@@ -38,7 +38,7 @@ $RECYCLE.BIN/
 # Shared generated output
 .cache/
 dist/
-{% if language != "typescript" %}
+{%- if language != "typescript" %}
 
 # Python
 .venv*/
@@ -55,8 +55,8 @@ htmlcov/
 *.egg-info/
 .eggs/
 build/
-{% endif %}
-{% if language != "python" %}
+{%- endif %}
+{%- if language != "python" %}
 
 # TypeScript and Node.js
 node_modules/
@@ -68,4 +68,4 @@ yarn-error.log*
 *.tsbuildinfo
 coverage/
 *.tgz
-{% endif %}
+{%- endif %}

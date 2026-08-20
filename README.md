@@ -185,7 +185,7 @@ uvx --from copier copier update --trust --vcs-ref <reviewed-full-commit-sha>
 
 - Ruff、mypy、pytest、coverage.py／pytest-cov、diff-cover 與 Gitleaks 共用單一驗證入口。
 - TypeScript 使用 Biome、TypeScript strict、Vitest coverage 與 npm 打包；混合 repo 同一入口兩套都跑。
-- PR 標題、Issue Form、CODEOWNERS、Ruleset、Actions 權限、合併策略與 labels 以檔案管理。
+- PR 標題、Issue Form、CODEOWNERS、Ruleset 草案、Actions 權限、合併策略與 labels 以檔案管理；private repo 的 Ruleset 等 GitHub Team 與維護團隊就緒後才套用。
 - Spec 合併到 `main` 後，由標準函式庫腳本建立或更新一張對應 Issue。
 - Dependabot 分別更新 uv 與 npm 生態，一般更新等待三天；pnpm resolver 也以嚴格模式拒絕發布未滿三天的版本，OSV 對已公開漏洞立即掃描。
 - 發布時建立 SHA-256、CycloneDX SBOM，並可選 GitHub artifact attestation。
@@ -195,9 +195,9 @@ Go、Rust、部署環境、可觀測性、RAG 與自動 agent loop 仍是 `futur
 
 ## 設定與密鑰
 
-### 套用 GitHub 設定
+### 套用 GitHub 設定（待啟用）
 
-管理者先看計畫，再套用版本化政策：
+這不是 Quickstart 的必要步驟。目前 Organization 使用 GitHub Free private repo，且尚未建立 CODEOWNERS team，因此先不套用 Ruleset；CI、PR title、OSV 與 Zizmor 仍會執行，但暫時不是不可繞過的合併門禁。升級到 GitHub Team 並建立維護團隊後，管理者再看計畫並套用版本化政策：
 
 ```bash
 gh auth status
@@ -205,11 +205,11 @@ gh auth status
 ./scripts/apply-repository-settings.sh apply
 ```
 
-它會設定 squash-only、Actions 預設唯讀、labels 與 `main` Ruleset。執行者需要目標 repo 的管理權限及可讀取 Organization team 的授權；若 `gh auth status` 失敗，先用 `gh auth login -h github.com` 重新登入。腳本會先確認 `.github/CODEOWNERS` 指向真實存在且登入者可見的 team，避免唯一個人 owner 自己開 PR 後無人可核准。團隊存取權仍由 GitHub Organization 管理。
+它會設定 squash-only、Actions 預設唯讀、labels 與 `main` Ruleset。腳本會在任何寫入前先確認目標方案支援 Ruleset；Organization 的 private repo 最低需要 GitHub Team，GitHub Free 只有 public repo 能啟用這項門禁。若不符合，`plan`／`apply` 都會顯示原因並保證沒有設定被部分套用。執行者另需目標 repo 管理權與 Organization team 讀取權；腳本會確認 `.github/CODEOWNERS` 指向真實存在且登入者可見的 team，避免唯一個人 owner 自己開 PR 後無人可核准。
 
-### 啟用無人值守的 Python 升版
+### 啟用無人值守的 Python 升版（待設定 App）
 
-建立一個只安裝在此 repo 的 GitHub App，給予 Contents 與 Pull requests 讀寫、Checks 唯讀權限；把 App ID 存成 repository variable `CSARC_VERSION_BOT_APP_ID`，private key 存成 repository secret `CSARC_VERSION_BOT_PRIVATE_KEY`。管理者套用 Ruleset 時帶入 App ID，腳本只讓這個 App 以 PR 形式略過人工核准，不允許直接寫入 `main`：
+建立一個只安裝在此 repo 的 GitHub App，給予 Contents 與 Pull requests 讀寫、Checks 唯讀權限。Client ID 存成 repository variable `CSARC_VERSION_BOT_CLIENT_ID`，供 workflow 產生短效 token；數字 App ID 只在套用 Ruleset bypass 時由 `CSARC_VERSION_BOT_APP_ID` 傳給腳本；private key 存成 repository secret `CSARC_VERSION_BOT_PRIVATE_KEY`。腳本只讓這個 App 以 PR 形式略過人工核准，不允許直接寫入 `main`：
 
 ```bash
 CSARC_VERSION_BOT_APP_ID=<app-id> \
@@ -218,17 +218,17 @@ CSARC_VERSION_BOT_APP_ID=<app-id> \
 
 `.github/workflows/python-version-policy.yml` 每週查詢 Python 官方發布資料，並將各項直接 dev 相依的 PyPI 最新版交給 uv 實際解析，讓 Actions summary 顯示可升級項目或完整衝突鏈。新功能版本滿三十天後，`scripts/update_python_version.py` 會同步 root 與模板設定、保留既有最低版本選項、更新 `uv.lock` 並實跑完整驗證；GitHub App 接著建立 PR、等待所有門禁通過，再自動合併。沒有設定 App 憑證時，排程會明確失敗，不會退回權限較大的個人 token 或直接推送。
 
-### 啟用 release-please
+### 啟用 release-please（待設定 App）
 
-同一個 GitHub App 也供 `.github/workflows/release-please.yml` 使用。release-please 不要求新增 Ruleset bypass，Release PR 仍由人員合併。Organization 管理者只需設定一次：
+同一個 GitHub App 也供 `.github/workflows/release-please.yml` 使用。未設定 `CSARC_VERSION_BOT_CLIENT_ID` 時，workflow job 會略過，不會讓每次推送 `main` 都出現預期內紅燈；release-please 不要求新增 Ruleset bypass，Release PR 仍由人員合併。Organization 管理者只需設定一次：
 
 1. 到 **Settings → Developer settings → GitHub Apps → New GitHub App** 建立專用 App；不需要 webhook。
 2. Repository permissions 設為 **Contents: Read and write**、**Pull requests: Read and write**；若同時啟用 Python 無人值守升版，再加 **Checks: Read-only**。
-3. 將 App 安裝到這個 repo、記下 App ID，並在 App 頁面產生 private key PEM 檔。
+3. 將 App 安裝到這個 repo、記下 Client ID 與數字 App ID，並在 App 頁面產生 private key PEM 檔。
 4. 在 repo 根目錄執行下列指令；完成後刪除本機下載的 PEM，或移入團隊核准的密鑰管理工具。
 
 ```bash
-gh variable set CSARC_VERSION_BOT_APP_ID --body '<app-id>'
+gh variable set CSARC_VERSION_BOT_CLIENT_ID --body '<client-id>'
 gh secret set CSARC_VERSION_BOT_PRIVATE_KEY < ./private-key.pem
 ```
 

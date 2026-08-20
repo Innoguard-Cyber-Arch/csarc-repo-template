@@ -16,21 +16,21 @@ permissions:
   contents: read
 
 jobs:
-{% if use_reusable_workflow %}
+{%- if use_reusable_workflow %}
   verify:
     uses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@{{ workflow_ref }}
     with:
       language-profile: "{{ language }}"
-{% if language != "typescript" %}
+{%- if language != "typescript" %}
       python-version: "{{ python_target }}"
-{% if python_mode == "minimum" and python_min != "3.14" %}
+{%- if python_mode == "minimum" and python_min != "3.14" %}
       additional-python-version: "3.14"
-{% endif %}
-{% endif %}
-{% if language != "python" %}
+{%- endif %}
+{%- endif %}
+{%- if language != "python" %}
       node-version: "24"
-{% endif %}
-{% else %}
+{%- endif %}
+{%- else %}
   verify:
     name: verify
     runs-on: ubuntu-latest
@@ -39,13 +39,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-{% if language != "typescript" %}
+{%- if language != "typescript" %}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "{{ python_target }}"
-{% endif %}
+{%- endif %}
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-{% if language != "python" %}
+{%- if language != "python" %}
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: "11.22.0"
@@ -54,15 +54,15 @@ jobs:
         with:
           node-version: "24"
           cache: pnpm
-{% endif %}
+{%- endif %}
       - name: Verify declared language modules
         run: ./scripts/verify
-{% if language != "typescript" %}
+{%- if language != "typescript" %}
         env:
           CSARC_PYTHON_VERSION: "{{ python_target }}"
           UV_PROJECT_ENVIRONMENT: .venv-primary
-{% endif %}
-{% if language != "typescript" and python_mode == "minimum" and python_min != "3.14" %}
+{%- endif %}
+{%- if language != "typescript" and python_mode == "minimum" and python_min != "3.14" %}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
@@ -72,5 +72,5 @@ jobs:
           CSARC_PYTHON_VERSION: "3.14"
           UV_PROJECT_ENVIRONMENT: .venv-latest
           CSARC_VERIFY_TYPESCRIPT: "false"
-{% endif %}
-{% endif %}
+{%- endif %}
+{%- endif %}

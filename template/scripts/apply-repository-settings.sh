@@ -15,6 +15,18 @@ ruleset_payload="$repo_root/policies/rulesets.json"
 temporary_ruleset=""
 code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"
 
+if ! ruleset_access="$(gh api "repos/$repo/rulesets" 2>&1)"; then
+  echo "Cannot manage the required main Ruleset for $repo."
+  if [[ "$ruleset_access" == *"Upgrade to GitHub Pro or make this repository public"* ]]; then
+    echo "Private organization repositories require GitHub Team or above for Rulesets."
+    echo "GitHub Free can enforce this policy only when the repository is public."
+  else
+    echo "$ruleset_access"
+  fi
+  echo "No settings changed."
+  exit 1
+fi
+
 if [[ ! "$code_owner" =~ ^@([^/]+)/([^/[:space:]]+)$ ]]; then
   echo "CODEOWNERS must use an existing GitHub team: @organization/team."
   exit 1
@@ -82,8 +94,9 @@ PY
 )
 
 ruleset_id="$(
-  gh api "repos/$repo/rulesets" \
-    --jq '.[] | select(.name == "CSARC main protection") | .id' | head -n 1
+  uv run --no-project python -c \
+    'import json,sys; print(next((item["id"] for item in json.load(sys.stdin) if item["name"] == "CSARC main protection"), ""))' \
+    <<<"$ruleset_access"
 )"
 if [[ -n "$ruleset_id" ]]; then
   gh api --method PUT "repos/$repo/rulesets/$ruleset_id" \
