@@ -4,11 +4,11 @@
 /policies/ {{ code_owner }}
 /docs/specs/ {{ code_owner }}
 /.csarc/ {{ code_owner }}
-{% if language != "typescript" %}
+{%- if language != "typescript" %}
 /pyproject.toml {{ code_owner }}
 /uv.lock {{ code_owner }}
-{% endif %}
-{% if language != "python" %}
+{%- endif %}
+{%- if language != "python" %}
 /package.json {{ code_owner }}
 /pnpm-lock.yaml {{ code_owner }}
 /pnpm-workspace.yaml {{ code_owner }}
@@ -16,4 +16,4 @@
 /tsconfig*.json {{ code_owner }}
 /biome.json {{ code_owner }}
 /vitest.config.ts {{ code_owner }}
-{% endif %}
+{%- endif %}

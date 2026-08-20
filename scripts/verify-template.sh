@@ -26,6 +26,8 @@ uv run mypy \
   template/scripts \
   template/tests/test_spec_to_issue.py
 uv run pytest template/tests/test_spec_to_issue.py
+bash -n scripts/apply-repository-settings.sh
+bash -n template/scripts/apply-repository-settings.sh
 ./scripts/scan-secrets
 uv run zizmor . --format plain
 
@@ -158,6 +160,10 @@ uv run copier copy --trust --defaults \
   --data package_name="template_smoke_test" \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/default-project"
+
+git -C "$fixture_root/default-project" init -q -b main
+git -C "$fixture_root/default-project" add .
+git -C "$fixture_root/default-project" diff --cached --check
 
 test -f "$fixture_root/default-project/.copier-answers.yml"
 diff -B -w "$repo_root/.github/dependabot.yml" \
@@ -312,7 +318,7 @@ PY
 
 # A release version bump must not make the generated smoke test stale.
 release_bump_project="$fixture_root/release-bump-project"
-rsync -a --exclude=.venv --exclude=.cache --exclude=.ruff_cache \
+rsync -a --exclude=.git --exclude=.venv --exclude=.cache --exclude=.ruff_cache \
   "$fixture_root/default-project/" "$release_bump_project/"
 uv run python - "$release_bump_project" <<'PY'
 import json
@@ -349,6 +355,10 @@ uv run copier copy --trust --defaults \
   --data language=typescript \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/typescript-project"
+
+git -C "$fixture_root/typescript-project" init -q -b main
+git -C "$fixture_root/typescript-project" add .
+git -C "$fixture_root/typescript-project" diff --cached --check
 
 grep -q 'language: typescript' \
   "$fixture_root/typescript-project/.copier-answers.yml"
@@ -436,8 +446,9 @@ diff -B -w "$repo_root/.gitignore" \
   "$fixture_root/all-features-project/.gitignore"
 test "$("$fixture_root/all-features-project/scripts/detect-language-profile" --suggest)" = \
   "python-typescript"
-git -C "$fixture_root/all-features-project" init -b main
+git -C "$fixture_root/all-features-project" init -q -b main
 git -C "$fixture_root/all-features-project" add .
+git -C "$fixture_root/all-features-project" diff --cached --check
 
 (
   cd "$fixture_root/all-features-project"

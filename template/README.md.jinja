@@ -60,10 +60,10 @@ PR squash 合併到 `main` 後，release-please 會依標題累積下一版內�
 
 ## 設定與密鑰
 
-Organization 管理者先到 **Settings → Developer settings → GitHub Apps** 建立不使用 webhook 的專用 App，授予 Contents、Pull requests 讀寫權限，安裝到此 repo，再於 App 頁面產生 private key。把 App ID 與 PEM 寫入 GitHub：
+**狀態：待啟用，並非開始開發的前置條件。** 未設定專用 GitHub App 時，release-please job 會略過，不影響 CI 與人工建立 tag；準備啟用自動 Release PR 時，再由 Organization 管理者到 **Settings → Developer settings → GitHub Apps** 建立不使用 webhook 的專用 App，授予 Contents、Pull requests 讀寫權限，安裝到此 repo，並在 App 頁面產生 private key。把 Client ID 與 PEM 寫入 GitHub：
 
 ```bash
-gh variable set CSARC_VERSION_BOT_APP_ID --body '<app-id>'
+gh variable set CSARC_VERSION_BOT_CLIENT_ID --body '<client-id>'
 gh secret set CSARC_VERSION_BOT_PRIVATE_KEY < ./private-key.pem
 ```
 
@@ -91,6 +91,6 @@ uvx --from copier copier update --trust --vcs-ref <reviewed-full-commit-sha>
 
 程式審查負責人由 `.github/CODEOWNERS` 指向 `{{ code_owner }}`。一般問題、功能需求與可重現錯誤使用 GitHub Issue；CI 失敗先看該 job 的第一個實際錯誤。疑似資安事件或含敏感資料的問題不可貼到公開 Issue，應走組織核准的內部通報管道；正式上線前必須在此補上具體聯絡入口。
 
-## GitHub 設定
+## GitHub 設定（符合條件後啟用）
 
-`policies/` 是可審查的 GitHub 設定。一般本機驗證不需要 GitHub token；只有套用設定、同步 Issue 或測試 release workflow 時才需要。管理者先執行 `gh auth status`，確認登入者具有 repo 管理權與 Organization team 讀取權，再執行 `./scripts/apply-repository-settings.sh plan`，確認後才執行 `apply`。腳本也會確認 CODEOWNERS team 真實存在。它會設定 squash-only、Actions 預設唯讀、labels 與 `main` Ruleset；團隊權限仍在 Organization 管理。
+`policies/` 先保存未來要套用的 GitHub 設定，但不列入目前 Quickstart。Organization 的 private repo 最低需要 GitHub Team，且必須先建立真實 CODEOWNERS team；目前若不符合，就只使用可正常執行的 CI／PR checks，不執行 `apply`。條件備妥後，管理者才執行 `gh auth status`、`./scripts/apply-repository-settings.sh plan`，確認計畫後再執行 `apply`；腳本會在任何寫入前檢查方案與 team，避免部分套用。
