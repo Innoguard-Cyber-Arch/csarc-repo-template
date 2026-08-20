@@ -1,0 +1,2663 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>CSARC Repo Template｜AI 輔助 SDLC 團隊公版</title>
+  <style>
+    :root {
+      --yellow: #ffe600;
+      --ink: #171717;
+      --paper: #fff;
+      --soft: #f3f3f1;
+      --line: #d5d5d0;
+      --muted: #666;
+      --green: #168558;
+      --best: #168558;
+      --best-soft: #e8f5ee;
+      --optional: #2563a9;
+      --optional-soft: #eaf2fb;
+      --rail: #b7b7b2;
+      --deck-scale: 1;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 100%; min-height: 100%; margin: 0; }
+    body {
+      overflow: hidden;
+      background: #242424;
+      color: var(--ink);
+      font-size: 18px;
+      font-family: Inter, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+    button { font: inherit; }
+
+    .deck {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 1600px;
+      height: 900px;
+      transform: translate(-50%, -50%) scale(var(--deck-scale));
+      transform-origin: center;
+    }
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: none;
+      width: 1600px;
+      height: 900px;
+      padding: 3.7% 4.7%;
+      overflow: hidden;
+      background: var(--paper);
+      box-shadow: 0 18px 60px rgba(0, 0, 0, .36);
+    }
+    .slide.active { display: flex; flex-direction: column; animation: enter .2s ease-out; }
+    @keyframes enter { from { opacity: 0; transform: translateX(10px); } }
+    .slide::after {
+      content: attr(data-page);
+      position: absolute;
+      right: 4.1%;
+      bottom: 2.1%;
+      color: #999;
+      font-size: 18px;
+      font-weight: 750;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: start;
+      gap: 6px;
+      margin-bottom: 1.25%;
+      padding-bottom: .9%;
+      border-bottom: 7px solid var(--yellow);
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1, h2 { line-height: 1.04; letter-spacing: -.04em; }
+    h1 { font-size: clamp(34px, 2.55vw, 42px); white-space: nowrap; }
+    h2 { font-size: clamp(32px, 2.45vw, 40px); white-space: nowrap; }
+    h3 { font-size: 20px; line-height: 1.2; }
+    .subtitle {
+      max-width: none;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.3;
+      text-align: left;
+    }
+    .accent { background: linear-gradient(transparent 58%, var(--yellow) 58%); }
+    .muted { color: var(--muted); }
+
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td { border: 1px solid var(--line); vertical-align: middle; line-height: 1.28; }
+    th { background: var(--ink); color: white; text-align: left; }
+
+    .overview-slide { padding-top: 3%; padding-right: 3.2%; padding-bottom: 3%; padding-left: 13.7%; }
+    .overview-slide header { margin-bottom: .8%; }
+    .overview-slide h1 { font-size: clamp(30px, 2.15vw, 36px); }
+    .overview { font-size: 18px; }
+    .overview th, .overview td { padding: 2px 7px; line-height: 1.08; }
+    .overview tbody tr:nth-child(even) td { background: #fafaf8; }
+    .overview .journey-stage { width: 16%; font-weight: 850; }
+    .overview .developer-action { width: 24%; }
+    .overview .automation { width: 34%; }
+    .overview .feedback { width: 26%; }
+    .overview tbody tr[data-tier="priority"] td:first-child { border-left: 7px solid var(--yellow); background: #fffbea; }
+    .overview tbody tr[data-tier="best"] td:first-child { border-left: 7px solid var(--best); background: var(--best-soft); }
+    .overview tbody tr[data-tier="optional"] td:first-child { border-left: 7px solid var(--optional); background: var(--optional-soft); }
+    .overview-callout { margin-top: 8px; padding: 9px 12px; border-left: 7px solid var(--yellow); background: #fffbea; font-size: 20px; line-height: 1.25; }
+    .background-band { display: grid; grid-template-columns: 150px 1fr; gap: 12px; margin-top: 8px; padding: 8px 12px; border: 1px solid var(--line); background: var(--soft); font-size: 18px; line-height: 1.25; }
+    .responsibility-slide, .quickstart-slide { padding-left: 13.7%; }
+    .responsibility-table { font-size: 18px; }
+    .responsibility-table th, .responsibility-table td { padding: 7px 9px; line-height: 1.18; }
+    .responsibility-table th:first-child { width: 15%; }
+    .responsibility-table th:nth-child(2) { width: 35%; }
+    .responsibility-table th:nth-child(3) { width: 28%; }
+    .responsibility-table th:last-child { width: 22%; }
+    .responsibility-table td:first-child { border-left: 7px solid var(--yellow); font-weight: 850; }
+    .reading-contract { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+    .reading-contract p { padding: 9px 11px; background: var(--soft); font-size: 18px; line-height: 1.25; }
+    .quick-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; flex: 1; min-height: 0; }
+    .quick-card { padding: 18px; border: 1px solid var(--line); border-top: 7px solid var(--yellow); background: white; }
+    .quick-card:nth-child(2) { border-top-color: var(--best); }
+    .quick-card:nth-child(3) { border-top-color: var(--optional); }
+    .quick-card h3 { margin-bottom: 12px; font-size: 24px; }
+    .quick-card p, .quick-card li { font-size: 19px; line-height: 1.38; }
+    .quick-card li + li { margin-top: 9px; }
+    .one-command { margin-top: 12px; padding: 12px 16px; background: var(--ink); color: white; font-size: 22px; font-weight: 800; text-align: center; }
+
+    .mark, .later, .repo-tag {
+      display: inline-block;
+      margin-right: 4px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      white-space: nowrap;
+      font-weight: 800;
+    }
+    .mark { background: var(--yellow); }
+    .later { border: 1px solid #bbb; color: var(--muted); }
+    .repo-tag { background: var(--ink); color: white; font-size: 18px; }
+    .tier-chip {
+      display: inline-block;
+      min-width: 90px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 18px;
+      font-weight: 850;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .tier-chip.priority { background: var(--yellow); color: var(--ink); }
+    .tier-chip.best { background: var(--best-soft); color: #0b6540; }
+    .tier-chip.optional { background: var(--optional-soft); color: #174f8b; }
+
+    .legend {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: .6%;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.35;
+    }
+    .overview-slide .legend { padding-right: 0; }
+    .selection-note {
+      margin-top: .6%;
+      padding: 8px 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ededeb;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.22;
+    }
+    .selection-note strong {
+      display: inline;
+      margin-right: 6px;
+      color: var(--ink);
+      font-size: 18px;
+    }
+
+    .repo-explorer-slide { padding-top: 3%; padding-right: 3.2%; padding-bottom: 2.7%; padding-left: 13.7%; }
+    .repo-explorer-slide header { margin-bottom: .8%; }
+    .repo-explorer-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
+    .explorer-window {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      flex-direction: column;
+      overflow: hidden;
+      border: 2px solid var(--ink);
+      border-radius: 9px;
+      background: white;
+      box-shadow: 0 9px 22px rgba(0, 0, 0, .12);
+    }
+    .explorer-toolbar {
+      display: grid;
+      grid-template-columns: 76px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      min-height: 38px;
+      padding: 5px 10px;
+      border-bottom: 1px solid #bdbdb8;
+      background: #e9e9e6;
+    }
+    .window-dots { display: flex; gap: 6px; }
+    .window-dots i { width: 11px; height: 11px; border-radius: 50%; background: #a5a5a0; }
+    .window-dots i:first-child { background: #e65c52; }
+    .window-dots i:nth-child(2) { background: #e9b949; }
+    .window-dots i:last-child { background: #48a967; }
+    .explorer-address {
+      padding: 4px 10px;
+      border: 1px solid #c7c7c2;
+      border-radius: 5px;
+      background: white;
+      color: #3b3b39;
+      font: 750 18px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .explorer-profile { font-size: 18px; font-weight: 850; white-space: nowrap; }
+    .explorer-body { display: grid; flex: 1; min-height: 0; grid-template-columns: 28% 72%; }
+    .folder-pane {
+      min-height: 0;
+      padding: 10px 9px;
+      overflow: hidden;
+      border-right: 1px solid var(--line);
+      background: #f4f4f2;
+    }
+    .folder-pane ul { margin: 0; padding: 0; list-style: none; }
+    .folder-pane ul ul { margin: 2px 0 3px 7px; padding-left: 8px; border-left: 1px solid #bbb; }
+    .folder-pane li { position: relative; min-height: 26px; margin: 0; padding: 3px 4px 3px 26px; font: 750 17.5px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .folder-pane li::before {
+      content: "";
+      position: absolute;
+      left: 3px;
+      top: 8px;
+      width: 17px;
+      height: 12px;
+      border-radius: 2px;
+      background: #f0c842;
+      box-shadow: inset 0 0 0 1px #b99317;
+    }
+    .folder-pane li::after {
+      content: "";
+      position: absolute;
+      left: 4px;
+      top: 5px;
+      width: 8px;
+      height: 5px;
+      border-radius: 2px 2px 0 0;
+      background: #f0c842;
+      box-shadow: inset 0 0 0 1px #b99317;
+    }
+    .folder-pane .root-folder { padding-top: 5px; padding-bottom: 5px; background: #fff8bf; font-weight: 900; }
+    .folder-pane .root-folder::before, .folder-pane .root-folder::after { background: var(--yellow); }
+    .file-pane { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
+    .file-list-head, .file-row {
+      display: grid;
+      min-width: 0;
+      grid-template-columns: minmax(0, 1.55fr) minmax(120px, .68fr) minmax(155px, .72fr);
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+    }
+    .file-list-head {
+      min-height: 30px;
+      border-bottom: 1px solid var(--line);
+      background: #f4f4f2;
+      color: var(--muted);
+      font-size: 18px;
+      font-weight: 850;
+    }
+    .file-rows { display: grid; flex: 1; min-height: 0; grid-template-rows: repeat(15, minmax(0, 1fr)); }
+    .file-row { border-bottom: 1px solid #e4e4e0; }
+    .file-row:nth-child(even) { background: #fbfbfa; }
+    .file-row:hover { background: #fffbea; }
+    .file-name {
+      position: relative;
+      min-width: 0;
+      padding-left: 24px;
+      overflow: hidden;
+      color: #174f8b;
+      font: 750 17.5px/1.08 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-name::before {
+      content: "";
+      position: absolute;
+      left: 4px;
+      top: 50%;
+      width: 12px;
+      height: 16px;
+      border: 1px solid #7d8ca2;
+      border-radius: 1px;
+      background: white;
+      transform: translateY(-50%);
+    }
+    .file-name.folder-name::before { width: 16px; height: 11px; border-color: #b99317; border-radius: 2px; background: #f0c842; }
+    .file-purpose { font-size: 18px; font-weight: 750; white-space: nowrap; }
+    .file-steps { display: flex; align-items: center; gap: 4px; }
+    .step-dot {
+      display: inline-grid;
+      width: 25px;
+      height: 25px;
+      place-items: center;
+      border-radius: 50%;
+      font-size: 17.5px;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .step-dot.priority { border: 1px solid #baaa00; background: var(--yellow); }
+    .step-dot.best { border: 1px solid #6db091; background: var(--best-soft); color: #0b6540; }
+    .journey-route {
+      display: grid;
+      grid-template-columns: repeat(10, minmax(0, 1fr));
+      gap: 4px;
+      margin-top: 7px;
+    }
+    .route-stop {
+      padding: 4px 2px;
+      border-left: 4px solid #baaa00;
+      background: #fffbea;
+      font-size: 17.5px;
+      font-weight: 800;
+      line-height: 1.08;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .route-stop.best { border-left-color: var(--best); background: var(--best-soft); color: #0b6540; }
+    .route-stop.optional { border-left-color: var(--optional); background: var(--optional-soft); color: #154969; }
+    .step-dot { border: 1px solid #9b9b95; background: #f3f3ef; color: var(--ink); }
+    .explorer-caption { margin-top: 5px; color: var(--muted); font-size: 18px; line-height: 1.18; }
+    .explorer-caption strong { color: var(--ink); }
+
+    .ecosystem-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
+    .ecosystem-slide header { position: relative; margin-bottom: 1%; padding-right: 150px; }
+    .ecosystem-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
+    .selection-sequence {
+      position: absolute;
+      top: 0;
+      right: 0;
+      padding: 5px 9px;
+      background: var(--yellow);
+      color: var(--ink);
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: .02em;
+    }
+    .tool-landscape {
+      display: grid;
+      flex: 1;
+      min-height: 0;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .tool-landscape.six { grid-template-rows: repeat(3, minmax(0, 1fr)); }
+    .tool-landscape.eight { grid-template-rows: repeat(4, minmax(0, 1fr)); }
+    .tool-profile {
+      display: grid;
+      min-width: 0;
+      grid-template-columns: 56px minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-left: 6px solid var(--ink);
+      background: var(--soft);
+    }
+    .tool-profile.adopt { border-left-color: #b9a700; background: #fffbea; }
+    .tool-profile.next { border-left-color: var(--best); background: var(--best-soft); }
+    .tool-profile.conditional { border-left-color: var(--optional); background: var(--optional-soft); }
+    .tool-logo-box {
+      display: grid;
+      width: 56px;
+      height: 56px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: white;
+    }
+    .tool-logo { display: block; max-width: 42px; max-height: 42px; object-fit: contain; }
+    .tool-profile h3 { margin-bottom: 2px; font-size: 20px; }
+    .tool-profile h3 a { color: var(--ink); text-decoration-color: var(--optional); text-underline-offset: 3px; }
+    .tool-status {
+      margin-right: 3px;
+      color: var(--muted);
+      font-size: 18px;
+      font-weight: 850;
+    }
+    .adopt .tool-status { color: #796900; }
+    .next .tool-status { color: #0b6540; }
+    .conditional .tool-status { color: #174f8b; }
+    .tool-profile p { font-size: 18px; line-height: 1.16; }
+    .tool-health { margin-top: 3px; color: var(--muted); font-weight: 700; }
+    .tool-deferred {
+      margin-top: 8px;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      background: #ededeb;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.22;
+    }
+    .tool-deferred p + p { margin-top: 3px; }
+    .tool-deferred strong { color: var(--ink); }
+    .ecosystem-reference { margin-top: 7px; }
+
+    .grid-2, .grid-3, .grid-4 { display: grid; gap: 1.15vw; min-height: 0; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .wide-left { grid-template-columns: 1.2fr .8fr; }
+
+    .card {
+      padding: clamp(12px, 1.15vw, 19px);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--soft);
+    }
+    .card.priority { border-top: 6px solid var(--yellow); background: #fffbea; }
+    .card.dark { border-color: var(--ink); background: var(--ink); color: white; }
+    .card p, .card li { font-size: 18px; line-height: 1.32; }
+    .card h3 + p, .card h3 + ul, .card h3 + .checks { margin-top: 8px; }
+    ul, ol { margin: 0; padding-left: 1.12em; }
+    li + li { margin-top: 5px; }
+    li::marker { color: #a89400; font-weight: 850; }
+    .kicker {
+      margin-bottom: 7px;
+      color: #8b7a00;
+      font-size: 18px;
+      font-weight: 850;
+      letter-spacing: .05em;
+    }
+
+    .repo-map {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: .9vw;
+    }
+    .repo {
+      min-height: 145px;
+      padding: 14px;
+      border-top: 6px solid var(--yellow);
+      background: var(--soft);
+    }
+    .repo code { display: block; margin-bottom: 9px; font-size: 20px; font-weight: 850; }
+    .repo p { color: var(--muted); font-size: 18px; line-height: 1.32; }
+
+    .code {
+      margin: 0;
+      padding: 11px 13px;
+      overflow: hidden;
+      border-radius: 8px;
+      background: #202020;
+      color: #f8f8f2;
+      font: 600 18px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+    }
+    .code .comment { color: #aaa; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .inline-code { padding: 1px 4px; border-radius: 4px; background: #e9e9e5; font-size: 18px; }
+
+    .impl { margin-top: .8vw; font-size: 18px; }
+    .impl th { padding: 7px 9px; }
+    .impl td { padding: 7px 9px; vertical-align: top; }
+    .impl td code { overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
+    .impl .step-col { width: 12%; font-weight: 850; }
+    .impl .repo-col { width: 20%; }
+    .impl .config-col { width: 39%; }
+    .impl .cmd-col { width: 29%; }
+    .impl tbody tr:nth-child(even) td { background: #fafaf8; }
+    .profile-contract th, .profile-contract td { padding-top: 5px; padding-bottom: 5px; }
+    .ai-sdlc-table th, .ai-sdlc-table td { padding-top: 4px; padding-bottom: 4px; }
+    .compact-ai-cards { margin-top: 10px !important; }
+    .compact-ai-cards .card { padding: 8px 10px; }
+    .compact-ai-cards .card h3 + p { margin-top: 4px; }
+    .compact-ai-cards .card p { line-height: 1.2; }
+    .supply-chain-table .repo-col { width: 18%; }
+    .supply-chain-table .config-col { width: 35%; }
+    .supply-chain-table .cmd-col { width: 35%; }
+
+    .checks { display: grid; gap: 7px; }
+    .check {
+      display: grid;
+      grid-template-columns: 16px 1fr;
+      gap: 7px;
+      font-size: 18px;
+      line-height: 1.38;
+    }
+    .check::before { content: "✓"; color: var(--green); font-weight: 900; }
+
+    .callout {
+      margin-top: auto;
+      padding: 9px 13px;
+      border-left: 6px solid var(--yellow);
+      background: var(--soft);
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.38;
+    }
+
+    .decision-slide { padding-left: 13.7%; }
+    .decision-slide header { margin-bottom: 0; }
+    .context-line {
+      margin: 7px 0 12px;
+      padding: 5px 0 6px;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .context-line strong { color: var(--ink); }
+    .journey-rail {
+      position: absolute;
+      left: 2.1%;
+      top: 4.5%;
+      bottom: 4.8%;
+      width: 9.7%;
+      display: flex;
+      flex-direction: column;
+    }
+    .journey-rail h3 {
+      margin: 6px 0 4px;
+      color: var(--muted);
+      font-size: 18px;
+      letter-spacing: .02em;
+    }
+    .journey-bookend {
+      display: flex;
+      flex: 0 0 38px;
+      box-sizing: border-box;
+      align-items: center;
+      padding: 6px 7px;
+      border: 2px solid var(--ink);
+      background: white;
+      color: var(--ink);
+      font-size: 18px;
+      font-weight: 850;
+      line-height: 1.15;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .journey-bookend:first-child { border-left: 7px solid var(--yellow); }
+    .journey-bookend:last-child { margin-top: 7px; border-left: 7px solid var(--optional); }
+    .journey-bookend.active-overview { background: var(--yellow); }
+    .journey-bookend.active-files { background: var(--best-soft); color: #0b6540; }
+    .journey-bookend.active-selection { background: var(--ink); color: white; }
+    .journey-bookend.active-bridge { background: var(--optional-soft); color: #174f8b; }
+    .journey-bookend:hover, .journey-bookend:focus-visible { background: #fffbea; outline: 3px solid var(--yellow); outline-offset: 1px; }
+    .overview-slide .journey-rail, .repo-explorer-slide .journey-rail, .responsibility-slide .journey-rail, .quickstart-slide .journey-rail { width: 9.7%; }
+    .overview-slide .journey-bookend, .repo-explorer-slide .journey-bookend, .responsibility-slide .journey-bookend, .quickstart-slide .journey-bookend { padding: 4px; font-size: 17.5px; }
+    .overview-slide .journey-rail h3, .repo-explorer-slide .journey-rail h3, .responsibility-slide .journey-rail h3, .quickstart-slide .journey-rail h3 { font-size: 17.5px; white-space: nowrap; }
+    .overview-slide .journey-item, .repo-explorer-slide .journey-item, .responsibility-slide .journey-item, .quickstart-slide .journey-item { font-size: 17.5px; white-space: nowrap; }
+    .overview-slide .journey-item a, .repo-explorer-slide .journey-item a, .responsibility-slide .journey-item a, .quickstart-slide .journey-item a { padding-right: 2px; padding-left: 3px; }
+    .journey-rail ol {
+      display: grid;
+      flex: 0 0 auto;
+      min-height: 0;
+      gap: 3px;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      list-style: none;
+    }
+    .journey-item {
+      display: flex;
+      min-height: 0;
+      align-items: center;
+      padding: 0;
+      border-left: 5px solid #c8c8c3;
+      background: #f1f1ef;
+      color: #9b9b96;
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.05;
+    }
+    .journey-item a {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 5px;
+      color: inherit;
+      text-decoration: none;
+    }
+    .journey-code {
+      display: inline-grid;
+      min-width: 27px;
+      padding: 2px 4px;
+      place-items: center;
+      border: 1px solid #aaa;
+      border-radius: 999px;
+      background: white;
+      color: #555;
+      font-size: 17.5px;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .journey-item.active .journey-code { border-color: var(--ink); color: var(--ink); }
+    .journey-bookend { gap: 4px; }
+    .journey-item a:hover, .journey-item a:focus-visible { color: var(--ink); outline: 3px solid var(--yellow); outline-offset: -3px; }
+    .journey-item.active { color: var(--ink); font-weight: 900; }
+    .journey-item.active.priority { border-color: #b9a700; background: var(--yellow); }
+    .journey-item.active.best { border-color: var(--best); background: var(--best-soft); color: #0b6540; }
+    .journey-item.active.optional { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
+    .decision-tier-tag {
+      display: inline-block;
+      margin-right: 7px;
+      padding: 3px 7px;
+      border-left: 5px solid;
+      color: var(--ink);
+      font-size: 17.5px;
+      font-weight: 900;
+      line-height: 1;
+      vertical-align: 1px;
+    }
+    .decision-tier-tag.priority { border-color: #b9a700; background: var(--yellow); }
+    .decision-tier-tag.best { border-color: var(--best); background: var(--best-soft); color: #0b6540; }
+    .decision-tier-tag.optional { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
+    .decision-strip {
+      display: grid;
+      grid-template-columns: 1.12fr 1fr;
+      min-height: 0;
+      border: 1px solid var(--line);
+      background: white;
+    }
+    .decision-step {
+      padding: 15px 16px;
+      border-right: 1px solid var(--line);
+    }
+    .decision-step:not(.recommended) { border-right: 0; }
+    .decision-step.recommended {
+      order: -1;
+      border-top: 7px solid var(--yellow);
+      border-right: 1px solid var(--line);
+      background: #fffbea;
+    }
+    .step-label {
+      display: block;
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 18px;
+      font-weight: 850;
+    }
+    .decision-step.recommended .step-label { color: #796900; }
+    .decision-step h3 { margin-bottom: 9px; font-size: 22px; }
+    .decision-step p, .decision-step li { font-size: 18px; line-height: 1.34; }
+    .decision-step li + li { margin-top: 7px; }
+    .decision-slide[data-track="method"] .decision-step li + li { margin-top: 2px; }
+    .package-disclosure { position: relative; z-index: 30; margin-bottom: 9px; }
+    .package-disclosure[open] { z-index: 38; }
+    .package-disclosure summary {
+      display: block;
+      cursor: pointer;
+      font-size: 22px;
+      font-weight: 850;
+      line-height: 1.2;
+      list-style: none;
+    }
+    .package-disclosure summary::-webkit-details-marker { display: none; }
+    .package-disclosure summary:focus-visible { outline: 4px solid var(--yellow); outline-offset: 3px; }
+    .tech-name {
+      color: #174f8b;
+      text-decoration: underline dotted 2px;
+      text-decoration-color: #174f8b;
+      text-underline-offset: 4px;
+    }
+    .package-health {
+      position: absolute;
+      top: calc(100% + 7px);
+      right: 0;
+      z-index: 39;
+      display: grid;
+      width: min(650px, 145%);
+      max-height: 255px;
+      gap: 5px;
+      padding: 11px 13px;
+      overflow: auto;
+      border: 3px solid var(--ink);
+      border-top: 7px solid var(--yellow);
+      border-radius: 8px;
+      background: white;
+      box-shadow: 0 18px 46px rgba(0, 0, 0, .28);
+    }
+    .package-health p { font-size: 18px; line-height: 1.25; }
+    .package-health a { color: #174f8b; font-weight: 850; text-underline-offset: 2px; }
+    .config-guidance {
+      margin-top: 12px;
+      padding: 9px 12px;
+      border-left: 6px solid var(--yellow);
+      background: var(--soft);
+      font-size: 18px;
+      line-height: 1.32;
+    }
+    .config-guidance > strong { display: block; color: var(--ink); }
+    .config-guidance > p { margin: 1px 0 6px; color: var(--muted); font-size: 18px; }
+    .config-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+    .config-trigger {
+      display: grid;
+      grid-template-columns: minmax(0, 57%) minmax(0, 43%);
+      grid-template-areas:
+        "title file"
+        "summary summary";
+      min-width: 0;
+      min-height: 0;
+      align-items: start;
+      gap: 3px 8px;
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      border-left: 4px solid #b9a700;
+      background: white;
+      color: var(--ink);
+      cursor: pointer;
+      text-align: left;
+    }
+    .config-trigger:hover, .config-trigger:focus-visible { outline: 3px solid var(--yellow); outline-offset: 1px; }
+    .config-trigger-title { grid-area: title; font-size: 18px; font-weight: 750; line-height: 1.18; }
+    .config-trigger-title::after { content: "："; }
+    .config-trigger-file {
+      grid-area: file;
+      min-width: 0;
+      overflow: visible;
+      color: #174f8b;
+      font: 700 18px/1.12 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      overflow-wrap: anywhere;
+      text-overflow: clip;
+      white-space: normal;
+    }
+    .config-trigger-summary {
+      grid-area: summary;
+      color: #4f4f4f;
+      font-size: 18px;
+      font-weight: 520;
+      line-height: 1.18;
+    }
+    .config-overlay[hidden] { display: none; }
+    .config-overlay {
+      position: absolute;
+      right: 4.7%;
+      bottom: 6.2%;
+      z-index: 40;
+      width: 68%;
+    }
+    .config-overlay-card {
+      position: relative;
+      padding: 14px 16px 15px;
+      border: 3px solid var(--ink);
+      border-top: 8px solid var(--yellow);
+      border-radius: 9px;
+      background: white;
+      box-shadow: 0 18px 46px rgba(0, 0, 0, .3);
+    }
+    .config-overlay-close {
+      position: absolute;
+      top: 8px;
+      right: 9px;
+      width: 34px;
+      height: 34px;
+      border: 0;
+      border-radius: 4px;
+      background: var(--ink);
+      color: white;
+      cursor: pointer;
+      font-size: 24px;
+      font-weight: 850;
+      line-height: 1;
+    }
+    .config-overlay-close:focus-visible { outline: 4px solid var(--yellow); outline-offset: 2px; }
+    .config-overlay-card h3 { max-width: calc(100% - 45px); font-size: 23px; }
+    .config-overlay-goal { margin-top: 5px; color: var(--muted); font-size: 18px; line-height: 1.25; }
+    .config-overlay-path { margin: 8px 0 6px; font-size: 18px; font-weight: 850; }
+    .config-overlay-path code { color: #174f8b; }
+    .config-overlay .code { max-height: 245px; overflow: auto; font-size: 18px; line-height: 1.25; }
+    .term-trigger {
+      display: inline;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: #174f8b;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 850;
+      text-decoration: underline dotted 2px;
+      text-underline-offset: 3px;
+    }
+    .term-trigger:focus-visible { outline: 4px solid var(--yellow); outline-offset: 2px; }
+    .term-overlay-copy { margin-top: 8px; font-size: 18px; line-height: 1.35; }
+    .term-overlay-copy + .term-overlay-copy { margin-top: 6px; }
+
+    .flow { display: flex; align-items: stretch; gap: 12px; margin-bottom: 1vw; }
+    .flow-step {
+      position: relative;
+      flex: 1;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-top: 5px solid var(--yellow);
+      background: #fffbea;
+    }
+    .flow-step + .flow-step::before {
+      content: "→";
+      position: absolute;
+      left: -14px;
+      top: 50%;
+      font-size: 18px;
+      font-weight: 900;
+      transform: translateY(-50%);
+    }
+    .flow-step strong { display: block; font-size: 20px; }
+    .flow-step span { display: block; margin-top: 4px; color: var(--muted); font-size: 18px; line-height: 1.3; }
+    .dense-flow { margin-top: 8px !important; margin-bottom: 0; }
+    .dense-flow .flow-step { padding: 8px 10px; }
+
+    .phase-line { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1vw; }
+    .phase { padding: 14px; border-top: 6px solid #aaa; background: var(--soft); }
+    .phase:first-child { border-top-color: var(--yellow); background: #fffbea; }
+    .phase strong { font-size: 20px; }
+    .phase p { margin-top: 6px; color: var(--muted); font-size: 18px; line-height: 1.32; }
+
+    .bridge-slide { padding-top: 3%; padding-bottom: 2.7%; padding-left: 13.7%; }
+    .bridge-slide header { margin-bottom: .65%; }
+    .bridge-slide h2 { font-size: clamp(29px, 2.05vw, 35px); }
+    .bridge-table { font-size: 18px; }
+    .bridge-table .page-col { width: 7%; }
+    .bridge-table .topic-col { width: 20%; }
+    .bridge-table .status-col { width: 13%; }
+    .bridge-table .decision-col { width: 60%; }
+    .bridge-table th, .bridge-table td { padding: 3px 7px; line-height: 1.12; }
+    .bridge-table tbody tr:nth-child(even) td { background: #fafaf8; }
+    .bridge-table td:first-child { color: var(--muted); font-weight: 850; text-align: center; }
+    .bridge-status {
+      display: inline-block;
+      min-width: 82px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 18px;
+      font-weight: 850;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .bridge-status.keep { background: var(--best-soft); color: #0b6540; }
+    .bridge-status.adjust { background: var(--yellow); color: var(--ink); }
+    .bridge-status.defer { background: var(--optional-soft); color: #174f8b; }
+    .bridge-status.remove { background: #ececea; color: #555; }
+    .bridge-detail { position: relative; z-index: 1; }
+    .bridge-detail[open] { z-index: 40; }
+    .bridge-detail summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: 750;
+      list-style: none;
+    }
+    .bridge-detail summary::-webkit-details-marker { display: none; }
+    .bridge-detail summary::after {
+      content: "+";
+      display: grid;
+      width: 22px;
+      height: 22px;
+      flex: 0 0 22px;
+      place-items: center;
+      border-radius: 4px;
+      background: var(--yellow);
+      font-size: 20px;
+      line-height: 1;
+    }
+    .bridge-detail[open] summary::after { content: "−"; }
+    .bridge-detail summary:focus-visible { outline: 4px solid var(--yellow); outline-offset: 2px; }
+    .bridge-detail:not([open]) > .bridge-popover { display: none; }
+    .bridge-detail[open] > .bridge-popover {
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 6px);
+      z-index: 50;
+      width: min(790px, 58vw);
+      padding: 11px 14px;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      background: white;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, .24);
+    }
+    .bridge-detail.drop-down[open] > .bridge-popover { top: calc(100% + 6px); bottom: auto; }
+    .bridge-popover p { font-size: 18px; line-height: 1.3; }
+    .bridge-popover p + p { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--line); }
+    .bridge-popover strong { color: #655900; }
+    .bridge-reference { margin-top: 5px; color: var(--muted); }
+    .bridge-reference a { color: #174f8b; }
+
+    .review-notes-slide { padding-top: 3%; padding-bottom: 2.7%; padding-left: 13.7%; }
+    .review-notes-slide header { position: relative; margin-bottom: 1%; padding-right: 155px; }
+    .review-notes-slide h2 { font-size: clamp(29px, 2.05vw, 35px); }
+    .review-note-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      flex: 1;
+      min-height: 0;
+      gap: 8px;
+    }
+    .review-note {
+      min-height: 0;
+      padding: 8px 11px;
+      border: 1px solid var(--line);
+      border-left: 6px solid #8a7a00;
+      background: #faf9f4;
+    }
+    .review-note h3 { font-size: 20px; line-height: 1.15; }
+    .review-note p { margin-top: 4px; color: #2f2f2f; font-size: 17.5px; line-height: 1.27; }
+    .review-note strong { color: #655900; }
+    .review-note code { color: #174f8b; font-weight: 800; }
+    .review-note-footer {
+      margin-top: 8px;
+      padding: 7px 10px;
+      border: 1px solid #c9c9c9;
+      background: #ececea;
+      font-size: 17.5px;
+      line-height: 1.25;
+    }
+
+    .section-divider {
+      justify-content: center;
+      padding-left: 13.7%;
+      background: linear-gradient(120deg, #faf9f4 0 62%, #f5df00 62% 100%);
+    }
+    .section-divider .divider-kicker { margin-bottom: 16px; font-size: 22px; font-weight: 900; letter-spacing: .06em; }
+    .section-divider h2 { max-width: 980px; font-size: clamp(38px, 3vw, 52px); line-height: 1.08; white-space: normal; }
+    .section-divider .divider-copy { max-width: 920px; margin-top: 24px; font-size: 24px; line-height: 1.45; }
+    .section-divider .divider-copy strong { background: var(--yellow); white-space: nowrap; }
+
+    /* The opening behaves like product documentation: what the template does, how to adopt it, and what it maintains. */
+    .capability-slide, .adoption-slide, .managed-files-slide,
+    .decision-slide, .ecosystem-slide, .bridge-slide, .review-notes-slide { padding-left: 11.9%; }
+    .capability-slide, .adoption-slide, .managed-files-slide { padding-top: 3%; padding-right: 3.6%; padding-bottom: 3%; }
+    .capability-slide h1, .adoption-slide h2, .managed-files-slide h2 { font-size: clamp(30px, 2.2vw, 37px); }
+    .capability-slide .package-hero { margin-bottom: 8px; padding-bottom: 9px; }
+    .package-kicker {
+      color: var(--muted);
+      font: 800 17.5px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .02em;
+    }
+    .capability-slide .package-hero h1 {
+      color: var(--ink);
+      font: 900 46px/1.02 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: -.045em;
+    }
+    .package-hero h1 code { font: inherit; }
+    .package-badges { display: flex; flex-wrap: nowrap; gap: 6px; margin-top: 2px; }
+    .package-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 25px;
+      padding: 3px 8px;
+      border: 1px solid #999;
+      border-radius: 999px;
+      background: white;
+      color: #333;
+      font-size: 17.5px;
+      font-weight: 850;
+      line-height: 1;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .package-badge.beta { border-color: #b9a700; background: var(--yellow); color: var(--ink); }
+    .package-badge.python { border-color: var(--best); background: var(--best-soft); color: #0b6540; }
+    .package-badge.security { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
+    .package-badge:hover, .package-badge:focus-visible { outline: 3px solid var(--yellow); outline-offset: 1px; }
+    .capability-lead {
+      display: grid;
+      flex: 1;
+      min-height: 0;
+      grid-template-columns: 27% minmax(0, 1fr);
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .capability-promise {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 22px 24px 22px 0;
+      border-right: 1px solid var(--line);
+    }
+    .capability-promise strong { font-size: 28px; line-height: 1.12; }
+    .capability-promise p { margin-top: 12px; color: var(--muted); font-size: 20px; line-height: 1.35; }
+    .capability-list { display: grid; min-height: 0; grid-template-rows: repeat(4, minmax(0, 1fr)); }
+    .capability-row {
+      display: grid;
+      grid-template-columns: 27% minmax(0, 1fr);
+      align-items: center;
+      gap: 18px;
+      padding: 10px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .capability-row:last-child { border-bottom: 0; }
+    .capability-row h3 { font-size: 23px; }
+    .capability-row p { color: #333; font-size: 19px; line-height: 1.3; }
+    .capability-row code { color: #174f8b; font-weight: 800; }
+    .capability-boundary { margin-top: 10px; padding: 9px 12px; border-left: 7px solid var(--yellow); background: var(--soft); font-size: 19px; line-height: 1.3; }
+
+    .product-start {
+      display: grid;
+      flex: 1;
+      min-height: 0;
+      grid-template-columns: 38% minmax(0, 1fr);
+      border: 1px solid var(--line);
+    }
+    .product-scope { display: grid; grid-template-rows: auto repeat(4, minmax(0, 1fr)); padding: 14px 16px; border-right: 1px solid var(--line); background: #fafaf8; }
+    .product-scope > h3, .start-paths > h3 { margin-bottom: 8px; font-size: 21px; }
+    .scope-row { display: flex; flex-direction: column; justify-content: center; padding: 8px 0; border-top: 1px solid var(--line); }
+    .scope-row strong { display: block; font-size: 19px; }
+    .scope-row span { display: block; margin-top: 2px; color: #333; font-size: 18px; line-height: 1.25; }
+    .start-paths { display: grid; grid-template-rows: auto repeat(3, minmax(0, 1fr)); padding: 14px 16px; }
+    .start-path {
+      display: grid;
+      grid-template-columns: 25% minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 0;
+      border-top: 1px solid var(--line);
+    }
+    .start-path h3 { font-size: 20px; }
+    .start-path p { color: #333; font-size: 18px; line-height: 1.25; }
+    .product-prerequisites { grid-template-columns: 1fr auto auto; }
+    .product-prerequisites {
+      min-height: 58px;
+      border: 2px solid var(--line);
+      border-left: 10px solid var(--yellow);
+      background: var(--soft);
+      color: var(--ink);
+    }
+    .product-prerequisites p { color: var(--ink); }
+    .product-prerequisites p strong {
+      display: inline-block;
+      margin-right: 7px;
+      padding: 3px 7px;
+      background: var(--yellow);
+      color: var(--ink);
+      font-size: 18px;
+    }
+    .product-prerequisites code { color: #174f8b; font-weight: 800; }
+    .product-prerequisites .setup-trigger { border-color: var(--ink); border-left-color: var(--yellow); background: white; }
+
+    .adoption-paths {
+      display: grid;
+      flex: 1;
+      min-height: 0;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border: 1px solid var(--line);
+    }
+    .adoption-path { padding: 16px 18px; border-right: 1px solid var(--line); }
+    .adoption-path:last-child { border-right: 0; }
+    .adoption-path h3 { margin-bottom: 11px; font-size: 24px; }
+    .adoption-path ol { margin: 0 0 14px 22px; padding: 0; }
+    .adoption-path li { padding-left: 3px; font-size: 19px; line-height: 1.35; }
+    .adoption-path li + li { margin-top: 8px; }
+    .setup-trigger {
+      display: inline-block;
+      padding: 7px 10px;
+      border: 2px solid var(--ink);
+      border-left: 7px solid var(--yellow);
+      background: white;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: 850;
+      text-align: left;
+    }
+    .setup-trigger:hover, .setup-trigger:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+    .prerequisite-line {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: var(--soft);
+    }
+    .prerequisite-line p { font-size: 18px; line-height: 1.28; }
+    .prerequisite-line strong { color: var(--ink); }
+    .capability-slide .config-overlay { width: 72%; }
+
+    .language-contract {
+      display: grid;
+      grid-template-columns: 1.05fr 1.15fr 1.35fr;
+      gap: 7px;
+      margin-bottom: 8px;
+    }
+    .language-card {
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-left: 6px solid var(--yellow);
+      background: #fffbea;
+      font-size: 17.5px;
+      line-height: 1.22;
+    }
+    .language-card.shared { border-left-color: var(--best); background: var(--best-soft); }
+    .language-card.future { border-left-color: var(--optional); background: var(--optional-soft); }
+    .language-card strong { display: block; margin-bottom: 2px; font-size: 18px; }
+    .language-card a { color: #174f8b; font-weight: 800; }
+
+    .managed-intro { margin-bottom: 9px; padding: 8px 11px; border-left: 7px solid var(--yellow); background: #fffbea; font-size: 19px; line-height: 1.3; }
+    .managed-map { flex: 1; min-height: 0; font-size: 18px; }
+    .managed-map col:nth-child(1) { width: 16%; }
+    .managed-map col:nth-child(2) { width: 36%; }
+    .managed-map col:nth-child(3) { width: 27%; }
+    .managed-map col:nth-child(4) { width: 21%; }
+    .managed-map th, .managed-map td { padding: 6px 9px; line-height: 1.2; }
+    .managed-map tbody tr:nth-child(even) td { background: #fafaf8; }
+    .managed-map td:first-child { border-left: 7px solid var(--yellow); font-size: 19px; font-weight: 900; }
+    .managed-map code { color: #174f8b; font-weight: 750; overflow-wrap: anywhere; }
+    .managed-map .file-group { line-height: 1.38; }
+    .managed-map .journey-map { color: #0b6540; font-weight: 850; }
+
+    .repo-map-window {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      flex-direction: column;
+      overflow: hidden;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      background: white;
+      box-shadow: 0 9px 22px rgba(0, 0, 0, .12);
+    }
+    .repo-map-toolbar {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      min-height: 38px;
+      padding: 5px 10px;
+      border-bottom: 1px solid #bdbdb8;
+      background: #e9e9e6;
+    }
+    .repo-map-dots { display: flex; gap: 6px; }
+    .repo-map-dots i { width: 11px; height: 11px; border-radius: 50%; background: #a5a5a0; }
+    .repo-map-dots i:first-child { background: #e65c52; }
+    .repo-map-dots i:nth-child(2) { background: #e9b949; }
+    .repo-map-dots i:last-child { background: #48a967; }
+    .repo-map-address { padding: 4px 10px; border: 1px solid #c7c7c2; border-radius: 5px; background: white; font: 750 18px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .repo-map-profile { font-size: 18px; font-weight: 850; white-space: nowrap; }
+    .repo-map-head, .repo-map-row {
+      display: grid;
+      grid-template-columns: 44% 5% 31% 20%;
+      align-items: center;
+    }
+    .repo-map-head { min-height: 31px; padding: 0 11px; border-bottom: 1px solid var(--line); background: #f4f4f2; color: var(--muted); font-size: 18px; font-weight: 850; }
+    .repo-map-head span:nth-child(2) { color: transparent; }
+    .repo-map-body { display: grid; flex: 1; min-height: 0; grid-template-rows: repeat(5, minmax(0, 1fr)); }
+    .repo-map-row { padding: 4px 11px; border-bottom: 1px solid #e0e0dc; }
+    .repo-map-row:last-child { border-bottom: 0; }
+    .repo-map-row:nth-child(even) { background: #fbfbfa; }
+    .repo-file-cluster { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 8px; padding-right: 8px; }
+    .file-token {
+      position: relative;
+      min-width: 0;
+      padding-left: 21px;
+      color: #174f8b;
+      font: 750 17.5px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: -.04em;
+      overflow-wrap: anywhere;
+      white-space: normal;
+    }
+    .file-token.wide { grid-column: 1 / -1; }
+    .file-token::before {
+      content: "";
+      position: absolute;
+      left: 2px;
+      top: 50%;
+      width: 11px;
+      height: 14px;
+      border: 1px solid #7d8ca2;
+      border-radius: 1px;
+      background: white;
+      transform: translateY(-50%);
+    }
+    .file-token.folder::before { width: 15px; height: 10px; border-color: #b99317; border-radius: 2px; background: #f0c842; }
+    .map-arrow { color: #8a7a00; font-size: 28px; font-weight: 900; text-align: center; }
+    .repo-function { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 9px; padding-right: 10px; }
+    .function-icon { display: grid; width: 32px; height: 32px; place-items: center; border: 2px solid var(--ink); border-radius: 50%; background: var(--yellow); font-size: 20px; font-weight: 900; }
+    .repo-function strong { display: block; font-size: 19px; }
+    .repo-function span { display: block; margin-top: 2px; color: #444; font-size: 17.5px; line-height: 1.2; }
+    .repo-destination { padding: 7px 8px; border-left: 5px solid var(--best); background: var(--best-soft); color: #0b6540; font-size: 17.5px; font-weight: 850; line-height: 1.22; }
+
+    .repo-tree-head, .repo-tree-row {
+      display: grid;
+      grid-template-columns: 40% 29% 12% 19%;
+      align-items: center;
+      gap: 7px;
+      padding: 0 10px;
+    }
+    .repo-tree-head {
+      min-height: 29px;
+      border-bottom: 1px solid var(--line);
+      background: #f4f4f2;
+      color: var(--muted);
+      font-size: 17.5px;
+      font-weight: 850;
+    }
+    .repo-tree-body {
+      display: grid;
+      flex: 1;
+      min-height: 0;
+      grid-template-rows: repeat(18, minmax(0, 1fr));
+    }
+    .repo-tree-row { border-bottom: 1px solid #e4e4e0; font-size: 17.5px; line-height: 1.08; }
+    .repo-tree-row:nth-child(even) { background: #fbfbfa; }
+    .repo-tree-row.project-owned { border-left: 6px solid #e7794b; background: #fff4ef; }
+    .repo-tree-path {
+      position: relative;
+      min-width: 0;
+      padding-left: 23px;
+      overflow: hidden;
+      color: #174f8b;
+      font: 750 17.5px/1.08 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .repo-tree-path::before {
+      content: "";
+      position: absolute;
+      left: 4px;
+      top: 50%;
+      width: 11px;
+      height: 14px;
+      border: 1px solid #7d8ca2;
+      background: white;
+      transform: translateY(-50%);
+    }
+    .repo-tree-path.folder::before { width: 15px; height: 10px; border-color: #b99317; border-radius: 2px; background: #f0c842; }
+    .repo-tree-path.depth-1 { padding-left: 41px; }
+    .repo-tree-path.depth-1::before { left: 22px; }
+    .repo-tree-path.depth-2 { padding-left: 59px; }
+    .repo-tree-path.depth-2::before { left: 40px; }
+    .repo-tree-purpose { display: flex; min-width: 0; align-items: center; gap: 5px; color: #333; font-weight: 720; }
+    .repo-tree-purpose .journey-code { flex: 0 0 auto; border-color: #b9a700; background: #fff7a8; color: #655900; }
+    .repo-tree-purpose .purpose-copy { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .scope-badge, .owner-badge {
+      display: inline-block;
+      width: fit-content;
+      padding: 2px 6px;
+      border-radius: 999px;
+      white-space: nowrap;
+      font-size: 17.5px;
+      font-weight: 850;
+    }
+    .scope-badge.shared { background: var(--best-soft); color: #0b6540; }
+    .scope-badge.python { background: #fff1b5; color: #655900; }
+    .scope-badge.mixed { background: var(--optional-soft); color: #174f8b; }
+    .owner-badge.template { background: #ececea; color: #333; }
+    .owner-badge.shared { background: var(--optional-soft); color: #174f8b; }
+    .owner-badge.project { background: #ffe2d5; color: #8a3d20; }
+    .repo-map-legend {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 35px;
+      padding: 5px 10px;
+      border-top: 1px solid var(--line);
+      background: #f4f4f2;
+      font-size: 17.5px;
+      line-height: 1.16;
+    }
+    .repo-map-legend strong { color: var(--ink); }
+
+    .decision-register { flex: 1; min-height: 0; font-size: 17.5px; }
+    .decision-register th, .decision-register td { padding: 5px 8px; line-height: 1.18; }
+    .decision-register th:first-child { width: 31%; }
+    .decision-register td:first-child { border-left: 6px solid var(--yellow); font-weight: 850; }
+    .decision-register tbody tr:nth-child(even) td { background: #fafaf8; }
+    .language-appendix-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 8px; }
+    .language-appendix-card { padding: 8px 10px; border: 1px solid var(--line); border-top: 6px solid var(--yellow); background: #fffbea; }
+    .language-appendix-card:nth-child(2), .language-appendix-card:nth-child(3) { border-top-color: var(--best); background: var(--best-soft); }
+    .language-appendix-card:nth-child(4) { border-top-color: var(--optional); background: var(--optional-soft); }
+    .language-appendix-card h3 { font-size: 19px; }
+    .language-appendix-card p { margin-top: 3px; font-size: 17.5px; line-height: 1.2; }
+    .ruff-map { flex: 1; min-height: 0; font-size: 17.5px; }
+    .ruff-map th, .ruff-map td { padding: 4px 7px; line-height: 1.16; }
+    .ruff-map th:first-child { width: 25%; }
+    .ruff-map th:nth-child(2) { width: 30%; }
+    .ruff-map tbody tr:nth-child(even) td { background: #fafaf8; }
+
+    .journey-rail { left: 1.45%; width: 8.35%; }
+    .journey-rail h3 { margin-top: 5px; font-size: 17.5px; white-space: nowrap; }
+    .journey-rail .journey-use { flex: 0 0 auto; grid-template-rows: repeat(2, 38px); }
+    .journey-rail .journey-main { flex: 0 0 auto; grid-template-rows: repeat(7, 38px); }
+    .journey-rail .journey-support { flex: 0 0 auto; grid-template-rows: repeat(3, 38px); }
+    .journey-rail .journey-item + .journey-item { margin-top: 0; }
+    .journey-item { font-size: 17.5px; white-space: nowrap; }
+    .journey-bookend { padding: 4px 5px; font-size: 17.5px; }
+    .journey-bookend.appendix { margin-top: 3px; border-left: 6px solid var(--optional); }
+    .journey-rail > .journey-bookend:first-of-type { margin-top: 8px; }
+
+    .controls { position: fixed; right: 25px; bottom: 18px; display: flex; align-items: center; gap: 8px; z-index: 5; }
+    .controls button { width: 40px; height: 40px; border: 1px solid #666; border-radius: 50%; background: #171717; color: white; cursor: pointer; }
+    .controls button:hover, .controls button:focus-visible { border-color: var(--yellow); color: var(--yellow); outline: none; }
+    .controls button:disabled { opacity: .35; cursor: default; }
+    .counter { min-width: 64px; color: white; font-size: 18px; text-align: center; }
+    .view-controls { position: fixed; left: 25px; bottom: 18px; display: flex; align-items: center; gap: 7px; z-index: 5; }
+    .view-controls button { min-width: 40px; height: 40px; padding: 0 11px; border: 1px solid #666; border-radius: 20px; background: #171717; color: white; cursor: pointer; }
+    .view-controls button:hover, .view-controls button:focus-visible { border-color: var(--yellow); color: var(--yellow); outline: none; }
+    .view-controls button:disabled { opacity: .35; cursor: default; }
+    .zoom-level { min-width: 46px; color: white; font-size: 18px; text-align: center; }
+    .progress { position: fixed; left: 0; right: 0; bottom: 0; height: 4px; background: #444; z-index: 6; }
+    .progress span { display: block; height: 100%; background: var(--yellow); }
+
+    /* Projection rules: H1 stays on one line; copy is at least 18px; only APA reference lines may be smaller. */
+    .reference { font-size: 12pt; line-height: 1.25; }
+
+    @media print {
+      @page { size: 16in 9in; margin: 0; }
+      html, body { overflow: visible; background: white; }
+      .deck { position: static; display: block; width: auto; height: auto; padding: 0; transform: none; }
+      .slide, .slide.active { position: relative; display: flex; width: 16in; height: 9in; box-shadow: none; page-break-after: always; animation: none; transform: none; }
+      .controls, .view-controls, .progress { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) { .slide.active { animation: none; } }
+  </style>
+</head>
+<body>
+  <main class="deck" aria-live="polite">
+    <section class="slide ecosystem-slide" data-page="01 / 16" data-ecosystem="core" aria-label="開源工具選型總覽">
+      <header>
+        <span class="selection-sequence">附錄｜技術選型依據</span>
+        <h2>工具是實作手段，<span class="accent">流程與治理才是主線</span></h2>
+        <p class="subtitle">供已看過五月版的人查核選型：基本導入、未來導入與可選導入分開看；日常操作請回到前面的開發者旅程。</p>
+      </header>
+      <div class="tool-landscape eight">
+        <article class="tool-profile adopt">
+          <div class="tool-logo-box"><img class="tool-logo" src="https://raw.githubusercontent.com/copier-org/copier/master/img/logo.svg" alt="Copier logo"></div>
+          <div><h3><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">Copier</a></h3><p><strong>可更新模板｜</strong>建立新案，也同步舊案。<strong>決定｜</strong>基本導入；差異走 PR。</p><p class="tool-health"><span class="tool-status">已完成</span>· MIT · ★3.5k · 2026-08 仍更新</p></div>
+        </article>
+        <article class="tool-profile adopt">
+          <div class="tool-logo-box"><img class="tool-logo" src="https://raw.githubusercontent.com/zizmorcore/zizmor/main/docs/assets/favicon48x48.png" alt="zizmor logo"></div>
+          <div><h3><a href="https://github.com/zizmorcore/zizmor" target="_blank" rel="noreferrer">zizmor</a></h3><p><strong>Actions 安全｜</strong>檢查權限與不安全寫法。<strong>決定｜</strong>基本導入；PR 自動跑。</p><p class="tool-health"><span class="tool-status">已完成</span>· MIT · ★6.3k · 2026-08 仍更新</p></div>
+        </article>
+        <article class="tool-profile next">
+          <div class="tool-logo-box"><img class="tool-logo" src="https://github.com/github-community-projects.png?size=160" alt="GitHub Community Projects logo"></div>
+          <div><h3><a href="https://github.com/github-community-projects/safe-settings" target="_blank" rel="noreferrer">GitHub Safe Settings</a></h3><p><strong>多 repo 治理｜</strong>集中套用、找出差異。<strong>決定｜</strong>未來；目前 JSON＋<code>gh api</code>。</p><p class="tool-health"><span class="tool-status">未來導入</span>· ISC · ★911 · 2026-08 仍更新</p></div>
+        </article>
+        <article class="tool-profile conditional">
+          <div class="tool-logo-box"><img class="tool-logo" src="https://raw.githubusercontent.com/renovatebot/renovate/main/docs/usage/assets/images/logo.png" alt="Renovate logo"></div>
+          <div><h3><a href="https://github.com/renovatebot/renovate" target="_blank" rel="noreferrer">Renovate</a></h3><p><strong>套件更新｜</strong>等待與分組更細。<strong>決定｜</strong>可選；基本方案用 Dependabot。</p><p class="tool-health"><span class="tool-status">可選導入</span>· AGPL · ★22.3k · 2026-08 仍更新</p></div>
+        </article>
+        <article class="tool-profile">
+          <div class="tool-logo-box"><img class="tool-logo" src="https://cdn.simpleicons.org/githubactions/2088FF" alt="GitHub Actions logo"></div>
+          <div><h3><a href="https://github.com/actions/starter-workflows" target="_blank" rel="noreferrer">Starter Workflows</a></h3><p><strong>GitHub Actions 目錄｜</strong>官方範例。<strong>決定｜</strong>只參考分類，不照抄政策。</p><p class="tool-health"><span class="tool-status">內容參考</span>· GitHub · ★12.0k · 2026-08 仍更新</p></div>
+        </article>
+        <article class="tool-profile">
+          <div class="tool-logo-box"><img class="tool-logo" src="https://raw.githubusercontent.com/pyscaffold/pyscaffold/master/docs/gfx/logo.svg" alt="PyScaffold logo"></div>
+          <div><h3><a href="https://github.com/pyscaffold/pyscaffold" target="_blank" rel="noreferrer">PyScaffold</a></h3><p><strong>Python 骨架｜</strong>成熟結構與測試做法。<strong>決定｜</strong>只當內容檢查表。</p><p class="tool-health"><span class="tool-status">內容參考</span>· MIT · ★2.3k · 2026-08 仍更新</p></div>
+        </article>
+        <article class="tool-profile next">
+          <div class="tool-logo-box"><img class="tool-logo" src="https://github.com/github.png?size=160" alt="GitHub logo"></div>
+          <div><h3><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">GitHub Spec Kit</a></h3><p><strong>AI 規格拆解｜</strong>串起規格、計畫與工作。<strong>決定｜</strong>未來；目前用 spec → Issue。</p><p class="tool-health"><span class="tool-status">未來導入</span>· MIT · ★130,368 · 2026-08 仍更新</p></div>
+        </article>
+        <article class="tool-profile conditional">
+          <div class="tool-logo-box"><img class="tool-logo" src="https://cdn.simpleicons.org/backstage/9BF0E1" alt="Backstage logo"></div>
+          <div><h3><a href="https://github.com/backstage/backstage" target="_blank" rel="noreferrer">Backstage</a></h3><p><strong>開發者入口｜</strong>集中服務、owner 與文件。<strong>決定｜</strong>可選；服務變多才導入。</p><p class="tool-health"><span class="tool-status">可選導入</span>· Apache-2.0 · 持續維護</p></div>
+        </article>
+      </div>
+      <aside class="tool-deferred" aria-label="未來選配與暫不採用工具">
+        <p><strong>基本方案另已採用：</strong>Dependabot、OSV-Scanner、anchore/sbom-action（底層使用 Syft）。</p>
+        <p><strong>尚未啟用：</strong>Go／Rust profile、Scorecard、Harden-Runner、網站託管／登入、Hugo、RAG、通用部署與監控；repo 內部網站與生成內容模板已可用。</p>
+      </aside>
+      <p class="ecosystem-reference reference">Ref. GitHub repository metadata and project logo assets. Accessed August 20, 2026.</p>
+    </section>
+
+    <section class="slide active capability-slide" data-track="capability" aria-label="CSARC 公版能力與導入方式">
+      <header class="package-hero">
+        <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
+        <h1><code>csarc-repo-template</code></h1>
+        <p class="subtitle">Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。</p>
+        <div class="package-badges" aria-label="套件狀態">
+          <span class="package-badge beta">beta</span>
+          <span class="package-badge python">Python／TypeScript／兩者</span>
+          <span class="package-badge">Copier 可更新</span>
+          <span class="package-badge security">CI／安全檢查</span>
+          <span class="package-badge">Node 24 · pnpm 11</span>
+        </div>
+      </header>
+      <div class="language-contract" aria-label="程式語言 profile 決策">
+        <p class="language-card"><strong>建立時必選｜三種組合</strong>只用 Python、只用 TypeScript，或兩者都有；宣告會寫入 repo 並由檔案自動核對。</p>
+        <p class="language-card shared"><strong>每種語言共用</strong>Issue／spec、PR checks、Actions 權限、安全檢查與 Copier 更新方式不變；Ruleset 待 GitHub Team。</p>
+        <p class="language-card future"><strong>版本基線</strong>Python 3.14；TypeScript 採 Node 24 Active LTS。Go／Rust 仍是 future，不先建立空設定。</p>
+      </div>
+      <div class="product-start">
+        <section class="product-scope" aria-label="公版提供的能力">
+          <h3>公版會替 repo 準備</h3>
+          <p class="scope-row"><strong>規劃與 AI 契約</strong><span>Issue／spec＋<code>AGENTS.md</code></span></p>
+          <p class="scope-row"><strong>驗證與合併</strong><span><code>./scripts/verify</code>＋CI＋PR；Ruleset 待方案與 team 就緒</span></p>
+          <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件</span></p>
+          <p class="scope-row"><strong>可持續同步</strong><span>公版更新成為可審查差異，不會直接覆蓋產品程式</span></p>
+        </section>
+        <section class="start-paths" aria-label="三種導入方式">
+          <h3>依你現在的 repo 狀態開始</h3>
+          <article class="start-path"><h3>新 repo</h3><p>選擇語言組合，取得對應基線後建立第一個 PR。</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">建立指令</button></article>
+          <article class="start-path"><h3>既有 repo</h3><p>在導入分支保留舊債邊界，逐項解決衝突與門禁。</p><button class="setup-trigger" type="button" data-setup="existing" aria-expanded="false">導入指令</button></article>
+          <article class="start-path"><h3>已使用公版</h3><p>指定已審查的公版 SHA，只審查本次版本差異。</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">更新指令</button></article>
+        </section>
+      </div>
+      <div class="prerequisite-line product-prerequisites">
+        <p><strong>開始前必裝</strong>Git、GitHub CLI、uv；TypeScript／混合案另需 Node 24+、pnpm 11。純本機驗證不用 token；套用 GitHub 設定與端到端測試前才登入 <code>gh</code>。</p>
+        <button class="setup-trigger" type="button" data-setup="mac" aria-expanded="false">macOS 安裝</button>
+        <button class="setup-trigger" type="button" data-setup="windows" aria-expanded="false">Windows 安裝</button>
+      </div>
+    </section>
+
+    <section class="slide managed-files-slide" data-track="files" aria-label="模板會加入與維護的檔案群組">
+      <header>
+        <h2>模板會把這些<span class="accent">工程基礎設施放進你的 repo</span></h2>
+        <p class="subtitle">先選 Python、TypeScript 或兩者；共用 GitHub 層不變，只有所選語言的工具與產品目錄會出現。</p>
+      </header>
+      <div class="repo-map-window" aria-label="模板產生檔案的視覺對照">
+        <div class="repo-map-toolbar">
+          <span class="repo-map-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="repo-map-address">your-project /</span>
+          <span class="repo-map-profile">Python／TypeScript／混合｜依宣告產生</span>
+        </div>
+        <div class="repo-tree-head"><span>路徑（依 repo 結構）</span><span>功能／對應旅程編號</span><span>語言</span><span>模板影響</span></div>
+        <div class="repo-tree-body">
+          <div class="repo-tree-row"><span class="repo-tree-path">.copier-answers.yml＋.csarc/profile.json</span><span class="repo-tree-purpose"><span class="journey-code">08</span><span class="purpose-copy">來源、選項與語言宣告</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path">.gitignore</span><span class="repo-tree-purpose"><span class="journey-code">02</span><span class="purpose-copy">環境雜訊／語言產物</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path folder">.github/</span><span class="repo-tree-purpose"><span class="journey-code">03–06</span><span class="purpose-copy">GitHub 自動化入口</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1">CODEOWNERS</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">指定審查者／PR</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">ISSUE_TEMPLATE/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">工作單欄位／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1">dependabot.yml</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">依語言更新相依</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1">pull_request_template.md</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">PR 必填內容</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">03–06</span><span class="purpose-copy">七條自動流程</span></span><span class="scope-badge mixed">混合</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">ci.yml</span><span class="repo-tree-purpose"><span class="journey-code">03</span><span class="purpose-copy">執行已宣告模組</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">osv.yml</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">跨生態漏洞掃描</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">pr-policy.yml</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">PR 標題格式</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">release-please.yml</span><span class="repo-tree-purpose"><span class="journey-code">06</span><span class="purpose-copy">版本與 Release PR</span></span><span class="scope-badge mixed">混合</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">release.yml</span><span class="repo-tree-purpose"><span class="journey-code">05／06</span><span class="purpose-copy">依語言打包與 SBOM</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">spec-to-issue.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">規格自動開單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">zizmor.yml</span><span class="repo-tree-purpose"><span class="journey-code">03</span><span class="purpose-copy">Actions 安全</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">docs/specs/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">功能規格／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge project">專案持有</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path folder">policies/</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">repo 規則／治理</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path folder">scripts/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／07</span><span class="purpose-copy">開單、驗證與套用設定</span></span><span class="scope-badge mixed">混合</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path">CHANGELOG＋release-please config／manifest</span><span class="repo-tree-purpose"><span class="journey-code">06</span><span class="purpose-copy">版號與變更紀錄</span></span><span class="scope-badge mixed">混合</span><span class="owner-badge shared">共同維護</span></div>
+          <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">src/＋tests/；typescript/src/＋tests/</span><span class="repo-tree-purpose"><span class="journey-code">02／03</span><span class="purpose-copy">啟用模組的產品程式</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge project">專案持有</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path">README.md＋AGENTS.md＋CLAUDE.md</span><span class="repo-tree-purpose"><span class="journey-code">01–08</span><span class="purpose-copy">人與 AI 的使用規範</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path">pyproject／package／兩種 lockfile</span><span class="repo-tree-purpose"><span class="journey-code">03／05</span><span class="purpose-copy">版本與語言工具</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge shared">共同維護</span></div>
+        </div>
+        <div class="repo-map-legend"><span><strong>黃色編號：</strong>對照左側旅程 tag。<strong>模板影響：</strong>公版主導會在 update 提出差異；共同維護可能衝突並由人處理。</span><span><strong>橘線：</strong>專案持有且不改寫。</span></div>
+      </div>
+    </section>
+
+    <section class="slide decision-slide" data-track="agents" aria-label="步驟二 AI 工作契約與實作">
+      <header>
+        <h2>步驟 2｜<span class="accent">先定 AI 契約，再開始實作</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>AI 先讀工作單、repo 與 <code>AGENTS.md</code>，再提出做法、修改、測試；人保留方向、風險與合併責任。</p>
+      </header>
+      <p class="context-line"><strong>問題與目的｜</strong>只給一句 prompt，AI 會猜範圍；規則寫太滿又會過時。契約要短、可執行，且不能取代人的判斷。</p>
+      <div class="decision-strip">
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不靠長提示詞，也不把責任交給 AI</h3><ul><li><strong>只給一句 prompt：</strong>AI 會自行猜範圍、完成條件與驗證方式</li><li><strong>複製全部 coding style：</strong>容易與 Ruff／Biome 分歧，固定判定應交給 CI</li><li><strong>AI review 當必要門禁：</strong>結果會漂移，不能取代測試、同事審查與 Ruleset</li></ul></article>
+        <article class="decision-step recommended">
+          <span class="step-label">我們的選擇</span>
+          <details class="package-disclosure"><summary><span><span class="tech-name">標準 AGENTS.md＋就近覆寫</span></span></summary><div class="package-health"><p><a href="https://github.com/agentsmd/agents.md" target="_blank" rel="noreferrer">agentsmd/agents.md</a>｜MIT｜★23.7k｜公開且持續維護；格式就是一般 Markdown。</p><p><strong>熱門實例：</strong>VS Code 根檔 5 行、uv 25 行、Kubernetes 36 行；Next.js 558 行反映大型 monorepo，而不是每案都該追求的長度。</p><p><strong>官方行為：</strong>Codex 會由根目錄往工作目錄合併指令，越靠近目前檔案的規則優先。</p><p class="reference">Ref. OpenAI Docs and GitHub REST API snapshot, August 20, 2026.</p></div></details>
+          <p class="recommendation-copy"><strong>工作契約：</strong>六段涵蓋範圍、工作迴圈、指令、修改界線、安全與審查；依語言只列真正存在的指令，根檔最多 200 行。<br><strong>AI 執行：</strong>讀資料、提計畫、修改、補測試、跑共同驗證並整理 PR。<br><strong>人類負責：</strong>確認需求與技術方向、判斷風險、審查差異；真正門禁仍是 CI、Ruleset、CODEOWNERS 與 Actions 權限。</p>
+        </article>
+      </div>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>人類入口與 AI 工作契約：</strong><code>README.md</code> 規範八個必要章節；<code>AGENTS.md</code>＋<code>CLAUDE.md</code> 規範 Agent</li><li><strong>所有人與 AI 共用的實際驗證：</strong><code>scripts/verify</code>＋<code>scripts/verify-template.sh</code></li><li><strong>唯讀權限、人類核准與指定審查者：</strong><code>policies/actions.json</code>＋<code>policies/rulesets.json</code>＋<code>CODEOWNERS</code></li></ul></aside>
+    </section>
+
+    <section class="slide decision-slide" data-page="11 / 16" data-track="governance" aria-label="GitHub 規則的管理方式">
+      <header>
+        <h2>先把規則集中，<span class="accent">避免每個專案各做一套</span></h2>
+        <p class="subtitle"><strong>基本導入｜</strong>合併方式、Actions 權限、標籤與 main 門禁都存成 JSON，經 PR 審查後再套用。</p>
+      </header>
+      <p class="context-line"><strong>問題與目的｜</strong>若每個專案都靠人到網頁上設定，規則會逐漸不同；改成設定檔後，變更能被審查，也能重新套用。</p>
+      <div class="decision-strip">
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>這次不選，因為問題還沒大到需要</h3><ul><li><strong>只用 GitHub 網頁：</strong>改動無法隨 repo 審查，久了容易漂移</li><li><strong>Terraform：</strong>目前只有 repo 設定，不需要先養 provider 與 state</li><li><strong>Safe Settings：</strong>等多 repo 例外與漂移真的出現再導入</li></ul></article>
+        <article class="decision-step recommended">
+          <span class="step-label">我們的選擇</span>
+          <details class="package-disclosure"><summary><span>先用 GitHub 規則＋<span class="tech-name"><code>gh api</code></span>；專案變多再用 Safe Settings</span></summary><div class="package-health"><p><a href="https://github.com/cli/cli" target="_blank" rel="noreferrer">cli/cli</a>｜MIT｜★45.9k｜近期持續發布</p><p><a href="https://github.com/github-community-projects/safe-settings" target="_blank" rel="noreferrer">safe-settings</a>｜ISC｜★911｜2026-08-19 更新</p><p><strong>判讀：</strong>兩者皆公開且持續維護；Safe Settings 可預覽變更、共用上層規則，並修正網頁設定與設定檔不一致的狀況。</p><p class="reference">Ref. GitHub REST API snapshot, August 20, 2026.</p></div></details>
+          <p class="recommendation-copy"><strong>設定草案已完成、目前不套用：</strong><code>policies/</code> 保存合併、Actions、標籤與 main Ruleset；CI／PR checks 可先使用。<strong>限制：</strong>Free organization 的 private repo 無法強制 Ruleset，且目前沒有 CODEOWNERS team；最低升到 GitHub Team 並建立 team 後才啟用，不需 Enterprise。<br><strong>未來：</strong>repo 多到逐一套用容易漏時，再導入 Safe Settings。</p>
+        </article>
+      </div>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>現在先用：</strong>CI、PR title、OSV、Zizmor 照常回報檢查結果</li><li><strong>先保存、不套用：</strong><code>policies/rulesets.json</code>（private repo 需 GitHub Team＋真實 CODEOWNERS team）</li><li><strong>條件備妥才執行：</strong><code>scripts/apply-repository-settings.sh plan</code>，確認後再 <code>apply</code></li></ul></aside>
+    </section>
+
+    <section class="slide decision-slide" data-track="contract" aria-label="步驟三本機驗證與持續整合">
+      <header>
+        <h2>步驟 3｜<span class="accent">本機與 CI 用同一把尺</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>本機先跑 <code>./scripts/verify</code>；PR 與推送 main 時，CI 再執行完全相同的入口。</p>
+      </header>
+      <p class="context-line"><strong>問題與目的｜</strong>若每個人和 AI 都用不同指令，結果就無法重現；統一成一個驗證入口，問題可在送出 PR 前發現。</p>
+      <div class="decision-strip">
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>這次不選，因為會出現兩套標準</h3><ul><li><strong>只靠 IDE／pre-commit：</strong>本機可跳過，不能作合併證據</li><li><strong>每個 workflow 重寫指令：</strong>本機綠燈不代表 CI 會綠</li><li><strong>ESLint＋Prettier：</strong>TypeScript 基線先用一份 Biome 設定，減少重疊</li><li><strong>Python flat layout：</strong>測到原始碼，不是真正會發布的成品</li></ul></article>
+        <article class="decision-step recommended">
+          <span class="step-label">我們的選擇</span>
+          <details class="package-disclosure"><summary><span><span class="tech-name">Python：uv／Ruff／mypy／pytest　TS：pnpm／Biome／Vitest</span></span></summary><div class="package-health"><p><a href="https://github.com/astral-sh/uv" target="_blank" rel="noreferrer">uv／Ruff</a>、<a href="https://github.com/biomejs/biome" target="_blank" rel="noreferrer">Biome</a>、<a href="https://github.com/vitest-dev/vitest" target="_blank" rel="noreferrer">Vitest</a> 與 <a href="https://github.com/gitleaks/gitleaks" target="_blank" rel="noreferrer">Gitleaks</a> 都是公開且持續維護的主流工具。</p><p><strong>選型：</strong>各語言用自己的格式、型別、測試與打包工具；安全與治理入口仍共用。</p><p class="reference">Ref. GitHub repository metadata, accessed August 20, 2026.</p></div></details>
+          <p class="recommendation-copy"><strong>Python：</strong>Ruff、strict mypy、pytest、80% coverage、wheel 隔離安裝；需要舊版時再驗最低 Python 與相依下界。<br><strong>TypeScript：</strong>Biome、strict TypeScript、Vitest 80% coverage、npm tarball 隔離安裝；Node 24＋pnpm 11。<br><strong>混合：</strong><code>./scripts/verify</code> 先核對語言宣告，再把兩套都跑完；任一失敗就阻擋 CI。</p>
+        </article>
+      </div>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>宣告啟用 Python、TypeScript 或兩者：</strong><code>.csarc/profile.json</code>＋<code>scripts/detect-language-profile</code></li><li><strong>Python 規則／鎖定：</strong><code>pyproject.toml</code>＋<code>uv.lock</code>　<strong>TypeScript：</strong><code>package.json</code>＋<code>tsconfig.json</code>＋<code>biome.json</code>＋<code>pnpm-lock.yaml</code></li><li><strong>本機與 CI 同一入口：</strong><code>scripts/verify</code>＋<code>.github/workflows/ci.yml</code></li></ul></aside>
+    </section>
+
+    <section class="slide decision-slide" data-track="method" aria-label="步驟一規劃工作與 GitHub Issues">
+      <header>
+        <h2>步驟 1｜<span class="accent">先寫清楚要解決什麼</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>不要求背 SDD／TDD 名詞；先用五個問題，讓同事與 AI 都知道什麼才算完成。</p>
+      </header>
+      <p class="context-line"><strong>寫作原則｜</strong>不要只寫「新增報表功能」；要交代誰遇到什麼問題、希望得到什麼結果，以及要怎麼確認。</p>
+      <div class="decision-strip">
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不讓每張工作單都走過重流程</h3><ul><li><strong>只寫 Issue 標題：</strong>缺成果與驗證，人和 AI 只能猜</li><li><strong>每張都跑 Spec Kit：</strong>小工作成本過高</li><li><strong>只留在聊天：</strong>無版本紀錄，不能在 PR 審查</li></ul></article>
+        <article class="decision-step recommended">
+          <span class="step-label">我們的選擇</span>
+          <details class="package-disclosure"><summary><span>已完成的 <span class="tech-name">spec → Issue</span>；Spec Kit 先不導入</span></summary><div class="package-health"><p><strong>目前：</strong><code>docs/specs/</code> 經 CI 驗證；合併 main 後，由標準函式庫腳本與 GitHub CLI 建立或更新同一張 Issue。</p><p><strong>Spec Kit：</strong><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">github/spec-kit</a>｜MIT｜★130,368（已查證）｜公開、未封存、2026-08-19 仍更新。</p><p><strong>何時再評估：</strong>一份核准規格需要由 AI 穩定拆成多張子工作，而且團隊願意維護額外 CLI／Agent 流程。</p><p class="reference">Ref. GitHub REST API, accessed August 20, 2026.</p></div></details>
+          <p class="recommendation-copy"><strong>功能模板：</strong>① Problem：誰遇到什麼問題？　② Outcome：完成後看見什麼結果？　③ Acceptance criteria：哪些條件都要成立？　④ Out of scope：這次刻意不做什麼？　⑤ Verification：怎麼確認？<br><strong>另填：</strong>P0–P3 與 Expected size；超過三個工作天或包含兩個成果就拆小。</p>
+        </article>
+      </div>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>統一工作單欄位並關閉空白 Issue：</strong><code>.github/ISSUE_TEMPLATE/</code></li><li><strong>規格格式與 PR 內驗證：</strong><code>docs/specs/</code>＋<code>scripts/spec_to_issue.py</code></li><li><strong>合併 main 後自動建立或更新 Issue：</strong><code>.github/workflows/spec-to-issue.yml</code></li></ul></aside>
+      <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/copilot/tutorials/cloud-agent/get-the-best-results" target="_blank" rel="noreferrer">GitHub Docs</a>; <a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a>; <a href="https://www.anthropic.com/engineering/claude-code-best-practices" target="_blank" rel="noreferrer">Anthropic</a>. Accessed August 20, 2026.</p>
+    </section>
+
+    <section class="slide decision-slide" data-track="pr" aria-label="步驟四分支 PR 與合併">
+      <header>
+        <h2>步驟 4｜<span class="accent">小 PR 通過證據再合併</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>Milestone 只整理同一批工作，不必等整批完成才把大型 <code>dev</code> 分支併回 main。</p>
+      </header>
+      <p class="context-line"><strong>問題與目的｜</strong>長期 <code>dev</code> 分支容易和 <code>main</code> 差距愈來愈大；改用短分支與小 PR，較容易審查、找錯與復原。</p>
+      <div class="decision-strip">
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不為尚不存在的發布需求增加長期分支</h3><ul><li><strong>GitFlow／長期 dev：</strong>目前沒有固定批次發布，會增加積壓與合併衝突</li><li><strong>等 Milestone 才合併：</strong>PR 變大且問題更難定位</li><li><strong>直接推 main：</strong>繞過審查、門禁與可回復紀錄</li></ul></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>採 GitHub Flow，標題同時成為版本依據</h3><p><strong>九種 type：</strong><code>feat</code> 新功能；<code>fix</code> 修錯；<code>docs</code> 文件；<code>refactor</code> 重整；<code>test</code> 測試；<code>build</code> 建置／相依；<code>ci</code> 自動化；<code>chore</code> 維護；<code>revert</code> 還原。<br><strong>破壞性變更：</strong><code>feat(api)!: remove v1</code> 的 <code>!</code> 會讓版本跳大版。標題限英文；內文可以中文並填目的、驗證、風險與復原。</p></article>
+      </div>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>保護主分支與要求至少一人核准：</strong><code>policies/rulesets.json</code></li><li><strong>哪些敏感檔案要由誰審查：</strong><code>.github/CODEOWNERS</code></li><li><strong>PR 標題與必填內容：</strong><code>.github/workflows/pr-policy.yml</code>＋<code>.github/pull_request_template.md</code></li></ul></aside>
+    </section>
+
+    <section class="slide decision-slide" data-page="08 / 16" data-track="supply" aria-label="步驟五依賴風險與 SBOM">
+      <header>
+        <h2>步驟 5｜<span class="accent">風險立即看見，升版不搶第一天</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>安全、檔案證據與「版本能否安裝」是不同問題；依賴更新也是日常維護的一環。</p>
+      </header>
+      <p class="context-line"><strong>問題與目的｜</strong>第三方套件出現漏洞時要立刻知道；一般新版則先等三天，避免成為供應鏈攻擊最早一批受害者。</p>
+      <div class="decision-strip">
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把所有風險都當成同一種更新</h3><ul><li><strong>新版一出就升：</strong>可能成為惡意版本最早一批使用者</li><li><strong>漏洞也等三天：</strong>已知風險不應延後處理</li><li><strong>現在就換 Renovate：</strong>尚不需要<button class="term-trigger" type="button" aria-expanded="false" aria-controls="renovate-preset-overlay">中央共用更新規則（preset）</button>與複雜分組</li></ul></article>
+        <article class="decision-step recommended">
+          <span class="step-label">我們的選擇</span>
+          <details class="package-disclosure"><summary><span><span class="tech-name">Dependabot＋OSV＋anchore/sbom-action</span> 已完成</span></summary><div class="package-health"><p><a href="https://github.com/google/osv-scanner" target="_blank" rel="noreferrer">OSV-Scanner</a>｜Apache-2.0｜★10.9k；<a href="https://github.com/anchore/syft" target="_blank" rel="noreferrer">Syft</a>｜Apache-2.0｜★9.4k。</p><p><strong>Renovate：</strong>AGPL-3.0｜★22.3k；規則變複雜時才取代 Dependabot，不在目前大標。</p><p class="reference">Ref. GitHub REST API snapshot, August 20, 2026.</p></div></details>
+          <p class="recommendation-copy"><strong>等待：</strong>Dependabot 一般升版先等三天；pnpm 另以嚴格 resolver 阻擋發布未滿三天的直接或間接套件。<br><strong>漏洞：</strong>OSV 對已公開漏洞立即通知，不套用等待期。<br><strong>內容：</strong><code>uv.lock</code> 保存 SHA-256；<code>pnpm-lock.yaml</code> 保存 integrity hash；發布時解壓真正成品，再附 checksum 與非空 SBOM。<br><strong>限制：</strong>雜湊不證明來源善意，SBOM 也不會自行阻擋漏洞。</p>
+        </article>
+      </div>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>兩種生態的一般升版等三天：</strong><code>.github/dependabot.yml</code>；<strong>pnpm 本機也嚴格等待：</strong><code>pnpm-workspace.yaml</code></li><li><strong>凍結安裝並比對兩種 lockfile 雜湊：</strong><code>scripts/verify</code></li><li><strong>掃已知漏洞：</strong><code>osv.yml</code>　<strong>發布 checksum／SBOM：</strong><code>release.yml</code></li></ul></aside>
+      <aside id="renovate-preset-overlay" class="config-overlay term-overlay" hidden role="region" aria-label="中央共用更新規則說明">
+        <div class="config-overlay-card">
+          <button class="config-overlay-close" type="button" aria-label="關閉名詞說明">×</button>
+          <h3>中央共用更新規則（preset）是什麼？</h3>
+          <p class="term-overlay-copy"><strong>白話說：</strong>把套件更新規則放在一個共用設定；其他 repo 只要寫「沿用這套規則」，之後改一次就能同步等待天數、排程與分組。</p>
+          <p class="term-overlay-copy"><strong>何時需要：</strong>repo 變多、各專案設定開始不一致，或 Dependabot 已無法表達共同規則時。</p>
+          <p class="term-overlay-copy"><strong>目前決定：</strong>先用每個 repo 都看得懂的 Dependabot；出現上述問題後，再導入 Renovate preset。</p>
+        </div>
+      </aside>
+    </section>
+
+    <section class="slide decision-slide" data-track="deploy" aria-label="步驟六語意版本與持續交付">
+      <header>
+        <h2>步驟 6｜<span class="accent">版本規則與成品接續</span></h2>
+        <p class="subtitle"><strong>基本導入：</strong>tag 打包已完成；release-please 自動開 Release PR 待 GitHub App 啟用。</p>
+      </header>
+      <p class="context-line"><strong>設計流程｜</strong>PR 標題 → squash 成 main commit → release-please 開 Release PR → 人員合併 → 建立 tag → <code>release.yml</code> 產生成品。</p>
+      <div class="decision-strip">
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不建立繞過 main 審查的發版捷徑</h3><ul><li><strong>手動改版本與 tag：</strong>容易漏 CHANGELOG 或讓多語言版本不一致</li><li><strong>python-semantic-release：</strong>需要在發布時直接寫回 main</li><li><strong>各模組各自發版：</strong>目前產品是一個 repo 契約，會增加對版成本</li></ul></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">release-please</span>＋profile-aware release workflow</span></summary><div class="package-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜★7,367｜2026-08-18 仍更新。</p><p><strong>採用原因：</strong>版本變更走 Release PR；Python、TypeScript 與混合 repo 都能沿用同一治理。</p><p class="reference">Ref. GitHub repository metadata, accessed August 20, 2026.</p></div></details><p><strong>現在可用：</strong><code>fix</code>、<code>feat</code>、<code>!</code> 的版本規則與 tag 打包；混合 repo 會產生 wheel、npm tarball、SHA-256 與非空 SBOM。<br><strong>尚未啟用：</strong>GitHub App 未建立，因此 release-please job 會安全略過，不用個人 token 或 <code>.env</code> 暫代。</p></article>
+      </div>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>目前先不啟用 App：</strong><code>CSARC_VERSION_BOT_CLIENT_ID</code>／<code>PRIVATE_KEY</code> 未設定時 job 略過</li><li><strong>已備妥版本同步設定：</strong><code>release-please.yml</code>＋<code>release-please-config.json</code></li><li><strong>已實測 tag 後打包、checksum、非空 SBOM：</strong><code>release.yml</code></li></ul></aside>
+      <aside class="selection-note"><strong>目前邊界</strong><span>只承諾持續交付；GitHub App 與部署環境都未就緒，所以不宣稱無人值守發版，也不建立 <code>deploy.yml</code>。</span></aside>
+    </section>
+
+    <section class="slide decision-slide" data-page="14 / 16" data-track="rollout" aria-label="分階段導入策略">
+      <header>
+        <h2>分階段導入，<span class="accent">每一步都能驗證，也能停下來</span></h2>
+        <p class="subtitle"><strong>三層導入｜</strong>基本能力現在就隨模板產生；未來與可選能力先寫清楚觸發門檻，不用空檔案假裝完成。</p>
+      </header>
+      <p class="context-line"><strong>問題與目的｜</strong>一次導入模板、CI、部署、監控與 AI，團隊很難判斷哪裡出錯；分期後每一步都有完成條件。</p>
+      <div class="decision-strip">
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不按聲量或日期一次把功能全打開</h3><ul><li><strong>一次切換：</strong>錯誤會同時擴散到所有專案</li><li><strong>固定日期解鎖：</strong>時間到了不代表使用條件已成熟</li><li><strong>所有語言同時上：</strong>未驗證的 profile 只是空承諾</li></ul></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>三層不是日期，而是導入條件</h3><p><strong>基本導入：</strong>Python-only、TypeScript-only、混合 profile，以及 Issue／spec、PR／CI、依賴安全、可追溯成品與 repo 內部網站都已完成。<br><strong>待條件啟用：</strong>private repo Ruleset（GitHub Team＋CODEOWNERS team）、無人值守發版（GitHub App）。<strong>未來／可選：</strong>多 repo、Go／Rust、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></article>
+      </div>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>哪些 profile 已可用或仍在規劃：</strong><code>profiles/catalog.yaml</code></li><li><strong>目前先跑檢查、不套門禁：</strong><code>.github/workflows/</code>；Ruleset／App 條件備妥後再啟用</li><li><strong>建立與更新路徑是否都能通過：</strong><code>scripts/verify-template.sh</code></li></ul></aside>
+    </section>
+
+    <section class="slide decision-slide" data-track="template-release" aria-label="Copier 模板更新驗證與發布方式">
+      <header>
+        <h2>Copier 保持同步，<span class="accent">公版本身也吃自己的規則</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong><code>template/</code> 是下發內容唯一來源；root 只因 GitHub 讀取慣例保留公版自己的治理設定，兩層由腳本比對。</p>
+      </header>
+      <p class="context-line"><strong>問題與目的｜</strong>模板錯誤會一次影響多個專案；每次修改都要真的建立新案、模擬舊案更新，通過後才發布。</p>
+      <div class="decision-strip">
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>這次不選，因為無法持續同步或驗證</h3><ul><li><strong>GitHub Template：</strong>只複製一次，不記得來源與答案</li><li><strong>PyScaffold：</strong>可參考 Python 結構，但會形成第二套更新機制</li><li><strong>只驗 YAML：</strong>無法證明新案、既有案與更新真的能跑</li></ul></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋五種驗證情境</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；衝突留給 PR 由人處理。</p><p class="reference">Ref. GitHub repository metadata, accessed August 20, 2026.</p></div></details><p><strong>建立：</strong>Python-only、TypeScript-only、混合與最低 Python 都實跑完整驗證。<br><strong>更新：</strong>Copier 回歸確認兩種產品目錄不被公版覆寫；共用政策由 root 自我使用並比對。<br><strong>版本：</strong>Python 新功能版滿三十天可由 bot 驗證後前進；Node Active LTS 也要滿三十天並通過三種 profile。</p></article>
+      </div>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>下發來源、語言組合、保留路徑與功能開關：</strong><code>template/</code>＋<code>copier.yml</code></li><li><strong>root 自我治理與五種建立／更新驗證：</strong><code>.github/</code>＋<code>scripts/verify-template.sh</code></li><li><strong>語言基線與三十天觀察：</strong><code>profiles/catalog.yaml</code>；<strong>Python 自動升版：</strong><code>python-version-policy.yml</code></li></ul></aside>
+    </section>
+
+    <section class="slide decision-slide" data-track="docs-site" aria-label="內部網站與生成內容模板">
+      <header>
+        <h2>網站已入 repo，<span class="accent">託管與登入分開決定</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong><code>docs/index.html</code> 是公版內部網站；生成專案會收到可更新版型與自行維護的內容檔。</p>
+      </header>
+      <p class="context-line"><strong>問題與目的｜</strong>README 只留開始使用與日常入口；完整設計放在 repo 網站。網站內容與發布平台分開，避免還沒決定託管就建立空架構。</p>
+      <div class="decision-strip">
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>目前不選的原因</h3><ul><li><strong>README 承載全部內容：</strong>接手者難以找到開始指令</li><li><strong>直接導入 Hugo：</strong>單頁內容還不需要建置鏈與主題相依</li><li><strong>GitHub 私人 Pages：</strong>組織需 Enterprise Cloud；目前不適用</li><li><strong>Cloudflare Pages＋Access：</strong>是免費候選，但登入與資料政策尚未確認</li></ul></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">Plain HTML＋專案內容模板</span></span></summary><div class="package-health"><p><strong>目前可用：</strong>公版網站位於 <code>docs/index.html</code>；生成專案使用同風格的單頁版型，不需額外框架或套件。</p><p><strong>更新邊界：</strong>公版維護 <code>docs/index.html</code> 版型；專案維護 <code>docs/site-content.js</code> 內容，Copier 更新不覆寫後者。</p><p><strong>仍待討論：</strong>Cloudflare Pages＋Access 是託管與登入候選；文件成長到需要多頁與搜尋時，才導入 Hugo＋Hextra。</p></div></details><p><strong>版型：</strong><code>template/docs/index.html.jinja</code> 隨 Copier 更新。<br><strong>內容：</strong><code>template/docs/site-content.js.jinja</code> 首次產生後由專案維護。<br><strong>限制：</strong><code>noindex</code> 不是存取控制；未實裝託管前，不宣稱網站已有登入保護。</p></article>
+      </div>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>公版完整說明：</strong><code>docs/index.html</code></li><li><strong>生成專案版型：</strong><code>template/docs/index.html.jinja</code></li><li><strong>專案內容與更新保護：</strong><code>template/docs/site-content.js.jinja</code>＋<code>copier.yml</code></li></ul></aside>
+    </section>
+
+    <section class="slide bridge-slide" data-page="16 / 16" aria-label="五月版 SDLC 建議盤點">
+      <header>
+        <h2>五月版 SDLC 盤點｜<span class="accent">保留核心，調整實作方式</span></h2>
+        <p class="subtitle">給已看過五月版的團隊承先啟後：保留方法，修正實作與導入層級；點選每列可看三句判斷。</p>
+      </header>
+      <table class="bridge-table" aria-label="五月版簡報與目前設計的逐頁對照">
+        <colgroup><col class="page-col"><col class="topic-col"><col class="status-col"><col class="decision-col"></colgroup>
+        <thead><tr><th>頁次</th><th>五月版主題</th><th>結論</th><th>目前決定（點選）</th></tr></thead>
+        <tbody>
+          <tr><td>p.3</td><td>SDLC 核心階段</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>把計畫到監控集中在 GitHub</summary><div class="bridge-popover"><p><strong>五月版｜</strong>計畫、開發、測試、部署、監控的核心順序保留。</p><p><strong>本次判斷｜</strong>工作單、模板、合併申請、自動檢查與交付設定都放在 GitHub，方便持續維護。</p><p><strong>落地方式｜</strong>不是每個專案都要部署與監控，但都先遵守工作規劃、變更審查與驗證規則。</p></div></details></td></tr>
+          <tr><td>p.4</td><td>Jira Ticket</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>工作單與規格使用同一套欄位</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本用 Jira 的 Epic → Story → Task 分工；本次改用 GitHub Milestone、父子 Issue 與標籤整理。</p><p><strong>本次判斷｜</strong>每張工作單寫問題、預期成果、驗收、不做事項與驗證方式，另填 P0–P3 與預估大小；超過三個工作天就拆小。</p><p><strong>落地方式｜</strong><code>work-item.yml</code> 已建立；較複雜的 <code>docs/specs/</code> 合併 main 後，<code>spec-to-issue.yml</code> 會建立或更新同一張 Issue。</p></div></details></td></tr>
+          <tr><td>p.5</td><td>版本控制</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>短分支完成後直接申請合併到 main</summary><div class="bridge-popover"><p><strong>五月版｜</strong>保留平行分支，但不再把長期 <code>dev</code> 分支當成預設。</p><p><strong>本次判斷｜</strong>一般專案從 <code>main</code> 開短分支；一張工作單與 PR 只處理一個目的，檢查與審查通過就合併。</p><p><strong>落地方式｜</strong>只有固定發布週期、共用整合環境或多版本維護才增加 <code>dev</code>／release 分支。Git 也比 SVN 更適合在本機提交、平行分支與 GitHub 自動化。</p></div></details></td></tr>
+          <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>小 PR 完成就合併；交付批次用 Milestone 管</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是 <code>main</code> 的唯一入口，方向保留；三層審查改成依風險增加審查者。</p><p><strong>本次判斷｜</strong>一般 PR 要一位同組同事加上 CI；敏感檔案再由指定負責人核准；高風險架構變更另附決策紀錄。</p><p><strong>落地方式｜</strong>不等 Milestone 才批次合併。標題固定英文格式，內文必填目的、測試、風險與復原方式。</p></div></details></td></tr>
+          <tr><td>p.7</td><td>CI 自動化管線</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>本機與 CI 共用一個驗證入口</summary><div class="bridge-popover"><p><strong>五月版｜</strong>自動觸發、測試、格式與靜態錯誤檢查全部保留。</p><p><strong>本次判斷｜</strong><code>ci.yml</code> 依宣告執行 Python、TypeScript 或兩者；需要中央控管時才用完整 SHA 呼叫 reusable workflow。</p><p><strong>落地方式｜</strong>CI、PR 標題、OSV 與 zizmor 已能執行；目前先當檢查結果，private repo 升到 GitHub Team、建立 CODEOWNERS team 並套用 Ruleset 後，紅燈才成為不可繞過門禁。</p></div></details></td></tr>
+          <tr><td>p.8</td><td>CD 專案管理</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>目前是持續交付；部署仍需專案目標</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本預設 DEV → STAGING → Canary → PROD；本次不要求每個專案照搬四層。</p><p><strong>本次判斷｜</strong>目前 tag 觸發 release，建立可追溯交付成品；它不是 CI 綠燈後自動部署。STAGING 與 Canary 要有驗證目的、流量與健康門檻才建立。</p><p><strong>落地方式｜</strong><code>release.yml</code> 依 profile 產生 wheel、npm tarball 或兩者，並附 SHA-256、CycloneDX SBOM 與可選來源證明。</p></div></details></td></tr>
+          <tr><td>p.9</td><td>可觀測性</td><td><span class="bridge-status defer">第二階段</span></td><td><details class="bridge-detail"><summary>只有上線服務才做監控和值班</summary><div class="bridge-popover"><p><strong>五月版｜</strong>操作手冊、日誌、指標、追蹤、復原與值班流程保留為第二階段。</p><p><strong>本次判斷｜</strong>只對持續運行的服務導入；先依使用的雲端、環境與負責人選工具，不先綁定 Datadog 或 PagerDuty。</p><p><strong>落地方式｜</strong>測試資料另外管理成不含個資、可建立、可清除的範例，不把測資管理混成線上監控。</p></div></details></td></tr>
+          <tr><td>p.10</td><td>Copilot → Agent</td><td><span class="bridge-status defer">分階段</span></td><td><details class="bridge-detail"><summary>先受控 AI 協作；成熟後再自動重試</summary><div class="bridge-popover"><p><strong>五月版｜</strong>鼓勵 AI 從補完程式進步到能執行完整任務，方向保留，但不把工程師縮減成只會下提示詞。</p><p><strong>本次判斷｜</strong>第一階段讓 Agent 依清楚工作單研究、提計畫、修改、驗證並開 PR；<code>AGENTS.md</code> 與共同驗證命令限制工作方式。</p><p><strong>落地方式｜</strong><code>actions.json</code> 設定 Actions 預設唯讀且不能核准 PR，Ruleset 要求人類核准；目前沒有 AI workflow，因此沒有額外 secret 或合併權限。</p></div></details></td></tr>
+          <tr><td>p.11</td><td>AI 初審</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail"><summary>固定工具負責判定；AI 只補充建議</summary><div class="bridge-popover"><p><strong>五月版｜</strong>AI 初審保留，但程式碼格式與常見錯誤改由 formatter、linter 與靜態檢查穩定執行。</p><p><strong>本次判斷｜</strong>AI 審查只補充情境性錯誤、測試缺口、風險摘要與修正建議，不能當成通過證明。</p><p><strong>落地方式｜</strong>CI、同事審查與指定負責人才有合併決定權；AI 沒有核准、合併或讀取密鑰的權限。</p></div></details></td></tr>
+          <tr><td>p.12</td><td>AI CI/CD log</td><td><span class="bridge-status defer">第二階段</span></td><td><details class="bridge-detail"><summary>先摘要失敗；自動復原只給成熟部署</summary><div class="bridge-popover"><p><strong>五月版｜</strong>AI 可先摘要 CI 失敗紀錄；自動退版只適用於已有正式環境與可靠健康指標的部署。</p><p><strong>本次判斷｜</strong>PR 測試失敗就阻擋合併並用新提交修正，不跳過錯誤提交；若 <code>main</code> 已出問題，就用復原 PR 並建立工作單追蹤。</p><p><strong>落地方式｜</strong>只有健康指標、停止門檻、可重現復原與完整紀錄都成熟後，才考慮讓系統自動復原。</p></div></details></td></tr>
+          <tr><td>p.13</td><td>AI 文件與知識庫</td><td><span class="bridge-status defer">分階段</span></td><td><details class="bridge-detail"><summary>先維護 repo 內網站；託管與 RAG 延後</summary><div class="bridge-popover"><p><strong>五月版｜</strong>文件同步方向保留；讓 AI 搜尋文件再回答（RAG）改成選配。</p><p><strong>本次判斷｜</strong>README、規格與 <code>docs/index.html</code> 都和程式一起走 PR；生成專案另有可更新版型與不被覆寫的內容檔。</p><p><strong>落地方式｜</strong>Cloudflare／Hugo 尚未接入；AI 語意審查也要等模型端點與資料政策確定後才成為門禁。只有來源、owner、存取規則、引用與測試題都準備好時才做 RAG。</p></div></details></td></tr>
+          <tr><td>p.14</td><td>Legacy modernization</td><td><span class="bridge-status remove">可選</span></td><td><details class="bridge-detail"><summary>舊系統改造是專案需求，不放共同模板</summary><div class="bridge-popover"><p><strong>五月版｜</strong>提到用 AI 協助舊系統現代化；本次不放進所有專案都必須使用的共同模板。</p><p><strong>本次判斷｜</strong>這是特定專案的轉型工作，做法是先用測試記錄目前行為，再小步替換、用短 PR 審查，並保留復原方法。</p><p><strong>落地方式｜</strong>有真實舊系統、風險與效益後再建立專用模板或指南，不先把空工具放進所有新案。</p></div></details></td></tr>
+        </tbody>
+      </table>
+      <p class="bridge-reference reference">Ref. GitHub Docs. <a href="https://docs.github.com/en/copilot/tutorials/cloud-agent/get-the-best-results" target="_blank" rel="noreferrer">AI agent practices</a>; <a href="https://docs.github.com/en/get-started/using-github/github-flow" target="_blank" rel="noreferrer">GitHub flow</a>; <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues" target="_blank" rel="noreferrer">Sub-issues</a>; <a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets" target="_blank" rel="noreferrer">Rulesets</a>; <a href="https://docs.github.com/en/pages/getting-started-with-github-pages/changing-the-visibility-of-your-github-pages-site" target="_blank" rel="noreferrer">Pages visibility</a>. Accessed August 20, 2026.</p>
+    </section>
+
+    <section class="slide review-notes-slide" aria-label="決策附錄核心原則">
+      <header>
+        <span class="selection-sequence">決策附錄 1/2</span>
+        <h2>關鍵決策｜<span class="accent">哪些是規則，哪些是刻意不做</span></h2>
+        <p class="subtitle">讓後續審閱者與其他 AI 先理解判斷脈絡；條件改變時，用 PR 同步修改設定、驗證與說明。</p>
+      </header>
+      <table class="decision-register" aria-label="公版核心決策登錄">
+        <thead><tr><th>審閱問題</th><th>目前決定與原因</th></tr></thead>
+        <tbody>
+          <tr><td>基本／未來／可選是時程嗎？</td><td>不是日期，而是能力條件；沒有可執行目標、owner 與驗證方式，就不建立空設定。</td></tr>
+          <tr><td>為何 root 與 <code>template/</code> 都有設定？</td><td><code>template/</code> 是下發內容唯一來源；GitHub 只讀 root 的 <code>.github/</code>，所以公版需要自我治理。十七組成對設定由腳本比對。</td></tr>
+          <tr><td>Copier 會改哪些產品內容？</td><td>政策檔由公版主導，語言設定共同維護；Python 的 <code>src/tests</code>、TypeScript 的 <code>typescript/src/tests</code> 與 <code>docs/specs</code> 初次建立後不改寫。</td></tr>
+          <tr><td>新舊專案是否降低標準？</td><td>C901 維持 10，coverage 都是 80%。既有案只改成量測變更行，或把舊 Ruff／mypy 債務限縮到明確範圍。</td></tr>
+          <tr><td>CI 與 CD 到哪裡？</td><td><code>scripts/verify</code> 是本機與 CI 單一入口；中央 private repo 已允許組織內 reusable CI。tag release 產出可追溯成品，沒有部署目標前不建立 deploy。</td></tr>
+          <tr><td>依賴更新為何同時等三天又立即掃描？</td><td>三天觀察剛發布但尚未被揭露的惡意版本；OSV 立即阻擋已公開漏洞。完整 SHA／lockfile hash 證明內容一致，但不等於來源一定善意。</td></tr>
+          <tr><td>AI 規則如何真的生效？</td><td><code>AGENTS.md</code> 是單一脈絡，<code>CLAUDE.md</code> 只匯入；CI、CODEOWNERS 與 Actions 最小權限已設定，private repo 需 GitHub Team 才能用 Ruleset 強制門禁。</td></tr>
+          <tr><td>為何不再加更多工具？</td><td>不重複加入 Bandit、Semgrep、pyright 等功能重疊工具；健康度只是篩選條件，採用仍要能降低目前風險或成本。</td></tr>
+        </tbody>
+      </table>
+      <p class="review-note-footer"><strong>驗證承諾：</strong><code>./scripts/verify-template.sh</code> 會實跑新案、全功能案、既有案與 Copier 更新；簡報寫「已完成」就必須真的通過。</p>
+    </section>
+
+    <section class="slide review-notes-slide language-decision-slide" aria-label="決策附錄語言 profile 與 Google Python Style">
+      <header>
+        <span class="selection-sequence">決策附錄 2/2</span>
+        <h2>語言 profile｜<span class="accent">共用 GitHub 層，分開驗證工具鏈</span></h2>
+        <p class="subtitle">語言是高層能力選擇，不是臨時加一個 linter；可用狀態以 <code>profiles/catalog.yaml</code> 為準。</p>
+      </header>
+      <div class="language-appendix-grid">
+        <article class="language-appendix-card"><h3>跨語言共用</h3><p>Copier、Issue／spec、PR、Ruleset、CODEOWNERS、Actions 權限、Gitleaks、Zizmor 與供應鏈證據。</p></article>
+        <article class="language-appendix-card"><h3>Python｜現在可用</h3><p>預設 3.14；minimum 同時驗最低 Python、相依下界與目前穩定版。</p></article>
+        <article class="language-appendix-card"><h3>TypeScript｜現在可用</h3><p>Node 24＋pnpm 11；Biome、strict TypeScript、Vitest 80% 與 npm 打包驗證。</p></article>
+        <article class="language-appendix-card"><h3>組合與未來</h3><p>Python＋TypeScript 同時驗證且共用 SemVer；Go／Rust 仍是 future。</p></article>
+      </div>
+      <table class="ruff-map" aria-label="Ruff 對應 Google Python Style 的規則">
+        <thead><tr><th>Google Style 主題</th><th>repo 設定</th><th>可以檢查什麼／仍需人判斷什麼</th></tr></thead>
+        <tbody>
+          <tr><td>排版與 80 字元行寬</td><td><code>ruff format</code>＋<code>E</code>＋<code>line-length = 80</code></td><td>自動檢查排版、空白、行長；目前沒有另設例外。</td></tr>
+          <tr><td>import</td><td><code>I</code>＋<code>known-first-party</code></td><td>分組、排序與本專案套件辨識。</td></tr>
+          <tr><td>命名</td><td><code>N</code></td><td>檢查常見命名形式；名稱是否清楚仍由人審查。</td></tr>
+          <tr><td>docstring</td><td><code>D</code>＋<code>pydocstyle = "google"</code></td><td>檢查 Google docstring 結構；內容是否有用仍由人審查。</td></tr>
+          <tr><td>型別</td><td><code>ANN</code>＋strict <code>mypy</code></td><td>要求型別提示並驗證型別關係。</td></tr>
+          <tr><td>錯誤、安全與複雜度</td><td><code>F/B/S/C901/T20/UP/SIM/RUF</code></td><td>找常見錯誤、安全風險、複雜度與 debug print；不能取代設計審查。</td></tr>
+        </tbody>
+      </table>
+      <p class="reference">Ref. <a href="https://google.github.io/styleguide/pyguide.html" target="_blank" rel="noreferrer">Google Python Style Guide</a>; <a href="https://docs.astral.sh/ruff/settings/#lint_pydocstyle_convention" target="_blank" rel="noreferrer">Ruff pydocstyle convention</a>. Accessed August 20, 2026.</p>
+    </section>
+  </main>
+
+  <nav class="controls" aria-label="簡報控制">
+    <button id="previous" type="button" aria-label="上一頁">←</button>
+    <span class="counter" id="counter">1 / 16</span>
+    <button id="next" type="button" aria-label="下一頁">→</button>
+  </nav>
+  <nav class="view-controls" aria-label="畫面縮放控制">
+    <button id="zoom-out" type="button" aria-label="縮小投影片">−</button>
+    <button id="zoom-reset" type="button" aria-label="恢復自動符合畫面">符合畫面</button>
+    <span class="zoom-level" id="zoom-level" aria-live="polite">100%</span>
+    <button id="zoom-in" type="button" aria-label="放大投影片">＋</button>
+  </nav>
+  <div class="progress" aria-hidden="true"><span id="bar"></span></div>
+  <script>
+    const configExamples = {};
+
+    Object.assign(configExamples, {
+      agents: [
+        {
+          title: 'README 回答八個接手問題；AGENTS 只留下六類工作規則',
+          goal: '人先知道專案如何使用、驗證與求助；AI 再讀可執行的工作界線，兩份文件不互相複製。',
+          summary: 'README 必須保留概述、快速開始、技術、驗證、設定、維運、支援與公版更新；AGENTS 只寫 AI 執行規則。',
+          file: 'README.md＋AGENTS.md',
+          code: `# README.md
+## 專案概述
+## 快速開始
+## 技術與目錄
+## 開發與驗證
+## 設定與密鑰
+## 發布與維運
+## 負責人與支援
+## 公版更新
+
+# AGENTS.md
+
+## Scope and sources of truth
+## Working loop
+## Commands
+## Editing boundaries
+## Safety
+## Code Review Rules`
+        },
+        {
+          title: '依專案語言只產生真的可執行的指令',
+          goal: 'Python-only 不看到 pnpm；TypeScript-only 不看到 uv；混合案才同時列出兩套。',
+          summary: 'Copier 依 `language` 渲染指令；最後一律回到 `./scripts/verify`，公版驗證也會阻擋錯誤 profile。',
+          file: 'template/AGENTS.md.jinja＋scripts/verify-template.sh',
+          code: `{% if language != "typescript" %}
+- Python iteration: uv run ruff check <paths>
+{% endif %}
+{% if language != "python" %}
+- TypeScript iteration: pnpm exec biome check <paths>
+{% endif %}
+- Required final check: ./scripts/verify`
+        },
+        {
+          title: 'AI 能執行工作，但不能自行核准或合併',
+          goal: 'AGENTS.md 說明工作方式；GitHub 權限與 Ruleset 才是不能繞過的控制點。',
+          summary: 'Actions 預設唯讀且不能核准 PR；至少一位人員與 CODEOWNER 審查，所有討論與必要檢查都要完成。',
+          file: 'policies/actions.json＋policies/rulesets.json＋CODEOWNERS',
+          code: `policies/actions.json
+{
+  "default_workflow_permissions": "read",
+  "can_approve_pull_request_reviews": false
+}
+
+policies/rulesets.json
+{
+  "required_approving_review_count": 1,
+  "require_code_owner_review": true,
+  "required_review_thread_resolution": true
+}`
+        }
+      ],
+      governance: [
+        {
+          title: '先保存 squash-only 與 Actions 唯讀設定，條件備妥才套用',
+          goal: '設定已有可審查來源；目前 Free private repo 不執行 apply，避免只套用一半。',
+          summary: '草案設定 `allow_squash_merge=true`、停用 merge／rebase，workflow 預設 `read`；升級 GitHub Team 並建立 CODEOWNERS team 後才生效。',
+          file: 'policies/repository.json＋policies/actions.json',
+          code: `{
+  "allow_merge_commit": false,
+  "allow_rebase_merge": false,
+  "allow_squash_merge": true,
+  "delete_branch_on_merge": true
+}
+
+{
+  "default_workflow_permissions": "read",
+  "can_approve_pull_request_reviews": false
+}`
+        },
+        {
+          title: 'Ruleset 草案列出 PR、CI、PR 標題、OSV 與 zizmor',
+          goal: '四個檢查現在會回報結果；Ruleset 待 GitHub Team 與 CODEOWNERS team 後才強制。',
+          summary: '草案要求一位審查者、推送新 commit 撤銷舊核准，並使用真實檢查名稱；目前尚未套用，不宣稱紅燈已阻擋合併。',
+          file: 'template/policies/rulesets.json.jinja',
+          code: `{
+  "name": "CSARC main protection",
+  "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
+  "rules": [
+    {"type": "pull_request", "parameters": {
+      "required_approving_review_count": 1,
+      "require_code_owner_review": true,
+      "dismiss_stale_reviews_on_push": true
+    }},
+    {"type": "required_status_checks", "parameters": {
+      "required_status_checks": [
+        {"context": "verify"},
+        {"context": "title"},
+        {"context": "scan-pr / osv-scan"},
+        {"context": "audit"}
+      ]
+    }}
+  ]
+}
+
+reusable CI caller 會把 verify 產生為 verify / verify。`
+        },
+        {
+          title: '先檢查方案與套用計畫，管理者確認後才寫入 GitHub',
+          goal: 'private repo 先確認具有 Ruleset 權限；任何前置條件不符都不寫入。',
+          summary: '`plan` 先檢查方案與 CODEOWNERS team；通過後才可用 `apply` 呼叫 `gh api`，避免只套用一半。',
+          file: 'scripts/apply-repository-settings.sh',
+          code: `./scripts/apply-repository-settings.sh plan
+./scripts/apply-repository-settings.sh apply
+
+# GH_REPO can target another reviewed repository.
+GH_REPO=Innoguard-Cyber-Arch/example \
+  ./scripts/apply-repository-settings.sh plan`
+        }
+      ],
+      template: [
+        {
+          title: '先宣告語言組合，再只產生需要的工具鏈',
+          goal: '可選 Python-only、TypeScript-only 或兩者；Python 另提供 latest／minimum。',
+          summary: '答案寫入 `.csarc/profile.json`；驗證入口會依實際 `pyproject.toml`／`package.json` 自動核對。',
+          file: 'copier.yml',
+          code: `language:
+  choices: [python, typescript, python-typescript]
+  default: python
+python_support_mode:
+  type: str
+  choices: [latest, minimum]
+  default: latest
+python_min_version:
+  choices: ["3.12", "3.13", "3.14"]
+  when: minimum
+use_reusable_workflow:
+  type: bool
+  default: false
+enable_attestations:
+  type: bool
+  default: false`
+        },
+        {
+          title: 'Python、TypeScript 與混合組合都已可用',
+          goal: 'profile 清單只承諾真正通過建立與更新測試的內容。',
+          file: 'profiles/catalog.yaml',
+          code: `profiles:
+  python:
+    stage: beta
+    latest_reviewed_stable: "3.14"
+    default_support_mode: latest
+    style_guide:
+      name: Google Python Style Guide
+      line_length: 80
+  typescript:
+    stage: beta
+    latest_reviewed_active_lts: "24"
+    package_manager: pnpm
+  go: {stage: future}
+  rust: {stage: future}
+
+version_policy:
+  stable_release_observation_days: 30
+  merge_after_full_verification: automatic
+
+compositions:
+  python: {stage: beta, profiles: [python]}
+  typescript: {stage: beta, profiles: [typescript]}
+  python_typescript: {stage: beta, profiles: [python, typescript]}`
+        },
+        {
+          title: '既有 repo 在短分支同步審查過的模板內容',
+          goal: 'Copier 保留來源與答案；完整 SHA 決定實際套用內容。',
+          file: '.copier-answers.yml',
+          code: `git switch -c chore/update-repo-template
+uvx --from copier copier update --trust \
+  --vcs-ref <reviewed-full-commit-sha>
+./scripts/verify`
+        }
+      ],
+      contract: [
+        {
+          title: '先宣告 repo 使用 Python、TypeScript 或兩者',
+          goal: 'Copier 將選擇寫進 repo；偵測器只負責提醒實際檔案與宣告不一致，不擅自改設定。',
+          summary: '`language_profile` 是唯一依據；`--suggest` 可依根目錄的 `pyproject.toml` 與 `package.json` 提示最可能的組合。',
+          file: '.csarc/profile.json＋scripts/detect-language-profile',
+          code: `{
+  "language_profile": "python-typescript",
+  "modules": {
+    "python": true,
+    "typescript": true
+  }
+}
+
+./scripts/detect-language-profile --suggest
+./scripts/detect-language-profile`
+        },
+        {
+          title: '各語言保留自己的品質、測試與鎖定設定',
+          goal: '共用治理不等於硬湊成同一套工具；每種語言使用其主流工具，再由同一驗證入口協調。',
+          summary: 'Python 使用 uv、Ruff、mypy、pytest；TypeScript 使用 pnpm、Biome、TypeScript strict、Vitest，兩邊都鎖定實際相依與完整性資料。',
+          file: 'pyproject.toml／package.json＋兩種 lockfile',
+          code: `# Python module
+uv sync --locked
+uv run ruff check .
+uv run mypy
+uv run pytest --cov --cov-fail-under=80
+
+# TypeScript module
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm exec biome ci .
+pnpm exec tsc --noEmit
+pnpm exec vitest run --coverage`
+        },
+        {
+          title: '一個入口依宣告驗證、打包，再由 CI 重跑',
+          goal: '本機、AI 與 GitHub 執行同一入口；Python 驗證 wheel，TypeScript 驗證 npm tarball，雙語言則兩者都跑。',
+          summary: '`scripts/verify` 先檢查 profile，再執行對應模組；中央 workflow 啟用時必須固定完整 commit SHA。',
+          file: 'scripts/verify＋.github/workflows/ci.yml',
+          code: `./scripts/verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+uses: Cyber-Arch/csarc-repo-template/
+  .github/workflows/reusable-ci.yml@<full-commit-sha>
+with:
+  language-profile: python-typescript`
+        }
+      ],
+      method: [
+        {
+          title: '統一工作單欄位，並關閉空白 Issue',
+          goal: '表單與簡報使用完全相同的欄位，且不開放繞過表單的空白 Issue。',
+          summary: '`blank_issues_enabled=false`；必填 priority、problem、outcome、acceptance、out of scope、verification 與 estimate。',
+          file: '.github/ISSUE_TEMPLATE/work-item.yml＋config.yml',
+          code: `# work-item.yml
+body:
+  - id: priority
+    type: dropdown
+  - id: problem
+    type: textarea
+  - id: outcome
+    type: textarea
+  - id: acceptance
+    type: textarea
+  - id: out_of_scope
+    type: textarea
+  - id: verification
+    type: textarea
+  - id: estimate
+    type: input
+
+# config.yml
+blank_issues_enabled: false
+contact_links: []`
+        },
+        {
+          title: '複雜工作先用同一套欄位寫成可版本控制的規格',
+          goal: 'CI 會檢查必要 metadata、章節與至少一個驗收勾選項。',
+          summary: 'front matter 要有 id、priority、estimate、status；解析器拒絕缺章節或沒有驗收勾選項的規格。',
+          file: 'docs/specs/*.md＋scripts/spec_to_issue.py',
+          code: `---
+id: SPEC-001
+priority: P1
+estimate: 1-3 days
+status: proposed
+---
+
+## Problem
+## Outcome
+## Acceptance criteria
+- [ ] Observable condition
+## Out of scope
+## Verification`
+        },
+        {
+          title: '只有規格合併 main 後，才用最小權限建立或更新 Issue',
+          goal: 'PR 內容不直接取得寫入權限；同一 spec ID 不會重複開單。',
+          summary: '只監聽 `main` 的 `docs/specs/*.md`；權限限為 `contents: read`、`issues: write`，並以 spec ID 去重。',
+          file: '.github/workflows/spec-to-issue.yml',
+          code: `on:
+  push:
+    branches: [main]
+    paths: ["docs/specs/*.md"]
+permissions:
+  contents: read
+  issues: write`
+        }
+      ],
+      pr: [
+        {
+          title: 'main 要求一位核准、CODEOWNER 與所有必要檢查',
+          goal: '新提交會讓舊核准失效，不能直接推送或 force push。',
+          summary: '要求一位核准、CODEOWNER、最後推送者以外的人核准，並解完 review thread；新 commit 會撤銷舊核准。',
+          file: 'policies/rulesets.json',
+          code: `{
+  "type": "pull_request",
+  "parameters": {
+    "required_approving_review_count": 1,
+    "dismiss_stale_reviews_on_push": true,
+    "require_code_owner_review": true,
+    "require_last_push_approval": true,
+    "required_review_thread_resolution": true
+  }
+}`
+        },
+        {
+          title: '敏感路徑由指定 owner 再審查',
+          goal: '一般程式碼一位同事即可；CI、依賴、規格與政策檔提高審查層級。',
+          summary: '把 `.github/`、`scripts/`、`policies/`、spec 與 lockfile 指給 code owner，敏感變更會自動要求額外審查。',
+          file: '.github/CODEOWNERS',
+          code: `* {{ code_owner }}
+/.github/ {{ code_owner }}
+/scripts/ {{ code_owner }}
+/policies/ {{ code_owner }}
+/docs/specs/ {{ code_owner }}
+/pyproject.toml {{ code_owner }}
+/uv.lock {{ code_owner }}`
+        },
+        {
+          title: 'PR 標題限定九種 type，可用 ! 表示破壞性變更',
+          goal: '標題是版本計算依據，所以限可列印英文 ASCII；內文仍可使用中文。',
+          summary: 'regex 接受九種 type、小寫 scope 與冒號前的可選 `!`；第二段檢查拒絕中文標題，錯誤訊息明講 PR body 可以中文。',
+          file: '.github/workflows/pr-policy.yml＋pull_request_template.md',
+          code: `^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+
+
+if printf '%s' "$PR_TITLE" | LC_ALL=C \
+  grep -q '[^ -~]'; then
+  echo "The PR body may be written in Chinese."
+  exit 1
+fi
+
+## Purpose
+## Verification
+## Risk and rollback
+## Supply chain`
+        }
+      ],
+      ci: [
+        {
+          title: '預設 CI 在 PR 與 main push 執行專案自己的驗證入口',
+          goal: '預設路徑不依賴中央 workflow，容易閱讀與追錯。',
+          file: '.github/workflows/ci.yml',
+          code: `on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    steps:
+      - run: ./scripts/verify`
+        },
+        {
+          title: '流程穩定後，可改用完整 SHA 呼叫 reusable workflow',
+          goal: 'Copier 預設關閉；啟用時必須輸入 40 字元 commit SHA，中央 private repo 另須允許 organization 存取。',
+          file: 'copier.yml＋.github/workflows/reusable-ci.yml',
+          code: `use_reusable_workflow: true
+workflow_ref: <40-character-commit-sha>
+
+uses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@<40-character-commit-sha>
+with:
+  language-profile: python-typescript
+
+gh api --method PUT \\
+  repos/Innoguard-Cyber-Arch/csarc-repo-template/actions/permissions/access \\
+  -f access_level=organization`
+        },
+        {
+          title: 'zizmor 現在是每張 PR 都會執行的自動檢查',
+          goal: '每張 PR 都掃描；產出 private repo 採離線模式，跨 repo commit 歸屬待 GitHub App 才能線上查。',
+          file: '.github/workflows/zizmor.yml',
+          code: `name: Zizmor
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  audit:
+    steps:
+      - run: uvx --from zizmor==1.29.0 zizmor . --format plain
+# Canonical root uses a token; generated private repos stay offline.`
+        }
+      ],
+      supply: [
+        {
+          title: '一般套件新版觀察三天，再由測試與人員決定是否合併',
+          goal: '安全更新不等待；三天規則主要降低剛發布惡意版本的早期風險。',
+          summary: 'Dependabot 同時管理 `uv` 與 `npm` 生態；`cooldown.default-days=3` 延後一般升版，安全更新仍立即提出。',
+          file: '.github/dependabot.yml',
+          code: `updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+  - package-ecosystem: npm
+    directory: /
+    cooldown:
+      default-days: 3`
+        },
+        {
+          title: '兩種 lockfile 都驗內容；pnpm 本機也嚴格等三天',
+          goal: '版本號只供人閱讀；Python 比對 artifact SHA-256，npm 比對 integrity hash。',
+          summary: '`uv sync --locked` 與 `pnpm install --frozen-lockfile --ignore-scripts` 都會拒絕設定漂移；pnpm resolver 另阻擋發布未滿三天的直接與間接套件。',
+          file: 'uv.lock＋pnpm-lock.yaml＋pnpm-workspace.yaml＋scripts/verify',
+          code: `uv sync --locked
+pnpm install --frozen-lockfile --ignore-scripts
+
+minimumReleaseAge: 4320
+minimumReleaseAgeStrict: true`
+        },
+        {
+          title: '相依下界要能測，天花板要能指出是誰擋住',
+          goal: 'Ruff／mypy 的 Python target 只管語法；uv resolver 另外證明 dev 相依範圍可安裝。這不是漏洞掃描。',
+          summary: '`lowest-direct` 將直接相依降到宣告下界並重跑測試；每週排程逐一嘗試 PyPI 最新版，把 uv 的完整衝突鏈寫入 Actions summary。',
+          file: 'scripts/verify＋scripts/report_dependency_ceiling.py',
+          code: `uv pip compile pyproject.toml --group dev \
+  --resolution lowest-direct
+uv pip check --python <lower-bound-python>
+
+# Weekly ceiling report uses an exact requirement:
+uv pip compile pyproject.toml --group dev \
+  --upgrade-package "<package>==<latest>"`
+        },
+        {
+          title: 'PR、main 與每週排程掃描已公開登錄的漏洞',
+          goal: 'OSV 發現漏洞就失敗，不和一般新版的三天觀察混在一起。',
+          summary: '在 PR、main push 與每週一排程執行 OSV；掃到已登錄漏洞就讓檢查失敗，不套用三天等待。',
+          file: '.github/workflows/osv.yml',
+          code: `on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1"`
+        },
+        {
+          title: 'tag 發布時建立交付成品、SHA-256 與 CycloneDX SBOM',
+          goal: 'anchore/sbom-action 以 Syft 盤點內容；attestation 由 Copier 選項決定。',
+          summary: '依 profile 打包並計算 SHA-256；先把真正成品解壓到隔離目錄，再由 Syft 產生 CycloneDX。`components` 為空就讓 workflow 失敗。',
+          file: '.github/workflows/release.yml',
+          code: `- run: uv build               # Python
+- run: pnpm run build && pnpm pack --pack-destination dist # TypeScript
+- run: shasum -a 256 dist/* > SHA256SUMS
+- name: Extract release artifacts
+  run: |
+    mkdir -p "\${RUNNER_TEMP}/sbom-root"
+    # Extract each archive into the isolated SBOM input directory.
+- uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+  with:
+    path: \${{ runner.temp }}/sbom-root
+    format: cyclonedx-json
+    output-file: sbom.cdx.json`
+        }
+      ],
+      deploy: [
+        {
+          title: '待啟用｜GitHub App 在 workflow 內產生短效 token',
+          goal: 'Client ID 放 Variable、private key 放 Secret；數字 App ID 只供 Ruleset bypass，不把長期憑證寫進 repo 或 .env。',
+          summary: '目前尚未建立 App，相關 job 會略過。啟用時只給 Contents、Pull requests 讀寫權限；使用 App token，release-please 建立的 tag 才能觸發後續 workflow。',
+          file: 'Repository Settings／Secrets and variables／Actions',
+          code: `# Settings > Developer settings > GitHub Apps
+# Install App in this repo; generate a private-key PEM.
+gh variable set CSARC_VERSION_BOT_CLIENT_ID \
+  --body '<client-id>'
+gh secret set CSARC_VERSION_BOT_PRIVATE_KEY \
+  < ./private-key.pem
+
+# Local runtime secrets only:
+.env          # ignored; never commit
+.env.example  # placeholders only`
+        },
+        {
+          title: '設定已備妥｜release-please 只開 Release PR，不直接推 main',
+          goal: 'squash 後的 PR 標題決定版本；Python、TypeScript 或混合 repo 都由人審查 Release PR。',
+          summary: '`fix` 升修補版、`feat` 升次版、`!` 升大版；混合 repo 同步版本與 CHANGELOG。未設定 GitHub App 時 job 略過，不列為已啟用能力。',
+          file: '.github/workflows/release-please.yml＋release-please-config.json',
+          code: `- uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+  with:
+    token: \${{ steps.app-token.outputs.token }}
+    config-file: release-please-config.json
+    manifest-file: .release-please-manifest.json
+
+// release-please-config.json
+"release-type": "node", // combined or TypeScript profile
+"extra-files": [{
+  "type": "toml",
+  "path": "pyproject.toml",
+  "jsonpath": "$.project.version"
+}]`
+        },
+        {
+          title: 'tag 觸發既有 release workflow 產生交付證據',
+          goal: '版本、成品與來源沿用同一條可追溯鏈；仍不宣稱已自動部署。',
+          summary: '`v*` tag 已實測觸發 wheel、npm tarball、SHA-256 與 CycloneDX SBOM；成品先解壓，SBOM 不能為空。沒有 deploy job。',
+          file: '.github/workflows/release.yml',
+          code: `on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: build-and-sbom`
+        }
+      ],
+      knowledge: [
+        {
+          title: 'README 只保留開始使用與日常入口',
+          goal: '完整設計放在 repo 內部網站，避免 README 再次膨脹。',
+          summary: '公版內部網站是單檔 HTML，不需要另外安裝框架；它仍和程式一起走 PR。',
+          file: 'README.md＋docs/index.html',
+          code: `[開啟內部網站與完整決策說明](docs/index.html)`
+        },
+        {
+          title: '生成專案分開版型與內容',
+          goal: 'Copier 更新公版版型時，不能覆寫每個專案自行補充的內容。',
+          summary: '`index.html` 由公版更新；`site-content.js` 第一次產生後由專案維護。',
+          file: 'template/docs/＋copier.yml',
+          code: `_skip_if_exists:
+  - docs/site-content.js`
+        }
+      ],
+      rollout: [
+        {
+          title: '三種可用組合與 future 語言分開列出',
+          goal: '基本、未來與可選不是口號，而是對可用能力的承諾。',
+          summary: 'Python、TypeScript 與混合組合都是 `beta`；Go、Rust 保持 `future`，不會被 Copier 當成可選能力。',
+          file: 'profiles/catalog.yaml',
+          code: `python: {stage: beta}
+typescript: {stage: beta}
+go: {stage: future}
+rust: {stage: future}
+
+python_typescript: {stage: beta}`
+        },
+        {
+          title: 'GitHub 設定隨模板產生；Ruleset 與 App 暫不啟用',
+          goal: '設定檔可以先審查，但不把方案或憑證尚未支援的能力算成已完成。',
+          summary: 'CI／PR checks 現在可用；repository、actions、labels、rulesets 先保存，等 GitHub Team、CODEOWNERS team 與 GitHub App 分別備妥後才套用。',
+          file: 'policies/＋scripts/apply-repository-settings.sh',
+          code: `policies/repository.json
+policies/actions.json
+policies/labels.json
+policies/rulesets.json
+scripts/apply-repository-settings.sh`
+        },
+        {
+          title: '每次修改都測新案建立與既有專案更新',
+          goal: '可導入的條件是兩條路徑都通過，不是只看檔案存在。',
+          summary: '測試會真的執行 Copier copy、`scripts/verify`、zizmor 與 Copier update；任一路徑失敗就不發布。',
+          file: 'scripts/verify-template.sh',
+          code: `copier copy --defaults
+./scripts/verify
+uvx zizmor==1.29.0 . --format plain
+copier update --defaults`
+        }
+      ],
+      'template-release': [
+        {
+          title: 'Copier 只詢問會改變骨架或驗證行為的選項',
+          goal: '不提供關閉型別或秘密掃描的開關；嚴格門檻是公版契約。',
+          summary: 'Python 預設 latest；需要舊版相容才選 minimum 並宣告最低版本。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。',
+          file: 'copier.yml',
+          code: `language: python
+python_support_mode: latest  # latest | minimum
+python_min_version: "3.12"  # Used only in minimum mode
+coverage_mode: global  # global | diff
+coverage_threshold: 80
+enable_precommit: false
+enable_attestations: false
+use_reusable_workflow: false
+
+_skip_if_exists:
+  - "src/**"
+  - "tests/**"
+  - "docs/specs/**"`
+        },
+        {
+          title: '公版 root 鎖工具、跑 OSV，並檢查十七組共用設定沒有漂移',
+          goal: '中央模板不能要求下游做到自己做不到的事；PR 說明模板是唯一刻意差異。',
+          summary: 'root 以鎖定環境跑 Ruff、mypy、秘密與 Actions 掃描；腳本逐組 diff root／template 的共用政策。',
+          file: 'pyproject.toml＋uv.lock＋scripts/verify-template.sh',
+          code: `uv sync --locked
+uv lock --check
+uv run ruff format --check
+uv run ruff check
+uv run mypy
+./scripts/scan-secrets
+uv run zizmor . --format plain
+
+# Paired root/template policies are diff-checked.`
+        },
+        {
+          title: 'Python 新功能版本滿三十天後，驗證通過就自動升版',
+          goal: '不靠人記得升級，也不讓未通過 Ruff、mypy、CI 或模板更新測試的版本進入 main。',
+          summary: '排程讀取 Python 官方發布日期；專用 GitHub App 建立 PR、等待全部門禁通過後自動合併。PR 是稽核紀錄，不是人工待辦。',
+          file: 'python-version-policy.yml＋scripts/update_python_version.py',
+          code: `version_policy:
+  stable_release_observation_days: 30
+  update_method: scheduled_verified_pull_request
+  merge_after_full_verification: automatic
+
+# Required repository settings
+CSARC_VERSION_BOT_CLIENT_ID
+CSARC_VERSION_BOT_APP_ID # Ruleset bypass only
+CSARC_VERSION_BOT_PRIVATE_KEY`
+        },
+        {
+          title: 'Python-only、TypeScript-only、混合與 Copier 更新都要真的執行',
+          goal: 'beta 是公版 profile 的成熟階段，不是 Python 或 TypeScript 版本字串。',
+          summary: '驗證三種語言組合、global／diff coverage、reusable workflow、attestation 與 update；更新時保留兩邊產品程式。',
+          file: 'scripts/verify-template.sh＋profiles/catalog.yaml',
+          code: `./scripts/verify-template.sh
+
+# Covers global coverage, diff coverage, optional features,
+# reusable workflow, attestations, and copier update.
+
+python: {stage: beta}
+typescript: {stage: beta}
+go: {stage: future}
+rust: {stage: future}
+python_typescript: {stage: beta}`
+        }
+      ]
+    });
+
+    const setupExamples = {
+      new: {
+        title: '建立新 repo',
+        goal: '在目標資料夾外執行；Copier 會詢問 Python、TypeScript 或兩者。完整 commit SHA 必須先經團隊審查。',
+        location: 'Terminal',
+        code: `uvx --from copier copier copy --trust \\
+  --vcs-ref <reviewed-full-commit-sha> \\
+  https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git \\
+  ./my-project
+cd ./my-project
+./scripts/verify`
+      },
+      existing: {
+        title: '把公版導入既有 repo',
+        goal: '先開分支並宣告既有專案模式；公版保留原本 manifest，再由人合併工具設定。diff coverage 門檻仍是 80%。',
+        location: '既有 repo 根目錄',
+        code: `git switch -c chore/adopt-csarc-template
+uvx --from copier copier copy --trust --overwrite \\
+  --vcs-ref <reviewed-full-commit-sha> \\
+  --data project_mode=existing \\
+  --data language=<python|typescript|python-typescript> \\
+  --data coverage_mode=diff \\
+  https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git .
+./scripts/verify`
+      },
+      update: {
+        title: '更新已使用公版的 repo',
+        goal: 'Copier 讀取 .copier-answers.yml，只顯示新版差異；完成後仍以 PR 審查。',
+        location: '專案 repo 根目錄',
+        code: `git switch -c chore/update-repo-template
+uvx --from copier copier update --trust \\
+  --vcs-ref <reviewed-full-commit-sha>
+./scripts/verify`
+      },
+      mac: {
+        title: 'macOS 本機需求',
+        goal: '共同安裝 Git、GitHub CLI、uv；TypeScript／混合案再使用 Node 與 pnpm。只有 GitHub 連線操作需要登入。',
+        location: 'Terminal',
+        code: `brew install git gh uv node pnpm
+
+# Only for repository settings and GitHub end-to-end tests.
+gh auth login -h github.com
+gh auth status`
+      },
+      windows: {
+        title: 'Windows 本機需求',
+        goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；TypeScript／混合案再安裝 Node 24 與 pnpm 11。',
+        location: 'PowerShell（管理員）→ Ubuntu',
+        code: `# PowerShell (Administrator)
+wsl --install -d Ubuntu
+
+# Ubuntu in WSL2
+sudo apt update
+sudo apt install -y git gh curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+sudo apt install -y nodejs
+sudo npm install -g pnpm@11.22.0
+
+# Only for repository settings and GitHub end-to-end tests.
+gh auth login -h github.com
+gh auth status`
+      }
+    };
+
+    const lifecycleOrder = ['method', 'agents', 'contract', 'pr', 'supply', 'deploy', 'governance'];
+    const platformOrder = ['template-release', 'docs-site', 'rollout'];
+    const deckRoot = document.querySelector('.deck');
+    const capabilitySlide = document.querySelector('.capability-slide');
+    const filesSlide = document.querySelector('.managed-files-slide');
+    const bridgeSlide = document.querySelector('.bridge-slide');
+    const reviewNotesSlides = [...document.querySelectorAll('.review-notes-slide')];
+    const ecosystemSlide = document.querySelector('.ecosystem-slide');
+    deckRoot.replaceChildren(
+      capabilitySlide,
+      filesSlide,
+      ...lifecycleOrder.map(track => document.querySelector(`[data-track="${track}"]`)),
+      ...platformOrder.map(track => document.querySelector(`[data-track="${track}"]`)),
+      bridgeSlide,
+      ecosystemSlide,
+      ...reviewNotesSlides
+    );
+    const slideCount = document.querySelectorAll('.slide').length;
+    document.querySelectorAll('.slide').forEach((slide, index) => {
+      slide.dataset.page = `${String(index + 1).padStart(2, '0')} / ${slideCount}`;
+    });
+    const allSlidesInOrder = [...document.querySelectorAll('.slide')];
+    const pageByTrack = Object.fromEntries(allSlidesInOrder.filter(slide => slide.dataset.track).map(slide => [slide.dataset.track, allSlidesInOrder.indexOf(slide) + 1]));
+    const ecosystemPage = allSlidesInOrder.indexOf(document.querySelector('.ecosystem-slide')) + 1;
+    const bridgePage = allSlidesInOrder.indexOf(document.querySelector('.bridge-slide')) + 1;
+    const reviewNotesPage = allSlidesInOrder.indexOf(reviewNotesSlides[0]) + 1;
+    const journey = [
+      { id: 'capability', label: '能力／導入', tier: 'priority', group: 'use' },
+      { id: 'files', label: '檔案地圖', tier: 'priority', group: 'use' },
+      { id: 'method', code: '01', label: '工作定義', tier: 'priority', group: 'main' },
+      { id: 'agents', code: '02', label: 'AI 契約／實作', tier: 'priority', group: 'main' },
+      { id: 'contract', code: '03', label: '驗證＋CI', tier: 'priority', group: 'main' },
+      { id: 'pr', code: '04', label: 'PR／合併', tier: 'priority', group: 'main' },
+      { id: 'supply', code: '05', label: '依賴安全', tier: 'priority', group: 'main' },
+      { id: 'deploy', code: '06', label: '版本／交付', tier: 'best', group: 'main' },
+      { id: 'governance', code: '07', label: '規則治理', tier: 'priority', group: 'main' },
+      { id: 'template-release', code: '08', label: '模板升級', tier: 'priority', group: 'support' },
+      { id: 'docs-site', code: '09', label: '內部網站', tier: 'priority', group: 'support' },
+      { id: 'rollout', code: '10', label: '導入層級', tier: 'best', group: 'support' }
+    ].map(item => ({ ...item, page: pageByTrack[item.id] }));
+    const renderJourneyItems = (items, activeTrack) => items.map(item => `<li class="journey-item ${item.id === activeTrack ? `active ${item.tier}` : ''}"${item.id === activeTrack ? ' aria-current="step"' : ''}><a href="#${item.page}">${item.code ? `<span class="journey-code">${item.code}</span>` : ''}<span>${item.label}</span></a></li>`).join('');
+    document.querySelectorAll('.slide').forEach(slide => {
+      const activeTrack = slide.dataset.navTrack || slide.dataset.track;
+      const useItems = renderJourneyItems(journey.filter(item => item.group === 'use'), activeTrack);
+      const mainItems = renderJourneyItems(journey.filter(item => item.group === 'main'), activeTrack);
+      const supportItems = renderJourneyItems(journey.filter(item => item.group === 'support'), activeTrack);
+      const onEcosystem = slide.classList.contains('ecosystem-slide');
+      const onBridge = slide.classList.contains('bridge-slide');
+      const onReviewNotes = slide.classList.contains('review-notes-slide');
+      const selectionCurrent = onEcosystem ? ' active-selection" aria-current="page' : '';
+      const bridgeCurrent = onBridge ? ' active-bridge" aria-current="page' : '';
+      const reviewNotesCurrent = onReviewNotes ? ' active-overview" aria-current="page' : '';
+      slide.insertAdjacentHTML('afterbegin', `<aside class="journey-rail" aria-label="簡報目錄"><h3>使用公版</h3><ol class="journey-use">${useItems}</ol><h3>開發與維護</h3><ol class="journey-main">${mainItems}</ol><h3>公版管理</h3><ol class="journey-support">${supportItems}</ol><a class="journey-bookend appendix${bridgeCurrent}" href="#${bridgePage}">五月盤點</a><a class="journey-bookend appendix${selectionCurrent}" href="#${ecosystemPage}">工具附錄</a><a class="journey-bookend appendix${reviewNotesCurrent}" href="#${reviewNotesPage}">決策附錄</a></aside>`);
+      const activeJourney = journey.find(item => item.id === activeTrack);
+      const contextLine = slide.querySelector('.context-line');
+      if (activeJourney && contextLine) {
+        const tierLabels = { priority: '必備', best: '最佳', optional: '可選' };
+        contextLine.insertAdjacentHTML('afterbegin', `<span class="decision-tier-tag ${activeJourney.tier}">${tierLabels[activeJourney.tier]}</span>`);
+      }
+    });
+
+    function closeConfigOverlays() {
+      document.querySelectorAll('.config-overlay').forEach(overlay => {
+        overlay.hidden = true;
+        overlay.removeAttribute('data-item-index');
+      });
+      document.querySelectorAll('.config-trigger[aria-expanded="true"], .setup-trigger[aria-expanded="true"], .term-trigger[aria-expanded="true"]').forEach(trigger => {
+        trigger.setAttribute('aria-expanded', 'false');
+      });
+    }
+
+    function closePackageDisclosures(except = null) {
+      document.querySelectorAll('.package-disclosure[open]').forEach(detail => {
+        if (detail !== except) detail.open = false;
+      });
+    }
+
+    function closeBridgeDetails(except = null) {
+      document.querySelectorAll('.bridge-detail[open]').forEach(detail => {
+        if (detail !== except) detail.open = false;
+      });
+    }
+
+    document.querySelectorAll('.package-disclosure').forEach(detail => {
+      detail.addEventListener('toggle', () => {
+        if (detail.open) closePackageDisclosures(detail);
+      });
+    });
+
+    const setupOverlay = document.createElement('aside');
+    setupOverlay.id = 'setup-overlay';
+    setupOverlay.className = 'config-overlay';
+    setupOverlay.hidden = true;
+    setupOverlay.setAttribute('role', 'region');
+    setupOverlay.setAttribute('aria-label', '導入與安裝指令');
+    setupOverlay.innerHTML = `<div class="config-overlay-card"><button class="config-overlay-close" type="button" aria-label="關閉指令">×</button><h3></h3><p class="config-overlay-goal"></p><p class="config-overlay-path">執行位置：<code></code></p><pre class="code"></pre></div>`;
+    capabilitySlide.append(setupOverlay);
+    capabilitySlide.querySelectorAll('.setup-trigger').forEach(trigger => {
+      trigger.setAttribute('aria-controls', setupOverlay.id);
+      trigger.addEventListener('click', () => {
+        const key = trigger.dataset.setup;
+        const setting = setupExamples[key];
+        const isSameOpen = !setupOverlay.hidden && setupOverlay.dataset.itemIndex === key;
+        closeConfigOverlays();
+        if (!setting || isSameOpen) return;
+        setupOverlay.querySelector('h3').textContent = setting.title;
+        setupOverlay.querySelector('.config-overlay-goal').textContent = setting.goal;
+        setupOverlay.querySelector('.config-overlay-path code').textContent = setting.location;
+        setupOverlay.querySelector('pre').textContent = setting.code;
+        setupOverlay.dataset.itemIndex = key;
+        setupOverlay.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+      });
+    });
+    setupOverlay.querySelector('.config-overlay-close').addEventListener('click', closeConfigOverlays);
+
+    document.querySelectorAll('.term-trigger').forEach(trigger => {
+      const overlay = document.querySelector(`#${trigger.getAttribute('aria-controls')}`);
+      if (!overlay) return;
+      trigger.addEventListener('click', () => {
+        const isOpen = !overlay.hidden;
+        closeConfigOverlays();
+        if (isOpen) return;
+        overlay.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+      });
+      overlay.querySelector('.config-overlay-close').addEventListener('click', closeConfigOverlays);
+    });
+
+    document.querySelectorAll('.decision-slide').forEach(slide => {
+      const track = slide.dataset.track;
+      const settings = configExamples[track];
+      const guidance = slide.querySelector('.config-guidance');
+      if (!settings || !guidance) return;
+
+      const heading = document.createElement('strong');
+      heading.textContent = '需要設定的項目';
+      const intro = document.createElement('p');
+      intro.textContent = '設定內容與對應檔案如下。';
+      const actions = document.createElement('div');
+      actions.className = 'config-actions';
+
+      const overlay = document.createElement('aside');
+      overlay.id = `config-overlay-${track}`;
+      overlay.className = 'config-overlay';
+      overlay.hidden = true;
+      overlay.setAttribute('role', 'region');
+      overlay.setAttribute('aria-label', '設定實作覆蓋卡');
+      overlay.innerHTML = `<div class="config-overlay-card"><button class="config-overlay-close" type="button" aria-label="關閉設定實作">×</button><h3></h3><p class="config-overlay-goal"></p><p class="config-overlay-path">設定檔：<code></code></p><pre class="code"></pre></div>`;
+
+      settings.forEach((setting, index) => {
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'config-trigger';
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.setAttribute('aria-controls', overlay.id);
+
+        const title = document.createElement('span');
+        title.className = 'config-trigger-title';
+        title.textContent = setting.title;
+        const file = document.createElement('span');
+        file.className = 'config-trigger-file';
+        file.textContent = setting.file;
+        const summary = document.createElement('span');
+        summary.className = 'config-trigger-summary';
+        summary.textContent = (setting.summary || setting.goal).replaceAll('`', '');
+        trigger.append(title, file, summary);
+
+        trigger.addEventListener('click', () => {
+          const isSameOpen = !overlay.hidden && overlay.dataset.itemIndex === String(index);
+          closeConfigOverlays();
+          if (isSameOpen) return;
+          overlay.querySelector('h3').textContent = setting.title;
+          overlay.querySelector('.config-overlay-goal').textContent = setting.goal;
+          overlay.querySelector('.config-overlay-path code').textContent = setting.file;
+          overlay.querySelector('pre').textContent = setting.code;
+          overlay.dataset.itemIndex = String(index);
+          overlay.hidden = false;
+          trigger.setAttribute('aria-expanded', 'true');
+        });
+        actions.append(trigger);
+      });
+
+      overlay.querySelector('.config-overlay-close').addEventListener('click', closeConfigOverlays);
+      guidance.replaceChildren(heading, intro, actions);
+      slide.append(overlay);
+    });
+
+    addEventListener('click', event => {
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest('.package-disclosure')) closePackageDisclosures();
+      if (!event.target.closest('.bridge-detail')) closeBridgeDetails();
+      if (event.target.closest('.config-overlay-card, .config-trigger, .setup-trigger, .term-trigger')) return;
+      closeConfigOverlays();
+    });
+
+    const slides = [...document.querySelectorAll('.slide')];
+    const counter = document.querySelector('#counter');
+    const bar = document.querySelector('#bar');
+    const previous = document.querySelector('#previous');
+    const next = document.querySelector('#next');
+    const zoomOut = document.querySelector('#zoom-out');
+    const zoomReset = document.querySelector('#zoom-reset');
+    const zoomIn = document.querySelector('#zoom-in');
+    const zoomLevel = document.querySelector('#zoom-level');
+    let viewZoom = 1;
+    let current = Math.max(0, Math.min(slides.length - 1, Number(location.hash.slice(1)) - 1 || 0));
+    function fitDeck() {
+      const fit = Math.min((innerWidth - 32) / 1600, (innerHeight - 120) / 900);
+      document.documentElement.style.setProperty('--deck-scale', Math.max(.1, fit * viewZoom));
+      zoomLevel.textContent = `${Math.round(viewZoom * 100)}%`;
+      zoomOut.disabled = viewZoom <= .6;
+      zoomIn.disabled = viewZoom >= 1;
+    }
+    function setViewZoom(value) {
+      viewZoom = Math.max(.6, Math.min(1, value));
+      fitDeck();
+    }
+    function show(index) {
+      closeConfigOverlays();
+      closePackageDisclosures();
+      closeBridgeDetails();
+      current = Math.max(0, Math.min(slides.length - 1, index));
+      slides.forEach((slide, i) => { const active = i === current; slide.classList.toggle('active', active); slide.setAttribute('aria-hidden', String(!active)); });
+      counter.textContent = `${current + 1} / ${slides.length}`;
+      bar.style.width = `${((current + 1) / slides.length) * 100}%`;
+      previous.disabled = current === 0; next.disabled = current === slides.length - 1;
+      history.replaceState(null, '', `#${current + 1}`);
+    }
+    previous.addEventListener('click', () => show(current - 1));
+    next.addEventListener('click', () => show(current + 1));
+    zoomOut.addEventListener('click', () => setViewZoom(viewZoom - .1));
+    zoomReset.addEventListener('click', () => setViewZoom(1));
+    zoomIn.addEventListener('click', () => setViewZoom(viewZoom + .1));
+    addEventListener('resize', fitDeck);
+    document.querySelectorAll('.bridge-detail').forEach(detail => {
+      detail.addEventListener('toggle', () => {
+        if (!detail.open) return;
+        closeBridgeDetails(detail);
+      });
+    });
+    addEventListener('keydown', event => {
+      if (event.key === 'Escape') { closeConfigOverlays(); closePackageDisclosures(); closeBridgeDetails(); return; }
+      if (event.target.closest('summary, button, a, input, textarea, select')) return;
+      if (['ArrowRight', 'PageDown', ' '].includes(event.key)) { event.preventDefault(); show(current + 1); }
+      if (['ArrowLeft', 'PageUp'].includes(event.key)) { event.preventDefault(); show(current - 1); }
+      if (event.key === '-') setViewZoom(viewZoom - .1);
+      if (event.key === '+') setViewZoom(viewZoom + .1);
+      if (event.key === '0') setViewZoom(1);
+      if (event.key === 'Home') show(0); if (event.key === 'End') show(slides.length - 1); if (event.key.toLowerCase() === 'p') print();
+    });
+    addEventListener('hashchange', () => show(Number(location.hash.slice(1)) - 1 || 0));
+    fitDeck();
+    show(current);
+  </script>
+</body>
+</html>

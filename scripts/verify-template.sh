@@ -87,6 +87,9 @@ grep -q "^    - \"$next_python\"$" \
 test -f AGENTS.md
 test "$(wc -l < AGENTS.md)" -le 200
 test "$(cat CLAUDE.md)" = "@AGENTS.md"
+test -f docs/index.html
+grep -q '<title>CSARC Repo Template｜AI 輔助 SDLC 團隊公版</title>' \
+  docs/index.html
 grep -q '^## Working loop$' AGENTS.md
 grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
@@ -180,6 +183,12 @@ test -f "$fixture_root/default-project/.release-please-manifest.json"
 test "$(cat "$fixture_root/default-project/.python-version")" = "3.14"
 test -f "$fixture_root/default-project/AGENTS.md"
 test "$(wc -l < "$fixture_root/default-project/AGENTS.md")" -le 200
+test -f "$fixture_root/default-project/docs/index.html"
+test -f "$fixture_root/default-project/docs/site-content.js"
+grep -q 'Template Smoke Test' \
+  "$fixture_root/default-project/docs/site-content.js"
+grep -q 'window.CSARC_SITE_CONTENT' \
+  "$fixture_root/default-project/docs/site-content.js"
 grep -q '^## Scope and sources of truth$' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q '^## Commands$' "$fixture_root/default-project/AGENTS.md"
@@ -573,6 +582,8 @@ printf '%s\n' 'PROJECT_OWNED = true' \
   > "$update_project/src/csarc_project/__init__.py"
 printf '%s\n' 'export const projectOwned = true;' \
   > "$update_project/typescript/src/index.ts"
+printf '%s\n' 'window.PROJECT_OWNED_SITE = true;' \
+  > "$update_project/docs/site-content.js"
 git -C "$update_project" add .
 git -C "$update_project" commit -m "test: generated project"
 
@@ -592,4 +603,6 @@ grep -q '^PROJECT_OWNED = true$' \
   "$update_project/src/csarc_project/__init__.py"
 grep -q '^export const projectOwned = true;$' \
   "$update_project/typescript/src/index.ts"
+grep -q '^window.PROJECT_OWNED_SITE = true;$' \
+  "$update_project/docs/site-content.js"
 grep -q '_commit: v0.1.1' "$update_project/.copier-answers.yml"

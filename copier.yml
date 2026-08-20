@@ -30,6 +30,7 @@ _skip_if_exists:
   - "typescript/src/**/*.ts"
   - "typescript/tests/**/*.ts"
   - "docs/specs/**/*.md"
+  - "docs/site-content.js"
   - "{% if project_mode == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"
   - "{% if project_mode == 'existing' %}package.json{% else %}__overwrite_node_manifest__{% endif %}"
 _tasks:

@@ -1,31 +1,16 @@
 # {{ project_name }}
 
+{{ project_description }}
+
+[開啟專案內部網站](docs/index.html)
+
 ## 專案概述
 
-{{ project_description }}
-公版成熟階段：beta。本段應持續說清楚專案解決的問題、主要使用者、輸出邊界與使用範圍。
-
-## 技術與目錄
-
-本 repo 宣告為 `{{ language }}`，記錄在 `.csarc/profile.json`。`scripts/detect-language-profile --suggest` 會依 `pyproject.toml` 與 `package.json` 判斷實際模組；`scripts/verify` 會阻擋宣告與檔案不一致，避免只加一個設定檔卻漏掉整套門禁。
-
-`.gitignore` 固定排除 macOS、Windows、Linux 與常見 IDE 的本機雜訊，並依這個 profile 只加入{% if language != "typescript" %} Python{% endif %}{% if language == "python-typescript" %}、{% endif %}{% if language != "python" %} TypeScript{% endif %} 產物規則。VS Code 的 `settings.json`、`tasks.json`、`launch.json`、`extensions.json` 仍可提交，讓真正的團隊設定與個人暫存檔分開。
-
-{% if language != "typescript" %}
-Python 以 [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html) 為基準；Ruff 會檢查 80 字元行寬、import、命名與 Google docstring，mypy 負責 strict 型別檢查。
-
-{% if python_support_mode == "latest" %}本 repo 採「最新穩定版」模式，目前只承諾 Python 3.14：`requires-python`、Ruff、mypy、本機 `.python-version` 與 CI 都以 3.14 為準。公版日後更新最新穩定版時，Copier 會先形成可審查的 PR 差異。{% else %}本 repo 採「最低版本」模式，宣告支援 Python {{ python_min_version }} 以上；Ruff 與 mypy 以 {{ python_min_version }} 為語法下限，CI 同時驗證 {{ python_min_version }} 與目前最新穩定版 3.14。本機開發仍使用 `.python-version` 固定的 3.14。{% endif %}
-{% endif %}
-
-{% if language != "python" %}
-TypeScript 以 Node 24 Active LTS、pnpm 11 為基線；Biome 負責排版與 lint、TypeScript strict 模式負責型別、Vitest 負責測試與 {{ coverage_threshold }}% coverage。`pnpm-workspace.yaml` 會以嚴格模式拒絕發布未滿三天的新版本，`pnpm-lock.yaml` 則記錄下載內容的 integrity hash。
-{% endif %}
-
-公版更新會對 `.github/`、`policies/`、`scripts/verify`、`README.md`、`AGENTS.md` 與 `CLAUDE.md` 提出可審查差異；語言設定由公版和專案共同維護。{% if language != "typescript" %}`src/`、`tests/`、{% endif %}{% if language != "python" %}`typescript/src/`、`typescript/tests/`、{% endif %}`docs/specs/` 初次建立後屬於專案，Copier 設定為不改寫既有內容。
+本 repo 使用 CSARC 公版，語言 profile 是 `{{ language }}`。請在這裡補上主要使用者、解決的問題、輸出與不處理的範圍；完整團隊流程放在內部網站，不在 README 重複。
 
 ## 快速開始
 
-共同前置工具是 Git、GitHub CLI 與 uv；{% if language != "python" %}本 repo 另需 Node 24+ 與 pnpm 11。{% endif %}取得 repo 後，先用共同入口確認環境與成品都可用：
+共同需求是 Git、GitHub CLI、uv；{% if language != "python" %}本案另需 Node 24+ 與 pnpm 11。{% endif %}
 
 ```bash
 git clone <repository-url>
@@ -33,53 +18,41 @@ cd {{ project_slug }}
 ./scripts/verify
 ```
 
-{% if project_mode == "existing" %}
-這是既有專案導入：Copier 已保留原本的{% if language != "typescript" %} `pyproject.toml`{% endif %}{% if language == "python-typescript" %} 與{% endif %}{% if language != "python" %} `package.json`{% endif %}，不會自動合併產品相依、版本或 build backend。第一次驗證前，先人工合併公版的 dev 相依與工具區段{% if language != "typescript" %}，確認 `[project].version` 與 `src/{{ package_name }}/__init__.py` 的 `__version__` 一致，再執行 `uv lock` 與 `uv run ruff format .`{% endif %}{% if language == "python-typescript" %}；{% endif %}{% if language != "python" %}再執行 `pnpm install --lockfile-only --ignore-scripts` 與 `pnpm exec biome format --write .`{% endif %}。`coverage_mode=diff` 預設比較 `origin/main`；若尚未有該 ref，先推送遠端，或以 `DIFF_COVER_COMPARE_BRANCH=<existing-ref>` 指定真正存在的基準。
-{% endif %}
+請在這裡補上產品最短可成功的啟動或呼叫範例。
 
-專案維護者應在本節接著補上最短的啟動或呼叫範例；README 不應只告訴讀者如何跑檢查，卻沒說產品怎麼使用。
+{% if project_mode == "existing" %}> 既有案導入：Copier 已保留原本的 manifest。先人工合併 dev 相依、版本與工具設定，再重建 lockfile；`coverage_mode=diff` 預設比較 `origin/main`。{% endif %}
 
-## AI 工作契約
+## 技術與目錄
 
-`AGENTS.md` 告訴 AI 哪些來源可信、工作要怎麼驗證、哪些操作不可做，以及審查時要注意什麼；它不重複 README 或 linter 設定。語言迭代命令會依本 repo 的 profile 產生，最後仍統一執行 `./scripts/verify`。只有子目錄真的有不同命令、owner 或安全邊界時才增加就近 `AGENTS.md`；`CLAUDE.md` 只匯入根檔，避免兩套規則漂移。
+| 範圍 | 位置／工具 |
+| --- | --- |
+| 共用 | `.github/`、`policies/`、`docs/specs/`、`scripts/verify` |
+{% if language != "typescript" %}| Python | `src/`、`tests/`、uv、Ruff、mypy、pytest；Python {% if python_support_mode == "latest" %}3.14 only{% else %}{{ python_min_version }}+{% endif %} |
+{% endif %}{% if language != "python" %}| TypeScript | `typescript/`、pnpm 11、Biome、strict TypeScript、Vitest；Node 24+ |
+{% endif %}| 內部網站 | `docs/index.html` 版型；`docs/site-content.js` 專案內容 |
+
+語言宣告記在 `.csarc/profile.json`；`scripts/detect-language-profile --suggest` 會檢查實際檔案是否一致。
 
 ## 開發與驗證
 
-1. 用 Work item 開一張可獨立驗證的 Issue。
-2. 在分支完成一個結果；AI 可以協助寫程式，但不能自行合併。
-3. 執行 `./scripts/verify`。它會先核對語言宣告，接著執行{% if language != "typescript" %} Ruff、mypy、pytest、{{ coverage_threshold }}% {% if coverage_mode == "global" %}全專案{% else %}變更行{% endif %}覆蓋率、wheel 隔離安裝與 Python 相依下界驗證{% endif %}{% if language == "python-typescript" %}，以及{% endif %}{% if language != "python" %} Biome、TypeScript strict、Vitest {{ coverage_threshold }}% coverage、npm tarball 隔離安裝{% endif %}，最後檢查規格、政策 JSON、機密字串與 lockfile。
-4. 開 PR，等 CI、必要審查與 CODEOWNER 同意後再合併。
+1. 用 Work item 或 `docs/specs/` 寫清楚成果與驗證方式。
+2. 在短分支修改；AI 遵守 `AGENTS.md`，不能自行合併。
+3. 執行 `./scripts/verify`。
+4. PR 標題使用英文 `type(scope): summary`，通過 CI 與必要審查後合併。
 
-PR 標題使用英文 `type(scope): summary`，內文可以使用中文。可用的 type 是 `feat`、`fix`、`docs`、`refactor`、`test`、`build`、`ci`、`chore`、`revert`；scope 可省略，若有則用小寫。破壞性變更在冒號前加 `!`，例如 `feat(api)!: remove v1 endpoint`。
-
-## 發布與維運
-
-PR squash 合併到 `main` 後，release-please 會依標題累積下一版內容並開一張 Release PR。`fix` 升修補版、`feat` 升次版，`!` 升大版；其他 type 依用途整理 CHANGELOG。審查 Release PR 內的{% if language != "typescript" %} `pyproject.toml`、`uv.lock`、`src/{{ package_name }}/__init__.py`、{% endif %}{% if language != "python" %} `package.json`、{% endif %}`CHANGELOG.md`，合併後才會建立 `v*` tag；`release.yml` 隨即產生{% if language != "typescript" %} Python wheel／sdist{% endif %}{% if language == "python-typescript" %}與{% endif %}{% if language != "python" %} npm tarball{% endif %}、SHA-256 與 SBOM。
-
-公版目前只建立可追溯的發布成品，沒有通用部署流程。專案若加入環境或服務，必須在本節補上部署入口、健康檢查、復原方式與 runbook 位置。
+目前驗證包含{% if language != "typescript" %} Ruff、mypy、pytest、{{ coverage_threshold }}% coverage、wheel 與相依下界{% endif %}{% if language == "python-typescript" %}，以及{% endif %}{% if language != "python" %} Biome、TypeScript、Vitest {{ coverage_threshold }}% coverage 與 npm tarball{% endif %}，最後再檢查 spec、機密字串與 lockfile。
 
 ## 設定與密鑰
 
-**狀態：待啟用，並非開始開發的前置條件。** 未設定專用 GitHub App 時，release-please job 會略過，不影響 CI 與人工建立 tag；準備啟用自動 Release PR 時，再由 Organization 管理者到 **Settings → Developer settings → GitHub Apps** 建立不使用 webhook 的專用 App，授予 Contents、Pull requests 讀寫權限，安裝到此 repo，並在 App 頁面產生 private key。把 Client ID 與 PEM 寫入 GitHub：
+未設定專用 GitHub App 時，release-please job 會略過，不影響 CI 或人工 tag。Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。請在這裡列出產品設定的名稱、用途與取得位置，但不要填入真實值。
 
-```bash
-gh variable set CSARC_VERSION_BOT_CLIENT_ID --body '<client-id>'
-gh secret set CSARC_VERSION_BOT_PRIVATE_KEY < ./private-key.pem
-```
+## 發布與維運
 
-workflow 每次執行才由 private key 產生短效 token，不需人工保存 token；完成設定後，刪除本機 PEM 或移入核准的密鑰管理工具。不要把 App key 或 token 寫進 `.env`：Actions 使用 GitHub Secrets／Variables，正式環境使用密鑰管理或 OIDC；只有本機程式確實需要環境變數時，才使用已被忽略的 `.env`，並只提交去除敏感值的 `.env.example`。Python 與 uv 不會自動載入 `.env`。
+`fix` 升修補版、`feat` 升次版、`!` 升大版。`v*` tag 會產生{% if language != "typescript" %} wheel／sdist{% endif %}{% if language == "python-typescript" %}與{% endif %}{% if language != "python" %} npm tarball{% endif %}、SHA-256 與 SBOM；目前沒有通用部署流程。
 
-產品若有其他設定，應在本節列出名稱、用途、是否必填與取得位置；只記錄範例值，不記錄 token、密碼或私鑰。
-
-## 規格與 Issue
-
-從 `docs/specs/SPEC-001-example.md` 複製一份規格。五個必要段落是 Problem、Outcome、Acceptance criteria、Out of scope、Verification；Priority 與 Expected size 是另外的規劃欄位。PR 會驗證格式，合併到 `main` 後會建立或更新相同 ID 的 GitHub Issue。
+若本案是長駐服務，請補上部署入口、健康檢查、復原方法與 runbook。
 
 ## 公版更新
-
-Dependabot 會依 profile 更新{% if language != "typescript" %} uv 的 `pyproject.toml`／`uv.lock`{% endif %}{% if language == "python-typescript" %}與{% endif %}{% if language != "python" %} npm 的 `package.json`／`pnpm-lock.yaml`{% endif %}，一般新版本等待三天再提 PR；OSV 對已公開漏洞立即通知。更新 PR 仍要執行 `./scripts/verify`：{% if language != "typescript" %}`uv sync --locked` 會比對 Python 成品 SHA-256；{% endif %}{% if language != "python" %}`pnpm install --frozen-lockfile` 會比對 npm integrity hash，resolver 也會拒絕發布未滿三天的版本；{% endif %}版本號方便閱讀，真正執行內容以 lockfile 雜湊與完整 commit SHA 為準。
-
-公版更新從分支執行，不可直接改 `main`：
 
 ```bash
 git switch -c chore/update-repo-template
@@ -87,10 +60,8 @@ uvx --from copier copier update --trust --vcs-ref <reviewed-full-commit-sha>
 ./scripts/verify
 ```
 
+Copier 會更新網站版型，但不覆寫 `docs/site-content.js`。相依更新一般等待三天；OSV 對已公開漏洞立即通知。
+
 ## 負責人與支援
 
-程式審查負責人由 `.github/CODEOWNERS` 指向 `{{ code_owner }}`。一般問題、功能需求與可重現錯誤使用 GitHub Issue；CI 失敗先看該 job 的第一個實際錯誤。疑似資安事件或含敏感資料的問題不可貼到公開 Issue，應走組織核准的內部通報管道；正式上線前必須在此補上具體聯絡入口。
-
-## GitHub 設定（符合條件後啟用）
-
-`policies/` 先保存未來要套用的 GitHub 設定，但不列入目前 Quickstart。Organization 的 private repo 最低需要 GitHub Team，且必須先建立真實 CODEOWNERS team；目前若不符合，就只使用可正常執行的 CI／PR checks，不執行 `apply`。條件備妥後，管理者才執行 `gh auth status`、`./scripts/apply-repository-settings.sh plan`，確認計畫後再執行 `apply`；腳本會在任何寫入前檢查方案與 team，避免部分套用。
+程式審查者是 `{{ code_owner }}`。一般問題使用 GitHub Issue；疑似資安事件或敏感資料走組織核准的內部通報管道。
