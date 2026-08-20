@@ -1,0 +1,76 @@
+{% set python_mode = python_support_mode | default("latest") -%}
+{% set python_min = python_min_version | default("3.12") -%}
+{% set python_target = "3.14" if python_mode == "latest" else python_min -%}
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: {% raw %}${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}{% endraw %}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+{% if use_reusable_workflow %}
+  verify:
+    uses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@{{ workflow_ref }}
+    with:
+      language-profile: "{{ language }}"
+{% if language != "typescript" %}
+      python-version: "{{ python_target }}"
+{% if python_mode == "minimum" and python_min != "3.14" %}
+      additional-python-version: "3.14"
+{% endif %}
+{% endif %}
+{% if language != "python" %}
+      node-version: "24"
+{% endif %}
+{% else %}
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+{% if language != "typescript" %}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "{{ python_target }}"
+{% endif %}
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+{% if language != "python" %}
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: "11.22.0"
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: pnpm
+{% endif %}
+      - name: Verify declared language modules
+        run: ./scripts/verify
+{% if language != "typescript" %}
+        env:
+          CSARC_PYTHON_VERSION: "{{ python_target }}"
+          UV_PROJECT_ENVIRONMENT: .venv-primary
+{% endif %}
+{% if language != "typescript" and python_mode == "minimum" and python_min != "3.14" %}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Verify latest stable Python version
+        run: ./scripts/verify
+        env:
+          CSARC_PYTHON_VERSION: "3.14"
+          UV_PROJECT_ENVIRONMENT: .venv-latest
+          CSARC_VERIFY_TYPESCRIPT: "false"
+{% endif %}
+{% endif %}

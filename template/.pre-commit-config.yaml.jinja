@@ -1,0 +1,37 @@
+repos:
+  - repo: local
+    hooks:
+{% if language != "typescript" %}
+      - id: ruff-format
+        name: Ruff format
+        entry: uv run ruff format --check
+        language: system
+        types: [python]
+      - id: ruff
+        name: Ruff
+        entry: uv run ruff check
+        language: system
+        types: [python]
+      - id: mypy
+        name: mypy
+        entry: uv run mypy
+        language: system
+        pass_filenames: false
+{% endif %}
+{% if language != "python" %}
+      - id: biome
+        name: Biome
+        entry: pnpm exec biome ci .
+        language: system
+        pass_filenames: false
+      - id: typescript
+        name: TypeScript
+        entry: pnpm exec tsc --noEmit
+        language: system
+        pass_filenames: false
+{% endif %}
+      - id: gitleaks
+        name: Gitleaks
+        entry: ./scripts/scan-secrets
+        language: system
+        pass_filenames: false

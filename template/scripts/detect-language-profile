@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+profile_file="$repo_root/.csarc/profile.json"
+
+has_python=false
+has_typescript=false
+[[ -f "$repo_root/pyproject.toml" ]] && has_python=true
+[[ -f "$repo_root/package.json" ]] && has_typescript=true
+
+case "$has_python:$has_typescript" in
+  true:false) detected="python" ;;
+  false:true) detected="typescript" ;;
+  true:true) detected="python-typescript" ;;
+  *)
+    echo "No Python or TypeScript module was detected."
+    exit 1
+    ;;
+esac
+
+if [[ "${1:-}" == "--suggest" ]]; then
+  printf '%s\n' "$detected"
+  exit 0
+fi
+
+if [[ ! -f "$profile_file" ]]; then
+  echo "Missing .csarc/profile.json; detected profile: $detected"
+  exit 1
+fi
+
+declared="$({
+  sed -n 's/.*"language_profile": "\([^"]*\)".*/\1/p' "$profile_file"
+} | head -n 1)"
+if [[ "$declared" != "$detected" ]]; then
+  echo "Declared profile '$declared' does not match detected profile '$detected'."
+  exit 1
+fi
+
+printf 'language profile: %s\n' "$declared"

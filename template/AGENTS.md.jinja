@@ -1,0 +1,49 @@
+# {{ project_name }} agent instructions
+
+## Scope and sources of truth
+
+- This file applies to the whole repository. A nearer `AGENTS.md` may add subtree-specific guidance; do not duplicate these root rules there.
+- Treat this file as the single source for AI instructions; `CLAUDE.md` only imports it.
+- Treat `.csarc/profile.json` as the source of truth for enabled Python and TypeScript modules.
+- Use the linked GitHub Issue or `docs/specs/` document for scope and acceptance criteria. Use repository configuration for executable formatting, lint, type, test, and build rules.
+
+## Working loop
+
+1. Work from one GitHub Issue and keep the pull request focused on one independently verifiable outcome.
+2. Inspect nearby code, tests, and configuration before choosing an implementation.
+3. Make the smallest coherent change; preserve unrelated work and project-owned source files.
+4. Add or update the narrowest regression test that proves non-trivial behavior.
+5. Run targeted checks while iterating, then run `./scripts/verify` before opening or updating a pull request.
+6. Report the changed behavior, verification evidence, and any remaining limitation.
+
+## Commands
+
+- Required final check: `./scripts/verify`.
+{% if language != "typescript" %}- Python iteration: `uv run ruff check <paths>`, `uv run mypy`, and `uv run pytest <test-path>`.
+{% endif %}{% if language != "python" %}- TypeScript iteration: `pnpm exec biome check <paths>`, `pnpm exec tsc --noEmit`, and `pnpm exec vitest run <test-path>`.
+{% endif %}- Targeted commands speed up iteration but never replace the required final check.
+
+## Editing boundaries
+
+- Product code under {% if language != "typescript" %}`src/` and `tests/`{% endif %}{% if language == "python-typescript" %}, plus {% endif %}{% if language != "python" %}`typescript/src/` and `typescript/tests/`{% endif %} belongs to this project. Copier updates must not overwrite it.
+- Do not hand-edit generated lockfiles. Use {% if language != "typescript" %}uv{% endif %}{% if language == "python-typescript" %} or {% endif %}{% if language != "python" %}pnpm{% endif %} so integrity metadata stays valid.
+- Keep third-party GitHub Actions pinned to full commit SHAs.
+- Comments in source code must be written in English. Leave style details in `pyproject.toml`, `biome.json`, and other executable configuration instead of copying them here.
+
+## Safety
+
+- Never commit secrets, tokens, private keys, or populated `.env` files. Use GitHub Secrets or approved secret management for automation.
+- Review `scripts/apply-repository-settings.sh plan` before `apply`; do not operate production or external infrastructure without explicit authorization.
+- Do not bypass failed CI, required checks, resolved-conversation requirements, CODEOWNER review, or human approval.
+
+## Code Review Rules
+
+- Verify the change satisfies the Issue acceptance criteria and has relevant tests.
+- Flag unintended public API or release behavior changes; require an explicit compatibility and SemVer decision.
+- Review dependency, workflow-permission, secret-handling, and artifact-verification changes as security-sensitive.
+- Prefer existing project patterns and focused changes over new abstractions or broad rewrites.
+
+## Nested instructions
+
+- Add a nested `AGENTS.md` only when a subtree has genuinely different commands, ownership, or safety boundaries.
+- Use `AGENTS.override.md` only when replacing same-directory guidance is intentional; do not pre-create empty instruction files.

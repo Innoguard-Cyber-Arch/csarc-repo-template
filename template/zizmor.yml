@@ -1,0 +1,5 @@
+rules:
+  dependabot-cooldown:
+    ignore:
+      # Team policy deliberately uses a three-day observation window.
+      - dependabot.yml

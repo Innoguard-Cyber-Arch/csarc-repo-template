@@ -1,0 +1,106 @@
+name: Python version policy
+
+on:
+  schedule:
+    - cron: "23 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    name: update-after-observation-period
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Create version bot token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.CSARC_VERSION_BOT_APP_ID }}
+          private-key: ${{ secrets.CSARC_VERSION_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: read
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: "11.22.0"
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Report direct dependency ceilings
+        run: |
+          uv run python scripts/report_dependency_ceiling.py \
+            >> "$GITHUB_STEP_SUMMARY"
+      - name: Apply an eligible Python feature release
+        id: update
+        run: |
+          python3 scripts/update_python_version.py
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.update.outputs.changed == 'true'
+        name: Refresh the lock file
+        run: uv lock --python "$(cat .python-version)"
+      - if: steps.update.outputs.changed == 'true'
+        name: Verify the complete template
+        run: ./scripts/verify-template.sh
+      - if: steps.update.outputs.changed == 'true'
+        name: Create or refresh the audited pull request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          version="$(cat .python-version)"
+          branch="automation/python-${version}"
+          git config user.name "csarc-version-bot[bot]"
+          git config user.email "csarc-version-bot[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add .
+          git commit -m "build(python): adopt Python ${version}"
+          gh auth setup-git
+          git fetch origin "$branch:refs/remotes/origin/$branch" || true
+          git push --force-with-lease origin "HEAD:$branch"
+
+          pr_url="$(
+            gh pr list --head "$branch" --state open --json url --jq '.[0].url'
+          )"
+          if [[ -z "$pr_url" ]]; then
+            pr_url="$(
+              gh pr create \
+                --base main \
+                --head "$branch" \
+                --title "build(python): adopt Python ${version}" \
+                --body "Automated after the 30-day stable-release observation period. Full template verification passed before this PR was opened."
+            )"
+          fi
+
+          check_count="0"
+          for _ in {1..30}; do
+            check_count="$(
+              gh pr view "$pr_url" \
+                --json statusCheckRollup \
+                --jq '.statusCheckRollup | length'
+            )"
+            if [[ "$check_count" -gt 0 ]]; then
+              break
+            fi
+            sleep 5
+          done
+          if [[ "$check_count" -eq 0 ]]; then
+            echo "No pull request checks were reported."
+            exit 1
+          fi
+          gh pr checks "$pr_url" --watch --interval 10
+          gh pr merge "$pr_url" --admin --squash --delete-branch

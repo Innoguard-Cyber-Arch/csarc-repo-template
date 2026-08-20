@@ -1,0 +1,100 @@
+{% set python_mode = python_support_mode | default("latest") -%}
+{% set python_min = python_min_version | default("3.12") -%}
+{% set python_target = "3.14" if python_mode == "latest" else python_min -%}
+name: Release artifact
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+{% if enable_attestations %}
+  id-token: write
+  attestations: write
+{% endif %}
+
+jobs:
+  build:
+    name: build-and-sbom
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+{% if language != "typescript" %}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "{{ python_target }}"
+{% endif %}
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: false
+{% if language != "python" %}
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: "11.22.0"
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+{% endif %}
+      - name: Verify declared language modules
+        run: ./scripts/verify
+{% if language != "typescript" %}
+        env:
+          CSARC_PYTHON_VERSION: "{{ python_target }}"
+          UV_PROJECT_ENVIRONMENT: .venv-primary
+{% endif %}
+{% if language != "typescript" and python_mode == "minimum" and python_min != "3.14" %}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - name: Verify latest stable Python version
+        run: ./scripts/verify
+        env:
+          CSARC_PYTHON_VERSION: "3.14"
+          UV_PROJECT_ENVIRONMENT: .venv-latest
+          CSARC_VERIFY_TYPESCRIPT: "false"
+{% endif %}
+{% if language != "typescript" %}
+      - name: Build Python distributions
+        run: uv build
+{% endif %}
+{% if language != "python" %}
+      - name: Build TypeScript package
+        run: |
+          pnpm run build
+          find dist -maxdepth 1 -type f -name '.gitignore' -delete
+          find dist -maxdepth 1 -type f -name '*.tgz' -delete
+          pnpm pack --pack-destination dist
+{% endif %}
+      - name: Calculate artifact checksums
+        run: find dist -maxdepth 1 -type f -exec shasum -a 256 {} + | sort -k 2 > SHA256SUMS
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: dist
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+          upload-artifact: false
+{% if enable_attestations %}
+      - name: Attest artifact and SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/*
+          sbom-path: sbom.cdx.json
+{% endif %}
+      - name: Upload release evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-evidence
+          path: |
+            dist/
+            SHA256SUMS
+            sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30

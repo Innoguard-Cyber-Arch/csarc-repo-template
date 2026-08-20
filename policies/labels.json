@@ -1,0 +1,8 @@
+[
+  {"name": "task", "color": "1D76DB", "description": "One independently verifiable work item"},
+  {"name": "spec", "color": "5319E7", "description": "Work synchronized from docs/specs"},
+  {"name": "P0", "color": "B60205", "description": "Critical and immediate"},
+  {"name": "P1", "color": "D93F0B", "description": "High priority"},
+  {"name": "P2", "color": "FBCA04", "description": "Normal priority"},
+  {"name": "P3", "color": "C2E0C6", "description": "Low priority"}
+]

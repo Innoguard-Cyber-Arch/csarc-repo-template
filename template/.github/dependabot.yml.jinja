@@ -1,0 +1,32 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+{% if language != "typescript" %}
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      routine-updates:
+        patterns: ["*"]
+        update-types: [minor, patch]
+{% endif %}
+{% if language != "python" %}
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      routine-updates:
+        patterns: ["*"]
+        update-types: [minor, patch]
+{% endif %}

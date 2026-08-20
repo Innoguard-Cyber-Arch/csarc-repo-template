@@ -1,0 +1,55 @@
+name: Work item
+description: Propose one independently verifiable change
+title: "[Task] "
+labels: ["task"]
+body:
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options: [P0, P1, P2, P3]
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe who is affected and what is not working today.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected outcome
+      description: Describe one observable result, not the implementation steps.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: "- [ ] Observable condition"
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: State what this work deliberately does not include.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Explain how a reviewer can confirm the outcome.
+      placeholder: "- Command, test, or observable result"
+    validations:
+      required: true
+  - type: input
+    id: estimate
+    attributes:
+      label: Expected size
+      description: Split the work if it exceeds three working days or contains unrelated outcomes.
+    validations:
+      required: true

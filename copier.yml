@@ -1,0 +1,138 @@
+_min_copier_version: "9.17.0"
+_subdirectory: template
+_templates_suffix: .jinja
+_answers_file: .copier-answers.yml
+_exclude:
+  - "copier.yaml"
+  - "copier.yml"
+  - "~*"
+  - "*.py[co]"
+  - "__pycache__"
+  - ".git"
+  - ".DS_Store"
+  - ".svn"
+  - "{% if enable_precommit %}__keep_precommit__{% else %}.pre-commit-config.yaml{% endif %}"
+  - "{% if language != 'typescript' %}__keep_python_version__{% else %}.python-version{% endif %}"
+  - "{% if language != 'typescript' %}__keep_python_project__{% else %}pyproject.toml{% endif %}"
+  - "{% if language != 'typescript' %}__keep_python_source__{% else %}/src{% endif %}"
+  - "{% if language != 'typescript' %}__keep_python_tests__{% else %}/tests{% endif %}"
+  - "{% if language != 'python' %}__keep_node_version__{% else %}.node-version{% endif %}"
+  - "{% if language != 'python' %}__keep_node_package__{% else %}package.json{% endif %}"
+  - "{% if language != 'python' %}__keep_pnpm_workspace__{% else %}pnpm-workspace.yaml{% endif %}"
+  - "{% if language != 'python' %}__keep_biome__{% else %}biome.json{% endif %}"
+  - "{% if language != 'python' %}__keep_tsconfig__{% else %}tsconfig.json{% endif %}"
+  - "{% if language != 'python' %}__keep_tsconfig_build__{% else %}tsconfig.build.json{% endif %}"
+  - "{% if language != 'python' %}__keep_vitest__{% else %}vitest.config.ts{% endif %}"
+  - "{% if language != 'python' %}__keep_typescript_source__{% else %}/typescript{% endif %}"
+_skip_if_exists:
+  - "src/**/*.py"
+  - "tests/**/*.py"
+  - "typescript/src/**/*.ts"
+  - "typescript/tests/**/*.ts"
+  - "docs/specs/**/*.md"
+  - "{% if project_mode == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"
+  - "{% if project_mode == 'existing' %}package.json{% else %}__overwrite_node_manifest__{% endif %}"
+_tasks:
+  - command: "uv lock --python {{ '3.14' if (python_support_mode | default('latest')) == 'latest' else (python_min_version | default('3.12')) }}"
+    when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language != 'typescript' }}"
+  - command: "pnpm install --lockfile-only --ignore-scripts"
+    when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language != 'python' }}"
+_message_after_copy: |
+  {% if project_mode == 'existing' %}Existing pyproject.toml/package.json files were preserved. Merge the required tool settings and version markers described in README.md, run the format command, then run ./scripts/verify.{% else %}Project created. Confirm .csarc/profile.json, run ./scripts/verify, then open a pull request for the initial commit.{% endif %}
+
+project_mode:
+  type: str
+  help: Create a new repository or add the public baseline to an existing codebase
+  choices:
+    New repository: new
+    Adopt an existing repository: existing
+  default: new
+
+project_name:
+  type: str
+  help: Human-readable project name
+  default: CSARC Project
+
+project_slug:
+  type: str
+  help: Repository and distribution name
+  default: "{{ project_name | lower | replace(' ', '-') | replace('_', '-') }}"
+
+project_description:
+  type: str
+  default: A Cyber-Arch project
+
+language:
+  type: str
+  help: Product language modules; the answer is stored and verified in the repository
+  choices:
+    Python only: python
+    TypeScript only: typescript
+    Python and TypeScript: python-typescript
+  default: python
+
+package_name:
+  type: str
+  help: Python import package name
+  default: "{{ project_slug | replace('-', '_') }}"
+  when: "{{ language != 'typescript' }}"
+
+code_owner:
+  type: str
+  help: Existing GitHub team used by CODEOWNERS, for example @Innoguard-Cyber-Arch/platform
+  validator: "{% if not code_owner.startswith('@Innoguard-Cyber-Arch/') %}Use an existing @Innoguard-Cyber-Arch/<team> owner.{% endif %}"
+
+python_support_mode:
+  type: str
+  help: Use the reviewed latest stable Python release, or declare an older minimum supported release
+  choices:
+    Latest stable only (Python 3.14): latest
+    Declare a minimum supported version: minimum
+  default: latest
+  when: "{{ language != 'typescript' }}"
+
+python_min_version:
+  type: str
+  help: Oldest Python feature release that this project promises to support
+  choices:
+    - "3.12"
+    - "3.13"
+    - "3.14"
+  default: "3.12"
+  when: "{{ language != 'typescript' and python_support_mode == 'minimum' }}"
+
+coverage_mode:
+  type: str
+  help: New projects use global coverage; existing projects may measure changed lines first
+  choices:
+    - global
+    - diff
+  default: global
+
+coverage_threshold:
+  type: int
+  help: Minimum percentage required by the selected coverage mode
+  default: 80
+  validator: "{% if coverage_threshold < 1 or coverage_threshold > 100 %}Use an integer from 1 to 100.{% endif %}"
+
+enable_precommit:
+  type: bool
+  help: Add optional local pre-commit hooks; CI remains authoritative
+  default: false
+
+use_reusable_workflow:
+  type: bool
+  help: Call the reusable multi-language workflow from this repository
+  default: false
+
+workflow_ref:
+  type: str
+  help: Full commit SHA for the reusable workflow
+  default: ""
+  when: "{{ use_reusable_workflow }}"
+  validator: "{% if workflow_ref | length != 40 %}Use a full 40-character commit SHA.{% endif %}"
+
+enable_attestations:
+  type: bool
+  help: Enable GitHub artifact attestations; private repositories require GitHub Enterprise Cloud
+  default: false

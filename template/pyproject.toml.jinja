@@ -1,0 +1,61 @@
+{% set python_target = "3.14" if python_support_mode == "latest" else python_min_version -%}
+[project]
+name = "{{ project_slug }}"
+version = "0.1.0"
+description = "{{ project_description }}"
+readme = "README.md"
+requires-python = "{% if python_support_mode == 'latest' %}>=3.14,<3.15{% else %}>={{ python_min_version }}{% endif %}"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "coverage[toml]>=7.10,<8",
+  "diff-cover>=9.7,<11",
+  "mypy>=1.17,<3",
+{% if enable_precommit %}
+  "pre-commit>=4.3,<5",
+{% endif %}
+  "pytest>=8.4,<10",
+  "pytest-cov>=6.2,<8",
+  "ruff>=0.12,<1",
+]
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 80
+target-version = "py{{ python_target | replace('.', '') }}"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "B", "S", "C901", "UP", "SIM", "RUF", "ANN", "D", "T20"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = ["{{ package_name }}", "scripts"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "S101"]
+
+[tool.mypy]
+python_version = "{{ python_target }}"
+strict = true
+files = ["src", "scripts", "tests"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/{{ package_name }}"]

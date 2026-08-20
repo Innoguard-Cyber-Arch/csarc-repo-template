@@ -1,0 +1,35 @@
+{
+  "name": "{{ project_slug }}",
+  "version": "0.1.0",
+  "description": "{{ project_description }}",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist/typescript"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/typescript/index.d.ts",
+      "import": "./dist/typescript/index.js"
+    }
+  },
+  "scripts": {
+    "format": "biome format --write .",
+    "check": "biome ci .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "engines": {
+    "node": ">=24",
+    "pnpm": ">=11 <12"
+  },
+  "packageManager": "pnpm@11.22.0",
+  "devDependencies": {
+    "@biomejs/biome": "2.5.8",
+    "@types/node": "24.13.3",
+    "@vitest/coverage-v8": "4.1.10",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}
