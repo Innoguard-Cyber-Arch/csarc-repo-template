@@ -59,3 +59,10 @@ skip_covered = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/{{ package_name }}"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/{{ package_name }}",
+  "README.md",
+  "pyproject.toml",
+]

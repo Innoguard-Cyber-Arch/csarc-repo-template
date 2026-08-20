@@ -48,6 +48,13 @@ PY
   uv run diff-cover coverage.xml --compare-branch="$compare_branch" --fail-under={{ coverage_threshold }}
 {% endif %}
   uv build --clear
+  python_sdist="$(find dist -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+  test -n "$python_sdist"
+  tar -tzf "$python_sdist" | grep -q '/src/{{ package_name }}/'
+  if tar -tzf "$python_sdist" | grep -Eq '/(\.github|policies|scripts|tests|typescript)/'; then
+    echo "Python sdist contains repository infrastructure or test files." >&2
+    exit 1
+  fi
   uv run --isolated --no-project --with ./dist/*.whl \
     python -c "import {{ package_name }}"
   uv run --isolated --no-project --with twine twine check dist/*
