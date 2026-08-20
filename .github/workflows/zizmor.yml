@@ -22,6 +22,13 @@ jobs:
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - run: uvx --from zizmor==1.29.0 zizmor . --format plain
+      - name: Audit workflow definitions
         env:
-          GH_TOKEN: ${{ github.token }}
+          CSARC_ZIZMOR_TOKEN: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && github.token || '' }}
+        run: |
+          if [[ -n "$CSARC_ZIZMOR_TOKEN" ]]; then
+            GH_TOKEN="$CSARC_ZIZMOR_TOKEN" \
+              uvx --from zizmor==1.29.0 zizmor . --format plain
+          else
+            uvx --from zizmor==1.29.0 zizmor . --format plain
+          fi
