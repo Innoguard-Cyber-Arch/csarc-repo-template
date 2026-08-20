@@ -224,7 +224,7 @@ CSARC_VERSION_BOT_APP_ID=<app-id> \
   ./scripts/apply-repository-settings.sh apply
 ```
 
-`.github/workflows/python-version-policy.yml` 每週查詢 Python 官方發布資料，並將各項直接 dev 相依的 PyPI 最新版交給 uv 實際解析，讓 Actions summary 顯示可升級項目或完整衝突鏈。新功能版本滿三十天後，`scripts/update_python_version.py` 會同步 root 與模板設定、保留既有最低版本選項、更新 `uv.lock` 並實跑完整驗證；GitHub App 接著建立 PR、等待所有門禁通過，再自動合併。沒有設定 App 憑證時，排程會明確失敗，不會退回權限較大的個人 token 或直接推送。
+`.github/workflows/python-version-policy.yml` 每週查詢 Python 官方發布資料，並將各項直接 dev 相依的 PyPI 最新版交給 uv 實際解析，讓 Actions summary 顯示可升級項目或完整衝突鏈。新功能版本滿三十天後，`scripts/update_python_version.py` 會同步 root 與模板設定、保留既有最低版本選項、更新 `uv.lock` 並實跑完整驗證；GitHub App 接著建立 PR、等待所有門禁通過，再自動合併。沒有設定 App 憑證時，排程 job 會明確略過，不會退回權限較大的個人 token、直接推送或把這項能力算成已啟用。
 
 ### 啟用 release-please（待設定 App）
 
