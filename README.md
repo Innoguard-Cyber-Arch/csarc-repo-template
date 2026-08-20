@@ -171,6 +171,14 @@ ignore_errors = true
 
 本 repo 發布的是 Copier 公版，不是長駐服務；沒有部署環境、健康檢查或回復服務版本的 runbook。發生問題時撤回有問題的公版 tag，並以修正版重新走完整驗證與發布。
 
+若要讓 Organization 內的 private repo 呼叫本 repo 的 reusable workflow，中央 repo 必須一次性開放 Actions 存取。canonical repo 已完成下列設定；新建替代中央 repo 時才需要重做：
+
+```bash
+gh api --method PUT \
+  repos/Innoguard-Cyber-Arch/csarc-repo-template/actions/permissions/access \
+  -f access_level=organization
+```
+
 ## 公版更新
 
 發布後，把實際 commit SHA 提供給各專案更新。專案端應從分支執行：
@@ -189,7 +197,7 @@ uvx --from copier copier update --trust --vcs-ref <reviewed-full-commit-sha>
 - Spec 合併到 `main` 後，由標準函式庫腳本建立或更新一張對應 Issue。
 - Dependabot 分別更新 uv 與 npm 生態，一般更新等待三天；pnpm resolver 也以嚴格模式拒絕發布未滿三天的版本，OSV 對已公開漏洞立即掃描。
 - 發布時建立 SHA-256、CycloneDX SBOM，並可選 GitHub artifact attestation。
-- 所有第三方 Actions 固定完整 commit SHA；Zizmor 每次 PR 都會檢查。
+- 所有第三方 Actions 固定完整 commit SHA；Zizmor 每次 PR 都會檢查。公版 root 使用 GitHub token 驗證 commit 歸屬；產出 private repo 的 token 無權讀中央 private repo，因此改用離線模式檢查其他規則，不假裝已完成跨 repo 歸屬查證。
 
 Go、Rust、部署環境、可觀測性、RAG 與自動 agent loop 仍是 `future`，有真實使用專案與責任人，且建立與更新測試都通過後才新增。
 
