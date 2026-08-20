@@ -157,7 +157,7 @@ if valid_pr_title "feat: 新增報表功能"; then
 fi
 
 # Default project: strict global coverage and optional features disabled.
-uv run copier copy --trust --defaults \
+uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data project_name="Template Smoke Test" \
   --data project_slug="template-smoke-test" \
   --data package_name="template_smoke_test" \
@@ -358,7 +358,7 @@ PY
 )
 
 # TypeScript-only project: the same quality, packaging, and release gates apply.
-uv run copier copy --trust --defaults \
+uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data project_name="TypeScript Test" \
   --data project_slug="typescript-test" \
   --data language=typescript \
@@ -419,7 +419,7 @@ grep -q 'Build TypeScript package' \
 )
 
 # Combined project: reusable CI, attestations, and local pre-commit support.
-uv run copier copy --trust --defaults \
+uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data project_name="All Features Test" \
   --data project_slug="all-features-test" \
   --data package_name="all_features_test" \
@@ -467,7 +467,7 @@ git -C "$fixture_root/all-features-project" diff --cached --check
 )
 
 # Existing-project mode: changed-line coverage keeps the same 80% threshold.
-uv run copier copy --trust --defaults \
+uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data project_name="Existing Project Test" \
   --data project_slug="existing-project-test" \
   --data package_name="existing_project_test" \
@@ -538,7 +538,7 @@ cat > "$adoption_project/package.json" <<'JSON'
   "dependencies": {"typescript": "5.9.3"}
 }
 JSON
-uv run copier copy --trust --defaults --overwrite \
+uv run copier copy --trust --defaults --overwrite --vcs-ref HEAD \
   --data project_mode=existing \
   --data project_name="Legacy Product" \
   --data project_slug="legacy-product" \
