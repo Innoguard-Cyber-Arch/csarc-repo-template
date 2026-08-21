@@ -2021,7 +2021,7 @@ pnpm exec vitest run --coverage`
         {
           title: '一個入口驗證、打包，也證明錯誤會被拒絕',
           goal: '本機、AI 與 GitHub 執行同一入口；正向測試證明可交付，負向測資證明門禁不是永遠綠燈。',
-          summary: '九組 Issue 標題與十九組 PR 案例檢查標籤、標題、分支、Issue 與 main／dev；公版再注入錯誤 Python／TypeScript 檔。',
+          summary: '十組 Issue 標題與十九組 PR 案例檢查標籤、標題、分支、Issue 與 main／dev；公版再注入錯誤 Python／TypeScript 檔。',
           file: 'scripts/verify＋scripts/test-pr-policy＋.github/workflows/ci.yml',
           code: `./scripts/test-pr-policy
 ./scripts/verify
@@ -2041,7 +2041,7 @@ with:
         {
           title: '英文標題摘要成果，中文內文說明脈絡',
           goal: 'GitHub 建議標題應一眼說明重點；Issue Form 只能預填標題，真正的格式檢查交給 workflow。',
-          summary: '標題限 12–80 個 ASCII 字元及至少三個詞；不加類型前綴或句點。`issue-triage.yml` 先檢查，連結 Issue 的 PR 再檢查一次。',
+          summary: '標題限 12–80 個 ASCII 字元及至少三個詞；不加類型前綴或句點。Spec 識別碼藏在內文註解，`issue-triage.yml` 與 PR 再檢查標題。',
           file: 'scripts/validate-issue-title＋work-item.yml＋issue-triage.yml＋pr-policy.yml',
           code: `# work-item.yml
 description: 英文標題摘要重點，內文用中文定義改動
@@ -2061,6 +2061,7 @@ blank_issues_enabled: false
 contact_links: []
 
 # validate-issue-title: 12-80 ASCII characters, 3+ words.
+# spec_to_issue.py: keep the SPEC ID in an HTML comment in the body.
 # issue-triage.yml assigns the author and work label.`
         },
         {

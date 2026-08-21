@@ -16,9 +16,7 @@ printf '%s' "$title" | LC_ALL=C grep -q '[^ -~]' && fail "write the title in Eng
 [[ "$title" == *. ]] && fail "omit the trailing period."
 
 summary="$title"
-if [[ "$summary" =~ ^\[SPEC-[0-9]+\][[:space:]]+(.+)$ ]]; then
-  summary="${BASH_REMATCH[1]}"
-elif [[ "$summary" =~ ^\[[^]]+\] ]]; then
+if [[ "$summary" =~ ^\[[^]]+\] ]]; then
   fail "use labels instead of a bracketed type prefix."
 fi
 

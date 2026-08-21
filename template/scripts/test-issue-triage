@@ -11,12 +11,13 @@ title_validator="$repo_root/scripts/validate-issue-title"
 valid_titles=(
   "Fix authentication timeout handling"
   "Document GitHub App setup"
-  "[SPEC-001] Add health check endpoint"
+  "Add automated health endpoint"
 )
 invalid_titles=(
   "Fix timeout"
   "修正登入逾時問題"
   "[Bug] Fix broken login flow"
+  "[SPEC-001] Add health check endpoint"
   "bug: Fix broken login flow"
   "Fix broken login flow."
   "Add an excessively long Issue title that exceeds the eighty character maximum for this repository"
@@ -69,4 +70,4 @@ if ISSUE_BODY="" ISSUE_LABELS="" "$validator" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Issue title cases passed: 9; triage cases passed: 3"
+echo "Issue title cases passed: 10; triage cases passed: 3"

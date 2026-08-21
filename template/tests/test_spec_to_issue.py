@@ -12,6 +12,7 @@ build_issue_body = SPEC_MODULE["build_issue_body"]
 find_issue = SPEC_MODULE["find_issue"]
 load_labels = SPEC_MODULE["load_labels"]
 parse_spec_text = SPEC_MODULE["parse_spec_text"]
+sync_spec = SPEC_MODULE["sync_spec"]
 
 VALID_SPEC = """---
 id: SPEC-001
@@ -72,9 +73,43 @@ def test_issue_body_links_source_and_identity() -> None:
 def test_find_issue_deduplicates_by_spec_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    response = '[{"number": 42, "title": "[SPEC-001] Existing issue"}]'
-    monkeypatch.setitem(find_issue.__globals__, "run_gh", lambda _: response)
+    calls: list[list[str]] = []
+    response = json.dumps(
+        [
+            {
+                "number": 42,
+                "body": "<!-- csarc-spec-id: SPEC-001 -->\nDetails",
+            }
+        ]
+    )
+
+    def fake_run_gh(arguments: list[str]) -> str:
+        calls.append(arguments)
+        return response
+
+    monkeypatch.setitem(find_issue.__globals__, "run_gh", fake_run_gh)
     assert find_issue("owner/repo", "SPEC-001") == 42
+    assert '"csarc-spec-id: SPEC-001" in:body' in calls[0]
+    assert "number,body" in calls[0]
+
+
+def test_sync_keeps_spec_id_out_of_issue_title(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    spec = parse_spec_text(Path("docs/specs/SPEC-001-health.md"), VALID_SPEC)
+    calls: list[list[str]] = []
+
+    def fake_run_gh(arguments: list[str]) -> str:
+        calls.append(arguments)
+        return "created"
+
+    monkeypatch.setitem(sync_spec.__globals__, "find_issue", lambda *_: None)
+    monkeypatch.setitem(sync_spec.__globals__, "run_gh", fake_run_gh)
+
+    sync_spec(spec, "owner/repo", "main", "https://github.com")
+
+    create = next(call for call in calls if call[:2] == ["issue", "create"])
+    assert create[create.index("--title") + 1] == "Add a health endpoint"
 
 
 def test_load_labels_uses_policy_file(tmp_path: Path) -> None:
