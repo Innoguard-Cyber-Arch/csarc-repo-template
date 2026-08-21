@@ -6,6 +6,12 @@ fixture_root="$(mktemp -d)"
 trap 'rm -rf "$fixture_root"' EXIT
 cd "$repo_root"
 
+prime_gitleaks_cache() {
+  local project_root="$1"
+  mkdir -p "$project_root/.cache"
+  cp -R "$repo_root/.cache/gitleaks" "$project_root/.cache/gitleaks"
+}
+
 unset VIRTUAL_ENV
 export UV_PYTHON=3.14
 uv sync --locked --python 3.14
@@ -30,6 +36,8 @@ bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
+bash -n scripts/test-issue-triage
+./scripts/test-issue-triage
 
 # Repository settings must follow the account plan and actual API capability.
 github_plan_fixture="$fixture_root/github-plan"
@@ -40,6 +48,10 @@ set -euo pipefail
 
 if [[ "$1" == "api" && "$2" == "--method" ]]; then
   printf '%s\n' "$*" >> "$MOCK_GH_LOG"
+  exit 0
+fi
+if [[ "$1" == "label" && "$2" == "list" ]]; then
+  printf 'bug\nduplicate\ntask\n'
   exit 0
 fi
 if [[ "$1" == "label" ]]; then
@@ -91,6 +103,7 @@ run_settings_fixture() {
 free_plan="$(run_settings_fixture free)"
 grep -q 'Account plan: GitHub Free' <<<"$free_plan"
 grep -q 'SKIP policies/rulesets.json' <<<"$free_plan"
+grep -q 'WARNING main is not protected' <<<"$free_plan"
 team_plan="$(run_settings_fixture team)"
 grep -q 'Account plan: GitHub Team' <<<"$team_plan"
 grep -q 'APPLY policies/rulesets.json' <<<"$team_plan"
@@ -101,6 +114,12 @@ grep -q 'Enterprise-wide identity, audit, network' <<<"$enterprise_plan"
 run_settings_fixture free apply >/dev/null
 grep -q 'api --method PATCH repos/acme/project' \
   "$github_plan_fixture/free-apply.log"
+grep -q 'label delete duplicate' "$github_plan_fixture/free-apply.log"
+grep -q 'label delete task' "$github_plan_fixture/free-apply.log"
+if grep -q 'label delete bug' "$github_plan_fixture/free-apply.log"; then
+  echo "Labels declared in policy must not be deleted."
+  exit 1
+fi
 if grep -Eq 'api --method (POST|PUT) repos/acme/project/rulesets' \
   "$github_plan_fixture/free-apply.log"; then
   echo "GitHub Free private repositories must not receive a Ruleset."
@@ -248,6 +267,7 @@ paired_files=(
   .release-please-manifest.json
   .github/ISSUE_TEMPLATE/config.yml
   .github/ISSUE_TEMPLATE/work-item.yml
+  .github/workflows/issue-triage.yml
   .github/workflows/pr-policy.yml
   .github/workflows/release-please.yml
   policies/actions.json
@@ -256,6 +276,7 @@ paired_files=(
   scripts/apply-repository-settings.sh
   scripts/install-gitleaks
   scripts/scan-secrets
+  scripts/test-issue-triage
   scripts/test-pr-policy
   zizmor.yml
 )
@@ -263,11 +284,13 @@ for relative_file in "${paired_files[@]}"; do
   diff -B -w "$repo_root/$relative_file" "$repo_root/template/$relative_file"
 done
 
-test "$(grep -c '^    id:' .github/ISSUE_TEMPLATE/work-item.yml)" -eq 3
+test "$(grep -c '^    id:' .github/ISSUE_TEMPLATE/work-item.yml)" -eq 4
+grep -q '^    id: kind$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: problem$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: acceptance$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: verification$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q 'Validate pull request policy' .github/workflows/pr-policy.yml
+grep -q 'Select at least one PR label' .github/workflows/pr-policy.yml
 grep -q 'type/<issue-number>-short-slug' .github/workflows/pr-policy.yml
 grep -q 'Only dev promotion or release-please may target main in dev mode.' \
   .github/workflows/pr-policy.yml
@@ -302,6 +325,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data package_name="template_smoke_test" \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/default-project"
+prime_gitleaks_cache "$fixture_root/default-project"
 
 git -C "$fixture_root/default-project" init -q -b main
 git -C "$fixture_root/default-project" add .
@@ -378,7 +402,9 @@ fi
 grep -q '^blank_issues_enabled: false$' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/config.yml"
 test "$(grep -c '^    id:' \
-  "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 3
+  "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 4
+test -f "$fixture_root/default-project/.github/workflows/issue-triage.yml"
+test -x "$fixture_root/default-project/scripts/test-issue-triage"
 grep -q 'branches: \[main, dev\]' \
   "$fixture_root/default-project/.github/workflows/spec-to-issue.yml"
 grep -q 'target-branch: main' \
@@ -505,6 +531,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data language=ci \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/ci-only-project"
+prime_gitleaks_cache "$fixture_root/ci-only-project"
 
 git -C "$fixture_root/ci-only-project" init -q -b main
 git -C "$fixture_root/ci-only-project" add .
@@ -573,6 +600,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data branch_strategy=dev \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/typescript-project"
+prime_gitleaks_cache "$fixture_root/typescript-project"
 
 git -C "$fixture_root/typescript-project" init -q -b main
 git -C "$fixture_root/typescript-project" add .
@@ -663,6 +691,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data enable_attestations=true \
   --data enable_precommit=true \
   "$repo_root" "$fixture_root/all-features-project"
+prime_gitleaks_cache "$fixture_root/all-features-project"
 
 test -f "$fixture_root/all-features-project/.pre-commit-config.yaml"
 grep -q 'reusable-ci.yml@1111111111111111111111111111111111111111' \
@@ -709,6 +738,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data python_min_version=3.12 \
   --data coverage_mode=diff \
   "$repo_root" "$fixture_root/existing-project"
+prime_gitleaks_cache "$fixture_root/existing-project"
 
 grep -q '^requires-python = ">=3.12"$' \
   "$fixture_root/existing-project/pyproject.toml"

@@ -4,7 +4,9 @@
   "packages": {
     ".": {
       "component": "{{ project_slug }}",
-      "include-component-in-tag": false{% if language in ["python", "python-typescript"] %},
+      "include-component-in-tag": false,
+      "label": "enhancement",
+      "release-label": "enhancement"{% if language in ["python", "python-typescript"] %},
       "extra-files": [
 {% if language == "python-typescript" %}
         {

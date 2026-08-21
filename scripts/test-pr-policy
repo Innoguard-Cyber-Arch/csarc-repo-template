@@ -24,7 +24,7 @@ if ! grep -q 'branch_pattern=' "$validator"; then
   exit 1
 fi
 
-while IFS='|' read -r expected name strategy title base head body issue_state; do
+while IFS='|' read -r expected name strategy title labels base head body issue_state; do
   [[ -z "$expected" || "$expected" == \#* ]] && continue
   [[ "$body" == "-" ]] && body=""
   [[ "$issue_state" == "-" ]] && issue_state=""
@@ -33,6 +33,7 @@ while IFS='|' read -r expected name strategy title base head body issue_state; d
   if output="$(
     PR_BRANCH_STRATEGY="$strategy" \
     PR_TITLE="$title" \
+    PR_LABELS="$labels" \
     PR_BASE="$base" \
     PR_HEAD="$head" \
     PR_BODY="$body" \
@@ -50,24 +51,25 @@ while IFS='|' read -r expected name strategy title base head body issue_state; d
     exit 1
   fi
 done <<'CASES'
-# expected|name|strategy|title|base|head|body|issue state
-pass|main work|main|feat(api): add report|main|feat/42-report|Closes #42|open
-pass|dev work|dev|fix(api): handle timeout|dev|fix/42-timeout|Fixes #42|open
-pass|dev promotion|dev|feat!: promote tested changes|main|dev|-|-
-pass|release please|main|chore(main): release 0.2.0|main|release-please--branches--main--components--repo|-|-
-pass|dependabot|main|build(deps): bump pytest|main|dependabot/pip/pytest-9|-|-
-fail|unsupported title type|main|feature(api): add report|main|feat/42-report|Closes #42|open
-fail|non ASCII title|main|feat(api): 新增報表|main|feat/42-report|Closes #42|open
-fail|uppercase scope|main|feat(API): add report|main|feat/42-report|Closes #42|open
-fail|empty summary|main|feat:|main|feat/42-report|Closes #42|open
-fail|branch lacks Issue number|main|feat(api): add report|main|feat/report|Closes #42|open
-fail|unsupported branch type|main|feat(api): add report|main|feature/42-report|Closes #42|open
-fail|uppercase branch slug|main|feat(api): add report|main|feat/42-Report|Closes #42|open
-fail|mismatched Issue link|main|feat(api): add report|main|feat/42-report|Closes #41|open
-fail|closed Issue|main|feat(api): add report|main|feat/42-report|Closes #42|closed
-fail|main mode targets dev|main|feat(api): add report|dev|feat/42-report|Closes #42|open
-fail|dev work targets main|dev|feat(api): add report|main|feat/42-report|Closes #42|open
-fail|unknown branch strategy|staging|feat(api): add report|staging|feat/42-report|Closes #42|open
+# expected|name|strategy|title|labels|base|head|body|issue state
+pass|main work|main|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open
+pass|dev work|dev|fix(api): handle timeout|bug|dev|fix/42-timeout|Fixes #42|open
+pass|dev promotion|dev|feat!: promote tested changes|enhancement|main|dev|-|-
+pass|release please|main|chore(main): release 0.2.0|enhancement|main|release-please--branches--main--components--repo|-|-
+pass|dependabot|main|build(deps): bump pytest|enhancement|main|dependabot/pip/pytest-9|-|-
+fail|missing PR label|main|feat(api): add report|-|main|feat/42-report|Closes #42|open
+fail|unsupported title type|main|feature(api): add report|enhancement|main|feat/42-report|Closes #42|open
+fail|non ASCII title|main|feat(api): 新增報表|enhancement|main|feat/42-report|Closes #42|open
+fail|uppercase scope|main|feat(API): add report|enhancement|main|feat/42-report|Closes #42|open
+fail|empty summary|main|feat:|enhancement|main|feat/42-report|Closes #42|open
+fail|branch lacks Issue number|main|feat(api): add report|enhancement|main|feat/report|Closes #42|open
+fail|unsupported branch type|main|feat(api): add report|enhancement|main|feature/42-report|Closes #42|open
+fail|uppercase branch slug|main|feat(api): add report|enhancement|main|feat/42-Report|Closes #42|open
+fail|mismatched Issue link|main|feat(api): add report|enhancement|main|feat/42-report|Closes #41|open
+fail|closed Issue|main|feat(api): add report|enhancement|main|feat/42-report|Closes #42|closed
+fail|main mode targets dev|main|feat(api): add report|enhancement|dev|feat/42-report|Closes #42|open
+fail|dev work targets main|dev|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open
+fail|unknown branch strategy|staging|feat(api): add report|enhancement|staging|feat/42-report|Closes #42|open
 CASES
 
 echo "PR policy regression cases passed: $case_count"

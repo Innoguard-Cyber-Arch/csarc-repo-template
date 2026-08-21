@@ -2,7 +2,7 @@ name: PR policy
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened]
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -27,6 +27,7 @@ jobs:
           PR_BASE: ${{ github.event.pull_request.base.ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
@@ -40,6 +41,12 @@ jobs:
           if printf '%s' "$PR_TITLE" | LC_ALL=C grep -q '[^ -~]'; then
             echo "PR title must use ASCII characters only."
             echo "The PR body may be written in Chinese."
+            exit 1
+          fi
+          if [[ ",${PR_LABELS:-}," != *,bug,* &&
+                ",${PR_LABELS:-}," != *,enhancement,* &&
+                ",${PR_LABELS:-}," != *,documentation,* ]]; then
+            echo "Select at least one PR label: bug, enhancement, or documentation."
             exit 1
           fi
 

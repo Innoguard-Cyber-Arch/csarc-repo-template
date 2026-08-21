@@ -70,7 +70,7 @@ if [[ "$ruleset_available" == true ]]; then
   if [[ -n "${CSARC_VERSION_BOT_APP_ID:-}" ]]; then
     temporary_ruleset="$(mktemp)"
     trap 'rm -f "$temporary_ruleset"' EXIT
-    uv run python - \
+    uv run --no-project python - \
       "$ruleset_payload" \
       "$temporary_ruleset" \
       "$CSARC_VERSION_BOT_APP_ID" <<'PY'
@@ -101,12 +101,13 @@ echo "Repository visibility: $repo_visibility"
 echo "Deployment plan:"
 echo "- APPLY policies/repository.json"
 echo "- APPLY policies/actions.json"
-echo "- APPLY policies/labels.json"
+echo "- APPLY policies/labels.json (exact set; remove labels outside policy)"
 if [[ "$ruleset_available" == true ]]; then
   echo "- APPLY policies/rulesets.json"
   echo "CODEOWNERS team: $code_owner"
 else
   echo "- SKIP policies/rulesets.json: $ruleset_skip_reason"
+  echo "- WARNING main is not protected: this private repository needs GitHub Team or public visibility before Rulesets can be enforced."
 fi
 if [[ "$plan_label" == "GitHub Enterprise" ]]; then
   echo "- INFO Enterprise-wide identity, audit, network, and organization Rulesets are outside this repository script."
@@ -125,7 +126,7 @@ while IFS=$'\t' read -r name color description; do
   gh label create "$name" --repo "$repo" --color "$color" \
     --description "$description" --force >/dev/null
 done < <(
-  uv run python - "$repo_root/policies/labels.json" <<'PY'
+  uv run --no-project python - "$repo_root/policies/labels.json" <<'PY'
 import json
 import sys
 
@@ -133,6 +134,22 @@ for label in json.load(open(sys.argv[1], encoding="utf-8")):
     print(label["name"], label["color"], label["description"], sep="\t")
 PY
 )
+
+desired_labels="$({
+  uv run --no-project python - "$repo_root/policies/labels.json" <<'PY'
+import json
+import sys
+
+for label in json.load(open(sys.argv[1], encoding="utf-8")):
+    print(label["name"])
+PY
+})"
+while IFS= read -r existing_label; do
+  [[ -z "$existing_label" ]] && continue
+  if ! grep -Fxq "$existing_label" <<<"$desired_labels"; then
+    gh label delete "$existing_label" --repo "$repo" --yes >/dev/null
+  fi
+done < <(gh label list --repo "$repo" --limit 1000 --json name --jq '.[].name')
 
 if [[ "$ruleset_available" == true ]]; then
   ruleset_id="$(

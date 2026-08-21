@@ -1,0 +1,56 @@
+name: Issue triage
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  classify:
+    name: classify
+    if: github.event.issue.user.type == 'User'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign author and apply one work label
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+
+          issue_type=""
+          for allowed in bug enhancement documentation; do
+            if [[ ",${ISSUE_LABELS:-}," == *",${allowed},"* ]]; then
+              issue_type="$allowed"
+              break
+            fi
+          done
+          if [[ -z "$issue_type" ]]; then
+            issue_type="$(
+              awk '
+                /^### 類型$/ { found = 1; next }
+                found && NF { print; exit }
+              ' <<<"${ISSUE_BODY:-}"
+            )"
+          fi
+          case "$issue_type" in
+            bug|enhancement|documentation) ;;
+            *)
+              echo "Select one Issue type: bug, enhancement, or documentation."
+              exit 1
+              ;;
+          esac
+
+          for label in bug enhancement documentation; do
+            [[ "$label" == "$issue_type" ]] && continue
+            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --remove-label "$label" >/dev/null 2>&1 || true
+          done
+          gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --add-assignee "$ISSUE_AUTHOR" --add-label "$issue_type"

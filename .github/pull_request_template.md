@@ -11,6 +11,7 @@ Closes #N
 <!-- List the commands run and the expected result. -->
 
 - [ ] `./scripts/verify-template.sh`
+- [ ] 已選擇 `bug`、`enhancement` 或 `documentation` 其中一個標籤
 
 ## Risk and rollback
 

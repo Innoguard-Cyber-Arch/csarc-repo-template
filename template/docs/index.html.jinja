@@ -198,7 +198,7 @@
         <table class="table">
           <thead><tr><th>方案</th><th>公版會套用</th><th>方案邊界</th></tr></thead>
           <tbody>
-            <tr><td><strong>Free</strong></td><td>合併方式、Actions 唯讀權限、標籤；CI 仍會回報</td><td>private repo 略過 Ruleset，紅燈尚不能成為不可繞過門禁</td></tr>
+            <tr><td><strong>Free</strong></td><td>合併方式、Actions 唯讀權限、三種標籤；CI 仍會回報</td><td>private repo 的 <code>main</code> 未受強制保護，紅燈仍可能被繞過</td></tr>
             <tr><td><strong>Team</strong></td><td>Free 基線＋Ruleset、必要審查、CODEOWNERS 與必要檢查</td><td>要先建立真實 CODEOWNERS team</td></tr>
             <tr><td><strong>Enterprise</strong></td><td>沿用 Team 的 repo 設定</td><td>SSO／SCIM、稽核串流、IP 限制與組織 Ruleset 屬組織層，不由本 repo 腳本自動修改</td></tr>
           </tbody>

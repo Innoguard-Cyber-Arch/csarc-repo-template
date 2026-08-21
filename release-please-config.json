@@ -5,6 +5,8 @@
     ".": {
       "component": "csarc-repo-template",
       "include-component-in-tag": false,
+      "label": "enhancement",
+      "release-label": "enhancement",
       "extra-files": [
         {
           "type": "toml",

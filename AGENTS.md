@@ -31,6 +31,7 @@ Automated dependency, version-policy, and release-please branches may omit an Is
 - Do not weaken generated-project checks to make template tests pass.
 - Keep GitHub Actions pinned to full commit SHAs and retain the readable release tag in a comment.
 - Do not hand-edit generated lockfiles; use uv or pnpm so integrity metadata stays valid.
+- Do not create a separate GitHub repository for testing or validation. Use local temporary projects or this repository's Issues, branches, pull requests, and Actions.
 - Do not add a language, deployment target, platform integration, or placeholder configuration without a real consuming repository.
 - Comments in source code must be written in English. Leave formatting and lint details in their executable configuration instead of duplicating them here.
 
