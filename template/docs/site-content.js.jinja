@@ -3,6 +3,7 @@ window.CSARC_SITE_CONTENT = {
     name: {{ project_name | tojson }},
     description: {{ project_description | tojson }},
     language: {{ language | tojson }},
+    branch: {{ branch_strategy | tojson }},
     owner: {{ code_owner | tojson }},
     stage: "beta"
   },
@@ -10,7 +11,7 @@ window.CSARC_SITE_CONTENT = {
     prerequisites: [
       "Git",
       "GitHub CLI",
-      "uv"{% if language != "python" %},
+      "uv"{% if language in ["typescript", "python-typescript"] %},
       "Node 24+",
       "pnpm 11"{% endif %}
     ],
@@ -24,30 +25,31 @@ window.CSARC_SITE_CONTENT = {
     { path: ".github/", purpose: "PR、CI 與安全自動化", owner: "公版主導" },
     { path: "policies/", purpose: "可審查的 GitHub 設定", owner: "公版主導" },
     { path: "docs/specs/", purpose: "功能規格與 Issue 來源", owner: "專案維護" },
-{% if language != "typescript" %}
+{% if language in ["python", "python-typescript"] %}
     { path: "src/＋tests/", purpose: "Python 產品與測試", owner: "專案維護" },
-{% endif %}{% if language != "python" %}
+{% endif %}{% if language in ["typescript", "python-typescript"] %}
     { path: "typescript/", purpose: "TypeScript 產品與測試", owner: "專案維護" },
 {% endif %}
     { path: "scripts/verify", purpose: "本機與 CI 共同入口", owner: "公版主導" },
     { path: "docs/site-content.js", purpose: "本網站的專案內容", owner: "專案維護" }
   ],
   workflow: [
-    { title: "1｜定義工作", detail: "寫清楚問題、成果、完成條件、不做事項與驗證方式。" },
-    { title: "2｜實作", detail: "短分支完成一個結果；AI 遵守 AGENTS.md，不能自行合併。" },
+    { title: "1｜定義工作", detail: "先開 Issue，簡短寫清楚問題與原因、完成條件、驗證方式。" },
+    { title: "2｜分支與實作", detail: "從 {{ branch_strategy }} 建立 type/<Issue 編號>-簡稱；AI 不能自行合併。" },
     { title: "3｜驗證", detail: "本機執行 ./scripts/verify，PR 由 CI 重跑同一入口。" },
-    { title: "4｜審查", detail: "PR 標題使用英文 Conventional Commits；同事與 CODEOWNER 判斷風險。" },
+    { title: "4｜審查", detail: "PR 連回 Issue 並進 {{ branch_strategy }}；同事與 CODEOWNER 判斷風險。" },
     { title: "5｜交付", detail: "tag 建立可追溯成品、SHA-256 與非空 SBOM；部署依專案另訂。" }
   ],
   safeguards: [
     "一般相依新版等待三天，已公開漏洞由 OSV 立即通知。",
     "lockfile 保存下載內容雜湊；第三方 Actions 固定完整 commit SHA。",
+    "PR 政策包含合法／不合法回歸測資，避免門禁只會顯示綠燈。",
     "token 與私鑰放 GitHub Secrets／Variables，不提交到 repo 或 .env。",
     "Ruleset 只有在 GitHub 方案與 CODEOWNERS team 備妥後才套用。"
   ],
   release: {
-    current: "tag 打包、checksum 與 SBOM 已啟用；沒有通用部署流程。",
+    current: {% if language == "ci" %}"tag 會建立 GitHub Release 與來源封存檔；沒有語言套件，因此不產生套件 SBOM。"{% else %}"tag 打包、checksum 與 SBOM 已啟用；沒有通用部署流程。"{% endif %},
     optional: "GitHub App 未設定時，release-please 會略過；準備好後再啟用自動 Release PR。",
-    update: "Copier 從分支套用已審查的完整 commit SHA，再執行 ./scripts/verify。"
+    update: "Copier 從 {{ branch_strategy }} 的工作分支套用已審查的完整 commit SHA，再執行 ./scripts/verify。"
   }
 };

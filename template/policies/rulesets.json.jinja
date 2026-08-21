@@ -1,11 +1,11 @@
 {
-  "name": "CSARC main protection",
+  "name": "CSARC protected branches",
   "target": "branch",
   "enforcement": "active",
   "bypass_actors": [],
   "conditions": {
     "ref_name": {
-      "include": ["~DEFAULT_BRANCH"],
+      "include": ["~DEFAULT_BRANCH"{% if branch_strategy == "dev" %}, "refs/heads/dev"{% endif %}],
       "exclude": []
     }
   },

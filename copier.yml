@@ -12,18 +12,19 @@ _exclude:
   - ".DS_Store"
   - ".svn"
   - "{% if enable_precommit %}__keep_precommit__{% else %}.pre-commit-config.yaml{% endif %}"
-  - "{% if language != 'typescript' %}__keep_python_version__{% else %}.python-version{% endif %}"
-  - "{% if language != 'typescript' %}__keep_python_project__{% else %}pyproject.toml{% endif %}"
-  - "{% if language != 'typescript' %}__keep_python_source__{% else %}/src{% endif %}"
-  - "{% if language != 'typescript' %}__keep_python_tests__{% else %}/tests{% endif %}"
-  - "{% if language != 'python' %}__keep_node_version__{% else %}.node-version{% endif %}"
-  - "{% if language != 'python' %}__keep_node_package__{% else %}package.json{% endif %}"
-  - "{% if language != 'python' %}__keep_pnpm_workspace__{% else %}pnpm-workspace.yaml{% endif %}"
-  - "{% if language != 'python' %}__keep_biome__{% else %}biome.json{% endif %}"
-  - "{% if language != 'python' %}__keep_tsconfig__{% else %}tsconfig.json{% endif %}"
-  - "{% if language != 'python' %}__keep_tsconfig_build__{% else %}tsconfig.build.json{% endif %}"
-  - "{% if language != 'python' %}__keep_vitest__{% else %}vitest.config.ts{% endif %}"
-  - "{% if language != 'python' %}__keep_typescript_source__{% else %}/typescript{% endif %}"
+  - "{% if language in ['python', 'python-typescript'] %}__keep_python_version__{% else %}.python-version{% endif %}"
+  - "{% if language in ['python', 'python-typescript'] %}__keep_python_project__{% else %}pyproject.toml{% endif %}"
+  - "{% if language in ['python', 'python-typescript'] %}__keep_python_source__{% else %}/src{% endif %}"
+  - "{% if language in ['python', 'python-typescript'] %}__keep_python_tests__{% else %}/tests{% endif %}"
+  - "{% if language in ['typescript', 'python-typescript'] %}__keep_node_version__{% else %}.node-version{% endif %}"
+  - "{% if language in ['typescript', 'python-typescript'] %}__keep_node_package__{% else %}package.json{% endif %}"
+  - "{% if language in ['typescript', 'python-typescript'] %}__keep_pnpm_workspace__{% else %}pnpm-workspace.yaml{% endif %}"
+  - "{% if language in ['typescript', 'python-typescript'] %}__keep_biome__{% else %}biome.json{% endif %}"
+  - "{% if language in ['typescript', 'python-typescript'] %}__keep_tsconfig__{% else %}tsconfig.json{% endif %}"
+  - "{% if language in ['typescript', 'python-typescript'] %}__keep_tsconfig_build__{% else %}tsconfig.build.json{% endif %}"
+  - "{% if language in ['typescript', 'python-typescript'] %}__keep_vitest__{% else %}vitest.config.ts{% endif %}"
+  - "{% if language in ['typescript', 'python-typescript'] %}__keep_typescript_source__{% else %}/typescript{% endif %}"
+  - "{% if language == 'ci' %}__keep_ci_version__{% else %}version.txt{% endif %}"
 _skip_if_exists:
   - "src/**/*.py"
   - "tests/**/*.py"
@@ -35,11 +36,11 @@ _skip_if_exists:
   - "{% if project_mode == 'existing' %}package.json{% else %}__overwrite_node_manifest__{% endif %}"
 _tasks:
   - command: "uv lock --python {{ '3.14' if (python_support_mode | default('latest')) == 'latest' else (python_min_version | default('3.12')) }}"
-    when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language != 'typescript' }}"
+    when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language in ['python', 'python-typescript'] }}"
   - command: "pnpm install --lockfile-only --ignore-scripts"
-    when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language != 'python' }}"
+    when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language in ['typescript', 'python-typescript'] }}"
 _message_after_copy: |
-  {% if project_mode == 'existing' %}Existing pyproject.toml/package.json files were preserved. Merge the required tool settings and version markers described in README.md, run the format command, then run ./scripts/verify.{% else %}Project created. Confirm .csarc/profile.json, run ./scripts/verify, then open a pull request for the initial commit.{% endif %}
+  {% if project_mode == 'existing' %}Existing pyproject.toml/package.json files were preserved. Merge the required tool settings and version markers described in README.md, run ./scripts/verify, then link the pull request to its Issue.{% else %}Project created. Confirm .csarc/profile.json, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request.{% endif %}
 
 project_mode:
   type: str
@@ -67,16 +68,25 @@ language:
   type: str
   help: Product language modules; the answer is stored and verified in the repository
   choices:
+    CI/CD baseline only: ci
     Python only: python
     TypeScript only: typescript
     Python and TypeScript: python-typescript
   default: python
 
+branch_strategy:
+  type: str
+  help: Use dev only when the repository has a real shared integration or test environment
+  choices:
+    Short branch → pull request → main: main
+    Shared test environment → dev → main: dev
+  default: main
+
 package_name:
   type: str
   help: Python import package name
   default: "{{ project_slug | replace('-', '_') }}"
-  when: "{{ language != 'typescript' }}"
+  when: "{{ language in ['python', 'python-typescript'] }}"
 
 code_owner:
   type: str
@@ -90,7 +100,7 @@ python_support_mode:
     Latest stable only (Python 3.14): latest
     Declare a minimum supported version: minimum
   default: latest
-  when: "{{ language != 'typescript' }}"
+  when: "{{ language in ['python', 'python-typescript'] }}"
 
 python_min_version:
   type: str
@@ -100,7 +110,7 @@ python_min_version:
     - "3.13"
     - "3.14"
   default: "3.12"
-  when: "{{ language != 'typescript' and python_support_mode == 'minimum' }}"
+  when: "{{ language in ['python', 'python-typescript'] and python_support_mode == 'minimum' }}"
 
 coverage_mode:
   type: str
@@ -137,3 +147,4 @@ enable_attestations:
   type: bool
   help: Enable GitHub artifact attestations; private repositories require GitHub Enterprise Cloud
   default: false
+  when: "{{ language != 'ci' }}"

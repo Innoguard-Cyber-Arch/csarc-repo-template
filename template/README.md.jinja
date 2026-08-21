@@ -1,3 +1,5 @@
+{% set has_python = language in ["python", "python-typescript"] -%}
+{% set has_typescript = language in ["typescript", "python-typescript"] -%}
 # {{ project_name }}
 
 {{ project_description }}
@@ -10,37 +12,46 @@
 
 ## 快速開始
 
-共同需求是 Git、GitHub CLI、uv；{% if language != "python" %}本案另需 Node 24+ 與 pnpm 11。{% endif %}
+共同需求是 Git、GitHub CLI、uv；{% if has_typescript %}本案另需 Node 24+ 與 pnpm 11。{% endif %}
 
 ```bash
 git clone <repository-url>
 cd {{ project_slug }}
+{% if branch_strategy == "dev" %}git switch -c dev
+git push -u origin dev
+{% endif %}
 ./scripts/verify
 ```
 
 請在這裡補上產品最短可成功的啟動或呼叫範例。
 
 {% if project_mode == "existing" %}> 既有案導入：Copier 已保留原本的 manifest。先人工合併 dev 相依、版本與工具設定，再重建 lockfile；`coverage_mode=diff` 預設比較 `origin/main`。{% endif %}
+{% if branch_strategy == "dev" %}> 本案選用 `dev` 模式，因為有長期共用測試環境。維護者首次啟用時須從 `main` 建立並推送 `dev`。{% else %}> 本案沒有長期共用測試環境，短分支通過 PR 後直接合併到 `main`。{% endif %}
 
 ## 技術與目錄
 
 | 範圍 | 位置／工具 |
 | --- | --- |
 | 共用 | `.github/`、`policies/`、`docs/specs/`、`scripts/verify` |
-{% if language != "typescript" %}| Python | `src/`、`tests/`、uv、Ruff、mypy、pytest；Python {% if python_support_mode == "latest" %}3.14 only{% else %}{{ python_min_version }}+{% endif %} |
-{% endif %}{% if language != "python" %}| TypeScript | `typescript/`、pnpm 11、Biome、strict TypeScript、Vitest；Node 24+ |
+{% if has_python %}| Python | `src/`、`tests/`、uv、Ruff、mypy、pytest；Python {% if python_support_mode == "latest" %}3.14 only{% else %}{{ python_min_version }}+{% endif %} |
+{% endif %}{% if has_typescript %}| TypeScript | `typescript/`、pnpm 11、Biome、strict TypeScript、Vitest；Node 24+ |
 {% endif %}| 內部網站 | `docs/index.html` 版型；`docs/site-content.js` 專案內容 |
 
 語言宣告記在 `.csarc/profile.json`；`scripts/detect-language-profile --suggest` 會檢查實際檔案是否一致。
 
 ## 開發與驗證
 
-1. 用 Work item 或 `docs/specs/` 寫清楚成果與驗證方式。
-2. 在短分支修改；AI 遵守 `AGENTS.md`，不能自行合併。
+1. 簡單工作先開「開發工作」Issue；複雜需求先開規劃 Issue，再用 `docs/specs/` 拆出實作 Issue。
+2. 從 `{{ branch_strategy }}` 建立 `type/<issue-number>-short-slug` 分支；AI 遵守 `AGENTS.md`，不能自行合併。
 3. 執行 `./scripts/verify`。
-4. PR 標題使用英文 `type(scope): summary`，通過 CI 與必要審查後合併。
+4. PR 指向 `{{ branch_strategy }}`、內文寫 `Closes #<issue-number>`，標題使用英文 `type(scope): summary`。
+5. CI 與人工審查都通過才合併。{% if branch_strategy == "dev" %}準備發布時，再用一張審查過的 PR 將 `dev` 升版到 `main`。{% endif %}
 
-目前驗證包含{% if language != "typescript" %} Ruff、mypy、pytest、{{ coverage_threshold }}% coverage、wheel 與相依下界{% endif %}{% if language == "python-typescript" %}，以及{% endif %}{% if language != "python" %} Biome、TypeScript、Vitest {{ coverage_threshold }}% coverage 與 npm tarball{% endif %}，最後再檢查 spec、機密字串與 lockfile。
+`./scripts/verify` 也會跑 PR 政策正反例，確認合法流程能通過、錯誤標題／分支／Issue 關聯會被拒絕。
+
+{% if language == "ci" %}目前驗證 spec、README、JSON、workflow 與機密字串；沒有語言模組，因此不執行語言測試或打包。
+{% else %}目前驗證包含{% if has_python %} Ruff、mypy、pytest、{{ coverage_threshold }}% coverage、wheel 與相依下界{% endif %}{% if language == "python-typescript" %}，以及{% endif %}{% if has_typescript %} Biome、TypeScript、Vitest {{ coverage_threshold }}% coverage 與 npm tarball{% endif %}，最後再檢查 spec、機密字串與 lockfile。
+{% endif %}
 
 ## 設定與密鑰
 
@@ -48,14 +59,15 @@ cd {{ project_slug }}
 
 ## 發布與維運
 
-`fix` 升修補版、`feat` 升次版、`!` 升大版。`v*` tag 會產生{% if language != "typescript" %} wheel／sdist{% endif %}{% if language == "python-typescript" %}與{% endif %}{% if language != "python" %} npm tarball{% endif %}、SHA-256 與 SBOM；目前沒有通用部署流程。
+`fix(scope)` 升修補版、`feat(scope)` 升次版、`!` 升大版；scope 可用 `ci`、`python`、`typescript` 或 `template`，但整個 repo 永遠共用一個版本。{% if branch_strategy == "dev" %}因 repo 採 squash merge，`dev` 升版 PR 的英文標題代表整批變更的最高 SemVer 等級。{% endif %}{% if language == "ci" %}版本記在 `version.txt`，tag 發布 GitHub Release 的來源封存檔；沒有語言成品，因此不產生套件 SBOM。{% else %}`v*` tag 會產生{% if has_python %} wheel／sdist{% endif %}{% if language == "python-typescript" %}與{% endif %}{% if has_typescript %} npm tarball{% endif %}、SHA-256 與 SBOM。{% endif %}目前沒有通用部署流程。
 
 若本案是長駐服務，請補上部署入口、健康檢查、復原方法與 runbook。
 
 ## 公版更新
 
 ```bash
-git switch -c chore/update-repo-template
+git switch {{ branch_strategy }}
+git switch -c chore/<issue-number>-update-repo-template
 uvx --from copier copier update --trust --vcs-ref <reviewed-full-commit-sha>
 ./scripts/verify
 ```

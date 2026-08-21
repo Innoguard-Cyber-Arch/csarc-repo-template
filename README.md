@@ -1,6 +1,8 @@
 # CSARC Repo Template
 
-Cyber-Arch 的可更新 repo 公版，支援 Python、TypeScript 或兩者並用。新案、既有案與後續政策更新都經 Copier 形成可審查差異。
+Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript 或兩者並用。新案、既有案與後續政策更新都經 Copier 形成可審查差異。
+
+目前公版：v0.1.0 <!-- x-release-please-version -->
 
 [開啟內部網站與完整決策說明](docs/index.html)
 
@@ -8,7 +10,7 @@ Cyber-Arch 的可更新 repo 公版，支援 Python、TypeScript 或兩者並用
 
 本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。`template/` 是下發內容；根目錄則讓公版本身使用同一套規則。
 
-目前可用：三種語言 profile、Issue／spec、PR checks、驗證、打包、checksum 與 SBOM。Ruleset 要等 GitHub Team 與 CODEOWNERS team；release-please 自動化要等專用 GitHub App。
+目前可用：CI/CD-only、Python-only、TypeScript-only、混合四種 profile，以及 Issue／spec、PR checks、驗證、打包、checksum 與 SBOM。Ruleset 要等 GitHub Team 與 CODEOWNERS team；release-please 自動化要等專用 GitHub App。
 
 ## 快速開始
 
@@ -45,10 +47,14 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 
 ## 開發與驗證
 
-1. 用 Issue／`docs/specs/` 定義可獨立驗證的結果。
-2. 在短分支修改；PR 標題用英文 `type(scope): summary`。
+1. 簡單工作先開「開發工作」Issue；複雜需求先開規劃 Issue，再用 `docs/specs/` 拆出實作 Issue。
+2. 從 `main` 建立 `type/<issue-number>-short-slug` 分支，一張 Issue 與 PR 只交付一個結果。
 3. 公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。
-4. CI、同事與 CODEOWNER 都通過後才合併。
+4. PR 指向 `main`、內文寫 `Closes #<issue-number>`，並使用英文標題 `type(scope): summary`。
+5. CI 與人工審查都通過才合併；AI 不得自行合併。
+
+本 repo 沒有共用測試環境，因此採 main-only。生成專案只有在確實有長期 dev 測試環境時，才改選 `dev` 模式。
+驗證入口也會執行 PR 政策正反例；公版另注入不合法的 Python／TypeScript 內容，確認語言門禁真的會拒絕。
 
 `AGENTS.md` 是 AI 工作契約；工具細節以可執行設定為準，不在 README 重複。
 
@@ -60,7 +66,9 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 
 ## 發布與維運
 
-`v*` tag 觸發公版完整驗證；生成專案則依 profile 產生 wheel、npm tarball 或兩者，附 SHA-256 與非空 CycloneDX SBOM。現在只有持續交付，沒有通用部署流程。
+公版版本以 `version.txt`、`.release-please-manifest.json` 與 `v*` tag 同步記錄；tag 觸發完整驗證。生成專案則依 profile 產生 wheel、npm tarball 或兩者，附 SHA-256 與非空 CycloneDX SBOM；CI/CD-only 只有 GitHub Release 的來源封存檔，不假裝有語言成品。現在只有持續交付，沒有通用部署流程。
+
+整份公版只用一個 SemVer：`fix(scope)` 升 patch、`feat(scope)` 升 minor、`!` 升 major。scope 可標 `ci`、`python`、`typescript` 或 `template`；只要任何已支援 profile 不相容，就視為整份公版的破壞性變更。
 
 release-please 設定已備妥，但要等專用 GitHub App 才會自動開 Release PR；未設定時可人工建立 tag，不影響 CI。
 
@@ -69,7 +77,7 @@ release-please 設定已備妥，但要等專用 GitHub App 才會自動開 Rele
 各專案從分支套用已審查的完整 commit SHA：
 
 ```bash
-git switch -c chore/update-repo-template
+git switch -c chore/<issue-number>-update-repo-template
 uvx --from copier copier update --trust --vcs-ref <reviewed-full-commit-sha>
 ./scripts/verify
 ```

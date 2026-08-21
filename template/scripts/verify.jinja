@@ -4,18 +4,20 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-verify_python={{ "true" if language != "typescript" else "false" }}
-verify_typescript="${CSARC_VERIFY_TYPESCRIPT:-{{ "true" if language != "python" else "false" }}}"
+verify_python={{ "true" if language in ["python", "python-typescript"] else "false" }}
+verify_typescript="${CSARC_VERIFY_TYPESCRIPT:-{{ "true" if language in ["typescript", "python-typescript"] else "false" }}}"
 temporary_paths=()
 cleanup() {
   local path
   for path in "${temporary_paths[@]:-}"; do
     [[ -n "$path" ]] && rm -rf "$path"
   done
+  return 0
 }
 trap cleanup EXIT
 
 ./scripts/detect-language-profile
+./scripts/test-pr-policy
 
 if $verify_python; then
   python_version="${CSARC_PYTHON_VERSION:-3.14}"
@@ -97,6 +99,32 @@ fi
 "${platform_python[@]}" -m json.tool policies/actions.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/labels.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/rulesets.json >/dev/null
+"${platform_python[@]}" -m json.tool release-please-config.json >/dev/null
+"${platform_python[@]}" -m json.tool .release-please-manifest.json >/dev/null
+"${platform_python[@]}" - <<'PY'
+import json
+import tomllib
+from pathlib import Path
+
+versions = {
+    "release manifest": json.loads(
+        Path(".release-please-manifest.json").read_text(encoding="utf-8")
+    )["."]
+}
+if Path("pyproject.toml").exists():
+    versions["pyproject.toml"] = tomllib.loads(
+        Path("pyproject.toml").read_text(encoding="utf-8")
+    )["project"]["version"]
+if Path("package.json").exists():
+    versions["package.json"] = json.loads(
+        Path("package.json").read_text(encoding="utf-8")
+    )["version"]
+if Path("version.txt").exists():
+    versions["version.txt"] = Path("version.txt").read_text(encoding="utf-8").strip()
+if len(set(versions.values())) != 1:
+    raise SystemExit(f"Release versions do not match: {versions}")
+print(f"release version: {next(iter(versions.values()))}")
+PY
 test -x scripts/apply-repository-settings.sh
 test -x scripts/detect-language-profile
 

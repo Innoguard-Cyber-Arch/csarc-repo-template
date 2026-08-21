@@ -9,6 +9,20 @@ version_policy:
   merge_after_full_verification: automatic
   future_profiles_must_define_their_own_stable_channel: true
 
+template_release_policy:
+  version_source: version.txt
+  strategy: single_semver_for_all_compositions
+  release_tool: release-please
+  tag_format: vX.Y.Z
+  breaking_change_in_any_beta_composition_bumps_major: true
+
+branching_policy:
+  default: main
+  dev_mode_requires_shared_test_environment: true
+  work_branch_format: type/<issue-number>-short-slug
+  pull_request_must_close_matching_issue: true
+  automation_branches_may_omit_issue: true
+
 shared:
   stage: beta
   applies_to: every_repository
@@ -80,6 +94,11 @@ profiles:
     reason: Add only after a real consuming repository defines its stable toolchain and MSRV policy, then passes create and update tests.
 
 compositions:
+  ci:
+    stage: beta
+    profiles: []
+    release_output: github_release_source_archive
+
   python:
     stage: beta
     profiles:

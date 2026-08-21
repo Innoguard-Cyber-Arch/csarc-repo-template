@@ -1,7 +1,7 @@
 repos:
   - repo: local
     hooks:
-{% if language != "typescript" %}
+{% if language in ["python", "python-typescript"] %}
       - id: ruff-format
         name: Ruff format
         entry: uv run ruff format --check
@@ -18,7 +18,7 @@ repos:
         language: system
         pass_filenames: false
 {% endif %}
-{% if language != "python" %}
+{% if language in ["typescript", "python-typescript"] %}
       - id: biome
         name: Biome
         entry: pnpm exec biome ci .

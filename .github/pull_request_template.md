@@ -1,8 +1,10 @@
 ## Purpose
 
-<!-- What problem does this change solve? Link one Issue. -->
+<!-- Replace N with the Issue number used in the branch name. -->
 
-Closes #
+Closes #N
+
+<!-- Work PRs use type/N-short-slug and target the configured integration branch. -->
 
 ## Verification
 

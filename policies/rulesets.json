@@ -1,5 +1,5 @@
 {
-  "name": "CSARC main protection",
+  "name": "CSARC protected branches",
   "target": "branch",
   "enforcement": "active",
   "bypass_actors": [],

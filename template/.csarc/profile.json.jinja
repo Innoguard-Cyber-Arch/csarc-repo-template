@@ -1,9 +1,11 @@
 {
   "schema_version": 1,
   "template_mode": "{{ project_mode }}",
+  "branch_strategy": "{{ branch_strategy }}",
   "language_profile": "{{ language }}",
   "modules": {
-    "python": {{ "true" if language != "typescript" else "false" }},
-    "typescript": {{ "true" if language != "python" else "false" }}
+    "ci_cd": true,
+    "python": {{ "true" if language in ["python", "python-typescript"] else "false" }},
+    "typescript": {{ "true" if language in ["typescript", "python-typescript"] else "false" }}
   }
 }

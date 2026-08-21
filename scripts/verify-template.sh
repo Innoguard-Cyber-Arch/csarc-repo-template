@@ -28,6 +28,9 @@ uv run mypy \
 uv run pytest template/tests/test_spec_to_issue.py
 bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
+bash -n scripts/validate-pr-policy
+bash -n scripts/test-pr-policy
+./scripts/test-pr-policy
 ./scripts/scan-secrets
 uv run zizmor . --format plain
 
@@ -90,9 +93,47 @@ test "$(cat CLAUDE.md)" = "@AGENTS.md"
 test -f docs/index.html
 grep -q '<title>CSARC Repo Template｜AI 輔助 SDLC 團隊公版</title>' \
   docs/index.html
+test -f version.txt
+uv run python - <<'PY'
+import json
+import tomllib
+from pathlib import Path
+
+version = Path("version.txt").read_text(encoding="utf-8").strip()
+with Path("pyproject.toml").open("rb") as source:
+    project_version = tomllib.load(source)["project"]["version"]
+with Path("uv.lock").open("rb") as source:
+    lock_packages = tomllib.load(source)["package"]
+lock_version = next(
+    package["version"]
+    for package in lock_packages
+    if package["name"] == "csarc-repo-template"
+)
+manifest_version = json.loads(
+    Path(".release-please-manifest.json").read_text(encoding="utf-8")
+)["."]
+if len({version, project_version, lock_version, manifest_version}) != 1:
+    raise SystemExit("Template release versions do not match.")
+release_config = json.loads(
+    Path("release-please-config.json").read_text(encoding="utf-8")
+)
+if release_config["release-type"] != "simple":
+    raise SystemExit("The template repository must use the simple release type.")
+extra_paths = {
+    item["path"] for item in release_config["packages"]["."]["extra-files"]
+}
+if not {"pyproject.toml", "uv.lock", "README.md", "docs/index.html"} <= extra_paths:
+    raise SystemExit("The template release does not update every visible version.")
+for path in (Path("README.md"), Path("docs/index.html")):
+    content = path.read_text(encoding="utf-8")
+    if f"v{version}" not in content or "x-release-please-version" not in content:
+        raise SystemExit(f"{path} does not expose the current release version marker.")
+PY
 grep -q '^## Working loop$' AGENTS.md
 grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
+grep -q 'Start from `main` and name the branch' AGENTS.md
+grep -q 'Open the pull request against `main`' AGENTS.md
 required_readme_headings=(
   "專案概述"
   "快速開始"
@@ -126,21 +167,40 @@ paired_files=(
   .release-please-manifest.json
   .github/ISSUE_TEMPLATE/config.yml
   .github/ISSUE_TEMPLATE/work-item.yml
-  .github/workflows/osv.yml
   .github/workflows/pr-policy.yml
   .github/workflows/release-please.yml
-  .github/workflows/zizmor.yml
   policies/actions.json
   policies/labels.json
   policies/repository.json
   scripts/apply-repository-settings.sh
   scripts/install-gitleaks
   scripts/scan-secrets
+  scripts/test-pr-policy
+  scripts/validate-pr-policy
   zizmor.yml
 )
 for relative_file in "${paired_files[@]}"; do
   diff -B -w "$repo_root/$relative_file" "$repo_root/template/$relative_file"
 done
+
+test "$(grep -c '^    id:' .github/ISSUE_TEMPLATE/work-item.yml)" -eq 3
+grep -q '^    id: problem$' .github/ISSUE_TEMPLATE/work-item.yml
+grep -q '^    id: acceptance$' .github/ISSUE_TEMPLATE/work-item.yml
+grep -q '^    id: verification$' .github/ISSUE_TEMPLATE/work-item.yml
+grep -q 'Validate pull request policy' .github/workflows/pr-policy.yml
+grep -q './scripts/validate-pr-policy' .github/workflows/pr-policy.yml
+grep -q 'type/<issue-number>-short-slug' scripts/validate-pr-policy
+grep -q 'Only dev promotion or release-please may target main in dev mode.' \
+  scripts/validate-pr-policy
+grep -q 'branches: \[main\]' .github/workflows/ci.yml
+grep -q 'branches: \[main\]' .github/workflows/osv.yml
+grep -q 'branches: \[main\]' .github/workflows/zizmor.yml
+grep -q 'target-branch: main' .github/dependabot.yml
+grep -q '"name": "CSARC protected branches"' policies/rulesets.json
+if grep -q '"refs/heads/dev"' policies/rulesets.json; then
+  echo "The template repository must remain in main-only mode."
+  exit 1
+fi
 
 pr_title_pattern='^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+'
 valid_pr_title() {
@@ -174,6 +234,8 @@ diff -B -w "$repo_root/.github/dependabot.yml" \
 grep -q 'language: python' "$fixture_root/default-project/.copier-answers.yml"
 grep -q '"language_profile": "python"' \
   "$fixture_root/default-project/.csarc/profile.json"
+grep -q '"branch_strategy": "main"' \
+  "$fixture_root/default-project/.csarc/profile.json"
 test "$("$fixture_root/default-project/scripts/detect-language-profile" --suggest)" = \
   "python"
 test -f "$fixture_root/default-project/CHANGELOG.md"
@@ -194,6 +256,10 @@ grep -q '^## Scope and sources of truth$' \
 grep -q '^## Commands$' "$fixture_root/default-project/AGENTS.md"
 grep -q '^## Code Review Rules$' \
   "$fixture_root/default-project/AGENTS.md"
+grep -q 'Start from `main` and name the branch' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -q 'Open the pull request against `main`' \
+  "$fixture_root/default-project/AGENTS.md"
 grep -q 'uv run pytest <test-path>' \
   "$fixture_root/default-project/AGENTS.md"
 if grep -q 'pnpm exec vitest' "$fixture_root/default-project/AGENTS.md"; then
@@ -206,6 +272,11 @@ grep -q '"context": "verify"' \
   "$fixture_root/default-project/policies/rulesets.json"
 grep -q '"context": "scan-pr / osv-scan"' \
   "$fixture_root/default-project/policies/rulesets.json"
+if grep -q '"refs/heads/dev"' \
+  "$fixture_root/default-project/policies/rulesets.json"; then
+  echo "The default main-only Ruleset must not target dev."
+  exit 1
+fi
 test -x "$fixture_root/default-project/scripts/apply-repository-settings.sh"
 test -x "$fixture_root/default-project/scripts/install-gitleaks"
 test ! -f "$fixture_root/default-project/.pre-commit-config.yaml"
@@ -223,6 +294,12 @@ if grep -q '^node_modules/$' "$fixture_root/default-project/.gitignore"; then
 fi
 grep -q '^blank_issues_enabled: false$' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/config.yml"
+test "$(grep -c '^    id:' \
+  "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 3
+grep -q 'branches: \[main, dev\]' \
+  "$fixture_root/default-project/.github/workflows/spec-to-issue.yml"
+grep -q 'target-branch: main' \
+  "$fixture_root/default-project/.github/dependabot.yml"
 grep -q '^requires-python = ">=3.14,<3.15"$' \
   "$fixture_root/default-project/pyproject.toml"
 grep -q '^target-version = "py314"$' \
@@ -325,6 +402,54 @@ PY
   "$repo_root/.venv/bin/zizmor" . --format plain
 )
 
+# A broken Python change must be rejected by the generated CI command.
+printf 'import os\n' > \
+  "$fixture_root/default-project/src/template_smoke_test/invalid_policy_probe.py"
+if (
+  cd "$fixture_root/default-project"
+  uv run ruff check src/template_smoke_test/invalid_policy_probe.py >/dev/null 2>&1
+); then
+  echo "Ruff accepted an intentionally invalid Python change."
+  exit 1
+fi
+rm "$fixture_root/default-project/src/template_smoke_test/invalid_policy_probe.py"
+
+# CI/CD-only project: shared governance and release versioning without a
+# language package or language-specific toolchain.
+uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_name="CI Only Test" \
+  --data project_slug="ci-only-test" \
+  --data language=ci \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$fixture_root/ci-only-project"
+
+git -C "$fixture_root/ci-only-project" init -q -b main
+git -C "$fixture_root/ci-only-project" add .
+git -C "$fixture_root/ci-only-project" diff --cached --check
+grep -q 'language: ci' "$fixture_root/ci-only-project/.copier-answers.yml"
+grep -q '"language_profile": "ci"' \
+  "$fixture_root/ci-only-project/.csarc/profile.json"
+test "$("$fixture_root/ci-only-project/scripts/detect-language-profile" --suggest)" = \
+  "ci"
+test "$(cat "$fixture_root/ci-only-project/version.txt")" = "0.1.0"
+grep -q '"release-type": "simple"' \
+  "$fixture_root/ci-only-project/release-please-config.json"
+test ! -f "$fixture_root/ci-only-project/pyproject.toml"
+test ! -f "$fixture_root/ci-only-project/package.json"
+test ! -d "$fixture_root/ci-only-project/src"
+test ! -d "$fixture_root/ci-only-project/tests"
+test ! -d "$fixture_root/ci-only-project/typescript"
+if grep -q '^\.venv\*/\|^node_modules/$' \
+  "$fixture_root/ci-only-project/.gitignore"; then
+  echo "CI/CD-only .gitignore must not contain language artifacts."
+  exit 1
+fi
+(
+  cd "$fixture_root/ci-only-project"
+  ./scripts/verify
+  "$repo_root/.venv/bin/zizmor" . --format plain
+)
+
 # A release version bump must not make the generated smoke test stale.
 release_bump_project="$fixture_root/release-bump-project"
 rsync -a --exclude=.git --exclude=.venv --exclude=.cache --exclude=.ruff_cache \
@@ -362,6 +487,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data project_name="TypeScript Test" \
   --data project_slug="typescript-test" \
   --data language=typescript \
+  --data branch_strategy=dev \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/typescript-project"
 
@@ -373,6 +499,18 @@ grep -q 'language: typescript' \
   "$fixture_root/typescript-project/.copier-answers.yml"
 grep -q '"language_profile": "typescript"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
+grep -q '"branch_strategy": "dev"' \
+  "$fixture_root/typescript-project/.csarc/profile.json"
+grep -q 'Start from `dev` and name the branch' \
+  "$fixture_root/typescript-project/AGENTS.md"
+grep -q 'Open the pull request against `dev`' \
+  "$fixture_root/typescript-project/AGENTS.md"
+grep -q 'branches: \[main, dev\]' \
+  "$fixture_root/typescript-project/.github/workflows/ci.yml"
+grep -q 'target-branch: dev' \
+  "$fixture_root/typescript-project/.github/dependabot.yml"
+grep -q '"refs/heads/dev"' \
+  "$fixture_root/typescript-project/policies/rulesets.json"
 test "$("$fixture_root/typescript-project/scripts/detect-language-profile" --suggest)" = \
   "typescript"
 test -f "$fixture_root/typescript-project/package.json"
@@ -417,6 +555,18 @@ grep -q 'Build TypeScript package' \
   ./scripts/verify
   "$repo_root/.venv/bin/zizmor" . --format plain
 )
+
+# A badly formatted TypeScript change must be rejected by the generated CI command.
+printf 'export const invalid={value:1}\n' > \
+  "$fixture_root/typescript-project/typescript/src/invalid-policy-probe.ts"
+if (
+  cd "$fixture_root/typescript-project"
+  pnpm exec biome ci typescript/src/invalid-policy-probe.ts >/dev/null 2>&1
+); then
+  echo "Biome accepted an intentionally invalid TypeScript change."
+  exit 1
+fi
+rm "$fixture_root/typescript-project/typescript/src/invalid-policy-probe.ts"
 
 # Combined project: reusable CI, attestations, and local pre-commit support.
 uv run copier copy --trust --defaults --vcs-ref HEAD \

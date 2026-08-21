@@ -106,7 +106,7 @@
 
       text("#project-name", data.project.name);
       text("#project-description", data.project.description);
-      list("#project-badges", [data.project.stage, data.project.language, data.project.owner]);
+      list("#project-badges", [data.project.stage, data.project.language, `${data.project.branch} flow`, data.project.owner]);
       list("#prerequisites", data.start.prerequisites);
       text("#commands", data.start.commands.join("\n"));
       text("#release-current", data.release.current);

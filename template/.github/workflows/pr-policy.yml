@@ -10,24 +10,22 @@ concurrency:
 
 permissions:
   contents: read
+  issues: read
 
 jobs:
   title:
     name: title
     runs-on: ubuntu-latest
     steps:
-      - name: Validate conventional title
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+      - name: Validate pull request policy
         env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?:\ .+ ]]; then
-            echo "Use: type(scope): short English summary"
-            echo "Allowed types: feat, fix, docs, refactor, test, build, ci, chore, revert"
-            echo "Scope is optional and must use lowercase letters, numbers, '.', '_', '/', or '-'."
-            exit 1
-          fi
-          if printf '%s' "$PR_TITLE" | LC_ALL=C grep -q '[^ -~]'; then
-            echo "PR title must use ASCII characters only."
-            echo "The PR body may be written in Chinese."
-            exit 1
-          fi
+        run: ./scripts/validate-pr-policy
