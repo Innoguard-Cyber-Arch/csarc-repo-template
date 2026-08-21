@@ -10,7 +10,15 @@ if [[ "$mode" != "plan" && "$mode" != "apply" ]]; then
 fi
 
 command -v gh >/dev/null || { echo "Install and authenticate GitHub CLI first."; exit 1; }
-repo="${GH_REPO:-$(gh repo view --json nameWithOwner --jq .nameWithOwner)}"
+repo="${GH_REPO:-}"
+if [[ -z "$repo" ]]; then
+  if ! repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>&1)"; then
+    echo "Cannot identify the GitHub repository."
+    echo "Run inside a Git repository with a GitHub remote, or set GH_REPO=owner/repo."
+    echo "GitHub CLI: $repo"
+    exit 1
+  fi
+fi
 ruleset_payload="$repo_root/policies/rulesets.json"
 temporary_ruleset=""
 code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"

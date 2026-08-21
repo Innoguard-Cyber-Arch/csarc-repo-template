@@ -57,7 +57,9 @@ git push -u origin dev
 
 ## 設定與密鑰
 
-repo 推送到 GitHub 後，先執行 `./scripts/apply-repository-settings.sh plan`。腳本會查詢 GitHub 方案、repo 可見性與 Ruleset API：Free private repo 套用合併方式、Actions 權限與三種標籤，但 `main` 不受強制保護；private repo 至少要 Team，且 CODEOWNERS team 存在時才套用 Ruleset。確認輸出後再執行 `apply`；Copier 不在本機建檔階段猜測遠端方案。
+repo 推送到 GitHub 後，先執行 `./scripts/apply-repository-settings.sh plan`；尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。腳本會查詢 GitHub 方案、repo 可見性與 Ruleset API：Free private repo 套用合併方式、Actions 權限與三種標籤，但 `main` 不受強制保護；private repo 至少要 Team，且 CODEOWNERS team 存在時才套用 Ruleset。確認輸出後再執行 `apply`；Copier 不在本機建檔階段猜測遠端方案。
+
+GitHub artifact attestation 同樣取決於遠端 repo 能力，目前不由 Copier 產生；確認方案支援後再另行導入，避免 release 因權限不足失敗。
 
 未設定專用 GitHub App 時，release-please job 會略過，不影響 CI 或人工 tag。Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。請在這裡列出產品設定的名稱、用途與取得位置，但不要填入真實值。
 
@@ -68,6 +70,8 @@ repo 推送到 GitHub 後，先執行 `./scripts/apply-repository-settings.sh pl
 若本案是長駐服務，請補上部署入口、健康檢查、復原方法與 runbook。
 
 ## 公版更新
+
+先用 `gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template` 選擇團隊核准的版本，再以 `gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/<approved-release-tag> --jq .sha` 取得完整 40 字元 SHA。檢查該 commit 後貼入下列參數，不要直接輸入預留字樣。
 
 ```bash
 git switch {{ branch_strategy }}

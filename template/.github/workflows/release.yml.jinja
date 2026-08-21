@@ -12,10 +12,6 @@ on:
 
 permissions:
   contents: read
-{% if enable_attestations | default(false) %}
-  id-token: write
-  attestations: write
-{% endif %}
 
 jobs:
   build:
@@ -115,13 +111,6 @@ jobs:
               raise SystemExit("SBOM contains no components")
           print(f"SBOM components: {len(components)}")
           PY
-{% if enable_attestations | default(false) %}
-      - name: Attest artifact and SBOM
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-path: dist/*
-          sbom-path: sbom.cdx.json
-{% endif %}
       - name: Upload release evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
