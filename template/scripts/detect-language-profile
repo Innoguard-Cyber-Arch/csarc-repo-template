@@ -13,10 +13,7 @@ case "$has_python:$has_typescript" in
   true:false) detected="python" ;;
   false:true) detected="typescript" ;;
   true:true) detected="python-typescript" ;;
-  *)
-    echo "No Python or TypeScript module was detected."
-    exit 1
-    ;;
+  false:false) detected="ci" ;;
 esac
 
 if [[ "${1:-}" == "--suggest" ]]; then

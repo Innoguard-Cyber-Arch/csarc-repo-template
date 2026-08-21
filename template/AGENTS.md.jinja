@@ -4,31 +4,37 @@
 
 - This file applies to the whole repository. A nearer `AGENTS.md` may add subtree-specific guidance; do not duplicate these root rules there.
 - Treat this file as the single source for AI instructions; `CLAUDE.md` only imports it.
-- Treat `.csarc/profile.json` as the source of truth for enabled Python and TypeScript modules.
+- Treat `.csarc/profile.json` as the source of truth for the CI/CD baseline and enabled language modules.
 - Use the linked GitHub Issue or `docs/specs/` document for scope and acceptance criteria. Use repository configuration for executable formatting, lint, type, test, and build rules.
 
 ## Working loop
 
-1. Work from one GitHub Issue and keep the pull request focused on one independently verifiable outcome.
-2. Inspect nearby code, tests, and configuration before choosing an implementation.
-3. Make the smallest coherent change; preserve unrelated work and project-owned source files.
-4. Add or update the narrowest regression test that proves non-trivial behavior.
-5. Run targeted checks while iterating, then run `./scripts/verify` before opening or updating a pull request.
-6. Report the changed behavior, verification evidence, and any remaining limitation.
+1. Open or select one GitHub Issue before editing; use its acceptance criteria as the scope boundary.
+2. Start from `{{ branch_strategy }}` and name the branch `type/<issue-number>-short-slug`.
+3. Inspect nearby code, tests, and configuration before choosing an implementation.
+4. Make the smallest coherent change; preserve unrelated work and project-owned source files.
+5. Add or update the narrowest regression test that proves non-trivial behavior.
+6. Run targeted checks while iterating, then run `./scripts/verify` before opening or updating a pull request.
+7. Open the pull request against `{{ branch_strategy }}`, include `Closes #<issue-number>`, and never merge it yourself.
+8. Report the changed behavior, verification evidence, and any remaining limitation.
+
+Automated dependency and version-policy branches may omit an Issue, but still target `{{ branch_strategy }}`. {% if branch_strategy == "dev" %}Only a reviewed `dev` promotion or release-please pull request may target `main`.{% else %}Release-please may target `main` without a work Issue.{% endif %}
 
 ## Commands
 
 - Required final check: `./scripts/verify`.
-{% if language != "typescript" %}- Python iteration: `uv run ruff check <paths>`, `uv run mypy`, and `uv run pytest <test-path>`.
-{% endif %}{% if language != "python" %}- TypeScript iteration: `pnpm exec biome check <paths>`, `pnpm exec tsc --noEmit`, and `pnpm exec vitest run <test-path>`.
+{% if language in ["python", "python-typescript"] %}- Python iteration: `uv run ruff check <paths>`, `uv run mypy`, and `uv run pytest <test-path>`.
+{% endif %}{% if language in ["typescript", "python-typescript"] %}- TypeScript iteration: `pnpm exec biome check <paths>`, `pnpm exec tsc --noEmit`, and `pnpm exec vitest run <test-path>`.
 {% endif %}- Targeted commands speed up iteration but never replace the required final check.
 
 ## Editing boundaries
 
-- Product code under {% if language != "typescript" %}`src/` and `tests/`{% endif %}{% if language == "python-typescript" %}, plus {% endif %}{% if language != "python" %}`typescript/src/` and `typescript/tests/`{% endif %} belongs to this project. Copier updates must not overwrite it.
-- Do not hand-edit generated lockfiles. Use {% if language != "typescript" %}uv{% endif %}{% if language == "python-typescript" %} or {% endif %}{% if language != "python" %}pnpm{% endif %} so integrity metadata stays valid.
+{% if language == "ci" %}- This profile does not create a product language module. New product code requires an intentional profile change before language-specific CI is claimed.
+{% else %}- Product code under {% if language in ["python", "python-typescript"] %}`src/` and `tests/`{% endif %}{% if language == "python-typescript" %}, plus {% endif %}{% if language in ["typescript", "python-typescript"] %}`typescript/src/` and `typescript/tests/`{% endif %} belongs to this project. Copier updates must not overwrite it.
+- Do not hand-edit generated lockfiles. Use {% if language in ["python", "python-typescript"] %}uv{% endif %}{% if language == "python-typescript" %} or {% endif %}{% if language in ["typescript", "python-typescript"] %}pnpm{% endif %} so integrity metadata stays valid.
+{% endif %}
 - Keep third-party GitHub Actions pinned to full commit SHAs.
-- Comments in source code must be written in English. Leave style details in `pyproject.toml`, `biome.json`, and other executable configuration instead of copying them here.
+- Comments in source code must be written in English. Leave style details in {% if language == "ci" %}executable configuration{% elif language == "python" %}`pyproject.toml` and other executable configuration{% elif language == "typescript" %}`biome.json` and other executable configuration{% else %}`pyproject.toml`, `biome.json`, and other executable configuration{% endif %} instead of copying them here.
 
 ## Safety
 

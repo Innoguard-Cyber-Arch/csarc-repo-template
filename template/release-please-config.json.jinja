@@ -1,9 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "release-type": "{% if language == 'python' %}python{% else %}node{% endif %}",
+  "release-type": "{% if language == 'ci' %}simple{% elif language == 'python' %}python{% else %}node{% endif %}",
   "packages": {
     ".": {
-{% if language != "typescript" %}
+      "component": "{{ project_slug }}",
+      "include-component-in-tag": false{% if language in ["python", "python-typescript"] %},
       "extra-files": [
 {% if language == "python-typescript" %}
         {
@@ -21,10 +22,7 @@
           "type": "generic",
           "path": "src/{{ package_name }}/__init__.py"
         }
-      ]
-{% else %}
-      "release-type": "node"
-{% endif %}
+      ]{% endif %}
     }
   }
 }

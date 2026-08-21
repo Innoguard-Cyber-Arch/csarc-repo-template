@@ -2,7 +2,7 @@ name: Spec to Issue
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - docs/specs/*.md
       - scripts/spec_to_issue.py

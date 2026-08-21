@@ -1,13 +1,28 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "release-type": "python",
+  "release-type": "simple",
   "packages": {
     ".": {
+      "component": "csarc-repo-template",
+      "include-component-in-tag": false,
       "extra-files": [
+        {
+          "type": "toml",
+          "path": "pyproject.toml",
+          "jsonpath": "$.project.version"
+        },
         {
           "type": "toml",
           "path": "uv.lock",
           "jsonpath": "$.package[?(@.name.value==\"csarc-repo-template\")].version"
+        },
+        {
+          "type": "generic",
+          "path": "README.md"
+        },
+        {
+          "type": "generic",
+          "path": "docs/index.html"
         }
       ]
     }

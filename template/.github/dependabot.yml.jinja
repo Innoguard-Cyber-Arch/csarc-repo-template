@@ -2,13 +2,15 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
+    target-branch: {{ branch_strategy }}
     schedule:
       interval: weekly
     cooldown:
       default-days: 3
-{%- if language != "typescript" %}
+{%- if language in ["python", "python-typescript"] %}
   - package-ecosystem: uv
     directory: /
+    target-branch: {{ branch_strategy }}
     schedule:
       interval: weekly
     cooldown:
@@ -18,9 +20,10 @@ updates:
         patterns: ["*"]
         update-types: [minor, patch]
 {%- endif %}
-{%- if language != "python" %}
+{%- if language in ["typescript", "python-typescript"] %}
   - package-ecosystem: npm
     directory: /
+    target-branch: {{ branch_strategy }}
     schedule:
       interval: weekly
     cooldown:

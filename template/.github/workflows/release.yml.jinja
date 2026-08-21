@@ -1,6 +1,8 @@
 {% set python_mode = python_support_mode | default("latest") -%}
 {% set python_min = python_min_version | default("3.12") -%}
 {% set python_target = "3.14" if python_mode == "latest" else python_min -%}
+{% set has_python = language in ["python", "python-typescript"] -%}
+{% set has_typescript = language in ["typescript", "python-typescript"] -%}
 name: Release artifact
 
 on:
@@ -10,21 +12,21 @@ on:
 
 permissions:
   contents: read
-{% if enable_attestations %}
+{% if enable_attestations | default(false) %}
   id-token: write
   attestations: write
 {% endif %}
 
 jobs:
   build:
-    name: build-and-sbom
+    name: {% if language == "ci" %}verify-release{% else %}build-and-sbom{% endif %}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-{% if language != "typescript" %}
+{% if has_python %}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "{{ python_target }}"
@@ -32,7 +34,7 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
-{% if language != "python" %}
+{% if has_typescript %}
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: "11.22.0"
@@ -44,12 +46,12 @@ jobs:
 {% endif %}
       - name: Verify declared language modules
         run: ./scripts/verify
-{% if language != "typescript" %}
+{% if has_python %}
         env:
           CSARC_PYTHON_VERSION: "{{ python_target }}"
           UV_PROJECT_ENVIRONMENT: .venv-primary
 {% endif %}
-{% if language != "typescript" and python_mode == "minimum" and python_min != "3.14" %}
+{% if has_python and python_mode == "minimum" and python_min != "3.14" %}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
@@ -60,11 +62,11 @@ jobs:
           UV_PROJECT_ENVIRONMENT: .venv-latest
           CSARC_VERIFY_TYPESCRIPT: "false"
 {% endif %}
-{% if language != "typescript" %}
+{% if has_python %}
       - name: Build Python distributions
         run: uv build
 {% endif %}
-{% if language != "python" %}
+{% if has_typescript %}
       - name: Build TypeScript package
         run: |
           pnpm run build
@@ -72,6 +74,7 @@ jobs:
           find dist -maxdepth 1 -type f -name '*.tgz' -delete
           pnpm pack --pack-destination dist
 {% endif %}
+{%- if language != "ci" %}
       - name: Calculate artifact checksums
         run: find dist -maxdepth 1 -type f -exec shasum -a 256 {} + | sort -k 2 > SHA256SUMS
       - name: Extract release artifacts for SBOM analysis
@@ -112,7 +115,7 @@ jobs:
               raise SystemExit("SBOM contains no components")
           print(f"SBOM components: {len(components)}")
           PY
-{% if enable_attestations %}
+{% if enable_attestations | default(false) %}
       - name: Attest artifact and SBOM
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
@@ -129,3 +132,5 @@ jobs:
             sbom.cdx.json
           if-no-files-found: error
           retention-days: 30
+{% endif %}
+# This workflow creates release evidence; deployment remains project-specific.

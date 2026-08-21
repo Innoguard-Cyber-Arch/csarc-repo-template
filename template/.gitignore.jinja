@@ -38,7 +38,7 @@ $RECYCLE.BIN/
 # Shared generated output
 .cache/
 dist/
-{%- if language != "typescript" %}
+{%- if language in ["python", "python-typescript"] %}
 
 # Python
 .venv*/
@@ -56,7 +56,7 @@ htmlcov/
 .eggs/
 build/
 {%- endif %}
-{%- if language != "python" %}
+{%- if language in ["typescript", "python-typescript"] %}
 
 # TypeScript and Node.js
 node_modules/

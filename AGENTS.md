@@ -10,11 +10,15 @@
 
 ## Working loop
 
-1. Start from one defined outcome and inspect the existing implementation before editing.
-2. Make the smallest coherent change and preserve unrelated user work.
-3. Add or update the narrowest regression check that proves non-trivial behavior.
-4. Run targeted checks while iterating, then run `./scripts/verify-template.sh` before opening or updating a pull request.
-5. Report what changed, which verification ran, and any remaining limitation.
+1. Open or select one GitHub Issue before editing; use its acceptance criteria as the scope boundary.
+2. Start from `main` and name the branch `type/<issue-number>-short-slug`.
+3. Inspect the existing implementation, make the smallest coherent change, and preserve unrelated user work.
+4. Add or update the narrowest regression check that proves non-trivial behavior.
+5. Run targeted checks while iterating, then run `./scripts/verify-template.sh` before opening or updating a pull request.
+6. Open the pull request against `main`, include `Closes #<issue-number>`, and never merge it yourself.
+7. Report what changed, which verification ran, and any remaining limitation.
+
+Automated dependency, version-policy, and release-please branches may omit an Issue. This repository has no shared test environment, so it uses the main-only branch strategy.
 
 ## Commands
 

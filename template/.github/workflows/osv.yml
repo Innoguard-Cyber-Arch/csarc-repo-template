@@ -2,11 +2,11 @@ name: OSV
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   merge_group:
     types: [checks_requested]
   push:
-    branches: [main]
+    branches: [main, dev]
   schedule:
     - cron: "17 3 * * 1"
 
