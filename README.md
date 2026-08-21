@@ -10,7 +10,7 @@ Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript �
 
 本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。`template/` 是下發內容；根目錄則讓公版本身使用同一套規則。
 
-目前可用：CI/CD-only、Python-only、TypeScript-only、混合四種 profile，以及 Issue／spec、PR checks、驗證、打包、checksum 與 SBOM。Ruleset 要等 GitHub Team 與 CODEOWNERS team；release-please 自動化要等專用 GitHub App。
+目前可用：CI/CD-only、Python-only、TypeScript-only、混合四種 profile，以及 Issue／spec、PR checks、驗證、打包、checksum 與 SBOM。GitHub 設定腳本會先辨識方案與實際 API 能力；release-please 自動化則要等專用 GitHub App。
 
 ## 快速開始
 
@@ -20,6 +20,7 @@ Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript �
 git clone https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git
 cd csarc-repo-template
 ./scripts/verify-template.sh
+./scripts/apply-repository-settings.sh plan
 ```
 
 建立新案：
@@ -60,7 +61,7 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 
 ## 設定與密鑰
 
-- **Ruleset 尚未套用：**private organization repo 需 GitHub Team 與真實 CODEOWNERS team；條件備妥後才執行 `./scripts/apply-repository-settings.sh plan`／`apply`。
+- **依方案套用設定：**先執行 `./scripts/apply-repository-settings.sh plan`。Free private repo 會套用合併方式、Actions 權限與標籤，但明確略過 Ruleset；Team／Enterprise 且 CODEOWNERS team 存在時才套用保護分支門禁。確認計畫後再執行 `apply`。
 - **GitHub App 尚未設定：**未提供 `CSARC_VERSION_BOT_CLIENT_ID` 與 private key 時，版本升級與 release-please job 會略過。
 - Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。不要把 token、私鑰或實際密碼寫進 repo。
 
@@ -80,6 +81,7 @@ release-please 設定已備妥，但要等專用 GitHub App 才會自動開 Rele
 git switch -c chore/<issue-number>-update-repo-template
 uvx --from copier copier update --trust --vcs-ref <reviewed-full-commit-sha>
 ./scripts/verify
+./scripts/apply-repository-settings.sh plan
 ```
 
 `docs/site-content.js` 是生成專案自行維護的網站內容；Copier 更新版型時不會覆寫它。

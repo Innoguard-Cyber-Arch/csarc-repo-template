@@ -650,6 +650,16 @@
     .decision-step p, .decision-step li { font-size: 18px; line-height: 1.34; }
     .decision-step li + li { margin-top: 7px; }
     .decision-slide[data-track="method"] .decision-step li + li { margin-top: 2px; }
+    .plan-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .plan-card { padding: 13px 14px; border: 1px solid var(--line); border-top: 7px solid var(--rail); background: white; }
+    .plan-card.current { border-top-color: var(--yellow); background: #fffdf0; }
+    .plan-card.team { border-top-color: var(--best); }
+    .plan-card.enterprise { border-top-color: var(--optional); }
+    .plan-card h3 { margin-bottom: 7px; font-size: 22px; }
+    .plan-card p, .plan-card li { font-size: 17px; line-height: 1.27; }
+    .plan-card ul { margin: 7px 0 0; padding-left: 20px; }
+    .plan-card li + li { margin-top: 4px; }
+    .plan-state { display: inline-block; margin-left: 5px; padding: 2px 7px; border-radius: 999px; background: var(--soft); font-size: 15px; font-weight: 850; }
     .package-disclosure { position: relative; z-index: 30; margin-bottom: 9px; }
     .package-disclosure[open] { z-index: 38; }
     .package-disclosure summary {
@@ -1474,21 +1484,20 @@
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>人類入口與 AI 工作契約：</strong><code>README.md</code> 規範八個必要章節；<code>AGENTS.md</code>＋<code>CLAUDE.md</code> 規範 Agent</li><li><strong>所有人與 AI 共用的實際驗證：</strong><code>scripts/verify</code>＋<code>scripts/verify-template.sh</code></li><li><strong>唯讀權限、人類核准與指定審查者：</strong><code>policies/actions.json</code>＋<code>policies/rulesets.json</code>＋<code>CODEOWNERS</code></li></ul></aside>
     </section>
 
-    <section class="slide decision-slide" data-page="11 / 16" data-track="governance" aria-label="GitHub 規則的管理方式">
+    <section class="slide decision-slide" data-page="11 / 16" data-track="governance" aria-label="GitHub 方案與規則部署方式">
       <header>
-        <h2>先把規則集中，<span class="accent">避免每個專案各做一套</span></h2>
-        <p class="subtitle"><strong>基本導入｜</strong>合併方式、Actions 權限、標籤與保護分支門禁都存成 JSON，經 PR 審查後再套用。</p>
+        <h2>先辨識 GitHub 方案，<span class="accent">再套用真的能生效的管制</span></h2>
+        <p class="subtitle"><strong>基本導入｜</strong>同一份公版依 Free、Team、Enterprise 與實際 API 能力調整；不把付費功能假裝成已啟用。</p>
       </header>
-      <p class="context-line"><strong>問題與目的｜</strong>若每個專案都靠人到網頁上設定，規則會逐漸不同；改成設定檔後，變更能被審查，也能重新套用。</p>
-      <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>這次不選，因為問題還沒大到需要</h3><ul><li><strong>只用 GitHub 網頁：</strong>改動無法隨 repo 審查，久了容易漂移</li><li><strong>Terraform：</strong>目前只有 repo 設定，不需要先養 provider 與 state</li><li><strong>Safe Settings：</strong>等多 repo 例外與漂移真的出現再導入</li></ul></article>
-        <article class="decision-step recommended">
-          <span class="step-label">我們的選擇</span>
-          <details class="package-disclosure"><summary><span>先用 GitHub 規則＋<span class="tech-name"><code>gh api</code></span>；專案變多再用 Safe Settings</span></summary><div class="package-health"><p><a href="https://github.com/cli/cli" target="_blank" rel="noreferrer">cli/cli</a>｜MIT｜★45.9k｜近期持續發布</p><p><a href="https://github.com/github-community-projects/safe-settings" target="_blank" rel="noreferrer">safe-settings</a>｜ISC｜★911｜2026-08-19 更新</p><p><strong>判讀：</strong>兩者皆公開且持續維護；Safe Settings 可預覽變更、共用上層規則，並修正網頁設定與設定檔不一致的狀況。</p><p class="reference">Ref. GitHub REST API snapshot, August 20, 2026.</p></div></details>
-          <p class="recommendation-copy"><strong>設定草案已完成、目前不套用：</strong><code>policies/</code> 保存合併、Actions、標籤與 Ruleset；main-only 只保護 main，dev 模式同時保護 main／dev。CI／PR checks 可先使用。<strong>限制：</strong>Free organization 的 private repo 無法強制 Ruleset，且目前沒有 CODEOWNERS team；最低升到 GitHub Team 並建立 team 後才啟用。<br><strong>未來：</strong>repo 多到逐一套用容易漏時，再導入 Safe Settings。</p>
-        </article>
+      <p class="context-line"><strong>目前實測｜</strong><code>Innoguard-Cyber-Arch</code> API 回報 Free＋private；CI 會跑，但 Ruleset 不能把紅燈變成不可繞過的合併門禁。</p>
+      <div class="plan-grid">
+        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>會套用：</strong>合併方式、Actions 唯讀權限、Issue 標籤；CI／OSV／zizmor 照常回報。</p><ul><li>private repo 略過 Ruleset</li><li>required review／CODEOWNERS 不可強制</li></ul></article>
+        <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches、必要審查、team reviewers、CODEOWNERS 與必要檢查。</p><ul><li>需先建立真實 CODEOWNERS team</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
+        <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>現在先用：</strong>CI、PR title、OSV、Zizmor 照常回報檢查結果</li><li><strong>先保存、不套用：</strong><code>policies/rulesets.json</code>（private repo 需 GitHub Team＋真實 CODEOWNERS team）</li><li><strong>條件備妥才執行：</strong><code>scripts/apply-repository-settings.sh plan</code>，確認後再 <code>apply</code></li></ul></aside>
+      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性與 Ruleset API；Free private 仍可套基本設定，Team／Enterprise 才加 Ruleset。Enterprise 的身分、網路與稽核政策需另經組織層審查；Code Security／Secret Protection 另購，不因方案名稱自動開啟。</span></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>按能力套用：</strong><code>scripts/apply-repository-settings.sh apply</code></li></ul></aside>
+      <p class="reference">Ref. <a href="https://docs.github.com/en/get-started/learning-about-github/githubs-plans" target="_blank" rel="noreferrer">GitHub plans</a>；<a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets" target="_blank" rel="noreferrer">About rulesets</a>. Accessed August 21, 2026.</p>
     </section>
 
     <section class="slide decision-slide" data-track="contract" aria-label="步驟三本機驗證與持續整合">
@@ -1587,9 +1596,9 @@
       <p class="context-line"><strong>問題與目的｜</strong>一次導入模板、CI、部署、監控與 AI，團隊很難判斷哪裡出錯；分期後每一步都有完成條件。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不按聲量或日期一次把功能全打開</h3><ul><li><strong>一次切換：</strong>錯誤會同時擴散到所有專案</li><li><strong>固定日期解鎖：</strong>時間到了不代表使用條件已成熟</li><li><strong>所有語言同時上：</strong>未驗證的 profile 只是空承諾</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>三層不是日期，而是導入條件</h3><p><strong>基本導入：</strong>CI/CD-only、Python-only、TypeScript-only、混合 profile，以及 Issue／spec、PR／CI、依賴安全、語意版本、可追溯成品與 repo 內部網站都已完成。<br><strong>待條件啟用：</strong>private repo Ruleset（GitHub Team＋CODEOWNERS team）、無人值守發版（GitHub App）。<strong>未來／可選：</strong>多 repo、Go／Rust、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>三層不是日期，而是導入條件</h3><p><strong>基本導入：</strong>CI/CD-only、Python-only、TypeScript-only、混合 profile，以及 Issue／spec、PR／CI、依賴安全、語意版本、可追溯成品與 repo 內部網站都已完成。Free 可套基本 repo 設定。<br><strong>待條件啟用：</strong>private repo Ruleset（GitHub Team＋CODEOWNERS team）、無人值守發版（GitHub App）。<strong>未來／可選：</strong>多 repo、Go／Rust、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>哪些 profile 已可用或仍在規劃：</strong><code>profiles/catalog.yaml</code></li><li><strong>目前先跑檢查、不套門禁：</strong><code>.github/workflows/</code>；Ruleset／App 條件備妥後再啟用</li><li><strong>建立與更新路徑是否都能通過：</strong><code>scripts/verify-template.sh</code></li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>哪些 profile 已可用或仍在規劃：</strong><code>profiles/catalog.yaml</code></li><li><strong>先查方案再套可用設定：</strong><code>scripts/apply-repository-settings.sh</code>；Ruleset／App 條件備妥後再啟用</li><li><strong>建立與更新路徑是否都能通過：</strong><code>scripts/verify-template.sh</code></li></ul></aside>
     </section>
 
     <section class="slide decision-slide" data-track="template-release" aria-label="Copier 模板更新驗證與發布方式">
@@ -1768,61 +1777,41 @@ policies/rulesets.json
       ],
       governance: [
         {
-          title: '先保存 squash-only 與 Actions 唯讀設定，條件備妥才套用',
-          goal: '設定已有可審查來源；目前 Free private repo 不執行 apply，避免只套用一半。',
-          summary: '草案設定 `allow_squash_merge=true`、停用 merge／rebase，workflow 預設 `read`；升級 GitHub Team 並建立 CODEOWNERS team 後才生效。',
-          file: 'policies/repository.json＋policies/actions.json',
-          code: `{
-  "allow_merge_commit": false,
-  "allow_rebase_merge": false,
-  "allow_squash_merge": true,
-  "delete_branch_on_merge": true
-}
-
-{
-  "default_workflow_permissions": "read",
-  "can_approve_pull_request_reviews": false
-}`
-        },
-        {
-          title: 'Ruleset 草案列出 PR、CI、PR 標題、OSV 與 zizmor',
-          goal: '四個檢查現在會回報結果；Ruleset 待 GitHub Team 與 CODEOWNERS team 後才強制。',
-          summary: '草案要求一位審查者、推送新 commit 撤銷舊核准，並使用真實檢查名稱；目前尚未套用，不宣稱紅燈已阻擋合併。',
-          file: 'template/policies/rulesets.json.jinja',
-          code: `{
-  "name": "CSARC protected branches",
-  "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
-  "rules": [
-    {"type": "pull_request", "parameters": {
-      "required_approving_review_count": 1,
-      "require_code_owner_review": true,
-      "dismiss_stale_reviews_on_push": true
-    }},
-    {"type": "required_status_checks", "parameters": {
-      "required_status_checks": [
-        {"context": "verify"},
-        {"context": "title"},
-        {"context": "scan-pr / osv-scan"},
-        {"context": "audit"}
-      ]
-    }}
-  ]
-}
-
-dev 模式另加入 refs/heads/dev；
-reusable CI caller 會把 verify 產生為 verify / verify。`
-        },
-        {
-          title: '先檢查方案與套用計畫，管理者確認後才寫入 GitHub',
-          goal: 'private repo 先確認具有 Ruleset 權限；任何前置條件不符都不寫入。',
-          summary: '`plan` 先檢查方案與 CODEOWNERS team；通過後才可用 `apply` 呼叫 `gh api`，避免只套用一半。',
+          title: '先查帳號方案、repo 可見性與 Ruleset API',
+          goal: 'Copier 建檔時可能還沒有遠端 repo；真正套用前再向 GitHub 查詢，避免依使用者手填的方案猜測。',
+          summary: '先確認登入者具有 repo admin；plan.name 供人閱讀，Ruleset endpoint 的成功或方案限制錯誤才決定是否能套門禁；其他 403 會停止。',
           file: 'scripts/apply-repository-settings.sh',
-          code: `./scripts/apply-repository-settings.sh plan
-./scripts/apply-repository-settings.sh apply
+          code: `gh api "repos/$repo" \
+  --jq '[.owner.login, .owner.type, .visibility, .permissions.admin] | @tsv'
+gh api "orgs/$owner" --jq '.plan.name'
+gh api "repos/$repo/rulesets"
 
-# GH_REPO can target another reviewed repository.
-GH_REPO=Innoguard-Cyber-Arch/example \
-  ./scripts/apply-repository-settings.sh plan`
+./scripts/apply-repository-settings.sh plan`
+        },
+        {
+          title: '所有方案先套用不需要付費門禁的基本設定',
+          goal: 'Free private repo 也不再整包放棄；仍可讓合併方式、Actions 預設權限與 Issue 標籤跟著公版。',
+          summary: 'apply 會先完成 squash-only、刪除已合併分支、Actions 預設唯讀與標籤；CI／OSV／zizmor 繼續回報，但 Free private 的紅燈仍可被有權限者繞過。',
+          file: 'policies/repository.json＋policies/actions.json＋policies/labels.json',
+          code: `./scripts/apply-repository-settings.sh plan
+# Review the APPLY and SKIP list first.
+./scripts/apply-repository-settings.sh apply`
+        },
+        {
+          title: 'Team／Enterprise 才套 repo Ruleset；Enterprise 組織政策另審',
+          goal: '可用 Ruleset 時，先確認 CODEOWNERS team，再要求 PR、一位核准、CODEOWNER 與四項必要檢查。Enterprise 的身分、網路、稽核與跨 repo 規則不能由單一 repo 擅自決定。',
+          summary: 'Team 與 Enterprise 沿用 policies/rulesets.json；Enterprise 額外能力只列入 plan 提示，待組織管理者確認 SSO／SCIM、audit streaming、IP allow list 與組織 Ruleset 後另行設定。',
+          file: 'policies/rulesets.json＋.github/CODEOWNERS',
+          code: `# Repository Ruleset applied when the API allows it.
+required reviews: 1
+require CODEOWNER review: true
+required checks:
+  - verify
+  - title
+  - scan-pr / osv-scan
+  - audit
+
+# Enterprise organization controls are report-only here.`
         }
       ],
       template: [
@@ -2264,9 +2253,9 @@ rust: {stage: future}
 python_typescript: {stage: beta}`
         },
         {
-          title: 'GitHub 設定隨模板產生；Ruleset 與 App 暫不啟用',
-          goal: '設定檔可以先審查，但不把方案或憑證尚未支援的能力算成已完成。',
-          summary: 'CI／PR checks 現在可用；repository、actions、labels、rulesets 先保存，等 GitHub Team、CODEOWNERS team 與 GitHub App 分別備妥後才套用。',
+          title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
+          goal: '設定檔可以先審查；實際 repo 建立後才查方案與 API，不能使用的能力會明確略過。',
+          summary: 'Free private 會套 repository、actions、labels 並略過 Ruleset；Team／Enterprise 且 CODEOWNERS team 存在時再加 Ruleset。GitHub App 仍是另一項獨立條件。',
           file: 'policies/＋scripts/apply-repository-settings.sh',
           code: `policies/repository.json
 policies/actions.json
@@ -2359,7 +2348,7 @@ python_typescript: {stage: beta}`
     const setupExamples = {
       new: {
         title: '建立新 repo',
-        goal: 'Copier 會詢問語言組合與分支模式；只有真的有長期共用測試環境才選 dev。完整 commit SHA 必須先經團隊審查。',
+        goal: 'Copier 會詢問語言組合與分支模式；遠端 repo 建立後，再由設定腳本查方案與實際 API 能力。完整 commit SHA 必須先經團隊審查。',
         location: 'Terminal',
         code: `uvx --from copier copier copy --trust \\
   --vcs-ref <reviewed-full-commit-sha> \\
@@ -2367,6 +2356,9 @@ python_typescript: {stage: beta}`
   ./my-project
 cd ./my-project
 ./scripts/verify
+
+# Push the repository, authenticate gh, then inspect the deployment plan.
+./scripts/apply-repository-settings.sh plan
 
 # 建立遠端 repo 後先開 Issue，再從 main 或 dev 開編號分支。`
       },
@@ -2383,7 +2375,8 @@ uvx --from copier copier copy --trust --overwrite \\
   --data branch_strategy=<main|dev> \\
   --data coverage_mode=diff \\
   https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git .
-./scripts/verify`
+./scripts/verify
+./scripts/apply-repository-settings.sh plan`
       },
       update: {
         title: '更新已使用公版的 repo',
@@ -2393,7 +2386,8 @@ uvx --from copier copier copy --trust --overwrite \\
 git switch -c chore/<issue-number>-update-repo-template
 uvx --from copier copier update --trust \\
   --vcs-ref <reviewed-full-commit-sha>
-./scripts/verify`
+./scripts/verify
+./scripts/apply-repository-settings.sh plan`
       },
       mac: {
         title: 'macOS 本機需求',

@@ -21,6 +21,7 @@ cd {{ project_slug }}
 git push -u origin dev
 {% endif %}
 ./scripts/verify
+./scripts/apply-repository-settings.sh plan
 ```
 
 請在這裡補上產品最短可成功的啟動或呼叫範例。
@@ -55,6 +56,8 @@ git push -u origin dev
 
 ## 設定與密鑰
 
+repo 推送到 GitHub 後，先執行 `./scripts/apply-repository-settings.sh plan`。腳本會查詢 GitHub 方案、repo 可見性與 Ruleset API：Free private repo 套用合併方式、Actions 權限與標籤，但略過付費門禁；Team／Enterprise 且 CODEOWNERS team 存在時才套用 Ruleset。確認輸出後再執行 `apply`；Copier 不在本機建檔階段猜測遠端方案。
+
 未設定專用 GitHub App 時，release-please job 會略過，不影響 CI 或人工 tag。Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。請在這裡列出產品設定的名稱、用途與取得位置，但不要填入真實值。
 
 ## 發布與維運
@@ -70,6 +73,7 @@ git switch {{ branch_strategy }}
 git switch -c chore/<issue-number>-update-repo-template
 uvx --from copier copier update --trust --vcs-ref <reviewed-full-commit-sha>
 ./scripts/verify
+./scripts/apply-repository-settings.sh plan
 ```
 
 Copier 會更新網站版型，但不覆寫 `docs/site-content.js`。相依更新一般等待三天；OSV 對已公開漏洞立即通知。

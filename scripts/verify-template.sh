@@ -30,6 +30,86 @@ bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
+
+# Repository settings must follow the account plan and actual API capability.
+github_plan_fixture="$fixture_root/github-plan"
+mkdir -p "$github_plan_fixture/bin"
+cat > "$github_plan_fixture/bin/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$1" == "api" && "$2" == "--method" ]]; then
+  printf '%s\n' "$*" >> "$MOCK_GH_LOG"
+  exit 0
+fi
+if [[ "$1" == "label" ]]; then
+  printf '%s\n' "$*" >> "$MOCK_GH_LOG"
+  exit 0
+fi
+if [[ "$1" != "api" ]]; then
+  echo "Unexpected gh command: $*" >&2
+  exit 2
+fi
+case "$2" in
+  repos/acme/project)
+    printf 'acme\tOrganization\t%s\ttrue\n' "$MOCK_GITHUB_VISIBILITY"
+    ;;
+  orgs/acme)
+    printf '%s\n' "$MOCK_GITHUB_PLAN"
+    ;;
+  repos/acme/project/rulesets)
+    if [[ "$MOCK_GITHUB_PLAN" == "free" && "$MOCK_GITHUB_VISIBILITY" != "public" ]]; then
+      echo "Upgrade to GitHub Pro or make this repository public to enable this feature" >&2
+      exit 1
+    fi
+    printf '[]\n'
+    ;;
+  orgs/Innoguard-Cyber-Arch/teams/repository-maintainers)
+    printf '{}\n'
+    ;;
+  *)
+    echo "Unexpected gh API path: $2" >&2
+    exit 2
+    ;;
+esac
+SH
+chmod +x "$github_plan_fixture/bin/gh"
+
+run_settings_fixture() {
+  local plan="$1"
+  local mode="${2:-plan}"
+  local call_log="$github_plan_fixture/$plan-$mode.log"
+  : > "$call_log"
+  PATH="$github_plan_fixture/bin:$PATH" \
+    GH_REPO="acme/project" \
+    MOCK_GITHUB_PLAN="$plan" \
+    MOCK_GITHUB_VISIBILITY="private" \
+    MOCK_GH_LOG="$call_log" \
+    ./scripts/apply-repository-settings.sh "$mode"
+}
+
+free_plan="$(run_settings_fixture free)"
+grep -q 'Account plan: GitHub Free' <<<"$free_plan"
+grep -q 'SKIP policies/rulesets.json' <<<"$free_plan"
+team_plan="$(run_settings_fixture team)"
+grep -q 'Account plan: GitHub Team' <<<"$team_plan"
+grep -q 'APPLY policies/rulesets.json' <<<"$team_plan"
+enterprise_plan="$(run_settings_fixture business_plus)"
+grep -q 'Account plan: GitHub Enterprise' <<<"$enterprise_plan"
+grep -q 'Enterprise-wide identity, audit, network' <<<"$enterprise_plan"
+
+run_settings_fixture free apply >/dev/null
+grep -q 'api --method PATCH repos/acme/project' \
+  "$github_plan_fixture/free-apply.log"
+if grep -Eq 'api --method (POST|PUT) repos/acme/project/rulesets' \
+  "$github_plan_fixture/free-apply.log"; then
+  echo "GitHub Free private repositories must not receive a Ruleset."
+  exit 1
+fi
+run_settings_fixture team apply >/dev/null
+grep -q 'api --method POST repos/acme/project/rulesets' \
+  "$github_plan_fixture/team-apply.log"
+
 ./scripts/scan-secrets
 uv run zizmor . --format plain
 
@@ -92,6 +172,8 @@ test "$(cat CLAUDE.md)" = "@AGENTS.md"
 test -f docs/index.html
 grep -q '<title>CSARC Repo Template｜AI 輔助 SDLC 團隊公版</title>' \
   docs/index.html
+grep -q '先辨識 GitHub 方案' docs/index.html
+grep -q 'Code Security／Secret Protection 另購' docs/index.html
 test -f version.txt
 uv run python - <<'PY'
 import json
@@ -244,6 +326,10 @@ test -f "$fixture_root/default-project/AGENTS.md"
 test "$(wc -l < "$fixture_root/default-project/AGENTS.md")" -le 200
 test -f "$fixture_root/default-project/docs/index.html"
 test -f "$fixture_root/default-project/docs/site-content.js"
+grep -q 'GitHub 方案與門禁' \
+  "$fixture_root/default-project/docs/index.html"
+grep -q 'apply-repository-settings.sh plan' \
+  "$fixture_root/default-project/README.md"
 grep -q 'Template Smoke Test' \
   "$fixture_root/default-project/docs/site-content.js"
 grep -q 'window.CSARC_SITE_CONTENT' \

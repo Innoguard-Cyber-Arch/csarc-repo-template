@@ -15,36 +15,65 @@ ruleset_payload="$repo_root/policies/rulesets.json"
 temporary_ruleset=""
 code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"
 
+if ! repo_context="$({
+  gh api "repos/$repo" \
+    --jq '[.owner.login, .owner.type, (.visibility // (if .private then "private" else "public" end)), .permissions.admin] | @tsv'
+} 2>&1)"; then
+  echo "Cannot read repository metadata for $repo."
+  echo "$repo_context"
+  exit 1
+fi
+IFS=$'\t' read -r owner owner_type repo_visibility repo_admin <<<"$repo_context"
+if [[ "$repo_admin" != "true" ]]; then
+  echo "Repository administrator permission is required before any settings can be applied."
+  exit 1
+fi
+
+account_endpoint="users/$owner"
+if [[ "$owner_type" == "Organization" ]]; then
+  account_endpoint="orgs/$owner"
+fi
+account_plan="$(gh api "$account_endpoint" --jq '.plan.name // "unknown"' 2>/dev/null || echo unknown)"
+case "$account_plan" in
+  free) plan_label="GitHub Free" ;;
+  team) plan_label="GitHub Team" ;;
+  business|business_plus|enterprise) plan_label="GitHub Enterprise" ;;
+  pro) plan_label="GitHub Pro" ;;
+  *) plan_label="Unknown ($account_plan)" ;;
+esac
+
+ruleset_available=true
+ruleset_skip_reason=""
 if ! ruleset_access="$(gh api "repos/$repo/rulesets" 2>&1)"; then
-  echo "Cannot manage the required protected-branch Ruleset for $repo."
+  ruleset_available=false
   if [[ "$ruleset_access" == *"Upgrade to GitHub Pro or make this repository public"* ]]; then
-    echo "Private organization repositories require GitHub Team or above for Rulesets."
-    echo "GitHub Free can enforce this policy only when the repository is public."
+    ruleset_skip_reason="Private repositories on GitHub Free do not support Rulesets; use Team or above."
   else
+    echo "Cannot determine Ruleset capability for $repo."
     echo "$ruleset_access"
+    exit 1
   fi
-  echo "No settings changed."
-  exit 1
 fi
 
-if [[ ! "$code_owner" =~ ^@([^/]+)/([^/[:space:]]+)$ ]]; then
-  echo "CODEOWNERS must use an existing GitHub team: @organization/team."
-  exit 1
-fi
-owner_org="${BASH_REMATCH[1]}"
-owner_team="${BASH_REMATCH[2]}"
-if ! gh api "orgs/$owner_org/teams/$owner_team" >/dev/null; then
-  echo "CODEOWNERS team does not exist or is not visible: $code_owner"
-  exit 1
-fi
+if [[ "$ruleset_available" == true ]]; then
+  if [[ ! "$code_owner" =~ ^@([^/]+)/([^/[:space:]]+)$ ]]; then
+    echo "CODEOWNERS must use an existing GitHub team: @organization/team."
+    exit 1
+  fi
+  owner_org="${BASH_REMATCH[1]}"
+  owner_team="${BASH_REMATCH[2]}"
+  if ! gh api "orgs/$owner_org/teams/$owner_team" >/dev/null; then
+    echo "CODEOWNERS team does not exist or is not visible: $code_owner"
+    exit 1
+  fi
 
-if [[ -n "${CSARC_VERSION_BOT_APP_ID:-}" ]]; then
-  temporary_ruleset="$(mktemp)"
-  trap 'rm -f "$temporary_ruleset"' EXIT
-  uv run python - \
-    "$ruleset_payload" \
-    "$temporary_ruleset" \
-    "$CSARC_VERSION_BOT_APP_ID" <<'PY'
+  if [[ -n "${CSARC_VERSION_BOT_APP_ID:-}" ]]; then
+    temporary_ruleset="$(mktemp)"
+    trap 'rm -f "$temporary_ruleset"' EXIT
+    uv run python - \
+      "$ruleset_payload" \
+      "$temporary_ruleset" \
+      "$CSARC_VERSION_BOT_APP_ID" <<'PY'
 import json
 import sys
 
@@ -61,15 +90,27 @@ with open(destination, "w", encoding="utf-8") as output:
     json.dump(payload, output, indent=2)
     output.write("\n")
 PY
-  ruleset_payload="$temporary_ruleset"
+    ruleset_payload="$temporary_ruleset"
+  fi
 fi
 
 echo "Repository: $repo"
 echo "Mode: $mode"
-echo "CODEOWNERS team: $code_owner"
-for policy in repository actions labels rulesets; do
-  echo "- policies/$policy.json"
-done
+echo "Account plan: $plan_label"
+echo "Repository visibility: $repo_visibility"
+echo "Deployment plan:"
+echo "- APPLY policies/repository.json"
+echo "- APPLY policies/actions.json"
+echo "- APPLY policies/labels.json"
+if [[ "$ruleset_available" == true ]]; then
+  echo "- APPLY policies/rulesets.json"
+  echo "CODEOWNERS team: $code_owner"
+else
+  echo "- SKIP policies/rulesets.json: $ruleset_skip_reason"
+fi
+if [[ "$plan_label" == "GitHub Enterprise" ]]; then
+  echo "- INFO Enterprise-wide identity, audit, network, and organization Rulesets are outside this repository script."
+fi
 
 if [[ "$mode" == "plan" ]]; then
   echo "No changes applied. Re-run with 'apply' after review."
@@ -93,17 +134,19 @@ for label in json.load(open(sys.argv[1], encoding="utf-8")):
 PY
 )
 
-ruleset_id="$(
-  uv run --no-project python -c \
-    'import json,sys; print(next((item["id"] for item in json.load(sys.stdin) if item["name"] == "CSARC protected branches"), ""))' \
-    <<<"$ruleset_access"
-)"
-if [[ -n "$ruleset_id" ]]; then
-  gh api --method PUT "repos/$repo/rulesets/$ruleset_id" \
-    --input "$ruleset_payload" >/dev/null
-else
-  gh api --method POST "repos/$repo/rulesets" \
-    --input "$ruleset_payload" >/dev/null
+if [[ "$ruleset_available" == true ]]; then
+  ruleset_id="$(
+    uv run --no-project python -c \
+      'import json,sys; print(next((item["id"] for item in json.load(sys.stdin) if item["name"] == "CSARC protected branches"), ""))' \
+      <<<"$ruleset_access"
+  )"
+  if [[ -n "$ruleset_id" ]]; then
+    gh api --method PUT "repos/$repo/rulesets/$ruleset_id" \
+      --input "$ruleset_payload" >/dev/null
+  else
+    gh api --method POST "repos/$repo/rulesets" \
+      --input "$ruleset_payload" >/dev/null
+  fi
 fi
 
-echo "Repository settings applied. Review the Rulesets page in GitHub."
+echo "Available repository settings applied. Review the deployment plan above."
