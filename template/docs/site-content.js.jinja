@@ -34,10 +34,10 @@ window.CSARC_SITE_CONTENT = {
     { path: "docs/site-content.js", purpose: "本網站的專案內容", owner: "專案維護" }
   ],
   workflow: [
-    { title: "1｜定義工作", detail: "先開 Issue，簡短寫清楚問題與原因、完成條件、驗證方式。" },
+    { title: "1｜定義工作", detail: "先選 bug、enhancement 或 documentation，再寫三題；開單者自動成為負責人。" },
     { title: "2｜分支與實作", detail: "從 {{ branch_strategy }} 建立 type/<Issue 編號>-簡稱；AI 不能自行合併。" },
     { title: "3｜驗證", detail: "本機執行 ./scripts/verify，PR 由 CI 重跑同一入口。" },
-    { title: "4｜審查", detail: "PR 連回 Issue 並進 {{ branch_strategy }}；同事與 CODEOWNER 判斷風險。" },
+    { title: "4｜審查", detail: "PR 連回 Issue、選一個工作標籤並進 {{ branch_strategy }}；同事與 CODEOWNER 判斷風險。" },
     { title: "5｜交付", detail: "tag 建立可追溯成品、SHA-256 與非空 SBOM；部署依專案另訂。" }
   ],
   safeguards: [
@@ -45,7 +45,7 @@ window.CSARC_SITE_CONTENT = {
     "lockfile 保存下載內容雜湊；第三方 Actions 固定完整 commit SHA。",
     "PR 政策包含合法／不合法回歸測資，避免門禁只會顯示綠燈。",
     "token 與私鑰放 GitHub Secrets／Variables，不提交到 repo 或 .env。",
-    "設定腳本先查 GitHub 方案與 Ruleset API；Free private repo 只套基本設定，Team／Enterprise 才啟用付費門禁。"
+    "設定腳本先查 GitHub 方案與 Ruleset API；Free private repo 的 main 未受強制保護，Team／Enterprise 才啟用付費門禁。"
   ],
   release: {
     current: {% if language == "ci" %}"tag 會建立 GitHub Release 與來源封存檔；沒有語言套件，因此不產生套件 SBOM。"{% else %}"tag 打包、checksum 與 SBOM 已啟用；沒有通用部署流程。"{% endif %},

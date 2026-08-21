@@ -226,9 +226,7 @@ def sync_spec(spec: Spec, repo: str, source_ref: str, server_url: str) -> None:
                     "--body-file",
                     str(body_path),
                     "--label",
-                    "spec",
-                    "--label",
-                    spec.priority,
+                    "enhancement",
                 ]
             )
             LOGGER.info("created: %s", output)
@@ -245,9 +243,7 @@ def sync_spec(spec: Spec, repo: str, source_ref: str, server_url: str) -> None:
                     "--body-file",
                     str(body_path),
                     "--add-label",
-                    "spec",
-                    "--add-label",
-                    spec.priority,
+                    "enhancement",
                 ]
             )
             LOGGER.info("updated: #%s", issue_number)

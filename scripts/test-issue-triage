@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+test_root="$(mktemp -d)"
+trap 'rm -rf "$test_root"' EXIT
+validator="$test_root/validator"
+
+{
+  printf '#!/usr/bin/env bash\n'
+  awk '
+    /^      - name: Assign author and apply one work label$/ { found = 1; next }
+    found && /^        run: \|$/ { in_run = 1; next }
+    in_run && /^$/ { print; next }
+    in_run && /^          / { sub(/^          /, ""); print; next }
+    in_run { exit }
+  ' "$repo_root/.github/workflows/issue-triage.yml"
+} > "$validator"
+chmod +x "$validator"
+
+mkdir -p "$test_root/bin"
+cat > "$test_root/bin/gh" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$GH_LOG"
+SH
+chmod +x "$test_root/bin/gh"
+export PATH="$test_root/bin:$PATH"
+export GH_LOG="$test_root/gh.log"
+export GITHUB_REPOSITORY="owner/repo"
+export ISSUE_AUTHOR="contributor"
+export ISSUE_NUMBER="42"
+
+ISSUE_BODY=$'### 類型\n\nenhancement\n\n### 問題與原因\n\nExample' \
+ISSUE_LABELS="" "$validator"
+grep -q -- '--add-assignee contributor --add-label enhancement' "$GH_LOG"
+
+: > "$GH_LOG"
+ISSUE_BODY="" ISSUE_LABELS="bug" "$validator"
+grep -q -- '--add-assignee contributor --add-label bug' "$GH_LOG"
+
+if ISSUE_BODY="" ISSUE_LABELS="" "$validator" >/dev/null 2>&1; then
+  echo "Issue triage accepted an Issue without an allowed type."
+  exit 1
+fi
+
+echo "Issue triage regression cases passed: 3"

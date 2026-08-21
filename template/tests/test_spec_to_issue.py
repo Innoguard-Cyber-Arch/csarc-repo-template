@@ -83,9 +83,9 @@ def test_load_labels_uses_policy_file(tmp_path: Path) -> None:
         json.dumps(
             [
                 {
-                    "name": "P1",
-                    "color": "D93F0B",
-                    "description": "High priority",
+                    "name": "enhancement",
+                    "color": "A2EEEF",
+                    "description": "New feature or improvement",
                 }
             ]
         ),
@@ -93,8 +93,8 @@ def test_load_labels_uses_policy_file(tmp_path: Path) -> None:
     )
     assert load_labels(policy) == [
         {
-            "name": "P1",
-            "color": "D93F0B",
-            "description": "High priority",
+            "name": "enhancement",
+            "color": "A2EEEF",
+            "description": "New feature or improvement",
         }
     ]

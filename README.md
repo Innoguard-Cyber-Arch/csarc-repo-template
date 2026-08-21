@@ -49,10 +49,11 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 ## 開發與驗證
 
 1. 簡單工作先開「開發工作」Issue；複雜需求先開規劃 Issue，再用 `docs/specs/` 拆出實作 Issue。
-2. 從 `main` 建立 `type/<issue-number>-short-slug` 分支，一張 Issue 與 PR 只交付一個結果。
-3. 公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。
-4. PR 指向 `main`、內文寫 `Closes #<issue-number>`，並使用英文標題 `type(scope): summary`。
-5. CI 與人工審查都通過才合併；AI 不得自行合併。
+2. 開單者會自動成為負責人，並從 `bug`、`enhancement`、`documentation` 選一種類型。
+3. 從 `main` 建立 `type/<issue-number>-short-slug` 分支，一張 Issue 與 PR 只交付一個結果。
+4. 公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。
+5. PR 指向 `main`、內文寫 `Closes #<issue-number>`、選擇上述三種標籤之一，並使用英文標題 `type(scope): summary`。
+6. CI 與人工審查都通過才合併；AI 不得自行合併。
 
 本 repo 沒有共用測試環境，因此採 main-only。生成專案只有在確實有長期 dev 測試環境時，才改選 `dev` 模式。
 驗證入口也會執行 PR 政策正反例；公版另注入不合法的 Python／TypeScript 內容，確認語言門禁真的會拒絕。
@@ -61,7 +62,7 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 
 ## 設定與密鑰
 
-- **依方案套用設定：**先執行 `./scripts/apply-repository-settings.sh plan`。Free private repo 會套用合併方式、Actions 權限與標籤，但明確略過 Ruleset；Team／Enterprise 且 CODEOWNERS team 存在時才套用保護分支門禁。確認計畫後再執行 `apply`。
+- **依方案套用設定：**先執行 `./scripts/apply-repository-settings.sh plan`。Free private repo 會套用合併方式、Actions 權限與三種標籤，但 GitHub 不提供 Ruleset，因此 `main` 目前不受強制保護；private repo 至少要 Team，且 CODEOWNERS team 存在時才可套用門禁。確認計畫後再執行 `apply`。
 - **GitHub App 尚未設定：**未提供 `CSARC_VERSION_BOT_CLIENT_ID` 與 private key 時，版本升級與 release-please job 會略過。
 - Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。不要把 token、私鑰或實際密碼寫進 repo。
 

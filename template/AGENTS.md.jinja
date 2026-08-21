@@ -34,6 +34,7 @@ Automated dependency and version-policy branches may omit an Issue, but still ta
 - Do not hand-edit generated lockfiles. Use {% if language in ["python", "python-typescript"] %}uv{% endif %}{% if language == "python-typescript" %} or {% endif %}{% if language in ["typescript", "python-typescript"] %}pnpm{% endif %} so integrity metadata stays valid.
 {% endif %}
 - Keep third-party GitHub Actions pinned to full commit SHAs.
+- Do not create a separate GitHub repository for testing or validation. Use local temporary projects or this repository's Issues, branches, pull requests, and Actions.
 - Comments in source code must be written in English. Leave style details in {% if language == "ci" %}executable configuration{% elif language == "python" %}`pyproject.toml` and other executable configuration{% elif language == "typescript" %}`biome.json` and other executable configuration{% else %}`pyproject.toml`, `biome.json`, and other executable configuration{% endif %} instead of copying them here.
 
 ## Safety

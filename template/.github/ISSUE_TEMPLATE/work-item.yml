@@ -1,8 +1,19 @@
 name: 開發工作
 description: 先用簡短中文說明一個可獨立驗證的改動
 title: ""
-labels: ["task"]
+labels: []
 body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 類型
+      description: 只選最符合這張 Issue 的一種。
+      options:
+        - bug
+        - enhancement
+        - documentation
+    validations:
+      required: true
   - type: textarea
     id: problem
     attributes:

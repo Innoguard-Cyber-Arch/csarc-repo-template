@@ -43,10 +43,11 @@ git push -u origin dev
 ## 開發與驗證
 
 1. 簡單工作先開「開發工作」Issue；複雜需求先開規劃 Issue，再用 `docs/specs/` 拆出實作 Issue。
-2. 從 `{{ branch_strategy }}` 建立 `type/<issue-number>-short-slug` 分支；AI 遵守 `AGENTS.md`，不能自行合併。
-3. 執行 `./scripts/verify`。
-4. PR 指向 `{{ branch_strategy }}`、內文寫 `Closes #<issue-number>`，標題使用英文 `type(scope): summary`。
-5. CI 與人工審查都通過才合併。{% if branch_strategy == "dev" %}準備發布時，再用一張審查過的 PR 將 `dev` 升版到 `main`。{% endif %}
+2. 開單者會自動成為負責人，並從 `bug`、`enhancement`、`documentation` 選一種類型。
+3. 從 `{{ branch_strategy }}` 建立 `type/<issue-number>-short-slug` 分支；一張 Issue 與 PR 只交付一個結果。
+4. 執行 `./scripts/verify`；AI 遵守 `AGENTS.md`，不能自行合併。
+5. PR 指向 `{{ branch_strategy }}`、內文寫 `Closes #<issue-number>`、選擇上述三種標籤之一，標題使用英文 `type(scope): summary`。
+6. CI 與人工審查都通過才合併。{% if branch_strategy == "dev" %}準備發布時，再用一張審查過的 PR 將 `dev` 升版到 `main`。{% endif %}
 
 `./scripts/verify` 也會跑 PR 政策正反例，確認合法流程能通過、錯誤標題／分支／Issue 關聯會被拒絕。
 
@@ -56,7 +57,7 @@ git push -u origin dev
 
 ## 設定與密鑰
 
-repo 推送到 GitHub 後，先執行 `./scripts/apply-repository-settings.sh plan`。腳本會查詢 GitHub 方案、repo 可見性與 Ruleset API：Free private repo 套用合併方式、Actions 權限與標籤，但略過付費門禁；Team／Enterprise 且 CODEOWNERS team 存在時才套用 Ruleset。確認輸出後再執行 `apply`；Copier 不在本機建檔階段猜測遠端方案。
+repo 推送到 GitHub 後，先執行 `./scripts/apply-repository-settings.sh plan`。腳本會查詢 GitHub 方案、repo 可見性與 Ruleset API：Free private repo 套用合併方式、Actions 權限與三種標籤，但 `main` 不受強制保護；private repo 至少要 Team，且 CODEOWNERS team 存在時才套用 Ruleset。確認輸出後再執行 `apply`；Copier 不在本機建檔階段猜測遠端方案。
 
 未設定專用 GitHub App 時，release-please job 會略過，不影響 CI 或人工 tag。Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。請在這裡列出產品設定的名稱、用途與取得位置，但不要填入真實值。
 

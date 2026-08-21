@@ -11,6 +11,7 @@ Closes #N
 <!-- List commands and results. -->
 
 - [ ] `./scripts/verify`
+- [ ] 已選擇 `bug`、`enhancement` 或 `documentation` 其中一個標籤
 
 ## Risk and rollback
 

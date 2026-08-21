@@ -26,7 +26,7 @@
     html, body { width: 100%; min-height: 100%; margin: 0; }
     body {
       overflow: hidden;
-      background: #242424;
+      background: var(--paper);
       color: var(--ink);
       font-size: 18px;
       font-family: Inter, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
@@ -51,7 +51,7 @@
       padding: 3.7% 4.7%;
       overflow: hidden;
       background: var(--paper);
-      box-shadow: 0 18px 60px rgba(0, 0, 0, .36);
+      box-shadow: none;
     }
     .slide.active { display: flex; flex-direction: column; animation: enter .2s ease-out; }
     @keyframes enter { from { opacity: 0; transform: translateX(10px); } }
@@ -982,6 +982,7 @@
     .package-badge.beta { border-color: #b9a700; background: var(--yellow); color: var(--ink); }
     .package-badge.python { border-color: var(--best); background: var(--best-soft); color: #0b6540; }
     .package-badge.security { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
+    .package-badge.warning { border-color: #b42318; background: #fff0ed; color: #8a1c12; }
     .package-badge:hover, .package-badge:focus-visible { outline: 3px solid var(--yellow); outline-offset: 1px; }
     .capability-lead {
       display: grid;
@@ -1310,17 +1311,19 @@
     .journey-bookend.appendix { margin-top: 3px; border-left: 6px solid var(--optional); }
     .journey-rail > .journey-bookend:first-of-type { margin-top: 8px; }
 
-    .controls { position: fixed; right: 25px; bottom: 18px; display: flex; align-items: center; gap: 8px; z-index: 5; }
-    .controls button { width: 40px; height: 40px; border: 1px solid #666; border-radius: 50%; background: #171717; color: white; cursor: pointer; }
-    .controls button:hover, .controls button:focus-visible { border-color: var(--yellow); color: var(--yellow); outline: none; }
+    .controls, .view-controls { opacity: .24; transition: opacity .15s ease; }
+    .controls:hover, .controls:focus-within, .view-controls:hover, .view-controls:focus-within { opacity: .92; }
+    .controls { position: fixed; right: 18px; bottom: 12px; display: flex; align-items: center; gap: 6px; z-index: 5; }
+    .controls button { width: 36px; height: 36px; border: 1px solid rgba(23, 23, 23, .16); border-radius: 50%; background: rgba(255, 255, 255, .78); color: var(--ink); cursor: pointer; }
+    .controls button:hover, .controls button:focus-visible { border-color: var(--ink); background: white; outline: none; }
     .controls button:disabled { opacity: .35; cursor: default; }
-    .counter { min-width: 64px; color: white; font-size: 18px; text-align: center; }
-    .view-controls { position: fixed; left: 25px; bottom: 18px; display: flex; align-items: center; gap: 7px; z-index: 5; }
-    .view-controls button { min-width: 40px; height: 40px; padding: 0 11px; border: 1px solid #666; border-radius: 20px; background: #171717; color: white; cursor: pointer; }
-    .view-controls button:hover, .view-controls button:focus-visible { border-color: var(--yellow); color: var(--yellow); outline: none; }
+    .counter { min-width: 58px; color: var(--ink); font-size: 17px; font-weight: 800; text-align: center; }
+    .view-controls { position: fixed; left: 18px; bottom: 12px; display: flex; align-items: center; gap: 6px; z-index: 5; }
+    .view-controls button { min-width: 36px; height: 36px; padding: 0 9px; border: 1px solid rgba(23, 23, 23, .16); border-radius: 18px; background: rgba(255, 255, 255, .78); color: var(--ink); cursor: pointer; }
+    .view-controls button:hover, .view-controls button:focus-visible { border-color: var(--ink); background: white; outline: none; }
     .view-controls button:disabled { opacity: .35; cursor: default; }
-    .zoom-level { min-width: 46px; color: white; font-size: 18px; text-align: center; }
-    .progress { position: fixed; left: 0; right: 0; bottom: 0; height: 4px; background: #444; z-index: 6; }
+    .zoom-level { min-width: 44px; color: var(--ink); font-size: 17px; font-weight: 800; text-align: center; }
+    .progress { position: fixed; left: 0; right: 0; bottom: 0; height: 3px; background: #e5e5e2; z-index: 6; }
     .progress span { display: block; height: 100%; background: var(--yellow); }
 
     /* Projection rules: H1 stays on one line; copy is at least 18px; only APA reference lines may be smaller. */
@@ -1397,7 +1400,7 @@
           <span class="package-badge">main-only 預設／dev 可選</span>
           <span class="package-badge">Copier 可更新</span>
           <span class="package-badge security">CI／安全檢查</span>
-          <span class="package-badge">Node 24 · pnpm 11</span>
+          <span class="package-badge warning">Free private：main 尚未受保護</span>
         </div>
       </header>
       <div class="language-contract" aria-label="程式語言 profile 決策">
@@ -1447,7 +1450,7 @@
           <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">ISSUE_TEMPLATE/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">工作單欄位／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">dependabot.yml</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">依語言更新相依</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">pull_request_template.md</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">PR 必填內容</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">03–06</span><span class="purpose-copy">七條自動流程</span></span><span class="scope-badge mixed">混合</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03–06</span><span class="purpose-copy">八條自動流程</span></span><span class="scope-badge mixed">混合</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">ci.yml</span><span class="repo-tree-purpose"><span class="journey-code">03</span><span class="purpose-copy">執行已宣告模組</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">osv.yml</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">跨生態漏洞掃描</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">pr-policy.yml</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">Issue／分支／PR 規則</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
@@ -1489,9 +1492,9 @@
         <h2>先辨識 GitHub 方案，<span class="accent">再套用真的能生效的管制</span></h2>
         <p class="subtitle"><strong>基本導入｜</strong>同一份公版依 Free、Team、Enterprise 與實際 API 能力調整；不把付費功能假裝成已啟用。</p>
       </header>
-      <p class="context-line"><strong>目前實測｜</strong><code>Innoguard-Cyber-Arch</code> API 回報 Free＋private；CI 會跑，但 Ruleset 不能把紅燈變成不可繞過的合併門禁。</p>
+      <p class="context-line"><strong>目前實測｜</strong><code>Innoguard-Cyber-Arch</code> API 回報 Free＋private；因此 <code>main</code> 現在確實沒有強制保護，CI 紅燈仍可能被有權限者繞過。</p>
       <div class="plan-grid">
-        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>會套用：</strong>合併方式、Actions 唯讀權限、Issue 標籤；CI／OSV／zizmor 照常回報。</p><ul><li>private repo 略過 Ruleset</li><li>required review／CODEOWNERS 不可強制</li></ul></article>
+        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>會套用：</strong>合併方式、Actions 唯讀權限、三種標籤；CI／OSV／zizmor 照常回報。</p><ul><li>private repo 的 main 未受 Ruleset 保護</li><li>required review／CODEOWNERS 不可強制</li></ul></article>
         <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches、必要審查、team reviewers、CODEOWNERS 與必要檢查。</p><ul><li>需先建立真實 CODEOWNERS team</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
         <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
       </div>
@@ -1520,7 +1523,7 @@
     <section class="slide decision-slide" data-track="method" aria-label="步驟一規劃工作與 GitHub Issues">
       <header>
         <h2>步驟 1｜<span class="accent">先寫清楚要解決什麼</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>每次改動先有 Issue；簡單工作只答三題，複雜工作才用版本化規格拆單。</p>
+        <p class="subtitle"><strong>基本導入。</strong>每次改動先有 Issue；先選類型再答三題，複雜工作才用版本化規格拆單。</p>
       </header>
       <p class="context-line"><strong>寫作原則｜</strong>不要只寫「新增報表功能」；要交代誰遇到什麼問題、希望得到什麼結果，以及要怎麼確認。</p>
       <div class="decision-strip">
@@ -1528,10 +1531,10 @@
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
           <details class="package-disclosure"><summary><span>已完成的 <span class="tech-name">spec → Issue</span>；Spec Kit 先不導入</span></summary><div class="package-health"><p><strong>目前：</strong><code>docs/specs/</code> 經 CI 驗證；合併到選定整合分支後，由標準函式庫腳本與 GitHub CLI 建立或更新實作 Issue。</p><p><strong>Spec Kit：</strong><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">github/spec-kit</a>｜MIT｜★130,368（已查證）｜公開、未封存、2026-08-19 仍更新。</p><p><strong>何時再評估：</strong>一份核准規格需要由 AI 穩定拆成多張子工作，而且團隊願意維護額外 CLI／Agent 流程。</p><p class="reference">Ref. GitHub REST API, accessed August 20, 2026.</p></div></details>
-          <p class="recommendation-copy"><strong>一次性工作：</strong>先開一張中文 Issue，只寫「問題與原因、完成條件、驗證方式」。<br><strong>較複雜的 SDD：</strong>先開規劃 Issue，再用 <code>docs/specs/</code> 審查規格；規格合併後自動開出實作 Issue。兩條路都必須先有 Issue，才能建立編號分支與 PR。</p>
+          <p class="recommendation-copy"><strong>一次性工作：</strong>選 <code>bug</code>、<code>enhancement</code> 或 <code>documentation</code>，再寫「問題與原因、完成條件、驗證方式」；開單者自動成為負責人。<br><strong>較複雜的 SDD：</strong>先開規劃 Issue，再用 <code>docs/specs/</code> 審查規格；規格合併後自動開出實作 Issue。兩條路都必須先有 Issue，才能建立編號分支與 PR。</p>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>三個必填欄位並關閉空白 Issue：</strong><code>.github/ISSUE_TEMPLATE/</code></li><li><strong>規格格式與 PR 內驗證：</strong><code>docs/specs/</code>＋<code>scripts/spec_to_issue.py</code></li><li><strong>規格進入 main／dev 後自動建立或更新 Issue：</strong><code>.github/workflows/spec-to-issue.yml</code></li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>類型＋三個必填欄位，並關閉空白 Issue：</strong><code>.github/ISSUE_TEMPLATE/</code></li><li><strong>開單者自動成為負責人並套單一類型標籤：</strong><code>.github/workflows/issue-triage.yml</code></li><li><strong>規格進入 main／dev 後自動建立或更新 Issue：</strong><code>docs/specs/</code>＋<code>scripts/spec_to_issue.py</code>＋<code>spec-to-issue.yml</code></li></ul></aside>
       <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/copilot/tutorials/cloud-agent/get-the-best-results" target="_blank" rel="noreferrer">GitHub Docs</a>; <a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a>; <a href="https://www.anthropic.com/engineering/claude-code-best-practices" target="_blank" rel="noreferrer">Anthropic</a>. Accessed August 20, 2026.</p>
     </section>
 
@@ -1543,9 +1546,9 @@
       <p class="context-line"><strong>問題與目的｜</strong>分支要對應真實用途；無條件多一層 dev 只會增加漂移與合併衝突，不能取代測試環境。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把 dev 當成形式上的必經站</h3><ul><li><strong>預設 main-only：</strong>Issue → 短分支 → PR → main，適合沒有共用測試環境</li><li><strong>有 dev 環境：</strong>Issue → 短分支 → PR → dev，再經升版 PR 進 main</li><li><strong>直接 push：</strong>兩種模式都禁止，不能繞過審查與檢查</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>建立時選分支模式，Issue-first 規則不變</h3><p><strong>工作分支：</strong><code>type/&lt;Issue 編號&gt;-簡稱</code>；PR 內文必須用 <code>Closes #編號</code> 連回同一張未結案 Issue。<br><strong>版本標題：</strong><code>fix</code>／<code>feat</code>／<code>!</code> 分別代表 patch／minor／major；標題限英文，內文可用中文。依賴與版本機器人是唯一免 Issue 的例外。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>建立時選分支模式，Issue-first 規則不變</h3><p><strong>工作分支：</strong><code>type/&lt;Issue 編號&gt;-簡稱</code>；PR 內文必須用 <code>Closes #編號</code> 連回同一張未結案 Issue，並選三種工作標籤之一。<br><strong>例外：</strong>依賴與版本機器人可免 Issue；其餘工作都維持一張 Issue 對應一張 PR。</p></article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>選 main-only 或 dev 模式：</strong><code>copier.yml</code> → <code>branch_strategy</code>，結果存入 <code>.csarc/profile.json</code></li><li><strong>核對 Issue、分支編號、PR 目標與標題：</strong><code>.github/workflows/pr-policy.yml</code></li><li><strong>保護選定分支並指定審查者：</strong><code>policies/rulesets.json</code>＋<code>.github/CODEOWNERS</code></li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>選 main-only 或 dev 模式：</strong><code>copier.yml</code> → <code>branch_strategy</code>，結果存入 <code>.csarc/profile.json</code></li><li><strong>核對標籤、Issue、分支編號、PR 目標與標題：</strong><code>.github/workflows/pr-policy.yml</code>＋<code>scripts/test-pr-policy</code></li><li><strong>保護選定分支並指定審查者：</strong><code>policies/rulesets.json</code>＋<code>.github/CODEOWNERS</code>；Free private 暫時只能回報，不能強制</li></ul></aside>
     </section>
 
     <section class="slide decision-slide" data-page="08 / 16" data-track="supply" aria-label="步驟五依賴風險與 SBOM">
@@ -1637,7 +1640,7 @@
         <thead><tr><th>頁次</th><th>五月版主題</th><th>結論</th><th>目前決定（點選）</th></tr></thead>
         <tbody>
           <tr><td>p.3</td><td>SDLC 核心階段</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>把計畫到監控集中在 GitHub</summary><div class="bridge-popover"><p><strong>五月版｜</strong>計畫、開發、測試、部署、監控的核心順序保留。</p><p><strong>本次判斷｜</strong>工作單、模板、合併申請、自動檢查與交付設定都放在 GitHub，方便持續維護。</p><p><strong>落地方式｜</strong>不是每個專案都要部署與監控，但都先遵守工作規劃、變更審查與驗證規則。</p></div></details></td></tr>
-          <tr><td>p.4</td><td>Jira Ticket</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>每次改動先有最小 GitHub Issue</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本用 Jira 的 Epic → Story → Task 分工；本次只保留必要的 GitHub Issue、Milestone 與 spec。</p><p><strong>本次判斷｜</strong>一次性工作只填問題與原因、完成條件、驗證方式；複雜需求先開規劃 Issue，再由核准 spec 建立實作 Issue。</p><p><strong>落地方式｜</strong><code>work-item.yml</code> 只有三個必填欄位；PR workflow 會核對分支與 <code>Closes #編號</code> 是否指向同一張未結案 Issue。</p></div></details></td></tr>
+          <tr><td>p.4</td><td>Jira Ticket</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>每次改動先有最小 GitHub Issue</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本用 Jira 的 Epic → Story → Task 分工；本次只保留必要的 GitHub Issue、Milestone 與 spec。</p><p><strong>本次判斷｜</strong>一次性工作選一種類型並填三題；複雜需求先開規劃 Issue，再由核准 spec 建立實作 Issue。</p><p><strong>落地方式｜</strong><code>work-item.yml</code> 有類型與三個必填欄位；<code>issue-triage.yml</code> 指派開單者；PR workflow 核對標籤、分支與同號未結案 Issue。</p></div></details></td></tr>
           <tr><td>p.5</td><td>版本控制</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>是否使用 dev，取決於是否有 dev 環境</summary><div class="bridge-popover"><p><strong>五月版｜</strong>保留平行分支，但不把長期 <code>dev</code> 分支當成所有專案的預設。</p><p><strong>本次判斷｜</strong>沒有共用測試環境就從 <code>main</code> 開短分支並 PR 回 main；有長期 dev 環境才 PR 回 <code>dev</code>，再升版到 main。</p><p><strong>落地方式｜</strong>Copier 的 <code>branch_strategy</code> 會同步調整 CI、Dependabot、Ruleset、AGENTS 與 README；兩種模式都禁止直接推送。</p></div></details></td></tr>
           <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>Issue、編號分支與 PR 形成固定鏈</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是保護分支的唯一入口，方向保留；三層審查改成依風險增加審查者。</p><p><strong>本次判斷｜</strong>一般 PR 要有同編號 Issue、CI 與一位同事；敏感檔案再由指定負責人核准，高風險架構變更另附決策紀錄。</p><p><strong>落地方式｜</strong>分支固定 <code>type/123-short-slug</code>，PR 內文固定 <code>Closes #123</code>；依賴與版本自動化是免 Issue 的明列例外。</p></div></details></td></tr>
           <tr><td>p.7</td><td>CI 自動化管線</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>本機與 CI 共用一個驗證入口</summary><div class="bridge-popover"><p><strong>五月版｜</strong>自動觸發、測試、格式與靜態錯誤檢查全部保留。</p><p><strong>本次判斷｜</strong><code>ci.yml</code> 依宣告執行 Python、TypeScript 或兩者；需要中央控管時才用完整 SHA 呼叫 reusable workflow。</p><p><strong>落地方式｜</strong>CI、PR 標題、OSV 與 zizmor 已能執行；目前先當檢查結果，private repo 升到 GitHub Team、建立 CODEOWNERS team 並套用 Ruleset 後，紅燈才成為不可繞過門禁。</p></div></details></td></tr>
@@ -1655,56 +1658,31 @@
 
     <section class="slide review-notes-slide" aria-label="決策附錄核心原則">
       <header>
-        <span class="selection-sequence">決策附錄 1/2</span>
-        <h2>關鍵決策｜<span class="accent">哪些是規則，哪些是刻意不做</span></h2>
-        <p class="subtitle">讓後續審閱者與其他 AI 先理解判斷脈絡；條件改變時，用 PR 同步修改設定、驗證與說明。</p>
+        <span class="selection-sequence">決策附錄</span>
+        <h2>關鍵決策｜<span class="accent">規則、理由與刻意不做</span></h2>
+        <p class="subtitle">原補充文件已收斂於此；細節以可執行設定為準，條件改變時以 Issue／PR 同步更新。</p>
       </header>
       <table class="decision-register" aria-label="公版核心決策登錄">
         <thead><tr><th>審閱問題</th><th>目前決定與原因</th></tr></thead>
         <tbody>
-          <tr><td>基本／未來／可選是時程嗎？</td><td>不是日期，而是能力條件；沒有可執行目標、owner 與驗證方式，就不建立空設定。</td></tr>
-          <tr><td>為何 root 與 <code>template/</code> 都有設定？</td><td><code>template/</code> 是下發內容唯一來源；GitHub 只讀 root 的 <code>.github/</code>，所以公版需要自我治理。十七組成對設定由腳本比對。</td></tr>
-          <tr><td>Copier 會改哪些產品內容？</td><td>政策檔由公版主導，語言設定共同維護；Python 的 <code>src/tests</code>、TypeScript 的 <code>typescript/src/tests</code> 與 <code>docs/specs</code> 初次建立後不改寫。</td></tr>
-          <tr><td>新舊專案是否降低標準？</td><td>C901 維持 10，coverage 都是 80%。既有案只改成量測變更行，或把舊 Ruff／mypy 債務限縮到明確範圍。</td></tr>
-          <tr><td>CI 與 CD 到哪裡？</td><td><code>scripts/verify</code> 是本機與 CI 單一入口；中央 private repo 已允許組織內 reusable CI。tag release 產出可追溯成品，沒有部署目標前不建立 deploy。</td></tr>
-          <tr><td>依賴更新為何同時等三天又立即掃描？</td><td>三天觀察剛發布但尚未被揭露的惡意版本；OSV 立即阻擋已公開漏洞。完整 SHA／lockfile hash 證明內容一致，但不等於來源一定善意。</td></tr>
-          <tr><td>AI 規則如何真的生效？</td><td><code>AGENTS.md</code> 是單一脈絡，<code>CLAUDE.md</code> 只匯入；CI、CODEOWNERS 與 Actions 最小權限已設定，private repo 需 GitHub Team 才能用 Ruleset 強制門禁。</td></tr>
-          <tr><td>為何不再加更多工具？</td><td>不重複加入 Bandit、Semgrep、pyright 等功能重疊工具；健康度只是篩選條件，採用仍要能降低目前風險或成本。</td></tr>
+          <tr><td>方案與 <code>main</code> 保護</td><td>Free private 可套基本設定，但 <code>main</code> 目前未受強制保護；至少升 Team 並建立 CODEOWNERS team，才套 Ruleset、核准與必要檢查。</td></tr>
+          <tr><td>工作範圍與責任</td><td>Issue-first；開單者自動成為負責人，只用 bug／enhancement／documentation。一張 Issue 與 PR 只交付一個可驗證成果。</td></tr>
+          <tr><td>公版更新邊界</td><td><code>template/</code> 是下發來源，root 讓公版自我治理；Copier 更新政策但保護產品程式與規格，成對設定由驗證腳本防止漂移。</td></tr>
+          <tr><td>語言與程式品質</td><td>共用治理支援四種 profile；Python 採 src layout、Ruff 80 字元與 <a href="https://google.github.io/styleguide/pyguide.html" target="_blank" rel="noreferrer">Google Python Style</a>、strict mypy；TypeScript 採 Node 24、pnpm 11、Biome、Vitest。</td></tr>
+          <tr><td>CI、版本與交付</td><td>本機與 CI 共用 <code>scripts/verify</code>，十八組 PR 正反例證明錯誤會被拒絕；release-please 維護單一 SemVer，tag 產成品但不等於部署。</td></tr>
+          <tr><td>依賴與供應鏈</td><td>三天等待觀察未知惡意新版；OSV 查已公開漏洞；hash 驗內容一致；SBOM 列出成品套件；resolver 另證明版本上下界可安裝，五者互不取代。</td></tr>
+          <tr><td>AI、文件與未來能力</td><td><code>AGENTS.md</code> 是 AI 契約，README 與 repo 網站服務人類；Hugo／託管登入、部署、監控、RAG、Go／Rust 都要有 owner、使用情境與驗證後才導入。</td></tr>
+          <tr><td>驗證與測試資源</td><td>「已完成」必須有檔案與測試；驗證只用本機暫存專案或本 repo 的 Issue、分支、PR、Actions，禁止為測試另開 GitHub repo。</td></tr>
         </tbody>
       </table>
       <p class="review-note-footer"><strong>驗證承諾：</strong><code>./scripts/verify-template.sh</code> 會實跑新案、全功能案、既有案與 Copier 更新；簡報寫「已完成」就必須真的通過。</p>
     </section>
 
-    <section class="slide review-notes-slide language-decision-slide" aria-label="決策附錄語言 profile 與 Google Python Style">
-      <header>
-        <span class="selection-sequence">決策附錄 2/2</span>
-        <h2>語言 profile｜<span class="accent">共用 GitHub 層，分開驗證工具鏈</span></h2>
-        <p class="subtitle">語言是高層能力選擇，不是臨時加一個 linter；可用狀態以 <code>profiles/catalog.yaml</code> 為準。</p>
-      </header>
-      <div class="language-appendix-grid">
-        <article class="language-appendix-card"><h3>CI/CD-only｜現在可用</h3><p>只產生共用治理與自動化；以 <code>version.txt</code> 發來源封存檔，不假裝有語言成品。</p></article>
-        <article class="language-appendix-card"><h3>Python｜現在可用</h3><p>預設 3.14；minimum 同時驗最低 Python、相依下界與目前穩定版。</p></article>
-        <article class="language-appendix-card"><h3>TypeScript｜現在可用</h3><p>Node 24＋pnpm 11；Biome、strict TypeScript、Vitest 80% 與 npm 打包驗證。</p></article>
-        <article class="language-appendix-card"><h3>混合與版本</h3><p>兩套工具鏈一起驗證；每個 repo 仍只有一個 SemVer。Go／Rust 保持 future。</p></article>
-      </div>
-      <table class="ruff-map" aria-label="Ruff 對應 Google Python Style 的規則">
-        <thead><tr><th>Google Style 主題</th><th>repo 設定</th><th>可以檢查什麼／仍需人判斷什麼</th></tr></thead>
-        <tbody>
-          <tr><td>排版與 80 字元行寬</td><td><code>ruff format</code>＋<code>E</code>＋<code>line-length = 80</code></td><td>自動檢查排版、空白、行長；目前沒有另設例外。</td></tr>
-          <tr><td>import</td><td><code>I</code>＋<code>known-first-party</code></td><td>分組、排序與本專案套件辨識。</td></tr>
-          <tr><td>命名</td><td><code>N</code></td><td>檢查常見命名形式；名稱是否清楚仍由人審查。</td></tr>
-          <tr><td>docstring</td><td><code>D</code>＋<code>pydocstyle = "google"</code></td><td>檢查 Google docstring 結構；內容是否有用仍由人審查。</td></tr>
-          <tr><td>型別</td><td><code>ANN</code>＋strict <code>mypy</code></td><td>要求型別提示並驗證型別關係。</td></tr>
-          <tr><td>錯誤、安全與複雜度</td><td><code>F/B/S/C901/T20/UP/SIM/RUF</code></td><td>找常見錯誤、安全風險、複雜度與 debug print；不能取代設計審查。</td></tr>
-        </tbody>
-      </table>
-      <p class="reference">Ref. <a href="https://google.github.io/styleguide/pyguide.html" target="_blank" rel="noreferrer">Google Python Style Guide</a>; <a href="https://docs.astral.sh/ruff/settings/#lint_pydocstyle_convention" target="_blank" rel="noreferrer">Ruff pydocstyle convention</a>. Accessed August 20, 2026.</p>
-    </section>
   </main>
 
   <nav class="controls" aria-label="簡報控制">
     <button id="previous" type="button" aria-label="上一頁">←</button>
-    <span class="counter" id="counter">1 / 16</span>
+    <span class="counter" id="counter">1 / 15</span>
     <button id="next" type="button" aria-label="下一頁">→</button>
   </nav>
   <nav class="view-controls" aria-label="畫面縮放控制">
@@ -1790,8 +1768,8 @@ gh api "repos/$repo/rulesets"
         },
         {
           title: '所有方案先套用不需要付費門禁的基本設定',
-          goal: 'Free private repo 也不再整包放棄；仍可讓合併方式、Actions 預設權限與 Issue 標籤跟著公版。',
-          summary: 'apply 會先完成 squash-only、刪除已合併分支、Actions 預設唯讀與標籤；CI／OSV／zizmor 繼續回報，但 Free private 的紅燈仍可被有權限者繞過。',
+          goal: 'Free private repo 也不再整包放棄；仍可讓合併方式、Actions 預設權限與精簡標籤跟著公版。',
+          summary: 'apply 會先完成 squash-only、刪除已合併分支、Actions 預設唯讀，並把標籤收斂為 bug／enhancement／documentation；但 main 目前未受保護，CI 紅燈仍可被有權限者繞過。',
           file: 'policies/repository.json＋policies/actions.json＋policies/labels.json',
           code: `./scripts/apply-repository-settings.sh plan
 # Review the APPLY and SKIP list first.
@@ -1922,7 +1900,7 @@ pnpm exec vitest run --coverage`
         {
           title: '一個入口驗證、打包，也證明錯誤會被拒絕',
           goal: '本機、AI 與 GitHub 執行同一入口；正向測試證明可交付，負向測資證明門禁不是永遠綠燈。',
-          summary: '`scripts/test-pr-policy` 以十七組 valid／invalid 案例檢查標題、分支、Issue 與 main／dev；公版再注入錯誤 Python／TypeScript 檔。',
+          summary: '`scripts/test-pr-policy` 以十八組 valid／invalid 案例檢查標籤、標題、分支、Issue 與 main／dev；公版再注入錯誤 Python／TypeScript 檔。',
           file: 'scripts/verify＋scripts/test-pr-policy＋.github/workflows/ci.yml',
           code: `./scripts/test-pr-policy
 ./scripts/verify
@@ -1942,10 +1920,13 @@ with:
         {
           title: '統一工作單欄位，並關閉空白 Issue',
           goal: '表單與簡報使用完全相同的欄位，且不開放繞過表單的空白 Issue。',
-          summary: '`blank_issues_enabled=false`；一次性工作只必填 problem、acceptance、verification。優先級與預估只留在較完整的 spec。',
-          file: '.github/ISSUE_TEMPLATE/work-item.yml＋config.yml',
+          summary: '`blank_issues_enabled=false`；一次性工作選一個類型，再填 problem、acceptance、verification。開單者會自動成為負責人。',
+          file: '.github/ISSUE_TEMPLATE/work-item.yml＋issue-triage.yml＋config.yml',
           code: `# work-item.yml
 body:
+  - id: kind
+    type: dropdown
+    options: [bug, enhancement, documentation]
   - id: problem
     type: textarea
   - id: acceptance
@@ -1955,7 +1936,9 @@ body:
 
 # config.yml
 blank_issues_enabled: false
-contact_links: []`
+contact_links: []
+
+# issue-triage.yml assigns the author and work label.`
         },
         {
           title: '複雜工作先用同一套欄位寫成可版本控制的規格',
@@ -2021,9 +2004,9 @@ permissions:
 /uv.lock {{ code_owner }}`
         },
         {
-          title: 'PR 同時核對 Issue 編號、分支、目標與版本標題',
+          title: 'PR 同時核對標籤、Issue 編號、分支、目標與版本標題',
           goal: '先有工作紀錄再改程式；標題仍是版本計算依據，內文可以用中文。',
-          summary: '分支須為 `type/123-short-slug`，內文須有 `Closes #123` 且 Issue 未結案；main-only 指向 main，dev 模式指向 dev。',
+          summary: 'PR 至少選 bug／enhancement／documentation 之一；分支須為 `type/123-short-slug`，內文須有 `Closes #123` 且 Issue 未結案。',
           file: '.github/workflows/pr-policy.yml＋scripts/test-pr-policy＋pull_request_template.md',
           code: `^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+
 
@@ -2035,6 +2018,7 @@ fi
 
 branch: feat/123-short-slug
 body: Closes #123
+label: enhancement
 
 ## Purpose
 ## Verification
@@ -2255,7 +2239,7 @@ python_typescript: {stage: beta}`
         {
           title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
           goal: '設定檔可以先審查；實際 repo 建立後才查方案與 API，不能使用的能力會明確略過。',
-          summary: 'Free private 會套 repository、actions、labels 並略過 Ruleset；Team／Enterprise 且 CODEOWNERS team 存在時再加 Ruleset。GitHub App 仍是另一項獨立條件。',
+          summary: 'Free private 會套 repository、actions、三種 labels 並明確警告 main 未受保護；Team／Enterprise 且 CODEOWNERS team 存在時再加 Ruleset。GitHub App 仍是另一項獨立條件。',
           file: 'policies/＋scripts/apply-repository-settings.sh',
           code: `policies/repository.json
 policies/actions.json
@@ -2296,7 +2280,7 @@ _skip_if_exists:
   - "docs/specs/**"`
         },
         {
-          title: '公版 root 鎖工具、跑 OSV，並檢查十七組共用設定沒有漂移',
+          title: '公版 root 鎖工具、跑 OSV，並檢查共用設定沒有漂移',
           goal: '中央模板不能要求下游做到自己做不到的事；PR 說明模板是唯一刻意差異。',
           summary: 'root 以鎖定環境跑 Ruff、mypy、秘密與 Actions 掃描；腳本逐組 diff root／template 的共用政策。',
           file: 'pyproject.toml＋uv.lock＋scripts/verify-template.sh',
@@ -2628,7 +2612,7 @@ gh auth status`
     let viewZoom = 1;
     let current = Math.max(0, Math.min(slides.length - 1, Number(location.hash.slice(1)) - 1 || 0));
     function fitDeck() {
-      const fit = Math.min((innerWidth - 32) / 1600, (innerHeight - 120) / 900);
+      const fit = Math.min(innerWidth / 1600, innerHeight / 900);
       document.documentElement.style.setProperty('--deck-scale', Math.max(.1, fit * viewZoom));
       zoomLevel.textContent = `${Math.round(viewZoom * 100)}%`;
       zoomOut.disabled = viewZoom <= .6;
