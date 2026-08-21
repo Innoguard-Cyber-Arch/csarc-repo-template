@@ -50,7 +50,7 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 
 1. 簡單工作先開「開發工作」Issue；複雜需求先開規劃 Issue，再用 `docs/specs/` 拆出實作 Issue。
 2. 開單者會自動成為負責人，並從 `bug`、`enhancement`、`documentation` 選一種類型。
-3. 從 `main` 建立 `type/<issue-number>-short-slug` 分支，一張 Issue 與 PR 只交付一個結果。
+3. 從 `main` 建立 `type/<issue-number>-short-slug` 分支，一張 Issue 與 PR 只交付一個結果；若新增需求超出完成條件，另開 Issue 與分支。
 4. 公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。
 5. PR 指向 `main`、內文寫 `Closes #<issue-number>`、選擇上述三種標籤之一，並使用英文標題 `type(scope): summary`。
 6. CI 與人工審查都通過才合併；AI 不得自行合併。
