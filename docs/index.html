@@ -1662,12 +1662,12 @@
     <section class="slide decision-slide" data-track="pr" aria-label="步驟四分支 PR 與合併">
       <header>
         <h2>步驟 4｜<span class="accent">小 PR 通過證據再合併</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>沒有共用測試環境就直接 PR 到 main；真的有 dev 環境，才加 dev 整合層。</p>
+        <p class="subtitle"><strong>基本導入。</strong>沒有共用測試環境就直接或經 stack PR 到 main；真的有 dev 環境，才加 dev 整合層。</p>
       </header>
       <p class="context-line"><strong>問題與目的｜</strong>分支要對應真實用途；無條件多一層 dev 只會增加漂移與合併衝突，不能取代測試環境。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把 dev 當成形式上的必經站</h3><ul><li><strong>預設 main-only：</strong>Issue → 短分支 → PR → main，適合沒有共用測試環境</li><li><strong>有 dev 環境：</strong>Issue → 短分支 → PR → dev，再經升版 PR 進 main</li><li><strong>直接 push：</strong>兩種模式都禁止，不能繞過審查與檢查</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>建立時選分支模式，Issue-first 規則不變</h3><p><strong>工作分支：</strong><code>type/&lt;Issue 編號&gt;-簡稱</code>；PR 內文必須用 <code>Closes #編號</code> 連回同一張未結案 Issue，並選三種工作標籤之一。<br><strong>範圍：</strong>需求超出原 Issue 的完成條件就另開 Issue、分支與 PR，不把新工作偷偷塞進原單。依賴與版本機器人是唯一免 Issue 的例外。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>建立時選分支模式，Issue-first 規則不變</h3><p><strong>工作分支：</strong><code>type/&lt;Issue 編號&gt;-簡稱</code>；PR 可直接進策略分支，或指向 open PR 的上游分支形成 stack，但整條鏈必須回到策略分支。PR 內文必須用 <code>Closes #編號</code> 連回同一張未結案 Issue，並選三種工作標籤之一。<br><strong>範圍：</strong>需求超出原 Issue 的完成條件就另開 Issue、分支與 PR，不把新工作偷偷塞進原單。依賴與版本機器人是唯一免 Issue 的例外。</p></article>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>選 main-only 或 dev 模式：</strong><code>copier.yml</code> → <code>branch_strategy</code>，結果存入 <code>.csarc/profile.json</code></li><li><strong>核對標籤、Issue、分支編號、PR 目標與標題：</strong><code>.github/workflows/pr-policy.yml</code>＋<code>scripts/test-pr-policy</code></li><li><strong>保護選定分支並指定審查者：</strong><code>policies/rulesets.json</code>＋<code>.github/CODEOWNERS</code>；Free private 暫時只能回報，不能強制</li></ul></aside>
     </section>
@@ -1790,7 +1790,7 @@
           <tr><td>工作範圍與責任</td><td>Issue-first；標題用 12–80 字元英文摘要成果，內文可用中文；開單者自動成為負責人。新增需求超出完成條件就另開 Issue。</td></tr>
           <tr><td>公版更新邊界</td><td><code>template/</code> 是下發來源，root 讓公版自我治理；Copier 更新政策但保護產品程式與規格，成對設定由驗證腳本防止漂移。</td></tr>
           <tr><td>語言與程式品質</td><td>共用治理支援四種 profile；Python 採 src layout、Ruff 80 字元與 <a href="https://google.github.io/styleguide/pyguide.html" target="_blank" rel="noreferrer">Google Python Style</a>、strict mypy；TypeScript 採 Node 24、pnpm 11、Biome、Vitest。</td></tr>
-          <tr><td>CI、版本與交付</td><td>本機與 CI 共用 <code>scripts/verify</code>，Issue 標題與十九組 PR 正反例證明錯誤會被拒絕；release-please 維護單一 SemVer。</td></tr>
+          <tr><td>CI、版本與交付</td><td>本機與 CI 共用 <code>scripts/verify</code>，Issue 標題與二十五組 PR 正反例證明錯誤會被拒絕；release-please 維護單一 SemVer。</td></tr>
           <tr><td>依賴與供應鏈</td><td>三天等待觀察未知惡意新版；OSV 查已公開漏洞；hash 驗內容一致；SBOM 列出成品套件；resolver 另證明版本上下界可安裝，五者互不取代。</td></tr>
           <tr><td>AI、文件與未來能力</td><td><code>AGENTS.md</code> 是 AI 契約，README 與 repo 網站服務人類；Hugo／託管登入、部署、監控、RAG、Go／Rust 都要有 owner、使用情境與驗證後才導入。</td></tr>
           <tr><td>驗證與測試資源</td><td>「已完成」必須有檔案與測試；驗證只用本機暫存專案或本 repo 的 Issue、分支、PR、Actions，禁止為測試另開 GitHub repo。</td></tr>
@@ -2021,7 +2021,7 @@ pnpm exec vitest run --coverage`
         {
           title: '一個入口驗證、打包，也證明錯誤會被拒絕',
           goal: '本機、AI 與 GitHub 執行同一入口；正向測試證明可交付，負向測資證明門禁不是永遠綠燈。',
-          summary: '十組 Issue 標題與十九組 PR 案例檢查標籤、標題、分支、Issue 與 main／dev；公版再注入錯誤 Python／TypeScript 檔。',
+          summary: '十組 Issue 標題與二十五組 PR 案例檢查標籤、標題、stack base、Issue 與 main／dev；公版再注入錯誤 Python／TypeScript 檔。',
           file: 'scripts/verify＋scripts/test-pr-policy＋.github/workflows/ci.yml',
           code: `./scripts/test-pr-policy
 ./scripts/verify
@@ -2128,9 +2128,9 @@ permissions:
 /uv.lock {{ code_owner }}`
         },
         {
-          title: 'PR 同時核對標籤、Issue 編號、分支、目標與版本標題',
+          title: 'PR 同時核對標籤、Issue 編號、stack 來源與版本標題',
           goal: '先有工作紀錄再改程式；標題仍是版本計算依據，內文可以用中文。',
-          summary: 'PR 至少選一個工作標籤；分支須為 `type/123-short-slug`，內文須有 `Closes #123`，且連結 Issue 必須未結案、標題合格。',
+          summary: 'PR 至少選一個工作標籤；分支須為 `type/123-short-slug`，base 的 open PR 鏈須回到 main／dev，且連結 Issue 必須未結案、標題合格。',
           file: '.github/workflows/pr-policy.yml＋scripts/test-pr-policy＋pull_request_template.md',
           code: `^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+
 
@@ -2141,6 +2141,7 @@ if printf '%s' "$PR_TITLE" | LC_ALL=C \
 fi
 
 branch: feat/123-short-slug
+base: feat/122-parent -> main
 body: Closes #123
 label: enhancement
 

@@ -234,8 +234,8 @@ PY
 grep -q '^## Working loop$' AGENTS.md
 grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
-grep -q 'Start from `main` and name the branch' AGENTS.md
-grep -q 'Open the pull request against `main`' AGENTS.md
+grep -q 'pull request chain ends at `main`' AGENTS.md
+grep -q 'against `main` or its immediate parent in the stack' AGENTS.md
 required_readme_headings=(
   "專案概述"
   "快速開始"
@@ -366,9 +366,9 @@ grep -q '^## Scope and sources of truth$' \
 grep -q '^## Commands$' "$fixture_root/default-project/AGENTS.md"
 grep -q '^## Code Review Rules$' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'Start from `main` and name the branch' \
+grep -q 'pull request chain ends at `main`' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'Open the pull request against `main`' \
+grep -q 'against `main` or its immediate parent in the stack' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'uv run pytest <test-path>' \
   "$fixture_root/default-project/AGENTS.md"
@@ -616,9 +616,9 @@ grep -q '"language_profile": "typescript"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
 grep -q '"branch_strategy": "dev"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
-grep -q 'Start from `dev` and name the branch' \
+grep -q 'pull request chain ends at `dev`' \
   "$fixture_root/typescript-project/AGENTS.md"
-grep -q 'Open the pull request against `dev`' \
+grep -q 'against `dev` or its immediate parent in the stack' \
   "$fixture_root/typescript-project/AGENTS.md"
 grep -q 'branches: \[main, dev\]' \
   "$fixture_root/typescript-project/.github/workflows/ci.yml"

@@ -3,10 +3,34 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
-validator="$(mktemp)"
-trap 'rm -f "$validator"' EXIT
+fixture="$(mktemp -d)"
+validator="$fixture/validator"
+trap 'rm -rf "$fixture"' EXIT
 case_count=0
 export PR_ISSUE_TITLE="Add verified report workflow"
+
+cat > "$fixture/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+head_branch=""
+while (( $# > 0 )); do
+  if [[ "$1" == "-f" && "${2:-}" == head=* ]]; then
+    head_branch="${2#*:}"
+    shift 2
+  else
+    shift
+  fi
+done
+
+IFS=';' read -ra edges <<<"${PR_BASE_GRAPH:-}"
+for edge in "${edges[@]}"; do
+  if [[ "${edge%%=*}" == "$head_branch" ]]; then
+    tr ',' '\n' <<<"${edge#*=}"
+  fi
+done
+SH
+chmod +x "$fixture/gh"
 
 {
   printf '#!/usr/bin/env bash\n'
@@ -25,10 +49,11 @@ if ! grep -q 'branch_pattern=' "$validator"; then
   exit 1
 fi
 
-while IFS='|' read -r expected name strategy title labels base head body issue_state; do
+while IFS='|' read -r expected name strategy title labels base head body issue_state base_graph; do
   [[ -z "$expected" || "$expected" == \#* ]] && continue
   [[ "$body" == "-" ]] && body=""
   [[ "$issue_state" == "-" ]] && issue_state=""
+  [[ "$base_graph" == "-" ]] && base_graph=""
   case_count=$((case_count + 1))
 
   if output="$(
@@ -39,6 +64,9 @@ while IFS='|' read -r expected name strategy title labels base head body issue_s
     PR_HEAD="$head" \
     PR_BODY="$body" \
     PR_ISSUE_STATE="$issue_state" \
+    PR_BASE_GRAPH="$base_graph" \
+    GITHUB_REPOSITORY="acme/project" \
+    PATH="$fixture:$PATH" \
       "$validator" 2>&1
   )"; then
     actual="pass"
@@ -52,25 +80,31 @@ while IFS='|' read -r expected name strategy title labels base head body issue_s
     exit 1
   fi
 done <<'CASES'
-# expected|name|strategy|title|labels|base|head|body|issue state
-pass|main work|main|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open
-pass|dev work|dev|fix(api): handle timeout|bug|dev|fix/42-timeout|Fixes #42|open
-pass|dev promotion|dev|feat!: promote tested changes|enhancement|main|dev|-|-
-pass|release please|main|chore(main): release 0.2.0|enhancement|main|release-please--branches--main--components--repo|-|-
-pass|dependabot|main|build(deps): bump pytest|enhancement|main|dependabot/pip/pytest-9|-|-
-fail|missing PR label|main|feat(api): add report|-|main|feat/42-report|Closes #42|open
-fail|unsupported title type|main|feature(api): add report|enhancement|main|feat/42-report|Closes #42|open
-fail|non ASCII title|main|feat(api): 新增報表|enhancement|main|feat/42-report|Closes #42|open
-fail|uppercase scope|main|feat(API): add report|enhancement|main|feat/42-report|Closes #42|open
-fail|empty summary|main|feat:|enhancement|main|feat/42-report|Closes #42|open
-fail|branch lacks Issue number|main|feat(api): add report|enhancement|main|feat/report|Closes #42|open
-fail|unsupported branch type|main|feat(api): add report|enhancement|main|feature/42-report|Closes #42|open
-fail|uppercase branch slug|main|feat(api): add report|enhancement|main|feat/42-Report|Closes #42|open
-fail|mismatched Issue link|main|feat(api): add report|enhancement|main|feat/42-report|Closes #41|open
-fail|closed Issue|main|feat(api): add report|enhancement|main|feat/42-report|Closes #42|closed
-fail|main mode targets dev|main|feat(api): add report|enhancement|dev|feat/42-report|Closes #42|open
-fail|dev work targets main|dev|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open
-fail|unknown branch strategy|staging|feat(api): add report|enhancement|staging|feat/42-report|Closes #42|open
+# expected|name|strategy|title|labels|base|head|body|issue state|base graph
+pass|main work|main|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
+pass|main stack|main|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=main
+pass|main deep stack|main|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=feat/40-root;feat/40-root=main
+pass|dev work|dev|fix(api): handle timeout|bug|dev|fix/42-timeout|Fixes #42|open|-
+pass|dev stack|dev|fix(api): handle timeout|bug|fix/41-parent|fix/42-timeout|Fixes #42|open|fix/41-parent=dev
+pass|dev promotion|dev|feat!: promote tested changes|enhancement|main|dev|-|-|-
+pass|release please|main|chore(main): release 0.2.0|enhancement|main|release-please--branches--main--components--repo|-|-|-
+pass|dependabot|main|build(deps): bump pytest|enhancement|main|dependabot/pip/pytest-9|-|-|-
+fail|missing PR label|main|feat(api): add report|-|main|feat/42-report|Closes #42|open|-
+fail|unsupported title type|main|feature(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
+fail|non ASCII title|main|feat(api): 新增報表|enhancement|main|feat/42-report|Closes #42|open|-
+fail|uppercase scope|main|feat(API): add report|enhancement|main|feat/42-report|Closes #42|open|-
+fail|empty summary|main|feat:|enhancement|main|feat/42-report|Closes #42|open|-
+fail|branch lacks Issue number|main|feat(api): add report|enhancement|main|feat/report|Closes #42|open|-
+fail|unsupported branch type|main|feat(api): add report|enhancement|main|feature/42-report|Closes #42|open|-
+fail|uppercase branch slug|main|feat(api): add report|enhancement|main|feat/42-Report|Closes #42|open|-
+fail|mismatched Issue link|main|feat(api): add report|enhancement|main|feat/42-report|Closes #41|open|-
+fail|closed Issue|main|feat(api): add report|enhancement|main|feat/42-report|Closes #42|closed|-
+fail|orphan stack base|main|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|-
+fail|ambiguous stack base|main|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=main,dev
+fail|cyclic stack base|main|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=feat/40-root;feat/40-root=feat/41-parent
+fail|main mode targets dev|main|feat(api): add report|enhancement|dev|feat/42-report|Closes #42|open|-
+fail|dev work targets main|dev|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
+fail|unknown branch strategy|staging|feat(api): add report|enhancement|staging|feat/42-report|Closes #42|open|-
 CASES
 
 case_count=$((case_count + 1))

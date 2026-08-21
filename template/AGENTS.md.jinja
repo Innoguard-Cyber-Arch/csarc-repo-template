@@ -11,12 +11,12 @@
 
 1. Open or select one GitHub Issue before editing; use its acceptance criteria as the scope boundary. Write the Issue title in 12-80 ASCII characters and at least three words; describe the outcome without a type prefix or trailing period.
 2. If new work exceeds that Issue, stop and open a separate Issue; do not silently widen the current branch or pull request.
-3. Start from `{{ branch_strategy }}` and name the branch `type/<issue-number>-short-slug`.
+3. Start from `{{ branch_strategy }}`, or from an open work branch whose pull request chain ends at `{{ branch_strategy }}`, and name the branch `type/<issue-number>-short-slug`.
 4. Inspect nearby code, tests, and configuration before choosing an implementation.
 5. Make the smallest coherent change; preserve unrelated work and project-owned source files.
 6. Add or update the narrowest regression test that proves non-trivial behavior.
 7. Run targeted checks while iterating, then run `./scripts/verify` before opening or updating a pull request.
-8. Open the pull request against `{{ branch_strategy }}`, include `Closes #<issue-number>`, and never merge it yourself.
+8. Open the pull request against `{{ branch_strategy }}` or its immediate parent in the stack, include `Closes #<issue-number>`, and never merge it yourself.
 9. Report the changed behavior, verification evidence, and any remaining limitation.
 
 Automated dependency and version-policy branches may omit an Issue, but still target `{{ branch_strategy }}`. {% if branch_strategy == "dev" %}Only a reviewed `dev` promotion or release-please pull request may target `main`.{% else %}Release-please may target `main` without a work Issue.{% endif %}
