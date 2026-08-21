@@ -2,8 +2,27 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-validator="$script_dir/validate-pr-policy"
+repo_root="$(cd "$script_dir/.." && pwd)"
+validator="$(mktemp)"
+trap 'rm -f "$validator"' EXIT
 case_count=0
+
+{
+  printf '#!/usr/bin/env bash\n'
+  awk '
+    /^      - name: Validate pull request policy$/ { found = 1; next }
+    found && /^        run: \|$/ { in_run = 1; next }
+    in_run && /^$/ { print; next }
+    in_run && /^          / { sub(/^          /, ""); print; next }
+    in_run { exit }
+  ' "$repo_root/.github/workflows/pr-policy.yml"
+} > "$validator"
+chmod +x "$validator"
+
+if ! grep -q 'branch_pattern=' "$validator"; then
+  echo "Could not extract the PR policy from the workflow."
+  exit 1
+fi
 
 while IFS='|' read -r expected name strategy title base head body issue_state; do
   [[ -z "$expected" || "$expected" == \#* ]] && continue

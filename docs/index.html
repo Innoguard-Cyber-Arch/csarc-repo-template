@@ -2035,7 +2035,7 @@ permissions:
           title: 'PR 同時核對 Issue 編號、分支、目標與版本標題',
           goal: '先有工作紀錄再改程式；標題仍是版本計算依據，內文可以用中文。',
           summary: '分支須為 `type/123-short-slug`，內文須有 `Closes #123` 且 Issue 未結案；main-only 指向 main，dev 模式指向 dev。',
-          file: 'scripts/validate-pr-policy＋.github/workflows/pr-policy.yml＋pull_request_template.md',
+          file: '.github/workflows/pr-policy.yml＋scripts/test-pr-policy＋pull_request_template.md',
           code: `^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+
 
 if printf '%s' "$PR_TITLE" | LC_ALL=C \

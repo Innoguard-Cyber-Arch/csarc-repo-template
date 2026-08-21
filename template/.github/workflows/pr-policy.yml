@@ -28,4 +28,79 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_TITLE: ${{ github.event.pull_request.title }}
-        run: ./scripts/validate-pr-policy
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?:\ .+ ]]; then
+            echo "Use: type(scope): short English summary"
+            echo "Allowed types: feat, fix, docs, refactor, test, build, ci, chore, revert"
+            echo "Scope is optional and must use lowercase letters, numbers, '.', '_', '/', or '-'."
+            exit 1
+          fi
+          if printf '%s' "$PR_TITLE" | LC_ALL=C grep -q '[^ -~]'; then
+            echo "PR title must use ASCII characters only."
+            echo "The PR body may be written in Chinese."
+            exit 1
+          fi
+
+          branch_strategy="${PR_BRANCH_STRATEGY:-}"
+          if [[ -z "$branch_strategy" ]]; then
+            branch_strategy="main"
+            if [[ -f .csarc/profile.json ]]; then
+              branch_strategy="$(
+                python3 -c 'import json; print(json.load(open(".csarc/profile.json")).get("branch_strategy", "main"))'
+              )"
+            fi
+          fi
+
+          if [[ "$branch_strategy" != "main" && "$branch_strategy" != "dev" ]]; then
+            echo "branch_strategy must be main or dev."
+            exit 1
+          fi
+
+          if [[ "$PR_BASE" == "main" && "$PR_HEAD" == release-please--* ]]; then
+            exit 0
+          fi
+          if [[ "$branch_strategy" == "dev" && "$PR_BASE" == "main" ]]; then
+            if [[ "$PR_HEAD" == "dev" ]]; then
+              exit 0
+            fi
+            echo "Only dev promotion or release-please may target main in dev mode."
+            exit 1
+          fi
+
+          if [[ "$PR_BASE" != "$branch_strategy" ]]; then
+            echo "Work pull requests must target ${branch_strategy}."
+            exit 1
+          fi
+
+          if [[ "$PR_HEAD" == dependabot/* || "$PR_HEAD" == automation/* ]]; then
+            exit 0
+          fi
+
+          branch_pattern='^(feat|fix|docs|refactor|test|build|ci|chore|revert)/([0-9]+)-[a-z0-9][a-z0-9-]*$'
+          if [[ ! "$PR_HEAD" =~ $branch_pattern ]]; then
+            echo "Use branch: type/<issue-number>-short-slug"
+            exit 1
+          fi
+
+          issue_number="${BASH_REMATCH[2]}"
+          issue_link_pattern="(Closes|Fixes|Resolves)[[:space:]]+#${issue_number}([^0-9]|$)"
+          if [[ ! "${PR_BODY:-}" =~ $issue_link_pattern ]]; then
+            echo "PR body must include Closes #${issue_number}."
+            exit 1
+          fi
+
+          if [[ "${PR_ISSUE_STATE+x}" == "x" ]]; then
+            issue_state="$PR_ISSUE_STATE"
+          else
+            issue_state="$(
+              gh api "repos/$GITHUB_REPOSITORY/issues/$issue_number" \
+                --jq 'select((.pull_request | not) and .state == "open") | .state' \
+                2>/dev/null || true
+            )"
+          fi
+          if [[ "$issue_state" != "open" ]]; then
+            echo "Issue #${issue_number} must exist and remain open until merge."
+            exit 1
+          fi

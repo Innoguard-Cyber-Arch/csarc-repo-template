@@ -28,7 +28,6 @@ uv run mypy \
 uv run pytest template/tests/test_spec_to_issue.py
 bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
-bash -n scripts/validate-pr-policy
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
 ./scripts/scan-secrets
@@ -176,7 +175,6 @@ paired_files=(
   scripts/install-gitleaks
   scripts/scan-secrets
   scripts/test-pr-policy
-  scripts/validate-pr-policy
   zizmor.yml
 )
 for relative_file in "${paired_files[@]}"; do
@@ -188,10 +186,9 @@ grep -q '^    id: problem$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: acceptance$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: verification$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q 'Validate pull request policy' .github/workflows/pr-policy.yml
-grep -q './scripts/validate-pr-policy' .github/workflows/pr-policy.yml
-grep -q 'type/<issue-number>-short-slug' scripts/validate-pr-policy
+grep -q 'type/<issue-number>-short-slug' .github/workflows/pr-policy.yml
 grep -q 'Only dev promotion or release-please may target main in dev mode.' \
-  scripts/validate-pr-policy
+  .github/workflows/pr-policy.yml
 grep -q 'branches: \[main\]' .github/workflows/ci.yml
 grep -q 'branches: \[main\]' .github/workflows/osv.yml
 grep -q 'branches: \[main\]' .github/workflows/zizmor.yml
