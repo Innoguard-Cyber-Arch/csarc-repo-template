@@ -6,6 +6,7 @@ repo_root="$(cd "$script_dir/.." && pwd)"
 validator="$(mktemp)"
 trap 'rm -f "$validator"' EXIT
 case_count=0
+export PR_ISSUE_TITLE="Add verified report workflow"
 
 {
   printf '#!/usr/bin/env bash\n'
@@ -71,5 +72,19 @@ fail|main mode targets dev|main|feat(api): add report|enhancement|dev|feat/42-re
 fail|dev work targets main|dev|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open
 fail|unknown branch strategy|staging|feat(api): add report|enhancement|staging|feat/42-report|Closes #42|open
 CASES
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="模糊標題" \
+  "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a linked Issue with an invalid title."
+  exit 1
+fi
 
 echo "PR policy regression cases passed: $case_count"

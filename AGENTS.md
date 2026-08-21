@@ -10,7 +10,7 @@
 
 ## Working loop
 
-1. Open or select one GitHub Issue before editing; use its acceptance criteria as the scope boundary.
+1. Open or select one GitHub Issue before editing; use its acceptance criteria as the scope boundary. Write the Issue title in 12-80 ASCII characters and at least three words; describe the outcome without a type prefix or trailing period.
 2. If new work exceeds that Issue, stop and open a separate Issue; do not silently widen the current branch or pull request.
 3. Start from `main` and name the branch `type/<issue-number>-short-slug`.
 4. Inspect the existing implementation, make the smallest coherent change, and preserve unrelated user work.

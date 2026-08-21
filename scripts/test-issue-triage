@@ -6,6 +6,30 @@ repo_root="$(cd "$script_dir/.." && pwd)"
 test_root="$(mktemp -d)"
 trap 'rm -rf "$test_root"' EXIT
 validator="$test_root/validator"
+title_validator="$repo_root/scripts/validate-issue-title"
+
+valid_titles=(
+  "Fix authentication timeout handling"
+  "Document GitHub App setup"
+  "[SPEC-001] Add health check endpoint"
+)
+invalid_titles=(
+  "Fix timeout"
+  "修正登入逾時問題"
+  "[Bug] Fix broken login flow"
+  "bug: Fix broken login flow"
+  "Fix broken login flow."
+  "Add an excessively long Issue title that exceeds the eighty character maximum for this repository"
+)
+for title in "${valid_titles[@]}"; do
+  "$title_validator" "$title"
+done
+for title in "${invalid_titles[@]}"; do
+  if "$title_validator" "$title" >/dev/null 2>&1; then
+    echo "Issue title validator accepted: $title"
+    exit 1
+  fi
+done
 
 {
   printf '#!/usr/bin/env bash\n'
@@ -30,6 +54,7 @@ export GH_LOG="$test_root/gh.log"
 export GITHUB_REPOSITORY="owner/repo"
 export ISSUE_AUTHOR="contributor"
 export ISSUE_NUMBER="42"
+export ISSUE_TITLE="Add dependency policy checks"
 
 ISSUE_BODY=$'### 類型\n\nenhancement\n\n### 問題與原因\n\nExample' \
 ISSUE_LABELS="" "$validator"
@@ -44,4 +69,4 @@ if ISSUE_BODY="" ISSUE_LABELS="" "$validator" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Issue triage regression cases passed: 3"
+echo "Issue title cases passed: 9; triage cases passed: 3"

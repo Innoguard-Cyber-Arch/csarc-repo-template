@@ -37,6 +37,8 @@ bash -n template/scripts/apply-repository-settings.sh
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
 bash -n scripts/test-issue-triage
+bash -n scripts/validate-issue-title
+bash -n template/scripts/validate-issue-title
 ./scripts/test-issue-triage
 
 # Repository settings must follow the account plan and actual API capability.
@@ -278,6 +280,7 @@ paired_files=(
   scripts/scan-secrets
   scripts/test-issue-triage
   scripts/test-pr-policy
+  scripts/validate-issue-title
   zizmor.yml
 )
 for relative_file in "${paired_files[@]}"; do
@@ -405,6 +408,7 @@ test "$(grep -c '^    id:' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 4
 test -f "$fixture_root/default-project/.github/workflows/issue-triage.yml"
 test -x "$fixture_root/default-project/scripts/test-issue-triage"
+test -x "$fixture_root/default-project/scripts/validate-issue-title"
 grep -q 'branches: \[main, dev\]' \
   "$fixture_root/default-project/.github/workflows/spec-to-issue.yml"
 grep -q 'target-branch: main' \

@@ -42,14 +42,14 @@ git push -u origin dev
 
 ## 開發與驗證
 
-1. 簡單工作先開「開發工作」Issue；複雜需求先開規劃 Issue，再用 `docs/specs/` 拆出實作 Issue。
+1. 簡單工作先開「開發工作」Issue；標題以 12–80 個英文 ASCII 字元及至少三個詞直接描述成果，例如 `Add dependency policy checks`。Issue 不使用 PR 的 Conventional Commit 格式。
 2. 開單者會自動成為負責人，並從 `bug`、`enhancement`、`documentation` 選一種類型。
 3. 從 `{{ branch_strategy }}` 建立 `type/<issue-number>-short-slug` 分支；若新增需求超出 Issue 的完成條件，另開 Issue 與分支。
 4. 執行 `./scripts/verify`；AI 遵守 `AGENTS.md`，不能自行合併。
 5. PR 指向 `{{ branch_strategy }}`、內文寫 `Closes #<issue-number>`、選擇上述三種標籤之一，標題使用英文 `type(scope): summary`。
 6. CI 與人工審查都通過才合併。{% if branch_strategy == "dev" %}準備發布時，再用一張審查過的 PR 將 `dev` 升版到 `main`。{% endif %}
 
-`./scripts/verify` 也會跑 PR 政策正反例，確認合法流程能通過、錯誤標題／分支／Issue 關聯會被拒絕。
+`./scripts/verify` 也會跑 Issue／PR 政策正反例，確認合法流程能通過、不合格 Issue 標題與錯誤 PR 標題／分支／Issue 關聯會被拒絕。
 
 {% if language == "ci" %}目前驗證 spec、README、JSON、workflow 與機密字串；沒有語言模組，因此不執行語言測試或打包。
 {% else %}目前驗證包含{% if has_python %} Ruff、mypy、pytest、{{ coverage_threshold }}% coverage、wheel 與相依下界{% endif %}{% if language == "python-typescript" %}，以及{% endif %}{% if has_typescript %} Biome、TypeScript、Vitest {{ coverage_threshold }}% coverage 與 npm tarball{% endif %}，最後再檢查 spec、機密字串與 lockfile。
