@@ -65,10 +65,12 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 
 ## 設定與密鑰
 
-- **依方案套用設定：**推送遠端後執行 `./scripts/apply-repository-settings.sh plan`。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。Free private repo 會套用合併方式、Actions 權限與三種標籤，但 GitHub 不提供 Ruleset，因此 `main` 目前不受強制保護；private repo 至少要 Team，且 CODEOWNERS team 存在時才可套用門禁。確認計畫後再執行 `apply`。
+- **依方案套用設定：**推送遠端後執行 `./scripts/apply-repository-settings.sh plan`。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。Free private repo 會套用合併方式、Actions 權限與三種標籤，但 GitHub 不提供 Ruleset，因此 `main` 目前不受強制保護。確認計畫後再執行 `apply`。
 - **GitHub App 尚未設定：**未提供 `CSARC_VERSION_BOT_CLIENT_ID` 與 private key 時，版本升級與 release-please job 會略過。
 - **來源證明尚未啟用：**GitHub artifact attestation 取決於遠端 repo 的可見性與方案；Copier 建檔時無法可靠確認，因此目前不產生 attestation job。
 - Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。不要把 token、私鑰或實際密碼寫進 repo。
+
+> 若 plan 顯示 `WARNING main is not protected`，部署者必須選一條路：需要保密就請組織 owner 在 **Organization Settings → Billing & licensing** 升級至 GitHub Team 以上；已核准公開的程式碼才可在 **Repository Settings → General → Danger Zone** 改為 public。接著建立或確認 `.github/CODEOWNERS` 指定的 team，重新執行 `plan`，看到 `APPLY policies/rulesets.json` 後才執行 `apply`。不要為了省方案費用擅自公開 repository。
 
 ## 發布與維運
 

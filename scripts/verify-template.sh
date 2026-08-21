@@ -135,6 +135,12 @@ free_plan="$(run_settings_fixture free)"
 grep -q 'Account plan: GitHub Free' <<<"$free_plan"
 grep -q 'SKIP policies/rulesets.json' <<<"$free_plan"
 grep -q 'WARNING main is not protected' <<<"$free_plan"
+grep -q 'ask the owner to upgrade to GitHub Team or above' \
+  <<<"$free_plan"
+grep -q 'https://github.com/organizations/acme/settings/billing' <<<"$free_plan"
+grep -q 'ALTERNATIVE only when public access is approved' <<<"$free_plan"
+grep -q 'GH_REPO=acme/project ./scripts/apply-repository-settings.sh apply' \
+  <<<"$free_plan"
 team_plan="$(run_settings_fixture team)"
 grep -q 'Account plan: GitHub Team' <<<"$team_plan"
 grep -q 'APPLY policies/rulesets.json' <<<"$team_plan"
