@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  rejected_files="$(git ls-files --cached --others --exclude-standard -- '*.rej')"
+  if [[ -n "$rejected_files" ]]; then
+    echo "Resolve and remove Copier rejection files:" >&2
+    printf '%s\n' "$rejected_files" >&2
+    exit 1
+  fi
+  if conflict_lines="$(git grep --untracked -I -n -E '^(<{7}|={7}|>{7})( |$)' -- .)"; then
+    echo "Resolve Git conflict markers:" >&2
+    printf '%s\n' "$conflict_lines" >&2
+    exit 1
+  fi
+  exit 0
+fi
+
+rejected_file="$(find . \
+  \( -path './.git' -o -path './.cache' -o -path './.venv*' \
+    -o -path './node_modules' -o -path './dist' \) -prune \
+  -o -type f -name '*.rej' -print -quit)"
+if [[ -n "$rejected_file" ]]; then
+  echo "Resolve and remove Copier rejection file: $rejected_file" >&2
+  exit 1
+fi
+if conflict_lines="$(grep -R -I -n -E '^(<{7}|={7}|>{7})( |$)' \
+  --exclude-dir=.git --exclude-dir=.cache --exclude-dir='.venv*' \
+  --exclude-dir=node_modules --exclude-dir=dist .)"; then
+  echo "Resolve Git conflict markers:" >&2
+  printf '%s\n' "$conflict_lines" >&2
+  exit 1
+fi
