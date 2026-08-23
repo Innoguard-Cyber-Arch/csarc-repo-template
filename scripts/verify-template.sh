@@ -81,7 +81,7 @@ if [[ "$1" != "api" ]]; then
 fi
 case "$2" in
   repos/acme/project)
-    printf 'acme\tOrganization\t%s\ttrue\n' "$MOCK_GITHUB_VISIBILITY"
+    printf 'acme\tOrganization\t%s\ttrue\tmain\n' "$MOCK_GITHUB_VISIBILITY"
     ;;
   orgs/acme)
     printf '%s\n' "$MOCK_GITHUB_PLAN"
@@ -96,6 +96,17 @@ case "$2" in
       exit 1
     fi
     printf '[]\n'
+    ;;
+  repos/acme/project/rules/branches/main)
+    if [[ "${MOCK_GOVERNANCE:-protected}" == "error" ]]; then
+      echo "403 cannot inspect effective rules" >&2
+      exit 1
+    fi
+    if [[ "${MOCK_GOVERNANCE:-protected}" == "incomplete" ]]; then
+      printf '[]\n'
+      exit 0
+    fi
+    printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_approving_review_count":1,"required_review_thread_resolution":true}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"governance"},{"context":"verify"},{"context":"title"},{"context":"scan-pr / osv-scan"},{"context":"audit"}]}}]'
     ;;
   orgs/Innoguard-Cyber-Arch/teams/repository-maintainers)
     printf '{}\n'
@@ -114,6 +125,7 @@ run_settings_fixture() {
   local ruleset_error="${3:-}"
   local prune_labels="${4:-false}"
   local allow_unprotected="${5:-false}"
+  local governance="${6:-protected}"
   local suffix=""
   local arguments=("$mode")
   if [[ "$prune_labels" == true ]]; then
@@ -131,6 +143,7 @@ run_settings_fixture() {
     MOCK_GITHUB_PLAN="$plan" \
     MOCK_GITHUB_VISIBILITY="private" \
     MOCK_RULESET_ERROR="$ruleset_error" \
+    MOCK_GOVERNANCE="$governance" \
     MOCK_GH_LOG="$call_log" \
     ./scripts/apply-repository-settings.sh "${arguments[@]}"
 }
@@ -176,6 +189,24 @@ grep -q 'APPLY policies/rulesets.json' <<<"$team_plan"
 enterprise_plan="$(run_settings_fixture business_plus)"
 grep -q 'Account plan: GitHub Enterprise' <<<"$enterprise_plan"
 grep -q 'Enterprise-wide identity, audit, network' <<<"$enterprise_plan"
+
+if free_check="$(run_settings_fixture free check 2>&1)"; then
+  echo "GitHub Free private governance checks must fail closed."
+  exit 1
+fi
+grep -q 'BLOCKED required governance' <<<"$free_check"
+team_check="$(run_settings_fixture team check)"
+grep -q 'Repository governance ready' <<<"$team_check"
+if incomplete_check="$(run_settings_fixture team check "" false false incomplete 2>&1)"; then
+  echo "Incomplete effective branch rules must fail governance checks."
+  exit 1
+fi
+grep -q 'missing deletion rule' <<<"$incomplete_check"
+if unavailable_check="$(run_settings_fixture team check "" false false error 2>&1)"; then
+  echo "Unreadable effective branch rules must fail governance checks."
+  exit 1
+fi
+grep -q 'Cannot inspect effective rules' <<<"$unavailable_check"
 
 if free_apply="$(run_settings_fixture free apply 2>&1)"; then
   echo "Unprotected private repositories must fail closed by default."
@@ -418,7 +449,7 @@ if pull_request["required_approving_review_count"] < 1:
     raise SystemExit("The repository Ruleset must require approval.")
 if not pull_request["require_code_owner_review"]:
     raise SystemExit("The repository Ruleset must require CODEOWNER review.")
-if not {"verify", "title", "scan-pr / osv-scan", "audit"} <= checks:
+if not {"governance", "verify", "title", "scan-pr / osv-scan", "audit"} <= checks:
     raise SystemExit("The repository Ruleset is missing required checks.")
 PY
 if grep -q '"refs/heads/dev"' policies/rulesets.json; then
@@ -612,6 +643,14 @@ grep -q '^target-version = "py314"$' \
   "$fixture_root/default-project/pyproject.toml"
 grep -q 'python-version: "3.14"' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q '^  governance:$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q 'apply-repository-settings.sh check' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q '^    needs: governance$' \
+  "$fixture_root/default-project/.github/workflows/release.yml"
+grep -q '^    needs: governance$' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'config-file: release-please-config.json' \

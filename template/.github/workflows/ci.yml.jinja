@@ -18,6 +18,19 @@ permissions:
   contents: read
 
 jobs:
+  governance:
+    name: governance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Require protected default branch
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+        run: ./scripts/apply-repository-settings.sh check
+
 {%- if use_reusable_workflow %}
   verify:
     uses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@{{ workflow_ref }}

@@ -65,12 +65,12 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 
 ## 設定與密鑰
 
-- **依方案套用設定：**推送遠端後執行 `./scripts/apply-repository-settings.sh plan`。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。不支援 Ruleset 的 private repo 會標示為 `BLOCKED`，而且 `apply` 會在任何變更前停止。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會依 plan 列出的清單刪除。確認計畫後再執行 `apply`。
+- **依方案套用設定：**推送遠端後執行 `./scripts/apply-repository-settings.sh plan`。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。不支援 Ruleset 的 private repo 會標示為 `BLOCKED`，而且 `apply` 會在任何變更前停止。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會依 plan 列出的清單刪除。確認計畫後再執行 `apply`，最後以 `check` 唯讀驗證遠端生效狀態；CI 會持續顯示 governance 失敗，release 與 registry publishing 也不會執行。
 - **GitHub App 尚未設定：**未提供 `CSARC_VERSION_BOT_CLIENT_ID` 與 private key 時，版本升級與 release-please job 會略過。
 - **來源證明採明確啟用：**生成非 CI-only 專案時，可在 GitHub public repo 或支援的 Enterprise Cloud private／internal repo 啟用 artifact provenance 與 SBOM attestation；其他情況維持關閉，改用 GitHub Release 上的 SHA-256 驗證。
 - Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。不要把 token、私鑰或實際密碼寫進 repo。
 
-> 若 plan 顯示 `BLOCKED required governance`，需要保密就請組織 owner 在 **Organization Settings → Billing & licensing** 升級至 GitHub Team 以上；只有已核准公開的程式碼才可由人員在 **Repository Settings → General → Danger Zone** 改為 public，腳本不會變更可見性。接著建立或確認 `.github/CODEOWNERS` 指定的 team，重新執行 `plan`，看到 `APPLY policies/rulesets.json` 後才執行 `apply`。若已明確接受沒有 required checks、approval 與 CODEOWNER review 的風險，才可執行 `apply --allow-unprotected`；輸出會留下 `DEGRADED` 紀錄。
+> 若 plan 顯示 `BLOCKED required governance`，需要保密就請組織 owner 在 **Organization Settings → Billing & licensing** 升級至 GitHub Team 以上；只有已核准公開的程式碼才可由人員在 **Repository Settings → General → Danger Zone** 改為 public，腳本不會變更可見性。接著建立或確認 `.github/CODEOWNERS` 指定的 team，重新執行 `plan`／`apply`／`check`。GitHub Free private repo 沒有平台層 merge gate，因此紅色 governance check 只能阻止同 workflow 的發布，不能阻止有權限者手動合併；若明確接受此風險，才可執行 `apply --allow-unprotected`，但 CI/CD 仍維持 fail-closed。
 
 ## 發布與維運
 
