@@ -87,4 +87,27 @@ if PR_BRANCH_STRATEGY="main" \
   exit 1
 fi
 
+case_count=$((case_count + 1))
+title_validator="$repo_root/scripts/validate-issue-title"
+mv "$title_validator" "$title_validator.bak"
+restore_title_validator() { mv "$title_validator.bak" "$title_validator" 2>/dev/null || true; }
+trap 'restore_title_validator; rm -f "$validator"' EXIT
+if ! (
+  cd "$repo_root" && \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="模糊標題" \
+    "$validator" >/dev/null 2>&1
+); then
+  echo "PR policy failed when the base branch predates scripts/validate-issue-title."
+  restore_title_validator
+  exit 1
+fi
+restore_title_validator
+
 echo "PR policy regression cases passed: $case_count"

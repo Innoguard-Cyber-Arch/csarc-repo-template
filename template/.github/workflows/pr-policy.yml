@@ -113,4 +113,6 @@ jobs:
             echo "Issue #${issue_number} must exist and remain open until merge."
             exit 1
           fi
-          ./scripts/validate-issue-title "$issue_title"
+          if [[ -x ./scripts/validate-issue-title ]]; then
+            ./scripts/validate-issue-title "$issue_title"
+          fi
