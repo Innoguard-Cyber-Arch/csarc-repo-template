@@ -108,7 +108,6 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          test "$(gh api "repos/${GITHUB_REPOSITORY}/immutable-releases" --jq .enabled)" = true
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes
           fi
