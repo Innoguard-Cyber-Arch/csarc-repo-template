@@ -85,6 +85,7 @@ jobs:
     name: publish immutable release
     needs: verify
     permissions:
+      attestations: read
       contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
