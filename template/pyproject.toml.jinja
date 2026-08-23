@@ -1,8 +1,8 @@
 {% set python_target = "3.14" if python_support_mode == "latest" else python_min_version -%}
 [project]
-name = "{{ project_slug }}"
+name = {{ project_slug | tojson }}
 version = "0.1.0"
-description = "{{ project_description }}"
+description = {{ project_description | tojson }}
 readme = "README.md"
 requires-python = "{% if python_support_mode == 'latest' %}>=3.14,<3.15{% else %}>={{ python_min_version }}{% endif %}"
 dependencies = []
@@ -35,7 +35,7 @@ select = ["E", "F", "I", "N", "B", "S", "C901", "UP", "SIM", "RUF", "ANN", "D", 
 convention = "google"
 
 [tool.ruff.lint.isort]
-known-first-party = ["{{ package_name }}", "scripts"]
+known-first-party = [{{ package_name | tojson }}, "scripts"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D", "S101"]
