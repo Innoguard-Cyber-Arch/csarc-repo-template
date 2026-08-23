@@ -44,9 +44,9 @@ git push -u origin dev
 
 1. 簡單工作先開「開發工作」Issue；標題以 12–80 個英文 ASCII 字元及至少三個詞直接描述成果，例如 `Add dependency policy checks`。Issue 不使用 PR 的 Conventional Commit 格式。
 2. 開單者會自動成為負責人，並從 `bug`、`enhancement`、`documentation` 選一種類型。
-3. 從 `{{ branch_strategy }}` 建立 `type/<issue-number>-short-slug` 分支；若新增需求超出 Issue 的完成條件，另開 Issue 與分支。
+3. 從 `{{ branch_strategy }}` 或最終 PR 回 `{{ branch_strategy }}` 的未合併工作分支建立 `type/<issue-number>-short-slug`；若新增需求超出 Issue 的完成條件，另開 Issue 與分支。
 4. 執行 `./scripts/verify`；AI 遵守 `AGENTS.md`，不能自行合併。
-5. PR 指向 `{{ branch_strategy }}`、內文寫 `Closes #<issue-number>`、選擇上述三種標籤之一，標題使用英文 `type(scope): summary`。
+5. PR 指向 `{{ branch_strategy }}` 或 stack 中的直接上游分支；整條 open PR 鏈必須最終回到 `{{ branch_strategy }}`。內文寫 `Closes #<issue-number>`、選擇上述三種標籤之一，標題使用英文 `type(scope): summary`。
 6. CI 與人工審查都通過才合併。{% if branch_strategy == "dev" %}準備發布時，再用一張審查過的 PR 將 `dev` 升版到 `main`。{% endif %}
 
 `./scripts/verify` 也會跑 Issue／PR 政策正反例，確認合法流程能通過、不合格 Issue 標題與錯誤 PR 標題／分支／Issue 關聯會被拒絕。

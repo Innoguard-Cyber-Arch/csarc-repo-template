@@ -12,11 +12,11 @@
 
 1. Open or select one GitHub Issue before editing; use its acceptance criteria as the scope boundary. Write the Issue title in 12-80 ASCII characters and at least three words; describe the outcome without a type prefix or trailing period.
 2. If new work exceeds that Issue, stop and open a separate Issue; do not silently widen the current branch or pull request.
-3. Start from `main` and name the branch `type/<issue-number>-short-slug`.
+3. Start from `main`, or from an open work branch whose pull request chain ends at `main`, and name the branch `type/<issue-number>-short-slug`.
 4. Inspect the existing implementation, make the smallest coherent change, and preserve unrelated user work.
 5. Add or update the narrowest regression check that proves non-trivial behavior.
 6. Run targeted checks while iterating, then run `./scripts/verify-template.sh` before opening or updating a pull request.
-7. Open the pull request against `main`, include `Closes #<issue-number>`, and never merge it yourself.
+7. Open the pull request against `main` or its immediate parent in the stack, include `Closes #<issue-number>`, and never merge it yourself.
 8. Report what changed, which verification ran, and any remaining limitation.
 
 Automated dependency, version-policy, and release-please branches may omit an Issue. This repository has no shared test environment, so it uses the main-only branch strategy.

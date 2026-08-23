@@ -11,6 +11,7 @@ concurrency:
 permissions:
   contents: read
   issues: read
+  pull-requests: read
 
 jobs:
   title:
@@ -76,10 +77,34 @@ jobs:
             exit 1
           fi
 
-          if [[ "$PR_BASE" != "$branch_strategy" ]]; then
-            echo "Work pull requests must target ${branch_strategy}."
-            exit 1
-          fi
+          base_branch="$PR_BASE"
+          seen_bases="|"
+          while [[ "$base_branch" != "$branch_strategy" ]]; do
+            if [[ "$seen_bases" == *"|${base_branch}|"* ]]; then
+              echo "Pull request base chain contains a cycle at ${base_branch}."
+              exit 1
+            fi
+            seen_bases+="${base_branch}|"
+
+            if ! parent_output="$(
+              gh api --paginate --method GET "repos/$GITHUB_REPOSITORY/pulls" \
+                -f state=open \
+                -f head="${GITHUB_REPOSITORY%%/*}:${base_branch}" \
+                --jq '.[].base.ref'
+            )"; then
+              echo "Cannot inspect the open pull request for base branch ${base_branch}."
+              exit 1
+            fi
+            parent_bases=()
+            while IFS= read -r parent_base; do
+              [[ -n "$parent_base" ]] && parent_bases+=("$parent_base")
+            done <<<"$parent_output"
+            if (( ${#parent_bases[@]} != 1 )); then
+              echo "Base branch ${base_branch} must have exactly one open pull request."
+              exit 1
+            fi
+            base_branch="${parent_bases[0]}"
+          done
 
           if [[ "$PR_HEAD" == dependabot/* || "$PR_HEAD" == automation/* ]]; then
             exit 0
