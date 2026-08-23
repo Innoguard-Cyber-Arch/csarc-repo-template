@@ -2597,12 +2597,12 @@ scripts/apply-repository-settings.sh`
         {
           title: '每次修改都測新案、既有案導入與後續更新',
           goal: '可導入的條件是三條生命週期都通過，不是只看檔案存在。',
-          summary: '測試會真的執行 Copier copy、existing mode、Copier update 與更新後的 `scripts/verify`；root-only 測試資產若混入生成 repo 也會失敗。',
-          file: 'scripts/verify-template.sh',
-          code: `copier copy --defaults
-./scripts/verify
-uvx zizmor==1.29.0 . --format plain
-copier update --defaults`
+          summary: '測試會真的執行 CLI init、adopt dry-run／apply、update check／dry-run／apply 與衝突 fail-closed；CLI 內部仍以 Copier 產生與 smart update。root-only 測試資產若混入生成 repo 也會失敗。',
+          file: 'src/csarc_cli/＋tests/test_cli.py＋scripts/verify-template.sh',
+          code: `csarc init ./my-project
+csarc adopt . --dry-run
+csarc update --check --json
+csarc update`
         }
       ],
       'template-release': [
@@ -2681,54 +2681,29 @@ python_typescript: {stage: beta}`
     const setupExamples = {
       new: {
         title: '建立新 repo',
-        goal: 'Copier 會詢問語言組合與分支模式；先列出核准版本並解析成完整 commit SHA，遠端 repo 建立後才查方案與 API 能力。',
+        goal: 'CLI 會選取核准 release、解析完整 commit SHA、顯示計畫，確認後才以 Copier 建立與驗證。',
         location: 'Terminal',
-        code: `gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template --limit 5
-gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/v0.1.0 --jq .sha
+        code: `uvx --from csarc-repo-cli csarc init ./my-project
 
-uvx --from copier copier copy --trust \\
-  --vcs-ref <reviewed-full-commit-sha> \\
-  https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git \\
-  ./my-project
-cd ./my-project
-./scripts/verify
-
-# Push the repository, authenticate gh, then inspect the deployment plan.
-./scripts/apply-repository-settings.sh plan
-# Without a Git remote, use: GH_REPO=owner/repo ./scripts/apply-repository-settings.sh plan
-
-# 建立遠端 repo 後先開 Issue，再從 main 或 dev 開編號分支。`
+# CI or an explicitly authorized agent:
+uvx --from csarc-repo-cli csarc init ./my-project \\
+  --yes --non-interactive`
       },
       existing: {
         title: '把公版導入既有 repo',
-        goal: '先開分支並宣告既有專案模式；公版保留原本 manifest，再由人合併工具設定。diff coverage 門檻仍是 80%。',
+        goal: '先用 --dry-run 預覽新增、覆寫、保留與人工合併清單；必須是乾淨 Git working tree，預設保留產品內容。',
         location: '既有 repo 根目錄',
-        code: `gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template --limit 5
-gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/v0.1.0 --jq .sha
-gh issue create --template work-item.yml
-git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --from copier copier copy --trust --overwrite \\
-  --vcs-ref <reviewed-full-commit-sha> \\
-  --data project_mode=existing \\
-  --data language=<ci|python|typescript|python-typescript> \\
-  --data branch_strategy=<main|dev> \\
-  --data coverage_mode=diff \\
-  https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git .
-./scripts/verify
-./scripts/apply-repository-settings.sh plan`
+        code: `git switch -c chore/<issue-number>-adopt-csarc-template
+uvx --from csarc-repo-cli csarc adopt . --dry-run
+uvx --from csarc-repo-cli csarc adopt .`
       },
       update: {
         title: '更新已使用公版的 repo',
-        goal: 'Copier 讀取 .copier-answers.yml，只顯示新版差異；完成後仍以 PR 審查。',
+        goal: 'CLI 讀取 .copier-answers.yml，解析核准 release，以 Copier smart update 顯示新版差異；衝突時保留差異並 fail closed。',
         location: '專案 repo 根目錄',
-        code: `gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template --limit 5
-gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/v0.1.0 --jq .sha
-gh issue create --template work-item.yml
-git switch -c chore/<issue-number>-update-repo-template
-uvx --from copier copier update --trust \\
-  --vcs-ref <reviewed-full-commit-sha>
-./scripts/verify
-./scripts/apply-repository-settings.sh plan`
+        code: `git switch -c chore/<issue-number>-update-repo-template
+uvx --from csarc-repo-cli csarc update --check --json
+uvx --from csarc-repo-cli csarc update`
       },
       mac: {
         title: 'macOS 本機需求',

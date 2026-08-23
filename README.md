@@ -17,13 +17,12 @@ Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript �
 共同需求是 Git、GitHub CLI、uv；TypeScript／混合案另需 Node 24+ 與 pnpm 11。Windows 請在 WSL2 執行。
 
 ```bash
-git clone https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git
-cd csarc-repo-template
-./scripts/verify-template.sh
-./scripts/apply-repository-settings.sh plan
+uvx --from csarc-repo-cli csarc init ./my-project
+uvx --from csarc-repo-cli csarc adopt .
+uvx --from csarc-repo-cli csarc update
 ```
 
-建立、導入既有 repo 與後續同步的完整指令見「公版更新」。
+CLI 固定驗證 canonical repository numeric ID、immutable stable Release、release attestation、tag 指向與 commit signature，再把 GitHub Release 解析成完整 commit SHA 並顯示計畫；任何不一致都會在 Copier 寫檔前停止。互動模式等使用者確認，CI 或 agent 則要同時明確給 `--yes --non-interactive`。範本來源目前是 private repo，需先以 `gh auth login` 登入；第一個 CLI package 尚未發布前的開發用法見下方 troubleshooting。
 
 ## 技術與目錄
 
@@ -33,6 +32,7 @@ cd csarc-repo-template
 | `profiles/catalog.yaml` | 已支援語言與版本政策 |
 | `.github/`、`policies/` | 公版本身的 CI 與 GitHub 設定 |
 | `scripts/verify-template.sh` | 建立、更新、語言與供應鏈回歸 |
+| `src/csarc_cli/` | `csarc init`／`adopt`／`update` 的薄層 Copier orchestration |
 | `docs/index.html` | 內部網站與完整設計說明；內部限閱，目前只有 `noindex`／`robots.txt` 臨時防護，尚無實際存取控制 |
 
 Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；TypeScript 以 Node 24、pnpm 11、Biome、strict TypeScript 與 Vitest 為基線。
@@ -81,23 +81,16 @@ Python 與 TypeScript profile 可分別啟用 PyPI／npm Trusted Publishing，�
 
 整份公版只用一個 SemVer：`fix(scope)` 升 patch、`feat(scope)` 升 minor、`!` 升 major。scope 可標 `ci`、`python`、`typescript` 或 `template`；只要任何已支援 profile 不相容，就視為整份公版的破壞性變更。
 
-release-please 用內建 `GITHUB_TOKEN` 自動開、更新 Release PR；合併後才建 tag 並發 GitHub Release。release 建立時，同一 workflow 只在 `release_created` 為真時取得 `actions: write`，並以 tag 明確 dispatch `release-template.yml`；一般 main push 不會重複發版，手動 `v*` tag 與 workflow dispatch 仍可使用。
+release-please 用內建 `GITHUB_TOKEN` 自動開、更新 Release PR；合併後先建立 draft 與 tag，同一 workflow 只在 `release_created` 為真時取得 `actions: write`，並以 tag 明確 dispatch `release-template.yml`。發布 workflow 會先完整驗證、透過 `pypi` environment 的 Trusted Publisher 發布 `csarc-repo-cli`，再附加 wheel、sdist、release-specific prompt 與 provenance，最後才發布並鎖定 immutable GitHub Release；任一步驟失敗都保留 draft。發布後會以 `gh release verify` 重新驗證 attestation。一般 main push 不會重複發版。
 
 ## 公版更新
 
-以下三條路徑都先從 release 清單選擇團隊核准的 tag，再解析並審查其完整 40 字元 commit SHA。範例使用 `v0.1.0`；請把查詢結果貼入 `<reviewed-full-commit-sha>`。
+以下三條路徑都使用核准的 GitHub Release。CLI 只接受 `Innoguard-Cyber-Arch/csarc-repo-template`（repository ID `1340899393`），並確認 Release 已發布、非 draft、非 prerelease、immutable、attestation 有效、tag 未在驗證途中移動且 commit signature 有效。通過後才顯示完整 40 字元 commit SHA、固定版本的安裝指南、設定、新增／覆寫／保留／人工合併清單與衝突風險。成功後寫入 `.csarc/provenance.json`；來源或 provenance 漂移一律停止。
 
 ### 建立新 repo
 
 ```bash
-gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template --limit 5
-gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/v0.1.0 --jq .sha
-uvx --from copier copier copy --trust \
-  --vcs-ref <reviewed-full-commit-sha> \
-  https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git \
-  ./my-project
-cd ./my-project
-./scripts/verify
+uvx --from csarc-repo-cli csarc init ./my-project
 ```
 
 ### 導入既有 repo
@@ -106,31 +99,71 @@ cd ./my-project
 
 ```bash
 git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --from copier copier copy --trust --overwrite \
-  --vcs-ref <reviewed-full-commit-sha> \
-  --data project_mode=existing \
-  --data coverage_mode=diff \
-  https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git .
-
-# For Python or mixed projects.
-uv lock
-# For TypeScript or mixed projects.
-pnpm install --lockfile-only --ignore-scripts
-DIFF_COVER_COMPARE_BRANCH=origin/main ./scripts/verify
+uvx --from csarc-repo-cli csarc adopt . --dry-run
+uvx --from csarc-repo-cli csarc adopt .
 ```
 
-只執行實際語言需要的 lockfile 指令；若衝突或缺少既有工具設定，先依生成後 README 的提示人工合併，不要刪除產品相依來迎合模板。
+`adopt` 要求乾淨 Git working tree，以 `pyproject.toml`／`package.json` 建議 profile，並預設保留 manifest、產品程式、測試、spec 與網站內容。有無法 deterministic 合併的檔案時會保留可審查差異並回傳非零，不會無提示全面覆寫。
 
 ### 更新已導入的 repo
 
 ```bash
 git switch -c chore/<issue-number>-update-repo-template
-uvx --from copier copier update --trust --vcs-ref <reviewed-full-commit-sha>
-./scripts/verify
-./scripts/apply-repository-settings.sh plan
+uvx --from csarc-repo-cli csarc update --check --json
+uvx --from csarc-repo-cli csarc update
 ```
 
-`docs/site-content.js` 是生成專案自行維護的網站內容；Copier 更新版型時不會覆寫它。
+`update` 讀取現有 answers、執行 Copier smart update，並對 conflict marker 或 `.rej` fail closed。`update --check --json` 目前已是否最新時回傳 0，有更新時回傳 1，執行或輸入錯誤回傳 2。成功寫檔後 CLI 自動執行 `./scripts/verify` 與 repository settings `plan`；它不會執行 `apply`、push 或開 PR。
+
+### Agent prompt
+
+固定版本的安裝契約是 [`docs/agent-install.md`](docs/agent-install.md)。下列 prompt 只傳遞意圖與信任輸入；安裝邏輯仍由 CLI 執行。`<resolved-full-commit-sha>` 必須由正式 GitHub Release 驗證取得，不能用 `main`、`dev` 或 prompt 自稱的 SHA 代替。
+
+新建：
+
+```text
+請在 ./my-project 建立新 repository 並導入 CSARC 公版。
+目標路徑：./my-project
+來源 repository：https://github.com/Innoguard-Cyber-Arch/csarc-repo-template
+核准版本：最新穩定版
+核准 commit：<resolved-full-commit-sha>
+安裝指南：https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/<resolved-full-commit-sha>/docs/agent-install.md
+請先用 csarc init --dry-run 從正式 GitHub Release 驗證 repository ID、immutable release、attestation、tag、commit signature 並解析完整 SHA；顯示 SHA 給我確認後，才讀取該 SHA 的安裝指南。摘要新增、覆寫、保留與人工合併檔案並等待確認；不要自行 apply GitHub settings、push 或建立 PR。
+```
+
+既有導入：
+
+```text
+請在目前工作目錄的既有 repository 導入 CSARC 公版。
+目標路徑：.
+來源 repository：https://github.com/Innoguard-Cyber-Arch/csarc-repo-template
+核准版本：最新穩定版
+核准 commit：<resolved-full-commit-sha>
+安裝指南：https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/<resolved-full-commit-sha>/docs/agent-install.md
+請先用 csarc adopt --dry-run 從正式 GitHub Release 驗證 repository ID、immutable release、attestation、tag、commit signature 並解析完整 SHA；顯示 SHA 給我確認後，才讀取該 SHA 的安裝指南。摘要新增、覆寫、保留與人工合併檔案並等待確認；不要自行 apply GitHub settings、push 或建立 PR。
+```
+
+更新：
+
+```text
+請更新目前已導入 CSARC 的 repository。
+目標路徑：.
+來源 repository：https://github.com/Innoguard-Cyber-Arch/csarc-repo-template
+核准版本：最新穩定版
+核准 commit：<resolved-full-commit-sha>
+安裝指南：https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/<resolved-full-commit-sha>/docs/agent-install.md
+請先用 csarc update --dry-run 驗證既有 provenance，並從正式 GitHub Release 驗證 repository ID、immutable release、attestation、tag、commit signature與完整 SHA；顯示 SHA 給我確認後，才讀取該 SHA 的安裝指南。摘要 smart diff 與衝突風險並等待確認；不要自行 apply GitHub settings、push 或建立 PR。
+```
+
+### Troubleshooting／進階 Copier
+
+只有本機開發可顯式使用 `--allow-unreleased`；它會顯示高風險警告並把 provenance 標為 `development-unreleased`，不得放進一般 prompt。第一個 `csarc-repo-cli` 尚未發布到核准 registry 時，可從已審查的 commit 執行，不用手動 clone：
+
+```bash
+uvx --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<full-commit-sha>' csarc --help
+```
+
+若要調整進階 Copier 答案，在 CLI 後重複加入 `--data KEY=VALUE`；若要固定特定正式版本，使用 `--to vX.Y.Z --expected-sha <full-commit-sha>`。舊 repo 沒有 provenance 時，先人工核對既有 answers，再以 `update --from-release <tag> --accept-legacy` 明確遷移，CLI 不會默認宣稱舊狀態已驗證。`docs/site-content.js` 是生成專案自行維護的網站內容；Copier 更新版型時不會覆寫它。
 
 ### 驗證邊界
 
