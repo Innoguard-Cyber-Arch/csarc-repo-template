@@ -16,6 +16,7 @@ paired_files=(
   .release-please-manifest.json
   .github/ISSUE_TEMPLATE/config.yml
   .github/ISSUE_TEMPLATE/work-item.yml
+  .github/workflows/governance-comment.yml
   .github/workflows/issue-triage.yml
   .github/workflows/pr-policy.yml
   .github/workflows/release-please.yml

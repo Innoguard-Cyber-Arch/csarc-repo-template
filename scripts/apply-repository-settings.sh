@@ -33,6 +33,7 @@ if [[ -z "$repo" ]]; then
   fi
 fi
 ruleset_payload="$repo_root/policies/rulesets.json"
+ruleset_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["name"])' "$ruleset_payload")"
 code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"
 
 if ! repo_context="$({
@@ -67,7 +68,11 @@ case "$account_plan" in
 esac
 
 print_ruleset_guidance() {
-  echo "- BLOCKED required governance: $default_branch is not protected; this private repository needs GitHub Team or public visibility before Rulesets can be enforced."
+  echo "- DEGRADED required governance: $default_branch is not protected on this private repository."
+  echo "- PRESERVED desired Ruleset: policies/rulesets.json remains ready for a supported plan or public repository."
+  echo "- API LIMIT: GitHub REST and GraphQL reject Ruleset creation and updates on this plan, even with enforcement disabled."
+  echo "- OPTIONAL: an administrator may preconfigure a disabled Ruleset in the GitHub web UI; this script can detect but cannot create it."
+  echo "  https://github.com/$repo/settings/rules"
   echo "- NEXT STEP keep it private: ask the owner to upgrade to $private_ruleset_plan."
   echo "  $billing_url"
   echo "- ALTERNATIVE only when public access is approved: change repository visibility."
@@ -77,12 +82,64 @@ print_ruleset_guidance() {
   echo "  GH_REPO=$repo ./scripts/apply-repository-settings.sh apply"
 }
 
-ruleset_available=true
+load_graphql_ruleset() {
+  local graphql_result graphql_state
+  if ! graphql_result="$(
+    gh api graphql \
+      -f query='query($owner: String!, $name: String!) {
+        repository(owner: $owner, name: $name) {
+          rulesets(first: 100) {
+            nodes { id name enforcement target }
+          }
+        }
+      }' \
+      -f owner="$owner" \
+      -f name="${repo#*/}" 2>&1
+  )"; then
+    graphql_ruleset_error="$graphql_result"
+    return 1
+  fi
+  if ! graphql_state="$(python3 - "$ruleset_name" "$graphql_result" <<'PY'
+import json
+import sys
+
+ruleset_name = sys.argv[1]
+repository = json.loads(sys.argv[2])["data"]["repository"]
+if repository is None:
+    raise SystemExit("Repository is unavailable through the GraphQL API.")
+ruleset = next(
+    (item for item in repository["rulesets"]["nodes"] if item["name"] == ruleset_name),
+    None,
+)
+print(
+    ruleset["id"] if ruleset else "-",
+    ruleset["enforcement"] if ruleset else "-",
+    ruleset["target"] if ruleset else "-",
+    sep="|",
+)
+PY
+  )"; then
+    graphql_ruleset_error="$graphql_state"
+    return 1
+  fi
+  IFS='|' read -r ruleset_node_id ruleset_enforcement ruleset_target \
+    <<<"$graphql_state"
+}
+
+ruleset_enforcement_available=true
+ruleset_inventory_available=true
 ruleset_skip_reason=""
+graphql_ruleset_error=""
+ruleset_node_id="-"
+ruleset_enforcement="-"
+ruleset_target="-"
 if ! ruleset_access="$(gh api "repos/$repo/rulesets" 2>&1)"; then
-  ruleset_available=false
+  ruleset_enforcement_available=false
   if [[ "$ruleset_access" == *"Upgrade to GitHub Pro or make this repository public"* ]]; then
-    ruleset_skip_reason="Private repositories on GitHub Free do not support Rulesets; use Team or above."
+    ruleset_skip_reason="Private repositories on GitHub Free do not enforce Rulesets; use Team or above."
+    if ! load_graphql_ruleset; then
+      ruleset_inventory_available=false
+    fi
   else
     echo "Cannot determine Ruleset capability for $repo."
     echo "$ruleset_access"
@@ -91,9 +148,18 @@ if ! ruleset_access="$(gh api "repos/$repo/rulesets" 2>&1)"; then
 fi
 
 if [[ "$mode" == "check" ]]; then
-  if [[ "$ruleset_available" != true ]]; then
+  if [[ "$ruleset_enforcement_available" != true ]]; then
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
       echo "::warning title=Repository governance degraded::Required branch protection is unavailable for this private repository; continuing without it."
+    if [[ "$ruleset_inventory_available" != true ]]; then
+      echo "Cannot inspect manually staged Rulesets: $graphql_ruleset_error"
+    elif [[ "$ruleset_node_id" == "-" ]]; then
+      echo "MISSING remote Ruleset: desired state is preserved in policies/rulesets.json."
+    elif [[ "$ruleset_target" != "BRANCH" ]]; then
+      echo "STALE manually staged Ruleset: $ruleset_name must target branches."
+    else
+      echo "STAGED manually configured Ruleset: $ruleset_name is $ruleset_enforcement but is not enforced on this plan."
+    fi
     print_ruleset_guidance
     echo "DEGRADED required governance: $ruleset_skip_reason The template must keep working on every GitHub plan and visibility, so this account-plan limitation does not fail closed; a capable plan with rules that do not match policy still does."
     exit 0
@@ -153,7 +219,7 @@ PY
   exit 0
 fi
 
-if [[ "$ruleset_available" == true ]]; then
+if [[ "$ruleset_enforcement_available" == true ]]; then
   if [[ ! "$code_owner" =~ ^@([^/]+)/([^/[:space:]]+)$ ]]; then
     echo "CODEOWNERS must use an existing GitHub team: @organization/team."
     exit 1
@@ -195,13 +261,20 @@ if [[ "$prune_labels" == true ]]; then
 else
   echo "- KEEP labels outside policy (default additive mode)"
 fi
-if [[ "$ruleset_available" == true ]]; then
-  echo "- APPLY policies/rulesets.json"
+if [[ "$ruleset_enforcement_available" == true ]]; then
+  echo "- APPLY policies/rulesets.json (enforced by GitHub)"
   echo "CODEOWNERS team: $code_owner"
-else
-  echo "- SKIP policies/rulesets.json: $ruleset_skip_reason"
+elif [[ "$ruleset_inventory_available" == true ]]; then
+  echo "- PRESERVE policies/rulesets.json locally (public APIs cannot create a Ruleset on this plan)"
+  if [[ "$ruleset_node_id" == "-" ]]; then
+    echo "- OPTIONAL MANUAL STAGING: configure a disabled Ruleset in the GitHub web UI"
+  else
+    echo "- DETECTED manually staged Ruleset: $ruleset_name ($ruleset_enforcement)"
+  fi
   print_ruleset_guidance
-  echo "- EXPLICIT DEGRADED MODE: apply --allow-unprotected continues without branch protection and records that state in command output."
+else
+  echo "- PRESERVE policies/rulesets.json locally (cannot inspect manually staged Rulesets: $graphql_ruleset_error)"
+  print_ruleset_guidance
 fi
 if [[ "$plan_label" == "GitHub Enterprise" ]]; then
   echo "- INFO Enterprise-wide identity, audit, network, and organization Rulesets are outside this repository script."
@@ -211,12 +284,6 @@ if [[ "$mode" == "plan" ]]; then
   echo "No changes applied. Re-run with 'apply' after review."
   exit 0
 fi
-if [[ "$ruleset_available" != true && "$allow_unprotected" != true ]]; then
-  echo "Refusing to apply incomplete governance without --allow-unprotected." >&2
-  echo "Upgrade the account plan or explicitly accept degraded mode." >&2
-  exit 1
-fi
-
 gh api --method PATCH "repos/$repo" --input "$repo_root/policies/repository.json" >/dev/null
 gh api --method PUT "repos/$repo/actions/permissions/workflow" \
   --input "$repo_root/policies/actions.json" >/dev/null
@@ -243,7 +310,7 @@ if [[ "$prune_labels" == true ]]; then
   done <<<"$existing_labels"
 fi
 
-if [[ "$ruleset_available" == true ]]; then
+if [[ "$ruleset_enforcement_available" == true ]]; then
   ruleset_id="$(
     uv run --no-project python -c \
       'import json,sys; print(next((item["id"] for item in json.load(sys.stdin) if item["name"] == "CSARC protected branches"), ""))' \
@@ -258,9 +325,9 @@ if [[ "$ruleset_available" == true ]]; then
   fi
 fi
 
-if [[ "$ruleset_available" == true ]]; then
-  GH_REPO="$repo" "$0" check
+GH_REPO="$repo" "$0" check
+if [[ "$ruleset_enforcement_available" == true ]]; then
   echo "Required repository settings applied, including branch protection."
 else
-  echo "DEGRADED repository settings applied without required branch protection because --allow-unprotected was explicitly provided."
+  echo "DEGRADED repository settings applied; desired Ruleset remains in policies/rulesets.json for later activation."
 fi
