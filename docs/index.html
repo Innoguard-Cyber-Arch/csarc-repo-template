@@ -827,6 +827,69 @@
     .dense-flow { margin-top: 8px !important; margin-bottom: 0; }
     .dense-flow .flow-step { padding: 8px 10px; }
 
+    .pipeline-map { display: grid; flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr) auto auto; gap: 12px; }
+    .pipeline-track { display: grid; min-height: 0; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 18px; }
+    .pipeline-stage {
+      position: relative;
+      min-width: 0;
+      padding: 15px 13px 12px;
+      border: 1px solid var(--line);
+      border-top: 7px solid var(--yellow);
+      background: #fffbea;
+    }
+    .pipeline-stage.best { border-top-color: var(--best); background: var(--best-soft); }
+    .pipeline-stage:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      z-index: 1;
+      right: -17px;
+      top: 46%;
+      color: var(--ink);
+      font-size: 22px;
+      font-weight: 950;
+    }
+    .pipeline-phase { display: block; margin-bottom: 9px; color: var(--muted); font-size: 17px; font-weight: 850; }
+    .pipeline-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+    .pipeline-tag {
+      display: inline-flex;
+      min-width: 30px;
+      min-height: 28px;
+      align-items: center;
+      justify-content: center;
+      padding: 3px 7px;
+      border: 1px solid #b9a700;
+      border-radius: 999px;
+      background: var(--yellow);
+      color: var(--ink);
+      font-size: 17px;
+      font-weight: 900;
+    }
+    .pipeline-tag.best { border-color: var(--best); background: var(--best-soft); color: #0b6540; }
+    .pipeline-stage h3 { font-size: 21px; }
+    .pipeline-stage p { margin-top: 7px; color: var(--muted); font-size: 17.5px; line-height: 1.28; }
+    .pipeline-loop {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 9px 14px;
+      border-left: 7px solid var(--yellow);
+      background: var(--soft);
+      font-size: 18px;
+      line-height: 1.25;
+    }
+    .pipeline-loop strong { white-space: nowrap; }
+    .pipeline-foundation { display: grid; grid-template-columns: 1.15fr repeat(4, minmax(0, 1fr)); gap: 9px; }
+    .pipeline-foundation-label,
+    .pipeline-foundation-card { padding: 10px 12px; border: 1px solid var(--line); background: white; }
+    .pipeline-foundation-label { border-left: 7px solid var(--ink); background: var(--ink); color: white; }
+    .pipeline-foundation-label strong { display: block; font-size: 20px; }
+    .pipeline-foundation-label span { display: block; margin-top: 5px; font-size: 17px; line-height: 1.22; }
+    .pipeline-foundation-card { border-top: 6px solid var(--yellow); }
+    .pipeline-foundation-card.best { border-top-color: var(--best); background: var(--best-soft); }
+    .pipeline-foundation-card h3 { display: flex; align-items: center; gap: 7px; font-size: 19px; }
+    .pipeline-foundation-card p { margin-top: 5px; color: var(--muted); font-size: 17px; line-height: 1.22; }
+
     .phase-line { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1vw; }
     .phase { padding: 14px; border-top: 6px solid #aaa; background: var(--soft); }
     .phase:first-child { border-top-color: var(--yellow); background: #fffbea; }
@@ -947,10 +1010,10 @@
     .section-divider .divider-copy strong { background: var(--yellow); white-space: nowrap; }
 
     /* The opening behaves like product documentation: what the template does, how to adopt it, and what it maintains. */
-    .capability-slide, .adoption-slide, .managed-files-slide,
+    .capability-slide, .adoption-slide, .pipeline-slide, .managed-files-slide,
     .decision-slide, .ecosystem-slide, .bridge-slide, .review-notes-slide { padding-left: 11.9%; }
-    .capability-slide, .adoption-slide, .managed-files-slide { padding-top: 3%; padding-right: 3.6%; padding-bottom: 3%; }
-    .capability-slide h1, .adoption-slide h2, .managed-files-slide h2 { font-size: clamp(30px, 2.2vw, 37px); }
+    .capability-slide, .adoption-slide, .pipeline-slide, .managed-files-slide { padding-top: 3%; padding-right: 3.6%; padding-bottom: 3%; }
+    .capability-slide h1, .adoption-slide h2, .pipeline-slide h2, .managed-files-slide h2 { font-size: clamp(30px, 2.2vw, 37px); }
     .capability-slide .package-hero { margin-bottom: 8px; padding-bottom: 9px; }
     .package-kicker {
       color: var(--muted);
@@ -1302,7 +1365,7 @@
 
     .journey-rail { left: 1.45%; width: 8.35%; }
     .journey-rail h3 { margin-top: 5px; font-size: 17.5px; white-space: nowrap; }
-    .journey-rail .journey-use { flex: 0 0 auto; grid-template-rows: repeat(2, 38px); }
+    .journey-rail .journey-use { flex: 0 0 auto; grid-template-rows: repeat(3, 36px); }
     .journey-rail .journey-main { flex: 0 0 auto; grid-template-rows: repeat(7, 38px); }
     .journey-rail .journey-support { flex: 0 0 auto; grid-template-rows: repeat(3, 38px); }
     .journey-rail .journey-item + .journey-item { margin-top: 0; }
@@ -1427,6 +1490,64 @@
         <p><strong>開始前必裝</strong>Git、GitHub CLI、uv；TypeScript／混合案另需 Node 24+、pnpm 11。純本機驗證不用 token；套用 GitHub 設定與端到端測試前才登入 <code>gh</code>。</p>
         <button class="setup-trigger" type="button" data-setup="mac" aria-expanded="false">macOS 安裝</button>
         <button class="setup-trigger" type="button" data-setup="windows" aria-expanded="false">Windows 安裝</button>
+      </div>
+    </section>
+
+    <section class="slide pipeline-slide" data-track="flow" aria-label="CI/CD 流程與十個治理步驟對照">
+      <header>
+        <h2>一張圖看懂：<span class="accent">程式怎麼從需求走到可交付版本</span></h2>
+        <p class="subtitle">CI 是 PR 上的自動檢查與回饋；CD 是合併後建立可追溯版本與成品。01–06 跟著工作走，07–10 在底層維持整套流程。</p>
+      </header>
+      <div class="pipeline-map">
+        <div class="pipeline-track" aria-label="日常開發與交付主流程">
+          <article class="pipeline-stage">
+            <span class="pipeline-phase">PLAN｜先決定要做什麼</span>
+            <div class="pipeline-tags"><span class="pipeline-tag">01</span></div>
+            <h3>定義工作</h3>
+            <p>用 Issue 說清楚問題、完成條件與驗證方式。</p>
+          </article>
+          <article class="pipeline-stage">
+            <span class="pipeline-phase">CODE｜在短分支完成</span>
+            <div class="pipeline-tags"><span class="pipeline-tag">02</span></div>
+            <h3>實作與測試</h3>
+            <p>人或 AI 依 AGENTS.md 修改，先在本機驗證。</p>
+          </article>
+          <article class="pipeline-stage">
+            <span class="pipeline-phase">PR｜把變更交給團隊看</span>
+            <div class="pipeline-tags"><span class="pipeline-tag">04</span></div>
+            <h3>提出 PR</h3>
+            <p>連回 Issue，說明目的、測試與回退方式。</p>
+          </article>
+          <article class="pipeline-stage">
+            <span class="pipeline-phase">CI｜機器先找明確錯誤</span>
+            <div class="pipeline-tags"><span class="pipeline-tag">03</span><span class="pipeline-tag">05</span></div>
+            <h3>自動檢查</h3>
+            <p>跑格式、型別、測試、打包與依賴風險檢查。</p>
+          </article>
+          <article class="pipeline-stage">
+            <span class="pipeline-phase">REVIEW｜人判斷是否合理</span>
+            <div class="pipeline-tags"><span class="pipeline-tag">04</span></div>
+            <h3>審查與合併</h3>
+            <p>修到檢查通過、同事核准，再進 main 或 dev。</p>
+          </article>
+          <article class="pipeline-stage best">
+            <span class="pipeline-phase">CD｜交付同一份成品</span>
+            <div class="pipeline-tags"><span class="pipeline-tag best">06</span></div>
+            <h3>版本與交付</h3>
+            <p>建立 SemVer、artifact、checksum 與 SBOM；部署另訂。</p>
+          </article>
+        </div>
+        <div class="pipeline-loop" aria-label="CI 回饋迴圈">
+          <strong>↶ 檢查失敗：回到 02 修正，再更新同一張 PR</strong>
+          <span>交付後的新問題回到 01，成為下一張有邊界的 Issue。</span>
+        </div>
+        <div class="pipeline-foundation" aria-label="支撐整體流程的平台能力">
+          <div class="pipeline-foundation-label"><strong>一直支撐全流程</strong><span>不是每次手動執行，而是公版持續維護的基礎設施。</span></div>
+          <article class="pipeline-foundation-card"><h3><span class="pipeline-tag">07</span>規則治理</h3><p>權限、分支與合併規則一致。</p></article>
+          <article class="pipeline-foundation-card"><h3><span class="pipeline-tag">08</span>模板升級</h3><p>用 Copier 把政策更新帶回 repo。</p></article>
+          <article class="pipeline-foundation-card"><h3><span class="pipeline-tag">09</span>內部網站</h3><p>讓做法、限制與決策容易查找。</p></article>
+          <article class="pipeline-foundation-card best"><h3><span class="pipeline-tag best">10</span>導入層級</h3><p>基本先做；條件成熟再加進階能力。</p></article>
+        </div>
       </div>
     </section>
 
@@ -1682,7 +1803,7 @@
 
   <nav class="controls" aria-label="簡報控制">
     <button id="previous" type="button" aria-label="上一頁">←</button>
-    <span class="counter" id="counter">1 / 15</span>
+    <span class="counter" id="counter">1 / 16</span>
     <button id="next" type="button" aria-label="下一頁">→</button>
   </nav>
   <nav class="view-controls" aria-label="畫面縮放控制">
@@ -2408,12 +2529,14 @@ gh auth status`
     const platformOrder = ['template-release', 'docs-site', 'rollout'];
     const deckRoot = document.querySelector('.deck');
     const capabilitySlide = document.querySelector('.capability-slide');
+    const flowSlide = document.querySelector('.pipeline-slide');
     const filesSlide = document.querySelector('.managed-files-slide');
     const bridgeSlide = document.querySelector('.bridge-slide');
     const reviewNotesSlides = [...document.querySelectorAll('.review-notes-slide')];
     const ecosystemSlide = document.querySelector('.ecosystem-slide');
     deckRoot.replaceChildren(
       capabilitySlide,
+      flowSlide,
       filesSlide,
       ...lifecycleOrder.map(track => document.querySelector(`[data-track="${track}"]`)),
       ...platformOrder.map(track => document.querySelector(`[data-track="${track}"]`)),
@@ -2432,6 +2555,7 @@ gh auth status`
     const reviewNotesPage = allSlidesInOrder.indexOf(reviewNotesSlides[0]) + 1;
     const journey = [
       { id: 'capability', label: '能力／導入', tier: 'priority', group: 'use' },
+      { id: 'flow', label: 'CI/CD 流程', tier: 'priority', group: 'use' },
       { id: 'files', label: '檔案地圖', tier: 'priority', group: 'use' },
       { id: 'method', code: '01', label: '工作定義', tier: 'priority', group: 'main' },
       { id: 'agents', code: '02', label: 'AI 契約／實作', tier: 'priority', group: 'main' },
