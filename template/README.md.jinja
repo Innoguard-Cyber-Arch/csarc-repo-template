@@ -53,6 +53,8 @@ git push -u origin dev
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹；尚未 `git init` 的新專案仍可掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 
+{% if enable_codeql | default(false) %}此專案已產生 CodeQL workflow，只分析 {{ "Python 與 TypeScript" if language == "python-typescript" else ("Python" if language == "python" else "TypeScript") }}；它補足跨函式資料流等 SAST 檢查，但仍可能有誤報與漏報，結果需人工 triage。{% else %}此專案未啟用 SAST。Ruff／TypeScript lint 與 OSV 分別處理程式品質和已知相依漏洞，不能替代 SAST；public repo 可重新產生並啟用 `enable_codeql`，private／internal repo 則需先確認 GitHub Code Security 授權，或由專案選用核准的替代工具。{% endif %}
+
 `./scripts/verify-template.sh`、root 專用升版／同步工具與 template release workflows 只屬於中央模板 repo，不會下發到本專案；本專案的本機與 CI 驗證入口都是 `./scripts/verify`。
 
 {% if language == "ci" %}目前驗證 spec、README、JSON、workflow 與機密字串；沒有語言模組，因此不執行語言測試或打包。

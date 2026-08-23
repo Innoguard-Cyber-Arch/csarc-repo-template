@@ -1850,7 +1850,7 @@
           <tr><td>Release Please 線上執行＋<a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer"><code>GITHUB_TOKEN</code> 觸發規則</a></td><td><span class="tier-chip warning">尚未解決</span></td><td><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32645380139" target="_blank" rel="noreferrer">近期 run</a> 因 repo 禁止 Actions 建 PR 而失敗；即使建立 tag，預設 token 也不會再觸發成品 workflow。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/64" target="_blank" rel="noreferrer">#64</a>、<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/98" target="_blank" rel="noreferrer">#98</a></td></tr>
           <tr><td>OSV reusable workflow＋<a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows" target="_blank" rel="noreferrer">權限傳遞</a></td><td><span class="tier-chip best">已修正</span></td><td>呼叫端權限只能維持或縮小，不能替被呼叫 workflow 補權限；<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92" target="_blank" rel="noreferrer">PR #92</a> 補回必要權限後，<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32646097257" target="_blank" rel="noreferrer">main 線上 run</a> 已成功。</td></tr>
           <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a>＋<a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip priority">產生端已設計</span></td><td>public repo 的生成設定已預設啟用 provenance／SBOM attestation；只有消費或部署端實際驗證才產生防護效果，目前僅提供人工驗證指令。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/104" target="_blank" rel="noreferrer">#104</a></td></tr>
-          <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> 安全基線</td><td><span class="tier-chip priority">仍有缺口</span></td><td>已有 pinned Actions、OSV、<code>SECURITY.md</code>，以及完整 Git 歷史與工作樹 secret scan；仍缺方案感知的 SAST。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/103" target="_blank" rel="noreferrer">#103</a></td></tr>
+          <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> 安全基線</td><td><span class="tier-chip optional">方案感知</span></td><td>已有 pinned Actions、OSV、<code>SECURITY.md</code>、完整 Git 歷史與工作樹 secret scan；public repo 預設啟用 CodeQL，private／internal 則依 GitHub Code Security 授權明確 opt-in。</td></tr>
           <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip warning">尚未證明</span></td><td>目前只驗證合成 fixture；尚無下游 repo 證明建立、客製化、Copier update 與衝突處理。完成一個 pilot 前應視為 alpha／試行。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a></td></tr>
         </tbody>
       </table>
@@ -2369,6 +2369,20 @@ uv pip compile pyproject.toml --group dev \
     - cron: "17 3 * * 1"`
         },
         {
+          title: '方案感知的 CodeQL SAST，只分析實際語言',
+          goal: 'Ruff／TypeScript lint 找程式品質問題，OSV 找已知相依漏洞；CodeQL 另補跨函式資料流與安全查詢，三者不互相冒充。',
+          summary: 'Python／TypeScript public repo 預設產生 CodeQL；private／internal 只有確認 GitHub Code Security 授權後才 opt-in，否則明列 SAST 未涵蓋並由產品選核准替代工具。CI-only 不產生空 job。CodeQL 仍可能誤報或漏報，結果需人工 triage。',
+          file: 'copier.yml＋.github/workflows/codeql.yml',
+          code: `enable_codeql: true
+
+permissions:
+  contents: read
+  security-events: write
+
+matrix:
+  language: ["python", "javascript-typescript"]`
+        },
+        {
           title: 'tag 發布時建立交付成品、SHA-256 與 CycloneDX SBOM',
           goal: 'anchore/sbom-action 以 Syft 盤點內容；來源證明依專案可見度決定預設值。',
           summary: '依 profile 打包並計算 SHA-256；先把真正成品解壓到隔離目錄，再由 Syft 產生 CycloneDX。`components` 為空就讓 workflow 失敗；tag、commit 與 workflow run metadata 連同成品附加到 GitHub Release。Copier 的 `project_visibility` 選 public 時，`enable_release_attestations` 預設開啟，`publish-evidence` job 自動取得 `id-token: write`／`attestations: write` 並執行兩次 `actions/attest`；private／internal 維持現行明確 opt-in、預設關閉。',
@@ -2560,6 +2574,8 @@ python_min_version: "3.12"  # Used only in minimum mode
 coverage_mode: global  # global | diff
 coverage_threshold: 80
 enable_precommit: false
+project_visibility: private  # public defaults CodeQL on
+enable_codeql: false         # private/internal require GitHub Code Security
 use_reusable_workflow: false
 
 _skip_if_exists:

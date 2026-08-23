@@ -1,0 +1,35 @@
+{% set has_python = language in ["python", "python-typescript"] -%}
+{% set has_typescript = language in ["typescript", "python-typescript"] -%}
+name: CodeQL
+
+on:
+  pull_request:
+    branches: [{{ branch_strategy }}]
+  push:
+    branches: [{{ branch_strategy }}]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze (${{ "${{ matrix.language }}" }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [{% if has_python %}"python"{% endif %}{% if has_python and has_typescript %}, {% endif %}{% if has_typescript %}"javascript-typescript"{% endif %}]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
+        with:
+          languages: ${{ "${{ matrix.language }}" }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4

@@ -687,6 +687,9 @@ done
 grep -q 'language: python' "$fixture_root/default-project/.copier-answers.yml"
 grep -q 'project_visibility: private' \
   "$fixture_root/default-project/.copier-answers.yml"
+grep -q 'enable_codeql: false' \
+  "$fixture_root/default-project/.copier-answers.yml"
+test ! -f "$fixture_root/default-project/.github/workflows/codeql.yml"
 grep -q '"language_profile": "python"' \
   "$fixture_root/default-project/.csarc/profile.json"
 grep -q '"branch_strategy": "main"' \
@@ -724,6 +727,15 @@ grep -q 'project_visibility: public' \
   "$fixture_root/public-visibility-project/.copier-answers.yml"
 grep -q 'enable_release_attestations: true' \
   "$fixture_root/public-visibility-project/.copier-answers.yml"
+grep -q 'enable_codeql: true' \
+  "$fixture_root/public-visibility-project/.copier-answers.yml"
+test -f "$fixture_root/public-visibility-project/.github/workflows/codeql.yml"
+grep -q 'language: \["python"\]' \
+  "$fixture_root/public-visibility-project/.github/workflows/codeql.yml"
+grep -q 'security-events: write' \
+  "$fixture_root/public-visibility-project/.github/workflows/codeql.yml"
+grep -q 'github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827' \
+  "$fixture_root/public-visibility-project/.github/workflows/codeql.yml"
 test "$(grep -c 'actions/attest@' \
   "$fixture_root/public-visibility-project/.github/workflows/release.yml")" -eq 2
 grep -q 'attestations: write' \
@@ -742,6 +754,9 @@ grep -q 'project_visibility: internal' \
   "$fixture_root/internal-visibility-project/.copier-answers.yml"
 grep -q 'enable_release_attestations: false' \
   "$fixture_root/internal-visibility-project/.copier-answers.yml"
+grep -q 'enable_codeql: false' \
+  "$fixture_root/internal-visibility-project/.copier-answers.yml"
+test ! -f "$fixture_root/internal-visibility-project/.github/workflows/codeql.yml"
 if grep -q 'actions/attest@' \
   "$fixture_root/internal-visibility-project/.github/workflows/release.yml"; then
   echo "Internal projects must keep release attestations opt-in by default."
@@ -1212,6 +1227,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data enable_precommit=true \
   --data enable_template_update_notifications=true \
   --data enable_governance_drift_check=true \
+  --data enable_codeql=true \
   --data enable_release_attestations=true \
   --data enable_pypi_publishing=true \
   --data pypi_environment=pypi-release \
@@ -1230,6 +1246,9 @@ grep -q '^### 補充$' \
 grep -q 'CSARC_TEMPLATE_READ_TOKEN' \
   "$fixture_root/all-features-project/.github/workflows/template-update.yml"
 test -f "$fixture_root/all-features-project/.github/workflows/governance-drift.yml"
+test -f "$fixture_root/all-features-project/.github/workflows/codeql.yml"
+grep -q 'language: \["python", "javascript-typescript"\]' \
+  "$fixture_root/all-features-project/.github/workflows/codeql.yml"
 test -x "$fixture_root/all-features-project/scripts/check-governance-drift"
 grep -q 'schedule:' \
   "$fixture_root/all-features-project/.github/workflows/governance-drift.yml"
