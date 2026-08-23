@@ -91,6 +91,43 @@ bash -n scripts/validate-issue-title
 bash -n template/scripts/validate-issue-title
 ./scripts/test-issue-triage
 
+# The live probe must preserve valid run JSON and emit reusable evidence.
+live_probe_fixture="$fixture_root/live-probe"
+mkdir -p "$live_probe_fixture/bin"
+cat > "$live_probe_fixture/bin/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "$1 $2" in
+  "run list")
+    if [[ "$*" == *"--limit 1"* ]]; then
+      printf '40\n'
+    else
+      printf '41\n'
+    fi
+    ;;
+  "workflow run" | "run watch") ;;
+  "run view")
+    printf '%s\n' \
+      '{"conclusion":"success","url":"https://example.invalid/actions/runs/41"}'
+    ;;
+  *)
+    echo "Unexpected gh command: $*" >&2
+    exit 2
+    ;;
+esac
+SH
+chmod +x "$live_probe_fixture/bin/gh"
+PATH="$live_probe_fixture/bin:$PATH" \
+  GITHUB_REPOSITORY="acme/project" \
+  CSARC_LIVE_TIMEOUT_SECONDS=1 \
+  "$repo_root/scripts/run-live-workflow-probe" \
+  "OSV" "osv.yml" "main" "$live_probe_fixture/evidence.json" \
+  "reusable workflow permissions"
+jq -e \
+  '.status == "passed" and .conclusion == "success" and .run_id == 41' \
+  "$live_probe_fixture/evidence.json" >/dev/null
+
 # Repository settings must follow the account plan and actual API capability.
 github_plan_fixture="$fixture_root/github-plan"
 mkdir -p "$github_plan_fixture/bin"
