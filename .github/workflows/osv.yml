@@ -1,6 +1,7 @@
 name: OSV
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [main]
   merge_group:
@@ -33,7 +34,7 @@ jobs:
       fail-on-vuln: true
   scan-scheduled:
     name: scan-scheduled
-    if: ${{ github.event_name == 'push' || github.event_name == 'schedule' }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     permissions:
       actions: read
       contents: read
