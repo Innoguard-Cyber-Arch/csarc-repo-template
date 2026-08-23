@@ -142,9 +142,3 @@ workflow_ref:
   default: ""
   when: "{{ use_reusable_workflow }}"
   validator: "{% if workflow_ref | length != 40 %}Use a full 40-character commit SHA.{% endif %}"
-
-enable_attestations:
-  type: bool
-  help: Enable GitHub artifact attestations; private repositories require GitHub Enterprise Cloud
-  default: false
-  when: "{{ language != 'ci' }}"

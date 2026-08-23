@@ -1619,7 +1619,7 @@
         <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches、必要審查、team reviewers、CODEOWNERS 與必要檢查。</p><ul><li>需先建立真實 CODEOWNERS team</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
         <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
       </div>
-      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性與 Ruleset API；Free private 仍可套基本設定，Team／Enterprise 才加 Ruleset。Enterprise 的身分、網路與稽核政策需另經組織層審查；Code Security／Secret Protection 另購，不因方案名稱自動開啟。</span></aside>
+      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性與 Ruleset API；Free private 仍可套基本設定，但部署者必須請 owner 升級至 Team，或只在核准公開後改為 public。確認 CODEOWNERS team 存在並重跑 <code>plan</code>，看到 Ruleset 會套用後才執行 <code>apply</code>。Enterprise 的身分、網路與稽核政策需另經組織層審查；Code Security／Secret Protection 另購，不因方案名稱自動開啟。</span></aside>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>按能力套用：</strong><code>scripts/apply-repository-settings.sh apply</code></li></ul></aside>
       <p class="reference">Ref. <a href="https://docs.github.com/en/get-started/learning-about-github/githubs-plans" target="_blank" rel="noreferrer">GitHub plans</a>；<a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets" target="_blank" rel="noreferrer">About rulesets</a>. Accessed August 21, 2026.</p>
     </section>
@@ -1765,7 +1765,7 @@
           <tr><td>p.5</td><td>版本控制</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>是否使用 dev，取決於是否有 dev 環境</summary><div class="bridge-popover"><p><strong>五月版｜</strong>保留平行分支，但不把長期 <code>dev</code> 分支當成所有專案的預設。</p><p><strong>本次判斷｜</strong>沒有共用測試環境就從 <code>main</code> 開短分支並 PR 回 main；有長期 dev 環境才 PR 回 <code>dev</code>，再升版到 main。</p><p><strong>落地方式｜</strong>Copier 的 <code>branch_strategy</code> 會同步調整 CI、Dependabot、Ruleset、AGENTS 與 README；兩種模式都禁止直接推送。</p></div></details></td></tr>
           <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>Issue、編號分支與 PR 形成固定鏈</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是保護分支的唯一入口，方向保留；三層審查改成依風險增加審查者。</p><p><strong>本次判斷｜</strong>一般 PR 要有同編號 Issue、CI 與一位同事；敏感檔案再由指定負責人核准，高風險架構變更另附決策紀錄。</p><p><strong>落地方式｜</strong>分支固定 <code>type/123-short-slug</code>，PR 內文固定 <code>Closes #123</code>；依賴與版本自動化是免 Issue 的明列例外。</p></div></details></td></tr>
           <tr><td>p.7</td><td>CI 自動化管線</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>本機與 CI 共用一個驗證入口</summary><div class="bridge-popover"><p><strong>五月版｜</strong>自動觸發、測試、格式與靜態錯誤檢查全部保留。</p><p><strong>本次判斷｜</strong><code>ci.yml</code> 依宣告執行 Python、TypeScript 或兩者；需要中央控管時才用完整 SHA 呼叫 reusable workflow。</p><p><strong>落地方式｜</strong>CI、PR 標題、OSV 與 zizmor 已能執行；目前先當檢查結果，private repo 升到 GitHub Team、建立 CODEOWNERS team 並套用 Ruleset 後，紅燈才成為不可繞過門禁。</p></div></details></td></tr>
-          <tr><td>p.8</td><td>CD 專案管理</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>目前是持續交付；部署仍需專案目標</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本預設 DEV → STAGING → Canary → PROD；本次不要求每個專案照搬四層。</p><p><strong>本次判斷｜</strong>目前 tag 觸發 release，建立可追溯交付成品；它不是 CI 綠燈後自動部署。STAGING 與 Canary 要有驗證目的、流量與健康門檻才建立。</p><p><strong>落地方式｜</strong><code>release.yml</code> 依 profile 產生 wheel、npm tarball 或兩者，並附 SHA-256、CycloneDX SBOM 與可選來源證明。</p></div></details></td></tr>
+          <tr><td>p.8</td><td>CD 專案管理</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>目前是持續交付；部署仍需專案目標</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本預設 DEV → STAGING → Canary → PROD；本次不要求每個專案照搬四層。</p><p><strong>本次判斷｜</strong>目前 tag 觸發 release，建立可追溯交付成品；它不是 CI 綠燈後自動部署。STAGING 與 Canary 要有驗證目的、流量與健康門檻才建立。</p><p><strong>落地方式｜</strong><code>release.yml</code> 依 profile 產生 wheel、npm tarball 或兩者，並附 SHA-256 與 CycloneDX SBOM；來源證明待遠端能力確認後再導入。</p></div></details></td></tr>
           <tr><td>p.9</td><td>可觀測性</td><td><span class="bridge-status defer">第二階段</span></td><td><details class="bridge-detail"><summary>只有上線服務才做監控和值班</summary><div class="bridge-popover"><p><strong>五月版｜</strong>操作手冊、日誌、指標、追蹤、復原與值班流程保留為第二階段。</p><p><strong>本次判斷｜</strong>只對持續運行的服務導入；先依使用的雲端、環境與負責人選工具，不先綁定 Datadog 或 PagerDuty。</p><p><strong>落地方式｜</strong>測試資料另外管理成不含個資、可建立、可清除的範例，不把測資管理混成線上監控。</p></div></details></td></tr>
           <tr><td>p.10</td><td>Copilot → Agent</td><td><span class="bridge-status defer">分階段</span></td><td><details class="bridge-detail"><summary>先受控 AI 協作；成熟後再自動重試</summary><div class="bridge-popover"><p><strong>五月版｜</strong>鼓勵 AI 從補完程式進步到能執行完整任務，方向保留，但不把工程師縮減成只會下提示詞。</p><p><strong>本次判斷｜</strong>第一階段讓 Agent 依清楚工作單研究、提計畫、修改、驗證並開 PR；<code>AGENTS.md</code> 與共同驗證命令限制工作方式。</p><p><strong>落地方式｜</strong><code>actions.json</code> 設定 Actions 預設唯讀且不能核准 PR，Ruleset 要求人類核准；目前沒有 AI workflow，因此沒有額外 secret 或合併權限。</p></div></details></td></tr>
           <tr><td>p.11</td><td>AI 初審</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail"><summary>固定工具負責判定；AI 只補充建議</summary><div class="bridge-popover"><p><strong>五月版｜</strong>AI 初審保留，但程式碼格式與常見錯誤改由 formatter、linter 與靜態檢查穩定執行。</p><p><strong>本次判斷｜</strong>AI 審查只補充情境性錯誤、測試缺口、風險摘要與修正建議，不能當成通過證明。</p><p><strong>落地方式｜</strong>CI、同事審查與指定負責人才有合併決定權；AI 沒有核准、合併或讀取密鑰的權限。</p></div></details></td></tr>
@@ -1931,9 +1931,6 @@ python_min_version:
   when: minimum
 use_reusable_workflow:
   type: bool
-  default: false
-enable_attestations:
-  type: bool
   default: false`
         },
         {
@@ -1975,9 +1972,11 @@ compositions:
         },
         {
           title: '既有 repo 在短分支同步審查過的模板內容',
-          goal: 'Copier 保留來源與答案；完整 SHA 決定實際套用內容。',
+          goal: 'Copier 保留來源與答案；先從核准 release tag 查出 40 字元 SHA，再決定實際套用內容。',
           file: '.copier-answers.yml',
-          code: `git switch -c chore/update-repo-template
+          code: `gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template --limit 5
+gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/v0.1.0 --jq .sha
+git switch -c chore/update-repo-template
 uvx --from copier copier update --trust \
   --vcs-ref <reviewed-full-commit-sha>
 ./scripts/verify`
@@ -2257,8 +2256,8 @@ uv pip compile pyproject.toml --group dev \
         },
         {
           title: 'tag 發布時建立交付成品、SHA-256 與 CycloneDX SBOM',
-          goal: 'anchore/sbom-action 以 Syft 盤點內容；attestation 由 Copier 選項決定。',
-          summary: '依 profile 打包並計算 SHA-256；先把真正成品解壓到隔離目錄，再由 Syft 產生 CycloneDX。`components` 為空就讓 workflow 失敗。',
+          goal: 'anchore/sbom-action 以 Syft 盤點內容；來源證明要等遠端 repo 能力可確認後再導入。',
+          summary: '依 profile 打包並計算 SHA-256；先把真正成品解壓到隔離目錄，再由 Syft 產生 CycloneDX。`components` 為空就讓 workflow 失敗；目前不產生 attestation job。',
           file: '.github/workflows/release.yml',
           code: `- run: uv build               # Python
 - run: pnpm run build && pnpm pack --pack-destination dist # TypeScript
@@ -2396,7 +2395,6 @@ python_min_version: "3.12"  # Used only in minimum mode
 coverage_mode: global  # global | diff
 coverage_threshold: 80
 enable_precommit: false
-enable_attestations: false
 use_reusable_workflow: false
 
 _skip_if_exists:
@@ -2437,12 +2435,12 @@ CSARC_VERSION_BOT_PRIVATE_KEY`
         {
           title: '四種 profile 與 Copier 更新都要真的執行',
           goal: 'beta 是公版 profile 的成熟階段，不是 Python 或 TypeScript 版本字串。',
-          summary: '驗證 CI/CD-only、三種語言組合、global／diff coverage、reusable workflow、attestation 與 update；更新時保留產品程式。',
+          summary: '驗證 CI/CD-only、三種語言組合、global／diff coverage、reusable workflow 與 update；更新時保留產品程式。',
           file: 'scripts/verify-template.sh＋profiles/catalog.yaml',
           code: `./scripts/verify-template.sh
 
 # Covers global coverage, diff coverage, optional features,
-# reusable workflow, attestations, and copier update.
+# reusable workflow and copier update.
 
 ci: {stage: beta, profiles: []}
 python: {stage: beta}
@@ -2457,9 +2455,12 @@ python_typescript: {stage: beta}`
     const setupExamples = {
       new: {
         title: '建立新 repo',
-        goal: 'Copier 會詢問語言組合與分支模式；遠端 repo 建立後，再由設定腳本查方案與實際 API 能力。完整 commit SHA 必須先經團隊審查。',
+        goal: 'Copier 會詢問語言組合與分支模式；先列出核准版本並解析成完整 commit SHA，遠端 repo 建立後才查方案與 API 能力。',
         location: 'Terminal',
-        code: `uvx --from copier copier copy --trust \\
+        code: `gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template --limit 5
+gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/v0.1.0 --jq .sha
+
+uvx --from copier copier copy --trust \\
   --vcs-ref <reviewed-full-commit-sha> \\
   https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git \\
   ./my-project
@@ -2468,6 +2469,7 @@ cd ./my-project
 
 # Push the repository, authenticate gh, then inspect the deployment plan.
 ./scripts/apply-repository-settings.sh plan
+# Without a Git remote, use: GH_REPO=owner/repo ./scripts/apply-repository-settings.sh plan
 
 # 建立遠端 repo 後先開 Issue，再從 main 或 dev 開編號分支。`
       },
@@ -2475,7 +2477,9 @@ cd ./my-project
         title: '把公版導入既有 repo',
         goal: '先開分支並宣告既有專案模式；公版保留原本 manifest，再由人合併工具設定。diff coverage 門檻仍是 80%。',
         location: '既有 repo 根目錄',
-        code: `gh issue create --template work-item.yml
+        code: `gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template --limit 5
+gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/v0.1.0 --jq .sha
+gh issue create --template work-item.yml
 git switch -c chore/<issue-number>-adopt-csarc-template
 uvx --from copier copier copy --trust --overwrite \\
   --vcs-ref <reviewed-full-commit-sha> \\
@@ -2491,7 +2495,9 @@ uvx --from copier copier copy --trust --overwrite \\
         title: '更新已使用公版的 repo',
         goal: 'Copier 讀取 .copier-answers.yml，只顯示新版差異；完成後仍以 PR 審查。',
         location: '專案 repo 根目錄',
-        code: `gh issue create --template work-item.yml
+        code: `gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template --limit 5
+gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/v0.1.0 --jq .sha
+gh issue create --template work-item.yml
 git switch -c chore/<issue-number>-update-repo-template
 uvx --from copier copier update --trust \\
   --vcs-ref <reviewed-full-commit-sha>

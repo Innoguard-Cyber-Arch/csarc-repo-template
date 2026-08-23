@@ -60,6 +60,10 @@ if [[ "$1" == "label" ]]; then
   printf '%s\n' "$*" >> "$MOCK_GH_LOG"
   exit 0
 fi
+if [[ "$1" == "repo" && "$2" == "view" ]]; then
+  echo "no git remotes found" >&2
+  exit 1
+fi
 if [[ "$1" != "api" ]]; then
   echo "Unexpected gh command: $*" >&2
   exit 2
@@ -72,6 +76,10 @@ case "$2" in
     printf '%s\n' "$MOCK_GITHUB_PLAN"
     ;;
   repos/acme/project/rulesets)
+    if [[ -n "${MOCK_RULESET_ERROR:-}" ]]; then
+      echo "$MOCK_RULESET_ERROR" >&2
+      exit 1
+    fi
     if [[ "$MOCK_GITHUB_PLAN" == "free" && "$MOCK_GITHUB_VISIBILITY" != "public" ]]; then
       echo "Upgrade to GitHub Pro or make this repository public to enable this feature" >&2
       exit 1
@@ -92,20 +100,47 @@ chmod +x "$github_plan_fixture/bin/gh"
 run_settings_fixture() {
   local plan="$1"
   local mode="${2:-plan}"
+  local ruleset_error="${3:-}"
   local call_log="$github_plan_fixture/$plan-$mode.log"
   : > "$call_log"
   PATH="$github_plan_fixture/bin:$PATH" \
     GH_REPO="acme/project" \
     MOCK_GITHUB_PLAN="$plan" \
     MOCK_GITHUB_VISIBILITY="private" \
+    MOCK_RULESET_ERROR="$ruleset_error" \
     MOCK_GH_LOG="$call_log" \
     ./scripts/apply-repository-settings.sh "$mode"
 }
+
+if no_remote="$({
+  cd "$github_plan_fixture"
+  env -u GH_REPO PATH="$github_plan_fixture/bin:$PATH" \
+    MOCK_GH_LOG="$github_plan_fixture/no-remote.log" \
+    "$repo_root/scripts/apply-repository-settings.sh" plan
+} 2>&1)"; then
+  echo "Repository settings must stop when no Git remote is available."
+  exit 1
+fi
+grep -q 'Run inside a Git repository with a GitHub remote, or set GH_REPO=owner/repo.' \
+  <<<"$no_remote"
+
+if unknown_ruleset="$(run_settings_fixture team plan "403 service unavailable" 2>&1)"; then
+  echo "Unknown Ruleset API errors must stop repository settings."
+  exit 1
+fi
+grep -q 'Cannot determine Ruleset capability' <<<"$unknown_ruleset"
+grep -q '403 service unavailable' <<<"$unknown_ruleset"
 
 free_plan="$(run_settings_fixture free)"
 grep -q 'Account plan: GitHub Free' <<<"$free_plan"
 grep -q 'SKIP policies/rulesets.json' <<<"$free_plan"
 grep -q 'WARNING main is not protected' <<<"$free_plan"
+grep -q 'ask the owner to upgrade to GitHub Team or above' \
+  <<<"$free_plan"
+grep -q 'https://github.com/organizations/acme/settings/billing' <<<"$free_plan"
+grep -q 'ALTERNATIVE only when public access is approved' <<<"$free_plan"
+grep -q 'GH_REPO=acme/project ./scripts/apply-repository-settings.sh apply' \
+  <<<"$free_plan"
 team_plan="$(run_settings_fixture team)"
 grep -q 'Account plan: GitHub Team' <<<"$team_plan"
 grep -q 'APPLY policies/rulesets.json' <<<"$team_plan"
@@ -683,7 +718,7 @@ if (
 fi
 rm "$fixture_root/typescript-project/typescript/src/invalid-policy-probe.ts"
 
-# Combined project: reusable CI, attestations, and local pre-commit support.
+# Combined project: reusable CI and local pre-commit support.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data project_name="All Features Test" \
   --data project_slug="all-features-test" \
@@ -692,7 +727,6 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   --data use_reusable_workflow=true \
   --data workflow_ref=1111111111111111111111111111111111111111 \
-  --data enable_attestations=true \
   --data enable_precommit=true \
   "$repo_root" "$fixture_root/all-features-project"
 prime_gitleaks_cache "$fixture_root/all-features-project"
@@ -702,8 +736,11 @@ grep -q 'reusable-ci.yml@1111111111111111111111111111111111111111' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
 grep -q 'language-profile: "python-typescript"' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
-grep -q 'uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6' \
-  "$fixture_root/all-features-project/.github/workflows/release.yml"
+if grep -q 'actions/attest' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"; then
+  echo "Generated releases must not enable attestations before remote capability is verified."
+  exit 1
+fi
 grep -q '"context": "verify / verify"' \
   "$fixture_root/all-features-project/policies/rulesets.json"
 grep -q '"context": "scan-pr / osv-scan"' \

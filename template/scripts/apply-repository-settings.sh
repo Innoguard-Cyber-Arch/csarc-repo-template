@@ -10,7 +10,15 @@ if [[ "$mode" != "plan" && "$mode" != "apply" ]]; then
 fi
 
 command -v gh >/dev/null || { echo "Install and authenticate GitHub CLI first."; exit 1; }
-repo="${GH_REPO:-$(gh repo view --json nameWithOwner --jq .nameWithOwner)}"
+repo="${GH_REPO:-}"
+if [[ -z "$repo" ]]; then
+  if ! repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>&1)"; then
+    echo "Cannot identify the GitHub repository."
+    echo "Run inside a Git repository with a GitHub remote, or set GH_REPO=owner/repo."
+    echo "GitHub CLI: $repo"
+    exit 1
+  fi
+fi
 ruleset_payload="$repo_root/policies/rulesets.json"
 temporary_ruleset=""
 code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"
@@ -30,8 +38,12 @@ if [[ "$repo_admin" != "true" ]]; then
 fi
 
 account_endpoint="users/$owner"
+private_ruleset_plan="GitHub Pro"
+billing_url="https://github.com/settings/billing"
 if [[ "$owner_type" == "Organization" ]]; then
   account_endpoint="orgs/$owner"
+  private_ruleset_plan="GitHub Team or above"
+  billing_url="https://github.com/organizations/$owner/settings/billing"
 fi
 account_plan="$(gh api "$account_endpoint" --jq '.plan.name // "unknown"' 2>/dev/null || echo unknown)"
 case "$account_plan" in
@@ -108,6 +120,13 @@ if [[ "$ruleset_available" == true ]]; then
 else
   echo "- SKIP policies/rulesets.json: $ruleset_skip_reason"
   echo "- WARNING main is not protected: this private repository needs GitHub Team or public visibility before Rulesets can be enforced."
+  echo "- NEXT STEP keep it private: ask the owner to upgrade to $private_ruleset_plan."
+  echo "  $billing_url"
+  echo "- ALTERNATIVE only when public access is approved: change repository visibility."
+  echo "  https://github.com/$repo/settings"
+  echo "- THEN create or confirm the CODEOWNERS team $code_owner and rerun:"
+  echo "  GH_REPO=$repo ./scripts/apply-repository-settings.sh plan"
+  echo "  GH_REPO=$repo ./scripts/apply-repository-settings.sh apply"
 fi
 if [[ "$plan_label" == "GitHub Enterprise" ]]; then
   echo "- INFO Enterprise-wide identity, audit, network, and organization Rulesets are outside this repository script."
