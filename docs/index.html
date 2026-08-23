@@ -1615,11 +1615,11 @@
       </header>
       <p class="context-line"><strong>目前實測｜</strong><code>Innoguard-Cyber-Arch</code> API 回報 Free＋private；因此 <code>main</code> 現在確實沒有強制保護，CI 紅燈仍可能被有權限者繞過。</p>
       <div class="plan-grid">
-        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>預設阻擋：</strong>private repo 缺少 Ruleset 時，apply 會在變更前停止；CI 顯示 governance 紅燈，release 與 registry publishing 不會執行。</p><ul><li>private repo 的 main 未受 Ruleset 保護</li><li>CI 無法取代方案缺少的 merge gate</li></ul></article>
+        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>預設阻擋 apply，check 降級放行：</strong>private repo 缺少 Ruleset 時，apply 會在變更前停止；但 check 對這種帳號方案限制標示 DEGRADED 並放行，CI 與 release 照常執行，模板不因方案而永久卡死。</p><ul><li>private repo 的 main 未受 Ruleset 保護</li><li>CI 無法取代方案缺少的 merge gate</li></ul></article>
         <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches、必要審查、team reviewers、CODEOWNERS 與必要檢查。</p><ul><li>需先建立真實 CODEOWNERS team</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
         <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
       </div>
-      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性與 Ruleset API；Free private 預設阻擋 apply，部署者必須請 owner 升級至 Team，或只在核准公開後由人員改為 public，腳本本身不會改可見性。確認 CODEOWNERS team 存在並依序執行 <code>plan</code>、<code>apply</code>、<code>check</code>；CI 與 release 會持續檢查實際生效規則。只有明確接受風險時才使用 <code>apply --allow-unprotected</code>，但 CI/CD 仍維持 fail-closed。Enterprise 的身分、網路與稽核政策需另經組織層審查；Code Security／Secret Protection 另購，不因方案名稱自動開啟。</span></aside>
+      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性與 Ruleset API；Free private 預設阻擋 apply，部署者必須請 owner 升級至 Team，或只在核准公開後由人員改為 public，腳本本身不會改可見性。確認 CODEOWNERS team 存在並依序執行 <code>plan</code>、<code>apply</code>、<code>check</code>；CI 與 release 會持續檢查實際生效規則,但方案本身不支援 Ruleset 時 check 改標 DEGRADED 放行，不阻塞 CI／release。只有明確接受風險時才使用 <code>apply --allow-unprotected</code>。已支援 Ruleset 卻規則對不上政策時，check 仍 fail-closed。Enterprise 的身分、網路與稽核政策需另經組織層審查；Code Security／Secret Protection 另購，不因方案名稱自動開啟。</span></aside>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>無 BLOCKED 才套用：</strong><code>scripts/apply-repository-settings.sh apply</code></li></ul></aside>
       <p class="reference">Ref. <a href="https://docs.github.com/en/get-started/learning-about-github/githubs-plans" target="_blank" rel="noreferrer">GitHub plans</a>；<a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets" target="_blank" rel="noreferrer">About rulesets</a>. Accessed August 21, 2026.</p>
     </section>
@@ -2366,7 +2366,7 @@ python_typescript: {stage: beta}`
         {
           title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
           goal: '設定檔可以先審查；實際 repo 建立後才查方案與 API，不能使用的能力會明確略過。',
-          summary: 'Free private 缺少 Ruleset 時預設阻擋 apply，CI 顯示 governance 紅燈，release 與 registry publishing 不會執行；Team／Enterprise 且 CODEOWNERS team 存在時可套用並以 check 驗證 Ruleset。GitHub App 仍是另一項獨立條件。',
+          summary: 'Free private 缺少 Ruleset 時預設阻擋 apply，但 check 對這種方案限制標示 DEGRADED 放行，CI 與 release 照常執行；Team／Enterprise 且 CODEOWNERS team 存在時可套用並以 check 驗證 Ruleset，規則對不上政策才 fail-closed。GitHub App 仍是另一項獨立條件。',
           file: 'policies/＋scripts/apply-repository-settings.sh',
           code: `policies/repository.json
 policies/actions.json
