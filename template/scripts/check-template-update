@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+set +e
+copier check-update --quiet
+check_exit=$?
+set -e
+case "$check_exit" in
+  0)
+    echo "Project already uses the latest Copier template release."
+    exit 0
+    ;;
+  2) ;;
+  *)
+    echo "Copier update check failed with exit code $check_exit." >&2
+    exit "$check_exit"
+    ;;
+esac
+
+update_json="$(copier check-update --output-format json)"
+eval "$(python3 - "$update_json" <<'PY'
+import json
+import shlex
+import sys
+
+update = json.loads(sys.argv[1])
+print(f"current_version={shlex.quote(str(update['current_version']))}")
+print(f"latest_version={shlex.quote(str(update['latest_version']))}")
+PY
+)"
+
+title="Update repository from Copier template"
+body_file="$(mktemp)"
+trap 'rm -f "$body_file"' EXIT
+cat > "$body_file" <<EOF
+### 類型
+
+enhancement
+
+### 問題與原因
+
+Copier template 有可用更新。目前版本：\`$current_version\`；最新版本：\`$latest_version\`。請先審查 release 與完整 commit SHA，再由工作分支套用更新；此通知不會自動修改或合併 repository。
+
+### 完成條件
+
+- [ ] 選定並審查核准的 template release
+- [ ] 使用完整 commit SHA 執行 Copier update
+- [ ] 解決所有 conflict markers 與 .rej 檔
+- [ ] 完整驗證通過並由 PR 審查合併
+
+### 驗證方式
+
+- \`uvx --from copier copier update --trust --vcs-ref <reviewed-full-commit-sha>\`
+- \`./scripts/verify\`
+- \`./scripts/apply-repository-settings.sh plan\`
+EOF
+
+issue_number="$(
+  gh issue list --state open --limit 100 --json number,title \
+    --jq '.[] | select(.title == "Update repository from Copier template") | .number' |
+    head -n 1
+)"
+if [[ -n "$issue_number" ]]; then
+  gh issue edit "$issue_number" --body-file "$body_file" >/dev/null
+  echo "Updated template notification Issue #$issue_number."
+else
+  gh issue create \
+    --title "$title" \
+    --label enhancement \
+    --body-file "$body_file"
+fi

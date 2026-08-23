@@ -86,6 +86,9 @@ uvx --from copier copier update --trust --vcs-ref <reviewed-full-commit-sha>
 ```
 
 Copier 會更新網站版型，但不覆寫 `docs/site-content.js`。相依更新一般等待三天；{% if has_typescript %}pnpm 遇到 publisher trust 降級時會停止安裝，先確認套件發布者與 provenance，不要直接停用 policy；{% endif %}OSV 對已公開漏洞立即通知。
+{% if enable_template_update_notifications %}
+每週 template update workflow 只會建立或更新一張通知 Issue，不會自動套用或合併變更。若 `_src_path` 指向 private GitHub repository，請設定只有來源 repository Contents read 權限的 `CSARC_TEMPLATE_READ_TOKEN`；公開來源不需要這個 secret。
+{% endif %}
 
 ## 負責人與支援
 
