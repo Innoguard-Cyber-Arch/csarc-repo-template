@@ -308,6 +308,8 @@ grep -q 'Code Security／Secret Protection 另購' docs/index.html
 grep -q '治理稽核｜' docs/index.html
 grep -q 'issues/74' docs/index.html
 grep -q 'issues/79' docs/index.html
+grep -q 'Spec 格式決策｜' docs/index.html
+grep -q '維持現行 spec → Issue，不在本 Issue 遷移' docs/index.html
 test -f version.txt
 uv run python - <<'PY'
 import json
