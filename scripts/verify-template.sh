@@ -662,6 +662,17 @@ grep -q 'googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307c
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'config-file: release-please-config.json' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
+# release-please must run unconditionally on the default token, not wait on a GitHub App.
+grep -q 'token: \${{ secrets.GITHUB_TOKEN }}' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+if rg -q 'CSARC_VERSION_BOT|create-github-app-token' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"; then
+  echo "release-please must not depend on the GitHub App bot."
+  exit 1
+fi
+# Write permissions must be scoped to the release job, not the whole workflow.
+grep -q '^  contents: read$' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
 
 # Release Please must update the project version and uv lock entry together.
 uv run python - \

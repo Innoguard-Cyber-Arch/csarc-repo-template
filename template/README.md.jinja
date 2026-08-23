@@ -65,7 +65,7 @@ repo 推送到 GitHub 後，先執行 `./scripts/apply-repository-settings.sh pl
 
 {% if language != "ci" %}{% if enable_release_attestations | default(false) %}此專案會為 release distributions 產生 artifact provenance 與 SBOM attestation；這需要 public repo，或支援 artifact attestations 的 GitHub Enterprise Cloud private／internal repo。{% else %}Artifact attestation 未啟用，適合目前不支援該功能的 private repo；release 仍會附上 `SHA256SUMS` 與 SBOM，可用 checksum 驗證。{% endif %}{% endif %}
 
-未設定專用 GitHub App 時，release-please job 會略過，不影響 CI 或人工 tag。Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。請在這裡列出產品設定的名稱、用途與取得位置，但不要填入真實值。
+release-please 使用 Actions 內建 `GITHUB_TOKEN` 自動開 Release PR，不需要設定 GitHub App。Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。請在這裡列出產品設定的名稱、用途與取得位置，但不要填入真實值。
 
 ## 發布與維運
 

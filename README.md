@@ -10,7 +10,7 @@ Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript �
 
 本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。`template/` 是下發內容；根目錄則讓公版本身使用同一套規則。
 
-目前可用：CI/CD-only、Python-only、TypeScript-only、混合四種 profile，以及 Issue／spec、PR checks、驗證、打包、checksum 與 SBOM。GitHub 設定腳本會先辨識方案與實際 API 能力；release-please 自動化則要等專用 GitHub App。
+目前可用：CI/CD-only、Python-only、TypeScript-only、混合四種 profile，以及 Issue／spec、PR checks、驗證、打包、checksum、SBOM 與 release-please 自動升版。GitHub 設定腳本會先辨識方案與實際 API 能力。
 
 ## 快速開始
 
@@ -66,7 +66,7 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 ## 設定與密鑰
 
 - **依方案套用設定：**推送遠端後執行 `./scripts/apply-repository-settings.sh plan`。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。不支援 Ruleset 的 private repo 會標示為 `BLOCKED`，而且 `apply` 會在任何變更前停止。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會依 plan 列出的清單刪除。確認計畫後再執行 `apply`，最後以 `check` 唯讀驗證遠端生效狀態；模板必須在任何方案與公開／私密設定下都能運作，因此帳號方案本身不支援 Ruleset 時 `check` 會標示 `DEGRADED` 並放行，CI 與 release 照常執行——只有方案支援 Ruleset、但實際規則跟政策對不上時，`check` 才會擋下 CI 與 release。
-- **GitHub App 尚未設定：**未提供 `CSARC_VERSION_BOT_CLIENT_ID` 與 private key 時，版本升級與 release-please job 會略過。
+- **GitHub App 只給 Python 自動升版用：**release-please 使用 Actions 內建 `GITHUB_TOKEN`，不需要另外設定；`python-version-policy.yml` 的排程升版 PR 仍需要 `CSARC_VERSION_BOT_CLIENT_ID` 與 private key，未提供時該 job 會略過。
 - **來源證明採明確啟用：**生成非 CI-only 專案時，可在 GitHub public repo 或支援的 Enterprise Cloud private／internal repo 啟用 artifact provenance 與 SBOM attestation；其他情況維持關閉，改用 GitHub Release 上的 SHA-256 驗證。
 - Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。不要把 token、私鑰或實際密碼寫進 repo。
 
@@ -80,7 +80,7 @@ Python 與 TypeScript profile 可分別啟用 PyPI／npm Trusted Publishing，�
 
 整份公版只用一個 SemVer：`fix(scope)` 升 patch、`feat(scope)` 升 minor、`!` 升 major。scope 可標 `ci`、`python`、`typescript` 或 `template`；只要任何已支援 profile 不相容，就視為整份公版的破壞性變更。
 
-release-please 設定已備妥，但要等專用 GitHub App 才會自動開 Release PR；未設定時可人工建立 tag，不影響 CI。
+release-please 用內建 `GITHUB_TOKEN` 自動開、更新 Release PR；合併後才建 tag 並發 GitHub Release。不用另外設定 GitHub App——代價是這個 PR 本身、以及它產生的 tag，都不會用機器人身分再觸發其他 workflow（GitHub 防遞迴機制使然），但合併動作是人工按的，main 上仍會照常重新跑一次完整 CI。
 
 ## 公版更新
 
