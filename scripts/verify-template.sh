@@ -493,6 +493,13 @@ grep -q '"draft": true' release-please-config.json
 grep -q '"force-tag-creation": true' release-please-config.json
 grep -q 'gh release verify "$RELEASE_TAG"' \
   .github/workflows/release-template.yml
+grep -q 'isImmutable,isDraft,isPrerelease' \
+  .github/workflows/release-template.yml
+if grep -q 'repos/${GITHUB_REPOSITORY}/immutable-releases' \
+  .github/workflows/release-template.yml; then
+  echo "Release jobs must not require the admin-only immutable-releases endpoint." >&2
+  exit 1
+fi
 grep -q 'render_release_prompt.py' .github/workflows/release-template.yml
 test "$(grep -c 'release_policy.py prepare' \
   .github/workflows/release-template.yml)" = 2
