@@ -22,23 +22,22 @@ body:
   - type: textarea
     id: problem
     attributes:
-      label: 問題與原因
-      description: 誰遇到什麼問題？為什麼現在要處理？
+      label: 問題
+      description: 一兩句話說明現況與原因。
     validations:
       required: true
   - type: textarea
     id: acceptance
     attributes:
       label: 完成條件
-      description: 完成後可以觀察到什麼結果？若新增需求超出這些條件，請另開 Issue。
-      placeholder: "- [ ] 可由同事確認的結果"
+      description: 完成後可觀察到的結果；超出範圍另開 Issue。
+      placeholder: "- [ ] ..."
     validations:
       required: true
   - type: textarea
-    id: verification
+    id: supplement
     attributes:
-      label: 驗證方式
-      description: 列出要執行的指令、測試或人工檢查。
-      placeholder: "- 指令或檢查結果"
+      label: 補充
+      description: 選填：驗證方式、風險，或導入方自訂的必填項目。
     validations:
-      required: true
+      required: false

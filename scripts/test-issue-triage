@@ -57,7 +57,7 @@ export ISSUE_AUTHOR="contributor"
 export ISSUE_NUMBER="42"
 export ISSUE_TITLE="Add dependency policy checks"
 
-ISSUE_BODY=$'### 類型\n\nenhancement\n\n### 問題與原因\n\nExample' \
+ISSUE_BODY=$'### 類型\n\nenhancement\n\n### 問題\n\nExample' \
 ISSUE_LABELS="" "$validator"
 grep -q -- '--add-assignee contributor --add-label enhancement' "$GH_LOG"
 

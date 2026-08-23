@@ -42,6 +42,7 @@ Automated dependency, version-policy, and release-please branches may omit an Is
 - Never commit secrets, tokens, private keys, or populated `.env` files.
 - Review the plan output before applying repository settings; do not operate production or external infrastructure without explicit authorization.
 - Do not bypass required checks, human approval, CODEOWNER review, or supply-chain verification.
+- Alpha 階段允許作者自行合併；在 PR 內文加註 `Alpha 自行合併 / self-merged`，作為第 7 點「never merge it yourself」的已知例外。
 
 ## Code Review Rules
 
