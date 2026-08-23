@@ -1720,7 +1720,7 @@
       <p class="context-line"><strong>問題與目的｜</strong>一次導入模板、CI、部署、監控與 AI，團隊很難判斷哪裡出錯；分期後每一步都有完成條件。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不按聲量或日期一次把功能全打開</h3><ul><li><strong>一次切換：</strong>錯誤會同時擴散到所有專案</li><li><strong>固定日期解鎖：</strong>時間到了不代表使用條件已成熟</li><li><strong>所有語言同時上：</strong>未驗證的 profile 只是空承諾</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>三層不是日期，而是導入條件</h3><p><strong>基本導入：</strong>CI/CD-only、Python-only、TypeScript-only、混合 profile，以及 Issue／spec、PR／CI、依賴安全、語意版本、可追溯成品與 repo 內部網站都已完成。Free 可套基本 repo 設定。<br><strong>待條件啟用：</strong>private repo Ruleset（GitHub Team＋CODEOWNERS team）、無人值守發版（GitHub App）。<strong>未來／可選：</strong>多 repo、Go／Rust、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>三層不是日期，而是導入條件</h3><p><strong>基本導入：</strong>CI/CD-only、Python-only、TypeScript-only、混合 profile，以及 Issue／spec、PR／CI、依賴安全、語意版本、可追溯成品與 repo 內部網站都已完成。Free 可套基本 repo 設定。<br><strong>待條件啟用：</strong>private repo Ruleset（GitHub Team＋CODEOWNERS team）、由 GitHub App 建立版本 PR。<strong>未來／可選：</strong>多 repo、Go／Rust、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></article>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>哪些 profile 已可用或仍在規劃：</strong><code>profiles/catalog.yaml</code></li><li><strong>先查方案再套可用設定：</strong><code>scripts/apply-repository-settings.sh</code>；Ruleset／App 條件備妥後再啟用</li><li><strong>建立與更新路徑是否都能通過：</strong><code>scripts/verify-template.sh</code></li></ul></aside>
     </section>
@@ -2277,7 +2277,7 @@ uv pip compile pyproject.toml --group dev \
       deploy: [
         {
           title: '待啟用｜GitHub App 在 workflow 內產生短效 token',
-          goal: 'Client ID 放 Variable、private key 放 Secret；數字 App ID 只供 Ruleset bypass，不把長期憑證寫進 repo 或 .env。',
+          goal: 'Client ID 放 Variable、private key 放 Secret；App 只建立 PR，不取得 Ruleset bypass，也不把長期憑證寫進 repo 或 .env。',
           summary: '目前尚未建立 App，相關 job 會略過。啟用時只給 Contents、Pull requests 讀寫權限；使用 App token，release-please 建立的 tag 才能觸發後續 workflow。',
           file: 'Repository Settings／Secrets and variables／Actions',
           code: `# Settings > Developer settings > GitHub Apps
@@ -2419,18 +2419,17 @@ uv run zizmor . --format plain
 # Paired root/template policies are diff-checked.`
         },
         {
-          title: 'Python 新功能版本滿三十天後，驗證通過就自動升版',
-          goal: '不靠人記得升級，也不讓未通過 Ruff、mypy、CI 或模板更新測試的版本進入 main。',
-          summary: '排程讀取 Python 官方發布日期；專用 GitHub App 建立 PR、等待全部門禁通過後自動合併。PR 是稽核紀錄，不是人工待辦。',
+          title: 'Python 新功能版本滿三十天後，自動建立升版 PR',
+          goal: '不靠人記得升級，也不繞過 Ruff、mypy、CI、人工審查或模板更新測試。',
+          summary: '排程讀取 Python 官方發布日期；專用 GitHub App 建立帶 enhancement label 的 PR，通過全部門禁與人工審查後再由維護者合併。',
           file: 'python-version-policy.yml＋scripts/update_python_version.py',
           code: `version_policy:
   stable_release_observation_days: 30
   update_method: scheduled_verified_pull_request
-  merge_after_full_verification: automatic
+  merge_after_full_verification: human
 
 # Required repository settings
 CSARC_VERSION_BOT_CLIENT_ID
-CSARC_VERSION_BOT_APP_ID # Ruleset bypass only
 CSARC_VERSION_BOT_PRIVATE_KEY`
         },
         {
