@@ -23,6 +23,8 @@
 10. Open the pull request against `main` or its immediate parent in the stack, include `Closes #<issue-number>`, and never merge it yourself.
 11. Report what changed, which verification ran, and any remaining limitation.
 
+Parallel writable agents must use one branch and one Git worktree per task, and run concurrently only when their scopes are independent. Detect and reuse a host-managed worktree before creating one; never force the same branch into multiple worktrees, remove a worktree you did not create, or remove one with uncommitted changes. Worktrees isolate files, not integration: every result still follows this repository's pull request, CI, review, and final verification path.
+
 Automated dependency, version-policy, and release-please branches may omit an Issue. This repository has no shared test environment, so it uses the main-only branch strategy.
 
 Duplicate triage may close an Issue without a branch or pull request when no repository files change. Link the canonical Issue and use GitHub's native duplicate close reason; implementation work still follows the normal Issue, branch, and pull request loop.

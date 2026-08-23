@@ -512,6 +512,7 @@ grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
 grep -q 'pull request chain ends at `main`' AGENTS.md
 grep -q 'against `main` or its immediate parent in the stack' AGENTS.md
+grep -q 'one branch and one Git worktree per task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
 required_readme_headings=(
   "專案概述"
@@ -845,6 +846,8 @@ grep -q '^## Code Review Rules$' \
 grep -q 'pull request chain ends at `main`' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'against `main` or its immediate parent in the stack' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -q 'one branch and one Git worktree per task' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'uv run pytest <test-path>' \
   "$fixture_root/default-project/AGENTS.md"
