@@ -493,6 +493,8 @@ grep -q '"draft": true' release-please-config.json
 grep -q '"force-tag-creation": true' release-please-config.json
 grep -q 'gh release verify "$RELEASE_TAG"' \
   .github/workflows/release-template.yml
+grep -q 'attestations: read' \
+  .github/workflows/release-template.yml
 grep -q 'isImmutable,isDraft,isPrerelease' \
   .github/workflows/release-template.yml
 grep -q 'Release is already published and immutable' \
