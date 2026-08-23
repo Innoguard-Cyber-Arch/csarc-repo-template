@@ -2259,7 +2259,7 @@ uv pip compile pyproject.toml --group dev \
         },
         {
           title: 'tag 發布時建立交付成品、SHA-256 與 CycloneDX SBOM',
-          goal: 'anchore/sbom-action 以 Syft 盤點內容；來源證明要等遠端 repo 能力可確認後再導入。',
+          goal: 'anchore/sbom-action 以 Syft 盤點內容；來源證明依遠端 repo 能力明確啟用。',
           summary: '依 profile 打包並計算 SHA-256；先把真正成品解壓到隔離目錄，再由 Syft 產生 CycloneDX。`components` 為空就讓 workflow 失敗；tag、commit 與 workflow run metadata 連同成品附加到 GitHub Release，支援的 repo 可啟用 attestations。',
           file: '.github/workflows/release.yml',
           code: `- run: uv build               # Python
@@ -2320,7 +2320,7 @@ gh secret set CSARC_VERSION_BOT_PRIVATE_KEY \
         {
           title: 'tag 觸發既有 release workflow 產生交付證據',
           goal: '版本、成品與來源沿用同一條可追溯鏈；仍不宣稱已自動部署。',
-          summary: '`v*` tag 觸發 wheel、npm tarball、SHA-256 與 CycloneDX SBOM；成品先解壓，SBOM 不能為空，證據長期附加到 GitHub Release。沒有 deploy job。',
+          summary: '`v*` tag 觸發 wheel、npm tarball、SHA-256 與 CycloneDX SBOM；成品先解壓，SBOM 不能為空，證據長期附加到 GitHub Release。PyPI／npm 發布必須由 package owner 明確啟用 OIDC trusted publisher，且只有發布 job 取得 id-token。',
           file: '.github/workflows/release.yml',
           code: `on:
   push:
@@ -2366,7 +2366,7 @@ python_typescript: {stage: beta}`
         {
           title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
           goal: '設定檔可以先審查；實際 repo 建立後才查方案與 API，不能使用的能力會明確略過。',
-          summary: 'Free private 會套 repository、actions、三種 labels 並明確警告 main 未受保護；Team／Enterprise 且 CODEOWNERS team 存在時再加 Ruleset。GitHub App 仍是另一項獨立條件。',
+          summary: 'Free private 缺少 Ruleset 時預設阻擋 apply；只有明確接受 --allow-unprotected 才降級套用基本設定。Team／Enterprise 且 CODEOWNERS team 存在時可套用 Ruleset。GitHub App 仍是另一項獨立條件。',
           file: 'policies/＋scripts/apply-repository-settings.sh',
           code: `policies/repository.json
 policies/actions.json

@@ -76,6 +76,8 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 
 公版版本以 `version.txt`、`.release-please-manifest.json` 與 `v*` tag 同步記錄；tag 觸發完整驗證。生成專案則依 profile 產生 wheel、npm tarball 或兩者，將 distributions、`SHA256SUMS`、CycloneDX SBOM 與包含 tag／commit／workflow run 的 metadata 附加至 GitHub Release；CI/CD-only 只有 GitHub Release 的來源封存檔，不假裝有語言成品。下載後可執行 `gh release download <tag>` 與 `shasum -a 256 -c SHA256SUMS`；有啟用 attestation 時再以 `gh attestation verify <artifact> --repo <owner/repo>` 驗證。現在只有持續交付，沒有通用部署流程。
 
+Python 與 TypeScript profile 可分別啟用 PyPI／npm Trusted Publishing，預設都關閉。兩者使用 GitHub environment 與 OIDC 短效憑證，發布 job 才有 `id-token: write`，不讀取長效 registry token。啟用前，package owner 必須在 registry 登記完全相符的 organization／repository、workflow 檔名 `release.yml` 與 environment；PyPI 首次發布可先建立 pending publisher，npm 則需由既有 package owner 在 package Settings 建立 trusted publisher。npm 路徑需要 GitHub-hosted runner、Node 22.14+ 與 npm 11.5.1+，公版使用 Node 24。
+
 整份公版只用一個 SemVer：`fix(scope)` 升 patch、`feat(scope)` 升 minor、`!` 升 major。scope 可標 `ci`、`python`、`typescript` 或 `template`；只要任何已支援 profile 不相容，就視為整份公版的破壞性變更。
 
 release-please 設定已備妥，但要等專用 GitHub App 才會自動開 Release PR；未設定時可人工建立 tag，不影響 CI。

@@ -53,7 +53,7 @@ window.CSARC_SITE_CONTENT = {
   ],
   release: {
     current: {% if language == "ci" %}"tag 會建立 GitHub Release 與來源封存檔；沒有語言套件，因此不產生套件 SBOM。"{% else %}"tag 打包、checksum、SBOM 與來源 metadata 會附加到 GitHub Release；沒有通用部署流程。"{% endif %},
-    optional: "GitHub App 未設定時，release-please 會略過；artifact attestation 依 repo 能力由 Copier 明確啟用。",
+    optional: "GitHub App 未設定時，release-please 會略過；artifact attestation 與 PyPI／npm OIDC 發布都依 repo 與 registry 設定由 Copier 明確啟用。",
     update: "Copier 從 {{ branch_strategy }} 的工作分支套用已審查的完整 commit SHA，再執行 ./scripts/verify。"
   }
 };
