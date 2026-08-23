@@ -39,15 +39,37 @@ jobs:
             echo "Scope is optional and must use lowercase letters, numbers, '.', '_', '/', or '-'."
             exit 1
           fi
+          pr_title_type="${BASH_REMATCH[1]}"
           if printf '%s' "$PR_TITLE" | LC_ALL=C grep -q '[^ -~]'; then
             echo "PR title must use ASCII characters only."
             echo "The PR body may be written in Chinese."
             exit 1
           fi
-          if [[ ",${PR_LABELS:-}," != *,bug,* &&
-                ",${PR_LABELS:-}," != *,enhancement,* &&
-                ",${PR_LABELS:-}," != *,documentation,* ]]; then
-            echo "Select at least one PR label: bug, enhancement, or documentation."
+
+          selected_label=""
+          selected_count=0
+          for label in bug enhancement documentation; do
+            if [[ ",${PR_LABELS:-}," == *",${label},"* ]]; then
+              selected_label="$label"
+              selected_count=$((selected_count + 1))
+            fi
+          done
+          if (( selected_count != 1 )); then
+            echo "Select exactly one PR label: bug, enhancement, or documentation."
+            exit 1
+          fi
+          if [[ ",${PR_LABELS:-}," == *,duplicate,* ]]; then
+            echo "The duplicate label is an Issue disposition and cannot classify a pull request."
+            exit 1
+          fi
+
+          expected_label="enhancement"
+          case "$pr_title_type" in
+            fix) expected_label="bug" ;;
+            docs) expected_label="documentation" ;;
+          esac
+          if [[ "$selected_label" != "$expected_label" ]]; then
+            echo "PR title type ${pr_title_type} requires the ${expected_label} label."
             exit 1
           fi
 

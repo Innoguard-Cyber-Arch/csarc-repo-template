@@ -22,6 +22,8 @@
 
 Automated dependency, version-policy, and release-please branches may omit an Issue. This repository has no shared test environment, so it uses the main-only branch strategy.
 
+Duplicate triage may close an Issue without a branch or pull request when no repository files change. Link the canonical Issue and use GitHub's native duplicate close reason; implementation work still follows the normal Issue, branch, and pull request loop.
+
 ## Commands
 
 - Required final check: `./scripts/verify-template.sh`.

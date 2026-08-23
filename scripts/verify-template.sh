@@ -207,8 +207,11 @@ grep -q 'GH_REPO=acme/project ./scripts/apply-repository-settings.sh apply' \
 grep -q 'KEEP labels outside policy' <<<"$free_plan"
 free_prune_plan="$(run_settings_fixture free plan "" true)"
 grep -q 'PRUNE labels outside policy' <<<"$free_prune_plan"
-grep -q 'DELETE label: duplicate' <<<"$free_prune_plan"
 grep -q 'DELETE label: task' <<<"$free_prune_plan"
+if grep -q 'DELETE label: duplicate' <<<"$free_prune_plan"; then
+  echo "The duplicate policy label must not be pruned."
+  exit 1
+fi
 team_plan="$(run_settings_fixture team)"
 grep -q 'Account plan: GitHub Team' <<<"$team_plan"
 grep -q 'APPLY policies/rulesets.json' <<<"$team_plan"
@@ -281,10 +284,13 @@ if grep -q 'label delete' \
   exit 1
 fi
 run_settings_fixture free apply "" true true >/dev/null
-grep -q 'label delete duplicate' \
-  "$github_plan_fixture/free-apply-prune-allow-unprotected.log"
 grep -q 'label delete task' \
   "$github_plan_fixture/free-apply-prune-allow-unprotected.log"
+if grep -q 'label delete duplicate' \
+  "$github_plan_fixture/free-apply-prune-allow-unprotected.log"; then
+  echo "The duplicate policy label must not be deleted."
+  exit 1
+fi
 if grep -q 'label delete bug' \
   "$github_plan_fixture/free-apply-prune-allow-unprotected.log"; then
   echo "Labels declared in policy must not be deleted."
@@ -493,8 +499,10 @@ grep -q '^    id: kind$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: problem$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: acceptance$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: supplement$' .github/ISSUE_TEMPLATE/work-item.yml
+grep -q '^        - duplicate$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q 'Validate pull request policy' .github/workflows/pr-policy.yml
-grep -q 'Select at least one PR label' .github/workflows/pr-policy.yml
+grep -q 'Select exactly one PR label' .github/workflows/pr-policy.yml
+grep -q 'duplicate label is an Issue disposition' .github/workflows/pr-policy.yml
 grep -q 'type/<issue-number>-short-slug' .github/workflows/pr-policy.yml
 grep -q 'Only dev promotion or release-please may target main in dev mode.' \
   .github/workflows/pr-policy.yml

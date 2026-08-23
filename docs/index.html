@@ -1663,7 +1663,7 @@
     <section class="slide decision-slide" data-track="method" aria-label="步驟一規劃工作與 GitHub Issues">
       <header>
         <h2>步驟 1｜<span class="accent">先寫清楚要解決什麼</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>每次改動先有 Issue；先選類型，再寫問題與完成條件，超出範圍就另開 Issue。</p>
+        <p class="subtitle"><strong>基本導入。</strong>每次改動先有 Issue；Issue Type、label 與結案原因各自表達不同資訊，超出範圍就另開 Issue。</p>
       </header>
       <p class="context-line"><strong>寫作原則｜</strong>Issue 標題用英文摘要成果；內文再以中文交代問題與完成條件，其餘選填寫進補充。</p>
       <div class="decision-strip">
@@ -1671,11 +1671,11 @@
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
           <details class="package-disclosure"><summary><span>已完成的 <span class="tech-name">spec → Issue</span>；Spec Kit 先不導入</span></summary><div class="package-health"><p><strong>目前：</strong><code>docs/specs/</code> 經 CI 驗證；合併到選定整合分支後，由標準函式庫腳本與 GitHub CLI 建立或更新實作 Issue。</p><p><strong>Spec Kit：</strong><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">github/spec-kit</a>｜MIT｜★130,368（已查證）｜公開、未封存、2026-08-19 仍更新。</p><p><strong>何時再評估：</strong>一份核准規格需要由 AI 穩定拆成多張子工作，而且團隊願意維護額外 CLI／Agent 流程。</p><p class="reference">Ref. GitHub REST API, accessed August 20, 2026.</p></div></details>
-          <p class="recommendation-copy"><strong>標題：</strong>12–80 個英文 ASCII 字元、至少三個詞，直接描述成果；不加類型前綴或句點，PR 才用 Conventional Commit。<br><strong>內文：</strong>選 <code>bug</code>、<code>enhancement</code> 或 <code>documentation</code>，再寫問題與完成條件；驗證方式、風險或自訂必填項目選填寫進補充；複雜工作才用 spec 拆單。</p>
+          <p class="recommendation-copy"><strong>標題：</strong>12–80 個英文 ASCII 字元、至少三個詞，直接描述成果；不加類型前綴或句點，PR 才用 Conventional Commit。<br><strong>分類：</strong><code>bug</code>／<code>enhancement</code>／<code>documentation</code> labels 分別同步至 organization 原生 <code>Bug</code>／<code>Feature</code>／<code>Task</code>；沒有 Issue Types 時 labels 仍可攜。<code>duplicate</code> 是結案處置：連結 canonical Issue，使用 GitHub 原生 Duplicate reason 關閉；純 triage 不需 PR。<br><strong>內文：</strong>填寫問題與完成條件；驗證方式、風險或自訂必填項目放在補充；複雜工作才用 spec 拆單。</p>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>提示英文標題、類型、問題與完成條件：</strong><code>.github/ISSUE_TEMPLATE/</code></li><li><strong>驗證標題、指派開單者並套單一標籤：</strong><code>scripts/validate-issue-title</code>＋<code>issue-triage.yml</code></li><li><strong>PR 再核對連結 Issue 的標題與狀態：</strong><code>pr-policy.yml</code>；不合格就阻擋合併</li></ul></aside>
-      <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/learning-about-issues/quickstart" target="_blank" rel="noreferrer">GitHub Issues quickstart</a>; <a href="https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-issue-forms" target="_blank" rel="noreferrer">Issue Forms syntax</a>; <a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a>. Accessed August 21, 2026.</p>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>提示英文標題、分類、問題與完成條件：</strong><code>.github/ISSUE_TEMPLATE/</code></li><li><strong>驗證標題、同步單一 label 與可用的原生 Issue Type：</strong><code>scripts/validate-issue-title</code>＋<code>issue-triage.yml</code></li><li><strong>PR 再核對連結 Issue 的標題與狀態：</strong><code>pr-policy.yml</code>；PR 只支援 Markdown template 與 labels，不假造 Issue Type</li></ul></aside>
+      <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/managing-issue-types-in-an-organization" target="_blank" rel="noreferrer">GitHub issue types</a>; <a href="https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-issue-forms" target="_blank" rel="noreferrer">Issue Forms syntax</a>; <a href="https://docs.github.com/en/issues/using-labels-and-milestones-to-track-work/managing-labels" target="_blank" rel="noreferrer">GitHub labels</a>; <a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a>. Accessed August 23, 2026.</p>
     </section>
 
     <section class="slide decision-slide" data-track="pr" aria-label="步驟四分支 PR 與合併">
@@ -1686,7 +1686,7 @@
       <p class="context-line"><strong>問題與目的｜</strong>分支要對應真實用途；無條件多一層 dev 只會增加漂移與合併衝突，不能取代測試環境。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把 dev 當成形式上的必經站</h3><ul><li><strong>預設 main-only：</strong>Issue → 短分支 → PR → main，適合沒有共用測試環境</li><li><strong>有 dev 環境：</strong>Issue → 短分支 → PR → dev，再經升版 PR 進 main</li><li><strong>直接 push：</strong>兩種模式都禁止，不能繞過審查與檢查</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>建立時選分支模式，Issue-first 規則不變</h3><p><strong>工作分支：</strong><code>type/&lt;Issue 編號&gt;-簡稱</code>；PR 可直接進策略分支，或指向 open PR 的上游分支形成 stack，但整條鏈必須回到策略分支。PR 內文必須用 <code>Closes #編號</code> 連回同一張未結案 Issue，並選三種工作標籤之一。<br><strong>範圍：</strong>需求超出原 Issue 的完成條件就另開 Issue、分支與 PR，不把新工作偷偷塞進原單。依賴與版本機器人是唯一免 Issue 的例外。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>建立時選分支模式，Issue-first 規則不變</h3><p><strong>工作分支：</strong><code>type/&lt;Issue 編號&gt;-簡稱</code>；PR 可直接進策略分支，或指向 open PR 的上游分支形成 stack，但整條鏈必須回到策略分支。PR 內文必須用 <code>Closes #編號</code> 連回同一張未結案 Issue。<br><strong>PR 分類：</strong>GitHub 沒有 PR Issue Type／Issue Form，因此使用 Markdown template，並恰選一個 label：<code>fix</code>→<code>bug</code>、<code>docs</code>→<code>documentation</code>、其他允許的 title type→<code>enhancement</code>。<br><strong>範圍：</strong>需求超出完成條件就另開 Issue、分支與 PR；只有依賴／版本自動化，以及未改檔案的 duplicate triage 可免 Issue 或 PR。</p></article>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>選 main-only 或 dev 模式：</strong><code>copier.yml</code> → <code>branch_strategy</code>，結果存入 <code>.csarc/profile.json</code></li><li><strong>核對標籤、Issue、分支編號、PR 目標與標題：</strong><code>.github/workflows/pr-policy.yml</code>＋<code>scripts/test-pr-policy</code></li><li><strong>保護選定分支並指定審查者：</strong><code>policies/rulesets.json</code>＋<code>.github/CODEOWNERS</code>；Free private 保存 policy 並留下 CI／PR 紀錄，但不能自動建立或強制 Ruleset</li></ul></aside>
     </section>
@@ -2160,7 +2160,7 @@ description: 英文標題摘要重點，內文用中文定義改動
 body:
   - id: kind
     type: dropdown
-    options: [bug, enhancement, documentation]
+    options: [bug, enhancement, documentation, duplicate]
   - id: problem
     type: textarea
   - id: acceptance

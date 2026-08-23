@@ -2,7 +2,11 @@ name: Issue triage
 
 on:
   issues:
-    types: [opened, edited]
+    types: [opened, edited, reopened, labeled, closed]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -17,13 +21,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Assign author and apply one work label
+      - name: Assign author and apply issue classification
         env:
           GH_TOKEN: ${{ github.token }}
+          ISSUE_ACTION: ${{ github.event.action }}
           ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
           ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_EVENT_LABEL: ${{ github.event.label.name }}
           ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_STATE_REASON: ${{ github.event.issue.state_reason }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
         run: |
           set -euo pipefail
@@ -35,33 +42,69 @@ jobs:
             exit 1
           fi
 
-          issue_type=""
-          for allowed in bug enhancement documentation; do
-            if [[ ",${ISSUE_LABELS:-}," == *",${allowed},"* ]]; then
-              issue_type="$allowed"
-              break
-            fi
-          done
-          if [[ -z "$issue_type" ]]; then
-            issue_type="$(
+          issue_class=""
+          state_reason="$(printf '%s' "${ISSUE_STATE_REASON:-}" | tr '[:upper:]' '[:lower:]')"
+          if [[ "$state_reason" == "duplicate" ]]; then
+            issue_class="duplicate"
+          elif [[ "${ISSUE_ACTION:-}" == "labeled" ]]; then
+            case "${ISSUE_EVENT_LABEL:-}" in
+              bug|enhancement|documentation|duplicate)
+                issue_class="$ISSUE_EVENT_LABEL"
+                ;;
+            esac
+          fi
+          if [[ -z "$issue_class" && "${ISSUE_ACTION:-}" == "opened" ]]; then
+            issue_class="$(
               awk '
                 /^### 類型$/ { found = 1; next }
                 found && NF { print; exit }
               ' <<<"${ISSUE_BODY:-}"
             )"
           fi
-          case "$issue_type" in
-            bug|enhancement|documentation) ;;
+          if [[ -z "$issue_class" ]]; then
+            for allowed in duplicate bug enhancement documentation; do
+              if [[ ",${ISSUE_LABELS:-}," == *",${allowed},"* ]]; then
+                issue_class="$allowed"
+                break
+              fi
+            done
+          fi
+          if [[ -z "$issue_class" ]]; then
+            issue_class="$(
+              awk '
+                /^### 類型$/ { found = 1; next }
+                found && NF { print; exit }
+              ' <<<"${ISSUE_BODY:-}"
+            )"
+          fi
+          case "$issue_class" in
+            bug|enhancement|documentation|duplicate) ;;
             *)
-              echo "Select one Issue type: bug, enhancement, or documentation."
+              echo "Select one Issue classification: bug, enhancement, documentation, or duplicate."
               exit 1
               ;;
           esac
 
-          for label in bug enhancement documentation; do
-            [[ "$label" == "$issue_type" ]] && continue
+          for label in bug enhancement documentation duplicate; do
+            [[ "$label" == "$issue_class" ]] && continue
             gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
               --remove-label "$label" >/dev/null 2>&1 || true
           done
           gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
-            --add-assignee "$ISSUE_AUTHOR" --add-label "$issue_type"
+            --add-assignee "$ISSUE_AUTHOR" --add-label "$issue_class"
+
+          native_type=""
+          case "$issue_class" in
+            bug) native_type="Bug" ;;
+            enhancement) native_type="Feature" ;;
+            documentation) native_type="Task" ;;
+          esac
+          if [[ -n "$native_type" ]]; then
+            if ! gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --type "$native_type" >/dev/null 2>&1; then
+              echo "::notice::Native Issue Types are unavailable; the ${issue_class} label remains authoritative."
+            fi
+          elif ! gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --remove-type >/dev/null 2>&1; then
+            echo "::notice::Native Issue Types are unavailable; the duplicate label remains authoritative."
+          fi

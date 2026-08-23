@@ -43,10 +43,10 @@ git push -u origin dev
 ## 開發與驗證
 
 1. 簡單工作先開「開發工作」Issue；標題以 12–80 個英文 ASCII 字元及至少三個詞直接描述成果，例如 `Add dependency policy checks`。Issue 不使用 PR 的 Conventional Commit 格式。
-2. 開單者會自動成為負責人，並從 `bug`、`enhancement`、`documentation` 選一種類型；內文必填問題與完成條件，其餘放在選填補充。
-3. 從 `{{ branch_strategy }}` 或最終 PR 回 `{{ branch_strategy }}` 的未合併工作分支建立 `type/<issue-number>-short-slug`；若新增需求超出 Issue 的完成條件，另開 Issue 與分支。
+2. 開單者會自動成為負責人，並選一個分類：`bug`、`enhancement`、`documentation` 或 `duplicate`。前三者在 organization 啟用原生 Issue Types 時分別同步成 `Bug`、`Feature`、`Task`；不支援時仍以 label 正常運作。`duplicate` 是結案處置，不是假造的新 Issue Type。
+3. 從 `{{ branch_strategy }}` 或最終 PR 回 `{{ branch_strategy }}` 的未合併工作分支建立 `type/<issue-number>-short-slug`；若新增需求超出 Issue 的完成條件，另開 Issue 與分支。若後來確認重複，連結 canonical Issue 並用 GitHub 的 Duplicate 原生原因關閉；純 triage 不改檔案，可不開分支與 PR。
 4. 執行 `./scripts/verify`；AI 遵守 `AGENTS.md`，不能自行合併。
-5. PR 指向 `{{ branch_strategy }}` 或 stack 中的直接上游分支；整條 open PR 鏈必須最終回到 `{{ branch_strategy }}`。內文寫 `Closes #<issue-number>`、完成精簡清單，風險或回退放在選填補充；選擇上述三種標籤之一，標題使用英文 `type(scope): summary`。
+5. PR 指向 `{{ branch_strategy }}` 或 stack 中的直接上游分支；整條 open PR 鏈必須最終回到 `{{ branch_strategy }}`。內文寫 `Closes #<issue-number>`、完成精簡清單，風險或回退放在選填補充；PR 沒有原生 Issue Type／Issue Form，只使用 Markdown template，並恰選一個 change label：`fix`→`bug`、`docs`→`documentation`，其餘允許的 Conventional Commit type→`enhancement`。
 6. CI 與人工審查都通過才合併。{% if branch_strategy == "dev" %}準備發布時，再用一張審查過的 PR 將 `dev` 升版到 `main`。{% endif %}
 
 `./scripts/verify` 也會跑 Issue／PR 政策正反例，確認合法流程能通過、不合格 Issue 標題與錯誤 PR 標題／分支／Issue 關聯會被拒絕。

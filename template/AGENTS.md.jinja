@@ -21,6 +21,8 @@
 
 Automated dependency and version-policy branches may omit an Issue, but still target `{{ branch_strategy }}`. {% if branch_strategy == "dev" %}Only a reviewed `dev` promotion or release-please pull request may target `main`.{% else %}Release-please may target `main` without a work Issue.{% endif %}
 
+Duplicate triage may close an Issue without a branch or pull request when no repository files change. Link the canonical Issue and use GitHub's native duplicate close reason; implementation work still follows the normal Issue, branch, and pull request loop.
+
 If a `copier update` changes the Issue or pull request body template's shape, and an AI coding agent is available, ask it to retroactively rewrite existing Issue and pull request bodies to match the new template.
 
 ## Commands

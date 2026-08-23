@@ -12,11 +12,12 @@ body:
     id: kind
     attributes:
       label: 類型
-      description: 只選最符合這張 Issue 的一種。
+      description: 只選最符合這張 Issue 的一種；若後來確認已有相同工作，改為 duplicate。
       options:
         - bug
         - enhancement
         - documentation
+        - duplicate
     validations:
       required: true
   - type: textarea
