@@ -45,6 +45,8 @@ bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
 bash -n scripts/check-update-conflicts
 bash -n template/scripts/check-update-conflicts
+bash -n scripts/check-governance-drift
+bash -n template/scripts/check-governance-drift
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
 bash -n scripts/test-issue-triage
@@ -74,6 +76,14 @@ fi
 if [[ "$1" == "repo" && "$2" == "view" ]]; then
   echo "no git remotes found" >&2
   exit 1
+fi
+if [[ "$1" == "issue" && "$2" == "list" ]]; then
+  printf '%s\n' "${MOCK_EXISTING_ISSUE:-}"
+  exit 0
+fi
+if [[ "$1" == "issue" ]]; then
+  printf '%s\n' "$*" >> "$MOCK_GH_LOG"
+  exit 0
 fi
 if [[ "$1" != "api" ]]; then
   echo "Unexpected gh command: $*" >&2
@@ -205,6 +215,38 @@ if unavailable_check="$(run_settings_fixture team check "" false false error 2>&
   exit 1
 fi
 grep -q 'Cannot inspect effective rules' <<<"$unavailable_check"
+
+# The scheduled drift check must open, update, or skip a tracking Issue
+# based on the real apply-repository-settings.sh check output.
+run_drift_check() {
+  local governance="$1"
+  local existing_issue="${2:-}"
+  local log_file="$3"
+  : > "$log_file"
+  PATH="$github_plan_fixture/bin:$PATH" \
+    GH_REPO="acme/project" \
+    MOCK_GITHUB_PLAN="team" \
+    MOCK_GITHUB_VISIBILITY="private" \
+    MOCK_GOVERNANCE="$governance" \
+    MOCK_EXISTING_ISSUE="$existing_issue" \
+    MOCK_GH_LOG="$log_file" \
+    "$repo_root/scripts/check-governance-drift"
+}
+drift_create_log="$github_plan_fixture/drift-create.log"
+if run_drift_check incomplete "" "$drift_create_log" >/dev/null 2>&1; then
+  echo "check-governance-drift must fail when governance drift is detected."
+  exit 1
+fi
+grep -q '^issue create .*--label bug' "$drift_create_log"
+drift_update_log="$github_plan_fixture/drift-update.log"
+if run_drift_check incomplete 91 "$drift_update_log" >/dev/null 2>&1; then
+  echo "check-governance-drift must fail when governance drift is detected."
+  exit 1
+fi
+grep -q '^issue edit 91 ' "$drift_update_log"
+drift_clean_log="$github_plan_fixture/drift-clean.log"
+run_drift_check protected "" "$drift_clean_log" >/dev/null
+test ! -s "$drift_clean_log"
 
 if free_apply="$(run_settings_fixture free apply 2>&1)"; then
   echo "Unprotected private repositories must fail closed by default."
@@ -599,6 +641,8 @@ if grep -q 'actions/attest@' \
 fi
 test ! -f "$fixture_root/default-project/.github/workflows/template-update.yml"
 test ! -f "$fixture_root/default-project/scripts/check-template-update"
+test ! -f "$fixture_root/default-project/.github/workflows/governance-drift.yml"
+test ! -f "$fixture_root/default-project/scripts/check-governance-drift"
 test -f "$fixture_root/default-project/release-please-config.json"
 test -f "$fixture_root/default-project/.release-please-manifest.json"
 test "$(cat "$fixture_root/default-project/.python-version")" = "3.14"
@@ -1023,6 +1067,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data workflow_ref=1111111111111111111111111111111111111111 \
   --data enable_precommit=true \
   --data enable_template_update_notifications=true \
+  --data enable_governance_drift_check=true \
   --data enable_release_attestations=true \
   --data enable_pypi_publishing=true \
   --data pypi_environment=pypi-release \
@@ -1040,6 +1085,18 @@ grep -q '^### 補充$' \
   "$fixture_root/all-features-project/scripts/check-template-update"
 grep -q 'CSARC_TEMPLATE_READ_TOKEN' \
   "$fixture_root/all-features-project/.github/workflows/template-update.yml"
+test -f "$fixture_root/all-features-project/.github/workflows/governance-drift.yml"
+test -x "$fixture_root/all-features-project/scripts/check-governance-drift"
+grep -q 'schedule:' \
+  "$fixture_root/all-features-project/.github/workflows/governance-drift.yml"
+grep -q 'issues: write' \
+  "$fixture_root/all-features-project/.github/workflows/governance-drift.yml"
+grep -q './scripts/check-governance-drift' \
+  "$fixture_root/all-features-project/.github/workflows/governance-drift.yml"
+grep -q 'apply-repository-settings.sh check' \
+  "$fixture_root/all-features-project/scripts/check-governance-drift"
+grep -q '^### 補充$' \
+  "$fixture_root/all-features-project/scripts/check-governance-drift"
 template_update_fixture="$fixture_root/template-update-check"
 mkdir -p "$template_update_fixture/bin"
 cat > "$template_update_fixture/bin/copier" <<'SH'

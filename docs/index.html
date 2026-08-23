@@ -1622,7 +1622,7 @@
         <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
       </div>
       <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性與 Ruleset API；Free private 預設阻擋 apply，部署者必須請 owner 升級至 Team，或只在核准公開後由人員改為 public，腳本本身不會改可見性。確認 CODEOWNERS team 存在並依序執行 <code>plan</code>、<code>apply</code>、<code>check</code>；CI 與 release 會持續檢查實際生效規則,但方案本身不支援 Ruleset 時 check 改標 DEGRADED 放行，不阻塞 CI／release。只有明確接受風險時才使用 <code>apply --allow-unprotected</code>。已支援 Ruleset 卻規則對不上政策時，check 仍 fail-closed。Enterprise 的身分、網路與稽核政策需另經組織層審查；Code Security／Secret Protection 另購，不因方案名稱自動開啟。</span></aside>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>無 BLOCKED 才套用：</strong><code>scripts/apply-repository-settings.sh apply</code></li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>無 BLOCKED 才套用：</strong><code>scripts/apply-repository-settings.sh apply</code></li><li><strong>排程偵測漂移：</strong><code>.github/workflows/governance-drift.yml</code>（daily cron）每天在 CI 之外重跑 <code>check</code>，抓出排程執行時仍存在的偏離，並由 <code>scripts/check-governance-drift</code> 自動開立或更新追蹤 Issue；兩次快照之間曾變更又恢復的事件仍需 audit log 或組織層監控，下發專案以 <code>enable_governance_drift_check</code> 選配</li></ul></aside>
       <p class="reference">Ref. <a href="https://docs.github.com/en/get-started/learning-about-github/githubs-plans" target="_blank" rel="noreferrer">GitHub plans</a>；<a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets" target="_blank" rel="noreferrer">About rulesets</a>. Accessed August 21, 2026.</p>
     </section>
 
@@ -1968,6 +1968,30 @@ required checks:
   - audit
 
 # Enterprise organization controls are report-only here.`
+        },
+        {
+          title: '排程每天重跑 check，縮短 CI-only 的檢查間隔',
+          goal: 'CI 觸發的 check 只是一次性快照；daily cron 能抓出排程執行時仍存在的偏離，降低沒有程式碼變更時長期失察的風險。不需要另外導入 GitHub App 或第三方常駐服務，沿用同一個 check 邏輯即可。',
+          summary: '`governance-drift.yml` 用 daily cron 呼叫 `scripts/check-governance-drift`，它包一層 `apply-repository-settings.sh check`；偵測到偏離就用 `gh issue create`／`gh issue edit` 開立或更新單一追蹤 Issue，內容附上實際差異；沒有偏離則不建立或更新任何 Issue。這仍是快照檢查：若設定在兩次執行之間遭變更後又恢復，需由 GitHub audit log 或組織層事件監控追溯。下發專案透過 `enable_governance_drift_check`（預設關閉）選配同一 workflow。',
+          file: '.github/workflows/governance-drift.yml＋scripts/check-governance-drift',
+          code: `on:
+  schedule:
+    - cron: "13 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+- run: ./scripts/check-governance-drift
+
+# Inside the script:
+./scripts/apply-repository-settings.sh check
+# On drift, open/update one tracking Issue:
+gh issue list --state open --json number,title \
+  --jq '.[] | select(.title == "Repository governance drift detected") | .number'
+gh issue create --label bug --body-file "$body_file"
+gh issue edit "$issue_number" --body-file "$body_file"`
         }
       ],
       template: [
