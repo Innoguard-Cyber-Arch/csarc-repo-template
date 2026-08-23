@@ -1,5 +1,6 @@
 [
   {"name": "bug", "color": "D73A4A", "description": "Something is not working"},
   {"name": "enhancement", "color": "A2EEEF", "description": "New feature or improvement"},
-  {"name": "documentation", "color": "0075CA", "description": "Documentation improvement"}
+  {"name": "documentation", "color": "0075CA", "description": "Documentation improvement"},
+  {"name": "duplicate", "color": "CFD3D7", "description": "This issue already exists"}
 ]

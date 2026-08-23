@@ -8,7 +8,7 @@ Closes #N
 
 ## 完成清單
 
-- [ ] `./scripts/verify-template.sh` 已通過；已選標籤；未超出原 Issue 範圍
+- [ ] `./scripts/verify-template.sh` 已通過；恰選一個 change label（`fix`→`bug`、`docs`→`documentation`、其餘 type→`enhancement`）；未超出原 Issue 範圍
 - [ ] 已測試新專案產生並評估既有專案更新影響；第三方 Actions 固定完整 commit SHA
 
 ## 補充
