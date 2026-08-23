@@ -1842,7 +1842,7 @@
       <header>
         <span class="selection-sequence">決策附錄</span>
         <h2>外部基準與實測｜<span class="accent">有骨架，還不是完整平台</span></h2>
-        <p class="subtitle">結論：已真正解決新 repo 建立、Copier 更新與本機／合成驗證；OSV 與 Release 閉環已有線上成功證據，治理仍受 GitHub 方案限制，真實下游採用尚未證明。簡潔度合理，現在最需要的是持續保留 live evidence，不是再加框架。</p>
+        <p class="subtitle">結論：已真正解決新 repo 建立、Copier 更新與本機／合成驗證；OSV、Release 與第一個 CI-only consuming repo 都有線上成功證據。治理仍受 GitHub 方案限制，語言 profile 尚待各自試行。</p>
       </header>
       <table class="decision-register audit-register" aria-label="外部基準與線上實測比較">
         <thead><tr><th>外部基準／實測</th><th>判斷</th><th>研究選擇與目前邊界</th></tr></thead>
@@ -1855,30 +1855,30 @@
           <tr><td>OSV reusable workflow＋<a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows" target="_blank" rel="noreferrer">權限傳遞</a></td><td><span class="tier-chip best">已修正</span></td><td>呼叫端權限只能維持或縮小，不能替被呼叫 workflow 補權限；<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92" target="_blank" rel="noreferrer">PR #92</a> 補回必要權限後，<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32646097257" target="_blank" rel="noreferrer">main 線上 run</a> 已成功。</td></tr>
           <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a>＋<a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip priority">產生端已設計</span></td><td>public repo 的生成設定已預設啟用 provenance／SBOM attestation；只有消費或部署端實際驗證才產生防護效果，目前僅提供人工驗證指令。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/104" target="_blank" rel="noreferrer">#104</a></td></tr>
           <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> 安全基線</td><td><span class="tier-chip optional">方案感知</span></td><td>已有 pinned Actions、OSV、<code>SECURITY.md</code>、完整 Git 歷史與工作樹 secret scan；public repo 預設啟用 CodeQL，private／internal 則依 GitHub Code Security 授權明確 opt-in。</td></tr>
-          <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip warning">尚未證明</span></td><td>目前只驗證合成 fixture；尚無下游 repo 證明建立、客製化、Copier update 與衝突處理。完成一個 pilot 前應視為 alpha／試行。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a></td></tr>
+          <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip best">CI-only 已證明</span></td><td><code>ai-guardrail</code> 已透過 Issue、兩支 PR 完成 v0.2.4 導入、產品客製化保留、v0.3.1 Copier update 與兩次完整線上檢查；Python、TypeScript 與混合 composition 仍缺各自的真實 pilot。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a>／<a href="pilot-adoption.md">證據</a></td></tr>
         </tbody>
       </table>
-      <p class="review-note-footer"><strong>簡潔度判斷：</strong>Copier＋GitHub Actions＋標準工具的方向夠簡潔；真正風險是把合成測試當成線上閉環。root-only <code>Live integration smoke</code> 會分別 dispatch OSV、Release Please、release handoff 與 governance drift 並保存 JSON evidence；真實 pilot 完成後，再依規模決定較重工具。</p>
+      <p class="review-note-footer"><strong>簡潔度判斷：</strong>Copier＋GitHub Actions＋標準工具的方向夠簡潔；真實 CI-only pilot 已補上合成測試以外的證據。root-only <code>Live integration smoke</code> 持續驗證 OSV、Release Please、release handoff 與 governance drift；其餘語言 profile 各完成 pilot 後才升 beta。</p>
     </section>
 
     <section class="slide review-notes-slide" id="fleet-governance-inventory" aria-label="Fleet 治理採用盤點">
       <header>
         <span class="selection-sequence">決策附錄</span>
-        <h2>Fleet 治理盤點｜<span class="accent">還沒有 consuming repo</span></h2>
-        <p class="subtitle">2026-08-24 以 GitHub API 唯讀盤點：組織共 6 個 private repo，只有本 repo 是模板來源；其餘 5 個都沒有 <code>.copier-answers.yml</code> 或 <code>.csarc/profile.json</code>，所以目前實際 consuming repo 為 <strong>0</strong>。門檻未達前不部署中央平台。</p>
+        <h2>Fleet 治理盤點｜<span class="accent">1 個 consuming repo</span></h2>
+        <p class="subtitle">2026-08-24 完成第一個真實 pilot：組織共 6 個 private repo，<code>ai-guardrail</code> 已導入並更新至 v0.3.1；其餘 4 個產品／工具 repo 尚未導入。門檻未達前不部署中央平台。</p>
       </header>
       <table class="decision-register audit-register" aria-label="Repository 採用盤點">
         <thead><tr><th>Repository</th><th>Owner</th><th>模板版本</th><th>漂移資料</th></tr></thead>
         <tbody>
-          <tr><td><code>csarc-repo-template</code></td><td><code>@Innoguard-Cyber-Arch/repository-maintainers</code></td><td>來源 repo，目前 <code>v0.1.0</code></td><td>非 consuming repo；<code>governance-drift.yml</code> 尚無完成的 schedule／manual run，樣本不足以計算頻率。</td></tr>
+          <tr><td><code>csarc-repo-template</code></td><td><code>@Innoguard-Cyber-Arch/repository-maintainers</code></td><td>來源 repo，目前 <code>v0.3.1</code></td><td>非 consuming repo；live integration 已驗證 governance drift 可執行。</td></tr>
           <tr><td><code>GRC</code></td><td>未宣告 CODEOWNERS</td><td>未導入</td><td>無模板漂移資料</td></tr>
           <tr><td><code>LLM_Guard</code></td><td>未宣告 CODEOWNERS</td><td>未導入</td><td>無模板漂移資料</td></tr>
-          <tr><td><code>ai-guardrail</code></td><td>未宣告 CODEOWNERS</td><td>未導入</td><td>無模板漂移資料</td></tr>
+          <tr><td><code>ai-guardrail</code></td><td><code>@Innoguard-Cyber-Arch/repository-maintainers</code></td><td><code>v0.3.1</code>／CI-only beta</td><td>導入與更新 PR 全綠；後續由 daily governance drift 累積頻率資料</td></tr>
           <tr><td><code>claude-newsletter</code></td><td>未宣告 CODEOWNERS</td><td>未導入</td><td>無模板漂移資料</td></tr>
           <tr><td><code>csarc-agent-kit</code></td><td>未宣告 CODEOWNERS</td><td>未導入</td><td>無模板漂移資料</td></tr>
         </tbody>
       </table>
-      <aside class="selection-note"><strong>盤點結論</strong><span>目前沒有下游 repo 可以計算模板版本與治理漂移頻率；「沒有 run」不記為「零漂移」。其餘 repo 缺少 CODEOWNERS 是 pilot 前要補的 metadata，還不是部署平台的證據。</span></aside>
+      <aside class="selection-note"><strong>盤點結論</strong><span>目前只有一個下游 repo，足以證明導入與更新生命週期，不足以合理化中央平台。漂移頻率只計完成的排程樣本；「沒有 run」不記為「零漂移」。</span></aside>
       <p class="bridge-reference reference">Inventory: GitHub repositories, default branches, CODEOWNERS, Copier answers and CSARC profiles; accessed August 24, 2026.</p>
     </section>
 
@@ -2095,31 +2095,31 @@ use_reusable_workflow:
   default: false`
         },
         {
-          title: 'CI/CD-only、Python、TypeScript 與混合組合都已可用',
-          goal: 'profile 清單只承諾真正通過建立與更新測試的內容。',
+          title: '可用性與真實採用成熟度分開標示',
+          goal: 'profile 清單同時記錄合成驗證與 consuming repo 證據，不把可建立誤寫成已成熟。',
           file: 'profiles/catalog.yaml',
           code: `template_release_policy:
   strategy: single_semver_for_all_compositions
 
 profiles:
   python:
-    stage: beta
+    stage: alpha
     latest_reviewed_stable: "3.14"
     default_support_mode: latest
     style_guide:
       name: Google Python Style Guide
       line_length: 80
   typescript:
-    stage: beta
+    stage: alpha
     latest_reviewed_active_lts: "24"
     package_manager: pnpm
   go: {stage: future}
 
 compositions:
   ci: {stage: beta, profiles: []}
-  python: {stage: beta, profiles: [python]}
-  typescript: {stage: beta, profiles: [typescript]}
-  python_typescript: {stage: beta, profiles: [python, typescript]}
+  python: {stage: alpha, profiles: [python]}
+  typescript: {stage: alpha, profiles: [typescript]}
+  python_typescript: {stage: alpha, profiles: [python, typescript]}
   rust: {stage: future}
 
 version_policy:
@@ -2127,9 +2127,9 @@ version_policy:
   merge_after_full_verification: automatic
 
 compositions:
-  python: {stage: beta, profiles: [python]}
-  typescript: {stage: beta, profiles: [typescript]}
-  python_typescript: {stage: beta, profiles: [python, typescript]}`
+  python: {stage: alpha, profiles: [python]}
+  typescript: {stage: alpha, profiles: [typescript]}
+  python_typescript: {stage: alpha, profiles: [python, typescript]}`
         },
         {
           title: '既有 repo 在短分支同步審查過的模板內容',
@@ -2569,17 +2569,17 @@ dispatch_artifacts(next_tag)`
       ],
       rollout: [
         {
-          title: '四種可用組合與 future 語言分開列出',
+          title: '可用組合依真實採用證據分級',
           goal: '基本、未來與可選不是口號，而是對可用能力的承諾。',
-          summary: 'CI/CD-only、Python、TypeScript 與混合組合都是 `beta`；Go、Rust 保持 `future`，不會被 Copier 當成可選能力。',
+          summary: '共用治理與 CI/CD-only 已有真實 pilot，維持 `beta`；Python、TypeScript 與混合組合可建立但尚無 consuming repo，維持 `alpha`；Go、Rust 保持 `future`。',
           file: 'profiles/catalog.yaml',
           code: `ci: {stage: beta, profiles: []}
-python: {stage: beta}
-typescript: {stage: beta}
+python: {stage: alpha}
+typescript: {stage: alpha}
 go: {stage: future}
 rust: {stage: future}
 
-python_typescript: {stage: beta}`
+python_typescript: {stage: alpha}`
         },
         {
           title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
@@ -2658,8 +2658,8 @@ CSARC_VERSION_BOT_PRIVATE_KEY`
         },
         {
           title: '四種 profile 與 Copier 更新都要真的執行',
-          goal: 'beta 是公版 profile 的成熟階段，不是 Python 或 TypeScript 版本字串。',
-          summary: '驗證 CI/CD-only、三種語言組合、global／diff coverage、reusable workflow 與 update；更新時保留產品程式。',
+          goal: 'beta 必須同時有合成生命週期與真實 consuming repo 證據。',
+          summary: '四種組合都通過合成建立／更新；目前只有 CI/CD-only 完成真實產品導入、客製化保留與線上 update。',
           file: 'scripts/verify-template.sh＋profiles/catalog.yaml',
           code: `./scripts/verify-template.sh
 
@@ -2667,11 +2667,11 @@ CSARC_VERSION_BOT_PRIVATE_KEY`
 # reusable workflow and copier update.
 
 ci: {stage: beta, profiles: []}
-python: {stage: beta}
-typescript: {stage: beta}
+python: {stage: alpha}
+typescript: {stage: alpha}
 go: {stage: future}
 rust: {stage: future}
-python_typescript: {stage: beta}`
+python_typescript: {stage: alpha}`
         }
       ]
     });

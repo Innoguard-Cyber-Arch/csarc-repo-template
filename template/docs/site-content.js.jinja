@@ -5,7 +5,7 @@ window.CSARC_SITE_CONTENT = {
     language: {{ language | tojson }},
     branch: {{ branch_strategy | tojson }},
     owner: {{ code_owner | tojson }},
-    stage: "beta"
+    stage: {% if language == "ci" %}"beta"{% else %}"alpha"{% endif %}
   },
   start: {
     prerequisites: [
