@@ -82,26 +82,9 @@ jobs:
               gh pr create \
                 --base main \
                 --head "$branch" \
+                --label enhancement \
                 --title "build(python): adopt Python ${version}" \
                 --body "Automated after the 30-day stable-release observation period. Full template verification passed before this PR was opened."
             )"
           fi
-
-          check_count="0"
-          for _ in {1..30}; do
-            check_count="$(
-              gh pr view "$pr_url" \
-                --json statusCheckRollup \
-                --jq '.statusCheckRollup | length'
-            )"
-            if [[ "$check_count" -gt 0 ]]; then
-              break
-            fi
-            sleep 5
-          done
-          if [[ "$check_count" -eq 0 ]]; then
-            echo "No pull request checks were reported."
-            exit 1
-          fi
-          gh pr checks "$pr_url" --watch --interval 10
-          gh pr merge "$pr_url" --admin --squash --delete-branch
+          gh pr edit "$pr_url" --add-label enhancement
