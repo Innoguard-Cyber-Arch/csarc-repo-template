@@ -54,6 +54,7 @@ dependency_version_policy:
 
 shared:
   stage: beta
+  evidence: https://github.com/Innoguard-Cyber-Arch/ai-guardrail/issues/1
   applies_to: every_repository
   source: template
   update_method: copier
@@ -66,7 +67,7 @@ shared:
 
 profiles:
   python:
-    stage: beta
+    stage: alpha
     latest_reviewed_stable: "3.14"
     default_support_mode: latest
     support_modes:
@@ -92,7 +93,7 @@ profiles:
     verification: ./scripts/verify
 
   typescript:
-    stage: beta
+    stage: alpha
     latest_reviewed_active_lts: "24"
     stable_channel: node_active_lts
     stable_release_observation_days: 30
@@ -125,22 +126,23 @@ profiles:
 compositions:
   ci:
     stage: beta
+    evidence: https://github.com/Innoguard-Cyber-Arch/ai-guardrail/issues/1
     profiles: []
     release_output: github_release_source_archive
 
   python:
-    stage: beta
+    stage: alpha
     profiles:
       - python
 
   python_typescript:
-    stage: beta
+    stage: alpha
     profiles:
       - python
       - typescript
 
   typescript:
-    stage: beta
+    stage: alpha
     profiles:
       - typescript
 
@@ -150,3 +152,23 @@ promotion_requirements:
   - copier_create_test
   - copier_update_test
   - complete_local_and_ci_verification
+
+promotion_evidence:
+  shared:
+    status: satisfied
+    repository: Innoguard-Cyber-Arch/ai-guardrail
+    profile: ci
+    issue: https://github.com/Innoguard-Cyber-Arch/ai-guardrail/issues/1
+    adoption_pull_request: https://github.com/Innoguard-Cyber-Arch/ai-guardrail/pull/2
+    update_pull_request: https://github.com/Innoguard-Cyber-Arch/ai-guardrail/pull/3
+  ci:
+    status: satisfied
+    repository: Innoguard-Cyber-Arch/ai-guardrail
+    profile: ci
+    result: docs/pilot-adoption.md
+  python:
+    status: pending_real_consuming_repository
+  typescript:
+    status: pending_real_consuming_repository
+  python_typescript:
+    status: pending_real_consuming_repository

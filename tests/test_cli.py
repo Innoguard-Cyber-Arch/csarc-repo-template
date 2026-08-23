@@ -355,6 +355,7 @@ def test_update_check_dry_run_apply_and_conflict(
     )
     assert git(project, "status", "--porcelain") == before
     assert managed.read_text(encoding="utf-8") == "template version two\n"
+    assert "files may still change" in capsys.readouterr().out
 
     assert (
         main(

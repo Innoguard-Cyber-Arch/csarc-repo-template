@@ -497,6 +497,12 @@ test -f AGENTS.md
 test "$(wc -l < AGENTS.md)" -le 200
 test "$(cat CLAUDE.md)" = "@AGENTS.md"
 test -f docs/index.html
+test -f docs/pilot-adoption.md
+grep -q 'ai-guardrail' docs/pilot-adoption.md
+grep -q 'run 32664445831' docs/pilot-adoption.md
+grep -q 'docs/pilot-adoption.md' README.md
+test "$(grep -c '^[[:space:]]*stage: beta$' profiles/catalog.yaml)" -eq 2
+test "$(grep -c '^[[:space:]]*stage: alpha$' profiles/catalog.yaml)" -eq 5
 grep -q '<title>CSARC Repo Template｜AI 輔助 SDLC 團隊公版</title>' \
   docs/index.html
 grep -q '先辨識 GitHub 方案' docs/index.html
@@ -939,6 +945,8 @@ grep -Fq 'Template \"Smoke\" Test' \
   "$fixture_root/default-project/docs/site-content.js"
 grep -q 'window.CSARC_SITE_CONTENT' \
   "$fixture_root/default-project/docs/site-content.js"
+grep -q 'stage: "alpha"' \
+  "$fixture_root/default-project/docs/site-content.js"
 grep -q '^## Scope and sources of truth$' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q '^## Commands$' "$fixture_root/default-project/AGENTS.md"
@@ -964,6 +972,8 @@ grep -q '^  pull_request:$' \
 grep -q 'csarc-governance-notice' \
   "$fixture_root/default-project/.github/workflows/governance-comment.yml"
 grep -Fq '$endpoint?per_page=100' \
+  "$fixture_root/default-project/.github/workflows/governance-comment.yml"
+grep -q 'base branch predates the governance checker' \
   "$fixture_root/default-project/.github/workflows/governance-comment.yml"
 if grep -q -- '--slurp' \
   "$fixture_root/default-project/.github/workflows/governance-comment.yml"; then
@@ -1227,6 +1237,8 @@ git -C "$fixture_root/ci-only-project" diff --cached --check
 grep -q 'language: ci' "$fixture_root/ci-only-project/.copier-answers.yml"
 grep -q '"language_profile": "ci"' \
   "$fixture_root/ci-only-project/.csarc/profile.json"
+grep -q 'stage: "beta"' \
+  "$fixture_root/ci-only-project/docs/site-content.js"
 test "$("$fixture_root/ci-only-project/scripts/detect-language-profile" --suggest)" = \
   "ci"
 test "$(cat "$fixture_root/ci-only-project/version.txt")" = "0.1.0"

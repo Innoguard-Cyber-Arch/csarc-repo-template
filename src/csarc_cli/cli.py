@@ -1017,7 +1017,10 @@ def command_update(args: argparse.Namespace) -> int:
     if preview.returncode != 0:
         raise CliError(preview.stderr.strip() or preview.stdout.strip())
     print("Copier smart-update preview:")
-    print(preview.stdout.strip() or "  (no file changes)")
+    print(
+        preview.stdout.strip()
+        or "  (Copier returned no preview details; files may still change.)"
+    )
     if args.dry_run or not confirm(args):
         return 0
 
