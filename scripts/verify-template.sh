@@ -494,7 +494,8 @@ grep -q '"force-tag-creation": true' release-please-config.json
 grep -q 'gh release verify "$RELEASE_TAG"' \
   .github/workflows/release-template.yml
 grep -q 'render_release_prompt.py' .github/workflows/release-template.yml
-grep -q 'release_policy.py prepare' .github/workflows/release-template.yml
+test "$(grep -c 'release_policy.py prepare' \
+  .github/workflows/release-template.yml)" = 2
 grep -q 'tags: \["v\*"\]' .github/workflows/release-template.yml
 grep -q 'gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes' \
   .github/workflows/release-template.yml

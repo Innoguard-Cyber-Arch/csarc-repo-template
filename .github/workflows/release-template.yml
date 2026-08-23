@@ -44,12 +44,6 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
-      - name: Materialize the immutable tag version
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: >-
-          uv run --no-project python scripts/release_policy.py prepare
-          --tag "$RELEASE_TAG"
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: "11.22.0"
