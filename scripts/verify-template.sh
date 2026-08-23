@@ -477,7 +477,7 @@ grep -q 'branches: \[main\]' .github/workflows/ci.yml
 grep -q 'branches: \[main\]' .github/workflows/osv.yml
 grep -q 'gh pr edit "$pr_url" --add-label enhancement' \
   .github/workflows/python-version-policy.yml
-if rg -q -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
+if grep -Eq -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
   .github/workflows/python-version-policy.yml \
   scripts/apply-repository-settings.sh \
   template/scripts/apply-repository-settings.sh; then
@@ -761,7 +761,7 @@ grep -q 'config-file: release-please-config.json' \
 # release-please must run unconditionally on the default token, not wait on a GitHub App.
 grep -q 'token: \${{ secrets.GITHUB_TOKEN }}' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-if rg -q 'CSARC_VERSION_BOT|create-github-app-token' \
+if grep -Eq 'CSARC_VERSION_BOT|create-github-app-token' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"; then
   echo "release-please must not depend on the GitHub App bot."
   exit 1
@@ -1165,7 +1165,7 @@ grep -q '^      name: "npm-release"$' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q 'npm publish "${packages\[0\]}" --provenance --access public' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
-if rg -q 'PYPI_API_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN' \
+if grep -Eq 'PYPI_API_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"; then
   echo "Trusted publishing must not require a long-lived registry token."
   exit 1
