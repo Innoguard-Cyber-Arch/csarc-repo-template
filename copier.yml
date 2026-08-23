@@ -16,6 +16,7 @@ _exclude:
   - "{% if enable_template_update_notifications %}__keep_template_update_script__{% else %}scripts/check-template-update{% endif %}"
   - "{% if enable_governance_drift_check %}__keep_governance_drift_workflow__{% else %}.github/workflows/governance-drift.yml{% endif %}"
   - "{% if enable_governance_drift_check %}__keep_governance_drift_script__{% else %}scripts/check-governance-drift{% endif %}"
+  - "{% if enable_codeql | default(false) %}__keep_codeql__{% else %}.github/workflows/codeql.yml{% endif %}"
   - "{% if language in ['python', 'python-typescript'] %}__keep_python_version__{% else %}.python-version{% endif %}"
   - "{% if language in ['python', 'python-typescript'] %}__keep_python_project__{% else %}pyproject.toml{% endif %}"
   - "{% if language in ['python', 'python-typescript'] %}__keep_python_source__{% else %}/src{% endif %}"
@@ -151,6 +152,12 @@ project_visibility:
     Private: private
     Internal (GitHub Enterprise Cloud only): internal
   default: private
+
+enable_codeql:
+  type: bool
+  help: Enable CodeQL SAST on public repositories or private/internal repositories licensed for GitHub Code Security
+  default: "{{ project_visibility == 'public' and language != 'ci' }}"
+  when: "{{ language != 'ci' }}"
 
 enable_governance_drift_check:
   type: bool
