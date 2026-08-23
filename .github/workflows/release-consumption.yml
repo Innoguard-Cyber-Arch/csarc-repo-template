@@ -1,0 +1,115 @@
+name: Release consumption verification
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/release-consumption.yml
+      - scripts/verify_release_consumption.py
+      - tests/test_release_consumption.py
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published immutable release tag; blank selects latest
+        required: false
+        type: string
+
+permissions:
+  attestations: read
+  contents: read
+
+jobs:
+  verify:
+    name: verify downloaded CLI release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify the downloaded release artifact
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          tag="$REQUESTED_TAG"
+          if [[ -z "$tag" ]]; then
+            tag="$(
+              gh release view --repo "$GITHUB_REPOSITORY" \
+                --json tagName,isDraft,isPrerelease,isImmutable \
+                --jq 'select(.isDraft == false and .isPrerelease == false and .isImmutable == true) | .tagName'
+            )"
+          fi
+          [[ -n "$tag" ]]
+          release_dir="$RUNNER_TEMP/release"
+          evidence_dir="$GITHUB_WORKSPACE/release-consumption-evidence"
+          mkdir -p "$release_dir" "$evidence_dir"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+            --pattern '*.whl' --dir "$release_dir"
+          mapfile -t artifacts < <(
+            find "$release_dir" -maxdepth 1 -type f -name '*.whl'
+          )
+          [[ "${#artifacts[@]}" -eq 1 ]]
+          artifact="${artifacts[0]}"
+          verification_json="$RUNNER_TEMP/release-verification.json"
+          gh release verify "$tag" --repo "$GITHUB_REPOSITORY" \
+            --format json > "$verification_json"
+          repository_id="$(
+            gh api "repos/$GITHUB_REPOSITORY" --jq '.id'
+          )"
+          commit_sha="$(
+            gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq '.sha'
+          )"
+          python3 scripts/verify_release_consumption.py \
+            --verification-json "$verification_json" \
+            --artifact "$artifact" \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$repository_id" \
+            --tag "$tag" \
+            --commit "$commit_sha" \
+            --output "$evidence_dir/success.json"
+          python3 -m zipfile --test "$artifact"
+          {
+            echo "tag=$tag"
+            echo "artifact=$artifact"
+            echo "verification_json=$verification_json"
+            echo "repository_id=$repository_id"
+            echo "commit_sha=$commit_sha"
+          } >> "$GITHUB_OUTPUT"
+      - name: Prove a digest mismatch fails closed
+        env:
+          ARTIFACT: ${{ steps.release.outputs.artifact }}
+          COMMIT_SHA: ${{ steps.release.outputs.commit_sha }}
+          REPOSITORY_ID: ${{ steps.release.outputs.repository_id }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          VERIFICATION_JSON: ${{ steps.release.outputs.verification_json }}
+        run: |
+          set -euo pipefail
+          tampered_dir="$RUNNER_TEMP/tampered"
+          mkdir -p "$tampered_dir"
+          tampered="$tampered_dir/$(basename "$ARTIFACT")"
+          cp "$ARTIFACT" "$tampered"
+          printf 'controlled-tamper' >> "$tampered"
+          failure_log="release-consumption-evidence/controlled-failure.txt"
+          if python3 scripts/verify_release_consumption.py \
+            --verification-json "$VERIFICATION_JSON" \
+            --artifact "$tampered" \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$REPOSITORY_ID" \
+            --tag "$RELEASE_TAG" \
+            --commit "$COMMIT_SHA" \
+            --output release-consumption-evidence/unexpected-success.json \
+            2> "$failure_log"; then
+            echo "Tampered artifact unexpectedly passed verification." >&2
+            exit 1
+          fi
+          grep -q 'Downloaded artifact digest mismatch' "$failure_log"
+      - name: Upload consumption evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-consumption-${{ github.run_id }}
+          path: release-consumption-evidence/
+          if-no-files-found: error
+          retention-days: 30
