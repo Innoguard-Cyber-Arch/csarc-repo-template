@@ -1824,6 +1824,35 @@
       <p class="review-note-footer"><strong>方法：</strong>2026-08-23 對照六個外部案例後留下的摘要與追蹤連結；完整比較細節留在稽核報告與各衍生 Issue，不在本頁重製全文。</p>
     </section>
 
+    <section class="slide review-notes-slide" aria-label="Spec Kit 格式決策">
+      <header>
+        <span class="selection-sequence">決策附錄</span>
+        <h2>Spec 格式決策｜<span class="accent">維持 spec → Issue，訂重新評估條件</span></h2>
+        <p class="subtitle">比較自製 frontmatter＋idempotent marker 與 GitHub Spec Kit 的 <code>/specify /plan /tasks /implement</code> 生命週期；本 Issue 只交付決策與記錄，不遷移程式碼。</p>
+      </header>
+      <div class="decision-strip">
+        <article class="decision-step">
+          <span class="step-label">GitHub Spec Kit</span>
+          <h3>2025-09 開源，半年內成為事實標準</h3>
+          <ul>
+            <li><strong>生命週期：</strong><code>/specify → /plan → /tasks → /implement</code> 四段 slash command，逐步產出 spec.md／plan.md／tasks.md，設計給 AI coding agent 逐步執行。</li>
+            <li><strong>相依：</strong>需安裝 <code>specify</code> CLI，並綁定支援的 AI 工具（Claude Code、Copilot 等）。</li>
+            <li><strong>同步：</strong>沒有內建「一份 spec 對應一張 GitHub Issue」的 idempotent 同步機制，需要自行銜接。</li>
+            <li><strong>採用熱度：</strong><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">github/spec-kit</a>｜MIT｜★130,368（已查證）｜公開、未封存、2026-08-19 仍更新。</li>
+          </ul>
+        </article>
+        <article class="decision-step recommended">
+          <span class="step-label">我們的決定</span>
+          <h3>維持現行 spec → Issue，不在本 Issue 遷移</h3>
+          <p><strong>現行：</strong><code>docs/specs/*.md</code> 用 frontmatter（<code>id／title／owner／priority／estimate／status</code>）記錄狀態，<code>scripts/spec_to_issue.py</code> 以 <code>&lt;!-- csarc-spec-id: SPEC-xxx --&gt;</code> HTML 註解 marker 做 idempotent 同步，已通過 <code>./scripts/verify-template.sh</code> 回歸。</p>
+          <p><strong>遷移成本：</strong>改採 Spec Kit 需要重寫 <code>spec_to_issue.py</code> 的解析與同步邏輯、既有 spec 全部轉檔、更新驗證腳本的斷言，且需另外設計 Issue-sync 等價機制；雙格式支援則讓兩套系統同時維護，增加認知負擔，本 Issue 不做這兩件事。</p>
+          <p><strong>理由：</strong>目前規格量小、現行管線穩定且已納入回歸測試；Spec Kit 的 CLI／Agent 相依對單一小型公版 repo 效益還不明確。</p>
+          <p><strong>重新評估條件：</strong>核准規格需要由 AI 穩定拆成多張子工作，且團隊願意維護額外 CLI／Agent 流程時，再重新評估遷移或雙格式支援；與「步驟一規劃工作」頁既有立場一致。</p>
+        </article>
+      </div>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>現行 spec 格式與驗證：</strong><code>docs/specs/*.md</code>＋<code>scripts/spec_to_issue.py</code></li><li><strong>決策追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/77" target="_blank" rel="noreferrer">Issue #77</a></li></ul></aside>
+    </section>
+
   </main>
 
   <nav class="controls" aria-label="簡報控制">
