@@ -757,6 +757,9 @@ grep -q 'enable_release_attestations: false' \
 grep -q 'enable_codeql: false' \
   "$fixture_root/internal-visibility-project/.copier-answers.yml"
 test ! -f "$fixture_root/internal-visibility-project/.github/workflows/codeql.yml"
+grep -q 'id="fleet-governance-thresholds"' docs/index.html
+grep -q '10 個活躍 consuming repo' docs/index.html
+grep -q '30 天內同類漂移' docs/index.html
 if grep -q 'actions/attest@' \
   "$fixture_root/internal-visibility-project/.github/workflows/release.yml"; then
   echo "Internal projects must keep release attestations opt-in by default."

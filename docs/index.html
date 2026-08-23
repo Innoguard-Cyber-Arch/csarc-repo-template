@@ -1857,6 +1857,50 @@
       <p class="review-note-footer"><strong>簡潔度判斷：</strong>Copier＋GitHub Actions＋標準工具的方向夠簡潔；真正風險是把合成測試當成線上閉環。先補 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/99" target="_blank" rel="noreferrer">live smoke test</a> 與真實 pilot，再依規模決定較重工具；易過期的熱度快照另由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/106" target="_blank" rel="noreferrer">#106</a> 移除。</p>
     </section>
 
+    <section class="slide review-notes-slide" id="fleet-governance-inventory" aria-label="Fleet 治理採用盤點">
+      <header>
+        <span class="selection-sequence">決策附錄</span>
+        <h2>Fleet 治理盤點｜<span class="accent">還沒有 consuming repo</span></h2>
+        <p class="subtitle">2026-08-24 以 GitHub API 唯讀盤點：組織共 6 個 private repo，只有本 repo 是模板來源；其餘 5 個都沒有 <code>.copier-answers.yml</code> 或 <code>.csarc/profile.json</code>，所以目前實際 consuming repo 為 <strong>0</strong>。門檻未達前不部署中央平台。</p>
+      </header>
+      <table class="decision-register audit-register" aria-label="Repository 採用盤點">
+        <thead><tr><th>Repository</th><th>Owner</th><th>模板版本</th><th>漂移資料</th></tr></thead>
+        <tbody>
+          <tr><td><code>csarc-repo-template</code></td><td><code>@Innoguard-Cyber-Arch/repository-maintainers</code></td><td>來源 repo，目前 <code>v0.1.0</code></td><td>非 consuming repo；<code>governance-drift.yml</code> 尚無完成的 schedule／manual run，樣本不足以計算頻率。</td></tr>
+          <tr><td><code>GRC</code></td><td>未宣告 CODEOWNERS</td><td>未導入</td><td>無模板漂移資料</td></tr>
+          <tr><td><code>LLM_Guard</code></td><td>未宣告 CODEOWNERS</td><td>未導入</td><td>無模板漂移資料</td></tr>
+          <tr><td><code>ai-guardrail</code></td><td>未宣告 CODEOWNERS</td><td>未導入</td><td>無模板漂移資料</td></tr>
+          <tr><td><code>claude-newsletter</code></td><td>未宣告 CODEOWNERS</td><td>未導入</td><td>無模板漂移資料</td></tr>
+          <tr><td><code>csarc-agent-kit</code></td><td>未宣告 CODEOWNERS</td><td>未導入</td><td>無模板漂移資料</td></tr>
+        </tbody>
+      </table>
+      <aside class="selection-note"><strong>盤點結論</strong><span>目前沒有下游 repo 可以計算模板版本與治理漂移頻率；「沒有 run」不記為「零漂移」。其餘 repo 缺少 CODEOWNERS 是 pilot 前要補的 metadata，還不是部署平台的證據。</span></aside>
+      <p class="bridge-reference reference">Inventory: GitHub repositories, default branches, CODEOWNERS, Copier answers and CSARC profiles; accessed August 24, 2026.</p>
+    </section>
+
+    <section class="slide review-notes-slide" id="fleet-governance-thresholds" aria-label="Fleet 治理採用門檻">
+      <header>
+        <span class="selection-sequence">決策附錄</span>
+        <h2>Fleet 治理門檻｜<span class="accent">先量問題，再加平台</span></h2>
+        <p class="subtitle">Catalog 處理服務可見性與 owner；policy enforcement 處理跨 repo 設定偏離。兩種問題分開計數、分開選工具。</p>
+      </header>
+      <div class="decision-strip">
+        <article class="decision-step recommended">
+          <span class="step-label">Catalog 門檻</span>
+          <h3>解決「是誰、服務在哪」</h3>
+          <p>滿足任一條才開始 Backstage proof of concept：<strong>10 個活躍 consuming repo</strong>；或至少 3 個 consuming repo，且 90 天內有 <strong>2 次 owner／服務查找超過 30 分鐘</strong>的 Issue 記錄。Backstage 負責 catalog、owner、系統關係與成熟度可見性，不當 repository setting 強制工具。</p>
+        </article>
+        <article class="decision-step">
+          <span class="step-label">Policy 門檻</span>
+          <h3>解決「設定偏離且修不回來」</h3>
+          <p>至少 5 個 consuming repo 後，滿足任一條才評估中央 enforcement：30 天內同類漂移出現於 <strong>2 個以上 repo</strong>；連續兩個模板 release 都有超過 <strong>20%</strong> 的 update PR 逾 <strong>5 個工作天</strong>；或每月人工 <code>apply</code>／修正超過 <strong>2 小時</strong>。Allstar 適合持續檢查與執行安全政策；Safe Settings 適合用階層設定檔統一下發 repository settings。兩者不取代 catalog。</p>
+        </article>
+      </div>
+      <aside class="selection-note"><strong>目前決定</strong><span>0 個 consuming repo，且沒有可用的漂移頻率樣本，不達任一門檻。維持 Copier／JSON policy／GitHub API／每日漂移檢查；不預先部署 Backstage、Allstar 或 Safe Settings。</span></aside>
+      <aside class="config-guidance"><strong>重新評估</strong><ul><li>每季與每次新增 pilot 後，以 GitHub API 重點數 answers／profile、CODEOWNERS、未完成 update PR 與 governance-drift runs。</li><li>漂移頻率只計「有完成排程樣本」的 consuming repo；沒有 run 不記為零漂移。</li><li>觸發後另開 Issue，指定平台 owner、成本上限、試行範圍與退場條件；本決策不授權建置外部服務。</li></ul></aside>
+      <p class="bridge-reference reference">Ref. <a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Backstage Software Catalog</a>; <a href="https://github.com/ossf/allstar" target="_blank" rel="noreferrer">OpenSSF Allstar</a>; <a href="https://github.com/github-community-projects/safe-settings" target="_blank" rel="noreferrer">GitHub Safe Settings</a>. Accessed August 24, 2026.</p>
+    </section>
+
     <section class="slide review-notes-slide" aria-label="Spec Kit 格式決策">
       <header>
         <span class="selection-sequence">決策附錄</span>
