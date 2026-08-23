@@ -10,7 +10,7 @@ Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript �
 
 本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。`template/` 是下發內容；根目錄則讓公版本身使用同一套規則。
 
-目前可用：CI/CD-only、Python-only、TypeScript-only、混合四種 profile，以及 Issue／spec、PR checks、驗證、打包、checksum、SBOM 與 release-please 自動升版。GitHub 設定腳本會先辨識方案與實際 API 能力。
+目前可用：CI/CD-only、Python-only、TypeScript-only、混合四種 profile，以及 Issue／spec、PR checks、驗證、打包、checksum、SBOM 與 capability-adaptive 自動升版。GitHub 設定腳本會先辨識方案與實際 API 能力。
 
 ## 快速開始
 
@@ -59,8 +59,8 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 
 ## 設定與密鑰
 
-- **依方案套用設定：**GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。推送遠端後先執行 `./scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 唯讀驗證；尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。`apply` 也會允許 Actions 建立 release-please PR；workflow 預設權限仍為唯讀，只有 release job 取得 `pull-requests: write`。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。
-- **GitHub App 只給 Python 自動升版用：**release-please 使用 Actions 內建 `GITHUB_TOKEN`，不需要另外設定；`python-version-policy.yml` 的排程升版 PR 仍需要 `CSARC_VERSION_BOT_CLIENT_ID` 與 private key，未提供時該 job 會略過。
+- **依方案套用設定：**GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。有管理權且希望啟用較強門禁時，可在推送遠端後執行 `./scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 唯讀驗證；這不是 portable release baseline 的必要步驟。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。`apply` 會嘗試設定 Actions 建立 PR；組織政策回覆 403／409 時保留宣告、明確降級並繼續，其餘未知錯誤仍停止。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。
+- **Release 路徑依能力自動選擇：**`csarc init`／`adopt`／`update` 會在 GitHub origin 與 API 可讀時顯示 preflight；每次 release workflow 仍以當下的 `GITHUB_TOKEN` 重測 Actions PR、contents、Release 與 workflow dispatch 能力。四項都確認可用時使用 release-please；PR 被禁止或無法確認但其餘交付能力完整時，從最新 `main` commit 配置版本、建立 tag／draft release 並 dispatch 成品；其餘情況只驗證並輸出 `release-capabilities-<run-id>` artifact，不假裝已發版。PR check 只顯示 patch／minor／major／no-release 意圖，確切版本到 main 後才配置。這些路徑都不需要長效 PAT 或額外 GitHub App；`python-version-policy.yml` 的排程升版 PR 仍需要專用 App，未提供時略過。
 - **每日排程偵測治理漂移：**`apply-repository-settings.sh check` 原本只在 PR／push 觸發的 CI 裡執行，是一次性快照；`.github/workflows/governance-drift.yml`（daily cron，另可手動 `workflow_dispatch`）在 CI 之外每天重跑同一個 `check`，縮短只靠程式碼變更觸發檢查的盲區，並抓出排程執行時仍存在的偏離。偵測到偏離就由 `scripts/check-governance-drift` 自動開立或更新一張 `Repository governance drift detected` Issue，內容附上實際擷取到的差異；沒有偏離則不會建立或更新任何 Issue。若設定在兩次快照之間遭變更後又恢復，這個排程無法回溯偵測，仍需 GitHub audit log 或組織層事件監控。下發專案可在 Copier 問答啟用 `enable_governance_drift_check`（預設關閉）選配同一檢查。
 - **來源證明依可見度決定預設值：**Copier 問答新增 `project_visibility`（public／private／internal）；建立非 CI-only 專案且選擇 public 時，`enable_release_attestations` 預設開啟，自動產生 `actions/attest` provenance／SBOM attestation，`publish-evidence` job 也會拿到對應的 `id-token: write`／`attestations: write`——呼應 GitHub 在 2025–2026 年把公開 repo 的 build attestation 逐步轉為預設行為的方向。private／internal 維持現行明確 opt-in、預設關閉，改用 GitHub Release 上的 SHA-256 驗證；此預設值只在 Copier 建檔當下生效，不會回頭偵測或變更既有 repo 在 GitHub 上的實際可見度，PyPI／npm Trusted Publishing 也不受影響、仍為明確 opt-in。
 - **SAST 依方案啟用：**有 Python／TypeScript 的 public repo 預設產生最小 CodeQL workflow；private／internal repo 只有在已授權 GitHub Code Security 時才明確開啟 `enable_codeql`，否則 SAST 保持未涵蓋並由專案選用核准的替代工具。Ruff／TypeScript 負責 lint 與型別，OSV 負責已知相依漏洞，都不視為 SAST。CodeQL 只分析所選 profile 的語言，結果仍可能有誤報與漏報，需人工 triage。
@@ -81,11 +81,17 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 
 公版版本以 `version.txt`、`.release-please-manifest.json` 與 `v*` tag 同步記錄；tag 觸發完整驗證。生成專案則依 profile 產生 wheel、npm tarball 或兩者，將 distributions、`SHA256SUMS`、CycloneDX SBOM 與包含 tag／commit／workflow run 的 metadata 附加至 GitHub Release；CI/CD-only 只有 GitHub Release 的來源封存檔，不假裝有語言成品。下載後可執行 `gh release download <tag>` 與 `shasum -a 256 -c SHA256SUMS`；有啟用 attestation 時再以 `gh attestation verify <artifact> --repo <owner/repo>` 驗證。現在只有持續交付，沒有通用部署流程。
 
-Python 與 TypeScript profile 可分別啟用 PyPI／npm Trusted Publishing，預設都關閉。兩者使用 GitHub environment 與 OIDC 短效憑證，發布 job 才有 `id-token: write`，不讀取長效 registry token。啟用前，package owner 必須在 registry 登記完全相符的 organization／repository、workflow 檔名 `release.yml` 與 environment；PyPI 首次發布可先建立 pending publisher，npm 則需由既有 package owner 在 package Settings 建立 trusted publisher。npm 路徑需要 GitHub-hosted runner、Node 22.14+ 與 npm 11.5.1+，公版使用 Node 24。
+| Runtime 實測政策 | 模式與行為 | 保證、限制與 fallback |
+| --- | --- | --- |
+| PR、contents、Release、dispatch 都是 `allowed` | **Release PR：**release-please 維護可審查的版本／changelog PR；合併後建立 release 並明確 dispatch 成品 workflow | 保留最強的人類審查與來源 metadata 同步；任一必要能力漂移就不再選此模式 |
+| PR 是 `blocked`／`unknown`，其餘三項都是 `allowed` | **Direct：**只由最新 `main` 配置 tag 與 draft release，再 dispatch 成品 workflow，不另開 PR | 亂序 run 會成為 no-op，成品 checkout 依 tag 暫時寫入正確版本；main 上的版本檔與 changelog 不會另有升版 commit |
+| contents、Release 或 dispatch 任一不是 `allowed` | **Verification only：**保留測試與 machine-readable capability artifact，不建立 tag 或 release | 不會把不確定權限當成功；政策恢復後由後續 main run 重新計算並接續 |
+
+Python 與 TypeScript profile 可分別啟用 PyPI／npm Trusted Publishing，預設都關閉；本公版 repo 的 PyPI job 也只有在 repository variable `CSARC_ENABLE_PYPI_PUBLISHING=true` 時才執行，且不會阻擋基線 GitHub Release。兩者使用 GitHub environment 與 OIDC 短效憑證，發布 job 才有 `id-token: write`，不讀取長效 registry token。啟用前，package owner 必須在 registry 登記完全相符的 organization／repository、workflow 檔名 `release.yml`（公版為 `release-template.yml`）與 environment；PyPI 首次發布可先建立 pending publisher，npm 則需由既有 package owner 在 package Settings 建立 trusted publisher。npm 路徑需要 GitHub-hosted runner、Node 22.14+ 與 npm 11.5.1+，公版使用 Node 24。
 
 整份公版只用一個 SemVer：`fix(scope)` 升 patch、`feat(scope)` 升 minor、`!` 升 major。scope 可標 `ci`、`python`、`typescript` 或 `template`；只要任何已支援 profile 不相容，就視為整份公版的破壞性變更。
 
-release-please 用內建 `GITHUB_TOKEN` 自動開、更新 Release PR；合併後先建立 draft 與 tag，同一 workflow 只在 `release_created` 為真時取得 `actions: write`，並以 tag 明確 dispatch `release-template.yml`。發布 workflow 會先完整驗證、透過 `pypi` environment 的 Trusted Publisher 發布 `csarc-repo-cli`，再附加 wheel、sdist、release-specific prompt 與 provenance，最後才發布並鎖定 immutable GitHub Release；任一步驟失敗都保留 draft。發布後會以 `gh release verify` 重新驗證 attestation。一般 main push 不會重複發版。
+release workflow 用內建 `GITHUB_TOKEN` 重測能力：支援時由 release-please 自動開、更新 Release PR；目前組織政策禁止 Actions PR 時，改由 direct mode 在合併後的最新 `main` 建立 draft 與 tag。兩種模式都以 tag 明確 dispatch `release-template.yml`。發布 workflow 會先完整驗證，再附加 wheel、sdist、release-specific prompt 與 provenance，最後發布並鎖定 immutable GitHub Release；任一步驟失敗都保留 draft。選配 PyPI Trusted Publishing 在 GitHub Release 成功後獨立執行。發布後會以 `gh release verify` 重新驗證 attestation。一般 main push不會重複發版。
 
 ## 公版更新
 

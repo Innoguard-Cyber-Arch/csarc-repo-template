@@ -47,6 +47,12 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
+      - name: Materialize the immutable tag version
+        env:
+          RELEASE_TAG: {% raw %}${{ github.ref_name }}{% endraw %}
+        run: >-
+          uv run --no-project python scripts/release_policy.py prepare
+          --tag "$RELEASE_TAG"
 {% if has_typescript %}
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
@@ -221,6 +227,9 @@ jobs:
             release-evidence/sbom.cdx.json \
             release-evidence/release-metadata.json \
             --clobber
+          if [[ "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)" == true ]]; then
+            gh release edit "$GITHUB_REF_NAME" --draft=false
+          fi
 {% endif %}
 {% if has_python and publish_python %}
   publish-python:

@@ -18,6 +18,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Require the default branch as the release source
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]]; then
+            echo "Release planning only runs from $DEFAULT_BRANCH." >&2
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -26,9 +34,58 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: ./scripts/apply-repository-settings.sh check
 
-  release:
-    name: release
+  capabilities:
+    name: release capabilities
     needs: governance
+    outputs:
+      mode: ${{ steps.detect.outputs.mode }}
+      reason: ${{ steps.detect.outputs.reason }}
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Detect current release capabilities
+        id: detect
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          artifact_workflow=release.yml
+          if [[ -f .github/workflows/release-template.yml ]]; then
+            artifact_workflow=release-template.yml
+          fi
+          python3 scripts/release_policy.py detect \
+            --repo "$GITHUB_REPOSITORY" \
+            --sha "$GITHUB_SHA" \
+            --branch "$DEFAULT_BRANCH" \
+            --workflow "$artifact_workflow" \
+            --output release-capabilities.json \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Publish capability evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-capabilities-${{ github.run_id }}
+          path: release-capabilities.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Summarize selected mode
+        env:
+          RELEASE_MODE: ${{ steps.detect.outputs.mode }}
+          RELEASE_REASON: ${{ steps.detect.outputs.reason }}
+        run: |
+          echo "### Release mode: $RELEASE_MODE" >> "$GITHUB_STEP_SUMMARY"
+          echo "$RELEASE_REASON" >> "$GITHUB_STEP_SUMMARY"
+
+  release-pr:
+    name: release pull request
+    needs: capabilities
+    if: ${{ needs.capabilities.outputs.mode == 'release-pr' }}
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -46,10 +103,10 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  dispatch-artifacts:
-    name: dispatch artifacts
-    needs: release
-    if: ${{ needs.release.outputs.release_created == 'true' }}
+  dispatch-release-pr:
+    name: dispatch release pull request artifacts
+    needs: release-pr
+    if: ${{ needs.release-pr.outputs.release_created == 'true' }}
     permissions:
       actions: write
       contents: read
@@ -62,10 +119,66 @@ jobs:
       - name: Dispatch the artifact workflow at the release tag
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ needs.release.outputs.tag_name }}
+          RELEASE_TAG: ${{ needs.release-pr.outputs.tag_name }}
         run: |
           workflow=release.yml
           if [[ -f .github/workflows/release-template.yml ]]; then
             workflow=release-template.yml
           fi
           gh workflow run "$workflow" --ref "$RELEASE_TAG"
+
+  direct-release:
+    name: direct release after main
+    needs: capabilities
+    if: ${{ needs.capabilities.outputs.mode == 'direct' }}
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Recheck policy and allocate from the current main head
+        id: release
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          artifact_workflow=release.yml
+          if [[ -f .github/workflows/release-template.yml ]]; then
+            artifact_workflow=release-template.yml
+          fi
+          python3 scripts/release_policy.py release \
+            --repo "$GITHUB_REPOSITORY" \
+            --sha "$GITHUB_SHA" \
+            --branch "$DEFAULT_BRANCH" \
+            --workflow "$artifact_workflow" \
+            --output release-capabilities-final.json \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Publish final release decision
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-decision-${{ github.run_id }}
+          path: release-capabilities-final.json
+          if-no-files-found: error
+          retention-days: 30
+
+  verification-only:
+    name: verification only
+    needs: capabilities
+    if: ${{ needs.capabilities.outputs.mode == 'verification-only' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report unavailable release automation
+        env:
+          RELEASE_REASON: ${{ needs.capabilities.outputs.reason }}
+        run: |
+          echo "::warning::$RELEASE_REASON"
+          echo "### Verification only" >> "$GITHUB_STEP_SUMMARY"
+          echo "$RELEASE_REASON" >> "$GITHUB_STEP_SUMMARY"

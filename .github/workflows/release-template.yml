@@ -36,6 +36,12 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
+      - name: Materialize the immutable tag version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: >-
+          uv run --no-project python scripts/release_policy.py prepare
+          --tag "$RELEASE_TAG"
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: "11.22.0"
@@ -48,7 +54,8 @@ jobs:
 
   publish-pypi:
     name: publish CLI to PyPI
-    needs: verify
+    if: ${{ vars.CSARC_ENABLE_PYPI_PUBLISHING == 'true' }}
+    needs: publish
     environment: pypi
     permissions:
       contents: read
@@ -62,13 +69,19 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
+      - name: Materialize the immutable tag version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: >-
+          uv run --no-project python scripts/release_policy.py prepare
+          --tag "$RELEASE_TAG"
       - run: uv build
       - name: Publish with trusted identity
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
 
   publish:
     name: publish immutable release
-    needs: [verify, publish-pypi]
+    needs: verify
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -81,6 +94,12 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
+      - name: Materialize the immutable tag version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: >-
+          uv run --no-project python scripts/release_policy.py prepare
+          --tag "$RELEASE_TAG"
       - name: Build CLI and prepare release assets
         env:
           GH_TOKEN: ${{ github.token }}

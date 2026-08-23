@@ -49,6 +49,17 @@ If a `copier update` changes the Issue or pull request body template's shape, an
 - Do not create a separate GitHub repository for testing or validation. Use local temporary projects or this repository's Issues, branches, pull requests, and Actions.
 - Comments in source code must be written in English. Leave style details in {% if language == "ci" %}executable configuration{% elif language == "python" %}`pyproject.toml` and other executable configuration{% elif language == "typescript" %}`biome.json` and other executable configuration{% else %}`pyproject.toml`, `biome.json`, and other executable configuration{% endif %} instead of copying them here.
 
+## Platform capability and automation
+
+- Keep desired CI/CD behavior declarative in the repository and enforce it with tests; agents may edit that declaration but must not assume organization or enterprise administrator access.
+- The portable baseline must not require adopters to create a GitHub App or PAT, copy a personal token, populate `.env`, or change organization policy. Never extract or persist `gh auth token` as project configuration.
+- Detect platform capabilities during init, adopt, and update when they are observable, and re-evaluate them during CI/CD. Distinguish allowed, blocked, and unknown; never treat a permission error as evidence that a capability is available.
+- Select the highest safe supported mode and degrade explicitly to artifact-only or verification-only behavior when release or deployment writes are unavailable. Never claim that a release or deployment succeeded when it was skipped or blocked.
+- Do not make the portable fallback the capability ceiling. When stronger controls are confirmed, prefer the mode with stronger review, ordering, provenance, and deployment guarantees.
+- A pull request declares SemVer intent through its validated title. Assign the exact version only after merge from the actual default-branch history; do not reserve version numbers on open pull requests.
+- Keep external trust bootstrap such as package-registry publishers or cloud identities optional and verifiable. Do not bypass or silently weaken platform policy to make automation pass.
+- Keep the project website aligned with the capability matrix. For each policy-dependent mode, document its prerequisites, selected behavior, guarantees, limitations, and fallback without presenting unavailable capabilities as active.
+
 ## Safety
 
 - Never commit secrets, tokens, private keys, or populated `.env` files. Use GitHub Secrets or approved secret management for automation.

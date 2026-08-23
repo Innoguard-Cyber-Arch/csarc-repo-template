@@ -238,7 +238,7 @@ echo "Account plan: $plan_label"
 echo "Repository visibility: $repo_visibility"
 echo "Deployment plan:"
 echo "- APPLY policies/repository.json"
-echo "- APPLY policies/actions.json"
+echo "- APPLY policies/actions.json when account policy permits it"
 echo "- APPLY policies/labels.json (create or update policy labels)"
 existing_labels="$(gh label list --repo "$repo" --limit 1000 --json name --jq '.[].name')"
 desired_labels="$({
@@ -285,8 +285,21 @@ if [[ "$mode" == "plan" ]]; then
   exit 0
 fi
 gh api --method PATCH "repos/$repo" --input "$repo_root/policies/repository.json" >/dev/null
-gh api --method PUT "repos/$repo/actions/permissions/workflow" \
-  --input "$repo_root/policies/actions.json" >/dev/null
+actions_policy_applied=true
+if ! actions_policy_error="$(
+  gh api --method PUT "repos/$repo/actions/permissions/workflow" \
+    --input "$repo_root/policies/actions.json" 2>&1
+)"; then
+  if [[ "$actions_policy_error" =~ (403|409|not\ permitted) ]]; then
+    actions_policy_applied=false
+    echo "DEGRADED Actions PR policy: $actions_policy_error"
+    echo "The release workflow will select direct or verification-only mode at runtime."
+  else
+    echo "Cannot apply Actions workflow permissions for $repo." >&2
+    echo "$actions_policy_error" >&2
+    exit 1
+  fi
+fi
 
 while IFS=$'\t' read -r name color description; do
   gh label create "$name" --repo "$repo" --color "$color" \
@@ -326,8 +339,8 @@ if [[ "$ruleset_enforcement_available" == true ]]; then
 fi
 
 GH_REPO="$repo" "$0" check
-if [[ "$ruleset_enforcement_available" == true ]]; then
+if [[ "$ruleset_enforcement_available" == true && "$actions_policy_applied" == true ]]; then
   echo "Required repository settings applied, including branch protection."
 else
-  echo "DEGRADED repository settings applied; desired Ruleset remains in policies/rulesets.json for later activation."
+  echo "DEGRADED repository settings applied; unavailable policy remains declarative and runtime workflows adapt."
 fi

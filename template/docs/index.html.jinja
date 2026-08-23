@@ -80,6 +80,7 @@
       .sidebar nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .sidebar small { position: static; display: block; margin-top: 18px; }
       .cards { grid-template-columns: 1fr; }
+      .table { display: block; max-width: 100%; overflow-x: auto; }
     }
   </style>
   <script src="site-content.js" defer></script>
@@ -112,6 +113,17 @@
       text("#release-current", data.release.current);
       text("#release-optional", data.release.optional);
       text("#update", data.release.update);
+
+      const releaseModes = document.querySelector("#release-modes");
+      for (const row of data.release.modes) {
+        const tr = document.createElement("tr");
+        for (const value of [row.policy, row.mode, row.delivery, row.boundary]) {
+          const td = document.createElement("td");
+          td.textContent = value;
+          tr.append(td);
+        }
+        releaseModes.append(tr);
+      }
 
       const structure = document.querySelector("#structure-body");
       for (const row of data.structure) {
@@ -195,7 +207,7 @@
 
       <section id="github-plan">
         <h2><span>GitHub 方案與門禁</span></h2>
-        <p>repo 推送後依序執行 <code>./scripts/apply-repository-settings.sh plan</code>、<code>apply</code> 與 <code>check</code>；最後一步會唯讀檢查實際生效規則，必要門禁不存在時 CI 與 release 都會失敗。</p>
+        <p>repo 推送後會由 CI 讀取實際能力。有管理權且要啟用較強門禁時，可再執行 <code>./scripts/apply-repository-settings.sh plan</code>、<code>apply</code> 與 <code>check</code>；這不是 portable release baseline 的必要步驟。</p>
         <table class="table">
           <thead><tr><th>方案</th><th>公版會套用</th><th>方案邊界</th></tr></thead>
           <tbody>
@@ -212,6 +224,10 @@
       <section id="release">
         <h2><span>交付與更新</span></h2>
         <p id="release-current" class="notice"></p>
+        <table class="table">
+          <thead><tr><th>Runtime 實測政策</th><th>模式</th><th>保證</th><th>限制／fallback</th></tr></thead>
+          <tbody id="release-modes"></tbody>
+        </table>
         <p id="release-optional" class="notice optional"></p>
         <p id="update"></p>
       </section>

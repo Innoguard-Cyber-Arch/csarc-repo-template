@@ -53,7 +53,27 @@ window.CSARC_SITE_CONTENT = {
   ],
   release: {
     current: {% if language == "ci" %}"tag 會建立 GitHub Release 與來源封存檔；沒有語言套件，因此不產生套件 SBOM。"{% else %}"tag 打包、checksum、SBOM 與來源 metadata 會附加到 GitHub Release；沒有通用部署流程。"{% endif %},
-    optional: "release-please 使用 GITHUB_TOKEN；repo 必須允許 Actions 建立 PR，而且 release 建立後要明確啟動成品 workflow。Artifact attestation 與 PyPI／npm OIDC 發布依 repo 與 registry 設定啟用。",
+    modes: [
+      {
+        policy: "PR、contents、Release、dispatch 都是 allowed",
+        mode: "Release PR",
+        delivery: "release-please 保留可審查的版本與 changelog PR；合併後明確 dispatch 成品 workflow。",
+        boundary: "必要能力漂移時自動降級；不要求 App 或 PAT。"
+      },
+      {
+        policy: "PR blocked／unknown，其餘三項 allowed",
+        mode: "Direct",
+        delivery: "只由最新 main 配置 tag 與 draft release；亂序 run 成為 no-op。",
+        boundary: "成品 checkout 暫時寫入版本；main 不另有版本／changelog commit。"
+      },
+      {
+        policy: "contents、Release 或 dispatch 任一非 allowed",
+        mode: "Verification only",
+        delivery: "執行驗證並保存 machine-readable capability artifact，不建立 release。",
+        boundary: "不把未知權限當成功；後續 run 會依新政策重新判斷。"
+      }
+    ],
+    optional: "Artifact attestation 與 PyPI／npm OIDC 發布依 repo 與外部 registry 信任設定啟用；portable baseline 不要求導入者建立長效 token 或修改組織政策。",
     update: "Copier 從 {{ branch_strategy }} 的工作分支套用已審查的完整 commit SHA，再執行 ./scripts/verify。"
   }
 };
