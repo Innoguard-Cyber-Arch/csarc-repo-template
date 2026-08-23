@@ -136,7 +136,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(gh release view "$RELEASE_TAG" --json isImmutable,isDraft,isPrerelease --jq '[.isImmutable, .isDraft, .isPrerelease] | @tsv')" = $'true\tfalse\tfalse'
-          for attempt in 1 2 3 4 5 6; do
+          for attempt in {1..36}; do
             if gh release verify "$RELEASE_TAG" -R "$GITHUB_REPOSITORY"; then
               exit 0
             fi

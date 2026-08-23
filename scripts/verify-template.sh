@@ -493,6 +493,7 @@ grep -q '"draft": true' release-please-config.json
 grep -q '"force-tag-creation": true' release-please-config.json
 grep -q 'gh release verify "$RELEASE_TAG"' \
   .github/workflows/release-template.yml
+grep -q 'for attempt in {1..36}' .github/workflows/release-template.yml
 grep -q 'isImmutable,isDraft,isPrerelease' \
   .github/workflows/release-template.yml
 if grep -q 'repos/${GITHUB_REPOSITORY}/immutable-releases' \
