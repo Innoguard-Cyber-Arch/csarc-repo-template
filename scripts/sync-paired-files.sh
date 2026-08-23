@@ -13,6 +13,7 @@ set -euo pipefail
 #                                         each pair that has drifted.
 paired_files=(
   CLAUDE.md
+  SECURITY.md
   .release-please-manifest.json
   .github/ISSUE_TEMPLATE/config.yml
   .github/ISSUE_TEMPLATE/work-item.yml
