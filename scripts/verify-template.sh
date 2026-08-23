@@ -535,6 +535,8 @@ test -f "$fixture_root/default-project/.copier-answers.yml"
 diff -B -w "$repo_root/.github/dependabot.yml" \
   "$fixture_root/default-project/.github/dependabot.yml"
 grep -q 'language: python' "$fixture_root/default-project/.copier-answers.yml"
+grep -q 'project_visibility: private' \
+  "$fixture_root/default-project/.copier-answers.yml"
 grep -q '"language_profile": "python"' \
   "$fixture_root/default-project/.csarc/profile.json"
 grep -q '"branch_strategy": "main"' \
@@ -557,6 +559,42 @@ fi
 if grep -q '^  publish-python:\|^  publish-npm:' \
   "$fixture_root/default-project/.github/workflows/release.yml"; then
   echo "Registry publishing must remain opt-in."
+  exit 1
+fi
+
+# Public projects default release attestations on; private/internal stay explicit opt-in.
+uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_slug="public-visibility-test" \
+  --data package_name="public_visibility_test" \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  --data project_visibility=public \
+  "$repo_root" "$fixture_root/public-visibility-project"
+prime_gitleaks_cache "$fixture_root/public-visibility-project"
+grep -q 'project_visibility: public' \
+  "$fixture_root/public-visibility-project/.copier-answers.yml"
+grep -q 'enable_release_attestations: true' \
+  "$fixture_root/public-visibility-project/.copier-answers.yml"
+test "$(grep -c 'actions/attest@' \
+  "$fixture_root/public-visibility-project/.github/workflows/release.yml")" -eq 2
+grep -q 'attestations: write' \
+  "$fixture_root/public-visibility-project/.github/workflows/release.yml"
+grep -q 'id-token: write' \
+  "$fixture_root/public-visibility-project/.github/workflows/release.yml"
+
+uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_slug="internal-visibility-test" \
+  --data package_name="internal_visibility_test" \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  --data project_visibility=internal \
+  "$repo_root" "$fixture_root/internal-visibility-project"
+prime_gitleaks_cache "$fixture_root/internal-visibility-project"
+grep -q 'project_visibility: internal' \
+  "$fixture_root/internal-visibility-project/.copier-answers.yml"
+grep -q 'enable_release_attestations: false' \
+  "$fixture_root/internal-visibility-project/.copier-answers.yml"
+if grep -q 'actions/attest@' \
+  "$fixture_root/internal-visibility-project/.github/workflows/release.yml"; then
+  echo "Internal projects must keep release attestations opt-in by default."
   exit 1
 fi
 test ! -f "$fixture_root/default-project/.github/workflows/template-update.yml"

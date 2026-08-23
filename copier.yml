@@ -141,10 +141,19 @@ enable_template_update_notifications:
   help: Check weekly for a newer Copier template release and maintain one notification Issue
   default: false
 
+project_visibility:
+  type: str
+  help: GitHub repository visibility this project will use
+  choices:
+    Public: public
+    Private: private
+    Internal (GitHub Enterprise Cloud only): internal
+  default: private
+
 enable_release_attestations:
   type: bool
-  help: Sign release provenance and SBOM attestations on supported GitHub plans
-  default: false
+  help: Sign release provenance and SBOM attestations on supported GitHub plans; public projects default on, private/internal stay explicit opt-in
+  default: "{{ project_visibility == 'public' }}"
   when: "{{ language != 'ci' }}"
 
 enable_pypi_publishing:
