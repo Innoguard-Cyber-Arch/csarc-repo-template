@@ -622,6 +622,21 @@ git -C "$fixture_root/default-project" add .
 git -C "$fixture_root/default-project" diff --cached --check
 
 test -f "$fixture_root/default-project/.copier-answers.yml"
+root_only_paths=(
+  scripts/verify-template.sh
+  scripts/sync-paired-files.sh
+  scripts/update_python_version.py
+  scripts/report_dependency_ceiling.py
+  .github/workflows/reusable-ci.yml
+  .github/workflows/release-template.yml
+  .github/workflows/python-version-policy.yml
+)
+for root_only_path in "${root_only_paths[@]}"; do
+  if [[ -e "$fixture_root/default-project/$root_only_path" ]]; then
+    echo "Generated projects must not receive template-repository-only file: $root_only_path"
+    exit 1
+  fi
+done
 diff -B -w "$repo_root/.github/dependabot.yml" \
   "$fixture_root/default-project/.github/dependabot.yml"
 for renovate_config_path in \
@@ -1362,7 +1377,7 @@ grep -q 'project_mode: existing' "$adoption_project/.copier-answers.yml"
 grep -q '"template_mode": "existing"' \
   "$adoption_project/.csarc/profile.json"
 
-# Verify that an existing generated repository can receive a later template version.
+# Verify that an adopted repository can receive a later template version.
 update_source="$fixture_root/update-source"
 update_project="$fixture_root/update-project"
 mkdir -p "$update_source"
@@ -1381,17 +1396,32 @@ uv run copier copy --trust --defaults --vcs-ref v0.1.0 \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$update_source" "$update_project"
 
+# Reuse a valid generated project as a compatible legacy fixture without
+# template history, so the lifecycle test does not duplicate full manifests.
+rm "$update_project/.copier-answers.yml"
+printf '%s\n' '' '[tool.product]' 'owner = "legacy"' \
+  >> "$update_project/pyproject.toml"
+printf '%s\n' 'PROJECT_OWNED = True' \
+  >> "$update_project/src/csarc_project/__init__.py"
+printf '%s\n' 'export const projectOwned = true;' \
+  >> "$update_project/typescript/src/index.ts"
+printf '%s\n' 'window.PROJECT_OWNED_SITE = true;' \
+  >> "$update_project/docs/site-content.js"
+uv run copier copy --trust --defaults --overwrite --vcs-ref v0.1.0 \
+  --data project_mode=existing \
+  --data language=python-typescript \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$update_source" "$update_project"
+grep -q 'project_mode: existing' "$update_project/.copier-answers.yml"
+grep -q '"template_mode": "existing"' \
+  "$update_project/.csarc/profile.json"
+grep -q '^owner = "legacy"$' "$update_project/pyproject.toml"
+
 git -C "$update_project" init -b main
 git -C "$update_project" config user.name "Template Test"
 git -C "$update_project" config user.email "template-test@example.invalid"
-printf '%s\n' 'PROJECT_OWNED = true' \
-  > "$update_project/src/csarc_project/__init__.py"
-printf '%s\n' 'export const projectOwned = true;' \
-  > "$update_project/typescript/src/index.ts"
-printf '%s\n' 'window.PROJECT_OWNED_SITE = true;' \
-  > "$update_project/docs/site-content.js"
 git -C "$update_project" add .
-git -C "$update_project" commit -m "test: generated project"
+git -C "$update_project" commit -m "test: adopted project"
 
 cp "$update_source/template/.gitignore.jinja" \
   "$update_source/template/update-marker"
@@ -1405,10 +1435,16 @@ git -C "$update_source" tag v0.1.1
 )
 
 test -f "$update_project/update-marker"
-grep -q '^PROJECT_OWNED = true$' \
+grep -q '^owner = "legacy"$' "$update_project/pyproject.toml"
+grep -q '^PROJECT_OWNED = True$' \
   "$update_project/src/csarc_project/__init__.py"
 grep -q '^export const projectOwned = true;$' \
   "$update_project/typescript/src/index.ts"
 grep -q '^window.PROJECT_OWNED_SITE = true;$' \
   "$update_project/docs/site-content.js"
 grep -q '_commit: v0.1.1' "$update_project/.copier-answers.yml"
+prime_gitleaks_cache "$update_project"
+(
+  cd "$update_project"
+  ./scripts/verify
+)
