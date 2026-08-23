@@ -271,8 +271,11 @@ jobs:
             exit 1
           }
           expected_repo_url="https://github.com/${GITHUB_REPOSITORY}.git"
-          tar -xOf "${packages[0]}" package/package.json |
-            grep -Fq "\"url\": \"${expected_repo_url}\"" || {
+          actual_repo_url="$(
+            tar -xOf "${packages[0]}" package/package.json |
+              node -e 'let input = ""; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => console.log(JSON.parse(input).repository?.url ?? ""));'
+          )"
+          [[ "$actual_repo_url" == "$expected_repo_url" ]] || {
               echo "package.json repository.url must match ${expected_repo_url}." >&2
               exit 1
             }
