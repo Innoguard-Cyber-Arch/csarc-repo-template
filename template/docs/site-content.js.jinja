@@ -41,6 +41,9 @@ window.CSARC_SITE_CONTENT = {
     { title: "5｜交付", detail: "tag 建立可追溯成品、SHA-256 與非空 SBOM；部署依專案另訂。" }
   ],
   safeguards: [
+{% if language != "ci" %}
+    "Coverage 是未測程式碼的訊號，不等於品質；新案看全域、既有案先看 changed lines，門檻依缺陷與模組風險調整。",
+{% endif %}
     "一般相依新版等待三天；pnpm 另拒絕 publisher trust 降級，已公開漏洞由 OSV 立即通知。",
     "lockfile 保存下載內容雜湊；第三方 Actions 固定完整 commit SHA。",
     "PR 政策包含合法／不合法回歸測資，避免門禁只會顯示綠燈。",

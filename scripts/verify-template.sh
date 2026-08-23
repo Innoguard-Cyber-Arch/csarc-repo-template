@@ -433,6 +433,10 @@ test ! -f "$fixture_root/default-project/.pre-commit-config.yaml"
 test ! -f "$fixture_root/default-project/package.json"
 test ! -f "$fixture_root/default-project/pnpm-workspace.yaml"
 test ! -d "$fixture_root/default-project/typescript"
+grep -q 'Coverage 是找出未測程式碼的訊號' \
+  "$fixture_root/default-project/README.md"
+grep -q '新案看全域、既有案先看 changed lines' \
+  "$fixture_root/default-project/docs/site-content.js"
 grep -q '^\.DS_Store$' "$fixture_root/default-project/.gitignore"
 grep -q '^Thumbs\.db$' "$fixture_root/default-project/.gitignore"
 grep -q '^\.vscode/\*$' "$fixture_root/default-project/.gitignore"
