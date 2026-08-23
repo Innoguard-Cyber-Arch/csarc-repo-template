@@ -42,7 +42,7 @@ _tasks:
   - command: "pnpm install --lockfile-only --ignore-scripts"
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language in ['typescript', 'python-typescript'] }}"
 _message_after_copy: |
-  {% if project_mode == 'existing' %}Existing pyproject.toml/package.json files were preserved. Merge the required tool settings and version markers described in README.md, run ./scripts/verify, then link the pull request to its Issue.{% else %}Project created. Confirm .csarc/profile.json, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request.{% endif %} After pushing to GitHub, run ./scripts/apply-repository-settings.sh plan and apply; CI and release automation stay blocked until ./scripts/apply-repository-settings.sh check confirms the required branch rules.
+  {% if project_mode == 'existing' %}Existing pyproject.toml/package.json files were preserved. Merge the required tool settings and version markers described in README.md, run ./scripts/verify, then link the pull request to its Issue.{% else %}Project created. Confirm .csarc/profile.json, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request.{% endif %} After pushing to GitHub, run ./scripts/apply-repository-settings.sh plan and apply; ./scripts/apply-repository-settings.sh check gates CI and release only on plans that support branch rules and are not yet configured for them — accounts without Ruleset support (e.g. GitHub Free private) run in degraded mode instead of being blocked.
 
 project_mode:
   type: str

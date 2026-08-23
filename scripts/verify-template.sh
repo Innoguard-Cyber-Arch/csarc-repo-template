@@ -190,11 +190,9 @@ enterprise_plan="$(run_settings_fixture business_plus)"
 grep -q 'Account plan: GitHub Enterprise' <<<"$enterprise_plan"
 grep -q 'Enterprise-wide identity, audit, network' <<<"$enterprise_plan"
 
-if free_check="$(run_settings_fixture free check 2>&1)"; then
-  echo "GitHub Free private governance checks must fail closed."
-  exit 1
-fi
+free_check="$(run_settings_fixture free check)"
 grep -q 'BLOCKED required governance' <<<"$free_check"
+grep -q 'DEGRADED required governance' <<<"$free_check"
 team_check="$(run_settings_fixture team check)"
 grep -q 'Repository governance ready' <<<"$team_check"
 if incomplete_check="$(run_settings_fixture team check "" false false incomplete 2>&1)"; then

@@ -93,9 +93,10 @@ fi
 if [[ "$mode" == "check" ]]; then
   if [[ "$ruleset_available" != true ]]; then
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
-      echo "::error title=Repository governance blocked::Required branch protection is unavailable for this private repository."
-    print_ruleset_guidance >&2
-    exit 1
+      echo "::warning title=Repository governance degraded::Required branch protection is unavailable for this private repository; continuing without it."
+    print_ruleset_guidance
+    echo "DEGRADED required governance: $ruleset_skip_reason The template must keep working on every GitHub plan and visibility, so this account-plan limitation does not fail closed; a capable plan with rules that do not match policy still does."
+    exit 0
   fi
   if ! branch_rules="$(gh api "repos/$repo/rules/branches/$default_branch" 2>&1)"; then
     echo "Cannot inspect effective rules for $repo:$default_branch." >&2
