@@ -105,7 +105,14 @@ run_settings_fixture() {
   local plan="$1"
   local mode="${2:-plan}"
   local ruleset_error="${3:-}"
-  local call_log="$github_plan_fixture/$plan-$mode.log"
+  local prune_labels="${4:-false}"
+  local suffix=""
+  local arguments=("$mode")
+  if [[ "$prune_labels" == true ]]; then
+    suffix="-prune"
+    arguments+=(--prune-labels)
+  fi
+  local call_log="$github_plan_fixture/$plan-$mode$suffix.log"
   : > "$call_log"
   PATH="$github_plan_fixture/bin:$PATH" \
     GH_REPO="acme/project" \
@@ -113,7 +120,7 @@ run_settings_fixture() {
     MOCK_GITHUB_VISIBILITY="private" \
     MOCK_RULESET_ERROR="$ruleset_error" \
     MOCK_GH_LOG="$call_log" \
-    ./scripts/apply-repository-settings.sh "$mode"
+    ./scripts/apply-repository-settings.sh "${arguments[@]}"
 }
 
 if no_remote="$({
@@ -145,6 +152,11 @@ grep -q 'https://github.com/organizations/acme/settings/billing' <<<"$free_plan"
 grep -q 'ALTERNATIVE only when public access is approved' <<<"$free_plan"
 grep -q 'GH_REPO=acme/project ./scripts/apply-repository-settings.sh apply' \
   <<<"$free_plan"
+grep -q 'KEEP labels outside policy' <<<"$free_plan"
+free_prune_plan="$(run_settings_fixture free plan "" true)"
+grep -q 'PRUNE labels outside policy' <<<"$free_prune_plan"
+grep -q 'DELETE label: duplicate' <<<"$free_prune_plan"
+grep -q 'DELETE label: task' <<<"$free_prune_plan"
 team_plan="$(run_settings_fixture team)"
 grep -q 'Account plan: GitHub Team' <<<"$team_plan"
 grep -q 'APPLY policies/rulesets.json' <<<"$team_plan"
@@ -155,9 +167,14 @@ grep -q 'Enterprise-wide identity, audit, network' <<<"$enterprise_plan"
 run_settings_fixture free apply >/dev/null
 grep -q 'api --method PATCH repos/acme/project' \
   "$github_plan_fixture/free-apply.log"
-grep -q 'label delete duplicate' "$github_plan_fixture/free-apply.log"
-grep -q 'label delete task' "$github_plan_fixture/free-apply.log"
-if grep -q 'label delete bug' "$github_plan_fixture/free-apply.log"; then
+if grep -q 'label delete' "$github_plan_fixture/free-apply.log"; then
+  echo "Default repository setup must preserve labels outside policy."
+  exit 1
+fi
+run_settings_fixture free apply "" true >/dev/null
+grep -q 'label delete duplicate' "$github_plan_fixture/free-apply-prune.log"
+grep -q 'label delete task' "$github_plan_fixture/free-apply-prune.log"
+if grep -q 'label delete bug' "$github_plan_fixture/free-apply-prune.log"; then
   echo "Labels declared in policy must not be deleted."
   exit 1
 fi

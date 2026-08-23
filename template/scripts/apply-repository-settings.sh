@@ -3,9 +3,16 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mode="${1:-plan}"
+prune_labels=false
 
 if [[ "$mode" != "plan" && "$mode" != "apply" ]]; then
-  echo "Usage: $0 [plan|apply]"
+  echo "Usage: $0 [plan|apply] [--prune-labels]"
+  exit 2
+fi
+if [[ "${2:-}" == "--prune-labels" ]]; then
+  prune_labels=true
+elif [[ -n "${2:-}" ]]; then
+  echo "Usage: $0 [plan|apply] [--prune-labels]"
   exit 2
 fi
 
@@ -113,7 +120,28 @@ echo "Repository visibility: $repo_visibility"
 echo "Deployment plan:"
 echo "- APPLY policies/repository.json"
 echo "- APPLY policies/actions.json"
-echo "- APPLY policies/labels.json (exact set; remove labels outside policy)"
+echo "- APPLY policies/labels.json (create or update policy labels)"
+existing_labels="$(gh label list --repo "$repo" --limit 1000 --json name --jq '.[].name')"
+desired_labels="$({
+  uv run --no-project python - "$repo_root/policies/labels.json" <<'PY'
+import json
+import sys
+
+for label in json.load(open(sys.argv[1], encoding="utf-8")):
+    print(label["name"])
+PY
+})"
+if [[ "$prune_labels" == true ]]; then
+  echo "- PRUNE labels outside policy (explicit --prune-labels)"
+  while IFS= read -r existing_label; do
+    [[ -z "$existing_label" ]] && continue
+    if ! grep -Fxq "$existing_label" <<<"$desired_labels"; then
+      echo "  - DELETE label: $existing_label"
+    fi
+  done <<<"$existing_labels"
+else
+  echo "- KEEP labels outside policy (default additive mode)"
+fi
 if [[ "$ruleset_available" == true ]]; then
   echo "- APPLY policies/rulesets.json"
   echo "CODEOWNERS team: $code_owner"
@@ -154,21 +182,14 @@ for label in json.load(open(sys.argv[1], encoding="utf-8")):
 PY
 )
 
-desired_labels="$({
-  uv run --no-project python - "$repo_root/policies/labels.json" <<'PY'
-import json
-import sys
-
-for label in json.load(open(sys.argv[1], encoding="utf-8")):
-    print(label["name"])
-PY
-})"
-while IFS= read -r existing_label; do
-  [[ -z "$existing_label" ]] && continue
-  if ! grep -Fxq "$existing_label" <<<"$desired_labels"; then
-    gh label delete "$existing_label" --repo "$repo" --yes >/dev/null
-  fi
-done < <(gh label list --repo "$repo" --limit 1000 --json name --jq '.[].name')
+if [[ "$prune_labels" == true ]]; then
+  while IFS= read -r existing_label; do
+    [[ -z "$existing_label" ]] && continue
+    if ! grep -Fxq "$existing_label" <<<"$desired_labels"; then
+      gh label delete "$existing_label" --repo "$repo" --yes >/dev/null
+    fi
+  done <<<"$existing_labels"
+fi
 
 if [[ "$ruleset_available" == true ]]; then
   ruleset_id="$(
