@@ -77,7 +77,7 @@ Python 與 TypeScript profile 可分別啟用 PyPI／npm Trusted Publishing，�
 
 整份公版只用一個 SemVer：`fix(scope)` 升 patch、`feat(scope)` 升 minor、`!` 升 major。scope 可標 `ci`、`python`、`typescript` 或 `template`；只要任何已支援 profile 不相容，就視為整份公版的破壞性變更。
 
-release-please 用內建 `GITHUB_TOKEN` 自動開、更新 Release PR；合併後才建 tag 並發 GitHub Release。不用另外設定 GitHub App——代價是這個 PR 本身、以及它產生的 tag，都不會用機器人身分再觸發其他 workflow（GitHub 防遞迴機制使然），但合併動作是人工按的，main 上仍會照常重新跑一次完整 CI。
+release-please 用內建 `GITHUB_TOKEN` 自動開、更新 Release PR；合併後才建 tag 並發 GitHub Release。release 建立時，同一 workflow 只在 `release_created` 為真時取得 `actions: write`，並以 tag 明確 dispatch `release-template.yml`；一般 main push 不會重複發版，手動 `v*` tag 與 workflow dispatch 仍可使用。
 
 ## 公版更新
 

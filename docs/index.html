@@ -1720,14 +1720,14 @@
     <section class="slide decision-slide" data-track="deploy" aria-label="步驟六語意版本與持續交付">
       <header>
         <h2>步驟 6｜<span class="accent">版本規則與成品接續</span></h2>
-        <p class="subtitle"><strong>Release PR 已接通，成品交付待閉環：</strong>公版本身與每個生成 repo 各有一個 SemVer；release-please 使用內建 <code>GITHUB_TOKEN</code>，tag 後交付仍需明確接續。</p>
+        <p class="subtitle"><strong>Release 與成品工作流已明確接續：</strong>公版本身與每個生成 repo 各有一個 SemVer；release-please 使用內建 <code>GITHUB_TOKEN</code>，建立 release 後以 tag dispatch 成品工作流。</p>
       </header>
       <p class="context-line"><strong>設計流程｜</strong><code>fix(ci)</code> 升 patch、<code>feat(python)</code>／<code>feat(typescript)</code> 升 minor、任何不相容變更加 <code>!</code> 升 major；Release PR 合併後才建 tag。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不為版本號另加一套平台</h3><ul><li><strong>Changesets：</strong>適合 npm workspace；CI-only／Python 案會多背 Node 設定</li><li><strong>Nx release：</strong>適合既有 Nx 大型 workspace；本案只需一個 release unit</li><li><strong>profile 各自編號：</strong>會增加相依矩陣與升級對版成本</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">release-please</span>＋單一 SemVer</span></summary><div class="package-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜持續維護。</p><p><strong>採用原因：</strong>manifest 模式與 extra files 已能用一個 release unit 同步不同 profile 的版本來源，沒有必要再引入 Changesets 或 Nx。<strong>實測邊界：</strong>Actions policy 允許只有 release job 取得 <code>pull-requests: write</code> 並以 <code>GITHUB_TOKEN</code> 建立 Release PR；GitHub 明定由該 token 產生的 tag 不會再觸發一般 <code>push</code> workflow，因此成品交付仍須由同一 workflow 或明確 <code>workflow_dispatch</code> 接續。</p><p class="reference">Ref. <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer">GitHub workflow trigger docs</a> and live workflow runs, accessed August 23, 2026.</p></div></details><p><strong>公版：</strong><code>version.txt</code> 是唯一版本來源，四種 profile 共用 <code>vX.Y.Z</code>。<br><strong>生成 repo：</strong>各有一個 SemVer；成品類型已定義，tag 後自動交付追蹤於 #98。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">release-please</span>＋單一 SemVer</span></summary><div class="package-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜持續維護。</p><p><strong>採用原因：</strong>manifest 模式與 extra files 已能用一個 release unit 同步不同 profile 的版本來源，沒有必要再引入 Changesets 或 Nx。<strong>觸發邊界：</strong>Actions policy 允許只有 release job 取得 <code>pull-requests: write</code>；release 建立後，另一個只具 <code>actions: write</code> 的 job 以輸出的 tag dispatch 成品 workflow。一般 main push 不會重複交付。</p><p class="reference">Ref. <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer">GitHub workflow trigger docs</a> and live workflow runs, accessed August 23, 2026.</p></div></details><p><strong>公版：</strong><code>version.txt</code> 是唯一版本來源，四種 profile 共用 <code>vX.Y.Z</code>。<br><strong>生成 repo：</strong>各有一個 SemVer；release 建立後使用同一個 tag 自動接續既有成品工作流。</p></article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>公版單一版本：</strong><code>version.txt</code>＋<code>.release-please-manifest.json</code>＋<code>release-please-config.json</code></li><li><strong>依 profile 同步版本來源：</strong>CI/CD-only 用 <code>version.txt</code>；Python 用 <code>pyproject.toml</code>；TypeScript 用 <code>package.json</code>；混合案同步後兩者</li><li><strong>仍需補齊：</strong>release 建立後明確啟動成品 workflow；追蹤於 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/98" target="_blank" rel="noreferrer">#98</a></li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>公版單一版本：</strong><code>version.txt</code>＋<code>.release-please-manifest.json</code>＋<code>release-please-config.json</code></li><li><strong>依 profile 同步版本來源：</strong>CI/CD-only 用 <code>version.txt</code>；Python 用 <code>pyproject.toml</code>；TypeScript 用 <code>package.json</code>；混合案同步後兩者</li><li><strong>成品接續：</strong>release-please 的 <code>release_created</code>／<code>tag_name</code> 輸出只在新 release 建立時 dispatch 成品 workflow</li></ul></aside>
       <aside class="selection-note"><strong>目前邊界</strong><span>版本資料、CHANGELOG 與成品 workflow 已存在，但線上自動交付尚未端到端成功，所以不宣稱零設定或無人值守發版。GitHub App 目前只留給 <code>python-version-policy.yml</code> 的排程升版 PR 使用。</span></aside>
     </section>
 
@@ -2480,10 +2480,10 @@ gh secret set CSARC_VERSION_BOT_PRIVATE_KEY \
 ]`
         },
         {
-          title: '待補觸發鏈｜release 建立後明確啟動成品 workflow',
+          title: '已接通｜release 建立後明確啟動成品 workflow',
           goal: '版本、成品與來源沿用同一條可追溯鏈；仍不宣稱已自動部署。',
-          summary: '手動或非 GITHUB_TOKEN 建立的 `v*` tag 可觸發 wheel、npm tarball、SHA-256 與 CycloneDX SBOM；release-please 使用預設 token 建 tag 時不會觸發一般 push workflow，需由同一 workflow 或 workflow_dispatch 明確接續。',
-          file: '.github/workflows/release.yml',
+          summary: 'release-please 只在 `release_created` 為真時，以輸出的 tag dispatch 既有成品 workflow；一般 main push 不會重複發版，手動 `v*` tag 與手動 dispatch 仍保留。',
+          file: '.github/workflows/release-please.yml＋.github/workflows/release.yml',
           code: `on:
   push:
     tags: ["v*"]

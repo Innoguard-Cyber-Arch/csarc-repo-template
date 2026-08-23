@@ -847,6 +847,16 @@ grep -q 'config-file: release-please-config.json' \
 # release-please must run unconditionally on the default token, not wait on a GitHub App.
 grep -q 'token: \${{ secrets.GITHUB_TOKEN }}' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q '^      release_created: \${{ steps.release.outputs.release_created }}$' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q '^      tag_name: \${{ steps.release.outputs.tag_name }}$' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q "needs.release.outputs.release_created == 'true'" \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q '^      actions: write$' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q 'gh workflow run "$workflow" --ref "$RELEASE_TAG"' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
 if grep -Eq 'CSARC_VERSION_BOT|create-github-app-token' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"; then
   echo "release-please must not depend on the GitHub App bot."
