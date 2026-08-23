@@ -695,6 +695,8 @@ grep -q '^minimumReleaseAge: 4320$' \
   "$fixture_root/typescript-project/pnpm-workspace.yaml"
 grep -q '^minimumReleaseAgeStrict: true$' \
   "$fixture_root/typescript-project/pnpm-workspace.yaml"
+grep -q '^trustPolicy: no-downgrade$' \
+  "$fixture_root/typescript-project/pnpm-workspace.yaml"
 grep -q 'integrity:' "$fixture_root/typescript-project/pnpm-lock.yaml"
 grep -q 'node-version: "24"' \
   "$fixture_root/typescript-project/.github/workflows/ci.yml"
@@ -755,6 +757,8 @@ test -f "$fixture_root/all-features-project/package.json"
 test -f "$fixture_root/all-features-project/uv.lock"
 test -f "$fixture_root/all-features-project/pnpm-lock.yaml"
 test -f "$fixture_root/all-features-project/pnpm-workspace.yaml"
+grep -q '^trustPolicy: no-downgrade$' \
+  "$fixture_root/all-features-project/pnpm-workspace.yaml"
 grep -q 'uv run pytest <test-path>' \
   "$fixture_root/all-features-project/AGENTS.md"
 grep -q 'pnpm exec vitest run <test-path>' \

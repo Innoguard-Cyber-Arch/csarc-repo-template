@@ -1683,7 +1683,7 @@
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
           <details class="package-disclosure"><summary><span><span class="tech-name">Dependabot＋OSV＋anchore/sbom-action</span> 已完成</span></summary><div class="package-health"><p><a href="https://github.com/google/osv-scanner" target="_blank" rel="noreferrer">OSV-Scanner</a>｜Apache-2.0｜★10.9k；<a href="https://github.com/anchore/syft" target="_blank" rel="noreferrer">Syft</a>｜Apache-2.0｜★9.4k。</p><p><strong>Renovate：</strong>AGPL-3.0｜★22.3k；規則變複雜時才取代 Dependabot，不在目前大標。</p><p class="reference">Ref. GitHub REST API snapshot, August 20, 2026.</p></div></details>
-          <p class="recommendation-copy"><strong>等待：</strong>Dependabot 一般升版先等三天；pnpm 另以嚴格 resolver 阻擋發布未滿三天的直接或間接套件。<br><strong>漏洞：</strong>OSV 對已公開漏洞立即通知，不套用等待期。<br><strong>內容：</strong><code>uv.lock</code> 保存 SHA-256；<code>pnpm-lock.yaml</code> 保存 integrity hash；發布時解壓真正成品，再附 checksum 與非空 SBOM。<br><strong>限制：</strong>雜湊不證明來源善意，SBOM 也不會自行阻擋漏洞。</p>
+          <p class="recommendation-copy"><strong>等待：</strong>Dependabot 一般升版先等三天；pnpm 另以嚴格 resolver 阻擋發布未滿三天的直接或間接套件，並拒絕 publisher trust 降級。遇到 trust downgrade 時先確認發布者與 provenance，不要直接停用 policy。<br><strong>漏洞：</strong>OSV 對已公開漏洞立即通知，不套用等待期。<br><strong>內容：</strong><code>uv.lock</code> 保存 SHA-256；<code>pnpm-lock.yaml</code> 保存 integrity hash；發布時解壓真正成品，再附 checksum 與非空 SBOM。<br><strong>限制：</strong>雜湊不證明來源善意，SBOM 也不會自行阻擋漏洞。</p>
         </article>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>兩種生態的一般升版等三天：</strong><code>.github/dependabot.yml</code>；<strong>pnpm 本機也嚴格等待：</strong><code>pnpm-workspace.yaml</code></li><li><strong>凍結安裝並比對兩種 lockfile 雜湊：</strong><code>scripts/verify</code></li><li><strong>掃已知漏洞：</strong><code>osv.yml</code>　<strong>發布 checksum／SBOM：</strong><code>release.yml</code></li></ul></aside>
@@ -2226,7 +2226,8 @@ jobs:
 pnpm install --frozen-lockfile --ignore-scripts
 
 minimumReleaseAge: 4320
-minimumReleaseAgeStrict: true`
+minimumReleaseAgeStrict: true
+trustPolicy: no-downgrade`
         },
         {
           title: '相依下界要能測，天花板要能指出是誰擋住',

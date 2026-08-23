@@ -83,7 +83,7 @@ uvx --from copier copier update --trust --vcs-ref <reviewed-full-commit-sha>
 ./scripts/apply-repository-settings.sh plan
 ```
 
-Copier 會更新網站版型，但不覆寫 `docs/site-content.js`。相依更新一般等待三天；OSV 對已公開漏洞立即通知。
+Copier 會更新網站版型，但不覆寫 `docs/site-content.js`。相依更新一般等待三天；{% if has_typescript %}pnpm 遇到 publisher trust 降級時會停止安裝，先確認套件發布者與 provenance，不要直接停用 policy；{% endif %}OSV 對已公開漏洞立即通知。
 
 ## 負責人與支援
 
