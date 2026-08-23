@@ -852,6 +852,16 @@ if grep -Eq 'CSARC_VERSION_BOT|create-github-app-token' \
   echo "release-please must not depend on the GitHub App bot."
   exit 1
 fi
+uv run --no-project python - \
+  "$fixture_root/default-project/policies/actions.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    policy = json.load(source)
+assert policy["default_workflow_permissions"] == "read"
+assert policy["can_approve_pull_request_reviews"] is True
+PY
 # Write permissions must be scoped to the release job, not the whole workflow.
 grep -q '^  contents: read$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
