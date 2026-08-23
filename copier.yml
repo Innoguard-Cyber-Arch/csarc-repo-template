@@ -44,7 +44,7 @@ _tasks:
   - command: "pnpm install --lockfile-only --ignore-scripts"
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language in ['typescript', 'python-typescript'] }}"
 _message_after_copy: |
-  {% if project_mode == 'existing' %}Existing pyproject.toml/package.json files were preserved. Merge the required tool settings and version markers described in README.md, run ./scripts/verify, then link the pull request to its Issue.{% else %}Project created. Confirm .csarc/profile.json, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request.{% endif %} After pushing to GitHub, run ./scripts/apply-repository-settings.sh plan and apply; ./scripts/apply-repository-settings.sh check gates CI and release only on plans that support branch rules and are not yet configured for them — accounts without Ruleset support (e.g. GitHub Free private) run in degraded mode instead of being blocked.
+  {% if project_mode == 'existing' %}Existing pyproject.toml/package.json files were preserved. Merge the required tool settings and version markers described in README.md, run ./scripts/verify, then link the pull request to its Issue.{% else %}Project created. Confirm .csarc/profile.json, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request.{% endif %} GitHub template creation and Copier do not copy repository settings. After pushing, run ./scripts/apply-repository-settings.sh plan and apply. GitHub Free private repositories keep the desired Ruleset policy in the repository because public APIs cannot create or enforce it; CI records this degraded state on pull requests. See README.md for the plan and visibility matrix.
 
 project_mode:
   type: str

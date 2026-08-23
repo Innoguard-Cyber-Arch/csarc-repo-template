@@ -199,12 +199,14 @@
         <table class="table">
           <thead><tr><th>方案</th><th>公版會套用</th><th>方案邊界</th></tr></thead>
           <tbody>
-            <tr><td><strong>Free</strong></td><td>public repo 可套 Ruleset；private repo 預設停止</td><td>只有明確傳入 <code>--allow-unprotected</code> 才會降級套用基本設定</td></tr>
-            <tr><td><strong>Team</strong></td><td>Free 基線＋Ruleset、必要審查、CODEOWNERS 與必要檢查</td><td>要先建立真實 CODEOWNERS team</td></tr>
+            <tr><td><strong>Free＋public</strong></td><td>套用並強制 Ruleset</td><td>缺少或不符政策時，governance check fail-closed</td></tr>
+            <tr><td><strong>Free organization＋private</strong></td><td>套用基本設定；期望 Ruleset 保留在 repo policy</td><td>公開 API 無法建立 Ruleset；check 標示 DEGRADED，PR 留言記錄限制</td></tr>
+            <tr><td><strong>Pro 個人帳號＋private</strong></td><td>套用並強制 Ruleset</td><td>個人 private repo 的付費路徑</td></tr>
+            <tr><td><strong>Team organization＋private</strong></td><td>Ruleset、必要審查、CODEOWNERS 與必要檢查</td><td>要先建立真實 CODEOWNERS team</td></tr>
             <tr><td><strong>Enterprise</strong></td><td>沿用 Team 的 repo 設定</td><td>SSO／SCIM、稽核串流、IP 限制與組織 Ruleset 屬組織層，不由本 repo 腳本自動修改</td></tr>
           </tbody>
         </table>
-        <p class="notice"><strong>Free private 的下一步：</strong>需要保密就請 owner 升級至 GitHub Team 以上；只有已核准公開的程式碼才能由人員改為 public，腳本不會變更可見性。未升級前 governance check 會維持紅燈並阻止同 workflow 的發布，但方案沒有平台層 merge gate，仍無法阻止有權限者手動合併。</p>
+        <p class="notice"><strong>Free private 的下一步：</strong>需要保密就請 owner 升級至 GitHub Team 以上；只有已核准公開的程式碼才能由人員改為 public，腳本不會變更可見性。GitHub 設定頁雖可顯示 Ruleset 編輯器，REST 與 GraphQL 建立／更新 API 仍會回覆需升級或公開；因此自動化只會保存 repo 內的 policy，管理員也可在 Web UI 人工預建 disabled Ruleset。governance check 標示 <code>DEGRADED</code>、CI 與 release 繼續，PR 會留下警告留言；這些紀錄不能阻止有權限者直接 push 或忽略紅燈合併。</p>
       </section>
 
       <section id="release">

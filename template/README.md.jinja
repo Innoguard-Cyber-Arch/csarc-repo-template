@@ -59,9 +59,16 @@ Coverage 是找出未測程式碼的訊號，不等於測試品質，也不取�
 
 ## 設定與密鑰
 
-repo 推送到 GitHub 後，先執行 `./scripts/apply-repository-settings.sh plan`；尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。腳本會查詢 GitHub 方案、repo 可見性與 Ruleset API：不支援 Ruleset 的 private repo 會標示為 `BLOCKED`，而且 `apply` 會在任何變更前停止。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會依 plan 列出的清單刪除。確認輸出後執行 `apply`，最後以 `check` 唯讀驗證遠端生效狀態；模板必須在任何方案與公開／私密設定下都能運作，因此帳號方案本身不支援 Ruleset 時 `check` 會標示 `DEGRADED` 並放行，CI 與 release 照常執行——只有方案支援 Ruleset、但實際規則跟政策對不上時，`check` 才會擋下 CI 與 release。Copier 不在本機建檔階段猜測遠端方案。
+GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。推送遠端後先執行 `./scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 唯讀驗證；尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。Copier 不在本機建檔階段猜測遠端方案。
 
-> 若 plan 顯示 `BLOCKED required governance`，需要保密就請組織 owner 在 **Organization Settings → Billing & licensing** 升級至 GitHub Team 以上；只有已核准公開的程式碼才可由人員在 **Repository Settings → General → Danger Zone** 改為 public，腳本不會變更可見性。接著建立或確認 `.github/CODEOWNERS` 指定的 team，重新執行 `plan`／`apply`／`check`。GitHub Free private repo 沒有平台層 merge gate，`check` 對這種帳號方案限制採 `DEGRADED` 放行，不讓 CI／release 永久卡死；若明確接受沒有 required review／CODEOWNERS 的風險，才可執行 `apply --allow-unprotected` 套用基本設定。已支援 Ruleset 的方案若規則跟政策對不上，`check` 仍會 fail-closed。
+| GitHub 方案與可見性 | `apply` 結果 | `check`／PR／CI/CD 行為 |
+| --- | --- | --- |
+| Free＋public | 透過 REST 套用並啟用 Ruleset | 驗證 `main` 的有效規則；缺少或不符即失敗 |
+| Free organization＋private | 套用基本設定，並把期望 Ruleset 保留在 `policies/rulesets.json`；公開 API 無法建立 Ruleset | 標示 `DEGRADED` 並讓 CI／release 繼續；PR 由 governance workflow 留下或更新警告留言。紅燈仍不能阻止直接 push 或手動合併 |
+| Pro 個人帳號＋private | 套用並啟用 Ruleset | 與 Free public 相同 |
+| Team／Enterprise organization＋private | 確認 CODEOWNERS team 後套用並啟用 Ruleset | 必要審查、CODEOWNER 與 status checks 成為 merge gate；不符政策時 fail-closed |
+
+`policies/rulesets.json` 是所有方案共用的期望狀態。Free organization private repo 的設定頁雖提供 Ruleset 編輯器，但 GitHub REST 與 GraphQL 對建立／更新（包含 `disabled`）都回覆需升級或公開；因此 `gh` 無法自動預存。管理員可選擇在 Web UI 人工建立 disabled Ruleset，`check` 會將它顯示為 `STAGED`，但仍只代表已儲存，不代表 `main` 受保護。repo 改成 public 或組織升級後，請重新執行 `plan`／`apply`／`check`，由腳本套用 `active` 政策並驗證 CODEOWNERS team 與有效規則。腳本不會自行變更可見性。
 
 {% if language != "ci" %}{% if enable_release_attestations | default(false) %}此專案會為 release distributions 產生 artifact provenance 與 SBOM attestation；這需要 public repo，或支援 artifact attestations 的 GitHub Enterprise Cloud private／internal repo。{% else %}Artifact attestation 未啟用，適合目前不支援該功能的 private repo；release 仍會附上 `SHA256SUMS` 與 SBOM，可用 checksum 驗證。{% endif %}{% endif %}
 
