@@ -90,6 +90,15 @@ if [[ "$1" != "api" ]]; then
   exit 2
 fi
 case "$2" in
+  graphql)
+    if [[ "${MOCK_STAGED_RULESET:-present}" == "absent" ]]; then
+      printf '%s\n' '{"data":{"repository":{"id":"R_test","rulesets":{"nodes":[]}}}}'
+    elif [[ "${MOCK_STAGED_RULESET:-present}" == "stale" ]]; then
+      printf '%s\n' '{"data":{"repository":{"id":"R_test","rulesets":{"nodes":[{"id":"RRS_test","name":"CSARC protected branches","enforcement":"DISABLED","target":"BRANCH"}]}}}}'
+    else
+      printf '%s\n' '{"data":{"repository":{"id":"R_test","rulesets":{"nodes":[{"id":"RRS_test","name":"CSARC protected branches","enforcement":"ACTIVE","target":"BRANCH"}]}}}}'
+    fi
+    ;;
   repos/acme/project)
     printf 'acme\tOrganization\t%s\ttrue\tmain\n' "$MOCK_GITHUB_VISIBILITY"
     ;;
@@ -136,6 +145,7 @@ run_settings_fixture() {
   local prune_labels="${4:-false}"
   local allow_unprotected="${5:-false}"
   local governance="${6:-protected}"
+  local staged_ruleset="${7:-present}"
   local suffix=""
   local arguments=("$mode")
   if [[ "$prune_labels" == true ]]; then
@@ -146,14 +156,19 @@ run_settings_fixture() {
     suffix="$suffix-allow-unprotected"
     arguments+=(--allow-unprotected)
   fi
+  if [[ "$staged_ruleset" != "present" ]]; then
+    suffix="$suffix-$staged_ruleset"
+  fi
   local call_log="$github_plan_fixture/$plan-$mode$suffix.log"
   : > "$call_log"
+  rm -f "$call_log.staged"
   PATH="$github_plan_fixture/bin:$PATH" \
     GH_REPO="acme/project" \
     MOCK_GITHUB_PLAN="$plan" \
     MOCK_GITHUB_VISIBILITY="private" \
     MOCK_RULESET_ERROR="$ruleset_error" \
     MOCK_GOVERNANCE="$governance" \
+    MOCK_STAGED_RULESET="$staged_ruleset" \
     MOCK_GH_LOG="$call_log" \
     ./scripts/apply-repository-settings.sh "${arguments[@]}"
 }
@@ -177,22 +192,26 @@ fi
 grep -q 'Cannot determine Ruleset capability' <<<"$unknown_ruleset"
 grep -q '403 service unavailable' <<<"$unknown_ruleset"
 
-free_plan="$(run_settings_fixture free)"
+free_plan="$(run_settings_fixture free plan "" false false protected absent)"
 grep -q 'Account plan: GitHub Free' <<<"$free_plan"
-grep -q 'SKIP policies/rulesets.json' <<<"$free_plan"
-grep -q 'BLOCKED required governance' <<<"$free_plan"
+grep -q 'PRESERVE policies/rulesets.json locally' <<<"$free_plan"
+grep -q 'OPTIONAL MANUAL STAGING' <<<"$free_plan"
+grep -q 'REST and GraphQL reject Ruleset creation' <<<"$free_plan"
+grep -q 'DEGRADED required governance' <<<"$free_plan"
 grep -q 'ask the owner to upgrade to GitHub Team or above' \
   <<<"$free_plan"
 grep -q 'https://github.com/organizations/acme/settings/billing' <<<"$free_plan"
 grep -q 'ALTERNATIVE only when public access is approved' <<<"$free_plan"
-grep -q 'apply --allow-unprotected' <<<"$free_plan"
 grep -q 'GH_REPO=acme/project ./scripts/apply-repository-settings.sh apply' \
   <<<"$free_plan"
 grep -q 'KEEP labels outside policy' <<<"$free_plan"
 free_prune_plan="$(run_settings_fixture free plan "" true)"
 grep -q 'PRUNE labels outside policy' <<<"$free_prune_plan"
-grep -q 'DELETE label: duplicate' <<<"$free_prune_plan"
 grep -q 'DELETE label: task' <<<"$free_prune_plan"
+if grep -q 'DELETE label: duplicate' <<<"$free_prune_plan"; then
+  echo "The duplicate policy label must not be pruned."
+  exit 1
+fi
 team_plan="$(run_settings_fixture team)"
 grep -q 'Account plan: GitHub Team' <<<"$team_plan"
 grep -q 'APPLY policies/rulesets.json' <<<"$team_plan"
@@ -201,8 +220,10 @@ grep -q 'Account plan: GitHub Enterprise' <<<"$enterprise_plan"
 grep -q 'Enterprise-wide identity, audit, network' <<<"$enterprise_plan"
 
 free_check="$(run_settings_fixture free check)"
-grep -q 'BLOCKED required governance' <<<"$free_check"
+grep -q 'STAGED manually configured Ruleset' <<<"$free_check"
 grep -q 'DEGRADED required governance' <<<"$free_check"
+free_missing_check="$(run_settings_fixture free check "" false false protected absent)"
+grep -q 'MISSING remote Ruleset' <<<"$free_missing_check"
 team_check="$(run_settings_fixture team check)"
 grep -q 'Repository governance ready' <<<"$team_check"
 if incomplete_check="$(run_settings_fixture team check "" false false incomplete 2>&1)"; then
@@ -248,34 +269,36 @@ drift_clean_log="$github_plan_fixture/drift-clean.log"
 run_drift_check protected "" "$drift_clean_log" >/dev/null
 test ! -s "$drift_clean_log"
 
-if free_apply="$(run_settings_fixture free apply 2>&1)"; then
-  echo "Unprotected private repositories must fail closed by default."
-  exit 1
-fi
-grep -q 'Refusing to apply incomplete governance' <<<"$free_apply"
-test ! -s "$github_plan_fixture/free-apply.log"
-free_degraded="$(run_settings_fixture free apply "" false true)"
+free_degraded="$(run_settings_fixture free apply "" false false protected absent)"
 grep -q 'DEGRADED repository settings applied' <<<"$free_degraded"
 grep -q 'api --method PATCH repos/acme/project' \
-  "$github_plan_fixture/free-apply-allow-unprotected.log"
+  "$github_plan_fixture/free-apply-absent.log"
+if grep -Eq 'createRepositoryRuleset|updateRepositoryRuleset|api --method (POST|PUT) repos/acme/project/rulesets' \
+  "$github_plan_fixture/free-apply-absent.log"; then
+  echo "GitHub Free private repositories must not receive unsupported Ruleset API mutations."
+  exit 1
+fi
 if grep -q 'label delete' \
-  "$github_plan_fixture/free-apply-allow-unprotected.log"; then
+  "$github_plan_fixture/free-apply-absent.log"; then
   echo "Default repository setup must preserve labels outside policy."
   exit 1
 fi
 run_settings_fixture free apply "" true true >/dev/null
-grep -q 'label delete duplicate' \
-  "$github_plan_fixture/free-apply-prune-allow-unprotected.log"
 grep -q 'label delete task' \
   "$github_plan_fixture/free-apply-prune-allow-unprotected.log"
+if grep -q 'label delete duplicate' \
+  "$github_plan_fixture/free-apply-prune-allow-unprotected.log"; then
+  echo "The duplicate policy label must not be deleted."
+  exit 1
+fi
 if grep -q 'label delete bug' \
   "$github_plan_fixture/free-apply-prune-allow-unprotected.log"; then
   echo "Labels declared in policy must not be deleted."
   exit 1
 fi
 if grep -Eq 'api --method (POST|PUT) repos/acme/project/rulesets' \
-  "$github_plan_fixture/free-apply-allow-unprotected.log"; then
-  echo "GitHub Free private repositories must not receive a Ruleset."
+  "$github_plan_fixture/free-apply-prune-allow-unprotected.log"; then
+  echo "GitHub Free private repositories must preserve Rulesets locally."
   exit 1
 fi
 run_settings_fixture team apply >/dev/null
@@ -354,6 +377,14 @@ grep -q 'issues/74' docs/index.html
 grep -q 'issues/79' docs/index.html
 grep -q 'Spec 格式決策｜' docs/index.html
 grep -q '維持現行 spec → Issue，不在本 Issue 遷移' docs/index.html
+grep -q '<meta name="robots" content="noindex,nofollow">' docs/index.html
+grep -q 'internal-notice' docs/index.html
+grep -q '請勿公開分享此連結' docs/index.html
+grep -q '存取控制決策｜' docs/index.html
+test -f docs/robots.txt
+grep -q '^Disallow: /$' docs/robots.txt
+grep -q 'docs/index.html' README.md
+grep -q '內部限閱' README.md
 test -f version.txt
 uv run python - <<'PY'
 import json
@@ -470,8 +501,10 @@ grep -q '^    id: kind$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: problem$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: acceptance$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: supplement$' .github/ISSUE_TEMPLATE/work-item.yml
+grep -q '^        - duplicate$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q 'Validate pull request policy' .github/workflows/pr-policy.yml
-grep -q 'Select at least one PR label' .github/workflows/pr-policy.yml
+grep -q 'Select exactly one PR label' .github/workflows/pr-policy.yml
+grep -q 'duplicate label is an Issue disposition' .github/workflows/pr-policy.yml
 grep -q 'type/<issue-number>-short-slug' .github/workflows/pr-policy.yml
 grep -q 'Only dev promotion or release-please may target main in dev mode.' \
   .github/workflows/pr-policy.yml
@@ -491,6 +524,22 @@ test "$(grep -c '^      security-events: write$' template/.github/workflows/osv.
 grep -q 'branches: \[main\]' .github/workflows/zizmor.yml
 grep -q 'target-branch: main' .github/dependabot.yml
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
+
+# Issue #74: the new-version observation window is Dependabot cooldown plus
+# pnpm's minimumReleaseAge today; trustPolicy remains an independent publisher
+# provenance gate. A Renovate consolidation of only the waiting policy was
+# evaluated and deliberately deferred (see profiles/catalog.yaml and
+# docs/index.html). Guard against a half-finished migration landing without
+# updating this decision or removing the mechanism it would replace.
+grep -q 'consolidation_status: evaluated_and_deferred' profiles/catalog.yaml
+grep -q 'stays_independent_of_renovate: true' profiles/catalog.yaml
+grep -q '評估｜以單一 Renovate 設定取代 Dependabot／pnpm 版本等待' \
+  docs/index.html
+for renovate_config_path in \
+  renovate.json renovate.json5 .github/renovate.json .renovaterc.json; do
+  test ! -e "$renovate_config_path"
+  test ! -e "template/$renovate_config_path"
+done
 uv run python - <<'PY'
 import json
 from pathlib import Path
@@ -575,6 +624,10 @@ git -C "$fixture_root/default-project" diff --cached --check
 test -f "$fixture_root/default-project/.copier-answers.yml"
 diff -B -w "$repo_root/.github/dependabot.yml" \
   "$fixture_root/default-project/.github/dependabot.yml"
+for renovate_config_path in \
+  renovate.json renovate.json5 .github/renovate.json .renovaterc.json; do
+  test ! -e "$fixture_root/default-project/$renovate_config_path"
+done
 grep -q 'language: python' "$fixture_root/default-project/.copier-answers.yml"
 grep -q 'project_visibility: private' \
   "$fixture_root/default-project/.copier-answers.yml"
@@ -682,6 +735,22 @@ if grep -q 'pnpm exec vitest' "$fixture_root/default-project/AGENTS.md"; then
 fi
 test "$(cat "$fixture_root/default-project/CLAUDE.md")" = "@AGENTS.md"
 test -f "$fixture_root/default-project/policies/rulesets.json"
+test -f "$fixture_root/default-project/.github/workflows/governance-comment.yml"
+grep -q '^  pull_request:$' \
+  "$fixture_root/default-project/.github/workflows/governance-comment.yml"
+grep -q 'csarc-governance-notice' \
+  "$fixture_root/default-project/.github/workflows/governance-comment.yml"
+grep -Fq '$endpoint?per_page=100' \
+  "$fixture_root/default-project/.github/workflows/governance-comment.yml"
+if grep -q -- '--slurp' \
+  "$fixture_root/default-project/.github/workflows/governance-comment.yml"; then
+  echo "Governance comments must use gh flags supported by GitHub-hosted runners."
+  exit 1
+fi
+grep -q 'Free organization＋private' \
+  "$fixture_root/default-project/README.md"
+grep -q 'DEGRADED' \
+  "$fixture_root/default-project/README.md"
 grep -q '"context": "verify"' \
   "$fixture_root/default-project/policies/rulesets.json"
 grep -q '"context": "scan-pr / osv-scan"' \

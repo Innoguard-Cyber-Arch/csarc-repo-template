@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
-"""Report whether each direct dev dependency can reach its PyPI latest."""
+"""Report whether each direct dev dependency can reach its PyPI latest.
+
+Scope boundary: this script only answers "does the uv resolver accept the
+latest published version given the rest of the dependency graph" (a resolver
+lower/upper-bound question). It intentionally does not implement, and must
+not grow into, a new-version observation window, publisher-trust downgrade
+policy, or known-vulnerability gate. Those remain Dependabot/pnpm, pnpm's
+trustPolicy, and OSV-Scanner's jobs today. A future Renovate configuration
+would consolidate only the observation window per the dependency-risk
+decision recorded in docs/index.html (the "supply" track).
+"""
 
 from __future__ import annotations
 

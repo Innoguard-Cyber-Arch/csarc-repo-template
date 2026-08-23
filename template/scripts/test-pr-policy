@@ -86,12 +86,16 @@ pass|main stack|main|feat(api): add report|enhancement|feat/41-parent|feat/42-re
 pass|main deep stack|main|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=feat/40-root;feat/40-root=main
 pass|dev work|dev|fix(api): handle timeout|bug|dev|fix/42-timeout|Fixes #42|open|-
 pass|dev stack|dev|fix(api): handle timeout|bug|fix/41-parent|fix/42-timeout|Fixes #42|open|fix/41-parent=dev
+pass|documentation|main|docs(api): explain reports|documentation|main|docs/42-reports|Closes #42|open|-
 pass|dev promotion|dev|feat!: promote tested changes|enhancement|main|dev|-|-|-
 pass|release please|main|chore(main): release 0.2.0|enhancement|main|release-please--branches--main--components--repo|-|-|-
 pass|dependabot|main|build(deps): bump pytest|enhancement|main|dependabot/pip/pytest-9|-|-|-
 pass|version automation|main|build(python): adopt Python 3.15|enhancement|main|automation/python-3.15|-|-|-
 fail|version automation missing label|main|build(python): adopt Python 3.15|-|main|automation/python-3.15|-|-|-
 fail|missing PR label|main|feat(api): add report|-|main|feat/42-report|Closes #42|open|-
+fail|multiple PR labels|main|feat(api): add report|enhancement,documentation|main|feat/42-report|Closes #42|open|-
+fail|duplicate PR label|main|feat(api): add report|enhancement,duplicate|main|feat/42-report|Closes #42|open|-
+fail|mismatched PR label|main|fix(api): handle timeout|enhancement|main|fix/42-timeout|Closes #42|open|-
 fail|unsupported title type|main|feature(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
 fail|non ASCII title|main|feat(api): 新增報表|enhancement|main|feat/42-report|Closes #42|open|-
 fail|uppercase scope|main|feat(API): add report|enhancement|main|feat/42-report|Closes #42|open|-
