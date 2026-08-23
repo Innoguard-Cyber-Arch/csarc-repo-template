@@ -446,6 +446,8 @@ test "$("$fixture_root/default-project/scripts/detect-language-profile" --sugges
   "python"
 test -f "$fixture_root/default-project/CHANGELOG.md"
 test -f "$fixture_root/default-project/.github/workflows/release-please.yml"
+test ! -f "$fixture_root/default-project/.github/workflows/template-update.yml"
+test ! -f "$fixture_root/default-project/scripts/check-template-update"
 test -f "$fixture_root/default-project/release-please-config.json"
 test -f "$fixture_root/default-project/.release-please-manifest.json"
 test "$(cat "$fixture_root/default-project/.python-version")" = "3.14"
@@ -831,10 +833,59 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data use_reusable_workflow=true \
   --data workflow_ref=1111111111111111111111111111111111111111 \
   --data enable_precommit=true \
+  --data enable_template_update_notifications=true \
   "$repo_root" "$fixture_root/all-features-project"
 prime_gitleaks_cache "$fixture_root/all-features-project"
 
 test -f "$fixture_root/all-features-project/.pre-commit-config.yaml"
+test -f "$fixture_root/all-features-project/.github/workflows/template-update.yml"
+test -x "$fixture_root/all-features-project/scripts/check-template-update"
+grep -q 'copier check-update --quiet' \
+  "$fixture_root/all-features-project/scripts/check-template-update"
+grep -q 'CSARC_TEMPLATE_READ_TOKEN' \
+  "$fixture_root/all-features-project/.github/workflows/template-update.yml"
+template_update_fixture="$fixture_root/template-update-check"
+mkdir -p "$template_update_fixture/bin"
+cat > "$template_update_fixture/bin/copier" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ " $* " == *" --quiet "* ]]; then
+  exit "${MOCK_COPIER_EXIT:-0}"
+fi
+printf '{"update_available":true,"current_version":"v0.1.0","latest_version":"v0.2.0"}\n'
+SH
+cat > "$template_update_fixture/bin/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$1 $2" == "issue list" ]]; then
+  printf '%s\n' "${MOCK_EXISTING_ISSUE:-}"
+  exit 0
+fi
+printf '%s\n' "$*" >> "$MOCK_GH_LOG"
+SH
+chmod +x "$template_update_fixture/bin/copier" "$template_update_fixture/bin/gh"
+: > "$template_update_fixture/create.log"
+PATH="$template_update_fixture/bin:$PATH" \
+  MOCK_COPIER_EXIT=2 \
+  MOCK_GH_LOG="$template_update_fixture/create.log" \
+  "$fixture_root/all-features-project/scripts/check-template-update" >/dev/null
+grep -q '^issue create .*--label enhancement' \
+  "$template_update_fixture/create.log"
+: > "$template_update_fixture/update.log"
+PATH="$template_update_fixture/bin:$PATH" \
+  MOCK_COPIER_EXIT=2 \
+  MOCK_EXISTING_ISSUE=42 \
+  MOCK_GH_LOG="$template_update_fixture/update.log" \
+  "$fixture_root/all-features-project/scripts/check-template-update" >/dev/null
+grep -q '^issue edit 42 ' "$template_update_fixture/update.log"
+: > "$template_update_fixture/current.log"
+PATH="$template_update_fixture/bin:$PATH" \
+  MOCK_COPIER_EXIT=0 \
+  MOCK_GH_LOG="$template_update_fixture/current.log" \
+  "$fixture_root/all-features-project/scripts/check-template-update" >/dev/null
+test ! -s "$template_update_fixture/current.log"
 grep -q 'reusable-ci.yml@1111111111111111111111111111111111111111' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
 grep -q 'language-profile: "python-typescript"' \
