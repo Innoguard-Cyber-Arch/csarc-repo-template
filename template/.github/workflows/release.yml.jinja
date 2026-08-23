@@ -4,6 +4,8 @@
 {% set has_python = language in ["python", "python-typescript"] -%}
 {% set has_typescript = language in ["typescript", "python-typescript"] -%}
 {% set enable_attestations = enable_release_attestations | default(false) -%}
+{% set publish_python = enable_pypi_publishing | default(false) -%}
+{% set publish_npm = enable_npm_publishing | default(false) -%}
 name: Release artifact
 
 on:
@@ -205,5 +207,75 @@ jobs:
             release-evidence/sbom.cdx.json \
             release-evidence/release-metadata.json \
             --clobber
+{% endif %}
+{% if has_python and publish_python %}
+  publish-python:
+    name: publish-python
+    if: github.ref_type == 'tag'
+    needs: publish-evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: {{ pypi_environment | tojson }}
+      url: https://pypi.org/p/{{ project_slug }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-evidence
+          path: release-evidence
+      - name: Select Python distributions
+        run: |
+          mkdir pypi-dist
+          find release-evidence/dist -maxdepth 1 -type f \
+            \( -name '*.whl' -o -name '*.tar.gz' \) \
+            -exec cp {} pypi-dist/ \;
+          find pypi-dist -maxdepth 1 -type f -print -quit | grep -q .
+      - name: Publish to PyPI with OIDC
+        uses: pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26 # v1.14.2
+        with:
+          packages-dir: pypi-dist/
+{% endif %}
+{% if has_typescript and publish_npm %}
+  publish-npm:
+    name: publish-npm
+    if: github.ref_type == 'tag'
+    needs: publish-evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: {{ npm_environment | tojson }}
+      url: https://www.npmjs.com/package/{{ project_slug }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-evidence
+          path: release-evidence
+      - name: Publish to npm with OIDC
+        run: |
+          mapfile -t packages < <(
+            find release-evidence/dist -maxdepth 1 -type f -name '*.tgz'
+          )
+          [[ "{% raw %}${#packages[@]}{% endraw %}" -eq 1 ]] || {
+            echo "Expected exactly one npm package tarball." >&2
+            exit 1
+          }
+          expected_repo_url="https://github.com/${GITHUB_REPOSITORY}.git"
+          tar -xOf "${packages[0]}" package/package.json |
+            grep -Fq "\"url\": \"${expected_repo_url}\"" || {
+              echo "package.json repository.url must match ${expected_repo_url}." >&2
+              exit 1
+            }
+          npm publish "${packages[0]}" --provenance --access public
 {% endif %}
 # This workflow creates release evidence; deployment remains project-specific.
