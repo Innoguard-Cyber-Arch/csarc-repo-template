@@ -305,6 +305,47 @@ run_settings_fixture team apply >/dev/null
 grep -q 'api --method POST repos/acme/project/rulesets' \
   "$github_plan_fixture/team-apply.log"
 
+secret_scan_fixture="$fixture_root/secret-scan"
+clean_secret_fixture="$secret_scan_fixture/clean"
+history_secret_fixture="$secret_scan_fixture/history-leak"
+worktree_secret_fixture="$secret_scan_fixture/worktree-leak"
+for secret_fixture in \
+  "$clean_secret_fixture" \
+  "$history_secret_fixture" \
+  "$worktree_secret_fixture"; do
+  mkdir -p "$secret_fixture"
+  printf '%s\n' \
+    'title = "CSARC secret scan fixture"' \
+    '[[rules]]' \
+    'id = "csarc-fixture-secret"' \
+    'description = "Synthetic fixture marker"' \
+    "regex = '''CSARC_FIXTURE_[A-Z]{16}'''" \
+    > "$secret_fixture/.gitleaks.toml"
+done
+printf '%s\n' 'safe fixture' > "$clean_secret_fixture/example.txt"
+./scripts/scan-secrets "$clean_secret_fixture"
+
+git -C "$history_secret_fixture" init -b main
+git -C "$history_secret_fixture" config user.name "Template Test"
+git -C "$history_secret_fixture" config user.email "template-test@example.invalid"
+printf '%s\n' 'CSARC_FIXTURE_ABCDEFGHIJKLMNOP' \
+  > "$history_secret_fixture/removed-secret.txt"
+git -C "$history_secret_fixture" add .
+git -C "$history_secret_fixture" commit -m "test: add synthetic leak"
+git -C "$history_secret_fixture" rm removed-secret.txt
+git -C "$history_secret_fixture" commit -m "test: remove synthetic leak"
+if ./scripts/scan-secrets "$history_secret_fixture"; then
+  echo "Secret scan must reject a synthetic marker retained in Git history."
+  exit 1
+fi
+
+printf '%s\n' 'CSARC_FIXTURE_QRSTUVWXYZABCDEF' \
+  > "$worktree_secret_fixture/uncommitted-secret.txt"
+if ./scripts/scan-secrets "$worktree_secret_fixture"; then
+  echo "Secret scan must reject a synthetic marker in a non-Git working tree."
+  exit 1
+fi
+
 ./scripts/scan-secrets
 uv run zizmor . --format plain
 
