@@ -433,6 +433,20 @@ fi
 grep -q 'branches: \[main\]' .github/workflows/zizmor.yml
 grep -q 'target-branch: main' .github/dependabot.yml
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
+
+# Issue #74: the new-version observation window is Dependabot cooldown plus
+# pnpm's minimumReleaseAge/trustPolicy today; a Renovate consolidation was
+# evaluated and deliberately deferred (see profiles/catalog.yaml and
+# docs/index.html). Guard against a half-finished migration landing without
+# updating this decision or removing the mechanism it would replace.
+grep -q 'consolidation_status: evaluated_and_deferred' profiles/catalog.yaml
+grep -q '評估｜以單一 Renovate 設定取代 Dependabot／pnpm 版本等待' \
+  docs/index.html
+for renovate_config_path in \
+  renovate.json renovate.json5 .github/renovate.json .renovaterc.json; do
+  test ! -e "$renovate_config_path"
+  test ! -e "template/$renovate_config_path"
+done
 uv run python - <<'PY'
 import json
 from pathlib import Path
@@ -517,6 +531,10 @@ git -C "$fixture_root/default-project" diff --cached --check
 test -f "$fixture_root/default-project/.copier-answers.yml"
 diff -B -w "$repo_root/.github/dependabot.yml" \
   "$fixture_root/default-project/.github/dependabot.yml"
+for renovate_config_path in \
+  renovate.json renovate.json5 .github/renovate.json .renovaterc.json; do
+  test ! -e "$fixture_root/default-project/$renovate_config_path"
+done
 grep -q 'language: python' "$fixture_root/default-project/.copier-answers.yml"
 grep -q '"language_profile": "python"' \
   "$fixture_root/default-project/.csarc/profile.json"

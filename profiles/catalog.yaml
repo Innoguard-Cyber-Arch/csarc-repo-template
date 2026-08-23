@@ -23,6 +23,32 @@ branching_policy:
   pull_request_must_close_matching_issue: true
   automation_branches_may_omit_issue: true
 
+# Evaluated per Issue #74: five mechanisms cover distinct, non-overlapping
+# concerns today. dependabot_cooldown and pnpm_release_gate both express the
+# same "new-version observation window" concept and are the consolidation
+# candidate; osv_scanner, resolver_ceiling_check, and sbom stay independent.
+dependency_version_policy:
+  new_version_observation_window:
+    mechanisms: [dependabot_cooldown, pnpm_release_gate]
+    consolidation_candidate: single_renovate_configuration
+    consolidation_status: evaluated_and_deferred
+    blocking_finding: >-
+      A downstream repo self-hosting Renovate via GitHub Actions with the
+      default GITHUB_TOKEN cannot trigger required "on: pull_request"
+      status checks on the PRs Renovate opens, so policies/rulesets.json
+      required status checks would silently skip Renovate PRs until each
+      repo provisions a GitHub App or a repo-scoped PAT.
+    decision_recorded_in: docs/index.html (supply track)
+    follow_up: separate Issue before the live mechanism is swapped
+  known_vulnerability_scanning:
+    mechanism: osv_scanner
+    stays_independent_of_version_cooldown: true
+  resolver_bound_check:
+    mechanism: report_dependency_ceiling.py
+    scope: resolver_lower_and_upper_bound_only
+  shipped_artifact_inventory:
+    mechanism: cyclonedx_sbom
+
 shared:
   stage: beta
   applies_to: every_repository
