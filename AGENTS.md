@@ -6,6 +6,7 @@
 - Treat this file as the single source for AI instructions; `CLAUDE.md` only imports it.
 - Treat `copier.yml`, `template/`, `policies/`, and `profiles/catalog.yaml` as the product.
 - `template/` is what downstream repositories receive. Root configuration governs this template repository itself.
+- Use root `docs/specs/` for medium- and long-term design; approved specs synchronize to Issues through the same pipeline shipped to downstream repositories.
 - Keep the deck and checked-in paths aligned. Do not describe a capability as active unless the template creates and verifies it.
 
 ## Working loop
