@@ -1,7 +1,7 @@
 {
-  "name": "{{ project_slug }}",
+  "name": {{ project_slug | tojson }},
   "version": "0.1.0",
-  "description": "{{ project_description }}",
+  "description": {{ project_description | tojson }},
   "type": "module",
   "sideEffects": false,
   "files": [

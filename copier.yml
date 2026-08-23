@@ -54,11 +54,13 @@ project_name:
   type: str
   help: Human-readable project name
   default: CSARC Project
+  validator: "{% if not project_name | trim %}Enter a non-empty project name.{% endif %}"
 
 project_slug:
   type: str
   help: Repository and distribution name
   default: "{{ project_name | lower | replace(' ', '-') | replace('_', '-') }}"
+  validator: "{% if not project_slug | regex_search('^[a-z0-9](?:[a-z0-9._-]{0,212}[a-z0-9])?$') %}Use 1-214 lowercase letters, numbers, dots, underscores, or hyphens; start and end with a letter or number.{% endif %}"
 
 project_description:
   type: str
@@ -87,6 +89,7 @@ package_name:
   help: Python import package name
   default: "{{ project_slug | replace('-', '_') }}"
   when: "{{ language in ['python', 'python-typescript'] }}"
+  validator: "{% if not package_name | regex_search('^[a-z_][a-z0-9_]*$') %}Use a lowercase Python identifier containing letters, numbers, or underscores.{% endif %}"
 
 code_owner:
   type: str
@@ -141,4 +144,4 @@ workflow_ref:
   help: Full commit SHA for the reusable workflow
   default: ""
   when: "{{ use_reusable_workflow }}"
-  validator: "{% if workflow_ref | length != 40 %}Use a full 40-character commit SHA.{% endif %}"
+  validator: "{% if not workflow_ref | regex_search('^[0-9a-fA-F]{40}$') %}Use a full 40-character hexadecimal commit SHA.{% endif %}"

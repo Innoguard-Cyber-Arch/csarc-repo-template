@@ -392,10 +392,39 @@ if valid_pr_title "feat: 新增報表功能"; then
   exit 1
 fi
 
+# Invalid trust-boundary values must fail before producing a usable project.
+if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_slug="Invalid/Slug" \
+  --data language=ci \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$fixture_root/invalid-slug" >/dev/null 2>&1; then
+  echo "Copier accepted an invalid project slug."
+  exit 1
+fi
+if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_slug="valid-project" \
+  --data package_name="9invalid" \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$fixture_root/invalid-package" >/dev/null 2>&1; then
+  echo "Copier accepted an invalid Python package name."
+  exit 1
+fi
+if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_slug="valid-project" \
+  --data language=ci \
+  --data use_reusable_workflow=true \
+  --data workflow_ref="gggggggggggggggggggggggggggggggggggggggg" \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$fixture_root/invalid-workflow-ref" >/dev/null 2>&1; then
+  echo "Copier accepted a non-hexadecimal workflow commit SHA."
+  exit 1
+fi
+
 # Default project: strict global coverage and optional features disabled.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
-  --data project_name="Template Smoke Test" \
+  --data project_name='Template "Smoke" Test' \
   --data project_slug="template-smoke-test" \
+  --data $'project_description=A "quoted" project\n第二行' \
   --data package_name="template_smoke_test" \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/default-project"
@@ -428,7 +457,15 @@ grep -q 'GitHub 方案與門禁' \
   "$fixture_root/default-project/docs/index.html"
 grep -q 'apply-repository-settings.sh plan' \
   "$fixture_root/default-project/README.md"
-grep -q 'Template Smoke Test' \
+uv run python - "$fixture_root/default-project/pyproject.toml" <<'PY'
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as pyproject:
+    project = tomllib.load(pyproject)["project"]
+assert project["description"] == 'A "quoted" project\n第二行'
+PY
+grep -Fq 'Template \"Smoke\" Test' \
   "$fixture_root/default-project/docs/site-content.js"
 grep -q 'window.CSARC_SITE_CONTENT' \
   "$fixture_root/default-project/docs/site-content.js"
@@ -690,6 +727,7 @@ PY
 uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data project_name="TypeScript Test" \
   --data project_slug="typescript-test" \
+  --data $'project_description=A "quoted" project\n第二行' \
   --data language=typescript \
   --data branch_strategy=dev \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
@@ -702,6 +740,14 @@ git -C "$fixture_root/typescript-project" diff --cached --check
 
 grep -q 'language: typescript' \
   "$fixture_root/typescript-project/.copier-answers.yml"
+uv run python - "$fixture_root/typescript-project/package.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as package_json:
+    package = json.load(package_json)
+assert package["description"] == 'A "quoted" project\n第二行'
+PY
 grep -q '"language_profile": "typescript"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
 grep -q '"branch_strategy": "dev"' \
