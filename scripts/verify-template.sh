@@ -379,10 +379,10 @@ done
 bash -n scripts/sync-paired-files.sh
 ./scripts/sync-paired-files.sh --check
 
-# The check must prove template/ was produced by the generator, not merely
-# byte-equal by coincidence: corrupt one generated copy, confirm --check
-# rejects it, confirm the plain generator run reproduces the exact source
-# content, and confirm --check accepts the regenerated result.
+# The check must compare template/ with the generator's deterministic output:
+# corrupt one generated copy, confirm --check rejects it, confirm the plain
+# generator run reproduces the exact source content, and confirm --check
+# accepts the regenerated result.
 sync_regression_fixture="$fixture_root/sync-paired-files"
 rsync -a --exclude=.git --exclude=.venv "$repo_root/" "$sync_regression_fixture/"
 printf '# drift injected by verify-template.sh regression test\n' \
@@ -394,6 +394,16 @@ fi
 (cd "$sync_regression_fixture" && ./scripts/sync-paired-files.sh)
 cmp -s "$sync_regression_fixture/zizmor.yml" \
   "$sync_regression_fixture/template/zizmor.yml"
+(cd "$sync_regression_fixture" && ./scripts/sync-paired-files.sh --check)
+
+# Executable bits are part of Git's file mode and must match in both directions.
+chmod +x "$sync_regression_fixture/template/zizmor.yml"
+if (cd "$sync_regression_fixture" && ./scripts/sync-paired-files.sh --check); then
+  echo "sync-paired-files.sh --check must fail on executable-bit drift."
+  exit 1
+fi
+(cd "$sync_regression_fixture" && ./scripts/sync-paired-files.sh)
+test ! -x "$sync_regression_fixture/template/zizmor.yml"
 (cd "$sync_regression_fixture" && ./scripts/sync-paired-files.sh --check)
 
 # A source file with no template/ counterpart must fail loudly instead of

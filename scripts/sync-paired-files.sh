@@ -9,7 +9,7 @@ set -euo pipefail
 # Usage:
 #   scripts/sync-paired-files.sh          Regenerate every template/ copy.
 #   scripts/sync-paired-files.sh --check  Verify copies without writing files;
-#                                         exits non-zero and prints a diff for
+#                                         exits non-zero and prints details for
 #                                         each pair that has drifted.
 paired_files=(
   CLAUDE.md
@@ -67,8 +67,9 @@ for relative_file in "${paired_files[@]}"; do
       diff -u "$target_file" "$source_file" >&2 || true
       drifted=1
     fi
-    if [[ -x "$source_file" && ! -x "$target_file" ]]; then
-      echo "template/$relative_file lost the executable bit that $relative_file has" >&2
+    if { [[ -x "$source_file" ]] && [[ ! -x "$target_file" ]]; } ||
+      { [[ ! -x "$source_file" ]] && [[ -x "$target_file" ]]; }; then
+      echo "template/$relative_file has a different executable bit than $relative_file" >&2
       drifted=1
     fi
   else
@@ -76,6 +77,8 @@ for relative_file in "${paired_files[@]}"; do
     cp "$source_file" "$target_file"
     if [[ -x "$source_file" ]]; then
       chmod +x "$target_file"
+    else
+      chmod -x "$target_file"
     fi
   fi
 done
