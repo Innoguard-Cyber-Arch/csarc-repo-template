@@ -27,7 +27,6 @@ if [[ -z "$repo" ]]; then
   fi
 fi
 ruleset_payload="$repo_root/policies/rulesets.json"
-temporary_ruleset=""
 code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"
 
 if ! repo_context="$({
@@ -84,32 +83,6 @@ if [[ "$ruleset_available" == true ]]; then
   if ! gh api "orgs/$owner_org/teams/$owner_team" >/dev/null; then
     echo "CODEOWNERS team does not exist or is not visible: $code_owner"
     exit 1
-  fi
-
-  if [[ -n "${CSARC_VERSION_BOT_APP_ID:-}" ]]; then
-    temporary_ruleset="$(mktemp)"
-    trap 'rm -f "$temporary_ruleset"' EXIT
-    uv run --no-project python - \
-      "$ruleset_payload" \
-      "$temporary_ruleset" \
-      "$CSARC_VERSION_BOT_APP_ID" <<'PY'
-import json
-import sys
-
-source, destination, app_id = sys.argv[1:]
-payload = json.load(open(source, encoding="utf-8"))
-payload["bypass_actors"] = [
-    {
-        "actor_id": int(app_id),
-        "actor_type": "Integration",
-        "bypass_mode": "pull_request",
-    }
-]
-with open(destination, "w", encoding="utf-8") as output:
-    json.dump(payload, output, indent=2)
-    output.write("\n")
-PY
-    ruleset_payload="$temporary_ruleset"
   fi
 fi
 

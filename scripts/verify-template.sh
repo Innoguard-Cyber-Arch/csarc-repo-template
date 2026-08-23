@@ -356,6 +356,15 @@ grep -q 'Only dev promotion or release-please may target main in dev mode.' \
   .github/workflows/pr-policy.yml
 grep -q 'branches: \[main\]' .github/workflows/ci.yml
 grep -q 'branches: \[main\]' .github/workflows/osv.yml
+grep -q 'gh pr edit "$pr_url" --add-label enhancement' \
+  .github/workflows/python-version-policy.yml
+if rg -q -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
+  .github/workflows/python-version-policy.yml \
+  scripts/apply-repository-settings.sh \
+  template/scripts/apply-repository-settings.sh; then
+  echo "Version automation must not bypass or perform repository merges."
+  exit 1
+fi
 if rg -q 'security-events: write' \
   .github/workflows/osv.yml template/.github/workflows/osv.yml; then
   echo "OSV workflows must not request security-events write access when SARIF upload is disabled."
