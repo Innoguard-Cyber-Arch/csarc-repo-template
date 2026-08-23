@@ -484,11 +484,8 @@ if rg -q -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
   echo "Version automation must not bypass or perform repository merges."
   exit 1
 fi
-if rg -q 'security-events: write' \
-  .github/workflows/osv.yml template/.github/workflows/osv.yml; then
-  echo "OSV workflows must not request security-events write access when SARIF upload is disabled."
-  exit 1
-fi
+test "$(grep -c '^      security-events: write$' .github/workflows/osv.yml)" -eq 2
+test "$(grep -c '^      security-events: write$' template/.github/workflows/osv.yml)" -eq 2
 grep -q 'branches: \[main\]' .github/workflows/zizmor.yml
 grep -q 'target-branch: main' .github/dependabot.yml
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
