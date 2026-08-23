@@ -334,6 +334,11 @@ grep -q 'Only dev promotion or release-please may target main in dev mode.' \
   .github/workflows/pr-policy.yml
 grep -q 'branches: \[main\]' .github/workflows/ci.yml
 grep -q 'branches: \[main\]' .github/workflows/osv.yml
+if rg -q 'security-events: write' \
+  .github/workflows/osv.yml template/.github/workflows/osv.yml; then
+  echo "OSV workflows must not request security-events write access when SARIF upload is disabled."
+  exit 1
+fi
 grep -q 'branches: \[main\]' .github/workflows/zizmor.yml
 grep -q 'target-branch: main' .github/dependabot.yml
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
