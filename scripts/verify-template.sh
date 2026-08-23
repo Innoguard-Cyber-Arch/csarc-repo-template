@@ -495,6 +495,9 @@ grep -q 'gh release verify "$RELEASE_TAG"' \
   .github/workflows/release-template.yml
 grep -q 'render_release_prompt.py' .github/workflows/release-template.yml
 grep -q 'release_policy.py prepare' .github/workflows/release-template.yml
+grep -q 'tags: \["v\*"\]' .github/workflows/release-template.yml
+grep -q 'gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes' \
+  .github/workflows/release-template.yml
 grep -q "CSARC_ENABLE_PYPI_PUBLISHING == 'true'" \
   .github/workflows/release-template.yml
 test -f scripts/release_policy.py
@@ -854,7 +857,7 @@ grep -q 'GitHub 方案與門禁' \
 grep -q 'id="release-modes"' \
   "$fixture_root/default-project/docs/index.html"
 grep -q 'Verification only' \
-  "$fixture_root/default-project/docs/site-content.js"
+  "$fixture_root/default-project/docs/index.html"
 grep -q 'apply-repository-settings.sh plan' \
   "$fixture_root/default-project/README.md"
 uv run python - "$fixture_root/default-project/pyproject.toml" <<'PY'
@@ -1010,7 +1013,7 @@ grep -q 'release_policy.py detect' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'release_policy.py release' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-grep -q 'Require the default branch as the release source' \
+grep -q 'Non-default branch run is diagnostic-only' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q "mode == 'verification-only'" \
   "$fixture_root/default-project/.github/workflows/release-please.yml"

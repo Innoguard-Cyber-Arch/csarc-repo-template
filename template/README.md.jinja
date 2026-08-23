@@ -93,6 +93,8 @@ PR 只顯示升版意圖：`fix(scope)` 是 patch、`feat(scope)` 是 minor、`!
 | PR、contents、Release、dispatch 都是 `allowed` | **Release PR：**release-please 維護可審查的版本／changelog PR；合併後明確 dispatch 成品 workflow | 保留最強的人類審查與來源 metadata 同步；必要能力漂移就不再選此模式 |
 | PR 是 `blocked`／`unknown`，其餘三項都是 `allowed` | **Direct：**最新整合分支配置 tag／draft release，不另開 PR | 亂序 run 成為 no-op；成品 checkout 暫時寫入版本，但來源分支不另有版本／changelog commit |
 | contents、Release 或 dispatch 任一不是 `allowed` | **Verification only：**保留驗證與 capability artifact，不建立 tag 或 release | 不把不確定權限當成功；政策恢復後由後續 run 重新計算 |
+
+GitHub Release 是共同基線；外部 registry 只會依本案 profile 與下列明確選項啟用，不是導入必要條件。
 {% if enable_pypi_publishing | default(false) %}
 PyPI 發布使用 environment `{{ pypi_environment }}` 與 OIDC，不需要 API token。Package owner 必須先在 PyPI 建立 project 或 pending publisher，將 organization、repository、workflow `release.yml` 與 environment 完整對應到本 repo；environment 建議要求人工核准。
 {% endif %}{% if enable_npm_publishing | default(false) %}
