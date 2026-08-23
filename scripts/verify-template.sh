@@ -495,6 +495,10 @@ grep -q 'gh release verify "$RELEASE_TAG"' \
   .github/workflows/release-template.yml
 grep -q 'isImmutable,isDraft,isPrerelease' \
   .github/workflows/release-template.yml
+grep -q 'Release is already published and immutable' \
+  .github/workflows/release-template.yml
+grep -q 'for attempt in {1..24}; do' \
+  .github/workflows/release-template.yml
 if grep -q 'repos/${GITHUB_REPOSITORY}/immutable-releases' \
   .github/workflows/release-template.yml; then
   echo "Release jobs must not require the admin-only immutable-releases endpoint." >&2
