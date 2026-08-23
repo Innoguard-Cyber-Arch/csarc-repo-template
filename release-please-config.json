@@ -4,6 +4,8 @@
   "packages": {
     ".": {
       "component": "csarc-repo-template",
+      "draft": true,
+      "force-tag-creation": true,
       "include-component-in-tag": false,
       "label": "enhancement",
       "release-label": "enhancement",
@@ -16,7 +18,7 @@
         {
           "type": "toml",
           "path": "uv.lock",
-          "jsonpath": "$.package[?(@.name.value==\"csarc-repo-template\")].version"
+          "jsonpath": "$.package[?(@.name.value==\"csarc-repo-cli\")].version"
         },
         {
           "type": "generic",

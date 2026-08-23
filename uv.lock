@@ -166,13 +166,15 @@ wheels = [
 ]
 
 [[package]]
-name = "csarc-repo-template"
+name = "csarc-repo-cli"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
+dependencies = [
+    { name = "copier" },
+]
 
 [package.dev-dependencies]
 dev = [
-    { name = "copier" },
     { name = "coverage" },
     { name = "diff-cover" },
     { name = "mypy" },
@@ -183,10 +185,10 @@ dev = [
 ]
 
 [package.metadata]
+requires-dist = [{ name = "copier", specifier = ">=9.17,<10" }]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "copier", specifier = ">=9.17,<10" },
     { name = "coverage", extras = ["toml"], specifier = ">=7.10,<8" },
     { name = "diff-cover", specifier = ">=9.7,<11" },
     { name = "mypy", specifier = ">=1.17,<3" },

@@ -1,9 +1,11 @@
 name: Release template
 
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
+
+concurrency:
+  group: release-template-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -43,3 +45,78 @@ jobs:
           node-version: "24"
           package-manager-cache: false
       - run: ./scripts/verify-template.sh
+
+  publish-pypi:
+    name: publish CLI to PyPI
+    needs: verify
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: false
+      - run: uv build
+      - name: Publish with trusted identity
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+
+  publish:
+    name: publish immutable release
+    needs: [verify, publish-pypi]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: false
+      - name: Build CLI and prepare release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/immutable-releases" --jq .enabled)" = true
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          commit_sha="$(git rev-parse HEAD)"
+          test "$commit_sha" = "$(git rev-list -n 1 "$RELEASE_TAG")"
+          gh release view "$RELEASE_TAG" --json body --jq .body >release-body.md
+          uv build
+          uv run python scripts/render_release_prompt.py \
+            --tag "$RELEASE_TAG" \
+            --sha "$commit_sha" \
+            --body-file release-body.md \
+            --output-dir release-assets
+          gh release upload "$RELEASE_TAG" \
+            dist/*.whl \
+            dist/*.tar.gz \
+            release-assets/release-prompt.txt \
+            release-assets/csarc-release-provenance.json
+          gh release edit "$RELEASE_TAG" \
+            --notes-file release-assets/release-notes.md \
+            --draft=false
+      - name: Verify published release trust chain
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test "$(gh release view "$RELEASE_TAG" --json isImmutable,isDraft,isPrerelease --jq '[.isImmutable, .isDraft, .isPrerelease] | @tsv')" = $'true\tfalse\tfalse'
+          for attempt in 1 2 3 4 5 6; do
+            if gh release verify "$RELEASE_TAG" -R "$GITHUB_REPOSITORY"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1

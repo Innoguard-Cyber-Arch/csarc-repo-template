@@ -19,27 +19,42 @@ export UV_PYTHON=3.14
 uv sync --locked --python 3.14
 uv lock --check
 uv run ruff format --check \
+  src/csarc_cli \
+  tests/test_cli.py \
+  tests/test_release_prompt.py \
   scripts/report_dependency_ceiling.py \
+  scripts/render_release_prompt.py \
   scripts/spec_to_issue.py \
   scripts/update_python_version.py \
   tests/test_spec_to_issue.py \
   template/scripts \
   template/tests/test_spec_to_issue.py
 uv run ruff check \
+  src/csarc_cli \
+  tests/test_cli.py \
+  tests/test_release_prompt.py \
   scripts/report_dependency_ceiling.py \
+  scripts/render_release_prompt.py \
   scripts/spec_to_issue.py \
   scripts/update_python_version.py \
   tests/test_spec_to_issue.py \
   template/scripts \
   template/tests/test_spec_to_issue.py
 uv run mypy \
+  src/csarc_cli \
   scripts/report_dependency_ceiling.py \
+  scripts/render_release_prompt.py \
   scripts/spec_to_issue.py \
   scripts/update_python_version.py \
   tests/test_spec_to_issue.py
 uv run mypy template/scripts template/tests/test_spec_to_issue.py
-uv run pytest tests/test_spec_to_issue.py
+uv run pytest tests/test_spec_to_issue.py tests/test_release_prompt.py
+uv run pytest tests/test_cli.py \
+  --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80
 uv run pytest template/tests/test_spec_to_issue.py
+uv build
+uvx --from "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)" \
+  csarc --help >/dev/null
 uv run python scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md
 bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
@@ -424,8 +439,24 @@ grep -q '請勿公開分享此連結' docs/index.html
 grep -q '存取控制決策｜' docs/index.html
 test -f docs/robots.txt
 grep -q '^Disallow: /$' docs/robots.txt
+test -f docs/agent-install.md
+grep -q 'Run the requested `csarc init`, `adopt`, or `update` command with' \
+  docs/agent-install.md
 grep -q 'docs/index.html' README.md
 grep -q '內部限閱' README.md
+grep -q 'uvx --from csarc-repo-cli csarc init' README.md
+grep -q 'uvx --from csarc-repo-cli csarc adopt' README.md
+grep -q 'uvx --from csarc-repo-cli csarc update' README.md
+test "$(grep -c '^目標路徑：' README.md)" -eq 3
+test "$(grep -c '^來源 repository：https://github.com/Innoguard-Cyber-Arch/csarc-repo-template$' README.md)" -eq 3
+test "$(grep -c '^核准版本：最新穩定版$' README.md)" -eq 3
+test "$(grep -c '^核准 commit：<resolved-full-commit-sha>$' README.md)" -eq 3
+test "$(grep -c '^安裝指南：https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/<resolved-full-commit-sha>/docs/agent-install.md$' README.md)" -eq 3
+grep -q '"draft": true' release-please-config.json
+grep -q '"force-tag-creation": true' release-please-config.json
+grep -q 'gh release verify "$RELEASE_TAG"' \
+  .github/workflows/release-template.yml
+grep -q 'render_release_prompt.py' .github/workflows/release-template.yml
 test -f version.txt
 uv run python - <<'PY'
 import json
@@ -440,7 +471,7 @@ with Path("uv.lock").open("rb") as source:
 lock_version = next(
     package["version"]
     for package in lock_packages
-    if package["name"] == "csarc-repo-template"
+    if package["name"] == "csarc-repo-cli"
 )
 manifest_version = json.loads(
     Path(".release-please-manifest.json").read_text(encoding="utf-8")
