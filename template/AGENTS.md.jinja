@@ -22,6 +22,8 @@
 11. Open the pull request against `{{ branch_strategy }}` or its immediate parent in the stack, include `Closes #<issue-number>`, and never merge it yourself.
 12. Report the changed behavior, verification evidence, and any remaining limitation.
 
+Parallel writable agents must use one branch and one Git worktree per task, and run concurrently only when their scopes are independent. Detect and reuse a host-managed worktree before creating one; never force the same branch into multiple worktrees, remove a worktree you did not create, or remove one with uncommitted changes. Worktrees isolate files, not integration: every result still follows this repository's pull request, CI, review, and final verification path.
+
 Automated dependency and version-policy branches may omit an Issue, but still target `{{ branch_strategy }}`. {% if branch_strategy == "dev" %}Only a reviewed `dev` promotion or release-please pull request may target `main`.{% else %}Release-please may target `main` without a work Issue.{% endif %}
 
 Duplicate triage may close an Issue without a branch or pull request when no repository files change. Link the canonical Issue and use GitHub's native duplicate close reason; implementation work still follows the normal Issue, branch, and pull request loop.
