@@ -20,20 +20,27 @@ uv sync --locked --python 3.14
 uv lock --check
 uv run ruff format --check \
   scripts/report_dependency_ceiling.py \
+  scripts/spec_to_issue.py \
   scripts/update_python_version.py \
+  tests/test_spec_to_issue.py \
   template/scripts \
   template/tests/test_spec_to_issue.py
 uv run ruff check \
   scripts/report_dependency_ceiling.py \
+  scripts/spec_to_issue.py \
   scripts/update_python_version.py \
+  tests/test_spec_to_issue.py \
   template/scripts \
   template/tests/test_spec_to_issue.py
 uv run mypy \
   scripts/report_dependency_ceiling.py \
+  scripts/spec_to_issue.py \
   scripts/update_python_version.py \
-  template/scripts \
-  template/tests/test_spec_to_issue.py
+  tests/test_spec_to_issue.py
+uv run mypy template/scripts template/tests/test_spec_to_issue.py
+uv run pytest tests/test_spec_to_issue.py
 uv run pytest template/tests/test_spec_to_issue.py
+uv run python scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md
 bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
 bash -n scripts/check-update-conflicts
@@ -210,8 +217,9 @@ if ! uv pip install \
   exit 1
 fi
 uv pip check --python "$lower_bounds_root/.venv/bin/python"
-if ! "$lower_bounds_root/.venv/bin/python" \
-  -m pytest template/tests/test_spec_to_issue.py; then
+if ! "$lower_bounds_root/.venv/bin/python" -m pytest tests/test_spec_to_issue.py ||
+  ! "$lower_bounds_root/.venv/bin/python" \
+    -m pytest template/tests/test_spec_to_issue.py; then
   echo "Root tests fail with the declared direct dependency lower bounds."
   exit 1
 fi
@@ -328,6 +336,7 @@ paired_files=(
   .github/workflows/issue-triage.yml
   .github/workflows/pr-policy.yml
   .github/workflows/release-please.yml
+  .github/workflows/spec-to-issue.yml
   policies/actions.json
   policies/labels.json
   policies/repository.json
@@ -335,9 +344,11 @@ paired_files=(
   scripts/check-update-conflicts
   scripts/install-gitleaks
   scripts/scan-secrets
+  scripts/spec_to_issue.py
   scripts/test-issue-triage
   scripts/test-pr-policy
   scripts/validate-issue-title
+  tests/test_spec_to_issue.py
   zizmor.yml
 )
 for relative_file in "${paired_files[@]}"; do

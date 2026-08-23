@@ -35,6 +35,7 @@ convention = "google"
 known-first-party = ["scripts"]
 
 [tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "S101"]
 "template/tests/**" = ["D", "S101"]
 
 [tool.mypy]
