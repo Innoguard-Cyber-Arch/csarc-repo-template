@@ -151,6 +151,7 @@
     .tier-chip.priority { background: var(--yellow); color: var(--ink); }
     .tier-chip.best { background: var(--best-soft); color: #0b6540; }
     .tier-chip.optional { background: var(--optional-soft); color: #174f8b; }
+    .tier-chip.warning { background: #fff0ed; color: #8a1c12; }
 
     .legend {
       display: flex;
@@ -1351,6 +1352,7 @@
     .decision-register th:first-child { width: 31%; }
     .decision-register td:first-child { border-left: 6px solid var(--yellow); font-weight: 850; }
     .decision-register tbody tr:nth-child(even) td { background: #fafaf8; }
+    .audit-register th:nth-child(2), .audit-register td:nth-child(2) { width: 12%; text-align: center; }
     .language-appendix-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 8px; }
     .language-appendix-card { padding: 8px 10px; border: 1px solid var(--line); border-top: 6px solid var(--yellow); background: #fffbea; }
     .language-appendix-card:nth-child(2), .language-appendix-card:nth-child(3) { border-top-color: var(--best); background: var(--best-soft); }
@@ -1797,6 +1799,29 @@
         </tbody>
       </table>
       <p class="review-note-footer"><strong>驗證承諾：</strong><code>./scripts/verify-template.sh</code> 會實跑新案、全功能案、既有案與 Copier 更新；簡報寫「已完成」就必須真的通過。</p>
+    </section>
+
+    <section class="slide review-notes-slide" aria-label="2026-08 治理稽核九維度比較">
+      <header>
+        <span class="selection-sequence">決策附錄</span>
+        <h2>治理稽核｜<span class="accent">九維度比較與後續 Issue</span></h2>
+        <p class="subtitle">2026-08-23 對照 Copier/Cookiecutter、OpenSSF Allstar、GitHub Trusted Publishing／Artifact Attestations、GitHub Spec Kit、zizmor、Renovate vs Dependabot；2 項對齊最佳實務，6 項方向正確但有落差，1 項明確落差。</p>
+      </header>
+      <table class="decision-register audit-register" aria-label="治理稽核九維度比較">
+        <thead><tr><th>比較維度</th><th>評等</th><th>結論與後續</th></tr></thead>
+        <tbody>
+          <tr><td>GitHub Trusted Publishing（PyPI／npm OIDC 發布）</td><td><span class="tier-chip best">對齊</span></td><td>短效憑證取代長效 registry token，已依 package owner 設定流程完成；無待辦。</td></tr>
+          <tr><td>zizmor＋GitHub 方案降級處理</td><td><span class="tier-chip best">對齊</span></td><td><code>apply-repository-settings.sh</code> 對不支援 Ruleset 的方案標示 DEGRADED 放行，不假裝有平台層保護；無待辦。</td></tr>
+          <tr><td>Renovate vs Dependabot（依賴版本政策）</td><td><span class="tier-chip warning">明確落差</span></td><td>Dependabot 三天等待、pnpm 嚴格 resolver、OSV、checksum、SBOM 五種機制各自把關，沒有單一政策 owner。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/74" target="_blank" rel="noreferrer">#74</a></td></tr>
+          <tr><td>OpenSSF Allstar（持續治理稽核）</td><td><span class="tier-chip priority">有落差</span></td><td><code>apply-repository-settings.sh</code> 只在人工執行時檢查，沒有排程重跑找出設定漂移。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/75" target="_blank" rel="noreferrer">#75</a></td></tr>
+          <tr><td>Copier vs Cookiecutter（範本引擎與更新機制）</td><td><span class="tier-chip priority">有落差</span></td><td>可更新模板方向正確；但 root 與 <code>template/</code> 仍各自維護一份共用政策檔案，只靠腳本比對防漂移。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/76" target="_blank" rel="noreferrer">#76</a></td></tr>
+          <tr><td>Root／<code>template/</code> 重複檔案</td><td><span class="tier-chip priority">有落差</span></td><td>同一份設定要在兩處手動同步，才能保持公版自我治理與下發內容一致。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/76" target="_blank" rel="noreferrer">#76</a></td></tr>
+          <tr><td>GitHub Spec Kit（<code>/specify /plan /tasks /implement</code>）</td><td><span class="tier-chip priority">有落差</span></td><td>自製 <code>spec → Issue</code> 格式已可用，但與逐漸成為事實標準的 Spec Kit 尚未對齊。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/77" target="_blank" rel="noreferrer">#77</a></td></tr>
+          <tr><td>GitHub Artifact Attestations</td><td><span class="tier-chip priority">有落差</span></td><td>支援 provenance／SBOM attestation，但預設關閉，不依 repo 可見度自動決定。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/78" target="_blank" rel="noreferrer">#78</a></td></tr>
+          <tr><td>內部決策網站存取控制</td><td><span class="tier-chip priority">有落差</span></td><td><code>docs/index.html</code> 目前只有 <code>noindex</code>，沒有登入或其他實際存取限制。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">#79</a></td></tr>
+        </tbody>
+      </table>
+      <p class="review-note-footer"><strong>方法：</strong>2026-08-23 對照六個外部案例後留下的摘要與追蹤連結；完整比較細節留在稽核報告與各衍生 Issue，不在本頁重製全文。</p>
     </section>
 
   </main>
