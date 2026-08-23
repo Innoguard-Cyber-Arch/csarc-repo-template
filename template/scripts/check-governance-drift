@@ -27,7 +27,7 @@ bug
 
 ### 問題
 
-排程執行的 \`apply-repository-settings.sh check\` 偵測到目前 repository 設定（分支保護、必要檢查、CODEOWNER 審查等）已偏離 \`policies/\` 定義的政策。可能是設定被人為暫時關閉、完成一次不受審查的變更後又恢復，也可能是帳號方案或權限發生變化。此通知不會自動修改 repository。
+排程執行的 \`apply-repository-settings.sh check\` 偵測到目前 repository 設定（分支保護、必要檢查、CODEOWNER 審查等）仍偏離 \`policies/\` 定義的政策。可能是設定遭變更、帳號方案改變，或檢查所需權限發生變化。此通知不會自動修改 repository；兩次排程之間曾變更又恢復的事件需由 GitHub audit log 或組織層事件監控追溯。
 
 本次執行擷取的具體差異：
 
