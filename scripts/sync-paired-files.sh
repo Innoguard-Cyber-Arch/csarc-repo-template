@@ -63,7 +63,7 @@ for relative_file in "${paired_files[@]}"; do
       continue
     fi
     if ! cmp -s "$source_file" "$target_file"; then
-      echo "template/$relative_file was not produced by the last sync-paired-files.sh run:" >&2
+      echo "template/$relative_file does not match the sync-paired-files.sh output:" >&2
       diff -u "$target_file" "$source_file" >&2 || true
       drifted=1
     fi
