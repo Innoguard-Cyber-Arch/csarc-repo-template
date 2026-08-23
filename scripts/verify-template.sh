@@ -305,6 +305,9 @@ grep -q '<title>CSARC Repo Template｜AI 輔助 SDLC 團隊公版</title>' \
   docs/index.html
 grep -q '先辨識 GitHub 方案' docs/index.html
 grep -q 'Code Security／Secret Protection 另購' docs/index.html
+grep -q '治理稽核｜' docs/index.html
+grep -q 'issues/74' docs/index.html
+grep -q 'issues/79' docs/index.html
 test -f version.txt
 uv run python - <<'PY'
 import json
