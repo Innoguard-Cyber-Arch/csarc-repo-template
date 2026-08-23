@@ -63,13 +63,13 @@ repo 推送到 GitHub 後，先執行 `./scripts/apply-repository-settings.sh pl
 
 > 若 plan 顯示 `BLOCKED required governance`，需要保密就請組織 owner 在 **Organization Settings → Billing & licensing** 升級至 GitHub Team 以上；只有已核准公開的程式碼才可由人員在 **Repository Settings → General → Danger Zone** 改為 public，腳本不會變更可見性。接著建立或確認 `.github/CODEOWNERS` 指定的 team，重新執行 `plan`，看到 `APPLY policies/rulesets.json` 後才執行 `apply`。若已明確接受沒有 required checks、approval 與 CODEOWNER review 的風險，才可執行 `apply --allow-unprotected`；輸出會留下 `DEGRADED` 紀錄。
 
-GitHub artifact attestation 同樣取決於遠端 repo 能力，目前不由 Copier 產生；確認方案支援後再另行導入，避免 release 因權限不足失敗。
+{% if language != "ci" %}{% if enable_release_attestations | default(false) %}此專案會為 release distributions 產生 artifact provenance 與 SBOM attestation；這需要 public repo，或支援 artifact attestations 的 GitHub Enterprise Cloud private／internal repo。{% else %}Artifact attestation 未啟用，適合目前不支援該功能的 private repo；release 仍會附上 `SHA256SUMS` 與 SBOM，可用 checksum 驗證。{% endif %}{% endif %}
 
 未設定專用 GitHub App 時，release-please job 會略過，不影響 CI 或人工 tag。Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。請在這裡列出產品設定的名稱、用途與取得位置，但不要填入真實值。
 
 ## 發布與維運
 
-`fix(scope)` 升修補版、`feat(scope)` 升次版、`!` 升大版；scope 可用 `ci`、`python`、`typescript` 或 `template`，但整個 repo 永遠共用一個版本。{% if branch_strategy == "dev" %}因 repo 採 squash merge，`dev` 升版 PR 的英文標題代表整批變更的最高 SemVer 等級。{% endif %}{% if language == "ci" %}版本記在 `version.txt`，tag 發布 GitHub Release 的來源封存檔；沒有語言成品，因此不產生套件 SBOM。{% else %}`v*` tag 會產生{% if has_python %} wheel／sdist{% endif %}{% if language == "python-typescript" %}與{% endif %}{% if has_typescript %} npm tarball{% endif %}、SHA-256 與 SBOM。{% endif %}目前沒有通用部署流程。
+`fix(scope)` 升修補版、`feat(scope)` 升次版、`!` 升大版；scope 可用 `ci`、`python`、`typescript` 或 `template`，但整個 repo 永遠共用一個版本。{% if branch_strategy == "dev" %}因 repo 採 squash merge，`dev` 升版 PR 的英文標題代表整批變更的最高 SemVer 等級。{% endif %}{% if language == "ci" %}版本記在 `version.txt`，tag 發布 GitHub Release 的來源封存檔；沒有語言成品，因此不產生套件 SBOM。{% else %}`v*` tag 會產生{% if has_python %} wheel／sdist{% endif %}{% if language == "python-typescript" %}與{% endif %}{% if has_typescript %} npm tarball{% endif %}、SHA-256、SBOM 與來源 metadata，並附加到對應 GitHub Release。下載後執行 `gh release download <tag>`，再於下載目錄執行 `shasum -a 256 -c SHA256SUMS`；{% if enable_release_attestations | default(false) %}另以 `gh attestation verify <artifact> --repo <owner/repo>` 驗證 provenance。{% endif %}{% endif %}目前沒有通用部署流程。
 
 若本案是長駐服務，請補上部署入口、健康檢查、復原方法與 runbook。
 

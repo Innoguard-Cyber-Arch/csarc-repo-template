@@ -494,6 +494,17 @@ test "$("$fixture_root/default-project/scripts/detect-language-profile" --sugges
   "python"
 test -f "$fixture_root/default-project/CHANGELOG.md"
 test -f "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q 'gh release upload "$GITHUB_REF_NAME"' \
+  "$fixture_root/default-project/.github/workflows/release.yml"
+grep -q 'release-metadata.json' \
+  "$fixture_root/default-project/.github/workflows/release.yml"
+grep -q 'No release distribution was created' \
+  "$fixture_root/default-project/.github/workflows/release.yml"
+if grep -q 'actions/attest@' \
+  "$fixture_root/default-project/.github/workflows/release.yml"; then
+  echo "Release attestations must remain opt-in."
+  exit 1
+fi
 test ! -f "$fixture_root/default-project/.github/workflows/template-update.yml"
 test ! -f "$fixture_root/default-project/scripts/check-template-update"
 test -f "$fixture_root/default-project/release-please-config.json"
@@ -730,6 +741,11 @@ test ! -f "$fixture_root/ci-only-project/package.json"
 test ! -d "$fixture_root/ci-only-project/src"
 test ! -d "$fixture_root/ci-only-project/tests"
 test ! -d "$fixture_root/ci-only-project/typescript"
+if grep -q 'publish-evidence\|release-evidence' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"; then
+  echo "CI/CD-only releases must not require package evidence."
+  exit 1
+fi
 if grep -q '^\.venv\*/\|^node_modules/$' \
   "$fixture_root/ci-only-project/.gitignore"; then
   echo "CI/CD-only .gitignore must not contain language artifacts."
@@ -882,6 +898,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data workflow_ref=1111111111111111111111111111111111111111 \
   --data enable_precommit=true \
   --data enable_template_update_notifications=true \
+  --data enable_release_attestations=true \
   "$repo_root" "$fixture_root/all-features-project"
 prime_gitleaks_cache "$fixture_root/all-features-project"
 
@@ -938,11 +955,19 @@ grep -q 'reusable-ci.yml@1111111111111111111111111111111111111111' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
 grep -q 'language-profile: "python-typescript"' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
-if grep -q 'actions/attest' \
-  "$fixture_root/all-features-project/.github/workflows/release.yml"; then
-  echo "Generated releases must not enable attestations before remote capability is verified."
-  exit 1
-fi
+grep -q 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+test "$(grep -c \
+  'actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
+grep -q 'attestations: write' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q 'id-token: write' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q 'subject-checksums: release-evidence/SHA256SUMS' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q 'sbom-path: release-evidence/sbom.cdx.json' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q '"context": "verify / verify"' \
   "$fixture_root/all-features-project/policies/rulesets.json"
 grep -q '"context": "scan-pr / osv-scan"' \

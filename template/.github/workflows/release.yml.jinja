@@ -3,6 +3,7 @@
 {% set python_target = "3.14" if python_mode == "latest" else python_min -%}
 {% set has_python = language in ["python", "python-typescript"] -%}
 {% set has_typescript = language in ["typescript", "python-typescript"] -%}
+{% set enable_attestations = enable_release_attestations | default(false) -%}
 name: Release artifact
 
 on:
@@ -72,7 +73,12 @@ jobs:
 {% endif %}
 {%- if language != "ci" %}
       - name: Calculate artifact checksums
-        run: find dist -maxdepth 1 -type f -exec shasum -a 256 {} + | sort -k 2 > SHA256SUMS
+        run: |
+          find dist -maxdepth 1 -type f -print -quit | grep -q . || {
+            echo "No release distribution was created." >&2
+            exit 1
+          }
+          find dist -maxdepth 1 -type f -exec shasum -a 256 {} + | sort -k 2 > SHA256SUMS
       - name: Extract release artifacts for SBOM analysis
         run: |
           sbom_root="${RUNNER_TEMP}/sbom-root"
@@ -111,6 +117,27 @@ jobs:
               raise SystemExit("SBOM contains no components")
           print(f"SBOM components: {len(components)}")
           PY
+      - name: Record release source
+        env:
+          RELEASE_TAG: {% raw %}${{ github.ref_name }}{% endraw %}
+          RELEASE_COMMIT: {% raw %}${{ github.sha }}{% endraw %}
+          RELEASE_RUN_URL: {% raw %}${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}{% endraw %}
+        run: |
+          uv run --no-project python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          evidence = {
+              "tag": os.environ["RELEASE_TAG"],
+              "commit": os.environ["RELEASE_COMMIT"],
+              "workflow_run": os.environ["RELEASE_RUN_URL"],
+          }
+          Path("release-metadata.json").write_text(
+              json.dumps(evidence, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
       - name: Upload release evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -119,7 +146,61 @@ jobs:
             dist/
             SHA256SUMS
             sbom.cdx.json
+            release-metadata.json
           if-no-files-found: error
           retention-days: 30
+{% endif %}
+{% if language != "ci" %}
+  publish-evidence:
+    name: publish-evidence
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+{% if enable_attestations %}
+      id-token: write
+      attestations: write
+{% endif %}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-evidence
+          path: release-evidence
+      - name: Validate release evidence
+        run: |
+          test -s release-evidence/SHA256SUMS
+          test -s release-evidence/sbom.cdx.json
+          test -s release-evidence/release-metadata.json
+          find release-evidence/dist -maxdepth 1 -type f -print -quit | grep -q .
+          (
+            cd release-evidence
+            shasum -a 256 -c SHA256SUMS
+          )
+{% if enable_attestations %}
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: release-evidence/SHA256SUMS
+      - name: Attest software bill of materials
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: release-evidence/SHA256SUMS
+          sbom-path: release-evidence/sbom.cdx.json
+{% endif %}
+      - name: Attach evidence to GitHub Release
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+          fi
+          gh release upload "$GITHUB_REF_NAME" \
+            release-evidence/dist/* \
+            release-evidence/SHA256SUMS \
+            release-evidence/sbom.cdx.json \
+            release-evidence/release-metadata.json \
+            --clobber
 {% endif %}
 # This workflow creates release evidence; deployment remains project-specific.
