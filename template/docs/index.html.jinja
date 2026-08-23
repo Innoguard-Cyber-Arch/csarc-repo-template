@@ -194,7 +194,7 @@
 
       <section id="github-plan">
         <h2><span>GitHub 方案與門禁</span></h2>
-        <p>repo 推送後先執行 <code>./scripts/apply-repository-settings.sh plan</code>；腳本會查詢帳號方案、repo 可見性與 Ruleset API，並在必要門禁無法啟用時把部署標示為 <code>BLOCKED</code>。</p>
+        <p>repo 推送後依序執行 <code>./scripts/apply-repository-settings.sh plan</code>、<code>apply</code> 與 <code>check</code>；最後一步會唯讀檢查實際生效規則，必要門禁不存在時 CI 與 release 都會失敗。</p>
         <table class="table">
           <thead><tr><th>方案</th><th>公版會套用</th><th>方案邊界</th></tr></thead>
           <tbody>
@@ -203,7 +203,7 @@
             <tr><td><strong>Enterprise</strong></td><td>沿用 Team 的 repo 設定</td><td>SSO／SCIM、稽核串流、IP 限制與組織 Ruleset 屬組織層，不由本 repo 腳本自動修改</td></tr>
           </tbody>
         </table>
-        <p class="notice"><strong>Free private 的下一步：</strong>需要保密就請 owner 升級至 GitHub Team 以上；只有已核准公開的程式碼才能由人員改為 public，腳本不會變更可見性。確認 CODEOWNERS team 存在後重跑 <code>plan</code>，看到 <code>APPLY policies/rulesets.json</code> 才執行 <code>apply</code>；只有已接受未保護風險時才使用 <code>apply --allow-unprotected</code>。</p>
+        <p class="notice"><strong>Free private 的下一步：</strong>需要保密就請 owner 升級至 GitHub Team 以上；只有已核准公開的程式碼才能由人員改為 public，腳本不會變更可見性。未升級前 governance check 會維持紅燈並阻止同 workflow 的發布，但方案沒有平台層 merge gate，仍無法阻止有權限者手動合併。</p>
       </section>
 
       <section id="release">

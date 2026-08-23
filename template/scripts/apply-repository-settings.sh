@@ -6,8 +6,8 @@ mode="${1:-plan}"
 prune_labels=false
 allow_unprotected=false
 
-if [[ "$mode" != "plan" && "$mode" != "apply" ]]; then
-  echo "Usage: $0 [plan|apply] [--prune-labels] [--allow-unprotected]"
+if [[ "$mode" != "plan" && "$mode" != "apply" && "$mode" != "check" ]]; then
+  echo "Usage: $0 [plan|apply|check] [--prune-labels] [--allow-unprotected]"
   exit 2
 fi
 shift $(( $# > 0 ? 1 : 0 ))
@@ -16,7 +16,7 @@ for option in "$@"; do
     --prune-labels) prune_labels=true ;;
     --allow-unprotected) allow_unprotected=true ;;
     *)
-      echo "Usage: $0 [plan|apply] [--prune-labels] [--allow-unprotected]"
+      echo "Usage: $0 [plan|apply|check] [--prune-labels] [--allow-unprotected]"
       exit 2
       ;;
   esac
@@ -37,14 +37,14 @@ code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS
 
 if ! repo_context="$({
   gh api "repos/$repo" \
-    --jq '[.owner.login, .owner.type, (.visibility // (if .private then "private" else "public" end)), .permissions.admin] | @tsv'
+    --jq '[.owner.login, .owner.type, (.visibility // (if .private then "private" else "public" end)), .permissions.admin, .default_branch] | @tsv'
 } 2>&1)"; then
   echo "Cannot read repository metadata for $repo."
   echo "$repo_context"
   exit 1
 fi
-IFS=$'\t' read -r owner owner_type repo_visibility repo_admin <<<"$repo_context"
-if [[ "$repo_admin" != "true" ]]; then
+IFS=$'\t' read -r owner owner_type repo_visibility repo_admin default_branch <<<"$repo_context"
+if [[ "$mode" != "check" && "$repo_admin" != "true" ]]; then
   echo "Repository administrator permission is required before any settings can be applied."
   exit 1
 fi
@@ -66,6 +66,17 @@ case "$account_plan" in
   *) plan_label="Unknown ($account_plan)" ;;
 esac
 
+print_ruleset_guidance() {
+  echo "- BLOCKED required governance: $default_branch is not protected; this private repository needs GitHub Team or public visibility before Rulesets can be enforced."
+  echo "- NEXT STEP keep it private: ask the owner to upgrade to $private_ruleset_plan."
+  echo "  $billing_url"
+  echo "- ALTERNATIVE only when public access is approved: change repository visibility."
+  echo "  https://github.com/$repo/settings"
+  echo "- THEN create or confirm the CODEOWNERS team $code_owner and rerun:"
+  echo "  GH_REPO=$repo ./scripts/apply-repository-settings.sh plan"
+  echo "  GH_REPO=$repo ./scripts/apply-repository-settings.sh apply"
+}
+
 ruleset_available=true
 ruleset_skip_reason=""
 if ! ruleset_access="$(gh api "repos/$repo/rulesets" 2>&1)"; then
@@ -77,6 +88,68 @@ if ! ruleset_access="$(gh api "repos/$repo/rulesets" 2>&1)"; then
     echo "$ruleset_access"
     exit 1
   fi
+fi
+
+if [[ "$mode" == "check" ]]; then
+  if [[ "$ruleset_available" != true ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
+      echo "::error title=Repository governance blocked::Required branch protection is unavailable for this private repository."
+    print_ruleset_guidance >&2
+    exit 1
+  fi
+  if ! branch_rules="$(gh api "repos/$repo/rules/branches/$default_branch" 2>&1)"; then
+    echo "Cannot inspect effective rules for $repo:$default_branch." >&2
+    echo "$branch_rules" >&2
+    exit 1
+  fi
+  python3 - "$ruleset_payload" "$branch_rules" <<'PY'
+import json
+import sys
+
+desired = json.load(open(sys.argv[1], encoding="utf-8"))
+effective = json.loads(sys.argv[2])
+desired_by_type = {rule["type"]: rule for rule in desired["rules"]}
+effective_by_type = {}
+for rule in effective:
+    effective_by_type.setdefault(rule["type"], []).append(rule.get("parameters", {}))
+
+errors = []
+for rule_type in ("deletion", "non_fast_forward", "pull_request", "required_status_checks"):
+    if rule_type not in effective_by_type:
+        errors.append(f"missing {rule_type} rule")
+
+desired_pull_request = desired_by_type["pull_request"]["parameters"]
+pull_request_rules = effective_by_type.get("pull_request", [])
+if pull_request_rules:
+    if max(rule.get("required_approving_review_count", 0) for rule in pull_request_rules) < desired_pull_request["required_approving_review_count"]:
+        errors.append("approval requirement is too weak")
+    for setting in (
+        "dismiss_stale_reviews_on_push",
+        "require_code_owner_review",
+        "require_last_push_approval",
+        "required_review_thread_resolution",
+    ):
+        if desired_pull_request[setting] and not any(rule.get(setting) for rule in pull_request_rules):
+            errors.append(f"{setting} is not enforced")
+
+desired_checks = {
+    check["context"]
+    for check in desired_by_type["required_status_checks"]["parameters"]["required_status_checks"]
+}
+effective_checks = {
+    check["context"]
+    for rule in effective_by_type.get("required_status_checks", [])
+    for check in rule.get("required_status_checks", [])
+}
+missing_checks = sorted(desired_checks - effective_checks)
+if missing_checks:
+    errors.append("missing required checks: " + ", ".join(missing_checks))
+
+if errors:
+    raise SystemExit("Repository governance check failed: " + "; ".join(errors))
+PY
+  echo "Repository governance ready: $default_branch has the required effective rules."
+  exit 0
 fi
 
 if [[ "$ruleset_available" == true ]]; then
@@ -126,14 +199,7 @@ if [[ "$ruleset_available" == true ]]; then
   echo "CODEOWNERS team: $code_owner"
 else
   echo "- SKIP policies/rulesets.json: $ruleset_skip_reason"
-  echo "- BLOCKED required governance: main is not protected; this private repository needs GitHub Team or public visibility before Rulesets can be enforced."
-  echo "- NEXT STEP keep it private: ask the owner to upgrade to $private_ruleset_plan."
-  echo "  $billing_url"
-  echo "- ALTERNATIVE only when public access is approved: change repository visibility."
-  echo "  https://github.com/$repo/settings"
-  echo "- THEN create or confirm the CODEOWNERS team $code_owner and rerun:"
-  echo "  GH_REPO=$repo ./scripts/apply-repository-settings.sh plan"
-  echo "  GH_REPO=$repo ./scripts/apply-repository-settings.sh apply"
+  print_ruleset_guidance
   echo "- EXPLICIT DEGRADED MODE: apply --allow-unprotected continues without branch protection and records that state in command output."
 fi
 if [[ "$plan_label" == "GitHub Enterprise" ]]; then
@@ -192,6 +258,7 @@ if [[ "$ruleset_available" == true ]]; then
 fi
 
 if [[ "$ruleset_available" == true ]]; then
+  GH_REPO="$repo" "$0" check
   echo "Required repository settings applied, including branch protection."
 else
   echo "DEGRADED repository settings applied without required branch protection because --allow-unprotected was explicitly provided."

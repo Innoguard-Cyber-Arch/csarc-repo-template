@@ -17,8 +17,22 @@ permissions:
   contents: read
 
 jobs:
+  governance:
+    name: governance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Require protected default branch
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+        run: ./scripts/apply-repository-settings.sh check
+
   build:
     name: {% if language == "ci" %}verify-release{% else %}build-and-sbom{% endif %}
+    needs: governance
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
