@@ -505,6 +505,11 @@ if grep -q 'actions/attest@' \
   echo "Release attestations must remain opt-in."
   exit 1
 fi
+if grep -q '^  publish-python:\|^  publish-npm:' \
+  "$fixture_root/default-project/.github/workflows/release.yml"; then
+  echo "Registry publishing must remain opt-in."
+  exit 1
+fi
 test ! -f "$fixture_root/default-project/.github/workflows/template-update.yml"
 test ! -f "$fixture_root/default-project/scripts/check-template-update"
 test -f "$fixture_root/default-project/release-please-config.json"
@@ -746,6 +751,11 @@ if grep -q 'publish-evidence\|release-evidence' \
   echo "CI/CD-only releases must not require package evidence."
   exit 1
 fi
+if grep -q '^  publish-python:\|^  publish-npm:' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"; then
+  echo "CI/CD-only releases must not publish packages."
+  exit 1
+fi
 if grep -q '^\.venv\*/\|^node_modules/$' \
   "$fixture_root/ci-only-project/.gitignore"; then
   echo "CI/CD-only .gitignore must not contain language artifacts."
@@ -813,6 +823,9 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as package_json:
     package = json.load(package_json)
 assert package["description"] == 'A "quoted" project\n第二行'
+assert package["repository"]["url"] == (
+    "https://github.com/Innoguard-Cyber-Arch/typescript-test.git"
+)
 PY
 grep -q '"language_profile": "typescript"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
@@ -899,6 +912,10 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data enable_precommit=true \
   --data enable_template_update_notifications=true \
   --data enable_release_attestations=true \
+  --data enable_pypi_publishing=true \
+  --data pypi_environment=pypi-release \
+  --data enable_npm_publishing=true \
+  --data npm_environment=npm-release \
   "$repo_root" "$fixture_root/all-features-project"
 prime_gitleaks_cache "$fixture_root/all-features-project"
 
@@ -968,6 +985,23 @@ grep -q 'subject-checksums: release-evidence/SHA256SUMS' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q 'sbom-path: release-evidence/sbom.cdx.json' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q '^  publish-python:$' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q '^      name: "pypi-release"$' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q 'pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q '^  publish-npm:$' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q '^      name: "npm-release"$' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q 'npm publish "${packages\[0\]}" --provenance --access public' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+if rg -q 'PYPI_API_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"; then
+  echo "Trusted publishing must not require a long-lived registry token."
+  exit 1
+fi
 grep -q '"context": "verify / verify"' \
   "$fixture_root/all-features-project/policies/rulesets.json"
 grep -q '"context": "scan-pr / osv-scan"' \

@@ -70,6 +70,11 @@ repo 推送到 GitHub 後，先執行 `./scripts/apply-repository-settings.sh pl
 ## 發布與維運
 
 `fix(scope)` 升修補版、`feat(scope)` 升次版、`!` 升大版；scope 可用 `ci`、`python`、`typescript` 或 `template`，但整個 repo 永遠共用一個版本。{% if branch_strategy == "dev" %}因 repo 採 squash merge，`dev` 升版 PR 的英文標題代表整批變更的最高 SemVer 等級。{% endif %}{% if language == "ci" %}版本記在 `version.txt`，tag 發布 GitHub Release 的來源封存檔；沒有語言成品，因此不產生套件 SBOM。{% else %}`v*` tag 會產生{% if has_python %} wheel／sdist{% endif %}{% if language == "python-typescript" %}與{% endif %}{% if has_typescript %} npm tarball{% endif %}、SHA-256、SBOM 與來源 metadata，並附加到對應 GitHub Release。下載後執行 `gh release download <tag>`，再於下載目錄執行 `shasum -a 256 -c SHA256SUMS`；{% if enable_release_attestations | default(false) %}另以 `gh attestation verify <artifact> --repo <owner/repo>` 驗證 provenance。{% endif %}{% endif %}目前沒有通用部署流程。
+{% if enable_pypi_publishing | default(false) %}
+PyPI 發布使用 environment `{{ pypi_environment }}` 與 OIDC，不需要 API token。Package owner 必須先在 PyPI 建立 project 或 pending publisher，將 organization、repository、workflow `release.yml` 與 environment 完整對應到本 repo；environment 建議要求人工核准。
+{% endif %}{% if enable_npm_publishing | default(false) %}
+npm 發布使用 environment `{{ npm_environment }}` 與 OIDC，不需要 `NPM_TOKEN`。既有 package owner 必須先在 npm package Settings 建立 trusted publisher，並精確填入 organization、repository、workflow `release.yml` 與 environment；首次 package ownership 依組織核准流程建立。npm trusted publishing 需要 GitHub-hosted runner、Node 22.14+ 與 npm 11.5.1+，本 workflow 使用 Node 24。
+{% endif %}
 
 若本案是長駐服務，請補上部署入口、健康檢查、復原方法與 runbook。
 

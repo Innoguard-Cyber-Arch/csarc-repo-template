@@ -147,6 +147,32 @@ enable_release_attestations:
   default: false
   when: "{{ language != 'ci' }}"
 
+enable_pypi_publishing:
+  type: bool
+  help: Publish Python distributions through PyPI Trusted Publishing
+  default: false
+  when: "{{ language in ['python', 'python-typescript'] }}"
+
+pypi_environment:
+  type: str
+  help: Protected GitHub environment configured in the PyPI trusted publisher
+  default: pypi
+  when: "{{ enable_pypi_publishing }}"
+  validator: "{% if not pypi_environment.strip() %}Use a non-empty GitHub environment name.{% endif %}"
+
+enable_npm_publishing:
+  type: bool
+  help: Publish the npm tarball through npm Trusted Publishing
+  default: false
+  when: "{{ language in ['typescript', 'python-typescript'] }}"
+
+npm_environment:
+  type: str
+  help: Protected GitHub environment configured in the npm trusted publisher
+  default: npm
+  when: "{{ enable_npm_publishing }}"
+  validator: "{% if not npm_environment.strip() %}Use a non-empty GitHub environment name.{% endif %}"
+
 use_reusable_workflow:
   type: bool
   help: Call the reusable multi-language workflow from this repository
