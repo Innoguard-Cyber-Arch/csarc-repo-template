@@ -21,37 +21,49 @@ uv lock --check
 uv run ruff format --check \
   src/csarc_cli \
   tests/test_cli.py \
+  tests/test_milestone_lifecycle.py \
   tests/test_release_prompt.py \
   scripts/report_dependency_ceiling.py \
   scripts/render_release_prompt.py \
   scripts/spec_to_issue.py \
+  scripts/sync_milestone_state.py \
   scripts/update_python_version.py \
   tests/test_spec_to_issue.py \
   template/scripts \
+  template/tests/test_milestone_lifecycle.py \
   template/tests/test_spec_to_issue.py
 uv run ruff check \
   src/csarc_cli \
   tests/test_cli.py \
+  tests/test_milestone_lifecycle.py \
   tests/test_release_prompt.py \
   scripts/report_dependency_ceiling.py \
   scripts/render_release_prompt.py \
   scripts/spec_to_issue.py \
+  scripts/sync_milestone_state.py \
   scripts/update_python_version.py \
   tests/test_spec_to_issue.py \
   template/scripts \
+  template/tests/test_milestone_lifecycle.py \
   template/tests/test_spec_to_issue.py
 uv run mypy \
   src/csarc_cli \
   scripts/report_dependency_ceiling.py \
   scripts/render_release_prompt.py \
   scripts/spec_to_issue.py \
+  scripts/sync_milestone_state.py \
   scripts/update_python_version.py \
   tests/test_spec_to_issue.py
 uv run mypy template/scripts template/tests/test_spec_to_issue.py
-uv run pytest tests/test_spec_to_issue.py tests/test_release_prompt.py
+uv run pytest \
+  tests/test_milestone_lifecycle.py \
+  tests/test_release_prompt.py \
+  tests/test_spec_to_issue.py
 uv run pytest tests/test_cli.py \
   --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80
-uv run pytest template/tests/test_spec_to_issue.py
+uv run pytest \
+  template/tests/test_milestone_lifecycle.py \
+  template/tests/test_spec_to_issue.py
 uv build
 uvx --from "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)" \
   csarc --help >/dev/null
@@ -384,9 +396,11 @@ if ! uv pip install \
   exit 1
 fi
 uv pip check --python "$lower_bounds_root/.venv/bin/python"
-if ! "$lower_bounds_root/.venv/bin/python" -m pytest tests/test_spec_to_issue.py ||
+if ! "$lower_bounds_root/.venv/bin/python" -m pytest \
+  tests/test_milestone_lifecycle.py tests/test_spec_to_issue.py ||
   ! "$lower_bounds_root/.venv/bin/python" \
-    -m pytest template/tests/test_spec_to_issue.py; then
+    -m pytest template/tests/test_milestone_lifecycle.py \
+    template/tests/test_spec_to_issue.py; then
   echo "Root tests fail with the declared direct dependency lower bounds."
   exit 1
 fi
@@ -432,7 +446,7 @@ grep -q '真實 consuming repo 與採用證據' docs/index.html
 grep -q 'issues/74' docs/index.html
 grep -q 'issues/79' docs/index.html
 grep -q 'Spec 格式決策｜' docs/index.html
-grep -q '維持現行 spec → Issue，不在本 Issue 遷移' docs/index.html
+grep -q '預設 Issue，明確 Story 才建 Milestone' docs/index.html
 grep -q '<meta name="robots" content="noindex,nofollow">' docs/index.html
 grep -q 'internal-notice' docs/index.html
 grep -q '請勿公開分享此連結' docs/index.html
@@ -910,6 +924,17 @@ grep -q '^## Checklist$' \
 grep -q '^## Supplement$' \
   "$fixture_root/default-project/.github/pull_request_template.md"
 test -f "$fixture_root/default-project/.github/workflows/issue-triage.yml"
+test -f "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
+test -f "$fixture_root/default-project/docs/milestone-description.md"
+test -f "$fixture_root/default-project/scripts/sync_milestone_state.py"
+grep -q 'types: \[closed, reopened, milestoned\]' \
+  "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
+grep -q 'github.event.issue.milestone.number' \
+  "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
+grep -q 'docs/milestone-description.md' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -q '^# tracking: story$' \
+  "$fixture_root/default-project/docs/specs/SPEC-001-example.md"
 test -x "$fixture_root/default-project/scripts/test-issue-triage"
 test -x "$fixture_root/default-project/scripts/validate-issue-title"
 grep -q 'branches: \[main, dev\]' \

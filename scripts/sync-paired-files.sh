@@ -20,22 +20,26 @@ paired_files=(
   .github/workflows/governance-comment.yml
   .github/workflows/governance-drift.yml
   .github/workflows/issue-triage.yml
+  .github/workflows/milestone-lifecycle.yml
   .github/workflows/pr-policy.yml
   .github/workflows/release-please.yml
   .github/workflows/spec-to-issue.yml
   policies/actions.json
   policies/labels.json
   policies/repository.json
+  docs/milestone-description.md
   scripts/apply-repository-settings.sh
   scripts/check-governance-drift
   scripts/check-update-conflicts
   scripts/install-gitleaks
   scripts/scan-secrets
   scripts/spec_to_issue.py
+  scripts/sync_milestone_state.py
   scripts/test-issue-triage
   scripts/test-pr-policy
   scripts/validate-issue-title
   tests/test_spec_to_issue.py
+  tests/test_milestone_lifecycle.py
   zizmor.yml
 )
 
