@@ -305,6 +305,11 @@ grep -q '<title>CSARC Repo Template｜AI 輔助 SDLC 團隊公版</title>' \
   docs/index.html
 grep -q '先辨識 GitHub 方案' docs/index.html
 grep -q 'Code Security／Secret Protection 另購' docs/index.html
+grep -q '治理稽核｜' docs/index.html
+grep -q 'issues/74' docs/index.html
+grep -q 'issues/79' docs/index.html
+grep -q 'Spec 格式決策｜' docs/index.html
+grep -q '維持現行 spec → Issue，不在本 Issue 遷移' docs/index.html
 test -f version.txt
 uv run python - <<'PY'
 import json
@@ -376,31 +381,43 @@ for unsupported_path in "${unsupported_instruction_paths[@]}"; do
   test ! -e "$unsupported_path"
 done
 
-paired_files=(
-  .release-please-manifest.json
-  .github/ISSUE_TEMPLATE/config.yml
-  .github/ISSUE_TEMPLATE/work-item.yml
-  .github/workflows/issue-triage.yml
-  .github/workflows/pr-policy.yml
-  .github/workflows/release-please.yml
-  .github/workflows/spec-to-issue.yml
-  policies/actions.json
-  policies/labels.json
-  policies/repository.json
-  scripts/apply-repository-settings.sh
-  scripts/check-update-conflicts
-  scripts/install-gitleaks
-  scripts/scan-secrets
-  scripts/spec_to_issue.py
-  scripts/test-issue-triage
-  scripts/test-pr-policy
-  scripts/validate-issue-title
-  tests/test_spec_to_issue.py
-  zizmor.yml
-)
-for relative_file in "${paired_files[@]}"; do
-  diff -B -w "$repo_root/$relative_file" "$repo_root/template/$relative_file"
-done
+bash -n scripts/sync-paired-files.sh
+./scripts/sync-paired-files.sh --check
+
+# The check must compare template/ with the generator's deterministic output:
+# corrupt one generated copy, confirm --check rejects it, confirm the plain
+# generator run reproduces the exact source content, and confirm --check
+# accepts the regenerated result.
+sync_regression_fixture="$fixture_root/sync-paired-files"
+rsync -a --exclude=.git --exclude=.venv "$repo_root/" "$sync_regression_fixture/"
+printf '# drift injected by verify-template.sh regression test\n' \
+  >> "$sync_regression_fixture/template/zizmor.yml"
+if (cd "$sync_regression_fixture" && ./scripts/sync-paired-files.sh --check); then
+  echo "sync-paired-files.sh --check must fail on a drifted template/ copy."
+  exit 1
+fi
+(cd "$sync_regression_fixture" && ./scripts/sync-paired-files.sh)
+cmp -s "$sync_regression_fixture/zizmor.yml" \
+  "$sync_regression_fixture/template/zizmor.yml"
+(cd "$sync_regression_fixture" && ./scripts/sync-paired-files.sh --check)
+
+# Executable bits are part of Git's file mode and must match in both directions.
+chmod +x "$sync_regression_fixture/template/zizmor.yml"
+if (cd "$sync_regression_fixture" && ./scripts/sync-paired-files.sh --check); then
+  echo "sync-paired-files.sh --check must fail on executable-bit drift."
+  exit 1
+fi
+(cd "$sync_regression_fixture" && ./scripts/sync-paired-files.sh)
+test ! -x "$sync_regression_fixture/template/zizmor.yml"
+(cd "$sync_regression_fixture" && ./scripts/sync-paired-files.sh --check)
+
+# A source file with no template/ counterpart must fail loudly instead of
+# silently skipping the pair.
+rm "$sync_regression_fixture/template/CLAUDE.md"
+if (cd "$sync_regression_fixture" && ./scripts/sync-paired-files.sh --check); then
+  echo "sync-paired-files.sh --check must fail when a template/ copy is missing."
+  exit 1
+fi
 
 test "$(grep -c '^    id:' .github/ISSUE_TEMPLATE/work-item.yml)" -eq 4
 test "$(grep -c '^      required: true$' .github/ISSUE_TEMPLATE/work-item.yml)" -eq 3
