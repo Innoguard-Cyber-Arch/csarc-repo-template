@@ -1646,17 +1646,17 @@
         <h2>步驟 1｜<span class="accent">先寫清楚要解決什麼</span></h2>
         <p class="subtitle"><strong>基本導入。</strong>每次改動先有 Issue；先選類型再答三題，超出完成條件就另開 Issue。</p>
       </header>
-      <p class="context-line"><strong>寫作原則｜</strong>不要只寫「新增報表功能」；要交代誰遇到什麼問題、希望得到什麼結果，以及要怎麼確認。</p>
+      <p class="context-line"><strong>寫作原則｜</strong>Issue 標題用英文摘要成果；內文再以中文交代問題、完成條件與驗證方式。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不讓每張工作單都走過重流程</h3><ul><li><strong>只寫 Issue 標題：</strong>缺成果與驗證，人和 AI 只能猜</li><li><strong>每張都跑 Spec Kit：</strong>小工作成本過高</li><li><strong>只留在聊天：</strong>無版本紀錄，不能在 PR 審查</li></ul></article>
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
           <details class="package-disclosure"><summary><span>已完成的 <span class="tech-name">spec → Issue</span>；Spec Kit 先不導入</span></summary><div class="package-health"><p><strong>目前：</strong><code>docs/specs/</code> 經 CI 驗證；合併到選定整合分支後，由標準函式庫腳本與 GitHub CLI 建立或更新實作 Issue。</p><p><strong>Spec Kit：</strong><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">github/spec-kit</a>｜MIT｜★130,368（已查證）｜公開、未封存、2026-08-19 仍更新。</p><p><strong>何時再評估：</strong>一份核准規格需要由 AI 穩定拆成多張子工作，而且團隊願意維護額外 CLI／Agent 流程。</p><p class="reference">Ref. GitHub REST API, accessed August 20, 2026.</p></div></details>
-          <p class="recommendation-copy"><strong>一次性工作：</strong>選 <code>bug</code>、<code>enhancement</code> 或 <code>documentation</code>，再寫「問題與原因、完成條件、驗證方式」；開單者自動成為負責人。<br><strong>較複雜的 SDD：</strong>先開規劃 Issue，再用 <code>docs/specs/</code> 審查規格；規格合併後自動開出實作 Issue。兩條路都必須先有 Issue；超出原完成條件時另開 Issue 與分支。</p>
+          <p class="recommendation-copy"><strong>標題：</strong>12–80 個英文 ASCII 字元、至少三個詞，直接描述成果；不加類型前綴或句點，PR 才用 Conventional Commit。<br><strong>內文：</strong>選 <code>bug</code>、<code>enhancement</code> 或 <code>documentation</code>，再寫問題、完成條件與驗證方式；複雜工作才用 spec 拆單。</p>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>類型＋三個必填欄位，並關閉空白 Issue：</strong><code>.github/ISSUE_TEMPLATE/</code></li><li><strong>開單者自動成為負責人並套單一類型標籤：</strong><code>.github/workflows/issue-triage.yml</code></li><li><strong>規格進入 main／dev 後自動建立或更新 Issue：</strong><code>docs/specs/</code>＋<code>scripts/spec_to_issue.py</code>＋<code>spec-to-issue.yml</code></li></ul></aside>
-      <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/copilot/tutorials/cloud-agent/get-the-best-results" target="_blank" rel="noreferrer">GitHub Docs</a>; <a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a>; <a href="https://www.anthropic.com/engineering/claude-code-best-practices" target="_blank" rel="noreferrer">Anthropic</a>. Accessed August 20, 2026.</p>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>提示英文標題、類型與三個必填欄位：</strong><code>.github/ISSUE_TEMPLATE/</code></li><li><strong>驗證標題、指派開單者並套單一標籤：</strong><code>scripts/validate-issue-title</code>＋<code>issue-triage.yml</code></li><li><strong>PR 再核對連結 Issue 的標題與狀態：</strong><code>pr-policy.yml</code>；不合格就阻擋合併</li></ul></aside>
+      <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/learning-about-issues/quickstart" target="_blank" rel="noreferrer">GitHub Issues quickstart</a>; <a href="https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-issue-forms" target="_blank" rel="noreferrer">Issue Forms syntax</a>; <a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a>. Accessed August 21, 2026.</p>
     </section>
 
     <section class="slide decision-slide" data-track="pr" aria-label="步驟四分支 PR 與合併">
@@ -1787,10 +1787,10 @@
         <thead><tr><th>審閱問題</th><th>目前決定與原因</th></tr></thead>
         <tbody>
           <tr><td>方案與 <code>main</code> 保護</td><td>Free private 可套基本設定，但 <code>main</code> 目前未受強制保護；至少升 Team 並建立 CODEOWNERS team，才套 Ruleset、核准與必要檢查。</td></tr>
-          <tr><td>工作範圍與責任</td><td>Issue-first；開單者自動成為負責人，只用 bug／enhancement／documentation。新增需求超出完成條件就另開 Issue，不擴張原 PR。</td></tr>
+          <tr><td>工作範圍與責任</td><td>Issue-first；標題用 12–80 字元英文摘要成果，內文可用中文；開單者自動成為負責人。新增需求超出完成條件就另開 Issue。</td></tr>
           <tr><td>公版更新邊界</td><td><code>template/</code> 是下發來源，root 讓公版自我治理；Copier 更新政策但保護產品程式與規格，成對設定由驗證腳本防止漂移。</td></tr>
           <tr><td>語言與程式品質</td><td>共用治理支援四種 profile；Python 採 src layout、Ruff 80 字元與 <a href="https://google.github.io/styleguide/pyguide.html" target="_blank" rel="noreferrer">Google Python Style</a>、strict mypy；TypeScript 採 Node 24、pnpm 11、Biome、Vitest。</td></tr>
-          <tr><td>CI、版本與交付</td><td>本機與 CI 共用 <code>scripts/verify</code>，十八組 PR 正反例證明錯誤會被拒絕；release-please 維護單一 SemVer，tag 產成品但不等於部署。</td></tr>
+          <tr><td>CI、版本與交付</td><td>本機與 CI 共用 <code>scripts/verify</code>，Issue 標題與十九組 PR 正反例證明錯誤會被拒絕；release-please 維護單一 SemVer。</td></tr>
           <tr><td>依賴與供應鏈</td><td>三天等待觀察未知惡意新版；OSV 查已公開漏洞；hash 驗內容一致；SBOM 列出成品套件；resolver 另證明版本上下界可安裝，五者互不取代。</td></tr>
           <tr><td>AI、文件與未來能力</td><td><code>AGENTS.md</code> 是 AI 契約，README 與 repo 網站服務人類；Hugo／託管登入、部署、監控、RAG、Go／Rust 都要有 owner、使用情境與驗證後才導入。</td></tr>
           <tr><td>驗證與測試資源</td><td>「已完成」必須有檔案與測試；驗證只用本機暫存專案或本 repo 的 Issue、分支、PR、Actions，禁止為測試另開 GitHub repo。</td></tr>
@@ -2021,7 +2021,7 @@ pnpm exec vitest run --coverage`
         {
           title: '一個入口驗證、打包，也證明錯誤會被拒絕',
           goal: '本機、AI 與 GitHub 執行同一入口；正向測試證明可交付，負向測資證明門禁不是永遠綠燈。',
-          summary: '`scripts/test-pr-policy` 以十八組 valid／invalid 案例檢查標籤、標題、分支、Issue 與 main／dev；公版再注入錯誤 Python／TypeScript 檔。',
+          summary: '十組 Issue 標題與十九組 PR 案例檢查標籤、標題、分支、Issue 與 main／dev；公版再注入錯誤 Python／TypeScript 檔。',
           file: 'scripts/verify＋scripts/test-pr-policy＋.github/workflows/ci.yml',
           code: `./scripts/test-pr-policy
 ./scripts/verify
@@ -2039,11 +2039,12 @@ with:
       ],
       method: [
         {
-          title: '統一工作單欄位，並關閉空白 Issue',
-          goal: '表單與簡報使用完全相同的欄位，且不開放繞過表單的空白 Issue。',
-          summary: '`blank_issues_enabled=false`；一次性工作選一個類型，再填 problem、acceptance、verification。開單者會自動成為負責人。',
-          file: '.github/ISSUE_TEMPLATE/work-item.yml＋issue-triage.yml＋config.yml',
+          title: '英文標題摘要成果，中文內文說明脈絡',
+          goal: 'GitHub 建議標題應一眼說明重點；Issue Form 只能預填標題，真正的格式檢查交給 workflow。',
+          summary: '標題限 12–80 個 ASCII 字元及至少三個詞；不加類型前綴或句點。Spec 識別碼藏在內文註解，`issue-triage.yml` 與 PR 再檢查標題。',
+          file: 'scripts/validate-issue-title＋work-item.yml＋issue-triage.yml＋pr-policy.yml',
           code: `# work-item.yml
+description: 英文標題摘要重點，內文用中文定義改動
 body:
   - id: kind
     type: dropdown
@@ -2059,6 +2060,8 @@ body:
 blank_issues_enabled: false
 contact_links: []
 
+# validate-issue-title: 12-80 ASCII characters, 3+ words.
+# spec_to_issue.py: keep the SPEC ID in an HTML comment in the body.
 # issue-triage.yml assigns the author and work label.`
         },
         {
@@ -2127,7 +2130,7 @@ permissions:
         {
           title: 'PR 同時核對標籤、Issue 編號、分支、目標與版本標題',
           goal: '先有工作紀錄再改程式；標題仍是版本計算依據，內文可以用中文。',
-          summary: 'PR 至少選 bug／enhancement／documentation 之一；分支須為 `type/123-short-slug`，內文須有 `Closes #123` 且 Issue 未結案。超出原 Issue 就另開單。',
+          summary: 'PR 至少選一個工作標籤；分支須為 `type/123-short-slug`，內文須有 `Closes #123`，且連結 Issue 必須未結案、標題合格。',
           file: '.github/workflows/pr-policy.yml＋scripts/test-pr-policy＋pull_request_template.md',
           code: `^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+
 

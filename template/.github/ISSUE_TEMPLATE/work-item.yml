@@ -1,8 +1,13 @@
 name: 開發工作
-description: 先用簡短中文說明一個可獨立驗證的改動
+description: 英文標題摘要重點，內文用簡短中文定義一個可驗證改動
 title: ""
 labels: []
 body:
+  - type: markdown
+    attributes:
+      value: >-
+        **標題規則：**使用 12–80 個英文 ASCII 字元及至少三個詞，直接描述成果；
+        不加 `[Bug]` 或 `bug:` 前綴，不以句點結尾。例如：`Add dependency policy checks`。
   - type: dropdown
     id: kind
     attributes:

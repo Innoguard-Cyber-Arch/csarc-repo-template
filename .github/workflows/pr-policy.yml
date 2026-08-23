@@ -100,14 +100,19 @@ jobs:
 
           if [[ "${PR_ISSUE_STATE+x}" == "x" ]]; then
             issue_state="$PR_ISSUE_STATE"
+            issue_title="${PR_ISSUE_TITLE:-}"
           else
-            issue_state="$(
+            issue_payload="$(
               gh api "repos/$GITHUB_REPOSITORY/issues/$issue_number" \
-                --jq 'select((.pull_request | not) and .state == "open") | .state' \
+                --jq 'select(.pull_request | not) | [.state, .title] | @tsv' \
                 2>/dev/null || true
             )"
+            IFS=$'\t' read -r issue_state issue_title <<<"$issue_payload"
           fi
           if [[ "$issue_state" != "open" ]]; then
             echo "Issue #${issue_number} must exist and remain open until merge."
             exit 1
+          fi
+          if [[ -x ./scripts/validate-issue-title ]]; then
+            ./scripts/validate-issue-title "$issue_title"
           fi

@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+title="${1:-}"
+length="${#title}"
+
+fail() {
+  echo "Invalid Issue title: $1" >&2
+  echo "Use 12-80 ASCII characters and at least three words, for example: Add dependency policy checks" >&2
+  exit 1
+}
+
+(( length >= 12 && length <= 80 )) || fail "length must be 12-80 characters."
+printf '%s' "$title" | LC_ALL=C grep -q '[^ -~]' && fail "write the title in English ASCII."
+[[ "$title" =~ ^[[:space:]] || "$title" =~ [[:space:]]$ ]] && fail "remove leading or trailing spaces."
+[[ "$title" == *. ]] && fail "omit the trailing period."
+
+summary="$title"
+if [[ "$summary" =~ ^\[[^]]+\] ]]; then
+  fail "use labels instead of a bracketed type prefix."
+fi
+
+shopt -s nocasematch
+if [[ "$summary" =~ ^(bug|feature|enhancement|documentation|docs|task|chore):[[:space:]] ]]; then
+  fail "use the Issue label instead of a type prefix."
+fi
+shopt -u nocasematch
+
+[[ "$summary" =~ ^[A-Za-z] ]] || fail "start the summary with an English word."
+word_count="$(awk '{ print NF }' <<<"$summary")"
+(( word_count >= 3 )) || fail "describe the outcome with at least three words."

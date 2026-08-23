@@ -48,7 +48,7 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 
 ## 開發與驗證
 
-1. 簡單工作先開「開發工作」Issue；複雜需求先開規劃 Issue，再用 `docs/specs/` 拆出實作 Issue。
+1. 簡單工作先開「開發工作」Issue；標題以 12–80 個英文 ASCII 字元及至少三個詞直接描述成果，例如 `Add dependency policy checks`。Issue 不使用 PR 的 Conventional Commit 格式。
 2. 開單者會自動成為負責人，並從 `bug`、`enhancement`、`documentation` 選一種類型。
 3. 從 `main` 建立 `type/<issue-number>-short-slug` 分支，一張 Issue 與 PR 只交付一個結果；若新增需求超出完成條件，另開 Issue 與分支。
 4. 公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。
@@ -56,7 +56,7 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 6. CI 與人工審查都通過才合併；AI 不得自行合併。
 
 本 repo 沒有共用測試環境，因此採 main-only。生成專案只有在確實有長期 dev 測試環境時，才改選 `dev` 模式。
-驗證入口也會執行 PR 政策正反例；公版另注入不合法的 Python／TypeScript 內容，確認語言門禁真的會拒絕。
+驗證入口也會執行 Issue／PR 政策正反例；標題不合格的 Issue 會讓連結它的 PR 無法通過，公版另注入不合法的 Python／TypeScript 內容，確認語言門禁真的會拒絕。
 
 `AGENTS.md` 是 AI 工作契約；工具細節以可執行設定為準，不在 README 重複。
 

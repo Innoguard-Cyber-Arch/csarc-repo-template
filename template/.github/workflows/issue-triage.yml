@@ -14,6 +14,9 @@ jobs:
     if: github.event.issue.user.type == 'User'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Assign author and apply one work label
         env:
           GH_TOKEN: ${{ github.token }}
@@ -21,8 +24,16 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
         run: |
           set -euo pipefail
+
+          if ! title_error="$(./scripts/validate-issue-title "$ISSUE_TITLE" 2>&1)"; then
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body "$(printf '請先修正 Issue 標題後再開始工作。\n\n```text\n%s\n```' "$title_error")"
+            printf '%s\n' "$title_error" >&2
+            exit 1
+          fi
 
           issue_type=""
           for allowed in bug enhancement documentation; do

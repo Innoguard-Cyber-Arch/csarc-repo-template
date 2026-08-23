@@ -168,6 +168,7 @@ def run_gh(arguments: list[str]) -> str:
 
 def find_issue(repo: str, spec_id: str) -> int | None:
     """Return the existing managed Issue number, if one exists."""
+    marker = f"<!-- csarc-spec-id: {spec_id} -->"
     result = run_gh(
         [
             "issue",
@@ -177,15 +178,15 @@ def find_issue(repo: str, spec_id: str) -> int | None:
             "--state",
             "all",
             "--search",
-            f'"[{spec_id}]" in:title',
+            f'"csarc-spec-id: {spec_id}" in:body',
             "--json",
-            "number,title",
+            "number,body",
             "--limit",
             "100",
         ]
     )
     for item in json.loads(result or "[]"):
-        if item["title"].startswith(f"[{spec_id}]"):
+        if marker in item.get("body", "").splitlines():
             return int(item["number"])
     return None
 
@@ -205,7 +206,7 @@ def sync_spec(spec: Spec, repo: str, source_ref: str, server_url: str) -> None:
         f"{server_url}/{repo}/blob/{source_ref}/{relative_path.as_posix()}"
     )
     body = build_issue_body(spec, source_url)
-    title = f"[{spec.spec_id}] {spec.title}"
+    title = spec.title
     issue_number = find_issue(repo, spec.spec_id)
 
     with tempfile.NamedTemporaryFile(
