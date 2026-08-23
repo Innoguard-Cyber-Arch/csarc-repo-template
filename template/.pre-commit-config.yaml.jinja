@@ -1,6 +1,11 @@
 repos:
   - repo: local
     hooks:
+      - id: update-conflicts
+        name: Copier update conflicts
+        entry: ./scripts/check-update-conflicts
+        language: system
+        pass_filenames: false
 {% if language in ["python", "python-typescript"] %}
       - id: ruff-format
         name: Ruff format
