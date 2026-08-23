@@ -6,6 +6,8 @@ fixture_root="$(mktemp -d)"
 trap 'rm -rf "$fixture_root"' EXIT
 cd "$repo_root"
 
+./scripts/check-update-conflicts
+
 prime_gitleaks_cache() {
   local project_root="$1"
   mkdir -p "$project_root/.cache"
@@ -34,6 +36,8 @@ uv run mypy \
 uv run pytest template/tests/test_spec_to_issue.py
 bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
+bash -n scripts/check-update-conflicts
+bash -n template/scripts/check-update-conflicts
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
 bash -n scripts/test-issue-triage
@@ -311,6 +315,7 @@ paired_files=(
   policies/labels.json
   policies/repository.json
   scripts/apply-repository-settings.sh
+  scripts/check-update-conflicts
   scripts/install-gitleaks
   scripts/scan-secrets
   scripts/test-issue-triage
@@ -428,6 +433,7 @@ if grep -q '"refs/heads/dev"' \
   exit 1
 fi
 test -x "$fixture_root/default-project/scripts/apply-repository-settings.sh"
+test -x "$fixture_root/default-project/scripts/check-update-conflicts"
 test -x "$fixture_root/default-project/scripts/install-gitleaks"
 test ! -f "$fixture_root/default-project/.pre-commit-config.yaml"
 test ! -f "$fixture_root/default-project/package.json"
@@ -442,6 +448,20 @@ grep -q '^Thumbs\.db$' "$fixture_root/default-project/.gitignore"
 grep -q '^\.vscode/\*$' "$fixture_root/default-project/.gitignore"
 grep -q '^\.venv\*/$' "$fixture_root/default-project/.gitignore"
 grep -q '^__pycache__/$' "$fixture_root/default-project/.gitignore"
+printf '<<<<<<< ours\n=======\n>>>>>>> theirs\n' > \
+  "$fixture_root/default-project/conflict-probe.txt"
+if "$fixture_root/default-project/scripts/check-update-conflicts" >/dev/null 2>&1; then
+  echo "Copier conflict markers must fail verification."
+  exit 1
+fi
+rm "$fixture_root/default-project/conflict-probe.txt"
+: > "$fixture_root/default-project/copier-update.rej"
+if "$fixture_root/default-project/scripts/check-update-conflicts" >/dev/null 2>&1; then
+  echo "Copier rejection files must fail verification."
+  exit 1
+fi
+rm "$fixture_root/default-project/copier-update.rej"
+"$fixture_root/default-project/scripts/check-update-conflicts"
 if grep -q '^node_modules/$' "$fixture_root/default-project/.gitignore"; then
   echo "Python-only .gitignore must not contain TypeScript artifacts."
   exit 1
