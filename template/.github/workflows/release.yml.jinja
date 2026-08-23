@@ -244,6 +244,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
+{% if enable_attestations %}
+      attestations: read
+{% endif %}
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -256,6 +259,26 @@ jobs:
             \( -name '*.whl' -o -name '*.tar.gz' \) \
             -exec cp {} pypi-dist/ \;
           find pypi-dist -maxdepth 1 -type f -print -quit | grep -q .
+{% if enable_attestations %}
+      - name: Verify Python build provenance before publishing
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+        run: |
+          set -euo pipefail
+          mapfile -t packages < <(
+            find pypi-dist -maxdepth 1 -type f \
+              \( -name '*.whl' -o -name '*.tar.gz' \)
+          )
+          [[ "{% raw %}${#packages[@]}{% endraw %}" -gt 0 ]]
+          for package in "{% raw %}${packages[@]}{% endraw %}"; do
+            gh attestation verify "$package" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow \
+                "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-digest "$GITHUB_SHA" \
+              --source-ref "$GITHUB_REF"
+          done
+{% endif %}
       - name: Publish to PyPI with OIDC
         uses: pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26 # v1.14.2
         with:
@@ -274,6 +297,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
+{% if enable_attestations %}
+      attestations: read
+{% endif %}
     steps:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -284,6 +310,23 @@ jobs:
         with:
           name: release-evidence
           path: release-evidence
+{% if enable_attestations %}
+      - name: Verify npm build provenance before publishing
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+        run: |
+          set -euo pipefail
+          mapfile -t packages < <(
+            find release-evidence/dist -maxdepth 1 -type f -name '*.tgz'
+          )
+          [[ "{% raw %}${#packages[@]}{% endraw %}" -eq 1 ]]
+          gh attestation verify "{% raw %}${packages[0]}{% endraw %}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow \
+              "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-digest "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF"
+{% endif %}
       - name: Publish to npm with OIDC
         run: |
           mapfile -t packages < <(

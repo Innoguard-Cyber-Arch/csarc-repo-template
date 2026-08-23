@@ -24,12 +24,14 @@ uv run ruff format --check \
   tests/test_milestone_lifecycle.py \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
+  tests/test_release_consumption.py \
   scripts/report_dependency_ceiling.py \
   scripts/render_release_prompt.py \
   scripts/release_policy.py \
   scripts/spec_to_issue.py \
   scripts/sync_milestone_state.py \
   scripts/update_python_version.py \
+  scripts/verify_release_consumption.py \
   tests/test_spec_to_issue.py \
   template/scripts \
   template/tests/test_milestone_lifecycle.py \
@@ -41,12 +43,14 @@ uv run ruff check \
   tests/test_milestone_lifecycle.py \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
+  tests/test_release_consumption.py \
   scripts/report_dependency_ceiling.py \
   scripts/render_release_prompt.py \
   scripts/release_policy.py \
   scripts/spec_to_issue.py \
   scripts/sync_milestone_state.py \
   scripts/update_python_version.py \
+  scripts/verify_release_consumption.py \
   tests/test_spec_to_issue.py \
   template/scripts \
   template/tests/test_milestone_lifecycle.py \
@@ -60,12 +64,14 @@ uv run mypy \
   scripts/spec_to_issue.py \
   scripts/sync_milestone_state.py \
   scripts/update_python_version.py \
+  scripts/verify_release_consumption.py \
   tests/test_spec_to_issue.py
 uv run mypy template/scripts template/tests/test_spec_to_issue.py
 uv run pytest \
   tests/test_milestone_lifecycle.py \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
+  tests/test_release_consumption.py \
   tests/test_spec_to_issue.py
 uv run pytest tests/test_cli.py \
   --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80
@@ -498,6 +504,9 @@ test "$(wc -l < AGENTS.md)" -le 200
 test "$(cat CLAUDE.md)" = "@AGENTS.md"
 test -f docs/index.html
 test -f docs/pilot-adoption.md
+test -f docs/artifact-consumption.md
+grep -q '產生 attestation 只證明' docs/artifact-consumption.md
+grep -q 'docs/artifact-consumption.md' README.md
 grep -q 'ai-guardrail' docs/pilot-adoption.md
 grep -q 'run 32664445831' docs/pilot-adoption.md
 grep -q 'docs/pilot-adoption.md' README.md
@@ -532,8 +541,11 @@ test -f docs/live-integration.md
 grep -q '只代表靜態與合成驗證通過' docs/live-integration.md
 test -x scripts/run-live-workflow-probe
 test -f .github/workflows/live-integration.yml
+test -f .github/workflows/release-consumption.yml
 test ! -e template/.github/workflows/live-integration.yml
+test ! -e template/.github/workflows/release-consumption.yml
 test ! -e template/scripts/run-live-workflow-probe
+test ! -e template/scripts/verify_release_consumption.py
 grep -q '^      actions: write$' .github/workflows/live-integration.yml
 grep -q '^            capability: OSV$' .github/workflows/live-integration.yml
 grep -q '^            capability: Release Please$' .github/workflows/live-integration.yml
@@ -1259,6 +1271,11 @@ if grep -q '^  publish-python:\|^  publish-npm:' \
   echo "CI/CD-only releases must not publish packages."
   exit 1
 fi
+if grep -q 'gh attestation verify' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"; then
+  echo "CI-only release workflow must not contain artifact verification."
+  exit 1
+fi
 if grep -q '^\.venv\*/\|^node_modules/$' \
   "$fixture_root/ci-only-project/.gitignore"; then
   echo "CI/CD-only .gitignore must not contain language artifacts."
@@ -1507,8 +1524,20 @@ grep -q 'subject-checksums: release-evidence/SHA256SUMS' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q 'sbom-path: release-evidence/sbom.cdx.json' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q '外部 registry 發布會先以 `gh attestation verify` 強制比對' \
+  "$fixture_root/all-features-project/README.md"
 grep -q '^  publish-python:$' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
+test "$(grep -c '^      attestations: read$' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
+test "$(grep -c 'gh attestation verify' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
+test "$(grep -c -- '--signer-workflow' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
+test "$(grep -c -- '--source-ref \"\$GITHUB_REF\"' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
+test "$(grep -c -- '--source-digest \"\$GITHUB_SHA\"' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
 grep -q '^      name: "pypi-release"$' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q 'pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26' \
