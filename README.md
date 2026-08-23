@@ -4,7 +4,7 @@ Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript �
 
 目前公版：v0.1.0 <!-- x-release-please-version -->
 
-[開啟內部網站與完整決策說明](docs/index.html)
+[開啟內部網站與完整決策說明](docs/index.html)（內部限閱，請勿公開分享此連結；`noindex`／`robots.txt` 只是臨時防護，不是存取控制，詳見網站內「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)）
 
 ## 專案概述
 
@@ -45,7 +45,7 @@ uvx --from copier copier copy --trust --overwrite \
 | `profiles/catalog.yaml` | 已支援語言與版本政策 |
 | `.github/`、`policies/` | 公版本身的 CI 與 GitHub 設定 |
 | `scripts/verify-template.sh` | 建立、更新、語言與供應鏈回歸 |
-| `docs/index.html` | 內部網站與完整設計說明 |
+| `docs/index.html` | 內部網站與完整設計說明；內部限閱，目前只有 `noindex`／`robots.txt` 臨時防護，尚無實際存取控制 |
 
 Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；TypeScript 以 Node 24、pnpm 11、Biome、strict TypeScript 與 Vitest 為基線。
 
@@ -69,6 +69,7 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 - **GitHub App 只給 Python 自動升版用：**release-please 使用 Actions 內建 `GITHUB_TOKEN`，不需要另外設定；`python-version-policy.yml` 的排程升版 PR 仍需要 `CSARC_VERSION_BOT_CLIENT_ID` 與 private key，未提供時該 job 會略過。
 - **來源證明採明確啟用：**生成非 CI-only 專案時，可在 GitHub public repo 或支援的 Enterprise Cloud private／internal repo 啟用 artifact provenance 與 SBOM attestation；其他情況維持關閉，改用 GitHub Release 上的 SHA-256 驗證。
 - Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。不要把 token、私鑰或實際密碼寫進 repo。
+- **內部網站存取控制現況：**`docs/index.html` 目前沒有登入或其他實際存取限制，只有 `noindex`／`docs/robots.txt` 臨時防護；已評估 Cloudflare Pages＋Access（候選，需另建 Cloudflare 帳號）、GitHub Pages＋IP 限制（需先升級 Enterprise Cloud）、內部登入平台（未來，服務變多才評估）三種方案，任一方案都需要組織 owner 另行建立並持有帳號權限，本 repo 不會自行申請或設定。詳見 `docs/index.html`「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)。
 
 > 若 plan 顯示 `BLOCKED required governance`，需要保密就請組織 owner 在 **Organization Settings → Billing & licensing** 升級至 GitHub Team 以上；只有已核准公開的程式碼才可由人員在 **Repository Settings → General → Danger Zone** 改為 public，腳本不會變更可見性。接著建立或確認 `.github/CODEOWNERS` 指定的 team，重新執行 `plan`／`apply`／`check`。GitHub Free private repo 沒有平台層 merge gate，`check` 對這種帳號方案限制採 `DEGRADED` 放行，不讓 CI／release 永久卡死；若明確接受沒有 required review／CODEOWNERS 的風險，才可執行 `apply --allow-unprotected` 套用基本設定。已支援 Ruleset 的方案若規則跟政策對不上，`check` 仍會 fail-closed。
 

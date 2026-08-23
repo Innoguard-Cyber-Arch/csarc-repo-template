@@ -310,6 +310,14 @@ grep -q 'issues/74' docs/index.html
 grep -q 'issues/79' docs/index.html
 grep -q 'Spec 格式決策｜' docs/index.html
 grep -q '維持現行 spec → Issue，不在本 Issue 遷移' docs/index.html
+grep -q '<meta name="robots" content="noindex,nofollow">' docs/index.html
+grep -q 'internal-notice' docs/index.html
+grep -q '請勿公開分享此連結' docs/index.html
+grep -q '存取控制決策｜' docs/index.html
+test -f docs/robots.txt
+grep -q '^Disallow: /$' docs/robots.txt
+grep -q 'docs/index.html' README.md
+grep -q '內部限閱' README.md
 test -f version.txt
 uv run python - <<'PY'
 import json
