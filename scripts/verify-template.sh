@@ -346,6 +346,7 @@ grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
 grep -q 'pull request chain ends at `main`' AGENTS.md
 grep -q 'against `main` or its immediate parent in the stack' AGENTS.md
+grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
 required_readme_headings=(
   "專案概述"
   "快速開始"
@@ -402,10 +403,12 @@ for relative_file in "${paired_files[@]}"; do
 done
 
 test "$(grep -c '^    id:' .github/ISSUE_TEMPLATE/work-item.yml)" -eq 4
+test "$(grep -c '^      required: true$' .github/ISSUE_TEMPLATE/work-item.yml)" -eq 3
+test "$(grep -c '^      required: false$' .github/ISSUE_TEMPLATE/work-item.yml)" -eq 1
 grep -q '^    id: kind$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: problem$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: acceptance$' .github/ISSUE_TEMPLATE/work-item.yml
-grep -q '^    id: verification$' .github/ISSUE_TEMPLATE/work-item.yml
+grep -q '^    id: supplement$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q 'Validate pull request policy' .github/workflows/pr-policy.yml
 grep -q 'Select at least one PR label' .github/workflows/pr-policy.yml
 grep -q 'type/<issue-number>-short-slug' .github/workflows/pr-policy.yml
@@ -628,6 +631,12 @@ grep -q '^blank_issues_enabled: false$' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/config.yml"
 test "$(grep -c '^    id:' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 4
+grep -q '^    id: supplement$' \
+  "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml"
+grep -q '^## Checklist$' \
+  "$fixture_root/default-project/.github/pull_request_template.md"
+grep -q '^## Supplement$' \
+  "$fixture_root/default-project/.github/pull_request_template.md"
 test -f "$fixture_root/default-project/.github/workflows/issue-triage.yml"
 test -x "$fixture_root/default-project/scripts/test-issue-triage"
 test -x "$fixture_root/default-project/scripts/validate-issue-title"
@@ -960,6 +969,8 @@ test -f "$fixture_root/all-features-project/.pre-commit-config.yaml"
 test -f "$fixture_root/all-features-project/.github/workflows/template-update.yml"
 test -x "$fixture_root/all-features-project/scripts/check-template-update"
 grep -q 'copier check-update --quiet' \
+  "$fixture_root/all-features-project/scripts/check-template-update"
+grep -q '^### 補充$' \
   "$fixture_root/all-features-project/scripts/check-template-update"
 grep -q 'CSARC_TEMPLATE_READ_TOKEN' \
   "$fixture_root/all-features-project/.github/workflows/template-update.yml"

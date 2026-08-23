@@ -34,10 +34,10 @@ window.CSARC_SITE_CONTENT = {
     { path: "docs/site-content.js", purpose: "本網站的專案內容", owner: "專案維護" }
   ],
   workflow: [
-    { title: "1｜定義工作", detail: "Issue 用 12–80 字元英文標題摘要成果；內文選類型並寫三題，開單者自動成為負責人。" },
+    { title: "1｜定義工作", detail: "Issue 用 12–80 字元英文標題摘要成果；內文選類型，必填問題與完成條件，其餘放在選填補充。" },
     { title: "2｜分支與實作", detail: "從 {{ branch_strategy }} 或最終回到它的 open PR 分支建立 type/<Issue 編號>-簡稱；若超出原單就另開 Issue。" },
     { title: "3｜驗證", detail: "本機執行 ./scripts/verify，PR 由 CI 重跑同一入口。" },
-    { title: "4｜審查", detail: "PR 連回 Issue、選一個工作標籤，可直接或經 stack 進 {{ branch_strategy }}；同事與 CODEOWNER 判斷風險。" },
+    { title: "4｜審查", detail: "PR 連回 Issue、完成精簡清單並選一個工作標籤；風險或回退放在選填補充，再由同事與 CODEOWNER 審查。" },
     { title: "5｜交付", detail: "tag 建立可追溯成品、SHA-256 與非空 SBOM；部署依專案另訂。" }
   ],
   safeguards: [

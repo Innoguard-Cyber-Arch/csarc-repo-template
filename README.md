@@ -52,10 +52,10 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；Typ
 ## 開發與驗證
 
 1. 簡單工作先開「開發工作」Issue；標題以 12–80 個英文 ASCII 字元及至少三個詞直接描述成果，例如 `Add dependency policy checks`。Issue 不使用 PR 的 Conventional Commit 格式。
-2. 開單者會自動成為負責人，並從 `bug`、`enhancement`、`documentation` 選一種類型。
+2. 開單者會自動成為負責人，並從 `bug`、`enhancement`、`documentation` 選一種類型；內文必填問題與完成條件，其餘放在選填補充。
 3. 從 `main` 或最終 PR 回 `main` 的未合併工作分支建立 `type/<issue-number>-short-slug`；一張 Issue 與 PR 只交付一個結果，若新增需求超出完成條件就另開 Issue 與分支。
 4. 公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。
-5. PR 指向 `main` 或 stack 中的直接上游分支；整條 open PR 鏈必須最終回到 `main`。內文寫 `Closes #<issue-number>`、選擇上述三種標籤之一，並使用英文標題 `type(scope): summary`。
+5. PR 指向 `main` 或 stack 中的直接上游分支；整條 open PR 鏈必須最終回到 `main`。內文寫 `Closes #<issue-number>`、完成精簡清單，風險或回退放在選填補充；選擇上述三種標籤之一，並使用英文標題 `type(scope): summary`。
 6. CI 與人工審查都通過才合併；AI 不得自行合併。
 
 本 repo 沒有共用測試環境，因此採 main-only。生成專案只有在確實有長期 dev 測試環境時，才改選 `dev` 模式。

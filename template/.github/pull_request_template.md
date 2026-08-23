@@ -6,25 +6,11 @@ Closes #N
 
 <!-- Work PRs use type/N-short-slug and target the configured integration branch. -->
 
-## Verification
+## Checklist
 
-<!-- List commands and results. -->
+- [ ] `./scripts/verify` passes; labeled `bug`/`enhancement`/`documentation`; stays within the Issue
+- [ ] New-project generation tested and existing-project updates considered; lockfile changes reviewed; third-party Actions pinned to full commit SHAs
 
-- [ ] `./scripts/verify`
-- [ ] 已選擇 `bug`、`enhancement` 或 `documentation` 其中一個標籤
-- [ ] 若需求超出原 Issue，已另開 Issue，未擴張本 PR
+## Supplement
 
-## Risk and rollback
-
-<!-- Describe user impact, sensitive paths, and how to revert. -->
-
-## Review size
-
-- [ ] This pull request stays focused on one outcome.
-- [ ] If the change exceeds roughly 400 lines, the description explains why it cannot be split safely.
-
-## Supply chain
-
-- [ ] Lockfile changes are expected and reviewed.
-- [ ] Third-party Actions use full commit SHAs.
-- [ ] New dependencies have an owner and a clear need.
+<!-- Optional: risk, rollback, review size, or reviewer-specific requirements. -->

@@ -6,20 +6,11 @@ Closes #N
 
 <!-- Work PRs use type/N-short-slug and target the configured integration branch. -->
 
-## Verification
+## 完成清單
 
-<!-- List the commands run and the expected result. -->
+- [ ] `./scripts/verify-template.sh` 已通過；已選標籤；未超出原 Issue 範圍
+- [ ] 已測試新專案產生並評估既有專案更新影響；第三方 Actions 固定完整 commit SHA
 
-- [ ] `./scripts/verify-template.sh`
-- [ ] 已選擇 `bug`、`enhancement` 或 `documentation` 其中一個標籤
-- [ ] 若需求超出原 Issue，已另開 Issue，未擴張本 PR
+## 補充
 
-## Risk and rollback
-
-<!-- State affected profiles, migration risk, and how to revert. -->
-
-## Template impact
-
-- [ ] New project generation was tested.
-- [ ] Existing-project update impact was considered.
-- [ ] Third-party Actions remain pinned to full commit SHAs.
+<!-- 選填：風險、回退，或本 PR 對其他專案的額外影響。 -->
