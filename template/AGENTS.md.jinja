@@ -9,19 +9,24 @@
 
 ## Working loop
 
-1. Open or select one GitHub Issue before editing; use its acceptance criteria as the scope boundary. Write the Issue title in 12-80 ASCII characters and at least three words; describe the outcome without a type prefix or trailing period.
-2. If new work exceeds that Issue, stop and open a separate Issue; do not silently widen the current branch or pull request.
-3. Start from `{{ branch_strategy }}`, or from an open work branch whose pull request chain ends at `{{ branch_strategy }}`, and name the branch `type/<issue-number>-short-slug`.
-4. Inspect nearby code, tests, and configuration before choosing an implementation.
-5. Make the smallest coherent change; preserve unrelated work and project-owned source files.
-6. Add or update the narrowest regression test that proves non-trivial behavior.
-7. Run targeted checks while iterating, then run `./scripts/verify` before opening or updating a pull request.
-8. Open the pull request against `{{ branch_strategy }}` or its immediate parent in the stack, include `Closes #<issue-number>`, and never merge it yourself.
-9. Report the changed behavior, verification evidence, and any remaining limitation.
+1. Before planning or opening an Issue, list open Milestones and read their descriptions and open Issues. Reuse an open story Milestone only when this work directly advances its acceptance criteria; otherwise create a new story Milestone or leave the Issue standalone.
+2. A Milestone is an optional, independently verifiable story outcome containing one or more Issues. It is not required for every Issue, is not selected by Issue count, and must not also contain linked PRs. A spec is only one possible story source. Use `docs/milestone-description.md` for its description.
+3. Open or select one GitHub Issue before editing; use its acceptance criteria as the scope boundary. Write the Issue title in 12-80 ASCII characters and at least three words; describe the outcome without a type prefix or trailing period. Add it to the selected Milestone with GitHub's native association; necessary follow-up fixes may join the same open Milestone.
+4. If new work exceeds that Issue, stop and open a separate Issue; do not silently widen the current branch or pull request.
+5. Start from `{{ branch_strategy }}`, or from an open work branch whose pull request chain ends at `{{ branch_strategy }}`, and name the branch `type/<issue-number>-short-slug`.
+6. Inspect nearby code, tests, and configuration before choosing an implementation.
+7. Make the smallest coherent change; preserve unrelated work and project-owned source files.
+8. Add or update the narrowest regression test that proves non-trivial behavior.
+9. Run targeted checks while iterating, then run `./scripts/verify` before opening or updating a pull request.
+10. Before closing the final open Issue in a Milestone, re-check the story acceptance criteria and add any genuinely required follow-up Issue. The lifecycle workflow closes a zero-open-Issue Milestone and reopens it when open work returns.
+11. Open the pull request against `{{ branch_strategy }}` or its immediate parent in the stack, include `Closes #<issue-number>`, and never merge it yourself.
+12. Report the changed behavior, verification evidence, and any remaining limitation.
 
 Automated dependency and version-policy branches may omit an Issue, but still target `{{ branch_strategy }}`. {% if branch_strategy == "dev" %}Only a reviewed `dev` promotion or release-please pull request may target `main`.{% else %}Release-please may target `main` without a work Issue.{% endif %}
 
 Duplicate triage may close an Issue without a branch or pull request when no repository files change. Link the canonical Issue and use GitHub's native duplicate close reason; implementation work still follows the normal Issue, branch, and pull request loop.
+
+For an existing repository, audit Milestones and Issues in bounded pages: propose semantic story groups and exclusions read-only, wait for confirmation, then idempotently create or update Milestones and associations. Do not infer grouping from titles or labels alone, require every historical Issue to have a Milestone, or reopen completed Issues during backfill.
 
 If a `copier update` changes the Issue or pull request body template's shape, and an AI coding agent is available, ask it to retroactively rewrite existing Issue and pull request bodies to match the new template.
 

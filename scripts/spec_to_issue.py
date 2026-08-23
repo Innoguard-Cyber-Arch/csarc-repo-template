@@ -17,6 +17,7 @@ from pathlib import Path
 SPEC_ID = re.compile(r"^SPEC-[0-9]{3,}$")
 PRIORITIES = {"P0", "P1", "P2", "P3"}
 STATUSES = {"draft", "proposed", "approved"}
+TRACKING = {"issue", "story"}
 LOGGER = logging.getLogger(__name__)
 
 
@@ -35,6 +36,7 @@ class Spec:
     priority: str
     estimate: str
     status: str
+    tracking: str
     body: str
 
 
@@ -76,6 +78,8 @@ def _validate_metadata(path: Path, metadata: dict[str, str]) -> None:
         raise SpecError(f"{path}: priority must be one of {sorted(PRIORITIES)}")
     if metadata["status"] not in STATUSES:
         raise SpecError(f"{path}: status must be one of {sorted(STATUSES)}")
+    if metadata.get("tracking", "issue") not in TRACKING:
+        raise SpecError(f"{path}: tracking must be one of {sorted(TRACKING)}")
 
 
 def _validate_body(path: Path, body: str) -> None:
@@ -122,6 +126,7 @@ def parse_spec_text(path: Path, text: str) -> Spec:
         priority=metadata["priority"],
         estimate=metadata["estimate"],
         status=metadata["status"],
+        tracking=metadata.get("tracking", "issue"),
         body=body,
     )
 
@@ -136,6 +141,23 @@ def build_issue_body(spec: Spec, source_url: str) -> str:
     return "\n".join(
         [
             f"<!-- csarc-spec-id: {spec.spec_id} -->",
+            f"> Source: [{spec.path.as_posix()}]({source_url})  ",
+            f"> Owner: {spec.owner}  ",
+            f"> Priority: {spec.priority}  ",
+            f"> Expected size: {spec.estimate}  ",
+            f"> Spec status: {spec.status}",
+            "",
+            spec.body,
+            "",
+        ]
+    )
+
+
+def build_milestone_description(spec: Spec, source_url: str) -> str:
+    """Build the complete story contract stored in a GitHub Milestone."""
+    return "\n".join(
+        [
+            f"<!-- csarc-story-id: {spec.spec_id} -->",
             f"> Source: [{spec.path.as_posix()}]({source_url})  ",
             f"> Owner: {spec.owner}  ",
             f"> Priority: {spec.priority}  ",
@@ -191,6 +213,59 @@ def find_issue(repo: str, spec_id: str) -> int | None:
     return None
 
 
+def find_milestone(repo: str, spec_id: str) -> int | None:
+    """Return the existing managed Milestone number, if one exists."""
+    marker = f"<!-- csarc-story-id: {spec_id} -->"
+    result = run_gh(
+        [
+            "api",
+            "--paginate",
+            "--slurp",
+            f"repos/{repo}/milestones?state=all&per_page=100",
+        ]
+    )
+    pages = json.loads(result or "[]")
+    for page in pages:
+        for item in page:
+            if marker in item.get("description", "").splitlines():
+                return int(item["number"])
+    return None
+
+
+def sync_milestone(spec: Spec, repo: str, source_url: str) -> None:
+    """Create or update one story Milestone without inventing child Issues."""
+    description = build_milestone_description(spec, source_url)
+    number = find_milestone(repo, spec.spec_id)
+    fields = [
+        "--raw-field",
+        f"title={spec.title}",
+        "--raw-field",
+        f"description={description}",
+    ]
+    if number is None:
+        output = run_gh(
+            [
+                "api",
+                "--method",
+                "POST",
+                f"repos/{repo}/milestones",
+                *fields,
+            ]
+        )
+        LOGGER.info("created milestone: %s", output)
+        return
+    run_gh(
+        [
+            "api",
+            "--method",
+            "PATCH",
+            f"repos/{repo}/milestones/{number}",
+            *fields,
+        ]
+    )
+    LOGGER.info("updated milestone: %s", number)
+
+
 def sync_spec(spec: Spec, repo: str, source_ref: str, server_url: str) -> None:
     """Create or update the GitHub Issue that corresponds to one spec."""
     if spec.status == "draft":
@@ -207,6 +282,9 @@ def sync_spec(spec: Spec, repo: str, source_ref: str, server_url: str) -> None:
     )
     body = build_issue_body(spec, source_url)
     title = spec.title
+    if spec.tracking == "story":
+        sync_milestone(spec, repo, source_url)
+        return
     issue_number = find_issue(repo, spec.spec_id)
 
     with tempfile.NamedTemporaryFile(

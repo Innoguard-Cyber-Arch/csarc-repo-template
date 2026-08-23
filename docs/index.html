@@ -1487,20 +1487,20 @@
       </header>
       <div class="language-contract" aria-label="程式語言 profile 決策">
         <p class="language-card"><strong>建立時必選｜四種組合</strong>只要 CI/CD 基線、Python、TypeScript，或兩者都有；宣告會寫入 repo 並由檔案自動核對。</p>
-        <p class="language-card shared"><strong>四種組合共用</strong>Issue／spec、PR checks、安全檢查、單一 SemVer 與 Copier 更新；建立時另選 main-only 或有測試環境的 dev 模式。</p>
+        <p class="language-card shared"><strong>四種組合共用</strong>可選 Story Milestone、Issue／spec、PR checks、安全檢查、單一 SemVer 與 Copier 更新；建立時另選 main-only 或有測試環境的 dev 模式。</p>
         <p class="language-card future"><strong>版本基線</strong>Python 3.14；TypeScript 採 Node 24 Active LTS。Go／Rust 仍是 future，不先建立空設定。</p>
       </div>
       <div class="product-start">
         <section class="product-scope" aria-label="公版提供的能力">
           <h3>公版會替 repo 準備</h3>
-          <p class="scope-row"><strong>規劃與 AI 契約</strong><span>先開 Issue，再開編號分支；spec 可自動拆出 Issue</span></p>
+          <p class="scope-row"><strong>規劃與 AI 契約</strong><span>可選 Story Milestone → 1..N Issues → 各自 PR；spec 可同步 Issue 或 Story</span></p>
           <p class="scope-row"><strong>驗證與合併</strong><span><code>./scripts/verify</code>＋CI＋PR；依環境選 main 或 dev</span></p>
           <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件</span></p>
           <p class="scope-row"><strong>可持續同步</strong><span>公版更新成為可審查差異，不會直接覆蓋產品程式</span></p>
         </section>
         <section class="start-paths" aria-label="三種導入方式">
           <h3>依你現在的 repo 狀態開始</h3>
-          <article class="start-path"><h3>新 repo</h3><p>選語言組合與分支模式，先開 Issue，再建立第一個 PR。</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">建立指令</button></article>
+          <article class="start-path"><h3>新 repo</h3><p>選語言與分支模式；需要端到端 story 時先建 Milestone，再由 Issue 進 PR。</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">建立指令</button></article>
           <article class="start-path"><h3>既有 repo</h3><p>在導入分支保留舊債邊界，逐項解決衝突與門禁。</p><button class="setup-trigger" type="button" data-setup="existing" aria-expanded="false">導入指令</button></article>
           <article class="start-path"><h3>已使用公版</h3><p>指定已審查的公版 SHA，只審查本次版本差異。</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">更新指令</button></article>
         </section>
@@ -1663,18 +1663,18 @@
     <section class="slide decision-slide" data-track="method" aria-label="步驟一規劃工作與 GitHub Issues">
       <header>
         <h2>步驟 1｜<span class="accent">先寫清楚要解決什麼</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>每次改動先有 Issue；Issue Type、label 與結案原因各自表達不同資訊，超出範圍就另開 Issue。</p>
+        <p class="subtitle"><strong>基本導入。</strong>可選 Story Milestone 管完整成果，1..N Issues 管可獨立工作，PR 只交付其 Issue；不是每張 Issue 都需要 Milestone。</p>
       </header>
       <p class="context-line"><strong>寫作原則｜</strong>Issue 標題用英文摘要成果；內文再以中文交代問題與完成條件，其餘選填寫進補充。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不讓每張工作單都走過重流程</h3><ul><li><strong>只寫 Issue 標題：</strong>缺成果與驗證，人和 AI 只能猜</li><li><strong>每張都跑 Spec Kit：</strong>小工作成本過高</li><li><strong>只留在聊天：</strong>無版本紀錄，不能在 PR 審查</li></ul></article>
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
-          <details class="package-disclosure"><summary><span>已完成的 <span class="tech-name">spec → Issue</span>；Spec Kit 先不導入</span></summary><div class="package-health"><p><strong>目前：</strong><code>docs/specs/</code> 經 CI 驗證；合併到選定整合分支後，由標準函式庫腳本與 GitHub CLI 建立或更新實作 Issue。</p><p><strong>Spec Kit：</strong><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">github/spec-kit</a>｜MIT｜公開、未封存、持續維護。</p><p><strong>何時再評估：</strong>一份核准規格需要由 AI 穩定拆成多張子工作，而且團隊願意維護額外 CLI／Agent 流程。</p></div></details>
-          <p class="recommendation-copy"><strong>標題：</strong>12–80 個英文 ASCII 字元、至少三個詞，直接描述成果；不加類型前綴或句點，PR 才用 Conventional Commit。<br><strong>分類：</strong><code>bug</code>／<code>enhancement</code>／<code>documentation</code> labels 分別同步至 organization 原生 <code>Bug</code>／<code>Feature</code>／<code>Task</code>；沒有 Issue Types 時 labels 仍可攜。<code>duplicate</code> 是結案處置：連結 canonical Issue，使用 GitHub 原生 Duplicate reason 關閉；純 triage 不需 PR。<br><strong>內文：</strong>填寫問題與完成條件；驗證方式、風險或自訂必填項目放在補充；複雜工作才用 spec 拆單。</p>
+          <details class="package-disclosure"><summary><span>預設 <span class="tech-name">spec → Issue</span>；明確 story 才同步 Milestone</span></summary><div class="package-health"><p><strong>目前：</strong><code>docs/specs/</code> 經 CI 驗證；預設 idempotently 建立或更新單一 Issue，只有 frontmatter 明列 <code>tracking: story</code> 才建立或更新 Milestone，不自動拆 child Issues。</p><p><strong>生命週期：</strong>最後一張 open Issue 關閉時關閉 Milestone；Issue reopen 或 open Issue 掛入 closed Milestone 時重開。每次都讀最新 API 狀態並以 Milestone number 序列化。</p><p><strong>Spec Kit：</strong><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">github/spec-kit</a>｜MIT｜公開、未封存、持續維護。</p></div></details>
+          <p class="recommendation-copy"><strong>Story：</strong>Milestone description 填 Problem、Outcome、Acceptance criteria、Out of scope、Verification 與來源；只掛直接推進成果的 Issues，不重複掛 PR。<br><strong>Issue：</strong>12–80 個英文 ASCII 字元、至少三個詞；standalone 工作可不掛 Milestone，必要 fix 可加入既有 open story。<br><strong>既有 repo：</strong>分頁唯讀盤點、小批提出候選分群與排除項目，經人確認才 idempotently 套用；不靠標題或 label 自動判斷。</p>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>提示英文標題、分類、問題與完成條件：</strong><code>.github/ISSUE_TEMPLATE/</code></li><li><strong>驗證標題、同步單一 label 與可用的原生 Issue Type：</strong><code>scripts/validate-issue-title</code>＋<code>issue-triage.yml</code></li><li><strong>PR 再核對連結 Issue 的標題與狀態：</strong><code>pr-policy.yml</code>；PR 只支援 Markdown template 與 labels，不假造 Issue Type</li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>Story 結構：</strong><code>docs/milestone-description.md</code>；agent 先查 open Milestones，再選沿用、新建或 standalone</li><li><strong>Spec 同步：</strong><code>scripts/spec_to_issue.py</code>；預設 Issue，<code>tracking: story</code> 才同步 Milestone</li><li><strong>自動收尾：</strong><code>milestone-lifecycle.yml</code> 依最新 open issue 數關閉或重開</li></ul></aside>
       <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/managing-issue-types-in-an-organization" target="_blank" rel="noreferrer">GitHub issue types</a>; <a href="https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-issue-forms" target="_blank" rel="noreferrer">Issue Forms syntax</a>; <a href="https://docs.github.com/en/issues/using-labels-and-milestones-to-track-work/managing-labels" target="_blank" rel="noreferrer">GitHub labels</a>; <a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a>. Accessed August 23, 2026.</p>
     </section>
 
@@ -1904,8 +1904,8 @@
     <section class="slide review-notes-slide" aria-label="Spec Kit 格式決策">
       <header>
         <span class="selection-sequence">決策附錄</span>
-        <h2>Spec 格式決策｜<span class="accent">維持 spec → Issue，訂重新評估條件</span></h2>
-        <p class="subtitle">比較自製 frontmatter＋idempotent marker 與 GitHub Spec Kit 的 <code>/specify /plan /tasks /implement</code> 生命週期；本 Issue 只交付決策與記錄，不遷移程式碼。</p>
+        <h2>Spec 格式決策｜<span class="accent">預設 Issue，明確 Story 才建 Milestone</span></h2>
+        <p class="subtitle">沿用輕量 frontmatter；<code>tracking: story</code> 是顯式選項，不因 spec 存在或 Issue 數量自動升格。</p>
       </header>
       <div class="decision-strip">
         <article class="decision-step">
@@ -1920,8 +1920,8 @@
         </article>
         <article class="decision-step recommended">
           <span class="step-label">我們的決定</span>
-          <h3>維持現行 spec → Issue，不在本 Issue 遷移</h3>
-          <p><strong>現行：</strong><code>docs/specs/*.md</code> 用 frontmatter（<code>id／title／owner／priority／estimate／status</code>）記錄狀態，<code>scripts/spec_to_issue.py</code> 以 <code>&lt;!-- csarc-spec-id: SPEC-xxx --&gt;</code> HTML 註解 marker 做 idempotent 同步，已通過 <code>./scripts/verify-template.sh</code> 回歸。</p>
+          <h3>保留單一格式，增加可選 story tracker</h3>
+          <p><strong>現行：</strong><code>docs/specs/*.md</code> 用 frontmatter 記錄狀態；預設以 <code>csarc-spec-id</code> marker 同步 Issue，明列 <code>tracking: story</code> 則以 <code>csarc-story-id</code> marker 同步 Milestone，兩者都可重跑且不自動拆工作。</p>
           <p><strong>遷移成本：</strong>改採 Spec Kit 需要重寫 <code>spec_to_issue.py</code> 的解析與同步邏輯、既有 spec 全部轉檔、更新驗證腳本的斷言，且需另外設計 Issue-sync 等價機制；雙格式支援則讓兩套系統同時維護，增加認知負擔，本 Issue 不做這兩件事。</p>
           <p><strong>理由：</strong>目前規格量小、現行管線穩定且已納入回歸測試；Spec Kit 的 CLI／Agent 相依對單一小型公版 repo 效益還不明確。</p>
           <p><strong>重新評估條件：</strong>核准規格需要由 AI 穩定拆成多張子工作，且團隊願意維護額外 CLI／Agent 流程時，再重新評估遷移或雙格式支援；與「步驟一規劃工作」頁既有立場一致。</p>
@@ -2222,15 +2222,17 @@ contact_links: []
 # issue-triage.yml assigns the author and work label.`
         },
         {
-          title: '複雜工作先用同一套欄位寫成可版本控制的規格',
-          goal: 'CI 會檢查必要 metadata、章節與至少一個驗收勾選項。',
-          summary: 'front matter 要有 id、priority、estimate、status；解析器拒絕缺章節或沒有驗收勾選項的規格。',
-          file: 'docs/specs/*.md＋scripts/spec_to_issue.py',
+          title: '只有可端到端驗收的 story 才建立 Milestone',
+          goal: 'Milestone 是可選的 1..N Issues 成果層，不靠工作數量決定，也不重複掛 PR。',
+          summary: 'description 固定寫 Problem、Outcome、Acceptance criteria、Out of scope、Verification 與 Source；spec 預設同步 Issue，只有 `tracking: story` 同步 Milestone。',
+          file: 'docs/milestone-description.md＋scripts/spec_to_issue.py',
           code: `---
 id: SPEC-001
 priority: P1
 estimate: 1-3 days
 status: proposed
+# Optional: create or update one Milestone instead of one Issue.
+tracking: story
 ---
 
 ## Problem
@@ -2241,14 +2243,16 @@ status: proposed
 ## Verification`
         },
         {
-          title: '規格合併到整合分支後，才用最小權限建立或更新 Issue',
-          goal: 'PR 內容不直接取得寫入權限；同一 spec ID 不會重複開單。',
-          summary: '監聽 `main`／`dev` 的 `docs/specs/*.md`；沒有 dev 的專案只會在 main 觸發，並以 spec ID 去重。',
-          file: '.github/workflows/spec-to-issue.yml',
+          title: '工作合併後才以最小權限同步追蹤與生命週期',
+          goal: 'PR 內容不直接取得寫入權限；同一 spec ID 不重複開單，並依最新遠端狀態收尾 story。',
+          summary: '`spec-to-issue.yml` 在整合分支同步 Issue 或 Milestone；`milestone-lifecycle.yml` 在最後一張 Issue 關閉時關 Milestone，有 open work 回來時重開。',
+          file: 'spec-to-issue.yml＋milestone-lifecycle.yml',
           code: `on:
   push:
     branches: [main, dev]
     paths: ["docs/specs/*.md"]
+  issues:
+    types: [closed, reopened, milestoned]
 permissions:
   contents: read
   issues: write`
