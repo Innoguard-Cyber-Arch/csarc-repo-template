@@ -1720,14 +1720,14 @@
     <section class="slide decision-slide" data-track="deploy" aria-label="步驟六語意版本與持續交付">
       <header>
         <h2>步驟 6｜<span class="accent">版本規則與成品接續</span></h2>
-        <p class="subtitle"><strong>已完成設計，尚未完成線上閉環：</strong>公版本身與每個生成 repo 各有一個 SemVer；release-please 使用內建 <code>GITHUB_TOKEN</code>，但實際 Release PR 與 tag 後交付仍有平台設定與觸發鏈缺口。</p>
+        <p class="subtitle"><strong>Release PR 已接通，成品交付待閉環：</strong>公版本身與每個生成 repo 各有一個 SemVer；release-please 使用內建 <code>GITHUB_TOKEN</code>，tag 後交付仍需明確接續。</p>
       </header>
       <p class="context-line"><strong>設計流程｜</strong><code>fix(ci)</code> 升 patch、<code>feat(python)</code>／<code>feat(typescript)</code> 升 minor、任何不相容變更加 <code>!</code> 升 major；Release PR 合併後才建 tag。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不為版本號另加一套平台</h3><ul><li><strong>Changesets：</strong>適合 npm workspace；CI-only／Python 案會多背 Node 設定</li><li><strong>Nx release：</strong>適合既有 Nx 大型 workspace；本案只需一個 release unit</li><li><strong>profile 各自編號：</strong>會增加相依矩陣與升級對版成本</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">release-please</span>＋單一 SemVer</span></summary><div class="package-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜持續維護。</p><p><strong>採用原因：</strong>manifest 模式與 extra files 已能用一個 release unit 同步不同 profile 的版本來源，沒有必要再引入 Changesets 或 Nx。<strong>實測邊界：</strong>本 repo 的 Actions 政策目前禁止 <code>GITHUB_TOKEN</code> 建立或核准 PR，因此最近執行無法開 Release PR；而 GitHub 明定由 <code>GITHUB_TOKEN</code> 產生的 tag 不會再觸發一般 <code>push</code> workflow，必須由同一 workflow 交付或明確 <code>workflow_dispatch</code>。</p><p class="reference">Ref. <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer">GitHub workflow trigger docs</a> and live workflow runs, accessed August 23, 2026.</p></div></details><p><strong>公版：</strong><code>version.txt</code> 是唯一版本來源，四種 profile 共用 <code>vX.Y.Z</code>。<br><strong>生成 repo：</strong>各有一個 SemVer；成品類型已定義，自動交付仍待修正 Release PR 權限與 tag 觸發鏈。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">release-please</span>＋單一 SemVer</span></summary><div class="package-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜持續維護。</p><p><strong>採用原因：</strong>manifest 模式與 extra files 已能用一個 release unit 同步不同 profile 的版本來源，沒有必要再引入 Changesets 或 Nx。<strong>實測邊界：</strong>Actions policy 允許只有 release job 取得 <code>pull-requests: write</code> 並以 <code>GITHUB_TOKEN</code> 建立 Release PR；GitHub 明定由該 token 產生的 tag 不會再觸發一般 <code>push</code> workflow，因此成品交付仍須由同一 workflow 或明確 <code>workflow_dispatch</code> 接續。</p><p class="reference">Ref. <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer">GitHub workflow trigger docs</a> and live workflow runs, accessed August 23, 2026.</p></div></details><p><strong>公版：</strong><code>version.txt</code> 是唯一版本來源，四種 profile 共用 <code>vX.Y.Z</code>。<br><strong>生成 repo：</strong>各有一個 SemVer；成品類型已定義，tag 後自動交付追蹤於 #98。</p></article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>公版單一版本：</strong><code>version.txt</code>＋<code>.release-please-manifest.json</code>＋<code>release-please-config.json</code></li><li><strong>依 profile 同步版本來源：</strong>CI/CD-only 用 <code>version.txt</code>；Python 用 <code>pyproject.toml</code>；TypeScript 用 <code>package.json</code>；混合案同步後兩者</li><li><strong>仍需補齊：</strong>允許 Actions 建立 Release PR，並在 release 建立後明確啟動成品 workflow；追蹤於 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/64" target="_blank" rel="noreferrer">#64</a> 與衍生 Issue</li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>公版單一版本：</strong><code>version.txt</code>＋<code>.release-please-manifest.json</code>＋<code>release-please-config.json</code></li><li><strong>依 profile 同步版本來源：</strong>CI/CD-only 用 <code>version.txt</code>；Python 用 <code>pyproject.toml</code>；TypeScript 用 <code>package.json</code>；混合案同步後兩者</li><li><strong>仍需補齊：</strong>release 建立後明確啟動成品 workflow；追蹤於 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/98" target="_blank" rel="noreferrer">#98</a></li></ul></aside>
       <aside class="selection-note"><strong>目前邊界</strong><span>版本資料、CHANGELOG 與成品 workflow 已存在，但線上自動交付尚未端到端成功，所以不宣稱零設定或無人值守發版。GitHub App 目前只留給 <code>python-version-policy.yml</code> 的排程升版 PR 使用。</span></aside>
     </section>
 
@@ -1943,14 +1943,14 @@
 - Required final check: ./scripts/verify`
         },
         {
-          title: 'AI 能執行工作，但不能自行核准或合併',
+          title: 'AI 能執行工作，但不能自行合併',
           goal: 'AGENTS.md 說明工作方式；GitHub 權限與 Ruleset 才是不能繞過的控制點。',
-          summary: 'Actions 預設唯讀且不能核准 PR；至少一位人員與 CODEOWNER 審查，所有討論與必要檢查都要完成。',
+          summary: 'Actions 預設唯讀；repository toggle 允許 release workflow 建立 PR，但只有該 job 取得 pull-requests: write。Ruleset 仍要求至少一位人員與 CODEOWNER 審查。',
           file: 'policies/actions.json＋policies/rulesets.json＋CODEOWNERS',
           code: `policies/actions.json
 {
   "default_workflow_permissions": "read",
-  "can_approve_pull_request_reviews": false
+  "can_approve_pull_request_reviews": true
 }
 
 policies/rulesets.json
@@ -2456,9 +2456,9 @@ gh secret set CSARC_VERSION_BOT_PRIVATE_KEY \
 .env.example  # placeholders only`
         },
         {
-          title: '待補 repo 設定｜release-please 只開 Release PR，不直接推 main',
+          title: '已配置｜release-please 只開 Release PR，不直接推 main',
           goal: '公版本身一個版本；每個生成 repo 也各自只有一個版本，四種 profile 不另行分版。',
-          summary: '`fix(ci)` 升修補版、`feat(python)`／`feat(typescript)` 升次版、任何不相容變更加 `!` 升大版；使用 GITHUB_TOKEN，不用 GitHub App，但 repo 必須允許 Actions 建立 PR。目前線上 run 尚未通過。',
+          summary: '`fix(ci)` 升修補版、`feat(python)`／`feat(typescript)` 升次版、任何不相容變更加 `!` 升大版；使用 GITHUB_TOKEN，不用 GitHub App。actions policy 允許 release job 建立 PR，其他 job 仍維持最小權限。',
           file: 'version.txt＋.release-please-manifest.json＋release-please-config.json',
           code: `- uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
   with:
