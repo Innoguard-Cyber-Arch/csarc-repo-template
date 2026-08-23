@@ -51,6 +51,8 @@ git push -u origin dev
 
 `./scripts/verify` 也會跑 Issue／PR 政策正反例，確認合法流程能通過、不合格 Issue 標題與錯誤 PR 標題／分支／Issue 關聯會被拒絕。
 
+`./scripts/verify-template.sh`、root 專用升版／同步工具與 template release workflows 只屬於中央模板 repo，不會下發到本專案；本專案的本機與 CI 驗證入口都是 `./scripts/verify`。
+
 {% if language == "ci" %}目前驗證 spec、README、JSON、workflow 與機密字串；沒有語言模組，因此不執行語言測試或打包。
 {% else %}目前驗證包含{% if has_python %} Ruff、mypy、pytest、{{ coverage_threshold }}% coverage、wheel 與相依下界{% endif %}{% if language == "python-typescript" %}，以及{% endif %}{% if has_typescript %} Biome、TypeScript、Vitest {{ coverage_threshold }}% coverage 與 npm tarball{% endif %}，最後再檢查 spec、機密字串與 lockfile。
 

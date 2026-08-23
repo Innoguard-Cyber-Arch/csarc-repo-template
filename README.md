@@ -23,19 +23,7 @@ cd csarc-repo-template
 ./scripts/apply-repository-settings.sh plan
 ```
 
-建立新案前，先從 release 清單選擇團隊核准的 tag；下例以 `v0.1.0` 示範如何取得 40 字元 commit SHA，再把輸出貼入 `--vcs-ref`。
-
-```bash
-gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template --limit 5
-gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/v0.1.0 --jq .sha
-
-uvx --from copier copier copy --trust --overwrite \
-  --vcs-ref <reviewed-full-commit-sha> \
-  https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git \
-  ./my-project
-```
-
-既有案請先開分支，並加上 `--data project_mode=existing`；Copier 會保留原有 `pyproject.toml`／`package.json`，相依與工具設定仍須人工合併。
+建立、導入既有 repo 與後續同步的完整指令見「公版更新」。
 
 ## 技術與目錄
 
@@ -93,9 +81,43 @@ release-please 用內建 `GITHUB_TOKEN` 自動開、更新 Release PR；合併�
 
 ## 公版更新
 
-各專案從分支套用已審查的完整 commit SHA：
+以下三條路徑都先從 release 清單選擇團隊核准的 tag，再解析並審查其完整 40 字元 commit SHA。範例使用 `v0.1.0`；請把查詢結果貼入 `<reviewed-full-commit-sha>`。
 
-先用 `gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template` 選擇團隊核准的版本，再以 `gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/<approved-release-tag> --jq .sha` 取得 40 字元 SHA；檢查 GitHub 上的 commit 內容後，貼到下列參數，不要直接輸入預留字樣。
+### 建立新 repo
+
+```bash
+gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template --limit 5
+gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/v0.1.0 --jq .sha
+uvx --from copier copier copy --trust \
+  --vcs-ref <reviewed-full-commit-sha> \
+  https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git \
+  ./my-project
+cd ./my-project
+./scripts/verify
+```
+
+### 導入既有 repo
+
+在既有 repo 的工作分支執行；`project_mode=existing` 會保留原有 `pyproject.toml`、`package.json`、產品程式、測試、spec 與網站內容。
+
+```bash
+git switch -c chore/<issue-number>-adopt-csarc-template
+uvx --from copier copier copy --trust --overwrite \
+  --vcs-ref <reviewed-full-commit-sha> \
+  --data project_mode=existing \
+  --data coverage_mode=diff \
+  https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git .
+
+# For Python or mixed projects.
+uv lock
+# For TypeScript or mixed projects.
+pnpm install --lockfile-only --ignore-scripts
+DIFF_COVER_COMPARE_BRANCH=origin/main ./scripts/verify
+```
+
+只執行實際語言需要的 lockfile 指令；若衝突或缺少既有工具設定，先依生成後 README 的提示人工合併，不要刪除產品相依來迎合模板。
+
+### 更新已導入的 repo
 
 ```bash
 git switch -c chore/<issue-number>-update-repo-template
@@ -105,6 +127,10 @@ uvx --from copier copier update --trust --vcs-ref <reviewed-full-commit-sha>
 ```
 
 `docs/site-content.js` 是生成專案自行維護的網站內容；Copier 更新版型時不會覆寫它。
+
+### 驗證邊界
+
+本模板 repo 的 CI 執行 `./scripts/verify-template.sh`，用暫存 fixture 驗證上述三條生命週期；這支腳本、root 專用升版／同步工具與 template release workflows 都不會下發。生成 repo 的本機與 CI 唯一入口是 `./scripts/verify`；選用 reusable workflow 時也只會呼叫生成 repo 內的這支腳本。
 
 ## 負責人與支援
 

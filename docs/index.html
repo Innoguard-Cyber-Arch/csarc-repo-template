@@ -1624,7 +1624,7 @@
           <p class="recommendation-copy"><strong>工作契約：</strong>六段涵蓋範圍、工作迴圈、指令、修改界線、安全與審查；依語言只列真正存在的指令，根檔最多 200 行。<br><strong>AI 執行：</strong>讀資料、提計畫、修改、補測試、跑共同驗證並整理 PR。<br><strong>人類負責：</strong>確認需求與技術方向、判斷風險、審查差異；真正門禁仍是 CI、Ruleset、CODEOWNERS 與 Actions 權限。</p>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>人類入口與 AI 工作契約：</strong><code>README.md</code> 規範八個必要章節；<code>AGENTS.md</code>＋<code>CLAUDE.md</code> 規範 Agent</li><li><strong>所有人與 AI 共用的實際驗證：</strong><code>scripts/verify</code>＋<code>scripts/verify-template.sh</code></li><li><strong>唯讀權限、人類核准與指定審查者：</strong><code>policies/actions.json</code>＋<code>policies/rulesets.json</code>＋<code>CODEOWNERS</code></li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>人類入口與 AI 工作契約：</strong><code>README.md</code> 規範八個必要章節；<code>AGENTS.md</code>＋<code>CLAUDE.md</code> 規範 Agent</li><li><strong>實際驗證：</strong>生成 repo 與其 CI 執行 <code>scripts/verify</code>；只有中央模板 repo 執行、不下發的 <code>scripts/verify-template.sh</code> 負責建立／導入／更新 fixture</li><li><strong>唯讀權限、人類核准與指定審查者：</strong><code>policies/actions.json</code>＋<code>policies/rulesets.json</code>＋<code>CODEOWNERS</code></li></ul></aside>
     </section>
 
     <section class="slide decision-slide" data-page="11 / 16" data-track="governance" aria-label="GitHub 方案與規則部署方式">
@@ -1749,13 +1749,13 @@
         <h2>Copier 保持同步，<span class="accent">公版本身也吃自己的規則</span></h2>
         <p class="subtitle"><strong>基本導入。</strong><code>template/</code> 是下發內容唯一來源；root 只因 GitHub 讀取慣例保留公版自己的治理設定，21 對逐位元組相同的檔案由產生腳本從 root 生成 <code>template/</code> 副本。</p>
       </header>
-      <p class="context-line"><strong>問題與目的｜</strong>模板錯誤會一次影響多個專案；每次修改都要真的建立新案、模擬舊案更新，通過後才發布。</p>
+      <p class="context-line"><strong>問題與目的｜</strong>模板錯誤會一次影響多個專案；每次修改都要真的建立新案、導入既有案，再讓已導入的 repo 接收更新並通過完整驗證。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>這次不選，因為無法持續同步或驗證</h3><ul><li><strong>GitHub Template：</strong>只複製一次，不記得來源與答案</li><li><strong>PyScaffold：</strong>可參考 Python 結構，但會形成第二套更新機制</li><li><strong>只驗 YAML：</strong>無法證明新案、既有案與更新真的能跑</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；衝突留給 PR 由人處理。</p></div></details><p><strong>建立：</strong>CI/CD-only、Python-only、TypeScript-only、混合與最低 Python 都實跑驗證。<br><strong>更新：</strong>Copier 回歸確認產品目錄不被公版覆寫；共用政策由 root 自我使用並比對。<br><strong>版本：</strong>公版四種組合共用一個 SemVer；Python 與 Node 基線則各自滿三十天觀察後再前進。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；衝突留給 PR 由人處理。</p></div></details><p><strong>建立：</strong>CI/CD-only、Python-only、TypeScript-only、混合與最低 Python 都實跑驗證。<br><strong>導入與更新：</strong>先以 existing mode 導入已有內容，再對同一 repo 執行下一版 Copier update、確認產品目錄未被覆寫，最後執行生成專案的完整驗證。<br><strong>版本：</strong>公版四種組合共用一個 SemVer；Python 與 Node 基線則各自滿三十天觀察後再前進。</p></article>
       </div>
       <p class="context-line"><strong>root／template 配對檔案｜</strong>21 對 workflow、policy 與 script（例如 <code>zizmor.yml</code>、<code>policies/actions.json</code>、<code>scripts/spec_to_issue.py</code>）在 root 與 <code>template/</code> 之間逐位元組相同；過去只靠 <code>verify-template.sh</code> 在 CI 用 <code>diff</code> 事後比對，任何一邊漏改要等驗證跑完才被抓到。現在 <code>scripts/sync-paired-files.sh</code> 把 root 當成唯一來源：本機執行它會立即重新產生每個 <code>template/</code> 副本；加 <code>--check</code> 則不寫檔，只驗證每個副本是否符合產生腳本的確定性輸出（內容與可執行位元），任何一對不一致就印出差異並失敗。<code>verify-template.sh</code> 已改成呼叫 <code>--check</code>，並用一段複製到暫存目錄、蓄意注入內容與權限落差、確認失敗、重新產生、確認通過的回歸測試證明這個機制會擋下漂移。<code>dependabot.yml</code>、<code>.gitignore</code> 等僅因 Jinja 變數不同的檔案不在此列，仍由既有的「產生一個實案並與 root 比對」測試把關；<code>AGENTS.md</code>／<code>README.md</code> 等文件因 root 與下游專案的治理內容本來就不同，不屬於重複維護，故未強行合併。</p>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>下發來源、語言組合、保留路徑與功能開關：</strong><code>template/</code>＋<code>copier.yml</code></li><li><strong>root 自我治理與五種建立／更新驗證：</strong><code>.github/</code>＋<code>scripts/verify-template.sh</code></li><li><strong>語言基線與三十天觀察：</strong><code>profiles/catalog.yaml</code>；<strong>Python 自動升版：</strong><code>python-version-policy.yml</code></li><li><strong>root／template 配對檔案的單一來源與漂移檢查：</strong><code>scripts/sync-paired-files.sh</code></li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>下發來源、語言組合、保留路徑與功能開關：</strong><code>template/</code>＋<code>copier.yml</code></li><li><strong>root-only CI 與建立／導入／更新驗證：</strong><code>.github/</code>＋<code>scripts/verify-template.sh</code>；生成 repo 不會收到這支腳本或 template release workflows</li><li><strong>語言基線與三十天觀察：</strong><code>profiles/catalog.yaml</code>；<strong>Python 自動升版：</strong><code>python-version-policy.yml</code></li><li><strong>root／template 配對檔案的單一來源與漂移檢查：</strong><code>scripts/sync-paired-files.sh</code></li></ul></aside>
     </section>
 
     <section class="slide decision-slide" data-track="docs-site" aria-label="內部網站與生成內容模板">
@@ -1831,7 +1831,7 @@
           <tr><td>驗證與測試資源</td><td>「已完成」必須有檔案與測試；驗證只用本機暫存專案或本 repo 的 Issue、分支、PR、Actions，禁止為測試另開 GitHub repo。</td></tr>
         </tbody>
       </table>
-      <p class="review-note-footer"><strong>驗證承諾：</strong><code>./scripts/verify-template.sh</code> 會實跑新案、全功能案、既有案與 Copier 更新；簡報寫「已完成」就必須真的通過。</p>
+      <p class="review-note-footer"><strong>驗證承諾：</strong><code>./scripts/verify-template.sh</code> 會實跑新案、既有案導入，以及同一個已導入 repo 的 Copier 更新與更新後完整驗證；這支 root-only 腳本不會下發。</p>
     </section>
 
     <section class="slide review-notes-slide" aria-label="2026-08 外部基準與線上實測比較">
@@ -2537,9 +2537,9 @@ policies/rulesets.json
 scripts/apply-repository-settings.sh`
         },
         {
-          title: '每次修改都測新案建立與既有專案更新',
-          goal: '可導入的條件是兩條路徑都通過，不是只看檔案存在。',
-          summary: '測試會真的執行 Copier copy、`scripts/verify`、zizmor 與 Copier update；任一路徑失敗就不發布。',
+          title: '每次修改都測新案、既有案導入與後續更新',
+          goal: '可導入的條件是三條生命週期都通過，不是只看檔案存在。',
+          summary: '測試會真的執行 Copier copy、existing mode、Copier update 與更新後的 `scripts/verify`；root-only 測試資產若混入生成 repo 也會失敗。',
           file: 'scripts/verify-template.sh',
           code: `copier copy --defaults
 ./scripts/verify
