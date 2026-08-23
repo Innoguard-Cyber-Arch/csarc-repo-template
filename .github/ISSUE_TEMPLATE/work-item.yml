@@ -25,7 +25,7 @@ body:
     id: acceptance
     attributes:
       label: 完成條件
-      description: 完成後可以觀察到什麼結果？一張 Issue 只放一個成果。
+      description: 完成後可以觀察到什麼結果？若新增需求超出這些條件，請另開 Issue。
       placeholder: "- [ ] 可由同事確認的結果"
     validations:
       required: true

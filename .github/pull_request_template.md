@@ -12,6 +12,7 @@ Closes #N
 
 - [ ] `./scripts/verify-template.sh`
 - [ ] 已選擇 `bug`、`enhancement` 或 `documentation` 其中一個標籤
+- [ ] 若需求超出原 Issue，已另開 Issue，未擴張本 PR
 
 ## Risk and rollback
 

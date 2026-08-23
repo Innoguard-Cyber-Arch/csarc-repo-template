@@ -1523,7 +1523,7 @@
     <section class="slide decision-slide" data-track="method" aria-label="步驟一規劃工作與 GitHub Issues">
       <header>
         <h2>步驟 1｜<span class="accent">先寫清楚要解決什麼</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>每次改動先有 Issue；先選類型再答三題，複雜工作才用版本化規格拆單。</p>
+        <p class="subtitle"><strong>基本導入。</strong>每次改動先有 Issue；先選類型再答三題，超出完成條件就另開 Issue。</p>
       </header>
       <p class="context-line"><strong>寫作原則｜</strong>不要只寫「新增報表功能」；要交代誰遇到什麼問題、希望得到什麼結果，以及要怎麼確認。</p>
       <div class="decision-strip">
@@ -1531,7 +1531,7 @@
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
           <details class="package-disclosure"><summary><span>已完成的 <span class="tech-name">spec → Issue</span>；Spec Kit 先不導入</span></summary><div class="package-health"><p><strong>目前：</strong><code>docs/specs/</code> 經 CI 驗證；合併到選定整合分支後，由標準函式庫腳本與 GitHub CLI 建立或更新實作 Issue。</p><p><strong>Spec Kit：</strong><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">github/spec-kit</a>｜MIT｜★130,368（已查證）｜公開、未封存、2026-08-19 仍更新。</p><p><strong>何時再評估：</strong>一份核准規格需要由 AI 穩定拆成多張子工作，而且團隊願意維護額外 CLI／Agent 流程。</p><p class="reference">Ref. GitHub REST API, accessed August 20, 2026.</p></div></details>
-          <p class="recommendation-copy"><strong>一次性工作：</strong>選 <code>bug</code>、<code>enhancement</code> 或 <code>documentation</code>，再寫「問題與原因、完成條件、驗證方式」；開單者自動成為負責人。<br><strong>較複雜的 SDD：</strong>先開規劃 Issue，再用 <code>docs/specs/</code> 審查規格；規格合併後自動開出實作 Issue。兩條路都必須先有 Issue，才能建立編號分支與 PR。</p>
+          <p class="recommendation-copy"><strong>一次性工作：</strong>選 <code>bug</code>、<code>enhancement</code> 或 <code>documentation</code>，再寫「問題與原因、完成條件、驗證方式」；開單者自動成為負責人。<br><strong>較複雜的 SDD：</strong>先開規劃 Issue，再用 <code>docs/specs/</code> 審查規格；規格合併後自動開出實作 Issue。兩條路都必須先有 Issue；超出原完成條件時另開 Issue 與分支。</p>
         </article>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>類型＋三個必填欄位，並關閉空白 Issue：</strong><code>.github/ISSUE_TEMPLATE/</code></li><li><strong>開單者自動成為負責人並套單一類型標籤：</strong><code>.github/workflows/issue-triage.yml</code></li><li><strong>規格進入 main／dev 後自動建立或更新 Issue：</strong><code>docs/specs/</code>＋<code>scripts/spec_to_issue.py</code>＋<code>spec-to-issue.yml</code></li></ul></aside>
@@ -1546,7 +1546,7 @@
       <p class="context-line"><strong>問題與目的｜</strong>分支要對應真實用途；無條件多一層 dev 只會增加漂移與合併衝突，不能取代測試環境。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把 dev 當成形式上的必經站</h3><ul><li><strong>預設 main-only：</strong>Issue → 短分支 → PR → main，適合沒有共用測試環境</li><li><strong>有 dev 環境：</strong>Issue → 短分支 → PR → dev，再經升版 PR 進 main</li><li><strong>直接 push：</strong>兩種模式都禁止，不能繞過審查與檢查</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>建立時選分支模式，Issue-first 規則不變</h3><p><strong>工作分支：</strong><code>type/&lt;Issue 編號&gt;-簡稱</code>；PR 內文必須用 <code>Closes #編號</code> 連回同一張未結案 Issue，並選三種工作標籤之一。<br><strong>例外：</strong>依賴與版本機器人可免 Issue；其餘工作都維持一張 Issue 對應一張 PR。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>建立時選分支模式，Issue-first 規則不變</h3><p><strong>工作分支：</strong><code>type/&lt;Issue 編號&gt;-簡稱</code>；PR 內文必須用 <code>Closes #編號</code> 連回同一張未結案 Issue，並選三種工作標籤之一。<br><strong>範圍：</strong>需求超出原 Issue 的完成條件就另開 Issue、分支與 PR，不把新工作偷偷塞進原單。依賴與版本機器人是唯一免 Issue 的例外。</p></article>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>選 main-only 或 dev 模式：</strong><code>copier.yml</code> → <code>branch_strategy</code>，結果存入 <code>.csarc/profile.json</code></li><li><strong>核對標籤、Issue、分支編號、PR 目標與標題：</strong><code>.github/workflows/pr-policy.yml</code>＋<code>scripts/test-pr-policy</code></li><li><strong>保護選定分支並指定審查者：</strong><code>policies/rulesets.json</code>＋<code>.github/CODEOWNERS</code>；Free private 暫時只能回報，不能強制</li></ul></aside>
     </section>
@@ -1640,7 +1640,7 @@
         <thead><tr><th>頁次</th><th>五月版主題</th><th>結論</th><th>目前決定（點選）</th></tr></thead>
         <tbody>
           <tr><td>p.3</td><td>SDLC 核心階段</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>把計畫到監控集中在 GitHub</summary><div class="bridge-popover"><p><strong>五月版｜</strong>計畫、開發、測試、部署、監控的核心順序保留。</p><p><strong>本次判斷｜</strong>工作單、模板、合併申請、自動檢查與交付設定都放在 GitHub，方便持續維護。</p><p><strong>落地方式｜</strong>不是每個專案都要部署與監控，但都先遵守工作規劃、變更審查與驗證規則。</p></div></details></td></tr>
-          <tr><td>p.4</td><td>Jira Ticket</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>每次改動先有最小 GitHub Issue</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本用 Jira 的 Epic → Story → Task 分工；本次只保留必要的 GitHub Issue、Milestone 與 spec。</p><p><strong>本次判斷｜</strong>一次性工作選一種類型並填三題；複雜需求先開規劃 Issue，再由核准 spec 建立實作 Issue。</p><p><strong>落地方式｜</strong><code>work-item.yml</code> 有類型與三個必填欄位；<code>issue-triage.yml</code> 指派開單者；PR workflow 核對標籤、分支與同號未結案 Issue。</p></div></details></td></tr>
+          <tr><td>p.4</td><td>Jira Ticket</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>每次改動先有最小 GitHub Issue</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本用 Jira 的 Epic → Story → Task 分工；本次只保留必要的 GitHub Issue、Milestone 與 spec。</p><p><strong>本次判斷｜</strong>一次性工作選一種類型並填三題；複雜需求先開規劃 Issue，再由核准 spec 建立實作 Issue。新增範圍另開 Issue。</p><p><strong>落地方式｜</strong><code>work-item.yml</code> 有類型與三個必填欄位；<code>issue-triage.yml</code> 指派開單者；PR workflow 核對標籤、分支與同號未結案 Issue。</p></div></details></td></tr>
           <tr><td>p.5</td><td>版本控制</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>是否使用 dev，取決於是否有 dev 環境</summary><div class="bridge-popover"><p><strong>五月版｜</strong>保留平行分支，但不把長期 <code>dev</code> 分支當成所有專案的預設。</p><p><strong>本次判斷｜</strong>沒有共用測試環境就從 <code>main</code> 開短分支並 PR 回 main；有長期 dev 環境才 PR 回 <code>dev</code>，再升版到 main。</p><p><strong>落地方式｜</strong>Copier 的 <code>branch_strategy</code> 會同步調整 CI、Dependabot、Ruleset、AGENTS 與 README；兩種模式都禁止直接推送。</p></div></details></td></tr>
           <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>Issue、編號分支與 PR 形成固定鏈</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是保護分支的唯一入口，方向保留；三層審查改成依風險增加審查者。</p><p><strong>本次判斷｜</strong>一般 PR 要有同編號 Issue、CI 與一位同事；敏感檔案再由指定負責人核准，高風險架構變更另附決策紀錄。</p><p><strong>落地方式｜</strong>分支固定 <code>type/123-short-slug</code>，PR 內文固定 <code>Closes #123</code>；依賴與版本自動化是免 Issue 的明列例外。</p></div></details></td></tr>
           <tr><td>p.7</td><td>CI 自動化管線</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>本機與 CI 共用一個驗證入口</summary><div class="bridge-popover"><p><strong>五月版｜</strong>自動觸發、測試、格式與靜態錯誤檢查全部保留。</p><p><strong>本次判斷｜</strong><code>ci.yml</code> 依宣告執行 Python、TypeScript 或兩者；需要中央控管時才用完整 SHA 呼叫 reusable workflow。</p><p><strong>落地方式｜</strong>CI、PR 標題、OSV 與 zizmor 已能執行；目前先當檢查結果，private repo 升到 GitHub Team、建立 CODEOWNERS team 並套用 Ruleset 後，紅燈才成為不可繞過門禁。</p></div></details></td></tr>
@@ -1666,7 +1666,7 @@
         <thead><tr><th>審閱問題</th><th>目前決定與原因</th></tr></thead>
         <tbody>
           <tr><td>方案與 <code>main</code> 保護</td><td>Free private 可套基本設定，但 <code>main</code> 目前未受強制保護；至少升 Team 並建立 CODEOWNERS team，才套 Ruleset、核准與必要檢查。</td></tr>
-          <tr><td>工作範圍與責任</td><td>Issue-first；開單者自動成為負責人，只用 bug／enhancement／documentation。一張 Issue 與 PR 只交付一個可驗證成果。</td></tr>
+          <tr><td>工作範圍與責任</td><td>Issue-first；開單者自動成為負責人，只用 bug／enhancement／documentation。新增需求超出完成條件就另開 Issue，不擴張原 PR。</td></tr>
           <tr><td>公版更新邊界</td><td><code>template/</code> 是下發來源，root 讓公版自我治理；Copier 更新政策但保護產品程式與規格，成對設定由驗證腳本防止漂移。</td></tr>
           <tr><td>語言與程式品質</td><td>共用治理支援四種 profile；Python 採 src layout、Ruff 80 字元與 <a href="https://google.github.io/styleguide/pyguide.html" target="_blank" rel="noreferrer">Google Python Style</a>、strict mypy；TypeScript 採 Node 24、pnpm 11、Biome、Vitest。</td></tr>
           <tr><td>CI、版本與交付</td><td>本機與 CI 共用 <code>scripts/verify</code>，十八組 PR 正反例證明錯誤會被拒絕；release-please 維護單一 SemVer，tag 產成品但不等於部署。</td></tr>
@@ -2006,7 +2006,7 @@ permissions:
         {
           title: 'PR 同時核對標籤、Issue 編號、分支、目標與版本標題',
           goal: '先有工作紀錄再改程式；標題仍是版本計算依據，內文可以用中文。',
-          summary: 'PR 至少選 bug／enhancement／documentation 之一；分支須為 `type/123-short-slug`，內文須有 `Closes #123` 且 Issue 未結案。',
+          summary: 'PR 至少選 bug／enhancement／documentation 之一；分支須為 `type/123-short-slug`，內文須有 `Closes #123` 且 Issue 未結案。超出原 Issue 就另開單。',
           file: '.github/workflows/pr-policy.yml＋scripts/test-pr-policy＋pull_request_template.md',
           code: `^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+
 
