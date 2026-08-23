@@ -29,6 +29,9 @@ jobs:
   release:
     name: release
     needs: governance
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     permissions:
       contents: write
       pull-requests: write
@@ -36,8 +39,33 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Open or update the release pull request
+        id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  dispatch-artifacts:
+    name: dispatch artifacts
+    needs: release
+    if: ${{ needs.release.outputs.release_created == 'true' }}
+    permissions:
+      actions: write
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Dispatch the artifact workflow at the release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag_name }}
+        run: |
+          workflow=release.yml
+          if [[ -f .github/workflows/release-template.yml ]]; then
+            workflow=release-template.yml
+          fi
+          gh workflow run "$workflow" --ref "$RELEASE_TAG"
