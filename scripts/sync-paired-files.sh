@@ -32,6 +32,7 @@ paired_files=(
   scripts/check-governance-drift
   scripts/check-update-conflicts
   scripts/install-gitleaks
+  scripts/release_policy.py
   scripts/scan-secrets
   scripts/spec_to_issue.py
   scripts/sync_milestone_state.py
@@ -40,6 +41,7 @@ paired_files=(
   scripts/validate-issue-title
   tests/test_spec_to_issue.py
   tests/test_milestone_lifecycle.py
+  tests/test_release_policy.py
   zizmor.yml
 )
 

@@ -652,6 +652,75 @@ def settings_plan(target: Path) -> None:
         )
 
 
+def target_repository(target: Path) -> str | None:
+    """Return the GitHub origin of an existing target, when discoverable."""
+    result = run(
+        ["git", "-C", str(target), "remote", "get-url", "origin"],
+        capture=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return github_repository(result.stdout.strip())
+
+
+def capability_preflight(
+    script: Path, target: Path, *, emit: bool = True
+) -> dict[str, object]:
+    """Run the read-only release preflight without making it a prerequisite."""
+    repository = target_repository(target)
+    if repository is None or not script.is_file():
+        payload: dict[str, object] = {
+            "mode": "verification-only",
+            "reason": "GitHub origin or capability script is unavailable",
+            "capabilities": {
+                name: {"state": "unknown", "reason": "runtime check required"}
+                for name in (
+                    "actions_pull_requests",
+                    "contents",
+                    "release",
+                    "dispatch",
+                )
+            },
+        }
+    else:
+        result = run(
+            [
+                sys.executable,
+                str(script),
+                "preflight",
+                "--repo",
+                repository,
+            ],
+            capture=True,
+            check=False,
+        )
+        try:
+            parsed = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            parsed = None
+        payload = (
+            parsed
+            if result.returncode == 0 and isinstance(parsed, dict)
+            else {
+                "mode": "verification-only",
+                "reason": "GitHub capability preflight was unavailable",
+                "capabilities": {},
+            }
+        )
+    if emit:
+        raw_states = payload.get("capabilities")
+        states = raw_states if isinstance(raw_states, dict) else {}
+        summary = ", ".join(
+            f"{name}={value.get('state', 'unknown')}"
+            for name, value in states.items()
+            if isinstance(value, dict)
+        )
+        print(f"GitHub release preflight: {summary or 'unknown'}")
+        print("Runtime workflows recheck capabilities before every release.")
+    return payload
+
+
 def base_data(target: Path, mode: str, values: list[str]) -> dict[str, str]:
     """Build stable defaults while allowing explicit Copier answers."""
     slug = slugify(target.name)
@@ -723,6 +792,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:
         copier_copy(args.source, revision, stage, data)
         plan = compare_stage(stage, target, adopt=mode == "adopt")
         print_plan(mode, target, revision, data, plan)
+        capability_preflight(stage / "scripts" / "release_policy.py", target)
         if args.dry_run or not confirm(args):
             return 0
         if mode == "init":
@@ -898,6 +968,13 @@ def command_update(args: argparse.Namespace) -> int:
         accept_legacy=args.accept_legacy,
         from_release=args.from_release,
     )
+    preflight = capability_preflight(
+        target / "scripts" / "release_policy.py",
+        target,
+        emit=not args.json,
+    )
+    if args.json:
+        status["release_capabilities"] = preflight
     if args.check:
         if args.json:
             print(json.dumps(status, sort_keys=True, separators=(",", ":")))

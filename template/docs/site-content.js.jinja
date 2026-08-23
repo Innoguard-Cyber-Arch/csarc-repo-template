@@ -53,7 +53,7 @@ window.CSARC_SITE_CONTENT = {
   ],
   release: {
     current: {% if language == "ci" %}"tag 會建立 GitHub Release 與來源封存檔；沒有語言套件，因此不產生套件 SBOM。"{% else %}"tag 打包、checksum、SBOM 與來源 metadata 會附加到 GitHub Release；沒有通用部署流程。"{% endif %},
-    optional: "release-please 使用 GITHUB_TOKEN；repo 必須允許 Actions 建立 PR，而且 release 建立後要明確啟動成品 workflow。Artifact attestation 與 PyPI／npm OIDC 發布依 repo 與 registry 設定啟用。",
+    optional: {% if language == "ci" %}"CI/CD-only 沒有語言套件或 registry 發布；portable baseline 不要求導入者建立長效 token 或修改組織政策。"{% elif language == "python" %}"Artifact attestation 與 PyPI OIDC 發布都是選配；本 profile 不會產生 npm 套件，portable baseline 也不要求長效 token 或組織政策變更。"{% elif language == "typescript" %}"Artifact attestation 與 npm OIDC 發布都是選配；本 profile 不會產生 PyPI 套件，portable baseline 也不要求長效 token 或組織政策變更。"{% else %}"Artifact attestation、PyPI 與 npm OIDC 發布各自選配；portable baseline 不要求導入者建立長效 token 或修改組織政策。"{% endif %},
     update: "Copier 從 {{ branch_strategy }} 的工作分支套用已審查的完整 commit SHA，再執行 ./scripts/verify。"
   }
 };

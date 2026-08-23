@@ -46,6 +46,20 @@ jobs:
             exit 1
           fi
 
+          release_intent="no-release"
+          if [[ "$PR_TITLE" =~ ^[^:]+!:\  ]]; then
+            release_intent="major"
+          elif [[ "$pr_title_type" == "feat" ]]; then
+            release_intent="minor"
+          elif [[ "$pr_title_type" == "fix" || "$pr_title_type" == "revert" ]]; then
+            release_intent="patch"
+          fi
+          release_message="Release intent: ${release_intent}; exact version is allocated only after main."
+          echo "$release_message"
+          if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+            echo "$release_message" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           selected_label=""
           selected_count=0
           for label in bug enhancement documentation; do

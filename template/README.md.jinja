@@ -69,7 +69,7 @@ Coverage 是找出未測程式碼的訊號，不等於測試品質，也不取�
 
 ## 設定與密鑰
 
-GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。推送遠端後先執行 `./scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 唯讀驗證；尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。Copier 不在本機建檔階段猜測遠端方案。
+GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。有管理權且希望啟用較強門禁時，可在推送遠端後執行 `./scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 唯讀驗證；這不是 portable release baseline 的必要步驟。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。組織政策拒絕 Actions PR 設定時，`apply` 會保留宣告並明確降級。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。Copier 不在本機建檔階段猜測遠端方案。
 
 | GitHub 方案與可見性 | `apply` 結果 | `check`／PR／CI/CD 行為 |
 | --- | --- | --- |
@@ -82,11 +82,19 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 
 {% if language != "ci" %}{% if enable_release_attestations | default(false) %}此專案會為 release distributions 產生 artifact provenance 與 SBOM attestation；這需要 public repo，或支援 artifact attestations 的 GitHub Enterprise Cloud private／internal repo。{% else %}Artifact attestation 未啟用，適合目前不支援該功能的 private repo；release 仍會附上 `SHA256SUMS` 與 SBOM，可用 checksum 驗證。{% endif %}{% endif %}
 
-release-please 使用 Actions 內建 `GITHUB_TOKEN` 自動開 Release PR，不需要設定 GitHub App。首次推送後執行 `./scripts/apply-repository-settings.sh plan` 與 `apply`，讓 Actions 可建立 PR；workflow 預設權限仍為唯讀，只有 release job 取得 `pull-requests: write`。Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。請在這裡列出產品設定的名稱、用途與取得位置，但不要填入真實值。
+release workflow 使用 Actions 內建 `GITHUB_TOKEN`，不需要設定 GitHub App 或 PAT。`csarc init`／`adopt`／`update` 在 GitHub origin 與 API 可讀時顯示 capability preflight；每次 workflow 仍重測 Actions PR、contents、Release 與 dispatch 能力。四項都確認可用時使用 release-please；PR 被禁止或無法確認但其餘交付能力完整時，從最新整合分支 commit 配置版本並交付；否則只驗證並上傳 machine-readable capability artifact。`plan`／`apply`／`check` 是有管理權時啟用較強門禁的選配，不會阻止 runtime 自適應。Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。請在這裡列出產品設定的名稱、用途與取得位置，但不要填入真實值。
 
 ## 發布與維運
 
-`fix(scope)` 升修補版、`feat(scope)` 升次版、`!` 升大版；scope 可用 `ci`、`python`、`typescript` 或 `template`，但整個 repo 永遠共用一個版本。{% if branch_strategy == "dev" %}因 repo 採 squash merge，`dev` 升版 PR 的英文標題代表整批變更的最高 SemVer 等級。{% endif %}release-please 建立 release 後會以該 tag 明確 dispatch 成品 workflow；一般 main push 不會重複發版，手動 `v*` tag 與 workflow dispatch 仍可使用。{% if language == "ci" %}版本記在 `version.txt`，tag 發布 GitHub Release 的來源封存檔；沒有語言成品，因此不產生套件 SBOM。{% else %}`v*` tag 會產生{% if has_python %} wheel／sdist{% endif %}{% if language == "python-typescript" %}與{% endif %}{% if has_typescript %} npm tarball{% endif %}、SHA-256、SBOM 與來源 metadata，並附加到對應 GitHub Release。下載後執行 `gh release download <tag>`，再於下載目錄執行 `shasum -a 256 -c SHA256SUMS`；{% if enable_release_attestations | default(false) %}另以 `gh attestation verify <artifact> --repo <owner/repo>` 驗證 provenance。{% endif %}{% endif %}目前沒有通用部署流程。
+PR 只顯示升版意圖：`fix(scope)` 是 patch、`feat(scope)` 是 minor、`!` 是 major，其餘是 no-release；不在 PR 階段預約確切版本。進入整合分支後才以實際 commit／tag 順序配置版本，過期或亂序 run 會停止。{% if branch_strategy == "dev" %}因 repo 採 squash merge，`dev` 升版 PR 的英文標題代表整批變更的最高 SemVer 等級。{% endif %}release-please 或 direct mode 建立 release 後會以該 tag 明確 dispatch 成品 workflow；一般 main push 不重複交付相同 tag，手動 `v*` tag 與 workflow dispatch 仍可使用。{% if language == "ci" %}版本記在 `version.txt`，tag 發布 GitHub Release 的來源封存檔；沒有語言成品，因此不產生套件 SBOM。{% else %}`v*` tag 會產生{% if has_python %} wheel／sdist{% endif %}{% if language == "python-typescript" %}與{% endif %}{% if has_typescript %} npm tarball{% endif %}、SHA-256、SBOM 與來源 metadata，並附加到對應 GitHub Release。下載後執行 `gh release download <tag>`，再於下載目錄執行 `shasum -a 256 -c SHA256SUMS`；{% if enable_release_attestations | default(false) %}另以 `gh attestation verify <artifact> --repo <owner/repo>` 驗證 provenance。{% endif %}{% endif %}目前沒有通用部署流程。
+
+| Runtime 實測政策 | 模式與行為 | 保證、限制與 fallback |
+| --- | --- | --- |
+| PR、contents、Release、dispatch 都是 `allowed` | **Release PR：**release-please 維護可審查的版本／changelog PR；合併後明確 dispatch 成品 workflow | 保留最強的人類審查與來源 metadata 同步；必要能力漂移就不再選此模式 |
+| PR 是 `blocked`／`unknown`，其餘三項都是 `allowed` | **Direct：**最新整合分支配置 tag／draft release，不另開 PR | 亂序 run 成為 no-op；成品 checkout 暫時寫入版本，但來源分支不另有版本／changelog commit |
+| contents、Release 或 dispatch 任一不是 `allowed` | **Verification only：**保留驗證與 capability artifact，不建立 tag 或 release | 不把不確定權限當成功；政策恢復後由後續 run 重新計算 |
+
+GitHub Release 是共同基線；外部 registry 只會依本案 profile 與下列明確選項啟用，不是導入必要條件。
 {% if enable_pypi_publishing | default(false) %}
 PyPI 發布使用 environment `{{ pypi_environment }}` 與 OIDC，不需要 API token。Package owner 必須先在 PyPI 建立 project 或 pending publisher，將 organization、repository、workflow `release.yml` 與 environment 完整對應到本 repo；environment 建議要求人工核准。
 {% endif %}{% if enable_npm_publishing | default(false) %}

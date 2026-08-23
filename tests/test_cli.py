@@ -196,6 +196,45 @@ def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
     assert provenance["verification"] == "development-unreleased"
 
 
+def test_capability_preflight_uses_readable_github_origin(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = tmp_path / "release_policy.py"
+    script.touch()
+    response = {
+        "mode": "direct",
+        "capabilities": {
+            "actions_pull_requests": {"state": "blocked"},
+            "contents": {"state": "unknown"},
+        },
+    }
+
+    def fake_run(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, capture, check
+        if command[0] == "git":
+            return subprocess.CompletedProcess(
+                command,
+                0,
+                stdout="https://github.com/owner/repo.git\n",
+                stderr="",
+            )
+        return subprocess.CompletedProcess(
+            command, 0, stdout=json.dumps(response), stderr=""
+        )
+
+    monkeypatch.setattr(cli, "run", fake_run)
+    assert cli.capability_preflight(script, tmp_path) == response
+    assert "actions_pull_requests=blocked" in capsys.readouterr().out
+
+
 def test_adopt_requires_clean_tree_and_preserves_product_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

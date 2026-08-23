@@ -699,6 +699,10 @@
     }
     .package-health p { font-size: 18px; line-height: 1.25; }
     .package-health a { color: #174f8b; font-weight: 850; text-underline-offset: 2px; }
+    .release-policy-health { width: min(800px, 175%); }
+    .release-policy-matrix { width: 100%; border-collapse: collapse; }
+    .release-policy-matrix th, .release-policy-matrix td { padding: 5px 6px; border: 1px solid var(--line); font-size: 14px; line-height: 1.18; text-align: left; vertical-align: top; }
+    .release-policy-matrix th { background: var(--soft); font-weight: 850; }
     .config-guidance {
       margin-top: 12px;
       padding: 9px 12px;
@@ -1720,15 +1724,15 @@
     <section class="slide decision-slide" data-track="deploy" aria-label="步驟六語意版本與持續交付">
       <header>
         <h2>步驟 6｜<span class="accent">版本規則與成品接續</span></h2>
-        <p class="subtitle"><strong>Release 與成品工作流已明確接續：</strong>公版本身與每個生成 repo 各有一個 SemVer；release-please 使用內建 <code>GITHUB_TOKEN</code>，建立 release 後以 tag dispatch 成品工作流。</p>
+        <p class="subtitle"><strong>Release 路徑依當下能力選擇：</strong>PR 與成品交接能力都確認時使用 release-please；否則在必要寫入能力完整時從最新 main commit 直接交付，再不行就明確停在 verification-only。</p>
       </header>
-      <p class="context-line"><strong>設計流程｜</strong><code>fix(ci)</code> 升 patch、<code>feat(python)</code>／<code>feat(typescript)</code> 升 minor、任何不相容變更加 <code>!</code> 升 major；Release PR 合併後才建 tag。</p>
+      <p class="context-line"><strong>設計流程｜</strong>PR 只顯示 patch／minor／major／no-release 意圖；確切版本只在進入 main 後依實際 commit／tag 順序配置，過期 run 不發版。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不為版本號另加一套平台</h3><ul><li><strong>Changesets：</strong>適合 npm workspace；CI-only／Python 案會多背 Node 設定</li><li><strong>Nx release：</strong>適合既有 Nx 大型 workspace；本案只需一個 release unit</li><li><strong>profile 各自編號：</strong>會增加相依矩陣與升級對版成本</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">release-please</span>＋單一 SemVer</span></summary><div class="package-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜持續維護。</p><p><strong>採用原因：</strong>manifest 模式與 extra files 已能用一個 release unit 同步不同 profile 的版本來源，沒有必要再引入 Changesets 或 Nx。<strong>觸發邊界：</strong>Actions policy 允許只有 release job 取得 <code>pull-requests: write</code>；release 建立後，另一個只具 <code>actions: write</code> 的 job 以輸出的 tag dispatch 成品 workflow。一般 main push 不會重複交付。</p><p class="reference">Ref. <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer">GitHub workflow trigger docs</a> and live workflow runs, accessed August 23, 2026.</p></div></details><p><strong>公版：</strong><code>version.txt</code> 是唯一版本來源，四種 profile 共用 <code>vX.Y.Z</code>。<br><strong>生成 repo：</strong>各有一個 SemVer；release 建立後使用同一個 tag 自動接續既有成品工作流。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">adaptive release</span>＋單一 SemVer</span></summary><div class="package-health release-policy-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜持續維護。</p><p><strong>三態能力：</strong><code>allowed</code>、<code>blocked</code>、<code>unknown</code> 分別記錄 Actions PR、contents、Release 與 dispatch；403、409、無 remote 或無管理權都不會被誤當 allowed。</p><table class="release-policy-matrix" aria-label="Release policy capability matrix"><thead><tr><th>前提</th><th>選擇</th><th>行為與保證</th><th>限制與 fallback</th></tr></thead><tbody><tr><td>四項都是 allowed</td><td>Release PR</td><td>可審查版本／changelog；合併後 dispatch 成品</td><td>任一能力漂移就不再選用</td></tr><tr><td>PR blocked／unknown；其餘 allowed</td><td>Direct</td><td>最新 main 才配置 tag；亂序 run no-op</td><td>成品 checkout 寫入版本；main 不另有升版 commit</td></tr><tr><td>任一交付寫入非 allowed</td><td>Verification only</td><td>測試並保存 machine-readable artifact</td><td>不建立 release；後續 run 重新判斷</td></tr></tbody></table><p class="reference">Ref. <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer">GitHub workflow trigger docs</a> and live workflow runs, accessed August 24, 2026.</p></div></details><p><strong>收斂：</strong>direct mode 重讀 default branch head，只有最新 main commit 可配置下一個 tag；concurrency 不必保證 FIFO。<br><strong>成品：</strong>tag checkout 暫時 materialize 該版本後驗證、打包，再 dispatch 既有成品 workflow。</p></article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>公版單一版本：</strong><code>version.txt</code>＋<code>.release-please-manifest.json</code>＋<code>release-please-config.json</code></li><li><strong>依 profile 同步版本來源：</strong>CI/CD-only 用 <code>version.txt</code>；Python 用 <code>pyproject.toml</code>；TypeScript 用 <code>package.json</code>；混合案同步後兩者</li><li><strong>成品接續：</strong>release-please 的 <code>release_created</code>／<code>tag_name</code> 輸出只在新 release 建立時 dispatch 成品 workflow</li></ul></aside>
-      <aside class="selection-note"><strong>目前邊界</strong><span>版本資料、CHANGELOG 與成品 workflow 已存在，但線上自動交付尚未端到端成功，所以不宣稱零設定或無人值守發版。GitHub App 目前只留給 <code>python-version-policy.yml</code> 的排程升版 PR 使用。</span></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>能力與版本配置：</strong><code>scripts/release_policy.py</code>；CLI 做唯讀 preflight，workflow 每次重新偵測</li><li><strong>PR mode：</strong><code>release-please-config.json</code>；<strong>direct mode：</strong>最新 main commit＋可達 SemVer tags</li><li><strong>查詢證據：</strong><code>release-capabilities-&lt;run-id&gt;</code> artifact＋job outputs；不寫入 repo</li></ul></aside>
+      <aside class="selection-note"><strong>目前邊界</strong><span>不要求導入者建立 PAT、GitHub App 或修改無權控制的組織政策；若 contents、Release 或 dispatch 無法確認，workflow 只完成驗證並明確告警，不宣稱已自動發版。Python 排程升版 App 仍是另一個選配身份。</span></aside>
     </section>
 
     <section class="slide decision-slide" data-page="14 / 16" data-track="rollout" aria-label="分階段導入策略">
@@ -1847,7 +1851,7 @@
           <tr><td><a href="https://engineering.atspotify.com/2020/08/how-we-use-golden-paths-to-solve-fragmentation-in-our-software-ecosystem" target="_blank" rel="noreferrer">Spotify Golden Path</a>＋<a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Backstage Catalog</a></td><td><span class="tier-chip priority">只完成一段</span></td><td>目前是單 repo golden-path 模板，不是有 catalog、owner、成熟度與 fleet migration 的平台；跨團隊尋找服務反覆變痛點時才導入。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/105" target="_blank" rel="noreferrer">#105</a></td></tr>
           <tr><td><a href="https://github.com/ossf/allstar" target="_blank" rel="noreferrer">Allstar</a>／<a href="https://github.com/github-community-projects/safe-settings" target="_blank" rel="noreferrer">Safe Settings</a></td><td><span class="tier-chip best">目前夠用</span></td><td>排程漂移檢查已由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/75" target="_blank" rel="noreferrer">#75</a> 完成；repo 數量增加、同類漂移重複發生時，再換中央政策服務。</td></tr>
           <tr><td><a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets" target="_blank" rel="noreferrer">GitHub Rulesets</a>／Free private</td><td><span class="tier-chip priority">部分解決</span></td><td>能查出平台能力並告警，但 Free private 無法強制 Ruleset；把未受保護狀態寫入 policy 的改善由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87" target="_blank" rel="noreferrer">#87</a> 處理中。</td></tr>
-          <tr><td>Release Please 線上執行＋<a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer"><code>GITHUB_TOKEN</code> 觸發規則</a></td><td><span class="tier-chip warning">尚未解決</span></td><td><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32645380139" target="_blank" rel="noreferrer">近期 run</a> 因 repo 禁止 Actions 建 PR 而失敗；即使建立 tag，預設 token 也不會再觸發成品 workflow。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/64" target="_blank" rel="noreferrer">#64</a>、<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/98" target="_blank" rel="noreferrer">#98</a></td></tr>
+          <tr><td>Release Please 線上執行＋<a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer"><code>GITHUB_TOKEN</code> 觸發規則</a></td><td><span class="tier-chip priority">自適應路徑</span></td><td><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32645380139" target="_blank" rel="noreferrer">既有 run</a> 證明 Actions PR 會被組織政策阻擋；現在每次以無副作用 probe 選 release-please、direct 或 verification-only，並以 artifact 留存判斷。正式閉環仍以本次 main live run 為準。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123" target="_blank" rel="noreferrer">#123</a></td></tr>
           <tr><td>OSV reusable workflow＋<a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows" target="_blank" rel="noreferrer">權限傳遞</a></td><td><span class="tier-chip best">已修正</span></td><td>呼叫端權限只能維持或縮小，不能替被呼叫 workflow 補權限；<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92" target="_blank" rel="noreferrer">PR #92</a> 補回必要權限後，<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32646097257" target="_blank" rel="noreferrer">main 線上 run</a> 已成功。</td></tr>
           <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a>＋<a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip priority">產生端已設計</span></td><td>public repo 的生成設定已預設啟用 provenance／SBOM attestation；只有消費或部署端實際驗證才產生防護效果，目前僅提供人工驗證指令。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/104" target="_blank" rel="noreferrer">#104</a></td></tr>
           <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> 安全基線</td><td><span class="tier-chip optional">方案感知</span></td><td>已有 pinned Actions、OSV、<code>SECURITY.md</code>、完整 Git 歷史與工作樹 secret scan；public repo 預設啟用 CodeQL，private／internal 則依 GitHub Code Security 授權明確 opt-in。</td></tr>
@@ -2518,42 +2522,32 @@ gh secret set CSARC_VERSION_BOT_PRIVATE_KEY \
 .env.example  # placeholders only`
         },
         {
-          title: '已配置｜release-please 只開 Release PR，不直接推 main',
-          goal: '公版本身一個版本；每個生成 repo 也各自只有一個版本，四種 profile 不另行分版。',
-          summary: '`fix(ci)` 升修補版、`feat(python)`／`feat(typescript)` 升次版、任何不相容變更加 `!` 升大版；使用 GITHUB_TOKEN，不用 GitHub App。actions policy 允許 release job 建立 PR，其他 job 仍維持最小權限。',
-          file: 'version.txt＋.release-please-manifest.json＋release-please-config.json',
-          code: `- uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-  with:
-    token: \${{ secrets.GITHUB_TOKEN }}
-    config-file: release-please-config.json
-    manifest-file: .release-please-manifest.json
-
-// The template repository itself
-"release-type": "simple",
-"extra-files": [
-  {"type": "toml", "path": "pyproject.toml", "jsonpath": "$.project.version"},
-  {"type": "generic", "path": "README.md"}
-]
-
-// Generated mixed-language repository
-"release-type": "node",
-"extra-files": [
-  {"type": "toml", "path": "pyproject.toml", "jsonpath": "$.project.version"}
-]`
+          title: '已配置｜每次依 GitHub capability 選 release mode',
+          goal: '不要求導入者提供長效憑證或修改無權控制的組織政策；未知能力一律 fail closed。',
+          summary: 'Actions PR、contents、Release、dispatch 各自輸出 allowed／blocked／unknown；四項都確認才用 release-please，否則交付能力完整才 direct release，再不行就 verification-only。',
+          file: 'scripts/release_policy.py＋release-please.yml',
+          code: `{
+  "mode": "release-pr | direct | verification-only",
+  "capabilities": {
+    "actions_pull_requests": {"state": "allowed | blocked | unknown"},
+    "contents": {"state": "allowed | blocked | unknown"},
+    "release": {"state": "allowed | blocked | unknown"},
+    "dispatch": {"state": "allowed | blocked | unknown"}
+  }
+}`
         },
         {
-          title: '已接通｜release 建立後明確啟動成品 workflow',
-          goal: '版本、成品與來源沿用同一條可追溯鏈；仍不宣稱已自動部署。',
-          summary: 'release-please 只在 `release_created` 為真時，以輸出的 tag dispatch 既有成品 workflow；一般 main push 不會重複發版，手動 `v*` tag 與手動 dispatch 仍保留。',
-          file: '.github/workflows/release-please.yml＋.github/workflows/release.yml',
-          code: `on:
-  push:
-    tags: ["v*"]
-  workflow_dispatch:
+          title: '已接通｜main 後配置版本並明確啟動成品 workflow',
+          goal: '版本、成品與來源沿用同一條可追溯鏈；並行或亂序 run 不能替舊 commit 配置新 tag。',
+          summary: 'PR 只顯示 SemVer 意圖；direct mode 重讀 main head 與可達 tags，建立 draft release 後 dispatch。判斷 JSON 保存 30 天，不提交遠端快照。',
+          file: 'release_policy.py＋release-please.yml＋release.yml',
+          code: `if remote_main_sha != workflow_sha:
+    mode = "verification-only"
+    reason = "superseded"
 
-jobs:
-  build:
-    name: build-and-sbom`
+next_tag = bump(latest_reachable_tag, merged_commits)
+create_draft_release(next_tag)
+dispatch_artifacts(next_tag)`
         }
       ],
       knowledge: [

@@ -80,6 +80,7 @@
       .sidebar nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .sidebar small { position: static; display: block; margin-top: 18px; }
       .cards { grid-template-columns: 1fr; }
+      .table { display: block; max-width: 100%; overflow-x: auto; }
     }
   </style>
   <script src="site-content.js" defer></script>
@@ -195,7 +196,7 @@
 
       <section id="github-plan">
         <h2><span>GitHub 方案與門禁</span></h2>
-        <p>repo 推送後依序執行 <code>./scripts/apply-repository-settings.sh plan</code>、<code>apply</code> 與 <code>check</code>；最後一步會唯讀檢查實際生效規則，必要門禁不存在時 CI 與 release 都會失敗。</p>
+        <p>repo 推送後會由 CI 讀取實際能力。有管理權且要啟用較強門禁時，可再執行 <code>./scripts/apply-repository-settings.sh plan</code>、<code>apply</code> 與 <code>check</code>；這不是 portable release baseline 的必要步驟。</p>
         <table class="table">
           <thead><tr><th>方案</th><th>公版會套用</th><th>方案邊界</th></tr></thead>
           <tbody>
@@ -212,6 +213,14 @@
       <section id="release">
         <h2><span>交付與更新</span></h2>
         <p id="release-current" class="notice"></p>
+        <table class="table">
+          <thead><tr><th>Runtime 實測政策</th><th>模式</th><th>保證</th><th>限制／fallback</th></tr></thead>
+          <tbody id="release-modes">
+            <tr><td>PR、contents、Release、dispatch 都是 allowed</td><td><strong>Release PR</strong></td><td>release-please 保留可審查的版本與 changelog PR；合併後明確 dispatch 成品 workflow。</td><td>必要能力漂移時自動降級；不要求 App 或 PAT。</td></tr>
+            <tr><td>PR blocked／unknown，其餘三項 allowed</td><td><strong>Direct</strong></td><td>只由最新 main 配置 tag 與 draft release；亂序 run 成為 no-op。</td><td>成品 checkout 暫時寫入版本；main 不另有版本／changelog commit。</td></tr>
+            <tr><td>contents、Release 或 dispatch 任一非 allowed</td><td><strong>Verification only</strong></td><td>執行驗證並保存 machine-readable capability artifact，不建立 release。</td><td>不把未知權限當成功；後續 run 會依新政策重新判斷。</td></tr>
+          </tbody>
+        </table>
         <p id="release-optional" class="notice optional"></p>
         <p id="update"></p>
       </section>

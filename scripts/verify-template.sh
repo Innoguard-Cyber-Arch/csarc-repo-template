@@ -22,34 +22,41 @@ uv run ruff format --check \
   src/csarc_cli \
   tests/test_cli.py \
   tests/test_milestone_lifecycle.py \
+  tests/test_release_policy.py \
   tests/test_release_prompt.py \
   scripts/report_dependency_ceiling.py \
   scripts/render_release_prompt.py \
+  scripts/release_policy.py \
   scripts/spec_to_issue.py \
   scripts/sync_milestone_state.py \
   scripts/update_python_version.py \
   tests/test_spec_to_issue.py \
   template/scripts \
   template/tests/test_milestone_lifecycle.py \
+  template/tests/test_release_policy.py \
   template/tests/test_spec_to_issue.py
 uv run ruff check \
   src/csarc_cli \
   tests/test_cli.py \
   tests/test_milestone_lifecycle.py \
+  tests/test_release_policy.py \
   tests/test_release_prompt.py \
   scripts/report_dependency_ceiling.py \
   scripts/render_release_prompt.py \
+  scripts/release_policy.py \
   scripts/spec_to_issue.py \
   scripts/sync_milestone_state.py \
   scripts/update_python_version.py \
   tests/test_spec_to_issue.py \
   template/scripts \
   template/tests/test_milestone_lifecycle.py \
+  template/tests/test_release_policy.py \
   template/tests/test_spec_to_issue.py
 uv run mypy \
   src/csarc_cli \
   scripts/report_dependency_ceiling.py \
   scripts/render_release_prompt.py \
+  scripts/release_policy.py \
   scripts/spec_to_issue.py \
   scripts/sync_milestone_state.py \
   scripts/update_python_version.py \
@@ -57,12 +64,14 @@ uv run mypy \
 uv run mypy template/scripts template/tests/test_spec_to_issue.py
 uv run pytest \
   tests/test_milestone_lifecycle.py \
+  tests/test_release_policy.py \
   tests/test_release_prompt.py \
   tests/test_spec_to_issue.py
 uv run pytest tests/test_cli.py \
   --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80
 uv run pytest \
   template/tests/test_milestone_lifecycle.py \
+  template/tests/test_release_policy.py \
   template/tests/test_spec_to_issue.py
 uv build
 uvx --from "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)" \
@@ -89,6 +98,10 @@ cat > "$github_plan_fixture/bin/gh" <<'SH'
 set -euo pipefail
 
 if [[ "$1" == "api" && "$2" == "--method" ]]; then
+  if [[ "$*" == *"actions/permissions/workflow"* && -n "${MOCK_ACTIONS_ERROR:-}" ]]; then
+    echo "$MOCK_ACTIONS_ERROR" >&2
+    exit 1
+  fi
   printf '%s\n' "$*" >> "$MOCK_GH_LOG"
   exit 0
 fi
@@ -173,6 +186,7 @@ run_settings_fixture() {
   local allow_unprotected="${5:-false}"
   local governance="${6:-protected}"
   local staged_ruleset="${7:-present}"
+  local actions_error="${8:-}"
   local suffix=""
   local arguments=("$mode")
   if [[ "$prune_labels" == true ]]; then
@@ -196,6 +210,7 @@ run_settings_fixture() {
     MOCK_RULESET_ERROR="$ruleset_error" \
     MOCK_GOVERNANCE="$governance" \
     MOCK_STAGED_RULESET="$staged_ruleset" \
+    MOCK_ACTIONS_ERROR="$actions_error" \
     MOCK_GH_LOG="$call_log" \
     ./scripts/apply-repository-settings.sh "${arguments[@]}"
 }
@@ -298,6 +313,12 @@ test ! -s "$drift_clean_log"
 
 free_degraded="$(run_settings_fixture free apply "" false false protected absent)"
 grep -q 'DEGRADED repository settings applied' <<<"$free_degraded"
+free_actions_degraded="$(
+  run_settings_fixture free apply "" false false protected absent \
+    "409 GitHub Actions is not permitted to create pull requests"
+)"
+grep -q 'DEGRADED Actions PR policy' <<<"$free_actions_degraded"
+grep -q 'select direct or verification-only mode' <<<"$free_actions_degraded"
 grep -q 'api --method PATCH repos/acme/project' \
   "$github_plan_fixture/free-apply-absent.log"
 if grep -Eq 'createRepositoryRuleset|updateRepositoryRuleset|api --method (POST|PUT) repos/acme/project/rulesets' \
@@ -397,9 +418,11 @@ if ! uv pip install \
 fi
 uv pip check --python "$lower_bounds_root/.venv/bin/python"
 if ! "$lower_bounds_root/.venv/bin/python" -m pytest \
-  tests/test_milestone_lifecycle.py tests/test_spec_to_issue.py ||
+  tests/test_milestone_lifecycle.py tests/test_release_policy.py \
+  tests/test_spec_to_issue.py ||
   ! "$lower_bounds_root/.venv/bin/python" \
     -m pytest template/tests/test_milestone_lifecycle.py \
+    template/tests/test_release_policy.py \
     template/tests/test_spec_to_issue.py; then
   echo "Root tests fail with the declared direct dependency lower bounds."
   exit 1
@@ -471,6 +494,13 @@ grep -q '"force-tag-creation": true' release-please-config.json
 grep -q 'gh release verify "$RELEASE_TAG"' \
   .github/workflows/release-template.yml
 grep -q 'render_release_prompt.py' .github/workflows/release-template.yml
+grep -q 'release_policy.py prepare' .github/workflows/release-template.yml
+grep -q 'tags: \["v\*"\]' .github/workflows/release-template.yml
+grep -q 'gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes' \
+  .github/workflows/release-template.yml
+grep -q "CSARC_ENABLE_PYPI_PUBLISHING == 'true'" \
+  .github/workflows/release-template.yml
+test -f scripts/release_policy.py
 test -f version.txt
 uv run python - <<'PY'
 import json
@@ -824,6 +854,10 @@ test -f "$fixture_root/default-project/docs/index.html"
 test -f "$fixture_root/default-project/docs/site-content.js"
 grep -q 'GitHub 方案與門禁' \
   "$fixture_root/default-project/docs/index.html"
+grep -q 'id="release-modes"' \
+  "$fixture_root/default-project/docs/index.html"
+grep -q 'Verification only' \
+  "$fixture_root/default-project/docs/index.html"
 grep -q 'apply-repository-settings.sh plan' \
   "$fixture_root/default-project/README.md"
 uv run python - "$fixture_root/default-project/pyproject.toml" <<'PY'
@@ -962,19 +996,32 @@ grep -q 'googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307c
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'config-file: release-please-config.json' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-# release-please must run unconditionally on the default token, not wait on a GitHub App.
+# Release automation must adapt with the default token, not wait on a GitHub App.
 grep -q 'token: \${{ secrets.GITHUB_TOKEN }}' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q '^      release_created: \${{ steps.release.outputs.release_created }}$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q '^      tag_name: \${{ steps.release.outputs.tag_name }}$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-grep -q "needs.release.outputs.release_created == 'true'" \
+grep -q "needs.release-pr.outputs.release_created == 'true'" \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q '^      actions: write$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'gh workflow run "$workflow" --ref "$RELEASE_TAG"' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q 'release_policy.py detect' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q 'release_policy.py release' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q 'Non-default branch run is diagnostic-only' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q "mode == 'verification-only'" \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q 'release-capabilities-\${{ github.run_id }}' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q 'release_policy.py prepare' \
+  "$fixture_root/default-project/.github/workflows/release.yml"
+test -f "$fixture_root/default-project/scripts/release_policy.py"
 if grep -Eq 'CSARC_VERSION_BOT|create-github-app-token' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"; then
   echo "release-please must not depend on the GitHub App bot."
