@@ -54,8 +54,9 @@ PY
   uv build --clear
   python_sdist="$(find dist -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
   test -n "$python_sdist"
-  tar -tzf "$python_sdist" | grep -q '/src/{{ package_name }}/'
-  if tar -tzf "$python_sdist" | grep -Eq '/(\.github|policies|scripts|tests|typescript)/'; then
+  python_sdist_entries="$(tar -tzf "$python_sdist")"
+  grep -q '/src/{{ package_name }}/' <<<"$python_sdist_entries"
+  if grep -Eq '/(\.github|policies|scripts|tests|typescript)/' <<<"$python_sdist_entries"; then
     echo "Python sdist contains repository infrastructure or test files." >&2
     exit 1
   fi

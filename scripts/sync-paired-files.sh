@@ -17,6 +17,7 @@ paired_files=(
   .github/ISSUE_TEMPLATE/config.yml
   .github/ISSUE_TEMPLATE/work-item.yml
   .github/workflows/governance-comment.yml
+  .github/workflows/governance-drift.yml
   .github/workflows/issue-triage.yml
   .github/workflows/pr-policy.yml
   .github/workflows/release-please.yml
@@ -25,6 +26,7 @@ paired_files=(
   policies/labels.json
   policies/repository.json
   scripts/apply-repository-settings.sh
+  scripts/check-governance-drift
   scripts/check-update-conflicts
   scripts/install-gitleaks
   scripts/scan-secrets
