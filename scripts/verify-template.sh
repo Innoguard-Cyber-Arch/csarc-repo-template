@@ -83,6 +83,7 @@ bash -n scripts/check-update-conflicts
 bash -n template/scripts/check-update-conflicts
 bash -n scripts/check-governance-drift
 bash -n template/scripts/check-governance-drift
+bash -n scripts/run-live-workflow-probe
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
 bash -n scripts/test-issue-triage
@@ -474,6 +475,8 @@ grep -q '<meta name="robots" content="noindex,nofollow">' docs/index.html
 grep -q 'internal-notice' docs/index.html
 grep -q '請勿公開分享此連結' docs/index.html
 grep -q '存取控制決策｜' docs/index.html
+grep -q 'actions/runs/32662029395' docs/index.html
+grep -q 'Live integration smoke' docs/index.html
 test -f docs/robots.txt
 grep -q '^Disallow: /$' docs/robots.txt
 test -f docs/agent-install.md
@@ -481,6 +484,20 @@ grep -q 'Run the requested `csarc init`, `adopt`, or `update` command with' \
   docs/agent-install.md
 grep -q 'docs/index.html' README.md
 grep -q '內部限閱' README.md
+grep -q '線上整合證據' README.md
+test -f docs/live-integration.md
+grep -q '只代表靜態與合成驗證通過' docs/live-integration.md
+test -x scripts/run-live-workflow-probe
+test -f .github/workflows/live-integration.yml
+test ! -e template/.github/workflows/live-integration.yml
+test ! -e template/scripts/run-live-workflow-probe
+grep -q '^      actions: write$' .github/workflows/live-integration.yml
+grep -q '^            capability: OSV$' .github/workflows/live-integration.yml
+grep -q '^            capability: Release Please$' .github/workflows/live-integration.yml
+grep -q '^            capability: Release handoff$' .github/workflows/live-integration.yml
+grep -q '^            capability: Governance drift$' .github/workflows/live-integration.yml
+grep -q '^  workflow_dispatch:$' .github/workflows/osv.yml
+grep -q '^  workflow_dispatch:$' template/.github/workflows/osv.yml
 grep -q 'uvx --from csarc-repo-cli csarc init' README.md
 grep -q 'uvx --from csarc-repo-cli csarc adopt' README.md
 grep -q 'uvx --from csarc-repo-cli csarc update' README.md
