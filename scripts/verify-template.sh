@@ -493,6 +493,7 @@ grep -q '"draft": true' release-please-config.json
 grep -q '"force-tag-creation": true' release-please-config.json
 grep -q 'gh release verify "$RELEASE_TAG"' \
   .github/workflows/release-template.yml
+! grep -q 'immutable-releases' .github/workflows/release-template.yml
 grep -q 'render_release_prompt.py' .github/workflows/release-template.yml
 test "$(grep -c 'release_policy.py prepare' \
   .github/workflows/release-template.yml)" = 2
