@@ -111,7 +111,15 @@ jobs:
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes
           fi
-          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          release_state="$(
+            gh release view "$RELEASE_TAG" --json isDraft,isImmutable \
+              --jq '[.isImmutable, .isDraft] | @tsv'
+          )"
+          if [[ "$release_state" == $'true\tfalse' ]]; then
+            echo "Release is already published and immutable; keeping its assets unchanged."
+            exit 0
+          fi
+          test "$release_state" = $'false\ttrue'
           commit_sha="$(git rev-parse HEAD)"
           test "$commit_sha" = "$(git rev-list -n 1 "$RELEASE_TAG")"
           gh release view "$RELEASE_TAG" --json body --jq .body >release-body.md
@@ -136,7 +144,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(gh release view "$RELEASE_TAG" --json isImmutable,isDraft,isPrerelease --jq '[.isImmutable, .isDraft, .isPrerelease] | @tsv')" = $'true\tfalse\tfalse'
-          for attempt in 1 2 3 4 5 6; do
+          for attempt in {1..24}; do
             if gh release verify "$RELEASE_TAG" -R "$GITHUB_REPOSITORY"; then
               exit 0
             fi
