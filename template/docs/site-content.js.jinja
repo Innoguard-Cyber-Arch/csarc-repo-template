@@ -49,11 +49,11 @@ window.CSARC_SITE_CONTENT = {
     "PR 政策包含合法／不合法回歸測資，避免門禁只會顯示綠燈。",
     "token 與私鑰放 GitHub Secrets／Variables，不提交到 repo 或 .env。",
     "設定腳本先查 GitHub 方案與 Ruleset API；Free private repo 會保留 Ruleset policy，但公開 API 無法建立它，CI 的 governance check 持續告警並在 PR 留言，release 照常執行。",
-    "Artifact attestation 預設關閉；public 或支援的 Enterprise Cloud repo 可明確啟用，其他 repo 以 Release 上的 SHA-256 驗證。",
+    "Artifact attestation 在 public repo 預設開啟；private／internal repo 維持明確 opt-in，其他情況以 Release 上的 SHA-256 驗證。",
   ],
   release: {
     current: {% if language == "ci" %}"tag 會建立 GitHub Release 與來源封存檔；沒有語言套件，因此不產生套件 SBOM。"{% else %}"tag 打包、checksum、SBOM 與來源 metadata 會附加到 GitHub Release；沒有通用部署流程。"{% endif %},
-    optional: "GitHub App 未設定時，release-please 會略過；artifact attestation 與 PyPI／npm OIDC 發布都依 repo 與 registry 設定由 Copier 明確啟用。",
+    optional: "release-please 使用 GITHUB_TOKEN；repo 必須允許 Actions 建立 PR，而且 release 建立後要明確啟動成品 workflow。Artifact attestation 與 PyPI／npm OIDC 發布依 repo 與 registry 設定啟用。",
     update: "Copier 從 {{ branch_strategy }} 的工作分支套用已審查的完整 commit SHA，再執行 ./scripts/verify。"
   }
 };

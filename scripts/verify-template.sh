@@ -370,7 +370,9 @@ grep -q '<title>CSARC Repo Template｜AI 輔助 SDLC 團隊公版</title>' \
   docs/index.html
 grep -q '先辨識 GitHub 方案' docs/index.html
 grep -q 'Code Security／Secret Protection 另購' docs/index.html
-grep -q '治理稽核｜' docs/index.html
+grep -q '外部基準與實測｜' docs/index.html
+grep -q 'actions/runs/32645380139' docs/index.html
+grep -q '真實 consuming repo 與採用證據' docs/index.html
 grep -q 'issues/74' docs/index.html
 grep -q 'issues/79' docs/index.html
 grep -q 'Spec 格式決策｜' docs/index.html

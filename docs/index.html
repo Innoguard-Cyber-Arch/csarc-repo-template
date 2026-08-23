@@ -1440,11 +1440,11 @@
         </article>
         <article class="tool-profile next">
           <div class="tool-logo-box"><img class="tool-logo" src="https://github.com/github-community-projects.png?size=160" alt="GitHub Community Projects logo"></div>
-          <div><h3><a href="https://github.com/github-community-projects/safe-settings" target="_blank" rel="noreferrer">GitHub Safe Settings</a></h3><p><strong>多 repo 治理｜</strong>集中套用、找出差異。<strong>決定｜</strong>未來；目前 JSON＋<code>gh api</code>。</p><p class="tool-health"><span class="tool-status">未來導入</span>· ISC · ★911 · 2026-08 仍更新</p></div>
+          <div><h3><a href="https://github.com/github-community-projects/safe-settings" target="_blank" rel="noreferrer">GitHub Safe Settings</a></h3><p><strong>多 repo 治理｜</strong>集中套用、找出差異。<strong>決定｜</strong>未來；目前 JSON＋<code>gh api</code>＋排程漂移檢查已足夠。</p><p class="tool-health"><span class="tool-status">未來導入</span>· ISC · 2026-08 仍更新</p></div>
         </article>
         <article class="tool-profile conditional">
           <div class="tool-logo-box"><img class="tool-logo" src="https://raw.githubusercontent.com/renovatebot/renovate/main/docs/usage/assets/images/logo.png" alt="Renovate logo"></div>
-          <div><h3><a href="https://github.com/renovatebot/renovate" target="_blank" rel="noreferrer">Renovate</a></h3><p><strong>套件更新｜</strong>等待與分組更細。<strong>決定｜</strong>可選；基本方案用 Dependabot。</p><p class="tool-health"><span class="tool-status">可選導入</span>· AGPL · ★22.3k · 2026-08 仍更新</p></div>
+          <div><h3><a href="https://github.com/renovatebot/renovate" target="_blank" rel="noreferrer">Renovate</a></h3><p><strong>套件更新｜</strong>等待與分組更細。<strong>決定｜</strong>可選；基本方案用 Dependabot，評估見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/74" target="_blank" rel="noreferrer">#74</a>。</p><p class="tool-health"><span class="tool-status">可選導入</span>· AGPL · 2026-08 仍更新</p></div>
         </article>
         <article class="tool-profile">
           <div class="tool-logo-box"><img class="tool-logo" src="https://cdn.simpleicons.org/githubactions/2088FF" alt="GitHub Actions logo"></div>
@@ -1460,12 +1460,12 @@
         </article>
         <article class="tool-profile conditional">
           <div class="tool-logo-box"><img class="tool-logo" src="https://cdn.simpleicons.org/backstage/9BF0E1" alt="Backstage logo"></div>
-          <div><h3><a href="https://github.com/backstage/backstage" target="_blank" rel="noreferrer">Backstage</a></h3><p><strong>開發者入口｜</strong>集中服務、owner 與文件。<strong>決定｜</strong>可選；服務變多才導入。</p><p class="tool-health"><span class="tool-status">可選導入</span>· Apache-2.0 · 持續維護</p></div>
+          <div><h3><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Backstage</a></h3><p><strong>開發者入口｜</strong>集中服務、owner 與文件。<strong>決定｜</strong>等跨團隊找 owner／服務開始反覆耗時才導入。</p><p class="tool-health"><span class="tool-status">條件式導入</span>· Apache-2.0 · 2026-08 仍更新</p></div>
         </article>
       </div>
       <aside class="tool-deferred" aria-label="未來選配與暫不採用工具">
         <p><strong>基本方案另已採用：</strong>Dependabot、OSV-Scanner、anchore/sbom-action（底層使用 Syft）。</p>
-        <p><strong>尚未啟用：</strong>Go／Rust profile、Scorecard、Harden-Runner、網站託管／登入、Hugo、RAG、通用部署與監控；repo 內部網站與生成內容模板已可用。</p>
+        <p><strong>尚未啟用：</strong>Go／Rust profile、Scorecard、Harden-Runner、網站託管／登入（<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">#79</a>）、Hugo、RAG、通用部署與監控；repo 內部網站與生成內容模板已可用。</p>
       </aside>
       <p class="ecosystem-reference reference">Ref. GitHub repository metadata and project logo assets. Accessed August 20, 2026.</p>
     </section>
@@ -1720,15 +1720,15 @@
     <section class="slide decision-slide" data-track="deploy" aria-label="步驟六語意版本與持續交付">
       <header>
         <h2>步驟 6｜<span class="accent">版本規則與成品接續</span></h2>
-        <p class="subtitle"><strong>基本導入：</strong>公版本身與每個生成 repo 各有一個 SemVer；tag 交付與自動 Release PR 都已完成，用內建 <code>GITHUB_TOKEN</code>，不需要另外設定 GitHub App。</p>
+        <p class="subtitle"><strong>已完成設計，尚未完成線上閉環：</strong>公版本身與每個生成 repo 各有一個 SemVer；release-please 使用內建 <code>GITHUB_TOKEN</code>，但實際 Release PR 與 tag 後交付仍有平台設定與觸發鏈缺口。</p>
       </header>
       <p class="context-line"><strong>設計流程｜</strong><code>fix(ci)</code> 升 patch、<code>feat(python)</code>／<code>feat(typescript)</code> 升 minor、任何不相容變更加 <code>!</code> 升 major；Release PR 合併後才建 tag。</p>
       <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不為版本號另加一套平台</h3><ul><li><strong>Changesets fixed packages：</strong>適合 npm workspace；CI-only／Python 案會多背 Node 與 changeset 檔案</li><li><strong>Nx release groups：</strong>適合已有 Nx 的大型 workspace；本案只需要一個 release unit</li><li><strong>四種 profile 各自編號：</strong>同一公版會出現相依矩陣與升級對版成本</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">release-please</span>＋單一 SemVer</span></summary><div class="package-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜★7,372｜2026-08-18 仍更新。</p><p><strong>採用原因：</strong>官方 manifest 模式本來就支援多套 release type 與 linked versions；本案更簡單，只設一個 release unit，再用內建 extra files 同步另一語言版本。Token 用 Actions 內建 <code>GITHUB_TOKEN</code>，不用 GitHub App：後者只在「release PR／tag 需要再觸發其他 workflow」才有必要，而 GitHub 對此仍會防遞迴——PR 開啟期間看不到 <code>ci.yml</code> 的檢查，但合併是人工動作，main 上照樣重新跑一次；tag 同理不會自動觸發 <code>release-template.yml</code> 的複查，但該 commit 進 main 前已經驗證過。換一個不需要任何密鑰設定的預設值，換來的是兩個可接受的重複驗證缺口。</p><p class="reference">Ref. release-please manifest docs and GitHub repository metadata, accessed August 21, 2026.</p></div></details><p><strong>公版：</strong><code>version.txt</code> 是版本來源，四種 profile 一起發 <code>vX.Y.Z</code>；任一已支援組合不相容，整份公版升 major。<br><strong>生成 repo：</strong>每個 repo 有自己的單一 SemVer；dev 模式由升版 PR 標題表達整批最高等級。CI/CD-only 發來源封存檔，Python 發 wheel／sdist，TypeScript 發 npm tarball，混合案發兩者。</p></article>
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不為版本號另加一套平台</h3><ul><li><strong>Changesets：</strong>適合 npm workspace；CI-only／Python 案會多背 Node 設定</li><li><strong>Nx release：</strong>適合既有 Nx 大型 workspace；本案只需一個 release unit</li><li><strong>profile 各自編號：</strong>會增加相依矩陣與升級對版成本</li></ul></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">release-please</span>＋單一 SemVer</span></summary><div class="package-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜2026-08 仍更新。</p><p><strong>採用原因：</strong>manifest 模式與 extra files 已能用一個 release unit 同步不同 profile 的版本來源，沒有必要再引入 Changesets 或 Nx。<strong>實測邊界：</strong>本 repo 的 Actions 政策目前禁止 <code>GITHUB_TOKEN</code> 建立或核准 PR，因此最近執行無法開 Release PR；而 GitHub 明定由 <code>GITHUB_TOKEN</code> 產生的 tag 不會再觸發一般 <code>push</code> workflow，必須由同一 workflow 交付或明確 <code>workflow_dispatch</code>。</p><p class="reference">Ref. <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer">GitHub workflow trigger docs</a> and live workflow runs, accessed August 23, 2026.</p></div></details><p><strong>公版：</strong><code>version.txt</code> 是唯一版本來源，四種 profile 共用 <code>vX.Y.Z</code>。<br><strong>生成 repo：</strong>各有一個 SemVer；成品類型已定義，自動交付仍待修正 Release PR 權限與 tag 觸發鏈。</p></article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>公版單一版本：</strong><code>version.txt</code>＋<code>.release-please-manifest.json</code>＋<code>release-please-config.json</code></li><li><strong>依 profile 同步版本來源：</strong>CI/CD-only 用 <code>version.txt</code>；Python 用 <code>pyproject.toml</code>；TypeScript 用 <code>package.json</code>；混合案同步後兩者</li><li><strong>零設定即可運作：</strong>release-please 用 <code>secrets.GITHUB_TOKEN</code>，不需要 GitHub App 或任何額外的 repo variable／secret</li></ul></aside>
-      <aside class="selection-note"><strong>目前邊界</strong><span>版本、CHANGELOG、tag 與 Release PR 已是持續交付；部署環境仍未就緒，所以不宣稱無人值守發版，也不建立 <code>deploy.yml</code>。GitHub App 只留給 <code>python-version-policy.yml</code> 的排程升版 PR 使用。</span></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>公版單一版本：</strong><code>version.txt</code>＋<code>.release-please-manifest.json</code>＋<code>release-please-config.json</code></li><li><strong>依 profile 同步版本來源：</strong>CI/CD-only 用 <code>version.txt</code>；Python 用 <code>pyproject.toml</code>；TypeScript 用 <code>package.json</code>；混合案同步後兩者</li><li><strong>仍需補齊：</strong>允許 Actions 建立 Release PR，並在 release 建立後明確啟動成品 workflow；追蹤於 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/64" target="_blank" rel="noreferrer">#64</a> 與衍生 Issue</li></ul></aside>
+      <aside class="selection-note"><strong>目前邊界</strong><span>版本資料、CHANGELOG 與成品 workflow 已存在，但線上自動交付尚未端到端成功，所以不宣稱零設定或無人值守發版。GitHub App 目前只留給 <code>python-version-policy.yml</code> 的排程升版 PR 使用。</span></aside>
     </section>
 
     <section class="slide decision-slide" data-page="14 / 16" data-track="rollout" aria-label="分階段導入策略">
@@ -1739,7 +1739,7 @@
       <p class="context-line"><strong>問題與目的｜</strong>一次導入模板、CI、部署、監控與 AI，團隊很難判斷哪裡出錯；分期後每一步都有完成條件。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不按聲量或日期一次把功能全打開</h3><ul><li><strong>一次切換：</strong>錯誤會同時擴散到所有專案</li><li><strong>固定日期解鎖：</strong>時間到了不代表使用條件已成熟</li><li><strong>所有語言同時上：</strong>未驗證的 profile 只是空承諾</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>三層不是日期，而是導入條件</h3><p><strong>基本導入：</strong>CI/CD-only、Python-only、TypeScript-only、混合 profile，以及 Issue／spec、PR／CI、依賴安全、語意版本（release-please 用 <code>GITHUB_TOKEN</code> 自動開 Release PR）、可追溯成品與 repo 內部網站都已完成。Free private 會套基本設定並保存 Ruleset policy。<br><strong>待條件啟用：</strong>private repo Ruleset 強制執行（GitHub Team＋CODEOWNERS team）、GitHub App 建立的 Python 排程升版 PR。<strong>未來／可選：</strong>多 repo、Go／Rust、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>三層不是日期，而是導入條件</h3><p><strong>基本導入：</strong>CI/CD-only、Python-only、TypeScript-only、混合 profile，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已完成。Free 會先查能力並套可用設定；private repo 不宣稱有 Ruleset 強制保護。<br><strong>仍在試行：</strong>release-please、可追溯成品與 attestation 要以 GitHub 線上執行驗證；至少一個真實下游 repo 完成建立與 Copier 更新後，profile 才有 beta 的採用證據。<br><strong>未來／可選：</strong>中央 catalog／治理平台、多 repo、Go／Rust、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></article>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>哪些 profile 已可用或仍在規劃：</strong><code>profiles/catalog.yaml</code></li><li><strong>先查方案再套可用設定：</strong><code>scripts/apply-repository-settings.sh</code>；Ruleset／App 條件備妥後再啟用</li><li><strong>建立與更新路徑是否都能通過：</strong><code>scripts/verify-template.sh</code></li></ul></aside>
     </section>
@@ -1834,27 +1834,27 @@
       <p class="review-note-footer"><strong>驗證承諾：</strong><code>./scripts/verify-template.sh</code> 會實跑新案、全功能案、既有案與 Copier 更新；簡報寫「已完成」就必須真的通過。</p>
     </section>
 
-    <section class="slide review-notes-slide" aria-label="2026-08 治理稽核九維度比較">
+    <section class="slide review-notes-slide" aria-label="2026-08 外部基準與線上實測比較">
       <header>
         <span class="selection-sequence">決策附錄</span>
-        <h2>治理稽核｜<span class="accent">九維度比較與後續 Issue</span></h2>
-        <p class="subtitle">2026-08-23 對照 Copier/Cookiecutter、OpenSSF Allstar、GitHub Trusted Publishing／Artifact Attestations、GitHub Spec Kit、zizmor、Renovate vs Dependabot；2 項對齊最佳實務，6 項方向正確但有落差，1 項明確落差。</p>
+        <h2>外部基準與實測｜<span class="accent">有骨架，還不是完整平台</span></h2>
+        <p class="subtitle">結論：已真正解決新 repo 建立、Copier 更新與本機／合成驗證；OSV 已補正並線上成功，治理仍受 GitHub 方案限制，Release 閉環與真實下游採用尚未證明。簡潔度合理，現在最需要的是補驗證，不是再加框架。</p>
       </header>
-      <table class="decision-register audit-register" aria-label="治理稽核九維度比較">
-        <thead><tr><th>比較維度</th><th>評等</th><th>結論與後續</th></tr></thead>
+      <table class="decision-register audit-register" aria-label="外部基準與線上實測比較">
+        <thead><tr><th>外部基準／實測</th><th>判斷</th><th>研究選擇與目前邊界</th></tr></thead>
         <tbody>
-          <tr><td>GitHub Trusted Publishing（PyPI／npm OIDC 發布）</td><td><span class="tier-chip best">對齊</span></td><td>短效憑證取代長效 registry token，已依 package owner 設定流程完成；無待辦。</td></tr>
-          <tr><td>zizmor＋GitHub 方案降級處理</td><td><span class="tier-chip best">對齊</span></td><td><code>apply-repository-settings.sh</code> 對不支援 Ruleset 的方案標示 DEGRADED 放行，不假裝有平台層保護；無待辦。</td></tr>
-          <tr><td>Renovate vs Dependabot（依賴版本政策）</td><td><span class="tier-chip warning">明確落差</span></td><td>Dependabot 三天等待、pnpm 嚴格 resolver、OSV、checksum、SBOM 五種機制各自把關，沒有單一政策 owner。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/74" target="_blank" rel="noreferrer">#74</a></td></tr>
-          <tr><td>OpenSSF Allstar（持續治理稽核）</td><td><span class="tier-chip priority">有落差</span></td><td><code>apply-repository-settings.sh</code> 只在人工執行時檢查，沒有排程重跑找出設定漂移。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/75" target="_blank" rel="noreferrer">#75</a></td></tr>
-          <tr><td>Copier vs Cookiecutter（範本引擎與更新機制）</td><td><span class="tier-chip priority">有落差</span></td><td>可更新模板方向正確；但 root 與 <code>template/</code> 仍各自維護一份共用政策檔案，只靠腳本比對防漂移。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/76" target="_blank" rel="noreferrer">#76</a></td></tr>
-          <tr><td>Root／<code>template/</code> 重複檔案</td><td><span class="tier-chip priority">有落差</span></td><td>同一份設定要在兩處手動同步，才能保持公版自我治理與下發內容一致。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/76" target="_blank" rel="noreferrer">#76</a></td></tr>
-          <tr><td>GitHub Spec Kit（<code>/specify /plan /tasks /implement</code>）</td><td><span class="tier-chip priority">有落差</span></td><td>自製 <code>spec → Issue</code> 格式已可用，但與逐漸成為事實標準的 Spec Kit 尚未對齊。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/77" target="_blank" rel="noreferrer">#77</a></td></tr>
-          <tr><td>GitHub Artifact Attestations</td><td><span class="tier-chip priority">有落差</span></td><td>支援 provenance／SBOM attestation，但預設關閉，不依 repo 可見度自動決定。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/78" target="_blank" rel="noreferrer">#78</a></td></tr>
-          <tr><td>內部決策網站存取控制</td><td><span class="tier-chip priority">有落差</span></td><td><code>docs/index.html</code> 目前只有 <code>noindex</code>，沒有登入或其他實際存取限制。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">#79</a></td></tr>
+          <tr><td><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Copier</a> vs <a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen</a></td><td><span class="tier-chip best">選擇合適</span></td><td>需求是「產生後可修改，之後仍能更新」；Copier 的 smart update 比由程式持續擁有生成檔的 projen 更合適，維持現況。</td></tr>
+          <tr><td><a href="https://engineering.atspotify.com/2020/08/how-we-use-golden-paths-to-solve-fragmentation-in-our-software-ecosystem" target="_blank" rel="noreferrer">Spotify Golden Path</a>＋<a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Backstage Catalog</a></td><td><span class="tier-chip priority">只完成一段</span></td><td>目前是單 repo golden-path 模板，不是有 catalog、owner、成熟度與 fleet migration 的平台；跨團隊尋找服務反覆變痛點時才導入。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/105" target="_blank" rel="noreferrer">#105</a></td></tr>
+          <tr><td><a href="https://github.com/ossf/allstar" target="_blank" rel="noreferrer">Allstar</a>／<a href="https://github.com/github-community-projects/safe-settings" target="_blank" rel="noreferrer">Safe Settings</a></td><td><span class="tier-chip best">目前夠用</span></td><td>排程漂移檢查已由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/75" target="_blank" rel="noreferrer">#75</a> 完成；repo 數量增加、同類漂移重複發生時，再換中央政策服務。</td></tr>
+          <tr><td><a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets" target="_blank" rel="noreferrer">GitHub Rulesets</a>／Free private</td><td><span class="tier-chip priority">部分解決</span></td><td>能查出平台能力並告警，但 Free private 無法強制 Ruleset；把未受保護狀態寫入 policy 的改善由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87" target="_blank" rel="noreferrer">#87</a> 處理中。</td></tr>
+          <tr><td>Release Please 線上執行＋<a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer"><code>GITHUB_TOKEN</code> 觸發規則</a></td><td><span class="tier-chip warning">尚未解決</span></td><td><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32645380139" target="_blank" rel="noreferrer">近期 run</a> 因 repo 禁止 Actions 建 PR 而失敗；即使建立 tag，預設 token 也不會再觸發成品 workflow。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/64" target="_blank" rel="noreferrer">#64</a>、<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/98" target="_blank" rel="noreferrer">#98</a></td></tr>
+          <tr><td>OSV reusable workflow＋<a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows" target="_blank" rel="noreferrer">權限傳遞</a></td><td><span class="tier-chip best">已修正</span></td><td>呼叫端權限只能維持或縮小，不能替被呼叫 workflow 補權限；<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92" target="_blank" rel="noreferrer">PR #92</a> 補回必要權限後，<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32646097257" target="_blank" rel="noreferrer">main 線上 run</a> 已成功。</td></tr>
+          <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a>＋<a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip priority">產生端已設計</span></td><td>public repo 的生成設定已預設啟用 provenance／SBOM attestation；只有消費或部署端實際驗證才產生防護效果，目前僅提供人工驗證指令。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/104" target="_blank" rel="noreferrer">#104</a></td></tr>
+          <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> 安全基線</td><td><span class="tier-chip priority">仍有缺口</span></td><td>已有 pinned Actions、OSV 與工作樹 secret scan；仍缺完整 git 歷史掃描、<code>SECURITY.md</code> 與 SAST。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/101" target="_blank" rel="noreferrer">#101</a>、<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/102" target="_blank" rel="noreferrer">#102</a>、<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/103" target="_blank" rel="noreferrer">#103</a></td></tr>
+          <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip warning">尚未證明</span></td><td>目前只驗證合成 fixture；尚無下游 repo 證明建立、客製化、Copier update 與衝突處理。完成一個 pilot 前應視為 alpha／試行。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a></td></tr>
         </tbody>
       </table>
-      <p class="review-note-footer"><strong>方法：</strong>2026-08-23 對照六個外部案例後留下的摘要與追蹤連結；完整比較細節留在稽核報告與各衍生 Issue，不在本頁重製全文。</p>
+      <p class="review-note-footer"><strong>簡潔度判斷：</strong>Copier＋GitHub Actions＋標準工具的方向夠簡潔；真正風險是把合成測試當成線上閉環。先補 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/99" target="_blank" rel="noreferrer">live smoke test</a> 與真實 pilot，再依規模決定較重工具；易過期的熱度快照另由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/106" target="_blank" rel="noreferrer">#106</a> 移除。</p>
     </section>
 
     <section class="slide review-notes-slide" aria-label="Spec Kit 格式決策">
@@ -2441,9 +2441,9 @@ gh secret set CSARC_VERSION_BOT_PRIVATE_KEY \
 .env.example  # placeholders only`
         },
         {
-          title: '零設定生效｜release-please 只開 Release PR，不直接推 main',
+          title: '待補 repo 設定｜release-please 只開 Release PR，不直接推 main',
           goal: '公版本身一個版本；每個生成 repo 也各自只有一個版本，四種 profile 不另行分版。',
-          summary: '`fix(ci)` 升修補版、`feat(python)`／`feat(typescript)` 升次版、任何不相容變更加 `!` 升大版；用 GITHUB_TOKEN，任何方案、任何時候都會執行，不用等 GitHub App。',
+          summary: '`fix(ci)` 升修補版、`feat(python)`／`feat(typescript)` 升次版、任何不相容變更加 `!` 升大版；使用 GITHUB_TOKEN，不用 GitHub App，但 repo 必須允許 Actions 建立 PR。目前線上 run 尚未通過。',
           file: 'version.txt＋.release-please-manifest.json＋release-please-config.json',
           code: `- uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
   with:
@@ -2465,9 +2465,9 @@ gh secret set CSARC_VERSION_BOT_PRIVATE_KEY \
 ]`
         },
         {
-          title: 'tag 觸發既有 release workflow 產生交付證據',
+          title: '待補觸發鏈｜release 建立後明確啟動成品 workflow',
           goal: '版本、成品與來源沿用同一條可追溯鏈；仍不宣稱已自動部署。',
-          summary: '`v*` tag 觸發 wheel、npm tarball、SHA-256 與 CycloneDX SBOM；成品先解壓，SBOM 不能為空，證據長期附加到 GitHub Release。PyPI／npm 發布必須由 package owner 明確啟用 OIDC trusted publisher，且只有發布 job 取得 id-token。',
+          summary: '手動或非 GITHUB_TOKEN 建立的 `v*` tag 可觸發 wheel、npm tarball、SHA-256 與 CycloneDX SBOM；release-please 使用預設 token 建 tag 時不會觸發一般 push workflow，需由同一 workflow 或 workflow_dispatch 明確接續。',
           file: '.github/workflows/release.yml',
           code: `on:
   push:
