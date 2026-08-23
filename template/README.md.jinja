@@ -59,7 +59,7 @@ Coverage 是找出未測程式碼的訊號，不等於測試品質，也不取�
 
 ## 設定與密鑰
 
-repo 推送到 GitHub 後，先執行 `./scripts/apply-repository-settings.sh plan`；尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。腳本會查詢 GitHub 方案、repo 可見性與 Ruleset API：Free private repo 套用合併方式、Actions 權限與三種標籤，但 `main` 不受強制保護。確認輸出後再執行 `apply`；Copier 不在本機建檔階段猜測遠端方案。
+repo 推送到 GitHub 後，先執行 `./scripts/apply-repository-settings.sh plan`；尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。腳本會查詢 GitHub 方案、repo 可見性與 Ruleset API：Free private repo 套用合併方式、Actions 權限與三種標籤，但 `main` 不受強制保護。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會依 plan 列出的清單刪除。確認輸出後再執行 `apply`；Copier 不在本機建檔階段猜測遠端方案。
 
 > 若 plan 顯示 `WARNING main is not protected`，部署者必須選一條路：需要保密就請組織 owner 在 **Organization Settings → Billing & licensing** 升級至 GitHub Team 以上；已核准公開的程式碼才可在 **Repository Settings → General → Danger Zone** 改為 public。接著建立或確認 `.github/CODEOWNERS` 指定的 team，重新執行 `plan`，看到 `APPLY policies/rulesets.json` 後才執行 `apply`。不要為了省方案費用擅自公開 repository。
 
