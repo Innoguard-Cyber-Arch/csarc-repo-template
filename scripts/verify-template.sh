@@ -45,6 +45,8 @@ bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
 bash -n scripts/check-update-conflicts
 bash -n template/scripts/check-update-conflicts
+bash -n scripts/check-governance-drift
+bash -n template/scripts/check-governance-drift
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
 bash -n scripts/test-issue-triage
@@ -74,6 +76,14 @@ fi
 if [[ "$1" == "repo" && "$2" == "view" ]]; then
   echo "no git remotes found" >&2
   exit 1
+fi
+if [[ "$1" == "issue" && "$2" == "list" ]]; then
+  printf '%s\n' "${MOCK_EXISTING_ISSUE:-}"
+  exit 0
+fi
+if [[ "$1" == "issue" ]]; then
+  printf '%s\n' "$*" >> "$MOCK_GH_LOG"
+  exit 0
 fi
 if [[ "$1" != "api" ]]; then
   echo "Unexpected gh command: $*" >&2
@@ -227,6 +237,38 @@ if unavailable_check="$(run_settings_fixture team check "" false false error 2>&
 fi
 grep -q 'Cannot inspect effective rules' <<<"$unavailable_check"
 
+# The scheduled drift check must open, update, or skip a tracking Issue
+# based on the real apply-repository-settings.sh check output.
+run_drift_check() {
+  local governance="$1"
+  local existing_issue="${2:-}"
+  local log_file="$3"
+  : > "$log_file"
+  PATH="$github_plan_fixture/bin:$PATH" \
+    GH_REPO="acme/project" \
+    MOCK_GITHUB_PLAN="team" \
+    MOCK_GITHUB_VISIBILITY="private" \
+    MOCK_GOVERNANCE="$governance" \
+    MOCK_EXISTING_ISSUE="$existing_issue" \
+    MOCK_GH_LOG="$log_file" \
+    "$repo_root/scripts/check-governance-drift"
+}
+drift_create_log="$github_plan_fixture/drift-create.log"
+if run_drift_check incomplete "" "$drift_create_log" >/dev/null 2>&1; then
+  echo "check-governance-drift must fail when governance drift is detected."
+  exit 1
+fi
+grep -q '^issue create .*--label bug' "$drift_create_log"
+drift_update_log="$github_plan_fixture/drift-update.log"
+if run_drift_check incomplete 91 "$drift_update_log" >/dev/null 2>&1; then
+  echo "check-governance-drift must fail when governance drift is detected."
+  exit 1
+fi
+grep -q '^issue edit 91 ' "$drift_update_log"
+drift_clean_log="$github_plan_fixture/drift-clean.log"
+run_drift_check protected "" "$drift_clean_log" >/dev/null
+test ! -s "$drift_clean_log"
+
 free_degraded="$(run_settings_fixture free apply "" false false protected absent)"
 grep -q 'DEGRADED repository settings applied' <<<"$free_degraded"
 grep -q 'api --method PATCH repos/acme/project' \
@@ -333,6 +375,14 @@ grep -q 'issues/74' docs/index.html
 grep -q 'issues/79' docs/index.html
 grep -q 'Spec 格式決策｜' docs/index.html
 grep -q '維持現行 spec → Issue，不在本 Issue 遷移' docs/index.html
+grep -q '<meta name="robots" content="noindex,nofollow">' docs/index.html
+grep -q 'internal-notice' docs/index.html
+grep -q '請勿公開分享此連結' docs/index.html
+grep -q '存取控制決策｜' docs/index.html
+test -f docs/robots.txt
+grep -q '^Disallow: /$' docs/robots.txt
+grep -q 'docs/index.html' README.md
+grep -q '內部限閱' README.md
 test -f version.txt
 uv run python - <<'PY'
 import json
@@ -460,21 +510,34 @@ grep -q 'branches: \[main\]' .github/workflows/ci.yml
 grep -q 'branches: \[main\]' .github/workflows/osv.yml
 grep -q 'gh pr edit "$pr_url" --add-label enhancement' \
   .github/workflows/python-version-policy.yml
-if rg -q -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
+if grep -Eq -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
   .github/workflows/python-version-policy.yml \
   scripts/apply-repository-settings.sh \
   template/scripts/apply-repository-settings.sh; then
   echo "Version automation must not bypass or perform repository merges."
   exit 1
 fi
-if rg -q 'security-events: write' \
-  .github/workflows/osv.yml template/.github/workflows/osv.yml; then
-  echo "OSV workflows must not request security-events write access when SARIF upload is disabled."
-  exit 1
-fi
+test "$(grep -c '^      security-events: write$' .github/workflows/osv.yml)" -eq 2
+test "$(grep -c '^      security-events: write$' template/.github/workflows/osv.yml)" -eq 2
 grep -q 'branches: \[main\]' .github/workflows/zizmor.yml
 grep -q 'target-branch: main' .github/dependabot.yml
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
+
+# Issue #74: the new-version observation window is Dependabot cooldown plus
+# pnpm's minimumReleaseAge today; trustPolicy remains an independent publisher
+# provenance gate. A Renovate consolidation of only the waiting policy was
+# evaluated and deliberately deferred (see profiles/catalog.yaml and
+# docs/index.html). Guard against a half-finished migration landing without
+# updating this decision or removing the mechanism it would replace.
+grep -q 'consolidation_status: evaluated_and_deferred' profiles/catalog.yaml
+grep -q 'stays_independent_of_renovate: true' profiles/catalog.yaml
+grep -q '評估｜以單一 Renovate 設定取代 Dependabot／pnpm 版本等待' \
+  docs/index.html
+for renovate_config_path in \
+  renovate.json renovate.json5 .github/renovate.json .renovaterc.json; do
+  test ! -e "$renovate_config_path"
+  test ! -e "template/$renovate_config_path"
+done
 uv run python - <<'PY'
 import json
 from pathlib import Path
@@ -559,7 +622,13 @@ git -C "$fixture_root/default-project" diff --cached --check
 test -f "$fixture_root/default-project/.copier-answers.yml"
 diff -B -w "$repo_root/.github/dependabot.yml" \
   "$fixture_root/default-project/.github/dependabot.yml"
+for renovate_config_path in \
+  renovate.json renovate.json5 .github/renovate.json .renovaterc.json; do
+  test ! -e "$fixture_root/default-project/$renovate_config_path"
+done
 grep -q 'language: python' "$fixture_root/default-project/.copier-answers.yml"
+grep -q 'project_visibility: private' \
+  "$fixture_root/default-project/.copier-answers.yml"
 grep -q '"language_profile": "python"' \
   "$fixture_root/default-project/.csarc/profile.json"
 grep -q '"branch_strategy": "main"' \
@@ -584,8 +653,46 @@ if grep -q '^  publish-python:\|^  publish-npm:' \
   echo "Registry publishing must remain opt-in."
   exit 1
 fi
+
+# Public projects default release attestations on; private/internal stay explicit opt-in.
+uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_slug="public-visibility-test" \
+  --data package_name="public_visibility_test" \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  --data project_visibility=public \
+  "$repo_root" "$fixture_root/public-visibility-project"
+prime_gitleaks_cache "$fixture_root/public-visibility-project"
+grep -q 'project_visibility: public' \
+  "$fixture_root/public-visibility-project/.copier-answers.yml"
+grep -q 'enable_release_attestations: true' \
+  "$fixture_root/public-visibility-project/.copier-answers.yml"
+test "$(grep -c 'actions/attest@' \
+  "$fixture_root/public-visibility-project/.github/workflows/release.yml")" -eq 2
+grep -q 'attestations: write' \
+  "$fixture_root/public-visibility-project/.github/workflows/release.yml"
+grep -q 'id-token: write' \
+  "$fixture_root/public-visibility-project/.github/workflows/release.yml"
+
+uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_slug="internal-visibility-test" \
+  --data package_name="internal_visibility_test" \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  --data project_visibility=internal \
+  "$repo_root" "$fixture_root/internal-visibility-project"
+prime_gitleaks_cache "$fixture_root/internal-visibility-project"
+grep -q 'project_visibility: internal' \
+  "$fixture_root/internal-visibility-project/.copier-answers.yml"
+grep -q 'enable_release_attestations: false' \
+  "$fixture_root/internal-visibility-project/.copier-answers.yml"
+if grep -q 'actions/attest@' \
+  "$fixture_root/internal-visibility-project/.github/workflows/release.yml"; then
+  echo "Internal projects must keep release attestations opt-in by default."
+  exit 1
+fi
 test ! -f "$fixture_root/default-project/.github/workflows/template-update.yml"
 test ! -f "$fixture_root/default-project/scripts/check-template-update"
+test ! -f "$fixture_root/default-project/.github/workflows/governance-drift.yml"
+test ! -f "$fixture_root/default-project/scripts/check-governance-drift"
 test -f "$fixture_root/default-project/release-please-config.json"
 test -f "$fixture_root/default-project/.release-please-manifest.json"
 test "$(cat "$fixture_root/default-project/.python-version")" = "3.14"
@@ -723,7 +830,7 @@ grep -q 'config-file: release-please-config.json' \
 # release-please must run unconditionally on the default token, not wait on a GitHub App.
 grep -q 'token: \${{ secrets.GITHUB_TOKEN }}' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-if rg -q 'CSARC_VERSION_BOT|create-github-app-token' \
+if grep -Eq 'CSARC_VERSION_BOT|create-github-app-token' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"; then
   echo "release-please must not depend on the GitHub App bot."
   exit 1
@@ -1026,6 +1133,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data workflow_ref=1111111111111111111111111111111111111111 \
   --data enable_precommit=true \
   --data enable_template_update_notifications=true \
+  --data enable_governance_drift_check=true \
   --data enable_release_attestations=true \
   --data enable_pypi_publishing=true \
   --data pypi_environment=pypi-release \
@@ -1043,6 +1151,18 @@ grep -q '^### 補充$' \
   "$fixture_root/all-features-project/scripts/check-template-update"
 grep -q 'CSARC_TEMPLATE_READ_TOKEN' \
   "$fixture_root/all-features-project/.github/workflows/template-update.yml"
+test -f "$fixture_root/all-features-project/.github/workflows/governance-drift.yml"
+test -x "$fixture_root/all-features-project/scripts/check-governance-drift"
+grep -q 'schedule:' \
+  "$fixture_root/all-features-project/.github/workflows/governance-drift.yml"
+grep -q 'issues: write' \
+  "$fixture_root/all-features-project/.github/workflows/governance-drift.yml"
+grep -q './scripts/check-governance-drift' \
+  "$fixture_root/all-features-project/.github/workflows/governance-drift.yml"
+grep -q 'apply-repository-settings.sh check' \
+  "$fixture_root/all-features-project/scripts/check-governance-drift"
+grep -q '^### 補充$' \
+  "$fixture_root/all-features-project/scripts/check-governance-drift"
 template_update_fixture="$fixture_root/template-update-check"
 mkdir -p "$template_update_fixture/bin"
 cat > "$template_update_fixture/bin/copier" <<'SH'
@@ -1114,7 +1234,7 @@ grep -q '^      name: "npm-release"$' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q 'npm publish "${packages\[0\]}" --provenance --access public' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
-if rg -q 'PYPI_API_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN' \
+if grep -Eq 'PYPI_API_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"; then
   echo "Trusted publishing must not require a long-lived registry token."
   exit 1

@@ -1,0 +1,7 @@
+# Stopgap only: this repository has no real access control on docs/ yet.
+# noindex/robots.txt keeps well-behaved crawlers from indexing the page;
+# it does not stop anyone with the URL from opening it. See the
+# "存取控制決策" appendix slide in docs/index.html and Issue #79 for the
+# actual access-control decision and rollout plan.
+User-agent: *
+Disallow: /
