@@ -4,17 +4,23 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mode="${1:-plan}"
 prune_labels=false
+allow_unprotected=false
 
 if [[ "$mode" != "plan" && "$mode" != "apply" ]]; then
-  echo "Usage: $0 [plan|apply] [--prune-labels]"
+  echo "Usage: $0 [plan|apply] [--prune-labels] [--allow-unprotected]"
   exit 2
 fi
-if [[ "${2:-}" == "--prune-labels" ]]; then
-  prune_labels=true
-elif [[ -n "${2:-}" ]]; then
-  echo "Usage: $0 [plan|apply] [--prune-labels]"
-  exit 2
-fi
+shift $(( $# > 0 ? 1 : 0 ))
+for option in "$@"; do
+  case "$option" in
+    --prune-labels) prune_labels=true ;;
+    --allow-unprotected) allow_unprotected=true ;;
+    *)
+      echo "Usage: $0 [plan|apply] [--prune-labels] [--allow-unprotected]"
+      exit 2
+      ;;
+  esac
+done
 
 command -v gh >/dev/null || { echo "Install and authenticate GitHub CLI first."; exit 1; }
 repo="${GH_REPO:-}"
@@ -120,7 +126,7 @@ if [[ "$ruleset_available" == true ]]; then
   echo "CODEOWNERS team: $code_owner"
 else
   echo "- SKIP policies/rulesets.json: $ruleset_skip_reason"
-  echo "- WARNING main is not protected: this private repository needs GitHub Team or public visibility before Rulesets can be enforced."
+  echo "- BLOCKED required governance: main is not protected; this private repository needs GitHub Team or public visibility before Rulesets can be enforced."
   echo "- NEXT STEP keep it private: ask the owner to upgrade to $private_ruleset_plan."
   echo "  $billing_url"
   echo "- ALTERNATIVE only when public access is approved: change repository visibility."
@@ -128,6 +134,7 @@ else
   echo "- THEN create or confirm the CODEOWNERS team $code_owner and rerun:"
   echo "  GH_REPO=$repo ./scripts/apply-repository-settings.sh plan"
   echo "  GH_REPO=$repo ./scripts/apply-repository-settings.sh apply"
+  echo "- EXPLICIT DEGRADED MODE: apply --allow-unprotected continues without branch protection and records that state in command output."
 fi
 if [[ "$plan_label" == "GitHub Enterprise" ]]; then
   echo "- INFO Enterprise-wide identity, audit, network, and organization Rulesets are outside this repository script."
@@ -136,6 +143,11 @@ fi
 if [[ "$mode" == "plan" ]]; then
   echo "No changes applied. Re-run with 'apply' after review."
   exit 0
+fi
+if [[ "$ruleset_available" != true && "$allow_unprotected" != true ]]; then
+  echo "Refusing to apply incomplete governance without --allow-unprotected." >&2
+  echo "Upgrade the account plan or explicitly accept degraded mode." >&2
+  exit 1
 fi
 
 gh api --method PATCH "repos/$repo" --input "$repo_root/policies/repository.json" >/dev/null
@@ -179,4 +191,8 @@ if [[ "$ruleset_available" == true ]]; then
   fi
 fi
 
-echo "Available repository settings applied. Review the deployment plan above."
+if [[ "$ruleset_available" == true ]]; then
+  echo "Required repository settings applied, including branch protection."
+else
+  echo "DEGRADED repository settings applied without required branch protection because --allow-unprotected was explicitly provided."
+fi

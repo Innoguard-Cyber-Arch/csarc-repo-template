@@ -113,11 +113,16 @@ run_settings_fixture() {
   local mode="${2:-plan}"
   local ruleset_error="${3:-}"
   local prune_labels="${4:-false}"
+  local allow_unprotected="${5:-false}"
   local suffix=""
   local arguments=("$mode")
   if [[ "$prune_labels" == true ]]; then
     suffix="-prune"
     arguments+=(--prune-labels)
+  fi
+  if [[ "$allow_unprotected" == true ]]; then
+    suffix="$suffix-allow-unprotected"
+    arguments+=(--allow-unprotected)
   fi
   local call_log="$github_plan_fixture/$plan-$mode$suffix.log"
   : > "$call_log"
@@ -152,11 +157,12 @@ grep -q '403 service unavailable' <<<"$unknown_ruleset"
 free_plan="$(run_settings_fixture free)"
 grep -q 'Account plan: GitHub Free' <<<"$free_plan"
 grep -q 'SKIP policies/rulesets.json' <<<"$free_plan"
-grep -q 'WARNING main is not protected' <<<"$free_plan"
+grep -q 'BLOCKED required governance' <<<"$free_plan"
 grep -q 'ask the owner to upgrade to GitHub Team or above' \
   <<<"$free_plan"
 grep -q 'https://github.com/organizations/acme/settings/billing' <<<"$free_plan"
 grep -q 'ALTERNATIVE only when public access is approved' <<<"$free_plan"
+grep -q 'apply --allow-unprotected' <<<"$free_plan"
 grep -q 'GH_REPO=acme/project ./scripts/apply-repository-settings.sh apply' \
   <<<"$free_plan"
 grep -q 'KEEP labels outside policy' <<<"$free_plan"
@@ -171,22 +177,33 @@ enterprise_plan="$(run_settings_fixture business_plus)"
 grep -q 'Account plan: GitHub Enterprise' <<<"$enterprise_plan"
 grep -q 'Enterprise-wide identity, audit, network' <<<"$enterprise_plan"
 
-run_settings_fixture free apply >/dev/null
+if free_apply="$(run_settings_fixture free apply 2>&1)"; then
+  echo "Unprotected private repositories must fail closed by default."
+  exit 1
+fi
+grep -q 'Refusing to apply incomplete governance' <<<"$free_apply"
+test ! -s "$github_plan_fixture/free-apply.log"
+free_degraded="$(run_settings_fixture free apply "" false true)"
+grep -q 'DEGRADED repository settings applied' <<<"$free_degraded"
 grep -q 'api --method PATCH repos/acme/project' \
-  "$github_plan_fixture/free-apply.log"
-if grep -q 'label delete' "$github_plan_fixture/free-apply.log"; then
+  "$github_plan_fixture/free-apply-allow-unprotected.log"
+if grep -q 'label delete' \
+  "$github_plan_fixture/free-apply-allow-unprotected.log"; then
   echo "Default repository setup must preserve labels outside policy."
   exit 1
 fi
-run_settings_fixture free apply "" true >/dev/null
-grep -q 'label delete duplicate' "$github_plan_fixture/free-apply-prune.log"
-grep -q 'label delete task' "$github_plan_fixture/free-apply-prune.log"
-if grep -q 'label delete bug' "$github_plan_fixture/free-apply-prune.log"; then
+run_settings_fixture free apply "" true true >/dev/null
+grep -q 'label delete duplicate' \
+  "$github_plan_fixture/free-apply-prune-allow-unprotected.log"
+grep -q 'label delete task' \
+  "$github_plan_fixture/free-apply-prune-allow-unprotected.log"
+if grep -q 'label delete bug' \
+  "$github_plan_fixture/free-apply-prune-allow-unprotected.log"; then
   echo "Labels declared in policy must not be deleted."
   exit 1
 fi
 if grep -Eq 'api --method (POST|PUT) repos/acme/project/rulesets' \
-  "$github_plan_fixture/free-apply.log"; then
+  "$github_plan_fixture/free-apply-allow-unprotected.log"; then
   echo "GitHub Free private repositories must not receive a Ruleset."
   exit 1
 fi
@@ -384,6 +401,26 @@ fi
 grep -q 'branches: \[main\]' .github/workflows/zizmor.yml
 grep -q 'target-branch: main' .github/dependabot.yml
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
+uv run python - <<'PY'
+import json
+from pathlib import Path
+
+ruleset = json.loads(Path("policies/rulesets.json").read_text(encoding="utf-8"))
+rules = {rule["type"]: rule.get("parameters", {}) for rule in ruleset["rules"]}
+pull_request = rules["pull_request"]
+checks = {
+    check["context"]
+    for check in rules["required_status_checks"]["required_status_checks"]
+}
+if ruleset["enforcement"] != "active":
+    raise SystemExit("The repository Ruleset must be active.")
+if pull_request["required_approving_review_count"] < 1:
+    raise SystemExit("The repository Ruleset must require approval.")
+if not pull_request["require_code_owner_review"]:
+    raise SystemExit("The repository Ruleset must require CODEOWNER review.")
+if not {"verify", "title", "scan-pr / osv-scan", "audit"} <= checks:
+    raise SystemExit("The repository Ruleset is missing required checks.")
+PY
 if grep -q '"refs/heads/dev"' policies/rulesets.json; then
   echo "The template repository must remain in main-only mode."
   exit 1
