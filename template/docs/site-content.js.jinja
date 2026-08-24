@@ -47,6 +47,9 @@ window.CSARC_SITE_CONTENT = {
     "一般相依新版等待三天；pnpm 另拒絕 publisher trust 降級，已公開漏洞由 OSV 立即通知。",
     "lockfile 保存下載內容雜湊；第三方 Actions 固定完整 commit SHA。",
     "PR 政策包含合法／不合法回歸測資，避免門禁只會顯示綠燈。",
+{% if language in ["python", "python-typescript"] %}
+    "Python CI 會驗證所宣告的精確 .0 下界，以及支援範圍內每個 feature release 的最新 patch；目前支援範圍從 3.12 起。",
+{% endif %}
     "token 與私鑰放 GitHub Secrets／Variables，不提交到 repo 或 .env。",
     "設定腳本先查 GitHub 方案與 Ruleset API；Free private repo 會保留 Ruleset policy，但公開 API 無法建立它，CI 的 governance check 持續告警並在 PR 留言，release 照常執行。",
     "Artifact attestation 在 public repo 預設開啟；若也啟用 PyPI／npm 發布，registry job 會先驗 repository、tag、digest 與 signer workflow，private／internal repo 維持明確 opt-in。",

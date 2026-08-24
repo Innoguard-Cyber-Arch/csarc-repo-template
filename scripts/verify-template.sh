@@ -15,8 +15,8 @@ prime_gitleaks_cache() {
 }
 
 unset VIRTUAL_ENV
-export UV_PYTHON=3.14
-uv sync --locked --python 3.14
+export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
+uv sync --locked --python "$UV_PYTHON"
 uv lock --check
 uv run ruff format --check \
   src/csarc_cli \
@@ -807,6 +807,81 @@ if uv run copier copy --trust --defaults --vcs-ref HEAD \
   exit 1
 fi
 
+# Issue #140: every selectable minimum must generate the exact .0 lower bound
+# plus the latest patch of each supported feature release. Inline and reusable
+# workflows must describe the same runtime set while keeping one required
+# aggregate check.
+for python_minimum in 3.12 3.13 3.14; do
+  for reusable in false true; do
+    fixture_name="python-matrix-${python_minimum//./-}-${reusable}"
+    matrix_fixture="$fixture_root/$fixture_name"
+    copier_args=(
+      --trust --defaults --vcs-ref HEAD
+      --data "project_slug=$fixture_name"
+      --data "package_name=${fixture_name//-/_}"
+      --data code_owner="@Innoguard-Cyber-Arch/template-maintainers"
+      --data python_support_mode=minimum
+      --data "python_min_version=$python_minimum"
+      --data "use_reusable_workflow=$reusable"
+    )
+    if [[ "$reusable" == true ]]; then
+      copier_args+=(
+        --data workflow_ref=1111111111111111111111111111111111111111
+      )
+    fi
+    uv run copier copy "${copier_args[@]}" "$repo_root" "$matrix_fixture"
+
+    expected_ruff="py${python_minimum//./}"
+    grep -q "^requires-python = \">=$python_minimum\"$" \
+      "$matrix_fixture/pyproject.toml"
+    grep -q "^target-version = \"$expected_ruff\"$" \
+      "$matrix_fixture/pyproject.toml"
+    grep -q "^python_version = \"$python_minimum\"$" \
+      "$matrix_fixture/pyproject.toml"
+    uv run python - \
+      "$matrix_fixture/.github/workflows/ci.yml" \
+      "$matrix_fixture/policies/rulesets.json" \
+      "$python_minimum" "$reusable" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+workflow_path, ruleset_path, minimum, reusable_text = sys.argv[1:]
+latest_minor = 14
+minimum_minor = int(minimum.split(".")[1])
+expected = [f"{minimum}.0"] + [
+    f"3.{minor}" for minor in range(minimum_minor, latest_minor + 1)
+]
+workflow = Path(workflow_path).read_text(encoding="utf-8")
+if reusable_text == "true":
+    match = re.search(r"python-versions: >-\n\s+(\[[^\n]+\])", workflow)
+    if match is None:
+        raise SystemExit("Reusable workflow runtime input is missing")
+    actual = json.loads(match.group(1))
+    required_context = "verify / verify"
+else:
+    match = re.search(
+        r"python-version:\n((?:\s+- \"[^\"]+\"\n)+)", workflow
+    )
+    if match is None:
+        raise SystemExit("Inline workflow runtime matrix is missing")
+    actual = re.findall(r'- "([^\"]+)"', match.group(1))
+    required_context = "verify"
+if actual != expected:
+    raise SystemExit(f"Unexpected Python matrix: {actual!r} != {expected!r}")
+ruleset = json.loads(Path(ruleset_path).read_text(encoding="utf-8"))
+checks = next(
+    rule["parameters"]["required_status_checks"]
+    for rule in ruleset["rules"]
+    if rule["type"] == "required_status_checks"
+)
+if required_context not in {check["context"] for check in checks}:
+    raise SystemExit(f"Missing required aggregate check: {required_context}")
+PY
+  done
+done
+
 # Default project: strict global coverage and optional features disabled.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data project_name='Template "Smoke" Test' \
@@ -1069,7 +1144,13 @@ grep -q '^requires-python = ">=3.14,<3.15"$' \
   "$fixture_root/default-project/pyproject.toml"
 grep -q '^target-version = "py314"$' \
   "$fixture_root/default-project/pyproject.toml"
-grep -q 'python-version: "3.14"' \
+grep -q 'python-version:.*$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q -- '- "3.14.0"' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q -- '- "3.14"' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q '^    needs: runtime$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q '^  governance:$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
@@ -1509,6 +1590,8 @@ grep -q 'reusable-ci.yml@1111111111111111111111111111111111111111' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
 grep -q 'language-profile: "python-typescript"' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
+grep -q '\["3.14.0", "3.14"\]' \
+  "$fixture_root/all-features-project/.github/workflows/ci.yml"
 grep -q 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 test "$(grep -c \
@@ -1597,10 +1680,10 @@ grep -q '^requires-python = ">=3.12"$' \
   "$fixture_root/existing-project/pyproject.toml"
 grep -q '^target-version = "py312"$' \
   "$fixture_root/existing-project/pyproject.toml"
-grep -q 'python-version: "3.12"' \
-  "$fixture_root/existing-project/.github/workflows/ci.yml"
-grep -q 'python-version: "3.14"' \
-  "$fixture_root/existing-project/.github/workflows/ci.yml"
+for expected_python in 3.12.0 3.12 3.13 3.14; do
+  grep -q -- "- \"$expected_python\"" \
+    "$fixture_root/existing-project/.github/workflows/ci.yml"
+done
 
 git -C "$fixture_root/existing-project" init -b main
 git -C "$fixture_root/existing-project" config user.name "Template Test"
@@ -1624,14 +1707,12 @@ if ! grep -qF \
 fi
 (
   cd "$fixture_root/existing-project"
-  CSARC_PYTHON_VERSION=3.12 \
-    UV_PROJECT_ENVIRONMENT=.venv-minimum \
-    DIFF_COVER_COMPARE_BRANCH=HEAD \
-    ./scripts/verify
-  CSARC_PYTHON_VERSION=3.14 \
-    UV_PROJECT_ENVIRONMENT=.venv-latest \
-    DIFF_COVER_COMPARE_BRANCH=HEAD \
-    ./scripts/verify
+  for python_runtime in 3.12.0 3.12 3.13 3.14; do
+    CSARC_PYTHON_VERSION="$python_runtime" \
+      UV_PROJECT_ENVIRONMENT=".venv-$python_runtime" \
+      DIFF_COVER_COMPARE_BRANCH=HEAD \
+      ./scripts/verify
+  done
 )
 
 # Adoption must never replace existing product manifests.
