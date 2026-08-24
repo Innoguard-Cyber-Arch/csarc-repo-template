@@ -23,11 +23,13 @@ uv run ruff format --check \
   src/csarc_cli \
   tests/test_cli.py \
   tests/test_milestone_lifecycle.py \
+  tests/test_delivery_sync.py \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
   tests/test_release_consumption.py \
   tests/test_render_site.py \
   scripts/report_dependency_ceiling.py \
+  scripts/delivery_sync.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
   scripts/release_policy.py \
@@ -40,11 +42,13 @@ uv run ruff check \
   src/csarc_cli \
   tests/test_cli.py \
   tests/test_milestone_lifecycle.py \
+  tests/test_delivery_sync.py \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
   tests/test_release_consumption.py \
   tests/test_render_site.py \
   scripts/report_dependency_ceiling.py \
+  scripts/delivery_sync.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
   scripts/release_policy.py \
@@ -56,6 +60,7 @@ uv run ruff check \
 uv run mypy \
   src/csarc_cli \
   scripts/report_dependency_ceiling.py \
+  scripts/delivery_sync.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
   scripts/release_policy.py \
@@ -262,7 +267,7 @@ case "$2" in
       printf '[]\n'
       exit 0
     fi
-    printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_approving_review_count":1,"required_review_thread_resolution":true}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"governance"},{"context":"verify"},{"context":"title"},{"context":"scan-pr / osv-scan"},{"context":"audit"}]}}]'
+    printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_approving_review_count":1,"required_review_thread_resolution":true}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"governance"},{"context":"delivery-sync"},{"context":"verify"},{"context":"title"},{"context":"scan-pr / osv-scan"},{"context":"audit"}]}}]'
     ;;
   *)
     echo "Unexpected gh API path: $2" >&2
@@ -592,7 +597,7 @@ if ! uv pip install \
 fi
 uv pip check --python "$lower_bounds_root/.venv/bin/python"
 if ! "$lower_bounds_root/.venv/bin/python" -m pytest \
-  tests/test_milestone_lifecycle.py tests/test_release_policy.py \
+  tests/test_delivery_sync.py tests/test_milestone_lifecycle.py tests/test_release_policy.py \
   tests/test_spec_to_issue.py; then
   echo "Root tests fail with the declared direct dependency lower bounds."
   exit 1
@@ -944,7 +949,14 @@ if pull_request["required_approving_review_count"] < 1:
     raise SystemExit("The repository Ruleset must require approval.")
 if not pull_request["require_code_owner_review"]:
     raise SystemExit("The repository Ruleset must require CODEOWNER review.")
-if not {"governance", "verify", "title", "scan-pr / osv-scan", "audit"} <= checks:
+if not {
+    "delivery-sync",
+    "governance",
+    "verify",
+    "title",
+    "scan-pr / osv-scan",
+    "audit",
+} <= checks:
     raise SystemExit("The repository Ruleset is missing required checks.")
 PY
 grep -q '"refs/heads/dev/\*"' policies/rulesets.json
@@ -1290,6 +1302,8 @@ grep -q 'Free organization＋private' \
 grep -q 'DEGRADED' \
   "$fixture_root/default-project/README.md"
 grep -q '"context": "verify"' \
+  "$fixture_root/default-project/policies/rulesets.json"
+grep -q '"context": "delivery-sync"' \
   "$fixture_root/default-project/policies/rulesets.json"
 grep -q '"context": "scan-pr / osv-scan"' \
   "$fixture_root/default-project/policies/rulesets.json"

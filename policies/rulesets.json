@@ -29,6 +29,7 @@
         "strict_required_status_checks_policy": true,
         "required_status_checks": [
           {"context": "governance"},
+          {"context": "delivery-sync"},
           {"context": "verify"},
           {"context": "title"},
           {"context": "scan-pr / osv-scan"},
