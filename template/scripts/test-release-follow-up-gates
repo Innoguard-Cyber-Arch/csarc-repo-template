@@ -63,6 +63,7 @@ for workflow in \
   "$repo_root/.github/workflows/promotion.yml" \
   "$repo_root/.github/workflows/release-please.yml"; do
   grep -Fq '.merge_commit_sha == $sha' "$workflow"
+  grep -Fq 'commits/$GITHUB_SHA/pulls?per_page=100' "$workflow"
   grep -Fq 'pulls/$pr_number/files?per_page=100' "$workflow"
   grep -Fq 'git archive "$base_sha"' "$workflow"
   grep -Fq '"$trusted_root/scripts/release_policy.py" verify-release-follow-up' "$workflow"
@@ -86,8 +87,13 @@ cat > "$fixture/bin/gh" <<'SH'
 set -euo pipefail
 
 case "$*" in
-  *"/commits/"*"/pulls")
-    printf '%s\n' "$MOCK_PULL_REQUESTS"
+  *"/commits/"*"/pulls?per_page=100"*)
+    [[ "$*" == *"--paginate"* && "$*" == *"--slurp"* ]]
+    if [[ -n "${MOCK_PULL_REQUEST_PAGES:-}" ]]; then
+      printf '%s\n' "$MOCK_PULL_REQUEST_PAGES"
+    else
+      jq -cn --argjson page "$MOCK_PULL_REQUESTS" '[$page]'
+    fi
     ;;
   *"/pulls/"*"/files?per_page=100"*)
     [[ "$*" == *"--paginate"* && "$*" == *"--slurp"* ]]
@@ -177,12 +183,14 @@ run_gate() {
   local pull_requests="$2"
   local changed_files="$3"
   local expected_file_count="${4:-}"
+  local pull_request_pages="${5:-}"
   local runner_temp="$repo/runner-temp"
   mkdir -p "$runner_temp"
   (
     cd "$repo"
     PATH="$fixture/bin:$PATH" \
       MOCK_PULL_REQUESTS="$pull_requests" \
+      MOCK_PULL_REQUEST_PAGES="$pull_request_pages" \
       MOCK_CHANGED_FILES="$changed_files" \
       MOCK_FILE_COUNT_OVERRIDE="$expected_file_count" \
       GITHUB_REPOSITORY="owner/repo" \
@@ -216,12 +224,14 @@ run_premerge_gate() {
 run_release_gate() {
   local repo="$1"
   local pull_requests="$2"
+  local pull_request_pages="${3:-}"
   local runner_temp="$repo/release-runner-temp"
   mkdir -p "$runner_temp"
   (
     cd "$repo"
     PATH="$fixture/bin:$PATH" \
       MOCK_PULL_REQUESTS="$pull_requests" \
+      MOCK_PULL_REQUEST_PAGES="$pull_request_pages" \
       MOCK_CHANGED_FILES="CHANGELOG.md" \
       GITHUB_REPOSITORY="owner/repo" \
       GITHUB_SHA="$(git rev-parse HEAD)" \
@@ -272,6 +282,26 @@ if run_gate "$test_repo" "$ambiguous" "CHANGELOG.md" >/dev/null 2>&1; then
 fi
 if run_release_gate "$test_repo" "$ambiguous" >/dev/null 2>&1; then
   echo "Release source gate accepted ambiguous exact source PRs." >&2
+  exit 1
+fi
+
+first_page="$(jq -cn --argjson exact "$single_pr" '$exact + [range(29) | {}]')"
+second_page="$(pull_request_json "$base_sha" "$head_sha" 43)"
+paginated_ambiguous="$(
+  jq -cn \
+    --argjson first "$first_page" \
+    --argjson second "$second_page" \
+    '[$first, $second]'
+)"
+if run_gate \
+  "$test_repo" "$single_pr" "CHANGELOG.md" "" "$paginated_ambiguous" \
+  >/dev/null 2>&1; then
+  echo "Post-merge gate ignored an exact source PR on page two." >&2
+  exit 1
+fi
+if run_release_gate \
+  "$test_repo" "$single_pr" "$paginated_ambiguous" >/dev/null 2>&1; then
+  echo "Release source gate ignored an exact source PR on page two." >&2
   exit 1
 fi
 

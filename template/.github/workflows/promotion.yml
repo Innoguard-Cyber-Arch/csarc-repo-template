@@ -191,11 +191,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           pull_requests="$(
-            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls"
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls?per_page=100"
           )"
           pull_request_count="$(
             jq --arg sha "$GITHUB_SHA" \
-              '[.[] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)] | length' \
+              '[.[][] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)] | length' \
               <<<"$pull_requests"
           )"
           [[ "$pull_request_count" == "1" ]] || {
@@ -204,7 +205,7 @@ jobs:
           }
           pull_request="$(
             jq -c --arg sha "$GITHUB_SHA" \
-              '[.[] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)][0]' \
+              '[.[][] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)][0]' \
               <<<"$pull_requests"
           )"
           head_ref="$(jq -r .head.ref <<<"$pull_request")"
