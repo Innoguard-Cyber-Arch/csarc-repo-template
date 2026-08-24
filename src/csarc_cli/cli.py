@@ -1967,7 +1967,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
     with tempfile.TemporaryDirectory(prefix="csarc-plan-") as temporary:
         stage = Path(temporary) / "project"
         stage.mkdir()
-        copier_copy(source, revision, stage, data)
+        copier_copy(revision.source, revision, stage, data)
         answers = read_copier_answers(stage / ".copier-answers.yml")
         file_plan = compare_stage(stage, target, adopt=mode == "adopt")
         capabilities = capability_preflight(
@@ -2014,7 +2014,15 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                     revision,
                     repository,
                     target / ".copier-answers.yml",
-                    file_plan.add,
+                    tuple(
+                        sorted(
+                            set(file_plan.add)
+                            | (
+                                set(file_plan.preserve)
+                                & set(project_files(stage))
+                            )
+                        )
+                    ),
                     (*file_plan.manual, *file_plan.unknown),
                 ),
             )

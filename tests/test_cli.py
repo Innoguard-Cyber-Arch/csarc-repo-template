@@ -147,6 +147,12 @@ def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
     source, first_sha = make_template(tmp_path)
     project = tmp_path / "pending-product"
     project.mkdir()
+    write_executable(
+        project / "scripts" / "verify",
+        (source / "template" / "scripts" / "verify").read_text(
+            encoding="utf-8"
+        ),
+    )
     (project / "pyproject.toml").write_text(
         '[project]\nname = "pending-product"\nversion = "0.1.0"\n',
         encoding="utf-8",
@@ -718,6 +724,24 @@ def test_adopt_finalize_rejects_source_and_managed_file_drift(
 
     assert main(["adopt", str(project), "--finalize", "--yes"]) == 2
     assert "Managed adoption file drifted" in capsys.readouterr().err
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+def test_adopt_finalize_rejects_preserved_managed_file_drift(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Fingerprint template-managed files that adoption preserved."""
+    _, project = initialize_pending_adoption(tmp_path)
+    write_executable(
+        project / "scripts" / "verify",
+        "#!/usr/bin/env bash\nexit 0\n",
+    )
+
+    assert main(["adopt", str(project), "--finalize", "--yes"]) == 2
+    assert "Managed adoption file drifted: scripts/verify" in (
+        capsys.readouterr().err
+    )
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
     assert not (project / cli.PROVENANCE_FILE).exists()
 
@@ -1347,6 +1371,50 @@ def test_release_trust_failures_stop_before_copy(
     assert main(["init", str(target), "--dry-run"]) == 2
     assert not called
     assert not target.exists()
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        cli.CANONICAL_SOURCE.removesuffix(".git"),
+        f"{cli.CANONICAL_SOURCE}/",
+    ],
+)
+def test_copy_uses_resolved_canonical_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source: str,
+) -> None:
+    """Give Copier one canonical spelling for every approved source alias."""
+    copied_source: str | None = None
+
+    def copied(
+        actual_source: str,
+        revision: cli.Revision,
+        stage: Path,
+        data: dict[str, str],
+    ) -> None:
+        del revision, stage, data
+        nonlocal copied_source
+        copied_source = actual_source
+        raise CliError("fixture stop after source capture")
+
+    monkeypatch.setattr(cli, "GhReleaseClient", FakeReleaseClient)
+    monkeypatch.setattr(cli, "copier_copy", copied)
+
+    assert (
+        main(
+            [
+                "init",
+                str(tmp_path / "canonical-source"),
+                "--source",
+                source,
+                "--dry-run",
+            ]
+        )
+        == 2
+    )
+    assert copied_source == cli.CANONICAL_SOURCE
 
 
 def test_gh_client_dereferences_annotated_tags(
