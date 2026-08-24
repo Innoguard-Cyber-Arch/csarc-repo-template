@@ -1127,6 +1127,9 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "--allow-unreleased",
         "--data",
         "language=ci",
+        "--data",
+        "security_reporting_channel=Use the synthetic fixture's "
+        "private reporting channel.",
     ]
 
     assert main([*arguments, "--dry-run"]) == 0
