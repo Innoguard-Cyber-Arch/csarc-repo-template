@@ -1480,7 +1480,7 @@
         <h1><code>csarc-repo-template</code></h1>
         <p class="subtitle">Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。</p>
         <div class="package-badges" aria-label="套件狀態">
-          <span class="package-badge beta">v0.6.1</span><!-- x-release-please-version -->
+          <span class="package-badge beta">v0.8.2</span><!-- x-release-please-version -->
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">CI-only／Python／TypeScript／兩者</span>
           <span class="package-badge">main-only 預設／dev 可選</span>
@@ -1675,10 +1675,11 @@
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
           <details class="package-disclosure"><summary><span>預設 <span class="tech-name">spec → Issue</span>；明確 story 才同步 Milestone</span></summary><div class="package-health"><p><strong>目前：</strong><code>docs/specs/</code> 經 CI 驗證；預設 idempotently 建立或更新單一 Issue，只有 frontmatter 明列 <code>tracking: story</code> 才建立或更新 Milestone，不自動拆 child Issues。</p><p><strong>生命週期：</strong>最後一張 open Issue 關閉且所有 acceptance checkbox 已勾選時才關閉 Milestone；Issue reopen、open Issue 掛入或 criterion 取消勾選時重開。每次都讀最新 API 狀態並以 Milestone number 序列化。</p><p><strong>Spec Kit：</strong><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">github/spec-kit</a>｜MIT｜公開、未封存、持續維護。</p></div></details>
-          <p class="recommendation-copy"><strong>Story：</strong>Milestone description 填 Problem、Outcome、Acceptance criteria、Out of scope、Verification 與來源；只掛直接推進成果的 Issues，不重複掛 PR。<br><strong>Issue：</strong>12–80 個英文 ASCII 字元、至少三個詞；standalone 工作可不掛 Milestone，必要 fix 可加入既有 open story。<br><strong>既有 repo：</strong>分頁唯讀盤點、小批提出候選分群與排除項目，經人確認才 idempotently 套用；不靠標題或 label 自動判斷。</p>
+          <details class="package-disclosure"><summary><span>預設 <span class="tech-name">spec → Issue</span>；明確 story 才同步 Milestone</span></summary><div class="package-health"><p><strong>目前：</strong><code>docs/specs/</code> 經 CI 驗證；預設 idempotently 建立或更新單一 Issue，只有 frontmatter 明列 <code>tracking: story</code> 才建立或更新 Milestone，不自動拆 child Issues。</p><p><strong>生命週期：</strong>最後一張 open Issue 關閉且所有 acceptance checkbox 已勾選時才關閉 Milestone；Issue reopen、open Issue 掛入或 criterion 取消勾選時重開。每次都讀最新 API 狀態並以 Milestone number 序列化。</p><p><strong>Spec Kit：</strong><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">github/spec-kit</a>｜MIT｜公開、未封存、持續維護。</p></div></details>
+          <p class="recommendation-copy"><strong>Story：</strong>Milestone description 填 Problem、Outcome、Acceptance criteria、Out of scope、Verification、Related decisions 與來源；只掛直接推進成果的 Issues，不重複掛 PR。<br><strong>Issue：</strong>12–80 個英文 ASCII 字元、至少三個詞；建立前以 2–4 個問題或技術詞限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR。能互動時先向使用者摘要；已獲准直接建立時，在補充記錄舊決策是沿用、取代或駁回及理由，沒有候選則記錄搜尋範圍。<br><strong>既有 repo：</strong>分頁唯讀盤點、小批提出候選分群與排除項目，經人確認才 idempotently 套用；不靠標題或 label 自動判斷。</p>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>Story 結構：</strong><code>docs/milestone-description.md</code>；agent 先查 open Milestones，再選沿用、新建或 standalone</li><li><strong>Spec 同步：</strong><code>scripts/spec_to_issue.py</code>；預設 Issue，<code>tracking: story</code> 才同步 Milestone</li><li><strong>自動收尾：</strong><code>milestone-lifecycle.yml</code> 依最新 open issue 數關閉或重開</li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>決策前置：</strong><code>AGENTS.md</code> 要求先查 open Milestones，再以 bounded search 搜尋 open／closed Issues 並揭露沿用或推翻理由</li><li><strong>Story 結構：</strong><code>docs/milestone-description.md</code>；保留可稽核的 Related decisions</li><li><strong>Spec 同步：</strong><code>scripts/spec_to_issue.py</code>；預設 Issue，<code>tracking: story</code> 才同步 Milestone</li><li><strong>自動收尾：</strong><code>milestone-lifecycle.yml</code> 依最新 open issue 數關閉或重開</li></ul></aside>
       <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/managing-issue-types-in-an-organization" target="_blank" rel="noreferrer">GitHub issue types</a>; <a href="https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-issue-forms" target="_blank" rel="noreferrer">Issue Forms syntax</a>; <a href="https://docs.github.com/en/issues/using-labels-and-milestones-to-track-work/managing-labels" target="_blank" rel="noreferrer">GitHub labels</a>; <a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a>. Accessed August 23, 2026.</p>
     </section>
 
@@ -1716,7 +1717,9 @@
           <h3>中央共用更新規則（preset）是什麼？</h3>
           <p class="term-overlay-copy"><strong>白話說：</strong>把套件更新規則放在一個共用設定；其他 repo 只要寫「沿用這套規則」，之後改一次就能同步等待天數、排程與分組。</p>
           <p class="term-overlay-copy"><strong>何時需要：</strong>repo 變多、各專案設定開始不一致，或 Dependabot 已無法表達共同規則時。</p>
-          <p class="term-overlay-copy"><strong>目前決定：</strong>保留 Dependabot 與既有 CI/CD checks。自架 Renovate 的 <code>GITHUB_TOKEN</code> 不能建立可正常觸發所有必要檢查的 PR；Mend Renovate App 又要求 organization members 與 repository administration 權限。為避免每個導入者依賴更高權限的人或長效 PAT，公版不導入 preset。只有 Dependabot 已無法表達實際跨 repo 政策，而且已有可維護的 automation identity 時才重評。</p>
+          <p class="term-overlay-copy"><strong>目前決定：</strong>預設保留 Dependabot 與既有 CI/CD checks。自架 Renovate 的 <code>GITHUB_TOKEN</code> 不能建立可正常觸發所有必要檢查的 PR；Mend Renovate App 又要求 organization members read、repository administration read 與 workflow／content／PR write。只有 Dependabot 已無法表達實際跨 repo 政策時才考慮選配安裝。</p>
+          <table class="release-policy-matrix" aria-label="Optional integration capability matrix"><thead><tr><th>preflight 狀態</th><th>誰會看到</th><th>下一步</th></tr></thead><tbody><tr><td><code>available</code></td><td>personal repo owner，或同時具 repo admin 的 organization owner</td><td>開啟 <a href="https://github.com/apps/renovate/installations/new" target="_blank" rel="noreferrer">Renovate App 安裝頁</a>，檢查 GitHub 顯示的權限並只選目標 repo；CLI 不代為同意或安裝</td></tr><tr><td><code>request-owner</code></td><td>有 repo admin、但不是 account／organization owner</td><td>把同一安裝入口交給 owner 核准；等待期間保留 Dependabot</td></tr><tr><td><code>fallback</code></td><td>無 admin、權限未知、API 失敗或尚無 GitHub origin</td><td>不假設可安裝，繼續使用 Dependabot 與 required CI/CD checks；推送遠端後可重跑 preflight</td></tr></tbody></table>
+          <p class="term-overlay-copy"><strong>導入時檢查：</strong><code>csarc init</code>／<code>adopt</code>／<code>update</code> 會在 origin 可讀時查 owner 類型、repo admin 與 organization membership。新 repo 尚未有 origin 時可先設定 <code>GH_REPO=owner/repo</code>，推送後也能執行 <code>python scripts/release_policy.py preflight --repo owner/repo</code> 重查；整段只讀，不要求長效廣域 PAT。</p>
         </div>
       </aside>
     </section>

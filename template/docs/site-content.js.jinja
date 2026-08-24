@@ -34,7 +34,7 @@ window.CSARC_SITE_CONTENT = {
     { path: "docs/site-content.js", purpose: "本網站的專案內容", owner: "專案維護" }
   ],
   workflow: [
-    { title: "1｜定義工作", detail: "Issue 用 12–80 字元英文標題摘要成果；選一個分類並填寫問題與完成條件。bug／enhancement／documentation 會在可用時同步成 Bug／Feature／Task。" },
+    { title: "1｜定義工作", detail: "先限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR；向使用者摘要，或在新工作單記錄既有決策是沿用、取代或駁回。Issue 再以 12–80 字元英文標題摘要成果。" },
     { title: "2｜分支與實作", detail: "從 {{ branch_strategy }} 或最終回到它的 open PR 分支建立 type/<Issue 編號>-簡稱；若超出原單就另開 Issue。確認 duplicate 時連結 canonical Issue 並用原生 Duplicate 原因關閉，純 triage 不需 PR。" },
     { title: "3｜驗證", detail: "本機執行 ./scripts/verify，PR 由 CI 重跑同一入口。" },
     { title: "4｜審查", detail: "PR 連回 Issue、完成精簡清單，並依 Conventional Commit title 恰選 bug／enhancement／documentation；PR 使用 Markdown template，不假造 Issue Type。" },
@@ -52,6 +52,7 @@ window.CSARC_SITE_CONTENT = {
 {% endif %}
     "token 與私鑰放 GitHub Secrets／Variables，不提交到 repo 或 .env。",
     "設定腳本先查 GitHub 方案與 Ruleset API；Free private repo 會保留 Ruleset policy，但公開 API 無法建立它，CI 的 governance check 持續告警並在 PR 留言，release 照常執行。",
+    "導入 preflight 會把 Renovate 標成 available、request-owner 或 fallback；只有 account／organization owner 可進入 GitHub 同意頁並只選本 repo，其餘狀況保留 Dependabot 與既有 CI/CD。",
     "Artifact attestation 在 public repo 預設開啟；若也啟用 PyPI／npm 發布，registry job 會先驗 repository、tag、digest 與 signer workflow，private／internal repo 維持明確 opt-in。",
   ],
   release: {

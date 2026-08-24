@@ -17,3 +17,7 @@
    review.
 8. Do not apply repository settings, change global agent configuration, push,
    open a pull request, or merge unless the user separately requests it.
+9. During handoff, point out that the installed `AGENTS.md` requires a bounded
+   search of open and closed Issues before creating an Issue or Milestone, and
+   requires prior decisions and any reversal rationale to remain in the new
+   work item.

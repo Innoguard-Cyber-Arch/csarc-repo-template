@@ -9,18 +9,19 @@
 
 ## Working loop
 
-1. Before planning or opening an Issue, list open Milestones and read their descriptions and open Issues. Reuse an open story Milestone only when this work directly advances its acceptance criteria; otherwise create a new story Milestone or leave the Issue standalone.
+1. Before planning or opening an Issue or Milestone, list open Milestones and open Issues, then search open and closed Issues with two to four concrete problem or technology terms. Inspect the body, comments, and linked pull requests of credible matches; titles and labels alone are not decisions. Keep each query bounded to 20 candidates.
 2. A Milestone is an optional, independently verifiable story outcome containing one or more Issues. It is not required for every Issue, is not selected by Issue count, and must not also contain linked PRs. A spec is only one possible story source. Use `docs/milestone-description.md` for its description.
-3. Open or select one GitHub Issue before editing; use its acceptance criteria as the scope boundary. Write the Issue title in 12-80 ASCII characters and at least three words; describe the outcome without a type prefix or trailing period. Add it to the selected Milestone with GitHub's native association; necessary follow-up fixes may join the same open Milestone.
-4. If new work exceeds that Issue, stop and open a separate Issue; do not silently widen the current branch or pull request.
-5. Start from `{{ branch_strategy }}`, or from an open work branch whose pull request chain ends at `{{ branch_strategy }}`, and name the branch `type/<issue-number>-short-slug`.
-6. Inspect nearby code, tests, and configuration before choosing an implementation.
-7. Make the smallest coherent change; preserve unrelated work and project-owned source files.
-8. Add or update the narrowest regression test that proves non-trivial behavior.
-9. Run targeted checks while iterating, then run `./scripts/verify` before opening or updating a pull request.
-10. Before closing the final open Issue in a Milestone, re-check the story acceptance criteria, mark every verified item complete, and add any genuinely required follow-up Issue. The lifecycle workflow closes a zero-open-Issue Milestone only when every acceptance checkbox is checked, and reopens it when open work or an unchecked criterion returns.
-11. Open the pull request against `{{ branch_strategy }}` or its immediate parent in the stack, include `Closes #<issue-number>`, and never merge it yourself.
-12. Report the changed behavior, verification evidence, and any remaining limitation.
+3. Before creating the work item, present a short prior-decision summary when the user can respond. If creation is already authorized, record each relevant `#N` as preserved, superseded, or rejected with a reason in the Issue supplement or Milestone `Related decisions`; when none are found, record the bounded queries used. Never silently reverse an earlier decision.
+4. Open or select one GitHub Issue before editing; use its acceptance criteria as the scope boundary. Write the Issue title in 12-80 ASCII characters and at least three words; describe the outcome without a type prefix or trailing period. Add it to the selected Milestone with GitHub's native association; necessary follow-up fixes may join the same open Milestone.
+5. If new work exceeds that Issue, stop and open a separate Issue; do not silently widen the current branch or pull request.
+6. Start from `{{ branch_strategy }}`, or from an open work branch whose pull request chain ends at `{{ branch_strategy }}`, and name the branch `type/<issue-number>-short-slug`.
+7. Inspect nearby code, tests, and configuration before choosing an implementation.
+8. Make the smallest coherent change; preserve unrelated work and project-owned source files.
+9. Add or update the narrowest regression test that proves non-trivial behavior.
+10. Run targeted checks while iterating, then run `./scripts/verify` before opening or updating a pull request.
+11. Before closing the final open Issue in a Milestone, re-check the story acceptance criteria, mark every verified item complete, and add any genuinely required follow-up Issue. The lifecycle workflow closes a zero-open-Issue Milestone only when every acceptance checkbox is checked, and reopens it when open work or an unchecked criterion returns.
+12. Open the pull request against `{{ branch_strategy }}` or its immediate parent in the stack, include `Closes #<issue-number>`, and never merge it yourself.
+13. Report the changed behavior, verification evidence, and any remaining limitation.
 
 Parallel writable agents must use one branch and one Git worktree per task, and run concurrently only when their scopes are independent. Detect and reuse a host-managed worktree before creating one; never force the same branch into multiple worktrees, remove a worktree you did not create, or remove one with uncommitted changes. Worktrees isolate files, not integration: every result still follows this repository's pull request, CI, review, and final verification path.
 

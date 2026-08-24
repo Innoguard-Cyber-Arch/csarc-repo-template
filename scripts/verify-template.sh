@@ -620,6 +620,11 @@ grep -q 'pull request chain ends at `main`' AGENTS.md
 grep -q 'against `main` or its immediate parent in the stack' AGENTS.md
 grep -q 'one branch and one Git worktree per task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
+grep -q 'search open and closed Issues' AGENTS.md
+grep -q 'Never silently reverse an earlier decision' AGENTS.md
+grep -q 'Related decisions' docs/milestone-description.md
+grep -q 'bounded' docs/agent-install.md
+grep -q '沿用、取代或駁回' docs/index.html
 required_readme_headings=(
   "專案概述"
   "快速開始"
@@ -694,6 +699,7 @@ grep -q '^    id: kind$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: problem$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: acceptance$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: supplement$' .github/ISSUE_TEMPLATE/work-item.yml
+grep -q '搜尋相關 open／closed Issues' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^        - duplicate$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q 'Validate pull request policy' .github/workflows/pr-policy.yml
 grep -q 'Select exactly one PR label' .github/workflows/pr-policy.yml
@@ -726,6 +732,10 @@ grep -q 'automation: github_dependabot' profiles/catalog.yaml
 grep -q 'stays_independent_of_renovate: true' profiles/catalog.yaml
 grep -q '決定｜保留 Dependabot 與 pnpm 的原生門禁' \
   docs/index.html
+grep -q 'Optional integration capability matrix' docs/index.html
+grep -q 'available.*request-owner.*fallback' docs/index.html
+grep -q 'optional_integration_preflight' scripts/release_policy.py
+grep -q '選配整合依目前權限引導' README.md
 for renovate_config_path in \
   renovate.json renovate.json5 .github/renovate.json .renovaterc.json; do
   test ! -e "$renovate_config_path"
@@ -1009,6 +1019,10 @@ grep -q 'Verification only' \
   "$fixture_root/default-project/docs/index.html"
 grep -q 'apply-repository-settings.sh plan' \
   "$fixture_root/default-project/README.md"
+grep -q 'available.*request-owner.*fallback' \
+  "$fixture_root/default-project/README.md"
+grep -q '導入 preflight 會把 Renovate' \
+  "$fixture_root/default-project/docs/site-content.js"
 uv run python - "$fixture_root/default-project/pyproject.toml" <<'PY'
 import sys
 import tomllib
@@ -1033,6 +1047,8 @@ grep -q 'pull request chain ends at `main`' \
 grep -q 'against `main` or its immediate parent in the stack' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'one branch and one Git worktree per task' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -q 'search open and closed Issues' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'uv run pytest <test-path>' \
   "$fixture_root/default-project/AGENTS.md"
@@ -1123,6 +1139,12 @@ grep -q 'github.event.issue.milestone.number' \
   "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
 grep -q 'docs/milestone-description.md' \
   "$fixture_root/default-project/AGENTS.md"
+grep -q 'Related decisions' \
+  "$fixture_root/default-project/docs/milestone-description.md"
+grep -q '搜尋 open／closed 歷史工作' \
+  "$fixture_root/default-project/docs/index.html"
+grep -q '既有決策是沿用、取代或駁回' \
+  "$fixture_root/default-project/docs/site-content.js"
 grep -q '^# tracking: story$' \
   "$fixture_root/default-project/docs/specs/SPEC-001-example.md"
 test -x "$fixture_root/default-project/scripts/test-issue-triage"

@@ -2,7 +2,7 @@
 
 Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript 或兩者並用。新案、既有案與後續政策更新都經 Copier 形成可審查差異。
 
-目前公版：v0.6.1 <!-- x-release-please-version -->
+目前公版：v0.8.2 <!-- x-release-please-version -->
 
 [開啟內部網站與完整決策說明](docs/index.html)（內部限閱，請勿公開分享此連結；`noindex`／`robots.txt` 只是臨時防護，不是存取控制，詳見網站內「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)）
 
@@ -39,7 +39,7 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；CI 
 
 ## 開發與驗證
 
-交付模型是「可選 Story Milestone → 1..N Issues → 各自 PR」。Milestone 只代表可端到端驗收的成果，不是每張 Issue 的必填分類；SDD、一般規劃、使用者 story 或導入盤點都可能成為來源。description 使用 [`docs/milestone-description.md`](docs/milestone-description.md) 的 Problem、Outcome、Acceptance criteria、Out of scope、Verification 與 Source 結構；PR 不重複掛入 Milestone。最後一張 open Issue 關閉且所有 acceptance checkbox 已確認時，workflow 才會關閉 Milestone；Issue reopen、open Issue 掛入或 criterion 取消勾選時則重開。
+交付模型是「可選 Story Milestone → 1..N Issues → 各自 PR」。Milestone 只代表可端到端驗收的成果，不是每張 Issue 的必填分類；SDD、一般規劃、使用者 story 或導入盤點都可能成為來源。建立 Issue／Milestone 前，agent 會以具體關鍵字限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR，先向使用者摘要；若已獲准直接建立，則在補充或 `Related decisions` 記錄每項決策是沿用、取代或駁回及理由。description 使用 [`docs/milestone-description.md`](docs/milestone-description.md) 的完整結構；PR 不重複掛入 Milestone。最後一張 open Issue 關閉且所有 acceptance checkbox 已確認時，workflow 才會關閉 Milestone；Issue reopen、open Issue 掛入或 criterion 取消勾選時則重開。
 
 1. 簡單工作先開「開發工作」Issue；標題以 12–80 個英文 ASCII 字元及至少三個詞直接描述成果，例如 `Add dependency policy checks`。Issue 不使用 PR 的 Conventional Commit 格式。
 2. 開單者會自動成為負責人，並選一個分類：`bug`、`enhancement`、`documentation` 或 `duplicate`。前三者在 organization 啟用原生 Issue Types 時分別同步成 `Bug`、`Feature`、`Task`；不支援時仍以 label 正常運作。`duplicate` 是結案處置，不是假造的新 Issue Type。
@@ -61,6 +61,7 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；CI 
 
 - **依方案套用設定：**GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。有管理權且希望啟用較強門禁時，可在推送遠端後執行 `./scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 唯讀驗證；這不是 portable release baseline 的必要步驟。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。`apply` 會嘗試設定 Actions 建立 PR；組織政策回覆 403／409 時保留宣告、明確降級並繼續，其餘未知錯誤仍停止。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。
 - **Release 路徑依能力自動選擇：**`csarc init`／`adopt`／`update` 會在 GitHub origin 與 API 可讀時顯示 preflight；每次 release workflow 仍以當下的 `GITHUB_TOKEN` 重測 Actions PR、contents、Release 與 workflow dispatch 能力。四項都確認可用時使用 release-please；PR 被禁止或無法確認但其餘交付能力完整時，direct mode 只接受已由人工 PR 寫入版本與 CHANGELOG 的最新 `main` commit，再建立 tag／draft release 並 dispatch 成品。版本化 commit 尚未存在或其餘交付能力不完整時，只驗證並輸出 `release-capabilities-<run-id>` artifact，不假裝已發版。PR check 只顯示 patch／minor／major／no-release 意圖，確切版本到 main 後才配置。這些路徑都不需要長效 PAT 或額外 GitHub App；`python-version-policy.yml` 的排程升版 PR 仍需要專用 App，未提供時略過。
+- **選配整合依目前權限引導：**同一個唯讀 preflight 會辨識 personal／organization owner、目前 actor 的 repo admin 與 organization owner 狀態，並把 Renovate 標成 `available`、`request-owner` 或 `fallback`。`available` 只代表可以開啟 [Renovate App 安裝頁](https://github.com/apps/renovate/installations/new) 並由 GitHub 顯示權限、取得同意；請只選本 repo。organization member 即使有 repo admin，仍因 App 要求 organization members read 與 repository administration read 而顯示 `request-owner`。未知權限、API 失敗或無 admin 一律 `fallback`，繼續使用 Dependabot 與既有 CI/CD；CLI 不會靜默安裝 App，也不要求長效廣域 PAT。新 repo 尚未有 origin 時，先設定 `GH_REPO=owner/repo` 即可在 `csarc init` 階段檢查預定目標。
 - **每日排程偵測治理漂移：**`apply-repository-settings.sh check` 原本只在 PR／push 觸發的 CI 裡執行，是一次性快照；`.github/workflows/governance-drift.yml`（daily cron，另可手動 `workflow_dispatch`）在 CI 之外每天重跑同一個 `check`，縮短只靠程式碼變更觸發檢查的盲區，並抓出排程執行時仍存在的偏離。偵測到偏離就由 `scripts/check-governance-drift` 自動開立或更新一張 `Repository governance drift detected` Issue，內容附上實際擷取到的差異；沒有偏離則不會建立或更新任何 Issue。若設定在兩次快照之間遭變更後又恢復，這個排程無法回溯偵測，仍需 GitHub audit log 或組織層事件監控。下發專案可在 Copier 問答啟用 `enable_governance_drift_check`（預設關閉）選配同一檢查。
 - **線上整合證據：**`./scripts/verify-template.sh` 只證明靜態與合成驗證；root-only `Live integration smoke` 才會在本 repo 實際 dispatch OSV、Release Please、release handoff 與 governance drift，並為每項能力保存 JSON artifact。`Release consumption verification` 另會下載真正的 CLI wheel，驗證 immutable Release 的簽章、repository identity 與 artifact digest，再確認竄改內容會 fail closed。執行方式與邊界見 [`docs/live-integration.md`](docs/live-integration.md)及 [`docs/artifact-consumption.md`](docs/artifact-consumption.md)。
 - **來源證明依可見度決定預設值：**Copier 問答新增 `project_visibility`（public／private／internal）；建立非 CI-only 專案且選擇 public 時，`enable_release_attestations` 預設開啟，自動產生 `actions/attest` provenance／SBOM attestation，`publish-evidence` job 也會拿到對應的 `id-token: write`／`attestations: write`。若同時啟用 PyPI 或 npm 發布，對應 job 會在再發布前以 `gh attestation verify` 強制比對 repository、tag ref、artifact digest 與 signer workflow；產生 attestation 與強制驗證是兩個不同狀態。private／internal 維持明確 opt-in、預設關閉；此預設值只在 Copier 建檔當下生效，不會回頭偵測或變更既有 repo 的可見度。

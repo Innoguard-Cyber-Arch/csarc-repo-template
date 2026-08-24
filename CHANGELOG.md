@@ -3,17 +3,39 @@
 本檔案由 release-please 依合併到 `main` 的 Conventional Commits 維護。2026-08-24
 以前的版本依既有 tags、合併紀錄與 GitHub Release notes 回填；`v0.1.0`、
 `v0.2.0`、`v0.2.1` 是 tag-only 歷史版本，沒有可驗證的正式 Release 成品。
-`v0.2.2`～`v0.6.0` 的正式成品版本與 tag 一致，但 tagged source 的版本欄位
-仍停在 `0.1.0`；從 `v0.6.1` 起改為只發布已在 source commit 完整寫入版本與
+`v0.2.2`～`v0.8.1` 的正式成品版本與 tag 一致，但 tagged source 的版本欄位
+仍停在 `0.1.0`；從 `v0.8.2` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
-## [0.6.1] - 2026-08-24
+## [0.8.2] - 2026-08-24
 
 ### Fixed
 
 - 將公版 source、tag、CHANGELOG、文件與成品納入同一個 fail-closed 版本契約，
   並依可驗證紀錄補正 release 與 Milestone 歷史
   ([#151](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/151))。
+
+## [0.8.1] - 2026-08-24
+
+### Fixed
+
+- 要求完成 Milestone acceptance criteria 後才能自動關閉
+  ([#152](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/152))。
+
+## [0.8.0] - 2026-08-24
+
+### Added
+
+- 在建立工作前搜尋並保留既有決策脈絡
+  ([#147](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/147))。
+
+## [0.7.0] - 2026-08-24
+
+### Added
+
+- 依 repository 與 organization 權限引導選配整合安裝，並保留 Dependabot
+  與既有 CI/CD 作為 fallback
+  ([#156](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/156))。
 
 ## [0.6.0] - 2026-08-24
 
@@ -103,7 +125,10 @@ CHANGELOG 的 tag。
 
 - 建立第一個可追蹤的公版基線與 artifact／SBOM 完整性檢查。
 
-[0.6.1]: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.6.0...v0.6.1
+[0.8.2]: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.8.1...v0.8.2
+[0.8.1]: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.3.1...v0.4.0
