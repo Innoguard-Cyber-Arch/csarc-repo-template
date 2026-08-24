@@ -91,6 +91,7 @@ bash -n scripts/check-governance-drift
 bash -n template/scripts/check-governance-drift
 grep -q 'repository、Actions、政策標籤與有效 Ruleset' README.md
 grep -q 'policy labels, and effective Rulesets' docs/agent-install.md
+grep -q 'Administration read access' docs/agent-install.md
 grep -q 'repository、Actions、政策標籤與有效 Ruleset' docs/index.html
 bash -n scripts/run-live-workflow-probe
 bash -n scripts/test-pr-policy
@@ -196,15 +197,21 @@ case "$2" in
     ;;
   repos/acme/project)
     if [[ "$*" == *"--jq"* ]]; then
-      printf 'acme\tOrganization\t%s\ttrue\tmain\n' "$MOCK_GITHUB_VISIBILITY"
+      printf 'acme\tOrganization\t%s\t%s\tmain\n' \
+        "$MOCK_GITHUB_VISIBILITY" "${MOCK_REPO_ADMIN:-true}"
     elif [[ "${MOCK_REPOSITORY_STATE:-match}" == "mismatch" ]]; then
       printf '%s\n' '{"owner":{"login":"acme","type":"Organization"},"visibility":"private","permissions":{"admin":true},"default_branch":"main","allow_auto_merge":false,"allow_merge_commit":false,"allow_rebase_merge":false,"allow_squash_merge":true,"delete_branch_on_merge":true,"has_issues":true,"has_projects":false,"has_wiki":true}'
+    elif [[ "${MOCK_REPOSITORY_STATE:-match}" == "limited" ]]; then
+      printf '%s\n' '{"owner":{"login":"acme","type":"Organization"},"visibility":"private","permissions":{"admin":false},"default_branch":"main","has_issues":true,"has_projects":false,"has_wiki":false}'
     else
       printf '%s\n' '{"owner":{"login":"acme","type":"Organization"},"visibility":"private","permissions":{"admin":true},"default_branch":"main","allow_auto_merge":false,"allow_merge_commit":false,"allow_rebase_merge":false,"allow_squash_merge":true,"delete_branch_on_merge":true,"has_issues":true,"has_projects":false,"has_wiki":false}'
     fi
     ;;
   repos/acme/project/actions/permissions/workflow)
-    if [[ "${MOCK_ACTIONS_STATE:-match}" == "error" ]]; then
+    if [[ "${MOCK_ACTIONS_STATE:-match}" == "integration-error" ]]; then
+      echo "Resource not accessible by integration" >&2
+      exit 1
+    elif [[ "${MOCK_ACTIONS_STATE:-match}" == "error" ]]; then
       echo "503 Actions settings unavailable" >&2
       exit 1
     elif [[ "${MOCK_ACTIONS_STATE:-match}" == "default-mismatch" ]]; then
@@ -263,6 +270,7 @@ run_settings_fixture() {
   local repository_state="${9:-match}"
   local actions_state="${10:-match}"
   local labels_state="${11:-match}"
+  local repo_admin="${12:-true}"
   local suffix=""
   local arguments=("$mode")
   if [[ "$prune_labels" == true ]]; then
@@ -290,6 +298,7 @@ run_settings_fixture() {
     MOCK_REPOSITORY_STATE="$repository_state" \
     MOCK_ACTIONS_STATE="$actions_state" \
     MOCK_LABELS_STATE="$labels_state" \
+    MOCK_REPO_ADMIN="$repo_admin" \
     MOCK_GH_LOG="$call_log" \
     ./scripts/apply-repository-settings.sh "${arguments[@]}"
 }
@@ -364,6 +373,11 @@ if actions_unavailable="$(run_settings_fixture team check "" false false protect
 fi
 grep -q 'Cannot inspect Actions workflow permissions' <<<"$actions_unavailable"
 grep -q '503 Actions settings unavailable' <<<"$actions_unavailable"
+limited_token_check="$(run_settings_fixture team check "" false false protected present "" limited integration-error match false)"
+grep -q 'DEGRADED repository inspection: token cannot read administrator-only fields' \
+  <<<"$limited_token_check"
+grep -q 'DEGRADED Actions inspection: token cannot read administrator-only workflow permissions' \
+  <<<"$limited_token_check"
 actions_degraded_check="$(run_settings_fixture team check "" false false protected present "" match degraded)"
 grep -q 'DEGRADED Actions PR policy: desired true, live false' <<<"$actions_degraded_check"
 grep -q 'completed with 1 degraded capability difference' <<<"$actions_degraded_check"
@@ -1187,6 +1201,8 @@ grep -q 'Coverage 是找出未測程式碼的訊號' \
 grep -q 'repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/README.md"
 grep -q 'repository、Actions、政策標籤與有效 Ruleset' \
+  "$fixture_root/default-project/docs/index.html"
+grep -q 'Administration read' \
   "$fixture_root/default-project/docs/index.html"
 grep -q '新案看全域、既有案先看 changed lines' \
   "$fixture_root/default-project/docs/site-content.js"

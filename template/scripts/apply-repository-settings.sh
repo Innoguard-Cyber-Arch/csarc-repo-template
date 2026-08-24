@@ -150,12 +150,16 @@ fi
 if [[ "$mode" == "check" ]]; then
   check_errors=0
   check_degraded=0
+  repository_drift=""
+  repository_state_available=false
 
   if ! repository_state="$(gh api "repos/$repo" 2>&1)"; then
     echo "Cannot inspect repository settings for $repo." >&2
     echo "$repository_state" >&2
     check_errors=$((check_errors + 1))
-  elif ! repository_drift="$(python3 - "$repo_root/policies/repository.json" "$repository_state" 2>&1 <<'PY'
+  else
+    repository_state_available=true
+    if ! repository_drift="$(python3 - "$repo_root/policies/repository.json" "$repository_state" 2>&1 <<'PY'
 import json
 import sys
 
@@ -164,22 +168,52 @@ actual = json.loads(sys.argv[2])
 drift = [
     f"{key}: desired {value!r}, live {actual.get(key)!r}"
     for key, value in desired.items()
-    if actual.get(key) != value
+    if key in actual and actual[key] != value
 ]
 if drift:
     raise SystemExit("; ".join(drift))
 PY
-  )"; then
-    echo "Repository settings drift: $repository_drift" >&2
-    check_errors=$((check_errors + 1))
-  else
-    echo "Repository settings match policies/repository.json."
+    )"; then
+      echo "Repository settings drift: $repository_drift" >&2
+      check_errors=$((check_errors + 1))
+    fi
+  fi
+  if [[ "$repository_state_available" == "true" ]]; then
+    repository_missing="$(python3 - "$repo_root/policies/repository.json" "$repository_state" <<'PY'
+import json
+import sys
+
+desired = json.load(open(sys.argv[1], encoding="utf-8"))
+actual = json.loads(sys.argv[2])
+print(", ".join(key for key in desired if key not in actual))
+PY
+    )"
+    if [[ -n "$repository_missing" ]]; then
+      if [[ "$repo_admin" == "true" ]]; then
+        echo "Cannot observe repository setting fields despite administrator access: $repository_missing" >&2
+        check_errors=$((check_errors + 1))
+      else
+        [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
+          echo "::warning title=Settings inspection degraded::The token cannot read administrator-only repository fields."
+        echo "DEGRADED repository inspection: token cannot read administrator-only fields: $repository_missing"
+        check_degraded=$((check_degraded + 1))
+      fi
+    elif [[ -z "$repository_drift" ]]; then
+      echo "Repository settings match policies/repository.json."
+    fi
   fi
 
   if ! actions_state="$(gh api "repos/$repo/actions/permissions/workflow" 2>&1)"; then
-    echo "Cannot inspect Actions workflow permissions for $repo." >&2
-    echo "$actions_state" >&2
-    check_errors=$((check_errors + 1))
+    if [[ "$repo_admin" != "true" && "$actions_state" == *"Resource not accessible by integration"* ]]; then
+      [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
+        echo "::warning title=Actions inspection degraded::The token cannot read administrator-only Actions settings."
+      echo "DEGRADED Actions inspection: token cannot read administrator-only workflow permissions."
+      check_degraded=$((check_degraded + 1))
+    else
+      echo "Cannot inspect Actions workflow permissions for $repo." >&2
+      echo "$actions_state" >&2
+      check_errors=$((check_errors + 1))
+    fi
   elif ! actions_comparison="$(python3 - "$repo_root/policies/actions.json" "$actions_state" 2>&1 <<'PY'
 import json
 import sys

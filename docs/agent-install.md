@@ -28,4 +28,7 @@
     Copier. Administrators should run `apply-repository-settings.sh` in
     `plan`, `apply`, then `check` order; `check` compares repository, Actions,
     policy labels, and effective Rulesets. Report `DEGRADED` capability limits
-    separately from actionable drift.
+    separately from actionable drift. The built-in `GITHUB_TOKEN` cannot read
+    every administrator-only field; run the full check from a trusted checkout
+    with repository Administration read access, and never expose that token to
+    untrusted pull request code.
