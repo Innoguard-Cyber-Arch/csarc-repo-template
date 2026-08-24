@@ -864,12 +864,20 @@ def merge_gitignore(existing: str, generated: str) -> str:
     return newline.join([*lines, *separator, *additions]) + newline
 
 
+def is_regular_file(path: Path) -> bool:
+    """Return whether a path is a regular file without following links."""
+    try:
+        return stat.S_ISREG(path.lstat().st_mode)
+    except FileNotFoundError, NotADirectoryError:
+        return False
+
+
 def apply_adoption_policies(stage: Path, target: Path) -> tuple[str, ...]:
     """Apply the small fixed set of safe existing-repository merges."""
     merged: list[str] = []
     agents = target / "AGENTS.md"
     staged_agents = stage / "AGENTS.md"
-    if agents.is_file() and staged_agents.is_file():
+    if is_regular_file(agents) and is_regular_file(staged_agents):
         staged_agents.write_text(
             merge_agents_file(
                 agents.read_text(encoding="utf-8"),
@@ -880,7 +888,7 @@ def apply_adoption_policies(stage: Path, target: Path) -> tuple[str, ...]:
         merged.append("AGENTS.md")
     gitignore = target / ".gitignore"
     staged_gitignore = stage / ".gitignore"
-    if gitignore.is_file() and staged_gitignore.is_file():
+    if is_regular_file(gitignore) and is_regular_file(staged_gitignore):
         staged_gitignore.write_text(
             merge_gitignore(
                 gitignore.read_text(encoding="utf-8"),
@@ -906,6 +914,8 @@ def comparison_destination(target: Path, relative_name: str) -> Path | None:
                 continue
             if stat.S_ISLNK(mode):
                 raise
+            if not stat.S_ISDIR(mode):
+                return None
         return None
 
 
@@ -3590,7 +3600,6 @@ def command_update(args: argparse.Namespace) -> int:
     if args.dry_run or not confirm(args):
         return 0
 
-    validate_target_snapshot(target, target_snapshot)
     validate_repository_context(
         target,
         plan.repository,
@@ -3599,6 +3608,7 @@ def command_update(args: argparse.Namespace) -> int:
             saved_visibility if isinstance(saved_visibility, str) else None
         ),
     )
+    validate_target_snapshot(target, target_snapshot)
     result = run(
         [
             sys.executable,

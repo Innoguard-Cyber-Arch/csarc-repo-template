@@ -1854,6 +1854,34 @@ def test_fixed_merges_preserve_product_content_and_crlf() -> None:
     assert ignored == "dist/\r\n.env\r\n\r\n.venv/\r\n"
 
 
+@pytest.mark.parametrize("name", ["AGENTS.md", ".gitignore"])
+def test_adoption_policies_do_not_follow_final_symlinks(
+    tmp_path: Path, name: str
+) -> None:
+    """Leave final symlinks for unknown-file review without reading them."""
+    stage = tmp_path / "stage"
+    target = tmp_path / "target"
+    stage.mkdir()
+    target.mkdir()
+    generated = (
+        f"{cli.AGENTS_BLOCK_START}\ngenerated\n{cli.AGENTS_BLOCK_END}\n"
+        if name == "AGENTS.md"
+        else "generated ignore\n"
+    )
+    (stage / name).write_text(generated, encoding="utf-8")
+    external = tmp_path / f"external-{name.lstrip('.')}"
+    external.write_text(f"external {name}\n", encoding="utf-8")
+    (target / name).symlink_to(external)
+
+    merged = cli.apply_adoption_policies(stage, target)
+    plan = cli.compare_stage(stage, target, adopt=True, merged_paths=merged)
+
+    assert merged == ()
+    assert plan.unknown == (name,)
+    assert (stage / name).read_text(encoding="utf-8") == generated
+    assert external.read_text(encoding="utf-8") == f"external {name}\n"
+
+
 def test_compare_stage_includes_file_traits_without_following_links(
     tmp_path: Path,
 ) -> None:
@@ -1880,6 +1908,10 @@ def test_compare_stage_includes_file_traits_without_following_links(
     [
         ("target-directory", "collision"),
         ("target-file-ancestor", "collision/managed.txt"),
+        (
+            "target-multilevel-file-ancestor",
+            "collision/nested/managed.txt",
+        ),
     ],
 )
 def test_adopt_reports_file_directory_collisions_without_writes(
@@ -1900,10 +1932,9 @@ def test_adopt_reports_file_directory_collisions_without_writes(
             "owned\n", encoding="utf-8"
         )
     else:
-        (source / "template" / "collision").mkdir()
-        (source / "template" / "collision" / "managed.txt").write_text(
-            "template file\n", encoding="utf-8"
-        )
+        managed = source / "template" / unknown_path
+        managed.parent.mkdir(parents=True)
+        managed.write_text("template file\n", encoding="utf-8")
         (project / "collision").write_text("owned\n", encoding="utf-8")
     revision = commit(source, "test: add file directory collision")
     git(project, "init", "-b", "main")
@@ -2316,6 +2347,63 @@ def test_update_rechecks_repository_context_after_confirmation(
         == 2
     )
     assert "Repository context changed" in capsys.readouterr().err
+    assert (project / "managed.txt").read_text(encoding="utf-8") == (
+        "template version one\n"
+    )
+
+
+def test_update_rechecks_snapshot_after_repository_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Reject target drift introduced while repository context is refreshed."""
+    source, project, _ = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    product = project / "product.txt"
+    product.write_text("before\n", encoding="utf-8")
+    commit(project, "test: generated project")
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    revision = commit(source, "test: template version two")
+    stable = cli.RepositoryContext(
+        "owner/repository",
+        "owner",
+        "organization",
+        "private",
+        "github",
+        True,
+    )
+    calls = 0
+
+    def context_with_target_drift(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            product.write_text("after\n", encoding="utf-8")
+            commit(project, "test: context-query product change")
+        return stable
+
+    monkeypatch.setattr(cli, "repository_context", context_with_target_drift)
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
+    )
+    assert calls == 2
+    assert "Repository changed" in capsys.readouterr().err
     assert (project / "managed.txt").read_text(encoding="utf-8") == (
         "template version one\n"
     )
