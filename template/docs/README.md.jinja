@@ -1,17 +1,34 @@
-# 文件地圖
+# 文件與 Durable Project Memory 地圖
 
-`docs/index.html` 是專案的 portable presentation。它必須能下載、轉寄並以 `file://` 離線開啟；網站託管是選配，不是閱讀文件的前提。
+本專案以 **Durable Project Memory（持久化專案記憶）** 保存跨 session、跨 agent 與跨時間仍可讀取的專案知識。它由 current SDD、ADR、GitHub history 與 executable evidence 組成，不是一套額外工具。
+
+| 問題 | Canonical source | 維護責任 |
+| --- | --- | --- |
+| 現在必須做到什麼？ | `docs/specs/` | 專案維護的 living SDD；公版只提供範例與驗證 |
+| 為什麼這樣選？ | `docs/adr/` | 專案維護的 Architecture Decision Records（ADR）；保留 accepted、superseded、rejected 與 unresolved 理由 |
+| 何時提案與交付？ | GitHub Issue／PR／commit | 原始工作時間線與證據 |
+| 行為是否仍成立？ | tests／CI／release evidence | TDD／BDD 的可執行證據 |
+| Agent 如何開始？ | `AGENTS.md` 與本頁 | 穩定導航與工作規則 |
+
+Spec-Driven Development（SDD）以 `docs/specs/` 的 living specifications 保存 intent 與 acceptance contract；Architecture Decision Records（ADR）保存理由與替代方案；Test-Driven Development（TDD）保存最後可重現的 regression，不逐次抄錄 red／green 暫態；Behavior-Driven Development（BDD）只在跨角色行為需要 living example 時使用，不因而預設加入 Cucumber／Gherkin dependency。Software Design Document 也常縮寫為 SDD，但本模板不強制單一大型文件。
+
+`tracking: issue` 或預設值讓 approved／proposed spec 同步 Issue；`tracking: story` 同步 Story Milestone；`tracking: none` 保存已建立能力的 current spec，不建立新 work item。
+
+## Other documentation
 
 | 類型 | 路徑 | 維護責任 |
 | --- | --- | --- |
 | 單檔交付物 | `docs/index.html` | 由公版 renderer 產生，不直接編輯 |
 | 專案網站內容 | `docs/site-content.js` | 專案維護；Copier update 不覆寫 |
-| 專案網站主題 | `docs/site-theme.css` | 專案維護；只覆寫必要的設計 tokens 或窄範圍 selector |
+| 專案網站主題 | `docs/site-theme.css` | 專案維護；只覆寫必要的 design tokens 或窄範圍 selector |
 | 網站版型 | `site/` | 公版維護；Copier update 提供可審查的版型、樣式與互動更新 |
-| 選型與決策 | `docs/decisions/` | 專案維護；只記錄已確認且經 PR 審查的決策 |
-| 規格 | `docs/specs/` | 專案維護；核准後可同步成 Issue 或 Story Milestone |
 | Story 格式 | `docs/milestone-description.md` | 公版維護 |
 
-聊天不會自動成為正式決策。使用者確認 durable constraint 或 trade-off 後，agent 先回查既有決策與 Issues，再把摘要寫入工作單，最後透過 PR 更新 `docs/decisions/`；不得保存完整聊天逐字稿或把未確認推論寫成決定。
+## 新決策如何進來
 
-修改 project-owned 內容或主題後，執行 `uv run --no-project python scripts/render_site.py` 重建單檔。`./scripts/verify` 會以 `--check` 模式拒絕 stale bundle、外部 runtime asset 與不支援的明確 `schemaVersion`；沒有版本欄位的既有內容暫按 legacy v1 處理。
+1. 先讀相關 current spec，再搜尋 `docs/adr/` 與 open／closed Issues。
+2. 在 work item 摘要已確認限制、替代方案與舊決策 disposition。
+3. 以 scoped PR 更新 current spec 與對應 ADR；不要保存完整聊天、模型 chain-of-thought、敏感資訊或未確認推論。
+4. 若網站需要呈現，更新 project-owned content 並重建 `docs/index.html`；presentation 不取代 canonical Markdown。
+
+修改 project-owned 內容或主題後，執行 `uv run --no-project python scripts/render_site.py` 重建單檔。`./scripts/verify` 會以 `--check` 模式拒絕 stale bundle、外部 runtime asset、不支援的 `schemaVersion`、重複 spec ID 與不完整 decision metadata。

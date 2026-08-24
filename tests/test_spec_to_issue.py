@@ -17,6 +17,7 @@ load_labels = SPEC_MODULE["load_labels"]
 parse_spec_text = SPEC_MODULE["parse_spec_text"]
 sync_spec = SPEC_MODULE["sync_spec"]
 sync_milestone = SPEC_MODULE["sync_milestone"]
+validate_unique_ids = SPEC_MODULE["validate_unique_ids"]
 
 VALID_SPEC = """---
 id: SPEC-001
@@ -79,10 +80,44 @@ def test_story_tracking_is_explicit() -> None:
         )
 
 
+def test_current_spec_can_explicitly_skip_work_item_sync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current = VALID_SPEC.replace(
+        "status: proposed", "status: approved\ntracking: none"
+    )
+    spec = parse_spec_text(Path("docs/specs/SPEC-001-health.md"), current)
+    calls: list[list[str]] = []
+
+    monkeypatch.setitem(
+        sync_spec.__globals__,
+        "run_gh",
+        lambda arguments: calls.append(arguments),
+    )
+    sync_spec(spec, "owner/repo", "main", "https://github.com")
+
+    assert spec.tracking == "none"
+    assert calls == []
+
+
+def test_rejects_duplicate_spec_ids() -> None:
+    first = parse_spec_text(Path("docs/specs/first.md"), VALID_SPEC)
+    second = parse_spec_text(Path("docs/specs/second.md"), VALID_SPEC)
+
+    with pytest.raises(SpecError, match="duplicate id SPEC-001"):
+        validate_unique_ids([first, second])
+
+
 def test_rejects_missing_acceptance_criteria() -> None:
     invalid = VALID_SPEC.replace("## Acceptance criteria", "## Checks")
     with pytest.raises(SpecError, match="Acceptance criteria"):
         parse_spec_text(Path("invalid.md"), invalid)
+
+
+def test_accepts_completed_acceptance_criterion() -> None:
+    completed = VALID_SPEC.replace("- [ ] The endpoint", "- [x] The endpoint")
+    spec = parse_spec_text(Path("docs/specs/SPEC-001-health.md"), completed)
+    assert spec.spec_id == "SPEC-001"
 
 
 def test_rejects_missing_required_section() -> None:

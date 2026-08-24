@@ -17,7 +17,7 @@ from pathlib import Path
 SPEC_ID = re.compile(r"^SPEC-[0-9]{3,}$")
 PRIORITIES = {"P0", "P1", "P2", "P3"}
 STATUSES = {"draft", "proposed", "approved"}
-TRACKING = {"issue", "story"}
+TRACKING = {"issue", "none", "story"}
 LOGGER = logging.getLogger(__name__)
 
 
@@ -103,9 +103,9 @@ def _validate_body(path: Path, body: str) -> None:
     ]
     if missing_sections:
         raise SpecError(f"{path}: add an '## {missing_sections[0]}' section")
-    if "- [ ]" not in body:
+    if not re.search(r"^- \[[ xX]\] ", body, flags=re.MULTILINE):
         raise SpecError(
-            f"{path}: add at least one unchecked acceptance criterion"
+            f"{path}: add at least one acceptance criterion checkbox"
         )
 
 
@@ -134,6 +134,19 @@ def parse_spec_text(path: Path, text: str) -> Spec:
 def parse_spec(path: Path) -> Spec:
     """Read and validate one specification file."""
     return parse_spec_text(path, path.read_text(encoding="utf-8"))
+
+
+def validate_unique_ids(specs: list[Spec]) -> None:
+    """Reject ambiguous durable references across specification files."""
+    seen: dict[str, Path] = {}
+    for spec in specs:
+        previous = seen.get(spec.spec_id)
+        if previous is not None:
+            raise SpecError(
+                f"{spec.path}: duplicate id {spec.spec_id}; "
+                f"first used by {previous}"
+            )
+        seen[spec.spec_id] = spec.path
 
 
 def build_issue_body(spec: Spec, source_url: str) -> str:
@@ -300,6 +313,9 @@ def sync_spec(spec: Spec, repo: str, source_ref: str, server_url: str) -> None:
     if spec.status == "draft":
         LOGGER.info("skip draft: %s", spec.path)
         return
+    if spec.tracking == "none":
+        LOGGER.info("skip untracked current spec: %s", spec.path)
+        return
 
     repo_root = Path.cwd().resolve()
     absolute_path = spec.path.resolve()
@@ -422,6 +438,7 @@ def main() -> int:
     if not specs:
         LOGGER.info("no spec files found")
         return 0
+    validate_unique_ids(specs)
 
     if args.command == "validate":
         for spec in specs:

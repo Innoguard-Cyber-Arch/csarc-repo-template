@@ -36,6 +36,7 @@ _skip_if_exists:
   - "typescript/src/**/*.ts"
   - "typescript/tests/**/*.ts"
   - "docs/specs/**/*.md"
+  - "docs/adr/**/*.md"
   - "docs/site-content.js"
   - "docs/site-theme.css"
   - "{% if project_mode == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"

@@ -120,7 +120,7 @@ uv run pytest \
 uv build
 uvx --from "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)" \
   csarc --help >/dev/null
-uv run python scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md
+uv run python scripts/spec_to_issue.py validate
 bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
 bash -n scripts/check-update-conflicts
@@ -687,12 +687,28 @@ test -f site/styles.css
 test -f site/app.js
 test -f scripts/render_site.py
 test -f docs/README.md
-test -f docs/decisions/README.md
-test -f docs/decisions/portable-decision-site.md
+test -f docs/adr/README.md
+test -f docs/adr/portable-decision-site.md
 grep -q '可重現的 self-contained HTML' \
-  docs/decisions/portable-decision-site.md
+  docs/adr/portable-decision-site.md
 grep -q '不自動保存聊天逐字稿' \
-  docs/decisions/portable-decision-site.md
+  docs/adr/portable-decision-site.md
+grep -q 'Durable Project Memory' docs/README.md
+grep -q 'Spec-Driven Development' docs/README.md
+grep -q 'Architecture Decision Records' docs/README.md
+grep -q 'Test-Driven Development' docs/README.md
+grep -q 'Behavior-Driven Development' docs/README.md
+for adr in docs/adr/*.md; do
+  [[ "$adr" == "docs/adr/README.md" ]] && continue
+  grep -Eq '^- \*\*狀態：\*\*(Proposed|Accepted|Superseded|Rejected)$' "$adr"
+  grep -Eq '^- \*\*日期：\*\*[0-9]{4}-[0-9]{2}-[0-9]{2}$' "$adr"
+  grep -q 'https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/' "$adr"
+  grep -q 'https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/' "$adr"
+  grep -q '^## 問題與限制$' "$adr"
+  grep -q '^## 決定$' "$adr"
+  grep -q '^## 評估過的替代方案$' "$adr"
+  grep -q '^## 重新評估條件$' "$adr"
+done
 test -f docs/pilot-adoption.md
 test -f docs/artifact-consumption.md
 grep -q '產生 attestation 只證明' docs/artifact-consumption.md
@@ -718,7 +734,12 @@ grep -q 'internal-notice' docs/index.html
 grep -q '請勿公開分享此連結' docs/index.html
 grep -q '存取控制決策｜' docs/index.html
 grep -q '可維護來源 → self-contained HTML' docs/index.html
-grep -q 'docs/decisions/portable-decision-site.md' docs/index.html
+grep -q 'docs/adr/portable-decision-site.md' docs/index.html
+grep -q 'durable project memory' docs/index.html
+grep -q 'Spec-Driven Development' docs/index.html
+grep -q 'Architecture Decision Records' docs/index.html
+grep -q 'Test-Driven Development' docs/index.html
+grep -q 'Behavior-Driven Development' docs/index.html
 grep -q 'actions/runs/32662029395' docs/index.html
 grep -q 'Live integration smoke' docs/index.html
 test -f docs/robots.txt
@@ -1293,8 +1314,18 @@ test -f "$fixture_root/default-project/site/styles.css"
 test -f "$fixture_root/default-project/site/app.js"
 test -f "$fixture_root/default-project/scripts/render_site.py"
 test -f "$fixture_root/default-project/docs/README.md"
-test -f "$fixture_root/default-project/docs/decisions/README.md"
+test -f "$fixture_root/default-project/docs/adr/README.md"
 grep -q '不得保存完整聊天逐字稿' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Durable Project Memory' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Spec-Driven Development' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Architecture Decision Records' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Test-Driven Development' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Behavior-Driven Development' \
   "$fixture_root/default-project/docs/README.md"
 grep -q 'Never store a raw conversation transcript' \
   "$fixture_root/default-project/AGENTS.md"
@@ -2263,7 +2294,7 @@ grep -q 'window.TEMPLATE_SITE_V2 = true;' \
   "$update_project/site/app.js"
 grep -q 'window.TEMPLATE_SITE_V2 = true;' \
   "$update_project/docs/index.html"
-test -f "$update_project/docs/decisions/README.md"
+test -f "$update_project/docs/adr/README.md"
 grep -q 'Never store a raw conversation transcript' \
   "$update_project/AGENTS.md"
 grep -q '_commit: v0.1.1' "$update_project/.copier-answers.yml"
