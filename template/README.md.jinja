@@ -2,9 +2,24 @@
 {% set has_typescript = language in ["typescript", "python-typescript"] -%}
 # {{ project_name }}
 
+<!-- 請在這裡補上 CI 徽章，例如：
+[![CI](https://github.com/<org>/<repo>/actions/workflows/ci.yml/badge.svg)](https://github.com/<org>/<repo>/actions/workflows/ci.yml)
+-->
+
 {{ project_description }}
 
 [開啟專案內部網站](docs/index.html)
+
+## 目錄
+
+- [專案概述](#專案概述)
+- [快速開始](#快速開始)
+- [技術與目錄](#技術與目錄)
+- [開發與驗證](#開發與驗證)
+- [設定與密鑰](#設定與密鑰)
+- [發布與維運](#發布與維運)
+- [公版更新](#公版更新)
+- [負責人與支援](#負責人與支援)
 
 ## 專案概述
 
@@ -38,10 +53,10 @@ git push -u origin dev
 
 | 範圍 | 位置／工具 |
 | --- | --- |
-| 共用 | `.github/`、`policies/`、`docs/specs/`、`scripts/verify` |
+| 共用 | `.github/`、`policies/`、`docs/decisions/`、`docs/specs/`、`scripts/verify` |
 {% if has_python %}| Python | `src/`、`tests/`、uv、Ruff、mypy、pytest；CI 驗證 {% if python_support_mode == "latest" %}3.14.0 與最新 3.14.x{% else %}{{ python_min_version }}.0，以及 {{ python_min_version }}～3.14 每個 feature release 的最新 patch{% endif %} |
 {% endif %}{% if has_typescript %}| TypeScript | `typescript/`、pnpm 11、Biome、strict TypeScript、Vitest；Node 24+ |
-{% endif %}| 內部網站 | `docs/index.html` 版型；`docs/site-content.js` 專案內容 |
+{% endif %}| 內部網站 | `site/` 公版來源；`docs/site-content.js` 與 `docs/site-theme.css` 專案內容；`docs/index.html` portable bundle |
 
 語言宣告記在 `.csarc/profile.json`；`scripts/detect-language-profile --suggest` 會檢查實際檔案是否一致。
 {% if has_python %}Python minimum 選項目前從 3.12 起，未宣告支援 3.11；所選 feature release 的 `.0` 就是 `requires-python` 的實際下界，CI 不會只測較新的 patch。{% endif %}
@@ -132,7 +147,7 @@ uvx --from csarc-repo-cli csarc update --to <approved-release-tag> \
   --expected-sha <reviewed-full-commit-sha> --yes --non-interactive
 ```
 
-CLI 會先預覽 Copier smart diff、conflict risk 與 Milestone description migration；確認後才執行 update、`./scripts/verify` 與 repository settings plan。它會更新網站版型，但不覆寫 `docs/site-content.js`，也不會自行 apply settings、push 或開 PR。相依更新一般等待三天；{% if has_typescript %}pnpm 遇到 publisher trust 降級時會停止安裝，先確認套件發布者與 provenance，不要直接停用 policy；{% endif %}OSV 對已公開漏洞立即通知。
+CLI 會先預覽 Copier smart diff、conflict risk 與 Milestone description migration；確認後才執行 update、`./scripts/verify` 與 repository settings plan。它會更新 `site/` 版型並重建單檔，但不覆寫 `docs/site-content.js` 或 `docs/site-theme.css`，也不會自行 apply settings、push 或開 PR。相依更新一般等待三天；{% if has_typescript %}pnpm 遇到 publisher trust 降級時會停止安裝，先確認套件發布者與 provenance，不要直接停用 policy；{% endif %}OSV 對已公開漏洞立即通知。
 {% if enable_template_update_notifications %}
 每週 template update workflow 只會建立或更新一張通知 Issue，不會自動套用或合併變更。若 `_src_path` 指向 private GitHub repository，請設定只有來源 repository Contents read 權限的 `CSARC_TEMPLATE_READ_TOKEN`；公開來源不需要這個 secret。
 {% endif %}

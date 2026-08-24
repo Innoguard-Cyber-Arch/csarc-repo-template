@@ -7,6 +7,7 @@ trap 'rm -rf "$fixture_root"' EXIT
 cd "$repo_root"
 
 ./scripts/check-update-conflicts
+python3 scripts/render_site.py --check
 
 prime_gitleaks_cache() {
   local project_root="$1"
@@ -26,9 +27,11 @@ uv run ruff format --check \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
   tests/test_release_consumption.py \
+  tests/test_render_site.py \
   scripts/report_dependency_ceiling.py \
   scripts/delivery_sync.py \
   scripts/render_release_prompt.py \
+  scripts/render_site.py \
   scripts/release_policy.py \
   scripts/spec_to_issue.py \
   scripts/sync_milestone_state.py \
@@ -43,9 +46,11 @@ uv run ruff check \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
   tests/test_release_consumption.py \
+  tests/test_render_site.py \
   scripts/report_dependency_ceiling.py \
   scripts/delivery_sync.py \
   scripts/render_release_prompt.py \
+  scripts/render_site.py \
   scripts/release_policy.py \
   scripts/spec_to_issue.py \
   scripts/sync_milestone_state.py \
@@ -57,6 +62,7 @@ uv run mypy \
   scripts/report_dependency_ceiling.py \
   scripts/delivery_sync.py \
   scripts/render_release_prompt.py \
+  scripts/render_site.py \
   scripts/release_policy.py \
   scripts/spec_to_issue.py \
   scripts/sync_milestone_state.py \
@@ -94,7 +100,7 @@ grep -q 'HEAD.*pull request head SHA' template/AGENTS.md.jinja
 grep -q 'Actions quota fallback attestation' README.md
 grep -q 'Actions quota fallback attestation' template/README.md.jinja
 grep -q '額度耗盡.*human' docs/index.html
-grep -q '額度 fallback.*human' template/docs/index.html.jinja
+grep -q '額度 fallback.*human' template/site/index.html.jinja
 bash -n scripts/run-live-workflow-probe
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
@@ -628,6 +634,17 @@ test -f AGENTS.md
 test "$(wc -l < AGENTS.md)" -le 200
 test "$(cat CLAUDE.md)" = "@AGENTS.md"
 test -f docs/index.html
+test -f site/index.html
+test -f site/styles.css
+test -f site/app.js
+test -f scripts/render_site.py
+test -f docs/README.md
+test -f docs/decisions/README.md
+test -f docs/decisions/portable-decision-site.md
+grep -q '可重現的 self-contained HTML' \
+  docs/decisions/portable-decision-site.md
+grep -q '不自動保存聊天逐字稿' \
+  docs/decisions/portable-decision-site.md
 test -f docs/pilot-adoption.md
 test -f docs/artifact-consumption.md
 grep -q '產生 attestation 只證明' docs/artifact-consumption.md
@@ -652,6 +669,8 @@ grep -q '<meta name="robots" content="noindex,nofollow">' docs/index.html
 grep -q 'internal-notice' docs/index.html
 grep -q '請勿公開分享此連結' docs/index.html
 grep -q '存取控制決策｜' docs/index.html
+grep -q '可維護來源 → self-contained HTML' docs/index.html
+grep -q 'docs/decisions/portable-decision-site.md' docs/index.html
 grep -q 'actions/runs/32662029395' docs/index.html
 grep -q 'Live integration smoke' docs/index.html
 test -f docs/robots.txt
@@ -667,6 +686,8 @@ grep -q '只代表靜態與合成驗證通過' docs/live-integration.md
 test -x scripts/run-live-workflow-probe
 test -f .github/workflows/live-integration.yml
 test -f .github/workflows/release-consumption.yml
+grep -q '^  decision-site:$' .github/workflows/ci.yml
+grep -q 'name: portable-decision-site' .github/workflows/ci.yml
 test ! -e template/.github/workflows/live-integration.yml
 test ! -e template/.github/workflows/release-consumption.yml
 test ! -e template/scripts/run-live-workflow-probe
@@ -861,8 +882,8 @@ grep -Fq -- '-f "reviewers[]=$reviewer"' \
 grep -q 'DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"' src/csarc_cli/cli.py
 grep -Fqx '* @Innoguard-Cyber-Arch/arch' .github/CODEOWNERS
 grep -Fqx '@jachline28' .github/REVIEWERS
-grep -q '所有方案都透過 repository teams API 驗證' README.md
-grep -q 'Free private 不支援 team review request' template/docs/index.html.jinja
+grep -q '所有方案都先用 repository teams API 驗證' docs/index.html
+grep -q 'Free private 不支援 team review request' template/site/index.html.jinja
 
 grep -q "'## Purpose'" .github/workflows/python-version-policy.yml
 grep -q "'## 完成清單'" .github/workflows/python-version-policy.yml
@@ -1188,6 +1209,17 @@ test -f "$fixture_root/default-project/AGENTS.md"
 test "$(wc -l < "$fixture_root/default-project/AGENTS.md")" -le 200
 test -f "$fixture_root/default-project/docs/index.html"
 test -f "$fixture_root/default-project/docs/site-content.js"
+test -f "$fixture_root/default-project/docs/site-theme.css"
+test -f "$fixture_root/default-project/site/index.html"
+test -f "$fixture_root/default-project/site/styles.css"
+test -f "$fixture_root/default-project/site/app.js"
+test -f "$fixture_root/default-project/scripts/render_site.py"
+test -f "$fixture_root/default-project/docs/README.md"
+test -f "$fixture_root/default-project/docs/decisions/README.md"
+grep -q '不得保存完整聊天逐字稿' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Never store a raw conversation transcript' \
+  "$fixture_root/default-project/AGENTS.md"
 grep -q 'GitHub 方案與門禁' \
   "$fixture_root/default-project/docs/index.html"
 grep -q 'id="release-modes"' \
@@ -1212,6 +1244,15 @@ grep -Fq 'Template \"Smoke\" Test' \
   "$fixture_root/default-project/docs/site-content.js"
 grep -q 'window.CSARC_SITE_CONTENT' \
   "$fixture_root/default-project/docs/site-content.js"
+grep -q 'schemaVersion: 1' \
+  "$fixture_root/default-project/docs/site-content.js"
+grep -q 'data-bundled-from="../docs/site-content.js"' \
+  "$fixture_root/default-project/docs/index.html"
+if grep -Eq '<link[^>]+rel="stylesheet"|<script[^>]+src=' \
+  "$fixture_root/default-project/docs/index.html"; then
+  echo "Generated decision site contains an external runtime asset."
+  exit 1
+fi
 grep -q 'stage: "alpha"' \
   "$fixture_root/default-project/docs/site-content.js"
 grep -q '^## Scope and sources of truth$' \
@@ -1384,6 +1425,10 @@ grep -q '^  governance:$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q 'apply-repository-settings.sh check' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q '^  decision-site:$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q 'name: portable-decision-site' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q '^    needs: governance$' \
   "$fixture_root/default-project/.github/workflows/release.yml"
 grep -q '^    needs: governance$' \
@@ -1524,6 +1569,13 @@ PY
 
 (
   cd "$fixture_root/default-project"
+  printf '%s\n' 'window.STALE_BUNDLE_PROBE = true;' >> docs/site-content.js
+  if uv run --no-project python scripts/render_site.py --check >/dev/null 2>&1; then
+    echo "Site bundle check accepted stale project content."
+    exit 1
+  fi
+  uv run --no-project python scripts/render_site.py
+  grep -q 'window.STALE_BUNDLE_PROBE = true;' docs/index.html
   ./scripts/verify
   "$repo_root/.venv/bin/zizmor" . --format plain
 )
@@ -2014,6 +2066,8 @@ printf '%s\n' 'export const projectOwned = true;' \
   >> "$update_project/typescript/src/index.ts"
 printf '%s\n' 'window.PROJECT_OWNED_SITE = true;' \
   >> "$update_project/docs/site-content.js"
+printf '%s\n' '/* PROJECT_OWNED_THEME */' \
+  >> "$update_project/docs/site-theme.css"
 uv run copier copy --trust --defaults --overwrite --vcs-ref v0.1.0 \
   --data project_mode=existing \
   --data language=python-typescript \
@@ -2032,7 +2086,9 @@ git -C "$update_project" commit -m "test: adopted project"
 
 cp "$update_source/template/.gitignore.jinja" \
   "$update_source/template/update-marker"
-git -C "$update_source" add template/update-marker
+printf '%s\n' 'window.TEMPLATE_SITE_V2 = true;' \
+  >> "$update_source/template/site/app.js"
+git -C "$update_source" add template/update-marker template/site/app.js
 git -C "$update_source" commit -m "test: template v0.1.1"
 git -C "$update_source" tag v0.1.1
 
@@ -2049,6 +2105,19 @@ grep -q '^export const projectOwned = true;$' \
   "$update_project/typescript/src/index.ts"
 grep -q '^window.PROJECT_OWNED_SITE = true;$' \
   "$update_project/docs/site-content.js"
+grep -q '^/\* PROJECT_OWNED_THEME \*/$' \
+  "$update_project/docs/site-theme.css"
+grep -q 'window.PROJECT_OWNED_SITE = true;' \
+  "$update_project/docs/index.html"
+grep -q 'PROJECT_OWNED_THEME' \
+  "$update_project/docs/index.html"
+grep -q 'window.TEMPLATE_SITE_V2 = true;' \
+  "$update_project/site/app.js"
+grep -q 'window.TEMPLATE_SITE_V2 = true;' \
+  "$update_project/docs/index.html"
+test -f "$update_project/docs/decisions/README.md"
+grep -q 'Never store a raw conversation transcript' \
+  "$update_project/AGENTS.md"
 grep -q '_commit: v0.1.1' "$update_project/.copier-answers.yml"
 prime_gitleaks_cache "$update_project"
 (

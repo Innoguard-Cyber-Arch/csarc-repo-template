@@ -28,6 +28,8 @@ paired_files=(
   policies/labels.json
   policies/repository.json
   docs/milestone-description.md
+  docs/decisions/README.md
+  scripts/render_site.py
   scripts/apply-repository-settings.sh
   scripts/check-governance-drift
   scripts/delivery_sync.py
