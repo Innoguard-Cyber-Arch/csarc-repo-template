@@ -99,6 +99,7 @@ package_name:
 code_owner:
   type: str
   help: Existing GitHub team used by CODEOWNERS, for example @Innoguard-Cyber-Arch/platform
+  default: "@Innoguard-Cyber-Arch/arch"
   validator: "{% if not code_owner.startswith('@Innoguard-Cyber-Arch/') %}Use an existing @Innoguard-Cyber-Arch/<team> owner.{% endif %}"
 
 python_support_mode:

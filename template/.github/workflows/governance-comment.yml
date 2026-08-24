@@ -2,7 +2,7 @@ name: Governance notice
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, ready_for_review]
 
 permissions:
   actions: read
@@ -60,6 +60,22 @@ jobs:
           else
             gh api --method POST "$endpoint" -f body="$body" >/dev/null
           fi
+      - name: Request team review
+        if: ${{ github.event.action != 'synchronize' && !github.event.pull_request.draft }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          repo_owner="${GITHUB_REPOSITORY%%/*}"
+          code_owner="$(awk '!/^#/ && NF {print $NF; exit}' .github/CODEOWNERS)"
+          if [[ ! "$code_owner" =~ ^@${repo_owner}/([^/[:space:]]+)$ ]]; then
+            echo "CODEOWNERS must use a team in the repository organization: @$repo_owner/team." >&2
+            exit 1
+          fi
+          team_slug="${BASH_REMATCH[1]}"
+          gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/requested_reviewers" \
+            -f "team_reviewers[]=$team_slug" >/dev/null
       - name: Preserve fail-closed checks on capable plans
         if: ${{ steps.governance.outputs.status != '0' }}
         env:

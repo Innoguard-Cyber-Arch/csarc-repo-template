@@ -67,6 +67,45 @@ case "$account_plan" in
   *) plan_label="Unknown ($account_plan)" ;;
 esac
 
+codeowners_validation=""
+codeowners_inspection_error=""
+codeowners_inspection_available=false
+if [[ ! "$code_owner" =~ ^@([^/]+)/([^/[:space:]]+)$ ]]; then
+  codeowners_validation="CODEOWNERS must use a GitHub team: @organization/team."
+elif ! codeowners_state="$(gh api "repos/$repo/codeowners/errors" 2>&1)"; then
+  codeowners_inspection_error="$codeowners_state"
+elif ! codeowners_validation="$(python3 - "$codeowners_state" 2>&1 <<'PY'
+import json
+import sys
+
+errors = json.loads(sys.argv[1]).get("errors") or []
+print(
+    "; ".join(
+        f"{error.get('path', '.github/CODEOWNERS')}:{error.get('line', '?')}: "
+        + " ".join(str(error.get("message", "invalid owner")).splitlines())
+        for error in errors
+    )
+)
+PY
+)"; then
+  codeowners_inspection_error="$codeowners_validation"
+  codeowners_validation=""
+else
+  codeowners_inspection_available=true
+fi
+
+if [[ "$mode" != "check" ]]; then
+  if [[ -n "$codeowners_validation" ]]; then
+    echo "CODEOWNERS validation failed: $codeowners_validation" >&2
+    exit 1
+  fi
+  if [[ "$codeowners_inspection_available" != true ]]; then
+    echo "Cannot inspect CODEOWNERS for $repo." >&2
+    echo "$codeowners_inspection_error" >&2
+    exit 1
+  fi
+fi
+
 print_ruleset_guidance() {
   echo "- DEGRADED required governance: $default_branch is not protected on this private repository."
   echo "- PRESERVED desired Ruleset: policies/rulesets.json remains ready for a supported plan or public repository."
@@ -152,6 +191,24 @@ if [[ "$mode" == "check" ]]; then
   check_degraded=0
   repository_drift=""
   repository_state_available=false
+
+  if [[ -n "$codeowners_validation" ]]; then
+    echo "CODEOWNERS validation failed: $codeowners_validation" >&2
+    check_errors=$((check_errors + 1))
+  elif [[ "$codeowners_inspection_available" != true ]]; then
+    if [[ "$repo_admin" == "true" ]]; then
+      echo "Cannot inspect CODEOWNERS for $repo." >&2
+      echo "$codeowners_inspection_error" >&2
+      check_errors=$((check_errors + 1))
+    else
+      [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
+        echo "::warning title=CODEOWNERS inspection degraded::The token cannot validate configured owners."
+      echo "DEGRADED CODEOWNERS inspection: token cannot validate configured owners."
+      check_degraded=$((check_degraded + 1))
+    fi
+  else
+    echo "CODEOWNERS owners are valid and have repository write access."
+  fi
 
   if ! repository_state="$(gh api "repos/$repo" 2>&1)"; then
     echo "Cannot inspect repository settings for $repo." >&2
@@ -367,19 +424,6 @@ PY
     echo "All observable repository settings match policy."
   fi
   exit 0
-fi
-
-if [[ "$ruleset_enforcement_available" == true ]]; then
-  if [[ ! "$code_owner" =~ ^@([^/]+)/([^/[:space:]]+)$ ]]; then
-    echo "CODEOWNERS must use an existing GitHub team: @organization/team."
-    exit 1
-  fi
-  owner_org="${BASH_REMATCH[1]}"
-  owner_team="${BASH_REMATCH[2]}"
-  if ! gh api "orgs/$owner_org/teams/$owner_team" >/dev/null; then
-    echo "CODEOWNERS team does not exist or is not visible: $code_owner"
-    exit 1
-  fi
 fi
 
 echo "Repository: $repo"
