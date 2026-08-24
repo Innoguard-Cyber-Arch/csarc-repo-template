@@ -87,6 +87,8 @@ bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
 bash -n scripts/check-update-conflicts
 bash -n template/scripts/check-update-conflicts
+bash -n scripts/cleanup-worktrees
+bash -n template/scripts/cleanup-worktrees
 bash -n scripts/check-governance-drift
 bash -n template/scripts/check-governance-drift
 bash -n scripts/run-live-workflow-probe
@@ -96,6 +98,8 @@ bash -n scripts/test-issue-triage
 bash -n scripts/validate-issue-title
 bash -n template/scripts/validate-issue-title
 ./scripts/test-issue-triage
+bash -n scripts/test-worktree-cleanup
+./scripts/test-worktree-cleanup
 
 # The live probe must preserve valid run JSON and emit reusable evidence.
 live_probe_fixture="$fixture_root/live-probe"

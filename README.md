@@ -50,6 +50,8 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；CI 
 
 多個可寫 agents 平行執行時，一項任務使用一個 branch 與一個獨立 worktree，且只平行處理範圍互不依賴的工作；開始前先辨識目前是否已在 agent 平台管理的 worktree，不強制讓同一 branch 出現在多個 worktrees，也不自行刪除其他工具建立或含未提交變更的 worktree。原生 [`git worktree`](https://git-scm.com/docs/git-worktree) 是可攜基線；[Worktrunk](https://github.com/max-sixty/worktrunk) 可選擇簡化建立、切換與清理，但屬於本機／agent orchestration 輔助工具，不是本模板或生成 repo 的必要相依。worktree 只隔離工作目錄，整合仍以 PR、CI、人工審查及合併後完整驗證為準。
 
+GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktree 的 agent 也負責在 PR 合併後回收：先離開該 worktree 並更新 integration ref，再從另一個 checkout 執行 `./scripts/cleanup-worktrees --apply --worktree <path> origin/main`。腳本預設只列出候選項目，且只接受有 GitHub merged PR 證據、已進入 integration ref、乾淨且未鎖定的 branch worktree；維護者要清理全 repo 時，先執行不含 `--apply` 的 dry run，再省略 `--worktree` 套用全部候選項目。
+
 本 repo 沒有共用測試環境，因此採 main-only。生成專案只有在確實有長期 dev 測試環境時，才改選 `dev` 模式。
 驗證入口也會執行 Issue／PR 政策正反例；標題不合格的 Issue 會讓連結它的 PR 無法通過，公版另注入不合法的 Python／TypeScript 內容，確認語言門禁真的會拒絕。
 
