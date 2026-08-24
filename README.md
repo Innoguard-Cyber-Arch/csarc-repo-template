@@ -86,7 +86,7 @@ Agent 必須確認乾淨 worktree 的 `HEAD` 等於 PR head SHA，執行 `./scri
 | Pro 個人帳號＋private | 套用並啟用 Ruleset | 與 Free public 相同 |
 | Team／Enterprise organization＋private | 確認 CODEOWNERS team 後套用並啟用 Ruleset | 必要審查、CODEOWNER 與 status checks 成為 merge gate；不符政策時 fail-closed |
 
-`policies/rulesets.json` 是所有方案共用的期望狀態。設定腳本在所有方案都透過 CODEOWNERS errors API 驗證 team 存在且對 repo 有 write access；這項檢查與是否能強制 Ruleset 分開。Free organization private repo 的設定頁雖提供 Ruleset 編輯器，但 GitHub REST 與 GraphQL 對建立／更新（包含 `disabled`）都回覆需升級或公開；因此 `gh` 無法自動預存。管理員可選擇在 Web UI 人工建立 disabled Ruleset，`check` 會將它顯示為 `STAGED`，但仍只代表已儲存，不代表 `main` 受保護。repo 改成 public 或組織升級後，請重新執行 `plan`／`apply`／`check`，由腳本套用 `active` 政策並驗證有效規則。腳本不會自行變更可見性。
+`policies/rulesets.json` 是所有方案共用的期望狀態。設定腳本在所有方案都透過 repository teams API 驗證 PR 內設定的 team 存在且對 repo 有 write access；這項檢查與是否能強制 Ruleset 分開，也不依賴預設分支尚未更新的 CODEOWNERS。Free organization private repo 的設定頁雖提供 Ruleset 編輯器，但 GitHub REST 與 GraphQL 對建立／更新（包含 `disabled`）都回覆需升級或公開；因此 `gh` 無法自動預存。管理員可選擇在 Web UI 人工建立 disabled Ruleset，`check` 會將它顯示為 `STAGED`，但仍只代表已儲存，不代表 `main` 受保護。repo 改成 public 或組織升級後，請重新執行 `plan`／`apply`／`check`，由腳本套用 `active` 政策並驗證有效規則。腳本不會自行變更可見性。
 
 ## 發布與維運
 

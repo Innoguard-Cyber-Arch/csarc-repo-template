@@ -221,14 +221,16 @@ case "$2" in
       printf '%s\n' '{"default_workflow_permissions":"read","can_approve_pull_request_reviews":true}'
     fi
     ;;
-  repos/acme/project/codeowners/errors)
+  repos/acme/project/teams)
     if [[ "${MOCK_CODEOWNERS_STATE:-valid}" == "unavailable" ]]; then
       echo "Resource not accessible by integration" >&2
       exit 1
     elif [[ "${MOCK_CODEOWNERS_STATE:-valid}" == "invalid" ]]; then
-      printf '%s\n' '{"errors":[{"path":".github/CODEOWNERS","line":1,"message":"Unknown owner: team is missing, invisible, or lacks repository write access"}]}'
+      printf '%s\n' '[[{"slug":"arch","permission":"pull","permissions":{"pull":true,"push":false,"maintain":false,"admin":false}}]]'
+    elif [[ "${MOCK_CODEOWNERS_STATE:-valid}" == "missing" ]]; then
+      printf '%s\n' '[[]]'
     else
-      printf '%s\n' '{"errors":[]}'
+      printf '%s\n' '[[{"slug":"arch","permission":"push","permissions":{"pull":true,"push":true,"maintain":false,"admin":false}}]]'
     fi
     ;;
   orgs/acme)
@@ -331,16 +333,17 @@ grep -q 'Cannot determine Ruleset capability' <<<"$unknown_ruleset"
 grep -q '403 service unavailable' <<<"$unknown_ruleset"
 
 for settings_mode in plan apply check; do
-  if invalid_codeowners="$(
-    run_settings_fixture free "$settings_mode" "" false false protected \
-      absent "" match match match true invalid 2>&1
-  )"; then
-    echo "$settings_mode must reject invalid CODEOWNERS."
-    exit 1
-  fi
-  grep -q 'CODEOWNERS validation failed:' <<<"$invalid_codeowners"
-  grep -q 'missing, invisible, or lacks repository write access' \
-    <<<"$invalid_codeowners"
+  for codeowners_state in invalid missing; do
+    if invalid_codeowners="$(
+      run_settings_fixture free "$settings_mode" "" false false protected \
+        absent "" match match match true "$codeowners_state" 2>&1
+    )"; then
+      echo "$settings_mode must reject $codeowners_state CODEOWNERS."
+      exit 1
+    fi
+    grep -q 'CODEOWNERS validation failed:' <<<"$invalid_codeowners"
+    grep -Eq 'lacks repository (write )?access' <<<"$invalid_codeowners"
+  done
 done
 
 free_plan="$(run_settings_fixture free plan "" false false protected absent)"
@@ -847,7 +850,7 @@ grep -Fq -- '-f "reviewers[]=$reviewer"' \
 grep -q 'DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"' src/csarc_cli/cli.py
 grep -Fqx '* @Innoguard-Cyber-Arch/arch' .github/CODEOWNERS
 grep -Fqx '@jachline28' .github/REVIEWERS
-grep -q '所有方案都透過 CODEOWNERS errors API 驗證' README.md
+grep -q '所有方案都透過 repository teams API 驗證' README.md
 grep -q 'Free private 不支援 team review request' template/docs/index.html.jinja
 
 grep -q "'## Purpose'" .github/workflows/python-version-policy.yml

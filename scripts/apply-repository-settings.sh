@@ -72,20 +72,29 @@ codeowners_inspection_error=""
 codeowners_inspection_available=false
 if [[ ! "$code_owner" =~ ^@([^/]+)/([^/[:space:]]+)$ ]]; then
   codeowners_validation="CODEOWNERS must use a GitHub team: @organization/team."
-elif ! codeowners_state="$(gh api "repos/$repo/codeowners/errors" 2>&1)"; then
+elif ! codeowners_state="$(gh api "repos/$repo/teams" --paginate --slurp 2>&1)"; then
   codeowners_inspection_error="$codeowners_state"
-elif ! codeowners_validation="$(python3 - "$codeowners_state" 2>&1 <<'PY'
+elif ! codeowners_validation="$(python3 - "$code_owner" "$codeowners_state" 2>&1 <<'PY'
 import json
 import sys
 
-errors = json.loads(sys.argv[1]).get("errors") or []
-print(
-    "; ".join(
-        f"{error.get('path', '.github/CODEOWNERS')}:{error.get('line', '?')}: "
-        + " ".join(str(error.get("message", "invalid owner")).splitlines())
-        for error in errors
+owner = sys.argv[1]
+slug = owner.split("/", 1)[1].casefold()
+pages = json.loads(sys.argv[2])
+teams = [team for page in pages for team in page]
+team = next((item for item in teams if item.get("slug", "").casefold() == slug), None)
+if team is None:
+    print(f"{owner} is missing, invisible, or lacks repository access.")
+else:
+    permissions = team.get("permissions") or {}
+    writable = team.get("permission") in {"push", "maintain", "admin"} or any(
+        permissions.get(level) is True for level in ("push", "maintain", "admin")
     )
-)
+    if not writable:
+        print(
+            f"{owner} lacks repository write access "
+            f"(permission: {team.get('permission', 'unknown')})."
+        )
 PY
 )"; then
   codeowners_inspection_error="$codeowners_validation"
