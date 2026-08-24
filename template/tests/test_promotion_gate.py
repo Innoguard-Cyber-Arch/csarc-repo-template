@@ -16,14 +16,18 @@ MODULE = runpy.run_path(
 )
 classify_canary = MODULE["classify_canary"]
 finalize = MODULE["finalize"]
+finalize_quota_fallback = MODULE["finalize_quota_fallback"]
+github_get = MODULE["github_get"]
 highest_release_intent = MODULE["highest_release_intent"]
 included_pull_requests = MODULE["included_pull_requests"]
 main_is_current = MODULE["main_is_current"]
 prepare = MODULE["prepare"]
+require_zero_step_run = MODULE["require_zero_step_run"]
 route_for = MODULE["route_for"]
 same_repository = MODULE["same_repository"]
 unfinished_milestone_issues = MODULE["unfinished_milestone_issues"]
 verify_main = MODULE["verify_main"]
+verify_quota_main = MODULE["verify_quota_main"]
 _GIT = shutil.which("git")
 if _GIT is None:
     raise RuntimeError("Git is required for promotion tests")
@@ -190,6 +194,50 @@ def test_promotion_source_must_be_the_same_repository() -> None:
     assert not same_repository({"head": {"repo": None}}, "owner/repo")
 
 
+def test_github_get_uses_authenticated_cli_without_environment_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Local promotion preflight must not persist an extracted token."""
+    calls: list[list[str]] = []
+
+    def fake_run(arguments: list[str], **_kwargs: object) -> SimpleNamespace:
+        calls.append(arguments)
+        return SimpleNamespace(stdout='{"state": "open"}')
+
+    monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert github_get("owner/repo", "issues/42", "") == {"state": "open"}
+    assert calls == [["/usr/bin/gh", "api", "repos/owner/repo/issues/42"]]
+
+
+def test_blocked_run_must_match_head_and_have_no_started_steps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A real hosted test failure cannot be relabeled as quota exhaustion."""
+
+    def zero_step_get(_repo: str, path: str, _token: str) -> object:
+        if path.endswith("/jobs"):
+            return {"jobs": [{"runner_id": 0, "steps": []}]}
+        return {"head_sha": "head", "conclusion": "failure"}
+
+    monkeypatch.setitem(
+        require_zero_step_run.__globals__, "github_get", zero_step_get
+    )
+    run_url = "https://github.com/owner/repo/actions/runs/200"
+    require_zero_step_run(run_url, "owner/repo", "head", "")
+
+    def started_get(_repo: str, path: str, _token: str) -> object:
+        if path.endswith("/jobs"):
+            return {"jobs": [{"runner_id": 7, "steps": [{"name": "tests"}]}]}
+        return {"head_sha": "head", "conclusion": "failure"}
+
+    monkeypatch.setitem(
+        require_zero_step_run.__globals__, "github_get", started_get
+    )
+    with pytest.raises(RuntimeError, match="zero-step"):
+        require_zero_step_run(run_url, "owner/repo", "head", "")
+
+
 def test_prepare_builds_milestone_candidate_evidence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -343,6 +391,164 @@ def test_finalize_rejects_failed_configured_canary(tmp_path: Path) -> None:
         )
 
 
+def test_finalize_quota_fallback_is_non_release_and_sha_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Local promotion evidence stays tied to one clean pull-request head."""
+    source = tmp_path / "source.json"
+    target = tmp_path / "target.json"
+    source.write_text(
+        json.dumps(
+            {
+                "repository": "owner/repo",
+                "pull_request": 42,
+                "route": {"kind": "standalone-batch", "relevant": True},
+                "base_sha": "base",
+                "head_sha": "head",
+                "candidate_sha": "head",
+                "candidate_tree": "tree",
+                "candidate_archive": {"sha256": "digest"},
+                "canary": {"state": "blocked"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "git_output",
+        lambda *arguments: "" if arguments[0] == "status" else "head",
+    )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "contains_commit",
+        lambda *_: True,
+    )
+
+    def fallback_get(_repo: str, path: str, _token: str) -> object:
+        if path == "git/ref/heads/main":
+            return {"object": {"sha": "base"}}
+        if path.endswith("/jobs"):
+            return {"jobs": [{"runner_id": 0, "steps": []}]}
+        return {"head_sha": "head", "conclusion": "failure"}
+
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__, "github_get", fallback_get
+    )
+    finalize_quota_fallback(
+        SimpleNamespace(
+            input=source,
+            output=target,
+            attestation_url=(
+                "https://github.com/owner/repo/pull/42#issuecomment-100"
+            ),
+            authorization_url=(
+                "https://github.com/owner/repo/pull/42#issuecomment-101"
+            ),
+            blocked_run_url=["https://github.com/owner/repo/actions/runs/200"],
+            verification_command=["./scripts/verify-template.sh"],
+        )
+    )
+    evidence = json.loads(target.read_text(encoding="utf-8"))
+    assert evidence["gate"] == "quota-fallback"
+    assert evidence["release_eligible"] is False
+    assert evidence["full_check"] == {
+        "context": "verify",
+        "status": "local-quota-attested",
+        "commands": ["./scripts/verify-template.sh"],
+    }
+
+
+@pytest.mark.parametrize(
+    (
+        "route_kind",
+        "candidate_sha",
+        "canary_state",
+        "authorization_url",
+        "message",
+    ),
+    [
+        ("standalone-batch", "merge", "blocked", "valid", "must equal"),
+        ("standalone-batch", "head", "allowed", "valid", "configured canary"),
+        (
+            "standalone-batch",
+            "head",
+            "blocked",
+            "wrong",
+            "comments on the promotion PR",
+        ),
+        ("hotfix", "head", "blocked", "valid", "promotion gate"),
+    ],
+)
+def test_finalize_quota_fallback_rejects_unsafe_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    route_kind: str,
+    candidate_sha: str,
+    canary_state: str,
+    authorization_url: str,
+    message: str,
+) -> None:
+    """A fallback cannot drift from the head or replace external controls."""
+    source = tmp_path / "source.json"
+    source.write_text(
+        json.dumps(
+            {
+                "repository": "owner/repo",
+                "pull_request": 42,
+                "route": {"kind": route_kind, "relevant": True},
+                "base_sha": "base",
+                "head_sha": "head",
+                "candidate_sha": candidate_sha,
+                "candidate_tree": "tree",
+                "candidate_archive": {"sha256": "digest"},
+                "canary": {"state": canary_state},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "git_output",
+        lambda *arguments: "" if arguments[0] == "status" else "head",
+    )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "contains_commit",
+        lambda *_: True,
+    )
+
+    def fallback_get(_repo: str, path: str, _token: str) -> object:
+        if path == "git/ref/heads/main":
+            return {"object": {"sha": "base"}}
+        if path.endswith("/jobs"):
+            return {"jobs": [{"runner_id": 0, "steps": []}]}
+        return {"head_sha": "head", "conclusion": "failure"}
+
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__, "github_get", fallback_get
+    )
+    authorization = (
+        "https://github.com/owner/repo/pull/42#issuecomment-101"
+        if authorization_url == "valid"
+        else "https://github.com/owner/repo/pull/41#issuecomment-101"
+    )
+    with pytest.raises(RuntimeError, match=message):
+        finalize_quota_fallback(
+            SimpleNamespace(
+                input=source,
+                output=tmp_path / "target.json",
+                attestation_url=(
+                    "https://github.com/owner/repo/pull/42#issuecomment-100"
+                ),
+                authorization_url=authorization,
+                blocked_run_url=[
+                    "https://github.com/owner/repo/actions/runs/200"
+                ],
+                verification_command=["./scripts/verify-template.sh"],
+            )
+        )
+
+
 def test_verify_main_rejects_a_different_tree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -418,3 +624,49 @@ def test_verify_main_requires_successful_full_check(
                 output=tmp_path / "verified.json",
             )
         )
+
+
+def test_verify_quota_main_preserves_non_release_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A locally verified main tree must remain ineligible for release."""
+    source = tmp_path / "fallback.json"
+    target = tmp_path / "verified.json"
+    source.write_text(
+        json.dumps(
+            {
+                "gate": "quota-fallback",
+                "release_eligible": False,
+                "repository": "owner/repo",
+                "pull_request": 42,
+                "head_sha": "head",
+                "candidate_tree": "tree",
+                "full_check": {"status": "local-quota-attested"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_git(*arguments: str) -> str:
+        if arguments[0] == "status":
+            return ""
+        if arguments[-1] == "HEAD":
+            return "main"
+        return "tree"
+
+    monkeypatch.setitem(verify_quota_main.__globals__, "git_output", fake_git)
+    verify_quota_main(
+        SimpleNamespace(
+            evidence=source,
+            repo="owner/repo",
+            pr_number=42,
+            head_sha="head",
+            main_sha="main",
+            output=target,
+        )
+    )
+    evidence = json.loads(target.read_text(encoding="utf-8"))
+    assert evidence["post_merge"]["tree_identity"] == (
+        "verified-local-quota-fallback"
+    )
+    assert evidence["release_eligible"] is False
