@@ -1,0 +1,63 @@
+name: Delivery sync
+
+on:
+  pull_request:
+    branches: [main, dev, "dev/**"]
+    types: [opened, reopened, synchronize, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: delivery-sync-${{ github.repository }}-${{ github.event.pull_request.number || 'main' }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: delivery-sync
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+      - name: Require the proposed head to contain current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          python3 scripts/delivery_sync.py gate
+          --repo "$GITHUB_REPOSITORY"
+          --base "$PR_BASE"
+          --head-sha "$PR_HEAD_SHA"
+
+  reconcile:
+    name: reconcile
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Reconcile active delivery branches
+        env:
+          GH_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN || github.token }}
+          MAIN_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
+          SYNC_AUTO: ${{ vars.CSARC_AUTO_SYNC == 'true' && 'true' || 'false' }}
+          SYNC_TOKEN_KIND: ${{ secrets.CSARC_SYNC_TOKEN != '' && 'external' || 'github-token' }}
+        run: |
+          python3 scripts/delivery_sync.py reconcile \
+            --repo "$GITHUB_REPOSITORY" \
+            --main-sha "$MAIN_SHA" \
+            --auto "$SYNC_AUTO" \
+            --token-kind "$SYNC_TOKEN_KIND" | tee -a "$GITHUB_STEP_SUMMARY"

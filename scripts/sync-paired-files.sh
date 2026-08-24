@@ -18,6 +18,7 @@ paired_files=(
   .github/ISSUE_TEMPLATE/work-item.yml
   .github/workflows/governance-comment.yml
   .github/workflows/governance-drift.yml
+  .github/workflows/delivery-sync.yml
   .github/workflows/issue-triage.yml
   .github/workflows/milestone-lifecycle.yml
   .github/workflows/pr-policy.yml
@@ -29,6 +30,7 @@ paired_files=(
   docs/milestone-description.md
   scripts/apply-repository-settings.sh
   scripts/check-governance-drift
+  scripts/delivery_sync.py
   scripts/check-update-conflicts
   scripts/cleanup-worktrees
   scripts/install-gitleaks
@@ -41,6 +43,7 @@ paired_files=(
   scripts/test-worktree-cleanup
   scripts/validate-issue-title
   tests/test_spec_to_issue.py
+  tests/test_delivery_sync.py
   tests/test_milestone_lifecycle.py
   tests/test_release_policy.py
   zizmor.yml
