@@ -11,10 +11,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import BinaryIO, NoReturn, Protocol
+from typing import BinaryIO, NoReturn, Protocol, cast
 from urllib.parse import quote
 
 import yaml  # type: ignore[import-untyped]
@@ -31,6 +32,9 @@ DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"
 PROVENANCE_FILE = Path(".csarc/provenance.json")
 PENDING_ADOPTION_FILE = Path(".csarc/adoption-pending.json")
 ADOPTION_REPORT_BASENAME = "csarc-adoption-dry-run"
+ADOPTION_PLAN_BASENAME = "csarc-adoption-plan.json"
+AGENTS_BLOCK_START = "<!-- BEGIN CSARC MANAGED BLOCK -->"
+AGENTS_BLOCK_END = "<!-- END CSARC MANAGED BLOCK -->"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
 REPOSITORY_VISIBILITIES = {"public", "private", "internal"}
 LEGACY_MILESTONE_HEADINGS = (
@@ -130,6 +134,7 @@ class Plan:
     add: tuple[str, ...]
     overwrite: tuple[str, ...]
     preserve: tuple[str, ...]
+    merge: tuple[str, ...]
     manual: tuple[str, ...]
     unknown: tuple[str, ...]
 
@@ -171,6 +176,7 @@ class ResolvedPlan:
     capabilities: dict[str, object]
     files: Plan | None = None
     update: dict[str, object] | None = None
+    adoption: dict[str, object] | None = None
 
     def as_dict(self) -> dict[str, object]:
         """Return the stable machine-readable plan representation."""
@@ -194,6 +200,7 @@ class ResolvedPlan:
         if self.files is not None:
             result["files"] = {
                 "add": list(self.files.add),
+                "automatic_merge": list(self.files.merge),
                 "manual_merge": list(self.files.manual),
                 "overwrite": list(self.files.overwrite),
                 "preserve": list(self.files.preserve),
@@ -201,6 +208,8 @@ class ResolvedPlan:
             }
         if self.update is not None:
             result.update(self.update)
+        if self.adoption is not None:
+            result["adoption"] = self.adoption
         return result
 
 
@@ -561,7 +570,7 @@ def copier_copy(
     source: str,
     revision: Revision,
     stage: Path,
-    data: dict[str, str],
+    data: Mapping[str, object],
 ) -> None:
     """Render one immutable template revision into a staging directory."""
     command = [
@@ -625,7 +634,9 @@ def file_fingerprint(path: Path) -> str:
         digest.update(os.readlink(path).encode())
     elif path.is_file():
         digest.update(b"file\0")
-        digest.update(str(path.stat().st_mode & 0o111).encode())
+        digest.update(
+            b"executable" if path.stat().st_mode & 0o100 else b"regular"
+        )
         digest.update(b"\0")
         digest.update(path.read_bytes())
     else:
@@ -719,11 +730,15 @@ def read_pending_adoption(target: Path) -> dict[str, object]:
 
 
 def provenance_data(
-    revision: Revision, previous: dict[str, object] | None = None
+    revision: Revision,
+    previous: dict[str, object] | None = None,
+    *,
+    applied_at: str | None = None,
 ) -> dict[str, object]:
     """Build the auditable state recorded after a successful operation."""
     result: dict[str, object] = {
-        "applied_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "applied_at": applied_at
+        or datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "commit_sha": revision.sha,
         "guide_url": revision.guide_url,
         "release_attestation_verified": revision.attestation_verified,
@@ -747,6 +762,8 @@ def write_provenance(
     target: Path,
     revision: Revision,
     previous: dict[str, object] | None = None,
+    *,
+    applied_at: str | None = None,
 ) -> None:
     """Atomically persist verified release provenance."""
     destination = target / PROVENANCE_FILE
@@ -754,7 +771,9 @@ def write_provenance(
     temporary = destination.with_suffix(".tmp")
     temporary.write_text(
         json.dumps(
-            provenance_data(revision, previous), indent=2, sort_keys=True
+            provenance_data(revision, previous, applied_at=applied_at),
+            indent=2,
+            sort_keys=True,
         )
         + "\n",
         encoding="utf-8",
@@ -776,12 +795,89 @@ def read_provenance(target: Path) -> dict[str, object] | None:
     return payload
 
 
-def compare_stage(stage: Path, target: Path, *, adopt: bool) -> Plan:
+def managed_agents_block(content: str) -> str:
+    """Extract one complete CSARC-managed AGENTS block."""
+    if (
+        content.count(AGENTS_BLOCK_START) != 1
+        or content.count(AGENTS_BLOCK_END) != 1
+    ):
+        raise CliError("Generated AGENTS.md must contain one managed block.")
+    start = content.index(AGENTS_BLOCK_START)
+    end = content.index(AGENTS_BLOCK_END, start) + len(AGENTS_BLOCK_END)
+    return content[start:end]
+
+
+def merge_agents_file(existing: str, generated: str) -> str:
+    """Replace or append only the CSARC-managed AGENTS block."""
+    block = managed_agents_block(generated)
+    newline = "\r\n" if "\r\n" in existing else "\n"
+    block = block.replace("\r\n", "\n").replace("\n", newline)
+    starts = existing.count(AGENTS_BLOCK_START)
+    ends = existing.count(AGENTS_BLOCK_END)
+    if starts == 0 and ends == 0:
+        return existing.rstrip("\r\n") + newline * 2 + block + newline
+    if starts != 1 or ends != 1:
+        raise CliError("Existing AGENTS.md has invalid CSARC block markers.")
+    start = existing.index(AGENTS_BLOCK_START)
+    end = existing.index(AGENTS_BLOCK_END, start) + len(AGENTS_BLOCK_END)
+    return existing[:start] + block + existing[end:]
+
+
+def merge_gitignore(existing: str, generated: str) -> str:
+    """Append missing template entries while preserving project order."""
+    newline = "\r\n" if "\r\n" in existing else "\n"
+    lines = existing.splitlines()
+    known = set(lines)
+    additions = [line for line in generated.splitlines() if line not in known]
+    if not additions:
+        return (
+            existing if existing.endswith(("\n", "\r")) else existing + newline
+        )
+    separator = [] if not lines or not lines[-1] else [""]
+    return newline.join([*lines, *separator, *additions]) + newline
+
+
+def apply_adoption_policies(stage: Path, target: Path) -> tuple[str, ...]:
+    """Apply the small fixed set of safe existing-repository merges."""
+    merged: list[str] = []
+    agents = target / "AGENTS.md"
+    staged_agents = stage / "AGENTS.md"
+    if agents.is_file() and staged_agents.is_file():
+        staged_agents.write_text(
+            merge_agents_file(
+                agents.read_text(encoding="utf-8"),
+                staged_agents.read_text(encoding="utf-8"),
+            ),
+            encoding="utf-8",
+        )
+        merged.append("AGENTS.md")
+    gitignore = target / ".gitignore"
+    staged_gitignore = stage / ".gitignore"
+    if gitignore.is_file() and staged_gitignore.is_file():
+        staged_gitignore.write_text(
+            merge_gitignore(
+                gitignore.read_text(encoding="utf-8"),
+                staged_gitignore.read_text(encoding="utf-8"),
+            ),
+            encoding="utf-8",
+        )
+        merged.append(".gitignore")
+    return tuple(sorted(merged))
+
+
+def compare_stage(
+    stage: Path,
+    target: Path,
+    *,
+    adopt: bool,
+    merged_paths: tuple[str, ...] = (),
+) -> Plan:
     """Compare staged output with the destination without changing it."""
     staged = project_files(stage)
     existing = project_files(target)
     add: list[str] = []
     preserve: list[str] = []
+    merge: list[str] = []
     manual: list[str] = []
     unknown: list[str] = []
     for relative_name, staged_path in staged.items():
@@ -793,6 +889,8 @@ def compare_stage(stage: Path, target: Path, *, adopt: bool) -> Plan:
         existing_content = existing_path.read_bytes()
         if staged_content == existing_content:
             preserve.append(relative_name)
+        elif relative_name in merged_paths:
+            merge.append(relative_name)
         elif adopt:
             destination = (
                 manual
@@ -807,6 +905,7 @@ def compare_stage(stage: Path, target: Path, *, adopt: bool) -> Plan:
         tuple(sorted(add)),
         (),
         tuple(sorted(set(preserve))),
+        tuple(sorted(merge)),
         tuple(sorted(manual)),
         tuple(sorted(unknown)),
     )
@@ -842,10 +941,38 @@ def markdown_code(value: object) -> str:
 
 
 def report_settings(data: dict[str, object]) -> str:
-    """Return only the non-sensitive settings needed for adoption review."""
-    allowed = ("project_mode", "language", "coverage_mode")
+    """Return known non-secret settings used for rendering."""
+    allowed = {
+        "branch_strategy",
+        "code_owner",
+        "coverage_mode",
+        "coverage_threshold",
+        "enable_codeql",
+        "enable_governance_drift_check",
+        "enable_npm_publishing",
+        "enable_precommit",
+        "enable_pypi_publishing",
+        "enable_release_attestations",
+        "enable_template_update_notifications",
+        "language",
+        "npm_environment",
+        "package_name",
+        "project_description",
+        "project_mode",
+        "project_name",
+        "project_slug",
+        "project_visibility",
+        "pypi_environment",
+        "python_min_version",
+        "python_support_mode",
+        "reviewers",
+        "use_reusable_workflow",
+        "workflow_ref",
+    }
     return ", ".join(
-        f"`{key}={markdown_code(data[key])}`" for key in allowed if key in data
+        f"`{key}={markdown_code(value)}`"
+        for key, value in sorted(data.items())
+        if key in allowed
     )
 
 
@@ -855,6 +982,7 @@ def adoption_report_markdown(
     data: dict[str, object],
     plan: Plan,
     generated_at: str,
+    adoption: dict[str, object] | None = None,
 ) -> str:
     """Render the complete, shareable adoption decision report."""
     status, reason = plan_status(plan)
@@ -862,6 +990,7 @@ def adoption_report_markdown(
         ("Add", len(plan.add)),
         ("Overwrite", len(plan.overwrite)),
         ("Preserve", len(plan.preserve)),
+        ("Automatic merge", len(plan.merge)),
         ("Manual merge", len(plan.manual)),
         ("Unable to determine", len(plan.unknown)),
     )
@@ -888,6 +1017,29 @@ def adoption_report_markdown(
         "## Files needing attention",
         "",
     ]
+    if adoption is not None:
+        owner = adoption.get("code_owner")
+        owner_state = (
+            owner.get("state", "unknown")
+            if isinstance(owner, dict)
+            else "unknown"
+        )
+        lines[9:9] = [
+            f"- Target HEAD: `{markdown_code(adoption.get('target_head'))}`",
+            "- Working tree: "
+            + ("clean" if adoption.get("clean") else "dirty; review only"),
+            f"- CODEOWNER verification: `{markdown_code(owner_state)}`",
+            "- Project verification hook: `"
+            f"{markdown_code(adoption.get('project_verification_hook'))}`",
+            "- Candidate verification: `"
+            f"{markdown_code(adoption.get('verification'))}`",
+        ]
+        changes = adoption.get("target_changes")
+        if isinstance(changes, list) and changes:
+            lines[14:14] = [
+                "- Working-tree entries: "
+                + ", ".join(f"`{markdown_code(value)}`" for value in changes)
+            ]
     attention = (
         (path, "template and repository contain different UTF-8 text")
         for path in plan.manual
@@ -910,17 +1062,28 @@ def adoption_report_markdown(
             "- No known file conflicts. This does not guarantee semantic or "
             "runtime compatibility."
         )
+    if plan.merge:
+        lines.extend(
+            (
+                "",
+                "## Automatic merges",
+                "",
+                *(
+                    f"- `{markdown_code(path)}` - fixed CSARC adoption policy."
+                    for path in plan.merge
+                ),
+            )
+        )
     lines.extend(
         (
             "",
             "## If you approve",
             "",
-            "A real adoption adds only planned new files, runs "
-            "`./scripts/verify`, and previews repository settings with `plan`. "
-            "It does not apply settings, push, or open a pull request.",
+            "Apply only this machine plan with `csarc adopt --apply-plan`. "
+            "The CLI rebuilds and verifies the candidate before changing the "
+            "target. It does not apply settings, push, or open a pull request.",
             "",
-            "Review this report and the terminal plan before running the "
-            "command again without `--dry-run`.",
+            "Review this report and the terminal plan before applying it.",
             "",
         )
     )
@@ -995,6 +1158,7 @@ def draw_adoption_pdf(
         ("Add", len(plan.add), "#2F6B8A"),
         ("Overwrite", len(plan.overwrite), "#477E94"),
         ("Preserve", len(plan.preserve), "#7298A8"),
+        ("Automatic merge", len(plan.merge), "#4D7C5B"),
         ("Manual merge", len(plan.manual), "#A7833B"),
         ("Unknown", len(plan.unknown), "#9A5550"),
     )
@@ -1089,42 +1253,182 @@ def adoption_report_directory(target: Path, requested: Path | None) -> Path:
     return directory
 
 
+def adoption_plan_payload(plan: ResolvedPlan) -> dict[str, object]:
+    """Return a tamper-evident plan ready for persistence."""
+    payload = plan.as_dict()
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":")
+    ).encode()
+    payload["plan_sha256"] = hashlib.sha256(encoded).hexdigest()
+    return payload
+
+
+def read_adoption_plan(path: Path) -> dict[str, object]:
+    """Read a machine plan and reject accidental or malicious edits."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise CliError(f"Cannot read adoption plan from {path}.") from error
+    if not isinstance(payload, dict):
+        raise CliError("Adoption plan must be a JSON object.")
+    expected = payload.pop("plan_sha256", None)
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":")
+    ).encode()
+    actual = hashlib.sha256(encoded).hexdigest()
+    if not isinstance(expected, str) or expected != actual:
+        raise CliError("Adoption plan digest does not match its contents.")
+    payload["plan_sha256"] = expected
+    return payload
+
+
+def adoption_binding(payload: dict[str, object]) -> dict[str, object]:
+    """Return only fields that must remain identical before apply."""
+    adoption = payload.get("adoption")
+    if not isinstance(adoption, dict):
+        raise CliError("Adoption plan has no target state.")
+    return {
+        "answers": payload.get("answers"),
+        "adoption": adoption,
+        "files": payload.get("files"),
+        "mode": payload.get("mode"),
+        "repository": payload.get("repository"),
+        "target": payload.get("target"),
+        "template": payload.get("template"),
+    }
+
+
+def target_state(target: Path) -> tuple[str, tuple[str, ...], str]:
+    """Return HEAD, status entries, and a stable status digest."""
+    head, changes = git_target_state(target)
+    digest = hashlib.sha256("\0".join(changes).encode()).hexdigest()
+    return head, changes, digest
+
+
+def code_owner_verification(
+    repository: RepositoryContext, code_owner: object
+) -> dict[str, str]:
+    """Verify a team CODEOWNER when the GitHub API can enumerate access."""
+    value = str(code_owner)
+    match = re.fullmatch(r"@([^/]+)/([^/]+)", value)
+    if repository.repository is None or match is None:
+        return {
+            "reason": "Repository or team owner is unavailable.",
+            "state": "unknown",
+            "value": value,
+        }
+    organization, team = match.groups()
+    if (
+        repository.owner is None
+        or organization.casefold() != repository.owner.casefold()
+    ):
+        return {
+            "reason": "CODEOWNER organization does not match the repository.",
+            "state": "blocked",
+            "value": value,
+        }
+    try:
+        result = run(
+            [
+                "gh",
+                "api",
+                "--paginate",
+                f"repos/{repository.repository}/teams",
+                "--jq",
+                ".[].slug",
+            ],
+            capture=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return {
+            "reason": "GitHub CLI is unavailable.",
+            "state": "unknown",
+            "value": value,
+        }
+    if result.returncode != 0:
+        return {
+            "reason": result.stderr.strip() or "Team access is unreadable.",
+            "state": "unknown",
+            "value": value,
+        }
+    teams = {line.strip().casefold() for line in result.stdout.splitlines()}
+    if team.casefold() not in teams:
+        return {
+            "reason": "Team is not attached to the target repository.",
+            "state": "blocked",
+            "value": value,
+        }
+    return {
+        "reason": "Team has repository access.",
+        "state": "verified",
+        "value": value,
+    }
+
+
 def write_adoption_reports(
-    target: Path,
-    revision: Revision,
-    data: dict[str, object],
-    plan: Plan,
+    plan: ResolvedPlan,
     requested_directory: Path | None,
-) -> tuple[Path, Path]:
-    """Write Markdown first, then a PDF, without replacing prior reports."""
-    directory = adoption_report_directory(target, requested_directory)
+    *,
+    emit: bool = True,
+) -> tuple[Path, Path, Path]:
+    """Atomically replace the latest adoption reports outside the repo."""
+    if plan.files is None or plan.adoption is None:
+        raise CliError("Adoption report requires file and target state.")
+    directory = adoption_report_directory(plan.target, requested_directory)
     markdown_path = directory / f"{ADOPTION_REPORT_BASENAME}.md"
     pdf_path = directory / f"{ADOPTION_REPORT_BASENAME}.pdf"
-    collisions = [path for path in (markdown_path, pdf_path) if path.exists()]
-    if collisions:
-        names = ", ".join(path.name for path in collisions)
-        raise CliError(f"Adoption report already exists ({names}).")
+    plan_path = directory / ADOPTION_PLAN_BASENAME
     directory.mkdir(parents=True, exist_ok=True)
-    generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
-    with markdown_path.open("x", encoding="utf-8") as markdown:
+    generated_at = str(plan.adoption["generated_at"])
+    markdown_temporary = markdown_path.with_suffix(".md.tmp")
+    pdf_temporary = pdf_path.with_suffix(".pdf.tmp")
+    plan_temporary = plan_path.with_suffix(".json.tmp")
+    with markdown_temporary.open("w", encoding="utf-8") as markdown:
         markdown.write(
-            adoption_report_markdown(target, revision, data, plan, generated_at)
+            adoption_report_markdown(
+                plan.target,
+                plan.revision,
+                plan.answers,
+                plan.files,
+                generated_at,
+                plan.adoption,
+            )
         )
+    markdown_temporary.replace(markdown_path)
+    plan_temporary.write_text(
+        json.dumps(adoption_plan_payload(plan), indent=2, sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
+    plan_temporary.replace(plan_path)
     created_pdf = False
     try:
-        with pdf_path.open("xb") as pdf:
+        with pdf_temporary.open("wb") as pdf:
             created_pdf = True
-            draw_adoption_pdf(pdf, target, revision, data, plan, generated_at)
+            draw_adoption_pdf(
+                pdf,
+                plan.target,
+                plan.revision,
+                plan.answers,
+                plan.files,
+                generated_at,
+            )
+        pdf_temporary.replace(pdf_path)
     except Exception as error:
         if created_pdf:
-            pdf_path.unlink(missing_ok=True)
-        raise CliError(
-            "PDF report generation failed; Markdown remains at "
-            f"{markdown_path}."
-        ) from error
-    print(f"Markdown report: {markdown_path}")
-    print(f"PDF report: {pdf_path}")
-    return markdown_path, pdf_path
+            pdf_temporary.unlink(missing_ok=True)
+        print(
+            "WARNING: PDF report generation failed; Markdown and the machine "
+            f"plan remain usable at {directory}: {error}",
+            file=sys.stderr,
+        )
+    if emit:
+        print(f"Markdown report: {markdown_path}")
+        if pdf_path.is_file():
+            print(f"PDF report: {pdf_path}")
+        print(f"Machine plan: {plan_path}")
+    return markdown_path, pdf_path, plan_path
 
 
 def print_group(title: str, paths: tuple[str, ...]) -> None:
@@ -1197,11 +1501,20 @@ def print_plan(plan: ResolvedPlan) -> None:
     print("Settings:")
     for key, value in sorted(plan.answers.items()):
         print(f"  {key}={value}")
+    if plan.adoption is not None:
+        owner = plan.adoption.get("code_owner")
+        if isinstance(owner, dict):
+            print(
+                "CODEOWNER verification: "
+                f"{owner.get('state', 'unknown')} - "
+                f"{owner.get('reason', 'No details available.')}"
+            )
     print_capabilities(plan.capabilities)
     if plan.files is not None:
         print_group("Add", plan.files.add)
         print_group("Overwrite", plan.files.overwrite)
         print_group("Preserve", plan.files.preserve)
+        print_group("Automatic merge", plan.files.merge)
         print_group("Manual merge", plan.files.manual)
         print_group("Unable to determine", plan.files.unknown)
         status, reason = plan_status(plan.files)
@@ -1232,6 +1545,261 @@ def copy_additions(stage: Path, target: Path, paths: tuple[str, ...]) -> None:
         destination = target / relative_name
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination, follow_symlinks=False)
+
+
+def copy_candidate_files(
+    stage: Path, target: Path, paths: tuple[str, ...]
+) -> None:
+    """Copy planned additions and fixed merges into an isolated candidate."""
+    for relative_name in paths:
+        source = stage / relative_name
+        destination = target / relative_name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists() or destination.is_symlink():
+            destination.unlink()
+        if source.is_symlink():
+            destination.symlink_to(os.readlink(source))
+        else:
+            shutil.copy2(source, destination)
+
+
+def git_target_state(target: Path) -> tuple[str, tuple[str, ...]]:
+    """Return the exact committed base and reviewable working-tree state."""
+    head = run(
+        ["git", "-C", str(target), "rev-parse", "HEAD"], capture=True
+    ).stdout.strip()
+    status = run(
+        [
+            "git",
+            "-C",
+            str(target),
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+        ],
+        capture=True,
+    ).stdout.splitlines()
+    return head, tuple(status)
+
+
+def candidate_effects(
+    candidate: Path,
+    target: Path,
+    planned: Plan,
+) -> tuple[Plan, dict[str, str]]:
+    """Describe the complete candidate, including runtime-generated files."""
+    candidate_files = project_files(candidate)
+    target_files = project_files(target)
+    additions: list[str] = []
+    overwrites: list[str] = []
+    merges: list[str] = []
+    artifacts: dict[str, str] = {}
+    for name, path in candidate_files.items():
+        existing = target_files.get(name)
+        if existing is not None and file_fingerprint(path) == file_fingerprint(
+            existing
+        ):
+            continue
+        artifacts[name] = file_fingerprint(path)
+        if existing is None:
+            additions.append(name)
+        elif name in planned.merge:
+            merges.append(name)
+        else:
+            overwrites.append(name)
+    return (
+        Plan(
+            tuple(sorted(additions)),
+            tuple(sorted(overwrites)),
+            planned.preserve,
+            tuple(sorted(merges)),
+            planned.manual,
+            planned.unknown,
+        ),
+        dict(sorted(artifacts.items())),
+    )
+
+
+def clone_target(target: Path, candidate: Path) -> None:
+    """Clone the committed target without mutating its Git metadata."""
+    result = run(
+        [
+            "git",
+            "clone",
+            "--quiet",
+            "--no-hardlinks",
+            str(target),
+            str(candidate),
+        ],
+        capture=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise CliError(
+            result.stderr.strip() or "Cannot stage repository clone."
+        )
+
+
+def clone_working_tree(target: Path, candidate: Path) -> None:
+    """Clone HEAD and overlay the current tracked and untracked worktree."""
+    clone_target(target, candidate)
+    patch = candidate.parent / "working-tree.patch"
+    difference = run(
+        ["git", "-C", str(target), "diff", "--binary", "HEAD"],
+        capture=True,
+    )
+    patch.write_text(difference.stdout, encoding="utf-8")
+    if difference.stdout:
+        result = run(
+            ["git", "-C", str(candidate), "apply", str(patch)],
+            capture=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise CliError(
+                result.stderr.strip() or "Cannot stage tracked adoption work."
+            )
+    untracked = run(
+        [
+            "git",
+            "-C",
+            str(target),
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        ],
+        capture=True,
+    ).stdout.split("\0")
+    copy_candidate_files(
+        target, candidate, tuple(path for path in untracked if path)
+    )
+    run(["git", "-C", str(candidate), "add", "--all"])
+    run(
+        [
+            "git",
+            "-C",
+            str(candidate),
+            "-c",
+            "user.name=CSARC",
+            "-c",
+            "user.email=csarc@example.invalid",
+            "commit",
+            "--quiet",
+            "--no-gpg-sign",
+            "-m",
+            "chore: stage pending adoption",
+        ]
+    )
+
+
+def prepare_adoption_candidate(
+    stage: Path,
+    target: Path,
+    revision: Revision,
+    repository: RepositoryContext,
+    answers: dict[str, object],
+    planned: Plan,
+    generated_at: str,
+    candidate: Path,
+) -> tuple[Plan, dict[str, str], str]:
+    """Build and verify the exact adoption result outside the target repo."""
+    clone_target(target, candidate)
+    copy_candidate_files(stage, candidate, (*planned.add, *planned.merge))
+    if planned.manual or planned.unknown:
+        write_pending_adoption(
+            candidate,
+            pending_adoption_data(
+                candidate,
+                revision,
+                repository,
+                candidate / ".copier-answers.yml",
+                tuple(
+                    sorted(
+                        set(planned.add)
+                        | set(planned.merge)
+                        | (set(planned.preserve) & set(project_files(stage)))
+                    )
+                ),
+                (*planned.manual, *planned.unknown),
+            ),
+        )
+        verification = "deferred-manual-merge"
+    else:
+        create_adoption_lockfiles(candidate, answers)
+        write_provenance(candidate, revision, applied_at=generated_at)
+        try:
+            verify_project(candidate)
+        except CliError as error:
+            verification = f"failed: {error}"
+        else:
+            verification = "passed"
+    effects, artifacts = candidate_effects(candidate, target, planned)
+    return effects, artifacts, verification
+
+
+def write_candidate_patch(
+    candidate: Path,
+    target: Path,
+    patch: Path,
+    *,
+    delete_paths: tuple[str, ...] = (),
+) -> None:
+    """Apply an already verified candidate as one checked byte-level patch."""
+    before = patch.parent / "before"
+    after = patch.parent / "after"
+    before.mkdir()
+    after.mkdir()
+    candidate_files = project_files(candidate)
+    target_files = project_files(target)
+    changed = tuple(
+        sorted(
+            name
+            for name, candidate_path in candidate_files.items()
+            if name not in target_files
+            or file_fingerprint(candidate_path)
+            != file_fingerprint(target_files[name])
+        )
+    )
+    existing = tuple(name for name in changed if name in target_files)
+    copy_candidate_files(target, before, existing)
+    copy_candidate_files(candidate, after, changed)
+    copy_candidate_files(
+        target,
+        before,
+        tuple(name for name in delete_paths if name in target_files),
+    )
+    patch_result = subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "git",
+            "diff",
+            "--no-index",
+            "--binary",
+            "--no-renames",
+            "--",
+            before.name,
+            after.name,
+        ],
+        cwd=patch.parent,
+        capture_output=True,
+        check=False,
+    )
+    if patch_result.returncode not in {0, 1}:
+        detail = patch_result.stderr.decode(errors="replace").strip()
+        raise CliError(detail or "Cannot build candidate patch.")
+    patch.write_bytes(patch_result.stdout)
+    for check in (True, False):
+        command = ["git", "-C", str(target), "apply", "-p2"]
+        if check:
+            command.append("--check")
+        command.append(str(patch))
+        apply_result = run(command, capture=True, check=False)
+        if apply_result.returncode != 0:
+            detail = (
+                apply_result.stderr.strip()
+                or "Git rejected the candidate patch."
+            )
+            raise CliError(detail)
 
 
 def create_adoption_lockfiles(target: Path, answers: dict[str, object]) -> None:
@@ -1731,7 +2299,24 @@ def require_clean_repository(target: Path) -> None:
         raise CliError("Git working tree must be clean before adopt or update.")
 
 
-def validate_copy_target(target: Path, mode: str) -> None:
+def resolve_repository_target(path: Path) -> Path:
+    """Resolve any path inside one Git worktree to its root."""
+    candidate = path.expanduser().resolve()
+    result = run(
+        ["git", "-C", str(candidate), "rev-parse", "--show-toplevel"],
+        capture=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise CliError(
+            f"{candidate} must be inside an existing Git repository."
+        )
+    return Path(result.stdout.strip()).resolve()
+
+
+def validate_copy_target(
+    target: Path, mode: str, *, require_clean: bool = True
+) -> None:
     """Validate an init or adopt destination before release resolution."""
     if mode == "init" and target.exists() and any(target.iterdir()):
         raise CliError("init target must not exist or must be empty.")
@@ -1748,12 +2333,13 @@ def validate_copy_target(target: Path, mode: str) -> None:
         raise CliError(
             "Repository already has Copier answers; use csarc update."
         )
-    require_clean_repository(target)
+    if require_clean:
+        require_clean_repository(target)
 
 
 def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
     """Validate and complete one saved adoption checkpoint."""
-    target = args.path.expanduser().resolve()
+    target = resolve_repository_target(args.path or Path.cwd())
     if not target.is_dir():
         raise CliError("adopt target must be an existing directory.")
     if args.report_dir is not None:
@@ -1905,7 +2491,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         repository=repository,
         answers=answers,
         capabilities=capabilities,
-        files=Plan((), (), (), manual_files, ()),
+        files=Plan((), (), (), (), manual_files, ()),
     )
     if args.json:
         print(json.dumps(plan.as_dict(), sort_keys=True, separators=(",", ":")))
@@ -1916,34 +2502,262 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
     if args.dry_run or not confirm(args):
         return 0
 
-    create_adoption_lockfiles(target, answers)
-    try:
-        verify_project(target)
-    except CliError as error:
-        raise CliError(
-            "Project verification failed; fix the reported failures, then "
-            "rerun csarc adopt --finalize."
-        ) from error
+    with tempfile.TemporaryDirectory(prefix="csarc-finalize-") as temporary:
+        temporary_root = Path(temporary)
+        candidate = temporary_root / "candidate"
+        clone_working_tree(target, candidate)
+        create_adoption_lockfiles(candidate, answers)
+        write_provenance(candidate, revision)
+        (candidate / PENDING_ADOPTION_FILE).unlink()
+        try:
+            verify_project(candidate)
+        except CliError as error:
+            raise CliError(
+                "Project verification failed; fix the reported failures, "
+                "then rerun csarc adopt --finalize."
+            ) from error
+        write_candidate_patch(
+            candidate,
+            target,
+            temporary_root / "finalize.patch",
+            delete_paths=(PENDING_ADOPTION_FILE.as_posix(),),
+        )
     settings_plan(target)
     apply_milestone_description_plan(milestone_plan)
-    write_provenance(target, revision)
-    (target / PENDING_ADOPTION_FILE).unlink()
+    print("Adoption complete.")
+    return 0
+
+
+def predicted_adoption_effects(target: Path, planned: Plan) -> Plan:
+    """Include the checkpoint or provenance file in a review-only forecast."""
+    runtime = (
+        PENDING_ADOPTION_FILE
+        if planned.manual or planned.unknown
+        else PROVENANCE_FILE
+    )
+    additions = set(planned.add)
+    if not (target / runtime).exists():
+        additions.add(runtime.as_posix())
+    return Plan(
+        tuple(sorted(additions)),
+        planned.overwrite,
+        planned.preserve,
+        planned.merge,
+        planned.manual,
+        planned.unknown,
+    )
+
+
+def build_adoption_plan(
+    stage: Path,
+    candidate: Path,
+    target: Path,
+    revision: Revision,
+    repository: RepositoryContext,
+    answers: dict[str, object],
+    capabilities: dict[str, object],
+    generated_at: str,
+) -> ResolvedPlan:
+    """Build one locked adoption plan and its isolated candidate."""
+    merged = apply_adoption_policies(stage, target)
+    planned = compare_stage(stage, target, adopt=True, merged_paths=merged)
+    head, changes, status_sha256 = target_state(target)
+    artifacts: dict[str, str] = {}
+    if changes:
+        files = predicted_adoption_effects(target, planned)
+        verification = "not-run-dirty"
+    else:
+        files, artifacts, verification = prepare_adoption_candidate(
+            stage,
+            target,
+            revision,
+            repository,
+            answers,
+            planned,
+            generated_at,
+            candidate,
+        )
+    owner = code_owner_verification(repository, answers.get("code_owner"))
+    adoption: dict[str, object] = {
+        "applicable": not changes
+        and verification in {"passed", "deferred-manual-merge"}
+        and owner["state"] != "blocked",
+        "artifacts": artifacts,
+        "clean": not changes,
+        "code_owner": owner,
+        "generated_at": generated_at,
+        "phase": (
+            "pending" if planned.manual or planned.unknown else "complete"
+        ),
+        "project_verification_hook": (
+            "configured"
+            if os.access(target / "scripts" / "verify-product", os.X_OK)
+            else "not-configured"
+        ),
+        "target_changes": list(changes),
+        "target_head": head,
+        "target_status_sha256": status_sha256,
+        "verification": verification,
+    }
+    return ResolvedPlan(
+        mode="adopt",
+        target=target,
+        revision=revision,
+        repository=repository,
+        answers=answers,
+        capabilities=capabilities,
+        files=files,
+        adoption=adoption,
+    )
+
+
+def command_apply_adoption_plan(  # noqa: C901
+    args: argparse.Namespace, target: Path
+) -> int:
+    """Rebuild, verify, and apply exactly one saved adoption plan."""
+    if args.dry_run or args.report_dir is not None or args.json:
+        raise CliError(
+            "--apply-plan cannot be combined with --dry-run, --report-dir, "
+            "or --json."
+        )
+    if any((args.source, args.to, args.expected_sha, args.allow_unreleased)):
+        raise CliError(
+            "--apply-plan uses the source and SHA saved by dry-run; do not "
+            "pass release-selection options."
+        )
+    if args.data:
+        raise CliError("--apply-plan uses the answers saved by dry-run.")
+    plan_path = args.apply_plan.expanduser().resolve()
+    if plan_path == target or target in plan_path.parents:
+        raise CliError("Adoption plans must remain outside the target repo.")
+    saved = read_adoption_plan(plan_path)
+    if saved.get("mode") != "adopt" or saved.get("target") != str(target):
+        raise CliError("Adoption plan does not match this target repository.")
+    raw_adoption = saved.get("adoption")
+    raw_template = saved.get("template")
+    raw_answers = saved.get("answers")
+    raw_repository = saved.get("repository")
+    raw_capabilities = saved.get("release_capabilities")
+    if not all(
+        isinstance(value, dict)
+        for value in (
+            raw_adoption,
+            raw_template,
+            raw_answers,
+            raw_repository,
+            raw_capabilities,
+        )
+    ):
+        raise CliError("Adoption plan has an unsupported shape.")
+    raw_adoption = cast(dict[str, object], raw_adoption)
+    raw_template = cast(dict[str, object], raw_template)
+    raw_answers = cast(dict[str, object], raw_answers)
+    raw_repository = cast(dict[str, object], raw_repository)
+    raw_capabilities = cast(dict[str, object], raw_capabilities)
+    if raw_adoption.get("applicable") is not True:
+        raise CliError(
+            "Adoption plan is review-only; clean the repository or resolve "
+            "the reported failure, then rerun --dry-run."
+        )
+    source = raw_template.get("source")
+    release = raw_template.get("release")
+    sha = raw_template.get("sha")
+    verification = raw_template.get("verification")
+    generated_at = raw_adoption.get("generated_at")
+    if (
+        not isinstance(source, str)
+        or not isinstance(release, str)
+        or not isinstance(sha, str)
+        or not isinstance(generated_at, str)
+        or verification not in {"verified", "unverified"}
+    ):
+        raise CliError("Adoption plan has invalid template identity.")
+    require_clean_repository(target)
+    revision = resolve_revision(
+        source,
+        release,
+        expected_sha=sha,
+        allow_unreleased=verification == "unverified",
+    )
+    answers = {str(key): value for key, value in raw_answers.items()}
+    visibility = answers.get("project_visibility")
+    if not isinstance(visibility, str):
+        raise CliError("Adoption plan has no project_visibility answer.")
+    explicit_visibility = (
+        visibility if raw_repository.get("source") == "explicit" else None
+    )
+    repository = repository_context(target, explicit_visibility)
+    with tempfile.TemporaryDirectory(prefix="csarc-apply-") as temporary:
+        temporary_root = Path(temporary)
+        stage = temporary_root / "rendered"
+        stage.mkdir()
+        copier_copy(source, revision, stage, answers)
+        candidate = temporary_root / "candidate"
+        fresh = build_adoption_plan(
+            stage,
+            candidate,
+            target,
+            revision,
+            repository,
+            answers,
+            raw_capabilities,
+            generated_at,
+        )
+        fresh_payload = adoption_plan_payload(fresh)
+        if adoption_binding(fresh_payload) != adoption_binding(saved):
+            raise CliError(
+                "Repository or rendered output drifted after dry-run; create "
+                "a new adoption plan."
+            )
+        if (
+            fresh.adoption is None
+            or fresh.adoption.get("applicable") is not True
+        ):
+            raise CliError("Rebuilt adoption candidate is not applicable.")
+        print_plan(fresh)
+        if not confirm(args):
+            return 0
+        milestone_plan = milestone_description_plan(target)
+        write_candidate_patch(candidate, target, temporary_root / "adopt.patch")
+
+    phase = fresh.adoption.get("phase")
+    if phase == "pending":
+        print(
+            "Adoption pending: complete the listed manual merges, then run "
+            "csarc adopt --finalize."
+        )
+        return 1
+    settings_plan(target)
+    apply_milestone_description_plan(milestone_plan)
     print("Adoption complete.")
     return 0
 
 
 def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
     """Plan and apply init or adopt."""
-    target = args.path.expanduser().resolve()
+    target = (
+        resolve_repository_target(args.path or Path.cwd())
+        if mode == "adopt"
+        else args.path.expanduser().resolve()
+    )
     if mode == "adopt" and args.finalize:
         return command_finalize_adoption(args)
-    validate_copy_target(target, mode)
+    if mode == "adopt" and args.apply_plan is not None:
+        return command_apply_adoption_plan(args, target)
+    validate_copy_target(
+        target, mode, require_clean=mode != "adopt" or not args.dry_run
+    )
     if mode == "adopt" and args.report_dir is not None and not args.dry_run:
         raise CliError("--report-dir requires adopt --dry-run.")
     if args.json and not args.dry_run:
         raise CliError("--json requires --dry-run for init or adopt.")
     if args.json and mode == "adopt" and args.report_dir is not None:
         raise CliError("--report-dir cannot be combined with --json.")
+    if mode == "adopt" and not args.dry_run:
+        raise CliError(
+            "Run adopt --dry-run first, then apply its machine plan with "
+            "--apply-plan."
+        )
 
     source = args.source or CANONICAL_SOURCE
     revision = resolve_revision(
@@ -1969,19 +2783,31 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         stage.mkdir()
         copier_copy(revision.source, revision, stage, data)
         answers = read_copier_answers(stage / ".copier-answers.yml")
-        file_plan = compare_stage(stage, target, adopt=mode == "adopt")
         capabilities = capability_preflight(
             stage / "scripts" / "release_policy.py", target, emit=False
         )
-        plan = ResolvedPlan(
-            mode=mode,
-            target=target,
-            revision=revision,
-            repository=repository,
-            answers=answers,
-            capabilities=capabilities,
-            files=file_plan,
-        )
+        if mode == "adopt":
+            generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+            plan = build_adoption_plan(
+                stage,
+                Path(temporary) / "candidate",
+                target,
+                revision,
+                repository,
+                answers,
+                capabilities,
+                generated_at,
+            )
+        else:
+            plan = ResolvedPlan(
+                mode=mode,
+                target=target,
+                revision=revision,
+                repository=repository,
+                answers=answers,
+                capabilities=capabilities,
+                files=compare_stage(stage, target, adopt=False),
+            )
         if args.json:
             print(
                 json.dumps(
@@ -1991,14 +2817,9 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         else:
             print_plan(plan)
         if mode == "adopt" and args.dry_run:
-            write_adoption_reports(
-                target, revision, answers, file_plan, args.report_dir
-            )
-        milestone_plan = (
+            write_adoption_reports(plan, args.report_dir, emit=not args.json)
+        if mode == "adopt":
             milestone_description_plan(target, emit=not args.json)
-            if mode == "adopt"
-            else None
-        )
         if args.dry_run or not confirm(args):
             return 0
         if mode == "init":
@@ -2006,52 +2827,11 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 target.rmdir()
             shutil.copytree(stage, target, symlinks=True)
         else:
-            copy_additions(stage, target, file_plan.add)
-            write_pending_adoption(
-                target,
-                pending_adoption_data(
-                    target,
-                    revision,
-                    repository,
-                    target / ".copier-answers.yml",
-                    tuple(
-                        sorted(
-                            set(file_plan.add)
-                            | (
-                                set(file_plan.preserve)
-                                & set(project_files(stage))
-                            )
-                        )
-                    ),
-                    (*file_plan.manual, *file_plan.unknown),
-                ),
-            )
-            if file_plan.manual or file_plan.unknown:
-                print(
-                    "Adoption pending: complete the listed manual merges, "
-                    "then run csarc adopt --finalize."
-                )
-                return 1
+            raise CliError("Adoption requires a saved machine plan.")
 
-    if mode == "adopt":
-        create_adoption_lockfiles(target, answers)
-        try:
-            verify_project(target)
-        except CliError as error:
-            raise CliError(
-                "Project verification failed; fix the reported failures, "
-                "then rerun csarc adopt --finalize."
-            ) from error
-    else:
-        verify_project(target)
-    if mode == "adopt":
-        settings_plan(target)
-        apply_milestone_description_plan(milestone_plan)
-        write_provenance(target, revision)
-        (target / PENDING_ADOPTION_FILE).unlink()
-    else:
-        write_provenance(target, revision)
-        settings_plan(target)
+    verify_project(target)
+    write_provenance(target, revision)
+    settings_plan(target)
     return 0
 
 
@@ -2244,7 +3024,7 @@ def update_plan_answers(
 
 def command_update(args: argparse.Namespace) -> int:
     """Check or apply a Copier smart update."""
-    target = args.path.expanduser().resolve()
+    target = resolve_repository_target(args.path)
     if (target / PENDING_ADOPTION_FILE).is_file():
         raise CliError(
             "Adoption is pending; complete the manual merge and run "
@@ -2382,7 +3162,12 @@ def parser() -> argparse.ArgumentParser:
         ("adopt", "add the baseline to an existing clean repository"),
     ):
         subparser = subparsers.add_parser(name, help=help_text)
-        subparser.add_argument("path", type=Path)
+        if name == "adopt":
+            subparser.add_argument(
+                "path", nargs="?", type=Path, default=Path.cwd()
+            )
+        else:
+            subparser.add_argument("path", type=Path)
         subparser.add_argument("--to", metavar="RELEASE_OR_SHA")
         subparser.add_argument("--source")
         subparser.add_argument("--expected-sha", metavar="FULL_SHA")
@@ -2392,6 +3177,12 @@ def parser() -> argparse.ArgumentParser:
         )
         subparser.add_argument("--json", action="store_true")
         if name == "adopt":
+            subparser.add_argument(
+                "--apply-plan",
+                type=Path,
+                metavar="PATH",
+                help="apply one unchanged machine plan from dry-run",
+            )
             subparser.add_argument(
                 "--finalize",
                 action="store_true",
@@ -2427,6 +3218,8 @@ def main(arguments: list[str] | None = None) -> int:
     """Run the CSARC command-line interface."""
     args = parser().parse_args(arguments)
     try:
+        if sys.platform == "win32":
+            raise CliError("Native Windows is unsupported; run csarc in WSL2.")
         if args.command in {"init", "adopt"}:
             return command_copy(args, args.command)
         if args.json and not args.check:

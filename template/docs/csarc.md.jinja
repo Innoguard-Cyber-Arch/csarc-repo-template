@@ -1,0 +1,20 @@
+# CSARC repository baseline
+
+本文件是既有專案導入 CSARC 後的穩定操作入口；產品用途、安裝與使用方式仍以專案自己的 `README.md` 為準。
+
+## 工作流程
+
+- 修改前先讀取 root `AGENTS.md` 的專案規則與 CSARC managed block。
+- 建立 Issue、使用編號分支、執行 `./scripts/verify`，再依專案分支策略建立 PR。
+- repository settings 只先執行 `./scripts/apply-repository-settings.sh plan`；沒有管理員明確授權不得 apply。
+- 不自動 stash、commit、push、開 PR 或合併使用者既有工作。
+
+## 驗證與發布
+
+- 唯一完整驗證入口是 `./scripts/verify`；產品額外檢查放在可執行的 project-owned `scripts/verify-product`，公版驗證會在最後呼叫它。
+- 產品原有 release workflow 保留；CSARC 的 release baseline 位於 `.github/workflows/csarc-release.yml`。
+- Copier answers 與 `.csarc/provenance.json` 記錄已套用的 template Release 與完整 commit SHA。
+
+## 公版更新
+
+使用 `csarc update --check --json` 先驗證既有 provenance 並查看候選 Release；確認顯示的完整 SHA 與 plan 後，才套用更新。

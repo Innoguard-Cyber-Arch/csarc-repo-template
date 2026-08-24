@@ -160,9 +160,9 @@ npm 發布使用 environment `{{ npm_environment }}` 與 OIDC，不需要 `NPM_T
 ```bash
 git switch {% if branch_strategy == "delivery" %}dev/next{% else %}{{ branch_strategy }}{% endif %}
 git switch -c chore/<issue-number>-update-repo-template
-uvx --from csarc-repo-cli csarc update --to <approved-release-tag> \
+uvx --python 3.14 --from csarc-repo-cli csarc update --to <approved-release-tag> \
   --expected-sha <reviewed-full-commit-sha> --dry-run
-uvx --from csarc-repo-cli csarc update --to <approved-release-tag> \
+uvx --python 3.14 --from csarc-repo-cli csarc update --to <approved-release-tag> \
   --expected-sha <reviewed-full-commit-sha> --yes --non-interactive
 ```
 

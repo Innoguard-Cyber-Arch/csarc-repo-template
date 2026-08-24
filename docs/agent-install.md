@@ -1,25 +1,33 @@
 # CSARC agent install contract
 
-1. Confirm the target path is the repository requested by the user.
+1. Resolve the current Git repository root yourself. Ask only when a new
+   repository's name or location cannot be inferred unambiguously; do not put
+   a guessed path into the user prompt.
 2. Use only `https://github.com/Innoguard-Cyber-Arch/csarc-repo-template`.
-3. Run the requested `csarc init`, `adopt`, or `update` command with
-   `--dry-run` first. For a release-specific request, pass both `--to` and
-   `--expected-sha`. For `adopt`, also pass `--report-dir` with a location
-   outside the target repository.
+3. Select Python per invocation with `uvx --python 3.14`; never edit a shell
+   profile or global environment. Run the requested `csarc init`, `adopt`, or
+   `update` command with `--dry-run` first. For a release-specific request,
+   pass both `--to` and `--expected-sha`.
 4. Summarize the verified release, full commit SHA, release capability
    preflight, settings, conflict risk, and every file classified as add,
-   overwrite, preserve, manual merge, or unable to determine. Review both the
-   generated Markdown and PDF, then report the terminal's separate Milestone
+   overwrite, preserve, automatic merge, manual merge, or unable to determine.
+   Review the generated Markdown and machine plan, plus the PDF when available,
+   then report the terminal's separate Milestone
    description classifications: upgrade, current, or manual review. Neither
    source guarantees the absence of semantic or runtime conflicts. Unknown
    capabilities are resolved by the runtime workflow and never treated as
    allowed.
 5. Stop and wait for explicit confirmation before changing files.
-6. After confirmation, repeat the same command with
-   `--yes --non-interactive` and report the `./scripts/verify` result.
+   Treat an unverified `code_owner` as unknown and call it out before accepting
+   the plan; a confirmed missing team is blocking.
+6. After confirmation, apply an adoption only with the exact machine plan
+   emitted by dry-run and `--yes --non-interactive`. For init or update, reuse
+   the resolved tag and full SHA explicitly. Report the `./scripts/verify`
+   result.
 7. Stop on any identity, immutability, attestation, signature, SHA,
-   provenance, verification, or merge-conflict failure. Preserve the diff for
-   review.
+   provenance, plan-drift, verification, or merge-conflict failure. Do not
+   stash or commit existing user work. A failed adoption must leave the target
+   unchanged or in its explicit resumable pending state.
 8. Do not apply repository settings, change global agent configuration, push,
    open a pull request, or merge unless the user separately requests it.
 9. During handoff, point out that the installed `AGENTS.md` requires a bounded

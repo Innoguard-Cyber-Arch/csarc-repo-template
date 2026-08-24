@@ -104,7 +104,10 @@ enable_release_attestations:
     )
     write_executable(
         source / "template" / "scripts" / "verify",
-        "#!/usr/bin/env bash\nset -euo pipefail\ntest -f managed.txt\n",
+        "#!/usr/bin/env bash\nset -euo pipefail\ntest -f managed.txt\n"
+        "if [[ -x scripts/verify-product ]]; then\n"
+        "  ./scripts/verify-product\n"
+        "fi\n",
     )
     write_executable(
         source / "template" / "scripts" / "apply-repository-settings.sh",
@@ -161,18 +164,30 @@ def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
     commit(project, "test: pending product")
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        first_sha,
+        "--allow-unreleased",
+        "--data",
+        "language=ci",
+    ]
+    assert main([*arguments, "--dry-run"]) == 0
+    plan = (
+        tmp_path
+        / "pending-product-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
     assert (
         main(
             [
                 "adopt",
                 str(project),
-                "--source",
-                str(source),
-                "--to",
-                first_sha,
-                "--allow-unreleased",
-                "--data",
-                "language=ci",
+                "--apply-plan",
+                str(plan),
                 "--yes",
                 "--non-interactive",
             ]
@@ -646,10 +661,23 @@ def test_adopt_requires_clean_tree_and_preserves_product_files(
     pdf_text = reader.pages[0].extract_text()
     assert "Review required" in pdf_text
     assert "Manual merge" in pdf_text
-    assert main([*arguments, "--dry-run"]) == 2
-    assert "already exists" in capsys.readouterr().err
+    assert main([*arguments, "--dry-run"]) == 0
     assert git(project, "status", "--porcelain") == before
-    assert main([*arguments, "--yes", "--non-interactive"]) == 1
+    plan_path = report_dir / cli.ADOPTION_PLAN_BASENAME
+    assert plan_path.is_file()
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 1
+    )
     assert manifest.read_text(encoding="utf-8") == (
         '[project]\nname = "legacy-product"\nversion = "0.1.0"\n'
         'requires-python = ">=3.14"\n'
@@ -838,26 +866,39 @@ def test_real_template_adoption_resumes_after_manifest_merge(
             )
             + "\n"
         )
+    (project / "README.md").write_text("# Existing product\n", encoding="utf-8")
     (project / manifest_name).write_text(initial_manifest, encoding="utf-8")
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
     commit(project, f"test: existing {language} product")
 
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(ROOT),
+        "--to",
+        revision_sha,
+        "--allow-unreleased",
+        "--data",
+        f"language={language}",
+        "--data",
+        "coverage_mode=global",
+    ]
+    assert main([*arguments, "--dry-run"]) == 0
+    plan_path = (
+        tmp_path
+        / f"existing-{language}-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
     assert (
         main(
             [
                 "adopt",
                 str(project),
-                "--source",
-                str(ROOT),
-                "--to",
-                revision_sha,
-                "--allow-unreleased",
-                "--data",
-                f"language={language}",
-                "--data",
-                "coverage_mode=global",
+                "--apply-plan",
+                str(plan_path),
                 "--yes",
                 "--non-interactive",
             ]
@@ -901,6 +942,102 @@ def test_real_template_adoption_resumes_after_manifest_merge(
     assert (project / lock_name).is_file()
     assert (project / cli.PROVENANCE_FILE).is_file()
     assert not (project / cli.PENDING_ADOPTION_FILE).exists()
+
+
+def test_real_existing_adoption_uses_fixed_ownership_policies(
+    tmp_path: Path,
+) -> None:
+    """Adopt the pilot collision shape without replacing product-owned files."""
+    revision = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / "existing CSARC-測試"
+    (project / ".github" / "workflows").mkdir(parents=True)
+    (project / "README.md").write_text("# Product README\n", encoding="utf-8")
+    (project / "CHANGELOG.md").write_text(
+        "# Product changes\n", encoding="utf-8"
+    )
+    (project / "AGENTS.md").write_text(
+        "# Product agent rules\r\n\r\nKeep this rule.\r\n",
+        encoding="utf-8",
+    )
+    (project / ".gitignore").write_bytes(b"product-cache/\r\n.env\r\n")
+    product_release = project / ".github" / "workflows" / "release.yml"
+    product_release.write_text(
+        "name: Product release\non: workflow_dispatch\n", encoding="utf-8"
+    )
+    write_executable(
+        project / "scripts" / "verify-product",
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        "grep -q '^# Product README$' README.md\n"
+        "grep -q '^name: Product release$' .github/workflows/release.yml\n",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: product collision fixture")
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(ROOT),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--data",
+        "language=ci",
+    ]
+
+    assert main([*arguments, "--dry-run"]) == 0
+    plan_path = (
+        tmp_path
+        / "existing CSARC-測試-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert payload["files"]["manual_merge"] == []
+    assert payload["files"]["unknown"] == []
+    assert payload["files"]["automatic_merge"] == [".gitignore", "AGENTS.md"]
+    assert "README.md" in payload["files"]["preserve"]
+    assert "CHANGELOG.md" in payload["files"]["preserve"]
+    assert ".github/workflows/release.yml" in payload["files"]["preserve"]
+    assert ".github/workflows/csarc-release.yml" in payload["files"]["add"]
+    assert cli.PROVENANCE_FILE.as_posix() in payload["files"]["add"]
+    assert payload["adoption"]["project_verification_hook"] == "configured"
+    assert payload["adoption"]["verification"] == "passed"
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    assert (project / "README.md").read_text(encoding="utf-8") == (
+        "# Product README\n"
+    )
+    assert (project / "CHANGELOG.md").read_text(encoding="utf-8") == (
+        "# Product changes\n"
+    )
+    assert product_release.read_text(encoding="utf-8").startswith(
+        "name: Product release"
+    )
+    assert (project / ".github" / "workflows" / "csarc-release.yml").is_file()
+    assert "Keep this rule." in (project / "AGENTS.md").read_text(
+        encoding="utf-8"
+    )
+    assert cli.AGENTS_BLOCK_START in (project / "AGENTS.md").read_text(
+        encoding="utf-8"
+    )
+    ignore_lines = (
+        (project / ".gitignore").read_text(encoding="utf-8").splitlines()
+    )
+    assert ignore_lines[:2] == ["product-cache/", ".env"]
+    assert ignore_lines.count(".env") == 1
 
 
 def test_adoption_report_classifies_unknown_content(
@@ -1007,11 +1144,12 @@ def test_adoption_report_failure_keeps_markdown(
                 str(report_dir),
             ]
         )
-        == 2
+        == 0
     )
-    assert "Markdown remains" in capsys.readouterr().err
+    assert "machine plan remain usable" in capsys.readouterr().err
     assert (report_dir / "csarc-adoption-dry-run.md").is_file()
     assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
+    assert (report_dir / cli.ADOPTION_PLAN_BASENAME).is_file()
     assert git(project, "status", "--porcelain") == before
 
 
@@ -1038,12 +1176,13 @@ def test_adopt_help_describes_report_directory(
         cli.parser().parse_args(["adopt", "--help"])
     assert error.value.code == 0
     help_text = capsys.readouterr().out
+    assert "--apply-plan PATH" in help_text
     assert "--finalize" in help_text
     assert "--report-dir PATH" in help_text
 
 
-def test_adopt_rejects_dirty_tree(tmp_path: Path) -> None:
-    """Adopt refuses tracked or untracked changes."""
+def test_adopt_reports_dirty_tree_without_mutating_it(tmp_path: Path) -> None:
+    """Dirty adoption plans remain useful but cannot be applied."""
     source, first_sha = make_template(tmp_path)
     project = tmp_path / "dirty-product"
     project.mkdir()
@@ -1054,6 +1193,7 @@ def test_adopt_rejects_dirty_tree(tmp_path: Path) -> None:
     commit(project, "test: baseline")
     (project / "untracked.txt").write_text("dirty\n", encoding="utf-8")
 
+    before = git(project, "status", "--porcelain")
     assert (
         main(
             [
@@ -1067,9 +1207,304 @@ def test_adopt_rejects_dirty_tree(tmp_path: Path) -> None:
                 "--dry-run",
             ]
         )
+        == 0
+    )
+    plan = (
+        tmp_path
+        / "dirty-product-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    payload = json.loads(plan.read_text(encoding="utf-8"))
+    assert payload["adoption"]["applicable"] is False
+    assert payload["adoption"]["clean"] is False
+    assert payload["adoption"]["target_changes"] == ["?? untracked.txt"]
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan),
+                "--yes",
+            ]
+        )
         == 2
     )
+    assert git(project, "status", "--porcelain") == before
     assert not (project / ".copier-answers.yml").exists()
+
+
+def test_adopt_infers_unicode_repository_and_applies_exact_plan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Infer the Git root and count provenance in a portable exact plan."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "product with space-測試"
+    nested = project / "nested folder" / "子目錄"
+    nested.mkdir(parents=True)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    commit(project, "test: unicode product")
+    monkeypatch.chdir(nested)
+
+    arguments = [
+        "adopt",
+        "--source",
+        str(source),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--dry-run",
+    ]
+    assert main(arguments) == 0
+    plan_path = (
+        project.parent
+        / f"{project.name}-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert payload["target"] == str(project)
+    assert cli.PROVENANCE_FILE.as_posix() in payload["files"]["add"]
+    assert payload["adoption"]["artifacts"][cli.PROVENANCE_FILE.as_posix()]
+
+    assert (
+        main(
+            [
+                "adopt",
+                "--apply-plan",
+                str(plan_path),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    assert (project / cli.PROVENANCE_FILE).is_file()
+
+
+def test_adopt_rejects_plan_tampering_and_target_drift(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Refuse a changed plan or HEAD without writing generated files."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "drift-product"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    commit(project, "test: baseline")
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--dry-run",
+    ]
+    assert main(arguments) == 0
+    plan_path = (
+        tmp_path
+        / "drift-product-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    original = plan_path.read_text(encoding="utf-8")
+    plan_path.write_text(
+        original.replace('"mode": "adopt"', '"mode": "init"'),
+        encoding="utf-8",
+    )
+    assert main(["adopt", str(project), "--apply-plan", str(plan_path)]) == 2
+    assert "digest does not match" in capsys.readouterr().err
+    assert not (project / "managed.txt").exists()
+
+    plan_path.write_text(original, encoding="utf-8")
+    (project / "product.txt").write_text("new product\n", encoding="utf-8")
+    commit(project, "test: move target head")
+    assert main(["adopt", str(project), "--apply-plan", str(plan_path)]) == 2
+    assert "drifted after dry-run" in capsys.readouterr().err
+    assert not (project / "managed.txt").exists()
+
+
+def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
+    """Run the project hook in the candidate and keep target bytes unchanged."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "hook-product"
+    project.mkdir()
+    write_executable(
+        project / "scripts" / "verify-product",
+        "#!/usr/bin/env bash\nset -euo pipefail\nexit 23\n",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: failing product hook")
+    before = git(project, "status", "--porcelain")
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    plan_path = (
+        tmp_path
+        / "hook-product-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert payload["adoption"]["applicable"] is False
+    assert payload["adoption"]["project_verification_hook"] == "configured"
+    assert str(payload["adoption"]["verification"]).startswith("failed:")
+    assert main(["adopt", str(project), "--apply-plan", str(plan_path)]) == 2
+    assert git(project, "status", "--porcelain") == before
+    assert not (project / "managed.txt").exists()
+
+
+def test_fixed_merges_preserve_product_content_and_crlf() -> None:
+    """Apply only deterministic AGENTS and gitignore ownership policies."""
+    generated = f"{cli.AGENTS_BLOCK_START}\nmanaged\n{cli.AGENTS_BLOCK_END}\n"
+    existing = "# Product rules\r\n\r\nKeep this.\r\n"
+    merged = cli.merge_agents_file(existing, generated)
+    assert merged.startswith(existing.rstrip("\r\n"))
+    assert "\n" not in merged.replace("\r\n", "")
+    assert "Keep this." in merged
+    assert "managed" in merged
+
+    ignored = cli.merge_gitignore("dist/\r\n.env\r\n", ".env\n.venv/\n")
+    assert ignored == "dist/\r\n.env\r\n\r\n.venv/\r\n"
+
+
+def test_native_windows_stops_with_wsl2_guidance(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Fail before filesystem work when invoked from native Windows."""
+    monkeypatch.setattr(cli.sys, "platform", "win32")
+    assert main(["adopt", "--dry-run"]) == 2
+    assert "WSL2" in capsys.readouterr().err
+
+
+def test_code_owner_verification_distinguishes_team_states(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Distinguish verified, missing, and unreadable teams."""
+    repository = cli.RepositoryContext(
+        "Innoguard-Cyber-Arch/product",
+        "Innoguard-Cyber-Arch",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+    monkeypatch.setattr(
+        cli,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0], 0, stdout="arch\n", stderr=""
+        ),
+    )
+    assert (
+        cli.code_owner_verification(repository, "@Innoguard-Cyber-Arch/arch")[
+            "state"
+        ]
+        == "verified"
+    )
+    assert (
+        cli.code_owner_verification(
+            repository, "@Innoguard-Cyber-Arch/missing"
+        )["state"]
+        == "blocked"
+    )
+
+    monkeypatch.setattr(
+        cli,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0], 1, stdout="", stderr="not authorized"
+        ),
+    )
+    unknown = cli.code_owner_verification(
+        repository, "@Innoguard-Cyber-Arch/arch"
+    )
+    assert unknown["state"] == "unknown"
+    assert unknown["reason"] == "not authorized"
+
+
+def test_adoption_preserves_executable_and_checked_patch_symlink(
+    tmp_path: Path,
+) -> None:
+    """Keep portable filesystem traits through the checked candidate patch."""
+    source, _ = make_template(tmp_path)
+    write_executable(
+        source / "template" / "scripts" / "managed-tool",
+        "#!/usr/bin/env bash\nset -euo pipefail\n",
+    )
+    (source / "template" / "managed-link").symlink_to("managed.txt")
+    revision = commit(source, "test: add filesystem traits")
+    project = tmp_path / "filesystem-product"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    commit(project, "test: filesystem product")
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    plan_path = (
+        tmp_path
+        / "filesystem-product-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    assert (project / "managed-link").read_text(encoding="utf-8") == (
+        "template version one\n"
+    )
+    assert (project / "scripts" / "managed-tool").stat().st_mode & stat.S_IXUSR
+
+    candidate = tmp_path / "symlink-candidate"
+    cli.clone_target(project, candidate)
+    (candidate / "portable-link").symlink_to("product.txt")
+    cli.write_candidate_patch(candidate, project, tmp_path / "symlink.patch")
+    assert (project / "portable-link").is_symlink()
+    assert (project / "portable-link").readlink() == Path("product.txt")
 
 
 def test_update_check_dry_run_apply_and_conflict(
