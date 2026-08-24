@@ -99,6 +99,14 @@ else
   platform_python=(uv run --no-project python)
 fi
 "${platform_python[@]}" scripts/spec_to_issue.py validate
+test -f docs/README.md
+test -f docs/adr/README.md
+grep -q 'Durable Project Memory' docs/README.md
+grep -q 'Spec-Driven Development' docs/README.md
+grep -q 'Architecture Decision Records' docs/README.md
+grep -q 'Test-Driven Development' docs/README.md
+grep -q 'Behavior-Driven Development' docs/README.md
+grep -q 'docs/decisions/' docs/README.md
 "${platform_python[@]}" -m json.tool .csarc/profile.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/repository.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/actions.json >/dev/null
