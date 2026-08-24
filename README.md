@@ -1,5 +1,7 @@
 # CSARC Repo Template
 
+[![CI](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/workflows/ci.yml/badge.svg)](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/workflows/ci.yml)
+
 Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript 或兩者並用。新案、既有案與後續政策更新都經 Copier 形成可審查差異。
 
 目前公版：v0.11.0 <!-- x-release-please-version -->
@@ -7,6 +9,17 @@ Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript �
 [開啟內部網站與完整決策說明](docs/index.html)（內部限閱，請勿公開分享此連結；`noindex`／`robots.txt` 只是臨時防護，不是存取控制，詳見網站內「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)）
 
 > **這份文件的定位：**README 只給想導入或使用本範本的一般使用者看「是什麼、要不要用、怎麼開始、去哪裡找更多」；要在本 repo 本身開發，請讀 [`AGENTS.md`](AGENTS.md)（可執行的工作規則）；要理解「為什麼這樣設計」的決策矩陣與技術細節，請讀[內部網站附錄](docs/index.html)。三份文件各自負責一層，避免同一套規則重複維護。
+
+## 目錄
+
+- [專案概述](#專案概述)
+- [快速開始](#快速開始)
+- [技術與目錄](#技術與目錄)
+- [開發與驗證](#開發與驗證)
+- [設定與密鑰](#設定與密鑰)
+- [發布與維運](#發布與維運)
+- [公版更新](#公版更新)
+- [負責人與支援](#負責人與支援)
 
 ## 專案概述
 
