@@ -3,6 +3,8 @@ name: PR policy
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+  merge_group:
+    types: [checks_requested]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -18,11 +20,16 @@ jobs:
     name: title
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Accept the already-validated merge queue candidate
+        if: ${{ github.event_name == 'merge_group' }}
+        run: echo "Pull request policy was validated before merge queue entry."
+      - if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.base.sha }}
       - name: Validate pull request policy
+        if: ${{ github.event_name == 'pull_request' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BASE: ${{ github.event.pull_request.base.ref }}

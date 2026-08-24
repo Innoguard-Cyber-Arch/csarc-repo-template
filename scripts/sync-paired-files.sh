@@ -21,17 +21,21 @@ paired_files=(
   .github/workflows/delivery-sync.yml
   .github/workflows/issue-triage.yml
   .github/workflows/milestone-lifecycle.yml
+  .github/workflows/osv.yml
   .github/workflows/pr-policy.yml
   .github/workflows/release-please.yml
   .github/workflows/spec-to-issue.yml
+  .github/workflows/zizmor.yml
   policies/actions.json
   policies/labels.json
   policies/repository.json
+  docs/ci-policy.md
   docs/milestone-description.md
   docs/decisions/README.md
   scripts/render_site.py
   scripts/apply-repository-settings.sh
   scripts/check-governance-drift
+  scripts/ci_tier.py
   scripts/delivery_sync.py
   scripts/check-update-conflicts
   scripts/cleanup-worktrees
@@ -44,6 +48,7 @@ paired_files=(
   scripts/test-pr-policy
   scripts/test-worktree-cleanup
   scripts/validate-issue-title
+  tests/test_ci_tier.py
   tests/test_spec_to_issue.py
   tests/test_delivery_sync.py
   tests/test_milestone_lifecycle.py

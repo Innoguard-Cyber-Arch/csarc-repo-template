@@ -1,40 +1,17 @@
-name: OSV
+name: OSV scheduled scan
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main, dev, "dev/**"]
-  merge_group:
-    types: [checks_requested]
-  push:
-    branches: [main, dev, "dev/**"]
   schedule:
     - cron: "17 3 * * 1"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: osv-scheduled-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
-  scan-pr:
-    name: scan-pr
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
-    permissions:
-      actions: read
-      contents: read
-      # The pinned reusable workflow declares this permission even when SARIF upload is disabled.
-      security-events: write
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@6e4298ebc4db23e847df9b2e2de2939d6f066c67 # v2.5.1
-    with:
-      scan-args: |-
-        --include-git-root
-        -r
-        ./
-      upload-sarif: false
-      fail-on-vuln: true
-  scan-scheduled:
-    name: scan-scheduled
-    if: ${{ github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+  scan:
+    name: dependency vulnerability scan
     permissions:
       actions: read
       contents: read

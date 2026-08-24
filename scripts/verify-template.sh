@@ -23,12 +23,14 @@ uv run ruff format --check \
   src/csarc_cli \
   tests/test_cli.py \
   tests/test_milestone_lifecycle.py \
+  tests/test_ci_tier.py \
   tests/test_delivery_sync.py \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
   tests/test_release_consumption.py \
   tests/test_render_site.py \
   scripts/report_dependency_ceiling.py \
+  scripts/ci_tier.py \
   scripts/delivery_sync.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -42,12 +44,14 @@ uv run ruff check \
   src/csarc_cli \
   tests/test_cli.py \
   tests/test_milestone_lifecycle.py \
+  tests/test_ci_tier.py \
   tests/test_delivery_sync.py \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
   tests/test_release_consumption.py \
   tests/test_render_site.py \
   scripts/report_dependency_ceiling.py \
+  scripts/ci_tier.py \
   scripts/delivery_sync.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -60,6 +64,7 @@ uv run ruff check \
 uv run mypy \
   src/csarc_cli \
   scripts/report_dependency_ceiling.py \
+  scripts/ci_tier.py \
   scripts/delivery_sync.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -83,6 +88,7 @@ bash -n scripts/cleanup-worktrees
 bash -n template/scripts/cleanup-worktrees
 bash -n scripts/check-governance-drift
 bash -n template/scripts/check-governance-drift
+bash -n scripts/verify-fast
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' README.md
 grep -q 'policy labels, and effective Rulesets' docs/agent-install.md
 grep -q 'Administration read access' docs/agent-install.md
@@ -267,7 +273,7 @@ case "$2" in
       printf '[]\n'
       exit 0
     fi
-    printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_approving_review_count":1,"required_review_thread_resolution":true}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"governance"},{"context":"delivery-sync"},{"context":"verify"},{"context":"title"},{"context":"scan-pr / osv-scan"},{"context":"audit"}]}}]'
+    printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_approving_review_count":1,"required_review_thread_resolution":true}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"delivery-sync"},{"context":"verify"},{"context":"title"}]}}]'
     ;;
   *)
     echo "Unexpected gh API path: $2" >&2
@@ -682,6 +688,8 @@ grep -q 'docs/index.html' README.md
 grep -q '內部限閱' README.md
 grep -q '線上整合證據' README.md
 test -f docs/live-integration.md
+test -f docs/ci-policy.md
+grep -q '模板 repo 的導入前基線是一般 PR update 約 14' docs/ci-policy.md
 grep -q '只代表靜態與合成驗證通過' docs/live-integration.md
 test -x scripts/run-live-workflow-probe
 test -f .github/workflows/live-integration.yml
@@ -861,14 +869,18 @@ grep -q '^## Purpose$' .github/pull_request_template.md
 grep -q '^## 完成清單$' .github/pull_request_template.md
 grep -q '^## 補充$' .github/pull_request_template.md
 grep -q '^  pull_request:$' .github/workflows/governance-comment.yml
-grep -q 'types: \[opened, reopened, synchronize, ready_for_review\]' \
+grep -q 'types: \[opened, reopened, ready_for_review\]' \
   .github/workflows/governance-comment.yml
 grep -q '^  pull-requests: write$' .github/workflows/governance-comment.yml
 if grep -q '^  pull_request_target:$' .github/workflows/governance-comment.yml; then
   echo "Reviewer workflow must not use pull_request_target."
   exit 1
 fi
-grep -q "github.event.action != 'synchronize' && !github.event.pull_request.draft" \
+if grep -q 'synchronize' .github/workflows/governance-comment.yml; then
+  echo "Reviewer assignment must not repeat on every pull request update."
+  exit 1
+fi
+grep -q '!github.event.pull_request.draft' \
   .github/workflows/governance-comment.yml
 grep -q 'ref: \${{ github.event.pull_request.base.sha }}' \
   .github/workflows/governance-comment.yml
@@ -898,8 +910,17 @@ grep -q 'still has unchecked acceptance tasks' \
   .github/workflows/pr-policy.yml
 grep -q 'Only dev promotion or release-please may target main in dev mode.' \
   .github/workflows/pr-policy.yml
-grep -q 'branches: \[main, "dev/\*\*"\]' .github/workflows/ci.yml
-grep -q 'branches: \[main, dev, "dev/\*\*"\]' .github/workflows/osv.yml
+grep -q '^  merge_group:$' .github/workflows/ci.yml
+grep -q '^  workflow_dispatch:$' .github/workflows/ci.yml
+if grep -q '^  push:$' .github/workflows/ci.yml; then
+  echo "CI must not repeat a pull request suite after merge."
+  exit 1
+fi
+grep -q '^  schedule:$' .github/workflows/osv.yml
+if grep -q '^  pull_request:$' .github/workflows/osv.yml; then
+  echo "Standalone OSV must not duplicate change-aware CI scans."
+  exit 1
+fi
 grep -q 'gh pr edit "$pr_url" --add-label enhancement' \
   .github/workflows/python-version-policy.yml
 if grep -Eq -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
@@ -909,9 +930,13 @@ if grep -Eq -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
   echo "Version automation must not bypass or perform repository merges."
   exit 1
 fi
-test "$(grep -c '^      security-events: write$' .github/workflows/osv.yml)" -eq 2
-test "$(grep -c '^      security-events: write$' template/.github/workflows/osv.yml)" -eq 2
-grep -q 'branches: \[main, "dev/\*\*"\]' .github/workflows/zizmor.yml
+test "$(grep -c '^      security-events: write$' .github/workflows/osv.yml)" -eq 1
+test "$(grep -c '^      security-events: write$' template/.github/workflows/osv.yml)" -eq 1
+grep -q '^  schedule:$' .github/workflows/zizmor.yml
+if grep -q '^  pull_request:$' .github/workflows/zizmor.yml; then
+  echo "Standalone Zizmor must not duplicate change-aware CI audits."
+  exit 1
+fi
 grep -q 'target-branch: dev/next' .github/dependabot.yml
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
 
@@ -951,11 +976,8 @@ if not pull_request["require_code_owner_review"]:
     raise SystemExit("The repository Ruleset must require CODEOWNER review.")
 if not {
     "delivery-sync",
-    "governance",
     "verify",
     "title",
-    "scan-pr / osv-scan",
-    "audit",
 } <= checks:
     raise SystemExit("The repository Ruleset is missing required checks.")
 PY
@@ -1055,15 +1077,13 @@ if reusable_text == "true":
     if match is None:
         raise SystemExit("Reusable workflow runtime input is missing")
     actual = json.loads(match.group(1))
-    required_context = "verify / verify"
 else:
     match = re.search(
-        r"python-version:\n((?:\s+- \"[^\"]+\"\n)+)", workflow
+        r"runtime:\n((?:\s+- \"[^\"]+\"\n)+)", workflow
     )
     if match is None:
         raise SystemExit("Inline workflow runtime matrix is missing")
     actual = re.findall(r'- "([^\"]+)"', match.group(1))
-    required_context = "verify"
 if actual != expected:
     raise SystemExit(f"Unexpected Python matrix: {actual!r} != {expected!r}")
 ruleset = json.loads(Path(ruleset_path).read_text(encoding="utf-8"))
@@ -1072,8 +1092,8 @@ checks = next(
     for rule in ruleset["rules"]
     if rule["type"] == "required_status_checks"
 )
-if required_context not in {check["context"] for check in checks}:
-    raise SystemExit(f"Missing required aggregate check: {required_context}")
+if "verify" not in {check["context"] for check in checks}:
+    raise SystemExit("Missing required aggregate check: verify")
 PY
   done
 done
@@ -1283,15 +1303,17 @@ fi
 test "$(cat "$fixture_root/default-project/CLAUDE.md")" = "@AGENTS.md"
 test -f "$fixture_root/default-project/policies/rulesets.json"
 test -f "$fixture_root/default-project/.github/workflows/governance-comment.yml"
+test -f "$fixture_root/default-project/docs/ci-policy.md"
+grep -q '穩定的 `verify` aggregate context' \
+  "$fixture_root/default-project/docs/ci-policy.md"
 grep -Fqx '@jachline28' "$fixture_root/default-project/.github/REVIEWERS"
 grep -q '^  pull_request:$' \
   "$fixture_root/default-project/.github/workflows/governance-comment.yml"
-grep -q 'csarc-governance-notice' \
-  "$fixture_root/default-project/.github/workflows/governance-comment.yml"
-grep -Fq '$endpoint?per_page=100' \
-  "$fixture_root/default-project/.github/workflows/governance-comment.yml"
-grep -q 'base branch predates the governance checker' \
-  "$fixture_root/default-project/.github/workflows/governance-comment.yml"
+if grep -q 'apply-repository-settings.sh check' \
+  "$fixture_root/default-project/.github/workflows/governance-comment.yml"; then
+  echo "Reviewer assignment must not repeat remote governance checks."
+  exit 1
+fi
 if grep -q -- '--slurp' \
   "$fixture_root/default-project/.github/workflows/governance-comment.yml"; then
   echo "Governance comments must use gh flags supported by GitHub-hosted runners."
@@ -1305,13 +1327,13 @@ grep -q '"context": "verify"' \
   "$fixture_root/default-project/policies/rulesets.json"
 grep -q '"context": "delivery-sync"' \
   "$fixture_root/default-project/policies/rulesets.json"
-grep -q '"context": "scan-pr / osv-scan"' \
-  "$fixture_root/default-project/policies/rulesets.json"
 grep -q '"refs/heads/dev/\*"' \
   "$fixture_root/default-project/policies/rulesets.json"
 test -x "$fixture_root/default-project/scripts/apply-repository-settings.sh"
 test -x "$fixture_root/default-project/scripts/check-update-conflicts"
 test -x "$fixture_root/default-project/scripts/install-gitleaks"
+test -x "$fixture_root/default-project/scripts/verify-fast"
+test -f "$fixture_root/default-project/scripts/ci_tier.py"
 test ! -f "$fixture_root/default-project/.pre-commit-config.yaml"
 test ! -f "$fixture_root/default-project/package.json"
 test ! -f "$fixture_root/default-project/pnpm-workspace.yaml"
@@ -1328,7 +1350,7 @@ grep -q 'Actions quota fallback attestation' \
   "$fixture_root/default-project/README.md"
 grep -q '付款失敗、budget.*平台.*設定.*權限.*未知原因.*測試失敗' \
   "$fixture_root/default-project/docs/index.html"
-grep -q 'Actions 免費額度耗盡' \
+grep -q '一般 Issue PR 跑單一 runtime' \
   "$fixture_root/default-project/docs/site-content.js"
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/docs/index.html"
@@ -1419,7 +1441,7 @@ grep -q -- '- "3.14.0"' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q -- '- "3.14"' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
-grep -q '^    needs: runtime$' \
+grep -q '^    needs: \[fast, full, governance, osv, zizmor\]$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q '^  governance:$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
@@ -1714,8 +1736,13 @@ grep -q 'pull request chain ends at `dev`' \
   "$fixture_root/typescript-project/AGENTS.md"
 grep -q 'against `dev` or its immediate parent in the stack' \
   "$fixture_root/typescript-project/AGENTS.md"
-grep -q 'branches: \[main, dev\]' \
+grep -q '^  merge_group:$' \
   "$fixture_root/typescript-project/.github/workflows/ci.yml"
+if grep -q '^  push:$' \
+  "$fixture_root/typescript-project/.github/workflows/ci.yml"; then
+  echo "Generated CI must not repeat a verified tree after merge."
+  exit 1
+fi
 grep -q 'target-branch: dev' \
   "$fixture_root/typescript-project/.github/dependabot.yml"
 grep -q '"refs/heads/dev"' \
@@ -1917,9 +1944,7 @@ if grep -Eq 'PYPI_API_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN' \
   echo "Trusted publishing must not require a long-lived registry token."
   exit 1
 fi
-grep -q '"context": "verify / verify"' \
-  "$fixture_root/all-features-project/policies/rulesets.json"
-grep -q '"context": "scan-pr / osv-scan"' \
+grep -q '"context": "verify"' \
   "$fixture_root/all-features-project/policies/rulesets.json"
 test -f "$fixture_root/all-features-project/pyproject.toml"
 test -f "$fixture_root/all-features-project/package.json"

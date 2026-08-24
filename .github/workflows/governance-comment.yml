@@ -1,18 +1,16 @@
-name: Governance notice
+name: Reviewer assignment
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, ready_for_review]
 
 permissions:
-  actions: read
   contents: read
-  issues: read
   pull-requests: write
 
 jobs:
   record:
-    name: record unprotected branch
+    name: request reviewer
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -20,48 +18,8 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
-      - name: Check effective repository governance
-        id: governance
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [[ ! -x ./scripts/apply-repository-settings.sh ]]; then
-            output="DEGRADED required governance: The base branch predates the governance checker."
-            status=0
-          else
-            set +e
-            output="$(./scripts/apply-repository-settings.sh check 2>&1)"
-            status=$?
-            set -e
-          fi
-          printf '%s\n' "$output"
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          if (( status != 0 )) || grep -q '^DEGRADED required governance:' <<<"$output"; then
-            echo 'unprotected=true' >> "$GITHUB_OUTPUT"
-          fi
-      - name: Record governance limitation on the pull request
-        if: ${{ steps.governance.outputs.unprotected == 'true' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          marker='<!-- csarc-governance-notice -->'
-          run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          body="$marker
-          ⚠️ GitHub 尚未確認預設分支具備必要的有效保護規則。
-
-          CI/CD 檢查仍會執行並留下結果，但在 GitHub Free private repository 中，repo 內保存的 Ruleset 政策不會阻止直接 push 或忽略紅燈合併。詳情請見 [governance check]($run_url)。"
-          endpoint="repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments"
-          comment_id="$(gh api "$endpoint?per_page=100" \
-            --jq 'map(select(.user.login == "github-actions[bot]" and (.body | contains("<!-- csarc-governance-notice -->")))) | first | .id // empty')"
-          if [[ -n "$comment_id" ]]; then
-            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" \
-              -f body="$body" >/dev/null
-          else
-            gh api --method POST "$endpoint" -f body="$body" >/dev/null
-          fi
       - name: Request coworker review
-        if: ${{ github.event.action != 'synchronize' && !github.event.pull_request.draft }}
+        if: ${{ !github.event.pull_request.draft }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
@@ -84,8 +42,3 @@ jobs:
           gh api --method POST \
             "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/requested_reviewers" \
             -f "reviewers[]=$reviewer" >/dev/null
-      - name: Preserve fail-closed checks on capable plans
-        if: ${{ steps.governance.outputs.status != '0' }}
-        env:
-          STATUS: ${{ steps.governance.outputs.status }}
-        run: exit "$STATUS"

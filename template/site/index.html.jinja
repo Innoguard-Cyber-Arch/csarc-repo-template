@@ -51,6 +51,7 @@
       <section id="workflow">
         <h2><span>開發流程</span></h2>
         <p>開 Issue／Milestone 前先搜尋 open／closed 歷史工作並摘要既有決策；PR 保留 Issue 連結與精簡清單，closing PR 的自身與 referenced Issue checklist 都必須完成。</p>
+        <p class="notice"><strong>分層 CI：</strong>一般 Issue PR 執行單一 runtime 的 change-aware fast checks；promotion、hotfix、merge queue 或手動 dispatch 才執行 full matrix。純文件不啟動語言矩陣，OSV／Zizmor／remote governance 依變更範圍與週期排程執行；固定的 <code>verify</code> aggregate 讓不適用 job 明確 skipped，不留下 required check Pending。完整契約見 <code>docs/ci-policy.md</code>。</p>
         <p class="notice"><strong>Actions 額度 fallback：</strong>只有具帳務可見性的 human maintainer 確認當期免費分鐘已用完，且 job 未執行任何 step，agent 才能對精確 PR SHA 執行 <code>./scripts/verify</code>、列出無法本機重現的 checks，並留下只對該 SHA 有效的 <code>Actions quota fallback attestation</code>。付款失敗、budget、平台、設定、權限、未知原因或真正測試失敗都不得套用；合併須另有 human 一次性授權，額度重置後補跑正式 checks。</p>
         <div id="workflow-cards" class="cards"></div>
       </section>

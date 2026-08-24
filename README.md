@@ -74,9 +74,10 @@ flowchart LR
 上圖只畫主線；hotfix、direct／verification-only release 模式、worktree 使用與例外分支見 `AGENTS.md` 與[內部網站附錄](docs/index.html)。
 
 本 repo 採 delivery 模式：Milestone 工作先整合至 `dev/m<編號>-<簡稱>`，孤立 Issue 先進 `dev/next`，再以受審查的 promotion PR 進入 `main`；只有明確 hotfix 可直接 target main。CI 是可攜的 integration test layer，外部測試環境則屬 canary layer。
+
 `main` 前進後，所有未合併的 delivery／stacked PR 都必須先納入最新 main；`.github/workflows/delivery-sync.yml` 會讓過期 PR fail closed，並在 main push 摘要列出每條 active delivery branch 的 `sync/main-to-*` PR 指令。預設不自動寫入；只有明確設定 `CSARC_AUTO_SYNC=true`、提供會觸發 PR checks 的 `CSARC_SYNC_TOKEN`，且 branch／PR write probes 都為 allowed 時才自動開 PR，blocked／unknown 一律回到相同手動流程。
 
-公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。驗證入口也會執行 Issue／PR 政策正反例，並注入不合法的 Python／TypeScript 內容，確認語言門禁真的會拒絕。
+公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。驗證入口也會執行 Issue／PR 政策正反例，並注入不合法的 Python／TypeScript 內容，確認語言門禁真的會拒絕。PR CI 依 docs／fast／full 與週期性供應鏈四層執行，完整矩陣只留給 promotion、hotfix、merge queue 或手動驗證；觸發條件、穩定 required checks、成本估算與實測方式見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
 ### Actions 額度耗盡的一次性驗證
 

@@ -1,20 +1,20 @@
-name: Zizmor
+name: Zizmor scheduled audit
 
 on:
-  pull_request:
-  push:
-    branches: [main, "dev/**"]
+  workflow_dispatch:
+  schedule:
+    - cron: "43 3 * * 1"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: zizmor-scheduled-${{ github.repository }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
   audit:
-    name: audit
+    name: workflow audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
