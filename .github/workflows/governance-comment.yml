@@ -60,22 +60,30 @@ jobs:
           else
             gh api --method POST "$endpoint" -f body="$body" >/dev/null
           fi
-      - name: Request team review
+      - name: Request coworker review
         if: ${{ github.event.action != 'synchronize' && !github.event.pull_request.draft }}
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          repo_owner="${GITHUB_REPOSITORY%%/*}"
-          code_owner="$(awk '!/^#/ && NF {print $NF; exit}' .github/CODEOWNERS)"
-          if [[ ! "$code_owner" =~ ^@${repo_owner}/([^/[:space:]]+)$ ]]; then
-            echo "CODEOWNERS must use a team in the repository organization: @$repo_owner/team." >&2
+          mapfile -t configured_reviewers < <(awk '!/^#/ && NF {print $1}' .github/REVIEWERS)
+          eligible_reviewers=()
+          for account in "${configured_reviewers[@]}"; do
+            if [[ ! "$account" =~ ^@([A-Za-z0-9][A-Za-z0-9-]{0,38})$ ]]; then
+              echo "Invalid reviewer in .github/REVIEWERS: $account" >&2
+              exit 1
+            fi
+            [[ "${BASH_REMATCH[1]}" == "$PR_AUTHOR" ]] || eligible_reviewers+=("${BASH_REMATCH[1]}")
+          done
+          if (( ${#eligible_reviewers[@]} == 0 )); then
+            echo "No configured reviewer remains after excluding the pull request author." >&2
             exit 1
           fi
-          team_slug="${BASH_REMATCH[1]}"
+          reviewer="${eligible_reviewers[$((PR_NUMBER % ${#eligible_reviewers[@]}))]}"
           gh api --method POST \
             "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/requested_reviewers" \
-            -f "team_reviewers[]=$team_slug" >/dev/null
+            -f "reviewers[]=$reviewer" >/dev/null
       - name: Preserve fail-closed checks on capable plans
         if: ${{ steps.governance.outputs.status != '0' }}
         env:

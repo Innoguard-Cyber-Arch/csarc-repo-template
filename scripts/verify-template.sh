@@ -837,18 +837,27 @@ grep -q '^## 補充$' .github/pull_request_template.md
 grep -q '^  pull_request:$' .github/workflows/governance-comment.yml
 grep -q 'types: \[opened, reopened, synchronize, ready_for_review\]' \
   .github/workflows/governance-comment.yml
+grep -q '^  pull-requests: write$' .github/workflows/governance-comment.yml
+if grep -q '^  pull_request_target:$' .github/workflows/governance-comment.yml; then
+  echo "Reviewer workflow must not use pull_request_target."
+  exit 1
+fi
 grep -q "github.event.action != 'synchronize' && !github.event.pull_request.draft" \
   .github/workflows/governance-comment.yml
 grep -q 'ref: \${{ github.event.pull_request.base.sha }}' \
   .github/workflows/governance-comment.yml
+grep -q 'configured_reviewers.*\.github/REVIEWERS' \
+  .github/workflows/governance-comment.yml
+grep -Fq '== "$PR_AUTHOR"' .github/workflows/governance-comment.yml
 grep -q 'repos/\$GITHUB_REPOSITORY/pulls/\$PR_NUMBER/requested_reviewers' \
   .github/workflows/governance-comment.yml
-grep -Fq -- '-f "team_reviewers[]=$team_slug"' \
+grep -Fq -- '-f "reviewers[]=$reviewer"' \
   .github/workflows/governance-comment.yml
 grep -q 'DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"' src/csarc_cli/cli.py
 grep -Fqx '* @Innoguard-Cyber-Arch/arch' .github/CODEOWNERS
+grep -Fqx '@jachline28' .github/REVIEWERS
 grep -q '所有方案都透過 CODEOWNERS errors API 驗證' README.md
-grep -q 'review request 不等於強制核准' template/docs/index.html.jinja
+grep -q 'Free private 不支援 team review request' template/docs/index.html.jinja
 
 grep -q "'## Purpose'" .github/workflows/python-version-policy.yml
 grep -q "'## 完成清單'" .github/workflows/python-version-policy.yml
@@ -1111,6 +1120,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data project_slug="public-visibility-test" \
   --data package_name="public_visibility_test" \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  --data reviewers="@alice,@bob" \
   --data project_visibility=public \
   "$repo_root" "$fixture_root/public-visibility-project"
 prime_gitleaks_cache "$fixture_root/public-visibility-project"
@@ -1125,6 +1135,8 @@ grep -q 'language: \["python"\]' \
   "$fixture_root/public-visibility-project/.github/workflows/codeql.yml"
 grep -q 'security-events: write' \
   "$fixture_root/public-visibility-project/.github/workflows/codeql.yml"
+test "$(sed '/^#/d; /^$/d' "$fixture_root/public-visibility-project/.github/REVIEWERS")" = \
+  $'@alice\n@bob'
 grep -q 'github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827' \
   "$fixture_root/public-visibility-project/.github/workflows/codeql.yml"
 test "$(grep -c 'actions/attest@' \
@@ -1221,6 +1233,7 @@ fi
 test "$(cat "$fixture_root/default-project/CLAUDE.md")" = "@AGENTS.md"
 test -f "$fixture_root/default-project/policies/rulesets.json"
 test -f "$fixture_root/default-project/.github/workflows/governance-comment.yml"
+grep -Fqx '@jachline28' "$fixture_root/default-project/.github/REVIEWERS"
 grep -q '^  pull_request:$' \
   "$fixture_root/default-project/.github/workflows/governance-comment.yml"
 grep -q 'csarc-governance-notice' \
