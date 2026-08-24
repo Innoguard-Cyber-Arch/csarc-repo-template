@@ -698,17 +698,6 @@ grep -q 'Spec-Driven Development' docs/README.md
 grep -q 'Architecture Decision Records' docs/README.md
 grep -q 'Test-Driven Development' docs/README.md
 grep -q 'Behavior-Driven Development' docs/README.md
-for adr in docs/adr/*.md; do
-  [[ "$adr" == "docs/adr/README.md" ]] && continue
-  grep -Eq '^- \*\*狀態：\*\*(Proposed|Accepted|Superseded|Rejected)$' "$adr"
-  grep -Eq '^- \*\*日期：\*\*[0-9]{4}-[0-9]{2}-[0-9]{2}$' "$adr"
-  grep -q 'https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/' "$adr"
-  grep -q 'https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/' "$adr"
-  grep -q '^## 問題與限制$' "$adr"
-  grep -q '^## 決定$' "$adr"
-  grep -q '^## 評估過的替代方案$' "$adr"
-  grep -q '^## 重新評估條件$' "$adr"
-done
 test -f docs/pilot-adoption.md
 test -f docs/artifact-consumption.md
 grep -q '產生 attestation 只證明' docs/artifact-consumption.md
@@ -2247,6 +2236,10 @@ printf '%s\n' 'window.PROJECT_OWNED_SITE = true;' \
   >> "$update_project/docs/site-content.js"
 printf '%s\n' '/* PROJECT_OWNED_THEME */' \
   >> "$update_project/docs/site-theme.css"
+printf '%s\n' '' 'PROJECT_OWNED_MEMORY' \
+  >> "$update_project/docs/adr/README.md"
+printf '%s\n' '' 'PROJECT_OWNED_SPEC' \
+  >> "$update_project/docs/specs/SPEC-001-example.md"
 uv run copier copy --trust --defaults --overwrite --vcs-ref v0.1.0 \
   --data project_mode=existing \
   --data language=python-typescript \
@@ -2290,6 +2283,10 @@ grep -q 'window.PROJECT_OWNED_SITE = true;' \
   "$update_project/docs/index.html"
 grep -q 'PROJECT_OWNED_THEME' \
   "$update_project/docs/index.html"
+grep -q '^PROJECT_OWNED_MEMORY$' \
+  "$update_project/docs/adr/README.md"
+grep -q '^PROJECT_OWNED_SPEC$' \
+  "$update_project/docs/specs/SPEC-001-example.md"
 grep -q 'window.TEMPLATE_SITE_V2 = true;' \
   "$update_project/site/app.js"
 grep -q 'window.TEMPLATE_SITE_V2 = true;' \

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import logging
 import os
@@ -13,11 +14,21 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import unquote, urldefrag, urlparse
 
 SPEC_ID = re.compile(r"^SPEC-[0-9]{3,}$")
 PRIORITIES = {"P0", "P1", "P2", "P3"}
 STATUSES = {"draft", "proposed", "approved"}
 TRACKING = {"issue", "none", "story"}
+ADR_STATUSES = {"Accepted", "Proposed", "Rejected", "Superseded"}
+ADR_SECTIONS = (
+    "問題與限制",
+    "決定",
+    "評估過的替代方案",
+    "重新評估條件",
+)
+MARKDOWN_LINK = re.compile(r"(?<!!)\[[^]]+]\(([^)\s]+)\)")
+FULLWIDTH_COLON = "\N{FULLWIDTH COLON}"
 LOGGER = logging.getLogger(__name__)
 
 
@@ -147,6 +158,61 @@ def validate_unique_ids(specs: list[Spec]) -> None:
                 f"first used by {previous}"
             )
         seen[spec.spec_id] = spec.path
+
+
+def validate_adr(path: Path) -> None:
+    """Validate one durable Architecture Decision Record."""
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*\.md", path.name):
+        raise SpecError(f"{path}: ADR filename must be a stable slug")
+    text = path.read_text(encoding="utf-8")
+    status = re.search(
+        rf"^- \*\*狀態{FULLWIDTH_COLON}\*\*(\w+)\s*$",
+        text,
+        re.MULTILINE,
+    )
+    if status is None or status.group(1) not in ADR_STATUSES:
+        raise SpecError(
+            f"{path}: ADR status must be one of {sorted(ADR_STATUSES)}"
+        )
+    date = re.search(
+        rf"^- \*\*日期{FULLWIDTH_COLON}\*\*(\d{{4}}-\d{{2}}-\d{{2}})\s*$",
+        text,
+        re.MULTILINE,
+    )
+    if date is None:
+        raise SpecError(f"{path}: ADR date must use YYYY-MM-DD")
+    try:
+        dt.date.fromisoformat(date.group(1))
+    except ValueError as error:
+        raise SpecError(f"{path}: ADR date is invalid") from error
+    for section in ADR_SECTIONS:
+        if not re.search(rf"^## {re.escape(section)}\s*$", text, re.MULTILINE):
+            raise SpecError(f"{path}: add an '## {section}' section")
+    if not re.search(
+        r"https://github\.com/[^/\s)]+/[^/\s)]+/issues/[1-9]\d*", text
+    ):
+        raise SpecError(f"{path}: add a source Issue URL")
+    if not re.search(
+        r"https://github\.com/[^/\s)]+/[^/\s)]+/pull/[1-9]\d*", text
+    ):
+        raise SpecError(f"{path}: add an implementation PR URL")
+
+
+def validate_local_links(paths: list[Path], repo_root: Path) -> None:
+    """Reject broken repository-local Markdown links."""
+    root = repo_root.resolve()
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        for raw_target in MARKDOWN_LINK.findall(text):
+            target_text = unquote(urldefrag(raw_target).url)
+            parsed = urlparse(target_text)
+            if not target_text or parsed.scheme or target_text.startswith("/"):
+                continue
+            target = (path.parent / target_text).resolve()
+            if not target.is_relative_to(root) or not target.exists():
+                raise SpecError(
+                    f"{path}: linked file does not exist: {raw_target}"
+                )
 
 
 def build_issue_body(spec: Spec, source_url: str) -> str:
@@ -385,6 +451,15 @@ def discover_specs(paths: list[str]) -> list[Path]:
     return [path for path in candidates if path.is_file()]
 
 
+def discover_adrs() -> list[Path]:
+    """Discover ADRs, excluding their instructions."""
+    return [
+        path
+        for path in sorted(Path("docs/adr").glob("*.md"))
+        if path.name != "README.md"
+    ]
+
+
 def load_labels(path: Path) -> list[dict[str, str]]:
     """Load the repository label policy used by Issue synchronization."""
     raw: object = json.loads(path.read_text(encoding="utf-8"))
@@ -441,8 +516,14 @@ def main() -> int:
     validate_unique_ids(specs)
 
     if args.command == "validate":
+        adrs = discover_adrs() if not args.paths else []
+        for adr in adrs:
+            validate_adr(adr)
+        validate_local_links([spec.path for spec in specs] + adrs, Path.cwd())
         for spec in specs:
             LOGGER.info("valid: %s (%s)", spec.path, spec.status)
+        for adr in adrs:
+            LOGGER.info("valid: %s", adr)
         return 0
 
     for label in load_labels(Path("policies/labels.json")):

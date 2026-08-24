@@ -18,6 +18,9 @@ parse_spec_text = SPEC_MODULE["parse_spec_text"]
 sync_spec = SPEC_MODULE["sync_spec"]
 sync_milestone = SPEC_MODULE["sync_milestone"]
 validate_unique_ids = SPEC_MODULE["validate_unique_ids"]
+validate_adr = SPEC_MODULE["validate_adr"]
+validate_local_links = SPEC_MODULE["validate_local_links"]
+FULLWIDTH_COLON = "\N{FULLWIDTH COLON}"
 
 VALID_SPEC = """---
 id: SPEC-001
@@ -106,6 +109,70 @@ def test_rejects_duplicate_spec_ids() -> None:
 
     with pytest.raises(SpecError, match="duplicate id SPEC-001"):
         validate_unique_ids([first, second])
+
+
+VALID_DECISION = f"""# Keep the portable baseline
+
+- **狀態{FULLWIDTH_COLON}**Accepted
+- **日期{FULLWIDTH_COLON}**2026-08-24
+- **來源 Issue{FULLWIDTH_COLON}**[Issue #1](https://github.com/owner/repo/issues/1)
+- **實作 PR{FULLWIDTH_COLON}**[PR #2](https://github.com/owner/repo/pull/2)
+
+## 問題與限制
+
+The baseline must remain portable.
+
+## 決定
+
+Use repository files.
+
+## 評估過的替代方案
+
+Do not require an external database.
+
+## 重新評估條件
+
+Revisit when repository files no longer scale.
+"""
+
+
+def test_validates_adr_metadata_and_sources(tmp_path: Path) -> None:
+    decision = tmp_path / "portable-baseline.md"
+    decision.write_text(VALID_DECISION, encoding="utf-8")
+    validate_adr(decision)
+
+    decision.write_text(
+        VALID_DECISION.replace(
+            f"**狀態{FULLWIDTH_COLON}**Accepted",
+            f"**狀態{FULLWIDTH_COLON}**Unknown",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(SpecError, match="ADR status"):
+        validate_adr(decision)
+
+
+def test_rejects_adr_without_pull_request_source(tmp_path: Path) -> None:
+    decision = tmp_path / "portable-baseline.md"
+    decision.write_text(
+        VALID_DECISION.replace(
+            f"- **實作 PR{FULLWIDTH_COLON}**"
+            "[PR #2](https://github.com/owner/repo/pull/2)\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(SpecError, match="implementation PR URL"):
+        validate_adr(decision)
+
+
+def test_rejects_broken_local_memory_link(tmp_path: Path) -> None:
+    spec = tmp_path / "docs" / "specs" / "SPEC-001-example.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("See [missing](../adr/missing.md).", encoding="utf-8")
+
+    with pytest.raises(SpecError, match="linked file does not exist"):
+        validate_local_links([spec], tmp_path)
 
 
 def test_rejects_missing_acceptance_criteria() -> None:

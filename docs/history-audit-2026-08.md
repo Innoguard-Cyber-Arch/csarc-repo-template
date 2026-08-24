@@ -5,10 +5,11 @@
 ## Cutoff and result
 
 - **Repository:** `Innoguard-Cyber-Arch/csarc-repo-template`
-- **Cutoff:** 2026-08-24，Issue／PR 編號不晚於 `#221`，在建立 #223 前
+- **Cutoff:** `2026-08-24T13:08:45Z`（#223 建立時間），納入編號不晚於 `#221` 的既有項目
+- **Retrieval:** 2026-08-24，以 GitHub REST／GraphQL API 的當時內容建立快照
 - **Issues:** 103/103 讀取成功；84 closed、19 open；讀取全部 body 與 51 則 comments（分布於 33 張 Issues）
 - **Pull requests:** 118/118 讀取成功；86 merged、21 closed without merge、11 open；讀取全部 body、90 則 comments、219 個 commit entries 與 1,079 個 changed-file entries
-- **Review evidence:** GitHub GraphQL 對 118 張 PR 回傳 0 reviews、0 review threads；這是「沒有該類資料」，不是漏讀
+- **Review evidence:** 118/118 張 PR 的 reviews endpoint 讀取成功，共 0 reviews；這是「沒有該類資料」，不是漏讀
 - **Closing relationships:** 91/118 張 PR 有 GitHub `closingIssuesReferences`；其餘 27 張包含制度建立前的 #1–#5、被後繼 PR 取代的 stacked work，以及 cutoff 時仍 open 的 #210–#221
 - **格式觀察:** 102/103 張 Issues 符合目前「類型／問題／完成條件／補充」結構；116/118 張 PRs 符合目前「Purpose／完成清單／補充」結構。格式一致不代表決策已成為 canonical ADR。
 
@@ -16,23 +17,24 @@
 
 ## Read method
 
-使用已登入的 GitHub CLI，分頁並限制 repository 與 cutoff：
+使用已登入的 GitHub CLI。先以 REST issues endpoint 分頁抓取 Issue 與 PR 共用的 221 筆 body，再依 `number <= 221` 與 `pull_request` 欄位固定集合；接著對每個編號分頁抓取 comments 與 timeline，對每張 PR 分頁抓取 reviews、commits 與 files。最後用 GraphQL 分頁交叉核對 `closingIssuesReferences`：
 
 ```bash
-gh issue list --state all --limit 300 \
-  --json number,title,state,body,comments,createdAt,closedAt,url
-
-gh pr list --state all --limit 300 --json number,title,state
-gh pr view <number> \
-  --json number,title,state,baseRefName,headRefName,body,comments,commits,files,url
-
-gh api graphql -f query='<pullRequests page query including reviews,
-reviewThreads, comments, closingIssuesReferences, commits, and files>'
+repo=Innoguard-Cyber-Arch/csarc-repo-template
+gh api --paginate --slurp \
+  "repos/$repo/issues?state=all&per_page=100&direction=asc"
+gh api --paginate --slurp "repos/$repo/issues/<number>/comments?per_page=100"
+gh api --paginate --slurp "repos/$repo/issues/<number>/timeline?per_page=100"
+gh api --paginate --slurp "repos/$repo/pulls/<number>/reviews?per_page=100"
+gh api --paginate --slurp "repos/$repo/pulls/<number>/commits?per_page=100"
+gh api --paginate --slurp "repos/$repo/pulls/<number>/files?per_page=100"
+gh api graphql -f query='<paginated pullRequests query with
+closingIssuesReferences>'
 ```
 
-Issues 依 `7–40`、`41–80`、`81–120`、`121–160`、`161–200`、`201–221` 分批閱讀；PR 依 `1–40`、`41–80`、`81–120`、`121–160`、`161–193`、`210–221` 分批閱讀。遇到輸出截斷時，改用較小編號集合重讀。統計另以 GraphQL 兩頁結果交叉核對 review、closing relationship、commit 與 file counts。
+實際 endpoint coverage 為：item body 221/221、comments 221/221、timeline 221/221、PR reviews 118/118、PR commits 118/118、PR files 118/118、GraphQL closing relationships 118/118；0 個 endpoint error、0 個最終缺口。Issues 依 `7–40`、`41–80`、`81–120`、`121–160`、`161–200`、`201–221` 分批閱讀；PR 依 `1–40`、`41–80`、`81–120`、`121–160`、`161–193`、`210–221` 分批閱讀。遇到輸出截斷時，改用較小編號集合重讀。
 
-重跑時應保存新的查詢日期與 cutoff，不直接覆寫本快照；平台內容可能在其後新增或修改。API 失敗時保留已完成頁面，記錄失敗區間，從該區間重試，而不是以 title／label 補推論。
+重跑時應把每個 `--slurp` 結果依 endpoint／編號分檔，保存新的 retrieval time 與 cutoff，不直接覆寫本快照；平台內容可能在其後新增或修改。API 失敗時保留已完成頁面與失敗編號，只重試缺少的 endpoint／page，全部成功後才重算 ledger；不得以 title／label 補推論。
 
 ## Covered Issues
 

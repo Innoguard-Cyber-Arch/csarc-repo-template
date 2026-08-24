@@ -106,16 +106,6 @@ grep -q 'Spec-Driven Development' docs/README.md
 grep -q 'Architecture Decision Records' docs/README.md
 grep -q 'Test-Driven Development' docs/README.md
 grep -q 'Behavior-Driven Development' docs/README.md
-for adr in docs/adr/*.md; do
-  [[ "$adr" == "docs/adr/README.md" ]] && continue
-  grep -Eq '^- \*\*狀態：\*\*(Proposed|Accepted|Superseded|Rejected)$' "$adr"
-  grep -Eq '^- \*\*日期：\*\*[0-9]{4}-[0-9]{2}-[0-9]{2}$' "$adr"
-  grep -Eq 'https://github.com/.+/(issues|pull)/[0-9]+' "$adr"
-  grep -q '^## 問題與限制$' "$adr"
-  grep -q '^## 決定$' "$adr"
-  grep -q '^## 評估過的替代方案$' "$adr"
-  grep -q '^## 重新評估條件$' "$adr"
-done
 "${platform_python[@]}" -m json.tool .csarc/profile.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/repository.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/actions.json >/dev/null
