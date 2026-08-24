@@ -11,13 +11,95 @@ concurrency:
 
 permissions:
   actions: read
+  checks: read
   contents: read
   issues: read
   pull-requests: read
 
 jobs:
+  source:
+    name: promotion source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require an eligible main source
+        env:
+          CANONICAL_REPOSITORY: Innoguard-Cyber-Arch/csarc-repo-template
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            jq -n --arg sha "$GITHUB_SHA" \
+              '{kind:"manual", main_sha:$sha}' > main-release-source.json
+            exit 0
+          fi
+          pull_request="$(
+            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+              --jq '[.[] | select(.merged_at != null and .base.ref == "main")] | last // empty'
+          )"
+          [[ -n "$pull_request" ]] || {
+            echo "Main release source is not associated with a reviewed pull request." >&2
+            exit 1
+          }
+          head_ref="$(jq -r .head.ref <<<"$pull_request")"
+          head_sha="$(jq -r .head.sha <<<"$pull_request")"
+          pr_number="$(jq -r .number <<<"$pull_request")"
+          labels="$(jq -r '[.labels[].name] | join(",")' <<<"$pull_request")"
+          branch_strategy=main
+          if [[ "$GITHUB_REPOSITORY" == "$CANONICAL_REPOSITORY" ]]; then
+            branch_strategy=delivery
+          elif [[ -f .csarc/profile.json ]]; then
+            branch_strategy="$(jq -r '.branch_strategy // "main"' .csarc/profile.json)"
+          fi
+          if [[ "$branch_strategy" == "main" || "$head_ref" == release-please--* ]]; then
+            jq -n --arg kind "$branch_strategy" --arg sha "$GITHUB_SHA" \
+              --argjson pr "$pr_number" \
+              '{kind:$kind, main_sha:$sha, pull_request:$pr}' \
+              > main-release-source.json
+            exit 0
+          fi
+          if [[ "$head_ref" != "dev" && "$head_ref" != dev/* && ",$labels," != *,hotfix,* ]]; then
+            echo "Main release source lacks promotion or hotfix evidence." >&2
+            exit 1
+          fi
+          run_id="$(
+            gh run list --workflow promotion.yml --event pull_request \
+              --commit "$head_sha" --status success --limit 20 \
+              --json databaseId --jq '.[0].databaseId // empty'
+          )"
+          [[ -n "$run_id" ]] || {
+            echo "No successful promotion workflow was found for main." >&2
+            exit 1
+          }
+          mkdir promotion-proof
+          gh run download "$run_id" \
+            --name "promotion-evidence-${pr_number}-${head_sha}" \
+            --dir promotion-proof
+          candidate_sha="$(jq -r .candidate_sha promotion-proof/promotion-evidence.json)"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$candidate_sha/check-runs" \
+            > candidate-checks.json
+          python3 scripts/promotion_gate.py verify-main \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-number "$pr_number" \
+            --head-sha "$head_sha" \
+            --main-sha "$GITHUB_SHA" \
+            --evidence promotion-proof/promotion-evidence.json \
+            --checks candidate-checks.json \
+            --output main-release-source.json
+      - name: Publish release source evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: main-release-source-${{ github.run_id }}
+          path: main-release-source.json
+          if-no-files-found: error
+          retention-days: 90
+
   governance:
     name: governance
+    needs: source
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

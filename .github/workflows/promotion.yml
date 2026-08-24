@@ -1,0 +1,243 @@
+name: Promotion gate
+
+on:
+  pull_request:
+    branches: [main, dev, "dev/**"]
+    types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
+  merge_group:
+    types: [checks_requested]
+  push:
+    branches: [main]
+
+concurrency:
+  group: promotion-${{ github.repository }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  preflight:
+    name: promotion preflight
+    if: >-
+      ${{ github.event_name == 'merge_group' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' &&
+      (github.event.pull_request.head.ref == 'dev' || startsWith(github.event.pull_request.head.ref, 'dev/') ||
+      contains(github.event.pull_request.labels.*.name, 'promotion') ||
+      contains(github.event.pull_request.labels.*.name, 'hotfix'))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      candidate_sha: ${{ steps.prepare.outputs.candidate_sha }}
+      canary_environment: ${{ steps.prepare.outputs.canary_environment }}
+      canary_state: ${{ steps.prepare.outputs.canary_state }}
+      head_sha: ${{ steps.prepare.outputs.head_sha }}
+      kind: ${{ steps.prepare.outputs.kind }}
+      pr_number: ${{ steps.prepare.outputs.pr_number }}
+      relevant: ${{ steps.prepare.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate promotion prerequisites and bundle the candidate
+        id: prepare
+        env:
+          CANONICAL_REPOSITORY: Innoguard-Cyber-Arch/csarc-repo-template
+          CANARY_COMMAND: ${{ vars.CSARC_CANARY_COMMAND }}
+          CANARY_ENVIRONMENT: ${{ vars.CSARC_CANARY_ENVIRONMENT }}
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          branch_strategy=main
+          if [[ "$GITHUB_REPOSITORY" == "$CANONICAL_REPOSITORY" ]]; then
+            branch_strategy=delivery
+          elif [[ -n "${{ github.event.pull_request.base.sha || '' }}" ]]; then
+            profile="$(git show "${{ github.event.pull_request.base.sha }}:.csarc/profile.json" 2>/dev/null || true)"
+            if [[ -n "$profile" ]]; then
+              branch_strategy="$(jq -r '.branch_strategy // "main"' <<<"$profile")"
+            fi
+          fi
+          python3 scripts/promotion_gate.py prepare \
+            --event "$GITHUB_EVENT_NAME" \
+            --event-path "$GITHUB_EVENT_PATH" \
+            --repo "$GITHUB_REPOSITORY" \
+            --branch-strategy "$branch_strategy" \
+            --candidate-sha "$GITHUB_SHA" \
+            --workflow-run "$RUN_URL" \
+            --canary-command "$CANARY_COMMAND" \
+            --canary-environment "$CANARY_ENVIRONMENT" \
+            --archive promotion-candidate.tar.gz \
+            --output promotion-preflight.json \
+            --github-output "$GITHUB_OUTPUT" \
+            --summary "$GITHUB_STEP_SUMMARY"
+      - name: Upload candidate and preflight evidence
+        if: ${{ steps.prepare.outputs.relevant == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: promotion-candidate-${{ github.run_id }}
+          path: |
+            promotion-candidate.tar.gz
+            promotion-preflight.json
+          if-no-files-found: error
+          retention-days: 90
+
+  canary:
+    name: external canary
+    needs: preflight
+    if: ${{ needs.preflight.outputs.relevant == 'true' && needs.preflight.outputs.canary_state == 'allowed' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: ${{ needs.preflight.outputs.canary_environment }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: promotion-candidate-${{ github.run_id }}
+          path: candidate
+      - name: Run the configured canary smoke
+        env:
+          CANARY_COMMAND: ${{ vars.CSARC_CANARY_COMMAND }}
+          CSARC_CANARY_TOKEN: ${{ secrets.CSARC_CANARY_TOKEN }}
+          CSARC_CANDIDATE_ARCHIVE: ${{ github.workspace }}/candidate/promotion-candidate.tar.gz
+          CSARC_CANDIDATE_SHA: ${{ needs.preflight.outputs.candidate_sha }}
+        run: bash -euo pipefail -c "$CANARY_COMMAND"
+
+  gate:
+    name: promotion
+    if: >-
+      ${{ always() && (github.event_name == 'merge_group' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' &&
+      (github.event.pull_request.head.ref == 'dev' || startsWith(github.event.pull_request.head.ref, 'dev/') ||
+      contains(github.event.pull_request.labels.*.name, 'promotion') ||
+      contains(github.event.pull_request.labels.*.name, 'hotfix')))) }}
+    needs: [preflight, canary]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require successful preflight
+        env:
+          PREFLIGHT_RESULT: ${{ needs.preflight.result }}
+        run: test "$PREFLIGHT_RESULT" = success
+      - if: ${{ needs.preflight.outputs.relevant == 'true' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: ${{ needs.preflight.outputs.relevant == 'true' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: promotion-candidate-${{ github.run_id }}
+          path: candidate
+      - name: Finalize promotion evidence
+        if: ${{ needs.preflight.outputs.relevant == 'true' }}
+        env:
+          CANARY_RESULT: ${{ needs.canary.result }}
+        run: >-
+          python3 scripts/promotion_gate.py finalize
+          --input candidate/promotion-preflight.json
+          --output promotion-evidence.json
+          --canary-result "$CANARY_RESULT"
+      - name: Upload promotion evidence
+        if: ${{ needs.preflight.outputs.relevant == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: promotion-evidence-${{ needs.preflight.outputs.pr_number }}-${{ needs.preflight.outputs.head_sha }}
+          path: promotion-evidence.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Report non-applicable route
+        if: ${{ needs.preflight.outputs.relevant != 'true' }}
+        run: echo "Promotion gate is not applicable to this pull request."
+
+  post-merge:
+    name: verify promoted main
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Resolve the merged pull request and its evidence
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pull_request="$(
+            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
+              --jq '[.[] | select(.merged_at != null and .base.ref == "main")] | last // empty'
+          )"
+          [[ -n "$pull_request" ]] || {
+            echo "Main commit is not associated with a merged pull request." >&2
+            exit 1
+          }
+          head_ref="$(jq -r .head.ref <<<"$pull_request")"
+          if [[ "$head_ref" == release-please--* ]]; then
+            echo "skip_verification=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          labels="$(jq -r '[.labels[].name] | join(",")' <<<"$pull_request")"
+          branch_strategy=main
+          if [[ "$GITHUB_REPOSITORY" == "Innoguard-Cyber-Arch/csarc-repo-template" ]]; then
+            branch_strategy=delivery
+          elif [[ -f .csarc/profile.json ]]; then
+            branch_strategy="$(jq -r '.branch_strategy // "main"' .csarc/profile.json)"
+          fi
+          if [[ "$branch_strategy" == "main" ]]; then
+            echo "skip_verification=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$head_ref" != "dev" && "$head_ref" != dev/* && ",$labels," != *,hotfix,* ]]; then
+            echo "Main commit did not come from a promotion or hotfix." >&2
+            exit 1
+          fi
+          pr_number="$(jq -r .number <<<"$pull_request")"
+          head_sha="$(jq -r .head.sha <<<"$pull_request")"
+          run_id="$(
+            gh run list --workflow promotion.yml --event pull_request \
+              --commit "$head_sha" --status success --limit 20 \
+              --json databaseId --jq '.[0].databaseId // empty'
+          )"
+          [[ -n "$run_id" ]] || {
+            echo "No successful promotion workflow was found for the merged head." >&2
+            exit 1
+          }
+          mkdir promotion-proof
+          gh run download "$run_id" \
+            --name "promotion-evidence-${pr_number}-${head_sha}" \
+            --dir promotion-proof
+          candidate_sha="$(jq -r .candidate_sha promotion-proof/promotion-evidence.json)"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$candidate_sha/check-runs" \
+            > candidate-checks.json
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+      - name: Verify main tree identity and full CI result
+        if: ${{ steps.resolve.outputs.skip_verification != 'true' }}
+        env:
+          HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+        run: >-
+          python3 scripts/promotion_gate.py verify-main
+          --repo "$GITHUB_REPOSITORY"
+          --pr-number "$PR_NUMBER"
+          --head-sha "$HEAD_SHA"
+          --main-sha "$GITHUB_SHA"
+          --evidence promotion-proof/promotion-evidence.json
+          --checks candidate-checks.json
+          --output main-promotion-evidence.json
+      - name: Upload verified main evidence
+        if: ${{ steps.resolve.outputs.skip_verification != 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: main-promotion-evidence-${{ github.sha }}
+          path: main-promotion-evidence.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Record non-promotion main strategy or release follow-up
+        if: ${{ steps.resolve.outputs.skip_verification == 'true' }}
+        run: echo "This main commit does not require delivery promotion evidence."
