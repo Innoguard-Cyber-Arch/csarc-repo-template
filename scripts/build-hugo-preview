@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if (($# > 1)) || { (($# == 1)) && [[ "$1" != "--check" ]]; }; then
+  printf 'Usage: scripts/build-hugo-preview [--check]\n' >&2
+  exit 2
+fi
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+hugo_bin="$("$repo_root/scripts/install-hugo")"
+
+"$hugo_bin" \
+  --source "$repo_root" \
+  --config decision-site/hugo.toml \
+  --destination "$repo_root/dist/hugo-site" \
+  --cleanDestinationDir \
+  --noBuildLock \
+  --environment production \
+  --quiet
+
+python3 "$repo_root/scripts/render_site.py" \
+  --root "$repo_root" \
+  --source dist/hugo-site/index.html \
+  --output dist/hugo-preview.html
+
+if (($# == 1)); then
+  python3 "$repo_root/scripts/render_site.py" \
+    --root "$repo_root" \
+    --source dist/hugo-site/index.html \
+    --output dist/hugo-preview.html \
+    --check
+fi
+
+printf 'Hugo preview: %s\n' "$repo_root/dist/hugo-preview.html"

@@ -1,0 +1,37 @@
+baseURL = "/"
+title = "CSARC Repo Template｜AI 輔助 SDLC 團隊公版"
+disableKinds = ["taxonomy", "term", "rss", "sitemap", "robotsTXT"]
+
+[outputs]
+home = ["candidate"]
+
+[outputFormats.candidate]
+mediaType = "text/html"
+baseName = "index"
+isHTML = true
+notAlternative = true
+
+[module]
+  [module.hugoVersion]
+  min = "0.165.0"
+  max = "0.166.0"
+
+  [[module.mounts]]
+  source = "decision-site/content"
+  target = "content"
+
+  [[module.mounts]]
+  source = "decision-site/layouts"
+  target = "layouts"
+
+  [[module.mounts]]
+  source = "site/styles.css"
+  target = "static/styles.css"
+
+  [[module.mounts]]
+  source = "site/app.js"
+  target = "static/app.js"
+
+  [[module.mounts]]
+  source = "site/assets"
+  target = "static/assets"

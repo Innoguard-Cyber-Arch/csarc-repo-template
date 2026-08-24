@@ -91,6 +91,8 @@ bash -n scripts/check-update-conflicts
 bash -n template/scripts/check-update-conflicts
 bash -n scripts/cleanup-worktrees
 bash -n template/scripts/cleanup-worktrees
+bash -n scripts/install-hugo
+bash -n scripts/build-hugo-preview
 bash -n scripts/check-governance-drift
 bash -n template/scripts/check-governance-drift
 bash -n scripts/verify-fast
@@ -121,6 +123,7 @@ bash -n template/scripts/validate-issue-title
 ./scripts/test-issue-triage
 bash -n scripts/test-worktree-cleanup
 ./scripts/test-worktree-cleanup
+./scripts/build-hugo-preview --check
 
 # The live probe must preserve valid run JSON and emit reusable evidence.
 live_probe_fixture="$fixture_root/live-probe"

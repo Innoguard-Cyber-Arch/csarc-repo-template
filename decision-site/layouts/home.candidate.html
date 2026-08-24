@@ -1,0 +1,14 @@
+{{- $legacy := readFile "site/index.html" -}}
+{{- $body := replaceRE `(?s)^.*?<body>(.*)</body>.*$` "$1" $legacy -}}
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="icon" href="data:,">
+  <title>{{ .Title }}</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>{{ $body | safeHTML }}</body>
+</html>
