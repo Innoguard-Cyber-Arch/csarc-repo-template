@@ -4,6 +4,7 @@
 
 - This file applies to the whole repository. Read a nearer `AGENTS.md` only if a future subtree genuinely needs different commands or safety rules.
 - Treat this file as the single source for AI instructions; `CLAUDE.md` only imports it.
+- Three documents split by audience, each authoritative for its own layer: `README.md` targets general users adopting the template (what it is, whether to use it, how to start); this file targets contributors and agents working in this repository (executable workflow rules); `docs/index.html` is the appendix for decision rationale and technical detail. Do not restate this file's workflow rules in `README.md`; link to it instead.
 - Treat `copier.yml`, `template/`, `policies/`, and `profiles/catalog.yaml` as the product.
 - `template/` is what downstream repositories receive. Root configuration governs this template repository itself.
 - Use root `docs/specs/` for medium- and long-term design; approved specs synchronize to Issues through the same pipeline shipped to downstream repositories.
