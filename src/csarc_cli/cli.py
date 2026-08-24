@@ -1134,41 +1134,48 @@ def milestone_description_plan(
     changes: list[MilestoneDescriptionChange] = []
     current: list[tuple[int, str]] = []
     review: list[tuple[int, str]] = []
-    milestones = gh_pages(
-        f"repos/{repository}/milestones?state=all&per_page=100"
-    )
-    for milestone in milestones:
-        number = milestone.get("number")
-        title = milestone.get("title")
-        description = milestone.get("description")
-        if not isinstance(number, int) or not isinstance(title, str):
-            raise CliError("GitHub returned invalid Milestone metadata.")
-        if not isinstance(description, str):
-            review.append((number, title))
-            continue
-        headings = milestone_headings(description)
-        if headings == CURRENT_MILESTONE_HEADINGS:
-            current.append((number, title))
-            continue
-        if headings != LEGACY_MILESTONE_HEADINGS:
-            review.append((number, title))
-            continue
-        issues = gh_pages(
-            f"repos/{repository}/issues?state=all&milestone={number}"
-            "&per_page=100"
+    try:
+        milestones = gh_pages(
+            f"repos/{repository}/milestones?state=all&per_page=100"
         )
-        upgraded = upgraded_milestone_description(description, issues)
-        if upgraded is None:
-            review.append((number, title))
-            continue
-        changes.append(
-            MilestoneDescriptionChange(
-                number=number,
-                title=title,
-                before=description,
-                after=upgraded,
+        for milestone in milestones:
+            number = milestone.get("number")
+            title = milestone.get("title")
+            description = milestone.get("description")
+            if not isinstance(number, int) or not isinstance(title, str):
+                raise CliError("GitHub returned invalid Milestone metadata.")
+            if not isinstance(description, str):
+                review.append((number, title))
+                continue
+            headings = milestone_headings(description)
+            if headings == CURRENT_MILESTONE_HEADINGS:
+                current.append((number, title))
+                continue
+            if headings != LEGACY_MILESTONE_HEADINGS:
+                review.append((number, title))
+                continue
+            issues = gh_pages(
+                f"repos/{repository}/issues?state=all&milestone={number}"
+                "&per_page=100"
             )
+            upgraded = upgraded_milestone_description(description, issues)
+            if upgraded is None:
+                review.append((number, title))
+                continue
+            changes.append(
+                MilestoneDescriptionChange(
+                    number=number,
+                    title=title,
+                    before=description,
+                    after=upgraded,
+                )
+            )
+    except CliError as error:
+        print(
+            f"Milestone descriptions: unavailable ({error}; "
+            "review them manually)."
         )
+        return None
     plan = MilestoneDescriptionPlan(
         repository=repository,
         changes=tuple(changes),

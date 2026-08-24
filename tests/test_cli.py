@@ -401,6 +401,27 @@ Issue #1.
     assert cli.upgraded_milestone_description(plan.changes[0].after, []) is None
 
 
+def test_milestone_description_plan_degrades_without_api_access(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Unavailable Milestone access does not block repository adoption."""
+    monkeypatch.setattr(cli, "target_repository", lambda _: "owner/repo")
+    monkeypatch.setattr(
+        cli,
+        "gh_pages",
+        lambda _: (_ for _ in ()).throw(
+            cli.CliError("GitHub authentication is unavailable")
+        ),
+    )
+
+    assert cli.milestone_description_plan(tmp_path) is None
+    output = capsys.readouterr().out
+    assert "Milestone descriptions: unavailable" in output
+    assert "review them manually" in output
+
+
 def test_adopt_requires_clean_tree_and_preserves_product_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

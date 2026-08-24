@@ -7,6 +7,14 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.11.0] - 2026-08-24
+
+### Added
+
+- 升級 Milestone story planning 契約，並在 adopt/update 中安全遷移可辨識的
+  舊版 description
+  ([#161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/161))。
+
 ## [0.10.1] - 2026-08-24
 
 ### Fixed
@@ -153,6 +161,7 @@ CHANGELOG 的 tag。
 
 - 建立第一個可追蹤的公版基線與 artifact／SBOM 完整性檢查。
 
+[0.11.0]: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.9.0...v0.9.1
