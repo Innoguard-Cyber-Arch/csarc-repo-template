@@ -9,7 +9,7 @@
 
 使用者不一定能啟用 GitHub Pages、建立外部託管帳號，或取得 organization／enterprise 管理權。內部決策網站同時需要保留特殊簡報設計、支援討論與交付，而且下載後仍能離線開啟。因此 Pages、CDN、web font、外部 JavaScript 與分離圖片都不能成為 portable baseline。
 
-目前 root `docs/index.html` 把內容、樣式、互動與決策來源放在同一檔案；Copier 下發網站則把版型與 `docs/site-content.js` 分開，方便更新但失去單檔交付。兩者都缺少明確的 source／output、模板／專案 ownership 與 schema migration 契約。
+原本 root `docs/index.html` 把內容、樣式、互動與決策來源放在同一檔案；Copier 下發網站則在 runtime 載入 `docs/site-content.js`，方便更新但失去單檔交付。現在兩者都由 repository 內來源重建同一路徑的單檔交付物。
 
 聊天也不是 repository source of truth。現有 Spec → Issue 流程不會擷取對話；若無條件保存完整逐字稿，會把未確認假設、敏感脈絡與噪音寫進版本歷史。
 
@@ -18,7 +18,7 @@
 採用「repository 內可維護來源 → 可重現的 self-contained HTML」：
 
 1. `docs/index.html` 保持已提交、可直接傳送、可用 `file://` 開啟的單檔交付物；CSS、JavaScript、font、SVG 與 raster images 全部內嵌。
-2. 編輯來源與 bundled output 分離。來源保留特殊設計所需的版型、內容、樣式、互動與媒體；repository-local renderer 負責產生 `docs/index.html`。生成檔不是擴充點，也不直接手改。
+2. 編輯來源與 bundled output 分離。`site/` 保留特殊設計所需的版型、內容、樣式、互動與媒體；`scripts/render_site.py` 負責產生 `docs/index.html`。生成檔不是擴充點，也不直接手改。
 3. 不導入 Hugo、Docusaurus、Backstage 或另一套前端 toolchain。現階段的需求是單一簡報，最小 renderer 與既有 `uv` baseline 即可；只有多頁搜尋、跨 repo catalog 或翻譯需求實際出現時才重新評估。
 4. canonical decision records 放在 `docs/decisions/`。簡報呈現決策摘要與連結，但不再是唯一可編輯來源；runbook、實證與 spec 各自維持不同生命週期。
 5. root 與 Copier 下發專案遵守相同 portable contract，但可以有不同 presentation layout。共用設計基礎由公版維護，root 可以增加 deck-specific 呈現，生成專案則使用 handbook layout。
@@ -33,6 +33,8 @@
 | Decision records、specs 與產品實證 | owning repository | 專案擁有；公版只提供結構與規則 |
 
 專案內容契約必須宣告 `schemaVersion`。同一 major 版本新增欄位時提供相容預設；移除或改變語意時提供明確 migration 與可審查報告，不能靠覆寫 project-owned content 解決。
+
+目前 renderer 支援 `schemaVersion: 1`；沒有欄位的既有內容視為 legacy v1，讓舊專案更新後可先保留原內容。明確宣告其他版本時 fail closed。
 
 ## GitHub capability matrix
 
