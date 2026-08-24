@@ -157,7 +157,15 @@ def test_unknown_and_missing_paths_fail_safe_to_full() -> None:
 
 
 @pytest.mark.parametrize(
-    "path", [".release-please-manifest.json", "release-please-config.json"]
+    "path",
+    [
+        ".release-please-manifest.json",
+        "release-please-config.json",
+        "version.txt",
+        "template/.release-please-manifest.json",
+        "template/release-please-config.json.jinja",
+        "template/version.txt",
+    ],
 )
 def test_release_version_metadata_stays_fail_closed(path: str) -> None:
     """Do not downgrade unclassified release state to a routine tier."""

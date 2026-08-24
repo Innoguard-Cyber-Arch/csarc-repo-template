@@ -60,7 +60,19 @@ def scope_for(path: str) -> str:
         or path.startswith(".github/dependency-review-config")
     ):
         return "dependency"
-    if path == "copier.yml" or path.startswith(("template/", "profiles/")):
+    if (
+        path == "copier.yml"
+        or path.startswith("profiles/")
+        or (
+            path.startswith("template/")
+            and name
+            not in {
+                ".release-please-manifest.json",
+                "release-please-config.json",
+                "version.txt",
+            }
+        )
+    ):
         return "template"
     if path.startswith("docs/") or path.endswith((".md", ".html")):
         return "docs"

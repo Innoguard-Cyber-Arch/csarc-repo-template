@@ -721,6 +721,8 @@ if grep -q '^  decision-site:$' .github/workflows/ci.yml; then
   echo "Decision site validation must share the fast runner."
   exit 1
 fi
+grep -q 'types: \[opened, reopened, synchronize, labeled, unlabeled\]' \
+  .github/workflows/ci.yml
 grep -q 'name: portable-decision-site' .github/workflows/ci.yml
 grep -q "steps.plan.outputs.upload_site == 'true'" .github/workflows/ci.yml
 grep -q 'python3 scripts/render_site.py --check' .github/workflows/ci.yml
@@ -1528,6 +1530,8 @@ if grep -q '^  decision-site:$' \
   echo "Generated decision site validation must share the fast runner."
   exit 1
 fi
+grep -q 'types: \[opened, reopened, synchronize, labeled, unlabeled\]' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q 'name: portable-decision-site' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q "steps.plan.outputs.upload_site == 'true'" \
