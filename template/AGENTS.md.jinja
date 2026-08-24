@@ -33,6 +33,8 @@ Delivery routes, synchronization, promotion, release, canary, rollback, and quot
 
 Duplicate triage may close an Issue without code changes when it links the canonical Issue and uses GitHub's native duplicate reason. If a change or `copier update` modifies an Issue or pull request body shape, migrate existing bodies before closing it; otherwise create and link a follow-up Issue first.
 
+Existing-repository history changes start read-only: propose semantic story groups and exclusions, wait for explicit confirmation, then update Milestones and associations idempotently. Never infer groups from titles or labels alone, require every historical Issue to have a Milestone, or reopen completed Issues.
+
 ## Commands
 
 {% if language in ["python", "python-typescript"] %}- Python setup: `uv sync --locked`.

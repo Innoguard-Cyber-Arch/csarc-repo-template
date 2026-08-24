@@ -37,6 +37,9 @@ assert_agent_guidance() {
   grep -q 'docs/ci-policy.md#actions-額度-fallback' \
     "$project_root/AGENTS.md"
   grep -q 'scripts/render_site.py --check' "$project_root/AGENTS.md"
+  grep -q 'propose semantic story groups and exclusions' \
+    "$project_root/AGENTS.md"
+  grep -q 'reopen completed Issues' "$project_root/AGENTS.md"
 }
 
 ./scripts/check-update-conflicts
@@ -130,6 +133,10 @@ bash -n scripts/verify-fast
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' README.md
 grep -q 'policy labels, and effective Rulesets' docs/agent-install.md
 grep -q 'Administration read access' docs/agent-install.md
+grep -q 'Existing-repository history changes start read-only' \
+  docs/agent-install.md
+grep -q 'Never infer groups' docs/agent-install.md
+grep -q 'from titles or labels alone' docs/agent-install.md
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' docs/index.html
 grep -q '^## Actions quota fallback$' AGENTS.md
 grep -q '^## Actions quota fallback$' template/AGENTS.md.jinja
