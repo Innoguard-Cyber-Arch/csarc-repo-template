@@ -63,6 +63,8 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 
 `./scripts/verify` 也會跑 Issue／PR 政策正反例，確認合法流程能通過、不合格 Issue 標題與錯誤 PR 標題／分支／Issue 關聯會被拒絕。PR CI 依 docs／fast／full 與週期性供應鏈四層執行，完整矩陣只留給 promotion、hotfix、merge queue 或手動驗證；觸發條件、穩定 required checks、成本估算與實測方式見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
+{% if branch_strategy in ["dev", "delivery"] %}Promotion 另由穩定的 `promotion` context 封裝候選 source 與 SHA/tree 證據；合併後只核對 `main` tree 與已成功的 `verify`，不重跑完整矩陣。未設定外部環境時明確保留 artifact-only 證據；要啟用 canary，須同時設定 repository variables `CSARC_CANARY_COMMAND`、`CSARC_CANARY_ENVIRONMENT`，敏感值則放在該 environment 的 `CSARC_CANARY_TOKEN` secret。完整三態與失敗邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。{% endif %}
+
 ### Actions 額度耗盡的一次性驗證
 
 只有具帳務用量檢視權限的 human maintainer 已明確確認「當期 GitHub Actions 免費分鐘已用完」時，才可啟用本機 fallback。GitHub 顯示的 runner 未啟動訊息會同時提及付款失敗與 spending limit，本身不足以證明額度耗盡；付款失敗、budget 設定、平台事故、workflow／權限錯誤、原因不明，或任何已開始執行 step 後失敗的 job 都不能使用。

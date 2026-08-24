@@ -38,6 +38,34 @@ fast、full、OSV、Zizmor 與 remote governance 的 `success`／`skipped` 結�
 full run 不取消進行中的驗證，避免候選版本遺失完整證據。CI 不再對合併後的同一
 source tree 跑第二次完整 suite；`main` push 留給同步與 release 邊界工作。
 
+## Promotion 與 canary 證據
+
+Ruleset 另固定要求 `promotion` context。一般 Issue／sync PR 會得到明確的
+not-applicable 成功結果；`dev/m* → main`、`dev/next → main` 與 hotfix 則必須先
+確認 branch 包含最新 `main`。Milestone promotion 還會檢查同一 Milestone 中，除
+promotion Issue 外的工作均已關閉且沒有未勾選的 acceptance criterion。
+
+Promotion 會封裝候選 source archive，記錄 PR、base/head SHA、candidate tree、
+Milestone 與納入 Issues，並把完整 CI 的 `verify` 當成並列 required gate。合併後
+不重跑完整矩陣，而是下載該 PR 的 evidence、核對 `verify` 成功，並確認 `main`
+tree 與候選 tree 相同；任一不符都停止後續 release。
+
+外部 canary 採明確三態：
+
+- 同時設定 repository variable `CSARC_CANARY_COMMAND` 與
+  `CSARC_CANARY_ENVIRONMENT` 時為 `allowed`，候選 archive 會進入指定 GitHub
+  Environment 執行 smoke；敏感值只透過 environment secret
+  `CSARC_CANARY_TOKEN` 提供。
+- 兩者都未設定時為 `blocked`，只保留 artifact-only evidence，不能宣稱已完成
+  外部測試。
+- 只設定其中一項時為 `unknown`，同樣只保留 artifact-only evidence，並要求維護者
+  修正設定。這兩種 fallback 都不取代 full CI。
+
+Promotion Issue 會維持 open；只有 gate 通過且 PR 真正合併到 `main` 後，GitHub
+closing keyword 才關閉它。既有 Milestone lifecycle 會在所有 Issue 關閉且
+Milestone acceptance criteria 全部勾選時關閉 Milestone，之後若 Issue reopen 或
+criterion 取消勾選則重新開啟。
+
 ## 安全掃描與治理頻率
 
 - Gitleaks 留在每張 PR 的 docs／fast／full 路徑。

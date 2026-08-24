@@ -23,6 +23,7 @@ uv run ruff format --check \
   tests/test_cli.py \
   tests/test_milestone_lifecycle.py \
   tests/test_ci_tier.py \
+  tests/test_promotion_gate.py \
   tests/test_delivery_sync.py \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
@@ -30,6 +31,7 @@ uv run ruff format --check \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/release_policy.py \
   scripts/spec_to_issue.py \
@@ -42,6 +44,7 @@ uv run ruff check \
   tests/test_cli.py \
   tests/test_milestone_lifecycle.py \
   tests/test_ci_tier.py \
+  tests/test_promotion_gate.py \
   tests/test_delivery_sync.py \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
@@ -49,6 +52,7 @@ uv run ruff check \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/release_policy.py \
   scripts/spec_to_issue.py \
@@ -61,6 +65,7 @@ uv run mypy \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/release_policy.py \
   scripts/spec_to_issue.py \
@@ -267,7 +272,7 @@ case "$2" in
       printf '[]\n'
       exit 0
     fi
-    printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_approving_review_count":1,"required_review_thread_resolution":true}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"delivery-sync"},{"context":"verify"},{"context":"title"}]}}]'
+    printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_review_thread_resolution":true,"required_approving_review_count":1}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"delivery-sync"},{"context":"promotion"},{"context":"verify"},{"context":"title"}]}}]'
     ;;
   *)
     echo "Unexpected gh API path: $2" >&2
@@ -955,6 +960,7 @@ if not pull_request["require_code_owner_review"]:
     raise SystemExit("The repository Ruleset must require CODEOWNER review.")
 if not {
     "delivery-sync",
+    "promotion",
     "verify",
     "title",
 } <= checks:
@@ -1262,6 +1268,7 @@ fi
 test "$(cat "$fixture_root/default-project/CLAUDE.md")" = "@AGENTS.md"
 test -f "$fixture_root/default-project/policies/rulesets.json"
 test -f "$fixture_root/default-project/.github/workflows/governance-comment.yml"
+test -f "$fixture_root/default-project/.github/workflows/promotion.yml"
 test -f "$fixture_root/default-project/docs/ci-policy.md"
 grep -q '穩定的 `verify` aggregate context' \
   "$fixture_root/default-project/docs/ci-policy.md"
@@ -1286,6 +1293,8 @@ grep -q '"context": "verify"' \
   "$fixture_root/default-project/policies/rulesets.json"
 grep -q '"context": "delivery-sync"' \
   "$fixture_root/default-project/policies/rulesets.json"
+grep -q '"context": "promotion"' \
+  "$fixture_root/default-project/policies/rulesets.json"
 grep -q '"refs/heads/dev/\*"' \
   "$fixture_root/default-project/policies/rulesets.json"
 test -x "$fixture_root/default-project/scripts/apply-repository-settings.sh"
@@ -1293,6 +1302,7 @@ test -x "$fixture_root/default-project/scripts/check-update-conflicts"
 test -x "$fixture_root/default-project/scripts/install-gitleaks"
 test -x "$fixture_root/default-project/scripts/verify-fast"
 test -f "$fixture_root/default-project/scripts/ci_tier.py"
+test -x "$fixture_root/default-project/scripts/promotion_gate.py"
 test ! -f "$fixture_root/default-project/.pre-commit-config.yaml"
 test ! -f "$fixture_root/default-project/package.json"
 test ! -f "$fixture_root/default-project/pnpm-workspace.yaml"
