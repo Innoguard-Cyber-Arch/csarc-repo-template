@@ -1508,7 +1508,7 @@
           <h3>公版會替 repo 準備</h3>
           <p class="scope-row"><strong>規劃與 AI 契約</strong><span>可選 Story Milestone → 1..N Issues → 各自 PR；spec 可同步 Issue 或 Story</span></p>
           <p class="scope-row"><strong>驗證與合併</strong><span><code>./scripts/verify</code>＋分層 CI＋PR；並行 Milestone 各自整合，promotion 才進 main</span></p>
-          <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件</span></p>
+          <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件；已有 Containerfile 可選配容器驗證／GHCR</span></p>
           <p class="scope-row"><strong>可持續同步</strong><span>公版更新成為可審查差異，不會直接覆蓋產品程式</span></p>
         </section>
         <section class="start-paths" aria-label="三種導入方式">
@@ -2490,6 +2490,17 @@ matrix:
     path: \${{ runner.temp }}/sbom-root
     format: cyclonedx-json
     output-file: sbom.cdx.json`
+        },
+        {
+          title: '有 Containerfile 才啟用容器驗證與 GHCR 交付',
+          goal: '讓已有容器的產品取得一致門禁，同時讓非容器 repo 維持零 Docker job 與零 registry write 權限。',
+          summary: '`none` 不產生工作；`verify` 在 PR 使用 Buildx cache、smoke test 與 Trivy HIGH／CRITICAL scan，但不 push；`ghcr` 才從已驗證 release source 建置一次並保存相同 image bytes，推送版本與 commit SHA tag、附加 provenance／SPDX SBOM，再以 digest pull 與 smoke。ai-guardrail 的 `evaluation/Dockerfile` 是第一個具體使用情境；runtime 部署仍由產品另訂。',
+          file: 'copier.yml＋ci.yml＋csarc-release.yml＋profiles/catalog.yaml',
+          code: `container_mode: none | verify | ghcr
+containerfile_path: evaluation/Dockerfile
+container_smoke_command: docker run --rm "$IMAGE" --help
+
+# Only the release publishing job receives packages: write.`
         },
         {
           title: '決定｜保留 Dependabot 與 pnpm 的原生門禁',

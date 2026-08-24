@@ -712,7 +712,7 @@ grep -q 'ai-guardrail' docs/pilot-adoption.md
 grep -q 'run 32664445831' docs/pilot-adoption.md
 grep -q 'docs/pilot-adoption.md' README.md
 test "$(grep -c '^[[:space:]]*stage: beta$' profiles/catalog.yaml)" -eq 2
-test "$(grep -c '^[[:space:]]*stage: alpha$' profiles/catalog.yaml)" -eq 5
+test "$(grep -c '^[[:space:]]*stage: alpha$' profiles/catalog.yaml)" -eq 6
 grep -q '<title>CSARC Repo Template｜AI 輔助 SDLC 團隊公版</title>' \
   docs/index.html
 grep -q '先辨識 GitHub 方案' docs/index.html
@@ -1100,6 +1100,30 @@ if uv run copier copy --trust --defaults --vcs-ref HEAD \
   echo "Copier accepted a non-hexadecimal workflow commit SHA."
   exit 1
 fi
+if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_mode=existing \
+  --data project_slug="invalid-container-path" \
+  --data language=ci \
+  --data container_mode=verify \
+  --data containerfile_path="../Dockerfile" \
+  --data 'container_smoke_command=docker run --rm "$IMAGE"' \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$fixture_root/invalid-container-path" >/dev/null 2>&1; then
+  echo "Copier accepted an unsafe container file path."
+  exit 1
+fi
+if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_mode=existing \
+  --data project_slug="invalid-container-smoke" \
+  --data language=ci \
+  --data container_mode=verify \
+  --data containerfile_path="Dockerfile" \
+  --data container_smoke_command="docker ps" \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$fixture_root/invalid-container-smoke" >/dev/null 2>&1; then
+  echo "Copier accepted a container smoke command without IMAGE."
+  exit 1
+fi
 
 # Issue #140: every selectable minimum must generate the exact .0 lower bound
 # plus the latest patch of each supported feature release. Inline and reusable
@@ -1221,6 +1245,22 @@ grep -q '"language_profile": "python"' \
   "$fixture_root/default-project/.csarc/profile.json"
 grep -q '"branch_strategy": "delivery"' \
   "$fixture_root/default-project/.csarc/profile.json"
+grep -q '"container": false' \
+  "$fixture_root/default-project/.csarc/profile.json"
+grep -q '"mode": "none"' \
+  "$fixture_root/default-project/.csarc/profile.json"
+test ! -f "$fixture_root/default-project/Dockerfile"
+test ! -f "$fixture_root/default-project/Containerfile"
+if grep -q '^  container:$\|docker/setup-buildx-action@\|aquasecurity/trivy-action@' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"; then
+  echo "Container CI must not exist when the module is disabled."
+  exit 1
+fi
+if grep -q '^  publish-container:$\|^      packages: write$' \
+  "$fixture_root/default-project/.github/workflows/release.yml"; then
+  echo "Container publishing permissions must not exist when disabled."
+  exit 1
+fi
 test "$("$fixture_root/default-project/scripts/detect-language-profile" --suggest)" = \
   "python"
 test -f "$fixture_root/default-project/CHANGELOG.md"
@@ -2219,6 +2259,90 @@ grep -q '"typescript": "5.9.3"' "$adoption_project/package.json"
 grep -q 'project_mode: existing' "$adoption_project/.copier-answers.yml"
 grep -q '"template_mode": "existing"' \
   "$adoption_project/.csarc/profile.json"
+
+# Optional containers use a product-owned Containerfile. The ai-guardrail
+# pilot uses the same nested evaluation/Dockerfile shape.
+container_project="$fixture_root/container-project"
+mkdir -p "$container_project/evaluation"
+cat > "$container_project/evaluation/Dockerfile" <<'DOCKERFILE'
+FROM alpine:3.22
+CMD ["/bin/true"]
+DOCKERFILE
+uv run copier copy --trust --defaults --overwrite --vcs-ref HEAD \
+  --data project_mode=existing \
+  --data project_name="Container Project" \
+  --data project_slug="container-project" \
+  --data language=ci \
+  --data container_mode=ghcr \
+  --data containerfile_path=evaluation/Dockerfile \
+  --data 'container_smoke_command=docker run --rm "$IMAGE"' \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$container_project"
+prime_gitleaks_cache "$container_project"
+grep -q '"container": true' "$container_project/.csarc/profile.json"
+grep -q '"mode": "ghcr"' "$container_project/.csarc/profile.json"
+grep -q '"file": "evaluation/Dockerfile"' \
+  "$container_project/.csarc/profile.json"
+grep -q '容器模式 ghcr' "$container_project/docs/site-content.js"
+grep -q '^  - package-ecosystem: docker$' \
+  "$container_project/.github/dependabot.yml"
+grep -q '^    directory: /evaluation$' \
+  "$container_project/.github/dependabot.yml"
+grep -q '^  container:$' "$container_project/.github/workflows/ci.yml"
+grep -q 'cache-to: type=gha,mode=max' \
+  "$container_project/.github/workflows/ci.yml"
+grep -q 'aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25' \
+  "$container_project/.github/workflows/ci.yml"
+if grep -q '^      packages: write$' \
+  "$container_project/.github/workflows/ci.yml"; then
+  echo "Pull request container verification must not write packages."
+  exit 1
+fi
+grep -q '^  container-build:$' \
+  "$container_project/.github/workflows/csarc-release.yml"
+grep -q '^  publish-container:$' \
+  "$container_project/.github/workflows/csarc-release.yml"
+grep -q '^      packages: write$' \
+  "$container_project/.github/workflows/csarc-release.yml"
+grep -q 'actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a' \
+  "$container_project/.github/workflows/csarc-release.yml"
+grep -q 'actions/attest-sbom@4651f806c01d8637787e274ac3b56de9a85cc6a3' \
+  "$container_project/.github/workflows/csarc-release.yml"
+grep -q 'docker pull "$IMAGE"' \
+  "$container_project/.github/workflows/csarc-release.yml"
+if grep -q '^  push:$\|workflow_run:\|PAT\|personal.access.token' \
+  "$container_project/.github/workflows/csarc-release.yml"; then
+  echo "Container publishing must retain the verified release boundary."
+  exit 1
+fi
+(
+  cd "$container_project"
+  ./scripts/verify
+  "$repo_root/.venv/bin/zizmor" . --format plain
+)
+
+container_verify_project="$fixture_root/container-verify-project"
+mkdir -p "$container_verify_project"
+cat > "$container_verify_project/Containerfile" <<'CONTAINERFILE'
+FROM alpine:3.22
+CMD ["/bin/true"]
+CONTAINERFILE
+uv run copier copy --trust --defaults --overwrite --vcs-ref HEAD \
+  --data project_mode=existing \
+  --data project_slug="container-verify-project" \
+  --data language=ci \
+  --data container_mode=verify \
+  --data containerfile_path=Containerfile \
+  --data 'container_smoke_command=docker run --rm "$IMAGE"' \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$container_verify_project"
+grep -q '^  container:$' \
+  "$container_verify_project/.github/workflows/ci.yml"
+if grep -q '^  container-build:$\|^  publish-container:$\|^      packages: write$' \
+  "$container_verify_project/.github/workflows/csarc-release.yml"; then
+  echo "Verify-only containers must not publish to a registry."
+  exit 1
+fi
 
 # Verify that an adopted repository can receive a later template version.
 update_source="$fixture_root/update-source"

@@ -510,6 +510,17 @@ matrix:
     output-file: sbom.cdx.json`
         },
         {
+          title: '有 Containerfile 才啟用容器驗證與 GHCR 交付',
+          goal: '讓已有容器的產品取得一致門禁，同時讓非容器 repo 維持零 Docker job 與零 registry write 權限。',
+          summary: '`none` 不產生工作；`verify` 在 PR 使用 Buildx cache、smoke test 與 Trivy HIGH／CRITICAL scan，但不 push；`ghcr` 才從已驗證 release source 建置一次並保存相同 image bytes，推送版本與 commit SHA tag、附加 provenance／SPDX SBOM，再以 digest pull 與 smoke。ai-guardrail 的 `evaluation/Dockerfile` 是第一個具體使用情境；runtime 部署仍由產品另訂。',
+          file: 'copier.yml＋ci.yml＋csarc-release.yml＋profiles/catalog.yaml',
+          code: `container_mode: none | verify | ghcr
+containerfile_path: evaluation/Dockerfile
+container_smoke_command: docker run --rm "$IMAGE" --help
+
+# Only the release publishing job receives packages: write.`
+        },
+        {
           title: '決定｜保留 Dependabot 與 pnpm 的原生門禁',
           goal: '讓 dependency PR 繼續觸發既有 CI/CD checks，且不要求每個導入者安裝高權限 App 或保存長效 PAT。',
           summary: '不導入 Renovate：Dependabot 使用 GitHub 原生 automation identity，現有 PR checks 可直接執行。Dependabot cooldown 管理自動升版 PR 的三天等待；pnpm minimumReleaseAge 也保護本機與 CI resolution，並非完全重複。pnpm trustPolicy、OSV、resolver 上下界檢查與 SBOM 各自保留原本職責。若未來 Dependabot 無法表達已發生的跨 repo 需求，而且已有可維護的非 GITHUB_TOKEN 身分，再另案重評。',
