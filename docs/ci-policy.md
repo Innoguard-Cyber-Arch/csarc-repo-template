@@ -210,6 +210,25 @@ identity；合併後立即形成 patch release 邊界。接著由每條進行中
   schedule 執行；reviewer assignment 只在 opened、reopened 或 ready-for-review
   觸發，不在每次 synchronize 重做。
 
+## Actions 額度 fallback
+
+這個一次性流程只適用於具帳務可見性的 human maintainer 已明確確認當期 included
+GitHub Actions minutes 耗盡。只提到 failed payments 或 spending limit 的 runner 註記
+不足以證明符合條件；付款失敗、錯誤 budget、平台事故、workflow／權限錯誤、原因不明，
+或任何已開始執行 step 後失敗的 job 都維持 blocked。
+
+合併前必須確認 worktree 乾淨且 `HEAD` 等於 PR head SHA，執行完整本機驗證與每個可
+忠實重現的 required check；任何失敗都停止，GitHub-only checks 則逐項列出。通過後，
+在 PR 留下標題為 `Actions quota fallback attestation` 的留言，記錄 head SHA、受阻 run
+URL 與 annotation、human quota confirmation、UTC 時間、環境與工具版本、完整命令、
+結果及未重現 checks。Human maintainer 必須再針對該 PR 明確授權；新 commit 使聲明
+失效並須重新驗證、記錄與授權。不得建立或偽造成功 Check Run。
+
+只有 repo 現行政策已允許 author self-merge 時，agent 才可在上述條件完整後合併。
+fallback 不取代 release、publishing、deployment approval、secrets、provenance、
+CODEOWNER review 或任何無法本機重現的控制。額度恢復後須補跑該 SHA 的 GitHub
+checks 並記錄結果；平台不再允許補跑時，另開 Issue 保留缺口，不得宣稱追溯成功。
+
 ## 外部基準
 
 下列活躍大型 repository 與 GitHub 官方文件於 2026-08-24 查閱；當日三者約有
