@@ -84,6 +84,29 @@ Ruleset 固定要求 `title`、`delivery-sync`、`promotion` 與 `verify`。穩�
 full run 不取消進行中的驗證，避免候選版本遺失完整證據。CI 不再對合併後的同一
 source tree 跑第二次完整 suite；`main` push 留給同步與 release 邊界工作。
 
+## Actions quota fallback
+
+這是一個一次性、fail-closed 的例外，只能在具帳務用量檢視權限的 human
+maintainer 已明確確認當期 GitHub Actions 免費分鐘耗盡時使用。runner 未啟動訊息
+本身不足以證明原因；付款失敗、錯誤 spending budget、平台事故、workflow 或權限
+錯誤、原因不明，以及任何已開始執行 step 後失敗的 job 都不適用。
+
+使用前必須逐項完成：
+
+1. 確認 worktree 乾淨，且 `HEAD` 等於 pull request head SHA。
+2. 執行 repository 的完整本機驗證入口與所有可忠實重現的 required checks；
+   任一失敗即停止，GitHub-only checks 必須明列為未驗證。
+3. 在 PR 留下標題為 `Actions quota fallback attestation` 的 comment，記錄 head
+   SHA、受阻 run URL 與 annotation、human quota confirmation、UTC 執行時間、
+   環境與工具版本、完整命令與結果，以及未重現的 checks。
+4. 由 human maintainer 對同一 PR 與 head SHA 明確授權。新 commit 立即使
+   attestation 失效，必須重新驗證與授權。
+5. 只有 repository 已允許 author self-merge 時才可合併。不得偽造成功 Check Run，
+   也不得用此例外取代 release、publishing、deployment approval、secrets、
+   provenance、CODEOWNER review 或其他無法在本機重現的控制。
+6. 額度恢復後補跑該 commit 的 hosted checks 並記錄結果；若 GitHub 已不允許重跑，
+   另開 follow-up Issue，不得宣稱 retrospective CI success。
+
 ## Promotion 與 canary 證據
 
 Ruleset 另固定要求 `promotion` context。一般 Issue／sync PR 會得到明確的

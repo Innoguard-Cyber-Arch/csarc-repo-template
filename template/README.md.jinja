@@ -29,6 +29,10 @@
 
 共同需求是 Git、GitHub CLI、uv；{% if has_typescript %}本案另需 Node 24+ 與 pnpm 11。{% endif %}
 
+使用 Codex 或其他 coding agent 時，請直接把實際 Git repository root 設為
+workspace；先執行 `git rev-parse --show-toplevel` 確認目前位置。只開啟其父目錄
+不會讓 agent 自動載入子目錄的 `AGENTS.md`。
+
 ```bash
 git clone <repository-url>
 cd {{ project_slug }}
@@ -99,9 +103,10 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 
 ### Actions 額度耗盡的一次性驗證
 
-只有具帳務用量檢視權限的 human maintainer 已明確確認「當期 GitHub Actions 免費分鐘已用完」時，才可啟用本機 fallback。GitHub 顯示的 runner 未啟動訊息會同時提及付款失敗與 spending limit，本身不足以證明額度耗盡；付款失敗、budget 設定、平台事故、workflow／權限錯誤、原因不明，或任何已開始執行 step 後失敗的 job 都不能使用。
-
-Agent 必須確認乾淨 worktree 的 `HEAD` 等於 PR head SHA，執行 `./scripts/verify` 與所有可忠實本機重現的必要 checks，任何失敗都停止。通過後在 PR 留下標題為 `Actions quota fallback attestation` 的留言，記錄 SHA、受阻 run URL 與 annotation、human quota confirmation、UTC 時間、環境／工具版本、完整命令與結果，以及無法在本機重現的 checks。Human maintainer 必須明確授權該 PR 使用一次性 fallback；新 commit 會使聲明立即失效。若 repo 現行政策允許 author self-merge，agent 才能據此合併，但不得偽造成功 Check Run，也不能取代 release、publishing、deployment approval、secrets、provenance 或 CODEOWNER review。額度重置後須補跑該 commit 的 GitHub checks；無法補跑時另開 Issue 留下缺口。
+只有具帳務用量檢視權限的 human maintainer 已確認當期免費分鐘耗盡時，才可
+使用這個 SHA-bound fallback；付款、budget、平台、workflow、權限、原因不明或
+已開始執行的 job failure 都不適用。完整驗證、attestation、授權與事後補跑程序
+以 [CI policy](docs/ci-policy.md#actions-quota-fallback) 為唯一詳細來源。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹；尚未 `git init` 的新專案仍可掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 

@@ -6,6 +6,17 @@ fixture_root="$(mktemp -d)"
 trap 'rm -rf "$fixture_root"' EXIT
 cd "$repo_root"
 
+agent_instruction_max_bytes=12288
+check_agent_size() {
+  local path="$1"
+  local bytes
+  bytes="$(wc -c < "$path")"
+  if ((bytes > agent_instruction_max_bytes)); then
+    echo "$path exceeds the $agent_instruction_max_bytes-byte agent instruction limit."
+    exit 1
+  fi
+}
+
 ./scripts/check-update-conflicts
 python3 scripts/render_site.py --check
 
@@ -100,16 +111,22 @@ grep -q 'Administration read access' docs/agent-install.md
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' docs/index.html
 grep -q '^## Actions quota fallback$' AGENTS.md
 grep -q '^## Actions quota fallback$' template/AGENTS.md.jinja
-grep -q 'included GitHub Actions minutes are exhausted' AGENTS.md
-grep -q 'included GitHub Actions minutes are exhausted' template/AGENTS.md.jinja
-grep -q 'failed payment, a zero or incorrect spending budget, a platform outage' \
-  AGENTS.md
-grep -q 'failed payment, a zero or incorrect spending budget, a platform outage' \
-  template/AGENTS.md.jinja
-grep -q 'HEAD.*pull request head SHA' AGENTS.md
-grep -q 'HEAD.*pull request head SHA' template/AGENTS.md.jinja
-grep -q 'Actions quota fallback attestation' README.md
-grep -q 'Actions quota fallback attestation' template/README.md.jinja
+grep -q 'included GitHub Actions minutes' AGENTS.md
+grep -q 'included GitHub Actions minutes' template/AGENTS.md.jinja
+grep -q '^## Actions quota fallback$' docs/ci-policy.md
+grep -q '付款失敗、錯誤 spending budget、平台事故、workflow 或權限' \
+  docs/ci-policy.md
+grep -q 'HEAD.*pull request head SHA' docs/ci-policy.md
+grep -q 'Actions quota fallback attestation' docs/ci-policy.md
+grep -Fq 'docs/ci-policy.md#actions-quota-fallback' AGENTS.md
+grep -Fq 'docs/ci-policy.md#actions-quota-fallback' template/AGENTS.md.jinja
+grep -Fq 'git rev-parse --show-toplevel' README.md
+grep -Fq 'git rev-parse --show-toplevel' template/README.md.jinja
+if grep -q 'Actions quota fallback attestation' \
+  README.md template/README.md.jinja; then
+  echo "README must link to the canonical quota fallback instead of duplicating it."
+  exit 1
+fi
 grep -q '額度耗盡.*human' docs/index.html
 grep -q '額度 fallback.*human' template/site/index.html.jinja
 bash -n scripts/run-live-workflow-probe
@@ -643,7 +660,25 @@ grep -q "^    - \"$next_python\"$" \
 
 test -f AGENTS.md
 test "$(wc -l < AGENTS.md)" -le 200
+check_agent_size AGENTS.md
+check_agent_size template/AGENTS.md.jinja
 test "$(cat CLAUDE.md)" = "@AGENTS.md"
+required_agent_paths=(
+  README.md
+  docs/index.html
+  docs/specs
+  docs/decisions
+  docs/milestone-description.md
+  docs/agent-install.md
+  docs/ci-policy.md
+  site
+  scripts/cleanup-worktrees
+  scripts/verify-fast
+  scripts/verify-template.sh
+)
+for required_path in "${required_agent_paths[@]}"; do
+  test -e "$required_path"
+done
 test -f docs/index.html
 test -f site/index.html
 test -f site/styles.css
@@ -791,18 +826,25 @@ grep -q '^## Working loop$' AGENTS.md
 grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
 grep -q "pull request chain ends there" AGENTS.md
-grep -q "against its delivery branch or immediate parent in the stack" AGENTS.md
-grep -q 'complete every task in the pull request and referenced Issue' AGENTS.md
+grep -q "immediate parent in the stack" AGENTS.md
+grep -q 'referenced Issue' AGENTS.md
 grep -q 'one branch and one Git worktree per task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
 grep -q 'search open and closed Issues' AGENTS.md
-grep -q 'Never silently reverse an earlier decision' AGENTS.md
+grep -q 'Never silently reverse an' AGENTS.md
 grep -q 'whether creating through the UI, CLI, or API' AGENTS.md
-grep -q 'create and link a follow-up Issue first' AGENTS.md
-grep -Fq 'run `./scripts/cleanup-worktrees` in its default dry-run mode and report any candidates' \
+grep -q 'create and link a follow-up' AGENTS.md
+grep -Fq 'run `./scripts/cleanup-worktrees` in its default' \
   AGENTS.md
-grep -Fq 'run `./scripts/cleanup-worktrees` in its default dry-run mode and report any candidates' \
+grep -Fq 'run `./scripts/cleanup-worktrees` in its default' \
   template/AGENTS.md.jinja
+grep -Fq 'uv sync --locked --python 3.14' AGENTS.md
+grep -Fq './scripts/verify-fast' AGENTS.md
+grep -Fq 'uv run python scripts/render_site.py --check' AGENTS.md
+if grep -Eq '第[[:space:]]*[0-9]+[[:space:]]*點.*never merge' AGENTS.md; then
+  echo "AGENTS.md must not couple merge policy to a mutable step number."
+  exit 1
+fi
 grep -q '^## References$' docs/milestone-description.md
 grep -q 'bounded' docs/agent-install.md
 grep -q '沿用、取代或駁回' docs/index.html
@@ -1248,6 +1290,16 @@ test -f "$fixture_root/default-project/.release-please-manifest.json"
 test "$(cat "$fixture_root/default-project/.python-version")" = "3.14"
 test -f "$fixture_root/default-project/AGENTS.md"
 test "$(wc -l < "$fixture_root/default-project/AGENTS.md")" -le 200
+check_agent_size "$fixture_root/default-project/AGENTS.md"
+for required_path in \
+  docs/ci-policy.md \
+  docs/milestone-description.md \
+  docs/specs \
+  docs/decisions \
+  scripts/cleanup-worktrees \
+  scripts/verify; do
+  test -e "$fixture_root/default-project/$required_path"
+done
 test -f "$fixture_root/default-project/docs/index.html"
 test -f "$fixture_root/default-project/docs/site-content.js"
 test -f "$fixture_root/default-project/docs/site-theme.css"
@@ -1259,7 +1311,7 @@ test -f "$fixture_root/default-project/docs/README.md"
 test -f "$fixture_root/default-project/docs/decisions/README.md"
 grep -q '不得保存完整聊天逐字稿' \
   "$fixture_root/default-project/docs/README.md"
-grep -q 'Never store a raw conversation transcript' \
+grep -q 'Never store a raw conversation' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'GitHub 方案與門禁' \
   "$fixture_root/default-project/docs/index.html"
@@ -1305,7 +1357,7 @@ grep -q 'pull request chain ends there' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'against its delivery branch or immediate parent in the stack' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'complete every task in the pull request and referenced Issue' \
+grep -q 'referenced Issue' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'one branch and one Git worktree per task' \
   "$fixture_root/default-project/AGENTS.md"
@@ -1313,12 +1365,16 @@ grep -q 'search open and closed Issues' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'whether creating through the UI, CLI, or API' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'create and link a follow-up Issue first' \
+grep -q 'create and link a follow-up' \
   "$fixture_root/default-project/AGENTS.md"
-grep -Fq 'run `./scripts/cleanup-worktrees` in its default dry-run mode and report any candidates' \
+grep -Fq 'run `./scripts/cleanup-worktrees` in its default' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -Fq 'docs/ci-policy.md#actions-quota-fallback' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'uv run pytest <test-path>' \
   "$fixture_root/default-project/AGENTS.md"
+grep -Fq 'git rev-parse --show-toplevel' \
+  "$fixture_root/default-project/README.md"
 if grep -q 'pnpm exec vitest' "$fixture_root/default-project/AGENTS.md"; then
   echo "Python-only AGENTS.md must not include TypeScript commands."
   exit 1
@@ -1379,10 +1435,15 @@ grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/README.md"
 grep -q '^## Actions quota fallback$' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'included GitHub Actions minutes are exhausted' \
+grep -q 'included GitHub Actions minutes' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'Actions quota fallback attestation' \
-  "$fixture_root/default-project/README.md"
+  "$fixture_root/default-project/docs/ci-policy.md"
+if grep -q 'Actions quota fallback attestation' \
+  "$fixture_root/default-project/README.md"; then
+  echo "Generated README must not duplicate the canonical quota fallback."
+  exit 1
+fi
 grep -q '付款失敗、budget.*平台.*設定.*權限.*未知原因.*測試失敗' \
   "$fixture_root/default-project/docs/index.html"
 grep -q '一般 Issue PR 跑單一 runtime' \
@@ -1672,6 +1733,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data project_name="CI Only Test" \
   --data project_slug="ci-only-test" \
   --data language=ci \
+  --data branch_strategy=main \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/ci-only-project"
 prime_gitleaks_cache "$fixture_root/ci-only-project"
@@ -1682,6 +1744,16 @@ git -C "$fixture_root/ci-only-project" diff --cached --check
 grep -q 'language: ci' "$fixture_root/ci-only-project/.copier-answers.yml"
 grep -q '"language_profile": "ci"' \
   "$fixture_root/ci-only-project/.csarc/profile.json"
+grep -q '"branch_strategy": "main"' \
+  "$fixture_root/ci-only-project/.csarc/profile.json"
+check_agent_size "$fixture_root/ci-only-project/AGENTS.md"
+grep -q 'pull request chain ends at `main`' \
+  "$fixture_root/ci-only-project/AGENTS.md"
+if grep -Eq 'uv sync --locked|pnpm install --frozen-lockfile' \
+  "$fixture_root/ci-only-project/AGENTS.md"; then
+  echo "CI-only AGENTS.md must not include language setup commands."
+  exit 1
+fi
 grep -q 'stage: "beta"' \
   "$fixture_root/ci-only-project/docs/site-content.js"
 test "$("$fixture_root/ci-only-project/scripts/detect-language-profile" --suggest)" = \
@@ -1784,6 +1856,7 @@ grep -q '"language_profile": "typescript"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
 grep -q '"branch_strategy": "dev"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
+check_agent_size "$fixture_root/typescript-project/AGENTS.md"
 grep -q 'pull request chain ends at `dev`' \
   "$fixture_root/typescript-project/AGENTS.md"
 grep -q 'against `dev` or its immediate parent in the stack' \
@@ -2009,6 +2082,7 @@ grep -q 'uv run pytest <test-path>' \
   "$fixture_root/all-features-project/AGENTS.md"
 grep -q 'pnpm exec vitest run <test-path>' \
   "$fixture_root/all-features-project/AGENTS.md"
+check_agent_size "$fixture_root/all-features-project/AGENTS.md"
 diff -B -w "$repo_root/.gitignore" \
   "$fixture_root/all-features-project/.gitignore"
 test "$("$fixture_root/all-features-project/scripts/detect-language-profile" --suggest)" = \
@@ -2193,7 +2267,7 @@ grep -q 'window.TEMPLATE_SITE_V2 = true;' \
 grep -q 'window.TEMPLATE_SITE_V2 = true;' \
   "$update_project/docs/index.html"
 test -f "$update_project/docs/decisions/README.md"
-grep -q 'Never store a raw conversation transcript' \
+grep -q 'Never store a raw conversation' \
   "$update_project/AGENTS.md"
 grep -q '_commit: v0.1.1' "$update_project/.copier-answers.yml"
 prime_gitleaks_cache "$update_project"
