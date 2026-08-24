@@ -1,14 +1,49 @@
-{{- $legacy := readFile "site/index.html" -}}
-{{- $body := replaceRE `(?s)^.*?<body>(.*)</body>.*$` "$1" $legacy -}}
+{{- $assetPrefix := "" -}}
+{{- if eq .Lang "en" }}{{ $assetPrefix = "../" }}{{ end -}}
 <!doctype html>
-<html lang="zh-Hant-TW">
+<html lang="{{ .Language.LanguageCode }}" data-detail-level="technical">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <link rel="icon" href="data:,">
   <title>{{ .Title }}</title>
-  <link rel="stylesheet" href="styles.css">
+  <script>
+    try {
+      const savedDetailLevel = localStorage.getItem("csarc-detail-level");
+      if (savedDetailLevel === "simple") document.documentElement.dataset.detailLevel = savedDetailLevel;
+    } catch {}
+  </script>
+  <link rel="stylesheet" href="{{ $assetPrefix }}styles.css">
+  <link rel="stylesheet" href="{{ $assetPrefix }}detail-toggle.css">
 </head>
-<body>{{ $body | safeHTML }}</body>
+<body>
+  <p class="internal-notice">{{ .Params.notice }}</p>
+  <nav class="language-control" aria-label="{{ .Params.controls.language }}">
+    {{- range .AllTranslations }}
+    <a href="{{ if eq .Lang "en" }}hugo-preview.en.html{{ else }}hugo-preview.html{{ end }}"
+       lang="{{ .Language.LanguageCode }}"{{ if eq $.Lang .Lang }} aria-current="page"{{ end }}>{{ .Language.LanguageName }}</a>
+    {{- end }}
+  </nav>
+  <div class="detail-level-control" role="group" aria-label="{{ .Params.controls.detail }}" hidden>
+    <span>{{ .Params.controls.detail }}</span>
+    <button type="button" data-detail-level="simple" aria-pressed="false">{{ .Params.controls.simple }}</button>
+    <button type="button" data-detail-level="technical" aria-pressed="true">{{ .Params.controls.technical }}</button>
+  </div>
+  <main class="deck" aria-live="polite">{{ .Content }}</main>
+  <nav class="controls" aria-label="{{ .Params.controls.slides }}" hidden>
+    <button id="previous" type="button" aria-label="{{ .Params.controls.previous }}">←</button>
+    <span class="counter" id="counter">1 / 1</span>
+    <button id="next" type="button" aria-label="{{ .Params.controls.next }}">→</button>
+  </nav>
+  <nav class="view-controls" aria-label="{{ .Params.controls.zoom }}" hidden>
+    <button id="zoom-out" type="button" aria-label="{{ .Params.controls.zoom_out }}">−</button>
+    <button id="zoom-reset" type="button" aria-label="{{ .Params.controls.zoom_reset }}">{{ .Params.controls.fit }}</button>
+    <span class="zoom-level" id="zoom-level" aria-live="polite">100%</span>
+    <button id="zoom-in" type="button" aria-label="{{ .Params.controls.zoom_in }}">＋</button>
+  </nav>
+  <div class="progress" aria-hidden="true" hidden><span id="bar"></span></div>
+  <script src="{{ $assetPrefix }}candidate.js"></script>
+  <script src="{{ $assetPrefix }}detail-toggle.js"></script>
+</body>
 </html>

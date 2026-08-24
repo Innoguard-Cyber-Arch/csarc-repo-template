@@ -1,0 +1,121 @@
+title = "CSARC Repo Template"
+title_zh_tw = "共用詞彙表"
+title_en = "Shared glossary"
+intro_zh_tw = "每個詞彙都有穩定錨點與深入來源；本頁與 llms.txt 都由這份資料產生。"
+intro_en = "Every term has a stable anchor and a deeper source; this page and llms.txt are generated from this data."
+source_label_zh_tw = "深入閱讀"
+source_label_en = "Read more"
+summary_zh_tw = "可審查、可更新且可離線交付的 repository 公版，涵蓋工作定義、驗證與發布治理。"
+summary_en = "A reviewable, updatable repository foundation for work definition, verification, and governed delivery."
+source_base = "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/"
+
+[[groups]]
+key = "work"
+title_zh_tw = "工作與審查"
+title_en = "Work and review"
+
+  [[groups.terms]]
+  key = "issue"
+  term_zh_tw = "Issue 工作單"
+  term_en = "Issue"
+  summary_zh_tw = "界定一個可驗收結果、範圍與完成條件的工作單位。"
+  summary_en = "A unit of work that defines one observable outcome, its scope, and acceptance criteria."
+  path = "AGENTS.md#working-loop"
+
+  [[groups.terms]]
+  key = "story-milestone"
+  term_zh_tw = "Story Milestone"
+  term_en = "Story Milestone"
+  summary_zh_tw = "只有端到端成果需要時才建立、可獨立驗證的多 Issue story。"
+  summary_en = "An independently verifiable multi-Issue story, created only for an end-to-end outcome."
+  path = "docs/milestone-description.md"
+
+  [[groups.terms]]
+  key = "pull-request"
+  term_zh_tw = "Pull request"
+  term_en = "Pull request"
+  summary_zh_tw = "保存變更意圖、驗證證據與人類審查的整合邊界。"
+  summary_en = "The integration boundary that preserves intent, verification evidence, and human review."
+  path = ".github/pull_request_template.md"
+
+  [[groups.terms]]
+  key = "decision-record"
+  term_zh_tw = "決策記錄"
+  term_en = "Decision record"
+  summary_zh_tw = "保存已確認的架構、工具、安全與相容性取捨。"
+  summary_en = "The durable record of confirmed architecture, tooling, security, and compatibility trade-offs."
+  path = "docs/decisions/README.md"
+
+[[groups]]
+key = "verification"
+title_zh_tw = "驗證與能力"
+title_en = "Verification and capability"
+
+  [[groups.terms]]
+  key = "fast-checks"
+  term_zh_tw = "快速驗證"
+  term_en = "Fast checks"
+  summary_zh_tw = "依變更風險執行的短回饋檢查，不取代交付前完整驗證。"
+  summary_en = "Short feedback checks selected by change risk; they do not replace full pre-delivery verification."
+  path = "docs/ci-policy.md"
+
+  [[groups.terms]]
+  key = "full-verification"
+  term_zh_tw = "完整驗證"
+  term_en = "Full verification"
+  summary_zh_tw = "交付前執行的 repository 級契約，統一檢查程式、政策與產物。"
+  summary_en = "The repository-wide pre-delivery contract for code, policy, and artifacts."
+  path = "AGENTS.md#commands"
+
+  [[groups.terms]]
+  key = "capability-state"
+  term_zh_tw = "平台能力狀態"
+  term_en = "Platform capability state"
+  summary_zh_tw = "以 allowed、blocked 或 unknown 記錄實測能力，不從方案名稱猜測。"
+  summary_en = "Observed capability recorded as allowed, blocked, or unknown instead of inferred from plan names."
+  path = "docs/decisions/portable-decision-site.md"
+
+  [[groups.terms]]
+  key = "portable-artifact"
+  term_zh_tw = "可攜式產物"
+  term_en = "Portable artifact"
+  summary_zh_tw = "沒有 runtime 外部資產、可下載並以 file:// 離線使用的單檔交付物。"
+  summary_en = "A single-file deliverable with no external runtime assets that remains usable through file://."
+  path = "docs/decisions/portable-decision-site.md"
+
+[[groups]]
+key = "delivery"
+title_zh_tw = "整合與交付"
+title_en = "Integration and delivery"
+
+  [[groups.terms]]
+  key = "delivery-branch"
+  term_zh_tw = "Delivery branch"
+  term_en = "Delivery branch"
+  summary_zh_tw = "讓同一 story 的獨立 PR 先整合，再由 promotion 進入 main 的分支。"
+  summary_en = "The branch where independent PRs for one story integrate before promotion reaches main."
+  path = "docs/ci-policy.md"
+
+  [[groups.terms]]
+  key = "promotion"
+  term_zh_tw = "Promotion"
+  term_en = "Promotion"
+  summary_zh_tw = "把已驗證的 delivery branch 提升到 main 的明確交付動作。"
+  summary_en = "The explicit delivery action that advances a verified delivery branch to main."
+  path = "docs/ci-policy.md"
+
+  [[groups.terms]]
+  key = "release-intent"
+  term_zh_tw = "SemVer 意圖"
+  term_en = "SemVer intent"
+  summary_zh_tw = "由已驗證的 PR 標題宣告，合併後才從實際歷史決定版本。"
+  summary_en = "Declared by a validated PR title; the exact version is derived from merged history."
+  path = "docs/ci-policy.md"
+
+  [[groups.terms]]
+  key = "copier-update"
+  term_zh_tw = "Copier 更新"
+  term_en = "Copier update"
+  summary_zh_tw = "以可審查差異把公版變更套入既有 repository，保留專案持有內容。"
+  summary_en = "A reviewable template update that preserves project-owned content in an existing repository."
+  path = "README.md"
