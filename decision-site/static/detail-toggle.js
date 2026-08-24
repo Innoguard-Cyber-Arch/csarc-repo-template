@@ -52,4 +52,5 @@
   });
 
   setDetailLevel(root.dataset.detailLevel, false);
+  controls.hidden = false;
 })();

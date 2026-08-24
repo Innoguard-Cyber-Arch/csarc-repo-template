@@ -126,6 +126,11 @@ bash -n scripts/test-worktree-cleanup
 node --check decision-site/static/detail-toggle.js
 ./scripts/build-hugo-preview --check
 test "$(grep -o 'class="detail-level-control"' dist/hugo-preview.html | wc -l | tr -d ' ')" = 1
+grep -q 'class="detail-level-control" role="group" aria-label="閱讀深度" hidden' \
+  dist/hugo-preview.html
+grep -q '\.detail-level-control\[hidden\] { display: none; }' \
+  dist/hugo-preview.html
+grep -q 'controls.hidden = false' dist/hugo-preview.html
 grep -q 'data-detail-level="technical"' dist/hugo-preview.html
 grep -q 'csarc-detail-level' dist/hugo-preview.html
 grep -q '@media (prefers-reduced-motion: reduce)' dist/hugo-preview.html

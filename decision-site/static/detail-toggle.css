@@ -17,6 +17,8 @@
   transform: translateX(-50%);
 }
 
+.detail-level-control[hidden] { display: none; }
+
 .detail-level-control > span { padding: 0 7px; }
 
 .detail-level-control button {
