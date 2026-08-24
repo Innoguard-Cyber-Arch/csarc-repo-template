@@ -629,6 +629,11 @@ grep -q 'pull request chain ends at `main`' AGENTS.md
 grep -q 'against `main` or its immediate parent in the stack' AGENTS.md
 grep -q 'one branch and one Git worktree per task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
+grep -q 'search open and closed Issues' AGENTS.md
+grep -q 'Never silently reverse an earlier decision' AGENTS.md
+grep -q 'Related decisions' docs/milestone-description.md
+grep -q 'bounded' docs/agent-install.md
+grep -q '沿用、取代或駁回' docs/index.html
 required_readme_headings=(
   "專案概述"
   "快速開始"
@@ -703,6 +708,7 @@ grep -q '^    id: kind$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: problem$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: acceptance$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: supplement$' .github/ISSUE_TEMPLATE/work-item.yml
+grep -q '搜尋相關 open／closed Issues' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^        - duplicate$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q 'Validate pull request policy' .github/workflows/pr-policy.yml
 grep -q 'Select exactly one PR label' .github/workflows/pr-policy.yml
@@ -1051,6 +1057,8 @@ grep -q 'against `main` or its immediate parent in the stack' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'one branch and one Git worktree per task' \
   "$fixture_root/default-project/AGENTS.md"
+grep -q 'search open and closed Issues' \
+  "$fixture_root/default-project/AGENTS.md"
 grep -q 'uv run pytest <test-path>' \
   "$fixture_root/default-project/AGENTS.md"
 if grep -q 'pnpm exec vitest' "$fixture_root/default-project/AGENTS.md"; then
@@ -1140,6 +1148,12 @@ grep -q 'github.event.issue.milestone.number' \
   "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
 grep -q 'docs/milestone-description.md' \
   "$fixture_root/default-project/AGENTS.md"
+grep -q 'Related decisions' \
+  "$fixture_root/default-project/docs/milestone-description.md"
+grep -q '搜尋 open／closed 歷史工作' \
+  "$fixture_root/default-project/docs/index.html"
+grep -q '既有決策是沿用、取代或駁回' \
+  "$fixture_root/default-project/docs/site-content.js"
 grep -q '^# tracking: story$' \
   "$fixture_root/default-project/docs/specs/SPEC-001-example.md"
 test -x "$fixture_root/default-project/scripts/test-issue-triage"
