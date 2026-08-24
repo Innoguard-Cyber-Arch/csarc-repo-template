@@ -5,7 +5,8 @@ owner: @Innoguard-Cyber-Arch/arch
 priority: P2
 estimate: 1-3 days
 status: draft
-# tracking: story  # or none for a current spec without a work tracker
+# tracking: story
+# Use tracking: none for a current spec without a work tracker.
 ---
 
 ## Problem
