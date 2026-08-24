@@ -23,6 +23,12 @@
 4. canonical decision records 放在 `docs/decisions/`。簡報呈現決策摘要與連結，但不再是唯一可編輯來源；runbook、實證與 spec 各自維持不同生命週期。
 5. root 與 Copier 下發專案遵守相同 portable contract，但可以有不同 presentation layout。共用設計基礎由公版維護，root 可以增加 deck-specific 呈現，生成專案則使用 handbook layout。
 
+## 2026-08-24 Hugo 候選管線
+
+Issue #205 以兩次真實 spike 重新檢查第 3 點。mdBook 的書本導覽與現有卡片式簡報衝突；Hugo 0.165.0 的自訂單頁 output format 則能保留既有視覺，並把輸出直接交給未修改的 `scripts/render_site.py`。因此只局部取代「不導入 Hugo」的限制，保留單檔、離線 `file://`、零外部 runtime asset 與 checked-in output 的全部契約。
+
+候選 source 放在 `decision-site/`，預覽只寫入已忽略的 `dist/`。在 Issue #209 經維護者確認並切換前，`site/` 與 `docs/index.html` 仍是正式來源與交付物；候選 layout 暫時唯讀取用既有 body 與 assets，避免遷移期間維護兩份內容。
+
 ## Ownership 與更新
 
 | 內容 | Owner | Copier update 行為 |

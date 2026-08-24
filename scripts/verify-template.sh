@@ -91,6 +91,8 @@ bash -n scripts/check-update-conflicts
 bash -n template/scripts/check-update-conflicts
 bash -n scripts/cleanup-worktrees
 bash -n template/scripts/cleanup-worktrees
+bash -n scripts/install-hugo
+bash -n scripts/build-hugo-preview
 bash -n scripts/check-governance-drift
 bash -n template/scripts/check-governance-drift
 bash -n scripts/verify-fast
@@ -121,6 +123,139 @@ bash -n template/scripts/validate-issue-title
 ./scripts/test-issue-triage
 bash -n scripts/test-worktree-cleanup
 ./scripts/test-worktree-cleanup
+node --check decision-site/static/detail-toggle.js
+node --check decision-site/static/candidate.js
+python3 scripts/check-decision-site-translations
+! grep -q 'readFile "site/index.html"' decision-site/layouts/home.candidate.html
+! grep -q '<section' decision-site/content/_index.*.md
+
+translation_fixture="$fixture_root/decision-site-translations"
+mkdir -p "$translation_fixture"
+cp decision-site/content/_index.zh-tw.md "$translation_fixture/"
+sed 's/key="spec-format"/key="missing-spec-format"/' \
+  decision-site/content/_index.en.md > "$translation_fixture/_index.en.md"
+if python3 scripts/check-decision-site-translations \
+  --content-dir "$translation_fixture" >/dev/null 2>&1; then
+  echo "Translation verification must reject a missing matching content key."
+  exit 1
+fi
+
+python3 - decision-site/content/_index.en.md \
+  "$translation_fixture/_index.en.md" <<'PY'
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+opening = '{{< detail key="spec-format-cost"'
+start = source.index(opening)
+body_start = source.index("}}", start) + 2
+end = source.index("{{< /detail >}}", body_start)
+Path(sys.argv[2]).write_text(source[:body_start] + source[end:], encoding="utf-8")
+PY
+translation_error="$translation_fixture/empty-body-error"
+if python3 scripts/check-decision-site-translations \
+  --content-dir "$translation_fixture" >/dev/null 2>"$translation_error"; then
+  echo "Translation verification must reject an empty keyed block body."
+  exit 1
+fi
+grep -q 'empty content body' "$translation_error"
+
+sed 's/title="Cost of adopting Spec Kit"/title=""/' \
+  decision-site/content/_index.en.md > "$translation_fixture/_index.en.md"
+if python3 scripts/check-decision-site-translations \
+  --content-dir "$translation_fixture" >/dev/null 2>"$translation_error"; then
+  echo "Translation verification must reject an empty title."
+  exit 1
+fi
+grep -q 'empty title attribute' "$translation_error"
+
+python3 - decision-site/content/_index.en.md \
+  "$translation_fixture/_index.en.md" <<'PY'
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+opening = '{{< slide key="spec-format"'
+start = source.index(opening)
+body_start = source.index("}}", start) + 2
+nested = source.index('{{< detail key="spec-format-cost"', body_start)
+Path(sys.argv[2]).write_text(
+    source[:body_start] + "\n" + source[nested:], encoding="utf-8"
+)
+PY
+if python3 scripts/check-decision-site-translations \
+  --content-dir "$translation_fixture" >/dev/null 2>"$translation_error"; then
+  echo "Translation verification must reject missing direct slide content."
+  exit 1
+fi
+grep -q 'empty direct content body' "$translation_error"
+
+./scripts/build-hugo-preview --check
+python3 scripts/check-decision-site-glossary
+test "$(grep -o 'class="detail-level-control"' dist/hugo-preview.html | wc -l | tr -d ' ')" = 1
+grep -q 'class="detail-level-control" role="group" aria-label="閱讀深度" hidden' \
+  dist/hugo-preview.html
+grep -q '\.detail-level-control\[hidden\] { display: none; }' \
+  dist/hugo-preview.html
+grep -q 'controls.hidden = false' dist/hugo-preview.html
+test "$(grep -o 'class="language-control"' dist/hugo-preview.html | wc -l | tr -d ' ')" = 1
+test "$(grep -o 'class="language-control"' dist/hugo-preview.en.html | wc -l | tr -d ' ')" = 1
+grep -q '<html lang="zh-Hant-TW"' dist/hugo-preview.html
+grep -q '<html lang="en"' dist/hugo-preview.en.html
+# Without JavaScript, the first slide remains readable and inactive controls stay hidden.
+test "$(grep -o 'class="slide markdown-slide active' dist/hugo-preview.html | wc -l | tr -d ' ')" = 1
+test "$(grep -o 'class="slide markdown-slide active' dist/hugo-preview.en.html | wc -l | tr -d ' ')" = 1
+grep -q 'class="controls" aria-label="簡報控制" hidden' dist/hugo-preview.html
+grep -q 'class="view-controls" aria-label="畫面縮放控制" hidden' \
+  dist/hugo-preview.html
+grep -q 'slideControls.hidden = false' dist/hugo-preview.html
+grep -q 'data-detail-level="technical"' dist/hugo-preview.html
+grep -q 'csarc-detail-level' dist/hugo-preview.html
+grep -q '@media (prefers-reduced-motion: reduce)' dist/hugo-preview.html
+test "$(grep -o '<html' dist/hugo-site/index.html | wc -l | tr -d ' ')" = 1
+test "$(grep -o '<body' dist/hugo-site/index.html | wc -l | tr -d ' ')" = 1
+test "$(grep -o '<html' dist/hugo-site/en/index.html | wc -l | tr -d ' ')" = 1
+test "$(grep -o '<body' dist/hugo-site/en/index.html | wc -l | tr -d ' ')" = 1
+test "$(grep -o 'class="package-disclosure"' site/index.html | wc -l | tr -d ' ')" = \
+  "$(grep -o 'class="package-disclosure"' dist/hugo-preview.html | wc -l | tr -d ' ')"
+test "$(grep -o 'data-content-key="' dist/hugo-preview.html | wc -l | tr -d ' ')" = \
+  "$(grep -o 'data-content-key="' dist/hugo-preview.en.html | wc -l | tr -d ' ')"
+
+glossary_fixture="$fixture_root/decision-site-glossary"
+mkdir -p "$glossary_fixture"
+sed 's/^summary_en = ".*"$/summary_en = ""/' \
+  decision-site/data/glossary.toml > "$glossary_fixture/missing-translation.toml"
+if python3 scripts/check-decision-site-glossary \
+  --source "$glossary_fixture/missing-translation.toml" >/dev/null 2>&1; then
+  echo "Glossary verification must reject missing translated text."
+  exit 1
+fi
+
+sed 's/href="#glossary-issue"/href="#missing-glossary-issue"/' \
+  dist/hugo-preview.html > "$glossary_fixture/broken-link.html"
+if python3 scripts/check-decision-site-glossary \
+  --candidate "$glossary_fixture/broken-link.html" \
+  --candidate dist/hugo-preview.en.html >/dev/null 2>&1; then
+  echo "Glossary verification must reject a broken anchor link."
+  exit 1
+fi
+
+sed '1s/^# /## /' llms.txt > "$glossary_fixture/invalid-format.txt"
+if python3 scripts/check-decision-site-glossary \
+  --generated "$glossary_fixture/invalid-format.txt" \
+  --published "$glossary_fixture/invalid-format.txt" \
+  --published "$glossary_fixture/invalid-format.txt" >/dev/null 2>&1; then
+  echo "Glossary verification must reject an invalid llms.txt format."
+  exit 1
+fi
+
+sed '1s/CSARC/Drifted CSARC/' llms.txt > "$glossary_fixture/drifted.txt"
+if python3 scripts/check-decision-site-glossary \
+  --published "$glossary_fixture/drifted.txt" \
+  --published docs/llms.txt >/dev/null 2>&1; then
+  echo "Glossary verification must reject a stale published llms.txt."
+  exit 1
+fi
 
 # The live probe must preserve valid run JSON and emit reusable evidence.
 live_probe_fixture="$fixture_root/live-probe"

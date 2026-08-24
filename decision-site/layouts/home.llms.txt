@@ -1,0 +1,9 @@
+{{- $glossary := .Site.Data.glossary -}}
+{{- printf "# %s\n\n> %s / %s\n" $glossary.title $glossary.summary_en $glossary.summary_zh_tw -}}
+{{- range $glossary.groups -}}
+{{- printf "\n## %s / %s\n" .title_en .title_zh_tw -}}
+{{- range .terms -}}
+{{- printf "\n- [%s / %s](%s%s): %s / %s" .term_en .term_zh_tw $glossary.source_base .path .summary_en .summary_zh_tw -}}
+{{- end -}}
+{{- printf "\n" -}}
+{{- end -}}
