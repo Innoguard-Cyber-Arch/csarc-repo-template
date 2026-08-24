@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+"""Verify that the decision-site translations have the same structure."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+import tomllib
+from pathlib import Path
+
+LANGUAGE_FILES = ("_index.zh-tw.md", "_index.en.md")
+type Shape = str | dict[str, "Shape"]
+BLOCK = re.compile(
+    r'{{<\s*(slide|detail|disclosure)\b[^>]*\bkey="([^"]+)"[^>]*>}}'
+)
+
+
+def shape(value: object) -> Shape:
+    """Return only the nested keys and value types from front matter."""
+    if isinstance(value, dict):
+        return {key: shape(child) for key, child in value.items()}
+    return type(value).__name__
+
+
+def read_source(path: Path) -> tuple[Shape, list[tuple[str, str]]]:
+    """Read one source and return its front-matter and ordered content keys."""
+    text = path.read_text(encoding="utf-8")
+    parts = text.split("+++", 2)
+    if len(parts) != 3 or parts[0].strip():
+        raise ValueError(f"{path}: expected TOML front matter")
+    metadata = tomllib.loads(parts[1])
+    blocks = BLOCK.findall(parts[2])
+    if not blocks:
+        raise ValueError(f"{path}: no keyed content sections found")
+    if len(blocks) != len(set(blocks)):
+        raise ValueError(f"{path}: duplicate content key")
+    return shape(metadata), blocks
+
+
+def main() -> int:
+    """Compare both language sources and report the first structural drift."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--content-dir", type=Path, default=Path("decision-site/content")
+    )
+    args = parser.parse_args()
+    try:
+        sources = [
+            read_source(args.content_dir / name) for name in LANGUAGE_FILES
+        ]
+    except (
+        OSError,
+        UnicodeError,
+        ValueError,
+        tomllib.TOMLDecodeError,
+    ) as error:
+        sys.stderr.write(f"decision-site translations invalid: {error}\n")
+        return 1
+    if sources[0][0] != sources[1][0]:
+        sys.stderr.write(
+            "decision-site translations have different front-matter keys\n"
+        )
+        return 1
+    if sources[0][1] != sources[1][1]:
+        sys.stderr.write(
+            "decision-site translations have different content keys\n"
+        )
+        return 1
+    sys.stdout.write(
+        f"Decision-site translations: {len(sources[0][1])} keyed blocks\n"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

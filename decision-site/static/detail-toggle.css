@@ -43,6 +43,123 @@
   outline-offset: 2px;
 }
 
+.language-control {
+  position: fixed;
+  top: 8px;
+  right: 18px;
+  z-index: 61;
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(23, 23, 23, .2);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 4px 14px rgba(23, 23, 23, .12);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.language-control a {
+  padding: 5px 11px;
+  border-radius: 16px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.language-control a[aria-current="page"] {
+  background: var(--ink);
+  color: white;
+}
+
+.language-control a:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+.markdown-slide {
+  padding: 4% 5.5%;
+}
+
+.markdown-slide h2 {
+  max-width: 1180px;
+  font-size: 36px;
+  white-space: normal;
+}
+
+.markdown-body {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 12px;
+}
+
+.markdown-body > p:first-child,
+.markdown-body > table {
+  grid-column: 1 / -1;
+}
+
+.markdown-body > p:first-child {
+  padding: 12px 15px;
+  border-left: 7px solid var(--yellow);
+  background: #fffbea;
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+.markdown-body > ul,
+.markdown-body > ol,
+.markdown-body > table,
+.technical-detail,
+.markdown-body > .detail-panel,
+.markdown-body > .package-disclosure {
+  margin: 0;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-top: 7px solid var(--yellow);
+  background: white;
+}
+
+.markdown-body > ul,
+.markdown-body > ol {
+  padding-left: 40px;
+}
+
+.markdown-body li,
+.markdown-body td,
+.markdown-body th,
+.technical-detail p {
+  font-size: 19px;
+  line-height: 1.35;
+}
+
+.markdown-body li + li,
+.technical-detail p + p {
+  margin-top: 8px;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 8px 10px;
+}
+
+.technical-detail {
+  height: 100%;
+  border-top-color: var(--optional);
+  background: var(--optional-soft);
+}
+
+.technical-detail h3 {
+  margin-bottom: 8px;
+  font-size: 21px;
+}
+
+.markdown-body > .package-disclosure {
+  border-top-color: var(--best);
+  background: var(--best-soft);
+}
+
 .detail-panel {
   display: grid;
   min-height: 0;
@@ -64,7 +181,8 @@ html[data-detail-level="simple"] .detail-panel {
 }
 
 @media print {
-  .detail-level-control { display: none; }
+  .detail-level-control,
+  .language-control { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -10,6 +10,6 @@ Build and verify the ignored preview:
 ```
 
 The command pins Hugo 0.165.0, writes only below `dist/`, and passes the
-candidate page through the unchanged portable bundler. During the transition,
-the Hugo layout reads the reviewed legacy body and mounts its local assets;
-later Milestone issues replace that bridge with Markdown content.
+Chinese-default and English candidate pages through the unchanged portable
+bundler. The paired Markdown sources use the same ordered content keys;
+`scripts/check-decision-site-translations` rejects missing translation blocks.

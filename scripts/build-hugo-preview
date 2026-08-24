@@ -18,17 +18,23 @@ hugo_bin="$("$repo_root/scripts/install-hugo")"
   --environment production \
   --quiet
 
-python3 "$repo_root/scripts/render_site.py" \
-  --root "$repo_root" \
-  --source dist/hugo-site/index.html \
-  --output dist/hugo-preview.html
+sources=(dist/hugo-site/index.html dist/hugo-site/en/index.html)
+outputs=(dist/hugo-preview.html dist/hugo-preview.en.html)
 
-if (($# == 1)); then
+for index in 0 1; do
   python3 "$repo_root/scripts/render_site.py" \
     --root "$repo_root" \
-    --source dist/hugo-site/index.html \
-    --output dist/hugo-preview.html \
-    --check
-fi
+    --source "${sources[$index]}" \
+    --output "${outputs[$index]}"
 
-printf 'Hugo preview: %s\n' "$repo_root/dist/hugo-preview.html"
+  if (($# == 1)); then
+    python3 "$repo_root/scripts/render_site.py" \
+      --root "$repo_root" \
+      --source "${sources[$index]}" \
+      --output "${outputs[$index]}" \
+      --check
+  fi
+done
+
+printf 'Hugo previews: %s, %s\n' \
+  "$repo_root/${outputs[0]}" "$repo_root/${outputs[1]}"

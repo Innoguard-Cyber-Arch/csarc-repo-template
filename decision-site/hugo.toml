@@ -1,6 +1,21 @@
 baseURL = "/"
 title = "CSARC Repo Template｜AI 輔助 SDLC 團隊公版"
 disableKinds = ["taxonomy", "term", "rss", "sitemap", "robotsTXT"]
+defaultContentLanguage = "zh-tw"
+defaultContentLanguageInSubdir = false
+
+[languages]
+  [languages.zh-tw]
+  languageCode = "zh-Hant-TW"
+  languageName = "繁體中文"
+  title = "CSARC Repo Template｜AI 輔助 SDLC 團隊公版"
+  weight = 1
+
+  [languages.en]
+  languageCode = "en"
+  languageName = "English"
+  title = "CSARC Repo Template | AI-assisted SDLC foundation"
+  weight = 2
 
 [outputs]
 home = ["candidate"]
@@ -10,6 +25,9 @@ mediaType = "text/html"
 baseName = "index"
 isHTML = true
 notAlternative = true
+
+[markup.goldmark.renderer]
+unsafe = true
 
 [module]
   [module.hugoVersion]
@@ -31,11 +49,3 @@ notAlternative = true
   [[module.mounts]]
   source = "site/styles.css"
   target = "static/styles.css"
-
-  [[module.mounts]]
-  source = "site/app.js"
-  target = "static/app.js"
-
-  [[module.mounts]]
-  source = "site/assets"
-  target = "static/assets"

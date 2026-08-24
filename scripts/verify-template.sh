@@ -124,6 +124,22 @@ bash -n template/scripts/validate-issue-title
 bash -n scripts/test-worktree-cleanup
 ./scripts/test-worktree-cleanup
 node --check decision-site/static/detail-toggle.js
+node --check decision-site/static/candidate.js
+python3 scripts/check-decision-site-translations
+! grep -q 'readFile "site/index.html"' decision-site/layouts/home.candidate.html
+! grep -q '<section' decision-site/content/_index.*.md
+
+translation_fixture="$fixture_root/decision-site-translations"
+mkdir -p "$translation_fixture"
+cp decision-site/content/_index.zh-tw.md "$translation_fixture/"
+sed 's/key="spec-format"/key="missing-spec-format"/' \
+  decision-site/content/_index.en.md > "$translation_fixture/_index.en.md"
+if python3 scripts/check-decision-site-translations \
+  --content-dir "$translation_fixture" >/dev/null 2>&1; then
+  echo "Translation verification must reject a missing matching content key."
+  exit 1
+fi
+
 ./scripts/build-hugo-preview --check
 test "$(grep -o 'class="detail-level-control"' dist/hugo-preview.html | wc -l | tr -d ' ')" = 1
 grep -q 'class="detail-level-control" role="group" aria-label="閱讀深度" hidden' \
@@ -131,13 +147,21 @@ grep -q 'class="detail-level-control" role="group" aria-label="閱讀深度" hid
 grep -q '\.detail-level-control\[hidden\] { display: none; }' \
   dist/hugo-preview.html
 grep -q 'controls.hidden = false' dist/hugo-preview.html
+test "$(grep -o 'class="language-control"' dist/hugo-preview.html | wc -l | tr -d ' ')" = 1
+test "$(grep -o 'class="language-control"' dist/hugo-preview.en.html | wc -l | tr -d ' ')" = 1
+grep -q '<html lang="zh-Hant-TW"' dist/hugo-preview.html
+grep -q '<html lang="en"' dist/hugo-preview.en.html
 grep -q 'data-detail-level="technical"' dist/hugo-preview.html
 grep -q 'csarc-detail-level' dist/hugo-preview.html
 grep -q '@media (prefers-reduced-motion: reduce)' dist/hugo-preview.html
 test "$(grep -o '<html' dist/hugo-site/index.html | wc -l | tr -d ' ')" = 1
 test "$(grep -o '<body' dist/hugo-site/index.html | wc -l | tr -d ' ')" = 1
+test "$(grep -o '<html' dist/hugo-site/en/index.html | wc -l | tr -d ' ')" = 1
+test "$(grep -o '<body' dist/hugo-site/en/index.html | wc -l | tr -d ' ')" = 1
 test "$(grep -o 'class="package-disclosure"' site/index.html | wc -l | tr -d ' ')" = \
   "$(grep -o 'class="package-disclosure"' dist/hugo-preview.html | wc -l | tr -d ' ')"
+test "$(grep -o 'data-content-key="' dist/hugo-preview.html | wc -l | tr -d ' ')" = \
+  "$(grep -o 'data-content-key="' dist/hugo-preview.en.html | wc -l | tr -d ' ')"
 
 # The live probe must preserve valid run JSON and emit reusable evidence.
 live_probe_fixture="$fixture_root/live-probe"
