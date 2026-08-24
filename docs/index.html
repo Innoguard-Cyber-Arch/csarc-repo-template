@@ -2582,10 +2582,10 @@ scripts/apply-repository-settings.sh`
         {
           title: '每次修改都測新案、既有案導入與後續更新',
           goal: '可導入的條件是三條生命週期都通過，不是只看檔案存在。',
-          summary: '測試會真的執行 CLI init、adopt dry-run／apply、update check／dry-run／apply 與衝突 fail-closed；CLI 內部仍以 Copier 產生與 smart update。root-only 測試資產若混入生成 repo 也會失敗。',
+          summary: '測試會真的執行 CLI init、adopt dry-run／報告／apply、update check／dry-run／apply 與衝突 fail-closed；adopt 報告會以同一份分析輸出 Markdown 與一頁 PDF，且不修改 target repo。CLI 內部仍以 Copier 產生與 smart update。root-only 測試資產若混入生成 repo 也會失敗。',
           file: 'src/csarc_cli/＋tests/test_cli.py＋scripts/verify-template.sh',
           code: `csarc init ./my-project
-csarc adopt . --dry-run
+csarc adopt . --dry-run --report-dir ../csarc-adoption-report
 csarc update --check --json
 csarc update`
         }
@@ -2676,10 +2676,11 @@ uvx --from csarc-repo-cli csarc init ./my-project \\
       },
       existing: {
         title: '把公版導入既有 repo',
-        goal: '先用 --dry-run 預覽新增、覆寫、保留與人工合併清單；必須是乾淨 Git working tree，預設保留產品內容。',
+        goal: '先用 --dry-run 在 repo 外產生短版 Markdown 與一頁 PDF，預覽新增、覆寫、保留、人工合併與無法判定項目；必須是乾淨 Git working tree，預設保留產品內容。報告只描述已知風險，不保證沒有語意或執行期衝突。',
         location: '既有 repo 根目錄',
         code: `git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --from csarc-repo-cli csarc adopt . --dry-run
+uvx --from csarc-repo-cli csarc adopt . --dry-run \\
+  --report-dir ../csarc-adoption-report
 uvx --from csarc-repo-cli csarc adopt .`
       },
       update: {

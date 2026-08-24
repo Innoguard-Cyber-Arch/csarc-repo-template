@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from pypdf import PdfReader
 
 import csarc_cli.cli as cli
 from csarc_cli.cli import CliError, main
@@ -316,11 +317,162 @@ def test_adopt_requires_clean_tree_and_preserves_product_files(
     assert "pyproject.toml" in plan
     assert git(project, "status", "--porcelain") == before
     assert not (project / ".copier-answers.yml").exists()
+    report_dir = tmp_path / "legacy-product-csarc-adoption-report"
+    markdown = report_dir / "csarc-adoption-dry-run.md"
+    pdf = report_dir / "csarc-adoption-dry-run.pdf"
+    assert markdown.is_file()
+    assert pdf.is_file()
+    assert "Decision: Review required" in markdown.read_text(encoding="utf-8")
+    reader = PdfReader(pdf)
+    assert len(reader.pages) == 1
+    pdf_text = reader.pages[0].extract_text()
+    assert "Review required" in pdf_text
+    assert "Manual merge" in pdf_text
+    assert main([*arguments, "--dry-run"]) == 2
+    assert "already exists" in capsys.readouterr().err
+    assert git(project, "status", "--porcelain") == before
     assert main([*arguments, "--yes", "--non-interactive"]) == 0
     assert manifest.read_text(encoding="utf-8") == (
         '[project]\nname = "legacy-product"\n'
     )
     assert (project / ".copier-answers.yml").is_file()
+
+
+def test_adoption_report_classifies_unknown_content(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Report text collisions separately from unknown binary collisions."""
+    source, _ = make_template(tmp_path)
+    (source / "template" / "binary.dat").write_bytes(b"template\0binary")
+    (source / "template" / "same.txt").write_text(
+        "identical\n", encoding="utf-8"
+    )
+    revision = commit(source, "test: add report classification fixtures")
+    project = tmp_path / "collision-product"
+    project.mkdir()
+    (project / "pyproject.toml").write_text(
+        '[project]\nname = "collision-product"\n', encoding="utf-8"
+    )
+    (project / "managed.txt").write_text("product content\n", encoding="utf-8")
+    (project / "binary.dat").write_bytes(b"product\0binary")
+    (project / "same.txt").write_text("identical\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: collision product")
+    report_dir = tmp_path / "reports"
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--dry-run",
+        "--report-dir",
+        str(report_dir),
+    ]
+
+    before = git(project, "status", "--porcelain")
+    assert main(arguments) == 0
+    output = capsys.readouterr().out
+    assert (
+        f"Markdown report: {report_dir / 'csarc-adoption-dry-run.md'}" in output
+    )
+    assert f"PDF report: {report_dir / 'csarc-adoption-dry-run.pdf'}" in output
+    report = (report_dir / "csarc-adoption-dry-run.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Decision: Unable to determine" in report
+    assert (
+        "`managed.txt` - template and repository contain different UTF-8 text"
+        in report
+    )
+    assert (
+        "`binary.dat` - template and repository contain different non-text "
+        "content" in report
+    )
+    assert "| Preserve | 1 |" in report
+    assert "| Manual merge | 2 |" in report
+    assert "| Unable to determine | 1 |" in report
+    pdf_text = (
+        PdfReader(report_dir / "csarc-adoption-dry-run.pdf")
+        .pages[0]
+        .extract_text()
+    )
+    assert "Unable to determine" in pdf_text
+    assert "binary.dat" in pdf_text
+    assert git(project, "status", "--porcelain") == before
+
+
+def test_adoption_report_failure_keeps_markdown(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A PDF failure leaves the useful Markdown report and target untouched."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "report-failure-product"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    (project / "README.md").write_text("product\n", encoding="utf-8")
+    commit(project, "test: report failure product")
+    report_dir = tmp_path / "failed-report"
+
+    def fail_pdf(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("fixture PDF failure")
+
+    monkeypatch.setattr(cli, "draw_adoption_pdf", fail_pdf)
+    before = git(project, "status", "--porcelain")
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--dry-run",
+                "--report-dir",
+                str(report_dir),
+            ]
+        )
+        == 2
+    )
+    assert "Markdown remains" in capsys.readouterr().err
+    assert (report_dir / "csarc-adoption-dry-run.md").is_file()
+    assert not (report_dir / "csarc-adoption-dry-run.pdf").exists()
+    assert git(project, "status", "--porcelain") == before
+
+
+def test_adoption_report_path_and_settings_are_safe(tmp_path: Path) -> None:
+    """Keep reports outside the repo and omit arbitrary Copier data values."""
+    project = (tmp_path / "product").resolve()
+    project.mkdir()
+    with pytest.raises(CliError, match="outside the target repo"):
+        cli.adoption_report_directory(project, project / "reports")
+    settings = cli.report_settings(
+        {"language": "python", "coverage_mode": "diff", "api_token": "secret"}
+    )
+    assert "language=python" in settings
+    assert "coverage_mode=diff" in settings
+    assert "api_token" not in settings
+    assert "secret" not in settings
+
+
+def test_adopt_help_describes_report_directory(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Expose the report output option in the public CLI help."""
+    with pytest.raises(SystemExit) as error:
+        cli.parser().parse_args(["adopt", "--help"])
+    assert error.value.code == 0
+    assert "--report-dir PATH" in capsys.readouterr().out
 
 
 def test_adopt_rejects_dirty_tree(tmp_path: Path) -> None:

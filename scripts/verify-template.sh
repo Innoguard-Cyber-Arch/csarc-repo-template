@@ -648,6 +648,10 @@ grep -q '^  workflow_dispatch:$' template/.github/workflows/osv.yml
 grep -q 'uvx --from csarc-repo-cli csarc init' README.md
 grep -q 'uvx --from csarc-repo-cli csarc adopt' README.md
 grep -q 'uvx --from csarc-repo-cli csarc update' README.md
+grep -q -- '--report-dir ../csarc-adoption-report' README.md
+grep -q 'generated Markdown and PDF' docs/agent-install.md
+grep -q 'csarc-adoption-report' docs/index.html
+grep -q 'repo 外路徑' docs/pilot-adoption.md
 test "$(grep -c '^目標路徑：' README.md)" -eq 3
 test "$(grep -c '^來源 repository：https://github.com/Innoguard-Cyber-Arch/csarc-repo-template$' README.md)" -eq 3
 test "$(grep -c '^核准版本：最新穩定版$' README.md)" -eq 3

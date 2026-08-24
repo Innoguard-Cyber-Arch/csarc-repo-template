@@ -4,11 +4,14 @@
 2. Use only `https://github.com/Innoguard-Cyber-Arch/csarc-repo-template`.
 3. Run the requested `csarc init`, `adopt`, or `update` command with
    `--dry-run` first. For a release-specific request, pass both `--to` and
-   `--expected-sha`.
+   `--expected-sha`. For `adopt`, also pass `--report-dir` with a location
+   outside the target repository.
 4. Summarize the verified release, full commit SHA, release capability
    preflight, settings, conflict risk, and every file classified as add,
-   overwrite, preserve, or manual merge. Unknown capabilities are resolved by
-   the runtime workflow and never treated as allowed.
+   overwrite, preserve, manual merge, or unable to determine. Review both the
+   generated Markdown and PDF; neither guarantees the absence of semantic or
+   runtime conflicts. Unknown capabilities are resolved by the runtime
+   workflow and never treated as allowed.
 5. Stop and wait for explicit confirmation before changing files.
 6. After confirmation, repeat the same command with
    `--yes --non-interactive` and report the `./scripts/verify` result.
