@@ -4,6 +4,13 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+mode="${1:-full}"
+if [[ "$mode" != "full" && "$mode" != "python-compatibility" &&
+  "$mode" != "typescript" ]]; then
+  echo "Usage: $0 [full|python-compatibility|typescript]" >&2
+  exit 2
+fi
+
 verify_python={{ "true" if language in ["python", "python-typescript"] else "false" }}
 verify_typescript="${CSARC_VERIFY_TYPESCRIPT:-{{ "true" if language in ["typescript", "python-typescript"] else "false" }}}"
 temporary_paths=()
@@ -16,12 +23,60 @@ cleanup() {
 }
 trap cleanup EXIT
 
+verify_typescript_module() {
+  command -v node >/dev/null
+  command -v pnpm >/dev/null
+  test "$(node -p 'Number(process.versions.node.split(".")[0]) >= 24')" = "true"
+  test "$(pnpm --version | cut -d. -f1)" = "11"
+  pnpm install --frozen-lockfile --ignore-scripts
+  pnpm exec biome ci .
+  pnpm exec tsc --noEmit
+  pnpm exec vitest run --coverage
+  pnpm run build
+  mkdir -p dist
+  find dist -maxdepth 1 -type f -name '.gitignore' -delete
+  find dist -maxdepth 1 -type f -name '*.tgz' -delete
+  pnpm pack --pack-destination dist >/dev/null
+  typescript_tarball="$(find dist -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+  test -n "$typescript_tarball"
+  typescript_install_root="$(mktemp -d)"
+  temporary_paths+=("$typescript_install_root")
+  pnpm --dir "$typescript_install_root" add \
+    "$repo_root/$typescript_tarball" --ignore-scripts --silent
+  (
+    cd "$typescript_install_root"
+    node --input-type=module -e "import('{{ project_slug }}')"
+  )
+}
+
+if [[ "$mode" == "python-compatibility" ]]; then
+  if ! $verify_python; then
+    echo "Python compatibility is unavailable for this language profile." >&2
+    exit 2
+  fi
+  python_version="${CSARC_PYTHON_VERSION:-3.14}"
+  export UV_PYTHON="$python_version"
+  uv sync --locked --python "$python_version"
+  uv run pytest
+  exit 0
+fi
+
+if [[ "$mode" == "typescript" ]]; then
+  if [[ "$verify_typescript" != "true" ]]; then
+    echo "TypeScript verification is unavailable for this language profile." >&2
+    exit 2
+  fi
+  verify_typescript_module
+  exit 0
+fi
+
 ./scripts/check-update-conflicts
 uv run --no-project python scripts/render_site.py --check
 ./scripts/test-worktree-cleanup
 ./scripts/detect-language-profile
 ./scripts/test-pr-policy
 ./scripts/test-issue-triage
+./scripts/lint-workflows-shell
 
 if $verify_python; then
   python_version="${CSARC_PYTHON_VERSION:-3.14}"
@@ -68,29 +123,7 @@ PY
 fi
 
 if [[ "$verify_typescript" == "true" ]]; then
-  command -v node >/dev/null
-  command -v pnpm >/dev/null
-  test "$(node -p 'Number(process.versions.node.split(".")[0]) >= 24')" = "true"
-  test "$(pnpm --version | cut -d. -f1)" = "11"
-  pnpm install --frozen-lockfile --ignore-scripts
-  pnpm exec biome ci .
-  pnpm exec tsc --noEmit
-  pnpm exec vitest run --coverage
-  pnpm run build
-  mkdir -p dist
-  find dist -maxdepth 1 -type f -name '.gitignore' -delete
-  find dist -maxdepth 1 -type f -name '*.tgz' -delete
-  pnpm pack --pack-destination dist >/dev/null
-  typescript_tarball="$(find dist -maxdepth 1 -type f -name '*.tgz' -print -quit)"
-  test -n "$typescript_tarball"
-  typescript_install_root="$(mktemp -d)"
-  temporary_paths+=("$typescript_install_root")
-  pnpm --dir "$typescript_install_root" add \
-    "$repo_root/$typescript_tarball" --ignore-scripts --silent
-  (
-    cd "$typescript_install_root"
-    node --input-type=module -e "import('{{ project_slug }}')"
-  )
+  verify_typescript_module
 fi
 
 if $verify_python; then

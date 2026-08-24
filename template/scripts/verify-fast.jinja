@@ -8,6 +8,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 tier="${CSARC_CI_TIER:-fast}"
+scopes=",${CSARC_CI_SCOPES:-source},"
 {% if has_python %}export UV_PYTHON="${CSARC_PYTHON_VERSION:-{{ python_target }}}"
 {% endif -%}
 git diff --check
@@ -17,6 +18,10 @@ git diff --check
 if [[ "$tier" == "docs" ]]; then
   python3 scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md
   exit 0
+fi
+
+if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
+  ./scripts/lint-workflows-shell
 fi
 
 ./scripts/test-pr-policy

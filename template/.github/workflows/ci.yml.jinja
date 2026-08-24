@@ -10,6 +10,7 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
@@ -103,6 +104,16 @@ jobs:
           CSARC_PYTHON_VERSION: "{{ python_target }}"
 {%- endif %}
         run: ./scripts/verify-fast
+      - name: Verify portable decision site
+        run: python3 scripts/render_site.py --check
+      - name: Upload portable decision site
+        if: {% raw %}${{ steps.plan.outputs.upload_site == 'true' }}{% endraw %}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: portable-decision-site
+          path: docs/index.html
+          if-no-files-found: error
+          retention-days: 14
       - name: Record routing duration
         if: {% raw %}${{ always() }}{% endraw %}
         env:
@@ -131,59 +142,32 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  decision-site:
-    name: decision site artifact
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.14"
-      - name: Verify portable decision site
-        run: python scripts/render_site.py --check
-      - name: Upload portable decision site
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: portable-decision-site
-          path: docs/index.html
-          if-no-files-found: error
-          retention-days: 14
-
+{% if use_reusable_workflow %}
   full:
-    name: full verification{% if not use_reusable_workflow %} ({% raw %}${{ matrix.runtime }}{% endraw %}){% endif %}
+    name: full verification
     needs: fast
     if: {% raw %}${{ needs.fast.outputs.tier == 'full' }}{% endraw %}
-{%- if use_reusable_workflow %}
     uses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@{{ workflow_ref }}
     with:
       language-profile: "{{ language }}"
 {%- if has_python %}
+      canonical-python-version: "{{ python_latest }}"
       python-versions: >-
-        ["{{ python_target }}.0"{% for minor in range(python_min_minor, python_latest_minor + 1) %}, "3.{{ minor }}"{% endfor %}]
+        ["{{ python_target }}.0"{% for minor in range(python_min_minor, python_latest_minor) %}, "3.{{ minor }}"{% endfor %}]
 {%- else %}
+      canonical-python-version: "none"
       python-versions: '["none"]'
 {%- endif %}
 {%- if has_typescript %}
       node-version: "24"
 {%- endif %}
-{%- else %}
+{% else %}
+  canonical:
+    name: canonical full{% if has_python %} (Python {{ python_latest }}){% elif has_typescript %} and TypeScript (Node 24){% endif %}
+    needs: fast
+    if: {% raw %}${{ needs.fast.outputs.tier == 'full' }}{% endraw %}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        runtime:
-{%- if has_python %}
-          - "{{ python_target }}.0"
-{%- for minor in range(python_min_minor, python_latest_minor + 1) %}
-          - "3.{{ minor }}"
-{%- endfor %}
-{%- else %}
-          - "none"
-{%- endif %}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -191,10 +175,10 @@ jobs:
 {%- if has_python %}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: {% raw %}${{ matrix.runtime }}{% endraw %}
+          python-version: "{{ python_latest }}"
 {%- endif %}
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-{%- if has_typescript %}
+{%- if language == "typescript" %}
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           version: "11.22.0"
@@ -204,14 +188,86 @@ jobs:
           node-version: "24"
           cache: pnpm
 {%- endif %}
-      - name: Verify declared language modules
+      - name: Run canonical full verification
         run: ./scripts/verify
 {%- if has_python %}
         env:
+          CSARC_PYTHON_VERSION: "{{ python_latest }}"
+          UV_PROJECT_ENVIRONMENT: .venv-{{ python_latest }}
+{%- if language == "python-typescript" %}
+          CSARC_VERIFY_TYPESCRIPT: "false"
+{%- endif %}
+{%- endif %}
+      - name: Record canonical evidence
+        if: {% raw %}${{ always() }}{% endraw %}
+        env:
+          RESULT: {% raw %}${{ job.status }}{% endraw %}
+        run: echo "- Canonical full — $RESULT" >> "$GITHUB_STEP_SUMMARY"
+
+{%- if has_python %}
+  python-compatibility:
+    name: Python compatibility ({% raw %}${{ matrix.runtime }}{% endraw %})
+    needs: fast
+    if: {% raw %}${{ needs.fast.outputs.tier == 'full' }}{% endraw %}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime:
+          - "{{ python_target }}.0"
+{%- for minor in range(python_min_minor, python_latest_minor) %}
+          - "3.{{ minor }}"
+{%- endfor %}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: {% raw %}${{ matrix.runtime }}{% endraw %}
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Run runtime-sensitive tests
+        run: ./scripts/verify python-compatibility
+        env:
           CSARC_PYTHON_VERSION: {% raw %}${{ matrix.runtime }}{% endraw %}
           UV_PROJECT_ENVIRONMENT: .venv-{% raw %}${{ matrix.runtime }}{% endraw %}
+      - name: Record Python compatibility evidence
+        if: {% raw %}${{ always() }}{% endraw %}
+        env:
+          RESULT: {% raw %}${{ job.status }}{% endraw %}
+          RUNTIME: {% raw %}${{ matrix.runtime }}{% endraw %}
+        run: echo "- Python compatibility $RUNTIME — $RESULT" >> "$GITHUB_STEP_SUMMARY"
 {%- endif %}
+
+{%- if language == "python-typescript" %}
+  typescript:
+    name: TypeScript (Node 24)
+    needs: fast
+    if: {% raw %}${{ needs.fast.outputs.tier == 'full' }}{% endraw %}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: "11.22.0"
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Verify TypeScript module
+        run: ./scripts/verify typescript
+      - name: Record TypeScript evidence
+        if: {% raw %}${{ always() }}{% endraw %}
+        env:
+          RESULT: {% raw %}${{ job.status }}{% endraw %}
+        run: echo "- TypeScript Node 24 — $RESULT" >> "$GITHUB_STEP_SUMMARY"
 {%- endif %}
+{% endif %}
 
   governance:
     name: remote governance
@@ -263,19 +319,56 @@ jobs:
   verify:
     name: verify
     if: {% raw %}${{ always() }}{% endraw %}
-    needs: [fast, full, governance, osv, zizmor]
+    needs:
+      - fast
+{%- if use_reusable_workflow %}
+      - full
+{%- else %}
+      - canonical
+{%- if has_python %}
+      - python-compatibility
+{%- endif %}
+{%- if language == "python-typescript" %}
+      - typescript
+{%- endif %}
+{%- endif %}
+      - governance
+      - osv
+      - zizmor
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
       - name: Require every applicable check
         env:
           FAST_RESULT: {% raw %}${{ needs.fast.result }}{% endraw %}
+          TIER: {% raw %}${{ needs.fast.outputs.tier }}{% endraw %}
+{%- if use_reusable_workflow %}
           FULL_RESULT: {% raw %}${{ needs.full.result }}{% endraw %}
+{%- else %}
+          CANONICAL_RESULT: {% raw %}${{ needs.canonical.result }}{% endraw %}
+{%- if has_python %}
+          PYTHON_COMPATIBILITY_RESULT: {% raw %}${{ needs.python-compatibility.result }}{% endraw %}
+{%- endif %}
+{%- if language == "python-typescript" %}
+          TYPESCRIPT_RESULT: {% raw %}${{ needs.typescript.result }}{% endraw %}
+{%- endif %}
+{%- endif %}
           GOVERNANCE_RESULT: {% raw %}${{ needs.governance.result }}{% endraw %}
           OSV_RESULT: {% raw %}${{ needs.osv.result }}{% endraw %}
           ZIZMOR_RESULT: {% raw %}${{ needs.zizmor.result }}{% endraw %}
         run: |
           test "$FAST_RESULT" = success
-          for result in "$FULL_RESULT" "$GOVERNANCE_RESULT" "$OSV_RESULT" "$ZIZMOR_RESULT"; do
+          if [[ "$TIER" == full ]]; then
+{% if use_reusable_workflow %}            test "$FULL_RESULT" = success
+{% else %}            test "$CANONICAL_RESULT" = success
+{% if has_python %}            test "$PYTHON_COMPATIBILITY_RESULT" = success
+{% endif %}{% if language == "python-typescript" %}            test "$TYPESCRIPT_RESULT" = success
+{% endif %}{% endif %}          else
+{% if use_reusable_workflow %}            test "$FULL_RESULT" = skipped
+{% else %}            test "$CANONICAL_RESULT" = skipped
+{% if has_python %}            test "$PYTHON_COMPATIBILITY_RESULT" = skipped
+{% endif %}{% if language == "python-typescript" %}            test "$TYPESCRIPT_RESULT" = skipped
+{% endif %}{% endif %}          fi
+          for result in "$GOVERNANCE_RESULT" "$OSV_RESULT" "$ZIZMOR_RESULT"; do
             [[ "$result" == success || "$result" == skipped ]]
           done
