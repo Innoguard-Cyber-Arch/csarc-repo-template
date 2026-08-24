@@ -6,6 +6,42 @@ fixture_root="$(mktemp -d)"
 trap 'rm -rf "$fixture_root"' EXIT
 cd "$repo_root"
 
+test "$(wc -c < AGENTS.md)" -le 13000
+test "$(wc -c < template/AGENTS.md.jinja)" -le 14000
+if grep -Eq 'step [0-9]+|第 [0-9]+ 點|第 [0-9]+點' \
+  AGENTS.md template/AGENTS.md.jinja; then
+  echo "Agent guidance must not use numeric step cross-references."
+  exit 1
+fi
+grep -q 'uv sync --locked --python 3.14' AGENTS.md
+grep -q 'uv run pytest <test-path>' AGENTS.md
+grep -q 'scripts/render_site.py --check' AGENTS.md
+grep -q 'Actions quota fallback attestation' docs/ci-policy.md
+for summary_file in AGENTS.md README.md template/AGENTS.md.jinja \
+  template/README.md.jinja; do
+  grep -q 'docs/ci-policy.md#actions-額度-fallback' "$summary_file"
+  if grep -q 'Actions quota fallback attestation' "$summary_file"; then
+    echo "$summary_file duplicates the canonical quota fallback procedure."
+    exit 1
+  fi
+done
+
+assert_agent_guidance() {
+  local project_root="$1"
+  test "$(wc -c < "$project_root/AGENTS.md")" -le 14000
+  test "$(cat "$project_root/CLAUDE.md")" = "@AGENTS.md"
+  grep -q 'git rev-parse --show-toplevel' "$project_root/README.md"
+  grep -q 'pwd -P' "$project_root/README.md"
+  grep -q 'docs/ci-policy.md#actions-額度-fallback' \
+    "$project_root/README.md"
+  grep -q 'docs/ci-policy.md#actions-額度-fallback' \
+    "$project_root/AGENTS.md"
+  grep -q 'scripts/render_site.py --check' "$project_root/AGENTS.md"
+  grep -q 'propose semantic story groups and exclusions' \
+    "$project_root/AGENTS.md"
+  grep -q 'reopen completed Issues' "$project_root/AGENTS.md"
+}
+
 ./scripts/check-update-conflicts
 python3 scripts/render_site.py --check
 
@@ -89,7 +125,7 @@ uv run pytest \
 uv build
 uvx --from "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)" \
   csarc --help >/dev/null
-uv run python scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md
+uv run python scripts/spec_to_issue.py validate
 bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
 bash -n scripts/check-update-conflicts
@@ -102,19 +138,20 @@ bash -n scripts/verify-fast
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' README.md
 grep -q 'policy labels, and effective Rulesets' docs/agent-install.md
 grep -q 'Administration read access' docs/agent-install.md
+grep -q 'Existing-repository history changes start read-only' \
+  docs/agent-install.md
+grep -q 'Never infer groups' docs/agent-install.md
+grep -q 'from titles or labels alone' docs/agent-install.md
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' docs/index.html
 grep -q '^## Actions quota fallback$' AGENTS.md
 grep -q '^## Actions quota fallback$' template/AGENTS.md.jinja
-grep -q 'included GitHub Actions minutes are exhausted' AGENTS.md
-grep -q 'included GitHub Actions minutes are exhausted' template/AGENTS.md.jinja
-grep -q 'failed payment, a zero or incorrect spending budget, a platform outage' \
-  AGENTS.md
-grep -q 'failed payment, a zero or incorrect spending budget, a platform outage' \
-  template/AGENTS.md.jinja
-grep -q 'HEAD.*pull request head SHA' AGENTS.md
-grep -q 'HEAD.*pull request head SHA' template/AGENTS.md.jinja
-grep -q 'Actions quota fallback attestation' README.md
-grep -q 'Actions quota fallback attestation' template/README.md.jinja
+grep -q 'included Actions minutes are exhausted' AGENTS.md
+grep -q 'included Actions minutes are exhausted' template/AGENTS.md.jinja
+grep -q 'failed payments.*spending limit' docs/ci-policy.md
+grep -q 'HEAD.*PR head SHA' docs/ci-policy.md
+grep -q 'Actions quota fallback attestation' docs/ci-policy.md
+grep -q 'runner 註記本身不構成證據' README.md
+grep -q 'runner 註記本身不構成證據' template/README.md.jinja
 grep -q '額度耗盡.*human' docs/index.html
 grep -q '額度 fallback.*human' template/site/index.html.jinja
 bash -n scripts/run-live-workflow-probe
@@ -657,12 +694,17 @@ test -f site/styles.css
 test -f site/app.js
 test -f scripts/render_site.py
 test -f docs/README.md
-test -f docs/decisions/README.md
-test -f docs/decisions/portable-decision-site.md
+test -f docs/adr/README.md
+test -f docs/adr/portable-decision-site.md
 grep -q '可重現的 self-contained HTML' \
-  docs/decisions/portable-decision-site.md
+  docs/adr/portable-decision-site.md
 grep -q '不自動保存聊天逐字稿' \
-  docs/decisions/portable-decision-site.md
+  docs/adr/portable-decision-site.md
+grep -q 'Durable Project Memory' docs/README.md
+grep -q 'Spec-Driven Development' docs/README.md
+grep -q 'Architecture Decision Records' docs/README.md
+grep -q 'Test-Driven Development' docs/README.md
+grep -q 'Behavior-Driven Development' docs/README.md
 test -f docs/pilot-adoption.md
 test -f docs/artifact-consumption.md
 grep -q '產生 attestation 只證明' docs/artifact-consumption.md
@@ -688,7 +730,12 @@ grep -q 'internal-notice' docs/index.html
 grep -q '請勿公開分享此連結' docs/index.html
 grep -q '存取控制決策｜' docs/index.html
 grep -q '可維護來源 → self-contained HTML' docs/index.html
-grep -q 'docs/decisions/portable-decision-site.md' docs/index.html
+grep -q 'docs/adr/portable-decision-site.md' docs/index.html
+grep -q 'durable project memory' docs/index.html
+grep -q 'Spec-Driven Development' docs/index.html
+grep -q 'Architecture Decision Records' docs/index.html
+grep -q 'Test-Driven Development' docs/index.html
+grep -q 'Behavior-Driven Development' docs/index.html
 grep -q 'actions/runs/32662029395' docs/index.html
 grep -q 'Live integration smoke' docs/index.html
 test -f docs/robots.txt
@@ -840,6 +887,10 @@ grep -q 'search open and closed Issues' AGENTS.md
 grep -q 'Never silently reverse an earlier decision' AGENTS.md
 grep -q 'whether creating through the UI, CLI, or API' AGENTS.md
 grep -q 'create and link a follow-up Issue first' AGENTS.md
+grep -Fq 'run `./scripts/cleanup-worktrees` in its default dry-run mode and report any candidates' \
+  AGENTS.md
+grep -Fq 'run `./scripts/cleanup-worktrees` in its default dry-run mode and report any candidates' \
+  template/AGENTS.md.jinja
 grep -q '^## References$' docs/milestone-description.md
 grep -q 'bounded' docs/agent-install.md
 grep -q '沿用、取代或駁回' docs/index.html
@@ -1165,6 +1216,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/default-project"
 prime_gitleaks_cache "$fixture_root/default-project"
+assert_agent_guidance "$fixture_root/default-project"
 
 git -C "$fixture_root/default-project" init -q -b main
 git -C "$fixture_root/default-project" add .
@@ -1284,7 +1336,6 @@ test -f "$fixture_root/default-project/release-please-config.json"
 test -f "$fixture_root/default-project/.release-please-manifest.json"
 test "$(cat "$fixture_root/default-project/.python-version")" = "3.14"
 test -f "$fixture_root/default-project/AGENTS.md"
-test "$(wc -l < "$fixture_root/default-project/AGENTS.md")" -le 200
 test -f "$fixture_root/default-project/docs/index.html"
 test -f "$fixture_root/default-project/docs/site-content.js"
 test -f "$fixture_root/default-project/docs/site-theme.css"
@@ -1293,8 +1344,20 @@ test -f "$fixture_root/default-project/site/styles.css"
 test -f "$fixture_root/default-project/site/app.js"
 test -f "$fixture_root/default-project/scripts/render_site.py"
 test -f "$fixture_root/default-project/docs/README.md"
-test -f "$fixture_root/default-project/docs/decisions/README.md"
+test -f "$fixture_root/default-project/docs/adr/README.md"
 grep -q '不得保存完整聊天逐字稿' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Durable Project Memory' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Spec-Driven Development' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Architecture Decision Records' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Test-Driven Development' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Behavior-Driven Development' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'docs/decisions/' \
   "$fixture_root/default-project/docs/README.md"
 grep -q 'Never store a raw conversation transcript' \
   "$fixture_root/default-project/AGENTS.md"
@@ -1352,8 +1415,16 @@ grep -q 'whether creating through the UI, CLI, or API' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'create and link a follow-up Issue first' \
   "$fixture_root/default-project/AGENTS.md"
+grep -Fq 'run `./scripts/cleanup-worktrees` in its default dry-run mode and report any candidates' \
+  "$fixture_root/default-project/AGENTS.md"
 grep -q 'uv run pytest <test-path>' \
   "$fixture_root/default-project/AGENTS.md"
+grep -q 'Python setup: `uv sync --locked`' \
+  "$fixture_root/default-project/AGENTS.md"
+if grep -q 'TypeScript setup:' "$fixture_root/default-project/AGENTS.md"; then
+  echo "Python-only AGENTS.md must not include TypeScript setup."
+  exit 1
+fi
 if grep -q 'pnpm exec vitest' "$fixture_root/default-project/AGENTS.md"; then
   echo "Python-only AGENTS.md must not include TypeScript commands."
   exit 1
@@ -1414,13 +1485,11 @@ grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/README.md"
 grep -q '^## Actions quota fallback$' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'included GitHub Actions minutes are exhausted' \
-  "$fixture_root/default-project/AGENTS.md"
 grep -q 'Actions quota fallback attestation' \
-  "$fixture_root/default-project/README.md"
+  "$fixture_root/default-project/docs/ci-policy.md"
 grep -q '付款失敗、budget.*平台.*設定.*權限.*未知原因.*測試失敗' \
   "$fixture_root/default-project/docs/index.html"
-grep -q '一般 Issue PR 跑單一 runtime' \
+grep -q '一般 Issue PR 跑 change-aware fast checks' \
   "$fixture_root/default-project/docs/site-content.js"
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/docs/index.html"
@@ -1728,6 +1797,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/ci-only-project"
 prime_gitleaks_cache "$fixture_root/ci-only-project"
+assert_agent_guidance "$fixture_root/ci-only-project"
 
 git -C "$fixture_root/ci-only-project" init -q -b main
 git -C "$fixture_root/ci-only-project" add .
@@ -1747,6 +1817,13 @@ test ! -f "$fixture_root/ci-only-project/package.json"
 test ! -d "$fixture_root/ci-only-project/src"
 test ! -d "$fixture_root/ci-only-project/tests"
 test ! -d "$fixture_root/ci-only-project/typescript"
+grep -q 'no language toolchain install is required' \
+  "$fixture_root/ci-only-project/AGENTS.md"
+if grep -Eq 'Python setup:|TypeScript setup:' \
+  "$fixture_root/ci-only-project/AGENTS.md"; then
+  echo "CI-only AGENTS.md must not include language setup commands."
+  exit 1
+fi
 if grep -q 'publish-evidence\|release-evidence' \
   "$fixture_root/ci-only-project/.github/workflows/release.yml"; then
   echo "CI/CD-only releases must not require package evidence."
@@ -1772,6 +1849,20 @@ fi
   ./scripts/verify
   "$repo_root/.venv/bin/zizmor" . --format plain
 )
+
+# Main-only projects keep the same guidance contract without delivery wording.
+uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_name="Main Branch Test" \
+  --data project_slug="main-branch-test" \
+  --data language=ci \
+  --data branch_strategy=main \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$fixture_root/main-branch-project"
+assert_agent_guidance "$fixture_root/main-branch-project"
+grep -q 'pull request chain ends at `main`' \
+  "$fixture_root/main-branch-project/AGENTS.md"
+grep -q 'against `main` or its immediate parent in the stack' \
+  "$fixture_root/main-branch-project/AGENTS.md"
 
 # A release version bump must not make the generated smoke test stale.
 release_bump_project="$fixture_root/release-bump-project"
@@ -1815,6 +1906,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/typescript-project"
 prime_gitleaks_cache "$fixture_root/typescript-project"
+assert_agent_guidance "$fixture_root/typescript-project"
 
 git -C "$fixture_root/typescript-project" init -q -b main
 git -C "$fixture_root/typescript-project" add .
@@ -1862,6 +1954,8 @@ test -f "$fixture_root/typescript-project/typescript/tests/index.test.ts"
 test ! -f "$fixture_root/typescript-project/pyproject.toml"
 test ! -f "$fixture_root/typescript-project/.python-version"
 grep -q 'pnpm exec vitest run <test-path>' \
+  "$fixture_root/typescript-project/AGENTS.md"
+grep -q 'TypeScript setup: `corepack enable && pnpm install --frozen-lockfile`' \
   "$fixture_root/typescript-project/AGENTS.md"
 if grep -q 'uv run pytest' "$fixture_root/typescript-project/AGENTS.md"; then
   echo "TypeScript-only AGENTS.md must not include Python commands."
@@ -1931,6 +2025,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data npm_environment=npm-release \
   "$repo_root" "$fixture_root/all-features-project"
 prime_gitleaks_cache "$fixture_root/all-features-project"
+assert_agent_guidance "$fixture_root/all-features-project"
 
 test -f "$fixture_root/all-features-project/.pre-commit-config.yaml"
 test -f "$fixture_root/all-features-project/.github/workflows/template-update.yml"
@@ -2062,6 +2157,10 @@ grep -q 'uv run pytest <test-path>' \
   "$fixture_root/all-features-project/AGENTS.md"
 grep -q 'pnpm exec vitest run <test-path>' \
   "$fixture_root/all-features-project/AGENTS.md"
+grep -q 'Python setup: `uv sync --locked`' \
+  "$fixture_root/all-features-project/AGENTS.md"
+grep -q 'TypeScript setup: `corepack enable && pnpm install --frozen-lockfile`' \
+  "$fixture_root/all-features-project/AGENTS.md"
 diff -B -w "$repo_root/.gitignore" \
   "$fixture_root/all-features-project/.gitignore"
 test "$("$fixture_root/all-features-project/scripts/detect-language-profile" --suggest)" = \
@@ -2170,8 +2269,9 @@ grep -q '"template_mode": "existing"' \
 update_source="$fixture_root/update-source"
 update_project="$fixture_root/update-project"
 mkdir -p "$update_source"
-rsync -a --exclude=.git --exclude=.venv --exclude=.cache --exclude=.ruff_cache \
-  "$repo_root/" "$update_source/"
+legacy_memory_base=f1ecc6e4fa2bb03e7c322e5d8dd69265a7c34513
+git cat-file -e "$legacy_memory_base^{commit}"
+git archive "$legacy_memory_base" | tar -x -C "$update_source"
 
 git -C "$update_source" init -b main
 git -C "$update_source" config user.name "Template Test"
@@ -2198,6 +2298,12 @@ printf '%s\n' 'window.PROJECT_OWNED_SITE = true;' \
   >> "$update_project/docs/site-content.js"
 printf '%s\n' '/* PROJECT_OWNED_THEME */' \
   >> "$update_project/docs/site-theme.css"
+cp "$repo_root/docs/adr/agent-collaboration.md" \
+  "$update_project/docs/decisions/project-owned.md"
+printf '%s\n' '' 'PROJECT_OWNED_MEMORY' \
+  >> "$update_project/docs/decisions/project-owned.md"
+printf '%s\n' '' 'PROJECT_OWNED_SPEC' \
+  >> "$update_project/docs/specs/SPEC-001-example.md"
 uv run copier copy --trust --defaults --overwrite --vcs-ref v0.1.0 \
   --data project_mode=existing \
   --data language=python-typescript \
@@ -2214,11 +2320,13 @@ git -C "$update_project" config user.email "template-test@example.invalid"
 git -C "$update_project" add .
 git -C "$update_project" commit -m "test: adopted project"
 
+rsync -a --delete --exclude=.git --exclude=.venv --exclude=.cache \
+  --exclude=.ruff_cache "$repo_root/" "$update_source/"
 cp "$update_source/template/.gitignore.jinja" \
   "$update_source/template/update-marker"
 printf '%s\n' 'window.TEMPLATE_SITE_V2 = true;' \
   >> "$update_source/template/site/app.js"
-git -C "$update_source" add template/update-marker template/site/app.js
+git -C "$update_source" add -A
 git -C "$update_source" commit -m "test: template v0.1.1"
 git -C "$update_source" tag v0.1.1
 
@@ -2241,11 +2349,17 @@ grep -q 'window.PROJECT_OWNED_SITE = true;' \
   "$update_project/docs/index.html"
 grep -q 'PROJECT_OWNED_THEME' \
   "$update_project/docs/index.html"
+grep -q '^PROJECT_OWNED_MEMORY$' \
+  "$update_project/docs/decisions/project-owned.md"
+grep -q '^PROJECT_OWNED_SPEC$' \
+  "$update_project/docs/specs/SPEC-001-example.md"
 grep -q 'window.TEMPLATE_SITE_V2 = true;' \
   "$update_project/site/app.js"
 grep -q 'window.TEMPLATE_SITE_V2 = true;' \
   "$update_project/docs/index.html"
-test -f "$update_project/docs/decisions/README.md"
+test -f "$update_project/docs/adr/README.md"
+grep -q 'docs/decisions/' "$update_project/AGENTS.md"
+grep -q 'docs/decisions/' "$update_project/docs/README.md"
 grep -q 'Never store a raw conversation transcript' \
   "$update_project/AGENTS.md"
 grep -q '_commit: v0.1.1' "$update_project/.copier-answers.yml"

@@ -28,10 +28,15 @@
    work item. A confirmed adopt or update upgrades only recognized legacy
    CSARC Milestone descriptions; custom descriptions remain unchanged for
    manual review.
-10. Explain that a closing pull request is rejected while either its own
+10. Existing-repository history changes start read-only: propose semantic
+    story groups and exclusions, wait for explicit confirmation, then create
+    or update Milestones and associations idempotently. Never infer groups
+    from titles or labels alone, require every historical Issue to have a
+    Milestone, or reopen completed Issues.
+11. Explain that a closing pull request is rejected while either its own
     checklist or the referenced Issue still contains an unchecked task; the
     user must supply the missing evidence instead of checking it speculatively.
-11. Explain that repository settings are not copied by GitHub templates or
+12. Explain that repository settings are not copied by GitHub templates or
     Copier. Administrators should run `apply-repository-settings.sh` in
     `plan`, `apply`, then `check` order; `check` compares repository, Actions,
     policy labels, and effective Rulesets. Report `DEGRADED` capability limits
