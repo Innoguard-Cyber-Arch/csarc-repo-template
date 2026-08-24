@@ -46,7 +46,7 @@ Duplicate triage may close an Issue without code changes when it links the canon
 ## Actions quota fallback
 
 - The only eligible case is a human maintainer with billing visibility confirming that included Actions minutes are exhausted. All other failures remain blocked.
-- Follow the complete SHA-bound attestation, authorization, exclusion, and later rerun procedure in [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback). Never create or falsify a successful Check Run.
+- Follow the complete SHA/tree-bound procedure, including the non-release promotion path, in [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback). Never create or falsify a successful Check Run.
 
 ## Editing boundaries
 
