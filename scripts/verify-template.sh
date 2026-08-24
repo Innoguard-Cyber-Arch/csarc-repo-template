@@ -746,8 +746,10 @@ grep -q '^  typescript:$' .github/workflows/reusable-ci.yml
 grep -q './scripts/verify python-compatibility' \
   .github/workflows/reusable-ci.yml
 grep -q './scripts/verify typescript' .github/workflows/reusable-ci.yml
+# shellcheck disable=SC2016 # Match the literal workflow variable.
 grep -q 'test "$PYTHON_COMPATIBILITY_RESULT" = success' \
   .github/workflows/reusable-ci.yml
+# shellcheck disable=SC2016 # Match the literal workflow variable.
 grep -q 'test "$TYPESCRIPT_RESULT" = success' \
   .github/workflows/reusable-ci.yml
 grep -q 'python3 scripts/delivery_sync.py gate' .github/workflows/pr-policy.yml
@@ -2283,10 +2285,13 @@ test "$(
     "$adoption_project/.github/workflows/ci.yml" |
     grep -c 'actions/setup-node@'
 )" -eq 1
+# shellcheck disable=SC2016 # Match the literal workflow variable.
 grep -q 'test "$CANONICAL_RESULT" = success' \
   "$adoption_project/.github/workflows/ci.yml"
+# shellcheck disable=SC2016 # Match the literal workflow variable.
 grep -q 'test "$PYTHON_COMPATIBILITY_RESULT" = success' \
   "$adoption_project/.github/workflows/ci.yml"
+# shellcheck disable=SC2016 # Match the literal workflow variable.
 grep -q 'test "$TYPESCRIPT_RESULT" = success' \
   "$adoption_project/.github/workflows/ci.yml"
 
