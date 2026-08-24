@@ -52,6 +52,7 @@ window.CSARC_SITE_CONTENT = {
 {% endif %}
     "token 與私鑰放 GitHub Secrets／Variables，不提交到 repo 或 .env。",
     "設定腳本先查 GitHub 方案與 Ruleset API；Free private repo 會保留 Ruleset policy，但公開 API 無法建立它，CI 的 governance check 持續告警並在 PR 留言，release 照常執行。",
+    "導入 preflight 會把 Renovate 標成 available、request-owner 或 fallback；只有 account／organization owner 可進入 GitHub 同意頁並只選本 repo，其餘狀況保留 Dependabot 與既有 CI/CD。",
     "Artifact attestation 在 public repo 預設開啟；若也啟用 PyPI／npm 發布，registry job 會先驗 repository、tag、digest 與 signer workflow，private／internal repo 維持明確 opt-in。",
   ],
   release: {

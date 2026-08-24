@@ -20,6 +20,11 @@ from typing import Any
 STATES = {"allowed", "blocked", "unknown"}
 SEMVER = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 DIRECT_CAPABILITIES = ("contents", "release", "dispatch")
+RENOVATE_INSTALL_URL = "https://github.com/apps/renovate/installations/new"
+DEPENDABOT_FALLBACK = (
+    "Keep GitHub Dependabot via .github/dependabot.yml and the existing "
+    "required CI/CD checks."
+)
 
 
 @dataclass(frozen=True)
@@ -260,6 +265,195 @@ def preflight_capabilities(repo: str) -> dict[str, Capability]:
             else "repository Actions policy blocks pull requests",
         )
     return capabilities
+
+
+def gh_json(executable: str, endpoint: str) -> dict[str, object] | None:
+    """Read one GitHub API object without treating failure as permission."""
+    result = subprocess.run(  # noqa: S603
+        [executable, "api", endpoint],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def renovate_result(
+    state: str,
+    reason: str,
+    *,
+    observed: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Build the optional Renovate integration decision."""
+    if state == "available":
+        next_step = (
+            "Open the installation page, choose only this repository, and "
+            "review the App permissions before approving."
+        )
+    elif state == "request-owner":
+        next_step = (
+            "Ask the account or organization owner to review the installation "
+            "page and grant access only to this repository. Until approved, "
+            "keep GitHub Dependabot and the existing required CI/CD checks."
+        )
+    else:
+        next_step = DEPENDABOT_FALLBACK
+    return {
+        "state": state,
+        "reason": reason,
+        "next_step": next_step,
+        "install_url": RENOVATE_INSTALL_URL,
+        "fallback": DEPENDABOT_FALLBACK,
+        "requested_access": (
+            "The App installation screen is authoritative; Renovate currently "
+            "requests organization members read access and repository "
+            "administration read plus workflow/content/PR write access."
+        ),
+        "observed": observed
+        or {
+            "owner": None,
+            "owner_type": None,
+            "actor": None,
+            "repository_admin": None,
+            "organization_owner": None,
+        },
+    }
+
+
+def optional_integration_preflight(repo: str) -> dict[str, dict[str, object]]:
+    """Classify optional App setup from read-only repository observations."""
+    executable = shutil.which("gh")
+    if executable is None:
+        return {
+            "renovate": renovate_result("fallback", "GitHub CLI is unavailable")
+        }
+
+    repository = gh_json(executable, f"repos/{repo}")
+    if repository is None:
+        return {
+            "renovate": renovate_result(
+                "fallback",
+                "Repository permissions are unavailable; installation was "
+                "not assumed",
+            )
+        }
+    owner_payload = repository.get("owner")
+    permissions = repository.get("permissions")
+    owner = (
+        owner_payload.get("login")
+        if isinstance(owner_payload, dict)
+        and isinstance(owner_payload.get("login"), str)
+        else None
+    )
+    owner_type = (
+        owner_payload.get("type")
+        if isinstance(owner_payload, dict)
+        and isinstance(owner_payload.get("type"), str)
+        else None
+    )
+    repository_admin = (
+        permissions.get("admin")
+        if isinstance(permissions, dict)
+        and isinstance(permissions.get("admin"), bool)
+        else None
+    )
+    actor_payload = gh_json(executable, "user")
+    actor = (
+        actor_payload.get("login")
+        if isinstance(actor_payload, dict)
+        and isinstance(actor_payload.get("login"), str)
+        else None
+    )
+    observed: dict[str, object] = {
+        "owner": owner,
+        "owner_type": owner_type,
+        "actor": actor,
+        "repository_admin": repository_admin,
+        "organization_owner": None,
+    }
+    if owner is None or owner_type not in {"User", "Organization"}:
+        return {
+            "renovate": renovate_result(
+                "fallback",
+                "Repository owner type is unknown; installation was not "
+                "assumed",
+                observed=observed,
+            )
+        }
+    if actor is None or repository_admin is None:
+        return {
+            "renovate": renovate_result(
+                "fallback",
+                "Actor or repository permission is unknown; installation was "
+                "not assumed",
+                observed=observed,
+            )
+        }
+    if not repository_admin:
+        return {
+            "renovate": renovate_result(
+                "fallback",
+                "The current actor is not a repository administrator",
+                observed=observed,
+            )
+        }
+
+    if owner_type == "User":
+        if actor == owner:
+            return {
+                "renovate": renovate_result(
+                    "available",
+                    "The personal repository owner can review an App "
+                    "installation",
+                    observed=observed,
+                )
+            }
+        return {
+            "renovate": renovate_result(
+                "request-owner",
+                "A repository collaborator cannot install an App for another "
+                "personal account",
+                observed=observed,
+            )
+        }
+
+    membership = gh_json(executable, f"orgs/{owner}/memberships/{actor}")
+    if membership is None:
+        return {
+            "renovate": renovate_result(
+                "fallback",
+                "Organization ownership is unknown; installation was not "
+                "assumed",
+                observed=observed,
+            )
+        }
+    organization_owner = (
+        membership.get("state") == "active"
+        and membership.get("role") == "admin"
+    )
+    if organization_owner:
+        return {
+            "renovate": renovate_result(
+                "available",
+                "The current actor is an organization owner and repository "
+                "administrator",
+                observed={**observed, "organization_owner": True},
+            )
+        }
+    return {
+        "renovate": renovate_result(
+            "request-owner",
+            "Renovate requests organization permissions, so a repository "
+            "admin who is only a member must ask an organization owner",
+            observed={**observed, "organization_owner": False},
+        )
+    }
 
 
 def report(
@@ -616,7 +810,11 @@ def main(arguments: list[str] | None = None) -> int:
         return 0
     if args.command == "preflight":
         write_report(
-            report(preflight_capabilities(args.repo), "cli-preflight"),
+            report(
+                preflight_capabilities(args.repo),
+                "cli-preflight",
+                integrations=optional_integration_preflight(args.repo),
+            ),
             None,
             None,
         )
