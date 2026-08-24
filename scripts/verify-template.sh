@@ -747,7 +747,7 @@ if grep -q 'repos/${GITHUB_REPOSITORY}/immutable-releases' \
 fi
 grep -q 'render_release_prompt.py' .github/workflows/release-template.yml
 test "$(grep -c 'release_policy.py prepare' \
-  .github/workflows/release-template.yml)" = 2
+  .github/workflows/release-template.yml)" = 1
 grep -q 'source_run_id:' .github/workflows/release-template.yml
 grep -q 'release_policy.py verify-boundary' \
   .github/workflows/release-template.yml
@@ -759,6 +759,23 @@ grep -q 'gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes'
   .github/workflows/release-template.yml
 grep -q "CSARC_ENABLE_PYPI_PUBLISHING == 'true'" \
   .github/workflows/release-template.yml
+test "$(grep -c 'uv build' .github/workflows/release-template.yml)" = 1
+grep -q "steps.release_state.outputs.build_required == 'true'" \
+  .github/workflows/release-template.yml
+grep -q 'build_required=false' .github/workflows/release-template.yml
+grep -q 'gh release download "$RELEASE_TAG"' \
+  .github/workflows/release-template.yml
+grep -q 'shasum -a 256 -c ../SHA256SUMS' \
+  .github/workflows/release-template.yml
+grep -q 'scripts/verify_release_consumption.py' \
+  .github/workflows/release-template.yml
+grep -q 'output-file: sbom.cdx.json' \
+  .github/workflows/release-template.yml
+if sed -n '/^  publish-pypi:/,/^  publish:/p' \
+  .github/workflows/release-template.yml | grep -q 'uv build'; then
+  echo "PyPI publishing must reuse the immutable GitHub Release artifacts."
+  exit 1
+fi
 test -f scripts/release_policy.py
 test -f version.txt
 release_tag="$(git tag --points-at HEAD --list 'v[0-9]*' --sort=-version:refname | head -1)"

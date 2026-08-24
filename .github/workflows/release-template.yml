@@ -82,6 +82,7 @@ jobs:
     needs: publish
     environment: pypi
     permissions:
+      attestations: read
       contents: read
       id-token: write
     runs-on: ubuntu-latest
@@ -90,18 +91,51 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          enable-cache: false
-      - name: Verify the immutable tag version
+      - name: Download and verify the published Python distributions
         env:
+          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: >-
-          uv run --no-project python scripts/release_policy.py prepare
-          --tag "$RELEASE_TAG"
-      - run: uv build
+        run: |
+          set -euo pipefail
+          test "$(gh release view "$RELEASE_TAG" --json isImmutable,isDraft,isPrerelease --jq '[.isImmutable, .isDraft, .isPrerelease] | @tsv')" = $'true\tfalse\tfalse'
+          mkdir pypi-dist
+          gh release download "$RELEASE_TAG" \
+            --pattern '*.whl' \
+            --pattern '*.tar.gz' \
+            --pattern SHA256SUMS \
+            --dir pypi-dist
+          mv pypi-dist/SHA256SUMS SHA256SUMS
+          (
+            cd pypi-dist
+            shasum -a 256 -c ../SHA256SUMS
+          )
+          mapfile -t packages < <(
+            find pypi-dist -maxdepth 1 -type f \
+              \( -name '*.whl' -o -name '*.tar.gz' \) | sort
+          )
+          [[ "${#packages[@]}" -eq 2 ]]
+          verification_json="$RUNNER_TEMP/release-verification.json"
+          gh release verify "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --format json > "$verification_json"
+          repository_id="$(
+            gh api "repos/$GITHUB_REPOSITORY" --jq '.id'
+          )"
+          commit_sha="$(
+            gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq '.sha'
+          )"
+          for package in "${packages[@]}"; do
+            python3 scripts/verify_release_consumption.py \
+              --verification-json "$verification_json" \
+              --artifact "$package" \
+              --repository "$GITHUB_REPOSITORY" \
+              --repository-id "$repository_id" \
+              --tag "$RELEASE_TAG" \
+              --commit "$commit_sha"
+          done
       - name: Publish with trusted identity
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: pypi-dist/
 
   publish:
     name: publish immutable release
@@ -129,7 +163,8 @@ jobs:
         run: >-
           uv run --no-project python scripts/release_policy.py prepare
           --tag "$RELEASE_TAG"
-      - name: Build CLI and prepare release assets
+      - name: Inspect the release state
+        id: release_state
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
@@ -144,13 +179,67 @@ jobs:
           )"
           if [[ "$release_state" == $'true\tfalse' ]]; then
             echo "Release is already published and immutable; keeping its assets unchanged."
-            exit 0
+            echo "build_required=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$release_state" == $'false\ttrue' ]]; then
+            echo "build_required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Release must be either a mutable draft or published and immutable." >&2
+            exit 1
           fi
-          test "$release_state" = $'false\ttrue'
+      - name: Build CLI and calculate checksums
+        if: steps.release_state.outputs.build_required == 'true'
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
           commit_sha="$(git rev-parse HEAD)"
           test "$commit_sha" = "$(git rev-list -n 1 "$RELEASE_TAG")"
-          gh release view "$RELEASE_TAG" --json body --jq .body >release-body.md
           uv build
+          (
+            cd dist
+            shasum -a 256 * | sort -k 2 > ../SHA256SUMS
+          )
+      - name: Extract release artifacts for SBOM analysis
+        if: steps.release_state.outputs.build_required == 'true'
+        run: |
+          set -euo pipefail
+          sbom_root="${RUNNER_TEMP}/sbom-root"
+          mkdir -p "$sbom_root"
+          index=0
+          for archive in dist/*.whl dist/*.tar.gz; do
+            [[ -f "$archive" ]] || continue
+            index=$((index + 1))
+            destination="$sbom_root/artifact-${index}"
+            mkdir -p "$destination"
+            case "$archive" in
+              *.whl) unzip -q "$archive" -d "$destination" ;;
+              *) tar -xzf "$archive" -C "$destination" ;;
+            esac
+          done
+          [[ "$index" -eq 2 ]]
+      - name: Generate CycloneDX SBOM
+        if: steps.release_state.outputs.build_required == 'true'
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: ${{ runner.temp }}/sbom-root
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+          upload-artifact: false
+      - name: Publish the verified artifact set
+        if: steps.release_state.outputs.build_required == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          commit_sha="$(git rev-parse HEAD)"
+          test -s SHA256SUMS
+          test -s sbom.cdx.json
+          (
+            cd dist
+            shasum -a 256 -c ../SHA256SUMS
+          )
+          gh release view "$RELEASE_TAG" --json body --jq .body >release-body.md
           uv run python scripts/render_release_prompt.py \
             --tag "$RELEASE_TAG" \
             --sha "$commit_sha" \
@@ -160,9 +249,12 @@ jobs:
           gh release upload "$RELEASE_TAG" \
             dist/*.whl \
             dist/*.tar.gz \
+            SHA256SUMS \
+            sbom.cdx.json \
             release-assets/release-prompt.txt \
             release-assets/csarc-release-provenance.json \
-            release-assets/release-source.json
+            release-assets/release-source.json \
+            --clobber
           gh release edit "$RELEASE_TAG" \
             --notes-file release-assets/release-notes.md \
             --draft=false
