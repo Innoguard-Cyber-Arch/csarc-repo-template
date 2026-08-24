@@ -31,6 +31,7 @@ paired_files=(
   scripts/apply-repository-settings.sh
   scripts/check-governance-drift
   scripts/check-update-conflicts
+  scripts/cleanup-worktrees
   scripts/install-gitleaks
   scripts/release_policy.py
   scripts/scan-secrets
@@ -38,6 +39,7 @@ paired_files=(
   scripts/sync_milestone_state.py
   scripts/test-issue-triage
   scripts/test-pr-policy
+  scripts/test-worktree-cleanup
   scripts/validate-issue-title
   tests/test_spec_to_issue.py
   tests/test_milestone_lifecycle.py
