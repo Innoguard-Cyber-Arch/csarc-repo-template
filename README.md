@@ -89,7 +89,7 @@ Promotion 另由穩定的 `promotion` context 封裝候選 source 與 SHA/tree �
 
 ### Actions 額度耗盡的一次性驗證
 
-只有具帳務可見性的 human maintainer 確認當期 included Actions minutes 已耗盡時，才可能使用本機 fallback；runner 註記本身不構成證據。完整的 SHA 綁定、attestation、人工授權、不可替代控制與事後補跑流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
+只有具帳務可見性的 human maintainer 確認當期 included Actions minutes 已耗盡時，才可能使用本機 fallback；runner 註記本身不構成證據。Promotion 到 `main` 另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹，因此已刪除與尚未提交的機密都不會靜默略過；尚未 `git init` 的新專案仍可安全掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 
