@@ -21,7 +21,7 @@
 8. Add or update the narrowest regression check that proves non-trivial behavior.
 9. Run targeted checks while iterating, then run `./scripts/verify-template.sh` before opening or updating a pull request.
 10. Before closing the final open Issue in a Milestone, re-check the story acceptance criteria, mark every verified item complete, and add any genuinely required follow-up Issue. The lifecycle workflow closes a zero-open-Issue Milestone only when every acceptance checkbox is checked, and reopens it when open work or an unchecked criterion returns.
-11. Open the pull request against `main` or its immediate parent in the stack, include `Closes #<issue-number>`, and never merge it yourself.
+11. Before using `Closes`, `Fixes`, or `Resolves`, complete every task in the pull request and referenced Issue; do not check work that lacks its stated evidence. Open the pull request against `main` or its immediate parent in the stack, and never merge it yourself.
 12. Report what changed, which verification ran, and any remaining limitation.
 
 Parallel writable agents must use one branch and one Git worktree per task, and run concurrently only when their scopes are independent. Detect and reuse a host-managed worktree before creating one; never force the same branch into multiple worktrees, remove a worktree you did not create, or remove one with uncommitted changes. Worktrees isolate files, not integration: every result still follows this repository's pull request, CI, review, and final verification path.

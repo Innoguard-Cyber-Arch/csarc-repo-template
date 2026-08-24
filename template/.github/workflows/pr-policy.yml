@@ -158,20 +158,35 @@ jobs:
             echo "PR body must include Closes #${issue_number}."
             exit 1
           fi
+          unchecked_task_pattern='^[[:space:]]*-[[:space:]]+\[[[:space:]]*\]'
+          if grep -Eq "$unchecked_task_pattern" <<<"${PR_BODY:-}"; then
+            echo "Complete every pull request checklist item before using a closing keyword."
+            exit 1
+          fi
 
           if [[ "${PR_ISSUE_STATE+x}" == "x" ]]; then
             issue_state="$PR_ISSUE_STATE"
             issue_title="${PR_ISSUE_TITLE:-}"
+            issue_body="${PR_ISSUE_BODY:-}"
+            issue_has_unchecked=false
+            if grep -Eq "$unchecked_task_pattern" <<<"$issue_body"; then
+              issue_has_unchecked=true
+            fi
           else
             issue_payload="$(
               gh api "repos/$GITHUB_REPOSITORY/issues/$issue_number" \
-                --jq 'select(.pull_request | not) | [.state, .title] | @tsv' \
+                --jq 'select(.pull_request | not) | [.state, .title, ((.body // "") | test("(?m)^\\s*-\\s+\\[\\s*\\]"))] | @tsv' \
                 2>/dev/null || true
             )"
-            IFS=$'\t' read -r issue_state issue_title <<<"$issue_payload"
+            IFS=$'\t' read -r issue_state issue_title issue_has_unchecked \
+              <<<"$issue_payload"
           fi
           if [[ "$issue_state" != "open" ]]; then
             echo "Issue #${issue_number} must exist and remain open until merge."
+            exit 1
+          fi
+          if [[ "$issue_has_unchecked" == "true" ]]; then
+            echo "Issue #${issue_number} still has unchecked acceptance tasks."
             exit 1
           fi
           if [[ -x ./scripts/validate-issue-title ]]; then
