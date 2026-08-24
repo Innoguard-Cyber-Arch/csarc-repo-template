@@ -33,6 +33,8 @@ Link the approved spec, plan, user story, or adoption audit.
 
 Attach only Issues that directly advance these criteria. Do not attach their
 pull requests as duplicate progress items. Use a due date only for a real
-deadline, not as a release label. Before creation, inspect the body, comments,
-and linked pull requests of relevant open and closed Issues; titles and labels
-alone are not enough to reverse a decision.
+deadline, not as a release label. Check every verified acceptance item before
+closing the final Issue; the lifecycle workflow keeps incomplete stories open.
+Before creation, inspect the body, comments, and linked pull requests of
+relevant open and closed Issues; titles and labels alone are not enough to
+reverse a decision.

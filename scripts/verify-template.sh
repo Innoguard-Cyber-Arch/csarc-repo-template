@@ -683,26 +683,16 @@ grep -q "CSARC_ENABLE_PYPI_PUBLISHING == 'true'" \
   .github/workflows/release-template.yml
 test -f scripts/release_policy.py
 test -f version.txt
+release_tag="$(git tag --points-at HEAD --list 'v[0-9]*' --sort=-version:refname | head -1)"
+version_args=(verify-version --root .)
+if [[ -n "$release_tag" ]]; then
+  version_args+=(--tag "$release_tag")
+fi
+uv run --no-project python scripts/release_policy.py "${version_args[@]}"
 uv run python - <<'PY'
 import json
-import tomllib
 from pathlib import Path
 
-version = Path("version.txt").read_text(encoding="utf-8").strip()
-with Path("pyproject.toml").open("rb") as source:
-    project_version = tomllib.load(source)["project"]["version"]
-with Path("uv.lock").open("rb") as source:
-    lock_packages = tomllib.load(source)["package"]
-lock_version = next(
-    package["version"]
-    for package in lock_packages
-    if package["name"] == "csarc-repo-cli"
-)
-manifest_version = json.loads(
-    Path(".release-please-manifest.json").read_text(encoding="utf-8")
-)["."]
-if len({version, project_version, lock_version, manifest_version}) != 1:
-    raise SystemExit("Template release versions do not match.")
 release_config = json.loads(
     Path("release-please-config.json").read_text(encoding="utf-8")
 )
@@ -713,10 +703,11 @@ extra_paths = {
 }
 if not {"pyproject.toml", "uv.lock", "README.md", "docs/index.html"} <= extra_paths:
     raise SystemExit("The template release does not update every visible version.")
-for path in (Path("README.md"), Path("docs/index.html")):
-    content = path.read_text(encoding="utf-8")
-    if f"v{version}" not in content or "x-release-please-version" not in content:
-        raise SystemExit(f"{path} does not expose the current release version marker.")
+template_manifest = json.loads(
+    Path("template/.release-please-manifest.json").read_text(encoding="utf-8")
+)["."]
+if template_manifest != "0.1.0" or Path("template/version.txt").read_text().strip() != "0.1.0":
+    raise SystemExit("Generated projects must keep their independent 0.1.0 baseline.")
 PY
 grep -q '^## Working loop$' AGENTS.md
 grep -q '^## Commands$' AGENTS.md

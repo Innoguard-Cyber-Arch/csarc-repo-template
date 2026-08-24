@@ -74,7 +74,7 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
-      - name: Materialize the immutable tag version
+      - name: Verify the immutable tag version
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: >-
@@ -100,7 +100,7 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
-      - name: Materialize the immutable tag version
+      - name: Verify the immutable tag version
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: >-

@@ -19,9 +19,10 @@ classify_probe = MODULE["classify_probe"]
 direct_release = MODULE["direct_release"]
 release_intent = MODULE["release_intent"]
 release_plan = MODULE["release_plan"]
+release_version_errors = MODULE["release_version_errors"]
 select_release_mode = MODULE["select_release_mode"]
+verify_release_version = MODULE["verify_release_version"]
 optional_integration_preflight = MODULE["optional_integration_preflight"]
-update_release_version = MODULE["update_release_version"]
 
 
 def capabilities(
@@ -206,6 +207,20 @@ def git(root: Path, *arguments: str) -> str:
     ).stdout.strip()
 
 
+def write_release_surfaces(root: Path, version: str) -> None:
+    """Create the minimum governed release surfaces used by direct mode."""
+    (root / ".release-please-manifest.json").write_text(
+        json.dumps({".": version}) + "\n", encoding="utf-8"
+    )
+    (root / "version.txt").write_text(f"{version}\n", encoding="utf-8")
+    (root / "README.md").write_text(
+        f"v{version} <!-- x-release-please-version -->\n", encoding="utf-8"
+    )
+    (root / "CHANGELOG.md").write_text(
+        f"# Changelog\n\n## v{version}\n", encoding="utf-8"
+    )
+
+
 def test_release_plan_uses_reachable_tags_and_commit_order(
     tmp_path: Path,
 ) -> None:
@@ -329,9 +344,12 @@ def test_direct_release_creates_one_tag_draft_and_dispatch(
     git(tmp_path, "init", "-b", "main")
     git(tmp_path, "config", "user.name", "Release Test")
     git(tmp_path, "config", "user.email", "release@example.invalid")
-    (tmp_path / ".release-please-manifest.json").write_text(
-        '{".": "0.1.0"}\n', encoding="utf-8"
-    )
+    write_release_surfaces(tmp_path, "0.1.0")
+    (tmp_path / "file").write_text("baseline\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    git(tmp_path, "tag", "v0.1.0")
+    write_release_surfaces(tmp_path, "0.2.0")
     (tmp_path / "file").write_text("content\n", encoding="utf-8")
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-m", "feat: direct release")
@@ -353,23 +371,62 @@ def test_direct_release_creates_one_tag_draft_and_dispatch(
     )
 
 
-def test_prepare_materializes_tag_version(tmp_path: Path) -> None:
-    (tmp_path / ".release-please-manifest.json").write_text(
-        '{".": "0.1.0"}\n', encoding="utf-8"
+def test_direct_release_refuses_an_unmaterialized_version(
+    tmp_path: Path,
+) -> None:
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.1.0")
+    (tmp_path / "file").write_text("baseline\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    git(tmp_path, "tag", "v0.1.0")
+    (tmp_path / "file").write_text("fix\n", encoding="utf-8")
+    git(tmp_path, "commit", "-am", "fix: direct release")
+    sha = git(tmp_path, "rev-parse", "HEAD")
+    api = DirectReleaseAPI(sha)
+
+    payload, failed = direct_release(
+        api, "owner/repo", sha, "main", "release.yml", tmp_path
     )
+
+    assert not failed
+    assert payload["mode"] == "verification-only"
+    assert payload["status"] == "version-not-materialized"
+    assert payload["tag"] == "v0.1.1"
+    assert not any("/git/ref/tags/" in path for _, path, _ in api.calls)
+
+
+def test_prepare_requires_tag_version_without_mutating_files(
+    tmp_path: Path,
+) -> None:
+    write_release_surfaces(tmp_path, "0.2.0")
     (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "demo"\nversion = "0.1.0"\n', encoding="utf-8"
+        '[project]\nname = "demo"\nversion = "0.2.0"\n', encoding="utf-8"
     )
     (tmp_path / "uv.lock").write_text(
-        '[[package]]\nname = "demo"\nversion = "0.1.0"\n', encoding="utf-8"
+        '[[package]]\nname = "demo"\nversion = "0.2.0"\n', encoding="utf-8"
     )
+
+    before = {
+        path: path.read_text(encoding="utf-8")
+        for path in tmp_path.iterdir()
+        if path.is_file()
+    }
+    assert verify_release_version(tmp_path, "0.2.0") == "0.2.0"
+    assert before == {
+        path: path.read_text(encoding="utf-8")
+        for path in tmp_path.iterdir()
+        if path.is_file()
+    }
+
+    errors = release_version_errors(tmp_path, "0.2.1")
+    assert ".release-please-manifest.json is 0.2.0, expected 0.2.1" in errors
+    assert "CHANGELOG.md has no 0.2.1 release entry" in errors
+
     (tmp_path / "README.md").write_text(
-        "v0.1.0 <!-- x-release-please-version -->\n", encoding="utf-8"
+        "No version marker.\n", encoding="utf-8"
     )
-    update_release_version(tmp_path, "0.2.0")
-    assert json.loads(
-        (tmp_path / ".release-please-manifest.json").read_text()
-    ) == {".": "0.2.0"}
-    assert 'version = "0.2.0"' in (tmp_path / "pyproject.toml").read_text()
-    assert 'version = "0.2.0"' in (tmp_path / "uv.lock").read_text()
-    assert "v0.2.0" in (tmp_path / "README.md").read_text()
+    errors = release_version_errors(tmp_path, "0.2.0")
+    assert "README.md has no x-release-please-version marker" in errors
