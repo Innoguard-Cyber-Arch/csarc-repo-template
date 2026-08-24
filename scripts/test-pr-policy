@@ -92,6 +92,11 @@ pass|dev promotion|dev|feat!: promote tested changes|enhancement|main|dev|-|-|-
 pass|release please|main|chore(main): release 0.2.0|enhancement|main|release-please--branches--main--components--repo|-|-|-
 pass|dependabot|main|build(deps): bump pytest|enhancement|main|dependabot/pip/pytest-9|-|-|-
 pass|version automation|main|build(python): adopt Python 3.15|enhancement|main|automation/python-3.15|-|-|-
+pass|delivery standalone|delivery|feat(api): add report|enhancement|dev/next|feat/42-report|Closes #42|open|-
+pass|delivery standalone stack|delivery|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=dev/next
+pass|delivery hotfix|delivery|fix(api): stop outage|bug,hotfix|main|fix/42-outage|Fixes #42|open|-
+pass|delivery automation|delivery|build(deps): bump pytest|enhancement|dev/next|dependabot/pip/pytest-9|-|-|-
+pass|delivery sync|delivery|chore(sync): merge main into milestone|enhancement|dev/m7-staged-ci|sync/main-to-m7-staged-ci-abcdef0|-|-|-
 fail|version automation missing label|main|build(python): adopt Python 3.15|-|main|automation/python-3.15|-|-|-
 fail|missing PR label|main|feat(api): add report|-|main|feat/42-report|Closes #42|open|-
 fail|multiple PR labels|main|feat(api): add report|enhancement,documentation|main|feat/42-report|Closes #42|open|-
@@ -111,8 +116,76 @@ fail|ambiguous stack base|main|feat(api): add report|enhancement|feat/41-parent|
 fail|cyclic stack base|main|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=feat/40-root;feat/40-root=feat/41-parent
 fail|main mode targets dev|main|feat(api): add report|enhancement|dev|feat/42-report|Closes #42|open|-
 fail|dev work targets main|dev|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
+fail|delivery work targets main|delivery|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
+fail|delivery non-fix hotfix|delivery|feat(api): rush report|enhancement,hotfix|main|feat/42-report|Closes #42|open|-
+fail|delivery automation targets main|delivery|build(deps): bump pytest|enhancement|main|dependabot/pip/pytest-9|-|-|-
+fail|delivery sync mismatch|delivery|chore(sync): merge main into milestone|enhancement|dev/m8-other|sync/main-to-m7-staged-ci-abcdef0|-|-|-
 fail|unknown branch strategy|staging|feat(api): add report|enhancement|staging|feat/42-report|Closes #42|open|-
 CASES
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="feat(api): add report" \
+PR_LABELS="enhancement" \
+PR_BASE="dev/m7-staged-ci" \
+PR_HEAD="feat/42-report" \
+PR_BODY="Closes #42" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_MILESTONE_NUMBER="7" \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="feat!: promote milestone seven" \
+PR_LABELS="enhancement,promotion" \
+PR_BASE="main" \
+PR_HEAD="dev/m7-staged-ci" \
+PR_BODY="Closes #42" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_MILESTONE_NUMBER="7" \
+PR_ISSUE_LABELS="enhancement,promotion" \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="feat!: promote wrong milestone" \
+  PR_LABELS="enhancement,promotion" \
+  PR_BASE="main" \
+  PR_HEAD="dev/m7-staged-ci" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="8" \
+  PR_ISSUE_LABELS="enhancement,promotion" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a promotion Issue from another Milestone."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="fix(api): stop outage" \
+  PR_LABELS="bug,hotfix" \
+  PR_BASE="main" \
+  PR_HEAD="fix/42-outage" \
+  PR_BODY="Fixes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a Milestone Issue as a direct hotfix."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="delivery" \
+PR_DELIVERY_CUTOVER_ISSUE="185" \
+PR_TITLE="feat(api): finish pre-cutover work" \
+PR_LABELS="enhancement" \
+PR_BASE="main" \
+PR_HEAD="feat/184-finish-work" \
+PR_BODY="Closes #184" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_MILESTONE_NUMBER="7" \
+  "$validator" >/dev/null
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="main" \

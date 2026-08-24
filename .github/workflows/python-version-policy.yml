@@ -93,7 +93,7 @@ jobs:
               "Target Python: ${version}. This automated version-policy PR does not require a work Issue.")"
             pr_url="$(
               gh pr create \
-                --base main \
+                --base dev/next \
                 --head "$branch" \
                 --label enhancement \
                 --title "build(python): adopt Python ${version}" \

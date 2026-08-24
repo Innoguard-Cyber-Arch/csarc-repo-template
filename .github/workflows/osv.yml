@@ -3,11 +3,11 @@ name: OSV
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main]
+    branches: [main, dev, "dev/**"]
   merge_group:
     types: [checks_requested]
   push:
-    branches: [main]
+    branches: [main, dev, "dev/**"]
   schedule:
     - cron: "17 3 * * 1"
 

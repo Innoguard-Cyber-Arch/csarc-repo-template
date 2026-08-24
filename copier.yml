@@ -83,11 +83,12 @@ language:
 
 branch_strategy:
   type: str
-  help: Use dev only when the repository has a real shared integration or test environment
+  help: Choose how issue branches are integrated before promotion to main
   choices:
+    Milestone delivery branches and rolling dev/next: delivery
     Short branch → pull request → main: main
     Shared test environment → dev → main: dev
-  default: main
+  default: delivery
 
 package_name:
   type: str

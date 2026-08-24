@@ -35,7 +35,7 @@ window.CSARC_SITE_CONTENT = {
   ],
   workflow: [
     { title: "1｜定義工作", detail: "先限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR；向使用者摘要，或在新工作單記錄既有決策是沿用、取代或駁回。Issue 再以 12–80 字元英文標題摘要成果。" },
-    { title: "2｜分支與實作", detail: "從 {{ branch_strategy }} 或最終回到它的 open PR 分支建立 type/<Issue 編號>-簡稱；若超出原單就另開 Issue。確認 duplicate 時連結 canonical Issue 並用原生 Duplicate 原因關閉，純 triage 不需 PR。" },
+    { title: "2｜分支與實作", detail: "{% if branch_strategy == 'delivery' %}Milestone 工作從對應 dev/m<編號>-<簡稱>、孤立工作從 dev/next 建立{% else %}從 {{ branch_strategy }} 或最終回到它的 open PR 分支建立{% endif %} type/<Issue 編號>-簡稱；若超出原單就另開 Issue。確認 duplicate 時連結 canonical Issue 並用原生 Duplicate 原因關閉，純 triage 不需 PR。" },
     { title: "3｜驗證", detail: "本機執行 ./scripts/verify，PR 由 CI 重跑同一入口；只有 human 確認 Actions 免費額度耗盡時，才可留下綁定 PR SHA 的一次性本機驗證聲明。" },
     { title: "4｜審查", detail: "非 draft PR 會從導入時設定的 reviewers 排除作者後輪派一位；使用 closing keyword 前，自身與 referenced Issue 不得留有未勾選 task，再依 Conventional Commit title 恰選一個類型標籤。" },
     { title: "5｜交付", detail: "tag 建立可追溯成品、SHA-256 與非空 SBOM；部署依專案另訂。" }

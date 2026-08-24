@@ -11,7 +11,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main{% if branch_strategy == "dev" %}, dev{% endif %}]
+    branches: [main{% if branch_strategy == "dev" %}, dev{% elif branch_strategy == "delivery" %}, "dev/**"{% endif %}]
 
 concurrency:
   group: {% raw %}${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}{% endraw %}

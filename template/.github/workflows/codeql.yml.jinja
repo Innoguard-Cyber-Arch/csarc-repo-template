@@ -4,9 +4,9 @@ name: CodeQL
 
 on:
   pull_request:
-    branches: [{{ branch_strategy }}]
+    branches: [{% if branch_strategy == "delivery" %}main, "dev/**"{% else %}{{ branch_strategy }}{% endif %}]
   push:
-    branches: [{{ branch_strategy }}]
+    branches: [{% if branch_strategy == "delivery" %}main, "dev/**"{% else %}{{ branch_strategy }}{% endif %}]
   workflow_dispatch:
 
 permissions:
