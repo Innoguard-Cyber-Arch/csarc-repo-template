@@ -32,11 +32,7 @@ uv run ruff format --check \
   scripts/sync_milestone_state.py \
   scripts/update_python_version.py \
   scripts/verify_release_consumption.py \
-  tests/test_spec_to_issue.py \
-  template/scripts \
-  template/tests/test_milestone_lifecycle.py \
-  template/tests/test_release_policy.py \
-  template/tests/test_spec_to_issue.py
+  tests/test_spec_to_issue.py
 uv run ruff check \
   src/csarc_cli \
   tests/test_cli.py \
@@ -51,11 +47,7 @@ uv run ruff check \
   scripts/sync_milestone_state.py \
   scripts/update_python_version.py \
   scripts/verify_release_consumption.py \
-  tests/test_spec_to_issue.py \
-  template/scripts \
-  template/tests/test_milestone_lifecycle.py \
-  template/tests/test_release_policy.py \
-  template/tests/test_spec_to_issue.py
+  tests/test_spec_to_issue.py
 uv run mypy \
   src/csarc_cli \
   scripts/report_dependency_ceiling.py \
@@ -66,19 +58,8 @@ uv run mypy \
   scripts/update_python_version.py \
   scripts/verify_release_consumption.py \
   tests/test_spec_to_issue.py
-uv run mypy template/scripts template/tests/test_spec_to_issue.py
 uv run pytest \
-  tests/test_milestone_lifecycle.py \
-  tests/test_release_policy.py \
-  tests/test_release_prompt.py \
-  tests/test_release_consumption.py \
-  tests/test_spec_to_issue.py
-uv run pytest tests/test_cli.py \
   --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80
-uv run pytest \
-  template/tests/test_milestone_lifecycle.py \
-  template/tests/test_release_policy.py \
-  template/tests/test_spec_to_issue.py
 uv build
 uvx --from "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)" \
   csarc --help >/dev/null
@@ -569,11 +550,7 @@ fi
 uv pip check --python "$lower_bounds_root/.venv/bin/python"
 if ! "$lower_bounds_root/.venv/bin/python" -m pytest \
   tests/test_milestone_lifecycle.py tests/test_release_policy.py \
-  tests/test_spec_to_issue.py ||
-  ! "$lower_bounds_root/.venv/bin/python" \
-    -m pytest template/tests/test_milestone_lifecycle.py \
-    template/tests/test_release_policy.py \
-    template/tests/test_spec_to_issue.py; then
+  tests/test_spec_to_issue.py; then
   echo "Root tests fail with the declared direct dependency lower bounds."
   exit 1
 fi
@@ -1844,7 +1821,7 @@ git -C "$fixture_root/all-features-project" diff --cached --check
   "$repo_root/.venv/bin/zizmor" . --format plain
 )
 
-# Existing-project mode: changed-line coverage keeps the same 80% threshold.
+# Changed-line coverage keeps the same 80% threshold across the runtime matrix.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data project_name="Existing Project Test" \
   --data project_slug="existing-project-test" \
