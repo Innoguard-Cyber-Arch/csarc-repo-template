@@ -2612,11 +2612,13 @@ scripts/apply-repository-settings.sh`
         {
           title: '每次修改都測新案、既有案導入與後續更新',
           goal: '可導入的條件是三條生命週期都通過，不是只看檔案存在。',
-          summary: '測試會真的執行 CLI init、adopt dry-run／machine plan／隔離驗證／apply、update check／dry-run／apply 與衝突 fail-closed；adopt dry-run 不修改 target repo，正式套用拒絕任何 HEAD、working tree、release、answers 或輸出漂移。CLI 內部仍以 Copier 產生與 smart update。root-only 測試資產若混入生成 repo 也會失敗。',
+          summary: '測試會真的執行 CLI init、adopt dry-run／machine plan／隔離驗證／apply，以及人工合併後的 finalize dry-run／apply-plan；update 也涵蓋 check／dry-run／apply 與衝突 fail-closed。兩次 dry-run 都不修改 target repo，正式套用拒絕任何 HEAD、working tree、release、answers、人工結果或輸出漂移。CLI 內部仍以 Copier 產生與 smart update。root-only 測試資產若混入生成 repo 也會失敗。',
           file: 'src/csarc_cli/＋tests/test_cli.py＋scripts/verify-template.sh',
           code: `csarc init ./my-project
 csarc adopt --dry-run
 csarc adopt --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
+csarc adopt --finalize --dry-run
+csarc adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
 csarc update --check --json
 csarc update`
         }
@@ -2707,11 +2709,15 @@ uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project \\
       },
       existing: {
         title: '把公版導入既有 repo',
-        goal: 'CLI 自行找出 Git root；--dry-run 可讀取 dirty tree，但只在 repo 外產生 Markdown、PDF 與不可套用的 machine plan。乾淨 tree 會先在暫存 clone 完成固定合併、產品 hook 與完整驗證，再鎖定可套用 plan。',
+        goal: 'CLI 自行找出 Git root；--dry-run 可讀取 dirty tree，但只在 repo 外產生 Markdown、PDF 與不可套用的 machine plan。乾淨 tree 會先在暫存 clone 完成固定合併、產品 hook 與完整驗證，再鎖定可套用 plan；需要人工合併時，finalize 也必須重新 dry-run 並套用同一份第二階段 plan。',
         location: '既有 repo 根目錄',
         code: `git switch -c chore/<issue-number>-adopt-csarc-template
 uvx --python 3.14 --from csarc-repo-cli csarc adopt --dry-run
 uvx --python 3.14 --from csarc-repo-cli csarc adopt \\
+  --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
+# Only when the first apply creates a manual-merge checkpoint:
+uvx --python 3.14 --from csarc-repo-cli csarc adopt --finalize --dry-run
+uvx --python 3.14 --from csarc-repo-cli csarc adopt --finalize \\
   --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json`
       },
       update: {
