@@ -2,7 +2,7 @@ name: Governance notice
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, ready_for_review]
 
 permissions:
   actions: read
@@ -60,6 +60,30 @@ jobs:
           else
             gh api --method POST "$endpoint" -f body="$body" >/dev/null
           fi
+      - name: Request coworker review
+        if: ${{ github.event.action != 'synchronize' && !github.event.pull_request.draft }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          mapfile -t configured_reviewers < <(awk '!/^#/ && NF {print $1}' .github/REVIEWERS)
+          eligible_reviewers=()
+          for account in "${configured_reviewers[@]}"; do
+            if [[ ! "$account" =~ ^@([A-Za-z0-9][A-Za-z0-9-]{0,38})$ ]]; then
+              echo "Invalid reviewer in .github/REVIEWERS: $account" >&2
+              exit 1
+            fi
+            [[ "${BASH_REMATCH[1]}" == "$PR_AUTHOR" ]] || eligible_reviewers+=("${BASH_REMATCH[1]}")
+          done
+          if (( ${#eligible_reviewers[@]} == 0 )); then
+            echo "No configured reviewer remains after excluding the pull request author." >&2
+            exit 1
+          fi
+          reviewer="${eligible_reviewers[$((PR_NUMBER % ${#eligible_reviewers[@]}))]}"
+          gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/requested_reviewers" \
+            -f "reviewers[]=$reviewer" >/dev/null
       - name: Preserve fail-closed checks on capable plans
         if: ${{ steps.governance.outputs.status != '0' }}
         env:

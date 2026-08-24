@@ -1,7 +1,7 @@
 ---
 id: SPEC-001
 title: Replace this example with one observable outcome
-owner: @Innoguard-Cyber-Arch/repository-maintainers
+owner: @Innoguard-Cyber-Arch/arch
 priority: P2
 estimate: 1-3 days
 status: draft
