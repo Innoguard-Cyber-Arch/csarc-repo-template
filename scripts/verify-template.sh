@@ -872,7 +872,7 @@ grep -q 'DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"' src/csarc_cli/cli.py
 grep -Fqx '* @Innoguard-Cyber-Arch/arch' .github/CODEOWNERS
 grep -Fqx '@jachline28' .github/REVIEWERS
 grep -q '所有方案都先用 repository teams API 驗證' docs/index.html
-grep -q 'Free private 不支援 team review request' template/docs/index.html.jinja
+grep -q 'Free private 不支援 team review request' template/site/index.html.jinja
 
 grep -q "'## Purpose'" .github/workflows/python-version-policy.yml
 grep -q "'## 完成清單'" .github/workflows/python-version-policy.yml
