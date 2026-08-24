@@ -1087,6 +1087,22 @@ if uv run copier copy --trust --defaults --vcs-ref HEAD \
   echo "Copier accepted a missing security reporting channel."
   exit 1
 fi
+for invalid_metadata in \
+  'project_description= ToDo ' \
+  'project_run_command= tbD ' \
+  'security_reporting_channel= TODO '; do
+  metadata_field="${invalid_metadata%%=*}"
+  if uv run copier copy --trust --defaults --vcs-ref HEAD \
+    "${fixture_security_args[@]}" \
+    --data project_slug="invalid-$metadata_field" \
+    --data language=ci \
+    --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+    --data "$invalid_metadata" \
+    "$repo_root" "$fixture_root/invalid-$metadata_field" >/dev/null 2>&1; then
+    echo "Copier accepted placeholder metadata for $metadata_field."
+    exit 1
+  fi
+done
 if uv run copier copy --trust --defaults --vcs-ref HEAD \
   "${fixture_security_args[@]}" \
   --data project_slug="Invalid/Slug" \
@@ -1263,6 +1279,21 @@ if metadata_error="$(
   exit 1
 fi
 grep -q 'README.md has unfinished run command metadata' \
+  <<<"$metadata_error"
+cp "$fixture_root/default-project/README.md" "$metadata_probe/README.md"
+cp "$fixture_root/default-project/SECURITY.md" "$metadata_probe/SECURITY.md"
+printf '%s\n' ' ToDo ' >> "$metadata_probe/README.md"
+printf '%s\n' ' tBd ' >> "$metadata_probe/SECURITY.md"
+if metadata_error="$(
+  cd "$metadata_probe"
+  ./scripts/check-project-metadata 2>&1
+)"; then
+  echo "Generated verification must reject TODO/TBD metadata."
+  exit 1
+fi
+grep -q 'README.md has unfinished project description or run command metadata' \
+  <<<"$metadata_error"
+grep -q 'SECURITY.md has unfinished security reporting channel metadata' \
   <<<"$metadata_error"
 test ! -f "$fixture_root/default-project/.github/workflows/codeql.yml"
 grep -q '"language_profile": "python"' \
@@ -1852,6 +1883,7 @@ fi
 
 # Main-only projects keep the same guidance contract without delivery wording.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_name="Main Branch Test" \
   --data project_slug="main-branch-test" \
   --data language=ci \
@@ -2309,8 +2341,6 @@ printf '%s\n' 'window.PROJECT_OWNED_SITE = true;' \
   >> "$update_project/docs/site-content.js"
 printf '%s\n' '/* PROJECT_OWNED_THEME */' \
   >> "$update_project/docs/site-theme.css"
-printf '%s\n' 'PROJECT_OWNED_README' >> "$update_project/README.md"
-printf '%s\n' 'PROJECT_OWNED_SECURITY' >> "$update_project/SECURITY.md"
 cp "$repo_root/docs/adr/agent-collaboration.md" \
   "$update_project/docs/decisions/project-owned.md"
 printf '%s\n' '' 'PROJECT_OWNED_MEMORY' \
@@ -2327,6 +2357,10 @@ grep -q 'project_mode: existing' "$update_project/.copier-answers.yml"
 grep -q '"template_mode": "existing"' \
   "$update_project/.csarc/profile.json"
 grep -q '^owner = "legacy"$' "$update_project/pyproject.toml"
+printf '%s\n' '# Existing product' 'PROJECT_OWNED_README' \
+  > "$update_project/README.md"
+printf '%s\n' '# Existing security policy' 'PROJECT_OWNED_SECURITY' \
+  > "$update_project/SECURITY.md"
 
 git -C "$update_project" init -b main
 git -C "$update_project" config user.name "Template Test"
@@ -2346,7 +2380,8 @@ git -C "$update_source" tag v0.1.1
 
 (
   cd "$update_project"
-  "$repo_root/.venv/bin/copier" update --trust --defaults --vcs-ref v0.1.1
+  "$repo_root/.venv/bin/copier" update --trust --defaults --vcs-ref v0.1.1 \
+    "${fixture_security_args[@]}"
 )
 
 test -f "$update_project/update-marker"

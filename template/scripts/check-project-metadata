@@ -12,13 +12,24 @@ reject_placeholder() {
   fi
 }
 
+reject_line_placeholder() {
+  local file="$1"
+  local field="$2"
+  if grep -Eiq '^[[:space:]]*(todo|tbd)[[:space:]]*$' "$file"; then
+    echo "$file has unfinished $field metadata: TODO/TBD" >&2
+    status=1
+  fi
+}
+
 reject_placeholder README.md "project description" "A Cyber-Arch project"
 reject_placeholder README.md "project description" "請在這裡補上主要使用者"
 reject_placeholder README.md "run command" "請在這裡補上產品最短"
 reject_placeholder README.md "repository URL" "<repository-url>"
 reject_placeholder README.md "CI badge" "<org>/<repo>"
+reject_line_placeholder README.md "project description or run command"
 reject_placeholder SECURITY.md "security reporting channel" \
   "Project owner: replace"
+reject_line_placeholder SECURITY.md "security reporting channel"
 if [[ -f pyproject.toml ]]; then
   reject_placeholder pyproject.toml "repository URL" "<repository-url>"
 fi
