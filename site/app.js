@@ -425,7 +425,7 @@ jobs:
         {
           title: '一般套件新版觀察三天，再由測試與人員決定是否合併',
           goal: '安全更新不等待；三天規則主要降低剛發布惡意版本的早期風險。',
-          summary: 'Dependabot 同時管理 `uv` 與 `npm` 生態；`cooldown.default-days=3` 延後一般升版，安全更新仍立即提出。',
+          summary: 'Dependabot 同時管理 GitHub Actions、`uv` 與 `npm` 生態；`cooldown.default-days=3` 延後一般升版，安全更新仍立即提出。只有官方 `actions/*` 的 minor／patch 會合併成一張 PR；major 與第三方 Actions 保持獨立，方便審查與回退。',
           file: '.github/dependabot.yml',
           code: `updates:
   - package-ecosystem: uv

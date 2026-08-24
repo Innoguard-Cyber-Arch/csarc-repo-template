@@ -36,6 +36,8 @@ dependency_version_policy:
       required checks without a third-party App or long-lived credential.
       Keep pnpm minimumReleaseAge because it also protects local and CI
       resolution outside automated dependency pull requests.
+      Group only minor and patch updates from the official actions/* namespace;
+      major and third-party Action updates remain isolated for review.
     decision_recorded_in: docs/index.html (supply track)
     reconsider_when: >-
       Dependabot cannot express a demonstrated cross-repository policy and
