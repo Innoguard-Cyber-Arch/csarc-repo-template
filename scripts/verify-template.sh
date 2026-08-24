@@ -14,11 +14,44 @@ prime_gitleaks_cache() {
   cp -R "$repo_root/.cache/gitleaks" "$project_root/.cache/gitleaks"
 }
 
+runner_python() {
+  local requested="$1"
+  local candidate actual major minor patch key
+  local best=""
+  local best_key=-1
+  local candidates=()
+  [[ -n "${RUNNER_TOOL_CACHE:-}" ]] || return 1
+  shopt -s nullglob
+  candidates=("$RUNNER_TOOL_CACHE"/Python/"$requested"*/*/bin/python)
+  shopt -u nullglob
+  for candidate in "${candidates[@]}"; do
+    actual="$($candidate -c 'import platform; print(platform.python_version())')"
+    if [[ "$requested" == *.*.* ]]; then
+      [[ "$actual" == "$requested" ]] || continue
+    else
+      [[ "$actual" == "$requested".* ]] || continue
+    fi
+    IFS=. read -r major minor patch <<<"$actual"
+    key=$((major * 1000000 + minor * 1000 + patch))
+    if ((key > best_key)); then
+      best="$candidate"
+      best_key="$key"
+    fi
+  done
+  [[ -n "$best" ]] || return 1
+  printf '%s\n' "$best"
+}
+
 unset VIRTUAL_ENV
 verify_root_python() (
   local python_version="$1"
+  local interpreter
   export UV_PYTHON="$python_version"
   export UV_PROJECT_ENVIRONMENT="$fixture_root/.venv-root-${python_version//./-}"
+  if interpreter="$(runner_python "$python_version")"; then
+    export PATH="$(dirname "$interpreter"):$PATH"
+    export UV_PYTHON_PREFERENCE=only-system
+  fi
   echo "Verifying template repository with Python $python_version"
   uv sync --locked --python "$python_version"
   uv lock --check
@@ -1728,8 +1761,16 @@ if ! grep -qF \
   exit 1
 fi
 for python_version in 3.11.0 3.11 3.12 3.13 3.14; do
-  if ! uv python find "$python_version" >/dev/null 2>&1 &&
-    ! uv python install "$python_version"; then
+  python_path="$PATH"
+  python_preference="${UV_PYTHON_PREFERENCE:-managed}"
+  if interpreter="$(runner_python "$python_version")"; then
+    python_path="$(dirname "$interpreter"):$python_path"
+    python_preference=only-system
+  fi
+  if ! PATH="$python_path" UV_PYTHON_PREFERENCE="$python_preference" \
+    uv python find "$python_version" >/dev/null 2>&1 &&
+    ! UV_PYTHON_PREFERENCE="$python_preference" \
+      uv python install "$python_version"; then
     if [[ "$python_version" == 3.11.0 && "$(uname -s)-$(uname -m)" == Darwin-arm64 ]]; then
       echo "Skipping Python 3.11.0 execution: uv does not publish this macOS arm64 build."
       continue
@@ -1738,7 +1779,9 @@ for python_version in 3.11.0 3.11 3.12 3.13 3.14; do
   fi
   (
     cd "$fixture_root/existing-project"
-    CSARC_PYTHON_VERSION="$python_version" \
+    PATH="$python_path" \
+      UV_PYTHON_PREFERENCE="$python_preference" \
+      CSARC_PYTHON_VERSION="$python_version" \
       UV_PROJECT_ENVIRONMENT=".venv-${python_version//./-}" \
       DIFF_COVER_COMPARE_BRANCH=HEAD \
       ./scripts/verify
