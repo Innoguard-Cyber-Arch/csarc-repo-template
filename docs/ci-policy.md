@@ -239,12 +239,16 @@ checks 並記錄結果；平台不再允許補跑時，另開 Issue 保留缺口
 1. 在乾淨、精確等於 promotion PR head 的 worktree 執行 `prepare`，且
    `--candidate-sha` 必須是該 head SHA；保存 candidate archive、SHA-256、base/head SHA、
    candidate tree、納入 PR、SemVer intent 與 canary 三態。
-2. 執行完整本機驗證與所有可忠實重現的 required checks。若 canary 是 `allowed`，
-   fallback 不得替代它；只有 `blocked`／`unknown` 可維持 artifact-only。
-3. 先在同一 PR 留下標準 attestation，再由 human maintainer 對相同 head SHA 留下
-   明確授權。使用兩則留言 URL、所有 zero-step blocked run URL 與實際驗證命令執行
-   `finalize-quota-fallback`，產生 machine-readable evidence。此 evidence 的 gate 是
-   `quota-fallback`、`release_eligible` 固定為 `false`；把 JSON 與 archive digest 留在 PR。
+2. `finalize-quota-fallback` 只接受 preflight archive、兩則留言 URL 與所有 blocked run
+   URL；工具會自行執行固定的 `./scripts/verify-template.sh` 並重驗 promotion preflight，
+   不接受呼叫者提供的命令字串。若 canary 是 `allowed`，fallback 不得替代它；只有
+   `blocked`／`unknown` 可維持 artifact-only。
+3. 先在同一 PR 留下標題為 `Actions quota fallback attestation` 的標準留言，再由 human
+   maintainer 留下 `Actions quota fallback authorization`。兩則留言都必須使用工具定義的
+   canonical JSON，精確綁定 repository、PR、base/head SHA、candidate tree、archive digest
+   與完整 blocked-run set；前者明示具 billing visibility 且 included minutes 已耗盡，後者
+   明示一次性、無 admin bypass 的授權。工具會 refetch 留言、作者資格與 live GitHub
+   identity；輸出的 gate 是 `quota-fallback`、`release_eligible` 固定為 `false`。
 4. 僅以非 admin 的 squash merge 合併。更新乾淨的 `main` checkout 後執行
    `verify-quota-main`，確認 main tree 等於已驗證 candidate tree，並把結果留在 PR；
    不符時停止、revert／修正，不重寫歷史。
