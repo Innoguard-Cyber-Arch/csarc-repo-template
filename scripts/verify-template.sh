@@ -72,10 +72,10 @@ bash -n scripts/cleanup-worktrees
 bash -n template/scripts/cleanup-worktrees
 bash -n scripts/check-governance-drift
 bash -n template/scripts/check-governance-drift
-grep -q 'repository、Actions、政策標籤與有效 Ruleset' README.md
+grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' README.md
 grep -q 'policy labels, and effective Rulesets' docs/agent-install.md
 grep -q 'Administration read access' docs/agent-install.md
-grep -q 'repository、Actions、政策標籤與有效 Ruleset' docs/index.html
+grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' docs/index.html
 grep -q '^## Actions quota fallback$' AGENTS.md
 grep -q '^## Actions quota fallback$' template/AGENTS.md.jinja
 grep -q 'included GitHub Actions minutes are exhausted' AGENTS.md
@@ -221,6 +221,18 @@ case "$2" in
       printf '%s\n' '{"default_workflow_permissions":"read","can_approve_pull_request_reviews":true}'
     fi
     ;;
+  repos/acme/project/teams)
+    if [[ "${MOCK_CODEOWNERS_STATE:-valid}" == "unavailable" ]]; then
+      echo "Resource not accessible by integration" >&2
+      exit 1
+    elif [[ "${MOCK_CODEOWNERS_STATE:-valid}" == "invalid" ]]; then
+      printf '%s\n' '[[{"slug":"arch","permission":"pull","permissions":{"pull":true,"push":false,"maintain":false,"admin":false}}]]'
+    elif [[ "${MOCK_CODEOWNERS_STATE:-valid}" == "missing" ]]; then
+      printf '%s\n' '[[]]'
+    else
+      printf '%s\n' '[[{"slug":"arch","permission":"push","permissions":{"pull":true,"push":true,"maintain":false,"admin":false}}]]'
+    fi
+    ;;
   orgs/acme)
     printf '%s\n' "$MOCK_GITHUB_PLAN"
     ;;
@@ -246,9 +258,6 @@ case "$2" in
     fi
     printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_approving_review_count":1,"required_review_thread_resolution":true}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"governance"},{"context":"verify"},{"context":"title"},{"context":"scan-pr / osv-scan"},{"context":"audit"}]}}]'
     ;;
-  orgs/Innoguard-Cyber-Arch/teams/repository-maintainers)
-    printf '{}\n'
-    ;;
   *)
     echo "Unexpected gh API path: $2" >&2
     exit 2
@@ -270,6 +279,7 @@ run_settings_fixture() {
   local actions_state="${10:-match}"
   local labels_state="${11:-match}"
   local repo_admin="${12:-true}"
+  local codeowners_state="${13:-valid}"
   local suffix=""
   local arguments=("$mode")
   if [[ "$prune_labels" == true ]]; then
@@ -298,6 +308,7 @@ run_settings_fixture() {
     MOCK_ACTIONS_STATE="$actions_state" \
     MOCK_LABELS_STATE="$labels_state" \
     MOCK_REPO_ADMIN="$repo_admin" \
+    MOCK_CODEOWNERS_STATE="$codeowners_state" \
     MOCK_GH_LOG="$call_log" \
     ./scripts/apply-repository-settings.sh "${arguments[@]}"
 }
@@ -320,6 +331,20 @@ if unknown_ruleset="$(run_settings_fixture team plan "403 service unavailable" 2
 fi
 grep -q 'Cannot determine Ruleset capability' <<<"$unknown_ruleset"
 grep -q '403 service unavailable' <<<"$unknown_ruleset"
+
+for settings_mode in plan apply check; do
+  for codeowners_state in invalid missing; do
+    if invalid_codeowners="$(
+      run_settings_fixture free "$settings_mode" "" false false protected \
+        absent "" match match match true "$codeowners_state" 2>&1
+    )"; then
+      echo "$settings_mode must reject $codeowners_state CODEOWNERS."
+      exit 1
+    fi
+    grep -q 'CODEOWNERS validation failed:' <<<"$invalid_codeowners"
+    grep -Eq 'lacks repository (write )?access' <<<"$invalid_codeowners"
+  done
+done
 
 free_plan="$(run_settings_fixture free plan "" false false protected absent)"
 grep -q 'Account plan: GitHub Free' <<<"$free_plan"
@@ -380,6 +405,12 @@ grep -q 'DEGRADED Actions inspection: token cannot read administrator-only workf
 actions_degraded_check="$(run_settings_fixture team check "" false false protected present "" match degraded)"
 grep -q 'DEGRADED Actions PR policy: desired true, live false' <<<"$actions_degraded_check"
 grep -q 'completed with 1 degraded capability difference' <<<"$actions_degraded_check"
+limited_codeowners_check="$(
+  run_settings_fixture team check "" false false protected present "" \
+    limited integration-error match false unavailable
+)"
+grep -q 'DEGRADED CODEOWNERS inspection: token cannot validate configured owners' \
+  <<<"$limited_codeowners_check"
 if labels_mismatch="$(run_settings_fixture team check "" false false protected present "" match match mismatch 2>&1)"; then
   echo "Policy label mismatches must fail checks."
   exit 1
@@ -806,6 +837,31 @@ test "$(grep -c '^## ' .github/pull_request_template.md)" -eq 3
 grep -q '^## Purpose$' .github/pull_request_template.md
 grep -q '^## 完成清單$' .github/pull_request_template.md
 grep -q '^## 補充$' .github/pull_request_template.md
+grep -q '^  pull_request:$' .github/workflows/governance-comment.yml
+grep -q 'types: \[opened, reopened, synchronize, ready_for_review\]' \
+  .github/workflows/governance-comment.yml
+grep -q '^  pull-requests: write$' .github/workflows/governance-comment.yml
+if grep -q '^  pull_request_target:$' .github/workflows/governance-comment.yml; then
+  echo "Reviewer workflow must not use pull_request_target."
+  exit 1
+fi
+grep -q "github.event.action != 'synchronize' && !github.event.pull_request.draft" \
+  .github/workflows/governance-comment.yml
+grep -q 'ref: \${{ github.event.pull_request.base.sha }}' \
+  .github/workflows/governance-comment.yml
+grep -q 'configured_reviewers.*\.github/REVIEWERS' \
+  .github/workflows/governance-comment.yml
+grep -Fq '== "$PR_AUTHOR"' .github/workflows/governance-comment.yml
+grep -q 'repos/\$GITHUB_REPOSITORY/pulls/\$PR_NUMBER/requested_reviewers' \
+  .github/workflows/governance-comment.yml
+grep -Fq -- '-f "reviewers[]=$reviewer"' \
+  .github/workflows/governance-comment.yml
+grep -q 'DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"' src/csarc_cli/cli.py
+grep -Fqx '* @Innoguard-Cyber-Arch/arch' .github/CODEOWNERS
+grep -Fqx '@jachline28' .github/REVIEWERS
+grep -q '所有方案都先用 repository teams API 驗證' docs/index.html
+grep -q 'Free private 不支援 team review request' template/docs/index.html.jinja
+
 grep -q "'## Purpose'" .github/workflows/python-version-policy.yml
 grep -q "'## 完成清單'" .github/workflows/python-version-policy.yml
 grep -q "'## 補充'" .github/workflows/python-version-policy.yml
@@ -1067,6 +1123,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data project_slug="public-visibility-test" \
   --data package_name="public_visibility_test" \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  --data reviewers="@alice,@bob" \
   --data project_visibility=public \
   "$repo_root" "$fixture_root/public-visibility-project"
 prime_gitleaks_cache "$fixture_root/public-visibility-project"
@@ -1081,6 +1138,8 @@ grep -q 'language: \["python"\]' \
   "$fixture_root/public-visibility-project/.github/workflows/codeql.yml"
 grep -q 'security-events: write' \
   "$fixture_root/public-visibility-project/.github/workflows/codeql.yml"
+test "$(sed '/^#/d; /^$/d' "$fixture_root/public-visibility-project/.github/REVIEWERS")" = \
+  $'@alice\n@bob'
 grep -q 'github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827' \
   "$fixture_root/public-visibility-project/.github/workflows/codeql.yml"
 test "$(grep -c 'actions/attest@' \
@@ -1183,6 +1242,7 @@ fi
 test "$(cat "$fixture_root/default-project/CLAUDE.md")" = "@AGENTS.md"
 test -f "$fixture_root/default-project/policies/rulesets.json"
 test -f "$fixture_root/default-project/.github/workflows/governance-comment.yml"
+grep -Fqx '@jachline28' "$fixture_root/default-project/.github/REVIEWERS"
 grep -q '^  pull_request:$' \
   "$fixture_root/default-project/.github/workflows/governance-comment.yml"
 grep -q 'csarc-governance-notice' \
@@ -1218,7 +1278,7 @@ test ! -f "$fixture_root/default-project/pnpm-workspace.yaml"
 test ! -d "$fixture_root/default-project/typescript"
 grep -q 'Coverage 是找出未測程式碼的訊號' \
   "$fixture_root/default-project/README.md"
-grep -q 'repository、Actions、政策標籤與有效 Ruleset' \
+grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/README.md"
 grep -q '^## Actions quota fallback$' \
   "$fixture_root/default-project/AGENTS.md"
@@ -1230,7 +1290,7 @@ grep -q '付款失敗、budget.*平台.*設定.*權限.*未知原因.*測試失�
   "$fixture_root/default-project/docs/index.html"
 grep -q 'Actions 免費額度耗盡' \
   "$fixture_root/default-project/docs/site-content.js"
-grep -q 'repository、Actions、政策標籤與有效 Ruleset' \
+grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/docs/index.html"
 grep -q 'Administration read' \
   "$fixture_root/default-project/docs/index.html"

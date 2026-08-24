@@ -25,7 +25,7 @@ CANONICAL_SOURCE = (
 )
 CANONICAL_REPOSITORY = "Innoguard-Cyber-Arch/csarc-repo-template"
 CANONICAL_REPOSITORY_ID = 1_340_899_393
-DEFAULT_OWNER = "@Innoguard-Cyber-Arch/repository-maintainers"
+DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"
 PROVENANCE_FILE = Path(".csarc/provenance.json")
 ADOPTION_REPORT_BASENAME = "csarc-adoption-dry-run"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
