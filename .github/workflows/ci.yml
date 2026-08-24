@@ -61,3 +61,5 @@ jobs:
         with:
           node-version: "24"
       - run: ./scripts/verify-template.sh
+        env:
+          RUNNER_TOOL_CACHE: ${{ runner.tool_cache }}
