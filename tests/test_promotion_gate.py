@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import runpy
 import shutil
@@ -26,7 +27,7 @@ local_verification_command = MODULE["local_verification_command"]
 main_is_current = MODULE["main_is_current"]
 prepare = MODULE["prepare"]
 parser = MODULE["parser"]
-QUOTA_ANNOTATION_MESSAGE = MODULE["QUOTA_ANNOTATION_MESSAGE"]
+BILLING_GATE_ANNOTATION_MESSAGE = MODULE["BILLING_GATE_ANNOTATION_MESSAGE"]
 RejectRedirects = MODULE["RejectRedirects"]
 repository_variables = MODULE["repository_variables"]
 require_same_preflight = MODULE["require_same_preflight"]
@@ -237,7 +238,7 @@ def test_blocked_run_must_match_head_and_have_no_started_steps(
                 ],
             }
         if path.startswith("check-runs/7/annotations"):
-            return [{"message": QUOTA_ANNOTATION_MESSAGE}]
+            return [{"message": BILLING_GATE_ANNOTATION_MESSAGE}]
         return {
             "id": 200,
             "head_sha": "head",
@@ -325,6 +326,7 @@ def test_prepare_builds_milestone_candidate_evidence(
         if path == "issues/99":
             return {
                 "number": 99,
+                "title": "Promotion",
                 "state": "open",
                 "body": "- [x] Ready",
                 "labels": [{"name": "promotion"}],
@@ -381,6 +383,21 @@ def test_prepare_builds_milestone_candidate_evidence(
     evidence = json.loads(output.read_text(encoding="utf-8"))
     assert evidence["route"]["kind"] == "milestone"
     assert evidence["candidate_tree"]
+    assert evidence["promotion_pull_request"] == {
+        "number": 99,
+        "title": "feat: promote staged CI",
+        "body_sha256": hashlib.sha256(b"Closes #99").hexdigest(),
+        "closing_issue": 99,
+        "labels": ["promotion"],
+    }
+    assert evidence["tracking_issue_state"] == {
+        "number": 99,
+        "state": "open",
+        "title": "Promotion",
+        "body_sha256": hashlib.sha256(b"- [x] Ready").hexdigest(),
+        "labels": ["promotion"],
+        "milestone": 7,
+    }
     assert evidence["included_issues"] == [
         {"number": 1, "title": "Completed work"}
     ]
@@ -1049,7 +1066,7 @@ def test_quota_main_refetches_the_unique_squash_source(
         )
 
 
-def test_zero_step_run_reads_all_jobs_and_rejects_generic_billing(
+def test_zero_step_run_reads_all_jobs_and_rejects_changed_billing_marker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A hidden job or ambiguous billing annotation must fail closed."""
@@ -1100,9 +1117,8 @@ def test_zero_step_run_reads_all_jobs_and_rejects_generic_billing(
                 {
                     "annotation_level": "failure",
                     "message": (
-                        "The job was not started because recent account "
-                        "payments have failed or your spending limit needs "
-                        "to be increased."
+                        "The job was not started because of an unknown "
+                        "billing problem."
                     ),
                 }
             ]
@@ -1111,7 +1127,7 @@ def test_zero_step_run_reads_all_jobs_and_rejects_generic_billing(
     monkeypatch.setitem(
         require_zero_step_run.__globals__, "github_get", fake_get
     )
-    with pytest.raises(RuntimeError, match="included Actions minutes"):
+    with pytest.raises(RuntimeError, match="zero-step billing gate"):
         require_zero_step_run(
             "https://github.com/owner/repo/actions/runs/200",
             "owner/repo",
@@ -1177,6 +1193,20 @@ def test_preflight_binding_rejects_tampered_canary() -> None:
     rebuilt = {
         "repository": "owner/repo",
         "canary": {"state": "allowed", "environment": "canary"},
+    }
+    with pytest.raises(RuntimeError, match="live reconstruction"):
+        require_same_preflight(evidence, rebuilt)
+
+
+def test_preflight_binding_rejects_changed_pull_request_body() -> None:
+    """A changed promotion body invalidates the prepared evidence."""
+    evidence = {
+        "promotion_pull_request": {"body_sha256": "original"},
+        "tracking_issue_state": {"body_sha256": "issue"},
+    }
+    rebuilt = {
+        "promotion_pull_request": {"body_sha256": "changed"},
+        "tracking_issue_state": {"body_sha256": "issue"},
     }
     with pytest.raises(RuntimeError, match="live reconstruction"):
         require_same_preflight(evidence, rebuilt)

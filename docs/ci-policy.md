@@ -215,7 +215,9 @@ identity；合併後立即形成 patch release 邊界。接著由每條進行中
 
 這個一次性流程只適用於具帳務可見性的 human maintainer 已明確確認當期 included
 GitHub Actions minutes 耗盡。只提到 failed payments 或 spending limit 的 runner 註記
-不足以證明符合條件；付款失敗、錯誤 budget、平台事故、workflow／權限錯誤、原因不明，
+本身不足以證明符合條件；工具只把 GitHub 的精確泛用 billing 註記當成 zero-step
+billing gate 證據，仍須由具帳務可見性的 human maintainer 明確確認實際原因是 included
+minutes 耗盡。付款失敗、錯誤 budget、平台事故、workflow／權限錯誤、原因不明，
 或任何已開始執行 step 後失敗的 job 都維持 blocked。
 
 合併前必須確認 worktree 乾淨且 `HEAD` 等於 PR head SHA，執行完整本機驗證與每個可

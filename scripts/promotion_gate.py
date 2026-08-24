@@ -34,9 +34,10 @@ REQUIRED_QUOTA_WORKFLOWS = {
     ".github/workflows/ci.yml",
     ".github/workflows/promotion.yml",
 }
-QUOTA_ANNOTATION_MESSAGE = (
-    "The job was not started because this account's included GitHub Actions "
-    "minutes are exhausted."
+BILLING_GATE_ANNOTATION_MESSAGE = (
+    "The job was not started because recent account payments have failed or "
+    "your spending limit needs to be increased. Please check the 'Billing & "
+    "plans' section in your settings"
 )
 PREFLIGHT_REFETCH = "promotion preflight live refetch"
 
@@ -534,7 +535,9 @@ def preflight_binding(evidence: dict[str, Any]) -> dict[str, object]:
         "repository": evidence.get("repository"),
         "route": evidence.get("route"),
         "pull_request": evidence.get("pull_request"),
+        "promotion_pull_request": evidence.get("promotion_pull_request"),
         "tracking_issue": evidence.get("tracking_issue"),
+        "tracking_issue_state": evidence.get("tracking_issue_state"),
         "base_ref": evidence.get("base_ref"),
         "base_sha": evidence.get("base_sha"),
         "head_ref": evidence.get("head_ref"),
@@ -582,7 +585,7 @@ def require_zero_step_run(  # noqa: C901
     head_sha: str,
     token: str,
 ) -> str:
-    """Prove one PR run failed only for a quota-specific annotation."""
+    """Prove one PR run was stopped by GitHub's zero-step billing gate."""
     run_id = urllib.parse.urlparse(url).path.rsplit("/", 1)[-1]
     run = github_get(repo, f"actions/runs/{run_id}", token)
     if (
@@ -658,10 +661,10 @@ def require_zero_step_run(  # noqa: C901
             page += 1
         if (
             len(annotations) != 1
-            or annotations[0].get("message") != QUOTA_ANNOTATION_MESSAGE
+            or annotations[0].get("message") != BILLING_GATE_ANNOTATION_MESSAGE
         ):
             raise RuntimeError(
-                "Blocked job does not prove included Actions minutes exhaustion"
+                "Blocked job does not match GitHub's zero-step billing gate"
             )
     return str(run.get("path", ""))
 
@@ -921,13 +924,20 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     "Promotion and hotfix branches must come from "
                     "this repository"
                 )
-            number = issue_number(pull_request.get("body") or "")
+            title = pull_request.get("title")
+            body = pull_request.get("body") or ""
+            if not isinstance(title, str) or not isinstance(body, str):
+                raise RuntimeError(
+                    "Promotion pull request metadata is incomplete"
+                )
+            number = issue_number(body)
             if number is None and route.kind != "dev-promotion":
                 raise RuntimeError(
                     "Promotion pull request must close its tracking Issue"
                 )
             token = os.environ.get("GH_TOKEN", "")
             tracking_issue: dict[str, Any] = {}
+            tracking_issue_state: dict[str, object] | None = None
             if number is not None:
                 issue = github_get(args.repo, f"issues/{number}", token)
                 if not isinstance(issue, dict) or issue.get("state") != "open":
@@ -935,7 +945,13 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                         "Promotion tracking Issue must exist and remain open"
                     )
                 tracking_issue = issue
-                if UNCHECKED.search(issue.get("body") or ""):
+                issue_body = issue.get("body") or ""
+                if not isinstance(issue_body, str):
+                    raise RuntimeError(
+                        "Promotion tracking Issue metadata is incomplete"
+                    )
+                issue_title = str(issue.get("title") or "")
+                if UNCHECKED.search(issue_body):
                     raise RuntimeError(
                         "Promotion Issue has unchecked acceptance criteria"
                     )
@@ -963,6 +979,16 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     raise RuntimeError(
                         "Standalone promotion or hotfix cannot use a Milestone"
                     )
+                tracking_issue_state = {
+                    "number": number,
+                    "state": "open",
+                    "title": issue_title,
+                    "body_sha256": hashlib.sha256(
+                        issue_body.encode()
+                    ).hexdigest(),
+                    "labels": sorted(tracking_labels),
+                    "milestone": issue_milestone,
+                }
             included: list[dict[str, object]] = []
             if route.milestone is not None:
                 if number is None:
@@ -1012,8 +1038,8 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 included_prs = [
                     {
                         "number": pull_request["number"],
-                        "title": pull_request["title"],
-                        "intent": release_intent(pull_request["title"]),
+                        "title": title,
+                        "intent": release_intent(title),
                     }
                 ]
             else:
@@ -1027,7 +1053,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
             intent = highest_release_intent(
                 [str(item["title"]) for item in included_prs]
             )
-            promotion_intent = release_intent(pull_request["title"])
+            promotion_intent = release_intent(title)
             if promotion_intent != intent:
                 raise RuntimeError(
                     "Promotion pull-request title must declare the batch's "
@@ -1055,7 +1081,15 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 "repository": args.repo,
                 "route": asdict(route),
                 "pull_request": pull_request["number"],
+                "promotion_pull_request": {
+                    "number": pull_request["number"],
+                    "title": title,
+                    "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+                    "closing_issue": number,
+                    "labels": sorted(labels),
+                },
                 "tracking_issue": number,
+                "tracking_issue_state": tracking_issue_state,
                 "base_ref": base,
                 "base_sha": base_sha,
                 "head_ref": head,
@@ -1069,7 +1103,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 "included_issues": included,
                 "release": {
                     "intent": intent,
-                    "promotion_title": pull_request["title"],
+                    "promotion_title": title,
                     "included_pull_requests": included_prs,
                 },
                 "canary": asdict(canary),
