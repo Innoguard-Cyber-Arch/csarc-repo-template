@@ -259,3 +259,5 @@ This decision defines a reevaluation threshold. It does not authorize Backstage,
 Adoption requires new parsing and synchronization, conversion of existing specs, new validation assertions, and an equivalent Issue-sync design. The current benefit does not justify that cost.
 {{< /detail >}}
 {{< /slide >}}
+
+{{< glossary >}}

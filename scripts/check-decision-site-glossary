@@ -1,0 +1,240 @@
+#!/usr/bin/env python3
+"""Verify glossary source, rendered anchors, and published LLM indexes."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+import tomllib
+from pathlib import Path
+from urllib.parse import urldefrag, urlparse
+
+KEY = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+LINK = re.compile(r"^- \[([^]]+)]\(([^)]+)\): (.+)$", re.MULTILINE)
+HEADING = re.compile(r"^## (.+)$", re.MULTILINE)
+
+
+def required(record: dict[str, object], key: str, context: str) -> str:
+    """Return one required non-empty string."""
+    value = record.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{context}: {key} must be a non-empty string")
+    return value
+
+
+def add_key(value: str, seen: set[str], context: str) -> None:
+    """Require one unique slug and add it to the seen set."""
+    if not KEY.fullmatch(value) or value in seen:
+        raise ValueError(f"{context}: invalid or duplicate key {value!r}")
+    seen.add(value)
+
+
+def read_source(
+    source: Path, repo_root: Path
+) -> tuple[
+    str,
+    str,
+    list[str],
+    list[tuple[str, str, str]],
+    set[str],
+    set[str],
+]:
+    """Read the canonical data and return expected rendered values."""
+    with source.open("rb") as stream:
+        data = tomllib.load(stream)
+
+    title = required(data, "title", str(source))
+    required(data, "title_en", str(source))
+    required(data, "title_zh_tw", str(source))
+    required(data, "intro_en", str(source))
+    required(data, "intro_zh_tw", str(source))
+    required(data, "source_label_en", str(source))
+    required(data, "source_label_zh_tw", str(source))
+    summary = " / ".join(
+        (
+            required(data, "summary_en", str(source)),
+            required(data, "summary_zh_tw", str(source)),
+        )
+    )
+    source_base = required(data, "source_base", str(source))
+    parsed_base = urlparse(source_base)
+    if (
+        parsed_base.scheme != "https"
+        or not parsed_base.netloc
+        or not source_base.endswith("/")
+    ):
+        raise ValueError(
+            f"{source}: source_base must be an absolute HTTPS directory"
+        )
+
+    groups = data.get("groups")
+    if not isinstance(groups, list) or not groups:
+        raise ValueError(f"{source}: groups must be a non-empty array")
+
+    headings: list[str] = []
+    links: list[tuple[str, str, str]] = []
+    anchors = {"glossary"}
+    linked_anchors: set[str] = set()
+    seen_keys: set[str] = set()
+    root = repo_root.resolve()
+    for group_index, group in enumerate(groups, 1):
+        if not isinstance(group, dict):
+            raise ValueError(f"{source}: group {group_index} must be a table")
+        context = f"{source}: group {group_index}"
+        group_key = required(group, "key", context)
+        add_key(group_key, seen_keys, context)
+        anchors.add(f"glossary-group-{group_key}")
+        headings.append(
+            " / ".join(
+                (
+                    required(group, "title_en", context),
+                    required(group, "title_zh_tw", context),
+                )
+            )
+        )
+
+        terms = group.get("terms")
+        if not isinstance(terms, list) or not terms:
+            raise ValueError(f"{context}: terms must be a non-empty array")
+        for term_index, term in enumerate(terms, 1):
+            if not isinstance(term, dict):
+                raise ValueError(
+                    f"{context}: term {term_index} must be a table"
+                )
+            term_context = f"{context}, term {term_index}"
+            term_key = required(term, "key", term_context)
+            add_key(term_key, seen_keys, term_context)
+            term_anchor = f"glossary-{term_key}"
+            anchors.add(term_anchor)
+            linked_anchors.add(term_anchor)
+            path = required(term, "path", term_context)
+            relative_path = urldefrag(path).url
+            target = (root / relative_path).resolve()
+            if not target.is_relative_to(root) or not target.is_file():
+                raise ValueError(
+                    f"{term_context}: linked file does not exist: {path}"
+                )
+            links.append(
+                (
+                    " / ".join(
+                        (
+                            required(term, "term_en", term_context),
+                            required(term, "term_zh_tw", term_context),
+                        )
+                    ),
+                    f"{source_base}{path}",
+                    " / ".join(
+                        (
+                            required(term, "summary_en", term_context),
+                            required(term, "summary_zh_tw", term_context),
+                        )
+                    ),
+                )
+            )
+    return title, summary, headings, links, anchors, linked_anchors
+
+
+def check_candidate(
+    path: Path, anchors: set[str], linked_anchors: set[str]
+) -> None:
+    """Require every glossary anchor exactly once in a candidate page."""
+    html = path.read_text(encoding="utf-8")
+    for anchor in anchors:
+        count = html.count(f'id="{anchor}"')
+        if count != 1:
+            raise ValueError(
+                f"{path}: expected one #{anchor} anchor, found {count}"
+            )
+    for anchor in linked_anchors:
+        count = html.count(f'href="#{anchor}"')
+        if count != 1:
+            raise ValueError(
+                f"{path}: expected one link to #{anchor}, found {count}"
+            )
+
+
+def check_llms(
+    path: Path,
+    title: str,
+    summary: str,
+    headings: list[str],
+    links: list[tuple[str, str, str]],
+) -> bytes:
+    """Require the llms.txt shape and exact source-derived entries."""
+    content = path.read_bytes()
+    text = content.decode("utf-8")
+    lines = text.splitlines()
+    if not lines or lines[0] != f"# {title}":
+        raise ValueError(f"{path}: expected one project H1 on the first line")
+    if len(lines) < 3 or lines[2] != f"> {summary}":
+        raise ValueError(f"{path}: expected the bilingual summary blockquote")
+    if HEADING.findall(text) != headings:
+        raise ValueError(
+            f"{path}: category headings differ from glossary source"
+        )
+    if LINK.findall(text) != links:
+        raise ValueError(f"{path}: links differ from glossary source")
+    return content
+
+
+def main() -> int:
+    """Validate the complete glossary-to-output path."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--source", type=Path, default=Path("decision-site/data/glossary.toml")
+    )
+    parser.add_argument("--repo-root", type=Path, default=Path("."))
+    parser.add_argument("--content", action="append", type=Path)
+    parser.add_argument("--candidate", action="append", type=Path)
+    parser.add_argument(
+        "--generated", type=Path, default=Path("dist/hugo-site/llms.txt")
+    )
+    parser.add_argument("--published", action="append", type=Path)
+    args = parser.parse_args()
+    contents = args.content or [
+        Path("decision-site/content/_index.zh-tw.md"),
+        Path("decision-site/content/_index.en.md"),
+    ]
+    candidates = args.candidate or [
+        Path("dist/hugo-preview.html"),
+        Path("dist/hugo-preview.en.html"),
+    ]
+    published = args.published or [Path("llms.txt"), Path("docs/llms.txt")]
+
+    try:
+        title, summary, headings, links, anchors, linked_anchors = read_source(
+            args.source, args.repo_root
+        )
+        for content_path in contents:
+            if (
+                content_path.read_text(encoding="utf-8").count(
+                    "{{< glossary >}}"
+                )
+                != 1
+            ):
+                raise ValueError(
+                    f"{content_path}: expected one glossary shortcode"
+                )
+        for candidate in candidates:
+            check_candidate(candidate, anchors, linked_anchors)
+        generated = check_llms(args.generated, title, summary, headings, links)
+        for output in published:
+            if output.read_bytes() != generated:
+                raise ValueError(
+                    f"{output}: published llms.txt differs from Hugo output"
+                )
+    except (
+        OSError,
+        UnicodeError,
+        ValueError,
+        tomllib.TOMLDecodeError,
+    ) as error:
+        sys.stderr.write(f"decision-site glossary invalid: {error}\n")
+        return 1
+    sys.stdout.write(f"Decision-site glossary: {len(links)} linked terms\n")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

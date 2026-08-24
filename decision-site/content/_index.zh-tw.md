@@ -259,3 +259,5 @@ Agent 只將使用者已確認的 durable constraint 摘要到 Issue，再經過
 需改寫 parser 與同步邏輯、轉換既有 spec、更新驗證斷言，並另行設計等價 Issue-sync；目前效益尚不足。
 {{< /detail >}}
 {{< /slide >}}
+
+{{< glossary >}}

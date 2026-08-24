@@ -18,12 +18,18 @@ defaultContentLanguageInSubdir = false
   weight = 2
 
 [outputs]
-home = ["candidate"]
+home = ["candidate", "llms"]
 
 [outputFormats.candidate]
 mediaType = "text/html"
 baseName = "index"
 isHTML = true
+notAlternative = true
+
+[outputFormats.llms]
+mediaType = "text/plain"
+baseName = "llms"
+isPlainText = true
 notAlternative = true
 
 [markup.goldmark.renderer]
@@ -41,6 +47,10 @@ unsafe = true
   [[module.mounts]]
   source = "decision-site/layouts"
   target = "layouts"
+
+  [[module.mounts]]
+  source = "decision-site/data"
+  target = "data"
 
   [[module.mounts]]
   source = "decision-site/static"
