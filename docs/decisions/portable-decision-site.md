@@ -67,6 +67,20 @@
 | 只部署 Pages、不提交 bundle | 不採用；把高階平台能力錯當最低需求，無法服務受限方案或離線討論 |
 | 自動保存完整聊天 | 不採用；包含噪音、未確認假設與可能的敏感資訊，也缺少可審查的決策邊界 |
 
+## 相近模板與文件實務
+
+以下比較的是 2026-08-24 可見的 repository 結構，不代表直接採用其完整工具鏈：
+
+| 參考 | 可借鑑做法 | 本公版的取捨 |
+| --- | --- | --- |
+| [GitHub Spec Kit](https://github.com/github/spec-kit) | 將 constitution、spec／plan／tasks 與生成模板分開，讓 agent 讀取穩定的專案原則與工作產物 | 採用 durable source 與工作產物分離；不導入其完整指令流程 |
+| [OpenSpec](https://github.com/Fission-AI/OpenSpec) | 區分目前有效的 specs、提案中的 changes 與 archive，避免討論稿和現況混為一談 | 採用「已確認 decision」與「Issue 中待決內容」分離；保留現有輕量 spec → Issue 流程 |
+| [BMAD Method](https://github.com/bmad-code-org/BMAD-METHOD) | 將使用文件、agent／workflow 資產與安裝產物分層，文件本身使用任務導向結構 | 採用清楚的 owner 與閱讀入口；不複製其角色或大型流程框架 |
+| [GitHub starter workflows](https://github.com/actions/starter-workflows) | 可執行 workflow 與描述／呈現 metadata 分檔維護，再由平台組合 | 採用 source／presentation 分離與機器驗證，不讓產物成為唯一來源 |
+| [Backstage TechDocs](https://backstage.io/docs/features/techdocs/) | docs-as-code，從 repository source 建置並可集中發佈與搜尋 | 保留作為多 repo catalog 的升級路徑；目前因需額外平台與託管而不作 baseline |
+
+共同模式是把可審查的文字來源、模板／workflow 資產與發布產物分開。本公版額外受限於「收件者可能沒有託管能力」，因此把最後產物收斂成 repository 內已提交的單一 HTML，而不是把網站服務當成交付前提。
+
 ## 驗證契約
 
 後續 renderer 實作至少驗證：
