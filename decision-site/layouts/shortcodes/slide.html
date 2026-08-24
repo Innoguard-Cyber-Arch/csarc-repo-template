@@ -1,0 +1,8 @@
+<section class="slide markdown-slide{{ if eq .Ordinal 0 }} active{{ end }}{{ with .Get "class" }} {{ . }}{{ end }}" data-content-key="{{ .Get "key" }}"{{ with .Get "track" }} data-track="{{ . }}"{{ end }} aria-label="{{ .Get "title" }}">
+  <header>
+    {{ with .Get "eyebrow" }}<span class="selection-sequence">{{ . }}</span>{{ end }}
+    <h2>{{ .Get "title" }}</h2>
+    {{ with .Get "subtitle" }}<p class="subtitle">{{ . }}</p>{{ end }}
+  </header>
+  <div class="markdown-body">{{ .Inner | markdownify | safeHTML }}</div>
+</section>

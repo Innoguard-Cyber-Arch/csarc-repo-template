@@ -1,0 +1,4 @@
+<aside class="technical-detail" data-content-key="{{ .Get "key" }}">
+  {{ with .Get "title" }}<h3>{{ . }}</h3>{{ end }}
+  {{ .Inner | markdownify }}
+</aside>

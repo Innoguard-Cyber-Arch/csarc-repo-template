@@ -11,7 +11,8 @@
     '.pipeline-foundation',
     '.repo-map-legend',
     '.review-note-footer',
-    '.reference'
+    '.reference',
+    '.technical-detail'
   ].join(', ');
 
   document.querySelectorAll(selectors).forEach(detail => {
