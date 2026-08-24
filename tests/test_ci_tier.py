@@ -76,13 +76,14 @@ def test_risk_scopes_enable_only_their_expensive_check(
     ("base", "head", "labels", "reason"),
     [
         ("main", "dev/m7-ci", set(), "delivery promotion"),
+        ("main", "dev/i42-soak", {"promotion"}, "delivery promotion"),
         ("main", "fix/9-outage", {"hotfix"}, "hotfix to main"),
     ],
 )
 def test_promotion_and_hotfix_use_full_tier(
     base: str, head: str, labels: set[str], reason: str
 ) -> None:
-    """Run the complete matrix at both routes that can change main."""
+    """Run the complete matrix at every delivery route that can change main."""
     plan = classify("pull_request", base, head, labels, ["src/pkg/core.py"])
     assert plan.tier == "full"
     assert plan.reason == reason

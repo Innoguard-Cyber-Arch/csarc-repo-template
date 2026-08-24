@@ -239,7 +239,9 @@ def promotion_evidence(
     }
 
 
-@pytest.mark.parametrize("kind", ["milestone", "standalone-batch", "hotfix"])
+@pytest.mark.parametrize(
+    "kind", ["milestone", "standalone-batch", "isolated", "hotfix"]
+)
 def test_release_boundary_traces_each_delivery_route(kind: str) -> None:
     """Milestone, standalone, and hotfix batches retain promotion provenance."""
     result = aggregate_release_boundaries(

@@ -128,7 +128,7 @@ jobs:
           fi
 
           if [[ "$branch_strategy" == "delivery" ]]; then
-            if [[ "$PR_HEAD" =~ ^sync/main-to-(m[0-9]+-[a-z0-9][a-z0-9-]*|next)-[0-9a-f]{7,40}$ ]]; then
+            if [[ "$PR_HEAD" =~ ^sync/main-to-(m[0-9]+-[a-z0-9][a-z0-9-]*|i[0-9]+-[a-z0-9][a-z0-9-]*|next)-[0-9a-f]{7,40}$ ]]; then
               if [[ "$PR_BASE" == "dev/${BASH_REMATCH[1]}" ]]; then
                 exit 0
               fi
@@ -149,6 +149,9 @@ jobs:
             if [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
               promotion=true
               promotion_milestone="${BASH_REMATCH[1]}"
+            elif [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^dev/i([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
+              promotion=true
+              promotion_issue="${BASH_REMATCH[1]}"
             elif [[ "$PR_BASE" == "main" && "$PR_HEAD" == "dev/next" ]]; then
               promotion=true
             fi
@@ -224,8 +227,12 @@ jobs:
                 echo "The promotion Issue Milestone must match the delivery branch number."
                 exit 1
               fi
+              if [[ -n "${promotion_issue:-}" && "$issue_number" != "$promotion_issue" ]]; then
+                echo "An isolated delivery branch must match its promotion Issue number."
+                exit 1
+              fi
               if [[ -z "${promotion_milestone:-}" && "$issue_milestone_number" != "0" ]]; then
-                echo "A dev/next promotion Issue must not belong to a Milestone."
+                echo "A standalone promotion Issue must not belong to a Milestone."
                 exit 1
               fi
               exit 0

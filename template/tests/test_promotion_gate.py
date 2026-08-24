@@ -78,6 +78,14 @@ def test_route_for(
     assert route.milestone == milestone
 
 
+def test_isolated_issue_route_binds_the_issue_number() -> None:
+    """A temporary isolated delivery branch belongs to exactly one Issue."""
+    route = route_for("main", "dev/i42-payment-soak", {"promotion"}, "delivery")
+    assert route.kind == "isolated"
+    assert route.issue == 42
+    assert route.relevant
+
+
 @pytest.mark.parametrize(
     ("command", "environment", "state"),
     [

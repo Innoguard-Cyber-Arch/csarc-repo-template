@@ -97,6 +97,7 @@ pass|delivery standalone stack|delivery|feat(api): add report|enhancement|feat/4
 pass|delivery hotfix|delivery|fix(api): stop outage|bug,hotfix|main|fix/42-outage|Fixes #42|open|-
 pass|delivery automation|delivery|build(deps): bump pytest|enhancement|dev/next|dependabot/pip/pytest-9|-|-|-
 pass|delivery sync|delivery|chore(sync): merge main into milestone|enhancement|dev/m7-staged-ci|sync/main-to-m7-staged-ci-abcdef0|-|-|-
+pass|delivery isolated sync|delivery|chore(sync): merge main into isolated|enhancement|dev/i42-payment-soak|sync/main-to-i42-payment-soak-abcdef0|-|-|-
 fail|version automation missing label|main|build(python): adopt Python 3.15|-|main|automation/python-3.15|-|-|-
 fail|missing PR label|main|feat(api): add report|-|main|feat/42-report|Closes #42|open|-
 fail|multiple PR labels|main|feat(api): add report|enhancement,documentation|main|feat/42-report|Closes #42|open|-
@@ -145,6 +146,33 @@ PR_ISSUE_STATE="open" \
 PR_ISSUE_MILESTONE_NUMBER="7" \
 PR_ISSUE_LABELS="enhancement,promotion" \
   "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="feat(api): promote isolated payment soak" \
+PR_LABELS="enhancement,promotion" \
+PR_BASE="main" \
+PR_HEAD="dev/i42-payment-soak" \
+PR_BODY="Closes #42" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_MILESTONE_NUMBER="0" \
+PR_ISSUE_LABELS="enhancement,promotion" \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="feat(api): promote wrong isolated issue" \
+  PR_LABELS="enhancement,promotion" \
+  PR_BASE="main" \
+  PR_HEAD="dev/i41-payment-soak" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="0" \
+  PR_ISSUE_LABELS="enhancement,promotion" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted an isolated branch for another Issue."
+  exit 1
+fi
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \

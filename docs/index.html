@@ -1484,7 +1484,7 @@
           <span class="package-badge beta">v0.11.0</span><!-- x-release-please-version -->
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">CI-only／Python／TypeScript／兩者</span>
-          <span class="package-badge">main-only 預設／dev 可選</span>
+          <span class="package-badge">delivery 分層／main／dev</span>
           <span class="package-badge">Copier 可更新</span>
           <span class="package-badge security">CI／安全檢查</span>
           <span class="package-badge warning">Free private：main 尚未受保護</span>
@@ -1492,14 +1492,14 @@
       </header>
       <div class="language-contract" aria-label="程式語言 profile 決策">
         <p class="language-card"><strong>建立時必選｜四種組合</strong>只要 CI/CD 基線、Python、TypeScript，或兩者都有；宣告會寫入 repo 並由檔案自動核對。</p>
-        <p class="language-card shared"><strong>四種組合共用</strong>可選 Story Milestone、Issue／spec、PR checks、安全檢查、單一 SemVer 與 Copier 更新；建立時另選 main-only 或有測試環境的 dev 模式。</p>
+        <p class="language-card shared"><strong>四種組合共用</strong>可選 Story Milestone、Issue／spec、分層 CI、promotion evidence、安全檢查、單一 SemVer 與 Copier 更新；建立時可選 delivery、main-only 或單一 dev。</p>
         <p class="language-card future"><strong>版本基線</strong>Python 3.14；TypeScript 採 Node 24 Active LTS。Go／Rust 仍是 future，不先建立空設定。</p>
       </div>
       <div class="product-start">
         <section class="product-scope" aria-label="公版提供的能力">
           <h3>公版會替 repo 準備</h3>
           <p class="scope-row"><strong>規劃與 AI 契約</strong><span>可選 Story Milestone → 1..N Issues → 各自 PR；spec 可同步 Issue 或 Story</span></p>
-          <p class="scope-row"><strong>驗證與合併</strong><span><code>./scripts/verify</code>＋CI＋PR；依環境選 main 或 dev</span></p>
+          <p class="scope-row"><strong>驗證與合併</strong><span><code>./scripts/verify</code>＋分層 CI＋PR；並行 Milestone 各自整合，promotion 才進 main</span></p>
           <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件</span></p>
           <p class="scope-row"><strong>可持續同步</strong><span>公版更新成為可審查差異，不會直接覆蓋產品程式</span></p>
         </section>
@@ -1546,19 +1546,19 @@
             <span class="pipeline-phase">CI｜機器先找明確錯誤</span>
             <div class="pipeline-tags"><span class="pipeline-tag">03</span><span class="pipeline-tag">05</span></div>
             <h3>自動檢查</h3>
-            <p>跑格式、型別、測試、打包與依賴風險檢查。</p>
+            <p>Issue PR 跑 fast；promotion 才跑 full 與可選 canary。</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">REVIEW｜人判斷是否合理</span>
             <div class="pipeline-tags"><span class="pipeline-tag">04</span></div>
             <h3>審查與合併</h3>
-            <p>修到檢查通過、同事核准，再進 main 或 dev。</p>
+            <p>修到檢查通過、同事核准，先進對應 delivery branch。</p>
           </article>
           <article class="pipeline-stage best">
             <span class="pipeline-phase">CD｜交付同一份成品</span>
             <div class="pipeline-tags"><span class="pipeline-tag best">06</span></div>
             <h3>版本與交付</h3>
-            <p>建立 SemVer、artifact、checksum 與 SBOM；部署另訂。</p>
+            <p>promotion 批次建立 SemVer、artifact、checksum 與 SBOM；部署另訂。</p>
           </article>
         </div>
         <div class="pipeline-loop" aria-label="CI 回饋迴圈">
@@ -1662,7 +1662,7 @@
           <p class="recommendation-copy"><strong>Fast：</strong>每張一般 PR 跑 secret scan、格式、lint、型別、單元測試與必要 template smoke；docs-only 不啟動語言或生成矩陣。<br><strong>Full：</strong><code>dev/* → main</code> promotion、hotfix、merge queue 與手動 dispatch 才執行全部 runtime、profiles、Copier update、release 與安全回歸。<br><strong>條件式供應鏈：</strong>workflow 變更加跑 Zizmor，相依變更加跑 OSV，治理宣告變更加跑 remote governance；三者另有週期排程。未知路徑 fail closed 到 full。<br><strong>穩定門禁：</strong><code>verify</code> aggregate 每次都回報，不適用的重型 job 明確視為 skipped，避免 required check 永久 Pending；summary／artifact 記錄 tier、原因、scope 與 duration。完整契約見 <code>docs/ci-policy.md</code>。</p>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>分層規則：</strong><code>scripts/ci_tier.py</code>＋<code>scripts/verify-fast</code>＋<code>docs/ci-policy.md</code></li><li><strong>完整入口：</strong><code>scripts/verify</code>；公版為 <code>scripts/verify-template.sh</code></li><li><strong>常駐門禁：</strong><code>title</code>＋<code>delivery-sync</code>＋<code>verify</code>；OSV、Zizmor 與 remote governance 由 job-level 條件或週期排程執行</li><li><strong>額度耗盡：</strong>只有帳務可見的 human 確認免費分鐘歸零，且 job 未執行任何 step，才可依 <code>AGENTS.md</code> 對精確 PR SHA 產生一次性本機驗證聲明；付款、budget、平台、設定與測試失敗都不得套用</li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>分層規則：</strong><code>scripts/ci_tier.py</code>＋<code>scripts/verify-fast</code>＋<code>docs/ci-policy.md</code></li><li><strong>完整入口：</strong><code>scripts/verify</code>；公版為 <code>scripts/verify-template.sh</code></li><li><strong>常駐門禁：</strong><code>title</code>＋<code>delivery-sync</code>＋<code>verify</code>＋<code>promotion</code>；OSV、Zizmor 與 remote governance 由 job-level 條件或週期排程執行</li><li><strong>額度耗盡：</strong>只有帳務可見的 human 確認免費分鐘歸零，且 job 未執行任何 step，才可依 <code>AGENTS.md</code> 對精確 PR SHA 產生一次性本機驗證聲明；付款、budget、平台、設定與測試失敗都不得套用</li></ul></aside>
     </section>
 
     <section class="slide decision-slide" data-track="method" aria-label="步驟一規劃工作與 GitHub Issues">
@@ -1686,14 +1686,15 @@
     <section class="slide decision-slide" data-track="pr" aria-label="步驟四分支 PR 與合併">
       <header>
         <h2>步驟 4｜<span class="accent">小 PR 通過證據再合併</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>沒有共用測試環境就直接或經 stack PR 到 main；真的有 dev 環境，才加 dev 整合層。</p>
+        <p class="subtitle"><strong>基本導入。</strong>CI 就是可攜式 integration layer；Issue 先進 delivery branch，完成 Milestone 或固定批次時才 promotion 到 main。</p>
       </header>
-      <p class="context-line"><strong>問題與目的｜</strong>分支要對應真實用途；無條件多一層 dev 只會增加漂移與合併衝突，不能取代測試環境。</p>
+      <p class="context-line"><strong>問題與目的｜</strong>每張 PR 都送 main 會同時放大完整 CI 與發版次數；分支與 workflow 必須一起分層，才能在日常保留快回饋、在交付邊界集中完整信心。</p>
       <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把 dev 當成形式上的必經站</h3><ul><li><strong>預設 main-only：</strong>Issue → 短分支 → PR → main，適合沒有共用測試環境</li><li><strong>有 dev 環境：</strong>Issue → 短分支 → PR → dev，再經升版 PR 進 main</li><li><strong>直接 push：</strong>兩種模式都禁止，不能繞過審查與檢查</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>建立時選分支模式，Issue-first 規則不變</h3><p><strong>工作分支：</strong><code>type/&lt;Issue 編號&gt;-簡稱</code>；PR 可直接進策略分支，或指向 open PR 的上游分支形成 stack，但整條鏈必須回到策略分支。PR 內文用 <code>Closes #編號</code> 連回同一張未結案 Issue；PR 或 referenced Issue 仍有未勾選 task 時，policy 會拒絕 closing keyword，避免局部完成卻自動結案。<br><strong>PR 分類：</strong>GitHub 沒有 PR Issue Type／Issue Form，因此使用 Markdown template，並恰選一個 label：<code>fix</code>→<code>bug</code>、<code>docs</code>→<code>documentation</code>、其他允許的 title type→<code>enhancement</code>。<br><strong>範圍：</strong>需求超出完成條件就另開 Issue、分支與 PR；只有依賴／版本自動化，以及未改檔案的 duplicate triage 可免 Issue 或 PR。</p></article>
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把所有變更都當成一種交付</h3><ul><li><strong>每張 PR 進 main：</strong>一般變更也重跑完整矩陣並推動發版</li><li><strong>單一永久 dev：</strong>多個 Milestone 互相等待，候選內容難以隔離</li><li><strong>每張孤立 Issue 建 Milestone：</strong>失去 Story 的意義，只是在規避批次</li></ul></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>不同 Issue 進對應 delivery branch，main 再受審查地回流</h3><p><strong>Milestone：</strong><code>type/&lt;Issue&gt;-*</code> PR 進 <code>dev/m&lt;Milestone&gt;-*</code>；可同時有多條，完成後各自跑 full＋canary promotion。<br><strong>孤立工作：</strong>一般 Issue 進 <code>dev/next</code>，固定 release window 批次 promotion；確實要獨立 soak／canary 才使用一次性的 <code>dev/i&lt;Issue&gt;-*</code>，完成後刪除。只有 standalone <code>fix/*</code>＋<code>hotfix</code> 可直接 main。<br><strong>同步：</strong><code>main</code> 前進後，每條 active delivery branch 的 owner 以 <code>sync/main-to-*</code> PR 納入結果；blocked／unknown 自動寫入能力回到同一套手動 PR，不直接 push 或改寫歷史。</p></article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>選 main-only 或 dev 模式：</strong><code>copier.yml</code> → <code>branch_strategy</code>，結果存入 <code>.csarc/profile.json</code></li><li><strong>核對標籤、Issue、分支編號、PR 目標與標題：</strong><code>.github/workflows/pr-policy.yml</code>＋<code>scripts/test-pr-policy</code></li><li><strong>自動要求審查：</strong>Copier 的 <code>reviewers</code> 接受逗號分隔的一到多位帳號並生成 <code>.github/REVIEWERS</code>；Free private 每張 PR 輪派其中一位，team request 與強制核准需 GitHub Team 以上</li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>選 delivery、main-only 或 dev：</strong><code>copier.yml</code> → <code>branch_strategy</code>，結果存入 <code>.csarc/profile.json</code></li><li><strong>核對 route、Issue、branch 編號、標題與同步：</strong><code>pr-policy.yml</code>＋<code>delivery-sync.yml</code>＋<code>promotion.yml</code></li><li><strong>完整操作與遷移：</strong><code>docs/ci-policy.md</code> 含孤立 Issue 決策樹、雙 Milestone walkthrough、promotion checklist、回復與降級</li></ul></aside>
+      <p class="reference">Ref. <a href="https://github.com/home-assistant/core/blob/dev/.github/workflows/ci.yaml" target="_blank" rel="noreferrer">Home Assistant CI</a>; <a href="https://github.com/vercel/next.js/blob/canary/.github/workflows/build_and_test.yml" target="_blank" rel="noreferrer">Next.js build/test</a>; <a href="https://github.com/rust-lang/rust/blob/main/.github/workflows/ci.yml" target="_blank" rel="noreferrer">Rust CI</a>; <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore" target="_blank" rel="noreferrer">GitHub workflow filters</a>. Accessed August 24, 2026. 採用的是分流與交付邊界原則，不照抄其 branch 名稱。</p>
     </section>
 
     <section class="slide decision-slide" data-page="08 / 16" data-track="supply" aria-label="步驟五依賴風險與 SBOM">
@@ -1727,14 +1728,14 @@
     <section class="slide decision-slide" data-track="deploy" aria-label="步驟六語意版本與持續交付">
       <header>
         <h2>步驟 6｜<span class="accent">版本規則與成品接續</span></h2>
-        <p class="subtitle"><strong>Release 路徑依當下能力選擇：</strong>PR 與成品交接能力都確認時使用 release-please；否則只在最新 main 已含經審查的版本與 CHANGELOG 時直接交付，再不行就明確停在 verification-only。</p>
+        <p class="subtitle"><strong>Release 路徑依已驗證的 promotion 邊界與當下能力選擇：</strong>PR 與成品交接能力都確認時使用 release-please；否則只在最新 main 已含經審查的版本與 CHANGELOG 時直接交付，再不行就明確停在 verification-only。</p>
       </header>
-      <p class="context-line"><strong>設計流程｜</strong>PR 只顯示 patch／minor／major／no-release 意圖；確切版本只在進入 main 後依實際 commit／tag 順序配置，過期 run 不發版。</p>
+      <p class="context-line"><strong>設計流程｜</strong>Issue PR 只宣告 patch／minor／major／no-release 意圖；Milestone 完成、<code>dev/next</code> 固定窗口、isolated canary 或 hotfix 才形成 release 邊界，整批取最高意圖，全部 no-release 就略過。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不為版本號另加一套平台</h3><ul><li><strong>Changesets：</strong>適合 npm workspace；CI-only／Python 案會多背 Node 設定</li><li><strong>Nx release：</strong>適合既有 Nx 大型 workspace；本案只需一個 release unit</li><li><strong>profile 各自編號：</strong>會增加相依矩陣與升級對版成本</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">adaptive release</span>＋單一 SemVer</span></summary><div class="package-health release-policy-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜持續維護。</p><p><strong>三態能力：</strong><code>allowed</code>、<code>blocked</code>、<code>unknown</code> 分別記錄 Actions PR、contents、Release 與 dispatch；403、409、無 remote 或無管理權都不會被誤當 allowed。</p><table class="release-policy-matrix" aria-label="Release policy capability matrix"><thead><tr><th>前提</th><th>選擇</th><th>行為與保證</th><th>限制與 fallback</th></tr></thead><tbody><tr><td>四項都是 allowed</td><td>Release PR</td><td>可審查版本／changelog；合併後 dispatch 成品</td><td>任一能力漂移就不再選用</td></tr><tr><td>PR blocked／unknown；其餘 allowed</td><td>Direct</td><td>只為已版本化且含 CHANGELOG 的最新 main 配置 tag；亂序 run no-op</td><td>缺少版本 commit 時轉為 verification-only，需維護者先開 PR</td></tr><tr><td>任一交付寫入非 allowed</td><td>Verification only</td><td>測試並保存 machine-readable artifact</td><td>不建立 release；後續 run 重新判斷</td></tr></tbody></table><p class="reference">Ref. <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer">GitHub workflow trigger docs</a> and live workflow runs, accessed August 24, 2026.</p></div></details><p><strong>收斂：</strong>direct mode 重讀 default branch head，只有最新 main commit 且 source、tag、CHANGELOG 版本一致時才能交付；concurrency 不必保證 FIFO。<br><strong>成品：</strong>tag checkout 只驗證版本後打包，不再暫時改寫 tracked files。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">promotion-gated adaptive release</span>＋單一 SemVer</span></summary><div class="package-health release-policy-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜持續維護。</p><p><strong>來源證據：</strong>release-source 先核對 promotion 的 full <code>verify</code>、canary state、納入 PR 與 main tree identity；非 promotion／hotfix 的 main commit 只能 verification-only。</p><p><strong>三態能力：</strong><code>allowed</code>、<code>blocked</code>、<code>unknown</code> 分別記錄 Actions PR、contents、Release 與 dispatch；403、409、無 remote 或無管理權都不會被誤當 allowed。</p><table class="release-policy-matrix" aria-label="Release policy capability matrix"><thead><tr><th>前提</th><th>選擇</th><th>行為與保證</th><th>限制與 fallback</th></tr></thead><tbody><tr><td>來源有效且四項 allowed</td><td>Release PR</td><td>可審查版本／changelog；合併後帶 source run ID dispatch 成品</td><td>任一能力漂移就不再選用</td></tr><tr><td>來源有效；PR blocked／unknown；其餘 allowed</td><td>Direct</td><td>只為已版本化且含 CHANGELOG 的最新 main 配置 tag；亂序 run no-op</td><td>缺少版本 commit 時轉為 verification-only，需維護者先開 PR</td></tr><tr><td>來源無效或任一交付寫入非 allowed</td><td>Verification only</td><td>保存 machine-readable artifact</td><td>不建立 release；後續 run 重新判斷</td></tr></tbody></table><p class="reference">Ref. <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer">GitHub workflow trigger docs</a> and live workflow runs, accessed August 24, 2026.</p></div></details><p><strong>收斂：</strong>direct mode 重讀 default branch head，只有最新 main commit 且 source、tag、CHANGELOG、promotion evidence 一致時才能交付；concurrency 不必保證 FIFO。<br><strong>成品：</strong>workflow 不監聽任意 tag push，只接受 release-source run ID；tag checkout 產生 digest、SBOM／attestation，不重跑 promotion 已完成的 full runtime CI。</p></article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>能力與版本配置：</strong><code>scripts/release_policy.py</code>；CLI 做唯讀 preflight，workflow 每次重新偵測</li><li><strong>PR mode：</strong><code>release-please-config.json</code>；<strong>direct mode：</strong>最新 main commit＋可達 SemVer tags</li><li><strong>查詢證據：</strong><code>release-capabilities-&lt;run-id&gt;</code> artifact＋job outputs；不寫入 repo</li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>promotion 與 release-source：</strong><code>promotion.yml</code>＋<code>scripts/promotion_gate.py</code>＋<code>release-please.yml</code></li><li><strong>能力與版本配置：</strong><code>scripts/release_policy.py</code>；CLI 做唯讀 preflight，workflow 每次重新偵測</li><li><strong>查詢證據：</strong>promotion／release-source artifact 保留 90 天，PR、Issue、Milestone、commit 與 tag 作長期索引</li></ul></aside>
       <aside class="selection-note"><strong>目前邊界</strong><span>不要求導入者建立 PAT、GitHub App 或修改無權控制的組織政策；若 contents、Release 或 dispatch 無法確認，workflow 只完成驗證並明確告警，不宣稱已自動發版。Python 排程升版 App 仍是另一個選配身份。</span></aside>
     </section>
 
@@ -1789,10 +1790,10 @@
         <tbody>
           <tr><td>p.3</td><td>SDLC 核心階段</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>把計畫到監控集中在 GitHub</summary><div class="bridge-popover"><p><strong>五月版｜</strong>計畫、開發、測試、部署、監控的核心順序保留。</p><p><strong>本次判斷｜</strong>工作單、模板、合併申請、自動檢查與交付設定都放在 GitHub，方便持續維護。</p><p><strong>落地方式｜</strong>不是每個專案都要部署與監控，但都先遵守工作規劃、變更審查與驗證規則。</p></div></details></td></tr>
           <tr><td>p.4</td><td>Jira Ticket</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>每次改動先有最小 GitHub Issue</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本用 Jira 的 Epic → Story → Task 分工；本次只保留必要的 GitHub Issue、Milestone 與 spec。</p><p><strong>本次判斷｜</strong>一次性工作選一種類型、寫問題與完成條件；複雜需求先開規劃 Issue，再由核准 spec 建立實作 Issue。新增範圍另開 Issue。</p><p><strong>落地方式｜</strong><code>work-item.yml</code> 有類型、問題與完成條件兩個必填欄位，另加一個選填補充；<code>issue-triage.yml</code> 指派開單者；PR workflow 核對標籤、分支與同號未結案 Issue。</p></div></details></td></tr>
-          <tr><td>p.5</td><td>版本控制</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>是否使用 dev，取決於是否有 dev 環境</summary><div class="bridge-popover"><p><strong>五月版｜</strong>保留平行分支，但不把長期 <code>dev</code> 分支當成所有專案的預設。</p><p><strong>本次判斷｜</strong>沒有共用測試環境就從 <code>main</code> 開短分支並 PR 回 main；有長期 dev 環境才 PR 回 <code>dev</code>，再升版到 main。</p><p><strong>落地方式｜</strong>Copier 的 <code>branch_strategy</code> 會同步調整 CI、Dependabot、Ruleset、AGENTS 與 README；兩種模式都禁止直接推送。</p></div></details></td></tr>
+          <tr><td>p.5</td><td>版本控制</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>delivery branch 是 CI 整合邊界，不假裝成實體環境</summary><div class="bridge-popover"><p><strong>五月版｜</strong>保留平行分支，但不要求每案具備實體 DEV 環境。</p><p><strong>本次判斷｜</strong>並行 Milestone 各用 <code>dev/m*</code>，一般孤立工作進 <code>dev/next</code>，獨立 canary 才用暫時 <code>dev/i*</code>；完成時 promotion 到 main，hotfix 才直達 main。</p><p><strong>落地方式｜</strong>fast CI 驗證每次 Issue 整合，full CI＋可選 canary 驗證 promotion；main 前進後由 owner 以 reviewed sync PR 回流，不 rewrite 歷史。</p></div></details></td></tr>
           <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>Issue、編號分支與 PR 形成固定鏈</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是保護分支的唯一入口，方向保留；三層審查改成依風險增加審查者。</p><p><strong>本次判斷｜</strong>一般 PR 要有同編號 Issue、CI 與一位同事；高風險架構變更另附決策紀錄。</p><p><strong>落地方式｜</strong>分支固定 <code>type/123-short-slug</code>，PR 內文固定 <code>Closes #123</code>；governance workflow 在 Free private 從設定名單輪派一位個別 reviewer，GitHub Team 以上才支援 team request 與強制核准。</p></div></details></td></tr>
-          <tr><td>p.7</td><td>CI 自動化管線</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>本機與 CI 共用一個驗證入口</summary><div class="bridge-popover"><p><strong>五月版｜</strong>自動觸發、測試、格式與靜態錯誤檢查全部保留。</p><p><strong>本次判斷｜</strong><code>ci.yml</code> 依宣告執行 Python、TypeScript 或兩者；需要中央控管時才用完整 SHA 呼叫 reusable workflow。</p><p><strong>落地方式｜</strong>CI、PR 標題、OSV 與 zizmor 已能執行；目前先當檢查結果，private repo 升到 GitHub Team、建立 CODEOWNERS team 並套用 Ruleset 後，紅燈才成為不可繞過門禁。</p></div></details></td></tr>
-          <tr><td>p.8</td><td>CD 專案管理</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>目前是持續交付；部署仍需專案目標</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本預設 DEV → STAGING → Canary → PROD；本次不要求每個專案照搬四層。</p><p><strong>本次判斷｜</strong>目前 tag 觸發 release，建立可追溯交付成品；它不是 CI 綠燈後自動部署。STAGING 與 Canary 要有驗證目的、流量與健康門檻才建立。</p><p><strong>落地方式｜</strong><code>release.yml</code> 依 profile 產生 wheel、npm tarball 或兩者，將 SHA-256、CycloneDX SBOM 與來源 metadata 附加到 GitHub Release；public 專案預設啟用 attestation，private／internal 維持明確 opt-in。</p></div></details></td></tr>
+          <tr><td>p.7</td><td>CI 自動化管線</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>本機與 CI 共用入口，依風險分層執行</summary><div class="bridge-popover"><p><strong>五月版｜</strong>自動觸發、測試、格式與靜態錯誤檢查全部保留。</p><p><strong>本次判斷｜</strong>一般 Issue PR 跑 fast；promotion、hotfix、merge queue 與未知高風險路徑跑 full；OSV、Zizmor 與 remote governance 另依 scope／schedule 執行。</p><p><strong>落地方式｜</strong>固定 <code>verify</code> aggregate 避免 skipped workflow 留下 Pending；候選 full run 不取消，普通 PR 新 commit 則取消舊 run。Ruleset 可用時強制 <code>title</code>、<code>delivery-sync</code>、<code>verify</code> 與 <code>promotion</code>。</p></div></details></td></tr>
+          <tr><td>p.8</td><td>CD 專案管理</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>promotion 才形成發版邊界，不為每張 Issue 狂發版</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本預設 DEV → STAGING → Canary → PROD；本次不要求每個專案照搬四層。</p><p><strong>本次判斷｜</strong>Milestone 完成時 promotion 一次，<code>dev/next</code> 固定窗口批次 promotion，全部 no-release 就略過版本；hotfix 才立即發布。Canary 必須有環境與命令，否則只誠實保留 artifact-only。</p><p><strong>落地方式｜</strong>release-source 核對 promotion 的 full verify、canary state 與 tree identity；成品 workflow 只接受 source run ID，產生 digest、SBOM、attestation，不接受任意 tag push，也不重跑完整 runtime CI。</p></div></details></td></tr>
           <tr><td>p.9</td><td>可觀測性</td><td><span class="bridge-status defer">第二階段</span></td><td><details class="bridge-detail"><summary>只有上線服務才做監控和值班</summary><div class="bridge-popover"><p><strong>五月版｜</strong>操作手冊、日誌、指標、追蹤、復原與值班流程保留為第二階段。</p><p><strong>本次判斷｜</strong>只對持續運行的服務導入；先依使用的雲端、環境與負責人選工具，不先綁定 Datadog 或 PagerDuty。</p><p><strong>落地方式｜</strong>測試資料另外管理成不含個資、可建立、可清除的範例，不把測資管理混成線上監控。</p></div></details></td></tr>
           <tr><td>p.10</td><td>Copilot → Agent</td><td><span class="bridge-status defer">分階段</span></td><td><details class="bridge-detail"><summary>先受控 AI 協作；成熟後再自動重試</summary><div class="bridge-popover"><p><strong>五月版｜</strong>鼓勵 AI 從補完程式進步到能執行完整任務，方向保留，但不把工程師縮減成只會下提示詞。</p><p><strong>本次判斷｜</strong>第一階段讓 Agent 依清楚工作單研究、提計畫、修改、驗證並開 PR；平行可寫任務各自使用 branch 與 Git worktree，工具便利性由 agent-kit 管理。</p><p><strong>落地方式｜</strong><code>AGENTS.md</code> 與共同驗證命令限制工作方式；<code>actions.json</code> 設定 Actions 預設唯讀且不能核准 PR，Ruleset 要求人類核准。worktree manager 不是 CI/CD，也不取得額外 secret 或合併權限。</p></div></details></td></tr>
           <tr><td>p.11</td><td>AI 初審</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail"><summary>固定工具負責判定；AI 只補充建議</summary><div class="bridge-popover"><p><strong>五月版｜</strong>AI 初審保留，但程式碼格式與常見錯誤改由 formatter、linter 與靜態檢查穩定執行。</p><p><strong>本次判斷｜</strong>AI 審查只補充情境性錯誤、測試缺口、風險摘要與修正建議，不能當成通過證明。</p><p><strong>落地方式｜</strong>CI、同事審查與指定負責人才有合併決定權；AI 沒有核准、合併或讀取密鑰的權限。</p></div></details></td></tr>
@@ -1832,7 +1833,7 @@
           <tr><td>工作範圍與責任</td><td>Issue-first；標題用 12–80 字元英文摘要成果，內文可用中文；開單者自動成為負責人。新增需求超出完成條件就另開 Issue。</td></tr>
           <tr><td>公版更新邊界</td><td><code>template/</code> 是下發來源，root 讓公版自我治理；Copier 更新政策但保護產品程式與規格，成對設定由驗證腳本防止漂移。</td></tr>
           <tr><td>語言與程式品質</td><td>共用治理支援四種 profile；Python 採 src layout、Ruff 80 字元與 <a href="https://google.github.io/styleguide/pyguide.html" target="_blank" rel="noreferrer">Google Python Style</a>、strict mypy；TypeScript 採 Node 24、pnpm 11、Biome、Vitest。</td></tr>
-          <tr><td>CI、版本與交付</td><td>本機與 CI 共用 <code>scripts/verify</code>，Issue 標題與二十五組 PR 正反例證明錯誤會被拒絕；release-please 維護單一 SemVer。</td></tr>
+          <tr><td>CI、版本與交付</td><td>本機與 CI 共用 <code>scripts/verify</code>，PR policy 回歸案例證明錯誤 route 會被拒絕；日常 fast、promotion full，release-please 只在已驗證的批次邊界維護單一 SemVer。</td></tr>
           <tr><td>依賴與供應鏈</td><td>三天等待觀察未知惡意新版；OSV 查已公開漏洞；hash 驗內容一致；SBOM 列出成品套件；resolver 另證明版本上下界可安裝，五者互不取代。</td></tr>
           <tr><td>AI、文件與未來能力</td><td><code>AGENTS.md</code> 是 AI 契約，README 與 repo 網站服務人類；Hugo／託管登入、部署、監控、RAG、Go／Rust 都要有 owner、使用情境與驗證後才導入。</td></tr>
           <tr><td>驗證與測試資源</td><td>「已完成」必須有檔案與測試；驗證只用本機暫存專案或本 repo 的 Issue、分支、PR、Actions，禁止為測試另開 GitHub repo。</td></tr>
@@ -2192,15 +2193,16 @@ pnpm exec vitest run --coverage`
         {
           title: '一個入口驗證、打包，也證明錯誤會被拒絕',
           goal: '本機、AI 與 GitHub 執行同一入口；正向測試證明可交付，負向測資證明門禁不是永遠綠燈。',
-          summary: '十組 Issue 標題與二十五組 PR 案例檢查標籤、標題、stack base、Issue 與 main／dev；公版再注入錯誤 Python／TypeScript 檔。',
+          summary: 'Issue 標題與 PR policy 回歸案例檢查標籤、標題、stack base、Issue，以及 main／dev／delivery routes；公版再注入錯誤 Python／TypeScript 檔。',
           file: 'scripts/verify＋scripts/test-pr-policy＋.github/workflows/ci.yml',
           code: `./scripts/test-pr-policy
 ./scripts/verify
 
 on:
   pull_request:
-  push:
-    branches: [main]
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
 
 uses: Cyber-Arch/csarc-repo-template/
   .github/workflows/reusable-ci.yml@<full-commit-sha>
@@ -2325,19 +2327,21 @@ label: enhancement
       ],
       ci: [
         {
-          title: '預設 CI 在 PR 與整合分支 push 執行專案自己的驗證入口',
-          goal: '預設路徑不依賴中央 workflow，容易閱讀與追錯。',
+          title: 'CI 在 PR 依風險執行 fast 或 full，main 不重跑同一套測試',
+          goal: '預設路徑不依賴中央 workflow；穩定 aggregate context 兼顧成本與 required checks。',
           file: '.github/workflows/ci.yml',
           code: `on:
   pull_request:
-  push:
-    branches: [main] # dev 模式為 [main, dev]
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
 permissions:
+  actions: read
   contents: read
 jobs:
-  verify:
-    steps:
-      - run: ./scripts/verify`
+  fast: # docs／fast routing
+  full: # promotion／hotfix／merge queue／manual
+  verify: # always-present aggregate context`
         },
         {
           title: '流程穩定後，可改用完整 SHA 呼叫 reusable workflow',
@@ -2592,10 +2596,10 @@ csarc update`
         {
           title: 'Copier 只詢問會改變骨架或驗證行為的選項',
           goal: '不提供關閉型別或秘密掃描的開關；嚴格門檻是公版契約。',
-          summary: '語言與分支模式都在建立時明確選擇；沒有共用測試環境就用 main。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。',
+          summary: '語言與分支模式都在建立時明確選擇；delivery 模式把 CI 當整合層，main／dev 仍保留給適合的 repo。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。',
           file: 'copier.yml',
           code: `language: python
-branch_strategy: main  # main | dev
+branch_strategy: delivery  # delivery | main | dev
 python_support_mode: latest  # latest | minimum
 python_min_version: "3.12"  # Used only in minimum mode
 coverage_mode: global  # global | diff
