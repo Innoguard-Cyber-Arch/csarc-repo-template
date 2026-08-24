@@ -698,6 +698,8 @@ grep -q 'Live integration smoke' docs/index.html
 test -f docs/robots.txt
 grep -q '^Disallow: /$' docs/robots.txt
 test -f docs/agent-install.md
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
 grep -q 'Run the requested `csarc init`, `adopt`, or `update` command with' \
   docs/agent-install.md
 grep -q 'docs/index.html' README.md
@@ -742,6 +744,8 @@ test "$(grep -c '^核准 commit：<resolved-full-commit-sha>$' README.md)" -eq 3
 test "$(grep -c '^安裝指南：https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/<resolved-full-commit-sha>/docs/agent-install.md$' README.md)" -eq 3
 grep -q '"draft": true' release-please-config.json
 grep -q '"force-tag-creation": true' release-please-config.json
+# Shell variables are literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'gh release verify "$RELEASE_TAG"' \
   .github/workflows/release-template.yml
 grep -q '^      attestations: read$' .github/workflows/release-template.yml
@@ -751,6 +755,8 @@ grep -q 'Release is already published and immutable' \
   .github/workflows/release-template.yml
 grep -q 'for attempt in {1..24}; do' \
   .github/workflows/release-template.yml
+# The GitHub expression is literal workflow content.
+# shellcheck disable=SC2016
 if grep -q 'repos/${GITHUB_REPOSITORY}/immutable-releases' \
   .github/workflows/release-template.yml; then
   echo "Release jobs must not require the admin-only immutable-releases endpoint." >&2
@@ -766,6 +772,8 @@ if grep -q 'tags: \["v\*"\]' .github/workflows/release-template.yml; then
   echo "Release artifacts must require an explicit verified-source dispatch."
   exit 1
 fi
+# Shell variables are literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes' \
   .github/workflows/release-template.yml
 grep -q "CSARC_ENABLE_PYPI_PUBLISHING == 'true'" \
@@ -909,13 +917,21 @@ if grep -q 'synchronize' .github/workflows/governance-comment.yml; then
 fi
 grep -q '!github.event.pull_request.draft' \
   .github/workflows/governance-comment.yml
+# The GitHub expression is literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'ref: \${{ github.event.pull_request.base.sha }}' \
   .github/workflows/governance-comment.yml
 grep -q 'configured_reviewers.*\.github/REVIEWERS' \
   .github/workflows/governance-comment.yml
+# The shell variable is literal workflow content.
+# shellcheck disable=SC2016
 grep -Fq '== "$PR_AUTHOR"' .github/workflows/governance-comment.yml
+# Shell variables are literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'repos/\$GITHUB_REPOSITORY/pulls/\$PR_NUMBER/requested_reviewers' \
   .github/workflows/governance-comment.yml
+# The shell variable is literal workflow content.
+# shellcheck disable=SC2016
 grep -Fq -- '-f "reviewers[]=$reviewer"' \
   .github/workflows/governance-comment.yml
 grep -q 'DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"' src/csarc_cli/cli.py
@@ -948,6 +964,8 @@ if grep -q '^  pull_request:$' .github/workflows/osv.yml; then
   echo "Standalone OSV must not duplicate change-aware CI scans."
   exit 1
 fi
+# Shell variables are literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'gh pr edit "$pr_url" --add-label enhancement' \
   .github/workflows/python-version-policy.yml
 if grep -Eq -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
@@ -1177,6 +1195,8 @@ test "$("$fixture_root/default-project/scripts/detect-language-profile" --sugges
   "python"
 test -f "$fixture_root/default-project/CHANGELOG.md"
 test -f "$fixture_root/default-project/.github/workflows/release-please.yml"
+# Shell variables are literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'gh release upload "$GITHUB_REF_NAME"' \
   "$fixture_root/default-project/.github/workflows/release.yml"
 grep -q 'release-metadata.json' \
@@ -1334,6 +1354,8 @@ test -f "$fixture_root/default-project/policies/rulesets.json"
 test -f "$fixture_root/default-project/.github/workflows/governance-comment.yml"
 test -f "$fixture_root/default-project/.github/workflows/promotion.yml"
 test -f "$fixture_root/default-project/docs/ci-policy.md"
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
 grep -q '穩定的 `verify` aggregate context' \
   "$fixture_root/default-project/docs/ci-policy.md"
 grep -q '孤立 Issue 決策樹' \
@@ -1504,16 +1526,24 @@ grep -q 'googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307c
 grep -q 'config-file: release-please-config.json' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 # Release automation must adapt with the default token, not wait on a GitHub App.
+# The GitHub expression is literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'token: \${{ secrets.GITHUB_TOKEN }}' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
+# The GitHub expression is literal workflow content.
+# shellcheck disable=SC2016
 grep -q '^      release_created: \${{ steps.release.outputs.release_created }}$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
+# The GitHub expression is literal workflow content.
+# shellcheck disable=SC2016
 grep -q '^      tag_name: \${{ steps.release.outputs.tag_name }}$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q "needs.release-pr.outputs.release_created == 'true'" \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q '^      actions: write$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
+# Shell variables are literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'gh workflow run "$workflow" --ref "$RELEASE_TAG"' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'release_policy.py detect' \
@@ -1524,6 +1554,8 @@ grep -q 'Non-default branch run is diagnostic-only' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q "mode == 'verification-only'" \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
+# The GitHub expression is literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'release-capabilities-\${{ github.run_id }}' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'release_policy.py prepare' \
@@ -1534,6 +1566,8 @@ grep -q 'source_run_id:' \
   "$fixture_root/default-project/.github/workflows/release.yml"
 grep -q 'aggregate-boundary' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
+# The shell variable is literal workflow content.
+# shellcheck disable=SC2016
 grep -q -- '-f source_run_id="$GITHUB_RUN_ID"' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 if grep -q 'run: ./scripts/verify$' \
@@ -1793,8 +1827,12 @@ grep -q '"language_profile": "typescript"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
 grep -q '"branch_strategy": "dev"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
 grep -q 'pull request chain ends at `dev`' \
   "$fixture_root/typescript-project/AGENTS.md"
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
 grep -q 'against `dev` or its immediate parent in the stack' \
   "$fixture_root/typescript-project/AGENTS.md"
 grep -q '^  merge_group:$' \
@@ -1976,6 +2014,8 @@ grep -q 'subject-checksums: release-evidence/SHA256SUMS' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q 'sbom-path: release-evidence/sbom.cdx.json' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
 grep -q '外部 registry 發布會先以 `gh attestation verify` 強制比對' \
   "$fixture_root/all-features-project/README.md"
 grep -q '^  publish-python:$' \
@@ -1986,8 +2026,12 @@ test "$(grep -c 'gh attestation verify' \
   "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
 test "$(grep -c -- '--signer-workflow' \
   "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
+# The shell variable is literal workflow content.
+# shellcheck disable=SC2016
 test "$(grep -c -- '--source-ref \"\$GITHUB_REF\"' \
   "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
+# The shell variable is literal workflow content.
+# shellcheck disable=SC2016
 test "$(grep -c -- '--source-digest \"\$GITHUB_SHA\"' \
   "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
 grep -q '^      name: "pypi-release"$' \
@@ -1998,6 +2042,8 @@ grep -q '^  publish-npm:$' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q '^      name: "npm-release"$' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
+# Shell variables are literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'npm publish "${packages\[0\]}" --provenance --access public' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 if grep -Eq 'PYPI_API_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN' \

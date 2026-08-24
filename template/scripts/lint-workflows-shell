@@ -24,6 +24,5 @@ while IFS= read -r -d '' file_path; do
   fi
 done < <(find "$repo_root/scripts" -maxdepth 1 -type f -print0 2>/dev/null || true)
 if ((${#shell_files[@]})); then
-  # Test scripts deliberately match literal shell and GitHub expression text.
-  "$shellcheck_bin" --external-sources --exclude=SC2016 "${shell_files[@]}"
+  "$shellcheck_bin" --external-sources "${shell_files[@]}"
 fi

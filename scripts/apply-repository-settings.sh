@@ -137,6 +137,8 @@ print_ruleset_guidance() {
 load_graphql_ruleset() {
   local graphql_result graphql_state
   if ! graphql_result="$(
+    # GraphQL variables are intentionally literal in the query document.
+    # shellcheck disable=SC2016
     gh api graphql \
       -f query='query($owner: String!, $name: String!) {
         repository(owner: $owner, name: $name) {
