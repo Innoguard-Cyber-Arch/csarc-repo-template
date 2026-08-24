@@ -8,6 +8,8 @@ body:
       value: >-
         **標題規則：**使用 12–80 個英文 ASCII 字元及至少三個詞，直接描述成果；
         不加 `[Bug]` 或 `bug:` 前綴，不以句點結尾。例如：`Add dependency policy checks`。
+        建立前先依 AGENTS.md 搜尋相關 open／closed Issues；在「補充」列出沿用、
+        取代或駁回的既有決策與理由，若沒有候選則記錄搜尋範圍。
   - type: dropdown
     id: kind
     attributes:
@@ -39,6 +41,6 @@ body:
     id: supplement
     attributes:
       label: 補充
-      description: 選填：驗證方式、風險，或導入方自訂的必填項目。
+      description: 選填：相關決策與沿用／取代理由、驗證方式、風險，或導入方自訂項目。
     validations:
       required: false

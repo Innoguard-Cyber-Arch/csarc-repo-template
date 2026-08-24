@@ -43,13 +43,13 @@ git push -u origin dev
 
 ## 開發與驗證
 
-交付模型是「可選 Story Milestone → 1..N Issues → 各自 PR」。Milestone 只代表可端到端驗收的成果，不是每張 Issue 的必填分類；SDD、一般規劃、使用者 story 或導入盤點都可能成為來源。description 使用 [`docs/milestone-description.md`](docs/milestone-description.md) 的 Problem、Outcome、Acceptance criteria、Out of scope、Verification 與 Source 結構；PR 不重複掛入 Milestone。最後一張 open Issue 關閉時 workflow 會重新讀取遠端狀態後關閉 Milestone，Issue reopen 或 open Issue 掛入已關閉 Milestone時則重開。
+交付模型是「可選 Story Milestone → 1..N Issues → 各自 PR」。Milestone 只代表可端到端驗收的成果，不是每張 Issue 的必填分類；SDD、一般規劃、使用者 story 或導入盤點都可能成為來源。建立 Issue／Milestone 前，agent 會以具體關鍵字限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR，先向使用者摘要；若已獲准直接建立，則在補充或 `Related decisions` 記錄每項決策是沿用、取代或駁回及理由。description 使用 [`docs/milestone-description.md`](docs/milestone-description.md) 的完整結構；PR 不重複掛入 Milestone。最後一張 open Issue 關閉時 workflow 會重新讀取遠端狀態後關閉 Milestone，Issue reopen 或 open Issue 掛入已關閉 Milestone時則重開。
 
 1. 簡單工作先開「開發工作」Issue；標題以 12–80 個英文 ASCII 字元及至少三個詞直接描述成果，例如 `Add dependency policy checks`。Issue 不使用 PR 的 Conventional Commit 格式。
 2. 開單者會自動成為負責人，並選一個分類：`bug`、`enhancement`、`documentation` 或 `duplicate`。前三者在 organization 啟用原生 Issue Types 時分別同步成 `Bug`、`Feature`、`Task`；不支援時仍以 label 正常運作。`duplicate` 是結案處置，不是假造的新 Issue Type。
 3. 從 `{{ branch_strategy }}` 或最終 PR 回 `{{ branch_strategy }}` 的未合併工作分支建立 `type/<issue-number>-short-slug`；若新增需求超出 Issue 的完成條件，另開 Issue 與分支。若後來確認重複，連結 canonical Issue 並用 GitHub 的 Duplicate 原生原因關閉；純 triage 不改檔案，可不開分支與 PR。
 4. 執行 `./scripts/verify`；AI 遵守 `AGENTS.md`，不能自行合併。
-5. PR 指向 `{{ branch_strategy }}` 或 stack 中的直接上游分支；整條 open PR 鏈必須最終回到 `{{ branch_strategy }}`。內文寫 `Closes #<issue-number>`、完成精簡清單，風險或回退放在選填補充；PR 沒有原生 Issue Type／Issue Form，只使用 Markdown template，並恰選一個 change label：`fix`→`bug`、`docs`→`documentation`，其餘允許的 Conventional Commit type→`enhancement`。
+5. PR 指向 `{{ branch_strategy }}` 或 stack 中的直接上游分支；整條 open PR 鏈必須最終回到 `{{ branch_strategy }}`。使用 `Closes #<issue-number>` 前，PR 與 referenced Issue 不得留有未勾選 task；PR policy 會直接拒絕，避免局部完成卻自動結案。風險或回退放在選填補充；PR 沒有原生 Issue Type／Issue Form，只使用 Markdown template，並恰選一個 change label：`fix`→`bug`、`docs`→`documentation`，其餘允許的 Conventional Commit type→`enhancement`。
 6. CI 與人工審查都通過才合併。{% if branch_strategy == "dev" %}準備發布時，再用一張審查過的 PR 將 `dev` 升版到 `main`。{% endif %}
 
 多個可寫 agents 平行執行時，一項任務使用一個 branch 與一個獨立 worktree，且只平行處理範圍互不依賴的工作；開始前先辨識目前是否已在 agent 平台管理的 worktree，不強制讓同一 branch 出現在多個 worktrees，也不自行刪除其他工具建立或含未提交變更的 worktree。原生 [`git worktree`](https://git-scm.com/docs/git-worktree) 是可攜基線；[Worktrunk](https://github.com/max-sixty/worktrunk) 可選擇簡化建立、切換與清理，但屬於本機／agent orchestration 輔助工具，不是本模板或生成 repo 的必要相依。worktree 只隔離工作目錄，整合仍以 PR、CI、人工審查及合併後完整驗證為準。
@@ -86,6 +86,8 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 {% if language != "ci" %}{% if enable_release_attestations | default(false) %}此專案會為 release distributions 產生 artifact provenance 與 SBOM attestation；這需要 public repo，或支援 artifact attestations 的 GitHub Enterprise Cloud private／internal repo。{% if enable_pypi_publishing | default(false) or enable_npm_publishing | default(false) %}外部 registry 發布會先以 `gh attestation verify` 強制比對 repository、tag ref、artifact digest 與 signer workflow；驗證失敗就不發布。{% else %}目前沒有自動消費或部署路徑，因此只產生 attestation，不宣稱已在消費端強制驗證。{% endif %}{% else %}Artifact attestation 未啟用，適合目前不支援該功能的 private repo；release 仍會附上 `SHA256SUMS` 與 SBOM，可用 checksum 驗證，但沒有 provenance 強制門禁。{% endif %}{% endif %}
 
 release workflow 使用 Actions 內建 `GITHUB_TOKEN`，不需要設定 GitHub App 或 PAT。`csarc init`／`adopt`／`update` 在 GitHub origin 與 API 可讀時顯示 capability preflight；每次 workflow 仍重測 Actions PR、contents、Release 與 dispatch 能力。四項都確認可用時使用 release-please；PR 被禁止或無法確認但其餘交付能力完整時，從最新整合分支 commit 配置版本並交付；否則只驗證並上傳 machine-readable capability artifact。`plan`／`apply`／`check` 是有管理權時啟用較強門禁的選配，不會阻止 runtime 自適應。Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。請在這裡列出產品設定的名稱、用途與取得位置，但不要填入真實值。
+
+同一個唯讀 preflight 也會依 personal／organization owner、repo admin 與 organization owner 狀態，把選配 Renovate App 標成 `available`、`request-owner` 或 `fallback`。`available` 只提供 [安裝入口](https://github.com/apps/renovate/installations/new)，仍須在 GitHub 同意權限並只選本 repo；organization member 即使有 repo admin，仍需 organization owner 核准。未知權限、API 失敗或無 admin 時不猜測，直接保留 Dependabot 與既有 CI/CD。CLI 不會靜默安裝 App，也不要求長效廣域 PAT。新 repo 尚未有 origin 時，先設定 `GH_REPO=owner/repo` 可讓 `csarc init` 檢查預定目標；推送後也能執行 `python scripts/release_policy.py preflight --repo owner/repo` 重查。
 
 ## 發布與維運
 

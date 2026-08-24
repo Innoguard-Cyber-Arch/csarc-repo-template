@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -659,9 +660,14 @@ def target_repository(target: Path) -> str | None:
         capture=True,
         check=False,
     )
-    if result.returncode != 0:
-        return None
-    return github_repository(result.stdout.strip())
+    if result.returncode == 0:
+        repository = github_repository(result.stdout.strip())
+        if repository is not None:
+            return repository
+    explicit_repository = os.environ.get("GH_REPO", "").strip()
+    if explicit_repository:
+        return github_repository(f"gh:{explicit_repository}")
+    return None
 
 
 def capability_preflight(
@@ -681,6 +687,18 @@ def capability_preflight(
                     "release",
                     "dispatch",
                 )
+            },
+            "integrations": {
+                "renovate": {
+                    "state": "fallback",
+                    "reason": (
+                        "GitHub origin or capability script is unavailable"
+                    ),
+                    "next_step": (
+                        "Keep GitHub Dependabot via .github/dependabot.yml "
+                        "and the existing required CI/CD checks."
+                    ),
+                }
             },
         }
     else:
@@ -718,6 +736,17 @@ def capability_preflight(
         )
         print(f"GitHub release preflight: {summary or 'unknown'}")
         print("Runtime workflows recheck capabilities before every release.")
+        raw_integrations = payload.get("integrations")
+        integrations = (
+            raw_integrations if isinstance(raw_integrations, dict) else {}
+        )
+        for name, value in integrations.items():
+            if not isinstance(value, dict):
+                continue
+            state = value.get("state", "fallback")
+            next_step = value.get("next_step", "No automatic action.")
+            print(f"Optional integration {name}: {state}")
+            print(f"Next: {next_step}")
     return payload
 
 
