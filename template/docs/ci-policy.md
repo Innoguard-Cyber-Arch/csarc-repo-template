@@ -45,6 +45,15 @@ tier、保留 promotion evidence 並立即形成 release 邊界。
 | Full | promotion、hotfix、merge queue、手動 dispatch、未知高風險路徑 | 所有支援 runtime、profiles、Copier update、release policy、安全與整合回歸 | `verify` 與 `promotion` 必須成功；候選 run 不取消 | 只在交付邊界支付一次完整信心成本 |
 | Periodic／release | daily／weekly schedule 或已驗證的發布邊界 | OSV、Zizmor、governance drift、artifact、digest、SBOM、provenance | 排程不阻塞普通 PR；發布只接受 release-source evidence，重跑採 idempotent | 把時間性風險與成品工作移出每個 commit |
 
+Full tier 將 runtime 無關的 lint、文件、治理、profile、Copier create／adopt／update、
+package metadata 與完整成品檢查集中在最新 Python 的 `canonical full` 一次執行。
+Python compatibility jobs 只做 locked install 與 runtime-sensitive tests：精確最低版
+`.0` 一定保留，從最低支援版到 3.14 的每個 feature release 也都保留；最新 3.14
+由 canonical 覆蓋，其餘 runtime 不再重跑相同的完整 suite。混合 profile 的
+TypeScript install、test、coverage、build 與 pack 另在單一 Node 24 job 執行，canonical
+透過既有 `CSARC_VERIFY_TYPESCRIPT=false` 避免重複。TypeScript-only 仍由單一 canonical
+Node job 完整驗證，Python-only 則不啟動 Node job。
+
 `scripts/ci_tier.py` 依事件、base／head、labels 與 changed paths 做 fail-closed
 分類。`site/**`、根目錄 Issue forms 與一般 Markdown 明確歸入 docs tier，根目錄
 `.gitignore` 歸入 fast；workflow 變更加跑 Zizmor，相依 manifest／lockfile 加跑
@@ -252,3 +261,7 @@ policy、CI fast 與 CI aggregate 三個 runner job。以每個短 job 至少計
 一般 Issue PR 的實際 run/job duration 驗證至少 70% 降幅，營運驗收由
 [#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189) 追蹤；
 額度、付款或平台問題不得被記成成功測量，也不得用來跳過 promotion 的 full gate。
+Full tier 以 `canonical full`、`Python compatibility (<runtime>)` 與
+`TypeScript (Node <version>)` 分開留下 job result、duration 與 billed runner 證據，
+供 #189 比較；`verify` aggregate 依 tier 與 profile 要求所有適用 job 必須 success，
+只允許真正不適用的 job skipped，避免漏啟動被誤判成功。
