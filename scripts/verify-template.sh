@@ -1093,7 +1093,10 @@ fi
 for invalid_metadata in \
   'project_description= ToDo ' \
   'project_run_command= tbD ' \
-  'security_reporting_channel= TODO '; do
+  'security_reporting_channel= TODO ' \
+  'project_description= PlAcEhOlDeR ' \
+  'project_run_command= pLaCeHoLdEr ' \
+  'security_reporting_channel= PLACEholder '; do
   metadata_field="${invalid_metadata%%=*}"
   if uv run copier copy --trust --defaults --vcs-ref HEAD \
     "${fixture_security_args[@]}" \
@@ -1292,6 +1295,21 @@ if metadata_error="$(
   ./scripts/check-project-metadata 2>&1
 )"; then
   echo "Generated verification must reject TODO/TBD metadata."
+  exit 1
+fi
+grep -q 'README.md has unfinished project description or run command metadata' \
+  <<<"$metadata_error"
+grep -q 'SECURITY.md has unfinished security reporting channel metadata' \
+  <<<"$metadata_error"
+cp "$fixture_root/default-project/README.md" "$metadata_probe/README.md"
+cp "$fixture_root/default-project/SECURITY.md" "$metadata_probe/SECURITY.md"
+printf '%s\n' ' pLaCeHoLdEr ' >> "$metadata_probe/README.md"
+printf '%s\n' ' PLACEholder ' >> "$metadata_probe/SECURITY.md"
+if metadata_error="$(
+  cd "$metadata_probe"
+  ./scripts/check-project-metadata 2>&1
+)"; then
+  echo "Generated verification must reject placeholder metadata."
   exit 1
 fi
 grep -q 'README.md has unfinished project description or run command metadata' \

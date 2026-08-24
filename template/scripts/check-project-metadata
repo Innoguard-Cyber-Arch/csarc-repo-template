@@ -15,8 +15,8 @@ reject_placeholder() {
 reject_line_placeholder() {
   local file="$1"
   local field="$2"
-  if grep -Eiq '^[[:space:]]*(todo|tbd)[[:space:]]*$' "$file"; then
-    echo "$file has unfinished $field metadata: TODO/TBD" >&2
+  if grep -Eiq '^[[:space:]]*(todo|tbd|placeholder)[[:space:]]*$' "$file"; then
+    echo "$file has unfinished $field metadata: TODO/TBD/placeholder" >&2
     status=1
   fi
 }

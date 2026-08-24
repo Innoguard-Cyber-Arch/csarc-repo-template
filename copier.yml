@@ -81,7 +81,7 @@ project_description:
   type: str
   help: Organization-approved one-sentence purpose for README and package metadata
   default: "Source code and delivery automation for {{ project_name }}."
-  validator: "{% if not project_description | default('', true) | trim or project_description | trim | lower in ['a cyber-arch project', 'todo', 'tbd'] or '<' in project_description %}Enter the approved project purpose without placeholder text.{% endif %}"
+  validator: "{% if not project_description | default('', true) | trim or project_description | trim | lower in ['a cyber-arch project', 'todo', 'tbd', 'placeholder'] or '<' in project_description %}Enter the approved project purpose without placeholder text.{% endif %}"
 
 language:
   type: str
@@ -119,7 +119,7 @@ project_run_command:
   type: str
   help: Shortest command that successfully starts or invokes the product
   default: "{% if language == 'python' %}uv run python -c 'import {{ package_name }}'{% elif language == 'typescript' %}pnpm run build{% elif language == 'python-typescript' %}uv run python -c 'import {{ package_name }}' && pnpm run build{% else %}./scripts/verify{% endif %}"
-  validator: "{% if not project_run_command | default('', true) | trim or project_run_command | trim | lower in ['todo', 'tbd'] or '<' in project_run_command %}Enter a working product command without placeholder text.{% endif %}"
+  validator: "{% if not project_run_command | default('', true) | trim or project_run_command | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in project_run_command %}Enter a working product command without placeholder text.{% endif %}"
 
 repository_url:
   type: str
@@ -130,7 +130,7 @@ repository_url:
 security_reporting_channel:
   type: str
   help: Organization-approved private vulnerability reporting instructions
-  validator: "{% if not security_reporting_channel | default('', true) | trim or security_reporting_channel | trim | lower in ['todo', 'tbd'] or '<' in security_reporting_channel %}Enter the approved private reporting channel without placeholder text; do not invent an email address or SLA.{% endif %}"
+  validator: "{% if not security_reporting_channel | default('', true) | trim or security_reporting_channel | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in security_reporting_channel %}Enter the approved private reporting channel without placeholder text; do not invent an email address or SLA.{% endif %}"
 
 reviewers:
   type: str
