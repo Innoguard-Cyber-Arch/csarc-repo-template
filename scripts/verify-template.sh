@@ -8,11 +8,15 @@ cd "$repo_root"
 
 ./scripts/check-update-conflicts
 python3 scripts/render_site.py --check
+./scripts/lint-workflows-shell
+./scripts/test-static-validation
 
-prime_gitleaks_cache() {
+prime_validation_cache() {
   local project_root="$1"
   mkdir -p "$project_root/.cache"
-  cp -R "$repo_root/.cache/gitleaks" "$project_root/.cache/gitleaks"
+  for tool in actionlint gitleaks shellcheck; do
+    cp -R "$repo_root/.cache/$tool" "$project_root/.cache/$tool"
+  done
 }
 
 unset VIRTUAL_ENV
@@ -93,6 +97,13 @@ bash -n scripts/cleanup-worktrees
 bash -n template/scripts/cleanup-worktrees
 bash -n scripts/check-governance-drift
 bash -n template/scripts/check-governance-drift
+bash -n scripts/install-actionlint
+bash -n template/scripts/install-actionlint
+bash -n scripts/install-shellcheck
+bash -n template/scripts/install-shellcheck
+bash -n scripts/lint-workflows-shell
+bash -n template/scripts/lint-workflows-shell
+bash -n scripts/test-static-validation
 bash -n scripts/verify-fast
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' README.md
 grep -q 'policy labels, and effective Rulesets' docs/agent-install.md
@@ -1123,7 +1134,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data package_name="template_smoke_test" \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/default-project"
-prime_gitleaks_cache "$fixture_root/default-project"
+prime_validation_cache "$fixture_root/default-project"
 
 git -C "$fixture_root/default-project" init -q -b main
 git -C "$fixture_root/default-project" add .
@@ -1132,6 +1143,7 @@ git -C "$fixture_root/default-project" diff --cached --check
 test -f "$fixture_root/default-project/.copier-answers.yml"
 root_only_paths=(
   scripts/verify-template.sh
+  scripts/test-static-validation
   scripts/sync-paired-files.sh
   scripts/update_python_version.py
   scripts/report_dependency_ceiling.py
@@ -1190,7 +1202,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data reviewers="@alice,@bob" \
   --data project_visibility=public \
   "$repo_root" "$fixture_root/public-visibility-project"
-prime_gitleaks_cache "$fixture_root/public-visibility-project"
+prime_validation_cache "$fixture_root/public-visibility-project"
 grep -q 'project_visibility: public' \
   "$fixture_root/public-visibility-project/.copier-answers.yml"
 grep -q 'enable_release_attestations: true' \
@@ -1219,7 +1231,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   --data project_visibility=internal \
   "$repo_root" "$fixture_root/internal-visibility-project"
-prime_gitleaks_cache "$fixture_root/internal-visibility-project"
+prime_validation_cache "$fixture_root/internal-visibility-project"
 grep -q 'project_visibility: internal' \
   "$fixture_root/internal-visibility-project/.copier-answers.yml"
 grep -q 'enable_release_attestations: false' \
@@ -1359,7 +1371,10 @@ grep -q '"refs/heads/dev/\*"' \
   "$fixture_root/default-project/policies/rulesets.json"
 test -x "$fixture_root/default-project/scripts/apply-repository-settings.sh"
 test -x "$fixture_root/default-project/scripts/check-update-conflicts"
+test -x "$fixture_root/default-project/scripts/install-actionlint"
 test -x "$fixture_root/default-project/scripts/install-gitleaks"
+test -x "$fixture_root/default-project/scripts/install-shellcheck"
+test -x "$fixture_root/default-project/scripts/lint-workflows-shell"
 test -x "$fixture_root/default-project/scripts/verify-fast"
 test -f "$fixture_root/default-project/scripts/ci_tier.py"
 test -x "$fixture_root/default-project/scripts/promotion_gate.py"
@@ -1668,7 +1683,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data language=ci \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/ci-only-project"
-prime_gitleaks_cache "$fixture_root/ci-only-project"
+prime_validation_cache "$fixture_root/ci-only-project"
 
 git -C "$fixture_root/ci-only-project" init -q -b main
 git -C "$fixture_root/ci-only-project" add .
@@ -1755,7 +1770,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data branch_strategy=dev \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/typescript-project"
-prime_gitleaks_cache "$fixture_root/typescript-project"
+prime_validation_cache "$fixture_root/typescript-project"
 
 git -C "$fixture_root/typescript-project" init -q -b main
 git -C "$fixture_root/typescript-project" add .
@@ -1871,7 +1886,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data enable_npm_publishing=true \
   --data npm_environment=npm-release \
   "$repo_root" "$fixture_root/all-features-project"
-prime_gitleaks_cache "$fixture_root/all-features-project"
+prime_validation_cache "$fixture_root/all-features-project"
 
 test -f "$fixture_root/all-features-project/.pre-commit-config.yaml"
 test -f "$fixture_root/all-features-project/.github/workflows/template-update.yml"
@@ -2028,7 +2043,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data python_min_version=3.12 \
   --data coverage_mode=diff \
   "$repo_root" "$fixture_root/existing-project"
-prime_gitleaks_cache "$fixture_root/existing-project"
+prime_validation_cache "$fixture_root/existing-project"
 
 grep -q '^requires-python = ">=3.12"$' \
   "$fixture_root/existing-project/pyproject.toml"
@@ -2190,7 +2205,7 @@ test -f "$update_project/docs/decisions/README.md"
 grep -q 'Never store a raw conversation transcript' \
   "$update_project/AGENTS.md"
 grep -q '_commit: v0.1.1' "$update_project/.copier-answers.yml"
-prime_gitleaks_cache "$update_project"
+prime_validation_cache "$update_project"
 (
   cd "$update_project"
   ./scripts/verify

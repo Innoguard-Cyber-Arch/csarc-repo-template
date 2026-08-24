@@ -41,7 +41,7 @@ tier、保留 promotion evidence 並立即形成 release 邊界。
 | 層次 | 事件 | 執行內容 | Required／取消規則 | 成本目的 |
 | --- | --- | --- | --- | --- |
 | Policy | 每張 PR | PR 標題／Issue 關聯、branch route、delivery sync、review policy | `title`、`delivery-sync`、`promotion` 與 `verify` 都會產生；新 commit 可取消舊的一般 PR run | 先用便宜、確定性的規則拒絕錯誤流程 |
-| Docs／fast | 純文件或一般 Issue／sync PR | secret scan、格式、lint、型別、單元與 policy tests；模板範圍另做單一預設 profile smoke | 由穩定的 `verify` aggregate 彙總；同 PR 新 commit 取消舊 run | 每次整合保留快速回饋，不支付完整矩陣 |
+| Docs／fast | 純文件或一般 Issue／sync PR | secret scan、格式、lint、型別、單元與 policy tests；workflow／shell scope 加跑 actionlint／ShellCheck，模板範圍另做單一預設 profile smoke | 由穩定的 `verify` aggregate 彙總；同 PR 新 commit 取消舊 run | 每次整合保留快速回饋，不支付完整矩陣 |
 | Full | promotion、hotfix、merge queue、手動 dispatch、未知高風險路徑 | 所有支援 runtime、profiles、Copier update、release policy、安全與整合回歸 | `verify` 與 `promotion` 必須成功；候選 run 不取消 | 只在交付邊界支付一次完整信心成本 |
 | Periodic／release | daily／weekly schedule 或已驗證的發布邊界 | OSV、Zizmor、governance drift、artifact、digest、SBOM、provenance | 排程不阻塞普通 PR；發布只接受 release-source evidence，重跑採 idempotent | 把時間性風險與成品工作移出每個 commit |
 
@@ -204,6 +204,8 @@ identity；合併後立即形成 patch release 邊界。接著由每條進行中
 ## 安全掃描與治理頻率
 
 - Gitleaks 留在每張 PR 的 docs／fast／full 路徑。
+- actionlint 與 ShellCheck 在 workflow／shell 相關變更、full tier，以及既有每週
+  workflow audit 排程執行；兩者固定版本並驗證下載 checksum。
 - OSV 在相依或供應鏈設定變更、full tier，以及每週排程執行。
 - Zizmor 在 workflow／action 相關變更、full tier，以及每週排程執行。
 - Remote governance 在治理宣告／checker 變更、full tier，以及既有 daily drift

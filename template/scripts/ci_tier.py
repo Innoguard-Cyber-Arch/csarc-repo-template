@@ -31,6 +31,10 @@ def scope_for(path: str) -> str:
         or name in {"action.yml", "action.yaml", "zizmor.yml"}
     ):
         return "workflow"
+    if path.endswith(".sh") or (
+        path.startswith(("scripts/", "template/scripts/")) and "." not in name
+    ):
+        return "shell"
     if path in {".github/CODEOWNERS", ".github/REVIEWERS", "AGENTS.md"} or (
         path.startswith(("policies/", "template/policies/"))
         or path.startswith("scripts/apply-repository-settings")

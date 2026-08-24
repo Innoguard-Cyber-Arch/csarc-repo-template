@@ -14,7 +14,11 @@ shift $(( $# > 0 ? 1 : 0 ))
 for option in "$@"; do
   case "$option" in
     --prune-labels) prune_labels=true ;;
-    --allow-unprotected) allow_unprotected=true ;;
+    --allow-unprotected)
+      # Retain this parsed option for CLI compatibility.
+      # shellcheck disable=SC2034
+      allow_unprotected=true
+      ;;
     *)
       echo "Usage: $0 [plan|apply|check] [--prune-labels] [--allow-unprotected]"
       exit 2

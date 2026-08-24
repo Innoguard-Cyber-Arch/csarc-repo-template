@@ -22,6 +22,7 @@ uv run --no-project python scripts/render_site.py --check
 ./scripts/detect-language-profile
 ./scripts/test-pr-policy
 ./scripts/test-issue-triage
+./scripts/lint-workflows-shell
 
 if $verify_python; then
   python_version="${CSARC_PYTHON_VERSION:-3.14}"
