@@ -79,6 +79,11 @@ def prepare_upload(
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     published = published_digests(payload)
+    unexpected = sorted(published.keys() - {path.name for path in artifacts})
+    if unexpected:
+        raise PlanError(
+            "PyPI contains unexpected distributions: " + ", ".join(unexpected)
+        )
     pending: list[Path] = []
     for artifact in artifacts:
         actual = sha256(artifact)

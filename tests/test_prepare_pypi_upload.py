@@ -80,3 +80,22 @@ def test_digest_mismatch_fails_closed(tmp_path: Path) -> None:
 
     with pytest.raises(PlanError, match="digest mismatch"):
         prepare_upload(tmp_path / "verified", tmp_path / "upload", payload)
+
+
+def test_unexpected_published_distribution_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """Reject a PyPI version containing bytes absent from the release."""
+    artifacts = distributions(tmp_path / "verified")
+    payload = metadata(artifacts)
+    urls = payload["urls"]
+    assert isinstance(urls, list)
+    urls.append(
+        {
+            "filename": "package-1.0-py2-none-any.whl",
+            "digests": {"sha256": "0" * 64},
+        }
+    )
+
+    with pytest.raises(PlanError, match="unexpected distributions"):
+        prepare_upload(tmp_path / "verified", tmp_path / "upload", payload)

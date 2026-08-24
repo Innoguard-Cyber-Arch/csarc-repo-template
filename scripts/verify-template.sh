@@ -785,7 +785,12 @@ grep -q 'scripts/prepare_pypi_upload.py' \
   .github/workflows/release-template.yml
 grep -q "steps.verify_release.outputs.publish_required == 'true'" \
   .github/workflows/release-template.yml
-grep -q 'skip-existing: true' .github/workflows/release-template.yml
+sed -n '/name: Preserve release-source evidence/,/^$/p' \
+  .github/workflows/release-template.yml | grep -q 'overwrite: true'
+if grep -q 'skip-existing:' .github/workflows/release-template.yml; then
+  echo "PyPI digest conflicts must fail instead of being skipped."
+  exit 1
+fi
 grep -q 'output-file: sbom.cdx.json' \
   .github/workflows/release-template.yml
 if sed -n '/^  publish-pypi:/,/^  publish:/p' \
