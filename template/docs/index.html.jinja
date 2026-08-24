@@ -186,6 +186,7 @@
       <section id="workflow">
         <h2><span>開發流程</span></h2>
         <p>開 Issue／Milestone 前先搜尋 open／closed 歷史工作並摘要既有決策；PR 保留 Issue 連結與精簡清單，closing PR 的自身與 referenced Issue checklist 都必須完成。</p>
+        <p class="notice"><strong>Actions 額度 fallback：</strong>只有具帳務可見性的 human maintainer 確認當期免費分鐘已用完，且 job 未執行任何 step，agent 才能對精確 PR SHA 執行 <code>./scripts/verify</code>、列出無法本機重現的 checks，並留下只對該 SHA 有效的 <code>Actions quota fallback attestation</code>。付款失敗、budget、平台、設定、權限、未知原因或真正測試失敗都不得套用；合併須另有 human 一次性授權，額度重置後補跑正式 checks。</p>
         <div id="workflow-cards" class="cards"></div>
       </section>
 
