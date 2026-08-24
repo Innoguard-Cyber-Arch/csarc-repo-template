@@ -22,8 +22,9 @@
 9. Add or update the narrowest regression check that proves non-trivial behavior.
 10. Run targeted checks while iterating, then run `./scripts/verify-template.sh` before opening or updating a pull request.
 11. Before closing the final open Issue in a Milestone, re-check the story acceptance criteria and add any genuinely required follow-up Issue. The lifecycle workflow closes a zero-open-Issue Milestone and reopens it when open work returns.
-12. Open the pull request against `main` or its immediate parent in the stack, include `Closes #<issue-number>`, and never merge it yourself.
-13. Report what changed, which verification ran, and any remaining limitation.
+12. Before using `Closes`, `Fixes`, or `Resolves`, complete every task in the pull request and referenced Issue; do not check work that lacks its stated evidence. Open the pull request against `main` or its immediate parent in the stack, and never merge it yourself.
+13. After a pull request is merged, the agent that created its worktree must leave that worktree, fetch the integration ref, and run `./scripts/cleanup-worktrees --apply --worktree <path> origin/main` from another checkout. If the task is explicitly abandoned instead, its creator may remove only that clean worktree with `git worktree remove <path>`; keep the branch. Platform-managed worktrees stay under the platform lifecycle. For repository-wide maintenance, review the command's default dry run before omitting `--worktree`; it never removes main, current, locked, detached, dirty, unmerged, or unverifiable worktrees.
+14. Report what changed, which verification ran, and any remaining limitation.
 
 Parallel writable agents must use one branch and one Git worktree per task, and run concurrently only when their scopes are independent. Detect and reuse a host-managed worktree before creating one; never force the same branch into multiple worktrees, remove a worktree you did not create, or remove one with uncommitted changes. Worktrees isolate files, not integration: every result still follows this repository's pull request, CI, review, and final verification path.
 

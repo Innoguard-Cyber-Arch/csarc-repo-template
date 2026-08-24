@@ -1448,7 +1448,7 @@
         </article>
         <article class="tool-profile conditional">
           <div class="tool-logo-box"><img class="tool-logo" src="https://raw.githubusercontent.com/renovatebot/renovate/main/docs/usage/assets/images/logo.png" alt="Renovate logo"></div>
-          <div><h3><a href="https://github.com/renovatebot/renovate" target="_blank" rel="noreferrer">Renovate</a></h3><p><strong>套件更新｜</strong>等待與分組更細。<strong>決定｜</strong>可選；基本方案用 Dependabot，評估見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/74" target="_blank" rel="noreferrer">#74</a>。</p><p class="tool-health"><span class="tool-status">可選導入</span>· AGPL · 持續維護</p></div>
+          <div><h3><a href="https://github.com/renovatebot/renovate" target="_blank" rel="noreferrer">Renovate</a></h3><p><strong>套件更新｜</strong>等待與分組更細。<strong>決定｜</strong>不導入；保留能直接觸發既有 CI/CD checks 的 Dependabot。<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/74" target="_blank" rel="noreferrer">#74 評估</a>、<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/110" target="_blank" rel="noreferrer">#110 決策</a>。</p><p class="tool-health"><span class="tool-status">不採用</span>· AGPL · 持續維護</p></div>
         </article>
         <article class="tool-profile">
           <div class="tool-logo-box"><img class="tool-logo" src="https://cdn.simpleicons.org/githubactions/2088FF" alt="GitHub Actions logo"></div>
@@ -1625,7 +1625,7 @@
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
           <details class="package-disclosure"><summary><span><span class="tech-name">標準 AGENTS.md＋就近覆寫</span></span></summary><div class="package-health"><p><a href="https://github.com/agentsmd/agents.md" target="_blank" rel="noreferrer">agentsmd/agents.md</a>｜MIT｜公開且持續維護；格式就是一般 Markdown。</p><p><strong>熱門實例：</strong>VS Code 根檔 5 行、uv 25 行、Kubernetes 36 行；Next.js 558 行反映大型 monorepo，而不是每案都該追求的長度。</p><p><strong>官方行為：</strong>Codex 會由根目錄往工作目錄合併指令，越靠近目前檔案的規則優先。</p><p class="reference">Ref. OpenAI Docs; agentsmd/agents.md repository.</p></div></details>
-          <p class="recommendation-copy"><strong>工作契約：</strong>六段涵蓋範圍、工作迴圈、指令、修改界線、安全與審查；依語言只列真正存在的指令，根檔最多 200 行。<br><strong>平行隔離：</strong>每項可寫任務使用自己的 branch 與 Git worktree；只平行處理互不依賴的範圍。原生 Git 是基線，Worktrunk 是選用的本機輔助，不進入生成 repo 相依。<br><strong>人類負責：</strong>確認需求與技術方向、判斷風險、審查差異；worktree 不取代 PR，真正門禁仍是 CI、Ruleset、CODEOWNERS 與 Actions 權限。</p>
+          <p class="recommendation-copy"><strong>工作契約：</strong>六段涵蓋範圍、工作迴圈、指令、修改界線、安全與審查；依語言只列真正存在的指令，根檔最多 200 行。<br><strong>平行隔離：</strong>每項可寫任務使用自己的 branch 與 Git worktree；只平行處理互不依賴的範圍。原生 Git 是基線，Worktrunk 是選用的本機輔助，不進入生成 repo 相依。合併後由建立者執行 <code>scripts/cleanup-worktrees</code>，只回收 GitHub 已驗證合併且乾淨的 worktree。<br><strong>人類負責：</strong>確認需求與技術方向、判斷風險、審查差異；worktree 不取代 PR，真正門禁仍是 CI、Ruleset、CODEOWNERS 與 Actions 權限。</p>
         </article>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>人類入口與 AI 工作契約：</strong><code>README.md</code> 說明 worktree 與 CI/CD 邊界；<code>AGENTS.md</code>＋<code>CLAUDE.md</code> 規範每項任務的隔離與安全清理</li><li><strong>實際驗證：</strong>生成 repo 與其 CI 執行 <code>scripts/verify</code>；只有中央模板 repo 執行、不下發的 <code>scripts/verify-template.sh</code> 負責建立／導入／更新 fixture</li><li><strong>唯讀權限、人類核准與指定審查者：</strong><code>policies/actions.json</code>＋<code>policies/rulesets.json</code>＋<code>CODEOWNERS</code></li></ul></aside>
@@ -1638,12 +1638,12 @@
       </header>
       <p class="context-line"><strong>目前實測｜</strong><code>Innoguard-Cyber-Arch</code> API 回報 Free＋private；因此 <code>main</code> 現在確實沒有強制保護，CI 紅燈仍可能被有權限者繞過。</p>
       <div class="plan-grid">
-        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保存政策，check 降級放行：</strong>public repo 直接強制 Ruleset；private repo 只把期望狀態保留在 <code>policies/rulesets.json</code>，因為 REST 與 GraphQL 建立 API 都會拒絕。check 標示 DEGRADED，CI 與 release 照常執行，PR 會留下警告留言。</p><ul><li>private repo 的 main 仍未受 Ruleset 保護</li><li>CI 與留言提供紀錄，但無法取代 merge gate</li></ul></article>
+        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保存政策，check 降級放行：</strong>public repo 直接強制 Ruleset；private repo 只把期望狀態保留在 <code>policies/rulesets.json</code>，因為 REST 與 GraphQL 建立 API 都會拒絕。check 仍比對 repository、Actions 與政策標籤，再將 Ruleset 限制標示 DEGRADED；CI 與 release 照常執行，PR、workflow log 與 annotation 留下具體紀錄。</p><ul><li>private repo 的 main 仍未受 Ruleset 保護</li><li>CI 與留言提供紀錄，但無法取代 merge gate</li></ul></article>
         <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches、必要審查、team reviewers、CODEOWNERS 與必要檢查。</p><ul><li>需先建立真實 CODEOWNERS team</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
         <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
       </div>
-      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性與 Ruleset API；Free private 仍會套用基本設定，並把期望 Ruleset 保留在 repo，等 repo 改為 public 或組織升級後再由 <code>apply</code> 套用。Web UI 可供管理員人工預建 disabled Ruleset，但公開 REST／GraphQL API 無法自動建立。腳本本身不會改可見性。依序執行 <code>plan</code>、<code>apply</code>、<code>check</code>；不支援強制時，check 回報 MISSING 或 STAGED 與 DEGRADED，CI、release 繼續，PR 留言保留稽核紀錄。已支援 Ruleset 卻規則對不上政策時仍 fail-closed。啟用前必須確認 CODEOWNERS team；Enterprise 的身分、網路與稽核政策另經組織層審查；Code Security／Secret Protection 另購。</span></aside>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用支援的設定：</strong><code>scripts/apply-repository-settings.sh apply</code></li><li><strong>區分 policy、遠端儲存與有效強制：</strong><code>scripts/apply-repository-settings.sh check</code></li><li><strong>排程偵測漂移：</strong><code>.github/workflows/governance-drift.yml</code>（daily cron）每天在 CI 之外重跑 <code>check</code>，抓出排程執行時仍存在的偏離，並由 <code>scripts/check-governance-drift</code> 自動開立或更新追蹤 Issue；兩次快照之間曾變更又恢復的事件仍需 audit log 或組織層監控，下發專案以 <code>enable_governance_drift_check</code> 選配</li></ul></aside>
+      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性與 Ruleset API；Free private 仍會套用基本設定，並把期望 Ruleset 保留在 repo，等 repo 改為 public 或組織升級後再由 <code>apply</code> 套用。Web UI 可供管理員人工預建 disabled Ruleset，但公開 REST／GraphQL API 無法自動建立。腳本本身不會改可見性。依序執行 <code>plan</code>、<code>apply</code>、<code>check</code>；check 會逐項讀取 repository、Actions、政策標籤與有效 Ruleset。可修正差異 fail-closed；不支援的 Ruleset、受組織政策封鎖的 Actions PR 能力，或內建 <code>GITHUB_TOKEN</code> 看不到管理欄位時，回報具體 DEGRADED，CI 與 release 繼續。完整管理欄位驗證應由管理員在可信任 checkout 使用 Administration read 憑證，不把該 token 暴露給 PR 程式碼。啟用前必須確認 CODEOWNERS team；Enterprise 的身分、網路與稽核政策另經組織層審查；Code Security／Secret Protection 另購。</span></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用支援的設定：</strong><code>scripts/apply-repository-settings.sh apply</code></li><li><strong>比對全部可觀察設定：</strong><code>scripts/apply-repository-settings.sh check</code> 比對 repository、Actions、政策標籤與有效 Ruleset</li><li><strong>排程偵測漂移：</strong><code>.github/workflows/governance-drift.yml</code>（daily cron）每天重跑 <code>check</code>；可修正 drift 會開立或更新追蹤 Issue，DEGRADED 的具體差異留在 workflow log 與 warning annotation，不會誤稱為沒有 drift。兩次快照之間曾變更又恢復的事件仍需 audit log 或組織層監控，下發專案以 <code>enable_governance_drift_check</code> 選配</li></ul></aside>
       <p class="reference">Ref. <a href="https://docs.github.com/en/get-started/learning-about-github/githubs-plans" target="_blank" rel="noreferrer">GitHub plans</a>；<a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets" target="_blank" rel="noreferrer">About rulesets</a>. Accessed August 21, 2026.</p>
     </section>
 
@@ -1690,7 +1690,7 @@
       <p class="context-line"><strong>問題與目的｜</strong>分支要對應真實用途；無條件多一層 dev 只會增加漂移與合併衝突，不能取代測試環境。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把 dev 當成形式上的必經站</h3><ul><li><strong>預設 main-only：</strong>Issue → 短分支 → PR → main，適合沒有共用測試環境</li><li><strong>有 dev 環境：</strong>Issue → 短分支 → PR → dev，再經升版 PR 進 main</li><li><strong>直接 push：</strong>兩種模式都禁止，不能繞過審查與檢查</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>建立時選分支模式，Issue-first 規則不變</h3><p><strong>工作分支：</strong><code>type/&lt;Issue 編號&gt;-簡稱</code>；PR 可直接進策略分支，或指向 open PR 的上游分支形成 stack，但整條鏈必須回到策略分支。PR 內文必須用 <code>Closes #編號</code> 連回同一張未結案 Issue。<br><strong>PR 分類：</strong>GitHub 沒有 PR Issue Type／Issue Form，因此使用 Markdown template，並恰選一個 label：<code>fix</code>→<code>bug</code>、<code>docs</code>→<code>documentation</code>、其他允許的 title type→<code>enhancement</code>。<br><strong>範圍：</strong>需求超出完成條件就另開 Issue、分支與 PR；只有依賴／版本自動化，以及未改檔案的 duplicate triage 可免 Issue 或 PR。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>建立時選分支模式，Issue-first 規則不變</h3><p><strong>工作分支：</strong><code>type/&lt;Issue 編號&gt;-簡稱</code>；PR 可直接進策略分支，或指向 open PR 的上游分支形成 stack，但整條鏈必須回到策略分支。PR 內文用 <code>Closes #編號</code> 連回同一張未結案 Issue；PR 或 referenced Issue 仍有未勾選 task 時，policy 會拒絕 closing keyword，避免局部完成卻自動結案。<br><strong>PR 分類：</strong>GitHub 沒有 PR Issue Type／Issue Form，因此使用 Markdown template，並恰選一個 label：<code>fix</code>→<code>bug</code>、<code>docs</code>→<code>documentation</code>、其他允許的 title type→<code>enhancement</code>。<br><strong>範圍：</strong>需求超出完成條件就另開 Issue、分支與 PR；只有依賴／版本自動化，以及未改檔案的 duplicate triage 可免 Issue 或 PR。</p></article>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>選 main-only 或 dev 模式：</strong><code>copier.yml</code> → <code>branch_strategy</code>，結果存入 <code>.csarc/profile.json</code></li><li><strong>核對標籤、Issue、分支編號、PR 目標與標題：</strong><code>.github/workflows/pr-policy.yml</code>＋<code>scripts/test-pr-policy</code></li><li><strong>保護選定分支並指定審查者：</strong><code>policies/rulesets.json</code>＋<code>.github/CODEOWNERS</code>；Free private 保存 policy 並留下 CI／PR 紀錄，但不能自動建立或強制 Ruleset</li></ul></aside>
     </section>
@@ -1702,10 +1702,10 @@
       </header>
       <p class="context-line"><strong>問題與目的｜</strong>第三方套件出現漏洞時要立刻知道；一般新版則先等三天，避免成為供應鏈攻擊最早一批受害者。</p>
       <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把所有風險都當成同一種更新</h3><ul><li><strong>新版一出就升：</strong>可能成為惡意版本最早一批使用者</li><li><strong>漏洞也等三天：</strong>已知風險不應延後處理</li><li><strong>現在就換 Renovate：</strong>已評估<button class="term-trigger" type="button" aria-expanded="false" aria-controls="renovate-preset-overlay">中央共用更新規則（preset）</button>方案，暫緩換手</li></ul></article>
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把所有風險都當成同一種更新</h3><ul><li><strong>新版一出就升：</strong>可能成為惡意版本最早一批使用者</li><li><strong>漏洞也等三天：</strong>已知風險不應延後處理</li><li><strong>換成 Renovate：</strong><button class="term-trigger" type="button" aria-expanded="false" aria-controls="renovate-preset-overlay">中央共用更新規則（preset）</button>較靈活，但目前會額外依賴高權限身分</li></ul></article>
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
-          <details class="package-disclosure"><summary><span><span class="tech-name">Dependabot＋OSV＋anchore/sbom-action</span> 已完成</span></summary><div class="package-health"><p><a href="https://github.com/google/osv-scanner" target="_blank" rel="noreferrer">OSV-Scanner</a>｜Apache-2.0；<a href="https://github.com/anchore/syft" target="_blank" rel="noreferrer">Syft</a>｜Apache-2.0。</p><p><strong>Renovate：</strong>AGPL-3.0；已評估以單一設定取代 Dependabot cooldown 與 pnpm minimumReleaseAge（見下方「評估」卡片）；<code>trustPolicy: no-downgrade</code> 是獨立的發布者信任保護，仍留在 pnpm。下游 repo 的 GITHUB_TOKEN 無法觸發 Renovate PR 上的必要檢查，換手前要先解決這個營運缺口，暫緩實際遷移。</p></div></details>
+          <details class="package-disclosure"><summary><span><span class="tech-name">Dependabot＋OSV＋anchore/sbom-action</span> 已完成</span></summary><div class="package-health"><p><a href="https://github.com/google/osv-scanner" target="_blank" rel="noreferrer">OSV-Scanner</a>｜Apache-2.0；<a href="https://github.com/anchore/syft" target="_blank" rel="noreferrer">Syft</a>｜Apache-2.0。</p><p><strong>Renovate：</strong>AGPL-3.0；#110 決定不換手。Dependabot 使用 GitHub 原生 automation identity，PR 會觸發既有 verify、governance、OSV 與 zizmor checks，不需要第三方 App 或長效 PAT。pnpm <code>minimumReleaseAge</code> 另保護本機與 CI resolution，<code>trustPolicy: no-downgrade</code> 則保護發布者信任，兩者都保留。</p></div></details>
           <p class="recommendation-copy"><strong>等待：</strong>Dependabot 一般升版先等三天；pnpm 另以嚴格 resolver 阻擋發布未滿三天的直接或間接套件，並拒絕 publisher trust 降級。遇到 trust downgrade 時先確認發布者與 provenance，不要直接停用 policy。<br><strong>漏洞：</strong>OSV 對已公開漏洞立即通知，不套用等待期。<br><strong>內容：</strong><code>uv.lock</code> 保存 SHA-256；<code>pnpm-lock.yaml</code> 保存 integrity hash；發布時解壓真正成品，再附 checksum 與非空 SBOM。<br><strong>限制：</strong>雜湊不證明來源善意，SBOM 也不會自行阻擋漏洞。</p>
         </article>
       </div>
@@ -1716,7 +1716,9 @@
           <h3>中央共用更新規則（preset）是什麼？</h3>
           <p class="term-overlay-copy"><strong>白話說：</strong>把套件更新規則放在一個共用設定；其他 repo 只要寫「沿用這套規則」，之後改一次就能同步等待天數、排程與分組。</p>
           <p class="term-overlay-copy"><strong>何時需要：</strong>repo 變多、各專案設定開始不一致，或 Dependabot 已無法表達共同規則時。</p>
-          <p class="term-overlay-copy"><strong>目前決定（已評估觸發條件）：</strong>已提出具體 Renovate 設定草案，把 Dependabot cooldown 與 pnpm minimumReleaseAge 合併成一份「新版本觀察期＋已知漏洞立即處理」設定（見依賴風險卡片的「評估」項）；pnpm 的 <code>trustPolicy: no-downgrade</code> 不屬於等待期，繼續獨立保留。因下游 repo 用預設 GITHUB_TOKEN 自架 Renovate 時，PR 不會觸發必要檢查，換手前要先解決這個問題，本次先記錄方案、暫緩實際遷移，後續換手另開 Issue。</p>
+          <p class="term-overlay-copy"><strong>目前決定：</strong>預設保留 Dependabot 與既有 CI/CD checks。自架 Renovate 的 <code>GITHUB_TOKEN</code> 不能建立可正常觸發所有必要檢查的 PR；Mend Renovate App 又要求 organization members read、repository administration read 與 workflow／content／PR write。只有 Dependabot 已無法表達實際跨 repo 政策時才考慮選配安裝。</p>
+          <table class="release-policy-matrix" aria-label="Optional integration capability matrix"><thead><tr><th>preflight 狀態</th><th>誰會看到</th><th>下一步</th></tr></thead><tbody><tr><td><code>available</code></td><td>personal repo owner，或同時具 repo admin 的 organization owner</td><td>開啟 <a href="https://github.com/apps/renovate/installations/new" target="_blank" rel="noreferrer">Renovate App 安裝頁</a>，檢查 GitHub 顯示的權限並只選目標 repo；CLI 不代為同意或安裝</td></tr><tr><td><code>request-owner</code></td><td>有 repo admin、但不是 account／organization owner</td><td>把同一安裝入口交給 owner 核准；等待期間保留 Dependabot</td></tr><tr><td><code>fallback</code></td><td>無 admin、權限未知、API 失敗或尚無 GitHub origin</td><td>不假設可安裝，繼續使用 Dependabot 與 required CI/CD checks；推送遠端後可重跑 preflight</td></tr></tbody></table>
+          <p class="term-overlay-copy"><strong>導入時檢查：</strong><code>csarc init</code>／<code>adopt</code>／<code>update</code> 會在 origin 可讀時查 owner 類型、repo admin 與 organization membership。新 repo 尚未有 origin 時可先設定 <code>GH_REPO=owner/repo</code>，推送後也能執行 <code>python scripts/release_policy.py preflight --repo owner/repo</code> 重查；整段只讀，不要求長效廣域 PAT。</p>
         </div>
       </aside>
     </section>
@@ -2052,7 +2054,7 @@ required checks:
         {
           title: '排程每天重跑 check，縮短 CI-only 的檢查間隔',
           goal: 'CI 觸發的 check 只是一次性快照；daily cron 能抓出排程執行時仍存在的偏離，降低沒有程式碼變更時長期失察的風險。不需要另外導入 GitHub App 或第三方常駐服務，沿用同一個 check 邏輯即可。',
-          summary: '`governance-drift.yml` 用 daily cron 呼叫 `scripts/check-governance-drift`，它包一層 `apply-repository-settings.sh check`；偵測到偏離就用 `gh issue create`／`gh issue edit` 開立或更新單一追蹤 Issue，內容附上實際差異；沒有偏離則不建立或更新任何 Issue。這仍是快照檢查：若設定在兩次執行之間遭變更後又恢復，需由 GitHub audit log 或組織層事件監控追溯。下發專案透過 `enable_governance_drift_check`（預設關閉）選配同一 workflow。',
+          summary: '`governance-drift.yml` 用 daily cron 呼叫 `scripts/check-governance-drift`，它包一層 `apply-repository-settings.sh check`；可修正偏離會用 `gh issue create`／`gh issue edit` 開立或更新單一追蹤 Issue，內容附上 repository、Actions、政策標籤或 Ruleset 的實際差異。方案或組織限制造成的 DEGRADED 不讓 portable CI 永久失敗，也不會誤稱為沒有 drift；具體差異保留在 workflow log 與 warning annotation。這仍是快照檢查：若設定在兩次執行之間遭變更後又恢復，需由 GitHub audit log 或組織層事件監控追溯。下發專案透過 `enable_governance_drift_check`（預設關閉）選配同一 workflow。',
           file: '.github/workflows/governance-drift.yml＋scripts/check-governance-drift',
           code: `on:
   schedule:
@@ -2078,7 +2080,7 @@ gh issue edit "$issue_number" --body-file "$body_file"`
         {
           title: '先宣告語言組合，再只產生需要的工具鏈',
           goal: '可選 CI/CD-only、Python-only、TypeScript-only 或兩者；Python 另提供 latest／minimum。',
-          summary: '答案寫入 `.csarc/profile.json`；驗證入口會依實際 `pyproject.toml`／`package.json` 自動核對。',
+          summary: '答案寫入 `.csarc/profile.json`；驗證入口會依實際 `pyproject.toml`／`package.json` 自動核對。Python minimum 目前刻意從 3.12 起；CI 會跑所選版本的精確 `.0` 下界，以及一路到 reviewed stable 的每個 feature release 最新 patch，最後以穩定的 `verify` context 彙總。',
           file: 'copier.yml',
           code: `language:
   choices: [ci, python, typescript, python-typescript]
@@ -2092,7 +2094,10 @@ python_min_version:
   when: minimum
 use_reusable_workflow:
   type: bool
-  default: false`
+  default: false
+
+# 3.11 is intentionally outside the declared support range.
+# CI checks the selected .0 lower bound and every feature release through 3.14.`
         },
         {
           title: '可用性與真實採用成熟度分開標示',
@@ -2106,6 +2111,11 @@ profiles:
     stage: alpha
     latest_reviewed_stable: "3.14"
     default_support_mode: latest
+    support_modes:
+      minimum:
+        selectable_minimums: ["3.12", "3.13", "3.14"]
+        minimum_patch_policy: first_patch
+        ci_tests_exact_minimum_and_every_feature_release: true
     style_guide:
       name: Google Python Style Guide
       line_length: 80
@@ -2453,40 +2463,17 @@ matrix:
     output-file: sbom.cdx.json`
         },
         {
-          title: '評估｜以單一 Renovate 設定取代 Dependabot／pnpm 版本等待（暫緩換手）',
-          goal: 'Dependabot cooldown 與 pnpm minimumReleaseAge 都表達「新版本觀察期」；換成一份 Renovate 設定後，往後只需要改一個地方就能同步等待天數與分組規則。pnpm trustPolicy 是發布者信任降級保護，不屬於等待期，繼續獨立保留。',
-          summary: '已評估、尚未換手：downstream repo 若用預設 GITHUB_TOKEN 自架 Renovate GitHub Action，GitHub 基於防遞迴設計不會在 Renovate 開出的 PR 上觸發 required status checks（verify／governance／scan-pr／audit），會讓 policies/rulesets.json 的必要檢查對 Renovate PR 形同虛設；要修正就要比照 python-version-policy.yml 另外建立 GitHub App 或 repo-scoped PAT，這是每個下游 repo 各自的營運與密鑰決定，本次先只記錄方案與理由，不強制遷移，實際換手另開後續 Issue。pnpm trustPolicy、report_dependency_ceiling.py 的 resolver 上下界檢查與 Renovate 的版本觀察期是不同問題，維持不變。',
-          file: '尚未建立；決定記錄於 docs/index.html（本節）＋profiles/catalog.yaml',
-          code: `// Proposed renovate.json5 (NOT adopted yet; see decision note above)
-{
-  extends: ["config:recommended"],
-  // Mirrors dependabot.yml's cooldown.default-days: 3 and
-  // pnpm-workspace.yaml's minimumReleaseAge: 4320 (= 3 days).
-  minimumReleaseAge: "3 days",
-  vulnerabilityAlerts: {
-    // Known vulnerabilities skip the observation window, matching
-    // Dependabot security updates today.
-    minimumReleaseAge: "0 days",
-  },
-  packageRules: [
-    { matchManagers: ["github-actions"], groupName: "actions" },
-    { matchManagers: ["pep621", "uv"], groupName: "python" },
-    { matchManagers: ["npm"], groupName: "javascript" },
-  ],
-  schedule: ["before 6am on monday"],
-  // osvVulnerabilityAlerts left off on purpose: OSV-Scanner
-  // (osv.yml) stays the single known-CVE gate so the two
-  // mechanisms do not race or disagree with each other.
-  // pnpm's trustPolicy also stays in pnpm-workspace.yaml because it
-  // prevents publisher-trust downgrades rather than delaying releases.
-}
+          title: '決定｜保留 Dependabot 與 pnpm 的原生門禁',
+          goal: '讓 dependency PR 繼續觸發既有 CI/CD checks，且不要求每個導入者安裝高權限 App 或保存長效 PAT。',
+          summary: '不導入 Renovate：Dependabot 使用 GitHub 原生 automation identity，現有 PR checks 可直接執行。Dependabot cooldown 管理自動升版 PR 的三天等待；pnpm minimumReleaseAge 也保護本機與 CI resolution，並非完全重複。pnpm trustPolicy、OSV、resolver 上下界檢查與 SBOM 各自保留原本職責。若未來 Dependabot 無法表達已發生的跨 repo 需求，而且已有可維護的非 GITHUB_TOKEN 身分，再另案重評。',
+          file: '.github/dependabot.yml＋pnpm-workspace.yaml＋profiles/catalog.yaml',
+          code: `# Native updater; no extra App or long-lived token.
+.github/dependabot.yml
 
-// Blocking finding, not yet resolved:
-// A self-hosted Renovate Action with the default GITHUB_TOKEN does
-// not trigger "on: pull_request" required checks on the PRs it
-// opens (GitHub anti-recursion rule). Until each downstream repo
-// wires a GitHub App or PAT, adopting this config would silently
-// bypass the branch protection this template ships today.`
+# Install-time observation and publisher-trust gates.
+minimumReleaseAge: 4320
+minimumReleaseAgeStrict: true
+trustPolicy: no-downgrade`
         },
         {
           title: '回報本專案自身的漏洞，不是掃相依套件',
@@ -2584,7 +2571,7 @@ python_typescript: {stage: alpha}`
         {
           title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
           goal: '設定檔可以先審查；實際 repo 建立後才查方案與 API，不能使用的能力會明確略過。',
-          summary: 'Free private 在 repo 保存 ACTIVE Ruleset policy，check 標示 DEGRADED 並在 PR 留言，CI 與 release 照常執行；公開 API 無法建立 Ruleset。public／Pro／Team／Enterprise 以有效規則作為門禁，規則對不上政策時 fail-closed。GitHub App 仍是另一項獨立條件。',
+          summary: 'Free private 在 repo 保存 ACTIVE Ruleset policy；check 仍比對 repository、Actions 與政策標籤，再將 Ruleset 限制標示 DEGRADED，並在 PR、workflow log 與 annotation 留下具體紀錄。public／Pro／Team／Enterprise 以有效規則作為門禁，可修正設定對不上政策時 fail-closed。GitHub App 仍是另一項獨立條件。',
           file: 'policies/＋scripts/apply-repository-settings.sh',
           code: `policies/repository.json
 policies/actions.json

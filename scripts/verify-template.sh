@@ -15,8 +15,8 @@ prime_gitleaks_cache() {
 }
 
 unset VIRTUAL_ENV
-export UV_PYTHON=3.14
-uv sync --locked --python 3.14
+export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
+uv sync --locked --python "$UV_PYTHON"
 uv lock --check
 uv run ruff format --check \
   src/csarc_cli \
@@ -87,8 +87,14 @@ bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
 bash -n scripts/check-update-conflicts
 bash -n template/scripts/check-update-conflicts
+bash -n scripts/cleanup-worktrees
+bash -n template/scripts/cleanup-worktrees
 bash -n scripts/check-governance-drift
 bash -n template/scripts/check-governance-drift
+grep -q 'repository、Actions、政策標籤與有效 Ruleset' README.md
+grep -q 'policy labels, and effective Rulesets' docs/agent-install.md
+grep -q 'Administration read access' docs/agent-install.md
+grep -q 'repository、Actions、政策標籤與有效 Ruleset' docs/index.html
 bash -n scripts/run-live-workflow-probe
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
@@ -96,6 +102,8 @@ bash -n scripts/test-issue-triage
 bash -n scripts/validate-issue-title
 bash -n template/scripts/validate-issue-title
 ./scripts/test-issue-triage
+bash -n scripts/test-worktree-cleanup
+./scripts/test-worktree-cleanup
 
 # The live probe must preserve valid run JSON and emit reusable evidence.
 live_probe_fixture="$fixture_root/live-probe"
@@ -150,7 +158,15 @@ if [[ "$1" == "api" && "$2" == "--method" ]]; then
   exit 0
 fi
 if [[ "$1" == "label" && "$2" == "list" ]]; then
-  printf 'bug\nduplicate\ntask\n'
+  if [[ "$*" == *"name,color,description"* ]]; then
+    if [[ "${MOCK_LABELS_STATE:-match}" == "mismatch" ]]; then
+      printf '%s\n' '[{"name":"bug","color":"ffffff","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"task","color":"000000","description":"Custom"}]'
+    else
+      printf '%s\n' '[{"name":"bug","color":"D73A4A","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"task","color":"000000","description":"Custom"}]'
+    fi
+  else
+    printf 'bug\nduplicate\ntask\n'
+  fi
   exit 0
 fi
 if [[ "$1" == "label" ]]; then
@@ -184,7 +200,31 @@ case "$2" in
     fi
     ;;
   repos/acme/project)
-    printf 'acme\tOrganization\t%s\ttrue\tmain\n' "$MOCK_GITHUB_VISIBILITY"
+    if [[ "$*" == *"--jq"* ]]; then
+      printf 'acme\tOrganization\t%s\t%s\tmain\n' \
+        "$MOCK_GITHUB_VISIBILITY" "${MOCK_REPO_ADMIN:-true}"
+    elif [[ "${MOCK_REPOSITORY_STATE:-match}" == "mismatch" ]]; then
+      printf '%s\n' '{"owner":{"login":"acme","type":"Organization"},"visibility":"private","permissions":{"admin":true},"default_branch":"main","allow_auto_merge":false,"allow_merge_commit":false,"allow_rebase_merge":false,"allow_squash_merge":true,"delete_branch_on_merge":true,"has_issues":true,"has_projects":false,"has_wiki":true}'
+    elif [[ "${MOCK_REPOSITORY_STATE:-match}" == "limited" ]]; then
+      printf '%s\n' '{"owner":{"login":"acme","type":"Organization"},"visibility":"private","permissions":{"admin":false},"default_branch":"main","has_issues":true,"has_projects":false,"has_wiki":false}'
+    else
+      printf '%s\n' '{"owner":{"login":"acme","type":"Organization"},"visibility":"private","permissions":{"admin":true},"default_branch":"main","allow_auto_merge":false,"allow_merge_commit":false,"allow_rebase_merge":false,"allow_squash_merge":true,"delete_branch_on_merge":true,"has_issues":true,"has_projects":false,"has_wiki":false}'
+    fi
+    ;;
+  repos/acme/project/actions/permissions/workflow)
+    if [[ "${MOCK_ACTIONS_STATE:-match}" == "integration-error" ]]; then
+      echo "Resource not accessible by integration" >&2
+      exit 1
+    elif [[ "${MOCK_ACTIONS_STATE:-match}" == "error" ]]; then
+      echo "503 Actions settings unavailable" >&2
+      exit 1
+    elif [[ "${MOCK_ACTIONS_STATE:-match}" == "default-mismatch" ]]; then
+      printf '%s\n' '{"default_workflow_permissions":"write","can_approve_pull_request_reviews":true}'
+    elif [[ "${MOCK_ACTIONS_STATE:-match}" == "degraded" ]]; then
+      printf '%s\n' '{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}'
+    else
+      printf '%s\n' '{"default_workflow_permissions":"read","can_approve_pull_request_reviews":true}'
+    fi
     ;;
   orgs/acme)
     printf '%s\n' "$MOCK_GITHUB_PLAN"
@@ -231,6 +271,10 @@ run_settings_fixture() {
   local governance="${6:-protected}"
   local staged_ruleset="${7:-present}"
   local actions_error="${8:-}"
+  local repository_state="${9:-match}"
+  local actions_state="${10:-match}"
+  local labels_state="${11:-match}"
+  local repo_admin="${12:-true}"
   local suffix=""
   local arguments=("$mode")
   if [[ "$prune_labels" == true ]]; then
@@ -255,6 +299,10 @@ run_settings_fixture() {
     MOCK_GOVERNANCE="$governance" \
     MOCK_STAGED_RULESET="$staged_ruleset" \
     MOCK_ACTIONS_ERROR="$actions_error" \
+    MOCK_REPOSITORY_STATE="$repository_state" \
+    MOCK_ACTIONS_STATE="$actions_state" \
+    MOCK_LABELS_STATE="$labels_state" \
+    MOCK_REPO_ADMIN="$repo_admin" \
     MOCK_GH_LOG="$call_log" \
     ./scripts/apply-repository-settings.sh "${arguments[@]}"
 }
@@ -312,6 +360,36 @@ free_missing_check="$(run_settings_fixture free check "" false false protected a
 grep -q 'MISSING remote Ruleset' <<<"$free_missing_check"
 team_check="$(run_settings_fixture team check)"
 grep -q 'Repository governance ready' <<<"$team_check"
+grep -q 'All observable repository settings match policy' <<<"$team_check"
+if repository_mismatch="$(run_settings_fixture team check "" false false protected present "" mismatch 2>&1)"; then
+  echo "Repository setting mismatches must fail checks."
+  exit 1
+fi
+grep -q 'Repository settings drift: has_wiki' <<<"$repository_mismatch"
+if actions_mismatch="$(run_settings_fixture team check "" false false protected present "" match default-mismatch 2>&1)"; then
+  echo "Actionable Actions setting mismatches must fail checks."
+  exit 1
+fi
+grep -q 'Actions settings drift: default_workflow_permissions' <<<"$actions_mismatch"
+if actions_unavailable="$(run_settings_fixture team check "" false false protected present "" match error 2>&1)"; then
+  echo "Unreadable Actions settings must fail closed."
+  exit 1
+fi
+grep -q 'Cannot inspect Actions workflow permissions' <<<"$actions_unavailable"
+grep -q '503 Actions settings unavailable' <<<"$actions_unavailable"
+limited_token_check="$(run_settings_fixture team check "" false false protected present "" limited integration-error match false)"
+grep -q 'DEGRADED repository inspection: token cannot read administrator-only fields' \
+  <<<"$limited_token_check"
+grep -q 'DEGRADED Actions inspection: token cannot read administrator-only workflow permissions' \
+  <<<"$limited_token_check"
+actions_degraded_check="$(run_settings_fixture team check "" false false protected present "" match degraded)"
+grep -q 'DEGRADED Actions PR policy: desired true, live false' <<<"$actions_degraded_check"
+grep -q 'completed with 1 degraded capability difference' <<<"$actions_degraded_check"
+if labels_mismatch="$(run_settings_fixture team check "" false false protected present "" match match mismatch 2>&1)"; then
+  echo "Policy label mismatches must fail checks."
+  exit 1
+fi
+grep -q "Label settings drift: 'bug' color differs" <<<"$labels_mismatch"
 if incomplete_check="$(run_settings_fixture team check "" false false incomplete 2>&1)"; then
   echo "Incomplete effective branch rules must fail governance checks."
   exit 1
@@ -329,12 +407,17 @@ run_drift_check() {
   local governance="$1"
   local existing_issue="${2:-}"
   local log_file="$3"
+  local plan="${4:-team}"
+  local actions_state="${5:-match}"
+  local staged_ruleset="${6:-present}"
   : > "$log_file"
   PATH="$github_plan_fixture/bin:$PATH" \
     GH_REPO="acme/project" \
-    MOCK_GITHUB_PLAN="team" \
+    MOCK_GITHUB_PLAN="$plan" \
     MOCK_GITHUB_VISIBILITY="private" \
     MOCK_GOVERNANCE="$governance" \
+    MOCK_ACTIONS_STATE="$actions_state" \
+    MOCK_STAGED_RULESET="$staged_ruleset" \
     MOCK_EXISTING_ISSUE="$existing_issue" \
     MOCK_GH_LOG="$log_file" \
     "$repo_root/scripts/check-governance-drift"
@@ -354,6 +437,15 @@ grep -q '^issue edit 91 ' "$drift_update_log"
 drift_clean_log="$github_plan_fixture/drift-clean.log"
 run_drift_check protected "" "$drift_clean_log" >/dev/null
 test ! -s "$drift_clean_log"
+drift_degraded_log="$github_plan_fixture/drift-degraded.log"
+drift_degraded="$(run_drift_check protected "" "$drift_degraded_log" free match absent)"
+grep -q 'MISSING remote Ruleset' <<<"$drift_degraded"
+grep -q 'Repository settings have degraded capability differences' <<<"$drift_degraded"
+if grep -q 'No repository settings drift detected' <<<"$drift_degraded"; then
+  echo "Degraded settings must not be reported as fully aligned."
+  exit 1
+fi
+test ! -s "$drift_degraded_log"
 
 free_degraded="$(run_settings_fixture free apply "" false false protected absent)"
 grep -q 'DEGRADED repository settings applied' <<<"$free_degraded"
@@ -627,6 +719,7 @@ grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
 grep -q 'pull request chain ends at `main`' AGENTS.md
 grep -q 'against `main` or its immediate parent in the stack' AGENTS.md
+grep -q 'complete every task in the pull request and referenced Issue' AGENTS.md
 grep -q 'one branch and one Git worktree per task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
 grep -q 'search open and closed Issues' AGENTS.md
@@ -725,6 +818,10 @@ grep -q 'Validate pull request policy' .github/workflows/pr-policy.yml
 grep -q 'Select exactly one PR label' .github/workflows/pr-policy.yml
 grep -q 'duplicate label is an Issue disposition' .github/workflows/pr-policy.yml
 grep -q 'type/<issue-number>-short-slug' .github/workflows/pr-policy.yml
+grep -q 'Complete every pull request checklist item' \
+  .github/workflows/pr-policy.yml
+grep -q 'still has unchecked acceptance tasks' \
+  .github/workflows/pr-policy.yml
 grep -q 'Only dev promotion or release-please may target main in dev mode.' \
   .github/workflows/pr-policy.yml
 grep -q 'branches: \[main\]' .github/workflows/ci.yml
@@ -744,16 +841,18 @@ grep -q 'branches: \[main\]' .github/workflows/zizmor.yml
 grep -q 'target-branch: main' .github/dependabot.yml
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
 
-# Issue #74: the new-version observation window is Dependabot cooldown plus
-# pnpm's minimumReleaseAge today; trustPolicy remains an independent publisher
-# provenance gate. A Renovate consolidation of only the waiting policy was
-# evaluated and deliberately deferred (see profiles/catalog.yaml and
-# docs/index.html). Guard against a half-finished migration landing without
-# updating this decision or removing the mechanism it would replace.
-grep -q 'consolidation_status: evaluated_and_deferred' profiles/catalog.yaml
+# Issues #74 and #110: keep the native dependency updater so its PRs trigger
+# required checks without another privileged identity. pnpm also enforces the
+# waiting window during local and CI resolution; trustPolicy stays independent.
+grep -q 'consolidation_status: native_tools_retained' profiles/catalog.yaml
+grep -q 'automation: github_dependabot' profiles/catalog.yaml
 grep -q 'stays_independent_of_renovate: true' profiles/catalog.yaml
-grep -q '評估｜以單一 Renovate 設定取代 Dependabot／pnpm 版本等待' \
+grep -q '決定｜保留 Dependabot 與 pnpm 的原生門禁' \
   docs/index.html
+grep -q 'Optional integration capability matrix' docs/index.html
+grep -q 'available.*request-owner.*fallback' docs/index.html
+grep -q 'optional_integration_preflight' scripts/release_policy.py
+grep -q '選配整合依目前權限引導' README.md
 for renovate_config_path in \
   renovate.json renovate.json5 .github/renovate.json .renovaterc.json; do
   test ! -e "$renovate_config_path"
@@ -825,6 +924,81 @@ if uv run copier copy --trust --defaults --vcs-ref HEAD \
   echo "Copier accepted a non-hexadecimal workflow commit SHA."
   exit 1
 fi
+
+# Issue #140: every selectable minimum must generate the exact .0 lower bound
+# plus the latest patch of each supported feature release. Inline and reusable
+# workflows must describe the same runtime set while keeping one required
+# aggregate check.
+for python_minimum in 3.12 3.13 3.14; do
+  for reusable in false true; do
+    fixture_name="python-matrix-${python_minimum//./-}-${reusable}"
+    matrix_fixture="$fixture_root/$fixture_name"
+    copier_args=(
+      --trust --defaults --vcs-ref HEAD
+      --data "project_slug=$fixture_name"
+      --data "package_name=${fixture_name//-/_}"
+      --data code_owner="@Innoguard-Cyber-Arch/template-maintainers"
+      --data python_support_mode=minimum
+      --data "python_min_version=$python_minimum"
+      --data "use_reusable_workflow=$reusable"
+    )
+    if [[ "$reusable" == true ]]; then
+      copier_args+=(
+        --data workflow_ref=1111111111111111111111111111111111111111
+      )
+    fi
+    uv run copier copy "${copier_args[@]}" "$repo_root" "$matrix_fixture"
+
+    expected_ruff="py${python_minimum//./}"
+    grep -q "^requires-python = \">=$python_minimum\"$" \
+      "$matrix_fixture/pyproject.toml"
+    grep -q "^target-version = \"$expected_ruff\"$" \
+      "$matrix_fixture/pyproject.toml"
+    grep -q "^python_version = \"$python_minimum\"$" \
+      "$matrix_fixture/pyproject.toml"
+    uv run python - \
+      "$matrix_fixture/.github/workflows/ci.yml" \
+      "$matrix_fixture/policies/rulesets.json" \
+      "$python_minimum" "$reusable" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+workflow_path, ruleset_path, minimum, reusable_text = sys.argv[1:]
+latest_minor = 14
+minimum_minor = int(minimum.split(".")[1])
+expected = [f"{minimum}.0"] + [
+    f"3.{minor}" for minor in range(minimum_minor, latest_minor + 1)
+]
+workflow = Path(workflow_path).read_text(encoding="utf-8")
+if reusable_text == "true":
+    match = re.search(r"python-versions: >-\n\s+(\[[^\n]+\])", workflow)
+    if match is None:
+        raise SystemExit("Reusable workflow runtime input is missing")
+    actual = json.loads(match.group(1))
+    required_context = "verify / verify"
+else:
+    match = re.search(
+        r"python-version:\n((?:\s+- \"[^\"]+\"\n)+)", workflow
+    )
+    if match is None:
+        raise SystemExit("Inline workflow runtime matrix is missing")
+    actual = re.findall(r'- "([^\"]+)"', match.group(1))
+    required_context = "verify"
+if actual != expected:
+    raise SystemExit(f"Unexpected Python matrix: {actual!r} != {expected!r}")
+ruleset = json.loads(Path(ruleset_path).read_text(encoding="utf-8"))
+checks = next(
+    rule["parameters"]["required_status_checks"]
+    for rule in ruleset["rules"]
+    if rule["type"] == "required_status_checks"
+)
+if required_context not in {check["context"] for check in checks}:
+    raise SystemExit(f"Missing required aggregate check: {required_context}")
+PY
+  done
+done
 
 # Default project: strict global coverage and optional features disabled.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
@@ -962,6 +1136,10 @@ grep -q 'Verification only' \
   "$fixture_root/default-project/docs/index.html"
 grep -q 'apply-repository-settings.sh plan' \
   "$fixture_root/default-project/README.md"
+grep -q 'available.*request-owner.*fallback' \
+  "$fixture_root/default-project/README.md"
+grep -q '導入 preflight 會把 Renovate' \
+  "$fixture_root/default-project/docs/site-content.js"
 uv run python - "$fixture_root/default-project/pyproject.toml" <<'PY'
 import sys
 import tomllib
@@ -984,6 +1162,8 @@ grep -q '^## Code Review Rules$' \
 grep -q 'pull request chain ends at `main`' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'against `main` or its immediate parent in the stack' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -q 'complete every task in the pull request and referenced Issue' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'one branch and one Git worktree per task' \
   "$fixture_root/default-project/AGENTS.md"
@@ -1037,6 +1217,12 @@ test ! -f "$fixture_root/default-project/pnpm-workspace.yaml"
 test ! -d "$fixture_root/default-project/typescript"
 grep -q 'Coverage 是找出未測程式碼的訊號' \
   "$fixture_root/default-project/README.md"
+grep -q 'repository、Actions、政策標籤與有效 Ruleset' \
+  "$fixture_root/default-project/README.md"
+grep -q 'repository、Actions、政策標籤與有效 Ruleset' \
+  "$fixture_root/default-project/docs/index.html"
+grep -q 'Administration read' \
+  "$fixture_root/default-project/docs/index.html"
 grep -q '新案看全域、既有案先看 changed lines' \
   "$fixture_root/default-project/docs/site-content.js"
 grep -q '^\.DS_Store$' "$fixture_root/default-project/.gitignore"
@@ -1078,6 +1264,10 @@ grep -q '^## 完成清單$' \
   "$fixture_root/default-project/.github/pull_request_template.md"
 grep -q '^## 補充$' \
   "$fixture_root/default-project/.github/pull_request_template.md"
+grep -q 'Closing keywords require every task' \
+  "$fixture_root/default-project/.github/pull_request_template.md"
+grep -q 'referenced Issue checklist' \
+  "$fixture_root/default-project/docs/index.html"
 test -f "$fixture_root/default-project/.github/workflows/issue-triage.yml"
 test -f "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
 test -f "$fixture_root/default-project/docs/milestone-description.md"
@@ -1106,7 +1296,13 @@ grep -q '^requires-python = ">=3.14,<3.15"$' \
   "$fixture_root/default-project/pyproject.toml"
 grep -q '^target-version = "py314"$' \
   "$fixture_root/default-project/pyproject.toml"
-grep -q 'python-version: "3.14"' \
+grep -q 'python-version:.*$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q -- '- "3.14.0"' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q -- '- "3.14"' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q '^    needs: runtime$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q '^  governance:$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
@@ -1549,6 +1745,8 @@ grep -q 'reusable-ci.yml@1111111111111111111111111111111111111111' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
 grep -q 'language-profile: "python-typescript"' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
+grep -q '\["3.14.0", "3.14"\]' \
+  "$fixture_root/all-features-project/.github/workflows/ci.yml"
 grep -q 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 test "$(grep -c \
@@ -1637,10 +1835,10 @@ grep -q '^requires-python = ">=3.12"$' \
   "$fixture_root/existing-project/pyproject.toml"
 grep -q '^target-version = "py312"$' \
   "$fixture_root/existing-project/pyproject.toml"
-grep -q 'python-version: "3.12"' \
-  "$fixture_root/existing-project/.github/workflows/ci.yml"
-grep -q 'python-version: "3.14"' \
-  "$fixture_root/existing-project/.github/workflows/ci.yml"
+for expected_python in 3.12.0 3.12 3.13 3.14; do
+  grep -q -- "- \"$expected_python\"" \
+    "$fixture_root/existing-project/.github/workflows/ci.yml"
+done
 
 git -C "$fixture_root/existing-project" init -b main
 git -C "$fixture_root/existing-project" config user.name "Template Test"
@@ -1664,14 +1862,12 @@ if ! grep -qF \
 fi
 (
   cd "$fixture_root/existing-project"
-  CSARC_PYTHON_VERSION=3.12 \
-    UV_PROJECT_ENVIRONMENT=.venv-minimum \
-    DIFF_COVER_COMPARE_BRANCH=HEAD \
-    ./scripts/verify
-  CSARC_PYTHON_VERSION=3.14 \
-    UV_PROJECT_ENVIRONMENT=.venv-latest \
-    DIFF_COVER_COMPARE_BRANCH=HEAD \
-    ./scripts/verify
+  for python_runtime in 3.12.0 3.12 3.13 3.14; do
+    CSARC_PYTHON_VERSION="$python_runtime" \
+      UV_PROJECT_ENVIRONMENT=".venv-$python_runtime" \
+      DIFF_COVER_COMPARE_BRANCH=HEAD \
+      ./scripts/verify
+  done
 )
 
 # Adoption must never replace existing product manifests.

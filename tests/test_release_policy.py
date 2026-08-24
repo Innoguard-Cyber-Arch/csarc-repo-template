@@ -6,6 +6,7 @@ import json
 import runpy
 import subprocess
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -19,6 +20,7 @@ direct_release = MODULE["direct_release"]
 release_intent = MODULE["release_intent"]
 release_plan = MODULE["release_plan"]
 select_release_mode = MODULE["select_release_mode"]
+optional_integration_preflight = MODULE["optional_integration_preflight"]
 update_release_version = MODULE["update_release_version"]
 
 
@@ -59,6 +61,117 @@ def test_http_failures_are_never_allowed() -> None:
     assert classify_probe(0).state == "unknown"
     assert classify_probe(422).state == "unknown"
     assert classify_probe(422, validation_proves_access=True).state == "allowed"
+
+
+def integration_preflight(
+    monkeypatch: pytest.MonkeyPatch,
+    responses: dict[str, dict[str, object] | None],
+) -> dict[str, object]:
+    """Run the integration preflight with deterministic GitHub responses."""
+    monkeypatch.setattr(MODULE["shutil"], "which", lambda _: "/usr/bin/gh")
+
+    def fake_run(
+        command: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        del check, capture_output, text
+        payload = responses.get(command[-1])
+        return subprocess.CompletedProcess(
+            command,
+            0 if payload is not None else 1,
+            stdout=json.dumps(payload) if payload is not None else "",
+            stderr="",
+        )
+
+    monkeypatch.setattr(MODULE["subprocess"], "run", fake_run)
+    payload = optional_integration_preflight("owner/repo")
+    return cast(dict[str, object], payload["renovate"])
+
+
+def test_personal_repository_owner_can_open_installation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = integration_preflight(
+        monkeypatch,
+        {
+            "repos/owner/repo": {
+                "owner": {"login": "owner", "type": "User"},
+                "permissions": {"admin": True},
+            },
+            "user": {"login": "owner"},
+        },
+    )
+    assert result["state"] == "available"
+    observed = cast(dict[str, object], result["observed"])
+    assert observed["repository_admin"] is True
+
+
+def test_organization_owner_can_open_installation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = integration_preflight(
+        monkeypatch,
+        {
+            "repos/owner/repo": {
+                "owner": {"login": "owner", "type": "Organization"},
+                "permissions": {"admin": True},
+            },
+            "user": {"login": "actor"},
+            "orgs/owner/memberships/actor": {
+                "state": "active",
+                "role": "admin",
+            },
+        },
+    )
+    assert result["state"] == "available"
+    observed = cast(dict[str, object], result["observed"])
+    assert observed["organization_owner"] is True
+
+
+def test_organization_member_requests_owner_installation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = integration_preflight(
+        monkeypatch,
+        {
+            "repos/owner/repo": {
+                "owner": {"login": "owner", "type": "Organization"},
+                "permissions": {"admin": True},
+            },
+            "user": {"login": "actor"},
+            "orgs/owner/memberships/actor": {
+                "state": "active",
+                "role": "member",
+            },
+        },
+    )
+    assert result["state"] == "request-owner"
+    assert "Dependabot" in str(result["fallback"])
+
+
+@pytest.mark.parametrize(
+    "responses",
+    [
+        {
+            "repos/owner/repo": {
+                "owner": {"login": "owner", "type": "Organization"},
+                "permissions": {},
+            },
+            "user": {"login": "actor"},
+        },
+        {"repos/owner/repo": None},
+    ],
+)
+def test_unknown_or_failed_observation_uses_native_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    responses: dict[str, dict[str, object] | None],
+) -> None:
+    result = integration_preflight(monkeypatch, responses)
+    assert result["state"] == "fallback"
+    assert "Dependabot" in str(result["next_step"])
 
 
 @pytest.mark.parametrize(

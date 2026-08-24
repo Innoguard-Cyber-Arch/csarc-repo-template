@@ -23,23 +23,23 @@ branching_policy:
   pull_request_must_close_matching_issue: true
   automation_branches_may_omit_issue: true
 
-# Evaluated per Issue #74: the mechanisms are partly overlapping.
-# dependabot_cooldown and pnpm_minimum_release_age both express the same
-# "new-version observation window" concept and are the consolidation candidate;
-# pnpm_trust_policy, osv_scanner, resolver_ceiling_check, and sbom stay independent.
+# Evaluated per Issues #74 and #110. Dependabot remains the native PR identity;
+# pnpm also enforces the observation window during local and CI resolution.
+# The other controls below have separate responsibilities.
 dependency_version_policy:
   new_version_observation_window:
     mechanisms: [dependabot_cooldown, pnpm_minimum_release_age]
-    consolidation_candidate: single_renovate_configuration
-    consolidation_status: evaluated_and_deferred
-    blocking_finding: >-
-      A downstream repo self-hosting Renovate via GitHub Actions with the
-      default GITHUB_TOKEN cannot trigger required "on: pull_request"
-      status checks on the PRs Renovate opens, so policies/rulesets.json
-      required status checks would silently skip Renovate PRs until each
-      repo provisions a GitHub App or a repo-scoped PAT.
+    automation: github_dependabot
+    consolidation_status: native_tools_retained
+    decision: >-
+      Keep Dependabot so dependency pull requests trigger the existing
+      required checks without a third-party App or long-lived credential.
+      Keep pnpm minimumReleaseAge because it also protects local and CI
+      resolution outside automated dependency pull requests.
     decision_recorded_in: docs/index.html (supply track)
-    follow_up: separate Issue before the live mechanism is swapped
+    reconsider_when: >-
+      Dependabot cannot express a demonstrated cross-repository policy and
+      a sustainable non-GITHUB_TOKEN automation identity already exists.
   publisher_trust_downgrade:
     mechanism: pnpm_trust_policy_no_downgrade
     stays_independent_of_renovate: true
@@ -80,7 +80,8 @@ profiles:
           - "3.13"
           - "3.14"
         development_runtime: "3.14"
-        ci_tests_minimum_and_latest: true
+        minimum_patch_policy: first_patch
+        ci_tests_exact_minimum_and_every_feature_release: true
     style_guide:
       name: Google Python Style Guide
       url: https://google.github.io/styleguide/pyguide.html

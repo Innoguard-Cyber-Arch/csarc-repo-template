@@ -17,6 +17,7 @@ cleanup() {
 trap cleanup EXIT
 
 ./scripts/check-update-conflicts
+./scripts/test-worktree-cleanup
 ./scripts/detect-language-profile
 ./scripts/test-pr-policy
 ./scripts/test-issue-triage
