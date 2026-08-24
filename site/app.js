@@ -238,15 +238,16 @@ pnpm exec vitest run --coverage`
         {
           title: '一個入口驗證、打包，也證明錯誤會被拒絕',
           goal: '本機、AI 與 GitHub 執行同一入口；正向測試證明可交付，負向測資證明門禁不是永遠綠燈。',
-          summary: '十組 Issue 標題與二十五組 PR 案例檢查標籤、標題、stack base、Issue 與 main／dev；公版再注入錯誤 Python／TypeScript 檔。',
+          summary: 'Issue 標題與 PR policy 回歸案例檢查標籤、標題、stack base、Issue，以及 main／dev／delivery routes；公版再注入錯誤 Python／TypeScript 檔。',
           file: 'scripts/verify＋scripts/test-pr-policy＋.github/workflows/ci.yml',
           code: `./scripts/test-pr-policy
 ./scripts/verify
 
 on:
   pull_request:
-  push:
-    branches: [main]
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
 
 uses: Cyber-Arch/csarc-repo-template/
   .github/workflows/reusable-ci.yml@<full-commit-sha>
@@ -371,19 +372,21 @@ label: enhancement
       ],
       ci: [
         {
-          title: '預設 CI 在 PR 與整合分支 push 執行專案自己的驗證入口',
-          goal: '預設路徑不依賴中央 workflow，容易閱讀與追錯。',
+          title: 'CI 在 PR 依風險執行 fast 或 full，main 不重跑同一套測試',
+          goal: '預設路徑不依賴中央 workflow；穩定 aggregate context 兼顧成本與 required checks。',
           file: '.github/workflows/ci.yml',
           code: `on:
   pull_request:
-  push:
-    branches: [main] # dev 模式為 [main, dev]
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
 permissions:
+  actions: read
   contents: read
 jobs:
-  verify:
-    steps:
-      - run: ./scripts/verify`
+  fast: # docs／fast routing
+  full: # promotion／hotfix／merge queue／manual
+  verify: # always-present aggregate context`
         },
         {
           title: '流程穩定後，可改用完整 SHA 呼叫 reusable workflow',
@@ -401,21 +404,21 @@ gh api --method PUT \\
   -f access_level=organization`
         },
         {
-          title: 'zizmor 現在是每張 PR 都會執行的自動檢查',
-          goal: '每張 PR 都掃描；產出 private repo 採離線模式，跨 repo commit 歸屬待 GitHub App 才能線上查。',
-          file: '.github/workflows/zizmor.yml',
-          code: `name: Zizmor
+          title: 'zizmor 依 workflow 風險與週期排程執行',
+          goal: 'workflow／action 變更與 promotion 由 CI 條件式掃描；每週另掃一次，普通 source／docs PR 不重複付費。',
+          file: '.github/workflows/ci.yml＋.github/workflows/zizmor.yml',
+          code: `name: Zizmor scheduled audit
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "43 3 * * 1"
 permissions:
   contents: read
 jobs:
   audit:
     steps:
       - run: uvx --from zizmor==1.29.0 zizmor . --format plain
-# Canonical root uses a token; generated private repos stay offline.`
+# PR workflow changes are routed to the same audit by ci_tier.py.`
         }
       ],
       supply: [
@@ -639,10 +642,10 @@ csarc update`
         {
           title: 'Copier 只詢問會改變骨架或驗證行為的選項',
           goal: '不提供關閉型別或秘密掃描的開關；嚴格門檻是公版契約。',
-          summary: '語言與分支模式都在建立時明確選擇；沒有共用測試環境就用 main。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。',
+          summary: '語言與分支模式都在建立時明確選擇；delivery 模式把 CI 當整合層，main／dev 仍保留給適合的 repo。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。',
           file: 'copier.yml',
           code: `language: python
-branch_strategy: main  # main | dev
+branch_strategy: delivery  # delivery | main | dev
 python_support_mode: latest  # latest | minimum
 python_min_version: "3.12"  # Used only in minimum mode
 coverage_mode: global  # global | diff
