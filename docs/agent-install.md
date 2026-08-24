@@ -5,7 +5,11 @@
 3. Run the requested `csarc init`, `adopt`, or `update` command with
    `--dry-run` first. For a release-specific request, pass both `--to` and
    `--expected-sha`. For `adopt`, also pass `--report-dir` with a location
-   outside the target repository.
+   outside the target repository. Before `init` or `adopt`, obtain the
+   approved project description, shortest working product command, and
+   private security reporting channel. Pass an explicit
+   `security_reporting_channel` answer; never invent an email address, URL,
+   acknowledgement window, or resolution SLA.
 4. Summarize the verified release, full commit SHA, release capability
    preflight, settings, conflict risk, and every file classified as add,
    overwrite, preserve, manual merge, or unable to determine. Review both the

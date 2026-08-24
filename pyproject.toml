@@ -13,6 +13,9 @@ dependencies = [
 [project.scripts]
 csarc = "csarc_cli.cli:entrypoint"
 
+[project.urls]
+Repository = "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template"
+
 [build-system]
 requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"

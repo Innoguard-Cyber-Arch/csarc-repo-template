@@ -5,6 +5,9 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fixture_root="$(mktemp -d)"
 trap 'rm -rf "$fixture_root"' EXIT
 cd "$repo_root"
+fixture_security_args=(
+  --data "security_reporting_channel=Use the synthetic fixture's private reporting channel."
+)
 
 ./scripts/check-update-conflicts
 python3 scripts/render_site.py --check
@@ -89,6 +92,7 @@ bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
 bash -n scripts/check-update-conflicts
 bash -n template/scripts/check-update-conflicts
+bash -n template/scripts/check-project-metadata
 bash -n scripts/cleanup-worktrees
 bash -n template/scripts/cleanup-worktrees
 bash -n scripts/check-governance-drift
@@ -110,6 +114,15 @@ grep -q 'HEAD.*pull request head SHA' AGENTS.md
 grep -q 'HEAD.*pull request head SHA' template/AGENTS.md.jinja
 grep -q 'Actions quota fallback attestation' README.md
 grep -q 'Actions quota fallback attestation' template/README.md.jinja
+if rg -F \
+  -e 'Project owner: replace' \
+  -e 'A Cyber-Arch project' \
+  -e '請在這裡補上主要使用者' \
+  -e '請在這裡補上產品最短' \
+  README.md SECURITY.md site docs/index.html; then
+  echo "Root documentation contains unfinished project metadata."
+  exit 1
+fi
 grep -q '額度耗盡.*human' docs/index.html
 grep -q '額度 fallback.*human' template/site/index.html.jinja
 bash -n scripts/run-live-workflow-probe
@@ -1016,6 +1029,15 @@ fi
 
 # Invalid trust-boundary values must fail before producing a usable project.
 if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_slug="missing-security" \
+  --data language=ci \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$fixture_root/missing-security" >/dev/null 2>&1; then
+  echo "Copier accepted a missing security reporting channel."
+  exit 1
+fi
+if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_slug="Invalid/Slug" \
   --data language=ci \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
@@ -1024,6 +1046,7 @@ if uv run copier copy --trust --defaults --vcs-ref HEAD \
   exit 1
 fi
 if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_slug="valid-project" \
   --data package_name="9invalid" \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
@@ -1032,6 +1055,7 @@ if uv run copier copy --trust --defaults --vcs-ref HEAD \
   exit 1
 fi
 if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_slug="valid-project" \
   --data language=ci \
   --data use_reusable_workflow=true \
@@ -1052,6 +1076,7 @@ for python_minimum in 3.12 3.13 3.14; do
     matrix_fixture="$fixture_root/$fixture_name"
     copier_args=(
       --trust --defaults --vcs-ref HEAD
+      "${fixture_security_args[@]}"
       --data "project_slug=$fixture_name"
       --data "package_name=${fixture_name//-/_}"
       --data code_owner="@Innoguard-Cyber-Arch/template-maintainers"
@@ -1117,6 +1142,7 @@ done
 
 # Default project: strict global coverage and optional features disabled.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_name='Template "Smoke" Test' \
   --data project_slug="template-smoke-test" \
   --data $'project_description=A "quoted" project\n第二行' \
@@ -1156,6 +1182,36 @@ grep -q 'project_visibility: private' \
   "$fixture_root/default-project/.copier-answers.yml"
 grep -q 'enable_codeql: false' \
   "$fixture_root/default-project/.copier-answers.yml"
+grep -qF \
+  'https://github.com/Innoguard-Cyber-Arch/template-smoke-test/actions/workflows/ci.yml/badge.svg' \
+  "$fixture_root/default-project/README.md"
+grep -qF \
+  "uv run python -c 'import template_smoke_test'" \
+  "$fixture_root/default-project/README.md"
+grep -qF \
+  "Use the synthetic fixture's private reporting channel." \
+  "$fixture_root/default-project/SECURITY.md"
+grep -qF \
+  'Repository = "https://github.com/Innoguard-Cyber-Arch/template-smoke-test"' \
+  "$fixture_root/default-project/pyproject.toml"
+test -x "$fixture_root/default-project/scripts/check-project-metadata"
+"$fixture_root/default-project/scripts/check-project-metadata"
+metadata_probe="$fixture_root/metadata-placeholder"
+mkdir -p "$metadata_probe/scripts"
+cp "$fixture_root/default-project/scripts/check-project-metadata" \
+  "$metadata_probe/scripts/check-project-metadata"
+cp "$fixture_root/default-project/README.md" "$metadata_probe/README.md"
+cp "$fixture_root/default-project/SECURITY.md" "$metadata_probe/SECURITY.md"
+printf '%s\n' '請在這裡補上產品最短執行指令。' >> "$metadata_probe/README.md"
+if metadata_error="$(
+  cd "$metadata_probe"
+  ./scripts/check-project-metadata 2>&1
+)"; then
+  echo "Generated verification must reject unfinished metadata."
+  exit 1
+fi
+grep -q 'README.md has unfinished run command metadata' \
+  <<<"$metadata_error"
 test ! -f "$fixture_root/default-project/.github/workflows/codeql.yml"
 grep -q '"language_profile": "python"' \
   "$fixture_root/default-project/.csarc/profile.json"
@@ -1184,6 +1240,7 @@ fi
 
 # Public projects default release attestations on; private/internal stay explicit opt-in.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_slug="public-visibility-test" \
   --data package_name="public_visibility_test" \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
@@ -1214,6 +1271,7 @@ grep -q 'id-token: write' \
   "$fixture_root/public-visibility-project/.github/workflows/release.yml"
 
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_slug="internal-visibility-test" \
   --data package_name="internal_visibility_test" \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
@@ -1663,6 +1721,7 @@ rm "$fixture_root/default-project/src/template_smoke_test/invalid_policy_probe.p
 # CI/CD-only project: shared governance and release versioning without a
 # language package or language-specific toolchain.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_name="CI Only Test" \
   --data project_slug="ci-only-test" \
   --data language=ci \
@@ -1748,6 +1807,7 @@ PY
 
 # TypeScript-only project: the same quality, packaging, and release gates apply.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_name="TypeScript Test" \
   --data project_slug="typescript-test" \
   --data $'project_description=A "quoted" project\n第二行' \
@@ -1771,7 +1831,7 @@ with open(sys.argv[1], encoding="utf-8") as package_json:
     package = json.load(package_json)
 assert package["description"] == 'A "quoted" project\n第二行'
 assert package["repository"]["url"] == (
-    "https://github.com/Innoguard-Cyber-Arch/typescript-test.git"
+    "https://github.com/Innoguard-Cyber-Arch/typescript-test"
 )
 PY
 grep -q '"language_profile": "typescript"' \
@@ -1854,6 +1914,7 @@ rm "$fixture_root/typescript-project/typescript/src/invalid-policy-probe.ts"
 
 # Combined project: reusable CI and local pre-commit support.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_name="All Features Test" \
   --data project_slug="all-features-test" \
   --data package_name="all_features_test" \
@@ -2020,6 +2081,7 @@ git -C "$fixture_root/all-features-project" diff --cached --check
 
 # Changed-line coverage keeps the same 80% threshold across the runtime matrix.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_name="Existing Project Test" \
   --data project_slug="existing-project-test" \
   --data package_name="existing_project_test" \
@@ -2089,7 +2151,12 @@ cat > "$adoption_project/package.json" <<'JSON'
   "dependencies": {"typescript": "5.9.3"}
 }
 JSON
+printf '%s\n' '# Legacy product' 'PRODUCT_README_MARKER' \
+  > "$adoption_project/README.md"
+printf '%s\n' '# Legacy security policy' 'PRODUCT_SECURITY_MARKER' \
+  > "$adoption_project/SECURITY.md"
 uv run copier copy --trust --defaults --overwrite --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_mode=existing \
   --data project_name="Legacy Product" \
   --data project_slug="legacy-product" \
@@ -2103,6 +2170,8 @@ grep -q 'httpx>=0.28' "$adoption_project/pyproject.toml"
 grep -q 'setuptools.build_meta' "$adoption_project/pyproject.toml"
 grep -q '"version": "0.4.2"' "$adoption_project/package.json"
 grep -q '"typescript": "5.9.3"' "$adoption_project/package.json"
+grep -q '^PRODUCT_README_MARKER$' "$adoption_project/README.md"
+grep -q '^PRODUCT_SECURITY_MARKER$' "$adoption_project/SECURITY.md"
 grep -q 'project_mode: existing' "$adoption_project/.copier-answers.yml"
 grep -q '"template_mode": "existing"' \
   "$adoption_project/.csarc/profile.json"
@@ -2122,6 +2191,7 @@ git -C "$update_source" commit -m "test: template v0.1.0"
 git -C "$update_source" tag v0.1.0
 
 uv run copier copy --trust --defaults --vcs-ref v0.1.0 \
+  "${fixture_security_args[@]}" \
   --data language=python-typescript \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$update_source" "$update_project"
@@ -2139,7 +2209,10 @@ printf '%s\n' 'window.PROJECT_OWNED_SITE = true;' \
   >> "$update_project/docs/site-content.js"
 printf '%s\n' '/* PROJECT_OWNED_THEME */' \
   >> "$update_project/docs/site-theme.css"
+printf '%s\n' 'PROJECT_OWNED_README' >> "$update_project/README.md"
+printf '%s\n' 'PROJECT_OWNED_SECURITY' >> "$update_project/SECURITY.md"
 uv run copier copy --trust --defaults --overwrite --vcs-ref v0.1.0 \
+  "${fixture_security_args[@]}" \
   --data project_mode=existing \
   --data language=python-typescript \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
@@ -2178,6 +2251,8 @@ grep -q '^window.PROJECT_OWNED_SITE = true;$' \
   "$update_project/docs/site-content.js"
 grep -q '^/\* PROJECT_OWNED_THEME \*/$' \
   "$update_project/docs/site-theme.css"
+grep -q '^PROJECT_OWNED_README$' "$update_project/README.md"
+grep -q '^PROJECT_OWNED_SECURITY$' "$update_project/SECURITY.md"
 grep -q 'window.PROJECT_OWNED_SITE = true;' \
   "$update_project/docs/index.html"
 grep -q 'PROJECT_OWNED_THEME' \

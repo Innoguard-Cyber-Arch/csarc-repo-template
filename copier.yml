@@ -38,6 +38,8 @@ _skip_if_exists:
   - "docs/specs/**/*.md"
   - "docs/site-content.js"
   - "docs/site-theme.css"
+  - "{% if project_mode == 'existing' %}README.md{% else %}__overwrite_readme__{% endif %}"
+  - "{% if project_mode == 'existing' %}SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"
   - "{% if project_mode == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"
   - "{% if project_mode == 'existing' %}package.json{% else %}__overwrite_node_manifest__{% endif %}"
 _tasks:
@@ -71,7 +73,9 @@ project_slug:
 
 project_description:
   type: str
-  default: A Cyber-Arch project
+  help: Organization-approved one-sentence purpose for README and package metadata
+  default: "Source code and delivery automation for {{ project_name }}."
+  validator: "{% if not project_description | default('', true) | trim or project_description | lower in ['a cyber-arch project', 'todo', 'tbd'] or '<' in project_description %}Enter the approved project purpose without placeholder text.{% endif %}"
 
 language:
   type: str
@@ -104,6 +108,23 @@ code_owner:
   help: Existing GitHub team used by CODEOWNERS, for example @Innoguard-Cyber-Arch/platform
   default: "@Innoguard-Cyber-Arch/arch"
   validator: "{% if not code_owner.startswith('@Innoguard-Cyber-Arch/') %}Use an existing @Innoguard-Cyber-Arch/<team> owner.{% endif %}"
+
+project_run_command:
+  type: str
+  help: Shortest command that successfully starts or invokes the product
+  default: "{% if language == 'python' %}uv run python -c 'import {{ package_name }}'{% elif language == 'typescript' %}pnpm run build{% elif language == 'python-typescript' %}uv run python -c 'import {{ package_name }}' && pnpm run build{% else %}./scripts/verify{% endif %}"
+  validator: "{% if not project_run_command | default('', true) | trim or '<' in project_run_command %}Enter a working product command without placeholder text.{% endif %}"
+
+repository_url:
+  type: str
+  help: Canonical GitHub repository URL used by badges and package metadata
+  default: "https://github.com/{{ code_owner.split('/')[0] | replace('@', '') }}/{{ project_slug }}"
+  validator: "{% if not repository_url | default('', true) | regex_search('^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') %}Use https://github.com/owner/repository without a trailing slash or .git suffix.{% endif %}"
+
+security_reporting_channel:
+  type: str
+  help: Organization-approved private vulnerability reporting instructions
+  validator: "{% if not security_reporting_channel | default('', true) | trim or security_reporting_channel | lower in ['todo', 'tbd'] or '<' in security_reporting_channel %}Enter the approved private reporting channel without placeholder text; do not invent an email address or SLA.{% endif %}"
 
 reviewers:
   type: str

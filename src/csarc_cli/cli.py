@@ -1964,6 +1964,8 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
     )
     data = base_data(target, mode, explicit_data)
     data["project_visibility"] = repository.visibility
+    if repository.repository is not None:
+        data["repository_url"] = f"https://github.com/{repository.repository}"
     with tempfile.TemporaryDirectory(prefix="csarc-plan-") as temporary:
         stage = Path(temporary) / "project"
         stage.mkdir()
@@ -2204,7 +2206,7 @@ def update_status(
     return status, target_revision, previous
 
 
-def update_plan_answers(
+def update_plan_answers(  # noqa: C901
     answers: dict[str, object],
     explicit_data: dict[str, str],
     repository: RepositoryContext,
@@ -2214,6 +2216,10 @@ def update_plan_answers(
     update_data = dict(explicit_data)
     saved_visibility = answers.get("project_visibility")
     update_data["project_visibility"] = repository.visibility
+    if repository.repository is not None:
+        update_data["repository_url"] = (
+            f"https://github.com/{repository.repository}"
+        )
     if saved_visibility != repository.visibility:
         enabled = (
             repository.visibility == "public"

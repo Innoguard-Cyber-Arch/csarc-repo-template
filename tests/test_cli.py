@@ -810,7 +810,13 @@ def test_real_template_adoption_resumes_after_manifest_merge(
     data = cli.base_data(
         project,
         "adopt",
-        {"coverage_mode": "global", "language": language},
+        {
+            "coverage_mode": "global",
+            "language": language,
+            "security_reporting_channel": (
+                "Use the synthetic fixture's private reporting channel."
+            ),
+        },
     )
     data["project_visibility"] = "private"
     cli.copier_copy(
@@ -858,6 +864,9 @@ def test_real_template_adoption_resumes_after_manifest_merge(
                 f"language={language}",
                 "--data",
                 "coverage_mode=global",
+                "--data",
+                "security_reporting_channel=Use the synthetic fixture's "
+                "private reporting channel.",
                 "--yes",
                 "--non-interactive",
             ]
@@ -1241,6 +1250,9 @@ def test_update_recomputes_visibility_defaults_from_github(
     )
     payload = json.loads(capsys.readouterr().out)
     assert payload["answers"]["project_visibility"] == "public"
+    assert payload["answers"]["repository_url"] == (
+        "https://github.com/owner/repo"
+    )
     assert payload["answers"]["enable_codeql"] is True
     assert payload["answers"]["enable_release_attestations"] is True
 

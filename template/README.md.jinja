@@ -2,9 +2,7 @@
 {% set has_typescript = language in ["typescript", "python-typescript"] -%}
 # {{ project_name }}
 
-<!-- 請在這裡補上 CI 徽章，例如：
-[![CI](https://github.com/<org>/<repo>/actions/workflows/ci.yml/badge.svg)](https://github.com/<org>/<repo>/actions/workflows/ci.yml)
--->
+[![CI]({{ repository_url }}/actions/workflows/ci.yml/badge.svg)]({{ repository_url }}/actions/workflows/ci.yml)
 
 {{ project_description }}
 
@@ -23,14 +21,14 @@
 
 ## 專案概述
 
-本 repo 使用 CSARC 公版，語言 profile 是 `{{ language }}`。請在這裡補上主要使用者、解決的問題、輸出與不處理的範圍；完整團隊流程放在內部網站，不在 README 重複。
+本 repo 使用 CSARC 公版，語言 profile 是 `{{ language }}`。完整團隊流程放在內部網站，不在 README 重複。
 
 ## 快速開始
 
 共同需求是 Git、GitHub CLI、uv；{% if has_typescript %}本案另需 Node 24+ 與 pnpm 11。{% endif %}
 
 ```bash
-git clone <repository-url>
+git clone {{ repository_url }}
 cd {{ project_slug }}
 {% if branch_strategy == "delivery" %}git switch -c dev/next
 git push -u origin dev/next
@@ -41,7 +39,11 @@ git push -u origin dev
 ./scripts/apply-repository-settings.sh plan
 ```
 
-請在這裡補上產品最短可成功的啟動或呼叫範例。
+產品最短可成功的啟動或呼叫方式：
+
+```bash
+{{ project_run_command }}
+```
 
 {% if project_mode == "existing" %}> 既有案導入：Copier 已保留原本的 manifest。先人工合併 dev 相依、版本與工具設定，再重建 lockfile；`coverage_mode=diff` 預設比較 `origin/main`。{% endif %}
 {% if branch_strategy == "delivery" %}> 本案選用 delivery 模式：Milestone 使用 `dev/m<編號>-<簡稱>`，一般孤立 Issue 使用 `dev/next`，確實需要獨立 soak／canary 的孤立 Issue 才使用一次性的 `dev/i<Issue 編號>-<簡稱>`；它們都以 promotion PR 進入 `main`。{% elif branch_strategy == "dev" %}> 本案選用 `dev` 模式，因為有長期共用測試環境。維護者首次啟用時須從 `main` 建立並推送 `dev`。{% else %}> 本案使用 main 模式，短分支通過 PR 後直接合併到 `main`。{% endif %}

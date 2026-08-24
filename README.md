@@ -37,6 +37,12 @@ uvx --from csarc-repo-cli csarc adopt .
 uvx --from csarc-repo-cli csarc update
 ```
 
+`init`／`adopt` 會要求 `project_description`、`project_run_command` 與
+`security_reporting_channel`；前兩項可接受顯示的專案實值預設，安全通報管道則必須由
+專案 owner 明確輸入，例如 `--data security_reporting_channel='Use the approved private
+security portal.'`。不要猜測 email、URL 或回應 SLA。GitHub origin 可辨識時，CLI 會用
+實際 repository URL 產生 badge、clone 指令與 package metadata。
+
 CLI 固定驗證 canonical repository numeric ID、immutable stable Release、release attestation、tag 指向與 commit signature，再把 GitHub Release 解析成完整 commit SHA 並顯示計畫；任何不一致都會在 Copier 寫檔前停止。互動模式等使用者確認，CI 或 agent 則要同時明確給 `--yes --non-interactive`。範本來源目前是 private repo，需先以 `gh auth login` 登入；第一個 CLI package 尚未發布前的開發用法見下方 troubleshooting。
 
 ## 技術與目錄

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+status=0
+reject_placeholder() {
+  local file="$1"
+  local field="$2"
+  local placeholder="$3"
+  if grep -Fq -- "$placeholder" "$file"; then
+    echo "$file has unfinished $field metadata: $placeholder" >&2
+    status=1
+  fi
+}
+
+reject_placeholder README.md "project description" "A Cyber-Arch project"
+reject_placeholder README.md "project description" "請在這裡補上主要使用者"
+reject_placeholder README.md "run command" "請在這裡補上產品最短"
+reject_placeholder README.md "repository URL" "<repository-url>"
+reject_placeholder README.md "CI badge" "<org>/<repo>"
+reject_placeholder SECURITY.md "security reporting channel" \
+  "Project owner: replace"
+if [[ -f pyproject.toml ]]; then
+  reject_placeholder pyproject.toml "repository URL" "<repository-url>"
+fi
+if [[ -f package.json ]]; then
+  reject_placeholder package.json "repository URL" "<repository-url>"
+fi
+
+exit "$status"

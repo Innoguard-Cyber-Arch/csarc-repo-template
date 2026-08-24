@@ -12,15 +12,11 @@ Do not open a public GitHub Issue for a suspected vulnerability. Issues are
 public and indexed, so they must never contain exploit code, credentials,
 tokens, or customer data.
 
-Report through the organization-approved private channel instead of email or
-a public Issue. This template does not invent a contact address or a
-response-time commitment, because neither exists yet at the template level.
-
-<!-- Project owner: replace this section with the actual private reporting
-channel (for example GitHub private vulnerability reporting if enabled for
-this repository, a security contact mailbox, or an internal ticketing
-system) and the expected acknowledgement window before relying on this
-document. -->
+No organization-approved private security reporting channel is currently
+published for this repository. Do not disclose sensitive details in a public
+Issue or guess a maintainer's email address. Maintainers must publish an
+approved private channel before this repository can accept vulnerability
+reports. This policy does not invent an acknowledgement or resolution SLA.
 
 ## Scope
 
