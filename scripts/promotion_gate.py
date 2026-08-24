@@ -20,6 +20,7 @@ from typing import Any
 UNCHECKED = re.compile(r"(?m)^\s*-\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(r"(?:Closes|Fixes|Resolves)\s+#(\d+)(?:\D|$)", re.I)
 MILESTONE_BRANCH = re.compile(r"^dev/m(\d+)-[a-z0-9][a-z0-9-]*$")
+ISOLATED_BRANCH = re.compile(r"^dev/i(\d+)-[a-z0-9][a-z0-9-]*$")
 CONVENTIONAL_TITLE = re.compile(
     r"^(feat|fix|docs|refactor|test|build|ci|chore|revert)"
     r"(?:\([a-z0-9._/-]+\))?(!)?: "
@@ -34,6 +35,7 @@ class Route:
     kind: str
     relevant: bool
     milestone: int | None = None
+    issue: int | None = None
 
 
 @dataclass(frozen=True)
@@ -64,6 +66,9 @@ def route_for(
     match = MILESTONE_BRANCH.fullmatch(head)
     if match and "promotion" in labels:
         return Route("milestone", True, int(match.group(1)))
+    isolated = ISOLATED_BRANCH.fullmatch(head)
+    if isolated and "promotion" in labels:
+        return Route("isolated", True, issue=int(isolated.group(1)))
     if head == "dev/next" and "promotion" in labels:
         return Route("standalone-batch", True)
     if head.startswith("fix/") and "hotfix" in labels:
@@ -347,19 +352,21 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 raise RuntimeError(
                     "GH_TOKEN is required for promotion preflight"
                 )
+            tracking_issue: dict[str, Any] = {}
             if number is not None:
                 issue = github_get(args.repo, f"issues/{number}", token)
                 if not isinstance(issue, dict) or issue.get("state") != "open":
                     raise RuntimeError(
                         "Promotion tracking Issue must exist and remain open"
                     )
+                tracking_issue = issue
                 if UNCHECKED.search(issue.get("body") or ""):
                     raise RuntimeError(
                         "Promotion Issue has unchecked acceptance criteria"
                     )
                 tracking_labels = issue_labels(issue)
                 if (
-                    route.kind in {"milestone", "standalone-batch"}
+                    route.kind in {"milestone", "standalone-batch", "isolated"}
                     and "promotion" not in tracking_labels
                 ):
                     raise RuntimeError(
@@ -372,6 +379,10 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 ):
                     raise RuntimeError(
                         "Promotion Issue and delivery branch Milestones differ"
+                    )
+                if route.kind == "isolated" and number != route.issue:
+                    raise RuntimeError(
+                        "Isolated delivery branch and Issue numbers differ"
                     )
                 if route.kind != "milestone" and issue_milestone is not None:
                     raise RuntimeError(
@@ -396,6 +407,13 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     if "pull_request" not in item
                     and item.get("number") != number
                 ]
+            elif route.kind == "isolated" and number is not None:
+                included = [
+                    {
+                        "number": number,
+                        "title": str(tracking_issue.get("title", "")),
+                    }
+                ]
             current_main = github_get(args.repo, "git/ref/heads/main", token)
             if not isinstance(current_main, dict):
                 raise RuntimeError("GitHub returned an invalid main reference")
@@ -415,7 +433,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 raise RuntimeError(
                     "Delivery branch must contain current main before promotion"
                 )
-            if route.kind == "hotfix":
+            if route.kind in {"hotfix", "isolated"}:
                 included_prs = [
                     {
                         "number": pull_request["number"],

@@ -58,22 +58,24 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；CI 
 
 交付模型是「可選 Story Milestone → 1..N Issues → 各自 PR」；一張 Issue 對應一個工作分支與一個 PR，CI 與人工審查都通過才合併。完整規則（Issue／PR 內容格式、標題規範、分支與 worktree 使用、closing keyword 限制等）以 [`AGENTS.md`](AGENTS.md) 為唯一權威來源，這裡不重複列出。
 
+本 repo 採 delivery 模式：可同時有多條 Milestone delivery branch；一般孤立 Issue 進入 `dev/next`，確實需要獨立 soak／canary 時才使用一次性的 `dev/i<Issue 編號>-<簡稱>`。它們都以受審查的 promotion PR 進入 `main`；只有明確 hotfix 可直接 target main。CI 是可攜的 integration test layer，外部測試環境則屬 canary layer。
+
 ```mermaid
 flowchart LR
-    A["Issue<br/>驗收條件"] --> B["分支<br/>type/N-slug"]
-    B --> C["實作 + 測試"]
-    C --> D["本機驗證<br/>./scripts/verify"]
-    D --> E["PR → delivery branch"]
-    E --> F["CI 檢查"]
-    F --> G["人工審查"]
-    G --> H["合併"]
-    H --> I["promotion PR → main"]
-    I --> J["版本／發布<br/>release-please"]
+  A1["Milestone A Issues"] --> MA["dev/m7-delivery"]
+  B1["Milestone B Issues"] --> MB["dev/m8-auth"]
+  S["一般孤立 Issues"] --> N["dev/next"]
+  I["需獨立 canary 的 Issue #42"] --> DI["dev/i42-canary"]
+  H["緊急 fix/* + hotfix"] --> MAIN["main"]
+  MA -->|promotion: full + canary| MAIN
+  MB -->|promotion: full + canary| MAIN
+  N -->|批次 promotion| MAIN
+  DI -->|單獨 promotion| MAIN
+  MAIN -. "reviewed sync PR" .-> MA
+  MAIN -. "reviewed sync PR" .-> MB
+  MAIN -. "reviewed sync PR" .-> N
+  MAIN -. "reviewed sync PR" .-> DI
 ```
-
-上圖只畫主線；hotfix、direct／verification-only release 模式、worktree 使用與例外分支見 `AGENTS.md` 與[內部網站附錄](docs/index.html)。
-
-本 repo 採 delivery 模式：Milestone 工作先整合至 `dev/m<編號>-<簡稱>`，孤立 Issue 先進 `dev/next`，再以受審查的 promotion PR 進入 `main`；只有明確 hotfix 可直接 target main。CI 是可攜的 integration test layer，外部測試環境則屬 canary layer。
 
 `main` 前進後，所有未合併的 delivery／stacked PR 都必須先納入最新 main；`.github/workflows/delivery-sync.yml` 會讓過期 PR fail closed，並在 main push 摘要列出每條 active delivery branch 的 `sync/main-to-*` PR 指令。預設不自動寫入；只有明確設定 `CSARC_AUTO_SYNC=true`、提供會觸發 PR checks 的 `CSARC_SYNC_TOKEN`，且 branch／PR write probes 都為 allowed 時才自動開 PR，blocked／unknown 一律回到相同手動流程。
 

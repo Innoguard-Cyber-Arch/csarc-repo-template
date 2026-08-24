@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 DELIVERY_BRANCH = re.compile(r"^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$")
+ISOLATED_BRANCH = re.compile(r"^dev/i[0-9]+-[a-z0-9][a-z0-9-]*$")
 CAPABILITY_STATES = {"allowed", "blocked", "unknown"}
 
 
@@ -100,8 +101,10 @@ def active_delivery_branches(
             continue
         branch = ref.removeprefix("refs/heads/")
         match = DELIVERY_BRANCH.fullmatch(branch)
-        if branch == "dev/next" or (
-            match is not None and int(match.group(1)) in open_milestones
+        if (
+            branch == "dev/next"
+            or ISOLATED_BRANCH.fullmatch(branch)
+            or (match is not None and int(match.group(1)) in open_milestones)
         ):
             active.append((branch, sha))
     return sorted(active)

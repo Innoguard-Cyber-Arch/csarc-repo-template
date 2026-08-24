@@ -42,9 +42,11 @@ def test_active_delivery_branches_follow_open_milestones() -> None:
         {"ref": "refs/heads/dev/next", "object": {"sha": "next"}},
         {"ref": "refs/heads/dev/m7-ci", "object": {"sha": "seven"}},
         {"ref": "refs/heads/dev/m8-api", "object": {"sha": "eight"}},
+        {"ref": "refs/heads/dev/i42-soak", "object": {"sha": "isolated"}},
         {"ref": "refs/heads/dev/not-a-milestone", "object": {"sha": "other"}},
     ]
     assert active_delivery_branches(refs, {7, 8}) == [
+        ("dev/i42-soak", "isolated"),
         ("dev/m7-ci", "seven"),
         ("dev/m8-api", "eight"),
         ("dev/next", "next"),

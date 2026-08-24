@@ -175,7 +175,13 @@ def aggregate_release_boundaries(  # noqa: C901
     summaries: list[dict[str, object]] = []
     pull_requests: dict[int, dict[str, object]] = {}
     highest = "no-release"
-    valid_routes = {"milestone", "standalone-batch", "dev-promotion", "hotfix"}
+    valid_routes = {
+        "milestone",
+        "standalone-batch",
+        "isolated",
+        "dev-promotion",
+        "hotfix",
+    }
     for evidence in boundaries:
         route = evidence.get("route")
         post_merge = evidence.get("post_merge")

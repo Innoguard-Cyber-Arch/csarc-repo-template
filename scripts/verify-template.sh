@@ -695,6 +695,11 @@ grep -q '線上整合證據' README.md
 test -f docs/live-integration.md
 test -f docs/ci-policy.md
 grep -q '模板 repo 的導入前基線是一般 PR update 約 14' docs/ci-policy.md
+grep -q '孤立 Issue 決策樹' docs/ci-policy.md
+grep -q 'dev/i<Issue 編號>-<簡稱>' docs/ci-policy.md
+grep -q 'Maintainer walkthrough' docs/ci-policy.md
+grep -q 'Home Assistant core CI' docs/ci-policy.md
+grep -q 'promotion 批次建立 SemVer' docs/index.html
 grep -q '只代表靜態與合成驗證通過' docs/live-integration.md
 test -x scripts/run-live-workflow-probe
 test -f .github/workflows/live-integration.yml
@@ -1319,6 +1324,14 @@ test -f "$fixture_root/default-project/.github/workflows/promotion.yml"
 test -f "$fixture_root/default-project/docs/ci-policy.md"
 grep -q '穩定的 `verify` aggregate context' \
   "$fixture_root/default-project/docs/ci-policy.md"
+grep -q '孤立 Issue 決策樹' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q 'dev/i<Issue 編號>-<簡稱>' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q 'Delivery route' \
+  "$fixture_root/default-project/docs/index.html"
+grep -q 'dev/i<Issue 編號>-<簡稱>' \
+  "$fixture_root/default-project/README.md"
 grep -Fqx '@jachline28' "$fixture_root/default-project/.github/REVIEWERS"
 grep -q '^  pull_request:$' \
   "$fixture_root/default-project/.github/workflows/governance-comment.yml"
