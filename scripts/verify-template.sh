@@ -724,6 +724,8 @@ grep -q 'one branch and one Git worktree per task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
 grep -q 'search open and closed Issues' AGENTS.md
 grep -q 'Never silently reverse an earlier decision' AGENTS.md
+grep -q 'whether creating through the UI, CLI, or API' AGENTS.md
+grep -q 'create and link a follow-up Issue first' AGENTS.md
 grep -q 'Related decisions' docs/milestone-description.md
 grep -q 'bounded' docs/agent-install.md
 grep -q '沿用、取代或駁回' docs/index.html
@@ -801,8 +803,17 @@ grep -q '^    id: kind$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: problem$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: acceptance$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: supplement$' .github/ISSUE_TEMPLATE/work-item.yml
+test "$(grep -Ec '^      label: (類型|問題|完成條件|補充)$' \
+  .github/ISSUE_TEMPLATE/work-item.yml)" -eq 4
 grep -q '搜尋相關 open／closed Issues' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^        - duplicate$' .github/ISSUE_TEMPLATE/work-item.yml
+test "$(grep -c '^## ' .github/pull_request_template.md)" -eq 3
+grep -q '^## Purpose$' .github/pull_request_template.md
+grep -q '^## 完成清單$' .github/pull_request_template.md
+grep -q '^## 補充$' .github/pull_request_template.md
+grep -q "'## Purpose'" .github/workflows/python-version-policy.yml
+grep -q "'## 完成清單'" .github/workflows/python-version-policy.yml
+grep -q "'## 補充'" .github/workflows/python-version-policy.yml
 grep -q 'Validate pull request policy' .github/workflows/pr-policy.yml
 grep -q 'Select exactly one PR label' .github/workflows/pr-policy.yml
 grep -q 'duplicate label is an Issue disposition' .github/workflows/pr-policy.yml
@@ -1158,6 +1169,10 @@ grep -q 'one branch and one Git worktree per task' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'search open and closed Issues' \
   "$fixture_root/default-project/AGENTS.md"
+grep -q 'whether creating through the UI, CLI, or API' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -q 'create and link a follow-up Issue first' \
+  "$fixture_root/default-project/AGENTS.md"
 grep -q 'uv run pytest <test-path>' \
   "$fixture_root/default-project/AGENTS.md"
 if grep -q 'pnpm exec vitest' "$fixture_root/default-project/AGENTS.md"; then
@@ -1239,9 +1254,15 @@ test "$(grep -c '^    id:' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 4
 grep -q '^    id: supplement$' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml"
-grep -q '^## Checklist$' \
+test "$(grep -Ec '^      label: (類型|問題|完成條件|補充)$' \
+  "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 4
+test "$(grep -c '^## ' \
+  "$fixture_root/default-project/.github/pull_request_template.md")" -eq 3
+grep -q '^## Purpose$' \
   "$fixture_root/default-project/.github/pull_request_template.md"
-grep -q '^## Supplement$' \
+grep -q '^## 完成清單$' \
+  "$fixture_root/default-project/.github/pull_request_template.md"
+grep -q '^## 補充$' \
   "$fixture_root/default-project/.github/pull_request_template.md"
 grep -q 'Closing keywords require every task' \
   "$fixture_root/default-project/.github/pull_request_template.md"
@@ -1656,8 +1677,6 @@ test -f "$fixture_root/all-features-project/.github/workflows/template-update.ym
 test -x "$fixture_root/all-features-project/scripts/check-template-update"
 grep -q 'copier check-update --quiet' \
   "$fixture_root/all-features-project/scripts/check-template-update"
-grep -q '^### 補充$' \
-  "$fixture_root/all-features-project/scripts/check-template-update"
 grep -q 'CSARC_TEMPLATE_READ_TOKEN' \
   "$fixture_root/all-features-project/.github/workflows/template-update.yml"
 test -f "$fixture_root/all-features-project/.github/workflows/governance-drift.yml"
@@ -1673,8 +1692,13 @@ grep -q './scripts/check-governance-drift' \
   "$fixture_root/all-features-project/.github/workflows/governance-drift.yml"
 grep -q 'apply-repository-settings.sh check' \
   "$fixture_root/all-features-project/scripts/check-governance-drift"
-grep -q '^### 補充$' \
-  "$fixture_root/all-features-project/scripts/check-governance-drift"
+for issue_creator in check-template-update check-governance-drift; do
+  issue_creator_path="$fixture_root/all-features-project/scripts/$issue_creator"
+  test "$(grep -c '^### ' "$issue_creator_path")" -eq 4
+  for heading in 類型 問題 完成條件 補充; do
+    grep -qFx "### $heading" "$issue_creator_path"
+  done
+done
 template_update_fixture="$fixture_root/template-update-check"
 mkdir -p "$template_update_fixture/bin"
 cat > "$template_update_fixture/bin/copier" <<'SH'

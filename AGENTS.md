@@ -14,16 +14,17 @@
 1. Before planning or opening an Issue or Milestone, list open Milestones and open Issues, then search open and closed Issues with two to four concrete problem or technology terms. Inspect the body, comments, and linked pull requests of credible matches; titles and labels alone are not decisions. Keep each query bounded to 20 candidates.
 2. A Milestone is an optional, independently verifiable story outcome containing one or more Issues. It is not required for every Issue, is not selected by Issue count, and must not also contain the linked PRs. A spec is only one possible story source. Use `docs/milestone-description.md` for its description.
 3. Before creating the work item, present a short prior-decision summary when the user can respond. If creation is already authorized, record each relevant `#N` as preserved, superseded, or rejected with a reason in the Issue supplement or Milestone `Related decisions`; when none are found, record the bounded queries used. Never silently reverse an earlier decision.
-4. Open or select one GitHub Issue before editing; use its acceptance criteria as the scope boundary. Write the Issue title in 12-80 ASCII characters and at least three words; describe the outcome without a type prefix or trailing period. Add it to the selected Milestone with GitHub's native association; necessary follow-up fixes may join the same open Milestone.
-5. If new work exceeds that Issue, stop and open a separate Issue; do not silently widen the current branch or pull request.
-6. Start from `main`, or from an open work branch whose pull request chain ends at `main`, and name the branch `type/<issue-number>-short-slug`.
-7. Inspect the existing implementation, make the smallest coherent change, and preserve unrelated user work.
-8. Add or update the narrowest regression check that proves non-trivial behavior.
-9. Run targeted checks while iterating, then run `./scripts/verify-template.sh` before opening or updating a pull request.
-10. Before closing the final open Issue in a Milestone, re-check the story acceptance criteria and add any genuinely required follow-up Issue. The lifecycle workflow closes a zero-open-Issue Milestone and reopens it when open work returns.
-11. Before using `Closes`, `Fixes`, or `Resolves`, complete every task in the pull request and referenced Issue; do not check work that lacks its stated evidence. Open the pull request against `main` or its immediate parent in the stack, and never merge it yourself.
-12. After a pull request is merged, the agent that created its worktree must leave that worktree, fetch the integration ref, and run `./scripts/cleanup-worktrees --apply --worktree <path> origin/main` from another checkout. If the task is explicitly abandoned instead, its creator may remove only that clean worktree with `git worktree remove <path>`; keep the branch. Platform-managed worktrees stay under the platform lifecycle. For repository-wide maintenance, review the command's default dry run before omitting `--worktree`; it never removes main, current, locked, detached, dirty, unmerged, or unverifiable worktrees.
-13. Report what changed, which verification ran, and any remaining limitation.
+4. Use the exact checked-in body shape whether creating through the UI, CLI, or API: Issues use `類型`, `問題`, `完成條件`, and optional `補充`; pull requests use `Purpose`, `完成清單`, and optional `補充`. Fold verification, risk, rollback, impact, and decision details into those sections instead of adding parallel top-level sections.
+5. Open or select one GitHub Issue before editing; use its acceptance criteria as the scope boundary. Write the Issue title in 12-80 ASCII characters and at least three words; describe the outcome without a type prefix or trailing period. Add it to the selected Milestone with GitHub's native association; necessary follow-up fixes may join the same open Milestone.
+6. If new work exceeds that Issue, stop and open a separate Issue; do not silently widen the current branch or pull request.
+7. Start from `main`, or from an open work branch whose pull request chain ends at `main`, and name the branch `type/<issue-number>-short-slug`.
+8. Inspect the existing implementation, make the smallest coherent change, and preserve unrelated user work.
+9. Add or update the narrowest regression check that proves non-trivial behavior.
+10. Run targeted checks while iterating, then run `./scripts/verify-template.sh` before opening or updating a pull request.
+11. Before closing the final open Issue in a Milestone, re-check the story acceptance criteria and add any genuinely required follow-up Issue. The lifecycle workflow closes a zero-open-Issue Milestone and reopens it when open work returns.
+12. Before using `Closes`, `Fixes`, or `Resolves`, complete every task in the pull request and referenced Issue; do not check work that lacks its stated evidence. Open the pull request against `main` or its immediate parent in the stack, and never merge it yourself.
+13. After a pull request is merged, the agent that created its worktree must leave that worktree, fetch the integration ref, and run `./scripts/cleanup-worktrees --apply --worktree <path> origin/main` from another checkout. If the task is explicitly abandoned instead, its creator may remove only that clean worktree with `git worktree remove <path>`; keep the branch. Platform-managed worktrees stay under the platform lifecycle. For repository-wide maintenance, review the command's default dry run before omitting `--worktree`; it never removes main, current, locked, detached, dirty, unmerged, or unverifiable worktrees.
+14. Report what changed, which verification ran, and any remaining limitation.
 
 Parallel writable agents must use one branch and one Git worktree per task, and run concurrently only when their scopes are independent. Detect and reuse a host-managed worktree before creating one; never force the same branch into multiple worktrees, remove a worktree you did not create, or remove one with uncommitted changes. Worktrees isolate files, not integration: every result still follows this repository's pull request, CI, review, and final verification path.
 
@@ -32,6 +33,8 @@ Automated dependency, version-policy, and release-please branches may omit an Is
 Duplicate triage may close an Issue without a branch or pull request when no repository files change. Link the canonical Issue and use GitHub's native duplicate close reason; implementation work still follows the normal Issue, branch, and pull request loop.
 
 For an existing repository, audit Milestones and Issues in bounded pages: propose semantic story groups and exclusions read-only, wait for confirmation, then idempotently create or update Milestones and associations. Do not infer grouping from titles or labels alone, require every historical Issue to have a Milestone, or reopen completed Issues during backfill.
+
+If a change modifies the Issue or pull request body template's shape, migrate existing bodies before closing its Issue. If the authorized migration cannot be completed in that pull request, create and link a follow-up Issue first; a note in the pull request body is not a substitute.
 
 ## Commands
 

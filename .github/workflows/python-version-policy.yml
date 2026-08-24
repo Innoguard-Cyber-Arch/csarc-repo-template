@@ -78,13 +78,26 @@ jobs:
             gh pr list --head "$branch" --state open --json url --jq '.[0].url'
           )"
           if [[ -z "$pr_url" ]]; then
+            pr_body="$(printf '%s\n' \
+              '## Purpose' \
+              '' \
+              'Automated after the 30-day stable-release observation period.' \
+              '' \
+              '## 完成清單' \
+              '' \
+              '- [x] Full template verification passed before this PR was opened' \
+              '- [x] The stable-release observation period completed' \
+              '' \
+              '## 補充' \
+              '' \
+              "Target Python: ${version}. This automated version-policy PR does not require a work Issue.")"
             pr_url="$(
               gh pr create \
                 --base main \
                 --head "$branch" \
                 --label enhancement \
                 --title "build(python): adopt Python ${version}" \
-                --body "Automated after the 30-day stable-release observation period. Full template verification passed before this PR was opened."
+                --body "$pr_body"
             )"
           fi
           gh pr edit "$pr_url" --add-label enhancement
