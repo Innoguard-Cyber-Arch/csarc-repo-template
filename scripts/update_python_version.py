@@ -190,6 +190,7 @@ def update_files(
     replace_all(repo_root / "README.md", old, new)
     replace_all(repo_root / "template/README.md.jinja", old, new)
     for relative_path in (
+        ".github/workflows/ci.yml",
         ".github/workflows/reusable-ci.yml",
         "scripts/verify-template.sh",
         "template/.github/workflows/ci.yml.jinja",

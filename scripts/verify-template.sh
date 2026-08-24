@@ -15,74 +15,83 @@ prime_gitleaks_cache() {
 }
 
 unset VIRTUAL_ENV
+verify_root_python() (
+  local python_version="$1"
+  export UV_PYTHON="$python_version"
+  export UV_PROJECT_ENVIRONMENT="$fixture_root/.venv-root-${python_version//./-}"
+  echo "Verifying template repository with Python $python_version"
+  uv sync --locked --python "$python_version"
+  uv lock --check
+  uv run ruff format --check \
+    src/csarc_cli \
+    tests/test_cli.py \
+    tests/test_milestone_lifecycle.py \
+    tests/test_release_policy.py \
+    tests/test_release_prompt.py \
+    tests/test_release_consumption.py \
+    scripts/report_dependency_ceiling.py \
+    scripts/render_release_prompt.py \
+    scripts/release_policy.py \
+    scripts/spec_to_issue.py \
+    scripts/sync_milestone_state.py \
+    scripts/update_python_version.py \
+    scripts/verify_release_consumption.py \
+    tests/test_spec_to_issue.py \
+    template/scripts \
+    template/tests/test_milestone_lifecycle.py \
+    template/tests/test_release_policy.py \
+    template/tests/test_spec_to_issue.py
+  uv run ruff check \
+    src/csarc_cli \
+    tests/test_cli.py \
+    tests/test_milestone_lifecycle.py \
+    tests/test_release_policy.py \
+    tests/test_release_prompt.py \
+    tests/test_release_consumption.py \
+    scripts/report_dependency_ceiling.py \
+    scripts/render_release_prompt.py \
+    scripts/release_policy.py \
+    scripts/spec_to_issue.py \
+    scripts/sync_milestone_state.py \
+    scripts/update_python_version.py \
+    scripts/verify_release_consumption.py \
+    tests/test_spec_to_issue.py \
+    template/scripts \
+    template/tests/test_milestone_lifecycle.py \
+    template/tests/test_release_policy.py \
+    template/tests/test_spec_to_issue.py
+  uv run mypy \
+    src/csarc_cli \
+    scripts/report_dependency_ceiling.py \
+    scripts/render_release_prompt.py \
+    scripts/release_policy.py \
+    scripts/spec_to_issue.py \
+    scripts/sync_milestone_state.py \
+    scripts/update_python_version.py \
+    scripts/verify_release_consumption.py \
+    tests/test_spec_to_issue.py
+  uv run mypy template/scripts template/tests/test_spec_to_issue.py
+  uv run pytest \
+    tests/test_milestone_lifecycle.py \
+    tests/test_release_policy.py \
+    tests/test_release_prompt.py \
+    tests/test_release_consumption.py \
+    tests/test_spec_to_issue.py
+  uv run pytest tests/test_cli.py \
+    --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80
+  uv run pytest \
+    template/tests/test_milestone_lifecycle.py \
+    template/tests/test_release_policy.py \
+    template/tests/test_spec_to_issue.py
+  uv build --clear
+  uvx --from "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)" \
+    csarc --help >/dev/null
+  uv run python scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md
+)
+
+verify_root_python 3.14.0
+verify_root_python 3.14
 export UV_PYTHON=3.14
-uv sync --locked --python 3.14
-uv lock --check
-uv run ruff format --check \
-  src/csarc_cli \
-  tests/test_cli.py \
-  tests/test_milestone_lifecycle.py \
-  tests/test_release_policy.py \
-  tests/test_release_prompt.py \
-  tests/test_release_consumption.py \
-  scripts/report_dependency_ceiling.py \
-  scripts/render_release_prompt.py \
-  scripts/release_policy.py \
-  scripts/spec_to_issue.py \
-  scripts/sync_milestone_state.py \
-  scripts/update_python_version.py \
-  scripts/verify_release_consumption.py \
-  tests/test_spec_to_issue.py \
-  template/scripts \
-  template/tests/test_milestone_lifecycle.py \
-  template/tests/test_release_policy.py \
-  template/tests/test_spec_to_issue.py
-uv run ruff check \
-  src/csarc_cli \
-  tests/test_cli.py \
-  tests/test_milestone_lifecycle.py \
-  tests/test_release_policy.py \
-  tests/test_release_prompt.py \
-  tests/test_release_consumption.py \
-  scripts/report_dependency_ceiling.py \
-  scripts/render_release_prompt.py \
-  scripts/release_policy.py \
-  scripts/spec_to_issue.py \
-  scripts/sync_milestone_state.py \
-  scripts/update_python_version.py \
-  scripts/verify_release_consumption.py \
-  tests/test_spec_to_issue.py \
-  template/scripts \
-  template/tests/test_milestone_lifecycle.py \
-  template/tests/test_release_policy.py \
-  template/tests/test_spec_to_issue.py
-uv run mypy \
-  src/csarc_cli \
-  scripts/report_dependency_ceiling.py \
-  scripts/render_release_prompt.py \
-  scripts/release_policy.py \
-  scripts/spec_to_issue.py \
-  scripts/sync_milestone_state.py \
-  scripts/update_python_version.py \
-  scripts/verify_release_consumption.py \
-  tests/test_spec_to_issue.py
-uv run mypy template/scripts template/tests/test_spec_to_issue.py
-uv run pytest \
-  tests/test_milestone_lifecycle.py \
-  tests/test_release_policy.py \
-  tests/test_release_prompt.py \
-  tests/test_release_consumption.py \
-  tests/test_spec_to_issue.py
-uv run pytest tests/test_cli.py \
-  --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80
-uv run pytest \
-  template/tests/test_milestone_lifecycle.py \
-  template/tests/test_release_policy.py \
-  template/tests/test_spec_to_issue.py
-uv build
-uvx --from "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)" \
-  csarc --help >/dev/null
-uv run python scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md
 bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
 bash -n scripts/check-update-conflicts
@@ -441,36 +450,39 @@ fi
 ./scripts/scan-secrets
 uv run zizmor . --format plain
 
-# Prove that every declared direct dependency lower bound still works.
-lower_bounds_root="$fixture_root/root-lower-bounds"
-mkdir -p "$lower_bounds_root"
-if ! uv pip compile \
-  pyproject.toml \
-  --group dev \
-  --resolution lowest-direct \
-  --python-version 3.14 \
-  --output-file "$lower_bounds_root/requirements-min.txt"; then
-  echo "Root dev dependency lower bounds cannot be resolved."
-  exit 1
-fi
-uv venv --python 3.14 "$lower_bounds_root/.venv"
-if ! uv pip install \
-  --python "$lower_bounds_root/.venv/bin/python" \
-  --requirements "$lower_bounds_root/requirements-min.txt"; then
-  echo "Root dev dependency lower bounds cannot be installed."
-  exit 1
-fi
-uv pip check --python "$lower_bounds_root/.venv/bin/python"
-if ! "$lower_bounds_root/.venv/bin/python" -m pytest \
-  tests/test_milestone_lifecycle.py tests/test_release_policy.py \
-  tests/test_spec_to_issue.py ||
-  ! "$lower_bounds_root/.venv/bin/python" \
-    -m pytest template/tests/test_milestone_lifecycle.py \
-    template/tests/test_release_policy.py \
-    template/tests/test_spec_to_issue.py; then
-  echo "Root tests fail with the declared direct dependency lower bounds."
-  exit 1
-fi
+# Prove that every declared direct dependency lower bound still works on the
+# exact runtime floor and the latest patch in that feature release.
+for python_version in 3.14.0 3.14; do
+  lower_bounds_root="$fixture_root/root-lower-bounds-${python_version//./-}"
+  mkdir -p "$lower_bounds_root"
+  if ! uv pip compile \
+    pyproject.toml \
+    --group dev \
+    --resolution lowest-direct \
+    --python-version "$python_version" \
+    --output-file "$lower_bounds_root/requirements-min.txt"; then
+    echo "Root dev dependency lower bounds cannot be resolved on Python $python_version."
+    exit 1
+  fi
+  uv venv --python "$python_version" "$lower_bounds_root/.venv"
+  if ! uv pip install \
+    --python "$lower_bounds_root/.venv/bin/python" \
+    --requirements "$lower_bounds_root/requirements-min.txt"; then
+    echo "Root dev dependency lower bounds cannot be installed on Python $python_version."
+    exit 1
+  fi
+  uv pip check --python "$lower_bounds_root/.venv/bin/python"
+  if ! "$lower_bounds_root/.venv/bin/python" -m pytest \
+    tests/test_milestone_lifecycle.py tests/test_release_policy.py \
+    tests/test_spec_to_issue.py ||
+    ! "$lower_bounds_root/.venv/bin/python" \
+      -m pytest template/tests/test_milestone_lifecycle.py \
+      template/tests/test_release_policy.py \
+      template/tests/test_spec_to_issue.py; then
+    echo "Root tests fail with direct dependency lower bounds on Python $python_version."
+    exit 1
+  fi
+done
 
 # The next stable feature release must update every governed version surface.
 version_policy_fixture="$fixture_root/version-policy"
@@ -498,6 +510,13 @@ grep -q "^    - \"$current_python\"$" \
   "$version_policy_fixture/copier.yml"
 grep -q "^    - \"$next_python\"$" \
   "$version_policy_fixture/copier.yml"
+grep -q '^    - "3.11"$' "$version_policy_fixture/copier.yml"
+grep -Fq "default: '[\"$next_python.0\", \"$next_python\"]'" \
+  "$version_policy_fixture/.github/workflows/reusable-ci.yml"
+grep -q "verify_root_python $next_python.0" \
+  "$version_policy_fixture/scripts/verify-template.sh"
+grep -q "python-version: \"$next_python.0\"" \
+  "$version_policy_fixture/.github/workflows/ci.yml"
 
 test -f AGENTS.md
 test "$(wc -l < AGENTS.md)" -le 200
@@ -809,6 +828,86 @@ if uv run copier copy --trust --defaults --vcs-ref HEAD \
   exit 1
 fi
 
+# Every selectable minimum must render the same complete matrix for inline and
+# reusable CI, including the exact lower-bound patch.
+for python_minimum in 3.11 3.12 3.13 3.14; do
+  for fixture_kind in inline-python reusable-python-typescript; do
+    matrix_fixture="$fixture_root/matrix-$python_minimum-$fixture_kind"
+    language=python
+    copier_args=(
+      copy --trust --defaults --vcs-ref HEAD
+      --data "project_slug=matrix-${python_minimum//./-}-$fixture_kind"
+      --data "package_name=matrix_${python_minimum//./_}_${fixture_kind//-/_}"
+      --data code_owner=@Innoguard-Cyber-Arch/template-maintainers
+      --data python_support_mode=minimum
+      --data "python_min_version=$python_minimum"
+    )
+    if [[ "$fixture_kind" == reusable-python-typescript ]]; then
+      language=python-typescript
+      copier_args+=(
+        --data use_reusable_workflow=true
+        --data workflow_ref=1111111111111111111111111111111111111111
+      )
+    fi
+    copier_args+=(--data "language=$language" "$repo_root" "$matrix_fixture")
+    uv run copier "${copier_args[@]}" >/dev/null
+    uv run python - \
+      "$repo_root" "$matrix_fixture" "$python_minimum" "$fixture_kind" <<'PY'
+import json
+import sys
+import tomllib
+from pathlib import Path
+
+import yaml
+
+repo_root, project_root = map(Path, sys.argv[1:3])
+minimum, fixture_kind = sys.argv[3:]
+catalog = yaml.safe_load(
+    (repo_root / "profiles/catalog.yaml").read_text(encoding="utf-8")
+)
+latest_minor = int(
+    catalog["profiles"]["python"]["latest_reviewed_stable"].split(".")[1]
+)
+minimum_minor = int(minimum.split(".")[1])
+expected = [f"{minimum}.0"] + [
+    f"3.{minor}" for minor in range(minimum_minor, latest_minor + 1)
+]
+
+with (project_root / "pyproject.toml").open("rb") as pyproject_file:
+    pyproject = tomllib.load(pyproject_file)
+assert pyproject["project"]["requires-python"] == f">={minimum}"
+assert pyproject["tool"]["ruff"]["target-version"] == (
+    "py" + minimum.replace(".", "")
+)
+assert pyproject["tool"]["mypy"]["python_version"] == minimum
+
+workflow = yaml.safe_load(
+    (project_root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+)
+if fixture_kind == "inline-python":
+    actual = workflow["jobs"]["runtime"]["strategy"]["matrix"][
+        "python-version"
+    ]
+    assert workflow["jobs"]["verify"]["name"] == "verify"
+else:
+    actual = json.loads(
+        workflow["jobs"]["verify"]["with"]["python-versions"]
+    )
+    reusable = yaml.safe_load(
+        (repo_root / ".github/workflows/reusable-ci.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert reusable["jobs"]["verify"]["name"] == "verify"
+    matrix_value = reusable["jobs"]["runtime"]["strategy"]["matrix"][
+        "python-version"
+    ]
+    assert "fromJSON(inputs.python-versions)" in matrix_value
+assert actual == expected, (fixture_kind, minimum, actual, expected)
+PY
+  done
+done
+
 # Default project: strict global coverage and optional features disabled.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data project_name='Template "Smoke" Test' \
@@ -1071,7 +1170,9 @@ grep -q '^requires-python = ">=3.14,<3.15"$' \
   "$fixture_root/default-project/pyproject.toml"
 grep -q '^target-version = "py314"$' \
   "$fixture_root/default-project/pyproject.toml"
-grep -q 'python-version: "3.14"' \
+grep -q '^          - "3.14.0"$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q '^          - "3.14"$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q '^  governance:$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
@@ -1511,6 +1612,8 @@ grep -q 'reusable-ci.yml@1111111111111111111111111111111111111111' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
 grep -q 'language-profile: "python-typescript"' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
+grep -Fq "python-versions: '[\"3.14.0\", \"3.14\"]'" \
+  "$fixture_root/all-features-project/.github/workflows/ci.yml"
 grep -q 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 test "$(grep -c \
@@ -1590,18 +1693,18 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data package_name="existing_project_test" \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   --data python_support_mode=minimum \
-  --data python_min_version=3.12 \
+  --data python_min_version=3.11 \
   --data coverage_mode=diff \
   "$repo_root" "$fixture_root/existing-project"
 prime_gitleaks_cache "$fixture_root/existing-project"
 
-grep -q '^requires-python = ">=3.12"$' \
+grep -q '^requires-python = ">=3.11"$' \
   "$fixture_root/existing-project/pyproject.toml"
-grep -q '^target-version = "py312"$' \
+grep -q '^target-version = "py311"$' \
   "$fixture_root/existing-project/pyproject.toml"
-grep -q 'python-version: "3.12"' \
+grep -q '^          - "3.11.0"$' \
   "$fixture_root/existing-project/.github/workflows/ci.yml"
-grep -q 'python-version: "3.14"' \
+grep -q '^          - "3.14"$' \
   "$fixture_root/existing-project/.github/workflows/ci.yml"
 
 git -C "$fixture_root/existing-project" init -b main
@@ -1611,7 +1714,7 @@ git -C "$fixture_root/existing-project" add .
 git -C "$fixture_root/existing-project" commit -m "test: generated baseline"
 if diff_error="$(
   cd "$fixture_root/existing-project"
-  CSARC_PYTHON_VERSION=3.12 \
+  CSARC_PYTHON_VERSION=3.11 \
     UV_PROJECT_ENVIRONMENT=.venv-minimum \
     ./scripts/verify 2>&1
 )"; then
@@ -1624,17 +1727,23 @@ if ! grep -qF \
   echo "$diff_error"
   exit 1
 fi
-(
-  cd "$fixture_root/existing-project"
-  CSARC_PYTHON_VERSION=3.12 \
-    UV_PROJECT_ENVIRONMENT=.venv-minimum \
-    DIFF_COVER_COMPARE_BRANCH=HEAD \
-    ./scripts/verify
-  CSARC_PYTHON_VERSION=3.14 \
-    UV_PROJECT_ENVIRONMENT=.venv-latest \
-    DIFF_COVER_COMPARE_BRANCH=HEAD \
-    ./scripts/verify
-)
+for python_version in 3.11.0 3.11 3.12 3.13 3.14; do
+  if ! uv python find "$python_version" >/dev/null 2>&1 &&
+    ! uv python install "$python_version"; then
+    if [[ "$python_version" == 3.11.0 && "$(uname -s)-$(uname -m)" == Darwin-arm64 ]]; then
+      echo "Skipping Python 3.11.0 execution: uv does not publish this macOS arm64 build."
+      continue
+    fi
+    exit 1
+  fi
+  (
+    cd "$fixture_root/existing-project"
+    CSARC_PYTHON_VERSION="$python_version" \
+      UV_PROJECT_ENVIRONMENT=".venv-${python_version//./-}" \
+      DIFF_COVER_COMPARE_BRANCH=HEAD \
+      ./scripts/verify
+  )
+done
 
 # Adoption must never replace existing product manifests.
 adoption_project="$fixture_root/adoption-project"

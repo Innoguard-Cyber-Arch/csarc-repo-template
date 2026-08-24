@@ -2078,7 +2078,7 @@ gh issue edit "$issue_number" --body-file "$body_file"`
         {
           title: '先宣告語言組合，再只產生需要的工具鏈',
           goal: '可選 CI/CD-only、Python-only、TypeScript-only 或兩者；Python 另提供 latest／minimum。',
-          summary: '答案寫入 `.csarc/profile.json`；驗證入口會依實際 `pyproject.toml`／`package.json` 自動核對。',
+          summary: '答案寫入 `.csarc/profile.json`；Python minimum 可選 3.11～3.14，CI 會跑精確 `.0` 下界及其後每個 feature release 的最新 patch；驗證入口會依實際 `pyproject.toml`／`package.json` 自動核對。',
           file: 'copier.yml',
           code: `language:
   choices: [ci, python, typescript, python-typescript]
@@ -2088,7 +2088,7 @@ python_support_mode:
   choices: [latest, minimum]
   default: latest
 python_min_version:
-  choices: ["3.12", "3.13", "3.14"]
+  choices: ["3.11", "3.12", "3.13", "3.14"]
   when: minimum
 use_reusable_workflow:
   type: bool

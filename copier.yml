@@ -114,6 +114,7 @@ python_min_version:
   type: str
   help: Oldest Python feature release that this project promises to support
   choices:
+    - "3.11"
     - "3.12"
     - "3.13"
     - "3.14"

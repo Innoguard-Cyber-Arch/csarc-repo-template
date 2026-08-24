@@ -76,11 +76,13 @@ profiles:
         development_runtime: "3.14"
       minimum:
         selectable_minimums:
+          - "3.11"
           - "3.12"
           - "3.13"
           - "3.14"
         development_runtime: "3.14"
-        ci_tests_minimum_and_latest: true
+        ci_tests_exact_minimum_patch: true
+        ci_tests_every_supported_feature_release: true
     style_guide:
       name: Google Python Style Guide
       url: https://google.github.io/styleguide/pyguide.html

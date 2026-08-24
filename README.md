@@ -35,7 +35,7 @@ CLI 固定驗證 canonical repository numeric ID、immutable stable Release、re
 | `src/csarc_cli/` | `csarc init`／`adopt`／`update` 的薄層 Copier orchestration |
 | `docs/index.html` | 內部網站與完整設計說明；內部限閱，目前只有 `noindex`／`robots.txt` 臨時防護，尚無實際存取控制 |
 
-Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；TypeScript 以 Node 24、pnpm 11、Biome、strict TypeScript 與 Vitest 為基線。
+Python 預設只支援 3.14，也可宣告 3.11～3.14 為最低版本；CI 會驗證精確的 `.0` 下界及其後每個 feature release 的最新 patch。工具鏈使用 uv、Ruff、mypy、pytest 與 src layout；TypeScript 以 Node 24、pnpm 11、Biome、strict TypeScript 與 Vitest 為基線。
 
 ## 開發與驗證
 

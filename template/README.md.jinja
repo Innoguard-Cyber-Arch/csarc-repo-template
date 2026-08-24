@@ -67,6 +67,8 @@ git push -u origin dev
 Coverage 是找出未測程式碼的訊號，不等於測試品質，也不取代風險分析與人工 review。新案以 global coverage 建立基線；既有案先用 diff coverage 約束本次變更。只有缺陷紀錄、關鍵模組或風險改變時才調整 {{ coverage_threshold }}% 門檻，不要只為提高百分比加入沒有驗證行為的測試。
 {% endif %}
 
+{% if has_python %}Python CI 會驗證 `{{ "3.14" if python_support_mode == "latest" else python_min_version }}.0` 的精確下界，以及到 3.14 為止每個 feature release 的最新 patch。{% endif %}
+
 ## 設定與密鑰
 
 GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。有管理權且希望啟用較強門禁時，可在推送遠端後執行 `./scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 唯讀驗證；這不是 portable release baseline 的必要步驟。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。組織政策拒絕 Actions PR 設定時，`apply` 會保留宣告並明確降級。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。Copier 不在本機建檔階段猜測遠端方案。
