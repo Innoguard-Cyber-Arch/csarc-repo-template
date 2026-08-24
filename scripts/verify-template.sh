@@ -2267,7 +2267,7 @@ cp "$update_source/template/.gitignore.jinja" \
   "$update_source/template/update-marker"
 printf '%s\n' 'window.TEMPLATE_SITE_V2 = true;' \
   >> "$update_source/template/site/app.js"
-git -C "$update_source" add template/update-marker template/site/app.js
+git -C "$update_source" add -A
 git -C "$update_source" commit -m "test: template v0.1.1"
 git -C "$update_source" tag v0.1.1
 
