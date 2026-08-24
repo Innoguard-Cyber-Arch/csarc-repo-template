@@ -4,7 +4,7 @@
 
 - `docs/site-content.js`：文字與結構化內容；必須保留支援的 `schemaVersion`
 - `docs/site-theme.css`：允許的色彩、字型與少量版面覆寫
-- `docs/decisions/`：經確認與 PR 審查的 canonical 選型紀錄
+- `docs/adr/`：經確認與 PR 審查的 Architecture Decision Records（ADR）
 
 修改後執行 `uv run --no-project python scripts/render_site.py`。`docs/index.html` 會把 CSS、JavaScript、font 與 image 內嵌成可離線交付的單一檔案，不要直接修改它。
 

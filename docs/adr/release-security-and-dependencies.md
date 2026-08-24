@@ -1,0 +1,45 @@
+# Release, security, and dependency posture ADR
+
+- **狀態：**Accepted
+- **日期：**2026-08-24
+- **來源 Issues：**[#29](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/29), [#30](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/30), [#35](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/35), [#36](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/36), [#64](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/64), [#98](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/98), [#101](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/101), [#104](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/104), [#110](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/110), [#123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123), [#142](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/142)
+- **實作 PRs：**[#60](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/60), [#61](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/61), [#92](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92), [#51](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/51), [#118](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/118), [#119](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/119), [#128](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/128), [#139](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/139), [#143](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/143), [#151](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/151)
+
+## 問題與限制
+
+Release automation 會跨越 Git history、GitHub workflow permissions、immutable Release、artifact、attestation 與 registry。任一段的「成功」都不能自動證明其他段，依賴更新工具也不能取代漏洞、來源與成品驗證。
+
+## 決定
+
+- 精確版本只在 merge／promotion 後由 default-branch history 配置；tag 必須指到已包含該版本與 CHANGELOG 的 source commit。
+- GitHub Release 是 portable durable evidence：保存 distribution、checksum、非空 SBOM、source metadata，並在能力允許時加 attestation。
+- Release consumer 與 registry publisher 驗 repository、tag、source digest、artifact digest 與 signer workflow identity。
+- PyPI／npm publishing 是 opt-in OIDC；沒有 package owner、license 或 trusted publisher 時不宣稱已啟用。
+- Dependabot 保留為能觸發既有 checks 的 native update identity；pnpm 等待與 publisher trust、OSV、Gitleaks、CodeQL 各負責不同風險。
+
+## 歷史 disposition
+
+| 狀態 | 決策 | 來源 |
+| --- | --- | --- |
+| Superseded | 固定用 `GITHUB_TOKEN` 建 Release PR | [#64](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/64) → [#123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123)／[#128](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/128) |
+| Superseded | 只在 ephemeral checkout 改版本後發布 | [#98](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/98) → [#142](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/142)／[#151](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/151) |
+| Rejected | 以 Renovate 取代 native update automation，卻沒有可持續的高權限 identity | [#74](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/74)／[#110](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/110)／[#143](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/143) |
+| Preserved | 上游 OSV reusable workflow 的實際 permission requirement 優先於靜態推測 | [#35](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/35)／[#92](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92) |
+| Unresolved | License、supported CLI install 與 build-once cross-registry identity | [#170](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/170), [#195](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/195), [#203](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/203) |
+
+## Ownership 與驗證
+
+Repository owner 決定公開授權與 registry identity；workflow 只取得各 job 所需最小權限。Source、release、artifact 與 consumption tests 必須能製造受控錯誤並證明 fail closed；live evidence 則在 Issue／PR 留下 run、tag 與 digest。
+
+## 評估過的替代方案
+
+| 方案 | 結論 |
+| --- | --- |
+| 長效 PyPI／npm token | 不採用；使用 trusted publishing OIDC |
+| 只保留短期 Actions artifact | 不採用；正式證據附在 immutable Release |
+| 用單一 security scanner 取代其他控制 | 不採用；來源、依賴、secret、SAST 與成品是不同風險 |
+| 為早期 release 補造證據 | 不採用；缺失必須明記為歷史限制 |
+
+## 重新評估條件
+
+License／distribution 決策、registry 實際啟用或 GitHub attestation API 行為變更時重新檢查整條 trust chain。任何優化都必須維持相同 source 與 artifact identity。

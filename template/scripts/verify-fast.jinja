@@ -15,7 +15,7 @@ git diff --check
 ./scripts/scan-secrets
 
 if [[ "$tier" == "docs" ]]; then
-  python3 scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md
+  python3 scripts/spec_to_issue.py validate
   exit 0
 fi
 
