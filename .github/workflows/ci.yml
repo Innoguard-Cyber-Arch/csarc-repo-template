@@ -2,12 +2,13 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches: [main, "dev/**"]
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && !startsWith(github.event.pull_request.head.ref, 'dev') && !startsWith(github.event.pull_request.head.ref, 'release-please--') && !contains(github.event.pull_request.labels.*.name, 'promotion') && !contains(github.event.pull_request.labels.*.name, 'hotfix') }}
 
 permissions:
   actions: read
@@ -16,23 +17,102 @@ permissions:
   pull-requests: read
 
 jobs:
-  governance:
-    name: governance
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Require protected default branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: ./scripts/apply-repository-settings.sh check
-
-  python-runtime:
-    name: Python ${{ matrix.python-version }}
+  fast:
+    name: route and fast checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      tier: ${{ steps.plan.outputs.tier }}
+      reason: ${{ steps.plan.outputs.reason }}
+      scopes: ${{ steps.plan.outputs.scopes }}
+      run_governance: ${{ steps.plan.outputs.run_governance }}
+      run_osv: ${{ steps.plan.outputs.run_osv }}
+      run_zizmor: ${{ steps.plan.outputs.run_zizmor }}
+    steps:
+      - name: Start timing
+        id: started
+        run: echo "epoch=$(date +%s)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select verification tier
+        id: plan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          PR_BASE: ${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || '' }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref || github.event.merge_group.head_ref || '' }}
+        run: |
+          files="$RUNNER_TEMP/changed-files"
+          if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]]; then
+            git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$files"
+          else
+            git ls-files -z > "$files"
+          fi
+          args=()
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            args+=(--force-full)
+          fi
+          python3 scripts/ci_tier.py \
+            --event "$EVENT_NAME" \
+            --base "${PR_BASE#refs/heads/}" \
+            --head "${PR_HEAD#refs/heads/}" \
+            --labels "$LABELS" \
+            --files-from "$files" \
+            --output-json ci-plan.json \
+            --github-output "$GITHUB_OUTPUT" \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            "${args[@]}"
+      - if: ${{ steps.plan.outputs.tier == 'fast' }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - if: ${{ steps.plan.outputs.tier == 'fast' }}
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Run change-aware checks
+        if: ${{ steps.plan.outputs.tier == 'docs' || steps.plan.outputs.tier == 'fast' }}
+        env:
+          CSARC_CI_SCOPES: ${{ steps.plan.outputs.scopes }}
+          CSARC_CI_TIER: ${{ steps.plan.outputs.tier }}
+          CSARC_PYTHON_VERSION: "3.14"
+        run: ./scripts/verify-fast
+      - name: Record routing duration
+        if: ${{ always() }}
+        env:
+          STARTED_AT: ${{ steps.started.outputs.epoch }}
+        run: |
+          duration=$(( $(date +%s) - STARTED_AT ))
+          if [[ -f ci-plan.json ]]; then
+            python3 - "$duration" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          path = Path("ci-plan.json")
+          plan = json.loads(path.read_text(encoding="utf-8"))
+          plan["fast_job_seconds"] = int(sys.argv[1])
+          path.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+          PY
+          fi
+          echo "- Fast job duration: \`${duration}s\`" >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish CI routing evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-plan.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  python-runtime:
+    name: full Python ${{ matrix.python-version }}
+    needs: fast
+    if: ${{ needs.fast.outputs.tier == 'full' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -56,14 +136,77 @@ jobs:
         env:
           CSARC_PYTHON_VERSION: ${{ matrix.python-version }}
 
+  governance:
+    name: remote governance
+    needs: fast
+    if: ${{ needs.fast.outputs.run_governance == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+      - name: Check effective repository governance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/apply-repository-settings.sh check
+
+  osv:
+    name: dependency vulnerability scan
+    needs: fast
+    if: ${{ needs.fast.outputs.run_osv == 'true' }}
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@6e4298ebc4db23e847df9b2e2de2939d6f066c67 # v2.5.1
+    with:
+      scan-args: |-
+        --include-git-root
+        -r
+        ./
+      upload-sarif: false
+      fail-on-vuln: true
+
+  zizmor:
+    name: workflow audit
+    needs: fast
+    if: ${{ needs.fast.outputs.run_zizmor == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Audit workflow definitions
+        env:
+          CSARC_ZIZMOR_TOKEN: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && github.token || '' }}
+        run: |
+          if [[ -n "$CSARC_ZIZMOR_TOKEN" ]]; then
+            GH_TOKEN="$CSARC_ZIZMOR_TOKEN" \
+              uvx --from zizmor==1.29.0 zizmor . --format plain
+          else
+            uvx --from zizmor==1.29.0 zizmor . --format plain
+          fi
+
   verify:
     name: verify
     if: ${{ always() }}
-    needs: python-runtime
+    needs: [fast, python-runtime, governance, osv, zizmor]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
-      - name: Require every Python runtime
+      - name: Require every applicable check
         env:
+          FAST_RESULT: ${{ needs.fast.result }}
+          GOVERNANCE_RESULT: ${{ needs.governance.result }}
+          OSV_RESULT: ${{ needs.osv.result }}
           RUNTIME_RESULT: ${{ needs.python-runtime.result }}
-        run: test "$RUNTIME_RESULT" = success
+          ZIZMOR_RESULT: ${{ needs.zizmor.result }}
+        run: |
+          test "$FAST_RESULT" = success
+          for result in "$GOVERNANCE_RESULT" "$OSV_RESULT" "$RUNTIME_RESULT" "$ZIZMOR_RESULT"; do
+            [[ "$result" == success || "$result" == skipped ]]
+          done
