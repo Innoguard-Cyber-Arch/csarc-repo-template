@@ -46,7 +46,7 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；CI 
 3. 從 `main` 或最終 PR 回 `main` 的未合併工作分支建立 `type/<issue-number>-short-slug`；一張 Issue 與 PR 只交付一個結果，若新增需求超出完成條件就另開 Issue 與分支。若後來確認重複，連結 canonical Issue 並用 GitHub 的 Duplicate 原生原因關閉；純 triage 不改檔案，可不開分支與 PR。
 4. 公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。
 5. PR 指向 `main` 或 stack 中的直接上游分支；整條 open PR 鏈必須最終回到 `main`。使用 `Closes #<issue-number>` 前，PR 與 referenced Issue 不得留有未勾選 task；PR policy 會直接拒絕，避免局部完成卻自動結案。風險或回退放在選填補充；PR 沒有原生 Issue Type／Issue Form，只使用 Markdown template，並恰選一個 change label：`fix`→`bug`、`docs`→`documentation`，其餘允許的 Conventional Commit type→`enhancement`。
-6. CI 與人工審查都通過才合併；AI 不得自行合併。
+6. 一般情況下，CI 與人工審查都通過才合併；只有下列 Actions 額度例外與 `AGENTS.md` 明載的 Alpha 自行合併政策可在 human maintainer 明確授權後由 agent 合併。
 
 多個可寫 agents 平行執行時，一項任務使用一個 branch 與一個獨立 worktree，且只平行處理範圍互不依賴的工作；開始前先辨識目前是否已在 agent 平台管理的 worktree，不強制讓同一 branch 出現在多個 worktrees，也不自行刪除其他工具建立或含未提交變更的 worktree。原生 [`git worktree`](https://git-scm.com/docs/git-worktree) 是可攜基線；[Worktrunk](https://github.com/max-sixty/worktrunk) 可選擇簡化建立、切換與清理，但屬於本機／agent orchestration 輔助工具，不是本模板或生成 repo 的必要相依。worktree 只隔離工作目錄，整合仍以 PR、CI、人工審查及合併後完整驗證為準。
 
@@ -54,6 +54,12 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 
 本 repo 沒有共用測試環境，因此採 main-only。生成專案只有在確實有長期 dev 測試環境時，才改選 `dev` 模式。
 驗證入口也會執行 Issue／PR 政策正反例；標題不合格的 Issue 會讓連結它的 PR 無法通過，公版另注入不合法的 Python／TypeScript 內容，確認語言門禁真的會拒絕。
+
+### Actions 額度耗盡的一次性驗證
+
+只有具帳務用量檢視權限的 human maintainer 已明確確認「當期 GitHub Actions 免費分鐘已用完」時，才可啟用本機 fallback。GitHub 顯示的 runner 未啟動訊息會同時提及付款失敗與 spending limit，本身不足以證明額度耗盡；付款失敗、budget 設定、平台事故、workflow／權限錯誤、原因不明，或任何已開始執行 step 後失敗的 job 都不能使用。
+
+Agent 必須確認乾淨 worktree 的 `HEAD` 等於 PR head SHA，執行 `./scripts/verify-template.sh` 與所有可忠實本機重現的必要 checks，任何失敗都停止。通過後在 PR 留下標題為 `Actions quota fallback attestation` 的留言，記錄 SHA、受阻 run URL 與 annotation、human quota confirmation、UTC 時間、環境／工具版本、完整命令與結果，以及無法在本機重現的 checks。Human maintainer 必須明確授權該 PR 使用一次性 fallback；新 commit 會使聲明立即失效。若 repo 現行政策允許 author self-merge，agent 才能據此合併，但不得偽造成功 Check Run，也不能取代 release、publishing、deployment approval、secrets、provenance 或 CODEOWNER review。額度重置後須補跑該 commit 的 GitHub checks；無法補跑時另開 Issue 留下缺口。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹，因此已刪除與尚未提交的機密都不會靜默略過；尚未 `git init` 的新專案仍可安全掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 
