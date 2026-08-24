@@ -92,6 +92,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Download and verify the published Python distributions
+        id: verify_release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
@@ -132,10 +133,29 @@ jobs:
               --tag "$RELEASE_TAG" \
               --commit "$commit_sha"
           done
+          version="${RELEASE_TAG#v}"
+          metadata="$RUNNER_TEMP/pypi-release.json"
+          status="$(curl -sS -o "$metadata" -w '%{http_code}' \
+            "https://pypi.org/pypi/csarc-repo-cli/${version}/json")"
+          metadata_args=()
+          if [[ "$status" == 200 ]]; then
+            metadata_args=(--metadata "$metadata")
+          elif [[ "$status" != 404 ]]; then
+            echo "PyPI metadata request failed with HTTP ${status}." >&2
+            exit 1
+          fi
+          mv pypi-dist verified-dist
+          python3 scripts/prepare_pypi_upload.py \
+            --verified-dir verified-dist \
+            --upload-dir pypi-dist \
+            --github-output "$GITHUB_OUTPUT" \
+            "${metadata_args[@]}"
       - name: Publish with trusted identity
+        if: steps.verify_release.outputs.publish_required == 'true'
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: pypi-dist/
+          skip-existing: true
 
   publish:
     name: publish immutable release

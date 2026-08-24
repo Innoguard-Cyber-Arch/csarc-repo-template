@@ -29,8 +29,10 @@ uv run ruff format --check \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
   tests/test_release_consumption.py \
+  tests/test_prepare_pypi_upload.py \
   tests/test_render_site.py \
   scripts/report_dependency_ceiling.py \
+  scripts/prepare_pypi_upload.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
   scripts/promotion_gate.py \
@@ -52,8 +54,10 @@ uv run ruff check \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
   tests/test_release_consumption.py \
+  tests/test_prepare_pypi_upload.py \
   tests/test_render_site.py \
   scripts/report_dependency_ceiling.py \
+  scripts/prepare_pypi_upload.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
   scripts/promotion_gate.py \
@@ -71,6 +75,7 @@ uv run mypy \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
   scripts/promotion_gate.py \
+  scripts/prepare_pypi_upload.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
   scripts/release_policy.py \
@@ -769,6 +774,11 @@ grep -q 'shasum -a 256 -c ../SHA256SUMS' \
   .github/workflows/release-template.yml
 grep -q 'scripts/verify_release_consumption.py' \
   .github/workflows/release-template.yml
+grep -q 'scripts/prepare_pypi_upload.py' \
+  .github/workflows/release-template.yml
+grep -q "steps.verify_release.outputs.publish_required == 'true'" \
+  .github/workflows/release-template.yml
+grep -q 'skip-existing: true' .github/workflows/release-template.yml
 grep -q 'output-file: sbom.cdx.json' \
   .github/workflows/release-template.yml
 if sed -n '/^  publish-pypi:/,/^  publish:/p' \
