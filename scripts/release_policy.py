@@ -21,6 +21,7 @@ from typing import Any
 STATES = {"allowed", "blocked", "unknown"}
 SEMVER = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 DIRECT_CAPABILITIES = ("contents", "release", "dispatch")
+INTENT_RANK = {"no-release": 0, "patch": 1, "minor": 2, "major": 3}
 RENOVATE_INSTALL_URL = "https://github.com/apps/renovate/installations/new"
 DEPENDABOT_FALLBACK = (
     "Keep GitHub Dependabot via .github/dependabot.yml and the existing "
@@ -148,13 +149,12 @@ def bump_version(version: str, messages: list[str]) -> str | None:
     if match is None:
         raise ValueError(f"invalid semantic version: {version}")
     bump = "no-release"
-    rank = {"no-release": 0, "patch": 1, "minor": 2, "major": 3}
     for message in messages:
         subject, _, body = message.partition("\n")
         intent = release_intent(subject)
         if "BREAKING CHANGE:" in body or "BREAKING-CHANGE:" in body:
             intent = "major"
-        if rank[intent] > rank[bump]:
+        if INTENT_RANK[intent] > INTENT_RANK[bump]:
             bump = intent
     if bump == "no-release":
         return None
@@ -164,6 +164,171 @@ def bump_version(version: str, messages: list[str]) -> str | None:
     if bump == "minor":
         return f"{major}.{minor + 1}.0"
     return f"{major}.{minor}.{patch + 1}"
+
+
+def aggregate_release_boundaries(  # noqa: C901
+    boundaries: list[dict[str, Any]], main_sha: str, source_kind: str
+) -> dict[str, object]:
+    """Combine verified promotions into one deterministic release boundary."""
+    if not boundaries:
+        raise ValueError("release boundary contains no promotion evidence")
+    summaries: list[dict[str, object]] = []
+    pull_requests: dict[int, dict[str, object]] = {}
+    highest = "no-release"
+    valid_routes = {"milestone", "standalone-batch", "dev-promotion", "hotfix"}
+    for evidence in boundaries:
+        route = evidence.get("route")
+        post_merge = evidence.get("post_merge")
+        release = evidence.get("release")
+        if (
+            evidence.get("gate") != "passed"
+            or not isinstance(route, dict)
+            or route.get("kind") not in valid_routes
+            or not isinstance(post_merge, dict)
+            or post_merge.get("tree_identity") != "verified"
+            or not isinstance(release, dict)
+        ):
+            raise ValueError("release boundary has invalid promotion evidence")
+        intent = release.get("intent")
+        if not isinstance(intent, str) or intent not in INTENT_RANK:
+            raise ValueError("release boundary has invalid SemVer intent")
+        if INTENT_RANK[intent] > INTENT_RANK[highest]:
+            highest = intent
+        included = release.get("included_pull_requests")
+        if not isinstance(included, list) or not included:
+            raise ValueError("release boundary has no included pull requests")
+        boundary_highest = "no-release"
+        for pull_request in included:
+            if not isinstance(pull_request, dict):
+                raise ValueError("release boundary has an invalid pull request")
+            number = pull_request.get("number")
+            title = pull_request.get("title")
+            recorded_intent = pull_request.get("intent")
+            if not isinstance(number, int) or not isinstance(title, str):
+                raise ValueError("release boundary pull request is incomplete")
+            actual_intent = release_intent(title)
+            if recorded_intent != actual_intent:
+                raise ValueError(
+                    "release boundary pull-request intent is invalid"
+                )
+            if INTENT_RANK[actual_intent] > INTENT_RANK[boundary_highest]:
+                boundary_highest = actual_intent
+            pull_requests[number] = pull_request
+        if intent != boundary_highest:
+            raise ValueError("release boundary batch intent is invalid")
+        summaries.append(
+            {
+                "kind": route["kind"],
+                "milestone": route.get("milestone"),
+                "delivery_branch": evidence.get("head_ref"),
+                "promotion_pr": evidence.get("pull_request"),
+                "promotion_main_sha": post_merge.get("main_sha"),
+                "promotion_run": evidence.get("workflow_run"),
+                "included_issues": evidence.get("included_issues", []),
+                "canary": evidence.get("canary"),
+                "full_check": evidence.get("full_check"),
+            }
+        )
+    summaries.sort(key=lambda item: str(item["promotion_main_sha"]))
+    return {
+        "schema_version": 1,
+        "kind": source_kind,
+        "main_sha": main_sha,
+        "eligible": highest != "no-release",
+        "reason": (
+            f"verified promotion batch declares {highest} release intent"
+            if highest != "no-release"
+            else "all included pull requests are no-release changes"
+        ),
+        "release": {
+            "intent": highest,
+            "included_pull_requests": [
+                pull_requests[number] for number in sorted(pull_requests)
+            ],
+        },
+        "boundaries": summaries,
+    }
+
+
+def simple_release_boundary(
+    kind: str,
+    main_sha: str,
+    *,
+    title: str = "",
+    pull_request: int | None = None,
+    reason: str = "",
+) -> dict[str, object]:
+    """Represent main-strategy or fail-closed commits without promotion data."""
+    if kind == "unexpected":
+        return {
+            "schema_version": 1,
+            "kind": kind,
+            "main_sha": main_sha,
+            "eligible": False,
+            "reason": reason or "main commit has no eligible release source",
+        }
+    if kind == "main-release-follow-up":
+        eligible = True
+        intent = "release-follow-up"
+        explanation = "release pull request completed an existing boundary"
+    elif kind == "main-strategy":
+        intent = release_intent(title)
+        eligible = intent != "no-release"
+        explanation = (
+            f"main-strategy pull request declares {intent} release intent"
+            if eligible
+            else "main-strategy pull request is a no-release change"
+        )
+    else:
+        raise ValueError(f"invalid simple release boundary: {kind}")
+    return {
+        "schema_version": 1,
+        "kind": kind,
+        "main_sha": main_sha,
+        "pull_request": pull_request,
+        "eligible": eligible,
+        "reason": explanation,
+        "release": {"intent": intent},
+    }
+
+
+def release_boundary_errors(
+    evidence: dict[str, Any], expected_sha: str
+) -> list[str]:
+    """Return reasons an artifact workflow must reject release-source data."""
+    errors: list[str] = []
+    if evidence.get("main_sha") != expected_sha:
+        errors.append("release source does not match the tag commit")
+    if evidence.get("eligible") is not True:
+        errors.append(
+            str(evidence.get("reason") or "release source is ineligible")
+        )
+    kind = evidence.get("kind")
+    if kind in {"promotion", "release-follow-up"}:
+        boundaries = evidence.get("boundaries")
+        if not isinstance(boundaries, list) or not boundaries:
+            errors.append("release source has no verified promotion boundaries")
+    elif kind not in {"main-strategy", "main-release-follow-up"}:
+        errors.append(f"release source kind is not eligible: {kind}")
+    return errors
+
+
+def write_boundary(
+    payload: dict[str, object], output: Path, github_output: Path | None
+) -> None:
+    """Write release eligibility evidence and stable workflow outputs."""
+    output.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    if github_output is not None:
+        with github_output.open("a", encoding="utf-8") as handle:
+            handle.write(f"eligible={str(payload['eligible']).lower()}\n")
+            handle.write(f"reason={payload['reason']}\n")
+            release = payload.get("release")
+            intent = (
+                release.get("intent") if isinstance(release, dict) else "none"
+            )
+            handle.write(f"intent={intent}\n")
 
 
 def unknown_capabilities(reason: str) -> dict[str, Capability]:
@@ -676,6 +841,7 @@ def direct_release(  # noqa: C901
     branch: str,
     workflow: str,
     root: Path,
+    source_run_id: str = "",
 ) -> tuple[dict[str, object], bool]:
     """Allocate one release from the current remote default-branch head."""
     capabilities = detect_runtime_capabilities(api, repo, sha, branch, workflow)
@@ -801,10 +967,13 @@ def direct_release(  # noqa: C901
             if isinstance(item, dict)
         )
     if not active_or_successful:
+        dispatch: dict[str, object] = {"ref": tag}
+        if source_run_id:
+            dispatch["inputs"] = {"source_run_id": source_run_id}
         status, _ = api.request(
             "POST",
             f"repos/{repo}/actions/workflows/{encoded_workflow}/dispatches",
-            {"ref": tag},
+            dispatch,
         )
         if status != 204:
             payload.update(
@@ -842,6 +1011,35 @@ def parser() -> argparse.ArgumentParser:
     release.add_argument("--root", type=Path, default=Path.cwd())
     release.add_argument("--output", type=Path)
     release.add_argument("--github-output", type=Path)
+    release.add_argument("--source-run-id", default="")
+
+    boundary = subparsers.add_parser("boundary")
+    boundary.add_argument(
+        "--kind",
+        choices=("main-strategy", "main-release-follow-up", "unexpected"),
+        required=True,
+    )
+    boundary.add_argument("--main-sha", required=True)
+    boundary.add_argument("--title", default="")
+    boundary.add_argument("--pull-request", type=int)
+    boundary.add_argument("--reason", default="")
+    boundary.add_argument("--output", type=Path, required=True)
+    boundary.add_argument("--github-output", type=Path)
+
+    aggregate = subparsers.add_parser("aggregate-boundary")
+    aggregate.add_argument("--evidence-dir", type=Path, required=True)
+    aggregate.add_argument("--main-sha", required=True)
+    aggregate.add_argument(
+        "--source-kind",
+        choices=("promotion", "release-follow-up"),
+        required=True,
+    )
+    aggregate.add_argument("--output", type=Path, required=True)
+    aggregate.add_argument("--github-output", type=Path)
+
+    verify_boundary = subparsers.add_parser("verify-boundary")
+    verify_boundary.add_argument("--evidence", type=Path, required=True)
+    verify_boundary.add_argument("--sha", required=True)
 
     prepare = subparsers.add_parser("prepare")
     prepare.add_argument("--tag", required=True)
@@ -852,9 +1050,42 @@ def parser() -> argparse.ArgumentParser:
     return result
 
 
-def main(arguments: list[str] | None = None) -> int:
+def main(arguments: list[str] | None = None) -> int:  # noqa: C901
     """Run capability detection, direct release, or build preparation."""
     args = parser().parse_args(arguments)
+    if args.command == "boundary":
+        write_boundary(
+            simple_release_boundary(
+                args.kind,
+                args.main_sha,
+                title=args.title,
+                pull_request=args.pull_request,
+                reason=args.reason,
+            ),
+            args.output,
+            args.github_output,
+        )
+        return 0
+    if args.command == "aggregate-boundary":
+        evidence = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted(args.evidence_dir.glob("*.json"))
+        ]
+        write_boundary(
+            aggregate_release_boundaries(
+                evidence, args.main_sha, args.source_kind
+            ),
+            args.output,
+            args.github_output,
+        )
+        return 0
+    if args.command == "verify-boundary":
+        evidence = json.loads(args.evidence.read_text(encoding="utf-8"))
+        errors = release_boundary_errors(evidence, args.sha)
+        if errors:
+            raise SystemExit("; ".join(errors))
+        print("Release source boundary is verified.")  # noqa: T201
+        return 0
     if args.command in {"prepare", "verify-version"}:
         tag = args.tag
         expected = None
@@ -921,6 +1152,7 @@ def main(arguments: list[str] | None = None) -> int:
         args.branch,
         args.workflow,
         args.root.resolve(),
+        args.source_run_id,
     )
     write_report(payload, args.output, args.github_output)
     return 1 if failed else 0

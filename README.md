@@ -101,11 +101,21 @@ Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交
 
 ## 發布與維運
 
-公版的單一版本來源是 root `.release-please-manifest.json`；`version.txt`、`pyproject.toml`、`uv.lock`、README、docs、CHANGELOG、`v*` tag 與發布成品必須一致。生成專案的版本從自己的 `0.1.0` 起點開始，不跟隨公版版本。release workflow 用內建 `GITHUB_TOKEN` 重測 Actions PR、contents、Release 與 dispatch 能力，依能力在 release-please、direct 與 verification-only 三種模式間自動選擇，絕不會把「已跳過」宣稱成「已發版」。完整能力矩陣、版本來源同步範圍與 SemVer scope 規則見[內部網站附錄](docs/index.html)「版本規則與成品接續」章節。
+公版的單一版本來源是 root `.release-please-manifest.json`；`version.txt`、`pyproject.toml`、`uv.lock`、README、docs、CHANGELOG、`v*` tag 與發布成品必須一致。`template/.release-please-manifest.json` 與模板內的 package/version 檔則是新生成專案自己的 `0.1.0` 起點，不跟隨公版 release number。Promotion 已完成完整驗證；release workflow 只接受綁定該 main SHA 的 source evidence，再建置、計算 digest、產生 SBOM／attestation 並驗證 immutable Release，不重跑完整模板與 runtime 矩陣。生成專案依 profile 產生 wheel、npm tarball 或兩者，將 distributions、`SHA256SUMS`、CycloneDX SBOM 與包含 tag／commit／workflow run 的 metadata 附加至 GitHub Release；CI/CD-only 只有 GitHub Release 的來源封存檔，不假裝有語言成品。attestation 產生後，只有 PyPI／npm 再發布路徑會在啟用對應選項時強制驗證；一般下載仍由消費者執行 `gh attestation verify`。現在只有持續交付，沒有通用部署流程。
 
 GitHub Release 是所有 profile 的共同基線；PyPI／npm 依語言分開選配，預設全部關閉，且都使用 GitHub environment 與 OIDC 短效憑證，不讀取長效 registry token。啟用條件、trusted publisher 登記步驟與 Node／npm 版本需求見附錄同一章節。
 
-現在只有持續交付，沒有通用部署流程。
+| Runtime 實測政策 | 模式與行為 | 保證、限制與 fallback |
+| --- | --- | --- |
+| PR、contents、Release、dispatch 都是 `allowed` | **Release PR：**release-please 維護可審查的版本／changelog PR；合併後建立 release 並明確 dispatch 成品 workflow | 保留最強的人類審查與來源 metadata 同步；任一必要能力漂移就不再選此模式 |
+| PR 是 `blocked`／`unknown`，其餘三項都是 `allowed` | **Direct：**只由最新 `main` 配置 tag 與 draft release，再 dispatch 成品 workflow | 最新 commit 必須已由人工 PR 寫入正確版本與 CHANGELOG；否則 fail closed 為 verification-only |
+| contents、Release 或 dispatch 任一不是 `allowed` | **Verification only：**保留測試與 machine-readable capability artifact，不建立 tag 或 release | 不會把不確定權限當成功；政策恢復後由後續 main run 重新計算並接續 |
+
+GitHub Release 是所有 profile 的共同基線；registry 則依語言分開選配：純 Python 可開 PyPI、純 TypeScript 可開 npm、混合案可各自開啟、CI/CD-only 兩者皆無，預設全部關閉。本公版 repo 本身只把 Python `csarc-repo-cli` 當成可發布套件，因此根目錄只有選配的 PyPI job；它不代表生成專案固定使用 PyPI。該 job 只有在 repository variable `CSARC_ENABLE_PYPI_PUBLISHING=true` 時才執行，也不會阻擋基線 GitHub Release。PyPI／npm 都使用 GitHub environment 與 OIDC 短效憑證，發布 job 才有 `id-token: write`，不讀取長效 registry token。啟用前，package owner 必須在 registry 登記完全相符的 organization／repository、workflow 檔名 `release.yml`（公版為 `release-template.yml`）與 environment；PyPI 首次發布可先建立 pending publisher，npm 則需由既有 package owner 在 package Settings 建立 trusted publisher。npm 路徑需要 GitHub-hosted runner、Node 22.14+ 與 npm 11.5.1+，公版使用 Node 24。
+
+整份公版只用一個 SemVer：`fix(scope)` 升 patch、`feat(scope)` 升 minor、`!` 升 major。scope 可標 `ci`、`python`、`typescript` 或 `template`；只要任何已支援 profile 不相容，就視為整份公版的破壞性變更。
+
+release workflow 用內建 `GITHUB_TOKEN` 重測能力：支援時由 release-please 自動開、更新 Release PR；目前組織政策禁止 Actions PR 時，由維護者先開版本／CHANGELOG PR，合併後 direct mode 才能在最新 `main` 建立 draft 與 tag。Milestone 完成時 promotion 一次；`dev/next` 預設由維護團隊每週固定一個 release window 批次 promotion，沒有 release-worthy 變更就略過；hotfix 才立即發版。整批 SemVer 取納入 PR 的最高意圖，全部為 no-release 時不建立空版本。兩種 release 模式都只從已核對的 release-source run 明確 dispatch `release-template.yml`；任意 tag push 不會啟動發布。發布 workflow 不會再於 checkout 後暫時改寫版本；它會先驗證 tagged source、CHANGELOG、tag 與 promotion evidence 一致，再附加 wheel、sdist、release-specific prompt 與 provenance，最後發布並鎖定 immutable GitHub Release；任一步驟失敗都保留 draft。選配 PyPI Trusted Publishing 在 GitHub Release 成功後獨立執行。發布後會以 `gh release verify` 重新驗證 attestation。一般 main push 不會重複發版。完整批次與追溯規則見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
 ## 公版更新
 

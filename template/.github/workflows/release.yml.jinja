@@ -9,9 +9,12 @@
 name: Release artifact
 
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Release Please workflow run containing source evidence
+        required: true
+        type: string
 
 permissions:
   actions: read
@@ -20,8 +23,46 @@ permissions:
   pull-requests: read
 
 jobs:
+  source:
+    name: verify release source
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download and verify the promotion boundary
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+          SOURCE_RUN_ID: {% raw %}${{ inputs.source_run_id }}{% endraw %}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n "$SOURCE_RUN_ID" ]] || {
+            echo "Release artifacts require a Release Please source run." >&2
+            exit 1
+          }
+          source_run="$(gh run view "$SOURCE_RUN_ID" --json headSha,workflowName,status)"
+          test "$(jq -r .workflowName <<<"$source_run")" = "Release please"
+          test "$(jq -r .headSha <<<"$source_run")" = "$GITHUB_SHA"
+          mkdir release-source
+          gh run download "$SOURCE_RUN_ID" \
+            --name "main-release-source-${SOURCE_RUN_ID}" \
+            --dir release-source
+          python3 scripts/release_policy.py verify-boundary \
+            --evidence release-source/main-release-source.json \
+            --sha "$GITHUB_SHA"
+          mv release-source/main-release-source.json release-source/release-source.json
+      - name: Preserve release-source evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-source
+          path: release-source/release-source.json
+          if-no-files-found: error
+          retention-days: 90
+
   governance:
     name: governance
+    needs: source
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -50,6 +91,10 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-source
+          path: release-source
       - name: Verify the immutable tag version
         env:
           RELEASE_TAG: {% raw %}${{ github.ref_name }}{% endraw %}
@@ -66,24 +111,6 @@ jobs:
           node-version: "24"
           package-manager-cache: false
 {% endif %}
-      - name: Verify declared language modules
-        run: ./scripts/verify
-{% if has_python %}
-        env:
-          CSARC_PYTHON_VERSION: "{{ python_target }}"
-          UV_PROJECT_ENVIRONMENT: .venv-primary
-{% endif %}
-{% if has_python and python_mode == "minimum" and python_min != "3.14" %}
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.14"
-      - name: Verify latest stable Python version
-        run: ./scripts/verify
-        env:
-          CSARC_PYTHON_VERSION: "3.14"
-          UV_PROJECT_ENVIRONMENT: .venv-latest
-          CSARC_VERIFY_TYPESCRIPT: "false"
-{% endif %}
 {% if has_python %}
       - name: Build Python distributions
         run: uv build
@@ -91,6 +118,7 @@ jobs:
 {% if has_typescript %}
       - name: Build TypeScript package
         run: |
+          pnpm install --frozen-lockfile
           pnpm run build
           find dist -maxdepth 1 -type f -name '.gitignore' -delete
           find dist -maxdepth 1 -type f -name '*.tgz' -delete
@@ -157,6 +185,11 @@ jobs:
               "tag": os.environ["RELEASE_TAG"],
               "commit": os.environ["RELEASE_COMMIT"],
               "workflow_run": os.environ["RELEASE_RUN_URL"],
+              "release_source": json.loads(
+                  Path("release-source/release-source.json").read_text(
+                      encoding="utf-8"
+                  )
+              ),
           }
           Path("release-metadata.json").write_text(
               json.dumps(evidence, indent=2) + "\n",
@@ -172,8 +205,32 @@ jobs:
             SHA256SUMS
             sbom.cdx.json
             release-metadata.json
+            release-source/release-source.json
           if-no-files-found: error
           retention-days: 30
+{% endif %}
+{% if language == "ci" %}
+  publish-source:
+    name: publish verified source release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-source
+          path: release-source
+      - name: Attach evidence and publish the draft
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+        run: |
+          test "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)" = true
+          gh release upload "$GITHUB_REF_NAME" \
+            release-source/release-source.json \
+            --clobber
+          gh release edit "$GITHUB_REF_NAME" --draft=false
 {% endif %}
 {% if language != "ci" %}
   publish-evidence:
@@ -201,6 +258,7 @@ jobs:
           test -s release-evidence/SHA256SUMS
           test -s release-evidence/sbom.cdx.json
           test -s release-evidence/release-metadata.json
+          test -s release-evidence/release-source/release-source.json
           find release-evidence/dist -maxdepth 1 -type f -print -quit | grep -q .
           (
             cd release-evidence
@@ -229,6 +287,7 @@ jobs:
             release-evidence/SHA256SUMS \
             release-evidence/sbom.cdx.json \
             release-evidence/release-metadata.json \
+            release-evidence/release-source/release-source.json \
             --clobber
           if [[ "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)" == true ]]; then
             gh release edit "$GITHUB_REF_NAME" --draft=false
