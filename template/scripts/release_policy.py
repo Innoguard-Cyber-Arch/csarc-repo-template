@@ -4,15 +4,18 @@
 from __future__ import annotations
 
 import argparse
+import email.parser
 import json
 import os
 import re
 import shutil
 import subprocess
+import tarfile
 import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -840,6 +843,97 @@ def verify_release_version(
     return str(manifest["."])
 
 
+def release_target_errors(target: str, expected_sha: str) -> list[str]:
+    """Reject a mutable or unexpected GitHub Release target."""
+    if not re.fullmatch(r"[0-9a-f]{40}", expected_sha):
+        return ["expected release commit is not a full SHA"]
+    if target != expected_sha:
+        return [
+            f"GitHub Release target is {target or 'missing'}, "
+            f"expected {expected_sha}"
+        ]
+    return []
+
+
+def _metadata_identity(text: str) -> tuple[str, str]:
+    metadata = email.parser.Parser().parsestr(text)
+    return (metadata.get("Name", ""), metadata.get("Version", ""))
+
+
+def distribution_metadata_errors(
+    dist_dir: Path, expected_name: str, expected_version: str
+) -> list[str]:
+    """Verify the embedded identity in exactly one wheel and one sdist."""
+    wheels = sorted(dist_dir.glob("*.whl"))
+    sdists = sorted(dist_dir.glob("*.tar.gz"))
+    errors: list[str] = []
+    if len(wheels) != 1:
+        errors.append(f"expected one wheel, found {len(wheels)}")
+    if len(sdists) != 1:
+        errors.append(f"expected one sdist, found {len(sdists)}")
+    if errors:
+        return errors
+
+    identities: list[tuple[str, tuple[str, str]]] = []
+    try:
+        with zipfile.ZipFile(wheels[0]) as archive:
+            wheel_members = [
+                name
+                for name in archive.namelist()
+                if name.endswith(".dist-info/METADATA")
+            ]
+            if len(wheel_members) != 1:
+                errors.append(
+                    f"wheel contains {len(wheel_members)} METADATA files"
+                )
+            else:
+                identities.append(
+                    (
+                        wheels[0].name,
+                        _metadata_identity(
+                            archive.read(wheel_members[0]).decode("utf-8")
+                        ),
+                    )
+                )
+        with tarfile.open(sdists[0], "r:gz") as archive:
+            sdist_members = [
+                member
+                for member in archive.getmembers()
+                if member.isfile() and member.name.endswith("/PKG-INFO")
+            ]
+            if len(sdist_members) != 1:
+                errors.append(
+                    f"sdist contains {len(sdist_members)} PKG-INFO files"
+                )
+            else:
+                stream = archive.extractfile(sdist_members[0])
+                if stream is None:
+                    errors.append("sdist PKG-INFO is unreadable")
+                else:
+                    identities.append(
+                        (
+                            sdists[0].name,
+                            _metadata_identity(stream.read().decode("utf-8")),
+                        )
+                    )
+    except (
+        OSError,
+        UnicodeDecodeError,
+        tarfile.TarError,
+        zipfile.BadZipFile,
+    ) as error:
+        errors.append(f"distribution metadata is unreadable: {error}")
+
+    expected = (expected_name, expected_version)
+    errors.extend(
+        f"{filename} metadata is {name} {version}, "
+        f"expected {expected_name} {expected_version}"
+        for filename, (name, version) in identities
+        if (name, version) != expected
+    )
+    return errors
+
+
 def direct_release(  # noqa: C901
     api: GitHubAPI,
     repo: str,
@@ -1053,12 +1147,33 @@ def parser() -> argparse.ArgumentParser:
     verify = subparsers.add_parser("verify-version")
     verify.add_argument("--tag")
     verify.add_argument("--root", type=Path, default=Path.cwd())
+    verify_target = subparsers.add_parser("verify-release-target")
+    verify_target.add_argument("--target", required=True)
+    verify_target.add_argument("--sha", required=True)
+    verify_distributions = subparsers.add_parser("verify-distributions")
+    verify_distributions.add_argument("--dist-dir", type=Path, required=True)
+    verify_distributions.add_argument("--name", required=True)
+    verify_distributions.add_argument("--version", required=True)
     return result
 
 
 def main(arguments: list[str] | None = None) -> int:  # noqa: C901
     """Run capability detection, direct release, or build preparation."""
     args = parser().parse_args(arguments)
+    if args.command == "verify-release-target":
+        errors = release_target_errors(args.target, args.sha)
+        if errors:
+            raise SystemExit("; ".join(errors))
+        print("GitHub Release target is the exact commit SHA.")  # noqa: T201
+        return 0
+    if args.command == "verify-distributions":
+        errors = distribution_metadata_errors(
+            args.dist_dir.resolve(), args.name, args.version
+        )
+        if errors:
+            raise SystemExit("; ".join(errors))
+        print("Distribution metadata is consistent.")  # noqa: T201
+        return 0
     if args.command == "boundary":
         write_boundary(
             simple_release_boundary(

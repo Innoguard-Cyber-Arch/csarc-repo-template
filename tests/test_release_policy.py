@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import io
 import json
 import runpy
 import subprocess
+import tarfile
+import zipfile
 from pathlib import Path
 from typing import cast
 
@@ -18,14 +21,31 @@ aggregate_release_boundaries = MODULE["aggregate_release_boundaries"]
 bump_version = MODULE["bump_version"]
 classify_probe = MODULE["classify_probe"]
 direct_release = MODULE["direct_release"]
+distribution_metadata_errors = MODULE["distribution_metadata_errors"]
 release_intent = MODULE["release_intent"]
 release_boundary_errors = MODULE["release_boundary_errors"]
 release_plan = MODULE["release_plan"]
+release_target_errors = MODULE["release_target_errors"]
 release_version_errors = MODULE["release_version_errors"]
 select_release_mode = MODULE["select_release_mode"]
 simple_release_boundary = MODULE["simple_release_boundary"]
 verify_release_version = MODULE["verify_release_version"]
 optional_integration_preflight = MODULE["optional_integration_preflight"]
+
+
+def write_distributions(
+    root: Path, *, name: str = "demo", version: str = "1.2.3"
+) -> None:
+    """Create minimal wheel and sdist metadata fixtures."""
+    root.mkdir(exist_ok=True)
+    metadata = f"Metadata-Version: 2.4\nName: {name}\nVersion: {version}\n"
+    with zipfile.ZipFile(root / "demo-1.2.3-py3-none-any.whl", "w") as wheel:
+        wheel.writestr("demo-1.2.3.dist-info/METADATA", metadata)
+    payload = metadata.encode()
+    member = tarfile.TarInfo("demo-1.2.3/PKG-INFO")
+    member.size = len(payload)
+    with tarfile.open(root / "demo-1.2.3.tar.gz", "w:gz") as sdist:
+        sdist.addfile(member, io.BytesIO(payload))
 
 
 def capabilities(
@@ -556,3 +576,28 @@ def test_prepare_requires_tag_version_without_mutating_files(
     )
     errors = release_version_errors(tmp_path, "0.2.0")
     assert "README.md has no x-release-please-version marker" in errors
+
+
+def test_release_target_requires_the_exact_full_commit() -> None:
+    expected = "a" * 40
+
+    assert release_target_errors(expected, expected) == []
+    assert release_target_errors("main", expected) == [
+        f"GitHub Release target is main, expected {expected}"
+    ]
+    assert release_target_errors(expected, "short") == [
+        "expected release commit is not a full SHA"
+    ]
+
+
+def test_distribution_metadata_matches_release_identity(
+    tmp_path: Path,
+) -> None:
+    write_distributions(tmp_path)
+
+    assert distribution_metadata_errors(tmp_path, "demo", "1.2.3") == []
+    assert distribution_metadata_errors(tmp_path, "demo", "1.2.4") == [
+        "demo-1.2.3-py3-none-any.whl metadata is demo 1.2.3, "
+        "expected demo 1.2.4",
+        "demo-1.2.3.tar.gz metadata is demo 1.2.3, expected demo 1.2.4",
+    ]

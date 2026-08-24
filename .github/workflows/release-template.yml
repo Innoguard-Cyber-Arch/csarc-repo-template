@@ -190,8 +190,14 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          commit_sha="$(git rev-parse HEAD)"
+          test "$commit_sha" = "$(git rev-list -n 1 "$RELEASE_TAG")"
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes
+            gh release create "$RELEASE_TAG" \
+              --target "$commit_sha" \
+              --verify-tag \
+              --draft \
+              --generate-notes
           fi
           release_state="$(
             gh release view "$RELEASE_TAG" --json isDraft,isImmutable \
@@ -201,11 +207,19 @@ jobs:
             echo "Release is already published and immutable; keeping its assets unchanged."
             echo "build_required=false" >> "$GITHUB_OUTPUT"
           elif [[ "$release_state" == $'false\ttrue' ]]; then
+            gh release edit "$RELEASE_TAG" --target "$commit_sha"
             echo "build_required=true" >> "$GITHUB_OUTPUT"
           else
             echo "Release must be either a mutable draft or published and immutable." >&2
             exit 1
           fi
+          release_target="$(
+            gh release view "$RELEASE_TAG" --json targetCommitish \
+              --jq .targetCommitish
+          )"
+          python3 scripts/release_policy.py verify-release-target \
+            --target "$release_target" \
+            --sha "$commit_sha"
       - name: Build CLI and calculate checksums
         if: steps.release_state.outputs.build_required == 'true'
         env:
@@ -215,6 +229,10 @@ jobs:
           commit_sha="$(git rev-parse HEAD)"
           test "$commit_sha" = "$(git rev-list -n 1 "$RELEASE_TAG")"
           uv build
+          python3 scripts/release_policy.py verify-distributions \
+            --dist-dir dist \
+            --name csarc-repo-cli \
+            --version "${RELEASE_TAG#v}"
           (
             cd dist
             shasum -a 256 * | sort -k 2 > ../SHA256SUMS
@@ -265,6 +283,11 @@ jobs:
             --sha "$commit_sha" \
             --body-file release-body.md \
             --output-dir release-assets
+          jq -e --arg tag "$RELEASE_TAG" --arg sha "$commit_sha" \
+            '.release_tag == $tag and .commit_sha == $sha' \
+            release-assets/csarc-release-provenance.json >/dev/null
+          grep -Fq "$RELEASE_TAG" release-assets/release-prompt.txt
+          grep -Fq "$commit_sha" release-assets/release-prompt.txt
           cp release-source/release-source.json release-assets/release-source.json
           gh release upload "$RELEASE_TAG" \
             dist/*.whl \
@@ -276,6 +299,7 @@ jobs:
             release-assets/release-source.json \
             --clobber
           gh release edit "$RELEASE_TAG" \
+            --target "$commit_sha" \
             --notes-file release-assets/release-notes.md \
             --draft=false
       - name: Verify published release trust chain

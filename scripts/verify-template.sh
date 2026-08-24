@@ -760,7 +760,14 @@ if grep -q 'tags: \["v\*"\]' .github/workflows/release-template.yml; then
   echo "Release artifacts must require an explicit verified-source dispatch."
   exit 1
 fi
-grep -q 'gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes' \
+grep -q 'gh release create "$RELEASE_TAG"' \
+  .github/workflows/release-template.yml
+grep -q -- '--target "$commit_sha"' \
+  .github/workflows/release-template.yml
+grep -q 'verify-release-target' .github/workflows/release-template.yml
+grep -q 'verify-distributions' .github/workflows/release-template.yml
+grep -q 'release-prompt.txt' .github/workflows/release-template.yml
+grep -q 'csarc-release-provenance.json' \
   .github/workflows/release-template.yml
 grep -q "CSARC_ENABLE_PYPI_PUBLISHING == 'true'" \
   .github/workflows/release-template.yml
