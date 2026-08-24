@@ -13,6 +13,8 @@ from pypdf import PdfReader
 import csarc_cli.cli as cli
 from csarc_cli.cli import CliError, main
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     """Run a successful fixture command."""
@@ -87,8 +89,13 @@ enable_release_attestations:
     (source / "template" / "managed.txt").write_text(
         "template version one\n", encoding="utf-8"
     )
+    (source / "template" / ".python-version").write_text(
+        "3.14\n", encoding="utf-8"
+    )
     (source / "template" / "pyproject.toml").write_text(
-        '[project]\nname = "template-project"\n', encoding="utf-8"
+        '[project]\nname = "template-project"\nversion = "0.1.0"\n'
+        'requires-python = ">=3.14"\n',
+        encoding="utf-8",
     )
     (source / "template" / "{{ _copier_conf.answers_file }}.jinja").write_text(
         "# Changes here will be overwritten by Copier.\n"
@@ -133,6 +140,40 @@ def initialize_project(tmp_path: Path) -> tuple[Path, Path, str]:
         == 0
     )
     return source, project, first_sha
+
+
+def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
+    """Start a minimal adoption that requires a manual manifest merge."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / "pending-product"
+    project.mkdir()
+    (project / "pyproject.toml").write_text(
+        '[project]\nname = "pending-product"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: pending product")
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--data",
+                "language=ci",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 1
+    )
+    return source, project
 
 
 class FakeReleaseClient:
@@ -561,7 +602,9 @@ def test_adopt_requires_clean_tree_and_preserves_product_files(
     project.mkdir()
     manifest = project / "pyproject.toml"
     manifest.write_text(
-        '[project]\nname = "legacy-product"\n', encoding="utf-8"
+        '[project]\nname = "legacy-product"\nversion = "0.1.0"\n'
+        'requires-python = ">=3.14"\n',
+        encoding="utf-8",
     )
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
@@ -600,11 +643,240 @@ def test_adopt_requires_clean_tree_and_preserves_product_files(
     assert main([*arguments, "--dry-run"]) == 2
     assert "already exists" in capsys.readouterr().err
     assert git(project, "status", "--porcelain") == before
-    assert main([*arguments, "--yes", "--non-interactive"]) == 0
+    assert main([*arguments, "--yes", "--non-interactive"]) == 1
     assert manifest.read_text(encoding="utf-8") == (
-        '[project]\nname = "legacy-product"\n'
+        '[project]\nname = "legacy-product"\nversion = "0.1.0"\n'
+        'requires-python = ">=3.14"\n'
     )
     assert (project / ".copier-answers.yml").is_file()
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+    pending_status = git(project, "status", "--porcelain")
+    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 0
+    assert git(project, "status", "--porcelain") == pending_status
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--allow-unreleased",
+                "--check",
+                "--json",
+            ]
+        )
+        == 2
+    )
+    assert "Adoption is pending" in capsys.readouterr().out
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--finalize",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    assert (project / "uv.lock").is_file()
+    assert (project / cli.PROVENANCE_FILE).is_file()
+    assert not (project / cli.PENDING_ADOPTION_FILE).exists()
+
+
+def test_adopt_finalize_rejects_answer_drift(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Never complete an adoption whose saved Copier answers changed."""
+    _, project = initialize_pending_adoption(tmp_path)
+    answers = project / ".copier-answers.yml"
+    answers.write_text(
+        answers.read_text(encoding="utf-8") + "# unexpected edit\n",
+        encoding="utf-8",
+    )
+
+    assert main(["adopt", str(project), "--finalize", "--yes"]) == 2
+    assert "Copier answers changed" in capsys.readouterr().err
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+def test_adopt_finalize_rejects_source_and_managed_file_drift(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Require the original source and every copied managed file."""
+    source, project = initialize_pending_adoption(tmp_path)
+    unavailable_source = tmp_path / "template-source-moved"
+    source.rename(unavailable_source)
+
+    assert main(["adopt", str(project), "--finalize", "--yes"]) == 2
+    assert "template source is unavailable" in capsys.readouterr().err
+    unavailable_source.rename(source)
+    (project / "managed.txt").write_text(
+        "unexpected managed edit\n", encoding="utf-8"
+    )
+
+    assert main(["adopt", str(project), "--finalize", "--yes"]) == 2
+    assert "Managed adoption file drifted" in capsys.readouterr().err
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+def test_adopt_finalize_rejects_repository_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Do not finalize against a different GitHub repository context."""
+    _, project = initialize_pending_adoption(tmp_path)
+    monkeypatch.setattr(
+        cli,
+        "repository_context",
+        lambda *args, **kwargs: cli.RepositoryContext(
+            "different/repository",
+            "different",
+            "organization",
+            "private",
+            "github",
+            True,
+        ),
+    )
+
+    assert main(["adopt", str(project), "--finalize", "--yes"]) == 2
+    assert "origin or visibility changed" in capsys.readouterr().err
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+
+
+def test_adopt_finalize_failure_keeps_actionable_pending_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Keep the checkpoint and explain how to retry a failed verification."""
+    _, project = initialize_pending_adoption(tmp_path)
+    monkeypatch.setattr(
+        cli,
+        "verify_project",
+        lambda _: (_ for _ in ()).throw(CliError("fixture failure")),
+    )
+
+    assert main(["adopt", str(project), "--finalize", "--yes"]) == 2
+    assert "rerun csarc adopt --finalize" in capsys.readouterr().err
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+@pytest.mark.parametrize(
+    ("language", "manifest_name", "lock_name"),
+    [
+        ("python", "pyproject.toml", "uv.lock"),
+        ("typescript", "package.json", "pnpm-lock.yaml"),
+    ],
+)
+def test_real_template_adoption_resumes_after_manifest_merge(
+    tmp_path: Path,
+    language: str,
+    manifest_name: str,
+    lock_name: str,
+) -> None:
+    """Finalize real Python and TypeScript adoptions without prior locks."""
+    revision_sha = git(ROOT, "rev-parse", "HEAD")
+    project = tmp_path / f"existing-{language}"
+    reference = tmp_path / f"reference-{language}"
+    data = cli.base_data(
+        project,
+        "adopt",
+        {"coverage_mode": "global", "language": language},
+    )
+    data["project_visibility"] = "private"
+    cli.copier_copy(
+        str(ROOT),
+        cli.Revision(revision_sha, revision_sha, str(ROOT)),
+        reference,
+        data,
+    )
+    project.mkdir()
+    if language == "python":
+        initial_manifest = (
+            '[project]\nname = "existing-python"\nversion = "0.1.0"\n'
+            'requires-python = ">=3.14,<3.15"\n'
+        )
+    else:
+        initial_manifest = (
+            json.dumps(
+                {
+                    "name": "existing-typescript",
+                    "private": True,
+                    "type": "module",
+                    "version": "0.1.0",
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+    (project / manifest_name).write_text(initial_manifest, encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, f"test: existing {language} product")
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(ROOT),
+                "--to",
+                revision_sha,
+                "--allow-unreleased",
+                "--data",
+                f"language={language}",
+                "--data",
+                "coverage_mode=global",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 1
+    )
+    assert not (project / lock_name).exists()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+    manifest = project / manifest_name
+    if language == "python":
+        manifest.write_text(
+            (reference / manifest_name).read_text(encoding="utf-8")
+            + "\n[tool.product]\npreserved = true\n",
+            encoding="utf-8",
+        )
+    else:
+        merged = json.loads(
+            (reference / manifest_name).read_text(encoding="utf-8")
+        )
+        merged["productSetting"] = True
+        manifest.write_text(
+            json.dumps(merged, indent=2) + "\n", encoding="utf-8"
+        )
+
+    before = git(project, "status", "--porcelain")
+    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 0
+    assert git(project, "status", "--porcelain") == before
+    assert not (project / lock_name).exists()
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--finalize",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    assert (project / lock_name).is_file()
+    assert (project / cli.PROVENANCE_FILE).is_file()
+    assert not (project / cli.PENDING_ADOPTION_FILE).exists()
 
 
 def test_adoption_report_classifies_unknown_content(
@@ -741,7 +1013,9 @@ def test_adopt_help_describes_report_directory(
     with pytest.raises(SystemExit) as error:
         cli.parser().parse_args(["adopt", "--help"])
     assert error.value.code == 0
-    assert "--report-dir PATH" in capsys.readouterr().out
+    help_text = capsys.readouterr().out
+    assert "--finalize" in help_text
+    assert "--report-dir PATH" in help_text
 
 
 def test_adopt_rejects_dirty_tree(tmp_path: Path) -> None:

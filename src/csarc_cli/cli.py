@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -28,6 +29,7 @@ CANONICAL_REPOSITORY = "Innoguard-Cyber-Arch/csarc-repo-template"
 CANONICAL_REPOSITORY_ID = 1_340_899_393
 DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"
 PROVENANCE_FILE = Path(".csarc/provenance.json")
+PENDING_ADOPTION_FILE = Path(".csarc/adoption-pending.json")
 ADOPTION_REPORT_BASENAME = "csarc-adoption-dry-run"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
 REPOSITORY_VISIBILITIES = {"public", "private", "internal"}
@@ -615,6 +617,107 @@ def read_copier_answers(path: Path) -> dict[str, object]:
     }
 
 
+def file_fingerprint(path: Path) -> str:
+    """Hash managed content and the file traits Copier can reproduce."""
+    digest = hashlib.sha256()
+    if path.is_symlink():
+        digest.update(b"symlink\0")
+        digest.update(os.readlink(path).encode())
+    elif path.is_file():
+        digest.update(b"file\0")
+        digest.update(str(path.stat().st_mode & 0o111).encode())
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+    else:
+        raise CliError(f"Managed adoption file is missing: {path}")
+    return digest.hexdigest()
+
+
+def pending_adoption_data(
+    target: Path,
+    revision: Revision,
+    repository: RepositoryContext,
+    answers_path: Path,
+    managed_files: tuple[str, ...],
+    manual_files: tuple[str, ...],
+) -> dict[str, object]:
+    """Build the checkpoint needed to resume one exact adoption."""
+    return {
+        "answers_sha256": hashlib.sha256(answers_path.read_bytes()).hexdigest(),
+        "managed_files": [
+            {"fingerprint": file_fingerprint(target / name), "path": name}
+            for name in managed_files
+            if name != ".copier-answers.yml"
+        ],
+        "manual_files": list(manual_files),
+        "repository": repository.as_dict(),
+        "schema_version": 1,
+        "template": {
+            "release": revision.label,
+            "sha": revision.sha,
+            "source": revision.source,
+            "verification": (
+                "verified" if revision.verified else "development-unreleased"
+            ),
+        },
+    }
+
+
+def write_pending_adoption(target: Path, payload: dict[str, object]) -> None:
+    """Atomically persist an incomplete adoption checkpoint."""
+    destination = target / PENDING_ADOPTION_FILE
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(destination)
+
+
+def read_pending_adoption(target: Path) -> dict[str, object]:
+    """Read and minimally validate an adoption checkpoint."""
+    path = target / PENDING_ADOPTION_FILE
+    if not path.is_file():
+        raise CliError(
+            "No pending adoption exists; run csarc adopt first or use "
+            "csarc update for a completed adoption."
+        )
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise CliError(
+            "Pending adoption state is unreadable; restore it from the "
+            "original adoption or restart from a clean commit."
+        ) from error
+    template = payload.get("template") if isinstance(payload, dict) else None
+    repository = (
+        payload.get("repository") if isinstance(payload, dict) else None
+    )
+    managed = (
+        payload.get("managed_files") if isinstance(payload, dict) else None
+    )
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema_version") != 1
+        or not isinstance(payload.get("answers_sha256"), str)
+        or not isinstance(template, dict)
+        or not isinstance(repository, dict)
+        or not isinstance(managed, list)
+        or not all(
+            isinstance(item, dict)
+            and isinstance(item.get("path"), str)
+            and isinstance(item.get("fingerprint"), str)
+            for item in managed
+        )
+    ):
+        raise CliError(
+            "Pending adoption state has an unsupported shape; restore it "
+            "from the original adoption or restart from a clean commit."
+        )
+    return payload
+
+
 def provenance_data(
     revision: Revision, previous: dict[str, object] | None = None
 ) -> dict[str, object]:
@@ -1131,6 +1234,60 @@ def copy_additions(stage: Path, target: Path, paths: tuple[str, ...]) -> None:
         shutil.copy2(source, destination, follow_symlinks=False)
 
 
+def create_adoption_lockfiles(target: Path, answers: dict[str, object]) -> None:
+    """Create language lockfiles after an adoption is ready to finalize."""
+    language = answers.get("language")
+    if language in {"python", "python-typescript"}:
+        python_version = target / ".python-version"
+        if not python_version.is_file():
+            raise CliError(
+                "Cannot create uv.lock because .python-version is missing; "
+                "restore the managed file, then rerun csarc adopt --finalize."
+            )
+        try:
+            result = run(
+                [
+                    "uv",
+                    "lock",
+                    "--python",
+                    python_version.read_text(encoding="utf-8").strip(),
+                ],
+                cwd=target,
+                capture=True,
+                check=False,
+            )
+        except FileNotFoundError as error:
+            raise CliError(
+                "uv is required to create uv.lock; install uv, then rerun "
+                "csarc adopt --finalize."
+            ) from error
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            raise CliError(
+                "Cannot create uv.lock after the manifest merge; fix "
+                f"pyproject.toml, then rerun csarc adopt --finalize. {detail}"
+            )
+    if language in {"typescript", "python-typescript"}:
+        try:
+            result = run(
+                ["pnpm", "install", "--lockfile-only", "--ignore-scripts"],
+                cwd=target,
+                capture=True,
+                check=False,
+            )
+        except FileNotFoundError as error:
+            raise CliError(
+                "pnpm is required to create pnpm-lock.yaml; install pnpm, "
+                "then rerun csarc adopt --finalize."
+            ) from error
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            raise CliError(
+                "Cannot create pnpm-lock.yaml after the manifest merge; fix "
+                f"package.json, then rerun csarc adopt --finalize. {detail}"
+            )
+
+
 def verify_project(target: Path) -> None:
     """Run the generated project's canonical verification command."""
     verify = target / "scripts" / "verify"
@@ -1582,6 +1739,11 @@ def validate_copy_target(target: Path, mode: str) -> None:
         return
     if not target.is_dir():
         raise CliError("adopt target must be an existing directory.")
+    if (target / PENDING_ADOPTION_FILE).is_file():
+        raise CliError(
+            "Adoption is pending; complete the manual merge, then run "
+            "csarc adopt --finalize."
+        )
     if (target / ".copier-answers.yml").exists():
         raise CliError(
             "Repository already has Copier answers; use csarc update."
@@ -1589,9 +1751,192 @@ def validate_copy_target(target: Path, mode: str) -> None:
     require_clean_repository(target)
 
 
-def command_copy(args: argparse.Namespace, mode: str) -> int:
+def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
+    """Validate and complete one saved adoption checkpoint."""
+    target = args.path.expanduser().resolve()
+    if not target.is_dir():
+        raise CliError("adopt target must be an existing directory.")
+    if args.report_dir is not None:
+        raise CliError("--report-dir is only valid for adopt --dry-run.")
+    if args.json and not args.dry_run:
+        raise CliError("--json requires --dry-run for adopt --finalize.")
+    if any((args.source, args.to, args.expected_sha, args.allow_unreleased)):
+        raise CliError(
+            "adopt --finalize uses the source and release saved by the "
+            "pending adoption; do not pass release-selection options."
+        )
+
+    explicit_data = parse_data(args.data)
+    unsupported = sorted(set(explicit_data) - {"project_visibility"})
+    if unsupported:
+        raise CliError(
+            "adopt --finalize only accepts project_visibility; saved Copier "
+            f"answers cannot change ({', '.join(unsupported)})."
+        )
+    pending = read_pending_adoption(target)
+    raw_template = pending["template"]
+    raw_repository = pending["repository"]
+    raw_managed = pending["managed_files"]
+    if (
+        not isinstance(raw_template, dict)
+        or not isinstance(raw_repository, dict)
+        or not isinstance(raw_managed, list)
+    ):
+        raise CliError("Pending adoption state is invalid.")
+    source = raw_template.get("source")
+    release = raw_template.get("release")
+    sha = raw_template.get("sha")
+    verification = raw_template.get("verification")
+    if (
+        not isinstance(source, str)
+        or not source
+        or not isinstance(release, str)
+        or not release
+        or not isinstance(sha, str)
+        or FULL_SHA.fullmatch(sha) is None
+        or verification not in {"verified", "development-unreleased"}
+    ):
+        raise CliError(
+            "Pending template identity is invalid; restore the checkpoint or "
+            "restart adoption from a clean commit."
+        )
+
+    answers_path = target / ".copier-answers.yml"
+    if not answers_path.is_file():
+        raise CliError(
+            "Pending adoption is missing .copier-answers.yml; restore the "
+            "managed file, then rerun csarc adopt --finalize."
+        )
+    actual_answers_hash = hashlib.sha256(answers_path.read_bytes()).hexdigest()
+    if actual_answers_hash != pending["answers_sha256"]:
+        raise CliError(
+            "Copier answers changed after adoption started; restore "
+            ".copier-answers.yml or restart adoption from a clean commit."
+        )
+    if read_answer(answers_path, "_src_path") != source:
+        raise CliError(
+            "Copier source drifted after adoption started; restore the saved "
+            "answers or restart adoption from a clean commit."
+        )
+    if read_answer(answers_path, "_commit").lower() != sha.lower():
+        raise CliError(
+            "Copier commit drifted after adoption started; restore the saved "
+            "answers or restart adoption from a clean commit."
+        )
+    allow_unreleased = verification == "development-unreleased"
+    revision = resolve_revision(
+        source,
+        release,
+        expected_sha=sha,
+        allow_unreleased=allow_unreleased,
+    )
+    source_path = Path(source).expanduser()
+    if allow_unreleased:
+        if not source_path.exists():
+            raise CliError(
+                "Pending unreleased template source is unavailable; restore "
+                "the same local source, then rerun csarc adopt --finalize."
+            )
+        git_commit(source_path, sha)
+
+    for item in raw_managed:
+        if not isinstance(item, dict):
+            raise CliError("Pending managed-file state is invalid.")
+        name = item.get("path")
+        expected = item.get("fingerprint")
+        if not isinstance(name, str) or not isinstance(expected, str):
+            raise CliError("Pending managed-file state is invalid.")
+        relative_path = Path(name)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            raise CliError("Pending managed-file path is invalid.")
+        path = target / relative_path
+        if file_fingerprint(path) != expected:
+            raise CliError(
+                f"Managed adoption file drifted: {name}. Restore it from the "
+                "pending template revision, then rerun csarc adopt --finalize."
+            )
+
+    answers = read_copier_answers(answers_path)
+    saved_visibility = answers.get("project_visibility")
+    if not isinstance(saved_visibility, str):
+        raise CliError("Copier answers are missing project_visibility.")
+    explicit_visibility = explicit_data.get("project_visibility")
+    if (
+        explicit_visibility is None
+        and raw_repository.get("source") == "explicit"
+    ):
+        explicit_visibility = saved_visibility
+    repository = repository_context(
+        target,
+        explicit_visibility,
+        saved_visibility=saved_visibility,
+    )
+    saved_repository = raw_repository.get("repository")
+    if saved_repository is not None and not isinstance(saved_repository, str):
+        raise CliError("Pending repository identity is invalid.")
+    repository_matches = (
+        repository.repository is None and saved_repository is None
+    ) or (
+        isinstance(saved_repository, str)
+        and repository.repository is not None
+        and repository.repository.casefold() == saved_repository.casefold()
+    )
+    if not repository_matches or repository.visibility != raw_repository.get(
+        "visibility"
+    ):
+        raise CliError(
+            "Repository origin or visibility changed after adoption started; "
+            "restore it or restart adoption from a clean commit."
+        )
+
+    capabilities = capability_preflight(
+        target / "scripts" / "release_policy.py", target, emit=False
+    )
+    raw_manual = pending.get("manual_files", [])
+    manual_files = (
+        tuple(value for value in raw_manual if isinstance(value, str))
+        if isinstance(raw_manual, list)
+        else ()
+    )
+    plan = ResolvedPlan(
+        mode="adopt-finalize",
+        target=target,
+        revision=revision,
+        repository=repository,
+        answers=answers,
+        capabilities=capabilities,
+        files=Plan((), (), (), manual_files, ()),
+    )
+    if args.json:
+        print(json.dumps(plan.as_dict(), sort_keys=True, separators=(",", ":")))
+    else:
+        print_plan(plan)
+        print("Pending state: verified; ready to finalize.")
+    milestone_plan = milestone_description_plan(target, emit=not args.json)
+    if args.dry_run or not confirm(args):
+        return 0
+
+    create_adoption_lockfiles(target, answers)
+    try:
+        verify_project(target)
+    except CliError as error:
+        raise CliError(
+            "Project verification failed; fix the reported failures, then "
+            "rerun csarc adopt --finalize."
+        ) from error
+    settings_plan(target)
+    apply_milestone_description_plan(milestone_plan)
+    write_provenance(target, revision)
+    (target / PENDING_ADOPTION_FILE).unlink()
+    print("Adoption complete.")
+    return 0
+
+
+def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
     """Plan and apply init or adopt."""
     target = args.path.expanduser().resolve()
+    if mode == "adopt" and args.finalize:
+        return command_finalize_adoption(args)
     validate_copy_target(target, mode)
     if mode == "adopt" and args.report_dir is not None and not args.dry_run:
         raise CliError("--report-dir requires adopt --dry-run.")
@@ -1600,8 +1945,9 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:
     if args.json and mode == "adopt" and args.report_dir is not None:
         raise CliError("--report-dir cannot be combined with --json.")
 
+    source = args.source or CANONICAL_SOURCE
     revision = resolve_revision(
-        args.source,
+        source,
         args.to,
         expected_sha=args.expected_sha,
         allow_unreleased=args.allow_unreleased,
@@ -1621,7 +1967,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:
     with tempfile.TemporaryDirectory(prefix="csarc-plan-") as temporary:
         stage = Path(temporary) / "project"
         stage.mkdir()
-        copier_copy(args.source, revision, stage, data)
+        copier_copy(source, revision, stage, data)
         answers = read_copier_answers(stage / ".copier-answers.yml")
         file_plan = compare_stage(stage, target, adopt=mode == "adopt")
         capabilities = capability_preflight(
@@ -1661,11 +2007,43 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:
             shutil.copytree(stage, target, symlinks=True)
         else:
             copy_additions(stage, target, file_plan.add)
+            write_pending_adoption(
+                target,
+                pending_adoption_data(
+                    target,
+                    revision,
+                    repository,
+                    target / ".copier-answers.yml",
+                    file_plan.add,
+                    (*file_plan.manual, *file_plan.unknown),
+                ),
+            )
+            if file_plan.manual or file_plan.unknown:
+                print(
+                    "Adoption pending: complete the listed manual merges, "
+                    "then run csarc adopt --finalize."
+                )
+                return 1
 
-    verify_project(target)
-    write_provenance(target, revision)
-    settings_plan(target)
-    apply_milestone_description_plan(milestone_plan)
+    if mode == "adopt":
+        create_adoption_lockfiles(target, answers)
+        try:
+            verify_project(target)
+        except CliError as error:
+            raise CliError(
+                "Project verification failed; fix the reported failures, "
+                "then rerun csarc adopt --finalize."
+            ) from error
+    else:
+        verify_project(target)
+    if mode == "adopt":
+        settings_plan(target)
+        apply_milestone_description_plan(milestone_plan)
+        write_provenance(target, revision)
+        (target / PENDING_ADOPTION_FILE).unlink()
+    else:
+        write_provenance(target, revision)
+        settings_plan(target)
     return 0
 
 
@@ -1859,6 +2237,11 @@ def update_plan_answers(
 def command_update(args: argparse.Namespace) -> int:
     """Check or apply a Copier smart update."""
     target = args.path.expanduser().resolve()
+    if (target / PENDING_ADOPTION_FILE).is_file():
+        raise CliError(
+            "Adoption is pending; complete the manual merge and run "
+            "csarc adopt --finalize before update."
+        )
     answers_path = target / ".copier-answers.yml"
     if not answers_path.is_file():
         raise CliError("Missing .copier-answers.yml; use csarc adopt first.")
@@ -1993,7 +2376,7 @@ def parser() -> argparse.ArgumentParser:
         subparser = subparsers.add_parser(name, help=help_text)
         subparser.add_argument("path", type=Path)
         subparser.add_argument("--to", metavar="RELEASE_OR_SHA")
-        subparser.add_argument("--source", default=CANONICAL_SOURCE)
+        subparser.add_argument("--source")
         subparser.add_argument("--expected-sha", metavar="FULL_SHA")
         subparser.add_argument("--allow-unreleased", action="store_true")
         subparser.add_argument(
@@ -2001,6 +2384,11 @@ def parser() -> argparse.ArgumentParser:
         )
         subparser.add_argument("--json", action="store_true")
         if name == "adopt":
+            subparser.add_argument(
+                "--finalize",
+                action="store_true",
+                help="finish the exact saved pending adoption",
+            )
             subparser.add_argument(
                 "--report-dir",
                 type=Path,
