@@ -2078,7 +2078,7 @@ gh issue edit "$issue_number" --body-file "$body_file"`
         {
           title: '先宣告語言組合，再只產生需要的工具鏈',
           goal: '可選 CI/CD-only、Python-only、TypeScript-only 或兩者；Python 另提供 latest／minimum。',
-          summary: '答案寫入 `.csarc/profile.json`；驗證入口會依實際 `pyproject.toml`／`package.json` 自動核對。',
+          summary: '答案寫入 `.csarc/profile.json`；驗證入口會依實際 `pyproject.toml`／`package.json` 自動核對。Python minimum 目前刻意從 3.12 起；CI 會跑所選版本的精確 `.0` 下界，以及一路到 reviewed stable 的每個 feature release 最新 patch，最後以穩定的 `verify` context 彙總。',
           file: 'copier.yml',
           code: `language:
   choices: [ci, python, typescript, python-typescript]
@@ -2092,7 +2092,10 @@ python_min_version:
   when: minimum
 use_reusable_workflow:
   type: bool
-  default: false`
+  default: false
+
+# 3.11 is intentionally outside the declared support range.
+# CI checks the selected .0 lower bound and every feature release through 3.14.`
         },
         {
           title: '可用性與真實採用成熟度分開標示',
@@ -2106,6 +2109,11 @@ profiles:
     stage: alpha
     latest_reviewed_stable: "3.14"
     default_support_mode: latest
+    support_modes:
+      minimum:
+        selectable_minimums: ["3.12", "3.13", "3.14"]
+        minimum_patch_policy: first_patch
+        ci_tests_exact_minimum_and_every_feature_release: true
     style_guide:
       name: Google Python Style Guide
       line_length: 80

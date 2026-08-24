@@ -80,7 +80,8 @@ profiles:
           - "3.13"
           - "3.14"
         development_runtime: "3.14"
-        ci_tests_minimum_and_latest: true
+        minimum_patch_policy: first_patch
+        ci_tests_exact_minimum_and_every_feature_release: true
     style_guide:
       name: Google Python Style Guide
       url: https://google.github.io/styleguide/pyguide.html

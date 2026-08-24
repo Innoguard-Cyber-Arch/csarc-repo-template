@@ -1,6 +1,9 @@
 {% set python_mode = python_support_mode | default("latest") -%}
 {% set python_min = python_min_version | default("3.12") -%}
-{% set python_target = "3.14" if python_mode == "latest" else python_min -%}
+{% set python_latest = "3.14" -%}
+{% set python_target = python_latest if python_mode == "latest" else python_min -%}
+{% set python_min_minor = python_target.split(".")[1] | int -%}
+{% set python_latest_minor = python_latest.split(".")[1] | int -%}
 {% set has_python = language in ["python", "python-typescript"] -%}
 {% set has_typescript = language in ["typescript", "python-typescript"] -%}
 name: CI
@@ -37,28 +40,34 @@ jobs:
     with:
       language-profile: "{{ language }}"
 {%- if has_python %}
-      python-version: "{{ python_target }}"
-{%- if python_mode == "minimum" and python_min != "3.14" %}
-      additional-python-version: "3.14"
-{%- endif %}
+      python-versions: >-
+        ["{{ python_target }}.0"{% for minor in range(python_min_minor, python_latest_minor + 1) %}, "3.{{ minor }}"{% endfor %}]
+{%- else %}
+      python-versions: '["none"]'
 {%- endif %}
 {%- if has_typescript %}
       node-version: "24"
 {%- endif %}
-{%- else %}
-  verify:
-    name: verify
+{%- elif has_python %}
+  runtime:
+    name: Python {% raw %}${{ matrix.python-version }}{% endraw %}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "{{ python_target }}.0"
+{%- for minor in range(python_min_minor, python_latest_minor + 1) %}
+          - "3.{{ minor }}"
+{%- endfor %}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-{%- if has_python %}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "{{ python_target }}"
-{%- endif %}
+          python-version: {% raw %}${{ matrix.python-version }}{% endraw %}
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 {%- if has_typescript %}
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -72,20 +81,41 @@ jobs:
 {%- endif %}
       - name: Verify declared language modules
         run: ./scripts/verify
-{%- if has_python %}
         env:
-          CSARC_PYTHON_VERSION: "{{ python_target }}"
-          UV_PROJECT_ENVIRONMENT: .venv-primary
-{%- endif %}
-{%- if has_python and python_mode == "minimum" and python_min != "3.14" %}
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+          CSARC_PYTHON_VERSION: {% raw %}${{ matrix.python-version }}{% endraw %}
+          UV_PROJECT_ENVIRONMENT: .venv-{% raw %}${{ matrix.python-version }}{% endraw %}
+
+  verify:
+    name: verify
+    if: {% raw %}${{ always() }}{% endraw %}
+    needs: runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require every Python runtime
+        env:
+          RUNTIME_RESULT: {% raw %}${{ needs.runtime.result }}{% endraw %}
+        run: test "$RUNTIME_RESULT" = success
+{%- else %}
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          python-version: "3.14"
-      - name: Verify latest stable Python version
-        run: ./scripts/verify
-        env:
-          CSARC_PYTHON_VERSION: "3.14"
-          UV_PROJECT_ENVIRONMENT: .venv-latest
-          CSARC_VERIFY_TYPESCRIPT: "false"
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+{%- if has_typescript %}
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: "11.22.0"
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: pnpm
 {%- endif %}
+      - name: Verify declared language modules
+        run: ./scripts/verify
 {%- endif %}

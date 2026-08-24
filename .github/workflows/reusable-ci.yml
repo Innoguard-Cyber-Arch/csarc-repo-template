@@ -6,12 +6,9 @@ on:
       language-profile:
         type: string
         default: python
-      python-version:
+      python-versions:
         type: string
-        default: "3.14"
-      additional-python-version:
-        type: string
-        default: ""
+        default: '["3.14.0", "3.14"]'
       node-version:
         type: string
         default: "24"
@@ -20,10 +17,14 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    name: verify
+  runtime:
+    name: runtime (${{ matrix.runtime }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: ${{ fromJSON(inputs.python-versions) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -31,7 +32,7 @@ jobs:
       - if: contains(inputs.language-profile, 'python')
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: ${{ inputs.python-version }}
+          python-version: ${{ matrix.runtime }}
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - if: contains(inputs.language-profile, 'typescript')
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
@@ -46,16 +47,17 @@ jobs:
       - name: Verify declared language modules
         run: ./scripts/verify
         env:
-          CSARC_PYTHON_VERSION: ${{ inputs.python-version }}
-          UV_PROJECT_ENVIRONMENT: .venv-primary
-      - if: contains(inputs.language-profile, 'python') && inputs.additional-python-version != ''
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: ${{ inputs.additional-python-version }}
-      - if: contains(inputs.language-profile, 'python') && inputs.additional-python-version != ''
-        name: Verify additional Python version
-        run: ./scripts/verify
+          CSARC_PYTHON_VERSION: ${{ matrix.runtime }}
+          UV_PROJECT_ENVIRONMENT: .venv-${{ matrix.runtime }}
+
+  verify:
+    name: verify
+    if: ${{ always() }}
+    needs: runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require every runtime
         env:
-          CSARC_PYTHON_VERSION: ${{ inputs.additional-python-version }}
-          UV_PROJECT_ENVIRONMENT: .venv-additional
-          CSARC_VERIFY_TYPESCRIPT: "false"
+          RUNTIME_RESULT: ${{ needs.runtime.result }}
+        run: test "$RUNTIME_RESULT" = success
