@@ -1,0 +1,17 @@
+# 文件地圖
+
+`docs/index.html` 是專案的 portable presentation。它必須能下載、轉寄並以 `file://` 離線開啟；網站託管是選配，不是閱讀文件的前提。
+
+| 類型 | 路徑 | 維護責任 |
+| --- | --- | --- |
+| 單檔交付物 | `docs/index.html` | 由公版 renderer 產生，不直接編輯 |
+| 專案網站內容 | `docs/site-content.js` | 專案維護；Copier update 不覆寫 |
+| 專案網站主題 | `docs/site-theme.css` | 專案維護；只覆寫必要的設計 tokens 或窄範圍 selector |
+| 網站版型 | `site/` | 公版維護；Copier update 提供可審查的版型、樣式與互動更新 |
+| 選型與決策 | `docs/decisions/` | 專案維護；只記錄已確認且經 PR 審查的決策 |
+| 規格 | `docs/specs/` | 專案維護；核准後可同步成 Issue 或 Story Milestone |
+| Story 格式 | `docs/milestone-description.md` | 公版維護 |
+
+聊天不會自動成為正式決策。使用者確認 durable constraint 或 trade-off 後，agent 先回查既有決策與 Issues，再把摘要寫入工作單，最後透過 PR 更新 `docs/decisions/`；不得保存完整聊天逐字稿或把未確認推論寫成決定。
+
+修改 project-owned 內容或主題後，執行 `uv run --no-project python scripts/render_site.py` 重建單檔。`./scripts/verify` 會以 `--check` 模式拒絕 stale bundle、外部 runtime asset 與不支援的明確 `schemaVersion`；沒有版本欄位的既有內容暫按 legacy v1 處理。
