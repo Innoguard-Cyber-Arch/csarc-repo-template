@@ -85,8 +85,8 @@ gh api "repos/$repo/rulesets"
         {
           title: '方案決定 Ruleset 是否成為真正門禁',
           goal: 'Free private 先在 repo 保存相同政策；public、Pro、Team 或 Enterprise 可強制 PR、一位核准、CODEOWNER 與必要檢查。Enterprise 的組織規則仍另審。',
-          summary: '支援方案會驗證 CODEOWNERS team 與 main 的有效規則；Free private 的 CI 回報遠端 Ruleset 是 STAGED 或 MISSING，再加上 DEGRADED，並由獨立 workflow 在 PR 留下不重複的警告留言。',
-          file: 'policies/rulesets.json＋.github/CODEOWNERS',
+          summary: '所有方案都先用 repository teams API 驗證 PR 內設定的 team 與 write access；Free private 另從 REVIEWERS 名單輪派一位個別 reviewer，但 Ruleset 只保留 STAGED／MISSING 與 DEGRADED 紀錄。',
+          file: 'policies/rulesets.json＋.github/CODEOWNERS＋governance-comment.yml',
           code: `# The same policy is stored in every repository and enforced when supported.
 required reviews: 1
 require CODEOWNER review: true
@@ -340,17 +340,11 @@ permissions:
 }`
         },
         {
-          title: '敏感路徑由指定 owner 再審查',
-          goal: '一般程式碼一位同事即可；CI、依賴、規格與政策檔提高審查層級。',
-          summary: '把 `.github/`、`scripts/`、`policies/`、spec 與 lockfile 指給 code owner，敏感變更會自動要求額外審查。',
-          file: '.github/CODEOWNERS',
-          code: `* {{ code_owner }}
-/.github/ {{ code_owner }}
-/scripts/ {{ code_owner }}
-/policies/ {{ code_owner }}
-/docs/specs/ {{ code_owner }}
-/pyproject.toml {{ code_owner }}
-/uv.lock {{ code_owner }}`
+          title: 'PR 自動輪派一位同事審查',
+          goal: 'Free private 先可靠通知同事；支援 Ruleset 時再把核准變成 merge gate。',
+          summary: 'workflow 只 checkout base branch，從 REVIEWERS 設定排除作者後輪派一人；不執行 PR 分支程式碼。',
+          file: '.github/CODEOWNERS＋.github/REVIEWERS＋.github/workflows/governance-comment.yml',
+          code: `* {{ code_owner }}`
         },
         {
           title: 'PR 同時核對標籤、Issue 編號、stack 來源與版本標題',
