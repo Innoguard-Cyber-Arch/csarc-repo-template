@@ -23,6 +23,8 @@
 
 完整聊天、模型 chain-of-thought、敏感資訊與未確認推論都不屬於 project memory。
 
+從舊版模板更新的專案可能仍有 project-owned `docs/decisions/`。搜尋與驗證時同時讀取該目錄；新紀錄使用 `docs/adr/`，模板不會自動移動或覆寫舊內容。
+
 ## Current specifications
 
 - [`SPEC-001-example.md`](specs/SPEC-001-example.md) — draft schema example

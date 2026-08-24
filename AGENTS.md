@@ -7,9 +7,8 @@
 - Three documents split by audience, each authoritative for its own layer: `README.md` targets general users adopting the template (what it is, whether to use it, how to start); this file targets contributors and agents working in this repository (executable workflow rules); `docs/index.html` is the appendix for decision rationale and technical detail. Do not restate this file's workflow rules in `README.md`; link to it instead.
 - Treat `copier.yml`, `template/`, `policies/`, and `profiles/catalog.yaml` as the product.
 - `template/` is what downstream repositories receive. Root configuration governs this template repository itself.
-- Read `docs/README.md` as the durable project memory map before reconstructing design context from Issues or the presentation.
-- Use root `docs/specs/` for Spec-Driven Development (SDD) current contracts; approved specs may synchronize to an Issue or Story, while `tracking: none` records an already-established capability without creating a work item.
-- Use `docs/adr/` for Architecture Decision Records (ADRs) covering accepted, superseded, rejected, or unresolved architecture, tooling, security, compatibility, and platform choices. `docs/index.html` is the portable presentation, not the only editable decision source.
+- Use root `docs/specs/` for SDD current contracts; `docs/README.md` maps durable project memory.
+- Use `docs/adr/` for decisions. In updated projects, also search project-owned `docs/decisions/`; never move or overwrite it automatically.
 - Edit the root presentation in `site/`, then rebuild `docs/index.html`; do not hand-edit the generated bundle.
 - Keep decision records, the deck, and checked-in paths aligned. Do not describe a capability as active unless the template creates and verifies it.
 

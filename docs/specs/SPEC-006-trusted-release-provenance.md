@@ -23,7 +23,8 @@ tracking: none
 ## Acceptance criteria
 
 - [x] PR 只宣告 SemVer intent；精確版本由已合併 default-branch history 與 promotion boundary 決定。
-- [x] Tagged source、版本欄位、CHANGELOG、Release target、wheel／sdist metadata、prompt 與 provenance 指向同一版本與 commit。
+- [x] Tagged source、版本欄位、CHANGELOG、prompt 與 provenance 指向同一版本與 commit。
+- [ ] Release target 與 wheel／sdist metadata 也經獨立驗證並指向同一版本與 commit；此項等待 #203 交付。
 - [x] Release 保存 distributions、SHA-256、非空 CycloneDX SBOM 與 source metadata；啟用時加上 GitHub artifact attestations。
 - [x] Consumer 或 registry publishing 在使用成品前驗 repository、tag、source／artifact digest 與 signer workflow identity。
 - [x] PyPI／npm 使用 opt-in OIDC trusted publishing；baseline 不要求長效 token，未完成 license／publisher bootstrap 不宣稱可發布。
@@ -43,7 +44,7 @@ tracking: none
 ## Verification
 
 - `./scripts/verify-template.sh`
-- `scripts/release_policy.py` 對 proposed tag 與 source metadata 做 fail-closed 驗證。
+- `scripts/release_policy.py` 對 proposed tag 與既有 source metadata 做 fail-closed 驗證；Release target 與 wheel／sdist metadata gate 等待 #203。
 - `scripts/verify_release_consumption.py` 同時證明成功 consumption 與受控 digest mismatch 失敗。
 - Live release evidence 連回 immutable GitHub Release 與 workflow run。
 

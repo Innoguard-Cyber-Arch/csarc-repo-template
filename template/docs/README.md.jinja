@@ -12,6 +12,8 @@
 
 Spec-Driven Development（SDD）以 `docs/specs/` 的 living specifications 保存 intent 與 acceptance contract；Architecture Decision Records（ADR）保存理由與替代方案；Test-Driven Development（TDD）保存最後可重現的 regression，不逐次抄錄 red／green 暫態；Behavior-Driven Development（BDD）只在跨角色行為需要 living example 時使用，不因而預設加入 Cucumber／Gherkin dependency。Software Design Document 也常縮寫為 SDD，但本模板不強制單一大型文件。
 
+從舊版模板更新的專案可能仍有 project-owned `docs/decisions/`。搜尋與驗證時同時讀取該目錄；新紀錄使用 `docs/adr/`，模板不會自動移動或覆寫舊內容。
+
 `tracking: issue` 或預設值讓 approved／proposed spec 同步 Issue；`tracking: story` 同步 Story Milestone；`tracking: none` 保存已建立能力的 current spec，不建立新 work item。
 
 ## Other documentation
@@ -26,7 +28,7 @@ Spec-Driven Development（SDD）以 `docs/specs/` 的 living specifications 保�
 
 ## 新決策如何進來
 
-1. 先讀相關 current spec，再搜尋 `docs/adr/` 與 open／closed Issues。
+1. 先讀相關 current spec，再搜尋 `docs/adr/`、既有 `docs/decisions/` 與 open／closed Issues。
 2. 在 work item 摘要已確認限制、替代方案與舊決策 disposition。
 3. 以 scoped PR 更新 current spec 與對應 ADR；不得保存完整聊天逐字稿、模型 chain-of-thought、敏感資訊或未確認推論。
 4. 若網站需要呈現，更新 project-owned content 並重建 `docs/index.html`；presentation 不取代 canonical Markdown。

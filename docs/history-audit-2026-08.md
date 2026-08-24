@@ -17,24 +17,20 @@
 
 ## Read method
 
-使用已登入的 GitHub CLI。先以 REST issues endpoint 分頁抓取 Issue 與 PR 共用的 221 筆 body，再依 `number <= 221` 與 `pull_request` 欄位固定集合；接著對每個編號分頁抓取 comments 與 timeline，對每張 PR 分頁抓取 reviews、commits 與 files。最後用 GraphQL 分頁交叉核對 `closingIssuesReferences`：
+使用已登入的 GitHub CLI。可執行的 producer 以 REST issues endpoint 分頁抓取 Issue 與 PR 共用的 221 筆 body，再依 cutoff、`number <= 221` 與 `pull_request` 欄位固定集合；接著對每個編號分頁抓取 comments 與 timeline，對每張 PR 分頁抓取 reviews、commits 與 files。最後以檔內的完整 GraphQL query 分頁交叉核對 `reviewThreads` 與 `closingIssuesReferences`：
 
 ```bash
-repo=Innoguard-Cyber-Arch/csarc-repo-template
-gh api --paginate --slurp \
-  "repos/$repo/issues?state=all&per_page=100&direction=asc"
-gh api --paginate --slurp "repos/$repo/issues/<number>/comments?per_page=100"
-gh api --paginate --slurp "repos/$repo/issues/<number>/timeline?per_page=100"
-gh api --paginate --slurp "repos/$repo/pulls/<number>/reviews?per_page=100"
-gh api --paginate --slurp "repos/$repo/pulls/<number>/commits?per_page=100"
-gh api --paginate --slurp "repos/$repo/pulls/<number>/files?per_page=100"
-gh api graphql -f query='<paginated pullRequests query with
-reviewThreads and closingIssuesReferences>'
+uv run --no-project python scripts/audit_github_history.py \
+  --repo Innoguard-Cyber-Arch/csarc-repo-template \
+  --cutoff 2026-08-24T13:08:45Z \
+  --max-number 221
 ```
+
+Producer 只輸出 aggregate counts、各 endpoint 的成功／預期數與缺口，不保存 body、comment 或 timeline 原文。`tests/fixtures/history-audit-sample.json` 與 `tests/test_history_audit.py` 可離線重現分頁、aggregate、raw-content omission 與缺口時的非零結束狀態。
 
 實際 endpoint coverage 為：item body 221/221、comments 221/221、timeline 221/221、PR reviews 118/118、PR commits 118/118、PR files 118/118、GraphQL review threads／closing relationships 118/118；0 個 endpoint error、0 個最終缺口。Issues 依 `7–40`、`41–80`、`81–120`、`121–160`、`161–200`、`201–221` 分批閱讀；PR 依 `1–40`、`41–80`、`81–120`、`121–160`、`161–193`、`210–221` 分批閱讀。遇到輸出截斷時，改用較小編號集合重讀。
 
-重跑時應把每個 `--slurp` 結果依 endpoint／編號分檔，保存新的 retrieval time 與 cutoff，不直接覆寫本快照；平台內容可能在其後新增或修改。API 失敗時保留已完成頁面與失敗編號，只重試缺少的 endpoint／page，全部成功後才重算 ledger；不得以 title／label 補推論。
+重跑時保存新的 summary、retrieval time 與 cutoff，不直接覆寫本快照；平台內容可能在其後新增或修改。Producer 不把 raw response 寫入磁碟；API 失敗時以 `gaps` 列出缺少的 endpoint，重試全部成功後才重算 ledger，不得以 title／label 補推論。
 
 ## Covered Issues
 

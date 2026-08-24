@@ -83,6 +83,7 @@ Repository 提供一套 **Durable Project Memory（持久化專案記憶）**：
 ## Verification
 
 - `uv run pytest tests/test_spec_to_issue.py -q`
+- `uv run pytest tests/test_history_audit.py -q`
 - `./scripts/verify-template.sh`
 - 以 coverage ledger 的明確 cutoff、數量與編號清單交叉核對 GitHub API 結果。
 - 從全新 session 依 `AGENTS.md` 導航至本規格、至少一份能力 spec、decision record 與原始 Issue／PR。

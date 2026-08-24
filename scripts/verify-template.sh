@@ -1316,6 +1316,8 @@ grep -q 'Test-Driven Development' \
   "$fixture_root/default-project/docs/README.md"
 grep -q 'Behavior-Driven Development' \
   "$fixture_root/default-project/docs/README.md"
+grep -q 'docs/decisions/' \
+  "$fixture_root/default-project/docs/README.md"
 grep -q 'Never store a raw conversation transcript' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'GitHub 方案與門禁' \
@@ -2208,8 +2210,9 @@ grep -q '"template_mode": "existing"' \
 update_source="$fixture_root/update-source"
 update_project="$fixture_root/update-project"
 mkdir -p "$update_source"
-rsync -a --exclude=.git --exclude=.venv --exclude=.cache --exclude=.ruff_cache \
-  "$repo_root/" "$update_source/"
+legacy_memory_base=f1ecc6e4fa2bb03e7c322e5d8dd69265a7c34513
+git cat-file -e "$legacy_memory_base^{commit}"
+git archive "$legacy_memory_base" | tar -x -C "$update_source"
 
 git -C "$update_source" init -b main
 git -C "$update_source" config user.name "Template Test"
@@ -2236,8 +2239,10 @@ printf '%s\n' 'window.PROJECT_OWNED_SITE = true;' \
   >> "$update_project/docs/site-content.js"
 printf '%s\n' '/* PROJECT_OWNED_THEME */' \
   >> "$update_project/docs/site-theme.css"
+cp "$repo_root/docs/adr/agent-collaboration.md" \
+  "$update_project/docs/decisions/project-owned.md"
 printf '%s\n' '' 'PROJECT_OWNED_MEMORY' \
-  >> "$update_project/docs/adr/README.md"
+  >> "$update_project/docs/decisions/project-owned.md"
 printf '%s\n' '' 'PROJECT_OWNED_SPEC' \
   >> "$update_project/docs/specs/SPEC-001-example.md"
 uv run copier copy --trust --defaults --overwrite --vcs-ref v0.1.0 \
@@ -2256,6 +2261,8 @@ git -C "$update_project" config user.email "template-test@example.invalid"
 git -C "$update_project" add .
 git -C "$update_project" commit -m "test: adopted project"
 
+rsync -a --delete --exclude=.git --exclude=.venv --exclude=.cache \
+  --exclude=.ruff_cache "$repo_root/" "$update_source/"
 cp "$update_source/template/.gitignore.jinja" \
   "$update_source/template/update-marker"
 printf '%s\n' 'window.TEMPLATE_SITE_V2 = true;' \
@@ -2284,7 +2291,7 @@ grep -q 'window.PROJECT_OWNED_SITE = true;' \
 grep -q 'PROJECT_OWNED_THEME' \
   "$update_project/docs/index.html"
 grep -q '^PROJECT_OWNED_MEMORY$' \
-  "$update_project/docs/adr/README.md"
+  "$update_project/docs/decisions/project-owned.md"
 grep -q '^PROJECT_OWNED_SPEC$' \
   "$update_project/docs/specs/SPEC-001-example.md"
 grep -q 'window.TEMPLATE_SITE_V2 = true;' \
@@ -2292,6 +2299,8 @@ grep -q 'window.TEMPLATE_SITE_V2 = true;' \
 grep -q 'window.TEMPLATE_SITE_V2 = true;' \
   "$update_project/docs/index.html"
 test -f "$update_project/docs/adr/README.md"
+grep -q 'docs/decisions/' "$update_project/AGENTS.md"
+grep -q 'docs/decisions/' "$update_project/docs/README.md"
 grep -q 'Never store a raw conversation transcript' \
   "$update_project/AGENTS.md"
 grep -q '_commit: v0.1.1' "$update_project/.copier-answers.yml"

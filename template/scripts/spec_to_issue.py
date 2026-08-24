@@ -21,6 +21,7 @@ PRIORITIES = {"P0", "P1", "P2", "P3"}
 STATUSES = {"draft", "proposed", "approved"}
 TRACKING = {"issue", "none", "story"}
 ADR_STATUSES = {"Accepted", "Proposed", "Rejected", "Superseded"}
+ADR_DIRECTORIES = (Path("docs/adr"), Path("docs/decisions"))
 ADR_SECTIONS = (
     "問題與限制",
     "決定",
@@ -189,11 +190,17 @@ def validate_adr(path: Path) -> None:
         if not re.search(rf"^## {re.escape(section)}\s*$", text, re.MULTILINE):
             raise SpecError(f"{path}: add an '## {section}' section")
     if not re.search(
-        r"https://github\.com/[^/\s)]+/[^/\s)]+/issues/[1-9]\d*", text
+        rf"^- \*\*來源 Issues?{FULLWIDTH_COLON}\*\*[^\n]*"
+        r"https://github\.com/[^/\s)]+/[^/\s)]+/issues/[1-9]\d*",
+        text,
+        re.MULTILINE,
     ):
         raise SpecError(f"{path}: add a source Issue URL")
     if not re.search(
-        r"https://github\.com/[^/\s)]+/[^/\s)]+/pull/[1-9]\d*", text
+        rf"^- \*\*實作 PRs?{FULLWIDTH_COLON}\*\*[^\n]*"
+        r"https://github\.com/[^/\s)]+/[^/\s)]+/pull/[1-9]\d*",
+        text,
+        re.MULTILINE,
     ):
         raise SpecError(f"{path}: add an implementation PR URL")
 
@@ -443,19 +450,21 @@ def sync_spec(spec: Spec, repo: str, source_ref: str, server_url: str) -> None:
 
 def discover_specs(paths: list[str]) -> list[Path]:
     """Resolve explicit spec paths or discover all default spec files."""
-    candidates = (
-        [Path(item) for item in paths]
-        if paths
-        else sorted(Path("docs/specs").glob("*.md"))
-    )
-    return [path for path in candidates if path.is_file()]
+    if paths:
+        candidates = [Path(item) for item in paths]
+        missing = [str(path) for path in candidates if not path.is_file()]
+        if missing:
+            raise SpecError(f"spec file does not exist: {', '.join(missing)}")
+        return candidates
+    return sorted(Path("docs/specs").glob("*.md"))
 
 
 def discover_adrs() -> list[Path]:
-    """Discover ADRs, excluding their instructions."""
+    """Discover current and legacy ADRs, excluding their instructions."""
     return [
         path
-        for path in sorted(Path("docs/adr").glob("*.md"))
+        for directory in ADR_DIRECTORIES
+        for path in sorted(directory.glob("*.md"))
         if path.name != "README.md"
     ]
 
@@ -510,21 +519,25 @@ def main() -> int:
 
     args = parser.parse_args()
     specs = [parse_spec(path) for path in discover_specs(args.paths)]
-    if not specs:
-        LOGGER.info("no spec files found")
-        return 0
-    validate_unique_ids(specs)
 
     if args.command == "validate":
         adrs = discover_adrs() if not args.paths else []
         for adr in adrs:
             validate_adr(adr)
+        if not specs:
+            raise SpecError("no spec files found in docs/specs")
+        validate_unique_ids(specs)
         validate_local_links([spec.path for spec in specs] + adrs, Path.cwd())
         for spec in specs:
             LOGGER.info("valid: %s (%s)", spec.path, spec.status)
         for adr in adrs:
             LOGGER.info("valid: %s", adr)
         return 0
+
+    if not specs:
+        LOGGER.info("no spec files found")
+        return 0
+    validate_unique_ids(specs)
 
     for label in load_labels(Path("policies/labels.json")):
         run_gh(
