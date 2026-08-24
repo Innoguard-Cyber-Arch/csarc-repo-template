@@ -46,6 +46,15 @@ Repository 提供一套 **Durable Project Memory（持久化專案記憶）**：
 
 **Then** 它能分辨目前契約、被取代或駁回的選項、尚未落地的 open work，以及應執行的驗證，而不需要重建原始對話。
 
+## Traceability examples
+
+| Evidence | Stable path |
+| --- | --- |
+| 新增 current spec 的 `tracking: none` 與 ADR/link validation | 本規格 → [Issue #223](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/223) → `scripts/spec_to_issue.py` → [TDD regression](../../tests/test_spec_to_issue.py) |
+| Superseded decision | [Capability-aware governance ADR](../adr/capability-aware-governance.md) 的 #62 → #65／PR #66 disposition |
+| Rejected proposal | [Release/security ADR](../adr/release-security-and-dependencies.md) 的 Renovate proposal → #110／PR #143 disposition |
+| BDD-suitable fixture | 本規格的 Given／When／Then「新 agent 無聊天內容仍能重建脈絡」scenario；以 validator 與導航 assertion 實作，不新增 Cucumber |
+
 ## Acceptance criteria
 
 - [x] `docs/specs/` 有本總規格及多份按能力域拆分的 current SDD。
