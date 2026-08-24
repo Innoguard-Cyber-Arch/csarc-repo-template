@@ -735,6 +735,10 @@ grep -q 'automation: github_dependabot' profiles/catalog.yaml
 grep -q 'stays_independent_of_renovate: true' profiles/catalog.yaml
 grep -q '決定｜保留 Dependabot 與 pnpm 的原生門禁' \
   docs/index.html
+grep -q 'Optional integration capability matrix' docs/index.html
+grep -q 'available.*request-owner.*fallback' docs/index.html
+grep -q 'optional_integration_preflight' scripts/release_policy.py
+grep -q '選配整合依目前權限引導' README.md
 for renovate_config_path in \
   renovate.json renovate.json5 .github/renovate.json .renovaterc.json; do
   test ! -e "$renovate_config_path"
@@ -1018,6 +1022,10 @@ grep -q 'Verification only' \
   "$fixture_root/default-project/docs/index.html"
 grep -q 'apply-repository-settings.sh plan' \
   "$fixture_root/default-project/README.md"
+grep -q 'available.*request-owner.*fallback' \
+  "$fixture_root/default-project/README.md"
+grep -q '導入 preflight 會把 Renovate' \
+  "$fixture_root/default-project/docs/site-content.js"
 uv run python - "$fixture_root/default-project/pyproject.toml" <<'PY'
 import sys
 import tomllib

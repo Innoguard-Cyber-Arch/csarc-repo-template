@@ -209,6 +209,12 @@ def test_capability_preflight_uses_readable_github_origin(
             "actions_pull_requests": {"state": "blocked"},
             "contents": {"state": "unknown"},
         },
+        "integrations": {
+            "renovate": {
+                "state": "request-owner",
+                "next_step": "Ask the organization owner.",
+            }
+        },
     }
 
     def fake_run(
@@ -232,7 +238,48 @@ def test_capability_preflight_uses_readable_github_origin(
 
     monkeypatch.setattr(cli, "run", fake_run)
     assert cli.capability_preflight(script, tmp_path) == response
-    assert "actions_pull_requests=blocked" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "actions_pull_requests=blocked" in output
+    assert "Optional integration renovate: request-owner" in output
+    assert "Next: Ask the organization owner." in output
+
+
+def test_capability_preflight_without_origin_uses_integration_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    script = tmp_path / "release_policy.py"
+    script.touch()
+    monkeypatch.setattr(
+        cli,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0], 1, stdout="", stderr=""
+        ),
+    )
+
+    payload = cli.capability_preflight(script, tmp_path)
+
+    integration = payload["integrations"]["renovate"]
+    assert integration["state"] == "fallback"
+    assert "Dependabot" in integration["next_step"]
+    assert "Optional integration renovate: fallback" in capsys.readouterr().out
+
+
+def test_target_repository_uses_explicit_repo_for_new_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GH_REPO", "owner/new-repository")
+    monkeypatch.setattr(
+        cli,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0], 1, stdout="", stderr=""
+        ),
+    )
+
+    assert cli.target_repository(tmp_path) == "owner/new-repository"
 
 
 def test_adopt_requires_clean_tree_and_preserves_product_files(
