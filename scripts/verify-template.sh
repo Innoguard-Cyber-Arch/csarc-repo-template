@@ -289,7 +289,7 @@ case "$2" in
       printf '[]\n'
       exit 0
     fi
-    printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_review_thread_resolution":true,"required_approving_review_count":1}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"delivery-sync"},{"context":"promotion"},{"context":"verify"},{"context":"title"}]}}]'
+    printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_review_thread_resolution":true,"required_approving_review_count":1}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"promotion"},{"context":"verify"},{"context":"title"}]}}]'
     ;;
   *)
     echo "Unexpected gh API path: $2" >&2
@@ -717,8 +717,18 @@ grep -q '只代表靜態與合成驗證通過' docs/live-integration.md
 test -x scripts/run-live-workflow-probe
 test -f .github/workflows/live-integration.yml
 test -f .github/workflows/release-consumption.yml
-grep -q '^  decision-site:$' .github/workflows/ci.yml
+if grep -q '^  decision-site:$' .github/workflows/ci.yml; then
+  echo "Decision site validation must share the fast runner."
+  exit 1
+fi
 grep -q 'name: portable-decision-site' .github/workflows/ci.yml
+grep -q "steps.plan.outputs.upload_site == 'true'" .github/workflows/ci.yml
+grep -q 'python3 scripts/render_site.py --check' .github/workflows/ci.yml
+grep -q 'python3 scripts/delivery_sync.py gate' .github/workflows/pr-policy.yml
+if grep -q '^  pull_request:$' .github/workflows/delivery-sync.yml; then
+  echo "Delivery sync PR validation must share the policy runner."
+  exit 1
+fi
 test ! -e template/.github/workflows/live-integration.yml
 test ! -e template/.github/workflows/release-consumption.yml
 test ! -e template/scripts/run-live-workflow-probe
@@ -1019,13 +1029,10 @@ if pull_request["required_approving_review_count"] < 1:
     raise SystemExit("The repository Ruleset must require approval.")
 if not pull_request["require_code_owner_review"]:
     raise SystemExit("The repository Ruleset must require CODEOWNER review.")
-if not {
-    "delivery-sync",
-    "promotion",
-    "verify",
-    "title",
-} <= checks:
+if not {"promotion", "verify", "title"} <= checks:
     raise SystemExit("The repository Ruleset is missing required checks.")
+if "delivery-sync" in checks:
+    raise SystemExit("The retired delivery-sync context would stay pending.")
 PY
 grep -q '"refs/heads/dev/\*"' policies/rulesets.json
 
@@ -1385,8 +1392,11 @@ grep -q 'DEGRADED' \
   "$fixture_root/default-project/README.md"
 grep -q '"context": "verify"' \
   "$fixture_root/default-project/policies/rulesets.json"
-grep -q '"context": "delivery-sync"' \
-  "$fixture_root/default-project/policies/rulesets.json"
+if grep -q '"context": "delivery-sync"' \
+  "$fixture_root/default-project/policies/rulesets.json"; then
+  echo "Generated Ruleset must not require the retired delivery-sync context."
+  exit 1
+fi
 grep -q '"context": "promotion"' \
   "$fixture_root/default-project/policies/rulesets.json"
 grep -q '"refs/heads/dev/\*"' \
@@ -1513,10 +1523,24 @@ grep -q '^  governance:$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q 'apply-repository-settings.sh check' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
-grep -q '^  decision-site:$' \
-  "$fixture_root/default-project/.github/workflows/ci.yml"
+if grep -q '^  decision-site:$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"; then
+  echo "Generated decision site validation must share the fast runner."
+  exit 1
+fi
 grep -q 'name: portable-decision-site' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q "steps.plan.outputs.upload_site == 'true'" \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q 'python3 scripts/render_site.py --check' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q 'python3 scripts/delivery_sync.py gate' \
+  "$fixture_root/default-project/.github/workflows/pr-policy.yml"
+if grep -q '^  pull_request:$' \
+  "$fixture_root/default-project/.github/workflows/delivery-sync.yml"; then
+  echo "Generated delivery sync PR validation must share the policy runner."
+  exit 1
+fi
 grep -q '^    needs: governance$' \
   "$fixture_root/default-project/.github/workflows/release.yml"
 grep -q '^    needs: source$' \

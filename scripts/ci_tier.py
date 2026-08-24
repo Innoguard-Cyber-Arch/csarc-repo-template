@@ -19,11 +19,18 @@ class Plan:
     run_governance: bool
     run_osv: bool
     run_zizmor: bool
+    upload_site: bool
 
 
 def scope_for(path: str) -> str:
     """Map one repository path to its narrowest CI concern."""
     name = Path(path).name.removesuffix(".jinja")
+    if path.startswith(("site/", "template/site/")) or path.startswith(
+        ".github/ISSUE_TEMPLATE/"
+    ):
+        return "docs"
+    if path == ".gitignore":
+        return "source"
     if (
         path.startswith((".github/workflows/", ".github/actions/"))
         or "/.github/workflows/" in path
@@ -60,6 +67,19 @@ def scope_for(path: str) -> str:
     if path.startswith(("src/", "tests/", "scripts/")):
         return "source"
     return "unknown"
+
+
+def affects_decision_site(path: str) -> bool:
+    """Return whether a changed path affects the portable decision site."""
+    return path.startswith(("site/", "template/site/")) or path in {
+        "docs/index.html",
+        "docs/site-content.js",
+        "docs/site-theme.css",
+        "scripts/render_site.py",
+        "template/docs/site-content.js.jinja",
+        "template/docs/site-theme.css.jinja",
+        "template/scripts/render_site.py",
+    }
 
 
 def classify(
@@ -105,6 +125,11 @@ def classify(
         run_governance=full or "governance" in scopes,
         run_osv=full or "dependency" in scopes,
         run_zizmor=full or "workflow" in scopes,
+        upload_site=(
+            force_full
+            or promotion
+            or any(map(affects_decision_site, changed_files))
+        ),
     )
 
 
@@ -126,6 +151,7 @@ def write_outputs(path: Path, plan: Plan) -> None:
         "run_governance": str(plan.run_governance).lower(),
         "run_osv": str(plan.run_osv).lower(),
         "run_zizmor": str(plan.run_zizmor).lower(),
+        "upload_site": str(plan.upload_site).lower(),
     }
     with path.open("a", encoding="utf-8") as output:
         for key, value in values.items():
@@ -143,6 +169,7 @@ def render_summary(plan: Plan) -> str:
         f"- Remote governance: `{plan.run_governance}`\n"
         f"- OSV: `{plan.run_osv}`\n"
         f"- Zizmor: `{plan.run_zizmor}`\n"
+        f"- Decision site artifact: `{plan.upload_site}`\n"
     )
 
 

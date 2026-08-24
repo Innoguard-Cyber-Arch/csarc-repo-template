@@ -18,6 +18,10 @@ scope_for = MODULE["scope_for"]
     ("path", "scope"),
     [
         ("docs/guide.md", "docs"),
+        ("site/app.js", "docs"),
+        ("template/site/styles.css", "docs"),
+        (".github/ISSUE_TEMPLATE/work-item.yml", "docs"),
+        (".gitignore", "source"),
         ("README.md", "docs"),
         ("src/pkg/core.py", "source"),
         ("template/README.md.jinja", "template"),
@@ -47,6 +51,50 @@ def test_docs_only_uses_docs_tier() -> None:
     assert plan.tier == "docs"
     assert not plan.run_osv
     assert not plan.run_zizmor
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "site/app.js",
+        "docs/site-content.js",
+        "scripts/render_site.py",
+        "template/site/index.html.jinja",
+        "template/docs/site-theme.css.jinja",
+    ],
+)
+def test_site_changes_publish_the_decision_artifact(path: str) -> None:
+    """Publish the bundle only when its source or project content changes."""
+    plan = classify("pull_request", "dev/next", "docs/9-site", set(), [path])
+    assert plan.upload_site
+
+
+def test_unrelated_documentation_does_not_publish_the_site() -> None:
+    """Ordinary documentation keeps the fast runner artifact-free."""
+    plan = classify(
+        "pull_request", "dev/next", "docs/9-guide", set(), ["README.md"]
+    )
+    assert not plan.upload_site
+
+
+def test_issue_form_and_gitignore_do_not_fall_through_to_full() -> None:
+    """Known low-risk repository metadata receives an explicit cheap tier."""
+    issue_form = classify(
+        "pull_request",
+        "dev/next",
+        "docs/9-form",
+        set(),
+        [".github/ISSUE_TEMPLATE/work-item.yml"],
+    )
+    gitignore = classify(
+        "pull_request",
+        "dev/next",
+        "chore/9-ignore",
+        set(),
+        [".gitignore"],
+    )
+    assert issue_form.tier == "docs"
+    assert gitignore.tier == "fast"
 
 
 def test_source_uses_fast_canonical_runtime() -> None:
@@ -91,6 +139,7 @@ def test_promotion_and_hotfix_use_full_tier(
     assert plan.tier == "full"
     assert plan.reason == reason
     assert plan.run_governance and plan.run_osv and plan.run_zizmor
+    assert plan.upload_site == (reason == "delivery promotion")
 
 
 def test_unknown_and_missing_paths_fail_safe_to_full() -> None:
@@ -107,6 +156,18 @@ def test_unknown_and_missing_paths_fail_safe_to_full() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "path", [".release-please-manifest.json", "release-please-config.json"]
+)
+def test_release_version_metadata_stays_fail_closed(path: str) -> None:
+    """Do not downgrade unclassified release state to a routine tier."""
+    plan = classify(
+        "pull_request", "dev/next", "chore/9-release", set(), [path]
+    )
+    assert plan.tier == "full"
+    assert not plan.upload_site
+
+
 def test_push_does_not_repeat_the_verified_source_tree() -> None:
     """A merged tree records post-merge evidence without another full suite."""
     plan = classify("push", "", "", set(), ["src/pkg/core.py"])
@@ -120,3 +181,4 @@ def test_manual_and_merge_queue_runs_are_full() -> None:
     )
     queued = classify("merge_group", "main", "queue", set(), ["README.md"])
     assert manual.tier == queued.tier == "full"
+    assert manual.upload_site

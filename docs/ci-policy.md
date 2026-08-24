@@ -40,15 +40,18 @@ tier、保留 promotion evidence 並立即形成 release 邊界。
 
 | 層次 | 事件 | 執行內容 | Required／取消規則 | 成本目的 |
 | --- | --- | --- | --- | --- |
-| Policy | 每張 PR | PR 標題／Issue 關聯、branch route、delivery sync、review policy | `title`、`delivery-sync`、`promotion` 與 `verify` 都會產生；新 commit 可取消舊的一般 PR run | 先用便宜、確定性的規則拒絕錯誤流程 |
+| Policy | 每張 PR | 同一個 runner 檢查 PR 標題／Issue 關聯、branch route、delivery sync 與 review policy | `title`、`promotion` 與 `verify` 都會產生；新 commit 可取消舊的一般 PR run | 先用便宜、確定性的規則拒絕錯誤流程 |
 | Docs／fast | 純文件或一般 Issue／sync PR | secret scan、格式、lint、型別、單元與 policy tests；workflow／shell scope 加跑 actionlint／ShellCheck，模板範圍另做單一預設 profile smoke | 由穩定的 `verify` aggregate 彙總；同 PR 新 commit 取消舊 run | 每次整合保留快速回饋，不支付完整矩陣 |
 | Full | promotion、hotfix、merge queue、手動 dispatch、未知高風險路徑 | 所有支援 runtime、profiles、Copier update、release policy、安全與整合回歸 | `verify` 與 `promotion` 必須成功；候選 run 不取消 | 只在交付邊界支付一次完整信心成本 |
 | Periodic／release | daily／weekly schedule 或已驗證的發布邊界 | OSV、Zizmor、governance drift、artifact、digest、SBOM、provenance | 排程不阻塞普通 PR；發布只接受 release-source evidence，重跑採 idempotent | 把時間性風險與成品工作移出每個 commit |
 
 `scripts/ci_tier.py` 依事件、base／head、labels 與 changed paths 做 fail-closed
-分類。純 `docs/` 或 Markdown 只跑 docs tier；workflow 變更加跑 Zizmor，相依
-manifest／lockfile 加跑 OSV，治理宣告或 checker 加跑 remote governance；無法分類
-的路徑升級為 full，不會以檔名判斷後直接放行。
+分類。`site/**`、根目錄 Issue forms 與一般 Markdown 明確歸入 docs tier，根目錄
+`.gitignore` 歸入 fast；workflow 變更加跑 Zizmor，相依 manifest／lockfile 加跑
+OSV，治理宣告或 checker 加跑 remote governance。release／version 等未分類高風險
+路徑仍升級為 full，不會只為省 runner 而直接放行。Portable decision site 的 render
+check 在 fast job 內固定執行；只有 site 來源、相關 project docs、手動驗證或 promotion
+才上傳 artifact。
 
 ## `main` 回同步到進行中的 delivery branch
 
@@ -72,10 +75,14 @@ gh pr create --base <delivery-branch> --head sync/main-to-<delivery>-<main-sha>
 `CSARC_AUTO_SYNC=true`、`CSARC_SYNC_TOKEN` 可觸發後續 PR checks，且 branch／PR
 write probes 都是 `allowed`，workflow 才能自動建立相同 PR。任何能力為 `blocked`
 或 `unknown` 都只輸出上述手動指令，不猜測權限、不把未同步視為成功。
+main push 的 reconcile 只對過期 PR 的合併後 `title` policy context 寫入 failure，
+不寫 success；同步後的新 SHA 必須重新通過完整 PR policy，不能用 status 繞過標題、
+Issue 關聯或 branch route。
 
 ## Required checks 與 concurrency
 
-Ruleset 固定要求 `title`、`delivery-sync`、`promotion` 與 `verify`。穩定的 `verify` aggregate context
+Ruleset 固定要求 `title`、`promotion` 與 `verify`；delivery sync 已併入 `title`，
+不再留下獨立 required context。穩定的 `verify` aggregate context
 每次都建立，並彙總 fast、full、OSV、Zizmor 與 remote governance 的
 `success`／`skipped` 結果；因此不適用的重型 job 不會因 workflow-level path filter
 留下永久 Pending。
@@ -235,9 +242,10 @@ identity；合併後立即形成 patch release 邊界。接著由每條進行中
 ## 成本與證據
 
 模板 repo 的導入前基線是一般 PR update 約 14 billed Linux runner-minutes。
-分層後的一般 Issue PR 預期啟動 CI fast、CI aggregate、PR policy 與 delivery sync
-四個 job，估計 4 billed minutes，即約減少 71%；PR 首次開啟另有一次 reviewer
-assignment。這是 job-minute 模型估計，不是實際帳單數字。
+分層後的一般文件／來源 Issue PR，在首次 reviewer assignment 以外，最多啟動 PR
+policy、CI fast 與 CI aggregate 三個 runner job。以每個短 job 至少計一分鐘估算為
+3 billed minutes，相較 14 分鐘基線約減少 79%；這是 job-minute 模型估計，不是
+實際帳單數字。
 
 每次 CI 都會上傳 `ci-plan-<run-id>-<attempt>` artifact，並在 workflow summary
 記錄 tier、原因、scopes、條件式檢查與 fast job 秒數。Actions 可正常啟動後，應以
