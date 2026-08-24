@@ -283,6 +283,145 @@ def test_target_repository_uses_explicit_repo_for_new_project(
     assert cli.target_repository(tmp_path) == "owner/new-repository"
 
 
+def test_milestone_description_plan_is_paginated_and_idempotent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    legacy = """## Problem
+
+使用者看不到完整 story。
+
+## Outcome
+
+使用者可以驗收完整成果。
+
+## Acceptance criteria
+
+- [x] 結果可驗證。
+
+## Out of scope
+
+不改 Issue 關聯。
+
+## Verification
+
+檢查 Milestone。
+
+## Source
+
+Issue #1.
+"""
+    current = cli.upgraded_milestone_description(
+        legacy,
+        [{"number": 1, "title": "Deliver the story", "state": "closed"}],
+    )
+    assert current is not None
+    calls: list[list[str]] = []
+
+    def fake_run(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        del cwd, capture, check
+        calls.append(command)
+        endpoint = command[-1]
+        payload: object
+        if "milestones?" in endpoint:
+            payload = [
+                [
+                    {"number": 1, "title": "Legacy", "description": legacy},
+                    {"number": 2, "title": "Current", "description": current},
+                ],
+                [
+                    {
+                        "number": 3,
+                        "title": "Custom",
+                        "description": "Custom notes",
+                    },
+                    {"number": 4, "title": "Empty", "description": legacy},
+                ],
+            ]
+        elif "milestone=1" in endpoint:
+            payload = [
+                [
+                    {"number": 12, "title": "Second", "state": "open"},
+                    {
+                        "number": 11,
+                        "title": "First",
+                        "state": "closed",
+                    },
+                ],
+                [
+                    {
+                        "number": 13,
+                        "title": "Delivery PR",
+                        "state": "closed",
+                        "pull_request": {},
+                    }
+                ],
+            ]
+        elif "milestone=4" in endpoint:
+            payload = [[]]
+        elif endpoint.endswith("milestones/1"):
+            payload = {"description": legacy}
+        else:
+            payload = {}
+        return subprocess.CompletedProcess(
+            command, 0, stdout=json.dumps(payload), stderr=""
+        )
+
+    monkeypatch.setattr(cli, "target_repository", lambda _: "owner/repo")
+    monkeypatch.setattr(cli, "run", fake_run)
+
+    plan = cli.milestone_description_plan(tmp_path)
+
+    assert plan is not None
+    assert [change.number for change in plan.changes] == [1]
+    assert plan.current == ((2, "Current"),)
+    assert plan.review == ((3, "Custom"), (4, "Empty"))
+    assert "使用者看不到完整 story。" in plan.changes[0].after
+    assert "- #11 — First" in plan.changes[0].after
+    assert "- #12 — Second" in plan.changes[0].after
+    assert "## References" in plan.changes[0].after
+    assert not any("PATCH" in call for call in calls)
+    assert "Upgrade (1)" in capsys.readouterr().out
+
+    cli.apply_milestone_description_plan(plan)
+
+    patches = [call for call in calls if "PATCH" in call]
+    assert len(patches) == 1
+    assert patches[0][4].endswith("milestones/1")
+    assert cli.milestone_headings(plan.changes[0].after) == (
+        cli.CURRENT_MILESTONE_HEADINGS
+    )
+    assert cli.upgraded_milestone_description(plan.changes[0].after, []) is None
+
+
+def test_milestone_description_plan_degrades_without_api_access(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Unavailable Milestone access does not block repository adoption."""
+    monkeypatch.setattr(cli, "target_repository", lambda _: "owner/repo")
+    monkeypatch.setattr(
+        cli,
+        "gh_pages",
+        lambda _: (_ for _ in ()).throw(
+            cli.CliError("GitHub authentication is unavailable")
+        ),
+    )
+
+    assert cli.milestone_description_plan(tmp_path) is None
+    output = capsys.readouterr().out
+    assert "Milestone descriptions: unavailable" in output
+    assert "review them manually" in output
+
+
 def test_adopt_requires_clean_tree_and_preserves_product_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -10,13 +10,14 @@
 - 建立一張 Issue，列出要保留的程式、設定、文件與驗收指令。
 - 盤點預設分支、可見性、GitHub 方案、既有 workflows、CODEOWNERS、語言 manifest 與乾淨工作樹。
 - 驗證目標 GitHub Release、immutable 狀態、attestation、完整 commit SHA 與 CLI artifact。
-- 在編號分支執行 `csarc adopt --dry-run --report-dir <repo 外路徑>`，保存短版 Markdown 與一頁 PDF；確認新增、覆寫、保留、人工合併、無法判定項目及已知風險後才實際導入。報告不是沒有語意或執行期衝突的保證。
+- 在編號分支執行 `csarc adopt --dry-run --report-dir <repo 外路徑>`，保存短版 Markdown 與一頁 PDF，並保留終端的 Milestone description migration；確認新增、覆寫、保留、人工合併、無法判定項目及已知風險後才實際導入。報告不是沒有語意或執行期衝突的保證。
 
 ### 導入與驗證
 
 - 選最窄的 profile；容器化語言工具鏈不應被誤判為 host-language profile。
 - 保留產品 manifest、程式、測試、spec、網站內容與安全邊界。
 - 把既有 agent 指引整併到 `AGENTS.md`，讓 `CLAUDE.md` 只保留 `@AGENTS.md`。
+- 確認舊 CSARC Milestone description 已升級，custom description 仍列入人工審查；不可改動其狀態、期限或 Issue 關聯。
 - 將既有 README 內容放入公版要求的八個區段，不刪除產品操作資訊。
 - 先檢視 `apply-repository-settings.sh plan`，再套用可用政策；不可用能力須記為明確降級。
 - 執行 `./scripts/verify` 與產品原有驗證；本機無法執行的項目要記錄原因，並由 GitHub hosted runner 補足。

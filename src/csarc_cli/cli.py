@@ -29,6 +29,23 @@ DEFAULT_OWNER = "@Innoguard-Cyber-Arch/repository-maintainers"
 PROVENANCE_FILE = Path(".csarc/provenance.json")
 ADOPTION_REPORT_BASENAME = "csarc-adoption-dry-run"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
+LEGACY_MILESTONE_HEADINGS = (
+    "problem",
+    "outcome",
+    "acceptance criteria",
+    "out of scope",
+    "verification",
+    "source",
+)
+CURRENT_MILESTONE_HEADINGS = (
+    "problem",
+    "outcome",
+    "acceptance criteria",
+    "plan",
+    "out of scope",
+    "verification",
+    "references",
+)
 
 
 class CliError(RuntimeError):
@@ -111,6 +128,26 @@ class Plan:
     preserve: tuple[str, ...]
     manual: tuple[str, ...]
     unknown: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MilestoneDescriptionChange:
+    """One legacy Milestone description that can be upgraded safely."""
+
+    number: int
+    title: str
+    before: str
+    after: str
+
+
+@dataclass(frozen=True)
+class MilestoneDescriptionPlan:
+    """Read-only classification of a repository's Milestone descriptions."""
+
+    repository: str
+    changes: tuple[MilestoneDescriptionChange, ...]
+    current: tuple[tuple[int, str], ...]
+    review: tuple[tuple[int, str], ...]
 
 
 def run(
@@ -1004,6 +1041,202 @@ def target_repository(target: Path) -> str | None:
     return None
 
 
+def gh_milestone_payload(arguments: list[str]) -> object:
+    """Run one GitHub Milestone API request and validate its JSON shape."""
+    try:
+        result = run(["gh", "api", *arguments], capture=True, check=False)
+    except FileNotFoundError as error:
+        raise CliError(
+            "GitHub CLI is required to inspect Milestone descriptions."
+        ) from error
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "GitHub API request failed"
+        raise CliError(f"Cannot inspect Milestone descriptions: {detail}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise CliError("GitHub returned invalid Milestone JSON.") from error
+    return payload
+
+
+def gh_pages(endpoint: str) -> list[dict[str, object]]:
+    """Read all pages from one GitHub REST collection."""
+    payload = gh_milestone_payload(["--paginate", "--slurp", endpoint])
+    if not isinstance(payload, list):
+        raise CliError("GitHub returned an unexpected Milestone response.")
+    items: list[dict[str, object]] = []
+    for page in payload:
+        if not isinstance(page, list):
+            raise CliError("GitHub returned an unexpected Milestone page.")
+        for item in page:
+            if not isinstance(item, dict):
+                raise CliError("GitHub returned invalid Milestone metadata.")
+            items.append(item)
+    return items
+
+
+def milestone_headings(description: str) -> tuple[str, ...]:
+    """Return normalized H2 headings from one Milestone description."""
+    return tuple(
+        match.group(1).strip().casefold()
+        for match in re.finditer(r"^##[ \t]+(.+?)[ \t]*$", description, re.M)
+    )
+
+
+def upgraded_milestone_description(
+    description: str, issues: list[dict[str, object]]
+) -> str | None:
+    """Upgrade the exact legacy CSARC layout without rewriting prose."""
+    if milestone_headings(description) != LEGACY_MILESTONE_HEADINGS:
+        return None
+    work: list[tuple[int, str]] = []
+    for issue in issues:
+        number = issue.get("number")
+        if "pull_request" in issue or not isinstance(number, int):
+            continue
+        work.append(
+            (
+                number,
+                str(issue.get("title", "")).strip(),
+            )
+        )
+    work.sort()
+    if not work:
+        return None
+    issue_plan = "\n".join(f"- #{number} — {title}" for number, title in work)
+    upgraded = re.sub(
+        r"^##[ \t]+Out of scope[ \t]*$",
+        lambda _: f"## Plan\n\n{issue_plan}\n\n## Out of scope",
+        description,
+        count=1,
+        flags=re.I | re.M,
+    )
+    return re.sub(
+        r"^##[ \t]+Source[ \t]*$",
+        "## References",
+        upgraded,
+        count=1,
+        flags=re.I | re.M,
+    )
+
+
+def milestone_description_plan(
+    target: Path,
+) -> MilestoneDescriptionPlan | None:
+    """Classify all target Milestones and print the proposed migration."""
+    repository = target_repository(target)
+    if repository is None:
+        print(
+            "Milestone descriptions: unavailable (no GitHub origin; "
+            "review them manually)."
+        )
+        return None
+    changes: list[MilestoneDescriptionChange] = []
+    current: list[tuple[int, str]] = []
+    review: list[tuple[int, str]] = []
+    try:
+        milestones = gh_pages(
+            f"repos/{repository}/milestones?state=all&per_page=100"
+        )
+        for milestone in milestones:
+            number = milestone.get("number")
+            title = milestone.get("title")
+            description = milestone.get("description")
+            if not isinstance(number, int) or not isinstance(title, str):
+                raise CliError("GitHub returned invalid Milestone metadata.")
+            if not isinstance(description, str):
+                review.append((number, title))
+                continue
+            headings = milestone_headings(description)
+            if headings == CURRENT_MILESTONE_HEADINGS:
+                current.append((number, title))
+                continue
+            if headings != LEGACY_MILESTONE_HEADINGS:
+                review.append((number, title))
+                continue
+            issues = gh_pages(
+                f"repos/{repository}/issues?state=all&milestone={number}"
+                "&per_page=100"
+            )
+            upgraded = upgraded_milestone_description(description, issues)
+            if upgraded is None:
+                review.append((number, title))
+                continue
+            changes.append(
+                MilestoneDescriptionChange(
+                    number=number,
+                    title=title,
+                    before=description,
+                    after=upgraded,
+                )
+            )
+    except CliError as error:
+        print(
+            f"Milestone descriptions: unavailable ({error}; "
+            "review them manually)."
+        )
+        return None
+    plan = MilestoneDescriptionPlan(
+        repository=repository,
+        changes=tuple(changes),
+        current=tuple(current),
+        review=tuple(review),
+    )
+    print("Milestone description migration:")
+    print_group(
+        "  Upgrade",
+        tuple(f"#{item.number} {item.title}" for item in plan.changes),
+    )
+    print_group(
+        "  Current",
+        tuple(f"#{number} {title}" for number, title in plan.current),
+    )
+    print_group(
+        "  Manual review",
+        tuple(f"#{number} {title}" for number, title in plan.review),
+    )
+    return plan
+
+
+def apply_milestone_description_plan(
+    plan: MilestoneDescriptionPlan | None,
+) -> None:
+    """Apply a confirmed migration without changing Milestone metadata."""
+    if plan is None or not plan.changes:
+        return
+    for change in plan.changes:
+        payload = gh_milestone_payload(
+            [f"repos/{plan.repository}/milestones/{change.number}"]
+        )
+        if not isinstance(payload, dict):
+            raise CliError("GitHub returned invalid Milestone metadata.")
+        if payload.get("description") != change.before:
+            raise CliError(
+                f"Milestone #{change.number} changed after the dry-run plan; "
+                "run the command again."
+            )
+    for change in plan.changes:
+        result = run(
+            [
+                "gh",
+                "api",
+                "--method",
+                "PATCH",
+                f"repos/{plan.repository}/milestones/{change.number}",
+                "--raw-field",
+                f"description={change.after}",
+            ],
+            capture=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            detail = result.stderr.strip() or "GitHub API request failed"
+            raise CliError(
+                f"Cannot upgrade Milestone #{change.number}: {detail}"
+            )
+    print(f"Milestone descriptions upgraded: {len(plan.changes)}")
+
+
 def capability_preflight(
     script: Path, target: Path, *, emit: bool = True
 ) -> dict[str, object]:
@@ -1162,6 +1395,9 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:
             write_adoption_reports(
                 target, revision, data, plan, args.report_dir
             )
+        milestone_plan = (
+            milestone_description_plan(target) if mode == "adopt" else None
+        )
         if args.dry_run or not confirm(args):
             return 0
         if mode == "init":
@@ -1174,6 +1410,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:
     verify_project(target)
     write_provenance(target, revision)
     settings_plan(target)
+    apply_milestone_description_plan(milestone_plan)
     return 0
 
 
@@ -1390,6 +1627,7 @@ def command_update(args: argparse.Namespace) -> int:
         preview.stdout.strip()
         or "  (Copier returned no preview details; files may still change.)"
     )
+    milestone_plan = milestone_description_plan(target)
     if args.dry_run or not confirm(args):
         return 0
 
@@ -1420,6 +1658,7 @@ def command_update(args: argparse.Namespace) -> int:
     verify_project(target)
     write_provenance(target, target_revision, previous)
     settings_plan(target)
+    apply_milestone_description_plan(milestone_plan)
     return 0
 
 

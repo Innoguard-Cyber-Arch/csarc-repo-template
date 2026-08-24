@@ -39,6 +39,10 @@ The service exposes a health endpoint.
 
 - [ ] The endpoint returns HTTP 200 when dependencies are healthy.
 
+## Plan
+
+- #42 — Deliver the endpoint.
+
 ## Out of scope
 
 Changing the monitoring platform.
@@ -46,6 +50,10 @@ Changing the monitoring platform.
 ## Verification
 
 Run the endpoint test and observe HTTP 200.
+
+## References
+
+- Preserve the decision in #12.
 """
 
 
@@ -108,7 +116,9 @@ def test_milestone_description_has_story_contract() -> None:
     )
     assert "csarc-story-id: SPEC-001" in description
     assert "## Acceptance criteria" in description
+    assert "## Plan" in description
     assert "## Verification" in description
+    assert "## References" in description
 
 
 def test_find_issue_deduplicates_by_spec_id(
