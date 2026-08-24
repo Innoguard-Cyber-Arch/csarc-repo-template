@@ -77,9 +77,9 @@ flowchart LR
   MAIN -. "reviewed sync PR" .-> DI
 ```
 
-`main` 前進後，所有未合併的 delivery／stacked PR 都必須先納入最新 main；`.github/workflows/delivery-sync.yml` 會讓過期 PR fail closed，並在 main push 摘要列出每條 active delivery branch 的 `sync/main-to-*` PR 指令。預設不自動寫入；只有明確設定 `CSARC_AUTO_SYNC=true`、提供會觸發 PR checks 的 `CSARC_SYNC_TOKEN`，且 branch／PR write probes 都為 allowed 時才自動開 PR，blocked／unknown 一律回到相同手動流程。
+`main` 前進後，所有未合併的 delivery／stacked PR 都必須先納入最新 main；PR policy 會在既有 `title` runner 內 fail closed，`.github/workflows/delivery-sync.yml` 則只在 main push 摘要列出每條 active delivery branch 的 `sync/main-to-*` PR 指令並使過期 policy 失效。預設不自動寫入；只有明確設定 `CSARC_AUTO_SYNC=true`、提供會觸發 PR checks 的 `CSARC_SYNC_TOKEN`，且 branch／PR write probes 都為 allowed 時才自動開 PR，blocked／unknown 一律回到相同手動流程。
 
-公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。兩個入口都會用固定版本與已驗證 checksum 的 actionlint／ShellCheck 檢查 workflows 與 shell scripts；公版驗證另執行 Issue／PR 政策正反例，並注入不合法的 workflow、shell、Python／TypeScript 內容，確認各門禁真的會拒絕。PR CI 依 docs／fast／full 與週期性供應鏈四層執行，完整矩陣只留給 promotion、hotfix、merge queue 或手動驗證；觸發條件、穩定 required checks、成本估算與實測方式見 [`docs/ci-policy.md`](docs/ci-policy.md)。
+公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。兩個入口都會用固定版本與已驗證 checksum 的 actionlint／ShellCheck 檢查 workflows 與 shell scripts；公版驗證另執行 Issue／PR 政策正反例，並注入不合法的 workflow、shell、Python／TypeScript 內容，確認各門禁真的會拒絕。PR CI 依 docs／fast／full 與週期性供應鏈四層執行；一般 PR 除首次 reviewer 操作外最多啟動 policy、fast、verify aggregate 三個 runner，完整矩陣只留給 promotion、hotfix、merge queue 或手動驗證。Full tier 的 runtime 無關完整驗證只在最新 Python canonical job 執行一次；其餘 Python job 僅驗證安裝與 runtime-sensitive tests，混合 TypeScript 則只使用一個獨立 Node job。觸發條件、穩定 required checks、成本估算與實測方式見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
 Promotion 另由穩定的 `promotion` context 封裝候選 source 與 SHA/tree 證據；合併後只核對 `main` tree 與已成功的 `verify`，不重跑完整矩陣。未設定外部環境時明確保留 artifact-only 證據；要啟用 canary，須同時設定 repository variables `CSARC_CANARY_COMMAND`、`CSARC_CANARY_ENVIRONMENT`，敏感值則放在該 environment 的 `CSARC_CANARY_TOKEN` secret。完整三態與失敗邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 

@@ -289,7 +289,7 @@ case "$2" in
       printf '[]\n'
       exit 0
     fi
-    printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_review_thread_resolution":true,"required_approving_review_count":1}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"delivery-sync"},{"context":"promotion"},{"context":"verify"},{"context":"title"}]}}]'
+    printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_review_thread_resolution":true,"required_approving_review_count":1}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"promotion"},{"context":"verify"},{"context":"title"}]}}]'
     ;;
   *)
     echo "Unexpected gh API path: $2" >&2
@@ -717,8 +717,46 @@ grep -q '只代表靜態與合成驗證通過' docs/live-integration.md
 test -x scripts/run-live-workflow-probe
 test -f .github/workflows/live-integration.yml
 test -f .github/workflows/release-consumption.yml
-grep -q '^  decision-site:$' .github/workflows/ci.yml
+if grep -q '^  decision-site:$' .github/workflows/ci.yml; then
+  echo "Decision site validation must share the fast runner."
+  exit 1
+fi
+grep -q 'types: \[opened, reopened, synchronize, labeled, unlabeled\]' \
+  .github/workflows/ci.yml
 grep -q 'name: portable-decision-site' .github/workflows/ci.yml
+grep -q "steps.plan.outputs.upload_site == 'true'" .github/workflows/ci.yml
+grep -q 'python3 scripts/render_site.py --check' .github/workflows/ci.yml
+grep -q '^  canonical-full:$' .github/workflows/ci.yml
+grep -q '^    name: canonical full (Python 3.14 + Node 24)$' \
+  .github/workflows/ci.yml
+grep -q '^  python-compatibility:$' .github/workflows/ci.yml
+grep -q '^    name: Python compatibility (3.14.0)$' \
+  .github/workflows/ci.yml
+grep -q 'uv run pytest' .github/workflows/ci.yml
+test "$(grep -c 'run: ./scripts/verify-template.sh' .github/workflows/ci.yml)" -eq 1
+if grep -q '^  python-runtime:$' .github/workflows/ci.yml; then
+  echo "Root full verification must not repeat for every runtime."
+  exit 1
+fi
+grep -q '^    needs: \[fast, canonical-full, python-compatibility, governance, osv, zizmor\]$' \
+  .github/workflows/ci.yml
+grep -q '^  canonical:$' .github/workflows/reusable-ci.yml
+grep -q '^  python-compatibility:$' .github/workflows/reusable-ci.yml
+grep -q '^  typescript:$' .github/workflows/reusable-ci.yml
+grep -q './scripts/verify python-compatibility' \
+  .github/workflows/reusable-ci.yml
+grep -q './scripts/verify typescript' .github/workflows/reusable-ci.yml
+# shellcheck disable=SC2016 # Match the literal workflow variable.
+grep -q 'test "$PYTHON_COMPATIBILITY_RESULT" = success' \
+  .github/workflows/reusable-ci.yml
+# shellcheck disable=SC2016 # Match the literal workflow variable.
+grep -q 'test "$TYPESCRIPT_RESULT" = success' \
+  .github/workflows/reusable-ci.yml
+grep -q 'python3 scripts/delivery_sync.py gate' .github/workflows/pr-policy.yml
+if grep -q '^  pull_request:$' .github/workflows/delivery-sync.yml; then
+  echo "Delivery sync PR validation must share the policy runner."
+  exit 1
+fi
 test ! -e template/.github/workflows/live-integration.yml
 test ! -e template/.github/workflows/release-consumption.yml
 test ! -e template/scripts/run-live-workflow-probe
@@ -1019,13 +1057,10 @@ if pull_request["required_approving_review_count"] < 1:
     raise SystemExit("The repository Ruleset must require approval.")
 if not pull_request["require_code_owner_review"]:
     raise SystemExit("The repository Ruleset must require CODEOWNER review.")
-if not {
-    "delivery-sync",
-    "promotion",
-    "verify",
-    "title",
-} <= checks:
+if not {"promotion", "verify", "title"} <= checks:
     raise SystemExit("The repository Ruleset is missing required checks.")
+if "delivery-sync" in checks:
+    raise SystemExit("The retired delivery-sync context would stay pending.")
 PY
 grep -q '"refs/heads/dev/\*"' policies/rulesets.json
 
@@ -1071,10 +1106,9 @@ if uv run copier copy --trust --defaults --vcs-ref HEAD \
   exit 1
 fi
 
-# Issue #140: every selectable minimum must generate the exact .0 lower bound
-# plus the latest patch of each supported feature release. Inline and reusable
-# workflows must describe the same runtime set while keeping one required
-# aggregate check.
+# Issues #140 and #202: every selectable minimum must keep the exact .0 lower
+# bound plus every supported feature release. The canonical latest runtime runs
+# the full suite once; the remaining runtimes run compatibility tests only.
 for python_minimum in 3.12 3.13 3.14; do
   for reusable in false true; do
     fixture_name="python-matrix-${python_minimum//./-}-${reusable}"
@@ -1114,24 +1148,41 @@ from pathlib import Path
 workflow_path, ruleset_path, minimum, reusable_text = sys.argv[1:]
 latest_minor = 14
 minimum_minor = int(minimum.split(".")[1])
-expected = [f"{minimum}.0"] + [
-    f"3.{minor}" for minor in range(minimum_minor, latest_minor + 1)
+expected_compatibility = [f"{minimum}.0"] + [
+    f"3.{minor}" for minor in range(minimum_minor, latest_minor)
 ]
 workflow = Path(workflow_path).read_text(encoding="utf-8")
 if reusable_text == "true":
+    if 'canonical-python-version: "3.14"' not in workflow:
+        raise SystemExit("Reusable workflow canonical runtime is missing")
     match = re.search(r"python-versions: >-\n\s+(\[[^\n]+\])", workflow)
     if match is None:
-        raise SystemExit("Reusable workflow runtime input is missing")
+        raise SystemExit("Reusable workflow compatibility input is missing")
     actual = json.loads(match.group(1))
 else:
     match = re.search(
-        r"runtime:\n((?:\s+- \"[^\"]+\"\n)+)", workflow
+        r"  python-compatibility:\n.*?"
+        r"runtime:\n((?:\s+- \"[^\"]+\"\n)+)",
+        workflow,
+        re.DOTALL,
     )
     if match is None:
-        raise SystemExit("Inline workflow runtime matrix is missing")
+        raise SystemExit("Inline compatibility matrix is missing")
     actual = re.findall(r'- "([^\"]+)"', match.group(1))
-if actual != expected:
-    raise SystemExit(f"Unexpected Python matrix: {actual!r} != {expected!r}")
+    if 'name: canonical full (Python 3.14)' not in workflow:
+        raise SystemExit("Inline workflow canonical runtime is missing")
+    if "./scripts/verify python-compatibility" not in workflow:
+        raise SystemExit("Inline compatibility command is missing")
+if actual != expected_compatibility:
+    raise SystemExit(
+        f"Unexpected compatibility matrix: {actual!r} != "
+        f"{expected_compatibility!r}"
+    )
+expected_supported = [f"{minimum}.0"] + [
+    f"3.{minor}" for minor in range(minimum_minor, latest_minor + 1)
+]
+if actual + ["3.14"] != expected_supported:
+    raise SystemExit("Canonical and compatibility runtimes reduced support")
 ruleset = json.loads(Path(ruleset_path).read_text(encoding="utf-8"))
 checks = next(
     rule["parameters"]["required_status_checks"]
@@ -1385,8 +1436,11 @@ grep -q 'DEGRADED' \
   "$fixture_root/default-project/README.md"
 grep -q '"context": "verify"' \
   "$fixture_root/default-project/policies/rulesets.json"
-grep -q '"context": "delivery-sync"' \
-  "$fixture_root/default-project/policies/rulesets.json"
+if grep -q '"context": "delivery-sync"' \
+  "$fixture_root/default-project/policies/rulesets.json"; then
+  echo "Generated Ruleset must not require the retired delivery-sync context."
+  exit 1
+fi
 grep -q '"context": "promotion"' \
   "$fixture_root/default-project/policies/rulesets.json"
 grep -q '"refs/heads/dev/\*"' \
@@ -1505,18 +1559,48 @@ grep -q 'python-version:.*$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q -- '- "3.14.0"' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
-grep -q -- '- "3.14"' \
+grep -q '^    name: canonical full (Python 3.14)$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
-grep -q '^    needs: \[fast, full, governance, osv, zizmor\]$' \
+grep -q '^  python-compatibility:$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+if grep -q '^  typescript:$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"; then
+  echo "Python-only CI must not create a TypeScript job."
+  exit 1
+fi
+if grep -q 'actions/setup-node@' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"; then
+  echo "Python-only CI must not set up Node."
+  exit 1
+fi
+grep -q '^      - canonical$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q '^      - python-compatibility$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q '^  governance:$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q 'apply-repository-settings.sh check' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
-grep -q '^  decision-site:$' \
+if grep -q '^  decision-site:$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"; then
+  echo "Generated decision site validation must share the fast runner."
+  exit 1
+fi
+grep -q 'types: \[opened, reopened, synchronize, labeled, unlabeled\]' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q 'name: portable-decision-site' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q "steps.plan.outputs.upload_site == 'true'" \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q 'python3 scripts/render_site.py --check' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q 'python3 scripts/delivery_sync.py gate' \
+  "$fixture_root/default-project/.github/workflows/pr-policy.yml"
+if grep -q '^  pull_request:$' \
+  "$fixture_root/default-project/.github/workflows/delivery-sync.yml"; then
+  echo "Generated delivery sync PR validation must share the policy runner."
+  exit 1
+fi
 grep -q '^    needs: governance$' \
   "$fixture_root/default-project/.github/workflows/release.yml"
 grep -q '^    needs: source$' \
@@ -1880,6 +1964,18 @@ grep -q '^trustPolicy: no-downgrade$' \
 grep -q 'integrity:' "$fixture_root/typescript-project/pnpm-lock.yaml"
 grep -q 'node-version: "24"' \
   "$fixture_root/typescript-project/.github/workflows/ci.yml"
+grep -q '^    name: canonical full and TypeScript (Node 24)$' \
+  "$fixture_root/typescript-project/.github/workflows/ci.yml"
+if grep -q '^  python-compatibility:$' \
+  "$fixture_root/typescript-project/.github/workflows/ci.yml"; then
+  echo "TypeScript-only CI must not create a Python compatibility job."
+  exit 1
+fi
+if grep -q '^  typescript:$' \
+  "$fixture_root/typescript-project/.github/workflows/ci.yml"; then
+  echo "TypeScript-only CI must keep one runtime job."
+  exit 1
+fi
 grep -q 'package-ecosystem: npm' \
   "$fixture_root/typescript-project/.github/dependabot.yml"
 grep -q '"release-type": "node"' \
@@ -1999,7 +2095,9 @@ grep -q 'reusable-ci.yml@1111111111111111111111111111111111111111' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
 grep -q 'language-profile: "python-typescript"' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
-grep -q '\["3.14.0", "3.14"\]' \
+grep -q 'canonical-python-version: "3.14"' \
+  "$fixture_root/all-features-project/.github/workflows/ci.yml"
+grep -q '\["3.14.0"\]' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
 grep -q 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
@@ -2095,10 +2193,12 @@ grep -q '^requires-python = ">=3.12"$' \
   "$fixture_root/existing-project/pyproject.toml"
 grep -q '^target-version = "py312"$' \
   "$fixture_root/existing-project/pyproject.toml"
-for expected_python in 3.12.0 3.12 3.13 3.14; do
+for expected_python in 3.12.0 3.12 3.13; do
   grep -q -- "- \"$expected_python\"" \
     "$fixture_root/existing-project/.github/workflows/ci.yml"
 done
+grep -q '^    name: canonical full (Python 3.14)$' \
+  "$fixture_root/existing-project/.github/workflows/ci.yml"
 
 git -C "$fixture_root/existing-project" init -b main
 git -C "$fixture_root/existing-project" config user.name "Template Test"
@@ -2122,12 +2222,15 @@ if ! grep -qF \
 fi
 (
   cd "$fixture_root/existing-project"
-  for python_runtime in 3.12.0 3.12 3.13 3.14; do
+  for python_runtime in 3.12.0 3.12 3.13; do
     CSARC_PYTHON_VERSION="$python_runtime" \
       UV_PROJECT_ENVIRONMENT=".venv-$python_runtime" \
-      DIFF_COVER_COMPARE_BRANCH=HEAD \
-      ./scripts/verify
+      ./scripts/verify python-compatibility
   done
+  CSARC_PYTHON_VERSION=3.14 \
+    UV_PROJECT_ENVIRONMENT=.venv-3.14 \
+    DIFF_COVER_COMPARE_BRANCH=HEAD \
+    ./scripts/verify
 )
 
 # Adoption must never replace existing product manifests.
@@ -2167,6 +2270,30 @@ grep -q '"typescript": "5.9.3"' "$adoption_project/package.json"
 grep -q 'project_mode: existing' "$adoption_project/.copier-answers.yml"
 grep -q '"template_mode": "existing"' \
   "$adoption_project/.csarc/profile.json"
+grep -q '^    name: canonical full (Python 3.14)$' \
+  "$adoption_project/.github/workflows/ci.yml"
+grep -q '^  python-compatibility:$' \
+  "$adoption_project/.github/workflows/ci.yml"
+grep -q '^  typescript:$' \
+  "$adoption_project/.github/workflows/ci.yml"
+grep -q 'CSARC_VERIFY_TYPESCRIPT: "false"' \
+  "$adoption_project/.github/workflows/ci.yml"
+grep -q './scripts/verify typescript' \
+  "$adoption_project/.github/workflows/ci.yml"
+test "$(
+  sed -n '/^  canonical:$/,/^  governance:$/p' \
+    "$adoption_project/.github/workflows/ci.yml" |
+    grep -c 'actions/setup-node@'
+)" -eq 1
+# shellcheck disable=SC2016 # Match the literal workflow variable.
+grep -q 'test "$CANONICAL_RESULT" = success' \
+  "$adoption_project/.github/workflows/ci.yml"
+# shellcheck disable=SC2016 # Match the literal workflow variable.
+grep -q 'test "$PYTHON_COMPATIBILITY_RESULT" = success' \
+  "$adoption_project/.github/workflows/ci.yml"
+# shellcheck disable=SC2016 # Match the literal workflow variable.
+grep -q 'test "$TYPESCRIPT_RESULT" = success' \
+  "$adoption_project/.github/workflows/ci.yml"
 
 # Verify that an adopted repository can receive a later template version.
 update_source="$fixture_root/update-source"

@@ -333,8 +333,8 @@ def read_active_states(
     ]
 
 
-def update_open_pr_statuses(api: API, repo: str, main_sha: str) -> None:
-    """Invalidate stale delivery PR checks whenever main advances."""
+def invalidate_stale_pr_policy(api: API, repo: str, main_sha: str) -> None:
+    """Invalidate the combined PR policy whenever main advances."""
     status, payload = api.request(
         "GET", f"repos/{repo}/pulls?state=open&per_page=100"
     )
@@ -346,24 +346,21 @@ def update_open_pr_statuses(api: API, repo: str, main_sha: str) -> None:
         head_sha = pull.get("head", {}).get("sha")
         if base == "main" or not isinstance(head_sha, str):
             continue
-        current = includes_main(compare(api, repo, main_sha, head_sha))
-        state = "success" if current else "failure"
-        description = (
-            "PR head contains current main"
-            if current
-            else "PR head must synchronize current main before merge"
-        )
+        if includes_main(compare(api, repo, main_sha, head_sha)):
+            continue
         status_code, status_payload = api.request(
             "POST",
             f"repos/{repo}/statuses/{head_sha}",
             {
-                "state": state,
-                "context": "delivery-sync",
-                "description": description,
+                "state": "failure",
+                "context": "title",
+                "description": (
+                    "PR head must synchronize current main before merge"
+                ),
             },
         )
         require_response(
-            status_code, status_payload, "update delivery-sync status"
+            status_code, status_payload, "invalidate stale PR policy"
         )
 
 
@@ -377,7 +374,7 @@ def reconcile(
 ) -> list[str]:
     """Report or create one deduplicated sync PR per stale active branch."""
     states = read_active_states(api, repo, main_sha)
-    update_open_pr_statuses(api, repo, main_sha)
+    invalidate_stale_pr_policy(api, repo, main_sha)
     stale = [state for state in states if not state.current]
     if not stale:
         return ["All active delivery branches contain current main."]

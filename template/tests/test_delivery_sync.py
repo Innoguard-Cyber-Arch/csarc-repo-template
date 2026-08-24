@@ -16,6 +16,7 @@ capability_state = MODULE["capability_state"]
 create_sync_pr = MODULE["create_sync_pr"]
 gate = MODULE["gate"]
 includes_main = MODULE["includes_main"]
+invalidate_stale_pr_policy = MODULE["invalidate_stale_pr_policy"]
 manual_commands = MODULE["manual_commands"]
 reconcile = MODULE["reconcile"]
 select_auto_mode = MODULE["select_auto_mode"]
@@ -138,6 +139,48 @@ def test_second_main_advance_invalidates_previous_success() -> None:
     )
     with pytest.raises(RuntimeError, match="main-two"):
         gate(second, "acme/repo", "dev/next", "head-sha")
+
+
+def test_main_advance_invalidates_only_stale_combined_policy() -> None:
+    """Never publish a success status that could bypass the PR policy job."""
+    api = FakeAPI(
+        [
+            (
+                200,
+                [
+                    {
+                        "base": {"ref": "dev/m7-ci"},
+                        "head": {"sha": "current-head"},
+                    },
+                    {
+                        "base": {"ref": "dev/m7-ci"},
+                        "head": {"sha": "stale-head"},
+                    },
+                    {"base": {"ref": "main"}, "head": {"sha": "main-pr"}},
+                ],
+            ),
+            (200, {"status": "ahead"}),
+            (200, {"status": "diverged"}),
+            (201, {"state": "failure"}),
+        ]
+    )
+
+    invalidate_stale_pr_policy(api, "acme/repo", "main-two")
+
+    status_calls = [call for call in api.calls if call[0] == "POST"]
+    assert status_calls == [
+        (
+            "POST",
+            "repos/acme/repo/statuses/stale-head",
+            {
+                "state": "failure",
+                "context": "title",
+                "description": (
+                    "PR head must synchronize current main before merge"
+                ),
+            },
+        )
+    ]
 
 
 def test_manual_sync_is_deterministic_and_reviewed() -> None:
