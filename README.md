@@ -31,6 +31,8 @@ Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript �
 
 共同需求是 Git、GitHub CLI、uv；TypeScript／混合案另需 Node 24+ 與 pnpm 11。Windows 請在 WSL2 執行。
 
+請從實際 Git root 開啟 Codex／agent workspace；從 repo 上層開啟時，子目錄的 `AGENTS.md` 不一定會自動載入。開始前先在工作目錄執行 `test "$(git rev-parse --show-toplevel)" = "$(pwd -P)"`，失敗就切換到輸出的 Git root，不要複製另一份指引到父目錄。
+
 ```bash
 uvx --from csarc-repo-cli csarc init ./my-project
 uvx --from csarc-repo-cli csarc adopt .
@@ -54,11 +56,13 @@ CLI 固定驗證 canonical repository numeric ID、immutable stable Release、re
 | `.github/`、`policies/` | 公版本身的 CI 與 GitHub 設定 |
 | `scripts/verify-template.sh` | 建立、更新、語言與供應鏈回歸 |
 | `src/csarc_cli/` | `csarc init`／`adopt`／`update` 的薄層 Copier orchestration |
-| `docs/README.md`、`docs/decisions/` | 文件分類、維護方式與 canonical 選型紀錄 |
+| `docs/README.md`、`docs/specs/`、`docs/adr/` | Durable Project Memory 地圖、Spec-Driven Development（SDD）規格與 Architecture Decision Records（ADR） |
 | `site/`、`scripts/render_site.py` | 可維護的決策簡報來源與無額外相依的單檔 renderer |
 | `docs/index.html` | 可離線交付的生成簡報；內部限閱，目前只有 `noindex`／`robots.txt` 臨時防護，尚無實際存取控制 |
 
 Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；CI 會同時驗證精確下界 3.14.0 與最新 3.14.x。生成專案若選 minimum 模式，會驗證所選版本的 `.0` 下界，以及一路到 3.14 的每個 feature release 最新 patch；目前刻意不宣告 3.11 支援。TypeScript 以 Node 24、pnpm 11、Biome、strict TypeScript 與 Vitest 為基線。
+
+模板的 Durable Project Memory 同時支援 SDD、ADR、Test-Driven Development（TDD）的回歸證據與 Behavior-Driven Development（BDD）的必要行為情境；完整分工與導航見 [`docs/README.md`](docs/README.md)。
 
 ## 開發與驗證
 
@@ -91,9 +95,7 @@ Promotion 另由穩定的 `promotion` context 封裝候選 source 與 SHA/tree �
 
 ### Actions 額度耗盡的一次性驗證
 
-只有具帳務用量檢視權限的 human maintainer 已明確確認「當期 GitHub Actions 免費分鐘已用完」時，才可啟用本機 fallback。GitHub 顯示的 runner 未啟動訊息會同時提及付款失敗與 spending limit，本身不足以證明額度耗盡；付款失敗、budget 設定、平台事故、workflow／權限錯誤、原因不明，或任何已開始執行 step 後失敗的 job 都不能使用。
-
-Agent 必須確認乾淨 worktree 的 `HEAD` 等於 PR head SHA，執行 `./scripts/verify-template.sh` 與所有可忠實本機重現的必要 checks，任何失敗都停止。通過後在 PR 留下標題為 `Actions quota fallback attestation` 的留言，記錄 SHA、受阻 run URL 與 annotation、human quota confirmation、UTC 時間、環境／工具版本、完整命令與結果，以及無法在本機重現的 checks。Human maintainer 必須明確授權該 PR 使用一次性 fallback；新 commit 會使聲明立即失效。若 repo 現行政策允許 author self-merge，agent 才能據此合併，但不得偽造成功 Check Run，也不能取代 release、publishing、deployment approval、secrets、provenance 或 CODEOWNER review。額度重置後須補跑該 commit 的 GitHub checks；無法補跑時另開 Issue 留下缺口。
+只有具帳務可見性的 human maintainer 確認當期 included Actions minutes 已耗盡時，才可能使用本機 fallback；runner 註記本身不構成證據。完整的 SHA 綁定、attestation、人工授權、不可替代控制與事後補跑流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹，因此已刪除與尚未提交的機密都不會靜默略過；尚未 `git init` 的新專案仍可安全掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 

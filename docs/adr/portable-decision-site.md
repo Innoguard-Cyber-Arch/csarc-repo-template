@@ -1,9 +1,9 @@
-# Portable decision site architecture
+# Portable decision site architecture ADR
 
 - **狀態：**Accepted
 - **日期：**2026-08-24
-- **追蹤：**[Issue #177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177)
-- **工程實作：**[Issue #178](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178)
+- **來源 Issues：**[Issue #177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177)、[Issue #178](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178)
+- **實作 PRs：**[#185](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/185)、[#187](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/187)
 
 ## 問題與限制
 
@@ -20,7 +20,7 @@
 1. `docs/index.html` 保持已提交、可直接傳送、可用 `file://` 開啟的單檔交付物；CSS、JavaScript、font、SVG 與 raster images 全部內嵌。
 2. 編輯來源與 bundled output 分離。`site/` 保留特殊設計所需的版型、內容、樣式、互動與媒體；`scripts/render_site.py` 負責產生 `docs/index.html`。生成檔不是擴充點，也不直接手改。
 3. 不導入 Hugo、Docusaurus、Backstage 或另一套前端 toolchain。現階段的需求是單一簡報，最小 renderer 與既有 `uv` baseline 即可；只有多頁搜尋、跨 repo catalog 或翻譯需求實際出現時才重新評估。
-4. canonical decision records 放在 `docs/decisions/`。簡報呈現決策摘要與連結，但不再是唯一可編輯來源；runbook、實證與 spec 各自維持不同生命週期。
+4. canonical Architecture Decision Records（ADR）放在 `docs/adr/`。簡報呈現決策摘要與連結，但不再是唯一可編輯來源；runbook、實證與 spec 各自維持不同生命週期。
 5. root 與 Copier 下發專案遵守相同 portable contract，但可以有不同 presentation layout。共用設計基礎由公版維護，root 可以增加 deck-specific 呈現，生成專案則使用 handbook layout。
 
 ## Ownership 與更新
@@ -53,7 +53,7 @@
 
 不自動保存聊天逐字稿。Agent 遇到 durable constraint 或 trade-off 時執行下列流程：
 
-1. 搜尋 `docs/decisions/`、open／closed Issues、comments 與 linked pull requests。
+1. 搜尋 `docs/adr/`、open／closed Issues、comments 與 linked pull requests。
 2. 區分使用者已確認決策、仍在比較的選項與 agent 推論。
 3. 將已確認內容摘要到既有或新 Issue，記錄先前決策是沿用、取代或駁回及理由。
 4. 經使用者授權後，以該 Issue 的 PR 更新 canonical decision record；若簡報需要呈現，再由同一變更更新或重建 bundle。
