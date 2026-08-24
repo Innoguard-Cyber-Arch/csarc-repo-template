@@ -401,21 +401,21 @@ gh api --method PUT \\
   -f access_level=organization`
         },
         {
-          title: 'zizmor 現在是每張 PR 都會執行的自動檢查',
-          goal: '每張 PR 都掃描；產出 private repo 採離線模式，跨 repo commit 歸屬待 GitHub App 才能線上查。',
-          file: '.github/workflows/zizmor.yml',
-          code: `name: Zizmor
+          title: 'zizmor 依 workflow 風險與週期排程執行',
+          goal: 'workflow／action 變更與 promotion 由 CI 條件式掃描；每週另掃一次，普通 source／docs PR 不重複付費。',
+          file: '.github/workflows/ci.yml＋.github/workflows/zizmor.yml',
+          code: `name: Zizmor scheduled audit
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "43 3 * * 1"
 permissions:
   contents: read
 jobs:
   audit:
     steps:
       - run: uvx --from zizmor==1.29.0 zizmor . --format plain
-# Canonical root uses a token; generated private repos stay offline.`
+# PR workflow changes are routed to the same audit by ci_tier.py.`
         }
       ],
       supply: [
