@@ -140,6 +140,26 @@ if python3 scripts/check-decision-site-translations \
   exit 1
 fi
 
+python3 - decision-site/content/_index.en.md \
+  "$translation_fixture/_index.en.md" <<'PY'
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+opening = '{{< detail key="spec-format-cost"'
+start = source.index(opening)
+body_start = source.index("}}", start) + 2
+end = source.index("{{< /detail >}}", body_start)
+Path(sys.argv[2]).write_text(source[:body_start] + source[end:], encoding="utf-8")
+PY
+translation_error="$translation_fixture/empty-body-error"
+if python3 scripts/check-decision-site-translations \
+  --content-dir "$translation_fixture" >/dev/null 2>"$translation_error"; then
+  echo "Translation verification must reject an empty keyed block body."
+  exit 1
+fi
+grep -q 'empty content body' "$translation_error"
+
 ./scripts/build-hugo-preview --check
 test "$(grep -o 'class="detail-level-control"' dist/hugo-preview.html | wc -l | tr -d ' ')" = 1
 grep -q 'class="detail-level-control" role="group" aria-label="閱讀深度" hidden' \

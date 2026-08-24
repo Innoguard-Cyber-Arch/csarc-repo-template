@@ -12,7 +12,9 @@ from pathlib import Path
 LANGUAGE_FILES = ("_index.zh-tw.md", "_index.en.md")
 type Shape = str | dict[str, "Shape"]
 BLOCK = re.compile(
-    r'{{<\s*(slide|detail|disclosure)\b[^>]*\bkey="([^"]+)"[^>]*>}}'
+    r'(?={{<\s*(slide|detail|disclosure)\b[^>]*\bkey="([^"]+)"[^>]*>}}'
+    r"(.*?){{<\s*/\1\s*>}})",
+    re.DOTALL,
 )
 
 
@@ -30,7 +32,13 @@ def read_source(path: Path) -> tuple[Shape, list[tuple[str, str]]]:
     if len(parts) != 3 or parts[0].strip():
         raise ValueError(f"{path}: expected TOML front matter")
     metadata = tomllib.loads(parts[1])
-    blocks = BLOCK.findall(parts[2])
+    blocks = []
+    for block_type, key, body in BLOCK.findall(parts[2]):
+        if not body.strip():
+            raise ValueError(
+                f"{path}: empty content body for {block_type} key {key!r}"
+            )
+        blocks.append((block_type, key))
     if not blocks:
         raise ValueError(f"{path}: no keyed content sections found")
     if len(blocks) != len(set(blocks)):
