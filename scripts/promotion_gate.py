@@ -38,10 +38,7 @@ QUOTA_ANNOTATION_MESSAGE = (
     "The job was not started because this account's included GitHub Actions "
     "minutes are exhausted."
 )
-LOCAL_FALLBACK_COMMANDS = [
-    "./scripts/verify-template.sh",
-    "promotion preflight live refetch",
-]
+PREFLIGHT_REFETCH = "promotion preflight live refetch"
 
 
 class RejectRedirects(urllib.request.HTTPRedirectHandler):
@@ -276,6 +273,42 @@ def github_get(repo: str, path: str, token: str) -> object:
         return json.load(response)
 
 
+def repository_variables(repo: str, token: str) -> dict[str, str]:
+    """Read every repository Actions variable without trusting one page."""
+    variables: dict[str, str] = {}
+    total: int | None = None
+    page = 1
+    while total is None or len(variables) < total:
+        payload = github_get(
+            repo, f"actions/variables?per_page=100&page={page}", token
+        )
+        items = payload.get("variables") if isinstance(payload, dict) else None
+        count = (
+            payload.get("total_count") if isinstance(payload, dict) else None
+        )
+        if not isinstance(items, list) or not isinstance(count, int):
+            raise RuntimeError("Repository variable list is incomplete")
+        if total is not None and count != total:
+            raise RuntimeError("Repository variable count changed")
+        total = count
+        for item in items:
+            name = item.get("name") if isinstance(item, dict) else None
+            value = item.get("value") if isinstance(item, dict) else None
+            if (
+                not isinstance(name, str)
+                or not isinstance(value, str)
+                or name in variables
+            ):
+                raise RuntimeError("Repository variable list is invalid")
+            variables[name] = value
+        if not items and len(variables) < total:
+            raise RuntimeError("Repository variable list is incomplete")
+        page += 1
+    if len(variables) != total:
+        raise RuntimeError("Repository variable list is incomplete")
+    return variables
+
+
 def milestone_issues(
     repo: str, milestone: int, token: str
 ) -> list[dict[str, Any]]:
@@ -369,11 +402,12 @@ def atomic_output(path: Path, writer: Callable[[BinaryIO], object]) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, destination)
-        directory = os.open(destination.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        if os.name != "nt":
+            directory = os.open(destination.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -382,6 +416,36 @@ def write_evidence(path: Path, evidence: dict[str, object]) -> None:
     """Write machine-readable evidence through the safe output path."""
     content = (json.dumps(evidence, indent=2) + "\n").encode()
     atomic_output(path, lambda stream: stream.write(content))
+
+
+def require_distinct_paths(*paths: Path) -> None:
+    """Reject aliases that could replace an input or candidate archive."""
+    resolved = [safe_destination(path) for path in paths]
+    if len({str(path) for path in resolved}) != len(resolved):
+        raise RuntimeError("Evidence and archive paths must be distinct")
+    for index, left in enumerate(resolved):
+        for right in resolved[index + 1 :]:
+            if (
+                left.exists()
+                and right.exists()
+                and os.path.samefile(left, right)
+            ):
+                raise RuntimeError(
+                    "Evidence and archive paths must be distinct"
+                )
+
+
+def local_verification_command() -> list[str]:
+    """Select the checked-in verifier for root or generated repositories."""
+    for candidate in ("scripts/verify-template.sh", "scripts/verify"):
+        path = Path(candidate)
+        try:
+            mode = os.lstat(path).st_mode
+        except FileNotFoundError:
+            continue
+        if stat.S_ISREG(mode):
+            return [f"./{candidate}"]
+    raise RuntimeError("No repository verification command is available")
 
 
 def write_outputs(path: Path | None, values: dict[str, object]) -> None:
@@ -442,17 +506,10 @@ def fallback_statement(
     kind: str, evidence: dict[str, Any], run_urls: list[str]
 ) -> str:
     """Bind a human statement to one exact promotion candidate."""
-    archive = evidence.get("candidate_archive") or {}
+    fields = preflight_binding(evidence)
+    fields["runs"] = sorted(run_urls)
     binding = json.dumps(
-        {
-            "archive_sha256": archive.get("sha256"),
-            "base_sha": evidence.get("base_sha"),
-            "candidate_tree": evidence.get("candidate_tree"),
-            "head_sha": evidence.get("head_sha"),
-            "pull_request": evidence.get("pull_request"),
-            "repository": evidence.get("repository"),
-            "runs": sorted(run_urls),
-        },
+        fields,
         sort_keys=True,
         separators=(",", ":"),
     )
@@ -467,6 +524,38 @@ def fallback_statement(
         ),
     }
     return f"Actions quota fallback {kind}\n\n`{binding}`\n\n{statements[kind]}"
+
+
+def preflight_binding(evidence: dict[str, Any]) -> dict[str, object]:
+    """Return every security-relevant field from preflight evidence."""
+    archive = evidence.get("candidate_archive") or {}
+    return {
+        "schema_version": evidence.get("schema_version"),
+        "repository": evidence.get("repository"),
+        "route": evidence.get("route"),
+        "pull_request": evidence.get("pull_request"),
+        "tracking_issue": evidence.get("tracking_issue"),
+        "base_ref": evidence.get("base_ref"),
+        "base_sha": evidence.get("base_sha"),
+        "head_ref": evidence.get("head_ref"),
+        "head_sha": evidence.get("head_sha"),
+        "candidate_sha": evidence.get("candidate_sha"),
+        "candidate_tree": evidence.get("candidate_tree"),
+        "archive_sha256": archive.get("sha256"),
+        "included_issues": evidence.get("included_issues"),
+        "release": evidence.get("release"),
+        "canary": evidence.get("canary"),
+    }
+
+
+def require_same_preflight(
+    evidence: dict[str, Any], rebuilt: dict[str, Any]
+) -> None:
+    """Reject local preflight JSON that differs from live reconstruction."""
+    if preflight_binding(evidence) != preflight_binding(rebuilt):
+        raise RuntimeError(
+            "Promotion preflight evidence does not match live reconstruction"
+        )
 
 
 def require_run_url(url: str, repo: str) -> None:
@@ -498,7 +587,7 @@ def require_zero_step_run(  # noqa: C901
     run = github_get(repo, f"actions/runs/{run_id}", token)
     if (
         not isinstance(run, dict)
-        or run.get("id") not in (None, int(run_id))
+        or run.get("id") != int(run_id)
         or run.get("head_sha") != head_sha
         or run.get("head_branch") != head_ref
         or run.get("event") != "pull_request"
@@ -511,7 +600,7 @@ def require_zero_step_run(  # noqa: C901
     ):
         raise RuntimeError("Blocked run does not match the failed PR head")
     pull_requests = run.get("pull_requests")
-    if pull_requests and not any(
+    if not isinstance(pull_requests, list) or not any(
         isinstance(item, dict) and item.get("number") == pr_number
         for item in pull_requests
     ):
@@ -575,6 +664,51 @@ def require_zero_step_run(  # noqa: C901
                 "Blocked job does not prove included Actions minutes exhaustion"
             )
     return str(run.get("path", ""))
+
+
+def rebuild_quota_preflight(
+    evidence: dict[str, Any],
+    pull: dict[str, Any],
+    args: argparse.Namespace,
+    token: str,
+) -> dict[str, Any]:
+    """Recreate preflight from live GitHub state and the checked-out head."""
+    repo = str(evidence["repository"])
+    variables = repository_variables(repo, token)
+    route = evidence.get("route") or {}
+    strategy = "dev" if route.get("kind") == "dev-promotion" else "delivery"
+    with tempfile.TemporaryDirectory(dir=args.archive.parent) as directory:
+        root = Path(directory)
+        event_path = root / "event.json"
+        event_path.write_text(
+            json.dumps(
+                {"number": evidence["pull_request"], "pull_request": pull}
+            ),
+            encoding="utf-8",
+        )
+        output = root / "preflight.json"
+        prepare(
+            argparse.Namespace(
+                event="pull_request",
+                event_path=event_path,
+                repo=repo,
+                branch_strategy=strategy,
+                candidate_sha=evidence["head_sha"],
+                workflow_run=evidence.get("workflow_run", "local-fallback"),
+                canary_command=variables.get("CSARC_CANARY_COMMAND", ""),
+                canary_environment=variables.get(
+                    "CSARC_CANARY_ENVIRONMENT", ""
+                ),
+                archive=root / args.archive.name,
+                output=output,
+                github_output=None,
+                summary=None,
+            )
+        )
+        rebuilt = json.loads(output.read_text(encoding="utf-8"))
+    if not isinstance(rebuilt, dict):
+        raise RuntimeError("Rebuilt promotion preflight is invalid")
+    return rebuilt
 
 
 def validate_quota_preflight(  # noqa: C901
@@ -660,6 +794,9 @@ def validate_quota_preflight(  # noqa: C901
         )
         if sha256(rebuilt) != archive.get("sha256"):
             raise RuntimeError("Candidate archive cannot be reproduced")
+    require_same_preflight(
+        evidence, rebuild_quota_preflight(evidence, pull, args, token)
+    )
     run_urls = sorted(args.blocked_run_url)
     run_ids: list[int] = []
     for url in run_urls:
@@ -756,6 +893,7 @@ def validate_quota_preflight(  # noqa: C901
 
 def prepare(args: argparse.Namespace) -> None:  # noqa: C901
     """Validate promotion prerequisites and create the candidate bundle."""
+    require_distinct_paths(args.archive, args.output)
     event = json.loads(args.event_path.read_text(encoding="utf-8"))
     if args.event != "pull_request":
         route = Route("merge-queue", False)
@@ -984,6 +1122,7 @@ def finalize(args: argparse.Namespace) -> None:
 
 def finalize_quota_fallback(args: argparse.Namespace) -> None:
     """Record a non-release promotion gate from exact local evidence."""
+    require_distinct_paths(args.input, args.output, args.archive)
     evidence = json.loads(args.input.read_text(encoding="utf-8"))
     required = (
         "repository",
@@ -1017,14 +1156,15 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:
         raise RuntimeError("At least one blocked Actions run is required")
     token = os.environ.get("GH_TOKEN", "")
     attestation, authorization = validate_quota_preflight(evidence, args, token)
-    subprocess.run(["./scripts/verify-template.sh"], check=True)
+    verification_command = local_verification_command()
+    subprocess.run(verification_command, check=True)  # noqa: S603
     validate_quota_preflight(evidence, args, token)
 
     evidence["canary"]["result"] = "artifact-only"
     evidence["full_check"] = {
         "context": "verify",
         "status": "local-quota-attested",
-        "commands": LOCAL_FALLBACK_COMMANDS,
+        "commands": [verification_command[0], PREFLIGHT_REFETCH],
     }
     evidence["quota_fallback"] = {
         "attestation_url": args.attestation_url,

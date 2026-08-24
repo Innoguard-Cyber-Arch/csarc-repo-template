@@ -240,7 +240,9 @@ checks 並記錄結果；平台不再允許補跑時，另開 Issue 保留缺口
    `--candidate-sha` 必須是該 head SHA；保存 candidate archive、SHA-256、base/head SHA、
    candidate tree、納入 PR、SemVer intent 與 canary 三態。
 2. `finalize-quota-fallback` 只接受 preflight archive、兩則留言 URL 與所有 blocked run
-   URL；工具會自行執行固定的 `./scripts/verify-template.sh` 並重驗 promotion preflight，
+   URL；工具會自行選擇 repo 內建 verifier（模板來源 repo 為
+   `./scripts/verify-template.sh`，生成專案為 `./scripts/verify`），並以 live
+   repository variables 重建 promotion preflight，
    不接受呼叫者提供的命令字串。若 canary 是 `allowed`，fallback 不得替代它；只有
    `blocked`／`unknown` 可維持 artifact-only。
 3. 先在同一 PR 留下標題為 `Actions quota fallback attestation` 的標準留言，再由 human

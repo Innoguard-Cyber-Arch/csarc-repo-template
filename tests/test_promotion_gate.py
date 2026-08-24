@@ -18,14 +18,18 @@ MODULE = runpy.run_path(
 classify_canary = MODULE["classify_canary"]
 finalize = MODULE["finalize"]
 finalize_quota_fallback = MODULE["finalize_quota_fallback"]
+fallback_statement = MODULE["fallback_statement"]
 github_get = MODULE["github_get"]
 highest_release_intent = MODULE["highest_release_intent"]
 included_pull_requests = MODULE["included_pull_requests"]
+local_verification_command = MODULE["local_verification_command"]
 main_is_current = MODULE["main_is_current"]
 prepare = MODULE["prepare"]
 parser = MODULE["parser"]
 QUOTA_ANNOTATION_MESSAGE = MODULE["QUOTA_ANNOTATION_MESSAGE"]
 RejectRedirects = MODULE["RejectRedirects"]
+repository_variables = MODULE["repository_variables"]
+require_same_preflight = MODULE["require_same_preflight"]
 require_zero_step_run = MODULE["require_zero_step_run"]
 route_for = MODULE["route_for"]
 same_repository = MODULE["same_repository"]
@@ -242,6 +246,7 @@ def test_blocked_run_must_match_head_and_have_no_started_steps(
             "status": "completed",
             "conclusion": "failure",
             "path": ".github/workflows/ci.yml",
+            "pull_requests": [{"number": 42}],
             "repository": {"full_name": "owner/repo"},
             "head_repository": {"full_name": "owner/repo"},
         }
@@ -546,6 +551,11 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
             }
         },
     )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "rebuild_quota_preflight",
+        lambda evidence, *_: evidence,
+    )
     monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: None)
     arguments = SimpleNamespace(
         input=source,
@@ -570,7 +580,7 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
         "context": "verify",
         "status": "local-quota-attested",
         "commands": [
-            "./scripts/verify-template.sh",
+            local_verification_command()[0],
             "promotion preflight live refetch",
         ],
     }
@@ -581,6 +591,9 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
     with pytest.raises(RuntimeError, match="regular file"):
         finalize_quota_fallback(arguments)
     assert victim.read_text(encoding="utf-8") == "untouched\n"
+    arguments.output = archive
+    with pytest.raises(RuntimeError, match="must be distinct"):
+        finalize_quota_fallback(arguments)
 
 
 @pytest.mark.parametrize(
@@ -1053,6 +1066,7 @@ def test_zero_step_run_reads_all_jobs_and_rejects_generic_billing(
                 "status": "completed",
                 "conclusion": "failure",
                 "path": ".github/workflows/ci.yml",
+                "pull_requests": [{"number": 42}],
                 "repository": {"full_name": "owner/repo"},
                 "head_repository": {"full_name": "owner/repo"},
             }
@@ -1107,6 +1121,119 @@ def test_zero_step_run_reads_all_jobs_and_rejects_generic_billing(
             "",
         )
     assert any(path.endswith("page=2") for path in paths)
+
+
+@pytest.mark.parametrize(
+    "run_identity",
+    [
+        {"pull_requests": [{"number": 42}]},
+        {"id": 200},
+        {"id": 200, "pull_requests": []},
+        {"id": 200, "pull_requests": [{"number": 41}]},
+    ],
+)
+def test_zero_step_run_requires_exact_run_and_pull_request(
+    monkeypatch: pytest.MonkeyPatch, run_identity: dict[str, object]
+) -> None:
+    """A same-SHA run without exact API identity is not reusable."""
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path == "actions/runs/200":
+            return {
+                **run_identity,
+                "head_sha": "head",
+                "head_branch": "dev/next",
+                "event": "pull_request",
+                "status": "completed",
+                "conclusion": "failure",
+                "path": ".github/workflows/ci.yml",
+                "repository": {"full_name": "owner/repo"},
+                "head_repository": {"full_name": "owner/repo"},
+            }
+        raise AssertionError(path)
+
+    monkeypatch.setitem(
+        require_zero_step_run.__globals__, "github_get", fake_get
+    )
+    with pytest.raises(
+        RuntimeError, match=r"failed PR head|another pull request"
+    ):
+        require_zero_step_run(
+            "https://github.com/owner/repo/actions/runs/200",
+            "owner/repo",
+            42,
+            "dev/next",
+            "head",
+            "",
+        )
+
+
+def test_preflight_binding_rejects_tampered_canary() -> None:
+    """Local JSON cannot hide a configured live canary."""
+    evidence = {
+        "repository": "owner/repo",
+        "canary": {"state": "blocked", "environment": None},
+    }
+    rebuilt = {
+        "repository": "owner/repo",
+        "canary": {"state": "allowed", "environment": "canary"},
+    }
+    with pytest.raises(RuntimeError, match="live reconstruction"):
+        require_same_preflight(evidence, rebuilt)
+
+
+def test_authorization_statement_binds_full_preflight() -> None:
+    """Human authorization covers the route, canary, and evidence schema."""
+    evidence = {
+        "schema_version": 1,
+        "repository": "owner/repo",
+        "route": {"kind": "standalone-batch", "relevant": True},
+        "canary": {"state": "blocked", "environment": None},
+    }
+    statement = fallback_statement("authorization", evidence, ["run"])
+    binding = json.loads(statement.split("`")[1])
+    assert binding["schema_version"] == 1
+    assert binding["route"] == evidence["route"]
+    assert binding["canary"] == evidence["canary"]
+
+
+def test_repository_variables_reads_every_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Canary configuration cannot hide beyond the first API page."""
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path.endswith("page=1"):
+            return {
+                "total_count": 101,
+                "variables": [
+                    {"name": f"VARIABLE_{number}", "value": "value"}
+                    for number in range(100)
+                ],
+            }
+        return {
+            "total_count": 101,
+            "variables": [{"name": "CSARC_CANARY_COMMAND", "value": "./smoke"}],
+        }
+
+    monkeypatch.setitem(
+        repository_variables.__globals__, "github_get", fake_get
+    )
+    assert (
+        repository_variables("owner/repo", "token")["CSARC_CANARY_COMMAND"]
+        == "./smoke"
+    )
+
+
+def test_generated_repository_uses_its_verifier(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Generated repositories run scripts/verify, not a root-only command."""
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "verify").write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    assert local_verification_command() == ["./scripts/verify"]
 
 
 def test_token_request_rejects_cross_origin_redirect(
