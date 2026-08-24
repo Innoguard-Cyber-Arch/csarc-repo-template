@@ -56,6 +56,20 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；CI 
 
 交付模型是「可選 Story Milestone → 1..N Issues → 各自 PR」；一張 Issue 對應一個工作分支與一個 PR，CI 與人工審查都通過才合併。完整規則（Issue／PR 內容格式、標題規範、分支與 worktree 使用、closing keyword 限制等）以 [`AGENTS.md`](AGENTS.md) 為唯一權威來源，這裡不重複列出。
 
+```mermaid
+flowchart LR
+    A["Issue<br/>驗收條件"] --> B["分支<br/>type/N-slug"]
+    B --> C["實作 + 測試"]
+    C --> D["本機驗證<br/>./scripts/verify"]
+    D --> E["PR → main"]
+    E --> F["CI 檢查"]
+    F --> G["人工審查"]
+    G --> H["合併"]
+    H --> I["版本／發布<br/>release-please"]
+```
+
+上圖只畫主線；direct／verification-only release 模式、worktree 使用與例外分支見 `AGENTS.md` 與[內部網站附錄](docs/index.html)。
+
 本 repo 沒有共用測試環境，因此採 main-only；生成專案只有在確實有長期 dev 測試環境時，才在 Copier 問答改選 `dev` 模式。
 
 公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。驗證入口也會執行 Issue／PR 政策正反例，並注入不合法的 Python／TypeScript 內容，確認語言門禁真的會拒絕。
