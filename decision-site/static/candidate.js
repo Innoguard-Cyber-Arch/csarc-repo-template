@@ -11,7 +11,7 @@
   const slideControls = document.querySelector('.controls');
   const viewControls = document.querySelector('.view-controls');
   const progress = document.querySelector('.progress');
-  let current = Math.max(0, Math.min(slides.length - 1, Number(location.hash.slice(1)) - 1 || 0));
+  let current = 0;
   let zoom = 1;
 
   slides.forEach((slide, index) => {
@@ -24,7 +24,14 @@
     });
   }
 
-  function show(index) {
+  function indexFromHash() {
+    const value = location.hash.slice(1);
+    const target = document.getElementById(value);
+    if (target) return slides.indexOf(target.closest('.slide'));
+    return Number(value) - 1 || 0;
+  }
+
+  function show(index, updateHash = true) {
     closeDisclosures();
     current = Math.max(0, Math.min(slides.length - 1, index));
     slides.forEach((slide, slideIndex) => {
@@ -36,7 +43,7 @@
     bar.style.width = `${((current + 1) / slides.length) * 100}%`;
     previous.disabled = current === 0;
     next.disabled = current === slides.length - 1;
-    history.replaceState(null, '', `#${current + 1}`);
+    if (updateHash) history.replaceState(null, '', `#${current + 1}`);
   }
 
   function fit() {
@@ -68,7 +75,7 @@
   zoomReset.addEventListener('click', () => setZoom(1));
   zoomIn.addEventListener('click', () => setZoom(zoom + .1));
   addEventListener('resize', fit);
-  addEventListener('hashchange', () => show(Number(location.hash.slice(1)) - 1 || 0));
+  addEventListener('hashchange', () => show(indexFromHash(), false));
   addEventListener('keydown', event => {
     if (event.target.closest('summary, button, a, input, textarea, select')) return;
     if (['ArrowRight', 'PageDown', ' '].includes(event.key)) show(current + 1);
@@ -76,7 +83,7 @@
   });
 
   fit();
-  show(current);
+  show(indexFromHash(), !location.hash);
   slideControls.hidden = false;
   viewControls.hidden = false;
   progress.hidden = false;

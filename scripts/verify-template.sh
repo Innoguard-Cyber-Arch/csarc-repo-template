@@ -191,6 +191,7 @@ fi
 grep -q 'empty direct content body' "$translation_error"
 
 ./scripts/build-hugo-preview --check
+python3 scripts/check-decision-site-glossary
 test "$(grep -o 'class="detail-level-control"' dist/hugo-preview.html | wc -l | tr -d ' ')" = 1
 grep -q 'class="detail-level-control" role="group" aria-label="閱讀深度" hidden' \
   dist/hugo-preview.html
@@ -219,6 +220,42 @@ test "$(grep -o 'class="package-disclosure"' site/index.html | wc -l | tr -d ' '
   "$(grep -o 'class="package-disclosure"' dist/hugo-preview.html | wc -l | tr -d ' ')"
 test "$(grep -o 'data-content-key="' dist/hugo-preview.html | wc -l | tr -d ' ')" = \
   "$(grep -o 'data-content-key="' dist/hugo-preview.en.html | wc -l | tr -d ' ')"
+
+glossary_fixture="$fixture_root/decision-site-glossary"
+mkdir -p "$glossary_fixture"
+sed 's/^summary_en = ".*"$/summary_en = ""/' \
+  decision-site/data/glossary.toml > "$glossary_fixture/missing-translation.toml"
+if python3 scripts/check-decision-site-glossary \
+  --source "$glossary_fixture/missing-translation.toml" >/dev/null 2>&1; then
+  echo "Glossary verification must reject missing translated text."
+  exit 1
+fi
+
+sed 's/href="#glossary-issue"/href="#missing-glossary-issue"/' \
+  dist/hugo-preview.html > "$glossary_fixture/broken-link.html"
+if python3 scripts/check-decision-site-glossary \
+  --candidate "$glossary_fixture/broken-link.html" \
+  --candidate dist/hugo-preview.en.html >/dev/null 2>&1; then
+  echo "Glossary verification must reject a broken anchor link."
+  exit 1
+fi
+
+sed '1s/^# /## /' llms.txt > "$glossary_fixture/invalid-format.txt"
+if python3 scripts/check-decision-site-glossary \
+  --generated "$glossary_fixture/invalid-format.txt" \
+  --published "$glossary_fixture/invalid-format.txt" \
+  --published "$glossary_fixture/invalid-format.txt" >/dev/null 2>&1; then
+  echo "Glossary verification must reject an invalid llms.txt format."
+  exit 1
+fi
+
+sed '1s/CSARC/Drifted CSARC/' llms.txt > "$glossary_fixture/drifted.txt"
+if python3 scripts/check-decision-site-glossary \
+  --published "$glossary_fixture/drifted.txt" \
+  --published docs/llms.txt >/dev/null 2>&1; then
+  echo "Glossary verification must reject a stale published llms.txt."
+  exit 1
+fi
 
 # The live probe must preserve valid run JSON and emit reusable evidence.
 live_probe_fixture="$fixture_root/live-probe"

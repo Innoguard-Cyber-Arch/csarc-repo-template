@@ -36,5 +36,29 @@ for index in 0 1; do
   fi
 done
 
+llms_source=dist/hugo-site/llms.txt
+llms_translation_source=dist/hugo-site/en/llms.txt
+llms_outputs=(llms.txt docs/llms.txt)
+
+if ! cmp -s "$repo_root/$llms_source" "$repo_root/$llms_translation_source"; then
+  printf 'Bilingual Hugo builds produced different llms.txt indexes.\n' >&2
+  exit 1
+fi
+
+if (($# == 1)); then
+  for output in "${llms_outputs[@]}"; do
+    if ! cmp -s "$repo_root/$llms_source" "$repo_root/$output"; then
+      printf '%s is stale; run scripts/build-hugo-preview\n' "$output" >&2
+      exit 1
+    fi
+  done
+else
+  for output in "${llms_outputs[@]}"; do
+    cp "$repo_root/$llms_source" "$repo_root/$output"
+  done
+fi
+
 printf 'Hugo previews: %s, %s\n' \
   "$repo_root/${outputs[0]}" "$repo_root/${outputs[1]}"
+printf 'LLM indexes: %s, %s\n' \
+  "$repo_root/${llms_outputs[0]}" "$repo_root/${llms_outputs[1]}"

@@ -1,0 +1,37 @@
+{{- $glossary := .Page.Site.Data.glossary -}}
+{{- $english := eq .Page.Lang "en" -}}
+{{- $titleKey := cond $english "title_en" "title_zh_tw" -}}
+{{- $introKey := cond $english "intro_en" "intro_zh_tw" -}}
+{{- $termKey := cond $english "term_en" "term_zh_tw" -}}
+{{- $summaryKey := cond $english "summary_en" "summary_zh_tw" -}}
+{{- $sourceLabelKey := cond $english "source_label_en" "source_label_zh_tw" -}}
+<section class="slide markdown-slide glossary-slide" id="glossary" data-content-key="glossary-index" aria-label="{{ index $glossary $titleKey }}">
+  <header><span class="selection-sequence">Glossary</span><h2>{{ index $glossary $titleKey }}</h2></header>
+  <p class="glossary-intro">{{ index $glossary $introKey }}</p>
+  <div class="glossary-index">
+    {{- range $glossary.groups }}
+    <section>
+      <h3>{{ index . $titleKey }}</h3>
+      <ul>
+        {{- range .terms }}
+        <li><a href="#glossary-{{ .key }}">{{ index . $termKey }}</a></li>
+        {{- end }}
+      </ul>
+    </section>
+    {{- end }}
+  </div>
+</section>
+{{- range $glossary.groups }}
+<section class="slide markdown-slide glossary-slide" id="glossary-group-{{ .key }}" data-content-key="glossary-{{ .key }}" aria-label="{{ index . $titleKey }}">
+  <header><span class="selection-sequence">Glossary</span><h2>{{ index . $titleKey }}</h2></header>
+  <div class="glossary-grid">
+    {{- range .terms }}
+    <article class="glossary-term" id="glossary-{{ .key }}">
+      <h3>{{ index . $termKey }}</h3>
+      <p>{{ index . $summaryKey }}</p>
+      <a href="{{ $glossary.source_base }}{{ .path }}">{{ index $glossary $sourceLabelKey }} →</a>
+    </article>
+    {{- end }}
+  </div>
+</section>
+{{- end }}
