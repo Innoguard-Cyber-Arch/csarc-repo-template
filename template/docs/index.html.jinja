@@ -196,18 +196,18 @@
 
       <section id="github-plan">
         <h2><span>GitHub 方案與門禁</span></h2>
-        <p>repo 推送後會由 CI 讀取實際能力。有管理權且要啟用較強門禁時，可再執行 <code>./scripts/apply-repository-settings.sh plan</code>、<code>apply</code> 與 <code>check</code>；這不是 portable release baseline 的必要步驟。</p>
+        <p>repo 推送後會由 CI 讀取實際能力。有管理權且要啟用較強門禁時，可再執行 <code>./scripts/apply-repository-settings.sh plan</code>、<code>apply</code> 與 <code>check</code>；check 會唯讀比對 repository、Actions、政策標籤與有效 Ruleset。這不是 portable release baseline 的必要步驟。</p>
         <table class="table">
           <thead><tr><th>方案</th><th>公版會套用</th><th>方案邊界</th></tr></thead>
           <tbody>
             <tr><td><strong>Free＋public</strong></td><td>套用並強制 Ruleset</td><td>缺少或不符政策時，governance check fail-closed</td></tr>
-            <tr><td><strong>Free organization＋private</strong></td><td>套用基本設定；期望 Ruleset 保留在 repo policy</td><td>公開 API 無法建立 Ruleset；check 標示 DEGRADED，PR 留言記錄限制</td></tr>
+            <tr><td><strong>Free organization＋private</strong></td><td>套用基本設定；期望 Ruleset 保留在 repo policy</td><td>仍比對其他設定；Ruleset 限制標示 DEGRADED，PR、workflow log 與 annotation 記錄具體差異</td></tr>
             <tr><td><strong>Pro 個人帳號＋private</strong></td><td>套用並強制 Ruleset</td><td>個人 private repo 的付費路徑</td></tr>
             <tr><td><strong>Team organization＋private</strong></td><td>Ruleset、必要審查、CODEOWNERS 與必要檢查</td><td>要先建立真實 CODEOWNERS team</td></tr>
             <tr><td><strong>Enterprise</strong></td><td>沿用 Team 的 repo 設定</td><td>SSO／SCIM、稽核串流、IP 限制與組織 Ruleset 屬組織層，不由本 repo 腳本自動修改</td></tr>
           </tbody>
         </table>
-        <p class="notice"><strong>Free private 的下一步：</strong>需要保密就請 owner 升級至 GitHub Team 以上；只有已核准公開的程式碼才能由人員改為 public，腳本不會變更可見性。GitHub 設定頁雖可顯示 Ruleset 編輯器，REST 與 GraphQL 建立／更新 API 仍會回覆需升級或公開；因此自動化只會保存 repo 內的 policy，管理員也可在 Web UI 人工預建 disabled Ruleset。governance check 標示 <code>DEGRADED</code>、CI 與 release 繼續，PR 會留下警告留言；這些紀錄不能阻止有權限者直接 push 或忽略紅燈合併。</p>
+        <p class="notice"><strong>Free private 的下一步：</strong>需要保密就請 owner 升級至 GitHub Team 以上；只有已核准公開的程式碼才能由人員改為 public，腳本不會變更可見性。GitHub 設定頁雖可顯示 Ruleset 編輯器，REST 與 GraphQL 建立／更新 API 仍會回覆需升級或公開；因此自動化只會保存 repo 內的 policy，管理員也可在 Web UI 人工預建 disabled Ruleset。governance check 先檢查其他可觀察設定，再將 Ruleset 或 token 權限限制標示 <code>DEGRADED</code>；CI 與 release 繼續，PR、workflow log 與 annotation 留下具體差異。完整管理欄位驗證應由管理員在可信任 checkout 使用 Administration read 憑證，不能把該 token 暴露給未受信任的 PR 程式碼。這些紀錄不能阻止有權限者直接 push 或忽略紅燈合併。</p>
       </section>
 
       <section id="release">

@@ -6,8 +6,10 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   issues: write
+  pull-requests: read
 
 concurrency:
   group: governance-drift-${{ github.repository }}

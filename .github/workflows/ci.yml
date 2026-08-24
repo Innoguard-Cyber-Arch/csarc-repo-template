@@ -10,7 +10,10 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  actions: read
   contents: read
+  issues: read
+  pull-requests: read
 
 jobs:
   governance:

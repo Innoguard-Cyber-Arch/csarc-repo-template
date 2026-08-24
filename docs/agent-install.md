@@ -24,3 +24,11 @@
 10. Explain that a closing pull request is rejected while either its own
     checklist or the referenced Issue still contains an unchecked task; the
     user must supply the missing evidence instead of checking it speculatively.
+11. Explain that repository settings are not copied by GitHub templates or
+    Copier. Administrators should run `apply-repository-settings.sh` in
+    `plan`, `apply`, then `check` order; `check` compares repository, Actions,
+    policy labels, and effective Rulesets. Report `DEGRADED` capability limits
+    separately from actionable drift. The built-in `GITHUB_TOKEN` cannot read
+    every administrator-only field; run the full check from a trusted checkout
+    with repository Administration read access, and never expose that token to
+    untrusted pull request code.
