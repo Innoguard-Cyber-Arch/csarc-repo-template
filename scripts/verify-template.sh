@@ -702,6 +702,7 @@ test -f scripts/render_site.py
 test -f docs/README.md
 test -f docs/adr/README.md
 test -f docs/adr/portable-decision-site.md
+test -f docs/adr/transactional-repository-adoption.md
 grep -q '可重現的 self-contained HTML' \
   docs/adr/portable-decision-site.md
 grep -q '不自動保存聊天逐字稿' \
@@ -747,8 +748,8 @@ grep -q 'Live integration smoke' docs/index.html
 test -f docs/robots.txt
 grep -q '^Disallow: /$' docs/robots.txt
 test -f docs/agent-install.md
-grep -q 'Run the requested `csarc init`, `adopt`, or `update` command with' \
-  docs/agent-install.md
+grep -q 'Run the requested `csarc init`, `adopt`, or' docs/agent-install.md
+grep -q '`update` command with `--dry-run` first' docs/agent-install.md
 grep -q 'docs/index.html' README.md
 grep -q '內部限閱' README.md
 grep -q '線上整合證據' README.md
@@ -777,18 +778,20 @@ grep -q '^            capability: Release handoff$' .github/workflows/live-integ
 grep -q '^            capability: Governance drift$' .github/workflows/live-integration.yml
 grep -q '^  workflow_dispatch:$' .github/workflows/osv.yml
 grep -q '^  workflow_dispatch:$' template/.github/workflows/osv.yml
-grep -q 'uvx --from csarc-repo-cli csarc init' README.md
-grep -q 'uvx --from csarc-repo-cli csarc adopt' README.md
-grep -q 'uvx --from csarc-repo-cli csarc update' README.md
-grep -q -- '--report-dir ../csarc-adoption-report' README.md
-grep -q 'generated Markdown and PDF' docs/agent-install.md
+grep -q 'uvx --python 3.14 --from csarc-repo-cli csarc init' README.md
+grep -q 'uvx --python 3.14 --from csarc-repo-cli csarc adopt' README.md
+grep -q 'uvx --python 3.14 --from csarc-repo-cli csarc update' README.md
+grep -q -- '--apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json' README.md
+grep -q 'generated Markdown and machine plan' docs/agent-install.md
 grep -q 'csarc-adoption-report' docs/index.html
-grep -q 'repo 外路徑' docs/pilot-adoption.md
-test "$(grep -c '^目標路徑：' README.md)" -eq 3
-test "$(grep -c '^來源 repository：https://github.com/Innoguard-Cyber-Arch/csarc-repo-template$' README.md)" -eq 3
-test "$(grep -c '^核准版本：最新穩定版$' README.md)" -eq 3
-test "$(grep -c '^核准 commit：<resolved-full-commit-sha>$' README.md)" -eq 3
-test "$(grep -c '^安裝指南：https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/<resolved-full-commit-sha>/docs/agent-install.md$' README.md)" -eq 3
+grep -q 'repo 外的 Markdown、machine plan' docs/pilot-adoption.md
+grep -q '^### 建立新 repo$' README.md
+grep -q '^### 導入既有 repo$' README.md
+grep -q '^### 更新已導入的 repo$' README.md
+test "$(grep -c '^請使用 Python 3.14 與官方 csarc CLI' README.md)" -eq 3
+! grep -q '^目標路徑：' README.md
+! grep -q '<resolved-full-commit-sha>' README.md
+grep -q 'CLI 會從 canonical immutable Release 解析並驗證 full SHA' README.md
 grep -q '"draft": true' release-please-config.json
 grep -q '"force-tag-creation": true' release-please-config.json
 grep -q 'gh release verify "$RELEASE_TAG"' \

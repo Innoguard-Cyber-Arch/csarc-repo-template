@@ -26,16 +26,18 @@ def test_render_uses_one_release_identity_everywhere() -> None:
         prompts.count(f"https://raw.githubusercontent.com/{REPOSITORY}/{sha}/")
         == 3
     )
-    assert "csarc init ./my-project" in prompts
-    assert "csarc adopt ." in prompts
-    assert "--report-dir ../csarc-adoption-report" in prompts
-    assert "檢視產生的 Markdown 與 PDF" in prompts
-    assert "csarc update --to" in prompts
+    assert prompts.count("uvx --python 3.14 --from csarc-repo-cli") == 3
+    assert "目標路徑：" not in prompts
+    assert "csarc init" in prompts
+    assert "csarc adopt" in prompts
+    assert "--apply-plan" in prompts
+    assert "檢視 repo 外的 Markdown、PDF 與 machine plan" in prompts
+    assert "csarc update" in prompts
     assert provenance["commit_sha"] == sha
     assert provenance["guide_url"] in prompts
     assert provenance["release_tag"] == "v1.2.3"
     assert prompts.split("\n\n---", maxsplit=1)[0] not in notes
-    assert "csarc adopt ." in notes
+    assert "csarc adopt" in notes
 
 
 @pytest.mark.parametrize(

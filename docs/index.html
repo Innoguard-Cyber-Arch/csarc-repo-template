@@ -2177,7 +2177,7 @@ compositions:
           code: `gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template --limit 5
 gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/v0.1.0 --jq .sha
 git switch -c chore/update-repo-template
-uvx --from copier copier update --trust \
+uvx --python 3.14 --from copier copier update --trust \
   --vcs-ref <reviewed-full-commit-sha>
 ./scripts/verify`
         }
@@ -2614,10 +2614,13 @@ scripts/apply-repository-settings.sh`
         {
           title: '每次修改都測新案、既有案導入與後續更新',
           goal: '可導入的條件是三條生命週期都通過，不是只看檔案存在。',
-          summary: '測試會真的執行 CLI init、adopt dry-run／報告／apply、update check／dry-run／apply 與衝突 fail-closed；adopt 報告會以同一份分析輸出 Markdown 與一頁 PDF，且不修改 target repo。CLI 內部仍以 Copier 產生與 smart update。root-only 測試資產若混入生成 repo 也會失敗。',
+          summary: '測試會真的執行 CLI init、adopt dry-run／machine plan／隔離驗證／apply，以及人工合併後的 finalize dry-run／apply-plan；update 也涵蓋 check／dry-run／apply 與衝突 fail-closed。兩次 dry-run 都不修改 target repo，正式套用拒絕任何 HEAD、working tree、release、answers、人工結果或輸出漂移。CLI 內部仍以 Copier 產生與 smart update。root-only 測試資產若混入生成 repo 也會失敗。',
           file: 'src/csarc_cli/＋tests/test_cli.py＋scripts/verify-template.sh',
           code: `csarc init ./my-project
-csarc adopt . --dry-run --report-dir ../csarc-adoption-report
+csarc adopt --dry-run
+csarc adopt --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
+csarc adopt --finalize --dry-run
+csarc adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
 csarc update --check --json
 csarc update`
         }
@@ -2700,28 +2703,32 @@ python_typescript: {stage: alpha}`
         title: '建立新 repo',
         goal: 'CLI 會選取核准 release、解析完整 commit SHA、顯示計畫，確認後才以 Copier 建立與驗證。',
         location: 'Terminal',
-        code: `uvx --from csarc-repo-cli csarc init ./my-project
+        code: `uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project
 
 # CI or an explicitly authorized agent:
-uvx --from csarc-repo-cli csarc init ./my-project \\
+uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project \\
   --yes --non-interactive`
       },
       existing: {
         title: '把公版導入既有 repo',
-        goal: '先用 --dry-run 在 repo 外產生短版 Markdown 與一頁 PDF，預覽新增、覆寫、保留、人工合併與無法判定項目；必須是乾淨 Git working tree，預設保留產品內容。報告只描述已知風險，不保證沒有語意或執行期衝突。',
+        goal: 'CLI 自行找出 Git root；--dry-run 可讀取 dirty tree，但只在 repo 外產生 Markdown、PDF 與不可套用的 machine plan。乾淨 tree 會先在暫存 clone 完成固定合併、產品 hook 與完整驗證，再鎖定可套用 plan；需要人工合併時，finalize 也必須重新 dry-run 並套用同一份第二階段 plan。',
         location: '既有 repo 根目錄',
         code: `git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --from csarc-repo-cli csarc adopt . --dry-run \\
-  --report-dir ../csarc-adoption-report
-uvx --from csarc-repo-cli csarc adopt .`
+uvx --python 3.14 --from csarc-repo-cli csarc adopt --dry-run
+uvx --python 3.14 --from csarc-repo-cli csarc adopt \\
+  --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
+# Only when the first apply creates a manual-merge checkpoint:
+uvx --python 3.14 --from csarc-repo-cli csarc adopt --finalize --dry-run
+uvx --python 3.14 --from csarc-repo-cli csarc adopt --finalize \\
+  --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json`
       },
       update: {
         title: '更新已使用公版的 repo',
         goal: 'CLI 讀取 .copier-answers.yml，解析核准 release，以 Copier smart update 顯示新版差異；衝突時保留差異並 fail closed。',
         location: '專案 repo 根目錄',
         code: `git switch -c chore/<issue-number>-update-repo-template
-uvx --from csarc-repo-cli csarc update --check --json
-uvx --from csarc-repo-cli csarc update`
+uvx --python 3.14 --from csarc-repo-cli csarc update --check --json
+uvx --python 3.14 --from csarc-repo-cli csarc update`
       },
       mac: {
         title: 'macOS 本機需求',

@@ -11,6 +11,8 @@ _exclude:
   - ".git"
   - ".DS_Store"
   - ".svn"
+  - "{% if project_mode == 'existing' %}/README.md{% else %}__keep_project_readme__{% endif %}"
+  - "{% if project_mode == 'existing' %}/CHANGELOG.md{% else %}__keep_project_changelog__{% endif %}"
   - "{% if enable_precommit %}__keep_precommit__{% else %}.pre-commit-config.yaml{% endif %}"
   - "{% if enable_template_update_notifications %}__keep_template_update_workflow__{% else %}.github/workflows/template-update.yml{% endif %}"
   - "{% if enable_template_update_notifications %}__keep_template_update_script__{% else %}scripts/check-template-update{% endif %}"
