@@ -1448,7 +1448,7 @@
         </article>
         <article class="tool-profile conditional">
           <div class="tool-logo-box"><img class="tool-logo" src="https://raw.githubusercontent.com/renovatebot/renovate/main/docs/usage/assets/images/logo.png" alt="Renovate logo"></div>
-          <div><h3><a href="https://github.com/renovatebot/renovate" target="_blank" rel="noreferrer">Renovate</a></h3><p><strong>套件更新｜</strong>等待與分組更細。<strong>決定｜</strong>可選；基本方案用 Dependabot，評估見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/74" target="_blank" rel="noreferrer">#74</a>。</p><p class="tool-health"><span class="tool-status">可選導入</span>· AGPL · 持續維護</p></div>
+          <div><h3><a href="https://github.com/renovatebot/renovate" target="_blank" rel="noreferrer">Renovate</a></h3><p><strong>套件更新｜</strong>等待與分組更細。<strong>決定｜</strong>不導入；保留能直接觸發既有 CI/CD checks 的 Dependabot。<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/74" target="_blank" rel="noreferrer">#74 評估</a>、<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/110" target="_blank" rel="noreferrer">#110 決策</a>。</p><p class="tool-health"><span class="tool-status">不採用</span>· AGPL · 持續維護</p></div>
         </article>
         <article class="tool-profile">
           <div class="tool-logo-box"><img class="tool-logo" src="https://cdn.simpleicons.org/githubactions/2088FF" alt="GitHub Actions logo"></div>
@@ -1702,10 +1702,10 @@
       </header>
       <p class="context-line"><strong>問題與目的｜</strong>第三方套件出現漏洞時要立刻知道；一般新版則先等三天，避免成為供應鏈攻擊最早一批受害者。</p>
       <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把所有風險都當成同一種更新</h3><ul><li><strong>新版一出就升：</strong>可能成為惡意版本最早一批使用者</li><li><strong>漏洞也等三天：</strong>已知風險不應延後處理</li><li><strong>現在就換 Renovate：</strong>已評估<button class="term-trigger" type="button" aria-expanded="false" aria-controls="renovate-preset-overlay">中央共用更新規則（preset）</button>方案，暫緩換手</li></ul></article>
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把所有風險都當成同一種更新</h3><ul><li><strong>新版一出就升：</strong>可能成為惡意版本最早一批使用者</li><li><strong>漏洞也等三天：</strong>已知風險不應延後處理</li><li><strong>換成 Renovate：</strong><button class="term-trigger" type="button" aria-expanded="false" aria-controls="renovate-preset-overlay">中央共用更新規則（preset）</button>較靈活，但目前會額外依賴高權限身分</li></ul></article>
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
-          <details class="package-disclosure"><summary><span><span class="tech-name">Dependabot＋OSV＋anchore/sbom-action</span> 已完成</span></summary><div class="package-health"><p><a href="https://github.com/google/osv-scanner" target="_blank" rel="noreferrer">OSV-Scanner</a>｜Apache-2.0；<a href="https://github.com/anchore/syft" target="_blank" rel="noreferrer">Syft</a>｜Apache-2.0。</p><p><strong>Renovate：</strong>AGPL-3.0；已評估以單一設定取代 Dependabot cooldown 與 pnpm minimumReleaseAge（見下方「評估」卡片）；<code>trustPolicy: no-downgrade</code> 是獨立的發布者信任保護，仍留在 pnpm。下游 repo 的 GITHUB_TOKEN 無法觸發 Renovate PR 上的必要檢查，換手前要先解決這個營運缺口，暫緩實際遷移。</p></div></details>
+          <details class="package-disclosure"><summary><span><span class="tech-name">Dependabot＋OSV＋anchore/sbom-action</span> 已完成</span></summary><div class="package-health"><p><a href="https://github.com/google/osv-scanner" target="_blank" rel="noreferrer">OSV-Scanner</a>｜Apache-2.0；<a href="https://github.com/anchore/syft" target="_blank" rel="noreferrer">Syft</a>｜Apache-2.0。</p><p><strong>Renovate：</strong>AGPL-3.0；#110 決定不換手。Dependabot 使用 GitHub 原生 automation identity，PR 會觸發既有 verify、governance、OSV 與 zizmor checks，不需要第三方 App 或長效 PAT。pnpm <code>minimumReleaseAge</code> 另保護本機與 CI resolution，<code>trustPolicy: no-downgrade</code> 則保護發布者信任，兩者都保留。</p></div></details>
           <p class="recommendation-copy"><strong>等待：</strong>Dependabot 一般升版先等三天；pnpm 另以嚴格 resolver 阻擋發布未滿三天的直接或間接套件，並拒絕 publisher trust 降級。遇到 trust downgrade 時先確認發布者與 provenance，不要直接停用 policy。<br><strong>漏洞：</strong>OSV 對已公開漏洞立即通知，不套用等待期。<br><strong>內容：</strong><code>uv.lock</code> 保存 SHA-256；<code>pnpm-lock.yaml</code> 保存 integrity hash；發布時解壓真正成品，再附 checksum 與非空 SBOM。<br><strong>限制：</strong>雜湊不證明來源善意，SBOM 也不會自行阻擋漏洞。</p>
         </article>
       </div>
@@ -1716,7 +1716,7 @@
           <h3>中央共用更新規則（preset）是什麼？</h3>
           <p class="term-overlay-copy"><strong>白話說：</strong>把套件更新規則放在一個共用設定；其他 repo 只要寫「沿用這套規則」，之後改一次就能同步等待天數、排程與分組。</p>
           <p class="term-overlay-copy"><strong>何時需要：</strong>repo 變多、各專案設定開始不一致，或 Dependabot 已無法表達共同規則時。</p>
-          <p class="term-overlay-copy"><strong>目前決定（已評估觸發條件）：</strong>已提出具體 Renovate 設定草案，把 Dependabot cooldown 與 pnpm minimumReleaseAge 合併成一份「新版本觀察期＋已知漏洞立即處理」設定（見依賴風險卡片的「評估」項）；pnpm 的 <code>trustPolicy: no-downgrade</code> 不屬於等待期，繼續獨立保留。因下游 repo 用預設 GITHUB_TOKEN 自架 Renovate 時，PR 不會觸發必要檢查，換手前要先解決這個問題，本次先記錄方案、暫緩實際遷移，後續換手另開 Issue。</p>
+          <p class="term-overlay-copy"><strong>目前決定：</strong>保留 Dependabot 與既有 CI/CD checks。自架 Renovate 的 <code>GITHUB_TOKEN</code> 不能建立可正常觸發所有必要檢查的 PR；Mend Renovate App 又要求 organization members 與 repository administration 權限。為避免每個導入者依賴更高權限的人或長效 PAT，公版不導入 preset。只有 Dependabot 已無法表達實際跨 repo 政策，而且已有可維護的 automation identity 時才重評。</p>
         </div>
       </aside>
     </section>
@@ -2453,40 +2453,17 @@ matrix:
     output-file: sbom.cdx.json`
         },
         {
-          title: '評估｜以單一 Renovate 設定取代 Dependabot／pnpm 版本等待（暫緩換手）',
-          goal: 'Dependabot cooldown 與 pnpm minimumReleaseAge 都表達「新版本觀察期」；換成一份 Renovate 設定後，往後只需要改一個地方就能同步等待天數與分組規則。pnpm trustPolicy 是發布者信任降級保護，不屬於等待期，繼續獨立保留。',
-          summary: '已評估、尚未換手：downstream repo 若用預設 GITHUB_TOKEN 自架 Renovate GitHub Action，GitHub 基於防遞迴設計不會在 Renovate 開出的 PR 上觸發 required status checks（verify／governance／scan-pr／audit），會讓 policies/rulesets.json 的必要檢查對 Renovate PR 形同虛設；要修正就要比照 python-version-policy.yml 另外建立 GitHub App 或 repo-scoped PAT，這是每個下游 repo 各自的營運與密鑰決定，本次先只記錄方案與理由，不強制遷移，實際換手另開後續 Issue。pnpm trustPolicy、report_dependency_ceiling.py 的 resolver 上下界檢查與 Renovate 的版本觀察期是不同問題，維持不變。',
-          file: '尚未建立；決定記錄於 docs/index.html（本節）＋profiles/catalog.yaml',
-          code: `// Proposed renovate.json5 (NOT adopted yet; see decision note above)
-{
-  extends: ["config:recommended"],
-  // Mirrors dependabot.yml's cooldown.default-days: 3 and
-  // pnpm-workspace.yaml's minimumReleaseAge: 4320 (= 3 days).
-  minimumReleaseAge: "3 days",
-  vulnerabilityAlerts: {
-    // Known vulnerabilities skip the observation window, matching
-    // Dependabot security updates today.
-    minimumReleaseAge: "0 days",
-  },
-  packageRules: [
-    { matchManagers: ["github-actions"], groupName: "actions" },
-    { matchManagers: ["pep621", "uv"], groupName: "python" },
-    { matchManagers: ["npm"], groupName: "javascript" },
-  ],
-  schedule: ["before 6am on monday"],
-  // osvVulnerabilityAlerts left off on purpose: OSV-Scanner
-  // (osv.yml) stays the single known-CVE gate so the two
-  // mechanisms do not race or disagree with each other.
-  // pnpm's trustPolicy also stays in pnpm-workspace.yaml because it
-  // prevents publisher-trust downgrades rather than delaying releases.
-}
+          title: '決定｜保留 Dependabot 與 pnpm 的原生門禁',
+          goal: '讓 dependency PR 繼續觸發既有 CI/CD checks，且不要求每個導入者安裝高權限 App 或保存長效 PAT。',
+          summary: '不導入 Renovate：Dependabot 使用 GitHub 原生 automation identity，現有 PR checks 可直接執行。Dependabot cooldown 管理自動升版 PR 的三天等待；pnpm minimumReleaseAge 也保護本機與 CI resolution，並非完全重複。pnpm trustPolicy、OSV、resolver 上下界檢查與 SBOM 各自保留原本職責。若未來 Dependabot 無法表達已發生的跨 repo 需求，而且已有可維護的非 GITHUB_TOKEN 身分，再另案重評。',
+          file: '.github/dependabot.yml＋pnpm-workspace.yaml＋profiles/catalog.yaml',
+          code: `# Native updater; no extra App or long-lived token.
+.github/dependabot.yml
 
-// Blocking finding, not yet resolved:
-// A self-hosted Renovate Action with the default GITHUB_TOKEN does
-// not trigger "on: pull_request" required checks on the PRs it
-// opens (GitHub anti-recursion rule). Until each downstream repo
-// wires a GitHub App or PAT, adopting this config would silently
-// bypass the branch protection this template ships today.`
+# Install-time observation and publisher-trust gates.
+minimumReleaseAge: 4320
+minimumReleaseAgeStrict: true
+trustPolicy: no-downgrade`
         },
         {
           title: '回報本專案自身的漏洞，不是掃相依套件',
