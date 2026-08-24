@@ -58,17 +58,17 @@ known-first-party = ["csarc_cli", "scripts"]
 [tool.mypy]
 python_version = "3.14"
 strict = true
-files = ["src/csarc_cli", "template/scripts", "template/tests/test_spec_to_issue.py"]
+files = ["src/csarc_cli", "scripts", "tests/test_spec_to_issue.py"]
 exclude = [".*\\.jinja$"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
-testpaths = ["template/tests"]
+testpaths = ["tests"]
 python_files = ["test_*.py"]
 
 [tool.coverage.run]
 branch = true
-source = ["template/scripts"]
+source = ["src/csarc_cli"]
 
 [tool.coverage.report]
 show_missing = true

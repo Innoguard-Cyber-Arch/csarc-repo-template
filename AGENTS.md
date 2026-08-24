@@ -23,7 +23,7 @@
 9. Add or update the narrowest regression check that proves non-trivial behavior.
 10. Run targeted checks while iterating, then run `./scripts/verify-template.sh` before opening or updating a pull request.
 11. Before closing the final open Issue in a Milestone, re-check the story acceptance criteria, mark every verified item complete, and add any genuinely required follow-up Issue. The lifecycle workflow closes a zero-open-Issue Milestone only when every acceptance checkbox is checked, and reopens it when open work or an unchecked criterion returns.
-12. Before using `Closes`, `Fixes`, or `Resolves`, complete every task in the pull request and referenced Issue; do not check work that lacks its stated evidence. Open the pull request against `main` or its immediate parent in the stack, and never merge it yourself.
+12. Before using `Closes`, `Fixes`, or `Resolves`, complete every task in the pull request and referenced Issue; do not check work that lacks its stated evidence. Open the pull request against `main` or its immediate parent in the stack, and never merge it yourself except under an explicit repository self-merge policy and, when CI cannot start, the quota fallback below.
 13. After a pull request is merged, the agent that created its worktree must leave that worktree, fetch the integration ref, and run `./scripts/cleanup-worktrees --apply --worktree <path> origin/main` from another checkout. If the task is explicitly abandoned instead, its creator may remove only that clean worktree with `git worktree remove <path>`; keep the branch. Platform-managed worktrees stay under the platform lifecycle. For repository-wide maintenance, review the command's default dry run before omitting `--worktree`; it never removes main, current, locked, detached, dirty, unmerged, or unverifiable worktrees.
 14. Report what changed, which verification ran, and any remaining limitation.
 
@@ -41,6 +41,16 @@ If a change modifies the Issue or pull request body template's shape, migrate ex
 
 - Required final check: `./scripts/verify-template.sh`.
 - Use the narrowest relevant check while iterating, but never replace the required final check with a partial result.
+
+## Actions quota fallback
+
+- Use this one-time fallback only after a human maintainer with billing visibility explicitly confirms that the account's included GitHub Actions minutes are exhausted for the current billing period. The GitHub annotation that also mentions failed payments or spending limits is not sufficient evidence by itself.
+- Do not use the fallback for a failed payment, a zero or incorrect spending budget, a platform outage, a workflow or permission error, an unknown cause, or any job that started a step and failed. Those conditions remain blocked.
+- Before merge, confirm that the worktree is clean and its `HEAD` equals the pull request head SHA. Run `./scripts/verify-template.sh` and every required check that has a faithful local equivalent. Stop on any failure, and list every GitHub-only check that could not be reproduced locally.
+- Add a pull request comment headed `Actions quota fallback attestation` with the pull request head SHA, blocked run URLs and annotations, the human quota confirmation, UTC execution time, environment and tool versions, exact commands and results, and any checks not reproduced locally.
+- A human maintainer must explicitly authorize the fallback for that pull request. The attestation is valid only for its recorded head SHA; a new commit invalidates it and requires a fresh verification and authorization. The agent must not create or falsify a successful Check Run.
+- When this repository's documented merge policy permits author self-merge, the agent may merge after the attestation is complete and the human authorization is recorded. This exception never applies to release, publishing, deployment approval, secrets, provenance, CODEOWNER review, or any other control that cannot be reproduced locally.
+- After the allowance resets, re-run the blocked GitHub checks for the attested commit and record the result. If GitHub no longer permits that re-run, open a follow-up Issue instead of claiming retrospective CI success.
 
 ## Editing boundaries
 
@@ -67,7 +77,7 @@ If a change modifies the Issue or pull request body template's shape, migrate ex
 
 - Never commit secrets, tokens, private keys, or populated `.env` files.
 - Review the plan output before applying repository settings; do not operate production or external infrastructure without explicit authorization.
-- Do not bypass required checks, human approval, CODEOWNER review, or supply-chain verification.
+- Do not bypass required checks, human approval, CODEOWNER review, or supply-chain verification except for the exact quota-only, SHA-bound local verification fallback defined above; that exception does not waive human authorization or any non-local control.
 - Alpha 階段允許作者自行合併；在 PR 內文加註 `Alpha 自行合併 / self-merged`，作為第 7 點「never merge it yourself」的已知例外。
 
 ## Code Review Rules
