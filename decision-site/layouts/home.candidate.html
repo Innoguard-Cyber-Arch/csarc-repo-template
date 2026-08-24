@@ -31,18 +31,18 @@
     <button type="button" data-detail-level="technical" aria-pressed="true">{{ .Params.controls.technical }}</button>
   </div>
   <main class="deck" aria-live="polite">{{ .Content }}</main>
-  <nav class="controls" aria-label="{{ .Params.controls.slides }}">
+  <nav class="controls" aria-label="{{ .Params.controls.slides }}" hidden>
     <button id="previous" type="button" aria-label="{{ .Params.controls.previous }}">←</button>
     <span class="counter" id="counter">1 / 1</span>
     <button id="next" type="button" aria-label="{{ .Params.controls.next }}">→</button>
   </nav>
-  <nav class="view-controls" aria-label="{{ .Params.controls.zoom }}">
+  <nav class="view-controls" aria-label="{{ .Params.controls.zoom }}" hidden>
     <button id="zoom-out" type="button" aria-label="{{ .Params.controls.zoom_out }}">−</button>
     <button id="zoom-reset" type="button" aria-label="{{ .Params.controls.zoom_reset }}">{{ .Params.controls.fit }}</button>
     <span class="zoom-level" id="zoom-level" aria-live="polite">100%</span>
     <button id="zoom-in" type="button" aria-label="{{ .Params.controls.zoom_in }}">＋</button>
   </nav>
-  <div class="progress" aria-hidden="true"><span id="bar"></span></div>
+  <div class="progress" aria-hidden="true" hidden><span id="bar"></span></div>
   <script src="{{ $assetPrefix }}candidate.js"></script>
   <script src="{{ $assetPrefix }}detail-toggle.js"></script>
 </body>

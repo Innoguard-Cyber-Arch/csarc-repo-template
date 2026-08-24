@@ -8,6 +8,9 @@
   const zoomReset = document.querySelector('#zoom-reset');
   const zoomIn = document.querySelector('#zoom-in');
   const zoomLevel = document.querySelector('#zoom-level');
+  const slideControls = document.querySelector('.controls');
+  const viewControls = document.querySelector('.view-controls');
+  const progress = document.querySelector('.progress');
   let current = Math.max(0, Math.min(slides.length - 1, Number(location.hash.slice(1)) - 1 || 0));
   let zoom = 1;
 
@@ -74,4 +77,7 @@
 
   fit();
   show(current);
+  slideControls.hidden = false;
+  viewControls.hidden = false;
+  progress.hidden = false;
 })();

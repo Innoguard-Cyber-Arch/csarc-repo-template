@@ -160,6 +160,36 @@ if python3 scripts/check-decision-site-translations \
 fi
 grep -q 'empty content body' "$translation_error"
 
+sed 's/title="Cost of adopting Spec Kit"/title=""/' \
+  decision-site/content/_index.en.md > "$translation_fixture/_index.en.md"
+if python3 scripts/check-decision-site-translations \
+  --content-dir "$translation_fixture" >/dev/null 2>"$translation_error"; then
+  echo "Translation verification must reject an empty title."
+  exit 1
+fi
+grep -q 'empty title attribute' "$translation_error"
+
+python3 - decision-site/content/_index.en.md \
+  "$translation_fixture/_index.en.md" <<'PY'
+import sys
+from pathlib import Path
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+opening = '{{< slide key="spec-format"'
+start = source.index(opening)
+body_start = source.index("}}", start) + 2
+nested = source.index('{{< detail key="spec-format-cost"', body_start)
+Path(sys.argv[2]).write_text(
+    source[:body_start] + "\n" + source[nested:], encoding="utf-8"
+)
+PY
+if python3 scripts/check-decision-site-translations \
+  --content-dir "$translation_fixture" >/dev/null 2>"$translation_error"; then
+  echo "Translation verification must reject missing direct slide content."
+  exit 1
+fi
+grep -q 'empty direct content body' "$translation_error"
+
 ./scripts/build-hugo-preview --check
 test "$(grep -o 'class="detail-level-control"' dist/hugo-preview.html | wc -l | tr -d ' ')" = 1
 grep -q 'class="detail-level-control" role="group" aria-label="閱讀深度" hidden' \
@@ -171,6 +201,13 @@ test "$(grep -o 'class="language-control"' dist/hugo-preview.html | wc -l | tr -
 test "$(grep -o 'class="language-control"' dist/hugo-preview.en.html | wc -l | tr -d ' ')" = 1
 grep -q '<html lang="zh-Hant-TW"' dist/hugo-preview.html
 grep -q '<html lang="en"' dist/hugo-preview.en.html
+# Without JavaScript, the first slide remains readable and inactive controls stay hidden.
+test "$(grep -o 'class="slide markdown-slide active' dist/hugo-preview.html | wc -l | tr -d ' ')" = 1
+test "$(grep -o 'class="slide markdown-slide active' dist/hugo-preview.en.html | wc -l | tr -d ' ')" = 1
+grep -q 'class="controls" aria-label="簡報控制" hidden' dist/hugo-preview.html
+grep -q 'class="view-controls" aria-label="畫面縮放控制" hidden' \
+  dist/hugo-preview.html
+grep -q 'slideControls.hidden = false' dist/hugo-preview.html
 grep -q 'data-detail-level="technical"' dist/hugo-preview.html
 grep -q 'csarc-detail-level' dist/hugo-preview.html
 grep -q '@media (prefers-reduced-motion: reduce)' dist/hugo-preview.html

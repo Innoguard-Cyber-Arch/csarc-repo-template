@@ -19,6 +19,10 @@
 
 .detail-level-control[hidden] { display: none; }
 
+.controls[hidden],
+.view-controls[hidden],
+.progress[hidden] { display: none; }
+
 .detail-level-control > span { padding: 0 7px; }
 
 .detail-level-control button {
