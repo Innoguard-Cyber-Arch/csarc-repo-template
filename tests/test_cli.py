@@ -66,9 +66,21 @@ language:
 code_owner:
   type: str
   default: '@Innoguard-Cyber-Arch/repository-maintainers'
+reviewers:
+  type: str
+  default: '@default-reviewer'
 coverage_mode:
   type: str
   default: global
+project_visibility:
+  type: str
+  default: private
+enable_codeql:
+  type: bool
+  default: "{{ project_visibility == 'public' and language != 'ci' }}"
+enable_release_attestations:
+  type: bool
+  default: "{{ project_visibility == 'public' and language != 'ci' }}"
 """,
         encoding="utf-8",
     )
@@ -281,6 +293,124 @@ def test_target_repository_uses_explicit_repo_for_new_project(
     )
 
     assert cli.target_repository(tmp_path) == "owner/new-repository"
+
+
+@pytest.mark.parametrize("visibility", ["public", "private", "internal"])
+def test_repository_context_uses_github_owner_and_visibility(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    visibility: str,
+) -> None:
+    """Trust validated GitHub metadata instead of the template default."""
+    monkeypatch.setattr(cli, "target_repository", lambda _: "owner/repo")
+    monkeypatch.setattr(
+        cli,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0],
+            0,
+            stdout=json.dumps(
+                {
+                    "full_name": "owner/repo",
+                    "owner": {"login": "owner", "type": "Organization"},
+                    "visibility": visibility,
+                }
+            ),
+            stderr="",
+        ),
+    )
+
+    context = cli.repository_context(tmp_path, None)
+
+    assert context.owner == "owner"
+    assert context.owner_type == "organization"
+    assert context.visibility == visibility
+    assert context.verified
+
+
+def test_repository_context_requires_visibility_when_api_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail closed unless an operator supplies the unavailable setting."""
+    monkeypatch.setattr(cli, "target_repository", lambda _: "owner/repo")
+    monkeypatch.setattr(
+        cli,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0], 1, stdout="", stderr="permission denied"
+        ),
+    )
+
+    with pytest.raises(CliError, match="--data project_visibility"):
+        cli.repository_context(tmp_path, None)
+
+    context = cli.repository_context(tmp_path, "internal")
+    assert context.owner == "owner"
+    assert context.visibility == "internal"
+    assert context.source == "explicit"
+    assert not context.verified
+
+
+def test_repository_context_without_remote_uses_safe_or_explicit_value(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep no-remote projects private unless the user says otherwise."""
+    monkeypatch.setattr(cli, "target_repository", lambda _: None)
+
+    default = cli.repository_context(tmp_path, None)
+    explicit = cli.repository_context(tmp_path, "public")
+
+    assert default.visibility == "private"
+    assert default.source == "safe-default"
+    assert explicit.visibility == "public"
+    assert explicit.source == "explicit"
+
+
+@pytest.mark.parametrize(
+    ("visibility", "enabled"),
+    [("public", True), ("private", False), ("internal", False)],
+)
+def test_init_json_uses_one_complete_resolved_plan(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    visibility: str,
+    enabled: bool,
+) -> None:
+    """Emit repository defaults and every persisted answer from one plan."""
+    source, revision = make_template(tmp_path)
+    target = tmp_path / f"{visibility}-project"
+
+    assert (
+        main(
+            [
+                "init",
+                str(target),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--data",
+                "language=python",
+                "--data",
+                f"project_visibility={visibility}",
+                "--dry-run",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["schema_version"] == 1
+    assert payload["template"]["sha"] == revision
+    assert payload["repository"]["visibility"] == visibility
+    assert payload["answers"]["project_visibility"] == visibility
+    assert payload["answers"]["enable_codeql"] is enabled
+    assert payload["answers"]["enable_release_attestations"] is enabled
+    assert payload["answers"]["reviewers"] == "@default-reviewer"
+    assert payload["release_capabilities"]["mode"] == "verification-only"
+    assert not target.exists()
 
 
 def test_milestone_description_plan_is_paginated_and_idempotent(
@@ -747,6 +877,74 @@ def test_update_check_dry_run_apply_and_conflict(
         == 2
     )
     assert "<<<<<<<" in (project / "managed.txt").read_text(encoding="utf-8")
+
+
+def test_update_recomputes_visibility_defaults_from_github(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Migrate stale private defaults when GitHub reports a public repo."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / "public-project"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--data",
+                "language=python",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated private defaults")
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    second_sha = commit(source, "test: template version two")
+    monkeypatch.setattr(
+        cli,
+        "repository_context",
+        lambda *args, **kwargs: cli.RepositoryContext(
+            "owner/repo",
+            "owner",
+            "organization",
+            "public",
+            "github",
+            True,
+        ),
+    )
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                second_sha,
+                "--allow-unreleased",
+                "--check",
+                "--json",
+            ]
+        )
+        == 1
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["answers"]["project_visibility"] == "public"
+    assert payload["answers"]["enable_codeql"] is True
+    assert payload["answers"]["enable_release_attestations"] is True
 
 
 def test_non_interactive_writes_require_yes(tmp_path: Path) -> None:

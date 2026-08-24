@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import BinaryIO, NoReturn, Protocol
 from urllib.parse import quote
 
+import yaml  # type: ignore[import-untyped]
 from reportlab.lib import colors  # type: ignore[import-untyped]
 from reportlab.lib.pagesizes import A4  # type: ignore[import-untyped]
 from reportlab.pdfgen.canvas import Canvas  # type: ignore[import-untyped]
@@ -29,6 +30,7 @@ DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"
 PROVENANCE_FILE = Path(".csarc/provenance.json")
 ADOPTION_REPORT_BASENAME = "csarc-adoption-dry-run"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
+REPOSITORY_VISIBILITIES = {"public", "private", "internal"}
 LEGACY_MILESTONE_HEADINGS = (
     "problem",
     "outcome",
@@ -128,6 +130,76 @@ class Plan:
     preserve: tuple[str, ...]
     manual: tuple[str, ...]
     unknown: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RepositoryContext:
+    """Resolved GitHub identity used to choose repository-safe defaults."""
+
+    repository: str | None
+    owner: str | None
+    owner_type: str | None
+    visibility: str
+    source: str
+    verified: bool
+    reason: str | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        """Return a stable JSON-safe repository context."""
+        return {
+            "owner": self.owner,
+            "owner_type": self.owner_type,
+            "reason": self.reason,
+            "repository": self.repository,
+            "source": self.source,
+            "verified": self.verified,
+            "visibility": self.visibility,
+        }
+
+
+@dataclass(frozen=True)
+class ResolvedPlan:
+    """Single plan model shared by terminal and JSON output."""
+
+    mode: str
+    target: Path
+    revision: Revision
+    repository: RepositoryContext
+    answers: dict[str, object]
+    capabilities: dict[str, object]
+    files: Plan | None = None
+    update: dict[str, object] | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        """Return the stable machine-readable plan representation."""
+        result: dict[str, object] = {
+            "answers": dict(sorted(self.answers.items())),
+            "mode": self.mode,
+            "release_capabilities": self.capabilities,
+            "repository": self.repository.as_dict(),
+            "schema_version": 1,
+            "target": str(self.target),
+            "template": {
+                "guide_url": self.revision.guide_url,
+                "release": self.revision.label,
+                "sha": self.revision.sha,
+                "source": self.revision.source,
+                "verification": (
+                    "verified" if self.revision.verified else "unverified"
+                ),
+            },
+        }
+        if self.files is not None:
+            result["files"] = {
+                "add": list(self.files.add),
+                "manual_merge": list(self.files.manual),
+                "overwrite": list(self.files.overwrite),
+                "preserve": list(self.files.preserve),
+                "unknown": list(self.files.unknown),
+            }
+        if self.update is not None:
+            result.update(self.update)
+        return result
 
 
 @dataclass(frozen=True)
@@ -528,6 +600,21 @@ def pin_answer_commit(target: Path, commit: str) -> None:
     answers.write_text("\n".join(pinned) + "\n", encoding="utf-8")
 
 
+def read_copier_answers(path: Path) -> dict[str, object]:
+    """Read every non-secret answer persisted by Copier."""
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as error:
+        raise CliError(f"Cannot read Copier answers from {path}.") from error
+    if not isinstance(payload, dict):
+        raise CliError(f"Copier answers in {path} must be a mapping.")
+    return {
+        str(key): value
+        for key, value in payload.items()
+        if isinstance(key, str) and not key.startswith("_")
+    }
+
+
 def provenance_data(
     revision: Revision, previous: dict[str, object] | None = None
 ) -> dict[str, object]:
@@ -651,7 +738,7 @@ def markdown_code(value: object) -> str:
     return printable(value).replace("`", r"\`")
 
 
-def report_settings(data: dict[str, str]) -> str:
+def report_settings(data: dict[str, object]) -> str:
     """Return only the non-sensitive settings needed for adoption review."""
     allowed = ("project_mode", "language", "coverage_mode")
     return ", ".join(
@@ -662,7 +749,7 @@ def report_settings(data: dict[str, str]) -> str:
 def adoption_report_markdown(
     target: Path,
     revision: Revision,
-    data: dict[str, str],
+    data: dict[str, object],
     plan: Plan,
     generated_at: str,
 ) -> str:
@@ -747,7 +834,7 @@ def draw_adoption_pdf(
     output: BinaryIO,
     target: Path,
     revision: Revision,
-    data: dict[str, str],
+    data: dict[str, object],
     plan: Plan,
     generated_at: str,
 ) -> None:
@@ -902,7 +989,7 @@ def adoption_report_directory(target: Path, requested: Path | None) -> Path:
 def write_adoption_reports(
     target: Path,
     revision: Revision,
-    data: dict[str, str],
+    data: dict[str, object],
     plan: Plan,
     requested_directory: Path | None,
 ) -> tuple[Path, Path]:
@@ -947,33 +1034,80 @@ def print_group(title: str, paths: tuple[str, ...]) -> None:
         print("  (none)")
 
 
-def print_plan(
-    mode: str,
-    target: Path,
-    revision: Revision,
-    data: dict[str, str],
-    plan: Plan,
-) -> None:
-    """Print the immutable revision, settings, risks, and file effects."""
-    print(f"Mode: {mode}")
-    print(f"Target: {target}")
-    print(f"Template version: {revision.label}")
-    print(f"Template commit: {revision.sha}")
-    print(f"Pinned guide: {revision.guide_url}")
+def print_capabilities(payload: dict[str, object]) -> None:
+    """Print capability results from a resolved plan."""
+    raw_states = payload.get("capabilities")
+    states = raw_states if isinstance(raw_states, dict) else {}
+    summary = ", ".join(
+        f"{name}={value.get('state', 'unknown')}"
+        for name, value in states.items()
+        if isinstance(value, dict)
+    )
+    print(f"GitHub release preflight: {summary or 'unknown'}")
+    print("Runtime workflows recheck capabilities before every release.")
+    raw_integrations = payload.get("integrations")
+    integrations = (
+        raw_integrations if isinstance(raw_integrations, dict) else {}
+    )
+    for name, value in integrations.items():
+        if not isinstance(value, dict):
+            continue
+        state = value.get("state", "fallback")
+        next_step = value.get("next_step", "No automatic action.")
+        print(f"Optional integration {name}: {state}")
+        print(f"Next: {next_step}")
+
+
+def print_plan(plan: ResolvedPlan) -> None:
+    """Print the human-readable form of the shared plan model."""
+    print(f"Mode: {plan.mode}")
+    print(f"Target: {plan.target}")
+    if plan.update is not None:
+        print(
+            f"Template: {plan.update['current_version']} / "
+            f"{plan.update['current_sha']} -> "
+            f"{plan.update['target_version']} / "
+            f"{plan.update['target_sha']}"
+        )
+    else:
+        print(f"Template version: {plan.revision.label}")
+        print(f"Template commit: {plan.revision.sha}")
+    print(f"Template source: {plan.revision.source}")
+    print(f"Pinned guide: {plan.revision.guide_url}")
     print(
         "Release verification: "
-        + ("verified immutable release" if revision.verified else "UNVERIFIED")
+        + (
+            "verified immutable release"
+            if plan.revision.verified
+            else "UNVERIFIED"
+        )
     )
+    print(f"Repository: {plan.repository.repository or '(none)'}")
+    print(f"Repository owner: {plan.repository.owner or '(unknown)'}")
+    print(f"Repository owner type: {plan.repository.owner_type or 'unknown'}")
+    print(
+        f"Repository visibility: {plan.repository.visibility} "
+        f"({plan.repository.source})"
+    )
+    if plan.repository.reason is not None:
+        print(f"Repository context: {plan.repository.reason}")
     print("Settings:")
-    for key, value in sorted(data.items()):
+    for key, value in sorted(plan.answers.items()):
         print(f"  {key}={value}")
-    print_group("Add", plan.add)
-    print_group("Overwrite", plan.overwrite)
-    print_group("Preserve", plan.preserve)
-    print_group("Manual merge", plan.manual)
-    print_group("Unable to determine", plan.unknown)
-    status, reason = plan_status(plan)
-    print(f"Conflict risk: {status} - {reason}")
+    print_capabilities(plan.capabilities)
+    if plan.files is not None:
+        print_group("Add", plan.files.add)
+        print_group("Overwrite", plan.files.overwrite)
+        print_group("Preserve", plan.files.preserve)
+        print_group("Manual merge", plan.files.manual)
+        print_group("Unable to determine", plan.files.unknown)
+        status, reason = plan_status(plan.files)
+        print(f"Conflict risk: {status} - {reason}")
+    elif plan.update is not None:
+        print(
+            "Conflict risk: Copier smart diff; conflicts fail closed and "
+            "remain in place."
+        )
 
 
 def confirm(args: argparse.Namespace) -> bool:
@@ -1039,6 +1173,108 @@ def target_repository(target: Path) -> str | None:
     if explicit_repository:
         return github_repository(f"gh:{explicit_repository}")
     return None
+
+
+def repository_context(  # noqa: C901
+    target: Path,
+    explicit_visibility: str | None,
+    *,
+    saved_visibility: str | None = None,
+) -> RepositoryContext:
+    """Resolve repository owner and visibility before template rendering."""
+    if (
+        explicit_visibility is not None
+        and explicit_visibility not in REPOSITORY_VISIBILITIES
+    ):
+        raise CliError(
+            "project_visibility must be public, private, or internal."
+        )
+    repository = target_repository(target)
+    if repository is None:
+        visibility = explicit_visibility or saved_visibility or "private"
+        if visibility not in REPOSITORY_VISIBILITIES:
+            raise CliError(
+                "Saved project_visibility must be public, private, or internal."
+            )
+        return RepositoryContext(
+            repository=None,
+            owner=None,
+            owner_type=None,
+            visibility=visibility,
+            source=(
+                "explicit"
+                if explicit_visibility is not None
+                else "saved"
+                if saved_visibility is not None
+                else "safe-default"
+            ),
+            verified=False,
+            reason="No GitHub origin or GH_REPO was found.",
+        )
+
+    try:
+        result = run(
+            ["gh", "api", "--method", "GET", f"repos/{repository}"],
+            capture=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        result = subprocess.CompletedProcess(
+            ["gh"], 1, stdout="", stderr="GitHub CLI is unavailable"
+        )
+    failure = result.stderr.strip() or "GitHub API request failed"
+    payload: object = None
+    if result.returncode == 0:
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            failure = "GitHub returned invalid repository JSON"
+    if isinstance(payload, dict):
+        owner = payload.get("owner")
+        payload_visibility = payload.get("visibility")
+        full_name = payload.get("full_name")
+        if (
+            isinstance(owner, dict)
+            and isinstance(owner.get("login"), str)
+            and isinstance(owner.get("type"), str)
+            and isinstance(full_name, str)
+            and full_name.casefold() == repository.casefold()
+            and payload_visibility in REPOSITORY_VISIBILITIES
+        ):
+            actual_visibility = str(payload_visibility)
+            if (
+                explicit_visibility is not None
+                and explicit_visibility != actual_visibility
+            ):
+                raise CliError(
+                    "Explicit project_visibility does not match GitHub "
+                    f"({explicit_visibility} != {actual_visibility})."
+                )
+            return RepositoryContext(
+                repository=full_name,
+                owner=str(owner["login"]),
+                owner_type=str(owner["type"]).lower(),
+                visibility=actual_visibility,
+                source="github",
+                verified=True,
+            )
+        failure = "GitHub returned incomplete repository metadata"
+
+    if explicit_visibility is None:
+        raise CliError(
+            f"Cannot confirm visibility for {repository}: {failure}. Pass "
+            "--data project_visibility=public|private|internal after "
+            "verifying the repository setting."
+        )
+    return RepositoryContext(
+        repository=repository,
+        owner=repository.partition("/")[0],
+        owner_type=None,
+        visibility=explicit_visibility,
+        source="explicit",
+        verified=False,
+        reason=failure,
+    )
 
 
 def gh_milestone_payload(arguments: list[str]) -> object:
@@ -1120,16 +1356,19 @@ def upgraded_milestone_description(
     )
 
 
-def milestone_description_plan(
+def milestone_description_plan(  # noqa: C901
     target: Path,
+    *,
+    emit: bool = True,
 ) -> MilestoneDescriptionPlan | None:
     """Classify all target Milestones and print the proposed migration."""
     repository = target_repository(target)
     if repository is None:
-        print(
-            "Milestone descriptions: unavailable (no GitHub origin; "
-            "review them manually)."
-        )
+        if emit:
+            print(
+                "Milestone descriptions: unavailable (no GitHub origin; "
+                "review them manually)."
+            )
         return None
     changes: list[MilestoneDescriptionChange] = []
     current: list[tuple[int, str]] = []
@@ -1171,10 +1410,11 @@ def milestone_description_plan(
                 )
             )
     except CliError as error:
-        print(
-            f"Milestone descriptions: unavailable ({error}; "
-            "review them manually)."
-        )
+        if emit:
+            print(
+                f"Milestone descriptions: unavailable ({error}; "
+                "review them manually)."
+            )
         return None
     plan = MilestoneDescriptionPlan(
         repository=repository,
@@ -1182,19 +1422,20 @@ def milestone_description_plan(
         current=tuple(current),
         review=tuple(review),
     )
-    print("Milestone description migration:")
-    print_group(
-        "  Upgrade",
-        tuple(f"#{item.number} {item.title}" for item in plan.changes),
-    )
-    print_group(
-        "  Current",
-        tuple(f"#{number} {title}" for number, title in plan.current),
-    )
-    print_group(
-        "  Manual review",
-        tuple(f"#{number} {title}" for number, title in plan.review),
-    )
+    if emit:
+        print("Milestone description migration:")
+        print_group(
+            "  Upgrade",
+            tuple(f"#{item.number} {item.title}" for item in plan.changes),
+        )
+        print_group(
+            "  Current",
+            tuple(f"#{number} {title}" for number, title in plan.current),
+        )
+        print_group(
+            "  Manual review",
+            tuple(f"#{number} {title}" for number, title in plan.review),
+        )
     return plan
 
 
@@ -1294,30 +1535,13 @@ def capability_preflight(
             }
         )
     if emit:
-        raw_states = payload.get("capabilities")
-        states = raw_states if isinstance(raw_states, dict) else {}
-        summary = ", ".join(
-            f"{name}={value.get('state', 'unknown')}"
-            for name, value in states.items()
-            if isinstance(value, dict)
-        )
-        print(f"GitHub release preflight: {summary or 'unknown'}")
-        print("Runtime workflows recheck capabilities before every release.")
-        raw_integrations = payload.get("integrations")
-        integrations = (
-            raw_integrations if isinstance(raw_integrations, dict) else {}
-        )
-        for name, value in integrations.items():
-            if not isinstance(value, dict):
-                continue
-            state = value.get("state", "fallback")
-            next_step = value.get("next_step", "No automatic action.")
-            print(f"Optional integration {name}: {state}")
-            print(f"Next: {next_step}")
+        print_capabilities(payload)
     return payload
 
 
-def base_data(target: Path, mode: str, values: list[str]) -> dict[str, str]:
+def base_data(
+    target: Path, mode: str, values: dict[str, str]
+) -> dict[str, str]:
     """Build stable defaults while allowing explicit Copier answers."""
     slug = slugify(target.name)
     data = {
@@ -1330,7 +1554,7 @@ def base_data(target: Path, mode: str, values: list[str]) -> dict[str, str]:
     }
     if mode == "adopt":
         data["coverage_mode"] = "diff"
-    data.update(parse_data(values))
+    data.update(values)
     return data
 
 
@@ -1371,6 +1595,10 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:
     validate_copy_target(target, mode)
     if mode == "adopt" and args.report_dir is not None and not args.dry_run:
         raise CliError("--report-dir requires adopt --dry-run.")
+    if args.json and not args.dry_run:
+        raise CliError("--json requires --dry-run for init or adopt.")
+    if args.json and mode == "adopt" and args.report_dir is not None:
+        raise CliError("--report-dir cannot be combined with --json.")
 
     revision = resolve_revision(
         args.source,
@@ -1381,22 +1609,49 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:
     if not revision.verified:
         print(
             "WARNING: --allow-unreleased bypasses release identity, "
-            "immutability, attestation, and signature verification."
+            "immutability, attestation, and signature verification.",
+            file=sys.stderr,
         )
-    data = base_data(target, mode, args.data)
+    explicit_data = parse_data(args.data)
+    repository = repository_context(
+        target, explicit_data.get("project_visibility")
+    )
+    data = base_data(target, mode, explicit_data)
+    data["project_visibility"] = repository.visibility
     with tempfile.TemporaryDirectory(prefix="csarc-plan-") as temporary:
         stage = Path(temporary) / "project"
         stage.mkdir()
         copier_copy(args.source, revision, stage, data)
-        plan = compare_stage(stage, target, adopt=mode == "adopt")
-        print_plan(mode, target, revision, data, plan)
-        capability_preflight(stage / "scripts" / "release_policy.py", target)
+        answers = read_copier_answers(stage / ".copier-answers.yml")
+        file_plan = compare_stage(stage, target, adopt=mode == "adopt")
+        capabilities = capability_preflight(
+            stage / "scripts" / "release_policy.py", target, emit=False
+        )
+        plan = ResolvedPlan(
+            mode=mode,
+            target=target,
+            revision=revision,
+            repository=repository,
+            answers=answers,
+            capabilities=capabilities,
+            files=file_plan,
+        )
+        if args.json:
+            print(
+                json.dumps(
+                    plan.as_dict(), sort_keys=True, separators=(",", ":")
+                )
+            )
+        else:
+            print_plan(plan)
         if mode == "adopt" and args.dry_run:
             write_adoption_reports(
-                target, revision, data, plan, args.report_dir
+                target, revision, answers, file_plan, args.report_dir
             )
         milestone_plan = (
-            milestone_description_plan(target) if mode == "adopt" else None
+            milestone_description_plan(target, emit=not args.json)
+            if mode == "adopt"
+            else None
         )
         if args.dry_run or not confirm(args):
             return 0
@@ -1405,7 +1660,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:
                 target.rmdir()
             shutil.copytree(stage, target, symlinks=True)
         else:
-            copy_additions(stage, target, plan.add)
+            copy_additions(stage, target, file_plan.add)
 
     verify_project(target)
     write_provenance(target, revision)
@@ -1563,9 +1818,63 @@ def update_status(
     return status, target_revision, previous
 
 
+def update_plan_answers(
+    answers: dict[str, object],
+    explicit_data: dict[str, str],
+    repository: RepositoryContext,
+) -> tuple[dict[str, object], dict[str, str]]:
+    """Resolve update answers and Copier overrides from repository facts."""
+    result = dict(answers)
+    update_data = dict(explicit_data)
+    saved_visibility = answers.get("project_visibility")
+    update_data["project_visibility"] = repository.visibility
+    if saved_visibility != repository.visibility:
+        enabled = (
+            repository.visibility == "public"
+            and answers.get("language") != "ci"
+        )
+        for key in ("enable_codeql", "enable_release_attestations"):
+            if key in answers and key not in explicit_data:
+                update_data[key] = str(enabled).lower()
+    for key, value in update_data.items():
+        previous_value = answers.get(key)
+        if isinstance(previous_value, bool):
+            normalized = value.casefold()
+            if normalized in {"1", "true", "yes", "on"}:
+                result[key] = True
+            elif normalized in {"0", "false", "no", "off"}:
+                result[key] = False
+            else:
+                raise CliError(f"{key} must be a boolean value.")
+        elif isinstance(previous_value, int):
+            try:
+                result[key] = int(value)
+            except ValueError as error:
+                raise CliError(f"{key} must be an integer value.") from error
+        else:
+            result[key] = value
+    return result, update_data
+
+
 def command_update(args: argparse.Namespace) -> int:
     """Check or apply a Copier smart update."""
     target = args.path.expanduser().resolve()
+    answers_path = target / ".copier-answers.yml"
+    if not answers_path.is_file():
+        raise CliError("Missing .copier-answers.yml; use csarc adopt first.")
+    answers = read_copier_answers(answers_path)
+    explicit_data = parse_data(args.data)
+    saved_visibility = answers.get("project_visibility")
+    repository = repository_context(
+        target,
+        explicit_data.get("project_visibility"),
+        saved_visibility=(
+            saved_visibility if isinstance(saved_visibility, str) else None
+        ),
+    )
+    answers, update_data = update_plan_answers(
+        answers, explicit_data, repository
+    )
     status, target_revision, previous = update_status(
         target,
         args.to,
@@ -1577,33 +1886,34 @@ def command_update(args: argparse.Namespace) -> int:
     preflight = capability_preflight(
         target / "scripts" / "release_policy.py",
         target,
-        emit=not args.json,
+        emit=False,
     )
-    if args.json:
-        status["release_capabilities"] = preflight
+    plan = ResolvedPlan(
+        mode="update",
+        target=target,
+        revision=target_revision,
+        repository=repository,
+        answers=answers,
+        capabilities=preflight,
+        update=status,
+    )
     if args.check:
         if args.json:
-            print(json.dumps(status, sort_keys=True, separators=(",", ":")))
-        else:
             print(
-                f"Template {status['status']}: {status['current_sha']} -> "
-                f"{status['target_sha']} ({status['target_version']})"
+                json.dumps(
+                    plan.as_dict(), sort_keys=True, separators=(",", ":")
+                )
             )
+        else:
+            print_plan(plan)
         return 1 if status["update_available"] else 0
 
     require_clean_repository(target)
-    print("Mode: update")
-    print(f"Target: {target}")
-    print(
-        f"Template: {status['current_version']} / {status['current_sha']} -> "
-        f"{status['target_version']} / {status['target_sha']}"
-    )
-    print(f"Release verification: {status['target_verification']}")
-    print("Settings: existing .copier-answers.yml")
-    print(
-        "Conflict risk: Copier smart diff; conflicts fail closed and remain "
-        "in place."
-    )
+    copier_data = [
+        part
+        for key, value in sorted(update_data.items())
+        for part in ("--data", f"{key}={value}")
+    ]
     preview = run(
         [
             sys.executable,
@@ -1615,6 +1925,7 @@ def command_update(args: argparse.Namespace) -> int:
             "--pretend",
             "--vcs-ref",
             str(status["target_sha"]),
+            *copier_data,
             str(target),
         ],
         capture=True,
@@ -1622,6 +1933,7 @@ def command_update(args: argparse.Namespace) -> int:
     )
     if preview.returncode != 0:
         raise CliError(preview.stderr.strip() or preview.stdout.strip())
+    print_plan(plan)
     print("Copier smart-update preview:")
     print(
         preview.stdout.strip()
@@ -1643,6 +1955,7 @@ def command_update(args: argparse.Namespace) -> int:
             "inline",
             "--vcs-ref",
             str(status["target_sha"]),
+            *copier_data,
             str(target),
         ],
         check=False,
@@ -1686,6 +1999,7 @@ def parser() -> argparse.ArgumentParser:
         subparser.add_argument(
             "--data", action="append", default=[], metavar="KEY=VALUE"
         )
+        subparser.add_argument("--json", action="store_true")
         if name == "adopt":
             subparser.add_argument(
                 "--report-dir",
@@ -1706,6 +2020,9 @@ def parser() -> argparse.ArgumentParser:
     update.add_argument("--allow-unreleased", action="store_true")
     update.add_argument("--check", action="store_true")
     update.add_argument("--json", action="store_true")
+    update.add_argument(
+        "--data", action="append", default=[], metavar="KEY=VALUE"
+    )
     add_write_options(update)
     return result
 
