@@ -157,6 +157,8 @@ grep -q '額度 fallback.*human' template/site/index.html.jinja
 bash -n scripts/run-live-workflow-probe
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
+bash -n scripts/test-release-follow-up-gates
+./scripts/test-release-follow-up-gates
 bash -n scripts/test-issue-triage
 bash -n scripts/validate-issue-title
 bash -n template/scripts/validate-issue-title
@@ -1593,6 +1595,24 @@ grep -q '^    needs: governance$' \
 grep -q '^    needs: source$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q 'verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/pr-policy.yml"
+grep -q 'verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/promotion.yml"
+grep -q 'verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q 'git diff --no-renames --name-only' \
+  "$fixture_root/default-project/.github/workflows/promotion.yml"
+grep -Fq 'pulls/$pr_number/files?per_page=100' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -Fq '.merge_commit_sha == $sha' \
+  "$fixture_root/default-project/.github/workflows/promotion.yml"
+grep -Fq '.merge_commit_sha == $sha' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -Fq '"$trusted_root/scripts/release_policy.py" verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/promotion.yml"
+grep -Fq '"$trusted_root/scripts/release_policy.py" verify-release-follow-up' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'config-file: release-please-config.json' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
