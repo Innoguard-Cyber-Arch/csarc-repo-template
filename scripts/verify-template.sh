@@ -727,15 +727,13 @@ grep -q 'branches: \[main\]' .github/workflows/zizmor.yml
 grep -q 'target-branch: main' .github/dependabot.yml
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
 
-# Issue #74: the new-version observation window is Dependabot cooldown plus
-# pnpm's minimumReleaseAge today; trustPolicy remains an independent publisher
-# provenance gate. A Renovate consolidation of only the waiting policy was
-# evaluated and deliberately deferred (see profiles/catalog.yaml and
-# docs/index.html). Guard against a half-finished migration landing without
-# updating this decision or removing the mechanism it would replace.
-grep -q 'consolidation_status: evaluated_and_deferred' profiles/catalog.yaml
+# Issues #74 and #110: keep the native dependency updater so its PRs trigger
+# required checks without another privileged identity. pnpm also enforces the
+# waiting window during local and CI resolution; trustPolicy stays independent.
+grep -q 'consolidation_status: native_tools_retained' profiles/catalog.yaml
+grep -q 'automation: github_dependabot' profiles/catalog.yaml
 grep -q 'stays_independent_of_renovate: true' profiles/catalog.yaml
-grep -q '評估｜以單一 Renovate 設定取代 Dependabot／pnpm 版本等待' \
+grep -q '決定｜保留 Dependabot 與 pnpm 的原生門禁' \
   docs/index.html
 for renovate_config_path in \
   renovate.json renovate.json5 .github/renovate.json .renovaterc.json; do
