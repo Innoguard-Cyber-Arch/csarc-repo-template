@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import subprocess
+import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -356,58 +357,54 @@ def release_plan(root: Path, sha: str) -> tuple[str, str] | None:
     return None if version is None else (f"v{version}", version)
 
 
-def update_release_version(root: Path, version: str) -> None:
-    """Materialize a tag-selected version in an ephemeral build checkout."""
-    if SEMVER.fullmatch(version) is None:
-        raise ValueError(f"invalid semantic version: {version}")
+def release_version_errors(  # noqa: C901
+    root: Path, expected: str | None = None, *, require_changelog: bool = True
+) -> list[str]:
+    """Return every release surface that disagrees with the source version."""
+    versions: dict[str, str] = {}
+    errors: list[str] = []
+    version_file = root / "version.txt"
+    if version_file.is_file():
+        versions["version.txt"] = version_file.read_text(
+            encoding="utf-8"
+        ).strip()
+
     manifest_path = root / ".release-please-manifest.json"
     if manifest_path.is_file():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        manifest["."] = version
-        manifest_path.write_text(
-            json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
-        )
+        versions[".release-please-manifest.json"] = str(manifest.get(".", ""))
+    else:
+        errors.append(".release-please-manifest.json is missing")
 
     pyproject = root / "pyproject.toml"
     project_name = None
     if pyproject.is_file():
-        text = pyproject.read_text(encoding="utf-8")
-        project = re.search(r"(?ms)^\[project\]\n(.*?)(?=^\[|\Z)", text)
-        if project is not None:
-            project_name_match = re.search(
-                r'^name = "([^"]+)"$', project.group(1), re.M
-            )
-            project_name = (
-                project_name_match.group(1) if project_name_match else None
-            )
-            updated = re.sub(
-                r'(?m)^version = "\d+\.\d+\.\d+"$',
-                f'version = "{version}"',
-                project.group(0),
-                count=1,
-            )
-            text = text[: project.start()] + updated + text[project.end() :]
-            pyproject.write_text(text, encoding="utf-8")
+        with pyproject.open("rb") as source:
+            project = tomllib.load(source).get("project", {})
+        project_name = project.get("name")
+        if isinstance(project.get("version"), str):
+            versions["pyproject.toml"] = project["version"]
 
     lock = root / "uv.lock"
-    if lock.is_file() and project_name:
-        text = lock.read_text(encoding="utf-8")
-        pattern = (
-            rf'(?m)(^name = "{re.escape(project_name)}"\nversion = ")'
-            r'\d+\.\d+\.\d+("$)'
+    if lock.is_file() and isinstance(project_name, str):
+        with lock.open("rb") as source:
+            packages = tomllib.load(source).get("package", [])
+        locked = next(
+            (
+                package.get("version")
+                for package in packages
+                if package.get("name") == project_name
+            ),
+            None,
         )
-        lock.write_text(
-            re.sub(pattern, rf"\g<1>{version}\2", text, count=1),
-            encoding="utf-8",
-        )
+        if isinstance(locked, str):
+            versions["uv.lock"] = locked
 
     package_json = root / "package.json"
     if package_json.is_file():
         package = json.loads(package_json.read_text(encoding="utf-8"))
-        package["version"] = version
-        package_json.write_text(
-            json.dumps(package, indent=2) + "\n", encoding="utf-8"
-        )
+        if isinstance(package.get("version"), str):
+            versions["package.json"] = package["version"]
 
     for path in [
         root / "README.md",
@@ -416,24 +413,66 @@ def update_release_version(root: Path, version: str) -> None:
     ]:
         if not path.is_file():
             continue
-        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-        changed = [
-            re.sub(
-                r"v?\d+\.\d+\.\d+",
-                lambda match: (
-                    ("v" if match.group().startswith("v") else "") + version
-                ),
-                line,
-                count=1,
+        marker_found = False
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if "x-release-please-version" not in line:
+                continue
+            marker_found = True
+            match = re.search(r"v?(\d+\.\d+\.\d+)", line)
+            versions[str(path.relative_to(root))] = (
+                match.group(1) if match else ""
             )
-            if "x-release-please-version" in line
-            else line
-            for line in lines
-        ]
-        path.write_text("".join(changed), encoding="utf-8")
+        if (
+            path in {root / "README.md", root / "docs" / "index.html"}
+            and not marker_found
+        ):
+            errors.append(
+                f"{path.relative_to(root)} has no "
+                "x-release-please-version marker"
+            )
+
+    if not versions:
+        errors.append("no release version source exists")
+        return errors
+    source_version = expected or next(iter(versions.values()))
+    if SEMVER.fullmatch(source_version) is None:
+        errors.append(f"invalid release version: {source_version}")
+    errors.extend(
+        f"{path} is {version}, expected {source_version}"
+        for path, version in versions.items()
+        if version != source_version
+    )
+
+    if require_changelog:
+        changelog = root / "CHANGELOG.md"
+        heading = re.compile(
+            rf"(?m)^## (?:\[)?v?{re.escape(source_version)}(?:\]|\s|\()"
+        )
+        if not changelog.is_file() or not heading.search(
+            changelog.read_text(encoding="utf-8")
+        ):
+            errors.append(f"CHANGELOG.md has no {source_version} release entry")
+    return errors
+
+
+def verify_release_version(
+    root: Path, expected: str | None = None, *, require_changelog: bool = True
+) -> str:
+    """Require every governed source surface to identify one release."""
+    errors = release_version_errors(
+        root, expected, require_changelog=require_changelog
+    )
+    if errors:
+        raise ValueError("; ".join(errors))
+    if expected is not None:
+        return expected
     version_file = root / "version.txt"
     if version_file.is_file():
-        version_file.write_text(f"{version}\n", encoding="utf-8")
+        return version_file.read_text(encoding="utf-8").strip()
+    manifest = json.loads(
+        (root / ".release-please-manifest.json").read_text(encoding="utf-8")
+    )
+    return str(manifest["."])
 
 
 def direct_release(  # noqa: C901
@@ -472,6 +511,17 @@ def direct_release(  # noqa: C901
         payload.update(status="no-release", reason="no release-worthy commits")
         return payload, False
     tag, version = planned
+    version_errors = release_version_errors(root, version)
+    if version_errors:
+        payload.update(
+            mode="verification-only",
+            reason="release commit is not materialized: "
+            + "; ".join(version_errors),
+            status="version-not-materialized",
+            tag=tag,
+            version=version,
+        )
+        return payload, False
     status, existing_ref = api.request(
         "GET", f"repos/{repo}/git/ref/tags/{tag}"
     )
@@ -602,17 +652,32 @@ def parser() -> argparse.ArgumentParser:
     prepare = subparsers.add_parser("prepare")
     prepare.add_argument("--tag", required=True)
     prepare.add_argument("--root", type=Path, default=Path.cwd())
+    verify = subparsers.add_parser("verify-version")
+    verify.add_argument("--tag")
+    verify.add_argument("--root", type=Path, default=Path.cwd())
     return result
 
 
 def main(arguments: list[str] | None = None) -> int:
     """Run capability detection, direct release, or build preparation."""
     args = parser().parse_args(arguments)
-    if args.command == "prepare":
-        match = SEMVER.fullmatch(args.tag)
-        if match is None:
-            raise SystemExit(f"invalid release tag: {args.tag}")
-        update_release_version(args.root.resolve(), args.tag.removeprefix("v"))
+    if args.command in {"prepare", "verify-version"}:
+        tag = args.tag
+        expected = None
+        if tag is not None:
+            match = SEMVER.fullmatch(tag)
+            if match is None:
+                raise SystemExit(f"invalid release tag: {tag}")
+            expected = tag.removeprefix("v")
+        try:
+            version = verify_release_version(args.root.resolve(), expected)
+        except (
+            ValueError,
+            json.JSONDecodeError,
+            tomllib.TOMLDecodeError,
+        ) as error:
+            raise SystemExit(str(error)) from error
+        print(f"Release version {version} is consistent.")  # noqa: T201
         return 0
     if args.command == "preflight":
         write_report(

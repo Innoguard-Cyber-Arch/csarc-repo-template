@@ -19,7 +19,7 @@
 6. Inspect the existing implementation, make the smallest coherent change, and preserve unrelated user work.
 7. Add or update the narrowest regression check that proves non-trivial behavior.
 8. Run targeted checks while iterating, then run `./scripts/verify-template.sh` before opening or updating a pull request.
-9. Before closing the final open Issue in a Milestone, re-check the story acceptance criteria and add any genuinely required follow-up Issue. The lifecycle workflow closes a zero-open-Issue Milestone and reopens it when open work returns.
+9. Before closing the final open Issue in a Milestone, re-check the story acceptance criteria, mark every verified item complete, and add any genuinely required follow-up Issue. The lifecycle workflow closes a zero-open-Issue Milestone only when every acceptance checkbox is checked, and reopens it when open work or an unchecked criterion returns.
 10. Open the pull request against `main` or its immediate parent in the stack, include `Closes #<issue-number>`, and never merge it yourself.
 11. Report what changed, which verification ran, and any remaining limitation.
 

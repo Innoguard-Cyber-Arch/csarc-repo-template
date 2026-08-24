@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 
@@ -23,11 +24,24 @@ def run_gh(arguments: list[str]) -> str:
     return result.stdout.strip()
 
 
-def desired_state(state: str, open_issues: int) -> str | None:
+def acceptance_complete(description: str) -> bool:
+    """Return whether every checkbox in the acceptance section is checked."""
+    section = re.search(
+        r"(?ms)^## Acceptance criteria\s*$\n(.*?)(?=^## |\Z)", description
+    )
+    if section is None:
+        return False
+    checkboxes = re.findall(r"(?m)^- \[([ xX])\] ", section.group(1))
+    return bool(checkboxes) and all(mark.lower() == "x" for mark in checkboxes)
+
+
+def desired_state(
+    state: str, open_issues: int, criteria_complete: bool
+) -> str | None:
     """Return the state transition required by the latest remote snapshot."""
-    if open_issues == 0 and state == "open":
+    if open_issues == 0 and criteria_complete and state == "open":
         return "closed"
-    if open_issues > 0 and state == "closed":
+    if (open_issues > 0 or not criteria_complete) and state == "closed":
         return "open"
     return None
 
@@ -38,13 +52,15 @@ def sync(repo: str, number: int) -> str:
     milestone = json.loads(run_gh(["api", endpoint]))
     state = milestone.get("state")
     open_issues = milestone.get("open_issues")
+    description = milestone.get("description")
     if (
         not isinstance(state, str)
         or state not in {"open", "closed"}
         or not isinstance(open_issues, int)
+        or not isinstance(description, str)
     ):
         raise RuntimeError("GitHub returned invalid Milestone state")
-    target = desired_state(state, open_issues)
+    target = desired_state(state, open_issues, acceptance_complete(description))
     if target is None:
         return state
     run_gh(

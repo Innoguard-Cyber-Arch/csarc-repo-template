@@ -18,7 +18,7 @@
 7. Make the smallest coherent change; preserve unrelated work and project-owned source files.
 8. Add or update the narrowest regression test that proves non-trivial behavior.
 9. Run targeted checks while iterating, then run `./scripts/verify` before opening or updating a pull request.
-10. Before closing the final open Issue in a Milestone, re-check the story acceptance criteria and add any genuinely required follow-up Issue. The lifecycle workflow closes a zero-open-Issue Milestone and reopens it when open work returns.
+10. Before closing the final open Issue in a Milestone, re-check the story acceptance criteria, mark every verified item complete, and add any genuinely required follow-up Issue. The lifecycle workflow closes a zero-open-Issue Milestone only when every acceptance checkbox is checked, and reopens it when open work or an unchecked criterion returns.
 11. Open the pull request against `{{ branch_strategy }}` or its immediate parent in the stack, include `Closes #<issue-number>`, and never merge it yourself.
 12. Report the changed behavior, verification evidence, and any remaining limitation.
 
