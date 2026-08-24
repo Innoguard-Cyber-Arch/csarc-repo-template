@@ -28,7 +28,7 @@ Spec-Driven Development（SDD）以 `docs/specs/` 的 living specifications 保�
 
 1. 先讀相關 current spec，再搜尋 `docs/adr/` 與 open／closed Issues。
 2. 在 work item 摘要已確認限制、替代方案與舊決策 disposition。
-3. 以 scoped PR 更新 current spec 與對應 ADR；不要保存完整聊天、模型 chain-of-thought、敏感資訊或未確認推論。
+3. 以 scoped PR 更新 current spec 與對應 ADR；不得保存完整聊天逐字稿、模型 chain-of-thought、敏感資訊或未確認推論。
 4. 若網站需要呈現，更新 project-owned content 並重建 `docs/index.html`；presentation 不取代 canonical Markdown。
 
 修改 project-owned 內容或主題後，執行 `uv run --no-project python scripts/render_site.py` 重建單檔。`./scripts/verify` 會以 `--check` 模式拒絕 stale bundle、外部 runtime asset、不支援的 `schemaVersion`、重複 spec ID 與不完整 decision metadata。

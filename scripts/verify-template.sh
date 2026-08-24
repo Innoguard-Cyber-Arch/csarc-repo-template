@@ -1446,7 +1446,7 @@ grep -q 'Actions quota fallback attestation' \
   "$fixture_root/default-project/docs/ci-policy.md"
 grep -q '付款失敗、budget.*平台.*設定.*權限.*未知原因.*測試失敗' \
   "$fixture_root/default-project/docs/index.html"
-grep -q '一般 Issue PR 跑單一 runtime' \
+grep -q '一般 Issue PR 跑 change-aware fast checks' \
   "$fixture_root/default-project/docs/site-content.js"
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/docs/index.html"
