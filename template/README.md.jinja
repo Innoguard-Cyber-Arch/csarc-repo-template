@@ -72,13 +72,15 @@ flowchart LR
 
 | 範圍 | 位置／工具 |
 | --- | --- |
-| 共用 | `.github/`、`policies/`、`docs/decisions/`、`docs/specs/`、`scripts/verify` |
+| 共用 | `.github/`、`policies/`、`docs/adr/`、`docs/specs/`、`scripts/verify` |
 {% if has_python %}| Python | `src/`、`tests/`、uv、Ruff、mypy、pytest；CI 驗證 {% if python_support_mode == "latest" %}3.14.0 與最新 3.14.x{% else %}{{ python_min_version }}.0，以及 {{ python_min_version }}～3.14 每個 feature release 的最新 patch{% endif %} |
 {% endif %}{% if has_typescript %}| TypeScript | `typescript/`、pnpm 11、Biome、strict TypeScript、Vitest；Node 24+ |
 {% endif %}| 內部網站 | `site/` 公版來源；`docs/site-content.js` 與 `docs/site-theme.css` 專案內容；`docs/index.html` portable bundle |
 
 語言宣告記在 `.csarc/profile.json`；`scripts/detect-language-profile --suggest` 會檢查實際檔案是否一致。
 {% if has_python %}Python minimum 選項目前從 3.12 起，未宣告支援 3.11；所選 feature release 的 `.0` 就是 `requires-python` 的實際下界，CI 不會只測較新的 patch。{% endif %}
+
+本模板的 Durable Project Memory 同時支援 Spec-Driven Development（SDD）、Architecture Decision Records（ADR）、Test-Driven Development（TDD）的回歸證據與 Behavior-Driven Development（BDD）的必要行為情境；完整分工見 [`docs/README.md`](docs/README.md)。
 
 ## 開發與驗證
 

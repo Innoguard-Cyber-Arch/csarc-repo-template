@@ -120,7 +120,7 @@ uv run pytest \
 uv build
 uvx --from "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)" \
   csarc --help >/dev/null
-uv run python scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md
+uv run python scripts/spec_to_issue.py validate
 bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
 bash -n scripts/check-update-conflicts
@@ -687,12 +687,17 @@ test -f site/styles.css
 test -f site/app.js
 test -f scripts/render_site.py
 test -f docs/README.md
-test -f docs/decisions/README.md
-test -f docs/decisions/portable-decision-site.md
+test -f docs/adr/README.md
+test -f docs/adr/portable-decision-site.md
 grep -q '可重現的 self-contained HTML' \
-  docs/decisions/portable-decision-site.md
+  docs/adr/portable-decision-site.md
 grep -q '不自動保存聊天逐字稿' \
-  docs/decisions/portable-decision-site.md
+  docs/adr/portable-decision-site.md
+grep -q 'Durable Project Memory' docs/README.md
+grep -q 'Spec-Driven Development' docs/README.md
+grep -q 'Architecture Decision Records' docs/README.md
+grep -q 'Test-Driven Development' docs/README.md
+grep -q 'Behavior-Driven Development' docs/README.md
 test -f docs/pilot-adoption.md
 test -f docs/artifact-consumption.md
 grep -q '產生 attestation 只證明' docs/artifact-consumption.md
@@ -718,7 +723,12 @@ grep -q 'internal-notice' docs/index.html
 grep -q '請勿公開分享此連結' docs/index.html
 grep -q '存取控制決策｜' docs/index.html
 grep -q '可維護來源 → self-contained HTML' docs/index.html
-grep -q 'docs/decisions/portable-decision-site.md' docs/index.html
+grep -q 'docs/adr/portable-decision-site.md' docs/index.html
+grep -q 'durable project memory' docs/index.html
+grep -q 'Spec-Driven Development' docs/index.html
+grep -q 'Architecture Decision Records' docs/index.html
+grep -q 'Test-Driven Development' docs/index.html
+grep -q 'Behavior-Driven Development' docs/index.html
 grep -q 'actions/runs/32662029395' docs/index.html
 grep -q 'Live integration smoke' docs/index.html
 test -f docs/robots.txt
@@ -1293,8 +1303,20 @@ test -f "$fixture_root/default-project/site/styles.css"
 test -f "$fixture_root/default-project/site/app.js"
 test -f "$fixture_root/default-project/scripts/render_site.py"
 test -f "$fixture_root/default-project/docs/README.md"
-test -f "$fixture_root/default-project/docs/decisions/README.md"
+test -f "$fixture_root/default-project/docs/adr/README.md"
 grep -q '不得保存完整聊天逐字稿' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Durable Project Memory' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Spec-Driven Development' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Architecture Decision Records' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Test-Driven Development' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Behavior-Driven Development' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'docs/decisions/' \
   "$fixture_root/default-project/docs/README.md"
 grep -q 'Never store a raw conversation transcript' \
   "$fixture_root/default-project/AGENTS.md"
@@ -1426,7 +1448,7 @@ grep -q 'Actions quota fallback attestation' \
   "$fixture_root/default-project/docs/ci-policy.md"
 grep -q '付款失敗、budget.*平台.*設定.*權限.*未知原因.*測試失敗' \
   "$fixture_root/default-project/docs/index.html"
-grep -q '一般 Issue PR 跑單一 runtime' \
+grep -q '一般 Issue PR 跑 change-aware fast checks' \
   "$fixture_root/default-project/docs/site-content.js"
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/docs/index.html"
@@ -2188,8 +2210,9 @@ grep -q '"template_mode": "existing"' \
 update_source="$fixture_root/update-source"
 update_project="$fixture_root/update-project"
 mkdir -p "$update_source"
-rsync -a --exclude=.git --exclude=.venv --exclude=.cache --exclude=.ruff_cache \
-  "$repo_root/" "$update_source/"
+legacy_memory_base=f1ecc6e4fa2bb03e7c322e5d8dd69265a7c34513
+git cat-file -e "$legacy_memory_base^{commit}"
+git archive "$legacy_memory_base" | tar -x -C "$update_source"
 
 git -C "$update_source" init -b main
 git -C "$update_source" config user.name "Template Test"
@@ -2216,6 +2239,12 @@ printf '%s\n' 'window.PROJECT_OWNED_SITE = true;' \
   >> "$update_project/docs/site-content.js"
 printf '%s\n' '/* PROJECT_OWNED_THEME */' \
   >> "$update_project/docs/site-theme.css"
+cp "$repo_root/docs/adr/agent-collaboration.md" \
+  "$update_project/docs/decisions/project-owned.md"
+printf '%s\n' '' 'PROJECT_OWNED_MEMORY' \
+  >> "$update_project/docs/decisions/project-owned.md"
+printf '%s\n' '' 'PROJECT_OWNED_SPEC' \
+  >> "$update_project/docs/specs/SPEC-001-example.md"
 uv run copier copy --trust --defaults --overwrite --vcs-ref v0.1.0 \
   --data project_mode=existing \
   --data language=python-typescript \
@@ -2232,11 +2261,13 @@ git -C "$update_project" config user.email "template-test@example.invalid"
 git -C "$update_project" add .
 git -C "$update_project" commit -m "test: adopted project"
 
+rsync -a --delete --exclude=.git --exclude=.venv --exclude=.cache \
+  --exclude=.ruff_cache "$repo_root/" "$update_source/"
 cp "$update_source/template/.gitignore.jinja" \
   "$update_source/template/update-marker"
 printf '%s\n' 'window.TEMPLATE_SITE_V2 = true;' \
   >> "$update_source/template/site/app.js"
-git -C "$update_source" add template/update-marker template/site/app.js
+git -C "$update_source" add -A
 git -C "$update_source" commit -m "test: template v0.1.1"
 git -C "$update_source" tag v0.1.1
 
@@ -2259,11 +2290,17 @@ grep -q 'window.PROJECT_OWNED_SITE = true;' \
   "$update_project/docs/index.html"
 grep -q 'PROJECT_OWNED_THEME' \
   "$update_project/docs/index.html"
+grep -q '^PROJECT_OWNED_MEMORY$' \
+  "$update_project/docs/decisions/project-owned.md"
+grep -q '^PROJECT_OWNED_SPEC$' \
+  "$update_project/docs/specs/SPEC-001-example.md"
 grep -q 'window.TEMPLATE_SITE_V2 = true;' \
   "$update_project/site/app.js"
 grep -q 'window.TEMPLATE_SITE_V2 = true;' \
   "$update_project/docs/index.html"
-test -f "$update_project/docs/decisions/README.md"
+test -f "$update_project/docs/adr/README.md"
+grep -q 'docs/decisions/' "$update_project/AGENTS.md"
+grep -q 'docs/decisions/' "$update_project/docs/README.md"
 grep -q 'Never store a raw conversation transcript' \
   "$update_project/AGENTS.md"
 grep -q '_commit: v0.1.1' "$update_project/.copier-answers.yml"
