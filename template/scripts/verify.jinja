@@ -17,6 +17,7 @@ cleanup() {
 trap cleanup EXIT
 
 ./scripts/check-update-conflicts
+uv run --no-project python scripts/render_site.py --check
 ./scripts/test-worktree-cleanup
 ./scripts/detect-language-profile
 ./scripts/test-pr-policy

@@ -32,6 +32,8 @@ paired_files=(
   policies/repository.json
   docs/ci-policy.md
   docs/milestone-description.md
+  docs/decisions/README.md
+  scripts/render_site.py
   scripts/apply-repository-settings.sh
   scripts/check-governance-drift
   scripts/ci_tier.py
