@@ -54,7 +54,7 @@ tracking: none
 - [Issue #140](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/140)／[PR #150](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/150)
 - [Issue #162](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/162)／[PR #164](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/164)
 - [Issue #171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171)／[PR #173](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/173)
-- [Issue #233](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/233)
+- [Issue #233](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/233)／[PR #235](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/235)
 - [Issue #181](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/181)／[PR #190](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/190)
 - Open measurement／recovery work: [#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189), [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199)
 - [Staged delivery and verification ADR](../adr/staged-delivery-and-verification.md)
