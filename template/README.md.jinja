@@ -29,6 +29,8 @@
 
 共同需求是 Git、GitHub CLI、uv；{% if has_typescript %}本案另需 Node 24+ 與 pnpm 11。{% endif %}
 
+請從實際 Git root 開啟 Codex／agent workspace；從 repo 上層開啟時，子目錄的 `AGENTS.md` 不一定會自動載入。開始前先在工作目錄執行 `test "$(git rev-parse --show-toplevel)" = "$(pwd -P)"`，失敗就切換到輸出的 Git root，不要複製另一份指引到父目錄。
+
 ```bash
 git clone <repository-url>
 cd {{ project_slug }}
@@ -70,13 +72,15 @@ flowchart LR
 
 | 範圍 | 位置／工具 |
 | --- | --- |
-| 共用 | `.github/`、`policies/`、`docs/decisions/`、`docs/specs/`、`scripts/verify` |
+| 共用 | `.github/`、`policies/`、`docs/adr/`、`docs/specs/`、`scripts/verify` |
 {% if has_python %}| Python | `src/`、`tests/`、uv、Ruff、mypy、pytest；CI 驗證 {% if python_support_mode == "latest" %}3.14.0 與最新 3.14.x{% else %}{{ python_min_version }}.0，以及 {{ python_min_version }}～3.14 每個 feature release 的最新 patch{% endif %} |
 {% endif %}{% if has_typescript %}| TypeScript | `typescript/`、pnpm 11、Biome、strict TypeScript、Vitest；Node 24+ |
 {% endif %}| 內部網站 | `site/` 公版來源；`docs/site-content.js` 與 `docs/site-theme.css` 專案內容；`docs/index.html` portable bundle |
 
 語言宣告記在 `.csarc/profile.json`；`scripts/detect-language-profile --suggest` 會檢查實際檔案是否一致。
 {% if has_python %}Python minimum 選項目前從 3.12 起，未宣告支援 3.11；所選 feature release 的 `.0` 就是 `requires-python` 的實際下界，CI 不會只測較新的 patch。{% endif %}
+
+本模板的 Durable Project Memory 同時支援 Spec-Driven Development（SDD）、Architecture Decision Records（ADR）、Test-Driven Development（TDD）的回歸證據與 Behavior-Driven Development（BDD）的必要行為情境；完整分工見 [`docs/README.md`](docs/README.md)。
 
 ## 開發與驗證
 
@@ -99,9 +103,7 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 
 ### Actions 額度耗盡的一次性驗證
 
-只有具帳務用量檢視權限的 human maintainer 已明確確認「當期 GitHub Actions 免費分鐘已用完」時，才可啟用本機 fallback。GitHub 顯示的 runner 未啟動訊息會同時提及付款失敗與 spending limit，本身不足以證明額度耗盡；付款失敗、budget 設定、平台事故、workflow／權限錯誤、原因不明，或任何已開始執行 step 後失敗的 job 都不能使用。
-
-Agent 必須確認乾淨 worktree 的 `HEAD` 等於 PR head SHA，執行 `./scripts/verify` 與所有可忠實本機重現的必要 checks，任何失敗都停止。通過後在 PR 留下標題為 `Actions quota fallback attestation` 的留言，記錄 SHA、受阻 run URL 與 annotation、human quota confirmation、UTC 時間、環境／工具版本、完整命令與結果，以及無法在本機重現的 checks。Human maintainer 必須明確授權該 PR 使用一次性 fallback；新 commit 會使聲明立即失效。若 repo 現行政策允許 author self-merge，agent 才能據此合併，但不得偽造成功 Check Run，也不能取代 release、publishing、deployment approval、secrets、provenance 或 CODEOWNER review。額度重置後須補跑該 commit 的 GitHub checks；無法補跑時另開 Issue 留下缺口。
+只有具帳務可見性的 human maintainer 確認當期 included Actions minutes 已耗盡時，才可能使用本機 fallback；runner 註記本身不構成證據。{% if branch_strategy in ["dev", "delivery"] %}Promotion 到 `main` 另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release。{% endif %}完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹；尚未 `git init` 的新專案仍可掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 
@@ -160,9 +162,9 @@ npm 發布使用 environment `{{ npm_environment }}` 與 OIDC，不需要 `NPM_T
 ```bash
 git switch {% if branch_strategy == "delivery" %}dev/next{% else %}{{ branch_strategy }}{% endif %}
 git switch -c chore/<issue-number>-update-repo-template
-uvx --from csarc-repo-cli csarc update --to <approved-release-tag> \
+uvx --python 3.14 --from csarc-repo-cli csarc update --to <approved-release-tag> \
   --expected-sha <reviewed-full-commit-sha> --dry-run
-uvx --from csarc-repo-cli csarc update --to <approved-release-tag> \
+uvx --python 3.14 --from csarc-repo-cli csarc update --to <approved-release-tag> \
   --expected-sha <reviewed-full-commit-sha> --yes --non-interactive
 ```
 

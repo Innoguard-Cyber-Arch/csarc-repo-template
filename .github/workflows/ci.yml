@@ -157,6 +157,25 @@ jobs:
         env:
           CSARC_PYTHON_VERSION: ${{ matrix.python-version }}
 
+  adoption-macos:
+    name: adoption e2e macOS
+    needs: fast
+    if: ${{ needs.fast.outputs.tier == 'full' }}
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - run: uv sync --locked --python 3.14
+      - run: >-
+          uv run pytest -q
+          tests/test_cli.py::test_real_existing_adoption_uses_fixed_ownership_policies
+
   governance:
     name: remote governance
     needs: fast
@@ -215,19 +234,20 @@ jobs:
   verify:
     name: verify
     if: ${{ always() }}
-    needs: [fast, python-runtime, governance, osv, zizmor]
+    needs: [fast, python-runtime, adoption-macos, governance, osv, zizmor]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
       - name: Require every applicable check
         env:
           FAST_RESULT: ${{ needs.fast.result }}
+          ADOPTION_MACOS_RESULT: ${{ needs.adoption-macos.result }}
           GOVERNANCE_RESULT: ${{ needs.governance.result }}
           OSV_RESULT: ${{ needs.osv.result }}
           RUNTIME_RESULT: ${{ needs.python-runtime.result }}
           ZIZMOR_RESULT: ${{ needs.zizmor.result }}
         run: |
           test "$FAST_RESULT" = success
-          for result in "$GOVERNANCE_RESULT" "$OSV_RESULT" "$RUNTIME_RESULT" "$ZIZMOR_RESULT"; do
+          for result in "$ADOPTION_MACOS_RESULT" "$GOVERNANCE_RESULT" "$OSV_RESULT" "$RUNTIME_RESULT" "$ZIZMOR_RESULT"; do
             [[ "$result" == success || "$result" == skipped ]]
           done

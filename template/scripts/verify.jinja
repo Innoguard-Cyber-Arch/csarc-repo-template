@@ -99,6 +99,14 @@ else
   platform_python=(uv run --no-project python)
 fi
 "${platform_python[@]}" scripts/spec_to_issue.py validate
+test -f docs/README.md
+test -f docs/adr/README.md
+grep -q 'Durable Project Memory' docs/README.md
+grep -q 'Spec-Driven Development' docs/README.md
+grep -q 'Architecture Decision Records' docs/README.md
+grep -q 'Test-Driven Development' docs/README.md
+grep -q 'Behavior-Driven Development' docs/README.md
+grep -q 'docs/decisions/' docs/README.md
 "${platform_python[@]}" -m json.tool .csarc/profile.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/repository.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/actions.json >/dev/null
@@ -134,24 +142,27 @@ test -x scripts/apply-repository-settings.sh
 test -x scripts/detect-language-profile
 
 test -f AGENTS.md
-test "$(wc -l < AGENTS.md)" -le 200
 test "$(cat CLAUDE.md)" = "@AGENTS.md"
-required_readme_headings=(
-  "專案概述"
-  "快速開始"
-  "技術與目錄"
-  "開發與驗證"
-  "設定與密鑰"
-  "發布與維運"
-  "負責人與支援"
-  "公版更新"
-)
-for heading in "${required_readme_headings[@]}"; do
-  if ! grep -qFx "## $heading" README.md; then
-    echo "README.md is missing required section: $heading"
-    exit 1
-  fi
-done
+template_mode="$("${platform_python[@]}" -c 'import json; print(json.load(open(".csarc/profile.json"))["template_mode"])')"
+if [[ "$template_mode" == "new" ]]; then
+  test "$(wc -l < AGENTS.md)" -le 200
+  required_readme_headings=(
+    "專案概述"
+    "快速開始"
+    "技術與目錄"
+    "開發與驗證"
+    "設定與密鑰"
+    "發布與維運"
+    "負責人與支援"
+    "公版更新"
+  )
+  for heading in "${required_readme_headings[@]}"; do
+    if ! grep -qFx "## $heading" README.md; then
+      echo "README.md is missing required section: $heading"
+      exit 1
+    fi
+  done
+fi
 unsupported_instruction_paths=(
   .cursorrules
   .windsurfrules
@@ -211,4 +222,8 @@ if $verify_python; then
     --compare-branch="$compare_branch" \
     --fail-under={{ coverage_threshold }}
 {% endif %}
+fi
+
+if [[ -x scripts/verify-product ]]; then
+  ./scripts/verify-product
 fi
