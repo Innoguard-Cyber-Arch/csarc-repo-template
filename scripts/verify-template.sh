@@ -617,6 +617,13 @@ test -f AGENTS.md
 test "$(wc -l < AGENTS.md)" -le 200
 test "$(cat CLAUDE.md)" = "@AGENTS.md"
 test -f docs/index.html
+test -f docs/README.md
+test -f docs/decisions/README.md
+test -f docs/decisions/portable-decision-site.md
+grep -q '可重現的 self-contained HTML' \
+  docs/decisions/portable-decision-site.md
+grep -q '不自動保存聊天逐字稿' \
+  docs/decisions/portable-decision-site.md
 test -f docs/pilot-adoption.md
 test -f docs/artifact-consumption.md
 grep -q '產生 attestation 只證明' docs/artifact-consumption.md
@@ -641,6 +648,8 @@ grep -q '<meta name="robots" content="noindex,nofollow">' docs/index.html
 grep -q 'internal-notice' docs/index.html
 grep -q '請勿公開分享此連結' docs/index.html
 grep -q '存取控制決策｜' docs/index.html
+grep -q '可維護來源 → self-contained HTML' docs/index.html
+grep -q 'docs/decisions/portable-decision-site.md' docs/index.html
 grep -q 'actions/runs/32662029395' docs/index.html
 grep -q 'Live integration smoke' docs/index.html
 test -f docs/robots.txt
@@ -1173,6 +1182,12 @@ test -f "$fixture_root/default-project/AGENTS.md"
 test "$(wc -l < "$fixture_root/default-project/AGENTS.md")" -le 200
 test -f "$fixture_root/default-project/docs/index.html"
 test -f "$fixture_root/default-project/docs/site-content.js"
+test -f "$fixture_root/default-project/docs/README.md"
+test -f "$fixture_root/default-project/docs/decisions/README.md"
+grep -q '不得保存完整聊天逐字稿' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Never store a raw conversation transcript' \
+  "$fixture_root/default-project/AGENTS.md"
 grep -q 'GitHub 方案與門禁' \
   "$fixture_root/default-project/docs/index.html"
 grep -q 'id="release-modes"' \
@@ -2035,6 +2050,9 @@ grep -q '^export const projectOwned = true;$' \
   "$update_project/typescript/src/index.ts"
 grep -q '^window.PROJECT_OWNED_SITE = true;$' \
   "$update_project/docs/site-content.js"
+test -f "$update_project/docs/decisions/README.md"
+grep -q 'Never store a raw conversation transcript' \
+  "$update_project/AGENTS.md"
 grep -q '_commit: v0.1.1' "$update_project/.copier-answers.yml"
 prime_gitleaks_cache "$update_project"
 (

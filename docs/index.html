@@ -1784,17 +1784,17 @@
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>下發來源、語言組合、保留路徑與功能開關：</strong><code>template/</code>＋<code>copier.yml</code></li><li><strong>root-only CI 與建立／導入／更新驗證：</strong><code>.github/</code>＋<code>scripts/verify-template.sh</code>；生成 repo 不會收到這支腳本或 template release workflows</li><li><strong>語言基線與三十天觀察：</strong><code>profiles/catalog.yaml</code>；<strong>Python 自動升版：</strong><code>python-version-policy.yml</code></li><li><strong>root／template 配對檔案的單一來源與漂移檢查：</strong><code>scripts/sync-paired-files.sh</code></li></ul></aside>
     </section>
 
-    <section class="slide decision-slide" data-track="docs-site" aria-label="內部網站與生成內容模板">
+    <section class="slide decision-slide" id="portable-decision-site" data-track="docs-site" aria-label="可攜式單檔決策網站">
       <header>
-        <h2>網站已入 repo，<span class="accent">託管與登入分開決定</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong><code>docs/index.html</code> 是公版內部網站；生成專案會收到可更新版型與自行維護的內容檔。</p>
+        <h2>單檔永遠可交付，<span class="accent">平台能力只做加成</span></h2>
+        <p class="subtitle"><strong>已確認選型。</strong><code>docs/index.html</code> 必須可下載、轉寄並用 <code>file://</code> 離線開啟；Pages、外部託管與 CDN 都不是 portable baseline。</p>
       </header>
-      <p class="context-line"><strong>問題與目的｜</strong>README 只留開始使用與日常入口；完整設計放在 repo 網站。網站內容與發布平台分開，避免還沒決定託管就建立空架構。</p>
+      <p class="context-line"><strong>問題與目的｜</strong>保留特殊簡報設計與單檔交付，同時避免內容、樣式、互動、選型來源與逐字測試繼續綁在同一個人工維護檔案。</p>
       <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>目前不選的原因</h3><ul><li><strong>README 承載全部內容：</strong>接手者難以找到開始指令</li><li><strong>直接導入 Hugo：</strong>單頁內容還不需要建置鏈與主題相依</li><li><strong>GitHub 私人 Pages：</strong>組織需 Enterprise Cloud；目前不適用</li><li><strong>Cloudflare Pages＋Access：</strong>是免費候選，但登入與資料政策尚未確認</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">Plain HTML＋專案內容模板</span></span></summary><div class="package-health"><p><strong>目前可用：</strong>公版網站位於 <code>docs/index.html</code>；生成專案使用同風格的單頁版型，不需額外框架或套件。</p><p><strong>更新邊界：</strong>公版維護 <code>docs/index.html</code> 版型；專案維護 <code>docs/site-content.js</code> 內容，Copier 更新不覆寫後者。</p><p><strong>仍待討論：</strong>Cloudflare Pages＋Access 是託管與登入候選；文件成長到需要多頁與搜尋時，才導入 Hugo＋Hextra。</p></div></details><p><strong>版型：</strong><code>template/docs/index.html.jinja</code> 隨 Copier 更新。<br><strong>內容：</strong><code>template/docs/site-content.js.jinja</code> 首次產生後由專案維護。<br><strong>限制：</strong><code>noindex</code> 不是存取控制；未實裝託管前，不宣稱網站已有登入保護。</p></article>
+        <article class="decision-step"><span class="step-label">不採用</span><h3>不把交付限制誤當維護方式</h3><ul><li><strong>直接手改單檔：</strong>可以離線，但來源、呈現與測試高度耦合</li><li><strong>runtime 多檔載入：</strong>轉寄容易漏檔，<code>file://</code> 行為也受瀏覽器限制</li><li><strong>立刻導入文件平台：</strong>目前沒有多頁搜尋、翻譯或跨 repo catalog 的實證需求</li><li><strong>自動保存完整聊天：</strong>會混入未確認假設、敏感脈絡與噪音</li></ul></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">可維護來源 → self-contained HTML</span></span></summary><div class="package-health"><p><strong>交付契約：</strong>CSS、JavaScript、font、SVG 與圖片全部內嵌；外部連結可保留，但離線時不影響內容與操作。</p><p><strong>來源契約：</strong><code>docs/decisions/</code> 保存 canonical 選型；renderer、基礎設計與驗證由公版維護，專案內容與允許的 theme overrides 由 consuming repo 維護。</p><p><strong>互動收納：</strong>agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record；不保存完整逐字稿。</p></div></details><p><strong>所有環境：</strong>產生並驗證 committed bundle。<br><strong>Actions allowed：</strong>再增加重建比對與 artifact。<br><strong>核准 host 與寫入權限 allowed：</strong>再增加 preview／publish／access control。<br><strong>blocked／unknown：</strong>回退單檔交付，不宣稱已部署。</p></article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>公版完整說明：</strong><code>docs/index.html</code></li><li><strong>生成專案版型：</strong><code>template/docs/index.html.jinja</code></li><li><strong>專案內容與更新保護：</strong><code>template/docs/site-content.js.jinja</code>＋<code>copier.yml</code></li></ul></aside>
+      <aside class="config-guidance"><strong>決策與落地</strong><ul><li><strong>Canonical 選型：</strong><code>docs/decisions/portable-decision-site.md</code></li><li><strong>目前狀態：</strong>root 已是單檔；生成專案仍以 <code>docs/index.html</code>＋<code>docs/site-content.js</code> 執行，後續工程 Issue 會改為來源分離、輸出單檔</li><li><strong>安全邊界：</strong><code>noindex</code> 不是存取控制；受控發布保護入口，但下載後的離線檔仍可能被轉寄</li><li><strong>追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177" target="_blank" rel="noreferrer">Issue #177</a></li></ul></aside>
     </section>
 
     <section class="slide bridge-slide" data-page="16 / 16" aria-label="五月版 SDLC 建議盤點">
