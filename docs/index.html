@@ -1675,12 +1675,11 @@
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
           <details class="package-disclosure"><summary><span>預設 <span class="tech-name">spec → Issue</span>；明確 story 才同步 Milestone</span></summary><div class="package-health"><p><strong>目前：</strong><code>docs/specs/</code> 經 CI 驗證；預設 idempotently 建立或更新單一 Issue，只有 frontmatter 明列 <code>tracking: story</code> 才建立或更新 Milestone，不自動拆 child Issues。</p><p><strong>生命週期：</strong>最後一張 open Issue 關閉且所有 acceptance checkbox 已勾選時才關閉 Milestone；Issue reopen、open Issue 掛入或 criterion 取消勾選時重開。每次都讀最新 API 狀態並以 Milestone number 序列化。</p><p><strong>Spec Kit：</strong><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">github/spec-kit</a>｜MIT｜公開、未封存、持續維護。</p></div></details>
-          <details class="package-disclosure"><summary><span>預設 <span class="tech-name">spec → Issue</span>；明確 story 才同步 Milestone</span></summary><div class="package-health"><p><strong>目前：</strong><code>docs/specs/</code> 經 CI 驗證；預設 idempotently 建立或更新單一 Issue，只有 frontmatter 明列 <code>tracking: story</code> 才建立或更新 Milestone，不自動拆 child Issues。</p><p><strong>生命週期：</strong>最後一張 open Issue 關閉且所有 acceptance checkbox 已勾選時才關閉 Milestone；Issue reopen、open Issue 掛入或 criterion 取消勾選時重開。每次都讀最新 API 狀態並以 Milestone number 序列化。</p><p><strong>Spec Kit：</strong><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">github/spec-kit</a>｜MIT｜公開、未封存、持續維護。</p></div></details>
-          <p class="recommendation-copy"><strong>Story：</strong>Milestone description 填 Problem、Outcome、Acceptance criteria、Out of scope、Verification、Related decisions 與來源；只掛直接推進成果的 Issues，不重複掛 PR。<br><strong>Issue：</strong>12–80 個英文 ASCII 字元、至少三個詞；建立前以 2–4 個問題或技術詞限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR。能互動時先向使用者摘要；已獲准直接建立時，在補充記錄舊決策是沿用、取代或駁回及理由，沒有候選則記錄搜尋範圍。<br><strong>既有 repo：</strong>分頁唯讀盤點、小批提出候選分群與排除項目，經人確認才 idempotently 套用；不靠標題或 label 自動判斷。</p>
+          <p class="recommendation-copy"><strong>Story：</strong>Milestone description 以 Problem、具角色與價值的 Outcome、Acceptance criteria、Plan、Out of scope、Verification 與 References 說清楚成果；英文 H2 是穩定結構，內文使用團隊慣用語言。只掛直接推進成果的 Issues，不重複掛 PR。<br><strong>Issue：</strong>12–80 個英文 ASCII 字元、至少三個詞；建立前以 2–4 個問題或技術詞限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR。能互動時先向使用者摘要；已獲准直接建立時，在補充記錄舊決策是沿用、取代或駁回及理由，沒有候選則記錄搜尋範圍。<br><strong>既有 repo：</strong>adopt／update dry-run 分頁列出新版、可安全升級與人工審查項目；確認後只遷移舊 CSARC 結構，不靠標題或 label 重分群。</p>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>決策前置：</strong><code>AGENTS.md</code> 要求先查 open Milestones，再以 bounded search 搜尋 open／closed Issues 並揭露沿用或推翻理由</li><li><strong>Story 結構：</strong><code>docs/milestone-description.md</code>；保留可稽核的 Related decisions</li><li><strong>Spec 同步：</strong><code>scripts/spec_to_issue.py</code>；預設 Issue，<code>tracking: story</code> 才同步 Milestone</li><li><strong>自動收尾：</strong><code>milestone-lifecycle.yml</code> 依最新 open issue 數關閉或重開</li></ul></aside>
-      <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/managing-issue-types-in-an-organization" target="_blank" rel="noreferrer">GitHub issue types</a>; <a href="https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/syntax-for-issue-forms" target="_blank" rel="noreferrer">Issue Forms syntax</a>; <a href="https://docs.github.com/en/issues/using-labels-and-milestones-to-track-work/managing-labels" target="_blank" rel="noreferrer">GitHub labels</a>; <a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a>. Accessed August 23, 2026.</p>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>決策前置：</strong><code>AGENTS.md</code> 要求先查 open Milestones，再以 bounded search 搜尋 open／closed Issues 並揭露沿用或推翻理由</li><li><strong>Story 結構：</strong><code>docs/milestone-description.md</code>；References 保留可稽核決策，Plan 連結 1..N Issues</li><li><strong>Spec 同步：</strong><code>scripts/spec_to_issue.py</code>；預設 Issue，<code>tracking: story</code> 才同步 Milestone</li><li><strong>導入遷移：</strong><code>csarc adopt/update --dry-run</code> 預覽 description upgrade，確認後才寫入</li><li><strong>自動收尾：</strong><code>milestone-lifecycle.yml</code> 依最新 open issue 數關閉或重開</li></ul></aside>
+      <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/managing-issue-types-in-an-organization" target="_blank" rel="noreferrer">GitHub issue types</a>; <a href="https://github.com/github/spec-kit/blob/main/templates/spec-template.md" target="_blank" rel="noreferrer">Spec Kit template</a>; <a href="https://github.com/kubernetes/enhancements/blob/master/keps/NNNN-kep-template/README.md" target="_blank" rel="noreferrer">Kubernetes KEP</a>; <a href="https://github.com/rust-lang/rfcs/blob/master/0000-template.md" target="_blank" rel="noreferrer">Rust RFC</a>; <a href="https://github.com/grafana/grafana/blob/main/.github/ISSUE_TEMPLATE/1-feature_requests.md" target="_blank" rel="noreferrer">Grafana feature request</a>. Accessed August 24, 2026.</p>
     </section>
 
     <section class="slide decision-slide" data-track="pr" aria-label="步驟四分支 PR 與合併">
@@ -2239,7 +2238,7 @@ contact_links: []
         {
           title: '只有可端到端驗收的 story 才建立 Milestone',
           goal: 'Milestone 是可選的 1..N Issues 成果層，不靠工作數量決定，也不重複掛 PR。',
-          summary: 'description 固定寫 Problem、Outcome、Acceptance criteria、Out of scope、Verification 與 Source；spec 預設同步 Issue，只有 `tracking: story` 同步 Milestone。',
+          summary: 'description 以 Problem、Outcome、Acceptance criteria、Plan、Out of scope、Verification 與 References 寫清楚 story；spec 預設同步 Issue，只有 `tracking: story` 同步 Milestone。',
           file: 'docs/milestone-description.md＋scripts/spec_to_issue.py',
           code: `---
 id: SPEC-001
@@ -2254,8 +2253,11 @@ tracking: story
 ## Outcome
 ## Acceptance criteria
 - [ ] Observable condition
+## Plan
+- #123 — Independently deliverable work
 ## Out of scope
-## Verification`
+## Verification
+## References`
         },
         {
           title: '工作合併後才以最小權限同步追蹤與生命週期',

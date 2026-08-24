@@ -9,9 +9,11 @@
 4. Summarize the verified release, full commit SHA, release capability
    preflight, settings, conflict risk, and every file classified as add,
    overwrite, preserve, manual merge, or unable to determine. Review both the
-   generated Markdown and PDF; neither guarantees the absence of semantic or
-   runtime conflicts. Unknown capabilities are resolved by the runtime
-   workflow and never treated as allowed.
+   generated Markdown and PDF, then report the terminal's separate Milestone
+   description classifications: upgrade, current, or manual review. Neither
+   source guarantees the absence of semantic or runtime conflicts. Unknown
+   capabilities are resolved by the runtime workflow and never treated as
+   allowed.
 5. Stop and wait for explicit confirmation before changing files.
 6. After confirmation, repeat the same command with
    `--yes --non-interactive` and report the `./scripts/verify` result.
@@ -23,7 +25,9 @@
 9. During handoff, point out that the installed `AGENTS.md` requires a bounded
    search of open and closed Issues before creating an Issue or Milestone, and
    requires prior decisions and any reversal rationale to remain in the new
-   work item.
+   work item. A confirmed adopt or update upgrades only recognized legacy
+   CSARC Milestone descriptions; custom descriptions remain unchanged for
+   manual review.
 10. Explain that a closing pull request is rejected while either its own
     checklist or the referenced Issue still contains an unchecked task; the
     user must supply the missing evidence instead of checking it speculatively.

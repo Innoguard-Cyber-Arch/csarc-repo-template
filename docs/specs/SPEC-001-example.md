@@ -24,6 +24,10 @@ Explain why the outcome matters. Keep implementation choices out until they are 
 
 - [ ] Replace this line with one independently verifiable condition.
 
+## Plan
+
+List the independently deliverable Issues in dependency order.
+
 ## Out of scope
 
 List related work that this spec deliberately excludes.
@@ -31,3 +35,7 @@ List related work that this spec deliberately excludes.
 ## Verification
 
 List the command, test, or observable result a reviewer will use.
+
+## References
+
+Link the source request and preserved or superseded decisions.

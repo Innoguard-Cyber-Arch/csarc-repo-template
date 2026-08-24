@@ -39,7 +39,7 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；CI 
 
 ## 開發與驗證
 
-交付模型是「可選 Story Milestone → 1..N Issues → 各自 PR」。Milestone 只代表可端到端驗收的成果，不是每張 Issue 的必填分類；SDD、一般規劃、使用者 story 或導入盤點都可能成為來源。建立 Issue／Milestone 前，agent 會以具體關鍵字限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR，先向使用者摘要；若已獲准直接建立，則在補充或 `Related decisions` 記錄每項決策是沿用、取代或駁回及理由。description 使用 [`docs/milestone-description.md`](docs/milestone-description.md) 的完整結構；PR 不重複掛入 Milestone。最後一張 open Issue 關閉且所有 acceptance checkbox 已確認時，workflow 才會關閉 Milestone；Issue reopen、open Issue 掛入或 criterion 取消勾選時則重開。
+交付模型是「可選 Story Milestone → 1..N Issues → 各自 PR」。Milestone 只代表可端到端驗收的成果，不是每張 Issue 的必填分類；SDD、一般規劃、使用者 story 或導入盤點都可能成為來源。建立 Issue／Milestone 前，agent 會以具體關鍵字限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR，先向使用者摘要；若已獲准直接建立，則在補充或 Milestone `References` 記錄每項決策是沿用、取代或駁回及理由。description 使用 [`docs/milestone-description.md`](docs/milestone-description.md) 的 Problem、Outcome、Acceptance criteria、Plan、Out of scope、Verification 與 References；英文 H2 是穩定結構，內文使用專案團隊慣用語言。PR 不重複掛入 Milestone。最後一張 open Issue 關閉且所有 acceptance checkbox 已確認時，workflow 才會關閉 Milestone；Issue reopen、open Issue 掛入或 criterion 取消勾選時則重開。
 
 1. 簡單工作先開「開發工作」Issue；標題以 12–80 個英文 ASCII 字元及至少三個詞直接描述成果，例如 `Add dependency policy checks`。Issue 不使用 PR 的 Conventional Commit 格式。
 2. 開單者會自動成為負責人，並選一個分類：`bug`、`enhancement`、`documentation` 或 `duplicate`。前三者在 organization 啟用原生 Issue Types 時分別同步成 `Bug`、`Feature`、`Task`；不支援時仍以 label 正常運作。`duplicate` 是結案處置，不是假造的新 Issue Type。
@@ -126,7 +126,7 @@ uvx --from csarc-repo-cli csarc adopt . --dry-run \
 uvx --from csarc-repo-cli csarc adopt .
 ```
 
-`adopt` 要求乾淨 Git working tree，以 `pyproject.toml`／`package.json` 建議 profile，並預設保留 manifest、產品程式、測試、spec 與網站內容。dry run 會在 repo 外產生同源的短版 Markdown 與一頁 PDF，列出變更數量、需人工合併的文字檔及無法判讀的非文字碰撞；未指定 `--report-dir` 時使用相鄰的 `<repo>-csarc-adoption-report`。報告只說明已知風險，不保證沒有語意或執行期衝突，也不會修改 target repo。有無法 deterministic 合併的檔案時會保留可審查差異並回傳非零，不會無提示全面覆寫。
+`adopt` 要求乾淨 Git working tree，以 `pyproject.toml`／`package.json` 建議 profile，並預設保留 manifest、產品程式、測試、spec 與網站內容。dry run 會在 repo 外產生同源的短版 Markdown 與一頁 PDF，列出變更數量、需人工合併的文字檔與無法判讀的非文字碰撞；同一次終端輸出另列既有 Milestone description 的新版、可安全升級與人工審查項目。未指定 `--report-dir` 時使用相鄰的 `<repo>-csarc-adoption-report`。確認正式導入後只更新可辨識的舊 CSARC Milestone 結構，不改 title、狀態、期限或 Issue 關聯。報告只說明已知風險，不保證沒有語意或執行期衝突，也不會修改 target repo。有無法 deterministic 合併的檔案時會保留可審查差異並回傳非零，不會無提示全面覆寫。
 
 ### 更新已導入的 repo
 
@@ -136,7 +136,7 @@ uvx --from csarc-repo-cli csarc update --check --json
 uvx --from csarc-repo-cli csarc update
 ```
 
-`update` 讀取現有 answers、執行 Copier smart update，並對 conflict marker 或 `.rej` fail closed。`update --check --json` 目前已是否最新時回傳 0，有更新時回傳 1，執行或輸入錯誤回傳 2。成功寫檔後 CLI 自動執行 `./scripts/verify` 與 repository settings `plan`；它不會執行 `apply`、push 或開 PR。
+`update` 讀取現有 answers、執行 Copier smart update，並對 conflict marker 或 `.rej` fail closed。`update --dry-run` 同時預覽 Copier 與 Milestone description migration；`update --check --json` 目前已是最新時回傳 0，有更新時回傳 1，執行或輸入錯誤回傳 2。成功寫檔後 CLI 自動執行 `./scripts/verify`、repository settings `plan`，以及已確認的舊 CSARC Milestone description 升級；它不會套用 repository settings、push 或開 PR。
 
 ### Agent prompt
 
@@ -163,7 +163,7 @@ uvx --from csarc-repo-cli csarc update
 核准版本：最新穩定版
 核准 commit：<resolved-full-commit-sha>
 安裝指南：https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/<resolved-full-commit-sha>/docs/agent-install.md
-請先用 csarc adopt --dry-run --report-dir ../csarc-adoption-report 從正式 GitHub Release 驗證 repository ID、immutable release、attestation、tag、commit signature 並解析完整 SHA；顯示 SHA 給我確認後，才讀取該 SHA 的安裝指南。檢視產生的 Markdown 與 PDF，摘要新增、覆寫、保留、人工合併與無法判定項目並等待確認；不要自行 apply GitHub settings、push 或建立 PR。
+請先用 csarc adopt --dry-run --report-dir ../csarc-adoption-report 從正式 GitHub Release 驗證 repository ID、immutable release、attestation、tag、commit signature 並解析完整 SHA；顯示 SHA 給我確認後，才讀取該 SHA 的安裝指南。檢視產生的 Markdown 與 PDF，摘要新增、覆寫、保留、人工合併、無法判定項目與 Milestone description migration 並等待確認；不要自行 apply GitHub settings、push 或建立 PR。
 ```
 
 更新：
@@ -175,7 +175,7 @@ uvx --from csarc-repo-cli csarc update
 核准版本：最新穩定版
 核准 commit：<resolved-full-commit-sha>
 安裝指南：https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/<resolved-full-commit-sha>/docs/agent-install.md
-請先用 csarc update --dry-run 驗證既有 provenance，並從正式 GitHub Release 驗證 repository ID、immutable release、attestation、tag、commit signature與完整 SHA；顯示 SHA 給我確認後，才讀取該 SHA 的安裝指南。摘要 smart diff 與衝突風險並等待確認；不要自行 apply GitHub settings、push 或建立 PR。
+請先用 csarc update --dry-run 驗證既有 provenance，並從正式 GitHub Release 驗證 repository ID、immutable release、attestation、tag、commit signature與完整 SHA；顯示 SHA 給我確認後，才讀取該 SHA 的安裝指南。摘要 smart diff、衝突風險與 Milestone description migration 並等待確認；不要自行 apply GitHub settings、push 或建立 PR。
 ```
 
 ### Troubleshooting／進階 Copier

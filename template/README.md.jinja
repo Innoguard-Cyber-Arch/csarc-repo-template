@@ -43,7 +43,7 @@ git push -u origin dev
 
 ## 開發與驗證
 
-交付模型是「可選 Story Milestone → 1..N Issues → 各自 PR」。Milestone 只代表可端到端驗收的成果，不是每張 Issue 的必填分類；SDD、一般規劃、使用者 story 或導入盤點都可能成為來源。建立 Issue／Milestone 前，agent 會以具體關鍵字限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR，先向使用者摘要；若已獲准直接建立，則在補充或 `Related decisions` 記錄每項決策是沿用、取代或駁回及理由。description 使用 [`docs/milestone-description.md`](docs/milestone-description.md) 的完整結構；PR 不重複掛入 Milestone。最後一張 open Issue 關閉且所有 acceptance checkbox 已確認時，workflow 才會關閉 Milestone；Issue reopen、open Issue 掛入或 criterion 取消勾選時則重開。
+交付模型是「可選 Story Milestone → 1..N Issues → 各自 PR」。Milestone 只代表可端到端驗收的成果，不是每張 Issue 的必填分類；SDD、一般規劃、使用者 story 或導入盤點都可能成為來源。建立 Issue／Milestone 前，agent 會以具體關鍵字限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR，先向使用者摘要；若已獲准直接建立，則在補充或 Milestone `References` 記錄每項決策是沿用、取代或駁回及理由。description 使用 [`docs/milestone-description.md`](docs/milestone-description.md) 的 Problem、Outcome、Acceptance criteria、Plan、Out of scope、Verification 與 References；英文 H2 是穩定結構，內文使用專案團隊慣用語言。PR 不重複掛入 Milestone。最後一張 open Issue 關閉且所有 acceptance checkbox 已確認時，workflow 才會關閉 Milestone；Issue reopen、open Issue 掛入或 criterion 取消勾選時則重開。
 
 1. 簡單工作先開「開發工作」Issue；標題以 12–80 個英文 ASCII 字元及至少三個詞直接描述成果，例如 `Add dependency policy checks`。Issue 不使用 PR 的 Conventional Commit 格式。
 2. 開單者會自動成為負責人，並選一個分類：`bug`、`enhancement`、`documentation` 或 `duplicate`。前三者在 organization 啟用原生 Issue Types 時分別同步成 `Bug`、`Feature`、`Task`；不支援時仍以 label 正常運作。`duplicate` 是結案處置，不是假造的新 Issue Type。
@@ -115,12 +115,13 @@ npm 發布使用 environment `{{ npm_environment }}` 與 OIDC，不需要 `NPM_T
 ```bash
 git switch {{ branch_strategy }}
 git switch -c chore/<issue-number>-update-repo-template
-uvx --from copier copier update --trust --vcs-ref <reviewed-full-commit-sha>
-./scripts/verify
-./scripts/apply-repository-settings.sh plan
+uvx --from csarc-repo-cli csarc update --to <approved-release-tag> \
+  --expected-sha <reviewed-full-commit-sha> --dry-run
+uvx --from csarc-repo-cli csarc update --to <approved-release-tag> \
+  --expected-sha <reviewed-full-commit-sha> --yes --non-interactive
 ```
 
-Copier 會更新網站版型，但不覆寫 `docs/site-content.js`。相依更新一般等待三天；{% if has_typescript %}pnpm 遇到 publisher trust 降級時會停止安裝，先確認套件發布者與 provenance，不要直接停用 policy；{% endif %}OSV 對已公開漏洞立即通知。
+CLI 會先預覽 Copier smart diff、conflict risk 與 Milestone description migration；確認後才執行 update、`./scripts/verify` 與 repository settings plan。它會更新網站版型，但不覆寫 `docs/site-content.js`，也不會自行 apply settings、push 或開 PR。相依更新一般等待三天；{% if has_typescript %}pnpm 遇到 publisher trust 降級時會停止安裝，先確認套件發布者與 provenance，不要直接停用 policy；{% endif %}OSV 對已公開漏洞立即通知。
 {% if enable_template_update_notifications %}
 每週 template update workflow 只會建立或更新一張通知 Issue，不會自動套用或合併變更。若 `_src_path` 指向 private GitHub repository，請設定只有來源 repository Contents read 權限的 `CSARC_TEMPLATE_READ_TOKEN`；公開來源不需要這個 secret。
 {% endif %}

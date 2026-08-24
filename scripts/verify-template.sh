@@ -721,7 +721,7 @@ grep -q 'search open and closed Issues' AGENTS.md
 grep -q 'Never silently reverse an earlier decision' AGENTS.md
 grep -q 'whether creating through the UI, CLI, or API' AGENTS.md
 grep -q 'create and link a follow-up Issue first' AGENTS.md
-grep -q 'Related decisions' docs/milestone-description.md
+grep -q '^## References$' docs/milestone-description.md
 grep -q 'bounded' docs/agent-install.md
 grep -q '沿用、取代或駁回' docs/index.html
 required_readme_headings=(
@@ -1267,13 +1267,19 @@ test -f "$fixture_root/default-project/.github/workflows/issue-triage.yml"
 test -f "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
 test -f "$fixture_root/default-project/docs/milestone-description.md"
 test -f "$fixture_root/default-project/scripts/sync_milestone_state.py"
+grep -q '^## Plan$' \
+  "$fixture_root/default-project/docs/milestone-description.md"
+grep -q '^## References$' \
+  "$fixture_root/default-project/docs/milestone-description.md"
+grep -q '專案團隊慣用的語言' \
+  "$fixture_root/default-project/docs/milestone-description.md"
 grep -q 'types: \[closed, reopened, milestoned\]' \
   "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
 grep -q 'github.event.issue.milestone.number' \
   "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
 grep -q 'docs/milestone-description.md' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'Related decisions' \
+grep -q '^## References$' \
   "$fixture_root/default-project/docs/milestone-description.md"
 grep -q '搜尋 open／closed 歷史工作' \
   "$fixture_root/default-project/docs/index.html"
