@@ -285,6 +285,7 @@ def test_capability_preflight_uses_readable_github_origin(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    (tmp_path / ".git").mkdir()
     script = tmp_path / "release_policy.py"
     script.touch()
     response = {
@@ -309,6 +310,10 @@ def test_capability_preflight_uses_readable_github_origin(
         check: bool = True,
     ) -> subprocess.CompletedProcess[str]:
         del cwd, capture, check
+        if command[0] == "git" and "rev-parse" in command:
+            return subprocess.CompletedProcess(
+                command, 0, stdout=f"{tmp_path}\n", stderr=""
+            )
         if command[0] == "git":
             return subprocess.CompletedProcess(
                 command,
@@ -364,6 +369,27 @@ def test_target_repository_uses_explicit_repo_for_new_project(
     )
 
     assert cli.target_repository(tmp_path) == "owner/new-repository"
+
+
+def test_target_repository_does_not_inherit_an_enclosing_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Treat an init destination inside another checkout as a new repo."""
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    git(parent, "init", "-b", "main")
+    git(
+        parent,
+        "remote",
+        "add",
+        "origin",
+        "https://github.com/parent-org/parent-repo.git",
+    )
+    target = parent / "new-project"
+    target.mkdir()
+    monkeypatch.delenv("GH_REPO", raising=False)
+
+    assert cli.target_repository(target) is None
 
 
 @pytest.mark.parametrize("visibility", ["public", "private", "internal"])
@@ -1984,10 +2010,6 @@ def test_update_recomputes_visibility_defaults_from_github(
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
     commit(project, "test: generated private defaults")
-    (source / "template" / "managed.txt").write_text(
-        "template version two\n", encoding="utf-8"
-    )
-    second_sha = commit(source, "test: template version two")
     monkeypatch.setattr(
         cli,
         "repository_context",
@@ -1996,6 +2018,74 @@ def test_update_recomputes_visibility_defaults_from_github(
             "owner",
             "organization",
             "public",
+            "github",
+            True,
+        ),
+    )
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--check",
+                "--json",
+            ]
+        )
+        == 1
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "outdated"
+    assert payload["update_available"] is True
+    assert payload["answers_changed"] is True
+    assert payload["answers"]["project_visibility"] == "public"
+    assert payload["answers"]["enable_codeql"] is True
+    assert payload["answers"]["enable_release_attestations"] is True
+
+
+def test_update_plan_resolves_target_answers_and_capabilities(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Build update output from the target template, not installed answers."""
+    source, project, _ = initialize_project(tmp_path)
+    capsys.readouterr()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    git(
+        project,
+        "remote",
+        "add",
+        "origin",
+        "https://github.com/owner/repository.git",
+    )
+    commit(project, "test: generated project")
+    copier_config = source / "copier.yml"
+    copier_config.write_text(
+        copier_config.read_text(encoding="utf-8")
+        + "new_target_answer:\n  type: str\n  default: target-default\n",
+        encoding="utf-8",
+    )
+    write_executable(
+        source / "template" / "scripts" / "release_policy.py",
+        "#!/usr/bin/env python3\n"
+        "import json\n"
+        "print(json.dumps({'mode': 'target', 'capabilities': {}}))\n",
+    )
+    second_sha = commit(source, "test: add target answer and capability")
+    monkeypatch.setattr(
+        cli,
+        "repository_context",
+        lambda *args, **kwargs: cli.RepositoryContext(
+            "owner/repository",
+            "owner",
+            "organization",
+            "private",
             "github",
             True,
         ),
@@ -2016,9 +2106,67 @@ def test_update_recomputes_visibility_defaults_from_github(
         == 1
     )
     payload = json.loads(capsys.readouterr().out)
-    assert payload["answers"]["project_visibility"] == "public"
-    assert payload["answers"]["enable_codeql"] is True
-    assert payload["answers"]["enable_release_attestations"] is True
+    assert payload["answers"]["new_target_answer"] == "target-default"
+    assert payload["release_capabilities"]["mode"] == "target"
+    assert payload["capabilities_changed"] is True
+
+
+def test_update_check_reports_capability_drift_at_same_revision(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Treat target-policy drift as an available update without a new SHA."""
+    _source, project, first_sha = initialize_project(tmp_path)
+    capsys.readouterr()
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    git(
+        project,
+        "remote",
+        "add",
+        "origin",
+        "https://github.com/owner/repository.git",
+    )
+    write_executable(
+        project / "scripts" / "release_policy.py",
+        "#!/usr/bin/env python3\n"
+        "import json\n"
+        "print(json.dumps({'mode': 'installed', 'capabilities': {}}))\n",
+    )
+    commit(project, "test: customize installed capability policy")
+    monkeypatch.setattr(
+        cli,
+        "repository_context",
+        lambda *args, **kwargs: cli.RepositoryContext(
+            "owner/repository",
+            "owner",
+            "organization",
+            "private",
+            "github",
+            True,
+        ),
+    )
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--check",
+                "--json",
+            ]
+        )
+        == 1
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["answers_changed"] is False
+    assert payload["capabilities_changed"] is True
+    assert payload["update_available"] is True
 
 
 def test_non_interactive_writes_require_yes(tmp_path: Path) -> None:

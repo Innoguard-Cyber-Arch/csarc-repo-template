@@ -802,6 +802,10 @@ grep -q 'search open and closed Issues' AGENTS.md
 grep -q 'Never silently reverse an earlier decision' AGENTS.md
 grep -q 'whether creating through the UI, CLI, or API' AGENTS.md
 grep -q 'create and link a follow-up Issue first' AGENTS.md
+grep -Fq 'run `./scripts/cleanup-worktrees` in its default dry-run mode and report any candidates' \
+  AGENTS.md
+grep -Fq 'run `./scripts/cleanup-worktrees` in its default dry-run mode and report any candidates' \
+  template/AGENTS.md.jinja
 grep -q '^## References$' docs/milestone-description.md
 grep -q 'bounded' docs/agent-install.md
 grep -q '沿用、取代或駁回' docs/index.html
@@ -1313,6 +1317,8 @@ grep -q 'search open and closed Issues' \
 grep -q 'whether creating through the UI, CLI, or API' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'create and link a follow-up Issue first' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -Fq 'run `./scripts/cleanup-worktrees` in its default dry-run mode and report any candidates' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'uv run pytest <test-path>' \
   "$fixture_root/default-project/AGENTS.md"
