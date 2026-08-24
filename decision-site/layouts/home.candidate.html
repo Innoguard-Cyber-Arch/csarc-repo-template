@@ -1,14 +1,30 @@
 {{- $legacy := readFile "site/index.html" -}}
-{{- $body := replaceRE `(?s)^.*?<body>(.*)</body>.*$` "$1" $legacy -}}
+{{- $body := replaceRE `(?s)^.*?<body[^>]*>` "" $legacy -}}
+{{- $body = replaceRE `(?s)</body>\s*</html>\s*$|</html>\s*$` "" $body -}}
 <!doctype html>
-<html lang="zh-Hant-TW">
+<html lang="zh-Hant-TW" data-detail-level="technical">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <link rel="icon" href="data:,">
   <title>{{ .Title }}</title>
+  <script>
+    try {
+      const savedDetailLevel = localStorage.getItem("csarc-detail-level");
+      if (savedDetailLevel === "simple") document.documentElement.dataset.detailLevel = savedDetailLevel;
+    } catch {}
+  </script>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="detail-toggle.css">
 </head>
-<body>{{ $body | safeHTML }}</body>
+<body>
+  <div class="detail-level-control" role="group" aria-label="閱讀深度">
+    <span>閱讀深度</span>
+    <button type="button" data-detail-level="simple" aria-pressed="false">簡單</button>
+    <button type="button" data-detail-level="technical" aria-pressed="true">技術</button>
+  </div>
+  {{ $body | safeHTML }}
+  <script src="detail-toggle.js"></script>
+</body>
 </html>

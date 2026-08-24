@@ -123,7 +123,16 @@ bash -n template/scripts/validate-issue-title
 ./scripts/test-issue-triage
 bash -n scripts/test-worktree-cleanup
 ./scripts/test-worktree-cleanup
+node --check decision-site/static/detail-toggle.js
 ./scripts/build-hugo-preview --check
+test "$(grep -o 'class="detail-level-control"' dist/hugo-preview.html | wc -l | tr -d ' ')" = 1
+grep -q 'data-detail-level="technical"' dist/hugo-preview.html
+grep -q 'csarc-detail-level' dist/hugo-preview.html
+grep -q '@media (prefers-reduced-motion: reduce)' dist/hugo-preview.html
+test "$(grep -o '<html' dist/hugo-site/index.html | wc -l | tr -d ' ')" = 1
+test "$(grep -o '<body' dist/hugo-site/index.html | wc -l | tr -d ' ')" = 1
+test "$(grep -o 'class="package-disclosure"' site/index.html | wc -l | tr -d ' ')" = \
+  "$(grep -o 'class="package-disclosure"' dist/hugo-preview.html | wc -l | tr -d ' ')"
 
 # The live probe must preserve valid run JSON and emit reusable evidence.
 live_probe_fixture="$fixture_root/live-probe"

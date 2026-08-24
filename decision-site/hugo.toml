@@ -25,6 +25,10 @@ notAlternative = true
   target = "layouts"
 
   [[module.mounts]]
+  source = "decision-site/static"
+  target = "static"
+
+  [[module.mounts]]
   source = "site/styles.css"
   target = "static/styles.css"
 
