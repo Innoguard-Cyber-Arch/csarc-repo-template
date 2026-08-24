@@ -1,8 +1,9 @@
 # Transactional repository adoption
 
-- Status: Accepted
-- Date: 2026-08-24
-- Issue: [#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219)
+- **狀態：**Accepted
+- **日期：**2026-08-24
+- **來源 Issue：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219)
+- **實作 PR：**[#230](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/230)
 
 ## 問題與限制
 
@@ -10,7 +11,7 @@
 
 Generic prompt 需要保持穩定且不硬編工作路徑，但不能因此移除供應鏈身分驗證。Windows 的正式執行環境是 WSL2；native Windows shell 並非目前契約。
 
-## 決策
+## 決定
 
 三個 lifecycle 各保留一條 generic agent prompt：`init`、`adopt`、`update`。CLI 從目前 workspace 判斷位置，解析 canonical immutable Release，依序驗證 repository numeric ID、Release 狀態、tag commit、commit signature與 attestation，並把 tag 與 full SHA 寫入 plan 和 provenance。Release-specific prompt 直接攜帶相同 tag 與 full SHA。
 
@@ -31,7 +32,7 @@ Generic prompt 需要保持穩定且不硬編工作路徑，但不能因此移�
 
 Python 以 `uvx --python 3.14` 逐次選擇，不修改 shell profile、`PATH` 或全域環境。Ubuntu 與 macOS 跑完整 adoption 測試；Windows 使用 WSL2，native Windows 明確 fail closed。
 
-## 未採用方案
+## 評估過的替代方案
 
 - 在 README generic prompt 固定 path 或 SHA：path 無法跨 repo 重用，SHA 也無法在包含自身內容的 commit 中自我引用。
 - 讓 agent 自行 stash、commit 或逐檔決定：會改動使用者工作，也無法形成可重放契約。
@@ -39,8 +40,10 @@ Python 以 `uvx --python 3.14` 逐次選擇，不修改 shell profile、`PATH` �
 - 寫入目標後再驗證：失敗時會留下半套用狀態。
 - 宣稱支援 native Windows：目前 shell 與工具鏈契約沒有相應證據。
 
-## Ownership、驗證與重新評估
+## Ownership 與驗證
 
 CLI、模板 ownership policy、release prompt 產生器與 lifecycle e2e 由本 repo 維護；產品自行維護 README、CHANGELOG、產品 release workflow與選配的 executable `scripts/verify-product`。`./scripts/verify-template.sh` 必須涵蓋 plan 漂移、固定碰撞策略、驗證失敗不寫入、特殊路徑與 OS matrix。
+
+## 重新評估條件
 
 若未來要支援 native Windows、更多自動合併類型，或改變 Release trust chain，必須以新的 Issue、跨平台證據及 decision record 重新評估。
