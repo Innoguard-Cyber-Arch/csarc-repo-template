@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -559,7 +560,9 @@ def copier_copy(
     source: str,
     revision: Revision,
     stage: Path,
-    data: dict[str, str],
+    data: Mapping[str, object],
+    *,
+    skip_tasks: bool = False,
 ) -> None:
     """Render one immutable template revision into a staging directory."""
     command = [
@@ -573,8 +576,11 @@ def copier_copy(
         "--vcs-ref",
         revision.sha,
     ]
+    if skip_tasks:
+        command.append("--skip-tasks")
     for key, value in sorted(data.items()):
-        command.extend(["--data", f"{key}={value}"])
+        serialized = str(value).lower() if isinstance(value, bool) else value
+        command.extend(["--data", f"{key}={serialized}"])
     command.extend([source, str(stage)])
     result = run(command, capture=True, check=False)
     if result.returncode != 0:
@@ -1160,15 +1166,25 @@ def settings_plan(target: Path) -> None:
 
 def target_repository(target: Path) -> str | None:
     """Return the GitHub origin of an existing target, when discoverable."""
-    result = run(
-        ["git", "-C", str(target), "remote", "get-url", "origin"],
+    root = run(
+        ["git", "-C", str(target), "rev-parse", "--show-toplevel"],
         capture=True,
         check=False,
     )
-    if result.returncode == 0:
-        repository = github_repository(result.stdout.strip())
-        if repository is not None:
-            return repository
+    is_repository_root = (
+        root.returncode == 0
+        and Path(root.stdout.strip()).resolve() == target.resolve()
+    )
+    if is_repository_root:
+        result = run(
+            ["git", "-C", str(target), "remote", "get-url", "origin"],
+            capture=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            repository = github_repository(result.stdout.strip())
+            if repository is not None:
+                return repository
     explicit_repository = os.environ.get("GH_REPO", "").strip()
     if explicit_repository:
         return github_repository(f"gh:{explicit_repository}")
@@ -1862,9 +1878,9 @@ def command_update(args: argparse.Namespace) -> int:
     answers_path = target / ".copier-answers.yml"
     if not answers_path.is_file():
         raise CliError("Missing .copier-answers.yml; use csarc adopt first.")
-    answers = read_copier_answers(answers_path)
+    saved_answers = read_copier_answers(answers_path)
     explicit_data = parse_data(args.data)
-    saved_visibility = answers.get("project_visibility")
+    saved_visibility = saved_answers.get("project_visibility")
     repository = repository_context(
         target,
         explicit_data.get("project_visibility"),
@@ -1872,8 +1888,8 @@ def command_update(args: argparse.Namespace) -> int:
             saved_visibility if isinstance(saved_visibility, str) else None
         ),
     )
-    answers, update_data = update_plan_answers(
-        answers, explicit_data, repository
+    candidate_answers, update_data = update_plan_answers(
+        saved_answers, explicit_data, repository
     )
     status, target_revision, previous = update_status(
         target,
@@ -1883,10 +1899,46 @@ def command_update(args: argparse.Namespace) -> int:
         accept_legacy=args.accept_legacy,
         from_release=args.from_release,
     )
-    preflight = capability_preflight(
+    current_capabilities = capability_preflight(
         target / "scripts" / "release_policy.py",
         target,
         emit=False,
+    )
+    source = status.get("source")
+    if not isinstance(source, str):
+        raise CliError("Update source must be a string.")
+    with tempfile.TemporaryDirectory(prefix="csarc-update-plan-") as temporary:
+        stage = Path(temporary) / "project"
+        stage.mkdir()
+        copier_copy(
+            source,
+            target_revision,
+            stage,
+            candidate_answers,
+            skip_tasks=True,
+        )
+        answers = read_copier_answers(stage / ".copier-answers.yml")
+        preflight = capability_preflight(
+            stage / "scripts" / "release_policy.py",
+            target,
+            emit=False,
+        )
+    current_capabilities = dict(current_capabilities)
+    target_capabilities = dict(preflight)
+    current_capabilities.pop("observed_at", None)
+    target_capabilities.pop("observed_at", None)
+    answers_changed = answers != saved_answers
+    capabilities_changed = target_capabilities != current_capabilities
+    update_available = bool(status["update_available"]) or any(
+        (answers_changed, capabilities_changed)
+    )
+    status.update(
+        {
+            "answers_changed": answers_changed,
+            "capabilities_changed": capabilities_changed,
+            "status": "outdated" if update_available else "current",
+            "update_available": update_available,
+        }
     )
     plan = ResolvedPlan(
         mode="update",
