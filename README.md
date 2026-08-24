@@ -99,7 +99,7 @@ release workflow 用內建 `GITHUB_TOKEN` 重測能力：支援時由 release-pl
 
 真實導入的可重複步驟、驗收證據與已知平台限制整理在 [`docs/pilot-adoption.md`](docs/pilot-adoption.md)。第一個 consuming repo `ai-guardrail` 已完成 v0.2.4 導入與 v0.3.1 更新，因此共用治理與 CI/CD-only composition 為 beta；尚未有真實採用證據的 Python、TypeScript 與混合 composition 維持 alpha。
 
-以下三條路徑都使用核准的 GitHub Release。CLI 只接受 `Innoguard-Cyber-Arch/csarc-repo-template`（repository ID `1340899393`），並確認 Release 已發布、非 draft、非 prerelease、immutable、attestation 有效、tag 未在驗證途中移動且 commit signature 有效。通過後才顯示完整 40 字元 commit SHA、固定版本的安裝指南、設定、新增／覆寫／保留／人工合併清單與衝突風險。成功後寫入 `.csarc/provenance.json`；來源或 provenance 漂移一律停止。
+以下三條路徑都使用核准的 GitHub Release。CLI 只接受 `Innoguard-Cyber-Arch/csarc-repo-template`（repository ID `1340899393`），並確認 Release 已發布、非 draft、非 prerelease、immutable、attestation 有效、tag 未在驗證途中移動且 commit signature 有效。通過後才顯示完整 40 字元 commit SHA、固定版本的安裝指南、設定、新增／覆寫／保留／人工合併／無法判定清單與衝突風險。成功後寫入 `.csarc/provenance.json`；來源或 provenance 漂移一律停止。
 
 ### 建立新 repo
 
@@ -113,11 +113,12 @@ uvx --from csarc-repo-cli csarc init ./my-project
 
 ```bash
 git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --from csarc-repo-cli csarc adopt . --dry-run
+uvx --from csarc-repo-cli csarc adopt . --dry-run \
+  --report-dir ../csarc-adoption-report
 uvx --from csarc-repo-cli csarc adopt .
 ```
 
-`adopt` 要求乾淨 Git working tree，以 `pyproject.toml`／`package.json` 建議 profile，並預設保留 manifest、產品程式、測試、spec 與網站內容。有無法 deterministic 合併的檔案時會保留可審查差異並回傳非零，不會無提示全面覆寫。
+`adopt` 要求乾淨 Git working tree，以 `pyproject.toml`／`package.json` 建議 profile，並預設保留 manifest、產品程式、測試、spec 與網站內容。dry run 會在 repo 外產生同源的短版 Markdown 與一頁 PDF，列出變更數量、需人工合併的文字檔及無法判讀的非文字碰撞；未指定 `--report-dir` 時使用相鄰的 `<repo>-csarc-adoption-report`。報告只說明已知風險，不保證沒有語意或執行期衝突，也不會修改 target repo。有無法 deterministic 合併的檔案時會保留可審查差異並回傳非零，不會無提示全面覆寫。
 
 ### 更新已導入的 repo
 
@@ -154,7 +155,7 @@ uvx --from csarc-repo-cli csarc update
 核准版本：最新穩定版
 核准 commit：<resolved-full-commit-sha>
 安裝指南：https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/<resolved-full-commit-sha>/docs/agent-install.md
-請先用 csarc adopt --dry-run 從正式 GitHub Release 驗證 repository ID、immutable release、attestation、tag、commit signature 並解析完整 SHA；顯示 SHA 給我確認後，才讀取該 SHA 的安裝指南。摘要新增、覆寫、保留與人工合併檔案並等待確認；不要自行 apply GitHub settings、push 或建立 PR。
+請先用 csarc adopt --dry-run --report-dir ../csarc-adoption-report 從正式 GitHub Release 驗證 repository ID、immutable release、attestation、tag、commit signature 並解析完整 SHA；顯示 SHA 給我確認後，才讀取該 SHA 的安裝指南。檢視產生的 Markdown 與 PDF，摘要新增、覆寫、保留、人工合併與無法判定項目並等待確認；不要自行 apply GitHub settings、push 或建立 PR。
 ```
 
 更新：
