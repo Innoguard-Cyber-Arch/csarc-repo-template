@@ -28,6 +28,8 @@ def test_render_uses_one_release_identity_everywhere() -> None:
     )
     assert "csarc init ./my-project" in prompts
     assert "csarc adopt ." in prompts
+    assert "--report-dir ../csarc-adoption-report" in prompts
+    assert "檢視產生的 Markdown 與 PDF" in prompts
     assert "csarc update --to" in prompts
     assert provenance["commit_sha"] == sha
     assert provenance["guide_url"] in prompts

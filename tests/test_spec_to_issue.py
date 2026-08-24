@@ -1,4 +1,5 @@
 import json
+import re
 import runpy
 from pathlib import Path
 
@@ -87,6 +88,14 @@ def test_issue_body_links_source_and_identity() -> None:
     body = build_issue_body(spec, "https://github.example/spec")
     assert "csarc-spec-id: SPEC-001" in body
     assert "https://github.example/spec" in body
+    assert re.findall(r"^### .+$", body, re.MULTILINE) == [
+        "### 類型",
+        "### 問題",
+        "### 完成條件",
+        "### 補充",
+    ]
+    assert "**Outcome**" in body
+    assert "## Outcome" not in body
 
 
 def test_milestone_description_has_story_contract() -> None:

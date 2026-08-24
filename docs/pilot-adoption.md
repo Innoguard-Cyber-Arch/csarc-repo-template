@@ -10,7 +10,7 @@
 - 建立一張 Issue，列出要保留的程式、設定、文件與驗收指令。
 - 盤點預設分支、可見性、GitHub 方案、既有 workflows、CODEOWNERS、語言 manifest 與乾淨工作樹。
 - 驗證目標 GitHub Release、immutable 狀態、attestation、完整 commit SHA 與 CLI artifact。
-- 在編號分支執行 `csarc adopt --dry-run`，記錄新增、覆寫、保留、人工合併與預估風險；確認後才實際導入。
+- 在編號分支執行 `csarc adopt --dry-run --report-dir <repo 外路徑>`，保存短版 Markdown 與一頁 PDF；確認新增、覆寫、保留、人工合併、無法判定項目及已知風險後才實際導入。報告不是沒有語意或執行期衝突的保證。
 
 ### 導入與驗證
 

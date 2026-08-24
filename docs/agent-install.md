@@ -4,11 +4,14 @@
 2. Use only `https://github.com/Innoguard-Cyber-Arch/csarc-repo-template`.
 3. Run the requested `csarc init`, `adopt`, or `update` command with
    `--dry-run` first. For a release-specific request, pass both `--to` and
-   `--expected-sha`.
+   `--expected-sha`. For `adopt`, also pass `--report-dir` with a location
+   outside the target repository.
 4. Summarize the verified release, full commit SHA, release capability
    preflight, settings, conflict risk, and every file classified as add,
-   overwrite, preserve, or manual merge. Unknown capabilities are resolved by
-   the runtime workflow and never treated as allowed.
+   overwrite, preserve, manual merge, or unable to determine. Review both the
+   generated Markdown and PDF; neither guarantees the absence of semantic or
+   runtime conflicts. Unknown capabilities are resolved by the runtime
+   workflow and never treated as allowed.
 5. Stop and wait for explicit confirmation before changing files.
 6. After confirmation, repeat the same command with
    `--yes --non-interactive` and report the `./scripts/verify` result.
@@ -24,3 +27,11 @@
 10. Explain that a closing pull request is rejected while either its own
     checklist or the referenced Issue still contains an unchecked task; the
     user must supply the missing evidence instead of checking it speculatively.
+11. Explain that repository settings are not copied by GitHub templates or
+    Copier. Administrators should run `apply-repository-settings.sh` in
+    `plan`, `apply`, then `check` order; `check` compares repository, Actions,
+    policy labels, and effective Rulesets. Report `DEGRADED` capability limits
+    separately from actionable drift. The built-in `GITHUB_TOKEN` cannot read
+    every administrator-only field; run the full check from a trusted checkout
+    with repository Administration read access, and never expose that token to
+    untrusted pull request code.

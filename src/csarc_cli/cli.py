@@ -13,8 +13,12 @@ import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NoReturn, Protocol
+from typing import BinaryIO, NoReturn, Protocol
 from urllib.parse import quote
+
+from reportlab.lib import colors  # type: ignore[import-untyped]
+from reportlab.lib.pagesizes import A4  # type: ignore[import-untyped]
+from reportlab.pdfgen.canvas import Canvas  # type: ignore[import-untyped]
 
 CANONICAL_SOURCE = (
     "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git"
@@ -23,6 +27,7 @@ CANONICAL_REPOSITORY = "Innoguard-Cyber-Arch/csarc-repo-template"
 CANONICAL_REPOSITORY_ID = 1_340_899_393
 DEFAULT_OWNER = "@Innoguard-Cyber-Arch/repository-maintainers"
 PROVENANCE_FILE = Path(".csarc/provenance.json")
+ADOPTION_REPORT_BASENAME = "csarc-adoption-dry-run"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
 
 
@@ -105,6 +110,7 @@ class Plan:
     overwrite: tuple[str, ...]
     preserve: tuple[str, ...]
     manual: tuple[str, ...]
+    unknown: tuple[str, ...]
 
 
 def run(
@@ -409,9 +415,15 @@ def detect_language(target: Path) -> str:
     return "ci"
 
 
-def needs_manual_merge(relative: Path) -> bool:
-    """Return whether a preserved file also needs template settings merged."""
-    return relative.as_posix() in {"pyproject.toml", "package.json"}
+def is_text(content: bytes) -> bool:
+    """Return whether file content can be reviewed as UTF-8 text."""
+    if b"\0" in content:
+        return False
+    try:
+        content.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
 
 
 def project_files(root: Path) -> dict[str, Path]:
@@ -544,18 +556,23 @@ def compare_stage(stage: Path, target: Path, *, adopt: bool) -> Plan:
     add: list[str] = []
     preserve: list[str] = []
     manual: list[str] = []
+    unknown: list[str] = []
     for relative_name, staged_path in staged.items():
         existing_path = existing.get(relative_name)
         if existing_path is None:
             add.append(relative_name)
             continue
-        relative = Path(relative_name)
-        if staged_path.read_bytes() == existing_path.read_bytes():
+        staged_content = staged_path.read_bytes()
+        existing_content = existing_path.read_bytes()
+        if staged_content == existing_content:
             preserve.append(relative_name)
-        elif adopt and needs_manual_merge(relative):
-            manual.append(relative_name)
         elif adopt:
-            preserve.append(relative_name)
+            destination = (
+                manual
+                if is_text(staged_content) and is_text(existing_content)
+                else unknown
+            )
+            destination.append(relative_name)
         else:
             manual.append(relative_name)
     preserve.extend(name for name in existing if name not in staged)
@@ -564,7 +581,323 @@ def compare_stage(stage: Path, target: Path, *, adopt: bool) -> Plan:
         (),
         tuple(sorted(set(preserve))),
         tuple(sorted(manual)),
+        tuple(sorted(unknown)),
     )
+
+
+def plan_status(plan: Plan) -> tuple[str, str]:
+    """Return the strongest adoption decision and its limitation."""
+    if plan.unknown:
+        return (
+            "Unable to determine",
+            "Non-text path collisions need human inspection.",
+        )
+    if plan.manual:
+        return (
+            "Review required",
+            "Different text content needs a manual merge decision.",
+        )
+    return (
+        "Ready to adopt",
+        "No known file conflicts; semantic and runtime conflicts remain "
+        "possible.",
+    )
+
+
+def printable(value: object) -> str:
+    """Escape control characters without exposing file content."""
+    return str(value).replace("\n", r"\n").replace("\r", r"\r")
+
+
+def markdown_code(value: object) -> str:
+    """Return a safe inline Markdown code value."""
+    return printable(value).replace("`", r"\`")
+
+
+def report_settings(data: dict[str, str]) -> str:
+    """Return only the non-sensitive settings needed for adoption review."""
+    allowed = ("project_mode", "language", "coverage_mode")
+    return ", ".join(
+        f"`{key}={markdown_code(data[key])}`" for key in allowed if key in data
+    )
+
+
+def adoption_report_markdown(
+    target: Path,
+    revision: Revision,
+    data: dict[str, str],
+    plan: Plan,
+    generated_at: str,
+) -> str:
+    """Render the complete, shareable adoption decision report."""
+    status, reason = plan_status(plan)
+    counts = (
+        ("Add", len(plan.add)),
+        ("Overwrite", len(plan.overwrite)),
+        ("Preserve", len(plan.preserve)),
+        ("Manual merge", len(plan.manual)),
+        ("Unable to determine", len(plan.unknown)),
+    )
+    lines = [
+        "# CSARC adoption dry-run",
+        "",
+        f"> **Decision: {status}.** {reason}",
+        "",
+        "## Snapshot",
+        "",
+        f"- Target: `{markdown_code(target)}`",
+        f"- Template: `{markdown_code(revision.label)}` / `{revision.sha}`",
+        "- Release verification: "
+        + ("verified immutable release" if revision.verified else "UNVERIFIED"),
+        f"- Settings: {report_settings(data)}",
+        f"- Generated: `{generated_at}`",
+        "",
+        "## Expected file effects",
+        "",
+        "| Effect | Files |",
+        "| --- | ---: |",
+        *(f"| {label} | {count} |" for label, count in counts),
+        "",
+        "## Files needing attention",
+        "",
+    ]
+    attention = (
+        (path, "template and repository contain different UTF-8 text")
+        for path in plan.manual
+    )
+    unknown = (
+        (
+            path,
+            "template and repository contain different non-text content",
+        )
+        for path in plan.unknown
+    )
+    items = (*attention, *unknown)
+    if items:
+        lines.extend(
+            f"- `{markdown_code(path)}` - {item_reason}."
+            for path, item_reason in items
+        )
+    else:
+        lines.append(
+            "- No known file conflicts. This does not guarantee semantic or "
+            "runtime compatibility."
+        )
+    lines.extend(
+        (
+            "",
+            "## If you approve",
+            "",
+            "A real adoption adds only planned new files, runs "
+            "`./scripts/verify`, and previews repository settings with `plan`. "
+            "It does not apply settings, push, or open a pull request.",
+            "",
+            "Review this report and the terminal plan before running the "
+            "command again without `--dry-run`.",
+            "",
+        )
+    )
+    return "\n".join(lines)
+
+
+def pdf_text(value: object, limit: int = 92) -> str:
+    """Return printable ASCII text supported by the bundled PDF font."""
+    escaped = printable(value).encode("ascii", "backslashreplace").decode()
+    return escaped if len(escaped) <= limit else escaped[: limit - 3] + "..."
+
+
+def draw_adoption_pdf(
+    output: BinaryIO,
+    target: Path,
+    revision: Revision,
+    data: dict[str, str],
+    plan: Plan,
+    generated_at: str,
+) -> None:
+    """Draw a concise, selectable-text adoption decision PDF."""
+    page_width, page_height = A4
+    document = Canvas(output, pagesize=A4, pageCompression=1)
+    status, reason = plan_status(plan)
+    status_color = {
+        "Ready to adopt": colors.HexColor("#DDEFE2"),
+        "Review required": colors.HexColor("#F7E9B5"),
+        "Unable to determine": colors.HexColor("#F4D7D5"),
+    }[status]
+
+    document.setTitle("CSARC adoption dry-run")
+    document.setAuthor("CSARC Repo Template")
+    document.setFillColor(colors.HexColor("#17324D"))
+    document.setFont("Helvetica-Bold", 8)
+    document.drawString(48, page_height - 44, "CSARC REPO TEMPLATE")
+    document.setFont("Helvetica-Bold", 22)
+    document.drawString(48, page_height - 72, "Adoption dry-run")
+    document.setFillColor(colors.HexColor("#52606D"))
+    document.setFont("Helvetica", 8)
+    document.drawRightString(
+        page_width - 48, page_height - 44, pdf_text(generated_at)
+    )
+
+    document.setFillColor(status_color)
+    document.roundRect(
+        48, page_height - 150, page_width - 96, 54, 7, fill=1, stroke=0
+    )
+    document.setFillColor(colors.HexColor("#17212B"))
+    document.setFont("Helvetica-Bold", 14)
+    document.drawString(62, page_height - 118, status)
+    document.setFont("Helvetica", 8)
+    document.drawString(62, page_height - 135, pdf_text(reason))
+
+    metadata = (
+        ("Target", target),
+        ("Template", f"{revision.label} / {revision.sha}"),
+        (
+            "Verification",
+            "verified immutable release" if revision.verified else "UNVERIFIED",
+        ),
+        ("Profile", data.get("language", "unknown")),
+    )
+    y = page_height - 178
+    for label, value in metadata:
+        document.setFont("Helvetica-Bold", 8)
+        document.drawString(48, y, label)
+        document.setFont("Helvetica", 8)
+        document.drawString(110, y, pdf_text(value, 105))
+        y -= 15
+
+    counts = (
+        ("Add", len(plan.add), "#2F6B8A"),
+        ("Overwrite", len(plan.overwrite), "#477E94"),
+        ("Preserve", len(plan.preserve), "#7298A8"),
+        ("Manual merge", len(plan.manual), "#A7833B"),
+        ("Unknown", len(plan.unknown), "#9A5550"),
+    )
+    document.setFillColor(colors.HexColor("#17212B"))
+    document.setFont("Helvetica-Bold", 11)
+    document.drawString(48, y - 10, "Expected file effects")
+    maximum = max((count for _, count, _ in counts), default=1) or 1
+    y -= 34
+    for label, count, color in counts:
+        document.setFillColor(colors.HexColor("#52606D"))
+        document.setFont("Helvetica", 8)
+        document.drawString(48, y, label)
+        document.setFillColor(colors.HexColor("#E8EDF1"))
+        document.roundRect(128, y - 2, 330, 8, 4, fill=1, stroke=0)
+        document.setFillColor(colors.HexColor(color))
+        width = 0 if count == 0 else max(4, 330 * count / maximum)
+        if width:
+            document.roundRect(128, y - 2, width, 8, 4, fill=1, stroke=0)
+        document.setFillColor(colors.HexColor("#17212B"))
+        document.setFont("Helvetica-Bold", 8)
+        document.drawRightString(page_width - 48, y, str(count))
+        y -= 20
+
+    document.setFont("Helvetica-Bold", 11)
+    document.drawString(48, y - 4, "Files needing attention")
+    y -= 25
+    attention = [
+        (path, "different text - manual merge") for path in plan.manual
+    ] + [
+        (path, "different non-text content - inspect") for path in plan.unknown
+    ]
+    if not attention:
+        document.setFont("Helvetica", 8)
+        document.drawString(
+            48,
+            y,
+            "No known file conflicts. Semantic and runtime conflicts remain "
+            "possible.",
+        )
+    else:
+        document.setFont("Helvetica", 8)
+        for path, item_reason in attention[:7]:
+            document.drawString(48, y, f"- {pdf_text(path, 68)}")
+            document.setFillColor(colors.HexColor("#52606D"))
+            document.drawRightString(page_width - 48, y, item_reason)
+            document.setFillColor(colors.HexColor("#17212B"))
+            y -= 15
+        if len(attention) > 7:
+            document.drawString(
+                48,
+                y,
+                f"- {len(attention) - 7} more item(s); see the Markdown "
+                "report.",
+            )
+
+    document.setFillColor(colors.HexColor("#F1F4F6"))
+    document.roundRect(48, 84, page_width - 96, 68, 7, fill=1, stroke=0)
+    document.setFillColor(colors.HexColor("#17212B"))
+    document.setFont("Helvetica-Bold", 10)
+    document.drawString(62, 132, "If approved")
+    document.setFont("Helvetica", 8)
+    document.drawString(
+        62,
+        116,
+        "Adoption adds planned files, runs ./scripts/verify, and previews "
+        "settings.",
+    )
+    document.drawString(
+        62, 101, "It does not apply settings, push, or open a pull request."
+    )
+    document.setStrokeColor(colors.HexColor("#D5DCE1"))
+    document.line(48, 65, page_width - 48, 65)
+    document.setFillColor(colors.HexColor("#52606D"))
+    document.setFont("Helvetica", 7)
+    document.drawString(48, 50, "Generated by csarc adopt --dry-run")
+    document.drawRightString(page_width - 48, 50, "Page 1 of 1")
+    document.showPage()
+    document.save()
+
+
+def adoption_report_directory(target: Path, requested: Path | None) -> Path:
+    """Resolve a report directory that cannot dirty the target repository."""
+    directory = (
+        requested.expanduser().resolve()
+        if requested is not None
+        else target.parent / f"{target.name}-csarc-adoption-report"
+    )
+    if directory == target or target in directory.parents:
+        raise CliError(
+            "Adoption reports must be written outside the target repo."
+        )
+    return directory
+
+
+def write_adoption_reports(
+    target: Path,
+    revision: Revision,
+    data: dict[str, str],
+    plan: Plan,
+    requested_directory: Path | None,
+) -> tuple[Path, Path]:
+    """Write Markdown first, then a PDF, without replacing prior reports."""
+    directory = adoption_report_directory(target, requested_directory)
+    markdown_path = directory / f"{ADOPTION_REPORT_BASENAME}.md"
+    pdf_path = directory / f"{ADOPTION_REPORT_BASENAME}.pdf"
+    collisions = [path for path in (markdown_path, pdf_path) if path.exists()]
+    if collisions:
+        names = ", ".join(path.name for path in collisions)
+        raise CliError(f"Adoption report already exists ({names}).")
+    directory.mkdir(parents=True, exist_ok=True)
+    generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+    with markdown_path.open("x", encoding="utf-8") as markdown:
+        markdown.write(
+            adoption_report_markdown(target, revision, data, plan, generated_at)
+        )
+    created_pdf = False
+    try:
+        with pdf_path.open("xb") as pdf:
+            created_pdf = True
+            draw_adoption_pdf(pdf, target, revision, data, plan, generated_at)
+    except Exception as error:
+        if created_pdf:
+            pdf_path.unlink(missing_ok=True)
+        raise CliError(
+            "PDF report generation failed; Markdown remains at "
+            f"{markdown_path}."
+        ) from error
+    print(f"Markdown report: {markdown_path}")
+    print(f"PDF report: {pdf_path}")
+    return markdown_path, pdf_path
 
 
 def print_group(title: str, paths: tuple[str, ...]) -> None:
@@ -601,8 +934,9 @@ def print_plan(
     print_group("Overwrite", plan.overwrite)
     print_group("Preserve", plan.preserve)
     print_group("Manual merge", plan.manual)
-    risk = "manual merge required" if plan.manual else "no known file conflicts"
-    print(f"Conflict risk: {risk}")
+    print_group("Unable to determine", plan.unknown)
+    status, reason = plan_status(plan)
+    print(f"Conflict risk: {status} - {reason}")
 
 
 def confirm(args: argparse.Namespace) -> bool:
@@ -802,6 +1136,8 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:
     """Plan and apply init or adopt."""
     target = args.path.expanduser().resolve()
     validate_copy_target(target, mode)
+    if mode == "adopt" and args.report_dir is not None and not args.dry_run:
+        raise CliError("--report-dir requires adopt --dry-run.")
 
     revision = resolve_revision(
         args.source,
@@ -822,6 +1158,10 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:
         plan = compare_stage(stage, target, adopt=mode == "adopt")
         print_plan(mode, target, revision, data, plan)
         capability_preflight(stage / "scripts" / "release_policy.py", target)
+        if mode == "adopt" and args.dry_run:
+            write_adoption_reports(
+                target, revision, data, plan, args.report_dir
+            )
         if args.dry_run or not confirm(args):
             return 0
         if mode == "init":
@@ -1107,6 +1447,13 @@ def parser() -> argparse.ArgumentParser:
         subparser.add_argument(
             "--data", action="append", default=[], metavar="KEY=VALUE"
         )
+        if name == "adopt":
+            subparser.add_argument(
+                "--report-dir",
+                type=Path,
+                metavar="PATH",
+                help="write dry-run Markdown and PDF reports outside the repo",
+            )
         add_write_options(subparser)
 
     update = subparsers.add_parser(

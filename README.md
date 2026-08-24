@@ -2,7 +2,7 @@
 
 Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript 或兩者並用。新案、既有案與後續政策更新都經 Copier 形成可審查差異。
 
-目前公版：v0.8.2 <!-- x-release-please-version -->
+目前公版：v0.10.1 <!-- x-release-please-version -->
 
 [開啟內部網站與完整決策說明](docs/index.html)（內部限閱，請勿公開分享此連結；`noindex`／`robots.txt` 只是臨時防護，不是存取控制，詳見網站內「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)）
 
@@ -50,6 +50,8 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；CI 
 
 多個可寫 agents 平行執行時，一項任務使用一個 branch 與一個獨立 worktree，且只平行處理範圍互不依賴的工作；開始前先辨識目前是否已在 agent 平台管理的 worktree，不強制讓同一 branch 出現在多個 worktrees，也不自行刪除其他工具建立或含未提交變更的 worktree。原生 [`git worktree`](https://git-scm.com/docs/git-worktree) 是可攜基線；[Worktrunk](https://github.com/max-sixty/worktrunk) 可選擇簡化建立、切換與清理，但屬於本機／agent orchestration 輔助工具，不是本模板或生成 repo 的必要相依。worktree 只隔離工作目錄，整合仍以 PR、CI、人工審查及合併後完整驗證為準。
 
+GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktree 的 agent 也負責在 PR 合併後回收：先離開該 worktree 並更新 integration ref，再從另一個 checkout 執行 `./scripts/cleanup-worktrees --apply --worktree <path> origin/main`。腳本預設只列出候選項目，且只接受有 GitHub merged PR 證據、已進入 integration ref、乾淨且未鎖定的 branch worktree；維護者要清理全 repo 時，先執行不含 `--apply` 的 dry run，再省略 `--worktree` 套用全部候選項目。
+
 本 repo 沒有共用測試環境，因此採 main-only。生成專案只有在確實有長期 dev 測試環境時，才改選 `dev` 模式。
 驗證入口也會執行 Issue／PR 政策正反例；標題不合格的 Issue 會讓連結它的 PR 無法通過，公版另注入不合法的 Python／TypeScript 內容，確認語言門禁真的會拒絕。
 
@@ -59,10 +61,10 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；CI 
 
 ## 設定與密鑰
 
-- **依方案套用設定：**GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。有管理權且希望啟用較強門禁時，可在推送遠端後執行 `./scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 唯讀驗證；這不是 portable release baseline 的必要步驟。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。`apply` 會嘗試設定 Actions 建立 PR；組織政策回覆 403／409 時保留宣告、明確降級並繼續，其餘未知錯誤仍停止。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。
+- **依方案套用設定：**GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。有管理權且希望啟用較強門禁時，可在推送遠端後執行 `./scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 唯讀比對 repository、Actions、政策標籤與有效 Ruleset；這不是 portable release baseline 的必要步驟。可修正差異會失敗，Free private Ruleset、組織政策限制或 PR 的內建 `GITHUB_TOKEN` 看不到管理欄位時，則明確標為 `DEGRADED` 並保留具體差異。需要驗證全部管理欄位時，由管理員在可信任的 checkout 以具 repository Administration read 權限的 `gh` 憑證執行；不要把管理型 token 暴露給未受信任的 PR 程式碼。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。
 - **Release 路徑依能力自動選擇：**`csarc init`／`adopt`／`update` 會在 GitHub origin 與 API 可讀時顯示 preflight；每次 release workflow 仍以當下的 `GITHUB_TOKEN` 重測 Actions PR、contents、Release 與 workflow dispatch 能力。四項都確認可用時使用 release-please；PR 被禁止或無法確認但其餘交付能力完整時，direct mode 只接受已由人工 PR 寫入版本與 CHANGELOG 的最新 `main` commit，再建立 tag／draft release 並 dispatch 成品。版本化 commit 尚未存在或其餘交付能力不完整時，只驗證並輸出 `release-capabilities-<run-id>` artifact，不假裝已發版。PR check 只顯示 patch／minor／major／no-release 意圖，確切版本到 main 後才配置。這些路徑都不需要長效 PAT 或額外 GitHub App；`python-version-policy.yml` 的排程升版 PR 仍需要專用 App，未提供時略過。
 - **選配整合依目前權限引導：**同一個唯讀 preflight 會辨識 personal／organization owner、目前 actor 的 repo admin 與 organization owner 狀態，並把 Renovate 標成 `available`、`request-owner` 或 `fallback`。`available` 只代表可以開啟 [Renovate App 安裝頁](https://github.com/apps/renovate/installations/new) 並由 GitHub 顯示權限、取得同意；請只選本 repo。organization member 即使有 repo admin，仍因 App 要求 organization members read 與 repository administration read 而顯示 `request-owner`。未知權限、API 失敗或無 admin 一律 `fallback`，繼續使用 Dependabot 與既有 CI/CD；CLI 不會靜默安裝 App，也不要求長效廣域 PAT。新 repo 尚未有 origin 時，先設定 `GH_REPO=owner/repo` 即可在 `csarc init` 階段檢查預定目標。
-- **每日排程偵測治理漂移：**`apply-repository-settings.sh check` 原本只在 PR／push 觸發的 CI 裡執行，是一次性快照；`.github/workflows/governance-drift.yml`（daily cron，另可手動 `workflow_dispatch`）在 CI 之外每天重跑同一個 `check`，縮短只靠程式碼變更觸發檢查的盲區，並抓出排程執行時仍存在的偏離。偵測到偏離就由 `scripts/check-governance-drift` 自動開立或更新一張 `Repository governance drift detected` Issue，內容附上實際擷取到的差異；沒有偏離則不會建立或更新任何 Issue。若設定在兩次快照之間遭變更後又恢復，這個排程無法回溯偵測，仍需 GitHub audit log 或組織層事件監控。下發專案可在 Copier 問答啟用 `enable_governance_drift_check`（預設關閉）選配同一檢查。
+- **每日排程偵測治理漂移：**`apply-repository-settings.sh check` 原本只在 PR／push 觸發的 CI 裡執行，是一次性快照；`.github/workflows/governance-drift.yml`（daily cron，另可手動 `workflow_dispatch`）在 CI 之外每天重跑同一個 `check`。可修正偏離會由 `scripts/check-governance-drift` 開立或更新單一追蹤 Issue；平台或組織限制造成的 `DEGRADED` 不會讓 portable CI 永久失敗，也不會再被描述成「沒有 drift」，具體差異保留在 workflow log 與 warning annotation。若設定在兩次快照之間遭變更後又恢復，仍需 GitHub audit log 或組織層事件監控。下發專案可在 Copier 問答啟用 `enable_governance_drift_check`（預設關閉）。
 - **線上整合證據：**`./scripts/verify-template.sh` 只證明靜態與合成驗證；root-only `Live integration smoke` 才會在本 repo 實際 dispatch OSV、Release Please、release handoff 與 governance drift，並為每項能力保存 JSON artifact。`Release consumption verification` 另會下載真正的 CLI wheel，驗證 immutable Release 的簽章、repository identity 與 artifact digest，再確認竄改內容會 fail closed。執行方式與邊界見 [`docs/live-integration.md`](docs/live-integration.md)及 [`docs/artifact-consumption.md`](docs/artifact-consumption.md)。
 - **來源證明依可見度決定預設值：**Copier 問答新增 `project_visibility`（public／private／internal）；建立非 CI-only 專案且選擇 public 時，`enable_release_attestations` 預設開啟，自動產生 `actions/attest` provenance／SBOM attestation，`publish-evidence` job 也會拿到對應的 `id-token: write`／`attestations: write`。若同時啟用 PyPI 或 npm 發布，對應 job 會在再發布前以 `gh attestation verify` 強制比對 repository、tag ref、artifact digest 與 signer workflow；產生 attestation 與強制驗證是兩個不同狀態。private／internal 維持明確 opt-in、預設關閉；此預設值只在 Copier 建檔當下生效，不會回頭偵測或變更既有 repo 的可見度。
 - **SAST 依方案啟用：**有 Python／TypeScript 的 public repo 預設產生最小 CodeQL workflow；private／internal repo 只有在已授權 GitHub Code Security 時才明確開啟 `enable_codeql`，否則 SAST 保持未涵蓋並由專案選用核准的替代工具。Ruff／TypeScript 負責 lint 與型別，OSV 負責已知相依漏洞，都不視為 SAST。CodeQL 只分析所選 profile 的語言，結果仍可能有誤報與漏報，需人工 triage。
@@ -105,7 +107,7 @@ release workflow 用內建 `GITHUB_TOKEN` 重測能力：支援時由 release-pl
 
 真實導入的可重複步驟、驗收證據與已知平台限制整理在 [`docs/pilot-adoption.md`](docs/pilot-adoption.md)。第一個 consuming repo `ai-guardrail` 已完成 v0.2.4 導入與 v0.3.1 更新，因此共用治理與 CI/CD-only composition 為 beta；尚未有真實採用證據的 Python、TypeScript 與混合 composition 維持 alpha。
 
-以下三條路徑都使用核准的 GitHub Release。CLI 只接受 `Innoguard-Cyber-Arch/csarc-repo-template`（repository ID `1340899393`），並確認 Release 已發布、非 draft、非 prerelease、immutable、attestation 有效、tag 未在驗證途中移動且 commit signature 有效。通過後才顯示完整 40 字元 commit SHA、固定版本的安裝指南、設定、新增／覆寫／保留／人工合併清單與衝突風險。成功後寫入 `.csarc/provenance.json`；來源或 provenance 漂移一律停止。
+以下三條路徑都使用核准的 GitHub Release。CLI 只接受 `Innoguard-Cyber-Arch/csarc-repo-template`（repository ID `1340899393`），並確認 Release 已發布、非 draft、非 prerelease、immutable、attestation 有效、tag 未在驗證途中移動且 commit signature 有效。通過後才顯示完整 40 字元 commit SHA、固定版本的安裝指南、設定、新增／覆寫／保留／人工合併／無法判定清單與衝突風險。成功後寫入 `.csarc/provenance.json`；來源或 provenance 漂移一律停止。
 
 ### 建立新 repo
 
@@ -119,11 +121,12 @@ uvx --from csarc-repo-cli csarc init ./my-project
 
 ```bash
 git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --from csarc-repo-cli csarc adopt . --dry-run
+uvx --from csarc-repo-cli csarc adopt . --dry-run \
+  --report-dir ../csarc-adoption-report
 uvx --from csarc-repo-cli csarc adopt .
 ```
 
-`adopt` 要求乾淨 Git working tree，以 `pyproject.toml`／`package.json` 建議 profile，並預設保留 manifest、產品程式、測試、spec 與網站內容。有無法 deterministic 合併的檔案時會保留可審查差異並回傳非零，不會無提示全面覆寫。
+`adopt` 要求乾淨 Git working tree，以 `pyproject.toml`／`package.json` 建議 profile，並預設保留 manifest、產品程式、測試、spec 與網站內容。dry run 會在 repo 外產生同源的短版 Markdown 與一頁 PDF，列出變更數量、需人工合併的文字檔及無法判讀的非文字碰撞；未指定 `--report-dir` 時使用相鄰的 `<repo>-csarc-adoption-report`。報告只說明已知風險，不保證沒有語意或執行期衝突，也不會修改 target repo。有無法 deterministic 合併的檔案時會保留可審查差異並回傳非零，不會無提示全面覆寫。
 
 ### 更新已導入的 repo
 
@@ -160,7 +163,7 @@ uvx --from csarc-repo-cli csarc update
 核准版本：最新穩定版
 核准 commit：<resolved-full-commit-sha>
 安裝指南：https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/<resolved-full-commit-sha>/docs/agent-install.md
-請先用 csarc adopt --dry-run 從正式 GitHub Release 驗證 repository ID、immutable release、attestation、tag、commit signature 並解析完整 SHA；顯示 SHA 給我確認後，才讀取該 SHA 的安裝指南。摘要新增、覆寫、保留與人工合併檔案並等待確認；不要自行 apply GitHub settings、push 或建立 PR。
+請先用 csarc adopt --dry-run --report-dir ../csarc-adoption-report 從正式 GitHub Release 驗證 repository ID、immutable release、attestation、tag、commit signature 並解析完整 SHA；顯示 SHA 給我確認後，才讀取該 SHA 的安裝指南。檢視產生的 Markdown 與 PDF，摘要新增、覆寫、保留、人工合併與無法判定項目並等待確認；不要自行 apply GitHub settings、push 或建立 PR。
 ```
 
 更新：

@@ -138,18 +138,47 @@ def parse_spec(path: Path) -> Spec:
 
 def build_issue_body(spec: Spec, source_url: str) -> str:
     """Build the managed body stored in the matching GitHub Issue."""
-    return "\n".join(
+    matches = list(re.finditer(r"^## (.+?)\s*$", spec.body, re.MULTILINE))
+    sections = [
+        (
+            match.group(1),
+            spec.body[
+                match.end() : matches[index + 1].start()
+                if index + 1 < len(matches)
+                else len(spec.body)
+            ].strip(),
+        )
+        for index, match in enumerate(matches)
+    ]
+    section_map = {title.casefold(): content for title, content in sections}
+    supplement = "\n\n".join(
         [
             f"<!-- csarc-spec-id: {spec.spec_id} -->",
-            f"> Source: [{spec.path.as_posix()}]({source_url})  ",
-            f"> Owner: {spec.owner}  ",
-            f"> Priority: {spec.priority}  ",
-            f"> Expected size: {spec.estimate}  ",
-            f"> Spec status: {spec.status}",
-            "",
-            spec.body,
-            "",
+            "\n".join(
+                [
+                    f"> Source: [{spec.path.as_posix()}]({source_url})  ",
+                    f"> Owner: {spec.owner}  ",
+                    f"> Priority: {spec.priority}  ",
+                    f"> Expected size: {spec.estimate}  ",
+                    f"> Spec status: {spec.status}",
+                ]
+            ),
+            *(
+                f"**{title}**\n\n{content}"
+                for title, content in sections
+                if title.casefold() not in {"problem", "acceptance criteria"}
+            ),
         ]
+    )
+    return (
+        "### 類型\n\n"
+        "enhancement\n\n"
+        "### 問題\n\n"
+        f"{section_map['problem']}\n\n"
+        "### 完成條件\n\n"
+        f"{section_map['acceptance criteria']}\n\n"
+        "### 補充\n\n"
+        f"{supplement}\n"
     )
 
 

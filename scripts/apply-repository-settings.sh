@@ -148,6 +148,143 @@ if ! ruleset_access="$(gh api "repos/$repo/rulesets" 2>&1)"; then
 fi
 
 if [[ "$mode" == "check" ]]; then
+  check_errors=0
+  check_degraded=0
+  repository_drift=""
+  repository_state_available=false
+
+  if ! repository_state="$(gh api "repos/$repo" 2>&1)"; then
+    echo "Cannot inspect repository settings for $repo." >&2
+    echo "$repository_state" >&2
+    check_errors=$((check_errors + 1))
+  else
+    repository_state_available=true
+    if ! repository_drift="$(python3 - "$repo_root/policies/repository.json" "$repository_state" 2>&1 <<'PY'
+import json
+import sys
+
+desired = json.load(open(sys.argv[1], encoding="utf-8"))
+actual = json.loads(sys.argv[2])
+drift = [
+    f"{key}: desired {value!r}, live {actual.get(key)!r}"
+    for key, value in desired.items()
+    if key in actual and actual[key] != value
+]
+if drift:
+    raise SystemExit("; ".join(drift))
+PY
+    )"; then
+      echo "Repository settings drift: $repository_drift" >&2
+      check_errors=$((check_errors + 1))
+    fi
+  fi
+  if [[ "$repository_state_available" == "true" ]]; then
+    repository_missing="$(python3 - "$repo_root/policies/repository.json" "$repository_state" <<'PY'
+import json
+import sys
+
+desired = json.load(open(sys.argv[1], encoding="utf-8"))
+actual = json.loads(sys.argv[2])
+print(", ".join(key for key in desired if key not in actual))
+PY
+    )"
+    if [[ -n "$repository_missing" ]]; then
+      if [[ "$repo_admin" == "true" ]]; then
+        echo "Cannot observe repository setting fields despite administrator access: $repository_missing" >&2
+        check_errors=$((check_errors + 1))
+      else
+        [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
+          echo "::warning title=Settings inspection degraded::The token cannot read administrator-only repository fields."
+        echo "DEGRADED repository inspection: token cannot read administrator-only fields: $repository_missing"
+        check_degraded=$((check_degraded + 1))
+      fi
+    elif [[ -z "$repository_drift" ]]; then
+      echo "Repository settings match policies/repository.json."
+    fi
+  fi
+
+  if ! actions_state="$(gh api "repos/$repo/actions/permissions/workflow" 2>&1)"; then
+    if [[ "$repo_admin" != "true" && "$actions_state" == *"Resource not accessible by integration"* ]]; then
+      [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
+        echo "::warning title=Actions inspection degraded::The token cannot read administrator-only Actions settings."
+      echo "DEGRADED Actions inspection: token cannot read administrator-only workflow permissions."
+      check_degraded=$((check_degraded + 1))
+    else
+      echo "Cannot inspect Actions workflow permissions for $repo." >&2
+      echo "$actions_state" >&2
+      check_errors=$((check_errors + 1))
+    fi
+  elif ! actions_comparison="$(python3 - "$repo_root/policies/actions.json" "$actions_state" 2>&1 <<'PY'
+import json
+import sys
+
+desired = json.load(open(sys.argv[1], encoding="utf-8"))
+actual = json.loads(sys.argv[2])
+default_drift = desired["default_workflow_permissions"] != actual.get("default_workflow_permissions")
+desired_pr = desired["can_approve_pull_request_reviews"]
+actual_pr = actual.get("can_approve_pull_request_reviews")
+print(
+    str(default_drift).lower(),
+    str(desired_pr is True and actual_pr is False).lower(),
+    str(desired_pr != actual_pr and not (desired_pr is True and actual_pr is False)).lower(),
+    sep="|",
+)
+PY
+  )"; then
+    echo "Cannot compare Actions workflow permissions for $repo." >&2
+    echo "$actions_comparison" >&2
+    check_errors=$((check_errors + 1))
+  else
+    IFS='|' read -r actions_default_drift actions_pr_degraded actions_pr_drift \
+      <<<"$actions_comparison"
+    if [[ "$actions_default_drift" == "true" ]]; then
+      echo "Actions settings drift: default_workflow_permissions differs from policies/actions.json." >&2
+      check_errors=$((check_errors + 1))
+    fi
+    if [[ "$actions_pr_drift" == "true" ]]; then
+      echo "Actions settings drift: can_approve_pull_request_reviews differs from policies/actions.json." >&2
+      check_errors=$((check_errors + 1))
+    elif [[ "$actions_pr_degraded" == "true" ]]; then
+      [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
+        echo "::warning title=Actions policy degraded::Actions cannot approve pull requests although policies/actions.json requests it."
+      echo "DEGRADED Actions PR policy: desired true, live false; an organization policy may block this capability. Runtime release workflows adapt."
+      check_degraded=$((check_degraded + 1))
+    fi
+    if [[ "$actions_default_drift" != "true" && "$actions_pr_degraded" != "true" && "$actions_pr_drift" != "true" ]]; then
+      echo "Actions workflow permissions match policies/actions.json."
+    fi
+  fi
+
+  if ! labels_state="$(gh label list --repo "$repo" --limit 1000 --json name,color,description 2>&1)"; then
+    echo "Cannot inspect labels for $repo." >&2
+    echo "$labels_state" >&2
+    check_errors=$((check_errors + 1))
+  elif ! labels_drift="$(python3 - "$repo_root/policies/labels.json" "$labels_state" 2>&1 <<'PY'
+import json
+import sys
+
+desired = {item["name"]: item for item in json.load(open(sys.argv[1], encoding="utf-8"))}
+actual = {item["name"]: item for item in json.loads(sys.argv[2])}
+drift = []
+for name, expected in desired.items():
+    observed = actual.get(name)
+    if observed is None:
+        drift.append(f"missing {name!r}")
+        continue
+    if observed.get("color", "").lower() != expected["color"].lower():
+        drift.append(f"{name!r} color differs")
+    if (observed.get("description") or "") != expected["description"]:
+        drift.append(f"{name!r} description differs")
+if drift:
+    raise SystemExit("; ".join(drift))
+PY
+  )"; then
+    echo "Label settings drift: $labels_drift" >&2
+    check_errors=$((check_errors + 1))
+  else
+    echo "Policy labels match policies/labels.json; extra labels are allowed."
+  fi
+
   if [[ "$ruleset_enforcement_available" != true ]]; then
     [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
       echo "::warning title=Repository governance degraded::Required branch protection is unavailable for this private repository; continuing without it."
@@ -162,14 +299,12 @@ if [[ "$mode" == "check" ]]; then
     fi
     print_ruleset_guidance
     echo "DEGRADED required governance: $ruleset_skip_reason The template must keep working on every GitHub plan and visibility, so this account-plan limitation does not fail closed; a capable plan with rules that do not match policy still does."
-    exit 0
-  fi
-  if ! branch_rules="$(gh api "repos/$repo/rules/branches/$default_branch" 2>&1)"; then
+    check_degraded=$((check_degraded + 1))
+  elif ! branch_rules="$(gh api "repos/$repo/rules/branches/$default_branch" 2>&1)"; then
     echo "Cannot inspect effective rules for $repo:$default_branch." >&2
     echo "$branch_rules" >&2
-    exit 1
-  fi
-  python3 - "$ruleset_payload" "$branch_rules" <<'PY'
+    check_errors=$((check_errors + 1))
+  elif ! ruleset_drift="$(python3 - "$ruleset_payload" "$branch_rules" 2>&1 <<'PY'
 import json
 import sys
 
@@ -213,9 +348,24 @@ if missing_checks:
     errors.append("missing required checks: " + ", ".join(missing_checks))
 
 if errors:
-    raise SystemExit("Repository governance check failed: " + "; ".join(errors))
+    raise SystemExit("; ".join(errors))
 PY
-  echo "Repository governance ready: $default_branch has the required effective rules."
+  )"; then
+    echo "Ruleset settings drift: $ruleset_drift" >&2
+    check_errors=$((check_errors + 1))
+  else
+    echo "Repository governance ready: $default_branch has the required effective rules."
+  fi
+
+  if (( check_errors > 0 )); then
+    echo "Repository settings check failed with $check_errors actionable difference(s)." >&2
+    exit 1
+  fi
+  if (( check_degraded > 0 )); then
+    echo "Repository settings check completed with $check_degraded degraded capability difference(s)."
+  else
+    echo "All observable repository settings match policy."
+  fi
   exit 0
 fi
 

@@ -20,6 +20,15 @@ def prompt(mode: str, target: str, tag: str, sha: str) -> str:
         "update": "更新目前已導入 CSARC 的 repository",
     }
     command = f"csarc {mode} {target}".rstrip()
+    report_option = (
+        " --report-dir ../csarc-adoption-report" if mode == "adopt" else ""
+    )
+    review = (
+        "檢視產生的 Markdown 與 PDF，摘要新增、覆寫、保留、人工合併及"
+        "無法判定項目"
+        if mode == "adopt"
+        else "摘要將新增、覆寫、保留及需要人工合併的檔案"
+    )
     return "\n".join(
         (
             f"請{actions[mode]}。",
@@ -32,8 +41,8 @@ def prompt(mode: str, target: str, tag: str, sha: str) -> str:
             f"{REPOSITORY}/{sha}/docs/agent-install.md",
             "",
             "請先讀取該固定 commit 的安裝指南並執行 "
-            f"`{command} --to {tag} --expected-sha {sha} --dry-run`，"
-            "摘要將新增、覆寫、保留及需要人工合併的檔案。等我確認後才"
+            f"`{command} --to {tag} --expected-sha {sha} --dry-run"
+            f"{report_option}`，{review}。等我確認後才"
             "正式套用與驗證；不要自行 apply GitHub settings、push 或建立 PR。",
         )
     )

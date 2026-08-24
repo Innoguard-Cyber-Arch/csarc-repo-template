@@ -1480,7 +1480,7 @@
         <h1><code>csarc-repo-template</code></h1>
         <p class="subtitle">Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。</p>
         <div class="package-badges" aria-label="套件狀態">
-          <span class="package-badge beta">v0.8.2</span><!-- x-release-please-version -->
+          <span class="package-badge beta">v0.10.1</span><!-- x-release-please-version -->
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">CI-only／Python／TypeScript／兩者</span>
           <span class="package-badge">main-only 預設／dev 可選</span>
@@ -1625,7 +1625,7 @@
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
           <details class="package-disclosure"><summary><span><span class="tech-name">標準 AGENTS.md＋就近覆寫</span></span></summary><div class="package-health"><p><a href="https://github.com/agentsmd/agents.md" target="_blank" rel="noreferrer">agentsmd/agents.md</a>｜MIT｜公開且持續維護；格式就是一般 Markdown。</p><p><strong>熱門實例：</strong>VS Code 根檔 5 行、uv 25 行、Kubernetes 36 行；Next.js 558 行反映大型 monorepo，而不是每案都該追求的長度。</p><p><strong>官方行為：</strong>Codex 會由根目錄往工作目錄合併指令，越靠近目前檔案的規則優先。</p><p class="reference">Ref. OpenAI Docs; agentsmd/agents.md repository.</p></div></details>
-          <p class="recommendation-copy"><strong>工作契約：</strong>六段涵蓋範圍、工作迴圈、指令、修改界線、安全與審查；依語言只列真正存在的指令，根檔最多 200 行。<br><strong>平行隔離：</strong>每項可寫任務使用自己的 branch 與 Git worktree；只平行處理互不依賴的範圍。原生 Git 是基線，Worktrunk 是選用的本機輔助，不進入生成 repo 相依。<br><strong>人類負責：</strong>確認需求與技術方向、判斷風險、審查差異；worktree 不取代 PR，真正門禁仍是 CI、Ruleset、CODEOWNERS 與 Actions 權限。</p>
+          <p class="recommendation-copy"><strong>工作契約：</strong>六段涵蓋範圍、工作迴圈、指令、修改界線、安全與審查；依語言只列真正存在的指令，根檔最多 200 行。<br><strong>平行隔離：</strong>每項可寫任務使用自己的 branch 與 Git worktree；只平行處理互不依賴的範圍。原生 Git 是基線，Worktrunk 是選用的本機輔助，不進入生成 repo 相依。合併後由建立者執行 <code>scripts/cleanup-worktrees</code>，只回收 GitHub 已驗證合併且乾淨的 worktree。<br><strong>人類負責：</strong>確認需求與技術方向、判斷風險、審查差異；worktree 不取代 PR，真正門禁仍是 CI、Ruleset、CODEOWNERS 與 Actions 權限。</p>
         </article>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>人類入口與 AI 工作契約：</strong><code>README.md</code> 說明 worktree 與 CI/CD 邊界；<code>AGENTS.md</code>＋<code>CLAUDE.md</code> 規範每項任務的隔離與安全清理</li><li><strong>實際驗證：</strong>生成 repo 與其 CI 執行 <code>scripts/verify</code>；只有中央模板 repo 執行、不下發的 <code>scripts/verify-template.sh</code> 負責建立／導入／更新 fixture</li><li><strong>唯讀權限、人類核准與指定審查者：</strong><code>policies/actions.json</code>＋<code>policies/rulesets.json</code>＋<code>CODEOWNERS</code></li></ul></aside>
@@ -1638,12 +1638,12 @@
       </header>
       <p class="context-line"><strong>目前實測｜</strong><code>Innoguard-Cyber-Arch</code> API 回報 Free＋private；因此 <code>main</code> 現在確實沒有強制保護，CI 紅燈仍可能被有權限者繞過。</p>
       <div class="plan-grid">
-        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保存政策，check 降級放行：</strong>public repo 直接強制 Ruleset；private repo 只把期望狀態保留在 <code>policies/rulesets.json</code>，因為 REST 與 GraphQL 建立 API 都會拒絕。check 標示 DEGRADED，CI 與 release 照常執行，PR 會留下警告留言。</p><ul><li>private repo 的 main 仍未受 Ruleset 保護</li><li>CI 與留言提供紀錄，但無法取代 merge gate</li></ul></article>
+        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保存政策，check 降級放行：</strong>public repo 直接強制 Ruleset；private repo 只把期望狀態保留在 <code>policies/rulesets.json</code>，因為 REST 與 GraphQL 建立 API 都會拒絕。check 仍比對 repository、Actions 與政策標籤，再將 Ruleset 限制標示 DEGRADED；CI 與 release 照常執行，PR、workflow log 與 annotation 留下具體紀錄。</p><ul><li>private repo 的 main 仍未受 Ruleset 保護</li><li>CI 與留言提供紀錄，但無法取代 merge gate</li></ul></article>
         <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches、必要審查、team reviewers、CODEOWNERS 與必要檢查。</p><ul><li>需先建立真實 CODEOWNERS team</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
         <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
       </div>
-      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性與 Ruleset API；Free private 仍會套用基本設定，並把期望 Ruleset 保留在 repo，等 repo 改為 public 或組織升級後再由 <code>apply</code> 套用。Web UI 可供管理員人工預建 disabled Ruleset，但公開 REST／GraphQL API 無法自動建立。腳本本身不會改可見性。依序執行 <code>plan</code>、<code>apply</code>、<code>check</code>；不支援強制時，check 回報 MISSING 或 STAGED 與 DEGRADED，CI、release 繼續，PR 留言保留稽核紀錄。已支援 Ruleset 卻規則對不上政策時仍 fail-closed。啟用前必須確認 CODEOWNERS team；Enterprise 的身分、網路與稽核政策另經組織層審查；Code Security／Secret Protection 另購。</span></aside>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用支援的設定：</strong><code>scripts/apply-repository-settings.sh apply</code></li><li><strong>區分 policy、遠端儲存與有效強制：</strong><code>scripts/apply-repository-settings.sh check</code></li><li><strong>排程偵測漂移：</strong><code>.github/workflows/governance-drift.yml</code>（daily cron）每天在 CI 之外重跑 <code>check</code>，抓出排程執行時仍存在的偏離，並由 <code>scripts/check-governance-drift</code> 自動開立或更新追蹤 Issue；兩次快照之間曾變更又恢復的事件仍需 audit log 或組織層監控，下發專案以 <code>enable_governance_drift_check</code> 選配</li></ul></aside>
+      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性與 Ruleset API；Free private 仍會套用基本設定，並把期望 Ruleset 保留在 repo，等 repo 改為 public 或組織升級後再由 <code>apply</code> 套用。Web UI 可供管理員人工預建 disabled Ruleset，但公開 REST／GraphQL API 無法自動建立。腳本本身不會改可見性。依序執行 <code>plan</code>、<code>apply</code>、<code>check</code>；check 會逐項讀取 repository、Actions、政策標籤與有效 Ruleset。可修正差異 fail-closed；不支援的 Ruleset、受組織政策封鎖的 Actions PR 能力，或內建 <code>GITHUB_TOKEN</code> 看不到管理欄位時，回報具體 DEGRADED，CI 與 release 繼續。完整管理欄位驗證應由管理員在可信任 checkout 使用 Administration read 憑證，不把該 token 暴露給 PR 程式碼。啟用前必須確認 CODEOWNERS team；Enterprise 的身分、網路與稽核政策另經組織層審查；Code Security／Secret Protection 另購。</span></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用支援的設定：</strong><code>scripts/apply-repository-settings.sh apply</code></li><li><strong>比對全部可觀察設定：</strong><code>scripts/apply-repository-settings.sh check</code> 比對 repository、Actions、政策標籤與有效 Ruleset</li><li><strong>排程偵測漂移：</strong><code>.github/workflows/governance-drift.yml</code>（daily cron）每天重跑 <code>check</code>；可修正 drift 會開立或更新追蹤 Issue，DEGRADED 的具體差異留在 workflow log 與 warning annotation，不會誤稱為沒有 drift。兩次快照之間曾變更又恢復的事件仍需 audit log 或組織層監控，下發專案以 <code>enable_governance_drift_check</code> 選配</li></ul></aside>
       <p class="reference">Ref. <a href="https://docs.github.com/en/get-started/learning-about-github/githubs-plans" target="_blank" rel="noreferrer">GitHub plans</a>；<a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets" target="_blank" rel="noreferrer">About rulesets</a>. Accessed August 21, 2026.</p>
     </section>
 
@@ -2055,7 +2055,7 @@ required checks:
         {
           title: '排程每天重跑 check，縮短 CI-only 的檢查間隔',
           goal: 'CI 觸發的 check 只是一次性快照；daily cron 能抓出排程執行時仍存在的偏離，降低沒有程式碼變更時長期失察的風險。不需要另外導入 GitHub App 或第三方常駐服務，沿用同一個 check 邏輯即可。',
-          summary: '`governance-drift.yml` 用 daily cron 呼叫 `scripts/check-governance-drift`，它包一層 `apply-repository-settings.sh check`；偵測到偏離就用 `gh issue create`／`gh issue edit` 開立或更新單一追蹤 Issue，內容附上實際差異；沒有偏離則不建立或更新任何 Issue。這仍是快照檢查：若設定在兩次執行之間遭變更後又恢復，需由 GitHub audit log 或組織層事件監控追溯。下發專案透過 `enable_governance_drift_check`（預設關閉）選配同一 workflow。',
+          summary: '`governance-drift.yml` 用 daily cron 呼叫 `scripts/check-governance-drift`，它包一層 `apply-repository-settings.sh check`；可修正偏離會用 `gh issue create`／`gh issue edit` 開立或更新單一追蹤 Issue，內容附上 repository、Actions、政策標籤或 Ruleset 的實際差異。方案或組織限制造成的 DEGRADED 不讓 portable CI 永久失敗，也不會誤稱為沒有 drift；具體差異保留在 workflow log 與 warning annotation。這仍是快照檢查：若設定在兩次執行之間遭變更後又恢復，需由 GitHub audit log 或組織層事件監控追溯。下發專案透過 `enable_governance_drift_check`（預設關閉）選配同一 workflow。',
           file: '.github/workflows/governance-drift.yml＋scripts/check-governance-drift',
           code: `on:
   schedule:
@@ -2572,7 +2572,7 @@ python_typescript: {stage: alpha}`
         {
           title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
           goal: '設定檔可以先審查；實際 repo 建立後才查方案與 API，不能使用的能力會明確略過。',
-          summary: 'Free private 在 repo 保存 ACTIVE Ruleset policy，check 標示 DEGRADED 並在 PR 留言，CI 與 release 照常執行；公開 API 無法建立 Ruleset。public／Pro／Team／Enterprise 以有效規則作為門禁，規則對不上政策時 fail-closed。GitHub App 仍是另一項獨立條件。',
+          summary: 'Free private 在 repo 保存 ACTIVE Ruleset policy；check 仍比對 repository、Actions 與政策標籤，再將 Ruleset 限制標示 DEGRADED，並在 PR、workflow log 與 annotation 留下具體紀錄。public／Pro／Team／Enterprise 以有效規則作為門禁，可修正設定對不上政策時 fail-closed。GitHub App 仍是另一項獨立條件。',
           file: 'policies/＋scripts/apply-repository-settings.sh',
           code: `policies/repository.json
 policies/actions.json
@@ -2583,10 +2583,10 @@ scripts/apply-repository-settings.sh`
         {
           title: '每次修改都測新案、既有案導入與後續更新',
           goal: '可導入的條件是三條生命週期都通過，不是只看檔案存在。',
-          summary: '測試會真的執行 CLI init、adopt dry-run／apply、update check／dry-run／apply 與衝突 fail-closed；CLI 內部仍以 Copier 產生與 smart update。root-only 測試資產若混入生成 repo 也會失敗。',
+          summary: '測試會真的執行 CLI init、adopt dry-run／報告／apply、update check／dry-run／apply 與衝突 fail-closed；adopt 報告會以同一份分析輸出 Markdown 與一頁 PDF，且不修改 target repo。CLI 內部仍以 Copier 產生與 smart update。root-only 測試資產若混入生成 repo 也會失敗。',
           file: 'src/csarc_cli/＋tests/test_cli.py＋scripts/verify-template.sh',
           code: `csarc init ./my-project
-csarc adopt . --dry-run
+csarc adopt . --dry-run --report-dir ../csarc-adoption-report
 csarc update --check --json
 csarc update`
         }
@@ -2677,10 +2677,11 @@ uvx --from csarc-repo-cli csarc init ./my-project \\
       },
       existing: {
         title: '把公版導入既有 repo',
-        goal: '先用 --dry-run 預覽新增、覆寫、保留與人工合併清單；必須是乾淨 Git working tree，預設保留產品內容。',
+        goal: '先用 --dry-run 在 repo 外產生短版 Markdown 與一頁 PDF，預覽新增、覆寫、保留、人工合併與無法判定項目；必須是乾淨 Git working tree，預設保留產品內容。報告只描述已知風險，不保證沒有語意或執行期衝突。',
         location: '既有 repo 根目錄',
         code: `git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --from csarc-repo-cli csarc adopt . --dry-run
+uvx --from csarc-repo-cli csarc adopt . --dry-run \\
+  --report-dir ../csarc-adoption-report
 uvx --from csarc-repo-cli csarc adopt .`
       },
       update: {

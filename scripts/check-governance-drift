@@ -11,7 +11,11 @@ set -e
 
 if [[ "$check_exit" -eq 0 ]]; then
   printf '%s\n' "$check_output"
-  echo "No repository governance drift detected."
+  if grep -q '^DEGRADED ' <<<"$check_output"; then
+    echo "Repository settings have degraded capability differences; the concrete differences above remain recorded in this workflow run."
+  else
+    echo "No repository settings drift detected."
+  fi
   exit 0
 fi
 

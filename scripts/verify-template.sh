@@ -87,8 +87,14 @@ bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
 bash -n scripts/check-update-conflicts
 bash -n template/scripts/check-update-conflicts
+bash -n scripts/cleanup-worktrees
+bash -n template/scripts/cleanup-worktrees
 bash -n scripts/check-governance-drift
 bash -n template/scripts/check-governance-drift
+grep -q 'repository、Actions、政策標籤與有效 Ruleset' README.md
+grep -q 'policy labels, and effective Rulesets' docs/agent-install.md
+grep -q 'Administration read access' docs/agent-install.md
+grep -q 'repository、Actions、政策標籤與有效 Ruleset' docs/index.html
 bash -n scripts/run-live-workflow-probe
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
@@ -96,6 +102,8 @@ bash -n scripts/test-issue-triage
 bash -n scripts/validate-issue-title
 bash -n template/scripts/validate-issue-title
 ./scripts/test-issue-triage
+bash -n scripts/test-worktree-cleanup
+./scripts/test-worktree-cleanup
 
 # The live probe must preserve valid run JSON and emit reusable evidence.
 live_probe_fixture="$fixture_root/live-probe"
@@ -150,7 +158,15 @@ if [[ "$1" == "api" && "$2" == "--method" ]]; then
   exit 0
 fi
 if [[ "$1" == "label" && "$2" == "list" ]]; then
-  printf 'bug\nduplicate\ntask\n'
+  if [[ "$*" == *"name,color,description"* ]]; then
+    if [[ "${MOCK_LABELS_STATE:-match}" == "mismatch" ]]; then
+      printf '%s\n' '[{"name":"bug","color":"ffffff","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"task","color":"000000","description":"Custom"}]'
+    else
+      printf '%s\n' '[{"name":"bug","color":"D73A4A","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"task","color":"000000","description":"Custom"}]'
+    fi
+  else
+    printf 'bug\nduplicate\ntask\n'
+  fi
   exit 0
 fi
 if [[ "$1" == "label" ]]; then
@@ -184,7 +200,31 @@ case "$2" in
     fi
     ;;
   repos/acme/project)
-    printf 'acme\tOrganization\t%s\ttrue\tmain\n' "$MOCK_GITHUB_VISIBILITY"
+    if [[ "$*" == *"--jq"* ]]; then
+      printf 'acme\tOrganization\t%s\t%s\tmain\n' \
+        "$MOCK_GITHUB_VISIBILITY" "${MOCK_REPO_ADMIN:-true}"
+    elif [[ "${MOCK_REPOSITORY_STATE:-match}" == "mismatch" ]]; then
+      printf '%s\n' '{"owner":{"login":"acme","type":"Organization"},"visibility":"private","permissions":{"admin":true},"default_branch":"main","allow_auto_merge":false,"allow_merge_commit":false,"allow_rebase_merge":false,"allow_squash_merge":true,"delete_branch_on_merge":true,"has_issues":true,"has_projects":false,"has_wiki":true}'
+    elif [[ "${MOCK_REPOSITORY_STATE:-match}" == "limited" ]]; then
+      printf '%s\n' '{"owner":{"login":"acme","type":"Organization"},"visibility":"private","permissions":{"admin":false},"default_branch":"main","has_issues":true,"has_projects":false,"has_wiki":false}'
+    else
+      printf '%s\n' '{"owner":{"login":"acme","type":"Organization"},"visibility":"private","permissions":{"admin":true},"default_branch":"main","allow_auto_merge":false,"allow_merge_commit":false,"allow_rebase_merge":false,"allow_squash_merge":true,"delete_branch_on_merge":true,"has_issues":true,"has_projects":false,"has_wiki":false}'
+    fi
+    ;;
+  repos/acme/project/actions/permissions/workflow)
+    if [[ "${MOCK_ACTIONS_STATE:-match}" == "integration-error" ]]; then
+      echo "Resource not accessible by integration" >&2
+      exit 1
+    elif [[ "${MOCK_ACTIONS_STATE:-match}" == "error" ]]; then
+      echo "503 Actions settings unavailable" >&2
+      exit 1
+    elif [[ "${MOCK_ACTIONS_STATE:-match}" == "default-mismatch" ]]; then
+      printf '%s\n' '{"default_workflow_permissions":"write","can_approve_pull_request_reviews":true}'
+    elif [[ "${MOCK_ACTIONS_STATE:-match}" == "degraded" ]]; then
+      printf '%s\n' '{"default_workflow_permissions":"read","can_approve_pull_request_reviews":false}'
+    else
+      printf '%s\n' '{"default_workflow_permissions":"read","can_approve_pull_request_reviews":true}'
+    fi
     ;;
   orgs/acme)
     printf '%s\n' "$MOCK_GITHUB_PLAN"
@@ -231,6 +271,10 @@ run_settings_fixture() {
   local governance="${6:-protected}"
   local staged_ruleset="${7:-present}"
   local actions_error="${8:-}"
+  local repository_state="${9:-match}"
+  local actions_state="${10:-match}"
+  local labels_state="${11:-match}"
+  local repo_admin="${12:-true}"
   local suffix=""
   local arguments=("$mode")
   if [[ "$prune_labels" == true ]]; then
@@ -255,6 +299,10 @@ run_settings_fixture() {
     MOCK_GOVERNANCE="$governance" \
     MOCK_STAGED_RULESET="$staged_ruleset" \
     MOCK_ACTIONS_ERROR="$actions_error" \
+    MOCK_REPOSITORY_STATE="$repository_state" \
+    MOCK_ACTIONS_STATE="$actions_state" \
+    MOCK_LABELS_STATE="$labels_state" \
+    MOCK_REPO_ADMIN="$repo_admin" \
     MOCK_GH_LOG="$call_log" \
     ./scripts/apply-repository-settings.sh "${arguments[@]}"
 }
@@ -312,6 +360,36 @@ free_missing_check="$(run_settings_fixture free check "" false false protected a
 grep -q 'MISSING remote Ruleset' <<<"$free_missing_check"
 team_check="$(run_settings_fixture team check)"
 grep -q 'Repository governance ready' <<<"$team_check"
+grep -q 'All observable repository settings match policy' <<<"$team_check"
+if repository_mismatch="$(run_settings_fixture team check "" false false protected present "" mismatch 2>&1)"; then
+  echo "Repository setting mismatches must fail checks."
+  exit 1
+fi
+grep -q 'Repository settings drift: has_wiki' <<<"$repository_mismatch"
+if actions_mismatch="$(run_settings_fixture team check "" false false protected present "" match default-mismatch 2>&1)"; then
+  echo "Actionable Actions setting mismatches must fail checks."
+  exit 1
+fi
+grep -q 'Actions settings drift: default_workflow_permissions' <<<"$actions_mismatch"
+if actions_unavailable="$(run_settings_fixture team check "" false false protected present "" match error 2>&1)"; then
+  echo "Unreadable Actions settings must fail closed."
+  exit 1
+fi
+grep -q 'Cannot inspect Actions workflow permissions' <<<"$actions_unavailable"
+grep -q '503 Actions settings unavailable' <<<"$actions_unavailable"
+limited_token_check="$(run_settings_fixture team check "" false false protected present "" limited integration-error match false)"
+grep -q 'DEGRADED repository inspection: token cannot read administrator-only fields' \
+  <<<"$limited_token_check"
+grep -q 'DEGRADED Actions inspection: token cannot read administrator-only workflow permissions' \
+  <<<"$limited_token_check"
+actions_degraded_check="$(run_settings_fixture team check "" false false protected present "" match degraded)"
+grep -q 'DEGRADED Actions PR policy: desired true, live false' <<<"$actions_degraded_check"
+grep -q 'completed with 1 degraded capability difference' <<<"$actions_degraded_check"
+if labels_mismatch="$(run_settings_fixture team check "" false false protected present "" match match mismatch 2>&1)"; then
+  echo "Policy label mismatches must fail checks."
+  exit 1
+fi
+grep -q "Label settings drift: 'bug' color differs" <<<"$labels_mismatch"
 if incomplete_check="$(run_settings_fixture team check "" false false incomplete 2>&1)"; then
   echo "Incomplete effective branch rules must fail governance checks."
   exit 1
@@ -329,12 +407,17 @@ run_drift_check() {
   local governance="$1"
   local existing_issue="${2:-}"
   local log_file="$3"
+  local plan="${4:-team}"
+  local actions_state="${5:-match}"
+  local staged_ruleset="${6:-present}"
   : > "$log_file"
   PATH="$github_plan_fixture/bin:$PATH" \
     GH_REPO="acme/project" \
-    MOCK_GITHUB_PLAN="team" \
+    MOCK_GITHUB_PLAN="$plan" \
     MOCK_GITHUB_VISIBILITY="private" \
     MOCK_GOVERNANCE="$governance" \
+    MOCK_ACTIONS_STATE="$actions_state" \
+    MOCK_STAGED_RULESET="$staged_ruleset" \
     MOCK_EXISTING_ISSUE="$existing_issue" \
     MOCK_GH_LOG="$log_file" \
     "$repo_root/scripts/check-governance-drift"
@@ -354,6 +437,15 @@ grep -q '^issue edit 91 ' "$drift_update_log"
 drift_clean_log="$github_plan_fixture/drift-clean.log"
 run_drift_check protected "" "$drift_clean_log" >/dev/null
 test ! -s "$drift_clean_log"
+drift_degraded_log="$github_plan_fixture/drift-degraded.log"
+drift_degraded="$(run_drift_check protected "" "$drift_degraded_log" free match absent)"
+grep -q 'MISSING remote Ruleset' <<<"$drift_degraded"
+grep -q 'Repository settings have degraded capability differences' <<<"$drift_degraded"
+if grep -q 'No repository settings drift detected' <<<"$drift_degraded"; then
+  echo "Degraded settings must not be reported as fully aligned."
+  exit 1
+fi
+test ! -s "$drift_degraded_log"
 
 free_degraded="$(run_settings_fixture free apply "" false false protected absent)"
 grep -q 'DEGRADED repository settings applied' <<<"$free_degraded"
@@ -556,6 +648,10 @@ grep -q '^  workflow_dispatch:$' template/.github/workflows/osv.yml
 grep -q 'uvx --from csarc-repo-cli csarc init' README.md
 grep -q 'uvx --from csarc-repo-cli csarc adopt' README.md
 grep -q 'uvx --from csarc-repo-cli csarc update' README.md
+grep -q -- '--report-dir ../csarc-adoption-report' README.md
+grep -q 'generated Markdown and PDF' docs/agent-install.md
+grep -q 'csarc-adoption-report' docs/index.html
+grep -q 'repo 外路徑' docs/pilot-adoption.md
 test "$(grep -c '^目標路徑：' README.md)" -eq 3
 test "$(grep -c '^來源 repository：https://github.com/Innoguard-Cyber-Arch/csarc-repo-template$' README.md)" -eq 3
 test "$(grep -c '^核准版本：最新穩定版$' README.md)" -eq 3
@@ -623,6 +719,8 @@ grep -q 'one branch and one Git worktree per task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
 grep -q 'search open and closed Issues' AGENTS.md
 grep -q 'Never silently reverse an earlier decision' AGENTS.md
+grep -q 'whether creating through the UI, CLI, or API' AGENTS.md
+grep -q 'create and link a follow-up Issue first' AGENTS.md
 grep -q 'Related decisions' docs/milestone-description.md
 grep -q 'bounded' docs/agent-install.md
 grep -q '沿用、取代或駁回' docs/index.html
@@ -700,8 +798,17 @@ grep -q '^    id: kind$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: problem$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: acceptance$' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^    id: supplement$' .github/ISSUE_TEMPLATE/work-item.yml
+test "$(grep -Ec '^      label: (類型|問題|完成條件|補充)$' \
+  .github/ISSUE_TEMPLATE/work-item.yml)" -eq 4
 grep -q '搜尋相關 open／closed Issues' .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^        - duplicate$' .github/ISSUE_TEMPLATE/work-item.yml
+test "$(grep -c '^## ' .github/pull_request_template.md)" -eq 3
+grep -q '^## Purpose$' .github/pull_request_template.md
+grep -q '^## 完成清單$' .github/pull_request_template.md
+grep -q '^## 補充$' .github/pull_request_template.md
+grep -q "'## Purpose'" .github/workflows/python-version-policy.yml
+grep -q "'## 完成清單'" .github/workflows/python-version-policy.yml
+grep -q "'## 補充'" .github/workflows/python-version-policy.yml
 grep -q 'Validate pull request policy' .github/workflows/pr-policy.yml
 grep -q 'Select exactly one PR label' .github/workflows/pr-policy.yml
 grep -q 'duplicate label is an Issue disposition' .github/workflows/pr-policy.yml
@@ -1057,6 +1164,10 @@ grep -q 'one branch and one Git worktree per task' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'search open and closed Issues' \
   "$fixture_root/default-project/AGENTS.md"
+grep -q 'whether creating through the UI, CLI, or API' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -q 'create and link a follow-up Issue first' \
+  "$fixture_root/default-project/AGENTS.md"
 grep -q 'uv run pytest <test-path>' \
   "$fixture_root/default-project/AGENTS.md"
 if grep -q 'pnpm exec vitest' "$fixture_root/default-project/AGENTS.md"; then
@@ -1101,6 +1212,12 @@ test ! -f "$fixture_root/default-project/pnpm-workspace.yaml"
 test ! -d "$fixture_root/default-project/typescript"
 grep -q 'Coverage 是找出未測程式碼的訊號' \
   "$fixture_root/default-project/README.md"
+grep -q 'repository、Actions、政策標籤與有效 Ruleset' \
+  "$fixture_root/default-project/README.md"
+grep -q 'repository、Actions、政策標籤與有效 Ruleset' \
+  "$fixture_root/default-project/docs/index.html"
+grep -q 'Administration read' \
+  "$fixture_root/default-project/docs/index.html"
 grep -q '新案看全域、既有案先看 changed lines' \
   "$fixture_root/default-project/docs/site-content.js"
 grep -q '^\.DS_Store$' "$fixture_root/default-project/.gitignore"
@@ -1132,9 +1249,15 @@ test "$(grep -c '^    id:' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 4
 grep -q '^    id: supplement$' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml"
-grep -q '^## Checklist$' \
+test "$(grep -Ec '^      label: (類型|問題|完成條件|補充)$' \
+  "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 4
+test "$(grep -c '^## ' \
+  "$fixture_root/default-project/.github/pull_request_template.md")" -eq 3
+grep -q '^## Purpose$' \
   "$fixture_root/default-project/.github/pull_request_template.md"
-grep -q '^## Supplement$' \
+grep -q '^## 完成清單$' \
+  "$fixture_root/default-project/.github/pull_request_template.md"
+grep -q '^## 補充$' \
   "$fixture_root/default-project/.github/pull_request_template.md"
 grep -q 'Closing keywords require every task' \
   "$fixture_root/default-project/.github/pull_request_template.md"
@@ -1549,8 +1672,6 @@ test -f "$fixture_root/all-features-project/.github/workflows/template-update.ym
 test -x "$fixture_root/all-features-project/scripts/check-template-update"
 grep -q 'copier check-update --quiet' \
   "$fixture_root/all-features-project/scripts/check-template-update"
-grep -q '^### 補充$' \
-  "$fixture_root/all-features-project/scripts/check-template-update"
 grep -q 'CSARC_TEMPLATE_READ_TOKEN' \
   "$fixture_root/all-features-project/.github/workflows/template-update.yml"
 test -f "$fixture_root/all-features-project/.github/workflows/governance-drift.yml"
@@ -1566,8 +1687,13 @@ grep -q './scripts/check-governance-drift' \
   "$fixture_root/all-features-project/.github/workflows/governance-drift.yml"
 grep -q 'apply-repository-settings.sh check' \
   "$fixture_root/all-features-project/scripts/check-governance-drift"
-grep -q '^### 補充$' \
-  "$fixture_root/all-features-project/scripts/check-governance-drift"
+for issue_creator in check-template-update check-governance-drift; do
+  issue_creator_path="$fixture_root/all-features-project/scripts/$issue_creator"
+  test "$(grep -c '^### ' "$issue_creator_path")" -eq 4
+  for heading in 類型 問題 完成條件 補充; do
+    grep -qFx "### $heading" "$issue_creator_path"
+  done
+done
 template_update_fixture="$fixture_root/template-update-check"
 mkdir -p "$template_update_fixture/bin"
 cat > "$template_update_fixture/bin/copier" <<'SH'
