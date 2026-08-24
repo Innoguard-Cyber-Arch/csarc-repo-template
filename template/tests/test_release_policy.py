@@ -23,6 +23,7 @@ classify_probe = MODULE["classify_probe"]
 direct_release = MODULE["direct_release"]
 distribution_metadata_errors = MODULE["distribution_metadata_errors"]
 release_intent = MODULE["release_intent"]
+release_follow_up_errors = MODULE["release_follow_up_errors"]
 release_boundary_errors = MODULE["release_boundary_errors"]
 release_plan = MODULE["release_plan"]
 release_target_errors = MODULE["release_target_errors"]
@@ -31,6 +32,88 @@ select_release_mode = MODULE["select_release_mode"]
 simple_release_boundary = MODULE["simple_release_boundary"]
 verify_release_version = MODULE["verify_release_version"]
 optional_integration_preflight = MODULE["optional_integration_preflight"]
+
+
+def test_release_follow_up_accepts_only_automation_owned_changes(
+    tmp_path: Path,
+) -> None:
+    """Bind release follow-ups to the canonical bot branch and file set."""
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "python",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": [
+                            {"path": "src/demo/__init__.py"},
+                            "README.md",
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "uv.lock").touch()
+    valid_head = "release-please--branches--main--components--demo"
+    valid = {
+        "root": tmp_path,
+        "repo": "owner/repo",
+        "head": valid_head,
+        "head_repo": "owner/repo",
+        "actor": "github-actions[bot]",
+        "changed_files": [
+            ".release-please-manifest.json",
+            "CHANGELOG.md",
+            "pyproject.toml",
+            "uv.lock",
+            "src/demo/__init__.py",
+            "README.md",
+        ],
+    }
+    assert release_follow_up_errors(**valid) == []
+
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        "release-please--forged",
+        "owner/repo",
+        "github-actions[bot]",
+        ["CHANGELOG.md"],
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "fork/repo",
+        "github-actions[bot]",
+        ["CHANGELOG.md"],
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        "attacker",
+        ["CHANGELOG.md"],
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        "github-actions[bot]",
+        ["src/product.py"],
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        "github-actions[bot]",
+        [".github/workflows/ci.yml"],
+    )
 
 
 def write_distributions(

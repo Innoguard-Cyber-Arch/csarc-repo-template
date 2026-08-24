@@ -18,7 +18,7 @@ import urllib.request
 import zipfile
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 STATES = {"allowed", "blocked", "unknown"}
@@ -30,6 +30,7 @@ DEPENDABOT_FALLBACK = (
     "Keep GitHub Dependabot via .github/dependabot.yml and the existing "
     "required CI/CD checks."
 )
+RELEASE_PLEASE_ACTOR = "github-actions[bot]"
 
 
 @dataclass(frozen=True)
@@ -144,6 +145,82 @@ def release_intent(title: str) -> str:
     if match.group(1) in {"fix", "revert"}:
         return "patch"
     return "no-release"
+
+
+def release_follow_up_errors(  # noqa: C901
+    root: Path,
+    repo: str,
+    head: str,
+    head_repo: str,
+    actor: str,
+    changed_files: list[str],
+) -> list[str]:
+    """Reject release follow-ups outside the automation-owned boundary."""
+    errors: list[str] = []
+    if head_repo != repo:
+        errors.append("release follow-up must come from this repository")
+    if actor != RELEASE_PLEASE_ACTOR:
+        errors.append(
+            "release follow-up must be authored by github-actions[bot]"
+        )
+
+    try:
+        config = json.loads(
+            (root / "release-please-config.json").read_text(encoding="utf-8")
+        )
+        packages = config["packages"]
+        package = packages["."]
+        component = package["component"]
+        release_type = package.get("release-type", config.get("release-type"))
+        if not isinstance(component, str) or not component:
+            raise ValueError("release component is missing")
+        if release_type not in {"simple", "python", "node"}:
+            raise ValueError("release type is unsupported")
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        errors.append(f"release-please configuration is invalid: {error}")
+        return errors
+
+    expected_head = f"release-please--branches--main--components--{component}"
+    if head != expected_head:
+        errors.append(f"release follow-up branch must be {expected_head}")
+
+    allowed = {".release-please-manifest.json", "CHANGELOG.md"}
+    release_file = {
+        "simple": "version.txt",
+        "python": "pyproject.toml",
+        "node": "package.json",
+    }[release_type]
+    allowed.add(release_file)
+    for item in package.get("extra-files", []):
+        value = (
+            item
+            if isinstance(item, str)
+            else item.get("path")
+            if isinstance(item, dict)
+            else None
+        )
+        if not isinstance(value, str):
+            errors.append("release-please extra-files entry is invalid")
+            continue
+        path = PurePosixPath(value)
+        if path.is_absolute() or ".." in path.parts:
+            errors.append(f"release-please extra-files path is unsafe: {value}")
+            continue
+        allowed.add(path.as_posix())
+    for lockfile in ("uv.lock", "pnpm-lock.yaml"):
+        if (root / lockfile).is_file():
+            allowed.add(lockfile)
+
+    changed = {path for path in changed_files if path}
+    if not changed:
+        errors.append("release follow-up has no changed files")
+    unexpected = sorted(changed - allowed)
+    if unexpected:
+        errors.append(
+            "release follow-up changes non-release files: "
+            + ", ".join(unexpected)
+        )
+    return errors
 
 
 def bump_version(version: str, messages: list[str]) -> str | None:
@@ -1154,6 +1231,13 @@ def parser() -> argparse.ArgumentParser:
     verify_distributions.add_argument("--dist-dir", type=Path, required=True)
     verify_distributions.add_argument("--name", required=True)
     verify_distributions.add_argument("--version", required=True)
+    verify_follow_up = subparsers.add_parser("verify-release-follow-up")
+    verify_follow_up.add_argument("--repo", required=True)
+    verify_follow_up.add_argument("--head", required=True)
+    verify_follow_up.add_argument("--head-repo", required=True)
+    verify_follow_up.add_argument("--actor", required=True)
+    verify_follow_up.add_argument("--changed-files", type=Path, required=True)
+    verify_follow_up.add_argument("--root", type=Path, default=Path.cwd())
     return result
 
 
@@ -1173,6 +1257,19 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         if errors:
             raise SystemExit("; ".join(errors))
         print("Distribution metadata is consistent.")  # noqa: T201
+        return 0
+    if args.command == "verify-release-follow-up":
+        errors = release_follow_up_errors(
+            args.root.resolve(),
+            args.repo,
+            args.head,
+            args.head_repo,
+            args.actor,
+            args.changed_files.read_text(encoding="utf-8").splitlines(),
+        )
+        if errors:
+            raise SystemExit("; ".join(errors))
+        print("Release follow-up source is verified.")  # noqa: T201
         return 0
     if args.command == "boundary":
         write_boundary(

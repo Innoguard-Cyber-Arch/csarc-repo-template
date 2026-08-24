@@ -1525,6 +1525,16 @@ grep -q '^    needs: source$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q 'verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/pr-policy.yml"
+grep -q 'verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/promotion.yml"
+grep -q 'verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q 'git diff --no-renames --name-only' \
+  "$fixture_root/default-project/.github/workflows/promotion.yml"
+grep -q 'git diff --no-renames --name-only' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'config-file: release-please-config.json' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 # Release automation must adapt with the default token, not wait on a GitHub App.

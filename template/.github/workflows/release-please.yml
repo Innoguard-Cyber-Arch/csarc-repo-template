@@ -54,6 +54,16 @@ jobs:
           pr_number="$(jq -r .number <<<"$pull_request")"
           pr_title="$(jq -r .title <<<"$pull_request")"
           labels="$(jq -r '[.labels[].name] | join(",")' <<<"$pull_request")"
+          if [[ "$head_ref" == release-please--* ]]; then
+            git diff --no-renames --name-only "$GITHUB_SHA^" "$GITHUB_SHA" \
+              > "$RUNNER_TEMP/release-follow-up-files"
+            python3 scripts/release_policy.py verify-release-follow-up \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$head_ref" \
+              --head-repo "$(jq -r '.head.repo.full_name // empty' <<<"$pull_request")" \
+              --actor "$(jq -r '.user.login // empty' <<<"$pull_request")" \
+              --changed-files "$RUNNER_TEMP/release-follow-up-files"
+          fi
           branch_strategy=main
           if [[ "$GITHUB_REPOSITORY" == "$CANONICAL_REPOSITORY" ]]; then
             branch_strategy=delivery
