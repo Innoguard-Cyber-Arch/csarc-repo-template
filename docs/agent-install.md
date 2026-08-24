@@ -21,3 +21,6 @@
    search of open and closed Issues before creating an Issue or Milestone, and
    requires prior decisions and any reversal rationale to remain in the new
    work item.
+10. Explain that a closing pull request is rejected while either its own
+    checklist or the referenced Issue still contains an unchecked task; the
+    user must supply the missing evidence instead of checking it speculatively.

@@ -627,6 +627,7 @@ grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
 grep -q 'pull request chain ends at `main`' AGENTS.md
 grep -q 'against `main` or its immediate parent in the stack' AGENTS.md
+grep -q 'complete every task in the pull request and referenced Issue' AGENTS.md
 grep -q 'one branch and one Git worktree per task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
 grep -q 'search open and closed Issues' AGENTS.md
@@ -714,6 +715,10 @@ grep -q 'Validate pull request policy' .github/workflows/pr-policy.yml
 grep -q 'Select exactly one PR label' .github/workflows/pr-policy.yml
 grep -q 'duplicate label is an Issue disposition' .github/workflows/pr-policy.yml
 grep -q 'type/<issue-number>-short-slug' .github/workflows/pr-policy.yml
+grep -q 'Complete every pull request checklist item' \
+  .github/workflows/pr-policy.yml
+grep -q 'still has unchecked acceptance tasks' \
+  .github/workflows/pr-policy.yml
 grep -q 'Only dev promotion or release-please may target main in dev mode.' \
   .github/workflows/pr-policy.yml
 grep -q 'branches: \[main\]' .github/workflows/ci.yml
@@ -1055,6 +1060,8 @@ grep -q 'pull request chain ends at `main`' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'against `main` or its immediate parent in the stack' \
   "$fixture_root/default-project/AGENTS.md"
+grep -q 'complete every task in the pull request and referenced Issue' \
+  "$fixture_root/default-project/AGENTS.md"
 grep -q 'one branch and one Git worktree per task' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'search open and closed Issues' \
@@ -1138,6 +1145,10 @@ grep -q '^## Checklist$' \
   "$fixture_root/default-project/.github/pull_request_template.md"
 grep -q '^## Supplement$' \
   "$fixture_root/default-project/.github/pull_request_template.md"
+grep -q 'Closing keywords require every task' \
+  "$fixture_root/default-project/.github/pull_request_template.md"
+grep -q 'referenced Issue checklist' \
+  "$fixture_root/default-project/docs/index.html"
 test -f "$fixture_root/default-project/.github/workflows/issue-triage.yml"
 test -f "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
 test -f "$fixture_root/default-project/docs/milestone-description.md"
