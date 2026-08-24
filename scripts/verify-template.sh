@@ -722,7 +722,13 @@ fi
 grep -q 'render_release_prompt.py' .github/workflows/release-template.yml
 test "$(grep -c 'release_policy.py prepare' \
   .github/workflows/release-template.yml)" = 2
-grep -q 'tags: \["v\*"\]' .github/workflows/release-template.yml
+grep -q 'source_run_id:' .github/workflows/release-template.yml
+grep -q 'release_policy.py verify-boundary' \
+  .github/workflows/release-template.yml
+if grep -q 'tags: \["v\*"\]' .github/workflows/release-template.yml; then
+  echo "Release artifacts must require an explicit verified-source dispatch."
+  exit 1
+fi
 grep -q 'gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes' \
   .github/workflows/release-template.yml
 grep -q "CSARC_ENABLE_PYPI_PUBLISHING == 'true'" \
@@ -1418,7 +1424,7 @@ grep -q 'apply-repository-settings.sh check' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q '^    needs: governance$' \
   "$fixture_root/default-project/.github/workflows/release.yml"
-grep -q '^    needs: governance$' \
+grep -q '^    needs: source$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
@@ -1449,6 +1455,23 @@ grep -q 'release-capabilities-\${{ github.run_id }}' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'release_policy.py prepare' \
   "$fixture_root/default-project/.github/workflows/release.yml"
+grep -q 'release_policy.py verify-boundary' \
+  "$fixture_root/default-project/.github/workflows/release.yml"
+grep -q 'source_run_id:' \
+  "$fixture_root/default-project/.github/workflows/release.yml"
+grep -q 'aggregate-boundary' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q -- '-f source_run_id="$GITHUB_RUN_ID"' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+if grep -q 'run: ./scripts/verify$' \
+  "$fixture_root/default-project/.github/workflows/release.yml"; then
+  echo "Release artifacts must reuse promotion CI instead of rerunning it."
+  exit 1
+fi
+if grep -q './scripts/verify-template.sh' .github/workflows/release-template.yml; then
+  echo "Template releases must reuse promotion CI instead of rerunning it."
+  exit 1
+fi
 test -f "$fixture_root/default-project/scripts/release_policy.py"
 if grep -Eq 'CSARC_VERSION_BOT|create-github-app-token' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"; then

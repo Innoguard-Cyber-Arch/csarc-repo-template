@@ -20,6 +20,11 @@ from typing import Any
 UNCHECKED = re.compile(r"(?m)^\s*-\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(r"(?:Closes|Fixes|Resolves)\s+#(\d+)(?:\D|$)", re.I)
 MILESTONE_BRANCH = re.compile(r"^dev/m(\d+)-[a-z0-9][a-z0-9-]*$")
+CONVENTIONAL_TITLE = re.compile(
+    r"^(feat|fix|docs|refactor|test|build|ci|chore|revert)"
+    r"(?:\([a-z0-9._/-]+\))?(!)?: "
+)
+INTENT_RANK = {"no-release": 0, "patch": 1, "minor": 2, "major": 3}
 
 
 @dataclass(frozen=True)
@@ -102,6 +107,83 @@ def same_repository(pull_request: dict[str, Any], repo: str) -> bool:
     head = pull_request.get("head")
     head_repo = head.get("repo") if isinstance(head, dict) else None
     return isinstance(head_repo, dict) and head_repo.get("full_name") == repo
+
+
+def release_intent(title: str) -> str:
+    """Map a validated pull-request title to its SemVer intent."""
+    match = CONVENTIONAL_TITLE.match(title)
+    if match is None:
+        return "no-release"
+    if match.group(2):
+        return "major"
+    if match.group(1) == "feat":
+        return "minor"
+    if match.group(1) in {"fix", "revert"}:
+        return "patch"
+    return "no-release"
+
+
+def highest_release_intent(titles: list[str]) -> str:
+    """Return the highest SemVer intent represented by a delivery batch."""
+    return max(
+        (release_intent(title) for title in titles),
+        key=INTENT_RANK.__getitem__,
+        default="no-release",
+    )
+
+
+def included_pull_requests(  # noqa: C901
+    repo: str,
+    base_sha: str,
+    head_sha: str,
+    delivery_branch: str,
+    token: str,
+) -> list[dict[str, object]]:
+    """Find merged pull requests represented by the exact delivery range."""
+    included: dict[int, dict[str, object]] = {}
+    page = 1
+    while True:
+        query = urllib.parse.urlencode({"per_page": 100, "page": page})
+        comparison = github_get(
+            repo, f"compare/{base_sha}...{head_sha}?{query}", token
+        )
+        if not isinstance(comparison, dict):
+            raise RuntimeError("GitHub returned an invalid commit comparison")
+        commits = comparison.get("commits", [])
+        if not isinstance(commits, list):
+            raise RuntimeError("GitHub returned an invalid commit list")
+        for commit in commits:
+            sha = commit.get("sha") if isinstance(commit, dict) else None
+            if not isinstance(sha, str):
+                continue
+            pull_requests = github_get(repo, f"commits/{sha}/pulls", token)
+            if not isinstance(pull_requests, list):
+                raise RuntimeError(
+                    "GitHub returned an invalid associated pull-request list"
+                )
+            for pull_request in pull_requests:
+                if not isinstance(pull_request, dict):
+                    continue
+                base = pull_request.get("base")
+                number = pull_request.get("number")
+                title = pull_request.get("title")
+                if (
+                    pull_request.get("merged_at") is None
+                    or not isinstance(base, dict)
+                    or base.get("ref") != delivery_branch
+                    or not isinstance(number, int)
+                    or not isinstance(title, str)
+                ):
+                    continue
+                included[number] = {
+                    "number": number,
+                    "title": title,
+                    "intent": release_intent(title),
+                }
+        if len(commits) < 100:
+            break
+        page += 1
+    return [included[number] for number in sorted(included)]
 
 
 def unfinished_milestone_issues(
@@ -333,6 +415,31 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 raise RuntimeError(
                     "Delivery branch must contain current main before promotion"
                 )
+            if route.kind == "hotfix":
+                included_prs = [
+                    {
+                        "number": pull_request["number"],
+                        "title": pull_request["title"],
+                        "intent": release_intent(pull_request["title"]),
+                    }
+                ]
+            else:
+                included_prs = included_pull_requests(
+                    args.repo, base_sha, head_sha, head, token
+                )
+                if not included_prs:
+                    raise RuntimeError(
+                        "Delivery promotion contains no merged pull requests"
+                    )
+            intent = highest_release_intent(
+                [str(item["title"]) for item in included_prs]
+            )
+            promotion_intent = release_intent(pull_request["title"])
+            if promotion_intent != intent:
+                raise RuntimeError(
+                    "Promotion pull-request title must declare the batch's "
+                    f"highest SemVer intent ({intent})"
+                )
             candidate_sha = args.candidate_sha
             candidate_tree = git_output(
                 "rev-parse", f"{candidate_sha}^{{tree}}"
@@ -364,6 +471,11 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     "sha256": sha256(args.archive),
                 },
                 "included_issues": included,
+                "release": {
+                    "intent": intent,
+                    "promotion_title": pull_request["title"],
+                    "included_pull_requests": included_prs,
+                },
                 "canary": asdict(canary),
                 "workflow_run": args.workflow_run,
                 "created_at": datetime.now(UTC).isoformat(),

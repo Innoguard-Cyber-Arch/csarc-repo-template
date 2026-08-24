@@ -14,13 +14,16 @@ MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "release_policy.py")
 )
 Capability = MODULE["Capability"]
+aggregate_release_boundaries = MODULE["aggregate_release_boundaries"]
 bump_version = MODULE["bump_version"]
 classify_probe = MODULE["classify_probe"]
 direct_release = MODULE["direct_release"]
 release_intent = MODULE["release_intent"]
+release_boundary_errors = MODULE["release_boundary_errors"]
 release_plan = MODULE["release_plan"]
 release_version_errors = MODULE["release_version_errors"]
 select_release_mode = MODULE["select_release_mode"]
+simple_release_boundary = MODULE["simple_release_boundary"]
 verify_release_version = MODULE["verify_release_version"]
 optional_integration_preflight = MODULE["optional_integration_preflight"]
 
@@ -197,6 +200,115 @@ def test_bump_uses_highest_merged_intent() -> None:
     )
 
 
+def promotion_evidence(
+    kind: str, intent: str, number: int
+) -> dict[str, object]:
+    """Create one compact, verified delivery-boundary fixture."""
+    title = {
+        "no-release": "docs: work",
+        "patch": "fix: work",
+        "minor": "feat: work",
+        "major": "feat!: work",
+    }[intent]
+    return {
+        "gate": "passed",
+        "route": {
+            "kind": kind,
+            "milestone": 7 if kind == "milestone" else None,
+        },
+        "head_ref": "dev/m7-staged-ci" if kind == "milestone" else "dev/next",
+        "pull_request": number + 100,
+        "workflow_run": f"https://example.test/runs/{number}",
+        "included_issues": [{"number": number, "title": "Work"}],
+        "release": {
+            "intent": intent,
+            "included_pull_requests": [
+                {
+                    "number": number,
+                    "title": title,
+                    "intent": intent,
+                }
+            ],
+        },
+        "canary": {"state": "blocked", "result": "artifact-only"},
+        "full_check": {"context": "verify", "status": "required-peer-check"},
+        "post_merge": {
+            "main_sha": f"sha-{number}",
+            "tree_identity": "verified",
+        },
+    }
+
+
+@pytest.mark.parametrize("kind", ["milestone", "standalone-batch", "hotfix"])
+def test_release_boundary_traces_each_delivery_route(kind: str) -> None:
+    """Milestone, standalone, and hotfix batches retain promotion provenance."""
+    result = aggregate_release_boundaries(
+        [promotion_evidence(kind, "patch", 10)], "main", "promotion"
+    )
+    assert result["eligible"] is True
+    assert result["release"]["intent"] == "patch"
+    assert result["boundaries"][0]["kind"] == kind
+    assert result["boundaries"][0]["included_issues"] == [
+        {"number": 10, "title": "Work"}
+    ]
+
+
+def test_release_boundary_uses_highest_intent_and_is_idempotent() -> None:
+    """Retries converge on the same audited batch and highest SemVer intent."""
+    boundaries = [
+        promotion_evidence("milestone", "patch", 10),
+        promotion_evidence("standalone-batch", "minor", 11),
+    ]
+    first = aggregate_release_boundaries(
+        boundaries, "main", "release-follow-up"
+    )
+    second = aggregate_release_boundaries(
+        boundaries, "main", "release-follow-up"
+    )
+    assert first == second
+    assert first["release"]["intent"] == "minor"
+    assert [
+        item["number"] for item in first["release"]["included_pull_requests"]
+    ] == [
+        10,
+        11,
+    ]
+
+
+def test_no_release_boundary_stops_empty_versions() -> None:
+    """A docs/governance-only delivery batch is recorded but cannot publish."""
+    result = aggregate_release_boundaries(
+        [promotion_evidence("milestone", "no-release", 10)],
+        "main",
+        "promotion",
+    )
+    assert result["eligible"] is False
+    assert result["release"]["intent"] == "no-release"
+    assert release_boundary_errors(result, "main")
+
+
+def test_unexpected_main_commit_is_verification_only() -> None:
+    """Unrecognized main history fails closed with an actionable reason."""
+    result = simple_release_boundary(
+        "unexpected", "main", reason="No reviewed pull request found"
+    )
+    assert result["eligible"] is False
+    assert release_boundary_errors(result, "main") == [
+        "No reviewed pull request found",
+        "release source kind is not eligible: unexpected",
+    ]
+
+
+def test_release_source_must_match_the_tag_commit() -> None:
+    """A valid batch cannot be replayed for a different source tree."""
+    result = aggregate_release_boundaries(
+        [promotion_evidence("hotfix", "patch", 10)], "main", "promotion"
+    )
+    assert release_boundary_errors(result, "other") == [
+        "release source does not match the tag commit"
+    ]
+
+
 def git(root: Path, *arguments: str) -> str:
     return subprocess.run(  # noqa: S603
         ["git", *arguments],  # noqa: S607
@@ -357,7 +469,13 @@ def test_direct_release_creates_one_tag_draft_and_dispatch(
     api = DirectReleaseAPI(sha)
 
     payload, failed = direct_release(
-        api, "owner/repo", sha, "main", "release.yml", tmp_path
+        api,
+        "owner/repo",
+        sha,
+        "main",
+        "release.yml",
+        tmp_path,
+        "12345",
     )
 
     assert not failed
@@ -367,6 +485,12 @@ def test_direct_release_creates_one_tag_draft_and_dispatch(
         method == "POST"
         and path.endswith("/git/refs")
         and body == {"ref": "refs/tags/v0.2.0", "sha": sha}
+        for method, path, body in api.calls
+    )
+    assert any(
+        method == "POST"
+        and path.endswith("/dispatches")
+        and body == {"ref": "v0.2.0", "inputs": {"source_run_id": "12345"}}
         for method, path, body in api.calls
     )
 

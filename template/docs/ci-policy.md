@@ -66,6 +66,31 @@ closing keyword 才關閉它。既有 Milestone lifecycle 會在所有 Issue 關
 Milestone acceptance criteria 全部勾選時關閉 Milestone，之後若 Issue reopen 或
 criterion 取消勾選則重新開啟。
 
+## 批次發版邊界
+
+發版以 promotion 為單位，而不是以每張 Issue PR 為單位：Milestone 僅在完成時
+promotion 一次；`dev/next` 建議由團隊固定每週一個 release window 批次 promotion，
+沒有 release-worthy 變更時直接略過；hotfix 才是立即 promotion／release。若下一個
+release PR 合併前又有 promotion，Release Please 更新同一張 PR，最後仍只建立一個
+tag 與 GitHub Release。
+
+Promotion evidence 會列出 delivery range 中實際合併的 PR、標題與各自的
+major／minor／patch／no-release intent。Promotion PR 標題必須宣告其中最高等級，
+使 squash commit 與整批內容一致；若全部只有 `docs`、`ci`、`chore` 等 no-release
+變更，release jobs 會略過並留下原因，不建立空版本。
+
+`main` push 的 release-source job 會再次核對每個 promotion 的 full `verify`、
+canary 狀態與 tree identity，並把 delivery branch、Milestone／standalone route、
+promotion PR、main SHA、evidence run、Issues 與納入 PR 彙整成 90 天 artifact 和
+workflow summary。無關聯 PR、非 promotion／hotfix 或證據不符的 commit 只會得到
+verification-only 結果，不能進入 capability detection 或發布。
+
+Artifact workflow 不監聽任意 `v*` push，只接受 Release Please workflow 帶入
+source run ID 的明確 dispatch。它先驗證 tag commit 與 release-source evidence，
+再建置 distributions、digest、SBOM、attestation 與 registry／immutable Release
+驗證；不重跑已由 promotion 通過的完整 runtime／template 測試矩陣。相同 source
+的重跑會沿用既有 tag、draft Release 或成功 artifact run，不重複發布。
+
 ## 安全掃描與治理頻率
 
 - Gitleaks 留在每張 PR 的 docs／fast／full 路徑。

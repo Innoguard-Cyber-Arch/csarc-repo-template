@@ -16,6 +16,8 @@ MODULE = runpy.run_path(
 )
 classify_canary = MODULE["classify_canary"]
 finalize = MODULE["finalize"]
+highest_release_intent = MODULE["highest_release_intent"]
+included_pull_requests = MODULE["included_pull_requests"]
 main_is_current = MODULE["main_is_current"]
 prepare = MODULE["prepare"]
 route_for = MODULE["route_for"]
@@ -92,6 +94,56 @@ def test_canary_capability_is_explicit(
     assert classify_canary(command, environment).state == state
 
 
+def test_batch_uses_highest_included_pull_request_intent() -> None:
+    """A delivery batch exposes one auditable SemVer decision."""
+    assert highest_release_intent(["docs: guide", "fix: timeout"]) == "patch"
+    assert highest_release_intent(["fix: timeout", "feat: reports"]) == "minor"
+    assert (
+        highest_release_intent(["feat!: protocol", "feat: reports"]) == "major"
+    )
+    assert highest_release_intent(["docs: guide", "ci: tune"]) == "no-release"
+
+
+def test_included_pull_requests_are_deduplicated_and_scoped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only pull requests merged into the promoted delivery range count."""
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path.startswith("compare/"):
+            return {"commits": [{"sha": "one"}, {"sha": "two"}]}
+        if path == "commits/one/pulls":
+            return [
+                {
+                    "number": 10,
+                    "title": "fix: timeout",
+                    "merged_at": "2026-01-01T00:00:00Z",
+                    "base": {"ref": "dev/m7-staged-ci"},
+                }
+            ]
+        return [
+            {
+                "number": 10,
+                "title": "fix: timeout",
+                "merged_at": "2026-01-01T00:00:00Z",
+                "base": {"ref": "dev/m7-staged-ci"},
+            },
+            {
+                "number": 11,
+                "title": "feat: unrelated",
+                "merged_at": "2026-01-01T00:00:00Z",
+                "base": {"ref": "dev/next"},
+            },
+        ]
+
+    monkeypatch.setitem(
+        included_pull_requests.__globals__, "github_get", fake_get
+    )
+    assert included_pull_requests(
+        "owner/repo", "base", "head", "dev/m7-staged-ci", "token"
+    ) == [{"number": 10, "title": "fix: timeout", "intent": "patch"}]
+
+
 def test_milestone_requires_closed_checked_non_promotion_work() -> None:
     """Block open and unchecked work while ignoring PRs and promotion Issues."""
     issues = [
@@ -160,6 +212,7 @@ def test_prepare_builds_milestone_candidate_evidence(
         "number": 99,
         "pull_request": {
             "number": 99,
+            "title": "feat: promote staged CI",
             "body": "Closes #99",
             "labels": [{"name": "promotion"}],
             "base": {"ref": "main", "sha": base_sha},
@@ -207,6 +260,13 @@ def test_prepare_builds_milestone_candidate_evidence(
             },
         ],
     )
+    monkeypatch.setitem(
+        prepare.__globals__,
+        "included_pull_requests",
+        lambda *_: [
+            {"number": 1, "title": "feat: completed work", "intent": "minor"}
+        ],
+    )
     output = tmp_path / "promotion.json"
     prepare(
         SimpleNamespace(
@@ -230,6 +290,17 @@ def test_prepare_builds_milestone_candidate_evidence(
     assert evidence["included_issues"] == [
         {"number": 1, "title": "Completed work"}
     ]
+    assert evidence["release"] == {
+        "intent": "minor",
+        "promotion_title": "feat: promote staged CI",
+        "included_pull_requests": [
+            {
+                "number": 1,
+                "title": "feat: completed work",
+                "intent": "minor",
+            }
+        ],
+    }
 
 
 def test_finalize_accepts_artifact_only_blocked_canary(tmp_path: Path) -> None:
