@@ -121,7 +121,8 @@ Promotion owner 在請求合併前逐項確認：
 - tracking Issue 仍 open，PR 以 closing keyword 指向它，所有 acceptance checkbox
   已完成；Milestone route 的其他工作 Issue 全部關閉。
 - delivery head 包含目前 `main`；候選 source、base/head SHA 與 Git tree 已封存。
-- full `verify` 與 `promotion` context 成功，納入 PR 清單與最高 SemVer intent 相符。
+- full `verify` 與 `promotion` context 成功；或符合下方 quota-only promotion fallback，
+  且其精確 SHA/tree 證據與人工授權完整。納入 PR 清單與最高 SemVer intent 必須相符。
 - canary 為 `allowed` 且成功，或誠實記為 `blocked`／`unknown` artifact-only；後兩者
   不得在 release note 宣稱外部環境驗證成功。
 - reviewer 知道 rollback 是 revert promotion PR／發布修正版，而不是重寫歷史。
@@ -229,6 +230,30 @@ fallback 不取代 release、publishing、deployment approval、secrets、proven
 CODEOWNER review 或任何無法本機重現的控制。額度恢復後須補跑該 SHA 的 GitHub
 checks 並記錄結果；平台不再允許補跑時，另開 Issue 保留缺口，不得宣稱追溯成功。
 
+### Promotion PR 的額外 fallback 證據
+
+`dev/m*`、`dev/next`、`dev/i*` 或 delivery strategy 的 `dev` promotion 到 `main`
+可使用同一個 quota-only 例外；一般 main PR、release follow-up 與 hotfix 不因此新增
+快速通道。除前述共同條件外，必須使用既有 `scripts/promotion_gate.py`，依序完成：
+
+1. 在乾淨、精確等於 promotion PR head 的 worktree 執行 `prepare`，且
+   `--candidate-sha` 必須是該 head SHA；保存 candidate archive、SHA-256、base/head SHA、
+   candidate tree、納入 PR、SemVer intent 與 canary 三態。
+2. 執行完整本機驗證與所有可忠實重現的 required checks。若 canary 是 `allowed`，
+   fallback 不得替代它；只有 `blocked`／`unknown` 可維持 artifact-only。
+3. 先在同一 PR 留下標準 attestation，再由 human maintainer 對相同 head SHA 留下
+   明確授權。使用兩則留言 URL、所有 zero-step blocked run URL 與實際驗證命令執行
+   `finalize-quota-fallback`，產生 machine-readable evidence。此 evidence 的 gate 是
+   `quota-fallback`、`release_eligible` 固定為 `false`；把 JSON 與 archive digest 留在 PR。
+4. 僅以非 admin 的 squash merge 合併。更新乾淨的 `main` checkout 後執行
+   `verify-quota-main`，確認 main tree 等於已驗證 candidate tree，並把結果留在 PR；
+   不符時停止、revert／修正，不重寫歷史。
+
+新 commit、base SHA 漂移、candidate tree 改變、任何非 zero-step 失敗，或 attestation／
+authorization 不屬於同一 PR，都會使 fallback 失效。這份本機 evidence 只允許合併，
+不會被 hosted `release-source` 接受；在原 promotion 與 main post-merge checks 真正補跑
+成功前，不建立、移動或宣稱 tag、Release、package、provenance 或外部 canary 成功。
+
 ## 外部基準
 
 下列活躍大型 repository 與 GitHub 官方文件於 2026-08-24 查閱；當日三者約有
@@ -260,4 +285,6 @@ assignment。這是 job-minute 模型估計，不是實際帳單數字。
 記錄 tier、原因、scopes、條件式檢查與 fast job 秒數。Actions 可正常啟動後，應以
 一般 Issue PR 的實際 run/job duration 驗證至少 70% 降幅，營運驗收由
 [#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189) 追蹤；
-額度、付款或平台問題不得被記成成功測量，也不得用來跳過 promotion 的 full gate。
+額度、付款或平台問題不得被記成成功測量。Promotion 的 quota-only fallback 仍須完整
+執行同一套本機 full verification；它不是 hosted runner-minute 的成功量測，不能用來
+完成 #189。

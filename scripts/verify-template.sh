@@ -17,6 +17,11 @@ grep -q 'uv sync --locked --python 3.14' AGENTS.md
 grep -q 'uv run pytest <test-path>' AGENTS.md
 grep -q 'scripts/render_site.py --check' AGENTS.md
 grep -q 'Actions quota fallback attestation' docs/ci-policy.md
+grep -q 'finalize-quota-fallback' docs/ci-policy.md
+grep -q 'verify-quota-main' docs/ci-policy.md
+grep -q 'release_eligible.*false' docs/ci-policy.md
+cmp -s scripts/promotion_gate.py template/scripts/promotion_gate.py
+cmp -s tests/test_promotion_gate.py template/tests/test_promotion_gate.py
 for summary_file in AGENTS.md README.md template/AGENTS.md.jinja \
   template/README.md.jinja; do
   grep -q 'docs/ci-policy.md#actions-額度-fallback' "$summary_file"
@@ -1449,6 +1454,12 @@ grep -q '^## Actions quota fallback$' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'Actions quota fallback attestation' \
   "$fixture_root/default-project/docs/ci-policy.md"
+grep -q 'finalize-quota-fallback' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q 'verify-quota-main' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q 'SHA/tree-bound.*non-release promotion path' \
+  "$fixture_root/default-project/AGENTS.md"
 grep -q '付款失敗、budget.*平台.*設定.*權限.*未知原因.*測試失敗' \
   "$fixture_root/default-project/docs/index.html"
 grep -q '一般 Issue PR 跑 change-aware fast checks' \

@@ -27,12 +27,12 @@ tracking: none
 - [x] Python 驗證涵蓋精確最低 patch 與宣告範圍內每個 feature release；TypeScript、CI-only 與 mixed profiles 各自驗證真實輸出。
 - [x] Coverage 作為未測程式碼訊號，不被描述成品質分數；門檻依風險與缺陷證據調整。
 - [x] Workflow、permission、GitHub API 與 release 行為以 live probe 或 consuming-repo pilot 補足靜態 fixture，且清楚標示未驗證部分。
-- [x] Actions quota fallback 只接受 human 確認的免費額度耗盡、零 step 啟動與精確 SHA；不能取代 release、deployment、secret 或 provenance 控制。
+- [x] Actions quota fallback 只接受 human 確認的免費額度耗盡、零 step 啟動與精確 SHA；promotion 另綁定 candidate/main tree 並保持不可發布，不能取代 release、deployment、secret 或 provenance 控制。
 - [x] 修 bug 時新增會在修正前失敗的最小 regression；不要求保存每一次 red／green 暫態。
 
 ## Plan
 
-此 spec 是持續驗證基線。效能優化可以減少重複 runner 或 runtime-independent 工作，但不得縮減聲明的支援範圍或 promotion full gate。
+此 spec 是持續驗證基線。效能優化可以減少重複 runner 或 runtime-independent 工作，但不得縮減聲明的支援範圍或 promotion full verification；quota-only promotion fallback 必須保存等價的本機驗證與 tree evidence，並在 hosted checks 補跑前阻止 release。
 
 ## Out of scope
 
@@ -54,6 +54,7 @@ tracking: none
 - [Issue #140](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/140)／[PR #150](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/150)
 - [Issue #162](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/162)／[PR #164](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/164)
 - [Issue #171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171)／[PR #173](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/173)
+- [Issue #233](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/233)
 - [Issue #181](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/181)／[PR #190](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/190)
 - Open measurement／recovery work: [#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189), [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199)
 - [Staged delivery and verification ADR](../adr/staged-delivery-and-verification.md)
