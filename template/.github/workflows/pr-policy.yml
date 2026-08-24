@@ -26,7 +26,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_BRANCH_STRATEGY: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && 'delivery' || '' }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_DELIVERY_CUTOVER_ISSUE: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && '185' || '0' }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -97,8 +99,13 @@ jobs:
             fi
           fi
 
-          if [[ "$branch_strategy" != "main" && "$branch_strategy" != "dev" ]]; then
-            echo "branch_strategy must be main or dev."
+          if [[ "$branch_strategy" != "main" && "$branch_strategy" != "dev" && "$branch_strategy" != "delivery" ]]; then
+            echo "branch_strategy must be main, dev, or delivery."
+            exit 1
+          fi
+          delivery_cutover_issue="${PR_DELIVERY_CUTOVER_ISSUE:-0}"
+          if [[ ! "$delivery_cutover_issue" =~ ^[0-9]+$ ]]; then
+            echo "PR_DELIVERY_CUTOVER_ISSUE must be a non-negative integer."
             exit 1
           fi
 
@@ -113,9 +120,140 @@ jobs:
             exit 1
           fi
 
+          if [[ "$branch_strategy" == "delivery" ]]; then
+            if [[ "$PR_HEAD" =~ ^sync/main-to-(m[0-9]+-[a-z0-9][a-z0-9-]*|next)-[0-9a-f]{7,40}$ ]]; then
+              if [[ "$PR_BASE" == "dev/${BASH_REMATCH[1]}" ]]; then
+                exit 0
+              fi
+              echo "A main sync branch must target its matching delivery branch."
+              exit 1
+            fi
+
+            if [[ "$PR_HEAD" == dependabot/* || "$PR_HEAD" == automation/* ]]; then
+              if [[ "$PR_BASE" == "dev/next" ]]; then
+                exit 0
+              fi
+              echo "Automated maintenance must target dev/next in delivery mode."
+              exit 1
+            fi
+
+            promotion_milestone=""
+            promotion=false
+            if [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
+              promotion=true
+              promotion_milestone="${BASH_REMATCH[1]}"
+            elif [[ "$PR_BASE" == "main" && "$PR_HEAD" == "dev/next" ]]; then
+              promotion=true
+            fi
+          elif [[ "$PR_HEAD" == dependabot/* || "$PR_HEAD" == automation/* ]]; then
+            exit 0
+          fi
+
+          branch_pattern='^(feat|fix|docs|refactor|test|build|ci|chore|revert)/([0-9]+)-[a-z0-9][a-z0-9-]*$'
+          if [[ "${promotion:-false}" == "true" ]]; then
+            closing_issue_pattern='(Closes|Fixes|Resolves)[[:space:]]+#([0-9]+)([^0-9]|$)'
+            if [[ ! "${PR_BODY:-}" =~ $closing_issue_pattern ]]; then
+              echo "A delivery promotion must close its promotion Issue."
+              exit 1
+            fi
+            issue_number="${BASH_REMATCH[2]}"
+          else
+            if [[ ! "$PR_HEAD" =~ $branch_pattern ]]; then
+              echo "Use branch: type/<issue-number>-short-slug"
+              exit 1
+            fi
+            issue_number="${BASH_REMATCH[2]}"
+            issue_link_pattern="(Closes|Fixes|Resolves)[[:space:]]+#${issue_number}([^0-9]|$)"
+            if [[ ! "${PR_BODY:-}" =~ $issue_link_pattern ]]; then
+              echo "PR body must include Closes #${issue_number}."
+              exit 1
+            fi
+          fi
+          unchecked_task_pattern='^[[:space:]]*-[[:space:]]+\[[[:space:]]*\]'
+          if grep -Eq "$unchecked_task_pattern" <<<"${PR_BODY:-}"; then
+            echo "Complete every pull request checklist item before using a closing keyword."
+            exit 1
+          fi
+
+          if [[ "${PR_ISSUE_STATE+x}" == "x" ]]; then
+            issue_state="$PR_ISSUE_STATE"
+            issue_title="${PR_ISSUE_TITLE:-}"
+            issue_body="${PR_ISSUE_BODY:-}"
+            issue_milestone_number="${PR_ISSUE_MILESTONE_NUMBER:-0}"
+            issue_labels="${PR_ISSUE_LABELS:-}"
+            issue_has_unchecked=false
+            if grep -Eq "$unchecked_task_pattern" <<<"$issue_body"; then
+              issue_has_unchecked=true
+            fi
+          else
+            issue_payload="$(
+              gh api "repos/$GITHUB_REPOSITORY/issues/$issue_number" \
+                --jq 'select(.pull_request | not) | [.state, .title, ((.body // "") | test("(?m)^\\s*-\\s+\\[\\s*\\]")), (.milestone.number // 0), ([.labels[].name] | join(","))] | @tsv' \
+                2>/dev/null || true
+            )"
+            IFS=$'\t' read -r issue_state issue_title issue_has_unchecked \
+              issue_milestone_number issue_labels \
+              <<<"$issue_payload"
+          fi
+          if [[ "$issue_state" != "open" ]]; then
+            echo "Issue #${issue_number} must exist and remain open until merge."
+            exit 1
+          fi
+          if [[ "$issue_has_unchecked" == "true" ]]; then
+            echo "Issue #${issue_number} still has unchecked acceptance tasks."
+            exit 1
+          fi
+          if [[ -x ./scripts/validate-issue-title ]]; then
+            ./scripts/validate-issue-title "$issue_title"
+          fi
+
+          if [[ "$branch_strategy" == "delivery" ]]; then
+            if [[ "${promotion:-false}" == "true" ]]; then
+              if [[ ",${issue_labels:-}," != *,promotion,* ]]; then
+                echo "A delivery promotion must close an Issue labeled promotion."
+                exit 1
+              fi
+              if [[ -n "${promotion_milestone:-}" && "$issue_milestone_number" != "$promotion_milestone" ]]; then
+                echo "The promotion Issue Milestone must match the delivery branch number."
+                exit 1
+              fi
+              if [[ -z "${promotion_milestone:-}" && "$issue_milestone_number" != "0" ]]; then
+                echo "A dev/next promotion Issue must not belong to a Milestone."
+                exit 1
+              fi
+              exit 0
+            fi
+
+            if (( delivery_cutover_issue > 0 && issue_number < delivery_cutover_issue )); then
+              expected_base_kind="exact"
+              expected_base="main"
+            elif [[ "$PR_BASE" == "main" ]]; then
+              if [[ "$PR_HEAD" != fix/* || ",${PR_LABELS:-}," != *,hotfix,* || "$issue_milestone_number" != "0" ]]; then
+                echo "Only a standalone fix labeled hotfix may target main directly in delivery mode."
+                exit 1
+              fi
+              exit 0
+            elif [[ "$issue_milestone_number" == "0" ]]; then
+              expected_base_kind="exact"
+              expected_base="dev/next"
+            else
+              expected_base_kind="milestone"
+              expected_base="dev/m${issue_milestone_number}-"
+            fi
+          else
+            expected_base_kind="exact"
+            expected_base="$branch_strategy"
+          fi
+
           base_branch="$PR_BASE"
           seen_bases="|"
-          while [[ "$base_branch" != "$branch_strategy" ]]; do
+          while true; do
+            if [[ "$expected_base_kind" == "exact" && "$base_branch" == "$expected_base" ]]; then
+              break
+            fi
+            if [[ "$expected_base_kind" == "milestone" && "$base_branch" =~ ^${expected_base}[a-z0-9][a-z0-9-]*$ ]]; then
+              break
+            fi
             if [[ "$seen_bases" == *"|${base_branch}|"* ]]; then
               echo "Pull request base chain contains a cycle at ${base_branch}."
               exit 1
@@ -141,54 +279,3 @@ jobs:
             fi
             base_branch="${parent_bases[0]}"
           done
-
-          if [[ "$PR_HEAD" == dependabot/* || "$PR_HEAD" == automation/* ]]; then
-            exit 0
-          fi
-
-          branch_pattern='^(feat|fix|docs|refactor|test|build|ci|chore|revert)/([0-9]+)-[a-z0-9][a-z0-9-]*$'
-          if [[ ! "$PR_HEAD" =~ $branch_pattern ]]; then
-            echo "Use branch: type/<issue-number>-short-slug"
-            exit 1
-          fi
-
-          issue_number="${BASH_REMATCH[2]}"
-          issue_link_pattern="(Closes|Fixes|Resolves)[[:space:]]+#${issue_number}([^0-9]|$)"
-          if [[ ! "${PR_BODY:-}" =~ $issue_link_pattern ]]; then
-            echo "PR body must include Closes #${issue_number}."
-            exit 1
-          fi
-          unchecked_task_pattern='^[[:space:]]*-[[:space:]]+\[[[:space:]]*\]'
-          if grep -Eq "$unchecked_task_pattern" <<<"${PR_BODY:-}"; then
-            echo "Complete every pull request checklist item before using a closing keyword."
-            exit 1
-          fi
-
-          if [[ "${PR_ISSUE_STATE+x}" == "x" ]]; then
-            issue_state="$PR_ISSUE_STATE"
-            issue_title="${PR_ISSUE_TITLE:-}"
-            issue_body="${PR_ISSUE_BODY:-}"
-            issue_has_unchecked=false
-            if grep -Eq "$unchecked_task_pattern" <<<"$issue_body"; then
-              issue_has_unchecked=true
-            fi
-          else
-            issue_payload="$(
-              gh api "repos/$GITHUB_REPOSITORY/issues/$issue_number" \
-                --jq 'select(.pull_request | not) | [.state, .title, ((.body // "") | test("(?m)^\\s*-\\s+\\[\\s*\\]"))] | @tsv' \
-                2>/dev/null || true
-            )"
-            IFS=$'\t' read -r issue_state issue_title issue_has_unchecked \
-              <<<"$issue_payload"
-          fi
-          if [[ "$issue_state" != "open" ]]; then
-            echo "Issue #${issue_number} must exist and remain open until merge."
-            exit 1
-          fi
-          if [[ "$issue_has_unchecked" == "true" ]]; then
-            echo "Issue #${issue_number} still has unchecked acceptance tasks."
-            exit 1
-          fi
-          if [[ -x ./scripts/validate-issue-title ]]; then
-            ./scripts/validate-issue-title "$issue_title"
-          fi

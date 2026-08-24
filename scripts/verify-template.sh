@@ -161,12 +161,12 @@ fi
 if [[ "$1" == "label" && "$2" == "list" ]]; then
   if [[ "$*" == *"name,color,description"* ]]; then
     if [[ "${MOCK_LABELS_STATE:-match}" == "mismatch" ]]; then
-      printf '%s\n' '[{"name":"bug","color":"ffffff","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"task","color":"000000","description":"Custom"}]'
+      printf '%s\n' '[{"name":"bug","color":"ffffff","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"hotfix","color":"B60205","description":"Urgent standalone change promoted directly to main"},{"name":"promotion","color":"5319E7","description":"Final delivery branch promotion to main"},{"name":"task","color":"000000","description":"Custom"}]'
     else
-      printf '%s\n' '[{"name":"bug","color":"D73A4A","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"task","color":"000000","description":"Custom"}]'
+      printf '%s\n' '[{"name":"bug","color":"D73A4A","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"hotfix","color":"B60205","description":"Urgent standalone change promoted directly to main"},{"name":"promotion","color":"5319E7","description":"Final delivery branch promotion to main"},{"name":"task","color":"000000","description":"Custom"}]'
     fi
   else
-    printf 'bug\nduplicate\ntask\n'
+    printf 'bug\nduplicate\nhotfix\npromotion\ntask\n'
   fi
   exit 0
 fi
@@ -372,6 +372,12 @@ if grep -q 'DELETE label: duplicate' <<<"$free_prune_plan"; then
   echo "The duplicate policy label must not be pruned."
   exit 1
 fi
+for delivery_label in hotfix promotion; do
+  if grep -q "DELETE label: $delivery_label" <<<"$free_prune_plan"; then
+    echo "The $delivery_label policy label must not be pruned."
+    exit 1
+  fi
+done
 team_plan="$(run_settings_fixture team)"
 grep -q 'Account plan: GitHub Team' <<<"$team_plan"
 grep -q 'APPLY policies/rulesets.json' <<<"$team_plan"
@@ -755,8 +761,8 @@ PY
 grep -q '^## Working loop$' AGENTS.md
 grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
-grep -q 'pull request chain ends at `main`' AGENTS.md
-grep -q 'against `main` or its immediate parent in the stack' AGENTS.md
+grep -q "pull request chain ends there" AGENTS.md
+grep -q "against its delivery branch or immediate parent in the stack" AGENTS.md
 grep -q 'complete every task in the pull request and referenced Issue' AGENTS.md
 grep -q 'one branch and one Git worktree per task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
@@ -887,8 +893,8 @@ grep -q 'still has unchecked acceptance tasks' \
   .github/workflows/pr-policy.yml
 grep -q 'Only dev promotion or release-please may target main in dev mode.' \
   .github/workflows/pr-policy.yml
-grep -q 'branches: \[main\]' .github/workflows/ci.yml
-grep -q 'branches: \[main\]' .github/workflows/osv.yml
+grep -q 'branches: \[main, "dev/\*\*"\]' .github/workflows/ci.yml
+grep -q 'branches: \[main, dev, "dev/\*\*"\]' .github/workflows/osv.yml
 grep -q 'gh pr edit "$pr_url" --add-label enhancement' \
   .github/workflows/python-version-policy.yml
 if grep -Eq -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
@@ -900,8 +906,8 @@ if grep -Eq -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
 fi
 test "$(grep -c '^      security-events: write$' .github/workflows/osv.yml)" -eq 2
 test "$(grep -c '^      security-events: write$' template/.github/workflows/osv.yml)" -eq 2
-grep -q 'branches: \[main\]' .github/workflows/zizmor.yml
-grep -q 'target-branch: main' .github/dependabot.yml
+grep -q 'branches: \[main, "dev/\*\*"\]' .github/workflows/zizmor.yml
+grep -q 'target-branch: dev/next' .github/dependabot.yml
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
 
 # Issues #74 and #110: keep the native dependency updater so its PRs trigger
@@ -941,10 +947,7 @@ if not pull_request["require_code_owner_review"]:
 if not {"governance", "verify", "title", "scan-pr / osv-scan", "audit"} <= checks:
     raise SystemExit("The repository Ruleset is missing required checks.")
 PY
-if grep -q '"refs/heads/dev"' policies/rulesets.json; then
-  echo "The template repository must remain in main-only mode."
-  exit 1
-fi
+grep -q '"refs/heads/dev/\*"' policies/rulesets.json
 
 pr_title_pattern='^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+'
 valid_pr_title() {
@@ -1107,7 +1110,7 @@ grep -q 'enable_codeql: false' \
 test ! -f "$fixture_root/default-project/.github/workflows/codeql.yml"
 grep -q '"language_profile": "python"' \
   "$fixture_root/default-project/.csarc/profile.json"
-grep -q '"branch_strategy": "main"' \
+grep -q '"branch_strategy": "delivery"' \
   "$fixture_root/default-project/.csarc/profile.json"
 test "$("$fixture_root/default-project/scripts/detect-language-profile" --suggest)" = \
   "python"
@@ -1245,9 +1248,9 @@ grep -q '^## Scope and sources of truth$' \
 grep -q '^## Commands$' "$fixture_root/default-project/AGENTS.md"
 grep -q '^## Code Review Rules$' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'pull request chain ends at `main`' \
+grep -q 'pull request chain ends there' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'against `main` or its immediate parent in the stack' \
+grep -q 'against its delivery branch or immediate parent in the stack' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'complete every task in the pull request and referenced Issue' \
   "$fixture_root/default-project/AGENTS.md"
@@ -1290,11 +1293,8 @@ grep -q '"context": "verify"' \
   "$fixture_root/default-project/policies/rulesets.json"
 grep -q '"context": "scan-pr / osv-scan"' \
   "$fixture_root/default-project/policies/rulesets.json"
-if grep -q '"refs/heads/dev"' \
-  "$fixture_root/default-project/policies/rulesets.json"; then
-  echo "The default main-only Ruleset must not target dev."
-  exit 1
-fi
+grep -q '"refs/heads/dev/\*"' \
+  "$fixture_root/default-project/policies/rulesets.json"
 test -x "$fixture_root/default-project/scripts/apply-repository-settings.sh"
 test -x "$fixture_root/default-project/scripts/check-update-conflicts"
 test -x "$fixture_root/default-project/scripts/install-gitleaks"
@@ -1391,9 +1391,9 @@ grep -q '^# tracking: story$' \
   "$fixture_root/default-project/docs/specs/SPEC-001-example.md"
 test -x "$fixture_root/default-project/scripts/test-issue-triage"
 test -x "$fixture_root/default-project/scripts/validate-issue-title"
-grep -q 'branches: \[main, dev\]' \
+grep -q 'branches: \[main, dev, "dev/\*\*"\]' \
   "$fixture_root/default-project/.github/workflows/spec-to-issue.yml"
-grep -q 'target-branch: main' \
+grep -q 'target-branch: dev/next' \
   "$fixture_root/default-project/.github/dependabot.yml"
 grep -q '^requires-python = ">=3.14,<3.15"$' \
   "$fixture_root/default-project/pyproject.toml"

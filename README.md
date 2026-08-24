@@ -63,16 +63,17 @@ flowchart LR
     A["Issue<br/>驗收條件"] --> B["分支<br/>type/N-slug"]
     B --> C["實作 + 測試"]
     C --> D["本機驗證<br/>./scripts/verify"]
-    D --> E["PR → main"]
+    D --> E["PR → delivery branch"]
     E --> F["CI 檢查"]
     F --> G["人工審查"]
     G --> H["合併"]
-    H --> I["版本／發布<br/>release-please"]
+    H --> I["promotion PR → main"]
+    I --> J["版本／發布<br/>release-please"]
 ```
 
-上圖只畫主線；direct／verification-only release 模式、worktree 使用與例外分支見 `AGENTS.md` 與[內部網站附錄](docs/index.html)。
+上圖只畫主線；hotfix、direct／verification-only release 模式、worktree 使用與例外分支見 `AGENTS.md` 與[內部網站附錄](docs/index.html)。
 
-本 repo 沒有共用測試環境，因此採 main-only；生成專案只有在確實有長期 dev 測試環境時，才在 Copier 問答改選 `dev` 模式。
+本 repo 採 delivery 模式：Milestone 工作先整合至 `dev/m<編號>-<簡稱>`，孤立 Issue 先進 `dev/next`，再以受審查的 promotion PR 進入 `main`；只有明確 hotfix 可直接 target main。CI 是可攜的 integration test layer，外部測試環境則屬 canary layer。
 
 公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。驗證入口也會執行 Issue／PR 政策正反例，並注入不合法的 Python／TypeScript 內容，確認語言門禁真的會拒絕。
 
