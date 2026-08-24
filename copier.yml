@@ -37,6 +37,7 @@ _skip_if_exists:
   - "typescript/tests/**/*.ts"
   - "docs/specs/**/*.md"
   - "docs/site-content.js"
+  - "docs/site-theme.css"
   - "{% if project_mode == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"
   - "{% if project_mode == 'existing' %}package.json{% else %}__overwrite_node_manifest__{% endif %}"
 _tasks:
@@ -44,6 +45,7 @@ _tasks:
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language in ['python', 'python-typescript'] }}"
   - command: "pnpm install --lockfile-only --ignore-scripts"
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language in ['typescript', 'python-typescript'] }}"
+  - command: "uv run --no-project python scripts/render_site.py"
 _message_after_copy: |
   {% if project_mode == 'existing' %}Existing pyproject.toml/package.json files were preserved. Merge the required tool settings and version markers described in README.md, run ./scripts/verify, then link the pull request to its Issue.{% else %}Project created. Confirm .csarc/profile.json, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request.{% endif %} GitHub template creation and Copier do not copy repository settings. Runtime workflows detect release capabilities automatically. Administrators may optionally run ./scripts/apply-repository-settings.sh plan, apply, and check to enable stronger repository controls; unsupported organization policy remains explicit and does not require adopters to change it. See README.md for the capability and visibility matrices.
 

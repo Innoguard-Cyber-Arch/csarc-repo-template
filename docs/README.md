@@ -4,7 +4,8 @@
 
 | 類型 | 路徑 | 用途與維護方式 |
 | --- | --- | --- |
-| 單檔交付物 | `docs/index.html` | 內嵌樣式、程式與媒體的 portable presentation；目前由公版維護，Issue #177 的後續工程工作會把它改為可重現產物 |
+| 單檔交付物 | `docs/index.html` | 由 `site/` 重建的 portable presentation；內嵌樣式、程式與媒體，不直接編輯 |
+| 網站來源 | `site/` | 分開維護 HTML 內容、特殊視覺、互動與原始圖片；詳見 `site/README.md` |
 | 選型與決策 | `docs/decisions/` | 已確認的架構、工具、安全、相容性與平台能力取捨；保留狀態、理由、替代方案與重評條件 |
 | 規格 | `docs/specs/` | 中長期成果與驗收條件；核准後可同步成 Issue 或 Story Milestone |
 | 操作契約 | `docs/agent-install.md`、`docs/milestone-description.md` | 已發布且可能由固定版本 URL 讀取的介面；路徑保持穩定 |
@@ -27,4 +28,5 @@
 - 新增內容前先判斷它是使用指南、runbook、決策、實證、規格或交付物，不以檔案格式決定分類。
 - `docs/agent-install.md` 等公開契約優先維持穩定路徑；需要分類時由本頁導覽，不為整理目錄破壞既有 URL。
 - `docs/index.html` 必須保持單檔、無 runtime 外部 CSS、JavaScript、font 或 image 依賴。超連結可以指向外部參考資料，但離線開啟不能因網路不可用而失去簡報內容或操作能力。
+- 修改 `site/` 後執行 `uv run --no-project python scripts/render_site.py`；`--check` 只比對 committed bundle，不改檔案。
 - 網站呈現、來源、模板 ownership 與 GitHub capability fallback 的完整選型見 [`decisions/portable-decision-site.md`](decisions/portable-decision-site.md)。
