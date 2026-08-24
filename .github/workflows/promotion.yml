@@ -69,16 +69,19 @@ jobs:
             fi
           fi
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" && "$PR_HEAD" == release-please--* ]]; then
+            trusted_root="$(mktemp -d "$RUNNER_TEMP/release-follow-up-policy.XXXXXX")"
+            git archive "$PR_BASE_SHA" | tar -x -C "$trusted_root"
             git diff --no-renames --name-only \
               "$PR_BASE_SHA" \
               "$PR_HEAD_SHA" \
               > "$RUNNER_TEMP/release-follow-up-files"
-            python3 scripts/release_policy.py verify-release-follow-up \
+            python3 "$trusted_root/scripts/release_policy.py" verify-release-follow-up \
               --repo "$GITHUB_REPOSITORY" \
               --head "$PR_HEAD" \
               --head-repo "$PR_HEAD_REPOSITORY" \
               --actor "$PR_AUTHOR" \
-              --changed-files "$RUNNER_TEMP/release-follow-up-files"
+              --changed-files "$RUNNER_TEMP/release-follow-up-files" \
+              --root "$trusted_root"
           fi
           python3 scripts/promotion_gate.py prepare \
             --event "$GITHUB_EVENT_NAME" \
@@ -187,24 +190,59 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          pull_request="$(
-            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
-              --jq '[.[] | select(.merged_at != null and .base.ref == "main")] | last // empty'
+          pull_requests="$(
+            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls"
           )"
-          [[ -n "$pull_request" ]] || {
-            echo "Main commit is not associated with a merged pull request." >&2
+          pull_request_count="$(
+            jq --arg sha "$GITHUB_SHA" \
+              '[.[] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)] | length' \
+              <<<"$pull_requests"
+          )"
+          [[ "$pull_request_count" == "1" ]] || {
+            echo "Main commit must have exactly one merged pull request with the same merge SHA; found $pull_request_count." >&2
             exit 1
           }
+          pull_request="$(
+            jq -c --arg sha "$GITHUB_SHA" \
+              '[.[] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)][0]' \
+              <<<"$pull_requests"
+          )"
           head_ref="$(jq -r .head.ref <<<"$pull_request")"
           if [[ "$head_ref" == release-please--* ]]; then
-            git diff --no-renames --name-only "$GITHUB_SHA^" "$GITHUB_SHA" \
-              > "$RUNNER_TEMP/release-follow-up-files"
-            python3 scripts/release_policy.py verify-release-follow-up \
+            pr_number="$(jq -r .number <<<"$pull_request")"
+            base_sha="$(jq -r '.base.sha // empty' <<<"$pull_request")"
+            [[ "$base_sha" =~ ^[0-9a-f]{40}$ && "$base_sha" != "$GITHUB_SHA" ]] \
+              && git merge-base --is-ancestor "$base_sha" "$GITHUB_SHA" || {
+              echo "Release follow-up base SHA is missing or is not an ancestor of main." >&2
+              exit 1
+            }
+            expected_file_count="$(
+              gh api "repos/$GITHUB_REPOSITORY/pulls/$pr_number" --jq .changed_files
+            )"
+            [[ "$expected_file_count" =~ ^[0-9]+$ ]] || {
+              echo "Release follow-up changed-file count is unavailable." >&2
+              exit 1
+            }
+            files_json="$RUNNER_TEMP/release-follow-up-files.json"
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/pulls/$pr_number/files?per_page=100" \
+              > "$files_json"
+            actual_file_count="$(jq '[.[][]] | length' "$files_json")"
+            [[ "$actual_file_count" == "$expected_file_count" ]] || {
+              echo "Release follow-up file list is incomplete: expected $expected_file_count, received $actual_file_count." >&2
+              exit 1
+            }
+            jq -r '.[][] | .filename, (.previous_filename // empty)' \
+              "$files_json" > "$RUNNER_TEMP/release-follow-up-files"
+            trusted_root="$(mktemp -d "$RUNNER_TEMP/release-follow-up-policy.XXXXXX")"
+            git archive "$base_sha" | tar -x -C "$trusted_root"
+            python3 "$trusted_root/scripts/release_policy.py" verify-release-follow-up \
               --repo "$GITHUB_REPOSITORY" \
               --head "$head_ref" \
               --head-repo "$(jq -r '.head.repo.full_name // empty' <<<"$pull_request")" \
               --actor "$(jq -r '.user.login // empty' <<<"$pull_request")" \
-              --changed-files "$RUNNER_TEMP/release-follow-up-files"
+              --changed-files "$RUNNER_TEMP/release-follow-up-files" \
+              --root "$trusted_root"
             echo "skip_verification=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
