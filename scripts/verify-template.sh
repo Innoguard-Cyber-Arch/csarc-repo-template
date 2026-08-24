@@ -95,6 +95,20 @@ grep -q 'repository、Actions、政策標籤與有效 Ruleset' README.md
 grep -q 'policy labels, and effective Rulesets' docs/agent-install.md
 grep -q 'Administration read access' docs/agent-install.md
 grep -q 'repository、Actions、政策標籤與有效 Ruleset' docs/index.html
+grep -q '^## Actions quota fallback$' AGENTS.md
+grep -q '^## Actions quota fallback$' template/AGENTS.md.jinja
+grep -q 'included GitHub Actions minutes are exhausted' AGENTS.md
+grep -q 'included GitHub Actions minutes are exhausted' template/AGENTS.md.jinja
+grep -q 'failed payment, a zero or incorrect spending budget, a platform outage' \
+  AGENTS.md
+grep -q 'failed payment, a zero or incorrect spending budget, a platform outage' \
+  template/AGENTS.md.jinja
+grep -q 'HEAD.*pull request head SHA' AGENTS.md
+grep -q 'HEAD.*pull request head SHA' template/AGENTS.md.jinja
+grep -q 'Actions quota fallback attestation' README.md
+grep -q 'Actions quota fallback attestation' template/README.md.jinja
+grep -q '額度耗盡.*human' docs/index.html
+grep -q '額度 fallback.*human' template/docs/index.html.jinja
 bash -n scripts/run-live-workflow-probe
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
@@ -1214,6 +1228,16 @@ grep -q 'Coverage 是找出未測程式碼的訊號' \
   "$fixture_root/default-project/README.md"
 grep -q 'repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/README.md"
+grep -q '^## Actions quota fallback$' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -q 'included GitHub Actions minutes are exhausted' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -q 'Actions quota fallback attestation' \
+  "$fixture_root/default-project/README.md"
+grep -q '付款失敗、budget.*平台.*設定.*權限.*未知原因.*測試失敗' \
+  "$fixture_root/default-project/docs/index.html"
+grep -q 'Actions 免費額度耗盡' \
+  "$fixture_root/default-project/docs/site-content.js"
 grep -q 'repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/docs/index.html"
 grep -q 'Administration read' \
