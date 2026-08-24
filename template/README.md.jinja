@@ -63,15 +63,21 @@ git push -u origin dev
 1. 簡單工作先開「開發工作」Issue；標題以 12–80 個英文 ASCII 字元及至少三個詞直接描述成果，例如 `Add dependency policy checks`。Issue 不使用 PR 的 Conventional Commit 格式。
 2. 開單者會自動成為負責人，並選一個分類：`bug`、`enhancement`、`documentation` 或 `duplicate`。前三者在 organization 啟用原生 Issue Types 時分別同步成 `Bug`、`Feature`、`Task`；不支援時仍以 label 正常運作。`duplicate` 是結案處置，不是假造的新 Issue Type。
 3. 從 `{{ branch_strategy }}` 或最終 PR 回 `{{ branch_strategy }}` 的未合併工作分支建立 `type/<issue-number>-short-slug`；若新增需求超出 Issue 的完成條件，另開 Issue 與分支。若後來確認重複，連結 canonical Issue 並用 GitHub 的 Duplicate 原生原因關閉；純 triage 不改檔案，可不開分支與 PR。
-4. 執行 `./scripts/verify`；AI 遵守 `AGENTS.md`，不能自行合併。
+4. 執行 `./scripts/verify`；AI 遵守 `AGENTS.md`，一般情況下不能自行合併。
 5. PR 指向 `{{ branch_strategy }}` 或 stack 中的直接上游分支；整條 open PR 鏈必須最終回到 `{{ branch_strategy }}`。使用 `Closes #<issue-number>` 前，PR 與 referenced Issue 不得留有未勾選 task；PR policy 會直接拒絕，避免局部完成卻自動結案。風險或回退放在選填補充；PR 沒有原生 Issue Type／Issue Form，只使用 Markdown template，並恰選一個 change label：`fix`→`bug`、`docs`→`documentation`，其餘允許的 Conventional Commit type→`enhancement`。
-6. CI 與人工審查都通過才合併。{% if branch_strategy == "dev" %}準備發布時，再用一張審查過的 PR 將 `dev` 升版到 `main`。{% endif %}
+6. 一般情況下，CI 與人工審查都通過才合併；只有下列 Actions 額度例外且 human maintainer 明確授權時，agent 才可依 repo 現行 self-merge 政策合併。{% if branch_strategy == "dev" %}準備發布時，再用一張審查過的 PR 將 `dev` 升版到 `main`。{% endif %}
 
 多個可寫 agents 平行執行時，一項任務使用一個 branch 與一個獨立 worktree，且只平行處理範圍互不依賴的工作；開始前先辨識目前是否已在 agent 平台管理的 worktree，不強制讓同一 branch 出現在多個 worktrees，也不自行刪除其他工具建立或含未提交變更的 worktree。原生 [`git worktree`](https://git-scm.com/docs/git-worktree) 是可攜基線；[Worktrunk](https://github.com/max-sixty/worktrunk) 可選擇簡化建立、切換與清理，但屬於本機／agent orchestration 輔助工具，不是本模板或生成 repo 的必要相依。worktree 只隔離工作目錄，整合仍以 PR、CI、人工審查及合併後完整驗證為準。
 
 GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktree 的 agent 也負責在 PR 合併後回收：先離開該 worktree 並更新 integration ref，再從另一個 checkout 執行 `./scripts/cleanup-worktrees --apply --worktree <path> origin/{{ branch_strategy }}`。腳本預設只列出候選項目，且只接受有 GitHub merged PR 證據、已進入 integration ref、乾淨且未鎖定的 branch worktree；維護者要清理全 repo 時，先執行不含 `--apply` 的 dry run，再省略 `--worktree` 套用全部候選項目。
 
 `./scripts/verify` 也會跑 Issue／PR 政策正反例，確認合法流程能通過、不合格 Issue 標題與錯誤 PR 標題／分支／Issue 關聯會被拒絕。
+
+### Actions 額度耗盡的一次性驗證
+
+只有具帳務用量檢視權限的 human maintainer 已明確確認「當期 GitHub Actions 免費分鐘已用完」時，才可啟用本機 fallback。GitHub 顯示的 runner 未啟動訊息會同時提及付款失敗與 spending limit，本身不足以證明額度耗盡；付款失敗、budget 設定、平台事故、workflow／權限錯誤、原因不明，或任何已開始執行 step 後失敗的 job 都不能使用。
+
+Agent 必須確認乾淨 worktree 的 `HEAD` 等於 PR head SHA，執行 `./scripts/verify` 與所有可忠實本機重現的必要 checks，任何失敗都停止。通過後在 PR 留下標題為 `Actions quota fallback attestation` 的留言，記錄 SHA、受阻 run URL 與 annotation、human quota confirmation、UTC 時間、環境／工具版本、完整命令與結果，以及無法在本機重現的 checks。Human maintainer 必須明確授權該 PR 使用一次性 fallback；新 commit 會使聲明立即失效。若 repo 現行政策允許 author self-merge，agent 才能據此合併，但不得偽造成功 Check Run，也不能取代 release、publishing、deployment approval、secrets、provenance 或 CODEOWNER review。額度重置後須補跑該 commit 的 GitHub checks；無法補跑時另開 Issue 留下缺口。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹；尚未 `git init` 的新專案仍可掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 
@@ -87,16 +93,16 @@ Coverage 是找出未測程式碼的訊號，不等於測試品質，也不取�
 
 ## 設定與密鑰
 
-GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。有管理權且希望啟用較強門禁時，可在推送遠端後執行 `./scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 唯讀比對 repository、Actions、政策標籤與有效 Ruleset；這不是 portable release baseline 的必要步驟。可修正差異會失敗，Free private Ruleset、組織政策限制或 PR 的內建 `GITHUB_TOKEN` 看不到管理欄位時，則明確標為 `DEGRADED` 並保留具體差異。需要驗證全部管理欄位時，由管理員在可信任的 checkout 以具 repository Administration read 權限的 `gh` 憑證執行；不要把管理型 token 暴露給未受信任的 PR 程式碼。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。Copier 不在本機建檔階段猜測遠端方案。
+GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。有管理權且希望啟用較強門禁時，可在推送遠端後執行 `./scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 唯讀比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset；這不是 portable release baseline 的必要步驟。可修正差異會失敗，Free private Ruleset、組織政策限制或 PR 的內建 `GITHUB_TOKEN` 看不到管理欄位時，則明確標為 `DEGRADED` 並保留具體差異。需要驗證全部管理欄位時，由管理員在可信任的 checkout 以具 repository Administration read 權限的 `gh` 憑證執行；不要把管理型 token 暴露給未受信任的 PR 程式碼。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。Copier 不在本機建檔階段猜測遠端方案。
 
 | GitHub 方案與可見性 | `apply` 結果 | `check`／PR／CI/CD 行為 |
 | --- | --- | --- |
 | Free＋public | 透過 REST 套用並啟用 Ruleset | 驗證 `main` 的有效規則；缺少或不符即失敗 |
-| Free organization＋private | 套用基本設定，並把期望 Ruleset 保留在 `policies/rulesets.json`；公開 API 無法建立 Ruleset | `check` 仍比對 repository、Actions 與政策標籤，再將 Ruleset 限制標示 `DEGRADED`；CI／release 繼續，workflow log、annotation 與 PR 留言留下具體紀錄。紅燈仍不能阻止直接 push 或手動合併 |
+| Free organization＋private | 套用基本設定，並把期望 Ruleset 保留在 `policies/rulesets.json`；公開 API 無法建立 Ruleset | workflow 從設定名單輪派一位個別 reviewer，並以 `DEGRADED` 警告未強制；team request、紅燈或未核准都不能成為 merge gate |
 | Pro 個人帳號＋private | 套用並啟用 Ruleset | 與 Free public 相同 |
 | Team／Enterprise organization＋private | 確認 CODEOWNERS team 後套用並啟用 Ruleset | 必要審查、CODEOWNER 與 status checks 成為 merge gate；不符政策時 fail-closed |
 
-`policies/rulesets.json` 是所有方案共用的期望狀態。Free organization private repo 的設定頁雖提供 Ruleset 編輯器，但 GitHub REST 與 GraphQL 對建立／更新（包含 `disabled`）都回覆需升級或公開；因此 `gh` 無法自動預存。管理員可選擇在 Web UI 人工建立 disabled Ruleset，`check` 會將它顯示為 `STAGED`，但仍只代表已儲存，不代表 `main` 受保護。repo 改成 public 或組織升級後，請重新執行 `plan`／`apply`／`check`，由腳本套用 `active` 政策並驗證 CODEOWNERS team 與有效規則。腳本不會自行變更可見性。
+`policies/rulesets.json` 是所有方案共用的期望狀態。設定腳本在所有方案都透過 repository teams API 驗證 PR 內設定的 team 存在且對 repo 有 write access；這項檢查與是否能強制 Ruleset 分開，也不依賴預設分支尚未更新的 CODEOWNERS。`.github/workflows/governance-comment.yml` 另在非 draft PR 開啟、重開或轉為 ready 時，從 `.github/REVIEWERS` 排除作者後輪派一位個別 reviewer，並用短效 `GITHUB_TOKEN` 提出 request，不需 PAT 或 GitHub App。Copier 的 `reviewers` 可用逗號設定一到多位候選人。Free private 不支援 team review request 或多位同時 reviewer；GitHub Team 以上才提供這些能力。Free organization private repo 的設定頁雖提供 Ruleset 編輯器，但 GitHub REST 與 GraphQL 對建立／更新（包含 `disabled`）都回覆需升級或公開；因此 `gh` 無法自動預存。管理員可選擇在 Web UI 人工建立 disabled Ruleset，`check` 會將它顯示為 `STAGED`，但仍只代表已儲存，不代表 `main` 受保護。repo 改成 public 或組織升級後，請重新執行 `plan`／`apply`／`check`，由腳本套用 `active` 政策並驗證有效規則。腳本不會自行變更可見性。
 
 {% if language != "ci" %}{% if enable_release_attestations | default(false) %}此專案會為 release distributions 產生 artifact provenance 與 SBOM attestation；這需要 public repo，或支援 artifact attestations 的 GitHub Enterprise Cloud private／internal repo。{% if enable_pypi_publishing | default(false) or enable_npm_publishing | default(false) %}外部 registry 發布會先以 `gh attestation verify` 強制比對 repository、tag ref、artifact digest 與 signer workflow；驗證失敗就不發布。{% else %}目前沒有自動消費或部署路徑，因此只產生 attestation，不宣稱已在消費端強制驗證。{% endif %}{% else %}Artifact attestation 未啟用，適合目前不支援該功能的 private repo；release 仍會附上 `SHA256SUMS` 與 SBOM，可用 checksum 驗證，但沒有 provenance 強制門禁。{% endif %}{% endif %}
 
@@ -143,4 +149,4 @@ CLI 會先預覽 Copier smart diff、conflict risk 與 Milestone description mig
 
 ## 負責人與支援
 
-程式審查者是 `{{ code_owner }}`。一般問題使用 GitHub Issue；疑似資安事件或敏感資料走組織核准的內部通報管道，詳見 [`SECURITY.md`](SECURITY.md)。
+程式與政策 owner 是 `{{ code_owner }}`；governance workflow 會從 `.github/REVIEWERS` 輪派一位非作者 reviewer。一般問題使用 GitHub Issue；疑似資安事件或敏感資料走組織核准的內部通報管道，詳見 [`SECURITY.md`](SECURITY.md)。
