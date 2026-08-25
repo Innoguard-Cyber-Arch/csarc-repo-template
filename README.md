@@ -35,7 +35,7 @@ Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript �
 
 ```bash
 uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project
-uvx --python 3.14 --from csarc-repo-cli csarc adopt --dry-run
+uvx --python 3.14 --from csarc-repo-cli csarc adopt
 uvx --python 3.14 --from csarc-repo-cli csarc update --check --json
 ```
 
@@ -89,7 +89,7 @@ Promotion 另由穩定的 `promotion` context 封裝候選 source 與 SHA/tree �
 
 ### Actions 額度耗盡的一次性驗證
 
-只有具帳務可見性的 human maintainer 確認當期 included Actions minutes 已耗盡時，才可能使用本機 fallback；runner 註記本身不構成證據。Promotion 到 `main` 另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
+只有具帳務可見性的 human maintainer 確認 GitHub Actions 出現的 zero-step billing block（付款失敗或 spending limit）視為已授權的一次性特例時，才可能使用本機 fallback；runner 註記本身不構成證據，也不要求判斷實際帳務原因。Promotion 到 `main` 另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹，因此已刪除與尚未提交的機密都不會靜默略過；尚未 `git init` 的新專案仍可安全掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 
@@ -139,14 +139,14 @@ uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project
 
 ```bash
 git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --python 3.14 --from csarc-repo-cli csarc adopt --dry-run
+uvx --python 3.14 --from csarc-repo-cli csarc adopt
 uvx --python 3.14 --from csarc-repo-cli csarc adopt \
   --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
 ```
 
-`adopt --dry-run` 可檢查 dirty working tree，但只產生 repo 外的 Markdown、PDF 與 machine-readable plan，不修改 repo；dirty plan 只能審查，清理或提交既有工作後必須重跑。plan 鎖定 target HEAD、Release full SHA、answers 與輸出 digest；正式導入只接受 `--apply-plan`，有任何漂移便停止。CLI 會先在暫存 clone 產生完整候選、執行驗證與 patch check，成功後才改目標 repo。README／CHANGELOG 保留為 project-owned，`.gitignore` 使用 ordered union，`AGENTS.md` 只更新 CSARC managed block，產品既有 `release.yml` 則與 `csarc-release.yml` 分離。
+`adopt` 預設就是 dry-run；明確寫出 `--dry-run` 仍相容。它可檢查 dirty working tree，但只產生 repo 外的 Markdown、PDF 與 machine-readable plan，不修改 repo；dirty plan 只能審查，清理或提交既有工作後必須重跑。plan 鎖定 target HEAD、Release full SHA、answers 與輸出 digest；正式導入只接受 `--apply-plan`，有任何漂移便停止。CLI 會先在暫存 clone 產生完整候選、執行驗證與 patch check，成功後才改目標 repo。README／CHANGELOG 保留為 project-owned，`.gitignore` 使用 ordered union，`AGENTS.md` 只更新 CSARC managed block，產品既有 `release.yml` 則與 `csarc-release.yml` 分離。
 
-若第一階段列出 manual merge，先完成清單中的人工結果，再執行 `adopt --finalize --dry-run`；它會重建並驗證完整候選，將人工結果與完整 working-tree state 綁進同一個 repo 外 plan。確認後只能用 `adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json` 套用；直接執行 `--finalize` 或任何 plan 後漂移都會停止。
+若第一階段列出 manual merge，先完成清單中的人工結果，再執行 `adopt --finalize`；它同樣預設為 dry-run，會重建並驗證完整候選，將人工結果與完整 working-tree state 綁進同一個 repo 外 plan。確認後只能用 `adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json` 套用；任何 plan 後漂移都會停止。
 
 ### 更新已導入的 repo
 

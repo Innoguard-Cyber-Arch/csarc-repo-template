@@ -516,8 +516,9 @@ def fallback_statement(
     )
     statements = {
         "attestation": (
-            "I have billing visibility and confirm the included GitHub Actions "
-            "minutes are exhausted for this exact evidence."
+            "I have billing visibility and confirm this zero-step billing "
+            "block is an authorized one-time exception for this exact "
+            "evidence."
         ),
         "authorization": (
             "I authorize this exact one-time fallback without admin bypass or "

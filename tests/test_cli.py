@@ -175,7 +175,7 @@ def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
         "--data",
         "language=ci",
     ]
-    assert main([*arguments, "--dry-run"]) == 0
+    assert main(arguments) == 0
     plan = (
         tmp_path
         / "pending-product-csarc-adoption-report"
@@ -649,7 +649,7 @@ def test_milestone_description_plan_degrades_without_api_access(
     assert "review them manually" in output
 
 
-def test_adopt_requires_clean_tree_and_preserves_product_files(
+def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Adopt detects Python and never changes the existing manifest."""
@@ -913,8 +913,9 @@ def test_adopt_finalize_requires_matching_second_stage_plan(
 ) -> None:
     """Bind accepted manual results and recheck them after confirmation."""
     _, project = initialize_pending_adoption(tmp_path)
-    assert main(["adopt", str(project), "--finalize", "--yes"]) == 2
-    assert "--finalize --dry-run first" in capsys.readouterr().err
+    assert main(["adopt", str(project), "--finalize", "--yes"]) == 0
+    assert finalize_plan_path(project).is_file()
+    capsys.readouterr()
     manifest = project / "pyproject.toml"
     reviewed = manifest.read_bytes()
     assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 0
@@ -1169,9 +1170,13 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "--allow-unreleased",
         "--data",
         "language=ci",
+        "--data",
+        "project_name=Product Identity",
+        "--data",
+        "project_slug=product-identity",
     ]
 
-    assert main([*arguments, "--dry-run"]) == 0
+    assert main(arguments) == 0
     plan_path = (
         tmp_path
         / "existing CSARC-測試-csarc-adoption-report"
@@ -1188,6 +1193,7 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert cli.PROVENANCE_FILE.as_posix() in payload["files"]["add"]
     assert payload["adoption"]["project_verification_hook"] == "configured"
     assert payload["adoption"]["verification"] == "passed"
+    assert payload["answers"]["package_name"] == "product_identity"
 
     assert (
         main(
@@ -1493,6 +1499,7 @@ def test_adopt_help_describes_report_directory(
     assert "--apply-plan PATH" in help_text
     assert "--finalize" in help_text
     assert "--report-dir PATH" in help_text
+    assert "plan without writing (the default for adopt)" in help_text
 
 
 def test_adopt_reports_dirty_tree_without_mutating_it(tmp_path: Path) -> None:
@@ -1639,8 +1646,21 @@ def test_adopt_rejects_plan_tampering_and_target_drift(
     (project / "product.txt").write_text("new product\n", encoding="utf-8")
     commit(project, "test: move target head")
     assert main(["adopt", str(project), "--apply-plan", str(plan_path)]) == 2
-    assert "drifted after dry-run" in capsys.readouterr().err
+    error = capsys.readouterr().err
+    assert "drifted after dry-run" in error
+    assert "$.adoption.target_head" in error
     assert not (project / "managed.txt").exists()
+
+
+def test_json_differences_reports_paths_and_values() -> None:
+    """Explain plan drift at the exact JSON leaves that changed."""
+    assert cli.json_differences(
+        {"artifacts": {"managed.txt": "old"}, "files": ["a"]},
+        {"artifacts": {"managed.txt": "new"}, "files": ["a", "b"]},
+    ) == (
+        "$.artifacts.managed.txt: saved='old', rebuilt='new'",
+        "$.files.length: saved=1, rebuilt=2",
+    )
 
 
 def test_adopt_rechecks_target_after_confirmation(
