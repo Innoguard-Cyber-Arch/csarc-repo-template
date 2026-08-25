@@ -87,14 +87,16 @@ jobs:
 
           for label in bug enhancement documentation duplicate; do
             [[ "$label" == "$issue_class" ]] && continue
-            python3 scripts/pr_lifecycle.py issue-labels \
+            python3 scripts/pr_lifecycle.py issue-edit \
               --repo "$GITHUB_REPOSITORY" \
               --issue-number "$ISSUE_NUMBER" \
               --remove-label "$label" >/dev/null 2>&1 || true
           done
-          gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+          python3 scripts/pr_lifecycle.py issue-edit \
+            --repo "$GITHUB_REPOSITORY" \
+            --issue-number "$ISSUE_NUMBER" \
             --add-assignee "$ISSUE_AUTHOR"
-          python3 scripts/pr_lifecycle.py issue-labels \
+          python3 scripts/pr_lifecycle.py issue-edit \
             --repo "$GITHUB_REPOSITORY" \
             --issue-number "$ISSUE_NUMBER" \
             --add-label "$issue_class"
@@ -106,11 +108,15 @@ jobs:
             documentation) native_type="Task" ;;
           esac
           if [[ -n "$native_type" ]]; then
-            if ! gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            if ! python3 scripts/pr_lifecycle.py issue-edit \
+              --repo "$GITHUB_REPOSITORY" \
+              --issue-number "$ISSUE_NUMBER" \
               --type "$native_type" >/dev/null 2>&1; then
               echo "::notice::Native Issue Types are unavailable; the ${issue_class} label remains authoritative."
             fi
-          elif ! gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+          elif ! python3 scripts/pr_lifecycle.py issue-edit \
+            --repo "$GITHUB_REPOSITORY" \
+            --issue-number "$ISSUE_NUMBER" \
             --remove-type >/dev/null 2>&1; then
             echo "::notice::Native Issue Types are unavailable; the duplicate label remains authoritative."
           fi

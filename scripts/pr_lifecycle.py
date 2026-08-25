@@ -1311,13 +1311,22 @@ def authorization_template(args: argparse.Namespace, github: GitHub) -> None:
     )
 
 
-def edit_issue_labels(args: argparse.Namespace, github: GitHub) -> None:
-    """Edit labels only after proving the target is an Issue, not a PR."""
-    labels = args.add_label + args.remove_label
+def edit_standalone_issue(args: argparse.Namespace, github: GitHub) -> None:
+    """Edit metadata only after proving the target is an Issue, not a PR."""
+    values = [
+        *args.add_label,
+        *args.remove_label,
+        *args.add_assignee,
+        *([args.issue_type] if args.issue_type else []),
+    ]
     if REPOSITORY.fullmatch(args.repo) is None or args.issue_number < 1:
         raise RuntimeError("Issue identity is invalid")
-    if not labels or any(not label or "\n" in label for label in labels):
-        raise RuntimeError("Issue labels must be non-empty single-line values")
+    if (not values and not args.remove_type) or any(
+        not value or "\n" in value for value in values
+    ):
+        raise RuntimeError(
+            "Issue metadata must use non-empty single-line values"
+        )
     issue = github.get(args.repo, f"issues/{args.issue_number}")
     if (
         not isinstance(issue, dict)
@@ -1337,6 +1346,12 @@ def edit_issue_labels(args: argparse.Namespace, github: GitHub) -> None:
         command.extend(("--add-label", label))
     for label in args.remove_label:
         command.extend(("--remove-label", label))
+    for assignee in args.add_assignee:
+        command.extend(("--add-assignee", assignee))
+    if args.issue_type:
+        command.extend(("--type", args.issue_type))
+    elif args.remove_type:
+        command.append("--remove-type")
     run(command)
 
 
@@ -1356,11 +1371,35 @@ def lifecycle_api_target(compact: str) -> bool:
     )
 
 
+def declarative_writer_violations(text: str) -> list[str]:
+    """Find GraphQL and action writers regardless of their host language."""
+    compact = compact_tokens(text)
+    graphql_writers = [
+        "convert" + "pullrequest" + "todraft",
+        "mark" + "pullrequest" + "readyforreview",
+        "merge" + "pullrequest",
+        "update" + "pullrequest",
+        "add" + "labelstolabelable",
+        "remove" + "labelsfromlabelable",
+    ]
+    violations = []
+    if any(
+        re.search(rf"(?:graphql|mutation).{{0,500}}{writer}", compact)
+        for writer in graphql_writers
+    ):
+        violations.append("GraphQL PR lifecycle mutation")
+    release_writer = "googleapis/" + "release-please-" + "action@"
+    if release_writer in compact:
+        violations.append("opaque release pull-request writer")
+    return violations
+
+
 def command_writer_violations(text: str) -> list[str]:
     """Find lifecycle writes in shell or YAML logical command blocks."""
     violations: list[str] = []
     shell = text.replace("\\\r\n", " ").replace("\\\n", " ")
-    for block in shell.splitlines():
+    blocks = [*shell.splitlines(), shell]
+    for block in blocks:
         compact = compact_tokens(block)
         if any(
             f"ghpr{operation}" in compact
@@ -1384,30 +1423,27 @@ def command_writer_violations(text: str) -> list[str]:
             )
         ):
             violations.append("gh issue metadata write")
-        mutating_rest = re.search(
-            r"(?:--method|-x)(?:patch|put|post|delete)", compact
-        )
-        if mutating_rest and lifecycle_api_target(compact):
-            violations.append("REST pull-request or issue metadata write")
+        if "ghapi" in compact and lifecycle_api_target(compact):
+            lowered = block.casefold()
+            markers = re.findall(r"(?:--method|-x)", lowered)
+            methods = re.findall(
+                r"(?:--method|-x)[\s='\"`\\]*([a-z]+)", lowered
+            )
+            fields = any(
+                option in compact
+                for option in ("--field", "--raw-field", "--input", "-f")
+            )
+            if (
+                len(methods) != len(markers)
+                or any(
+                    method not in {"get", "head", "options"}
+                    for method in methods
+                )
+                or (not methods and fields)
+            ):
+                violations.append("REST pull-request or issue metadata write")
 
-    compact = compact_tokens(text)
-    graphql_writers = [
-        "convert" + "pullrequest" + "todraft",
-        "mark" + "pullrequest" + "readyforreview",
-        "merge" + "pullrequest",
-        "update" + "pullrequest",
-        "add" + "labelstolabelable",
-        "remove" + "labelsfromlabelable",
-    ]
-    if any(
-        re.search(rf"(?:graphql|mutation).{{0,500}}{writer}", compact)
-        for writer in graphql_writers
-    ):
-        violations.append("GraphQL PR lifecycle mutation")
-    release_writer = "googleapis/" + "release-please-" + "action@"
-    if release_writer in compact:
-        violations.append("opaque release pull-request writer")
-    return violations
+    return violations + declarative_writer_violations(text)
 
 
 def ast_name(node: ast.AST, aliases: dict[str, str]) -> str:
@@ -1492,35 +1528,6 @@ def python_writer_violations(text: str) -> list[str]:  # noqa: C901
     values: dict[str, str] = {}
     sequences: dict[str, list[str]] = {}
     clients: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
-            continue
-        targets = (
-            node.targets if isinstance(node, ast.Assign) else [node.target]
-        )
-        value = node.value
-        client = (
-            ast_name(value.func, aliases).casefold().replace("()", "")
-            if isinstance(value, ast.Call)
-            else ""
-        )
-        resolved_text = ast_text(value, values) if value is not None else None
-        resolved_argv = (
-            ast_argv(value, values, sequences) if value is not None else None
-        )
-        for target in targets:
-            if isinstance(target, ast.Name):
-                if resolved_text is not None:
-                    values[target.id] = resolved_text
-                if resolved_argv is not None:
-                    sequences[target.id] = resolved_argv
-                if client in {
-                    "httpx.asyncclient",
-                    "httpx.client",
-                    "requests.session",
-                }:
-                    clients[target.id] = client
-
     violations: list[str] = []
     subprocess_calls = {
         "os.popen",
@@ -1532,9 +1539,71 @@ def python_writer_violations(text: str) -> list[str]:  # noqa: C901
         "subprocess.run",
     }
     write_methods = {"delete", "patch", "post", "put"}
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
+    events = sorted(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(
+                node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Call)
+            )
+        ),
+        key=lambda node: (node.lineno, node.col_offset),
+    )
+    for node in events:
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = (
+                node.targets if isinstance(node, ast.Assign) else [node.target]
+            )
+            value = node.value
+            client = (
+                ast_name(value.func, aliases).casefold().replace("()", "")
+                if isinstance(value, ast.Call)
+                else ""
+            )
+            resolved_text = (
+                ast_text(value, values) if value is not None else None
+            )
+            resolved_argv = (
+                ast_argv(value, values, sequences)
+                if value is not None
+                else None
+            )
+            for target_node in targets:
+                if not isinstance(target_node, ast.Name):
+                    continue
+                values.pop(target_node.id, None)
+                sequences.pop(target_node.id, None)
+                clients.pop(target_node.id, None)
+                if resolved_text is not None:
+                    values[target_node.id] = resolved_text
+                if resolved_argv is not None:
+                    sequences[target_node.id] = resolved_argv
+                if client in {
+                    "httpx.asyncclient",
+                    "httpx.client",
+                    "requests.session",
+                }:
+                    clients[target_node.id] = client
             continue
+        if isinstance(node, ast.AugAssign):
+            if not isinstance(node.op, ast.Add) or not isinstance(
+                node.target, ast.Name
+            ):
+                continue
+            name = node.target.id
+            added_text = ast_text(node.value, values)
+            if name in values and added_text is not None:
+                values[name] += added_text
+            else:
+                values.pop(name, None)
+            added_argv = ast_argv(node.value, values, sequences)
+            if name in sequences and added_argv is not None:
+                sequences[name] = [*sequences[name], *added_argv]
+            else:
+                sequences.pop(name, None)
+            clients.pop(name, None)
+            continue
+
         name = ast_name(node.func, aliases)
         if name in subprocess_calls and node.args:
             argv = ast_argv(node.args[0], values, sequences)
@@ -1551,7 +1620,9 @@ def python_writer_violations(text: str) -> list[str]:  # noqa: C901
         keywords = {item.arg: item.value for item in node.keywords if item.arg}
         method: str | None = None
         url_node: ast.AST | None = None
-        if name.casefold().endswith("urllib.request.request"):
+        urllib_request = name.casefold().endswith("urllib.request.request")
+        urllib_urlopen = name.casefold().endswith("urllib.request.urlopen")
+        if urllib_request:
             url_node = node.args[0] if node.args else keywords.get("url")
             method_node = keywords.get("method")
             if method_node is not None:
@@ -1561,6 +1632,11 @@ def python_writer_violations(text: str) -> list[str]:  # noqa: C901
                 method = "post"
             else:
                 method = "get"
+        elif urllib_urlopen:
+            url_node = node.args[0] if node.args else keywords.get("url")
+            method = (
+                "post" if "data" in keywords or len(node.args) > 1 else "get"
+            )
         elif leaf in write_methods | {"get", "head", "options"}:
             method = leaf
             url_node = node.args[0] if node.args else keywords.get("url")
@@ -1581,12 +1657,20 @@ def python_writer_violations(text: str) -> list[str]:  # noqa: C901
         lifecycle_target = url is not None and lifecycle_api_target(
             compact_tokens(url)
         )
+        unresolved_urllib = (urllib_request or urllib_urlopen) and (
+            (method is None and lifecycle_target)
+            or (url is None and method in write_methods)
+        )
         if method in write_methods and (
-            lifecycle_target or root in {"httpx", "requests"}
+            lifecycle_target
+            or root in {"httpx", "requests"}
+            or unresolved_urllib
         ):
             violations.append("Python HTTP client lifecycle mutation")
         elif method not in write_methods | {"get", "head", "options"} and (
-            lifecycle_target or root in {"httpx", "requests"}
+            lifecycle_target
+            or root in {"httpx", "requests"}
+            or unresolved_urllib
         ):
             violations.append("Python HTTP method cannot be proven read-only")
     return violations
@@ -1594,17 +1678,45 @@ def python_writer_violations(text: str) -> list[str]:  # noqa: C901
 
 def writer_violations(text: str) -> list[str]:
     """Find lifecycle writes in scripts and workflows."""
-    return sorted(
-        set(command_writer_violations(text) + python_writer_violations(text))
-    )
+    try:
+        ast.parse(text)
+    except SyntaxError:
+        found = command_writer_violations(text)
+    else:
+        found = declarative_writer_violations(text)
+        found.extend(python_writer_violations(text))
+    return sorted(set(found))
+
+
+def canonical_scanner_helper(root: Path, path: Path) -> bool:
+    """Trust only exact in-root helper paths without symlink components."""
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return False
+    if relative.as_posix() not in {
+        "scripts/pr_lifecycle.py",
+        "template/scripts/pr_lifecycle.py",
+    }:
+        return False
+    current = root
+    if current.is_symlink():
+        return False
+    for part in relative.parts:
+        current /= part
+        if current.is_symlink():
+            return False
+    try:
+        resolved_root = root.resolve(strict=True)
+        resolved = path.resolve(strict=True)
+        resolved.relative_to(resolved_root)
+    except FileNotFoundError, ValueError:
+        return False
+    return resolved == resolved_root / relative
 
 
 def scan_writers(root: Path) -> None:
     """Fail when repository automation bypasses the lifecycle tool."""
-    allowed = {
-        root / "scripts/pr_lifecycle.py",
-        root / "template/scripts/pr_lifecycle.py",
-    }
     paths = [
         *root.glob(".github/workflows/*.yml"),
         *root.glob(".github/workflows/*.yaml"),
@@ -1615,7 +1727,7 @@ def scan_writers(root: Path) -> None:
     ]
     violations: list[str] = []
     for path in sorted(set(paths)):
-        if not path.is_file() or (path in allowed and not path.is_symlink()):
+        if not path.is_file() or canonical_scanner_helper(root, path):
             continue
         found = writer_violations(path.read_text(encoding="utf-8"))
         violations.extend(f"{path.relative_to(root)}: {item}" for item in found)
@@ -1641,12 +1753,16 @@ def parser() -> argparse.ArgumentParser:
     scan_command = commands.add_parser("scan-writers")
     scan_command.add_argument("--root", type=Path, default=Path.cwd())
     scan_command.set_defaults(scan_root=True)
-    issue_labels = commands.add_parser("issue-labels")
-    issue_labels.add_argument("--repo", required=True)
-    issue_labels.add_argument("--issue-number", required=True, type=int)
-    issue_labels.add_argument("--add-label", action="append", default=[])
-    issue_labels.add_argument("--remove-label", action="append", default=[])
-    issue_labels.set_defaults(handler=edit_issue_labels)
+    issue_edit = commands.add_parser("issue-edit")
+    issue_edit.add_argument("--repo", required=True)
+    issue_edit.add_argument("--issue-number", required=True, type=int)
+    issue_edit.add_argument("--add-label", action="append", default=[])
+    issue_edit.add_argument("--remove-label", action="append", default=[])
+    issue_edit.add_argument("--add-assignee", action="append", default=[])
+    issue_type = issue_edit.add_mutually_exclusive_group()
+    issue_type.add_argument("--type", dest="issue_type")
+    issue_type.add_argument("--remove-type", action="store_true")
+    issue_edit.set_defaults(handler=edit_standalone_issue)
 
     for name in (
         "state",

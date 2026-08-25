@@ -28,7 +28,7 @@ base_lane_ref = MODULE["base_lane_ref"]
 confirm_refs = MODULE["confirm_refs"]
 create_refs = MODULE["create_refs"]
 edit_metadata = MODULE["edit_metadata"]
-edit_issue_labels = MODULE["edit_issue_labels"]
+edit_standalone_issue = MODULE["edit_standalone_issue"]
 expired_remote_lease = MODULE["expired_remote_lease"]
 GitHub = MODULE["GitHub"]
 LEASE_CORE_FIELDS = MODULE["LEASE_CORE_FIELDS"]
@@ -355,6 +355,19 @@ subprocess.run(
     assert "gh issue metadata write" in writer_violations(source)
 
 
+def test_writer_scanner_tracks_augmented_subprocess_argv() -> None:
+    """Ordered list concatenation cannot hide a lifecycle command."""
+    source = """
+import subprocess
+
+command = ["gh", "issue"]
+command += ["edit", "42"]
+command += ["--add-" "label", "bug"]
+subprocess.run(command, check=True)
+"""
+    assert "gh issue metadata write" in writer_violations(source)
+
+
 @pytest.mark.parametrize(
     "source",
     [
@@ -414,6 +427,60 @@ requests.request(
     )
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        """
+import urllib.request
+
+urllib.request.Request(
+    "https://api.github.com/repos/o/r/pulls/42",
+    method=selected_method,
+)
+""",
+        """
+import urllib.request
+
+urllib.request.Request(selected_url, method="PATCH")
+""",
+        """
+import urllib.request
+
+urllib.request.urlopen(
+    "https://api.github.com/repos/o/r/issues/42/labels",
+    data=b"{}",
+)
+""",
+    ],
+)
+def test_writer_scanner_fails_closed_on_urllib_writes(source: str) -> None:
+    """Dynamic Requests and urlopen payloads cannot bypass the scan."""
+    assert writer_violations(source)
+
+
+@pytest.mark.parametrize("fold", [">", ">-"])
+def test_writer_scanner_normalizes_folded_yaml_and_dynamic_methods(
+    fold: str,
+) -> None:
+    """A folded workflow command cannot hide an unknown write method."""
+    source = f"""
+steps:
+  - run: {fold}
+      gh api
+      --method "$HTTP_METHOD"
+      "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER"
+"""
+    assert "REST pull-request or issue metadata write" in writer_violations(
+        source
+    )
+
+
+@pytest.mark.parametrize("method", ["GET", "HEAD", "OPTIONS"])
+def test_writer_scanner_allows_static_read_only_gh_api(method: str) -> None:
+    """Explicit read-only methods remain available to automation."""
+    assert not writer_violations(f"gh api --method {method} repos/o/r/pulls/42")
+
+
 def test_writer_scanner_allows_proven_read_only_http_calls() -> None:
     """Known GET calls do not block ordinary API inspection."""
     source = """
@@ -451,6 +518,28 @@ def test_writer_scanner_does_not_trust_a_nested_canonical_basename(
         scan_writers(tmp_path)
 
 
+@pytest.mark.parametrize("symlink_part", ["leaf", "ancestor"])
+def test_writer_scanner_does_not_trust_symlinked_canonical_paths(
+    tmp_path: Path, symlink_part: str
+) -> None:
+    """Every canonical helper path component must remain inside the root."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    rogue = outside / "pr_lifecycle.py"
+    rogue.write_text(
+        'requests.patch("https://api.github.com/repos/o/r/pulls/42")\n',
+        encoding="utf-8",
+    )
+    if symlink_part == "leaf":
+        scripts = tmp_path / "scripts"
+        scripts.mkdir()
+        (scripts / "pr_lifecycle.py").symlink_to(rogue)
+    else:
+        (tmp_path / "scripts").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(RuntimeError, match=r"scripts/pr_lifecycle\.py"):
+        scan_writers(tmp_path)
+
+
 def test_issue_label_helper_rejects_a_pull_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -461,17 +550,20 @@ def test_issue_label_helper_rejects_a_pull_request(
         "pull_request": {"url": "https://api.github.com/pulls/42"},
     }
     monkeypatch.setitem(
-        edit_issue_labels.__globals__,
+        edit_standalone_issue.__globals__,
         "run",
         lambda *_args, **_kwargs: pytest.fail("unexpected issue write"),
     )
     with pytest.raises(RuntimeError, match="standalone Issue"):
-        edit_issue_labels(
+        edit_standalone_issue(
             SimpleNamespace(
                 repo="owner/repo",
                 issue_number=42,
                 add_label=["bug"],
                 remove_label=[],
+                add_assignee=[],
+                issue_type=None,
+                remove_type=False,
             ),
             github,
         )
