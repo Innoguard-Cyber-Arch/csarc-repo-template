@@ -87,11 +87,17 @@ jobs:
 
           for label in bug enhancement documentation duplicate; do
             [[ "$label" == "$issue_class" ]] && continue
-            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            python3 scripts/pr_lifecycle.py issue-labels \
+              --repo "$GITHUB_REPOSITORY" \
+              --issue-number "$ISSUE_NUMBER" \
               --remove-label "$label" >/dev/null 2>&1 || true
           done
           gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
-            --add-assignee "$ISSUE_AUTHOR" --add-label "$issue_class"
+            --add-assignee "$ISSUE_AUTHOR"
+          python3 scripts/pr_lifecycle.py issue-labels \
+            --repo "$GITHUB_REPOSITORY" \
+            --issue-number "$ISSUE_NUMBER" \
+            --add-label "$issue_class"
 
           native_type=""
           case "$issue_class" in

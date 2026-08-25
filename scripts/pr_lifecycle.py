@@ -1310,6 +1310,35 @@ def authorization_template(args: argparse.Namespace, github: GitHub) -> None:
     )
 
 
+def edit_issue_labels(args: argparse.Namespace, github: GitHub) -> None:
+    """Edit labels only after proving the target is an Issue, not a PR."""
+    labels = args.add_label + args.remove_label
+    if REPOSITORY.fullmatch(args.repo) is None or args.issue_number < 1:
+        raise RuntimeError("Issue identity is invalid")
+    if not labels or any(not label or "\n" in label for label in labels):
+        raise RuntimeError("Issue labels must be non-empty single-line values")
+    issue = github.get(args.repo, f"issues/{args.issue_number}")
+    if (
+        not isinstance(issue, dict)
+        or issue.get("number") != args.issue_number
+        or issue.get("pull_request") is not None
+    ):
+        raise RuntimeError("Target must be a standalone Issue")
+    command = [
+        "gh",
+        "issue",
+        "edit",
+        str(args.issue_number),
+        "--repo",
+        args.repo,
+    ]
+    for label in args.add_label:
+        command.extend(("--add-label", label))
+    for label in args.remove_label:
+        command.extend(("--remove-label", label))
+    run(command)
+
+
 def writer_violations(text: str) -> list[str]:
     """Find PR lifecycle writes outside this module, including split tokens."""
     compact = re.sub(r"[^a-z0-9_./@-]+", "", text.casefold())
@@ -1323,6 +1352,21 @@ def writer_violations(text: str) -> list[str]:
         option in compact for option in ("--label", "--milestone", "--draft")
     ):
         violations.append("PR creation with an unleased metadata/state write")
+    shell = text.casefold().replace("\\\n", " ")
+    if any(
+        "ghissueedit" in re.sub(r"[^a-z0-9_-]+", "", line)
+        and any(
+            option in line
+            for option in (
+                "--add-label",
+                "--remove-label",
+                "--milestone",
+                "--remove-milestone",
+            )
+        )
+        for line in shell.splitlines()
+    ):
+        violations.append("gh issue metadata write")
     graphql_writers = [
         "convert" + "pullrequest" + "todraft",
         "mark" + "pullrequest" + "readyforreview",
@@ -1340,25 +1384,32 @@ def writer_violations(text: str) -> list[str]:
     if release_writer in compact:
         violations.append("opaque release pull-request writer")
     mutating_rest = re.search(
-        r"(?:--method|-x|request)(?:patch|put|post|delete)", compact
+        r"(?:--method|-x|request|requests.)(?:patch|put|post|delete)",
+        compact,
     )
     if mutating_rest and re.search(
         r"repos/.{1,160}/pulls/.{0,160}/merge", compact
     ):
         violations.append("REST pull-request merge")
     if mutating_rest and re.search(
-        r"repos/.{1,160}/pulls/[^/?]+(?:[?]|$)", compact
+        r"repos/.{1,160}/(?:pulls|issues)/[^/?]+(?:[?]|$)", compact
     ):
-        violations.append("REST pull-request metadata write")
+        violations.append("REST pull-request or issue metadata write")
     if mutating_rest and re.search(
-        r"repos/.{1,160}/issues/.{0,160}/labels", compact
+        r"repos/.{1,160}/(?:pulls|issues)/.{0,160}/"
+        r"(?:labels|milestones)",
+        compact,
     ):
-        violations.append("REST pull-request label write")
+        violations.append("REST pull-request or issue metadata write")
     return violations
 
 
 def scan_writers(root: Path) -> None:
     """Fail when repository automation bypasses the lifecycle tool."""
+    allowed = {
+        root / "scripts/pr_lifecycle.py",
+        root / "template/scripts/pr_lifecycle.py",
+    }
     paths = [
         *root.glob(".github/workflows/*.yml"),
         *root.glob(".github/workflows/*.yaml"),
@@ -1369,7 +1420,7 @@ def scan_writers(root: Path) -> None:
     ]
     violations: list[str] = []
     for path in sorted(set(paths)):
-        if not path.is_file() or path.name == "pr_lifecycle.py":
+        if not path.is_file() or (path in allowed and not path.is_symlink()):
             continue
         found = writer_violations(path.read_text(encoding="utf-8"))
         violations.extend(f"{path.relative_to(root)}: {item}" for item in found)
@@ -1395,6 +1446,12 @@ def parser() -> argparse.ArgumentParser:
     scan_command = commands.add_parser("scan-writers")
     scan_command.add_argument("--root", type=Path, default=Path.cwd())
     scan_command.set_defaults(scan_root=True)
+    issue_labels = commands.add_parser("issue-labels")
+    issue_labels.add_argument("--repo", required=True)
+    issue_labels.add_argument("--issue-number", required=True, type=int)
+    issue_labels.add_argument("--add-label", action="append", default=[])
+    issue_labels.add_argument("--remove-label", action="append", default=[])
+    issue_labels.set_defaults(handler=edit_issue_labels)
 
     for name in (
         "state",

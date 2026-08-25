@@ -28,6 +28,7 @@ base_lane_ref = MODULE["base_lane_ref"]
 confirm_refs = MODULE["confirm_refs"]
 create_refs = MODULE["create_refs"]
 edit_metadata = MODULE["edit_metadata"]
+edit_issue_labels = MODULE["edit_issue_labels"]
 expired_remote_lease = MODULE["expired_remote_lease"]
 GitHub = MODULE["GitHub"]
 LEASE_CORE_FIELDS = MODULE["LEASE_CORE_FIELDS"]
@@ -304,6 +305,29 @@ def test_origin_must_resolve_to_the_exact_github_repository(url: str) -> None:
         "gh api -X PATCH repos/owner/repo/pulls/42 --field draft=true",
         'query = "mutation { markPullRequest" "ReadyForReview(input: $x) }"',
         "gh pr create --base dev/next --head fix/x --label bug",
+        (
+            "requests.patch("
+            'f"https://api.github.com/repos/{repo}/pulls/{number}", '
+            'json={"draft": True})'
+        ),
+        (
+            "requests.post("
+            '"https://api.github.com/repos/o/r/issues/42/labels", '
+            'json={"labels": ["bug"]})'
+        ),
+        (
+            "requests.delete("
+            '"https://api.github.com/repos/o/r/issues/42/labels/bug")'
+        ),
+        "gh api --method PATCH repos/o/r/pulls/42 -f draft=true",
+        "gh api --method POST repos/o/r/issues/42/labels -f labels[]=bug",
+        (
+            "gh api --method DELETE "
+            '"repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/labels/bug"'
+        ),
+        "gh issue edit 42 --add-label bug",
+        "gh issue edit 42 --remove-label bug",
+        "gh issue edit 42 --milestone v1",
     ],
 )
 def test_writer_scanner_catches_split_lifecycle_mutations(source: str) -> None:
@@ -320,6 +344,46 @@ def test_writer_scanner_covers_root_and_template_automation(
     workflow.write_text("run: gh pr ready 42\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match=r"template/\.github/workflows"):
         scan_writers(tmp_path)
+
+
+def test_writer_scanner_does_not_trust_a_nested_canonical_basename(
+    tmp_path: Path,
+) -> None:
+    """Only the two exact canonical helper paths bypass their own scan."""
+    imposter = tmp_path / "scripts/helpers/pr_lifecycle.py"
+    imposter.parent.mkdir(parents=True)
+    imposter.write_text(
+        'requests.post("https://api.github.com/repos/o/r/issues/42")\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match=r"helpers/pr_lifecycle\.py"):
+        scan_writers(tmp_path)
+
+
+def test_issue_label_helper_rejects_a_pull_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue automation cannot use its canonical helper to mutate a PR."""
+    github = FakeGitHub("a" * 40)
+    github.get = lambda _repo, _path: {  # type: ignore[method-assign]
+        "number": 42,
+        "pull_request": {"url": "https://api.github.com/pulls/42"},
+    }
+    monkeypatch.setitem(
+        edit_issue_labels.__globals__,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("unexpected issue write"),
+    )
+    with pytest.raises(RuntimeError, match="standalone Issue"):
+        edit_issue_labels(
+            SimpleNamespace(
+                repo="owner/repo",
+                issue_number=42,
+                add_label=["bug"],
+                remove_label=[],
+            ),
+            github,
+        )
 
 
 def test_writer_scanner_allows_pr_creation_without_state_or_metadata() -> None:
