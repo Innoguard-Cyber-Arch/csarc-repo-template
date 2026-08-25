@@ -103,7 +103,11 @@ def risks_for(path: str) -> set[str]:
     """Identify changes that require explicit, fail-closed routing."""
     name = Path(path).name.removesuffix(".jinja")
     scope = scope_for(path)
-    risks: set[str] = set()
+    risks = (
+        {"verifier"}
+        if path.startswith(("scripts/", "template/scripts/"))
+        else set()
+    )
     if path == "copier.yml" or path.startswith("template/"):
         risks.add("generator")
     if path.startswith("src/csarc_cli/") or path == "tests/test_cli.py":

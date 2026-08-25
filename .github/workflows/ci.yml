@@ -271,6 +271,9 @@ jobs:
           FAST_RESULT: ${{ needs.fast.result }}
           TIER: ${{ needs.fast.outputs.tier }}
           RUN_DEEP: ${{ needs.fast.outputs.run_deep }}
+          RUN_GOVERNANCE: ${{ needs.fast.outputs.run_governance }}
+          RUN_OSV: ${{ needs.fast.outputs.run_osv }}
+          RUN_ZIZMOR: ${{ needs.fast.outputs.run_zizmor }}
           REVIEW_STATE: ${{ needs.fast.outputs.review_state }}
           CANONICAL_RESULT: ${{ needs.canonical-full.result }}
           ADOPTION_MACOS_RESULT: ${{ needs.adoption-macos.result }}
@@ -279,6 +282,22 @@ jobs:
           PYTHON_COMPATIBILITY_RESULT: ${{ needs.python-compatibility.result }}
           ZIZMOR_RESULT: ${{ needs.zizmor.result }}
         run: |
+          require_routed() {
+            expected="$1"
+            actual="$2"
+            name="$3"
+            if [[ "$expected" == true ]]; then
+              [[ "$actual" == success ]] || {
+                echo "$name must succeed when routed; got $actual" >&2
+                return 1
+              }
+            else
+              [[ "$actual" == skipped ]] || {
+                echo "$name must be skipped when not routed; got $actual" >&2
+                return 1
+              }
+            fi
+          }
           if [[ "$REVIEW_STATE" == "draft" ]]; then
             echo "::notice::Draft WIP targeted checks passed; full verification remains pending until Ready."
           fi
@@ -290,11 +309,7 @@ jobs:
             test "$CANONICAL_RESULT" = skipped
             test "$PYTHON_COMPATIBILITY_RESULT" = skipped
           fi
-          if [[ "$RUN_DEEP" == true ]]; then
-            test "$ADOPTION_MACOS_RESULT" = success
-          else
-            test "$ADOPTION_MACOS_RESULT" = skipped
-          fi
-          for result in "$GOVERNANCE_RESULT" "$OSV_RESULT" "$ZIZMOR_RESULT"; do
-            [[ "$result" == success || "$result" == skipped ]]
-          done
+          require_routed "$RUN_DEEP" "$ADOPTION_MACOS_RESULT" adoption-macos
+          require_routed "$RUN_GOVERNANCE" "$GOVERNANCE_RESULT" governance
+          require_routed "$RUN_OSV" "$OSV_RESULT" osv
+          require_routed "$RUN_ZIZMOR" "$ZIZMOR_RESULT" zizmor

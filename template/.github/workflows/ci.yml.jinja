@@ -43,7 +43,6 @@ jobs:
       run_governance: {% raw %}${{ steps.plan.outputs.run_governance }}{% endraw %}
       run_osv: {% raw %}${{ steps.plan.outputs.run_osv }}{% endraw %}
       run_zizmor: {% raw %}${{ steps.plan.outputs.run_zizmor }}{% endraw %}
-      run_deep: {% raw %}${{ steps.plan.outputs.run_deep }}{% endraw %}
     steps:
       - name: Start timing
         id: started
@@ -398,6 +397,9 @@ jobs:
         env:
           FAST_RESULT: {% raw %}${{ needs.fast.result }}{% endraw %}
           TIER: {% raw %}${{ needs.fast.outputs.tier }}{% endraw %}
+          RUN_GOVERNANCE: {% raw %}${{ needs.fast.outputs.run_governance }}{% endraw %}
+          RUN_OSV: {% raw %}${{ needs.fast.outputs.run_osv }}{% endraw %}
+          RUN_ZIZMOR: {% raw %}${{ needs.fast.outputs.run_zizmor }}{% endraw %}
           REVIEW_STATE: {% raw %}${{ needs.fast.outputs.review_state }}{% endraw %}
 {%- if use_reusable_workflow %}
           FULL_RESULT: {% raw %}${{ needs.full.result }}{% endraw %}
@@ -415,8 +417,25 @@ jobs:
           ZIZMOR_RESULT: {% raw %}${{ needs.zizmor.result }}{% endraw %}
 {%- if has_container %}
           CONTAINER_RESULT: {% raw %}${{ needs.container.result }}{% endraw %}
+          RUN_CONTAINER: {% raw %}${{ needs.fast.outputs.tier != 'docs' }}{% endraw %}
 {%- endif %}
         run: |
+          require_routed() {
+            expected="$1"
+            actual="$2"
+            name="$3"
+            if [[ "$expected" == true ]]; then
+              [[ "$actual" == success ]] || {
+                echo "$name must succeed when routed; got $actual" >&2
+                return 1
+              }
+            else
+              [[ "$actual" == skipped ]] || {
+                echo "$name must be skipped when not routed; got $actual" >&2
+                return 1
+              }
+            fi
+          }
           if [[ "$REVIEW_STATE" == "draft" ]]; then
             echo "::notice::Draft WIP targeted checks passed; full verification remains pending until Ready."
           fi
@@ -432,6 +451,8 @@ jobs:
 {% if has_python %}            test "$PYTHON_COMPATIBILITY_RESULT" = skipped
 {% endif %}{% if language == "python-typescript" %}            test "$TYPESCRIPT_RESULT" = skipped
 {% endif %}{% endif %}          fi
-          for result in "$GOVERNANCE_RESULT" "$OSV_RESULT" "$ZIZMOR_RESULT"{% if has_container %} "$CONTAINER_RESULT"{% endif %}; do
-            [[ "$result" == success || "$result" == skipped ]]
-          done
+          require_routed "$RUN_GOVERNANCE" "$GOVERNANCE_RESULT" governance
+          require_routed "$RUN_OSV" "$OSV_RESULT" osv
+          require_routed "$RUN_ZIZMOR" "$ZIZMOR_RESULT" zizmor
+{% if has_container %}          require_routed "$RUN_CONTAINER" "$CONTAINER_RESULT" container
+{% endif %}

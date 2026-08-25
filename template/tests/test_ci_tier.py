@@ -351,7 +351,46 @@ def test_required_aggregate_is_unconditional_and_routing_is_job_level() -> None:
         name for name in ("canonical-full", "canonical", "full") if name in jobs
     )
     assert jobs[full_job]["if"] == ("${{ needs.fast.outputs.tier == 'full' }}")
+    aggregate = jobs["verify"]["steps"][0]
+    assert aggregate["env"]["RUN_GOVERNANCE"] == (
+        "${{ needs.fast.outputs.run_governance }}"
+    )
+    assert aggregate["env"]["RUN_OSV"] == "${{ needs.fast.outputs.run_osv }}"
+    assert aggregate["env"]["RUN_ZIZMOR"] == (
+        "${{ needs.fast.outputs.run_zizmor }}"
+    )
+    assert aggregate["run"].count("require_routed") >= 4
     if "adoption-macos" in jobs:
         assert jobs["adoption-macos"]["if"] == (
             "${{ needs.fast.outputs.run_deep == 'true' }}"
         )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/check-update-conflicts",
+        "scripts/check-project-metadata.py",
+        "scripts/delivery_sync.py",
+        "scripts/pr_lifecycle.py",
+        "template/scripts/verify.jinja",
+    ],
+)
+def test_verifier_changes_are_explicit_risks(path: str) -> None:
+    """Prevent verifier changes from silently bypassing escalation rules."""
+    assert "verifier" in risks_for(path)
+
+
+def test_post_merge_checks_identity_without_repeating_matrix() -> None:
+    """Keep post-merge verification focused on tree and provenance identity."""
+    workflow = yaml.safe_load(
+        (
+            ROOT / ".github" / "workflows" / "promotion-post-merge.yml"
+        ).read_text()
+    )
+    commands = "\n".join(
+        step.get("run", "") for step in workflow["jobs"]["verify"]["steps"]
+    )
+    assert "promotion_gate.py verify-main" in commands
+    assert "verify-template.sh" not in commands
+    assert "pytest" not in commands
