@@ -35,9 +35,7 @@ SHA256 = re.compile(r"[0-9a-f]{64}")
 OWNER = re.compile(r"[A-Za-z0-9._/@:-]{1,200}")
 ACTOR = re.compile(r"[A-Za-z0-9_.-]+(?:\[bot\])?")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
-DELIVERY_BRANCH = re.compile(
-    r"^dev/m([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$"
-)
+DELIVERY_BRANCH = re.compile(r"^dev/m([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
 ISSUE_WORK_BRANCH = re.compile(
     r"^(?:build|chore|ci|docs|feat|fix|refactor|revert|test)/"
     r"([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$"
@@ -932,9 +930,9 @@ def require_routine_route(  # noqa: C901
         milestone = issue.get("milestone")
         if milestone is None:
             actual_milestone = None
-        elif isinstance(milestone, dict) and type(
-            milestone.get("number")
-        ) is int:
+        elif (
+            isinstance(milestone, dict) and type(milestone.get("number")) is int
+        ):
             actual_milestone = milestone["number"]
         else:
             raise RuntimeError("Routine work branch Issue Milestone is invalid")
@@ -1104,11 +1102,7 @@ def effective_protection(  # noqa: C901
     ]
     if any(not isinstance(items, list) for items in required_groups):
         return "unknown", "required check rules are malformed", set()
-    required_items = [
-        item
-        for items in required_groups
-        for item in items
-    ]
+    required_items = [item for items in required_groups for item in items]
     if any(
         not isinstance(item, dict)
         or not isinstance(item.get("context"), str)

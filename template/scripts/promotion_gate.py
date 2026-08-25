@@ -913,10 +913,7 @@ def require_zero_step_run(  # noqa: C901
         or job["id"] <= 0
         or not (
             job.get("runner_id") is None
-            or (
-                type(job.get("runner_id")) is int
-                and job["runner_id"] == 0
-            )
+            or (type(job.get("runner_id")) is int and job["runner_id"] == 0)
         )
         or not isinstance(job.get("steps"), list)
         or bool(job["steps"])
