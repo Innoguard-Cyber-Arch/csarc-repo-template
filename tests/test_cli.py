@@ -1497,11 +1497,11 @@ def test_real_template_adoption_resumes_after_manifest_merge(
     assert not (project / cli.PENDING_ADOPTION_FILE).exists()
 
 
-def test_real_existing_adoption_updates_without_losing_product_decisions(
+def test_real_init_and_adoption_update_through_verified_releases(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Adopt and update a realistic product through two verified releases."""
+    """Init and adopt from v1, then update both through verified v2."""
     source = tmp_path / "controlled-release-source"
     copy_real_template(source)
     (source / "template" / "decision.txt").write_text(
@@ -1545,6 +1545,49 @@ def test_real_existing_adoption_updates_without_losing_product_decisions(
         )
 
     monkeypatch.setattr(cli, "resolve_revision", verified_revision)
+    initialized = tmp_path / "initialized CSARC-測試"
+    assert (
+        main(
+            [
+                "init",
+                str(initialized),
+                "--source",
+                str(source),
+                "--to",
+                "v1.0.0",
+                "--expected-sha",
+                first_sha,
+                "--data",
+                "language=ci",
+                "--data",
+                "project_name=Initialized Identity",
+                "--data",
+                "project_slug=initialized-identity",
+            ]
+        )
+        == 0
+    )
+    init_plan_path = lifecycle_plan_path(initialized, "init")
+    init_plan = cli.read_machine_plan(init_plan_path)
+    assert init_plan["template"]["verification"] == "verified"
+    assert (
+        main(
+            [
+                "init",
+                str(initialized),
+                "--apply-plan",
+                str(init_plan_path),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    git(initialized, "init", "-b", "main")
+    git(initialized, "config", "user.name", "CLI Test")
+    git(initialized, "config", "user.email", "cli-test@example.invalid")
+    commit(initialized, "test: initialize controlled release v1")
+
     project = tmp_path / "existing CSARC-測試"
     data = cli.base_data(
         project,
@@ -1708,44 +1751,66 @@ def test_real_existing_adoption_updates_without_losing_product_decisions(
     retired.unlink()
     second_sha = commit(source, "test: controlled release v2")
     releases["v2.0.0"] = second_sha
-    assert (
-        main(
-            [
-                "update",
-                str(project),
-                "--to",
-                "v2.0.0",
-                "--expected-sha",
-                second_sha,
-            ]
+
+    def update_to_v2(target: Path) -> dict[str, object]:
+        assert (
+            main(
+                [
+                    "update",
+                    str(target),
+                    "--to",
+                    "v2.0.0",
+                    "--expected-sha",
+                    second_sha,
+                ]
+            )
+            == 0
         )
-        == 0
+        plan_path = lifecycle_plan_path(target, "update")
+        plan = cli.read_machine_plan(plan_path)
+        assert plan["transaction"]["verification"] == "passed"
+        assert plan["template"]["sha"] == second_sha
+        assert plan["files"]["delete"] == ["retired-after-v1.txt"]
+        assert "retired-after-v1.txt" not in plan["files"]["preserve"]
+        assert (
+            main(
+                [
+                    "update",
+                    str(target),
+                    "--apply-plan",
+                    str(plan_path),
+                    "--yes",
+                    "--non-interactive",
+                ]
+            )
+            == 0
+        )
+        return plan
+
+    initialized_update = update_to_v2(initialized)
+    initialized_transaction = initialized_update["transaction"]
+    assert isinstance(initialized_transaction, dict)
+    assert (initialized / "lifecycle-version.txt").read_text(
+        encoding="utf-8"
+    ) == "lifecycle v2\n"
+    assert not (initialized / "retired-after-v1.txt").exists()
+    for relative_name, digest in initialized_transaction["artifacts"].items():
+        assert cli.file_fingerprint(initialized / relative_name) == digest
+    initialized_provenance = json.loads(
+        (initialized / cli.PROVENANCE_FILE).read_text(encoding="utf-8")
     )
-    update_plan_path = lifecycle_plan_path(project, "update")
-    update_plan = cli.read_machine_plan(update_plan_path)
-    transaction = update_plan["transaction"]
-    assert transaction["verification"] == "passed"
-    assert update_plan["template"]["sha"] == second_sha
-    assert update_plan["files"]["delete"] == ["retired-after-v1.txt"]
-    assert "retired-after-v1.txt" not in update_plan["files"]["preserve"]
-    assert set(transaction["artifacts"]) == (
+    assert initialized_provenance["release_tag"] == "v2.0.0"
+    assert initialized_provenance["commit_sha"] == second_sha
+    assert initialized_provenance["previous"]["release_tag"] == "v1.0.0"
+    assert initialized_provenance["previous"]["commit_sha"] == first_sha
+
+    update_plan = update_to_v2(project)
+    assert set(update_plan["transaction"]["artifacts"]) == (
         set(update_plan["files"]["add"])
         | set(update_plan["files"]["overwrite"])
         | set(update_plan["files"]["automatic_merge"])
     )
-    assert (
-        main(
-            [
-                "update",
-                str(project),
-                "--apply-plan",
-                str(update_plan_path),
-                "--yes",
-                "--non-interactive",
-            ]
-        )
-        == 0
-    )
+    transaction = update_plan["transaction"]
 
     for relative_name, content in protected.items():
         assert (project / relative_name).read_bytes() == content

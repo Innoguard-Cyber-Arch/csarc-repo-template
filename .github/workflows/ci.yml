@@ -175,7 +175,11 @@ jobs:
       - run: >-
           uv run pytest -q
           tests/test_cli.py::test_lifecycle_plan_replay_updates_v1_to_v2
-          tests/test_cli.py::test_real_existing_adoption_updates_without_losing_product_decisions
+          tests/test_cli.py::test_real_init_and_adoption_update_through_verified_releases
+          tests/test_cli.py::test_runtime_state_rejects_symlinked_parent
+          tests/test_cli.py::test_fixed_merges_preserve_product_content_and_crlf
+          tests/test_cli.py::test_adoption_preserves_executable_and_checked_patch_symlink
+          tests/test_cli.py::test_candidate_patch_rolls_back_after_late_external_drift
 
   governance:
     name: remote governance
