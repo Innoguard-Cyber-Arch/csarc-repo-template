@@ -28,7 +28,7 @@ def test_render_uses_one_release_identity_everywhere() -> None:
         == 3
     )
     source = f"git+https://github.com/{REPOSITORY}.git@{sha}"
-    assert prompts.count(f"uvx --python 3.14 --from '{source}'") == 3
+    assert prompts.count(f"uvx --python 3.14 --from '{source}'") == 6
     assert "--from csarc-repo-cli" not in prompts
     assert "目標路徑：" not in prompts
     assert "csarc init" in prompts
@@ -44,23 +44,25 @@ def test_render_uses_one_release_identity_everywhere() -> None:
 
 
 @pytest.mark.parametrize(
-    ("mode", "apply_command"),
+    ("mode", "target_argument"),
     [
-        (
-            "init",
-            "csarc init <target-path> --apply-plan PATH "
-            "--yes --non-interactive",
-        ),
-        ("adopt", "csarc adopt --apply-plan PATH --yes --non-interactive"),
-        ("update", "csarc update --apply-plan PATH --yes --non-interactive"),
+        ("init", " <target-path>"),
+        ("adopt", ""),
+        ("update", ""),
     ],
 )
 def test_release_prompt_applies_only_the_reviewed_plan(
-    mode: str, apply_command: str
+    mode: str, target_argument: str
 ) -> None:
     """Keep every release prompt aligned with the transactional CLI."""
-    rendered = prompt(mode, "v1.2.3", "a" * 40)
+    sha = "a" * 40
+    rendered = prompt(mode, "v1.2.3", sha)
     after_confirmation = rendered.split("確認後", maxsplit=1)[1]
+    source = f"git+https://github.com/{REPOSITORY}.git@{sha}"
+    apply_command = (
+        f"uvx --python 3.14 --from '{source}' csarc {mode}"
+        f"{target_argument} --apply-plan PATH --yes --non-interactive"
+    )
 
     assert f"`{apply_command}`" in after_confirmation
     assert "--to" not in after_confirmation

@@ -3835,10 +3835,38 @@ def find_conflicts(target: Path) -> tuple[str, ...]:
         if relative_name.endswith(".rej"):
             conflicts.append(relative_name)
             continue
+        descriptor = -1
         try:
-            lines = path.read_text(encoding="utf-8").splitlines()
-        except UnicodeDecodeError:
+            before = os.stat(path, follow_symlinks=False)
+            if not stat.S_ISREG(before.st_mode):
+                continue
+            descriptor = os.open(
+                path,
+                os.O_RDONLY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_NONBLOCK", 0),
+            )
+            opened = os.fstat(descriptor)
+            after = os.stat(path, follow_symlinks=False)
+            if (
+                not stat.S_ISREG(opened.st_mode)
+                or (before.st_dev, before.st_ino)
+                != (opened.st_dev, opened.st_ino)
+                or (after.st_dev, after.st_ino)
+                != (opened.st_dev, opened.st_ino)
+            ):
+                continue
+            with os.fdopen(descriptor, mode="rb") as source:
+                descriptor = -1
+                content = source.read()
+            if not is_text(content):
+                continue
+            lines = content.decode("utf-8").splitlines()
+        except OSError:
             continue
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
         if any(marker.match(line) for line in lines):
             conflicts.append(relative_name)
     return tuple(sorted(conflicts))

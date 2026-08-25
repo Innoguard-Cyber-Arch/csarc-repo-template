@@ -3951,6 +3951,25 @@ def test_input_and_conflict_errors(tmp_path: Path) -> None:
     assert cli.find_conflicts(tmp_path) == ("change.rej", "conflict.txt")
 
 
+def test_conflict_scan_does_not_follow_symlinks_or_read_fifos(
+    tmp_path: Path,
+) -> None:
+    """Keep conflict detection inside regular files in the candidate repo."""
+    outside = tmp_path.parent / f"{tmp_path.name}-outside"
+    outside.mkdir()
+    (outside / "conflict.txt").write_text(
+        "<<<<<<< external\n=======\n>>>>>>> external\n", encoding="utf-8"
+    )
+    (tmp_path / "linked-directory").symlink_to(
+        outside, target_is_directory=True
+    )
+    fifo = outside / "blocking-fifo"
+    os.mkfifo(fifo)
+    (tmp_path / "linked-fifo").symlink_to(fifo)
+
+    assert cli.find_conflicts(tmp_path) == ()
+
+
 def test_guardrails_for_invalid_targets(tmp_path: Path) -> None:
     """Reject targets that cannot safely enter the requested lifecycle."""
     source, first_sha = make_template(tmp_path)

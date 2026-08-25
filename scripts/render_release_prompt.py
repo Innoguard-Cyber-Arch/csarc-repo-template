@@ -35,9 +35,9 @@ def prompt(mode: str, tag: str, sha: str) -> str:
         else "摘要將新增、覆寫、保留及需要人工合併的檔案"
     )
     apply_command = {
-        "init": "csarc init <target-path> --apply-plan PATH",
-        "adopt": "csarc adopt --apply-plan PATH",
-        "update": "csarc update --apply-plan PATH",
+        "init": f"{command} <target-path> --apply-plan PATH",
+        "adopt": f"{command} --apply-plan PATH",
+        "update": f"{command} --apply-plan PATH",
     }[mode]
     return "\n".join(
         (
