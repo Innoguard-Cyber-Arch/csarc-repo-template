@@ -35,7 +35,7 @@ Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript �
 
 ```bash
 uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project
-uvx --python 3.14 --from csarc-repo-cli csarc adopt --dry-run
+uvx --python 3.14 --from csarc-repo-cli csarc adopt
 uvx --python 3.14 --from csarc-repo-cli csarc update --check --json
 ```
 
@@ -139,14 +139,14 @@ uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project
 
 ```bash
 git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --python 3.14 --from csarc-repo-cli csarc adopt --dry-run
+uvx --python 3.14 --from csarc-repo-cli csarc adopt
 uvx --python 3.14 --from csarc-repo-cli csarc adopt \
   --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
 ```
 
-`adopt --dry-run` 可檢查 dirty working tree，但只產生 repo 外的 Markdown、PDF 與 machine-readable plan，不修改 repo；dirty plan 只能審查，清理或提交既有工作後必須重跑。plan 鎖定 target HEAD、Release full SHA、answers 與輸出 digest；正式導入只接受 `--apply-plan`，有任何漂移便停止。CLI 會先在暫存 clone 產生完整候選、執行驗證與 patch check，成功後才改目標 repo。README／CHANGELOG 保留為 project-owned，`.gitignore` 使用 ordered union，`AGENTS.md` 只更新 CSARC managed block，產品既有 `release.yml` 則與 `csarc-release.yml` 分離。
+`adopt` 預設就是 dry-run；明確寫出 `--dry-run` 仍相容。它可檢查 dirty working tree，但只產生 repo 外的 Markdown、PDF 與 machine-readable plan，不修改 repo；dirty plan 只能審查，清理或提交既有工作後必須重跑。plan 鎖定 target HEAD、Release full SHA、answers 與輸出 digest；正式導入只接受 `--apply-plan`，有任何漂移便停止。CLI 會先在暫存 clone 產生完整候選、執行驗證與 patch check，成功後才改目標 repo。README／CHANGELOG 保留為 project-owned，`.gitignore` 使用 ordered union，`AGENTS.md` 只更新 CSARC managed block，產品既有 `release.yml` 則與 `csarc-release.yml` 分離。
 
-若第一階段列出 manual merge，先完成清單中的人工結果，再執行 `adopt --finalize --dry-run`；它會重建並驗證完整候選，將人工結果與完整 working-tree state 綁進同一個 repo 外 plan。確認後只能用 `adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json` 套用；直接執行 `--finalize` 或任何 plan 後漂移都會停止。
+若第一階段列出 manual merge，先完成清單中的人工結果，再執行 `adopt --finalize`；它同樣預設為 dry-run，會重建並驗證完整候選，將人工結果與完整 working-tree state 綁進同一個 repo 外 plan。確認後只能用 `adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json` 套用；任何 plan 後漂移都會停止。
 
 ### 更新已導入的 repo
 

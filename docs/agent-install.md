@@ -6,8 +6,9 @@
 2. Use only `https://github.com/Innoguard-Cyber-Arch/csarc-repo-template`.
 3. Select Python per invocation with `uvx --python 3.14`; never edit a shell
    profile or global environment. Run the requested `csarc init`, `adopt`, or
-   `update` command with `--dry-run` first. For a release-specific request,
-   pass both `--to` and `--expected-sha`.
+   `update` command as a dry-run first; `adopt` and `adopt --finalize` default
+   to dry-run when no `--apply-plan` is supplied. For a release-specific
+   request, pass both `--to` and `--expected-sha`.
 4. Summarize the verified release, full commit SHA, release capability
    preflight, settings, conflict risk, and every file classified as add,
    overwrite, preserve, automatic merge, manual merge, or unable to determine.
