@@ -1220,11 +1220,13 @@ def test_new_sync_pr_labels_only_through_the_lifecycle_lease(
             ),
         ]
     )
-    labelled: list[tuple[str, int, str]] = []
+    labelled: list[tuple[str, int, str, str, str]] = []
     monkeypatch.setitem(
         create_sync_pr.__globals__,
         "label_sync_pr",
-        lambda repo, number, sha: labelled.append((repo, number, sha)),
+        lambda repo, number, sha, base_ref, base_sha: labelled.append(
+            (repo, number, sha, base_ref, base_sha)
+        ),
     )
     assert (
         create_sync_pr(
@@ -1232,7 +1234,7 @@ def test_new_sync_pr_labels_only_through_the_lifecycle_lease(
         )
         == "https://github.com/acme/repo/pull/17"
     )
-    assert labelled == [("acme/repo", 17, "a" * 40)]
+    assert labelled == [("acme/repo", 17, "a" * 40, "dev/m7-ci", "delivery")]
     assert not any("/labels" in path for _, path, _ in api.calls)
 
 
@@ -1240,21 +1242,48 @@ def test_lifecycle_label_always_releases_its_exact_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A failed metadata edit does not strand the workflow lease."""
-    commands: list[list[str]] = []
+    commands: list[tuple[list[str], Path]] = []
+    checkout = Path("/trusted-policy-base")
 
-    def command(arguments: list[str]) -> None:
-        commands.append(arguments)
+    class TrustedCheckout:
+        def __enter__(self) -> Path:
+            return checkout
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+    bases: list[tuple[str, str]] = []
+
+    def policy_worktree(base_ref: str, base_sha: str) -> TrustedCheckout:
+        bases.append((base_ref, base_sha))
+        return TrustedCheckout()
+
+    def command(arguments: list[str], *, cwd: Path) -> None:
+        commands.append((arguments, cwd))
         if arguments[0] == "edit":
             raise RuntimeError("edit failed")
 
     monkeypatch.setitem(label_sync_pr.__globals__, "lifecycle_command", command)
+    monkeypatch.setitem(
+        label_sync_pr.__globals__,
+        "trusted_policy_worktree",
+        policy_worktree,
+    )
     with pytest.raises(RuntimeError, match="edit failed"):
-        label_sync_pr("acme/repo", 17, "a" * 40)
-    assert [arguments[0] for arguments in commands] == [
+        label_sync_pr(
+            "acme/repo",
+            17,
+            "a" * 40,
+            "dev/m7-ci",
+            "b" * 40,
+        )
+    assert bases == [("dev/m7-ci", "b" * 40)]
+    assert [arguments[0] for arguments, _cwd in commands] == [
         "acquire",
         "edit",
         "release",
     ]
+    assert all(cwd == checkout for _arguments, cwd in commands)
 
 
 def test_reconcile_fans_out_with_capability_fallback() -> None:

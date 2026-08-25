@@ -31,6 +31,7 @@ confirm_refs = MODULE["confirm_refs"]
 create_refs = MODULE["create_refs"]
 edit_metadata = MODULE["edit_metadata"]
 edit_standalone_issue = MODULE["edit_standalone_issue"]
+effective_protection = MODULE["effective_protection"]
 close_integrated_issue = MODULE["close_integrated_issue"]
 expired_remote_lease = MODULE["expired_remote_lease"]
 GitHub = MODULE["GitHub"]
@@ -99,6 +100,7 @@ class FakeGitHub:
         self.body = "Closes #266\n\nAlpha 自行合併 / self-merged"
         self.files = ["src/app.py"]
         self.head_ref = "feat/266-lifecycle"
+        self.head_repo = "owner/repo"
         self.issue_state = "open"
         self.issue_labels: set[str] = set()
         self.issue_milestone: int | None = None
@@ -134,7 +136,7 @@ class FakeGitHub:
             "head": {
                 "ref": self.head_ref,
                 "sha": self.head,
-                "repo": {"full_name": "owner/repo"},
+                "repo": {"full_name": self.head_repo},
             },
         }
 
@@ -709,6 +711,43 @@ def test_github_get_repository_omits_trailing_slash(
     assert calls == [["gh", "api", "repos/owner/repo"]]
 
 
+def test_effective_protection_requires_identity_on_every_rule() -> None:
+    """One valid Ruleset ID cannot bless another unidentified rule."""
+
+    class FakeGitHub:
+        def get(self, _repo: str, path: str) -> object:
+            if path.startswith("rules/branches/"):
+                return [
+                    {
+                        "type": "pull_request",
+                        "parameters": {
+                            "required_approving_review_count": 1,
+                            "dismiss_stale_reviews_on_push": True,
+                            "require_code_owner_review": True,
+                            "require_last_push_approval": True,
+                            "required_review_thread_resolution": True,
+                        },
+                    },
+                    {
+                        "type": "required_status_checks",
+                        "ruleset_id": 7,
+                        "parameters": {
+                            "required_status_checks": [{"context": "verify"}]
+                        },
+                    },
+                ]
+            if path == "rulesets/7":
+                return {"enforcement": "active", "bypass_actors": []}
+            raise AssertionError(path)
+
+    state, reason, contexts = effective_protection(
+        FakeGitHub(), "owner/repo", "main"
+    )
+    assert state == "unknown"
+    assert "every effective rule" in reason
+    assert contexts == set()
+
+
 @pytest.mark.parametrize(
     "tampered_path",
     [
@@ -806,6 +845,36 @@ def test_cli_checks_the_trusted_base_before_dispatching_a_writer(
     with pytest.raises(SystemExit):
         lifecycle_main()
     assert not called
+
+
+def test_workflow_callers_prepare_a_detached_policy_base() -> None:
+    """Shipped writer callers must leave candidate code before mutation."""
+    repo_root = Path(__file__).parents[1]
+    triage = (repo_root / ".github/workflows/issue-triage.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "ref: ${{ github.event.repository.default_branch }}" in triage
+    assert triage.index("git checkout --detach HEAD") < triage.index(
+        "pr_lifecycle.py issue-edit"
+    )
+    assert triage.index("git clean -ffd") < triage.index(
+        "pr_lifecycle.py issue-edit"
+    )
+
+    version_policy = repo_root / ".github/workflows/python-version-policy.yml"
+    if not version_policy.exists():
+        return
+    workflow = version_policy.read_text(encoding="utf-8")
+    ordered = (
+        'head_sha="$(git rev-parse HEAD)"',
+        "--json baseRefName,baseRefOid",
+        'git checkout --detach "$base_sha"',
+        "git clean -ffd",
+        "pr_lifecycle.py acquire",
+        "pr_lifecycle.py edit",
+    )
+    positions = [workflow.index(fragment) for fragment in ordered]
+    assert positions == sorted(positions)
 
 
 def test_concurrent_prs_cannot_acquire_the_same_destination_lane(
@@ -1508,6 +1577,53 @@ def test_merge_snapshot_rejects_an_unlinked_arbitrary_branch(
             lease,
             "https://github.com/owner/repo/pull/42#issuecomment-99",
         )
+
+
+@pytest.mark.parametrize(
+    "head_ref",
+    ["sync/main-to-next-abcdef0", "dependabot/pip/pytest-9"],
+)
+def test_merge_snapshot_rejects_foreign_unlinked_automation(
+    head_ref: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fork cannot claim a trusted zero-closer automation branch name."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.base_ref = "dev/next"
+    github.head_ref = head_ref
+    github.head_repo = "attacker/fork"
+    github.body = "Unlinked automation."
+    lease = lease_fixture()
+    lease["base_ref"] = "dev/next"
+    monkeypatch.setitem(
+        merge_snapshot.__globals__, "local_branch_strategy", lambda: "delivery"
+    )
+    with pytest.raises(RuntimeError, match="canonical automation route"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+        )
+
+
+def test_merge_snapshot_allows_the_canonical_dev_promotion_without_a_closer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The dev strategy keeps its explicit long-lived promotion route."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.head_ref = "dev"
+    github.body = "Promote the reviewed dev branch."
+    monkeypatch.setitem(
+        merge_snapshot.__globals__, "local_branch_strategy", lambda: "dev"
+    )
+    snapshot = merge_snapshot(
+        github,
+        lease_fixture(),
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["close_issue"] is False
 
 
 @pytest.mark.parametrize(

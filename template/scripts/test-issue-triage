@@ -45,6 +45,21 @@ done
 chmod +x "$validator"
 
 mkdir -p "$test_root/bin"
+export REAL_PYTHON3="$(command -v python3)"
+cat > "$test_root/bin/python3" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "scripts/pr_lifecycle.py" ]]; then
+  shift
+  printf '%s\n' "$*" >> "$GH_LOG"
+  if [[ "${MOCK_ISSUE_TYPES_AVAILABLE:-true}" != "true" &&
+        ( " $* " == *" --type "* || " $* " == *" --remove-type "* ) ]]; then
+    exit 1
+  fi
+  exit 0
+fi
+exec "$REAL_PYTHON3" "$@"
+SH
+chmod +x "$test_root/bin/python3"
 cat > "$test_root/bin/gh" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$GH_LOG"

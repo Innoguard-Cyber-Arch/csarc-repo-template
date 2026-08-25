@@ -9,12 +9,15 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -1691,14 +1694,15 @@ def manual_commands(delivery_branch: str, main_sha: str) -> str:
     )
 
 
-def lifecycle_command(arguments: list[str]) -> None:
+def lifecycle_command(arguments: list[str], *, cwd: Path) -> None:
     """Run one fail-closed PR lifecycle operation."""
     result = subprocess.run(  # noqa: S603
         [
             sys.executable,
-            str(Path(__file__).with_name("pr_lifecycle.py")),
+            str(cwd / "scripts/pr_lifecycle.py"),
             *arguments,
         ],
+        cwd=cwd,
         text=True,
         capture_output=True,
         check=False,
@@ -1708,16 +1712,57 @@ def lifecycle_command(arguments: list[str]) -> None:
         raise RuntimeError(f"PR lifecycle operation failed: {detail}")
 
 
-def label_sync_pr(repo: str, number: int, head_sha: str) -> None:
+def git_command(arguments: list[str]) -> str:
+    """Run one local Git command without interpreting its output."""
+    git = shutil.which("git")
+    if git is None:
+        raise RuntimeError("Git is unavailable")
+    result = subprocess.run(  # noqa: S603
+        [git, *arguments],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(f"Git command failed: {detail}")
+    return result.stdout.strip()
+
+
+@contextmanager
+def trusted_policy_worktree(base_ref: str, base_sha: str) -> Iterator[Path]:
+    """Yield a clean detached checkout of one exact destination base."""
+    git_command(["fetch", "--no-tags", "origin", base_ref])
+    if git_command(["rev-parse", "FETCH_HEAD"]) != base_sha:
+        raise RuntimeError("Delivery base changed before lifecycle mutation")
+    with tempfile.TemporaryDirectory(prefix="csarc-policy-base-") as directory:
+        checkout = Path(directory) / "worktree"
+        git_command(["worktree", "add", "--detach", str(checkout), base_sha])
+        try:
+            yield checkout
+        finally:
+            git_command(["worktree", "remove", "--force", str(checkout)])
+
+
+def label_sync_pr(
+    repo: str,
+    number: int,
+    head_sha: str,
+    base_ref: str,
+    base_sha: str,
+) -> None:
     """Label a newly created sync PR while holding its exact remote lease."""
     owner = (
         "github-actions/"
         f"{os.environ.get('GITHUB_RUN_ID', 'local')}/"
         f"{os.environ.get('GITHUB_RUN_ATTEMPT', '1')}"
     )
-    with tempfile.TemporaryDirectory(
-        prefix="csarc-delivery-lease-"
-    ) as directory:
+    with (
+        tempfile.TemporaryDirectory(
+            prefix="csarc-delivery-lease-"
+        ) as directory,
+        trusted_policy_worktree(base_ref, base_sha) as policy_checkout,
+    ):
         evidence = Path(directory) / "lease.json"
         common = [
             "--repo",
@@ -1735,7 +1780,8 @@ def label_sync_pr(repo: str, number: int, head_sha: str) -> None:
                 head_sha,
                 "--output",
                 str(evidence),
-            ]
+            ],
+            cwd=policy_checkout,
         )
         try:
             lifecycle_command(
@@ -1748,10 +1794,14 @@ def label_sync_pr(repo: str, number: int, head_sha: str) -> None:
                     str(evidence),
                     "--add-label",
                     "enhancement",
-                ]
+                ],
+                cwd=policy_checkout,
             )
         finally:
-            lifecycle_command(["release", *common, "--lease", str(evidence)])
+            lifecycle_command(
+                ["release", *common, "--lease", str(evidence)],
+                cwd=policy_checkout,
+            )
 
 
 def probe_capabilities(api: API, repo: str, main_sha: str) -> tuple[str, str]:
@@ -1854,7 +1904,13 @@ def create_sync_pr(
         or not isinstance(head_sha, str)
     ):
         raise RuntimeError("GitHub returned an invalid pull request response")
-    label_sync_pr(repo, number, head_sha)
+    label_sync_pr(
+        repo,
+        number,
+        head_sha,
+        delivery_branch,
+        delivery_sha,
+    )
     return url
 
 

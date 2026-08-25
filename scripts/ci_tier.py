@@ -43,9 +43,9 @@ def scope_for(path: str) -> str:
         }
         or path in {".github/CODEOWNERS", ".github/REVIEWERS", "AGENTS.md"}
         or (
-        path.startswith(("policies/", "template/policies/"))
-        or path.startswith("scripts/apply-repository-settings")
-        or path.startswith("scripts/check-governance-drift")
+            path.startswith(("policies/", "template/policies/"))
+            or path.startswith("scripts/apply-repository-settings")
+            or path.startswith("scripts/check-governance-drift")
         )
     ):
         return "governance"

@@ -102,6 +102,15 @@ jobs:
           fi
           pr_number="$(gh pr view "$pr_url" --json number --jq .number)"
           head_sha="$(git rev-parse HEAD)"
+          IFS=$'\t' read -r base_ref base_sha < <(
+            gh pr view "$pr_url" --json baseRefName,baseRefOid \
+              --jq '[.baseRefName, .baseRefOid] | @tsv'
+          )
+          [[ "$base_ref" == "dev/next" ]]
+          git fetch --no-tags origin "$base_ref"
+          [[ "$(git rev-parse FETCH_HEAD)" == "$base_sha" ]]
+          git checkout --detach "$base_sha"
+          git clean -ffd
           lease="$RUNNER_TEMP/python-version-pr-lease.json"
           lease_owner="github-actions/${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}"
           lease_actor="${LEASE_APP_SLUG}[bot]"

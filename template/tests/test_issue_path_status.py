@@ -762,6 +762,7 @@ def test_exact_quota_note_allows_only_the_guarded_merge_path() -> None:
     assert decision.allowed_actions == ("acquire-lease",)
     assert "note-quota-fallback" not in decision.next_step
     assert "merge-quota" in decision.next_step
+    assert "dev/m9-sdlc@base" in decision.next_step
 
     data["capability"]["state"] = "unknown"
     decision = derive_status(data)

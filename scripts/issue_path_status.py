@@ -1262,12 +1262,16 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
         "Route, refs, blockers, required checks, and single-writer capability "
         "are current",
         (
-            "Acquire the lifecycle lease for this exact head, then run the "
-            "canonical merge-quota gate."
+            "From a clean detached checkout of "
+            f"{route['base']}@{branches.get(str(route['base']))}, acquire the "
+            "lifecycle lease for this exact head, then run the canonical "
+            "merge-quota gate."
             if checks == "accepted-routine-quota-fallback"
             else (
-                "Acquire the lifecycle lease for this exact head, then use "
-                "the canonical lifecycle gate for the merge decision."
+                "From a clean detached checkout of "
+                f"{route['base']}@{branches.get(str(route['base']))}, acquire "
+                "the lifecycle lease for this exact head, then use the "
+                "canonical lifecycle gate for the merge decision."
             )
         ),
         pull,

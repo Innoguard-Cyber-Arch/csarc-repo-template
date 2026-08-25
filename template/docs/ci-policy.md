@@ -315,6 +315,10 @@ GitHub App caller 必須從 pinned token action 的 `app-slug` 明確傳入 acto
 terminal policy-base SHA 的乾淨 detached checkout 執行，並在 mutation 前驗證 HEAD、
 origin 與 dirty state；PR candidate checkout 只作 live data，不能提供 writer 或其 policy
 dependencies。
+A stacked PR may remain a visible Draft, but lifecycle writers do not execute
+from or against its mutable parent. After that parent integrates, retarget the
+child directly to the terminal policy branch and re-run status before any
+automated metadata or merge write.
 
 `check` 與 `merge` 會在 lease 內分頁重讀 timeline、一般留言、inline review comments、
 submitted COMMENTED review bodies、reviews、checklists、base、
@@ -389,10 +393,13 @@ Actions quota fallback note
 `{"head_sha":"<PR head SHA>","pull_request":42,"repository":"owner/repo","runs":["https://github.com/owner/repo/actions/runs/123"],"verification":{"command":"./scripts/verify","result":"passed","unreproduced_checks":["GitHub-hosted runner identity"]}}`
 ```
 
-留言發布後，仍須先取得 exact-head lifecycle lease，再用同一工具執行合併；不直接呼叫
-`gh pr merge`：
+留言發布後，保留 candidate worktree 的 full verification evidence，另從 live status 回報的
+`<terminal-base-ref>@<terminal-base-sha>` 建立乾淨 detached worktree；只在該 trusted
+checkout 取得 exact-head lifecycle lease 並執行合併，不直接呼叫 `gh pr merge`：
 
 ```bash
+git worktree add --detach /tmp/csarc-policy-base <terminal-base-sha>
+cd /tmp/csarc-policy-base
 ./scripts/pr_lifecycle.py acquire \
   --repo owner/repo --pr-number 42 --head-sha <PR head SHA> \
   --owner <task-id> --output /tmp/pr-42-lease.json

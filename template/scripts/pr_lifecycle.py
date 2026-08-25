@@ -1362,17 +1362,19 @@ def effective_protection(
             "thread, or check rules are missing",
             set(),
         )
-    ruleset_ids = {
-        item.get("ruleset_id")
-        for item in pull_rules + check_rules
-        if item.get("ruleset_id")
-    }
-    if not ruleset_ids:
+    contributing_rules = pull_rules + check_rules
+    if any(
+        not isinstance(item.get("ruleset_id"), int)
+        or isinstance(item["ruleset_id"], bool)
+        or int(item["ruleset_id"]) < 1
+        for item in contributing_rules
+    ):
         return (
             "unknown",
-            "effective rules do not expose their Ruleset identity",
+            "every effective rule must expose a valid Ruleset identity",
             set(),
         )
+    ruleset_ids = {int(item["ruleset_id"]) for item in contributing_rules}
     for ruleset_id in ruleset_ids:
         try:
             ruleset = github.get(repo, f"rulesets/{ruleset_id}")
@@ -1523,15 +1525,24 @@ def require_single_closing_issue(
     return issue_number
 
 
-def canonical_unlinked_automation(pull: dict[str, Any], strategy: str) -> bool:
+def canonical_unlinked_automation(
+    pull: dict[str, Any], strategy: str, repo: str
+) -> bool:
     """Recognize only the no-Issue routes allowed by PR policy."""
     base_ref = str((pull.get("base") or {}).get("ref") or "")
-    head_ref = str((pull.get("head") or {}).get("ref") or "")
+    head = pull.get("head") or {}
+    head_ref = str(head.get("ref") or "")
+    if str((head.get("repo") or {}).get("full_name") or "").casefold() != (
+        repo.casefold()
+    ):
+        return False
     if head_ref.startswith("release-please--"):
         return base_ref == "main"
     if head_ref.startswith(("dependabot/", "automation/")):
         expected = {"main": "main", "dev": "dev", "delivery": "dev/next"}
         return base_ref == expected.get(strategy)
+    if strategy == "dev" and head_ref == "dev":
+        return base_ref == "main"
     if strategy != "delivery" or not base_ref.startswith("dev/"):
         return False
     key = base_ref.removeprefix("dev/")
@@ -1566,7 +1577,7 @@ def validate_merge_issue_links(
             "A tracked pull request must have exactly one closing reference"
         )
     head_ref = str((pull.get("head") or {}).get("ref") or "")
-    if not closing and not canonical_unlinked_automation(pull, strategy):
+    if not closing and not canonical_unlinked_automation(pull, strategy, repo):
         raise RuntimeError(
             "A zero-closer pull request must use a canonical automation route"
         )
