@@ -213,31 +213,39 @@ identity；合併後立即形成 patch release 邊界。接著由每條進行中
 
 ## Actions 額度 fallback
 
-這個一次性流程適用於 GitHub Actions job 出現 zero-step billing block：GitHub 的
+本 repo 是 GitHub Teams private plan，結構性地會超出每月 included Actions
+minutes；這是這個 repo 從一開始就會遇到的常態限制，不是需要升級方案或等待
+「恢復」才能解決的一次性事故。
+
+這個流程適用於 GitHub Actions job 出現 zero-step billing block：GitHub 的
 runner 未啟動訊息提及 failed payments 或 spending limit，工具以其精確、泛用的
-billing 註記文字辨識，不要求先行判讀實際帳務原因。具帳務可見性的 human maintainer
-只需明確確認「這次視為已授權的一次性特例處理」，不要求判斷實際原因是 included
-minutes 耗盡還是付款失敗——GitHub 帳務方案的內部差異不是這個 repo 的治理範圍。
-一般測試失敗、workflow／權限錯誤、平台事故、原因不明，或任何已開始執行 step 後
-才失敗的 job，都不算 zero-step billing block，仍然維持 blocked。
+billing 註記文字機械式辨識，不判讀實際帳務子原因——GitHub 帳務方案的內部差異
+不是這個 repo 的治理範圍。一般測試失敗、workflow／權限錯誤、平台事故、原因
+不明，或任何已開始執行 step 後才失敗的 job，都不算 zero-step billing block，
+仍然維持 blocked。
 
 合併前必須確認 worktree 乾淨且 `HEAD` 等於 PR head SHA，執行完整本機驗證與每個可
-忠實重現的 required check；任何失敗都停止，GitHub-only checks 則逐項列出。通過後，
-在 PR 留下標題為 `Actions quota fallback attestation` 的留言，記錄 head SHA、受阻 run
-URL 與 annotation、human exception confirmation、UTC 時間、環境與工具版本、完整命令、
-結果及未重現 checks。Human maintainer 必須再針對該 PR 明確授權；新 commit 使聲明
-失效並須重新驗證、記錄與授權。不得建立或偽造成功 Check Run。
+忠實重現的 required check；任何失敗都停止，GitHub-only checks 則逐項列出。不得
+建立或偽造成功 Check Run。fallback 不取代 release、publishing、deployment
+approval、secrets、provenance、CODEOWNER review 或任何無法本機重現的控制。額度
+恢復後須補跑該 SHA 的 GitHub checks 並記錄結果；平台不再允許補跑時，另開 Issue
+保留缺口，不得宣稱追溯成功。
 
-只有 repo 現行政策已允許 author self-merge 時，agent 才可在上述條件完整後合併。
-fallback 不取代 release、publishing、deployment approval、secrets、provenance、
-CODEOWNER review 或任何無法本機重現的控制。額度恢復後須補跑該 SHA 的 GitHub
-checks 並記錄結果；平台不再允許補跑時，另開 Issue 保留缺口，不得宣稱追溯成功。
+### 一般 Issue PR
+
+通過本機驗證後，用 `scripts/promotion_gate.py note-quota-fallback` 對每個受阻
+run URL 機械式確認 zero-step billing block（拒絕任何已執行 step 的 job），在 PR
+留下標題為 `Actions quota fallback note` 的留言，記錄 head SHA、受阻 run URL、
+驗證命令與結果、未重現 checks。留言產生後即可合併，不需要 human maintainer 另外
+即時確認或留言授權；新 commit 使既有 note 失效並須重新驗證、重新產生。只有 repo
+現行政策已允許 author self-merge 時（見下方 Alpha 例外），agent 才可合併。
 
 ### Promotion PR 的額外 fallback 證據
 
 `dev/m*`、`dev/next`、`dev/i*` 或 delivery strategy 的 `dev` promotion 到 `main`
-可使用同一個 quota-only 例外；一般 main PR、release follow-up 與 hotfix 不因此新增
-快速通道。除前述共同條件外，必須使用既有 `scripts/promotion_gate.py`，依序完成：
+是實際的 release 邊界，風險層級不同，維持較嚴格的雙方確認，可使用同一個
+quota-only 例外；一般 main PR、release follow-up 與 hotfix 不因此新增快速通道。
+除前述共同條件外，必須使用既有 `scripts/promotion_gate.py`，依序完成：
 
 1. 在乾淨、精確等於 promotion PR head 的 worktree 執行 `prepare`，且
    `--candidate-sha` 必須是該 head SHA；保存 candidate archive、SHA-256、base/head SHA、
