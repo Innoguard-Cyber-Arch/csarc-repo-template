@@ -18,7 +18,7 @@ Generic prompt 需要保持穩定且不硬編工作路徑，但不能因此移�
 既有導入採兩階段流程：
 
 1. `adopt` 在沒有 `--apply-plan` 時預設為 dry-run，只讀目標 repo，並在 repo 外原子更新 Markdown、PDF 與 machine-readable plan；明確的 `--dry-run` 仍相容。dirty tree 可產生 review-only plan，但不可套用。`adopt --finalize` 使用相同安全預設。
-2. `adopt --apply-plan` 重新驗證 Release、repo identity、HEAD、working tree、所有實際 render inputs（包含未寫入 Copier answers 的條件式衍生值）、檔案決策與 digest；在暫存 clone 產生完整候選，執行 `./scripts/verify` 與 project hook，再以通過 `git apply --check` 的同一份 patch 寫入目標。若 binding 不同，錯誤會列出精確 JSON path 與前後值，同時維持 fail closed。
+2. `adopt --apply-plan` 重新驗證 Release、repo identity、HEAD、working tree、所有實際 render inputs（包含未寫入 Copier answers 的條件式衍生值）、檔案決策與 digest；未發布開發來源必須在套用時再次明示 `--allow-unreleased`，plan digest 本身不構成信任授權。在暫存 clone 產生完整候選，執行 `./scripts/verify` 與 project hook，再以通過 `git apply --check` 的同一份 patch 寫入目標。若 binding 不同，錯誤會列出精確 JSON path 與前後值，同時維持 fail closed。
 
 需要人工合併時，第一份 plan 只建立 resumable checkpoint。人工完成清單後，`adopt --finalize --dry-run` 會從已驗證 template 重新推導 managed／manual 集合，在隔離 clone 建立並驗證完成態候選，再把 checkpoint、人工結果、完整允許 working-tree state 與預期 artifacts 綁入新的 repo 外 plan。正式 finalize 只接受該 plan；直接 finalize、非預期檔案或確認前後的任何漂移都停止。
 

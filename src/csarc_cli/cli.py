@@ -7,12 +7,14 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
 from collections.abc import Mapping
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -703,14 +705,13 @@ def pending_adoption_data(
 
 def write_pending_adoption(target: Path, payload: dict[str, object]) -> None:
     """Atomically persist an incomplete adoption checkpoint."""
-    destination = target / PENDING_ADOPTION_FILE
+    destination = checked_destination(target, PENDING_ADOPTION_FILE.as_posix())
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(".tmp")
-    temporary.write_text(
+    destination = checked_destination(target, PENDING_ADOPTION_FILE.as_posix())
+    atomic_replace_text(
+        destination,
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
     )
-    temporary.replace(destination)
 
 
 def read_pending_adoption(target: Path) -> dict[str, object]:
@@ -793,24 +794,25 @@ def write_provenance(
     applied_at: str | None = None,
 ) -> None:
     """Atomically persist verified release provenance."""
-    destination = target / PROVENANCE_FILE
+    destination = checked_destination(target, PROVENANCE_FILE.as_posix())
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(".tmp")
-    temporary.write_text(
+    destination = checked_destination(target, PROVENANCE_FILE.as_posix())
+    atomic_replace_text(
+        destination,
         json.dumps(
             provenance_data(revision, previous, applied_at=applied_at),
             indent=2,
             sort_keys=True,
         )
         + "\n",
-        encoding="utf-8",
     )
-    temporary.replace(destination)
 
 
 def read_provenance(target: Path) -> dict[str, object] | None:
     """Read saved provenance without trusting its fields yet."""
-    path = target / PROVENANCE_FILE
+    path = checked_destination(target, PROVENANCE_FILE.as_posix())
+    if path.is_symlink():
+        raise CliError("Saved provenance must not be a symlink.")
     if not path.is_file():
         return None
     try:
@@ -1344,25 +1346,110 @@ def adoption_plan_payload(plan: ResolvedPlan) -> dict[str, object]:
     return payload
 
 
-def atomic_replace_text(destination: Path, content: str) -> None:
-    """Replace text through a random regular file in the same directory."""
-    temporary: Path | None = None
+def directory_fd_matches_path(directory_fd: int, path: Path) -> bool:
+    """Return whether a path still names the directory held by an open fd."""
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=destination.parent,
-            prefix=f".{destination.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as output:
-            temporary = Path(output.name)
+        opened = os.fstat(directory_fd)
+        current = os.stat(path, follow_symlinks=False)
+    except OSError:
+        return False
+    return (
+        stat.S_ISDIR(current.st_mode)
+        and opened.st_dev == current.st_dev
+        and opened.st_ino == current.st_ino
+    )
+
+
+def atomic_replace_text(destination: Path, content: str) -> None:
+    """Replace text through a pinned, non-symlink parent directory."""
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    directory_flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        parent_fd = os.open(destination.parent, directory_flags)
+    except OSError as error:
+        raise CliError(
+            f"Cannot safely open destination directory: {destination.parent}"
+        ) from error
+    temporary_name = f".{destination.name}.{secrets.token_hex(16)}.tmp"
+    backup_name = f".{destination.name}.{secrets.token_hex(16)}.bak"
+    backup_created = False
+    try:
+        if not directory_fd_matches_path(parent_fd, destination.parent):
+            raise CliError("Destination directory changed while writing.")
+        temporary_fd = os.open(
+            temporary_name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+            dir_fd=parent_fd,
+        )
+        temporary_stat = os.fstat(temporary_fd)
+        with os.fdopen(temporary_fd, mode="w", encoding="utf-8") as output:
             output.write(content)
             output.flush()
-        temporary.replace(destination)
+        if not directory_fd_matches_path(parent_fd, destination.parent):
+            raise CliError("Destination directory changed while writing.")
+        try:
+            existing_fd = os.open(
+                destination.name,
+                os.O_RDONLY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_NONBLOCK", 0),
+                dir_fd=parent_fd,
+            )
+        except FileNotFoundError:
+            pass
+        else:
+            with os.fdopen(existing_fd, mode="rb") as existing:
+                existing_mode = os.fstat(existing.fileno()).st_mode
+                if not stat.S_ISREG(existing_mode):
+                    raise CliError(
+                        f"Destination is not a regular file: {destination}"
+                    )
+                backup_fd = os.open(
+                    backup_name,
+                    os.O_WRONLY
+                    | os.O_CREAT
+                    | os.O_EXCL
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    stat.S_IMODE(existing_mode),
+                    dir_fd=parent_fd,
+                )
+                with os.fdopen(backup_fd, mode="wb") as backup:
+                    os.fchmod(backup.fileno(), stat.S_IMODE(existing_mode))
+                    shutil.copyfileobj(existing, backup)
+                    backup.flush()
+            backup_created = True
+        os.replace(
+            temporary_name,
+            destination.name,
+            src_dir_fd=parent_fd,
+            dst_dir_fd=parent_fd,
+        )
+        if not directory_fd_matches_path(parent_fd, destination.parent):
+            current = os.stat(
+                destination.name, dir_fd=parent_fd, follow_symlinks=False
+            )
+            if (
+                current.st_dev == temporary_stat.st_dev
+                and current.st_ino == temporary_stat.st_ino
+            ):
+                if backup_created:
+                    os.replace(
+                        backup_name,
+                        destination.name,
+                        src_dir_fd=parent_fd,
+                        dst_dir_fd=parent_fd,
+                    )
+                    backup_created = False
+                else:
+                    os.unlink(destination.name, dir_fd=parent_fd)
+            raise CliError("Destination directory changed while writing.")
     finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+        with suppress(FileNotFoundError):
+            os.unlink(temporary_name, dir_fd=parent_fd)
+        with suppress(FileNotFoundError):
+            os.unlink(backup_name, dir_fd=parent_fd)
+        os.close(parent_fd)
 
 
 def read_adoption_plan(path: Path) -> dict[str, object]:
@@ -1683,6 +1770,24 @@ def confirm(args: argparse.Namespace) -> bool:
             "--non-interactive requires --yes before files may change."
         )
     return input("Apply this plan? [y/N] ").strip().lower() in {"y", "yes"}
+
+
+def require_unreleased_plan_opt_in(
+    verification: object, allow_unreleased: bool
+) -> None:
+    """Require a fresh explicit trust bypass when applying an unsafe plan."""
+    if verification not in {"unverified", "development-unreleased"}:
+        return
+    if not allow_unreleased:
+        raise CliError(
+            "Applying an unreleased template plan requires "
+            "--allow-unreleased again."
+        )
+    print(
+        "WARNING: --allow-unreleased bypasses release identity, "
+        "immutability, attestation, and signature verification.",
+        file=sys.stderr,
+    )
 
 
 def checked_destination(root: Path, relative_name: str) -> Path:
@@ -2715,7 +2820,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "Run adopt --finalize --dry-run first, then apply its machine "
             "plan with --finalize --apply-plan."
         )
-    if any((args.source, args.to, args.expected_sha, args.allow_unreleased)):
+    if any((args.source, args.to, args.expected_sha)):
         raise CliError(
             "adopt --finalize uses the source and release saved by the "
             "pending adoption; do not pass release-selection options."
@@ -2798,6 +2903,8 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "answers or restart adoption from a clean commit."
         )
     allow_unreleased = verification == "development-unreleased"
+    if args.apply_plan is not None:
+        require_unreleased_plan_opt_in(verification, args.allow_unreleased)
     revision = resolve_revision(
         source,
         release,
@@ -3091,7 +3198,7 @@ def command_apply_adoption_plan(  # noqa: C901
             "--apply-plan cannot be combined with --dry-run, --report-dir, "
             "or --json."
         )
-    if any((args.source, args.to, args.expected_sha, args.allow_unreleased)):
+    if any((args.source, args.to, args.expected_sha)):
         raise CliError(
             "--apply-plan uses the source and SHA saved by dry-run; do not "
             "pass release-selection options."
@@ -3143,6 +3250,7 @@ def command_apply_adoption_plan(  # noqa: C901
         or verification not in {"verified", "unverified"}
     ):
         raise CliError("Adoption plan has invalid template identity.")
+    require_unreleased_plan_opt_in(verification, args.allow_unreleased)
     require_clean_repository(target)
     revision = resolve_revision(
         source,
