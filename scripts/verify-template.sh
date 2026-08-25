@@ -2201,6 +2201,8 @@ prime_validation_cache "$fixture_root/all-features-project"
 assert_agent_guidance "$fixture_root/all-features-project"
 grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<reviewed-full-commit-sha>' csarc update" \
   "$fixture_root/all-features-project/README.md"
+grep -q -- '--apply-plan ../<repo>-csarc-update-plan.json --yes --non-interactive' \
+  "$fixture_root/all-features-project/README.md"
 
 test -f "$fixture_root/all-features-project/.pre-commit-config.yaml"
 test -f "$fixture_root/all-features-project/.github/workflows/template-update.yml"
