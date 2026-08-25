@@ -16,6 +16,9 @@ fi
 grep -q 'uv sync --locked --python 3.14' AGENTS.md
 grep -q 'uv run pytest <test-path>' AGENTS.md
 grep -q 'scripts/render_site.py --check' AGENTS.md
+grep -q 'scripts/pr_lifecycle.py' AGENTS.md
+grep -q 'scripts/pr_lifecycle.py' template/AGENTS.md.jinja
+grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md
 grep -q 'Actions quota fallback attestation' docs/ci-policy.md
 grep -q 'finalize-quota-fallback' docs/ci-policy.md
 grep -q 'verify-quota-main' docs/ci-policy.md
@@ -43,6 +46,7 @@ assert_agent_guidance() {
     "$project_root/README.md"
   grep -q 'docs/ci-policy.md#actions-額度-fallback' \
     "$project_root/AGENTS.md"
+  grep -q 'scripts/pr_lifecycle.py' "$project_root/AGENTS.md"
   grep -q 'scripts/render_site.py --check' "$project_root/AGENTS.md"
   grep -q 'propose semantic story groups and exclusions' \
     "$project_root/AGENTS.md"
@@ -1003,8 +1007,17 @@ if grep -q '^  pull_request:$' .github/workflows/osv.yml; then
   echo "Standalone OSV must not duplicate change-aware CI scans."
   exit 1
 fi
-grep -q 'gh pr edit "$pr_url" --add-label enhancement' \
-  .github/workflows/python-version-policy.yml
+test "$(grep -c 'scripts/pr_lifecycle.py acquire' \
+  .github/workflows/python-version-policy.yml)" -eq 1
+test "$(grep -c 'scripts/pr_lifecycle.py edit' \
+  .github/workflows/python-version-policy.yml)" -eq 1
+test "$(grep -c 'scripts/pr_lifecycle.py release' \
+  .github/workflows/python-version-policy.yml)" -eq 1
+if grep -Eq 'gh pr (ready|edit|merge)' \
+  .github/workflows/python-version-policy.yml; then
+  echo "Version automation must use the PR lifecycle lease tool."
+  exit 1
+fi
 if grep -Eq -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
   .github/workflows/python-version-policy.yml \
   scripts/apply-repository-settings.sh \
@@ -1518,6 +1531,10 @@ grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/README.md"
 grep -q '^## Actions quota fallback$' \
   "$fixture_root/default-project/AGENTS.md"
+grep -q 'scripts/pr_lifecycle.py' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -q '^## PR lifecycle single-writer$' \
+  "$fixture_root/default-project/docs/ci-policy.md"
 grep -q 'Actions quota fallback attestation' \
   "$fixture_root/default-project/docs/ci-policy.md"
 grep -q 'finalize-quota-fallback' \

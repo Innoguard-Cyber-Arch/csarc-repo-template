@@ -170,6 +170,8 @@ PY
 test -x scripts/apply-repository-settings.sh
 test -x scripts/detect-language-profile
 test -x scripts/pr_lifecycle.py
+grep -q 'scripts/pr_lifecycle.py' AGENTS.md
+grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md
 
 test -f AGENTS.md
 test "$(cat CLAUDE.md)" = "@AGENTS.md"

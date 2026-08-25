@@ -97,12 +97,23 @@ class GitHub:
         return json.loads(run(["gh", "api", f"repos/{repo}/{path}"]))
 
     def viewer(self) -> str:
-        """Return the authenticated GitHub actor."""
-        payload = json.loads(run(["gh", "api", "user"]))
-        login = payload.get("login") if isinstance(payload, dict) else None
-        if not isinstance(login, str) or not login:
+        """Return the authenticated user or GitHub App actor."""
+        try:
+            payload = json.loads(run(["gh", "api", "user"]))
+            login = payload.get("login") if isinstance(payload, dict) else None
+            if isinstance(login, str) and login:
+                return login
+        except RuntimeError:
+            pass
+        installation = json.loads(run(["gh", "api", "installation"]))
+        slug = (
+            installation.get("app_slug")
+            if isinstance(installation, dict)
+            else None
+        )
+        if not isinstance(slug, str) or not slug:
             raise RuntimeError("Authenticated GitHub actor is unavailable")
-        return login
+        return f"{slug}[bot]"
 
     def pages(self, repo: str, path: str) -> list[dict[str, Any]]:
         """Read and flatten every page of a REST collection."""
@@ -948,6 +959,55 @@ def mutate_state(args: argparse.Namespace, github: GitHub) -> None:
         )
 
 
+def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
+    """Edit labels or milestone only while the exact lease remains live."""
+    lease = read_lease(args.lease)
+    require_caller(lease, args.owner, github)
+    require_lease(github, lease, args.repo, args.pr_number, args.head_sha)
+    pull = live_pull(github, args.repo, args.pr_number, args.head_sha)
+    labels = {
+        item.get("name")
+        for item in pull.get("labels", [])
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    if not (
+        args.add_label
+        or args.remove_label
+        or args.milestone is not None
+        or args.remove_milestone
+    ):
+        raise RuntimeError("At least one label or milestone edit is required")
+    if any(
+        "\n" in label or not label
+        for label in args.add_label + args.remove_label
+    ):
+        raise RuntimeError("Label names must be non-empty single-line values")
+    expected_labels = (labels | set(args.add_label)) - set(args.remove_label)
+    command = ["gh", "pr", "edit", str(args.pr_number), "--repo", args.repo]
+    for label in args.add_label:
+        command.extend(("--add-label", label))
+    for label in args.remove_label:
+        command.extend(("--remove-label", label))
+    if args.milestone is not None:
+        command.extend(("--milestone", args.milestone))
+    elif args.remove_milestone:
+        command.append("--remove-milestone")
+    run(command)
+    require_lease(github, lease, args.repo, args.pr_number, args.head_sha)
+    updated = live_pull(github, args.repo, args.pr_number, args.head_sha)
+    updated_labels = {
+        item.get("name")
+        for item in updated.get("labels", [])
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    milestone = updated.get("milestone") or {}
+    milestone_matches = (
+        args.milestone is None or milestone.get("title") == args.milestone
+    ) and (not args.remove_milestone or updated.get("milestone") is None)
+    if updated_labels != expected_labels or not milestone_matches:
+        raise RuntimeError("Pull request metadata did not change as requested")
+
+
 def check(args: argparse.Namespace, github: GitHub) -> None:
     """Print the live merge snapshot without mutating GitHub."""
     lease = read_lease(args.lease)
@@ -1029,6 +1089,7 @@ def parser() -> argparse.ArgumentParser:
 
     for name in (
         "state",
+        "edit",
         "check",
         "merge",
         "authorization-template",
@@ -1047,6 +1108,12 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument(
                 "--state", choices=("ready", "draft"), required=True
             )
+        if name == "edit":
+            command.add_argument("--add-label", action="append", default=[])
+            command.add_argument("--remove-label", action="append", default=[])
+            milestone = command.add_mutually_exclusive_group()
+            milestone.add_argument("--milestone")
+            milestone.add_argument("--remove-milestone", action="store_true")
         command.set_defaults(handler_name=name)
     return result
 
@@ -1062,6 +1129,8 @@ def main() -> None:
             mutate_state(args, github)
         elif args.handler_name == "check":
             check(args, github)
+        elif args.handler_name == "edit":
+            edit_metadata(args, github)
         elif args.handler_name == "merge":
             merge(args, github)
         elif args.handler_name == "authorization-template":

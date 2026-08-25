@@ -22,6 +22,7 @@ acquire = MODULE["acquire"]
 authorization = MODULE["authorization"]
 authorization_statement = MODULE["authorization_statement"]
 create_refs = MODULE["create_refs"]
+edit_metadata = MODULE["edit_metadata"]
 GitHub = MODULE["GitHub"]
 lease_message = MODULE["lease_message"]
 merge = MODULE["merge"]
@@ -64,6 +65,8 @@ class FakeGitHub:
         self.base_sha = "b" * 40
         self.default_branch = "main"
         self.canonical_lease: dict[str, object] | None = None
+        self.labels = {"bug"}
+        self.milestone: str | None = None
 
     def viewer(self) -> str:
         """Return the task's authenticated actor."""
@@ -79,6 +82,12 @@ class FakeGitHub:
             "draft": self.draft,
             "title": "fix(ci): serialize lifecycle writes",
             "body": "Ready for review.",
+            "labels": [{"name": name} for name in sorted(self.labels)],
+            "milestone": (
+                {"title": self.milestone}
+                if self.milestone is not None
+                else None
+            ),
             "base": {"ref": self.base_ref, "sha": self.base_sha},
             "head": {
                 "ref": "dev/next",
@@ -219,6 +228,21 @@ def git(path: Path, *arguments: str) -> str:
 def test_origin_must_resolve_to_the_exact_github_repository(url: str) -> None:
     """Common authenticated GitHub origin forms resolve safely."""
     assert remote_repository(url) == "owner/repo"
+
+
+def test_github_app_installation_has_an_auditable_actor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A least-privilege Actions App need not impersonate a human user."""
+
+    def fake_run(command: list[str], **_kwargs: object) -> str:
+        if command[-1] == "user":
+            raise RuntimeError("Resource not accessible by integration")
+        assert command[-1] == "installation"
+        return json.dumps({"app_slug": "csarc-version-bot"})
+
+    monkeypatch.setitem(GitHub.viewer.__globals__, "run", fake_run)
+    assert GitHub().viewer() == "csarc-version-bot[bot]"
 
 
 def test_236_concurrent_lifecycle_writer_cannot_acquire(
@@ -367,7 +391,7 @@ def test_remote_lease_must_reuse_the_exact_head_commit(
                 payload["tree"] = {"sha": "9" * 40}
         return payload
 
-    github.get = tampered_get  # type: ignore[method-assign]
+    github.get = tampered_get  # type: ignore[assignment]
     with pytest.raises(RuntimeError, match="canonical evidence"):
         require_lease(github, canonical, "owner/repo", 42, "a" * 40)
 
@@ -470,7 +494,7 @@ def test_required_check_must_succeed_on_the_exact_head() -> None:
             ]
         return []
 
-    github.collection = stale_collection  # type: ignore[method-assign]
+    github.collection = stale_collection  # type: ignore[assignment]
     with pytest.raises(RuntimeError, match="exact head: verify"):
         require_successful_checks(
             github, "owner/repo", "a" * 40, {("verify", None)}
@@ -680,6 +704,43 @@ def test_tampered_lease_cannot_delete_an_arbitrary_ref(tmp_path: Path) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(RuntimeError, match="refs are invalid"):
         read_lease(path)
+
+
+def test_label_and_milestone_edits_run_inside_two_lease_checks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Metadata callers cannot omit the pre-write or post-write lease guard."""
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
+    checks = 0
+    github = FakeGitHub("a" * 40)
+
+    def check_lease(*_arguments: object) -> None:
+        nonlocal checks
+        checks += 1
+
+    def edit(_command: list[str], **_kwargs: object) -> str:
+        github.labels = {"enhancement"}
+        github.milestone = "M1"
+        return ""
+
+    monkeypatch.setitem(edit_metadata.__globals__, "require_lease", check_lease)
+    monkeypatch.setitem(edit_metadata.__globals__, "run", edit)
+    edit_metadata(
+        SimpleNamespace(
+            repo="owner/repo",
+            pr_number=42,
+            head_sha="a" * 40,
+            owner="task/merge",
+            lease=lease_path,
+            add_label=["enhancement"],
+            remove_label=["bug"],
+            milestone="M1",
+            remove_milestone=False,
+        ),
+        github,
+    )
+    assert checks == 2
 
 
 def test_merge_never_calls_gh_when_protection_is_degraded(

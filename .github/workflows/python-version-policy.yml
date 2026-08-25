@@ -100,4 +100,25 @@ jobs:
                 --body "$pr_body"
             )"
           fi
-          gh pr edit "$pr_url" --add-label enhancement
+          pr_number="$(gh pr view "$pr_url" --json number --jq .number)"
+          head_sha="$(git rev-parse HEAD)"
+          lease="$RUNNER_TEMP/python-version-pr-lease.json"
+          lease_owner="github-actions/${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}"
+          uv run --no-project python scripts/pr_lifecycle.py acquire \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-number "$pr_number" \
+            --head-sha "$head_sha" \
+            --owner "$lease_owner" \
+            --output "$lease"
+          uv run --no-project python scripts/pr_lifecycle.py edit \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-number "$pr_number" \
+            --head-sha "$head_sha" \
+            --owner "$lease_owner" \
+            --lease "$lease" \
+            --add-label enhancement
+          uv run --no-project python scripts/pr_lifecycle.py release \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-number "$pr_number" \
+            --owner "$lease_owner" \
+            --lease "$lease"

@@ -224,6 +224,26 @@ identity；合併後立即形成 patch release 邊界。接著由每條進行中
   schedule 執行；reviewer assignment 只在 opened、reopened 或 ready-for-review
   觸發，不在每次 synchronize 重做。
 
+## PR lifecycle single-writer
+
+任何 agent 要把既有 PR 轉 Ready／Draft、改 label／milestone、準備 merge authorization
+或合併前，必須先以 `scripts/pr_lifecycle.py acquire` 對精確 repository、PR、head SHA
+與 task owner 建立 lease evidence。工具會用 create-only atomic push 同時取得該 PR 的
+remote ref；目標是 default branch 時也必須取得共用 promotion ref。取得失敗、lease
+過期、remote commit／base／head 漂移時一律停止，不得覆寫、搶占或刪除其他 owner 的 ref。
+
+持有 lease 的 task 只能透過同一工具的 `state` 執行 Ready／Draft，透過 `edit` 改
+label／milestone，並用 `authorization-template` 產生綁定該 PR 與完整 head SHA 的唯一文字，
+交由具 live maintain/admin 權限的人類原樣張貼。禁止直接呼叫 `gh pr ready`、`gh pr edit`
+或 `gh pr merge`。其他 task 在 lease 釋放前只做唯讀複審，若找到 blocker，先通知 owner，
+不得自行改 PR state。Owner 在動作完成或明確放棄後才執行 `release`。
+
+`check` 與 `merge` 會在 lease 內重新讀取 timeline、comments、reviews、checklists、base、
+exact-head required checks 與 effective Ruleset；較新的 Draft、blocker 或任何漂移都使授權
+失效。`merge` 只使用 SHA-bound synchronous REST merge。無法證明 approval、last-push、
+thread resolution、required checks 與 no bypass 時，包含 GitHub Free private repository，
+agent 必須停在 `human-only`，由人類在 GitHub 上手動合併。
+
 ## Actions 額度 fallback
 
 這個一次性流程適用於 GitHub Actions job 出現 zero-step billing block：GitHub 的
