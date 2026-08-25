@@ -11,6 +11,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import urllib.parse
 import urllib.request
@@ -529,7 +530,12 @@ def fallback_statement(
 
 
 def quota_fallback_note(
-    repo: str, pr_number: int, head_sha: str, run_urls: list[str]
+    repo: str,
+    pr_number: int,
+    head_sha: str,
+    run_urls: list[str],
+    verification_command: str,
+    unreproduced_checks: list[str],
 ) -> str:
     """Bind a routine pull request's quota fallback note to one commit."""
     fields = {
@@ -537,10 +543,15 @@ def quota_fallback_note(
         "pull_request": pr_number,
         "head_sha": head_sha,
         "runs": sorted(run_urls),
+        "verification": {
+            "command": verification_command,
+            "result": "passed",
+            "unreproduced_checks": sorted(unreproduced_checks),
+        },
     }
     binding = json.dumps(fields, sort_keys=True, separators=(",", ":"))
     statement = (
-        "Every failing check on this exact commit is GitHub's zero-step "
+        "Every listed blocked run on this exact commit is GitHub's zero-step "
         "billing gate, not a real failure; full local verification passed "
         "for this exact commit. This repository's plan structurally runs "
         "over its included Actions minutes, so this is a standing, "
@@ -1183,21 +1194,101 @@ def note_quota_fallback(args: argparse.Namespace) -> None:
         raise RuntimeError("At least one blocked Actions run is required")
     token = os.environ.get("GH_TOKEN", "")
     pull = github_get(args.repo, f"pulls/{args.pr}", token)
+    base = pull.get("base") if isinstance(pull, dict) else None
     head = pull.get("head") if isinstance(pull, dict) else None
-    if not isinstance(head, dict):
-        raise RuntimeError("Pull request head could not be resolved")
+    if (
+        not isinstance(pull, dict)
+        or pull.get("number") != args.pr
+        or pull.get("state") != "open"
+        or pull.get("merged") is not False
+        or not isinstance(base, dict)
+        or not isinstance(head, dict)
+        or not same_repository(pull, args.repo)
+    ):
+        raise RuntimeError("Pull request identity could not be resolved")
     head_sha = str(head.get("sha") or "")
     head_ref = str(head.get("ref") or "")
     if not head_sha or not head_ref:
         raise RuntimeError("Pull request head is incomplete")
+    labels = {
+        item["name"]
+        for item in pull.get("labels", [])
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    route = route_for(
+        str(base.get("ref") or ""),
+        str(head.get("ref") or ""),
+        labels,
+        args.branch_strategy,
+    )
+    base_ref = str(base.get("ref") or "")
+    if route.kind != "not-applicable" or (
+        base_ref == "main"
+        and (
+            head_ref == "dev"
+            or head_ref == "dev/next"
+            or MILESTONE_BRANCH.fullmatch(head_ref)
+            or ISOLATED_BRANCH.fullmatch(head_ref)
+            or head_ref.startswith("release-please--")
+            or bool(labels & {"promotion", "hotfix"})
+        )
+    ):
+        raise RuntimeError(
+            "Routine quota fallback only applies to non-promotion pull requests"
+        )
+    if git_output("status", "--porcelain"):
+        raise RuntimeError("Routine quota fallback requires a clean worktree")
+    if git_output("rev-parse", "HEAD") != head_sha:
+        raise RuntimeError("Worktree HEAD must equal the pull request head")
     for url in args.blocked_run_url:
         require_run_url(url, args.repo)
         require_zero_step_run(
             url, args.repo, args.pr, head_ref, head_sha, token
         )
+    verification_command = local_verification_command()
+    subprocess.run(  # noqa: S603
+        verification_command, check=True, stdout=sys.stderr
+    )
+    latest_pull = github_get(args.repo, f"pulls/{args.pr}", token)
+    latest_base = (
+        latest_pull.get("base") if isinstance(latest_pull, dict) else None
+    )
+    latest_head = (
+        latest_pull.get("head") if isinstance(latest_pull, dict) else None
+    )
+    latest_labels = (
+        issue_labels(latest_pull) if isinstance(latest_pull, dict) else set()
+    )
+    if (
+        not isinstance(latest_pull, dict)
+        or latest_pull.get("state") != "open"
+        or latest_pull.get("merged") is not False
+        or not isinstance(latest_base, dict)
+        or latest_base.get("ref") != base.get("ref")
+        or not isinstance(latest_head, dict)
+        or latest_head.get("sha") != head_sha
+        or latest_head.get("ref") != head_ref
+        or route_for(
+            str(latest_base.get("ref") or ""),
+            str(latest_head.get("ref") or ""),
+            latest_labels,
+            args.branch_strategy,
+        ).kind
+        != "not-applicable"
+        or git_output("status", "--porcelain")
+        or git_output("rev-parse", "HEAD") != head_sha
+    ):
+        raise RuntimeError(
+            "Pull request or worktree changed during local verification"
+        )
     print(  # noqa: T201
         quota_fallback_note(
-            args.repo, args.pr, head_sha, sorted(args.blocked_run_url)
+            args.repo,
+            args.pr,
+            head_sha,
+            sorted(args.blocked_run_url),
+            verification_command[0],
+            args.unreproduced_check,
         )
     )
 
@@ -1483,7 +1574,13 @@ def parser() -> argparse.ArgumentParser:
     note_command = commands.add_parser("note-quota-fallback")
     note_command.add_argument("--repo", required=True)
     note_command.add_argument("--pr", type=int, required=True)
+    note_command.add_argument(
+        "--branch-strategy", choices=("main", "dev", "delivery"), required=True
+    )
     note_command.add_argument("--blocked-run-url", action="append", default=[])
+    note_command.add_argument(
+        "--unreproduced-check", action="append", default=[]
+    )
     note_command.set_defaults(handler=note_quota_fallback)
 
     verify_command = commands.add_parser("verify-main")

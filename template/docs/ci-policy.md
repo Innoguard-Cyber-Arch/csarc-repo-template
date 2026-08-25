@@ -233,12 +233,16 @@ approval、secrets、provenance、CODEOWNER review 或任何無法本機重現�
 
 ### 一般 Issue PR
 
-通過本機驗證後，用 `scripts/promotion_gate.py note-quota-fallback` 對每個受阻
+用 `scripts/promotion_gate.py note-quota-fallback` 對每個受阻
 run URL 機械式確認 zero-step billing block（拒絕任何已執行 step 的 job），在 PR
 留下標題為 `Actions quota fallback note` 的留言，記錄 head SHA、受阻 run URL、
 驗證命令與結果、未重現 checks。留言產生後即可合併，不需要 human maintainer 另外
 即時確認或留言授權；新 commit 使既有 note 失效並須重新驗證、重新產生。只有 repo
 現行政策已允許 author self-merge 時（見下方 Alpha 例外），agent 才可合併。
+子命令只接受依 repository branch strategy 判定為非 promotion 的 PR，會要求乾淨
+worktree 與精確 PR head、執行 repo 內建完整 verifier、再次確認 live head 未變，並將
+固定的 `passed` 結果與每個 `--unreproduced-check` 寫入 note；verification 失敗時不會
+輸出可用 note。
 
 ### Promotion PR 的額外 fallback 證據
 

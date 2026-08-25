@@ -282,11 +282,30 @@ def test_blocked_run_must_match_head_and_have_no_started_steps(
 
 
 def _routine_pr_get(
-    jobs: list[dict[str, object]],
+    jobs: list[dict[str, object]], *, promotion: bool = False
 ) -> Callable[[str, str, str], object]:
+    head_ref = (
+        "dev/m9-low-friction-ai-sdlc" if promotion else "enhancement/42-change"
+    )
+
     def fake_get(_repo: str, path: str, _token: str) -> object:
         if path == "pulls/42":
-            return {"head": {"sha": "head", "ref": "dev/next"}}
+            return {
+                "number": 42,
+                "state": "open",
+                "merged": False,
+                "labels": [{"name": "promotion"}] if promotion else [],
+                "base": {
+                    "ref": "main"
+                    if promotion
+                    else "dev/m9-low-friction-ai-sdlc"
+                },
+                "head": {
+                    "sha": "head",
+                    "ref": head_ref,
+                    "repo": {"full_name": "owner/repo"},
+                },
+            }
         if "/jobs?" in path:
             return {"total_count": len(jobs), "jobs": jobs}
         if path.startswith("check-runs/"):
@@ -294,7 +313,7 @@ def _routine_pr_get(
         return {
             "id": 200,
             "head_sha": "head",
-            "head_branch": "dev/next",
+            "head_branch": head_ref,
             "event": "pull_request",
             "status": "completed",
             "conclusion": "failure",
@@ -315,8 +334,30 @@ def test_note_quota_fallback_prints_note_for_zero_step_block(
     monkeypatch.setitem(
         note_quota_fallback.__globals__, "github_get", _routine_pr_get(jobs)
     )
+    monkeypatch.setitem(
+        note_quota_fallback.__globals__,
+        "git_output",
+        lambda *arguments: "" if arguments[0] == "status" else "head",
+    )
+    monkeypatch.setitem(
+        note_quota_fallback.__globals__,
+        "local_verification_command",
+        lambda: ["./scripts/verify-template.sh"],
+    )
+    calls: list[list[str]] = []
+    monkeypatch.setitem(
+        note_quota_fallback.__globals__,
+        "subprocess",
+        SimpleNamespace(run=lambda command, **_kwargs: calls.append(command)),
+    )
     run_url = "https://github.com/owner/repo/actions/runs/200"
-    args = SimpleNamespace(repo="owner/repo", pr=42, blocked_run_url=[run_url])
+    args = SimpleNamespace(
+        repo="owner/repo",
+        pr=42,
+        branch_strategy="delivery",
+        blocked_run_url=[run_url],
+        unreproduced_check=["hosted runner identity"],
+    )
     note_quota_fallback(args)
     output = capsys.readouterr().out
     assert "Actions quota fallback note" in output
@@ -324,6 +365,12 @@ def test_note_quota_fallback_prints_note_for_zero_step_block(
     assert binding["pull_request"] == 42
     assert binding["head_sha"] == "head"
     assert binding["runs"] == [run_url]
+    assert binding["verification"] == {
+        "command": "./scripts/verify-template.sh",
+        "result": "passed",
+        "unreproduced_checks": ["hosted runner identity"],
+    }
+    assert calls == [["./scripts/verify-template.sh"]]
 
 
 def test_note_quota_fallback_rejects_a_real_failure(
@@ -336,10 +383,44 @@ def test_note_quota_fallback_rejects_a_real_failure(
     monkeypatch.setitem(
         note_quota_fallback.__globals__, "github_get", _routine_pr_get(jobs)
     )
+    monkeypatch.setitem(
+        note_quota_fallback.__globals__,
+        "git_output",
+        lambda *arguments: "" if arguments[0] == "status" else "head",
+    )
     run_url = "https://github.com/owner/repo/actions/runs/200"
-    args = SimpleNamespace(repo="owner/repo", pr=42, blocked_run_url=[run_url])
+    args = SimpleNamespace(
+        repo="owner/repo",
+        pr=42,
+        branch_strategy="delivery",
+        blocked_run_url=[run_url],
+        unreproduced_check=[],
+    )
     with pytest.raises(RuntimeError, match="zero-step"):
         note_quota_fallback(args)
+
+
+def test_note_quota_fallback_rejects_promotion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Promotion pull requests keep their attestation and authorization gate."""
+    monkeypatch.setitem(
+        note_quota_fallback.__globals__,
+        "github_get",
+        _routine_pr_get([], promotion=True),
+    )
+    with pytest.raises(RuntimeError, match="non-promotion"):
+        note_quota_fallback(
+            SimpleNamespace(
+                repo="owner/repo",
+                pr=42,
+                branch_strategy="main",
+                blocked_run_url=[
+                    "https://github.com/owner/repo/actions/runs/200"
+                ],
+                unreproduced_check=[],
+            )
+        )
 
 
 def test_prepare_builds_milestone_candidate_evidence(
