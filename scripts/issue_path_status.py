@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import sys
+import urllib.parse
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -19,12 +20,15 @@ from typing import Any
 from ci_tier import classify as classify_ci
 from pr_lifecycle import (
     LEASE_STATUS_INTERFACE,
+    closing_issue_references,
     effective_protection,
+    issue_references,
     lease_status_snapshot,
+    local_branch_strategy,
 )
 from promotion_gate import (
     failed_pull_request_run_urls,
-    quota_fallback_note,
+    has_exact_quota_note,
     require_zero_step_run,
 )
 
@@ -32,6 +36,7 @@ ISSUE_BRANCH = r"[a-z][a-z0-9-]*"
 SUCCESSFUL_CONCLUSIONS = {"neutral", "skipped", "success"}
 FULL_SHA = re.compile(r"[0-9a-f]{40}")
 MAINTAINER_ASSOCIATIONS = {"MEMBER", "OWNER"}
+GITHUB_ACTIONS_APP_ID = 15368
 BLOCKER = re.compile(
     r"(?i)^(?:blocked|blocker)\s*:|^\[merge-blocker\]|^\[P[01]\]"
 )
@@ -39,18 +44,12 @@ BLOCKER_RESOLVED = re.compile(
     r"(?i)^merge blocker resolved\s*:|^\[merge-blocker-resolved\]"
 )
 UNCHECKED = re.compile(r"(?m)^\s*[-*+]\s+\[\s*\]")
-QUOTA_NOTE = re.compile(r"\AActions quota fallback note\n\n`([^`\n]+)`\n\n")
 DRAFT_FIELDS = (
     "Scope",
     "Completed verification",
     "Pending verification",
     "Known risks",
     "Dependencies / non-parallel work",
-)
-CLOSING_REFERENCE = re.compile(
-    r"(?i)\b(?:close(?:s|d)?|fix(?:es|ed)?|resolve(?:s|d)?)\s+"
-    r"(?:(?:https://github\.com/[\w.-]+/[\w.-]+/issues/)|"
-    r"(?:[\w.-]+/[\w.-]+)?#)(\d+)(?!\d)"
 )
 
 
@@ -238,8 +237,26 @@ def route_for(  # noqa: C901
                     rf"dev/i{issue_number}-[a-z0-9][a-z0-9-]*", branch
                 )
             )
+            if len(candidates) == 1:
+                return _unique_route(
+                    "isolated-promotion",
+                    "main",
+                    candidates,
+                    branches,
+                    issue_number,
+                )
+            if not candidates and "dev/next" in branches:
+                return {
+                    "kind": "standalone-batch-promotion",
+                    "valid": "main" in branches,
+                    "base": "main",
+                    "head": "dev/next",
+                    "head_pattern": None,
+                    "delivery": "dev/next",
+                    "reason": "standalone batch promotion uses dev/next",
+                }
             kind = "isolated-promotion"
-        return _unique_route(kind, "main", candidates, branches)
+        return _unique_route(kind, "main", candidates, branches, issue_number)
 
     if isinstance(milestone_number, int):
         candidates = sorted(
@@ -249,7 +266,9 @@ def route_for(  # noqa: C901
                 rf"dev/m{milestone_number}-[a-z0-9][a-z0-9-]*", branch
             )
         )
-        return _unique_route("milestone", "", candidates, branches)
+        return _unique_route(
+            "milestone", "", candidates, branches, issue_number
+        )
 
     return {
         "kind": "standalone",
@@ -269,6 +288,7 @@ def _unique_route(
     fixed_base: str,
     candidates: list[str],
     branches: dict[str, str],
+    issue_number: int,
 ) -> dict[str, object]:
     """Build a route only when its delivery branch is unambiguous."""
     if len(candidates) != 1:
@@ -287,7 +307,7 @@ def _unique_route(
         "valid": fixed_base in branches if promotion else True,
         "base": fixed_base or delivery,
         "head": delivery if promotion else None,
-        "head_pattern": None if promotion else "type/<issue>-*",
+        "head_pattern": None if promotion else f"type/{issue_number}-*",
         "delivery": delivery,
         "reason": "route derived from the live Issue and delivery ref",
     }
@@ -296,18 +316,21 @@ def _unique_route(
 def linked_pull(
     pull: dict[str, Any],
     issue_number: int,
-    native_links: set[int],
+    native_links: set[tuple[str, int]],
     route: dict[str, object],
+    repo: str,
 ) -> bool:
     """Use native cross-references, explicit body links, or the issue branch."""
     body = str(pull.get("body") or "")
-    reference = re.compile(
-        rf"(?i)(?:closes|fixes|resolves|refs?)\s+(?:[\w.-]+/[\w.-]+)?#{issue_number}(?!\d)"
-    )
     number = pull.get("number")
     related = (
-        isinstance(number, int) and number in native_links
-    ) or reference.search(body) is not None
+        isinstance(number, int)
+        and (repo.casefold(), number) in native_links
+    ) or any(
+        reference_repo.casefold() == repo.casefold()
+        and reference_number == issue_number
+        for reference_repo, reference_number in issue_references(body, repo)
+    )
     head = pull.get("head") or {}
     head_ref = str(head.get("ref") or "")
     branch_related = (
@@ -320,14 +343,15 @@ def linked_pull(
     return related or branch_related
 
 
-def base_chain(
+def _open_base_chain(
     pull: dict[str, Any],
     pulls: list[dict[str, Any]],
     expected_base: str,
     repo: str,
-) -> tuple[bool, list[str], str]:
-    """Follow one unique open PR chain to the expected integration ref."""
+) -> tuple[bool, list[dict[str, Any]], list[str], str]:
+    """Resolve one unique open PR chain to the integration ref."""
     current = pull
+    members: list[dict[str, Any]] = []
     chain: list[str] = []
     visited: set[str] = set()
     while True:
@@ -341,15 +365,22 @@ def base_chain(
             or not isinstance(base_ref, str)
             or head_repo.get("full_name") != repo
         ):
-            return False, chain, "PR chain identity is incomplete or external"
+            return (
+                False,
+                members,
+                chain,
+                "PR chain identity is incomplete or external",
+            )
         if head_ref in visited:
-            return False, chain, "PR base chain contains a cycle"
+            return False, members, chain, "PR base chain contains a cycle"
         visited.add(head_ref)
+        members.append(current)
         chain.append(head_ref)
         if base_ref == expected_base:
             chain.append(base_ref)
             return (
                 True,
+                members,
                 chain,
                 "PR chain reaches the expected integration branch",
             )
@@ -364,12 +395,67 @@ def base_chain(
         if len(parents) != 1:
             return (
                 False,
+                members,
                 chain,
                 f"PR base {base_ref} has {len(parents)} open parent PRs",
             )
         current = parents[0]
         if len(chain) > len(pulls) + 1:
-            return False, chain, "PR base chain exceeded its safe depth"
+            return (
+                False,
+                members,
+                chain,
+                "PR base chain exceeded its safe depth",
+            )
+
+
+def base_chain(
+    pull: dict[str, Any],
+    pulls: list[dict[str, Any]],
+    expected_base: str,
+    repo: str,
+    branches: dict[str, str],
+    ancestry: dict[str, bool],
+) -> tuple[bool, list[str], str]:
+    """Validate every live ref and ancestry edge in one open PR chain."""
+    valid, members, chain, reason = _open_base_chain(
+        pull, pulls, expected_base, repo
+    )
+    if not valid:
+        return False, chain, reason
+    for member in members:
+        base = member.get("base") or {}
+        head = member.get("head") or {}
+        base_ref = base.get("ref")
+        base_sha = base.get("sha")
+        head_ref = head.get("ref")
+        head_sha = head.get("sha")
+        if (
+            not isinstance(base_ref, str)
+            or not isinstance(base_sha, str)
+            or not isinstance(head_ref, str)
+            or not isinstance(head_sha, str)
+        ):
+            return False, chain, "PR chain commit identity is incomplete"
+        if branches.get(base_ref) != base_sha:
+            return (
+                False,
+                chain,
+                f"PR chain base {base_ref} drifted from its live ref",
+            )
+        if branches.get(head_ref) != head_sha:
+            return (
+                False,
+                chain,
+                f"PR chain head {head_ref} drifted from its live ref",
+            )
+        if ancestry.get(f"{base_sha}...{head_sha}") is not True:
+            return (
+                False,
+                chain,
+                f"PR chain base {base_ref} is not an ancestor of {head_ref}",
+            )
+    return True, chain, reason
 
 
 def merged_base_chain(
@@ -483,6 +569,7 @@ def risk_for(route: dict[str, object], files: list[str]) -> dict[str, object]:
         "hotfix",
         "milestone-promotion",
         "isolated-promotion",
+        "standalone-batch-promotion",
         "dev-promotion",
     }
     issue_labels = {"promotion"} if promotion else set()
@@ -613,78 +700,33 @@ def has_human_approval(
     )
 
 
-def has_exact_quota_note(
-    comments: list[dict[str, Any]],
-    repo: str,
-    pull_number: int,
-    head_sha: str,
-    run_urls: list[str],
-) -> bool:
-    """Accept one canonical #254 note bound to all live failed runs."""
-    matching = 0
-    for comment in comments:
-        match = QUOTA_NOTE.match(str(comment.get("body") or ""))
-        if match is None:
-            continue
-        try:
-            binding = json.loads(match.group(1))
-        except json.JSONDecodeError:
-            return False
-        verification = (
-            binding.get("verification") if isinstance(binding, dict) else None
-        )
-        if (
-            isinstance(binding, dict)
-            and set(binding)
-            == {
-                "repository",
-                "pull_request",
-                "head_sha",
-                "runs",
-                "verification",
-            }
-            and binding.get("repository") == repo
-            and binding.get("pull_request") == pull_number
-            and binding.get("head_sha") == head_sha
-            and binding.get("runs") == sorted(run_urls)
-            and isinstance(verification, dict)
-            and verification.get("command")
-            in {"./scripts/verify", "./scripts/verify-template.sh"}
-            and verification.get("result") == "passed"
-            and isinstance(verification.get("unreproduced_checks"), list)
-            and all(
-                isinstance(item, str)
-                for item in verification["unreproduced_checks"]
-            )
-            and set(verification)
-            == {"command", "result", "unreproduced_checks"}
-            and str(comment.get("body"))
-            == quota_fallback_note(
-                repo,
-                pull_number,
-                head_sha,
-                run_urls,
-                str(verification["command"]),
-                verification["unreproduced_checks"],
-            )
-        ):
-            matching += 1
-    return matching == 1
-
-
 def pull_contract_problem(
-    issue: dict[str, Any], pull: dict[str, Any]
+    issue: dict[str, Any], pull: dict[str, Any], repo: str
 ) -> tuple[str, str] | None:
     """Return the first #261 Draft/Ready contract violation."""
     issue_number = int(issue["number"])
     issue_body = str(issue.get("body") or "")
     body = str(pull.get("body") or "")
-    closing = [int(number) for number in CLOSING_REFERENCE.findall(body)]
-    if len(closing) > 1 or any(number != issue_number for number in closing):
+    closing = closing_issue_references(body, repo)
+    expected = (repo.casefold(), issue_number)
+    if len(closing) > 1 or any(
+        (reference_repo.casefold(), number) != expected
+        for reference_repo, number in closing
+    ):
         return (
             "The pull request has multiple or mismatched closing references",
             f"Keep only the primary Issue #{issue_number} reference, then "
             "rerun status.",
+        )
+    references = issue_references(body, repo)
+    if len(references) != 1 or (
+        references[0][0].casefold(), references[0][1]
+    ) != expected:
+        return (
+            "The pull request must reference exactly one primary Issue in "
+            "this repository",
+            f"Keep one Refs #{issue_number} link while Draft, then rerun "
+            "status.",
         )
     incomplete = UNCHECKED.search(issue_body) or UNCHECKED.search(body)
     if pull.get("draft"):
@@ -706,7 +748,7 @@ def pull_contract_problem(
                 "status.",
             )
         return None
-    if closing != [issue_number]:
+    if [(name.casefold(), number) for name, number in closing] != [expected]:
         return (
             "A Ready pull request needs one closing reference to its Issue",
             f"Use exactly one Closes #{issue_number} reference, then rerun "
@@ -815,7 +857,9 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
             "human_approval": bool(observation.get("human_approval")),
             "quota_note": bool(observation.get("quota_note")),
             "base_chain": observation.get("base_chain", []),
+            "chain_ancestry": observation.get("chain_ancestry", {}),
             "merged_route": observation.get("merged_route"),
+            "issue_state": issue.get("state"),
         }
         return Decision(
             1,
@@ -847,7 +891,11 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
         pull
         for pull in observation.get("pulls", [])
         if linked_pull(
-            pull, issue_number, observation.get("native_links", set()), route
+            pull,
+            issue_number,
+            observation.get("native_links", set()),
+            route,
+            repo,
         )
     ]
     open_pulls = [pull for pull in pulls if pull.get("state") == "open"]
@@ -903,6 +951,29 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
                     "Run or repair the exact-merge post-merge promotion check, "
                     "then rerun status.",
                     latest,
+                )
+            if issue.get("state") != "closed":
+                if promotion:
+                    return decision(
+                        "Candidate",
+                        "blocked",
+                        "The default-branch merge did not close its Issue",
+                        "Inspect the closing reference and GitHub merge state, "
+                        "then rerun status.",
+                        latest,
+                    )
+                head_sha = str((latest.get("head") or {}).get("sha") or "")
+                return decision(
+                    "Integrated",
+                    "blocked",
+                    "The non-default integration merge left its Issue open",
+                    "Using the retained merge lease, run "
+                    "./scripts/pr_lifecycle.py close-issue "
+                    f"--repo {repo} --pr-number {latest['number']} "
+                    f"--head-sha {head_sha} --lease <lease.json> "
+                    "--owner <task-owner>, then rerun status.",
+                    latest,
+                    ("close-issue",),
                 )
             return decision(
                 "Delivered" if promotion else "Integrated",
@@ -961,34 +1032,33 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
     head_ref = str(head.get("ref") or "")
     expected_head = route.get("head")
     if (
-        isinstance(expected_head, str)
-        and expected_head
-        and head_ref != expected_head
-    ) or (
-        route.get("kind") == "hotfix"
-        and re.fullmatch(rf"fix/{issue_number}-[a-z0-9][a-z0-9-]*", head_ref)
-        is None
+        (
+            isinstance(expected_head, str)
+            and expected_head
+            and head_ref != expected_head
+        )
+        or (
+            route.get("kind") == "hotfix"
+            and re.fullmatch(
+                rf"fix/{issue_number}-[a-z0-9][a-z0-9-]*", head_ref
+            )
+            is None
+        )
+        or (
+            not expected_head
+            and route.get("kind") != "hotfix"
+            and re.fullmatch(
+                rf"{ISSUE_BRANCH}/{issue_number}-[a-z0-9][a-z0-9-]*", head_ref
+            )
+            is None
+        )
     ):
-        expected = expected_head or f"fix/{issue_number}-*"
+        expected = expected_head or str(route.get("head_pattern"))
         return decision(
             "Draft" if pull.get("draft") else "Ready",
             "blocked",
             f"The pull request head does not match the {route['kind']} route",
             f"Move the work to {expected}, then rerun status.",
-            pull,
-        )
-    all_pulls = observation.get("all_pulls", observation.get("pulls", []))
-    chain_valid, chain, chain_reason = base_chain(
-        pull, all_pulls, str(route["base"]), repo
-    )
-    observation["base_chain"] = chain
-    if not chain_valid:
-        return decision(
-            "Draft" if pull.get("draft") else "Ready",
-            "blocked",
-            chain_reason,
-            f"Repair the unique open PR chain so it ends at {route['base']}, "
-            "then rerun status.",
             pull,
         )
     if (
@@ -1011,6 +1081,34 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
             f"Refresh PR #{pull['number']} at the live head and rerun status.",
             pull,
         )
+    all_pulls = observation.get("all_pulls", observation.get("pulls", []))
+    chain_valid, chain, chain_reason = base_chain(
+        pull,
+        all_pulls,
+        str(route["base"]),
+        repo,
+        branches,
+        observation.get("chain_ancestry", {}),
+    )
+    observation["base_chain"] = chain
+    if not chain_valid:
+        return decision(
+            "Draft" if pull.get("draft") else "Ready",
+            "blocked",
+            chain_reason,
+            f"Repair the current open PR chain so it ends at {route['base']}, "
+            "then rerun status.",
+            pull,
+        )
+    if issue.get("state") != "open":
+        return decision(
+            "Draft" if pull.get("draft") else "Ready",
+            "blocked",
+            "The linked Issue is closed while its pull request remains open",
+            f"Reopen Issue #{issue_number} or fix the PR linkage, then rerun "
+            "status.",
+            pull,
+        )
     blocker = observation.get("blocker")
     if blocker:
         return decision(
@@ -1021,7 +1119,7 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
             "status.",
             pull,
         )
-    contract_problem = pull_contract_problem(issue, pull)
+    contract_problem = pull_contract_problem(issue, pull, repo)
     if contract_problem is not None:
         reason, next_step = contract_problem
         return decision(
@@ -1118,8 +1216,15 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
         "clear",
         "Route, refs, blockers, required checks, and single-writer capability "
         "are current",
-        "Acquire the lifecycle lease for this exact head, then use the "
-        "canonical lifecycle gate for the merge decision.",
+        (
+            "Acquire the lifecycle lease for this exact head, then run the "
+            "canonical merge-quota gate."
+            if checks == "accepted-routine-quota-fallback"
+            else (
+                "Acquire the lifecycle lease for this exact head, then use "
+                "the canonical lifecycle gate for the merge decision."
+            )
+        ),
         pull,
         ("acquire-lease",),
     )
@@ -1136,34 +1241,85 @@ def _branch_map(items: list[dict[str, Any]]) -> dict[str, str]:
     return result
 
 
-def _native_links(timeline: list[dict[str, Any]]) -> set[int]:
+def _native_links(
+    timeline: list[dict[str, Any]], repo: str
+) -> set[tuple[str, int]]:
     """Extract PR numbers from native Issue cross-reference events."""
-    result: set[int] = set()
+    result: set[tuple[str, int]] = set()
     for item in timeline:
         source = item.get("source") or {}
         linked = source.get("issue") or {}
-        if isinstance(linked.get("pull_request"), dict) and isinstance(
-            linked.get("number"), int
+        source_repo = (linked.get("repository") or {}).get("full_name")
+        if not isinstance(source_repo, str):
+            match = re.fullmatch(
+                r"https://api\.github\.com/repos/([^/]+/[^/]+)",
+                str(linked.get("repository_url") or ""),
+            )
+            source_repo = match.group(1) if match else None
+        number = linked.get("number")
+        if (
+            isinstance(linked.get("pull_request"), dict)
+            and isinstance(source_repo, str)
+            and source_repo.casefold() == repo.casefold()
+            and isinstance(number, int)
         ):
-            result.add(linked["number"])
+            result.add((repo.casefold(), number))
     return result
 
 
-def local_branch_strategy() -> str:
-    """Read the checked-in repository profile, defaulting only for this root."""
-    root = Path(__file__).resolve().parents[1]
-    profile = root / ".csarc/profile.json"
-    if not profile.exists():
-        if (root / "copier.yml").is_file():
-            return "delivery"
-        raise RuntimeError("Repository profile is missing")
-    payload = json.loads(profile.read_text(encoding="utf-8"))
-    strategy = (
-        payload.get("branch_strategy") if isinstance(payload, dict) else None
+def trusted_post_merge_run(
+    github: GitHub,
+    repo: str,
+    merge_sha: str,
+    check_runs: list[dict[str, Any]],
+) -> bool:
+    """Bind the post-merge result to its canonical GitHub Actions run."""
+    trusted = [
+        run
+        for run in check_runs
+        if run.get("name") == "verify promoted main"
+        and run.get("head_sha") == merge_sha
+        and run.get("status") == "completed"
+        and run.get("conclusion") == "success"
+        and (run.get("app") or {}).get("id") == GITHUB_ACTIONS_APP_ID
+        and (run.get("app") or {}).get("slug") == "github-actions"
+    ]
+    if len(trusted) != 1:
+        return False
+    details = urllib.parse.urlparse(str(trusted[0].get("details_url") or ""))
+    match = re.fullmatch(
+        rf"/{re.escape(repo)}/actions/runs/(\d+)(?:/job/\d+)?", details.path
     )
-    if strategy not in {"delivery", "dev", "main"}:
-        raise RuntimeError("Repository branch strategy is missing or invalid")
-    return str(strategy)
+    if (
+        details.scheme != "https"
+        or details.netloc.casefold() != "github.com"
+        or details.query
+        or details.fragment
+        or match is None
+    ):
+        return False
+    try:
+        run = github.get(repo, f"actions/runs/{match.group(1)}")
+    except RuntimeError:
+        return False
+    check_suite = trusted[0].get("check_suite") or {}
+    return bool(
+        isinstance(run, dict)
+        and run.get("id") == int(match.group(1))
+        and run.get("name") == "Promotion post-merge"
+        and run.get("path") == ".github/workflows/promotion-post-merge.yml"
+        and run.get("event") == "push"
+        and run.get("head_branch") == "main"
+        and run.get("head_sha") == merge_sha
+        and run.get("status") == "completed"
+        and run.get("conclusion") == "success"
+        and (run.get("repository") or {}).get("full_name") == repo
+        and (run.get("head_repository") or {}).get("full_name") == repo
+        and isinstance(check_suite.get("id"), int)
+        and run.get("check_suite_id") == check_suite["id"]
+        and run.get("html_url")
+        == f"https://github.com/{repo}/actions/runs/{match.group(1)}"
+    )
 
 
 def local_repository() -> str:
@@ -1239,6 +1395,7 @@ def inspect_capability(
     repo: str,
     repository: dict[str, Any],
     pull: dict[str, Any],
+    policy_sha: str,
 ) -> dict[str, object]:
     """Compose canonical protection and lease availability read-only."""
     permissions = repository.get("permissions") or {}
@@ -1251,15 +1408,14 @@ def inspect_capability(
             "required": [],
         }
     base = pull.get("base") or {}
-    base_sha = base.get("sha")
-    if not isinstance(base_sha, str):
+    if FULL_SHA.fullmatch(policy_sha) is None:
         return {
             "state": "unknown",
-            "reason": "pull request identity is incomplete",
+            "reason": "terminal policy branch identity is incomplete",
             "required": [],
         }
     try:
-        require_base_lifecycle_interface(github, repo, base_sha)
+        require_base_lifecycle_interface(github, repo, policy_sha)
     except RuntimeError as error:
         return {"state": "unknown", "reason": str(error), "required": []}
     protection, reason, required = effective_protection(
@@ -1328,11 +1484,11 @@ def inspect_issue(  # noqa: C901
         repo, f"issues/{issue_number}/timeline?per_page=100"
     )
     route = route_for(issue, branches, branch_strategy)
-    native_links = _native_links(timeline)
+    native_links = _native_links(timeline, repo)
     related = [
         pull
         for pull in pulls
-        if linked_pull(pull, issue_number, native_links, route)
+        if linked_pull(pull, issue_number, native_links, route, repo)
     ]
     open_pulls = [pull for pull in related if pull.get("state") == "open"]
     work_pattern = re.compile(
@@ -1416,12 +1572,8 @@ def inspect_issue(  # noqa: C901
                         "&per_page=100",
                         "check_runs",
                     )
-                    observation["post_merge_verified"] = any(
-                        run.get("name") == "verify promoted main"
-                        and run.get("head_sha") == merge_sha
-                        and run.get("status") == "completed"
-                        and run.get("conclusion") == "success"
-                        for run in post_merge_runs
+                    observation["post_merge_verified"] = trusted_post_merge_run(
+                        github, repo, merge_sha, post_merge_runs
                     )
                 except RuntimeError:
                     observation["post_merge_verified"] = False
@@ -1451,6 +1603,7 @@ def inspect_issue(  # noqa: C901
         repo,
         repository,
         pull,
+        str(branches.get(str(route["base"])) or ""),
     )
     observation["capability"] = capability
     head_repo = head.get("repo") or {}
@@ -1479,15 +1632,28 @@ def inspect_issue(  # noqa: C901
         else set()
     )
     observed_checks = check_state(runs, statuses, required_contexts)
-    try:
-        comparison = github.get(repo, f"compare/{base_sha}...{head_sha}")
-        observation["base_current"] = (
-            observation.get("base_current") is not False
-            and isinstance(comparison, dict)
-            and comparison.get("status") in {"ahead", "identical"}
-        )
-    except RuntimeError:
-        observation["base_current"] = False
+    ancestry: dict[str, bool] = {}
+    chain_valid, chain_pulls, _, _ = _open_base_chain(
+        pull, pulls, str(route["base"]), repo
+    )
+    if chain_valid:
+        for member in chain_pulls:
+            member_base = member.get("base") or {}
+            member_head = member.get("head") or {}
+            ancestor = str(member_base.get("sha") or "")
+            descendant = str(member_head.get("sha") or "")
+            key = f"{ancestor}...{descendant}"
+            try:
+                comparison = github.get(repo, f"compare/{key}")
+                ancestry[key] = isinstance(
+                    comparison, dict
+                ) and comparison.get("status") in {"ahead", "identical"}
+            except RuntimeError:
+                ancestry[key] = False
+    observation["chain_ancestry"] = ancestry
+    observation["base_current"] = ancestry.get(
+        f"{base_sha}...{head_sha}", False
+    )
     if observed_checks == "failed":
         try:
             urls = failed_pull_request_run_urls(repo, head_sha, "")
@@ -1530,6 +1696,7 @@ def inspect_issue(  # noqa: C901
         int(pull["number"]),
         head_sha,
         list(observation.get("blocked_run_urls", [])),
+        str((pull.get("user") or {}).get("login") or ""),
     )
     return derive_status(observation)
 

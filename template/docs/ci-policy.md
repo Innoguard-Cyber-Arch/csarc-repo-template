@@ -55,6 +55,7 @@ tier、保留 promotion evidence 並立即形成 release 邊界。
 `guard=clear` 回傳 0、`guard=blocked` 回傳 1；GitHub／輸入讀取失敗回傳 2。
 
 同號的多張 open PR／多條 remote work branch、必要 branch 缺少、非本 repo head、
+非 promotion PR head 未符合 `<type>/<issue-number>-*`（hotfix 必須是 `fix/<issue-number>-*`）、
 base ancestry 或 head ref 漂移、未勾選 acceptance、較新的 blocker、required check
 失敗，以及 single-writer Ruleset／lifecycle interface 為 `blocked` 或 `unknown` 時，
 `guard` 都是 `blocked`，且不會列出 merge 動作。Elevated、promotion 與 hotfix 還必須
@@ -381,6 +382,39 @@ Actions quota fallback note
 
 `{"head_sha":"<PR head SHA>","pull_request":42,"repository":"owner/repo","runs":["https://github.com/owner/repo/actions/runs/123"],"verification":{"command":"./scripts/verify","result":"passed","unreproduced_checks":["GitHub-hosted runner identity"]}}`
 ```
+
+留言發布後，仍須先取得 exact-head lifecycle lease，再用同一工具執行合併；不直接呼叫
+`gh pr merge`：
+
+```bash
+./scripts/pr_lifecycle.py acquire \
+  --repo owner/repo --pr-number 42 --head-sha <PR head SHA> \
+  --owner <task-id> --output /tmp/pr-42-lease.json
+./scripts/pr_lifecycle.py merge-quota \
+  --repo owner/repo --pr-number 42 --head-sha <PR head SHA> \
+  --owner <task-id> --lease /tmp/pr-42-lease.json
+```
+
+`merge-quota` 不接受 authorization URL；它會在 lease 內前後各重讀一次 live PR，要求
+PR 內文含 `Alpha 自行合併 / self-merged`、恰一個本 repo closing Issue 且沒有未勾選
+項目，重新列舉該 head 的完整 failed run 集合、逐一驗證 zero-step billing block，並核對
+唯一 canonical note。Promotion、hotfix、workflow／governance、dependency、template 與
+unknown scope 一律拒絕；最後仍以 destination lease CAS、base SHA 與 merge response 驗證
+封住併發漂移。
+
+合併到非 default integration branch 後，GitHub 不會自動關閉 closing Issue，因此 lifecycle
+會保留原 lease。持有同一 lease 的 actor 必須執行 `close-issue`，工具會重新驗證 merged PR
+head/base、squash parent、完整 stacked containment、Issue／PR checklist 與 live route；成功關閉
+（或確認已關閉）後才釋放 lease：
+
+```bash
+./scripts/pr_lifecycle.py close-issue \
+  --repo owner/repo --pr-number 42 --head-sha <PR head SHA> \
+  --owner <task-id> --lease /tmp/pr-42-lease.json
+```
+
+route 尚未整合、containment 漂移、actor 不符或 evidence 不完整時一律 fail closed；不得改用
+未受 lease 保護的手動 `gh issue close` 取代。
 
 ### `dev/next` promotion preservation
 

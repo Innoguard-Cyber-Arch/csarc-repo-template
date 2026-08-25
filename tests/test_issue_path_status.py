@@ -24,6 +24,7 @@ has_exact_quota_note = MODULE["has_exact_quota_note"]
 has_human_approval = MODULE["has_human_approval"]
 inspect_issue = MODULE["inspect_issue"]
 inspect_capability = MODULE["inspect_capability"]
+native_links = MODULE["_native_links"]
 route_for = MODULE["route_for"]
 unresolved_blocker = MODULE["unresolved_blocker"]
 
@@ -63,6 +64,7 @@ def observation(
         if branches is None
         else branches
     )
+    pull_items = pulls or []
     return {
         "repository": "owner/repo",
         "issue": {
@@ -72,8 +74,10 @@ def observation(
             "milestone": {"number": milestone} if milestone else None,
         },
         "branches": branch_map,
-        "pulls": pulls or [],
-        "native_links": {pull["number"] for pull in pulls or []},
+        "pulls": pull_items,
+        "native_links": {
+            ("owner/repo", pull["number"]) for pull in pull_items
+        },
         "work_branches": work_branches or [],
         "files": files or [],
         "checks": checks,
@@ -84,6 +88,10 @@ def observation(
         },
         "blocker": blocker,
         "base_current": base_current,
+        "chain_ancestry": {
+            f"{item['base']['sha']}...{item['head']['sha']}": True
+            for item in pull_items
+        },
         "blocked_run_urls": blocked_run_urls or [],
         "quota_note": quota_note,
         "human_approval": human_approval,
@@ -197,6 +205,37 @@ def test_repository_profile_selects_main_or_dev_without_user_choice() -> None:
     assert (
         route_for(issue, {"main": "one", "dev": "two"}, "dev")["base"] == "dev"
     )
+    issue["labels"] = [{"name": "promotion"}]
+    dev_promotion = route_for(issue, {"main": "one", "dev": "two"}, "dev")
+    assert dev_promotion["base"] == "main"
+    assert dev_promotion["head"] == "dev"
+
+
+def test_standalone_batch_promotion_selects_dev_next() -> None:
+    """A non-Milestone promotion can deliver the shared dev/next batch."""
+    current = pull(
+        draft=False,
+        base="main",
+        base_sha="main",
+        head="dev/next",
+        head_sha="next",
+    )
+    data = observation(
+        milestone=None,
+        issue_labels=["promotion"],
+        pulls=[current],
+        branches={"main": "main", "dev/next": "next"},
+        files=["src/release.py"],
+        checks="passing",
+        capability="allowed",
+        human_approval=True,
+    )
+    decision = derive_status(data)
+    assert decision.state == "Candidate"
+    assert decision.guard == "clear"
+    assert decision.route["kind"] == "standalone-batch-promotion"
+    assert decision.route["head"] == "dev/next"
+    assert decision.allowed_actions == ("acquire-lease",)
 
 
 def test_hotfix_is_always_a_full_main_route() -> None:
@@ -253,6 +292,44 @@ def test_hotfix_rejects_a_non_fix_issue_branch() -> None:
     assert "merge-once" not in decision.allowed_actions
 
 
+def test_draft_rejects_a_branch_for_another_issue() -> None:
+    """Native linkage cannot make another Issue's head a valid owner."""
+    current = pull(head="feat/999-wrong")
+    data = observation(
+        pulls=[current],
+        branches={
+            "main": "main",
+            "dev/next": "next",
+            "dev/m9-sdlc": "base",
+            "feat/999-wrong": "head",
+        },
+    )
+    decision = derive_status(data)
+    assert decision.state == "Draft"
+    assert decision.guard == "blocked"
+    assert "does not match the milestone route" in decision.reason
+    assert "type/266-*" in decision.next_step
+
+
+def test_draft_rejects_a_closed_linked_issue() -> None:
+    """Visible Draft ownership cannot silently reopen a closed Issue."""
+    data = observation(
+        pulls=[pull()],
+        branches={
+            "main": "main",
+            "dev/next": "next",
+            "dev/m9-sdlc": "base",
+            "feat/266-path-status": "head",
+        },
+    )
+    data["issue"]["state"] = "closed"
+    decision = derive_status(data)
+    assert decision.state == "Draft"
+    assert decision.guard == "blocked"
+    assert "Issue is closed" in decision.reason
+    assert "Reopen Issue #266" in decision.next_step
+
+
 def test_parallel_claims_fail_closed() -> None:
     """Two agents cannot both own an Issue through open PRs."""
     data = observation(pulls=[pull(300), pull(301, head="fix/266-other")])
@@ -260,6 +337,36 @@ def test_parallel_claims_fail_closed() -> None:
     assert decision.guard == "blocked"
     assert "More than one open pull request" in decision.reason
     assert "close or unlink" in decision.next_step
+
+
+def test_external_links_cannot_claim_local_issue_ownership() -> None:
+    """Cross-repository references and PR-number collisions are not owners."""
+    current = pull(head="feat/999-foreign", body="Refs other/repo#266")
+    data = observation(
+        pulls=[current],
+        branches={
+            "main": "main",
+            "dev/m9-sdlc": "base",
+            "feat/999-foreign": "head",
+        },
+    )
+    data["native_links"] = {("other/repo", current["number"])}
+    decision = derive_status(data)
+    assert decision.state == "Open"
+    assert decision.pull_request is None
+
+    timeline = [
+        {
+            "source": {
+                "issue": {
+                    "number": current["number"],
+                    "pull_request": {},
+                    "repository_url": "https://api.github.com/repos/other/repo",
+                }
+            }
+        }
+    ]
+    assert native_links(timeline, "owner/repo") == set()
 
 
 def test_open_pr_does_not_hide_a_second_issue_branch() -> None:
@@ -303,6 +410,7 @@ def test_valid_stacked_pr_chain_reaches_the_delivery_branch() -> None:
         files=["src/status.py"],
     )
     data["all_pulls"] = [child, parent]
+    data["chain_ancestry"]["base...parent"] = True
     decision = derive_status(data)
     assert decision.state == "Draft"
     assert decision.guard == "clear"
@@ -315,6 +423,43 @@ def test_valid_stacked_pr_chain_reaches_the_delivery_branch() -> None:
     assert decision.observed_evidence["immediate_base_sha"] == "parent"
     assert decision.pull_request is not None
     assert decision.pull_request["base_sha"] == "parent"
+
+
+@pytest.mark.parametrize(
+    ("parent_base_sha", "parent_ancestry", "reason"),
+    [
+        ("stale-base", True, "drifted from its live ref"),
+        ("base", False, "is not an ancestor"),
+    ],
+)
+def test_stacked_parent_must_be_current_and_contain_its_base(
+    parent_base_sha: str, parent_ancestry: bool, reason: str
+) -> None:
+    """Every parent edge is live and ancestral, not only the top PR edge."""
+    child = pull(draft=True, base="enhancement/254-parent", base_sha="parent")
+    parent = pull(
+        281,
+        draft=False,
+        base="dev/m9-sdlc",
+        base_sha=parent_base_sha,
+        head="enhancement/254-parent",
+        head_sha="parent",
+    )
+    data = observation(
+        pulls=[child],
+        branches={
+            "main": "main",
+            "dev/m9-sdlc": "base",
+            "enhancement/254-parent": "parent",
+            "feat/266-path-status": "head",
+        },
+    )
+    data["all_pulls"] = [child, parent]
+    data["chain_ancestry"][f"{parent_base_sha}...parent"] = parent_ancestry
+    decision = derive_status(data)
+    assert decision.guard == "blocked"
+    assert reason in decision.reason
+    assert decision.allowed_actions == ("inspect",)
 
 
 def test_draft_contract_keeps_incomplete_work_visible_without_closing() -> None:
@@ -350,6 +495,32 @@ def test_draft_contract_requires_every_nonblank_ownership_field() -> None:
     decision = derive_status(data)
     assert decision.guard == "blocked"
     assert "missing or blank" in decision.reason
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        "No Issue link",
+        "Refs #999",
+        "Refs other/repo#266",
+        "Refs #266\nRefs #266",
+    ],
+)
+def test_draft_requires_one_primary_local_issue_reference(link: str) -> None:
+    """A valid branch name cannot replace the Draft ownership link."""
+    current = pull(body=str(pull()["body"]).replace("Refs #266", link))
+    data = observation(
+        pulls=[current],
+        branches={
+            "main": "main",
+            "dev/m9-sdlc": "base",
+            "feat/266-path-status": "head",
+        },
+    )
+    decision = derive_status(data)
+    assert decision.state == "Draft"
+    assert decision.guard == "blocked"
+    assert "exactly one primary Issue" in decision.reason
 
 
 def test_incomplete_draft_must_reference_instead_of_close_the_issue() -> None:
@@ -390,6 +561,33 @@ def test_ready_pr_requires_one_primary_closing_reference() -> None:
     decision = derive_status(data)
     assert decision.guard == "blocked"
     assert "one closing reference" in decision.reason
+
+
+@pytest.mark.parametrize("checks", ["passing", "quota-blocked"])
+def test_ready_and_quota_paths_reject_a_foreign_repository_closer(
+    checks: str,
+) -> None:
+    """A same-number cross-repository closer cannot satisfy this Issue."""
+    current = pull(draft=False)
+    current["body"] = str(current["body"]).replace(
+        "Closes #266", "Closes other/repo#266"
+    )
+    data = observation(
+        pulls=[current],
+        branches={
+            "main": "main",
+            "dev/m9-sdlc": "base",
+            "feat/266-path-status": "head",
+        },
+        files=["src/status.py"],
+        checks=checks,
+        capability="allowed",
+        blocked_run_urls=["https://github.com/owner/repo/actions/runs/42"],
+        quota_note=True,
+    )
+    decision = derive_status(data)
+    assert decision.guard == "blocked"
+    assert "mismatched closing references" in decision.reason
 
 
 @pytest.mark.parametrize(
@@ -503,6 +701,7 @@ def test_exact_quota_note_allows_only_the_guarded_merge_path() -> None:
     assert decision.guard == "clear"
     assert decision.allowed_actions == ("acquire-lease",)
     assert "note-quota-fallback" not in decision.next_step
+    assert "merge-quota" in decision.next_step
 
     data["capability"]["state"] = "unknown"
     decision = derive_status(data)
@@ -514,6 +713,7 @@ def test_quota_note_must_match_repo_pr_head_runs_and_verification() -> None:
     """A stale or partial note cannot authorize the routine fallback."""
     run = "https://github.com/owner/repo/actions/runs/42"
     comment = {
+        "user": {"login": "author", "type": "User"},
         "body": quota_fallback_note(
             "owner/repo",
             300,
@@ -523,12 +723,17 @@ def test_quota_note_must_match_repo_pr_head_runs_and_verification() -> None:
             ["hosted runner identity"],
         )
     }
-    assert has_exact_quota_note([comment], "owner/repo", 300, "head", [run])
-    assert not has_exact_quota_note(
-        [comment, comment], "owner/repo", 300, "head", [run]
+    assert has_exact_quota_note(
+        [comment], "owner/repo", 300, "head", [run], "author"
     )
     assert not has_exact_quota_note(
-        [comment], "owner/repo", 300, "new-head", [run]
+        [comment, comment], "owner/repo", 300, "head", [run], "author"
+    )
+    assert not has_exact_quota_note(
+        [comment], "owner/repo", 300, "new-head", [run], "author"
+    )
+    assert not has_exact_quota_note(
+        [comment], "owner/repo", 300, "head", [run], "attacker"
     )
 
 
@@ -673,7 +878,35 @@ def test_merged_pr_on_the_wrong_route_never_claims_integration() -> None:
     assert "0 merged parent PRs" in decision.reason
 
 
-def test_live_promotion_collects_containment_and_post_merge_evidence() -> None:
+def test_integrated_issue_has_one_auditable_close_action() -> None:
+    """A non-default merge retains its lease until the Issue is closed."""
+    merged = pull(
+        draft=False,
+        state="closed",
+        merged_at="2026-08-25T02:00:00Z",
+        merge_commit_sha="merge",
+    )
+    data = observation(pulls=[merged])
+    data["issue"]["state"] = "open"
+    data["merged_routes"] = {
+        "300": {
+            "valid": True,
+            "reason": "Merged PR chain reaches the expected integration branch",
+            "chain": ["feat/266-path-status", "dev/m9-sdlc"],
+            "terminal_merge_sha": "merge",
+            "containment": [],
+        }
+    }
+    decision = derive_status(data)
+    assert decision.state == "Integrated"
+    assert decision.guard == "blocked"
+    assert decision.allowed_actions == ("close-issue",)
+    assert "pr_lifecycle.py close-issue" in decision.next_step
+    assert "retained merge lease" in decision.next_step
+
+
+def test_live_promotion_collects_containment_and_post_merge_evidence(  # noqa: C901
+) -> None:
     """Delivered needs route containment and exact-merge verification."""
     merged = pull(
         draft=False,
@@ -687,6 +920,14 @@ def test_live_promotion_collects_containment_and_post_merge_evidence() -> None:
     )
 
     class FakeGitHub:
+        def __init__(
+            self,
+            app_id: int = 15368,
+            workflow_path: str = ".github/workflows/promotion-post-merge.yml",
+        ) -> None:
+            self.app_id = app_id
+            self.workflow_path = workflow_path
+
         def get(self, _repo: str, path: str = "") -> object:
             if not path:
                 return {"permissions": {"push": True}}
@@ -700,6 +941,21 @@ def test_live_promotion_collects_containment_and_post_merge_evidence() -> None:
                 }
             if path == "compare/merge...main-head":
                 return {"status": "ahead"}
+            if path == "actions/runs/77":
+                return {
+                    "id": 77,
+                    "name": "Promotion post-merge",
+                    "path": self.workflow_path,
+                    "event": "push",
+                    "head_branch": "main",
+                    "head_sha": "merge",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "check_suite_id": 88,
+                    "html_url": "https://github.com/owner/repo/actions/runs/77",
+                    "repository": {"full_name": "owner/repo"},
+                    "head_repository": {"full_name": "owner/repo"},
+                }
             raise AssertionError(path)
 
         def pages(self, _repo: str, path: str) -> list[dict[str, Any]]:
@@ -728,6 +984,14 @@ def test_live_promotion_collects_containment_and_post_merge_evidence() -> None:
                     "head_sha": "merge",
                     "status": "completed",
                     "conclusion": "success",
+                    "app": {
+                        "id": self.app_id,
+                        "slug": "github-actions",
+                    },
+                    "check_suite": {"id": 88},
+                    "details_url": (
+                        "https://github.com/owner/repo/actions/runs/77/job/99"
+                    ),
                 }
             ]
 
@@ -746,6 +1010,17 @@ def test_live_promotion_collects_containment_and_post_merge_evidence() -> None:
         "terminal_merge_sha": "merge",
         "containment": [],
     }
+
+    for spoofed_source in (
+        FakeGitHub(999),
+        FakeGitHub(workflow_path=".github/workflows/rogue.yml"),
+    ):
+        spoofed = inspect_issue(
+            spoofed_source, "owner/repo", 266, "delivery"
+        )
+        assert spoofed.state == "Candidate"
+        assert spoofed.guard == "blocked"
+        assert "post-merge tree evidence" in spoofed.reason
 
 
 def test_live_merged_stack_proves_child_and_terminal_containment() -> None:
@@ -782,7 +1057,7 @@ def test_live_merged_stack_proves_child_and_terminal_containment() -> None:
             if path == "issues/266":
                 return {
                     "number": 266,
-                    "state": "open",
+                    "state": "closed",
                     "body": "All acceptance tasks are complete.",
                     "labels": [],
                     "milestone": {"number": 9},
@@ -977,6 +1252,7 @@ def test_capability_composes_canonical_protection_and_available_lease(
         "owner/repo",
         {"permissions": {"push": True}},
         pull(draft=False, head_sha="a" * 40),
+        "b" * 40,
     )
     assert capability["state"] == "allowed"
     assert capability["required"] == [
@@ -1008,6 +1284,7 @@ def test_capability_blocks_when_canonical_lease_is_held(
         "owner/repo",
         {"permissions": {"push": True}},
         pull(draft=False, head_sha="a" * 40),
+        "b" * 40,
     )
     assert capability["state"] == "blocked"
     assert capability["lease_status"] == {
@@ -1044,6 +1321,46 @@ def test_capability_rejects_a_modified_head_lifecycle_helper(
         "owner/repo",
         {"permissions": {"push": True}},
         pull(draft=False, head_sha="a" * 40),
+        "b" * 40,
+    )
+    assert capability["state"] == "unknown"
+    assert "exact base blob" in str(capability["reason"])
+    assert not called
+
+
+def test_capability_trusts_terminal_policy_base_not_a_stack_parent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A mutable parent cannot replace the terminal branch's lifecycle code."""
+    local = (SCRIPTS / "pr_lifecycle.py").read_bytes()
+
+    class FakeGitHub:
+        def get(self, _repo: str, path: str = "") -> object:
+            if path.endswith("ref=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"):
+                return lifecycle_content(local + b"\n# stale terminal\n")
+            if path.endswith("ref=cccccccccccccccccccccccccccccccccccccccc"):
+                return lifecycle_content(local)
+            raise AssertionError(path)
+
+    called = False
+
+    def unexpected(*_args: object) -> object:
+        nonlocal called
+        called = True
+        return None
+
+    monkeypatch.setitem(
+        inspect_capability.__globals__, "effective_protection", unexpected
+    )
+    monkeypatch.setitem(
+        inspect_capability.__globals__, "lease_status_snapshot", unexpected
+    )
+    capability = inspect_capability(
+        FakeGitHub(),
+        "owner/repo",
+        {"permissions": {"push": True}},
+        pull(draft=False, base_sha="c" * 40, head_sha="a" * 40),
+        "b" * 40,
     )
     assert capability["state"] == "unknown"
     assert "exact base blob" in str(capability["reason"])
@@ -1053,7 +1370,7 @@ def test_capability_rejects_a_modified_head_lifecycle_helper(
 def test_missing_push_permission_is_unknown() -> None:
     """An omitted permission field cannot be treated as capability."""
     capability = inspect_capability(
-        SimpleNamespace(), "owner/repo", {}, pull(draft=False)
+        SimpleNamespace(), "owner/repo", {}, pull(draft=False), "b" * 40
     )
     assert capability["state"] == "unknown"
 

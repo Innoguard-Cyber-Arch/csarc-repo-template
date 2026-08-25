@@ -47,6 +47,8 @@ Duplicate triage may close an Issue without code changes when it links the canon
 
 - This repository's plan structurally runs over its included Actions minutes; a zero-step billing block is a standing, accepted operating condition, not an incident. All other failures remain blocked.
 - Routine Issue PRs: once local verification passes and every failing check is mechanically confirmed as a zero-step billing block, leave the `Actions quota fallback note` and merge; no separate real-time human confirmation is required.
+- Perform that routine exception only through `scripts/pr_lifecycle.py merge-quota` while holding its exact-head remote lease; never call the merge API directly.
+- A non-default merge retains that lease until the same actor runs `scripts/pr_lifecycle.py close-issue`; do not close the integrated Issue outside the lifecycle tool.
 - Promotion PRs to `main` keep the stricter two-party attestation and authorization procedure.
 - Follow the complete SHA/tree-bound procedure, including the non-release promotion path, in [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback). Never create or falsify a successful Check Run.
 

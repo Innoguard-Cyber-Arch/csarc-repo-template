@@ -30,6 +30,11 @@ scope_for = MODULE["scope_for"]
         ("policies/dev-next-ruleset.json", "governance"),
         ("template/policies/rulesets.json.jinja", "governance"),
         ("template/policies/dev-next-ruleset.json", "governance"),
+        ("scripts/ci_tier.py", "governance"),
+        ("scripts/issue_path_status.py", "governance"),
+        ("scripts/pr_lifecycle.py", "governance"),
+        ("scripts/promotion_gate.py", "governance"),
+        ("template/scripts/delivery_sync.py", "governance"),
         ("unexpected.bin", "unknown"),
     ],
 )

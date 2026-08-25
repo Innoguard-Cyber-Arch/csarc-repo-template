@@ -40,6 +40,7 @@ BILLING_GATE_ANNOTATION_MESSAGE = (
     "your spending limit needs to be increased. Please check the 'Billing & "
     "plans' section in your settings"
 )
+QUOTA_NOTE = re.compile(r"\AActions quota fallback note\n\n`([^`\n]+)`\n\n")
 PREFLIGHT_REFETCH = "promotion preflight live refetch"
 
 
@@ -617,6 +618,70 @@ def quota_fallback_note(
         "publishing, deployment, provenance, or canary success is claimed."
     )
     return f"Actions quota fallback note\n\n`{binding}`\n\n{statement}"
+
+
+def has_exact_quota_note(
+    comments: list[dict[str, Any]],
+    repo: str,
+    pull_number: int,
+    head_sha: str,
+    run_urls: list[str],
+    signer: str,
+) -> bool:
+    """Accept one canonical routine note bound to every live failed run."""
+    notes = 0
+    matching = 0
+    for comment in comments:
+        match = QUOTA_NOTE.match(str(comment.get("body") or ""))
+        if match is None:
+            continue
+        notes += 1
+        try:
+            binding = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            return False
+        verification = (
+            binding.get("verification") if isinstance(binding, dict) else None
+        )
+        if (
+            isinstance(binding, dict)
+            and set(binding)
+            == {
+                "repository",
+                "pull_request",
+                "head_sha",
+                "runs",
+                "verification",
+            }
+            and binding.get("repository") == repo
+            and binding.get("pull_request") == pull_number
+            and binding.get("head_sha") == head_sha
+            and binding.get("runs") == sorted(run_urls)
+            and str((comment.get("user") or {}).get("login") or "").casefold()
+            == signer.casefold()
+            and isinstance(verification, dict)
+            and verification.get("command")
+            in {"./scripts/verify", "./scripts/verify-template.sh"}
+            and verification.get("result") == "passed"
+            and isinstance(verification.get("unreproduced_checks"), list)
+            and all(
+                isinstance(item, str)
+                for item in verification["unreproduced_checks"]
+            )
+            and set(verification)
+            == {"command", "result", "unreproduced_checks"}
+            and str(comment.get("body"))
+            == quota_fallback_note(
+                repo,
+                pull_number,
+                head_sha,
+                run_urls,
+                str(verification["command"]),
+                verification["unreproduced_checks"],
+            )
+        ):
+            matching += 1
+    return notes == matching == 1
 
 
 def preflight_binding(

@@ -93,7 +93,7 @@ flowchart LR
 3. {% if branch_strategy == "delivery" %}從 Issue 所屬的 `dev/m<Milestone 編號>-<簡稱>` 建立工作分支；沒有 Milestone 時，預設從 `dev/next` 建立，只有在 Issue 記錄獨立 soak／canary 理由時，才直接使用一次性的 `dev/i<Issue 編號>-<簡稱>` 工作與 promotion。{% else %}從 `{{ branch_strategy }}` 或最終 PR 回 `{{ branch_strategy }}` 的未合併工作分支建立。{% endif %}一般工作分支使用 `type/<issue-number>-short-slug`；若新增需求超出 Issue 的完成條件，另開 Issue 與分支。若後來確認重複，連結 canonical Issue 並用 GitHub 的 Duplicate 原生原因關閉；純 triage 不改檔案，可不開分支與 PR。
 4. 執行 `./scripts/verify`；AI 遵守 `AGENTS.md`，一般情況下不能自行合併。
 5. PR 指向{% if branch_strategy == "delivery" %}對應 delivery branch{% else %} `{{ branch_strategy }}`{% endif %}或 stack 中的直接上游分支；整條 open PR 鏈必須最終回到該 integration branch。使用 `Closes #<issue-number>` 前，PR 與 referenced Issue 不得留有未勾選 task；PR policy 會直接拒絕，避免局部完成卻自動結案。風險或回退放在選填補充；PR 沒有原生 Issue Type／Issue Form，只使用 Markdown template，並恰選一個 change label：`fix`→`bug`、`docs`→`documentation`，其餘允許的 Conventional Commit type→`enhancement`。
-6. 一般情況下，CI 與人工審查都通過才合併；只有下列 Actions 額度例外且 human maintainer 明確授權時，agent 才可依 repo 現行 self-merge 政策合併。{% if branch_strategy == "delivery" %}Milestone 建立時同時建立一張 `promotion` Issue；完成後用 `dev/m* → main` PR 關閉它。一般孤立工作由 `dev/next → main` 批次 promotion；`dev/i*` 的同號 Issue 本身就是 promotion Issue，合併後刪除該暫時 branch。只有 standalone `fix/*` 加上 `hotfix` label 才能直接 main。{% elif branch_strategy == "dev" %}準備發布時，再用一張審查過的 PR 將 `dev` 升版到 `main`。{% endif %}
+6. 一般情況下，CI 與人工審查都通過才合併；一般 Issue 的 zero-step Actions 額度例外可依下方 single-note 流程與 lifecycle lease 合併，不需逐 PR human authorization。Promotion 額度例外仍須 human maintainer 明確授權。{% if branch_strategy == "delivery" %}Milestone 建立時同時建立一張 `promotion` Issue；完成後用 `dev/m* → main` PR 關閉它。一般孤立工作由 `dev/next → main` 批次 promotion；`dev/i*` 的同號 Issue 本身就是 promotion Issue，合併後刪除該暫時 branch。只有 standalone `fix/*` 加上 `hotfix` label 才能直接 main。{% elif branch_strategy == "dev" %}準備發布時，再用一張審查過的 PR 將 `dev` 升版到 `main`。{% endif %}
 
 多個可寫 agents 平行執行時，一項任務使用一個 branch 與一個獨立 worktree，且只平行處理範圍互不依賴的工作；開始前先辨識目前是否已在 agent 平台管理的 worktree，不強制讓同一 branch 出現在多個 worktrees，也不自行刪除其他工具建立或含未提交變更的 worktree。原生 [`git worktree`](https://git-scm.com/docs/git-worktree) 是可攜基線；[Worktrunk](https://github.com/max-sixty/worktrunk) 可選擇簡化建立、切換與清理，但屬於本機／agent orchestration 輔助工具，不是本模板或生成 repo 的必要相依。worktree 只隔離工作目錄，整合仍以 PR、CI、人工審查及合併後完整驗證為準。
 
@@ -106,6 +106,9 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 ### Actions 額度耗盡的一次性驗證
 
 只有 GitHub Actions 的 zero-step billing block 被機械式確認、且本機驗證通過時，才可能使用本機 fallback；runner 註記本身不構成證據。一般 Issue PR 留一則說明留言即可合併，不需要即時人工確認{% if branch_strategy in ["dev", "delivery"] %}；Promotion 到 `main` 仍維持 human attestation/authorization 雙方確認，另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release{% endif %}。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
+
+一般 Issue 的實際 fallback 合併仍須持有 exact-head remote lease，並只透過 `scripts/pr_lifecycle.py merge-quota` 執行；不得直接呼叫 merge API。
+合併到非 default integration branch 後會保留同一 lease，直到原 actor 以 `scripts/pr_lifecycle.py close-issue` 驗證 merged containment 並關閉 Issue；不得手動繞過。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹；尚未 `git init` 的新專案仍可掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 

@@ -18,6 +18,16 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
 
+from ci_tier import classify as classify_ci
+from promotion_gate import (
+    failed_pull_request_run_urls,
+    has_exact_quota_note,
+    require_zero_step_run,
+)
+from promotion_gate import (
+    route_for as promotion_route_for,
+)
+
 LEASE_SCHEMA = 2
 LEASE_STATUS_SCHEMA = 1
 LEASE_STATUS_INTERFACE = "csarc-pr-lifecycle-lease-status/v1"
@@ -30,7 +40,16 @@ OWNER = re.compile(r"[A-Za-z0-9._/@:-]{1,200}")
 ACTOR = re.compile(r"[A-Za-z0-9_.-]+(?:\[bot\])?")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 UNCHECKED = re.compile(r"(?m)^\s*[-*+]\s+\[\s*\]")
-CLOSING_ISSUE = re.compile(r"(?:Closes|Fixes|Resolves)\s+#(\d+)(?:\D|$)", re.I)
+CLOSING_REFERENCE = re.compile(
+    r"(?i)\b(?:close(?:s|d)?|fix(?:es|ed)?|resolve(?:s|d)?)\s+"
+    r"((?:https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/|"
+    r"(?:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?#)[1-9][0-9]*)(?!\d)"
+)
+LINKING_REFERENCE = re.compile(
+    r"(?i)\b(?:close(?:s|d)?|fix(?:es|ed)?|resolve(?:s|d)?|refs?)\s+"
+    r"((?:https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/|"
+    r"(?:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?#)[1-9][0-9]*)(?!\d)"
+)
 BLOCKER = re.compile(
     r"(?i)^(?:blocked|blocker)\s*:|^\[merge-blocker\]|^\[P[01]\]"
 )
@@ -62,6 +81,31 @@ LEASE_CORE_FIELDS = (
 def canonical_json(value: object) -> str:
     """Return stable compact JSON for comments and commit messages."""
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def issue_references(
+    body: str, repo: str, *, closing_only: bool = False
+) -> list[tuple[str, int]]:
+    """Return GitHub Issue links with an explicit repository identity."""
+    references: list[tuple[str, int]] = []
+    pattern = CLOSING_REFERENCE if closing_only else LINKING_REFERENCE
+    for match in pattern.finditer(body):
+        target = match.group(1)
+        if target.startswith("#"):
+            target_repo, number = repo, target[1:]
+        elif target.casefold().startswith("https://github.com/"):
+            path = target[len("https://github.com/") :]
+            owner, name, _, number = path.split("/")
+            target_repo = f"{owner}/{name}"
+        else:
+            target_repo, number = target.rsplit("#", 1)
+        references.append((target_repo, int(number)))
+    return references
+
+
+def closing_issue_references(body: str, repo: str) -> list[tuple[str, int]]:
+    """Return only closing GitHub Issue references."""
+    return issue_references(body, repo, closing_only=True)
 
 
 def parse_time(value: object, label: str) -> datetime:
@@ -236,6 +280,27 @@ class GitHub:
         result = json.loads(payload)
         if not isinstance(result, dict):
             raise RuntimeError("GitHub comment response is invalid")
+        return result
+
+    def close_issue(self, repo: str, issue_number: int) -> dict[str, Any]:
+        """Close one verified Issue as completed."""
+        payload = run(
+            [
+                "gh",
+                "api",
+                "--method",
+                "PATCH",
+                f"repos/{repo}/issues/{issue_number}",
+                "--input",
+                "-",
+            ],
+            input_text=json.dumps(
+                {"state": "closed", "state_reason": "completed"}
+            ),
+        )
+        result = json.loads(payload)
+        if not isinstance(result, dict):
+            raise RuntimeError("GitHub Issue close response is invalid")
         return result
 
 
@@ -1180,6 +1245,64 @@ def require_successful_checks(
         )
 
 
+def merge_discussion_snapshot(
+    github: GitHub, repo: str, pr_number: int
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], datetime | None]:
+    """Read comments and reviews, rejecting every current merge blocker."""
+    issue_comments = github.pages(
+        repo, f"issues/{pr_number}/comments?per_page=100"
+    )
+    comments = [
+        *issue_comments,
+        *github.pages(repo, f"pulls/{pr_number}/comments?per_page=100"),
+    ]
+    reviews = github.pages(repo, f"pulls/{pr_number}/reviews?per_page=100")
+    comments.extend(
+        {**review, "created_at": review.get("submitted_at")}
+        for review in reviews
+        if review.get("state") == "COMMENTED"
+        and review.get("submitted_at")
+        and review.get("body")
+    )
+    blocker, boundary = blocker_state(comments)
+    if blocker is not None:
+        raise RuntimeError(
+            "An unresolved blocking comment prevents merge: "
+            + str(blocker.get("html_url") or "unknown URL")
+        )
+    requested = sorted(
+        login
+        for login, state in current_reviews(reviews).items()
+        if state == "CHANGES_REQUESTED"
+    )
+    if requested:
+        raise RuntimeError(
+            "Changes are still requested by: " + ", ".join(requested)
+        )
+    return issue_comments, reviews, boundary
+
+
+def require_single_closing_issue(
+    github: GitHub, repo: str, pull: dict[str, Any]
+) -> int:
+    """Require exactly one complete Issue closer in this repository."""
+    closing = closing_issue_references(str(pull.get("body") or ""), repo)
+    if len(closing) != 1 or closing[0][0].casefold() != repo.casefold():
+        raise RuntimeError(
+            "Pull request must have exactly one closing reference in this "
+            "repository"
+        )
+    issue_number = closing[0][1]
+    issue = github.get(repo, f"issues/{issue_number}")
+    if not isinstance(issue, dict) or issue.get("pull_request") is not None:
+        raise RuntimeError(f"Closing reference #{issue_number} is not an Issue")
+    if UNCHECKED.search(str(issue.get("body") or "")):
+        raise RuntimeError(
+            f"Issue #{issue_number} has an unchecked checklist item"
+        )
+    return issue_number
+
+
 def merge_snapshot(  # noqa: C901
     github: GitHub,
     lease: dict[str, Any],
@@ -1211,41 +1334,14 @@ def merge_snapshot(  # noqa: C901
         raise RuntimeError(
             "A newer Draft event invalidated merge authorization"
         )
-    comments = [
-        *github.pages(repo, f"issues/{pr_number}/comments?per_page=100"),
-        *github.pages(repo, f"pulls/{pr_number}/comments?per_page=100"),
-    ]
-    reviews = github.pages(repo, f"pulls/{pr_number}/reviews?per_page=100")
-    comments.extend(
-        {
-            **review,
-            "created_at": review.get("submitted_at"),
-        }
-        for review in reviews
-        if review.get("state") == "COMMENTED"
-        and review.get("submitted_at")
-        and review.get("body")
+    _, reviews, blocker_boundary = merge_discussion_snapshot(
+        github, repo, pr_number
     )
-    blocker, blocker_boundary = blocker_state(comments)
-    if blocker is not None:
-        raise RuntimeError(
-            "An unresolved blocking comment prevents merge: "
-            + str(blocker.get("html_url") or "unknown URL")
-        )
     if blocker_boundary is not None and authorized_at <= blocker_boundary:
         raise RuntimeError(
             "Authorization does not postdate the latest blocker resolution"
         )
     review_states = current_reviews(reviews)
-    blockers = sorted(
-        login
-        for login, state in review_states.items()
-        if state == "CHANGES_REQUESTED"
-    )
-    if blockers:
-        raise RuntimeError(
-            "Changes are still requested by: " + ", ".join(blockers)
-        )
     actor = github.viewer(explicit_actor).casefold()
     if actor != str(lease["actor"]).casefold():
         raise RuntimeError(
@@ -1258,21 +1354,7 @@ def merge_snapshot(  # noqa: C901
     )
     if not approvers:
         raise RuntimeError("An independent approving review is required")
-    for issue_number in sorted(
-        {
-            int(value)
-            for value in CLOSING_ISSUE.findall(str(pull.get("body") or ""))
-        }
-    ):
-        issue = github.get(repo, f"issues/{issue_number}")
-        if not isinstance(issue, dict) or issue.get("pull_request") is not None:
-            raise RuntimeError(
-                f"Closing reference #{issue_number} is not an Issue"
-            )
-        if UNCHECKED.search(str(issue.get("body") or "")):
-            raise RuntimeError(
-                f"Issue #{issue_number} has an unchecked checklist item"
-            )
+    require_single_closing_issue(github, repo, pull)
 
     base = pull.get("base") or {}
     base_ref = base.get("ref")
@@ -1305,6 +1387,250 @@ def merge_snapshot(  # noqa: C901
         "protection": protection,
         "merge_mode": "agent" if protection == "enforced" else "human-only",
         "protection_reason": reason,
+    }
+
+
+def local_branch_strategy() -> str:
+    """Read the checked-in branch strategy used by this repository."""
+    root = Path(__file__).resolve().parents[1]
+    profile = root / ".csarc/profile.json"
+    if not profile.exists():
+        if (root / "copier.yml").is_file():
+            return "delivery"
+        raise RuntimeError("Repository profile is missing")
+    payload = json.loads(profile.read_text(encoding="utf-8"))
+    strategy = (
+        payload.get("branch_strategy") if isinstance(payload, dict) else None
+    )
+    if strategy not in {"delivery", "dev", "main"}:
+        raise RuntimeError("Repository branch strategy is missing or invalid")
+    return str(strategy)
+
+
+def routine_quota_snapshot(
+    github: GitHub,
+    lease: dict[str, Any],
+    explicit_actor: str = "",
+) -> dict[str, object]:
+    """Revalidate a routine zero-step exception without human authorization."""
+    repo = str(lease["repository"])
+    pr_number = int(lease["pull_request"])
+    head_sha = str(lease["head_sha"])
+    require_lease(github, lease, repo, pr_number, head_sha)
+    pull = live_pull(github, repo, pr_number, head_sha)
+    base = pull.get("base") or {}
+    head = pull.get("head") or {}
+    body = str(pull.get("body") or "")
+    if (
+        pull.get("draft") is not False
+        or UNCHECKED.search(body)
+        or base.get("ref") != lease["base_ref"]
+        or base.get("sha") != lease["base_sha"]
+        or (head.get("repo") or {}).get("full_name") != repo
+    ):
+        raise RuntimeError("Routine quota pull request identity is not final")
+    if "Alpha 自行合併 / self-merged" not in body:
+        raise RuntimeError(
+            "Routine quota merge lacks the Alpha self-merge note"
+        )
+    labels = {
+        str(item["name"])
+        for item in pull.get("labels", [])
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    strategy = local_branch_strategy()
+    route = promotion_route_for(
+        str(base.get("ref") or ""),
+        str(head.get("ref") or ""),
+        labels,
+        strategy,
+    )
+    files = [
+        str(item["filename"])
+        for item in github.pages(repo, f"pulls/{pr_number}/files?per_page=100")
+        if isinstance(item.get("filename"), str)
+    ]
+    plan = classify_ci(
+        "pull_request",
+        str(base.get("ref") or ""),
+        str(head.get("ref") or ""),
+        labels,
+        files,
+    )
+    elevated = {"workflow", "governance", "dependency", "template", "unknown"}
+    if (
+        route.kind != "not-applicable"
+        or bool(labels & {"promotion", "hotfix"})
+        or not files
+        or plan.tier == "full"
+        or bool(set(plan.scopes) & elevated)
+    ):
+        raise RuntimeError(
+            "Routine quota merge rejects promotion, hotfix, elevated, or "
+            "unknown work"
+        )
+    issue_comments, _, _ = merge_discussion_snapshot(
+        github, repo, pr_number
+    )
+    issue_number = require_single_closing_issue(github, repo, pull)
+    if re.fullmatch(
+        rf"[a-z][a-z0-9-]*/{issue_number}-[a-z0-9][a-z0-9-]*",
+        str(head.get("ref") or ""),
+    ) is None:
+        raise RuntimeError(
+            "Routine quota merge head does not match its closing Issue"
+        )
+    actor = github.viewer(explicit_actor).casefold()
+    if actor != str(lease["actor"]).casefold():
+        raise RuntimeError(
+            "Authenticated GitHub actor changed after lease acquisition"
+        )
+    token = os.environ.get("GH_TOKEN", "")
+    run_urls = failed_pull_request_run_urls(repo, head_sha, token)
+    for url in run_urls:
+        require_zero_step_run(
+            url,
+            repo,
+            pr_number,
+            str(head.get("ref") or ""),
+            head_sha,
+            token,
+        )
+    if not has_exact_quota_note(
+        issue_comments,
+        repo,
+        pr_number,
+        head_sha,
+        run_urls,
+        str(lease["actor"]),
+    ):
+        raise RuntimeError(
+            "Exactly one canonical routine quota note must match every live "
+            "failed run"
+        )
+    title = pull.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise RuntimeError("Pull request title is unavailable")
+    require_lease(github, lease, repo, pr_number, head_sha)
+    return {
+        "repository": repo,
+        "pull_request": pr_number,
+        "head_sha": head_sha,
+        "base_ref": lease["base_ref"],
+        "base_sha": lease["base_sha"],
+        "title": title,
+        "risk": "routine",
+        "blocked_run_urls": run_urls,
+        "merge_mode": "routine-quota",
+    }
+
+
+def merged_issue_snapshot(  # noqa: C901
+    github: GitHub,
+    lease: dict[str, Any],
+    explicit_actor: str = "",
+) -> dict[str, object]:
+    """Prove a merged PR reached its non-default integration route."""
+    repo = str(lease["repository"])
+    pr_number = int(lease["pull_request"])
+    require_origin(repo)
+    validate_refs(lease)
+    require_committed_lease(github, lease)
+    if github.viewer(explicit_actor).casefold() != str(
+        lease["actor"]
+    ).casefold():
+        raise RuntimeError(
+            "Authenticated GitHub actor changed after lease acquisition"
+        )
+    repository = github.get(repo, "")
+    pull = github.get(repo, f"pulls/{pr_number}")
+    if not isinstance(repository, dict) or not isinstance(pull, dict):
+        raise RuntimeError("Merged pull request identity is unavailable")
+    base = pull.get("base") or {}
+    head = pull.get("head") or {}
+    merge_sha = pull.get("merge_commit_sha")
+    if (
+        pull.get("merged") is not True
+        or pull.get("merged_at") is None
+        or head.get("sha") != lease["head_sha"]
+        or (head.get("repo") or {}).get("full_name") != repo
+        or base.get("ref") != lease["base_ref"]
+        or base.get("sha") != lease["base_sha"]
+        or repository.get("default_branch") != lease["default_branch"]
+        or SHA.fullmatch(str(merge_sha or "")) is None
+    ):
+        raise RuntimeError("Merged pull request does not match the lease")
+    merge_commit = github.get(repo, f"git/commits/{merge_sha}")
+    parents = (
+        merge_commit.get("parents")
+        if isinstance(merge_commit, dict)
+        else None
+    )
+    if (
+        not isinstance(parents, list)
+        or [item.get("sha") for item in parents if isinstance(item, dict)]
+        != [lease["base_sha"]]
+    ):
+        raise RuntimeError("Merged commit does not preserve the leased base")
+    if UNCHECKED.search(str(pull.get("body") or "")):
+        raise RuntimeError("Pull request has an unchecked checklist item")
+    merge_discussion_snapshot(github, repo, pr_number)
+    issue_number = require_single_closing_issue(github, repo, pull)
+    if re.fullmatch(
+        rf"[a-z][a-z0-9-]*/{issue_number}-[a-z0-9][a-z0-9-]*",
+        str(head.get("ref") or ""),
+    ) is None:
+        raise RuntimeError("Merged pull request head does not match its Issue")
+    issue = github.get(repo, f"issues/{issue_number}")
+    if not isinstance(issue, dict):
+        raise RuntimeError("Closing Issue identity is unavailable")
+
+    branches = {
+        str(item["name"]): str((item.get("commit") or {})["sha"])
+        for item in github.pages(repo, "branches?per_page=100")
+        if isinstance(item.get("name"), str)
+        and isinstance((item.get("commit") or {}).get("sha"), str)
+    }
+    from issue_path_status import merged_base_chain, route_for
+
+    route = route_for(issue, branches, local_branch_strategy())
+    expected_base = route.get("base")
+    if (
+        not route.get("valid")
+        or not isinstance(expected_base, str)
+        or expected_base == lease["default_branch"]
+    ):
+        raise RuntimeError(
+            "Issue close correction is limited to a valid non-default route"
+        )
+    pulls = github.pages(repo, "pulls?state=all&per_page=100")
+    valid, chain, reason, terminal, containment = merged_base_chain(
+        pull, pulls, expected_base, repo
+    )
+    if not valid:
+        raise RuntimeError(reason)
+    terminal_merge = terminal.get("merge_commit_sha")
+    if SHA.fullmatch(str(terminal_merge or "")) is None:
+        raise RuntimeError("Terminal merged PR has no immutable commit")
+    proofs = [*containment, (str(terminal_merge), branches[expected_base])]
+    for ancestor, descendant in proofs:
+        comparison = github.get(repo, f"compare/{ancestor}...{descendant}")
+        if not isinstance(comparison, dict) or comparison.get("status") not in {
+            "ahead",
+            "identical",
+        }:
+            raise RuntimeError(
+                f"Merged commit {ancestor} is not contained in {descendant}"
+            )
+    return {
+        "repository": repo,
+        "pull_request": pr_number,
+        "issue_number": issue_number,
+        "issue_state": issue.get("state"),
+        "head_sha": lease["head_sha"],
+        "merge_sha": merge_sha,
+        "route": route,
+        "base_chain": chain,
     }
 
 
@@ -1418,22 +1744,19 @@ def check(args: argparse.Namespace, github: GitHub) -> None:
     sys.stdout.write(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
 
 
-def merge(args: argparse.Namespace, github: GitHub) -> None:
-    """Merge only when both the lease and server-side controls are enforced."""
-    lease = read_lease(args.lease)
-    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
-    snapshot = merge_snapshot(
-        github, lease, args.authorization_url, getattr(args, "actor", "")
-    )
-    if snapshot["merge_mode"] != "agent":
-        raise RuntimeError(
-            "Agent merge is blocked: server-side protection is unavailable or "
-            "incomplete; a human maintainer must merge manually"
-        )
-    snapshot = merge_snapshot(
-        github, lease, args.authorization_url, getattr(args, "actor", "")
-    )
-    title = str(snapshot["title"])
+def merge_exact(
+    args: argparse.Namespace,
+    github: GitHub,
+    lease: dict[str, Any],
+    title: str,
+) -> None:
+    """Perform and verify one synchronous SHA-bound squash merge."""
+    if (
+        str(lease["repository"]).casefold() != args.repo.casefold()
+        or lease["pull_request"] != args.pr_number
+        or lease["head_sha"] != args.head_sha
+    ):
+        raise RuntimeError("Lease does not match the requested pull request")
     confirm_refs(lease)
     if branch_sha(github, args.repo, lease["base_ref"]) != lease["base_sha"]:
         raise RuntimeError(
@@ -1463,7 +1786,85 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
         raise RuntimeError(
             "Merged pull request state does not match the response"
         )
+    if lease["base_ref"] == lease["default_branch"]:
+        release_refs(lease)
+    else:
+        sys.stdout.write(
+            json.dumps(
+                {
+                    "merged": True,
+                    "merge_sha": merge_sha,
+                    "lease": "retained",
+                    "next_action": "close-issue",
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+
+
+def merge(args: argparse.Namespace, github: GitHub) -> None:
+    """Merge only when both the lease and server-side controls are enforced."""
+    lease = read_lease(args.lease)
+    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
+    snapshot = merge_snapshot(
+        github, lease, args.authorization_url, getattr(args, "actor", "")
+    )
+    if snapshot["merge_mode"] != "agent":
+        raise RuntimeError(
+            "Agent merge is blocked: server-side protection is unavailable or "
+            "incomplete; a human maintainer must merge manually"
+        )
+    snapshot = merge_snapshot(
+        github, lease, args.authorization_url, getattr(args, "actor", "")
+    )
+    merge_exact(args, github, lease, str(snapshot["title"]))
+
+
+def merge_quota(args: argparse.Namespace, github: GitHub) -> None:
+    """Merge one routine exact-head zero-step exception under its lease."""
+    lease = read_lease(args.lease)
+    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
+    routine_quota_snapshot(github, lease, getattr(args, "actor", ""))
+    snapshot = routine_quota_snapshot(
+        github, lease, getattr(args, "actor", "")
+    )
+    merge_exact(args, github, lease, str(snapshot["title"]))
+
+
+def close_integrated_issue(args: argparse.Namespace, github: GitHub) -> None:
+    """Close one integrated Issue and release its retained merge lease."""
+    lease = read_lease(args.lease)
+    if (
+        str(lease["repository"]).casefold() != args.repo.casefold()
+        or lease["pull_request"] != args.pr_number
+        or lease["head_sha"] != args.head_sha
+    ):
+        raise RuntimeError("Lease does not match the requested pull request")
+    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
+    snapshot = merged_issue_snapshot(
+        github, lease, getattr(args, "actor", "")
+    )
+    if snapshot["issue_state"] not in {"open", "closed"}:
+        raise RuntimeError("Closing Issue state is unavailable")
+    if snapshot["issue_state"] == "open":
+        snapshot = merged_issue_snapshot(
+            github, lease, getattr(args, "actor", "")
+        )
+        issue_number = snapshot["issue_number"]
+        if not isinstance(issue_number, int):
+            raise RuntimeError("Closing Issue identity is unavailable")
+        result = github.close_issue(args.repo, issue_number)
+        if (
+            result.get("number") != snapshot["issue_number"]
+            or result.get("state") != "closed"
+        ):
+            raise RuntimeError("GitHub did not close the exact Issue")
+        issue = github.get(args.repo, f"issues/{snapshot['issue_number']}")
+        if not isinstance(issue, dict) or issue.get("state") != "closed":
+            raise RuntimeError("Closed Issue state could not be verified")
     release_refs(lease)
+    sys.stdout.write(json.dumps(snapshot, sort_keys=True) + "\n")
 
 
 def release(args: argparse.Namespace, github: GitHub) -> None:
@@ -1974,6 +2375,8 @@ def parser() -> argparse.ArgumentParser:
         "edit",
         "check",
         "merge",
+        "merge-quota",
+        "close-issue",
         "authorization-template",
         "release",
     ):
@@ -2002,7 +2405,7 @@ def parser() -> argparse.ArgumentParser:
     return result
 
 
-def main() -> None:
+def main() -> None:  # noqa: C901
     """Run one fail-closed lifecycle operation."""
     args = parser().parse_args()
     github = GitHub()
@@ -2019,6 +2422,10 @@ def main() -> None:
             edit_metadata(args, github)
         elif args.handler_name == "merge":
             merge(args, github)
+        elif args.handler_name == "merge-quota":
+            merge_quota(args, github)
+        elif args.handler_name == "close-issue":
+            close_integrated_issue(args, github)
         elif args.handler_name == "authorization-template":
             authorization_template(args, github)
         else:

@@ -89,9 +89,9 @@ curl -fsSL '<engineering-practice-url>'
 
 | 證據 | 已觀察摩擦 | 對本提案的要求 |
 | --- | --- | --- |
-| [#238](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/238)／[PR #263](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/263) | PR #237 promotion 後 `delete_branch_on_merge` 刪掉長期 `dev/next`；post-merge workflow 又 zero-step，曾需人工重建。PR #263 已合併 `dev/next`，但本 ADR 不把尚未進本 branch 的行為宣稱為現況。 | 必要 branch 不存在必須 fail closed；保留／恢復需綁定 merged PR 與 current-main identity，`dev/i*` 仍可刪。 |
-| [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240)／[PR #260](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/260) | #236 的 merge call 比另一 task 轉 Draft 早約 1.7 秒；#253 又證明只比 source head 不能防 destination base race。PR #260 已進 `dev/next`，尚未進本 delivery branch。 | 合入後，所有 PR lifecycle writes 以跨 process lease 序列化，merge 前重讀 live source、destination、Draft、blocker 與 authorization；這是 future automation，不是現行 #254 routine fallback 的前置條件。 |
-| [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254) | Teams private plan 的 quota block 是日常條件；#254 已讓 routine PR 以 exact-head canonical note 配合 Alpha self-merge，不再逐張等第二則 human authorization。 | 保留已生效的 single-note routine fallback；#240 日後只補 writer 互斥，promotion 仍不簡化。 |
+| [#238](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/238)／[PR #263](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/263) | PR #237 promotion 後 `delete_branch_on_merge` 刪掉長期 `dev/next`；post-merge workflow 又 zero-step，曾需人工重建。PR #263 已合併 `dev/next`，其 exact squash 由 #266 candidate 移植到本 delivery 路徑。 | 本 candidate 已讓必要 branch 不存在時 fail closed，並把保留／恢復綁定 merged PR 與 current-main identity；`dev/i*` 仍可刪。 |
+| [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240)／[PR #260](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/260) | #236 的 merge call 比另一 task 轉 Draft 早約 1.7 秒；#253 又證明只比 source head 不能防 destination base race。PR #260 已進 `dev/next`，其 exact squash 由 #266 candidate 移植到本 delivery 路徑。 | 本 candidate 已用跨 process lease 序列化 PR lifecycle writes，並在 merge 前重讀 live source、destination、Draft、blocker 與 authorization。生效仍取決於 #266 完成 review、full verification 與合併。 |
+| [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254) | Teams private plan 的 quota block 是日常條件；#254 已讓 routine PR 以 exact-head canonical note 配合 Alpha self-merge，不再逐張等第二則 human authorization。 | 保留已生效的 single-note routine fallback；#266 candidate 已組合 #240 writer 互斥，promotion 仍不簡化。 |
 | [#261](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/261) | #261 已允許 targeted checks 後先開 Draft，讓遠端可見 owner、scope、依賴與待完成驗證。 | 保留現行 early Draft ownership；Ready 前才完成 acceptance 與完整驗證。 |
 
 ## 決定
@@ -134,7 +134,7 @@ stateDiagram-v2
 | `Open` | Issue 尚未有有效 owner／Draft | 團隊使用者或 agent 可認領 | branch 存在不等於已認領，仍要查 PR／worktree。 |
 | `Draft` | 一張對正確 base 的 Draft 公開 scope、owner、依賴與待辦 | Issue owner 可更新；其他人 review-only | 不可 merge、不可用 closing keyword 宣稱完成、不可視為已通過 full verify。 |
 | `Ready` | acceptance 完成、targeted 與完整本機驗證通過、無較新的 blocker | Issue owner可請 review；reviewer 決定 approval | Ready 不等於有 merge authority，且新 commit／base drift 會退回待驗證。 |
-| `Integrated` | exact Issue candidate 已受審查合併到正確 delivery branch | lease holder 或 human maintainer | 非 default base 的 closing keyword 不保證 Issue 已關；必要時由 lifecycle 補正。 |
+| `Integrated` | exact Issue candidate 已受審查合併到正確 delivery branch，且 Issue 已關閉 | lease holder 或 human maintainer | 非 default base 的 closing keyword 不保證 Issue 已關；lifecycle 保留 merge lease，並以 `close-issue` 重驗 route／containment／checklist 後補正。 |
 | `Candidate` | delivery scope 完成、包含 current `main`，promotion evidence 綁定 live base/head/tree | delivery owner 建立；human／platform核准例外 | artifact-only 不等於 external canary，local fallback 不等於 release evidence。 |
 | `Delivered` | verified candidate 已進 `main` 且 post-merge tree identity 成立 | human 或受保護 automation | merge timestamp 本身不證明 release／provenance 成功。 |
 
@@ -155,7 +155,7 @@ flowchart LR
 
 | 類別 | 判定 | 必要 gate | 例外授權 |
 | --- | --- | --- | --- |
-| Routine Issue | docs、局部行為或已知低風險路徑，route classifier 能完整解釋 | targeted behavior checks、policy、fast、stable aggregate；Ready 前一次完整本機驗證 | 現行 #254 已允許 zero-step quota 的 canonical note／Alpha self-merge；#240 日後只增加 writer serialization。 |
+| Routine Issue | docs、局部行為或已知低風險路徑，route classifier 能完整解釋 | targeted behavior checks、policy、fast、stable aggregate；Ready 前一次完整本機驗證 | 現行 #254 已允許 zero-step quota 的 canonical note／Alpha self-merge；#266 candidate 已把 #240 writer serialization 接入同一路徑。 |
 | Elevated Issue | workflow、權限、security、dependency／lock、governance、release、跨 profile 或 unknown path | full tier、獨立 human review、exact source/destination 再確認 | 只有 human maintainer 可接受風險或改分類；不能用 quota note 自動降級。 |
 | Promotion／hotfix | 任何進 `main` 的 delivery candidate 或正式環境緊急修正 | current-main、full、candidate tree、review、canary 三態、post-merge identity | quota fallback 仍需 human attestation／authorization；release-only controls 不可本機取代。 |
 | Periodic／release | drift、OSV、Zizmor、artifact、SBOM、provenance | 排程或 verified main source；idempotent evidence | 不阻塞 routine PR，但失敗會阻止受影響 promotion／release。 |
@@ -200,10 +200,11 @@ control plane、供應鏈與 promotion／release boundary 解釋。
 ## 重新評估條件
 
 本 ADR 維持 `Proposed`。已落地的 #254 routine quota、#261 early Draft ownership 與 #265
-behavior-oriented tests 是現行基線，必須持續保留；#240 single-writer／live destination
-guard 與 #266 path automation 進入本 delivery branch，每張實作 Issue 各自完成 root／
-template、targeted regression 與 `./scripts/verify-template.sh`，並經維護者審查後，才能把
-本提案改為 `Accepted`。本 PR 不預先修改 workflow，也不把 future automation 宣稱為 active。
+behavior-oriented tests，以及由 #266 candidate 整合的 #238／#240 行為與 path automation，
+是目前的 implementation candidate。#266 仍須完成獨立審查、exact-head
+`./scripts/verify-template.sh` 與 delivery merge；#268 另須保存實際 walkthrough 的人工接觸點、
+等待與 recovery evidence。兩者完成並經維護者審查後，才能把本提案改為 `Accepted`；fixture
+regressions 與 read-only smoke 不等於 #268 的 operational walkthrough。
 
 Milestone #9 應以政策草案的 scenarios 執行 fixture／live dry-run，記錄人工接觸點、等待、
 checks 與復原。#189 的 hosted runner-minute 仍獨立驗收。若實測顯示 routine latency 未降、

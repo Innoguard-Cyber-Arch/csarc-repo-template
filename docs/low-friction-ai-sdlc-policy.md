@@ -1,9 +1,9 @@
 # Low-friction AI SDLC policy（提案）
 
-> **尚未生效。** 本頁是 [Issue #264](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/264)
-> 的可驗收草案。現行操作仍以 `AGENTS.md` 與
-> [`docs/ci-policy.md`](ci-policy.md) 為準；後續 Issues 完成實作與同步後，才能把本頁
-> 狀態改為 Accepted。
+> **尚未全面生效。** 本頁是 [Issue #264](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/264)
+> 的可驗收草案。#240 與 #266 已由目前的 #266 candidate 整合；現行操作仍以
+> `AGENTS.md` 與 [`docs/ci-policy.md`](ci-policy.md) 為準。#266 完成 review／full
+> verification／merge 且 #268 留下實際 walkthrough evidence 後，才能把本頁改為 Accepted。
 
 設計依據、外部比較、現況摩擦與 decision disposition 見
 [`low-friction-ai-sdlc.md`](adr/low-friction-ai-sdlc.md)。這份草案只保留團隊使用者與
@@ -26,7 +26,9 @@ agent 執行工作需要知道的最短路徑。
    Ready 並請求正式 review。
 6. **依風險合併 delivery。** Routine PR 跑 policy／fast／stable aggregate；elevated PR
    升 full 並要求 human review。只有持有 #240 lifecycle lease 的 writer，或 degraded
-   模式下的 human maintainer，可以執行 Ready／Draft／metadata／merge 寫入。
+   模式下的 human maintainer，可以執行 Ready／Draft／metadata／merge 寫入。非 default
+   merge 會保留 lease，直到同一 actor 以 canonical `close-issue` 重新驗證 route／containment
+   與 checklist，補正 GitHub 不會自動關閉的 Issue。
 7. **在 delivery boundary 才 promotion。** delivery owner 等 batch／Milestone scope
    完成，先以 reviewed PR 同步 current `main`，再以 immutable base/head/tree 跑 full、
    canary 三態與 promotion evidence。合併 `main` 後核對 tree identity，才進 release。
@@ -60,8 +62,9 @@ promotion。不同 delivery branches 不互相 merge，也不直接 push。
 - **Routine、非 elevated Issue PR：**現行 #254 流程會確認所有失敗 jobs 都是相同 exact
   head 的 zero-step billing block，由 canonical tool 重跑完整本機驗證並留一則
   `Actions quota fallback note`；在 Alpha self-merge 政策下不要求每張 PR 另等 human
-  authorization。#240 合入本 delivery 且本提案 Accepted 後，lease／live destination
-  guard 會再序列化同一路徑，但不撤回或延後已生效的 #254 fallback。
+  authorization。#266 candidate 已整合 #240 lease／live destination guard；它在 #266
+  通過 review、full verification 並合入 delivery 後序列化同一路徑，但不撤回或延後已
+  生效的 #254 fallback。
 - **Elevated Issue PR：**不因 quota 自動降級；由 human maintainer 判斷是否可用現行
   SHA-bound fallback。
 - **Promotion／hotfix：**維持 attestation + authorization、candidate archive、tree
@@ -71,7 +74,8 @@ promotion。不同 delivery branches 不互相 merge，也不直接 push。
 ## 可驗收 scenarios
 
 每個 scenario 都要保存起始 refs、PR base/head、選到的 tier、人工接觸點、等待、結果與
-恢復動作。`Then` 是未來實作的 acceptance contract，不表示本 PR 已提供該 automation。
+恢復動作。#266 candidate 已提供自動推導與 fixture regressions，但不代表 #268 已完成真實
+operational walkthrough；以下 `Then` 仍是該 walkthrough 的 acceptance contract。
 
 ### 1. 一般 Milestone Issue
 
@@ -139,7 +143,8 @@ promotion。不同 delivery branches 不互相 merge，也不直接 push。
 
 ## 生效條件
 
-本草案不直接改變任何 workflow。至少 #240、#254、#261、#265、#266 的對應實作、
-root／template parity、regression checks 與完整 template verification 完成，且維護者審查
-本 ADR 後，才能把狀態改為 Accepted 並收斂現行 `AGENTS.md`／`docs/ci-policy.md`。任何
-尚未完成的自動化都維持現行 fail-closed 手動流程。
+#254、#261 與 #265 已是 delivery 基線；#266 candidate 已整合 #238、#240、path status、
+root／template parity 與 regressions。剩餘 activation evidence 是 #266 的獨立 final review、
+exact-head full template verification 與 delivery merge，以及 #268 保存的實際 walkthrough
+artifact／comment。完成前本 ADR 維持 Proposed，任何尚未生效的自動化都維持 fail-closed
+手動流程。

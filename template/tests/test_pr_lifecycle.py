@@ -8,6 +8,7 @@ import re
 import runpy
 import shutil
 import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -17,9 +18,9 @@ from typing import Any
 
 import pytest
 
-MODULE = runpy.run_path(
-    str(Path(__file__).parents[1] / "scripts" / "pr_lifecycle.py")
-)
+SCRIPTS = Path(__file__).parents[1] / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+MODULE = runpy.run_path(str(SCRIPTS / "pr_lifecycle.py"))
 acquire = MODULE["acquire"]
 audit_message = MODULE["audit_message"]
 authorization = MODULE["authorization"]
@@ -30,13 +31,17 @@ confirm_refs = MODULE["confirm_refs"]
 create_refs = MODULE["create_refs"]
 edit_metadata = MODULE["edit_metadata"]
 edit_standalone_issue = MODULE["edit_standalone_issue"]
+close_integrated_issue = MODULE["close_integrated_issue"]
 expired_remote_lease = MODULE["expired_remote_lease"]
 GitHub = MODULE["GitHub"]
 LEASE_CORE_FIELDS = MODULE["LEASE_CORE_FIELDS"]
 lease_message = MODULE["lease_message"]
 lease_status_snapshot = MODULE["lease_status_snapshot"]
 merge = MODULE["merge"]
+merge_quota = MODULE["merge_quota"]
+merged_issue_snapshot = MODULE["merged_issue_snapshot"]
 merge_snapshot = MODULE["merge_snapshot"]
+routine_quota_snapshot = MODULE["routine_quota_snapshot"]
 read_lease = MODULE["read_lease"]
 require_lease = MODULE["require_lease"]
 require_successful_checks = MODULE["require_successful_checks"]
@@ -87,7 +92,12 @@ class FakeGitHub:
         self.commit_payloads: dict[str, dict[str, Any]] = {}
         self.labels = {"bug"}
         self.milestone: str | None = None
-        self.body = "Ready for review."
+        self.body = "Closes #266\n\nAlpha 自行合併 / self-merged"
+        self.files = ["src/app.py"]
+        self.head_ref = "dev/next"
+        self.issue_state = "open"
+        self.contained = True
+        self.closed_issues: list[int] = []
 
     def viewer(self, explicit_actor: str = "") -> str:
         """Return the task's authenticated actor."""
@@ -100,6 +110,7 @@ class FakeGitHub:
             "number": number,
             "state": "closed" if self.merged else "open",
             "merged": self.merged,
+            "merged_at": "2026-08-25T02:00:00Z" if self.merged else None,
             "merge_commit_sha": "d" * 40 if self.merged else None,
             "draft": self.draft,
             "title": "fix(ci): serialize lifecycle writes",
@@ -112,7 +123,7 @@ class FakeGitHub:
             ),
             "base": {"ref": self.base_ref, "sha": self.base_sha},
             "head": {
-                "ref": "dev/next",
+                "ref": self.head_ref,
                 "sha": self.head,
                 "repo": {"full_name": "owner/repo"},
             },
@@ -129,7 +140,7 @@ class FakeGitHub:
             pull = self.pull()
             pull["number"] = int(pull_match.group(1))
             return pull
-        if path == "git/ref/heads/main":
+        if path == f"git/ref/heads/{self.base_ref.replace('/', '%2F')}":
             return {
                 "object": {
                     "sha": "d" * 40 if self.merged else self.destination_sha
@@ -155,6 +166,16 @@ class FakeGitHub:
                 "permission": self.permission,
                 "user": {"login": self.authorization_actor},
             }
+        if path == "issues/266":
+            return {
+                "number": 266,
+                "state": self.issue_state,
+                "body": "- [x] Done",
+                "labels": [],
+                "milestone": None,
+            }
+        if path.startswith("compare/"):
+            return {"status": "ahead" if self.contained else "diverged"}
         if path == "rules/branches/main":
             if not self.protected:
                 raise RuntimeError("Upgrade to GitHub Pro")
@@ -243,6 +264,18 @@ class FakeGitHub:
             return self.inline_comments
         if path.startswith("pulls/42/reviews"):
             return self.reviews
+        if path.startswith("pulls/42/files"):
+            return [{"filename": name} for name in self.files]
+        if path.startswith("branches?"):
+            return [
+                {"name": "main", "commit": {"sha": "m" * 40}},
+                {
+                    "name": "dev/next",
+                    "commit": {"sha": "d" * 40},
+                },
+            ]
+        if path.startswith("pulls?state=all"):
+            return [self.pull()]
         raise AssertionError(path)
 
     def comment(self, _repo: str, number: int, body: str) -> dict[str, Any]:
@@ -273,6 +306,14 @@ class FakeGitHub:
         assert head_sha == self.head
         self.merged = True
         return {"merged": True, "sha": "d" * 40}
+
+    def close_issue(
+        self, _repo: str, issue_number: int
+    ) -> dict[str, Any]:
+        """Record one verified Issue close."""
+        self.closed_issues.append(issue_number)
+        self.issue_state = "closed"
+        return {"number": issue_number, "state": "closed"}
 
 
 def git(path: Path, *arguments: str) -> str:
@@ -1225,6 +1266,28 @@ def test_merge_snapshot_allows_agent_only_with_enforced_no_bypass_rules(
     assert snapshot["merge_mode"] == "human-only"
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        "Closes other/repo#266",
+        "Closes #266\n\nFixes owner/repo#267",
+    ],
+)
+def test_merge_snapshot_requires_exactly_one_local_closer(
+    body: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A foreign or extra closer cannot pass the final merge snapshot."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.body = body
+    with pytest.raises(RuntimeError, match="exactly one closing reference"):
+        merge_snapshot(
+            github,
+            lease_fixture(),
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+        )
+
+
 def test_commented_review_does_not_clear_requested_changes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1600,6 +1663,325 @@ def test_merge_never_calls_gh_when_protection_is_degraded(
     assert not called
 
 
+def test_routine_quota_snapshot_reuses_exact_note_and_zero_step_proof(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A routine exception needs one exact note and every live failed run."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.head_ref = "feat/266-routine"
+    run_url = "https://github.com/owner/repo/actions/runs/123"
+    zero_step: list[str] = []
+    monkeypatch.setitem(
+        routine_quota_snapshot.__globals__,
+        "local_branch_strategy",
+        lambda: "main",
+    )
+    monkeypatch.setitem(
+        routine_quota_snapshot.__globals__,
+        "failed_pull_request_run_urls",
+        lambda *_: [run_url],
+    )
+    monkeypatch.setitem(
+        routine_quota_snapshot.__globals__,
+        "require_zero_step_run",
+        lambda url, *_: zero_step.append(url),
+    )
+    monkeypatch.setitem(
+        routine_quota_snapshot.__globals__,
+        "has_exact_quota_note",
+        lambda comments, repo, number, sha, urls, signer: (
+            comments == []
+            and repo == "owner/repo"
+            and number == 42
+            and sha == "a" * 40
+            and urls == [run_url]
+            and signer == "agent"
+        ),
+    )
+    snapshot = routine_quota_snapshot(github, lease_fixture())
+    assert snapshot["merge_mode"] == "routine-quota"
+    assert snapshot["blocked_run_urls"] == [run_url]
+    assert zero_step == [run_url]
+
+
+@pytest.mark.parametrize(
+    ("note_matches", "zero_step_error", "message"),
+    [
+        (False, None, "canonical routine quota note"),
+        (True, "job ran steps", "job ran steps"),
+    ],
+)
+def test_routine_quota_snapshot_rejects_stale_or_nonzero_evidence(
+    note_matches: bool,
+    zero_step_error: str | None,
+    message: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale note or executed job cannot authorize the quota exception."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.head_ref = "feat/266-routine"
+    run_url = "https://github.com/owner/repo/actions/runs/123"
+    monkeypatch.setitem(
+        routine_quota_snapshot.__globals__,
+        "local_branch_strategy",
+        lambda: "main",
+    )
+    monkeypatch.setitem(
+        routine_quota_snapshot.__globals__,
+        "failed_pull_request_run_urls",
+        lambda *_: [run_url],
+    )
+
+    def require_run(*_args: object) -> None:
+        if zero_step_error:
+            raise RuntimeError(zero_step_error)
+
+    monkeypatch.setitem(
+        routine_quota_snapshot.__globals__, "require_zero_step_run", require_run
+    )
+    monkeypatch.setitem(
+        routine_quota_snapshot.__globals__,
+        "has_exact_quota_note",
+        lambda *_: note_matches,
+    )
+    with pytest.raises(RuntimeError, match=message):
+        routine_quota_snapshot(github, lease_fixture())
+
+
+@pytest.mark.parametrize(
+    ("labels", "files"),
+    [({"promotion"}, ["src/app.py"]), ({"bug"}, [".github/workflows/ci.yml"])]
+)
+def test_routine_quota_snapshot_rejects_promotion_and_elevated_work(
+    labels: set[str], files: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The no-authorization exception cannot cross its routine risk boundary."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.head_ref = "feat/266-routine"
+    github.labels = labels
+    github.files = files
+    monkeypatch.setitem(
+        routine_quota_snapshot.__globals__,
+        "local_branch_strategy",
+        lambda: "main",
+    )
+    with pytest.raises(
+        RuntimeError, match="rejects promotion, hotfix, elevated"
+    ):
+        routine_quota_snapshot(github, lease_fixture())
+
+
+def test_routine_quota_snapshot_rejects_a_foreign_closer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A same-number foreign Issue cannot be closed by the quota path."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.head_ref = "feat/266-routine"
+    github.body = (
+        "Closes other/repo#266\n\nAlpha 自行合併 / self-merged"
+    )
+    monkeypatch.setitem(
+        routine_quota_snapshot.__globals__,
+        "local_branch_strategy",
+        lambda: "main",
+    )
+    with pytest.raises(RuntimeError, match="exactly one closing reference"):
+        routine_quota_snapshot(github, lease_fixture())
+
+
+def test_merge_quota_rechecks_the_snapshot_without_authorization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The quota mutation takes a final snapshot without an authorization."""
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
+    snapshots = 0
+    merged = False
+
+    def snapshot(*_args: object) -> dict[str, object]:
+        nonlocal snapshots
+        snapshots += 1
+        return {"title": "fix(ci): merge a routine quota PR"}
+
+    def merge_once(*_args: object) -> None:
+        nonlocal merged
+        merged = True
+
+    monkeypatch.setitem(
+        merge_quota.__globals__, "routine_quota_snapshot", snapshot
+    )
+    monkeypatch.setitem(merge_quota.__globals__, "merge_exact", merge_once)
+    merge_quota(
+        SimpleNamespace(
+            repo="owner/repo",
+            pr_number=42,
+            head_sha="a" * 40,
+            owner="task/merge",
+            lease=lease_path,
+            actor="agent",
+        ),
+        FakeGitHub("a" * 40),
+    )
+    assert snapshots == 2
+    assert merged
+
+
+def test_merge_quota_stops_when_the_final_snapshot_finds_a_blocker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A blocker arriving after preflight prevents the quota merge mutation."""
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
+    snapshots = 0
+
+    def snapshot(*_args: object) -> dict[str, object]:
+        nonlocal snapshots
+        snapshots += 1
+        if snapshots == 2:
+            raise RuntimeError("An unresolved blocking comment prevents merge")
+        return {"title": "fix(ci): merge a routine quota PR"}
+
+    monkeypatch.setitem(
+        merge_quota.__globals__, "routine_quota_snapshot", snapshot
+    )
+    monkeypatch.setitem(
+        merge_quota.__globals__,
+        "merge_exact",
+        lambda *_: pytest.fail("merge mutation was reached"),
+    )
+    with pytest.raises(RuntimeError, match="unresolved blocking comment"):
+        merge_quota(
+            SimpleNamespace(
+                repo="owner/repo",
+                pr_number=42,
+                head_sha="a" * 40,
+                owner="task/merge",
+                lease=lease_path,
+                actor="agent",
+            ),
+            FakeGitHub("a" * 40),
+        )
+
+
+@pytest.mark.parametrize("already_closed", [False, True])
+def test_close_issue_revalidates_integration_and_releases_retained_lease(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    already_closed: bool,
+) -> None:
+    """The retained merge lease makes non-default Issue close auditable."""
+    lease = lease_fixture()
+    lease["base_ref"] = "dev/next"
+    lease["refs"] = [
+        "refs/heads/csarc/leases/pr-42",
+        base_lane_ref("dev/next"),
+    ]
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease), encoding="utf-8")
+    github = FakeGitHub("a" * 40)
+    github.base_ref = "dev/next"
+    github.head_ref = "feat/266-path-status"
+    github.merged = True
+    github.issue_state = "closed" if already_closed else "open"
+    github.canonical_lease = lease
+    monkeypatch.setitem(
+        merged_issue_snapshot.__globals__, "require_origin", lambda _repo: None
+    )
+    monkeypatch.setitem(
+        merged_issue_snapshot.__globals__, "remote_ref", lambda _ref: "c" * 40
+    )
+    monkeypatch.setitem(
+        merged_issue_snapshot.__globals__,
+        "local_branch_strategy",
+        lambda: "delivery",
+    )
+    released = False
+
+    def record_release(_lease: dict[str, Any]) -> None:
+        nonlocal released
+        released = True
+
+    monkeypatch.setitem(
+        close_integrated_issue.__globals__, "release_refs", record_release
+    )
+    close_integrated_issue(
+        SimpleNamespace(
+            repo="owner/repo",
+            pr_number=42,
+            head_sha="a" * 40,
+            owner="task/merge",
+            lease=lease_path,
+            actor="agent",
+        ),
+        github,
+    )
+    assert github.issue_state == "closed"
+    assert github.closed_issues == ([] if already_closed else [266])
+    assert released
+
+
+@pytest.mark.parametrize("failure", ["containment", "checklist", "branch"])
+def test_close_issue_fails_closed_before_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    """Drifted containment or incomplete acceptance keeps the Issue open."""
+    lease = lease_fixture()
+    lease["base_ref"] = "dev/next"
+    lease["refs"] = [
+        "refs/heads/csarc/leases/pr-42",
+        base_lane_ref("dev/next"),
+    ]
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease), encoding="utf-8")
+    github = FakeGitHub("a" * 40)
+    github.base_ref = "dev/next"
+    github.head_ref = "feat/266-path-status"
+    github.merged = True
+    github.canonical_lease = lease
+    if failure == "containment":
+        github.contained = False
+    elif failure == "checklist":
+        github.body += "\n\n- [ ] unfinished"
+    else:
+        github.head_ref = "feat/999-wrong-issue"
+    monkeypatch.setitem(
+        merged_issue_snapshot.__globals__, "require_origin", lambda _repo: None
+    )
+    monkeypatch.setitem(
+        merged_issue_snapshot.__globals__, "remote_ref", lambda _ref: "c" * 40
+    )
+    monkeypatch.setitem(
+        merged_issue_snapshot.__globals__,
+        "local_branch_strategy",
+        lambda: "delivery",
+    )
+    monkeypatch.setitem(
+        close_integrated_issue.__globals__,
+        "release_refs",
+        lambda _lease: pytest.fail("unexpected lease release"),
+    )
+    with pytest.raises(RuntimeError):
+        close_integrated_issue(
+            SimpleNamespace(
+                repo="owner/repo",
+                pr_number=42,
+                head_sha="a" * 40,
+                owner="task/merge",
+                lease=lease_path,
+                actor="agent",
+            ),
+            github,
+        )
+    assert github.issue_state == "open"
+    assert not github.closed_issues
+
+
 def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1654,6 +2036,53 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
     assert mutations == ["lease-cas", "merge-put"]
     assert github.merged
     assert released
+
+
+def test_non_default_merge_retains_lease_for_issue_close(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A delivery merge remains serialized until its Issue is closed."""
+    lease = lease_fixture()
+    lease["base_ref"] = "dev/next"
+    lease["refs"] = [
+        "refs/heads/csarc/leases/pr-42",
+        base_lane_ref("dev/next"),
+    ]
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease), encoding="utf-8")
+    monkeypatch.setitem(
+        merge.__globals__,
+        "merge_snapshot",
+        lambda *_: {
+            "merge_mode": "agent",
+            "title": "fix(ci): serialize lifecycle writes",
+        },
+    )
+    monkeypatch.setitem(merge.__globals__, "confirm_refs", lambda _lease: None)
+    monkeypatch.setitem(
+        merge.__globals__,
+        "release_refs",
+        lambda _lease: pytest.fail("delivery lease was released early"),
+    )
+    github = FakeGitHub("a" * 40)
+    github.base_ref = "dev/next"
+    merge(
+        SimpleNamespace(
+            repo="owner/repo",
+            pr_number=42,
+            head_sha="a" * 40,
+            owner="task/merge",
+            lease=lease_path,
+            authorization_url=(
+                "https://github.com/owner/repo/pull/42#issuecomment-99"
+            ),
+        ),
+        github,
+    )
+    assert github.merged
+    assert '"lease": "retained"' in capsys.readouterr().out
 
 
 def test_final_merge_snapshot_rejects_a_new_p1_blocker(

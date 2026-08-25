@@ -32,10 +32,21 @@ def scope_for(path: str) -> str:
         or name in {"action.yml", "action.yaml", "zizmor.yml"}
     ):
         return "workflow"
-    if path in {".github/CODEOWNERS", ".github/REVIEWERS", "AGENTS.md"} or (
+    if (
+        name
+        in {
+            "ci_tier.py",
+            "delivery_sync.py",
+            "issue_path_status.py",
+            "pr_lifecycle.py",
+            "promotion_gate.py",
+        }
+        or path in {".github/CODEOWNERS", ".github/REVIEWERS", "AGENTS.md"}
+        or (
         path.startswith(("policies/", "template/policies/"))
         or path.startswith("scripts/apply-repository-settings")
         or path.startswith("scripts/check-governance-drift")
+        )
     ):
         return "governance"
     if (
