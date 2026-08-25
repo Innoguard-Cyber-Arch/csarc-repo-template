@@ -36,6 +36,7 @@ PROVENANCE_FILE = Path(".csarc/provenance.json")
 PENDING_ADOPTION_FILE = Path(".csarc/adoption-pending.json")
 ADOPTION_REPORT_BASENAME = "csarc-adoption-dry-run"
 ADOPTION_PLAN_BASENAME = "csarc-adoption-plan.json"
+LIFECYCLE_PLAN_BASENAME = "csarc-{mode}-plan.json"
 AGENTS_BLOCK_START = "<!-- BEGIN CSARC MANAGED BLOCK -->"
 AGENTS_BLOCK_END = "<!-- END CSARC MANAGED BLOCK -->"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
@@ -140,6 +141,7 @@ class Plan:
     merge: tuple[str, ...]
     manual: tuple[str, ...]
     unknown: tuple[str, ...]
+    delete: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -180,6 +182,7 @@ class ResolvedPlan:
     files: Plan | None = None
     update: dict[str, object] | None = None
     adoption: dict[str, object] | None = None
+    transaction: dict[str, object] | None = None
 
     def as_dict(self) -> dict[str, object]:
         """Return the stable machine-readable plan representation."""
@@ -208,11 +211,14 @@ class ResolvedPlan:
                 "overwrite": list(self.files.overwrite),
                 "preserve": list(self.files.preserve),
                 "unknown": list(self.files.unknown),
+                "delete": list(self.files.delete),
             }
         if self.update is not None:
             result.update(self.update)
         if self.adoption is not None:
             result["adoption"] = self.adoption
+        if self.transaction is not None:
+            result["transaction"] = self.transaction
         return result
 
 
@@ -1336,7 +1342,7 @@ def adoption_report_directory(target: Path, requested: Path | None) -> Path:
     return directory
 
 
-def adoption_plan_payload(plan: ResolvedPlan) -> dict[str, object]:
+def machine_plan_payload(plan: ResolvedPlan) -> dict[str, object]:
     """Return a tamper-evident plan ready for persistence."""
     payload = plan.as_dict()
     encoded = json.dumps(
@@ -1344,6 +1350,11 @@ def adoption_plan_payload(plan: ResolvedPlan) -> dict[str, object]:
     ).encode()
     payload["plan_sha256"] = hashlib.sha256(encoded).hexdigest()
     return payload
+
+
+def adoption_plan_payload(plan: ResolvedPlan) -> dict[str, object]:
+    """Return a tamper-evident adoption plan."""
+    return machine_plan_payload(plan)
 
 
 def directory_fd_matches_path(directory_fd: int, path: Path) -> bool:
@@ -1452,23 +1463,80 @@ def atomic_replace_text(destination: Path, content: str) -> None:
         os.close(parent_fd)
 
 
-def read_adoption_plan(path: Path) -> dict[str, object]:
+def read_machine_plan(path: Path) -> dict[str, object]:
     """Read a machine plan and reject accidental or malicious edits."""
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise CliError(f"Cannot read adoption plan from {path}.") from error
+        raise CliError(f"Cannot read machine plan from {path}.") from error
     if not isinstance(payload, dict):
-        raise CliError("Adoption plan must be a JSON object.")
+        raise CliError("Machine plan must be a JSON object.")
     expected = payload.pop("plan_sha256", None)
     encoded = json.dumps(
         payload, sort_keys=True, separators=(",", ":")
     ).encode()
     actual = hashlib.sha256(encoded).hexdigest()
     if not isinstance(expected, str) or expected != actual:
-        raise CliError("Adoption plan digest does not match its contents.")
+        raise CliError("Machine plan digest does not match its contents.")
     payload["plan_sha256"] = expected
     return payload
+
+
+def read_adoption_plan(path: Path) -> dict[str, object]:
+    """Read one tamper-evident adoption plan."""
+    return read_machine_plan(path)
+
+
+def authorize_plan_release(
+    payload: Mapping[str, object], allow_unreleased: bool
+) -> None:
+    """Require explicit authorization when replaying an unverified plan."""
+    verification = plan_mapping(payload, "template").get("verification")
+    if verification not in {"verified", "unverified"}:
+        raise CliError("Machine plan has invalid template verification.")
+    if verification == "unverified" and not allow_unreleased:
+        raise CliError(
+            "Applying an unreleased template plan requires "
+            "--allow-unreleased again."
+        )
+    if verification == "verified" and allow_unreleased:
+        raise CliError("--allow-unreleased is not valid for a verified plan.")
+    if allow_unreleased:
+        print(
+            "WARNING: --allow-unreleased bypasses release identity, "
+            "immutability, attestation, and signature verification.",
+            file=sys.stderr,
+        )
+
+
+def lifecycle_plan_path(
+    target: Path, mode: str, requested: Path | None
+) -> Path:
+    """Resolve an init or update plan path outside the target repository."""
+    path = (
+        requested.expanduser().resolve()
+        if requested is not None
+        else target.parent
+        / f"{target.name}-{LIFECYCLE_PLAN_BASENAME.format(mode=mode)}"
+    )
+    if path == target or target in path.parents:
+        raise CliError("Machine plans must be written outside the target repo.")
+    return path
+
+
+def write_lifecycle_plan(
+    plan: ResolvedPlan, requested: Path | None, *, emit: bool = True
+) -> Path:
+    """Atomically write an init or update transaction plan."""
+    path = lifecycle_plan_path(plan.target, plan.mode, requested)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_replace_text(
+        path,
+        json.dumps(machine_plan_payload(plan), indent=2, sort_keys=True) + "\n",
+    )
+    if emit:
+        print(f"Machine plan: {path}")
+    return path
 
 
 def adoption_binding(payload: dict[str, object]) -> dict[str, object]:
@@ -1485,6 +1553,95 @@ def adoption_binding(payload: dict[str, object]) -> dict[str, object]:
         "target": payload.get("target"),
         "template": payload.get("template"),
     }
+
+
+def transaction_binding(payload: dict[str, object]) -> dict[str, object]:
+    """Return the init or update fields that must match before apply."""
+    transaction = payload.get("transaction")
+    if not isinstance(transaction, dict):
+        raise CliError("Machine plan has no transaction state.")
+    return {
+        "answers": payload.get("answers"),
+        "files": payload.get("files"),
+        "mode": payload.get("mode"),
+        "repository": payload.get("repository"),
+        "target": payload.get("target"),
+        "template": payload.get("template"),
+        "transaction": transaction,
+        "update": (
+            {
+                key: value
+                for key, value in payload.items()
+                if key
+                in {
+                    "answers_changed",
+                    "capabilities_changed",
+                    "current_sha",
+                    "current_verification",
+                    "current_version",
+                    "source",
+                    "status",
+                    "target_sha",
+                    "target_verification",
+                    "target_version",
+                    "update_available",
+                }
+            }
+            if payload.get("mode") == "update"
+            else None
+        ),
+    }
+
+
+def plan_mapping(payload: Mapping[str, object], key: str) -> dict[str, object]:
+    """Return one required mapping from a persisted machine plan."""
+    value = payload.get(key)
+    if not isinstance(value, dict):
+        raise CliError(f"Machine plan has no valid {key} object.")
+    return {str(name): item for name, item in value.items()}
+
+
+def plan_revision(payload: Mapping[str, object]) -> Revision:
+    """Re-resolve the exact release identity stored by a machine plan."""
+    template = plan_mapping(payload, "template")
+    source = template.get("source")
+    release = template.get("release")
+    sha = template.get("sha")
+    verification = template.get("verification")
+    if (
+        not isinstance(source, str)
+        or not isinstance(release, str)
+        or not isinstance(sha, str)
+        or verification not in {"verified", "unverified"}
+    ):
+        raise CliError("Machine plan has invalid template identity.")
+    return resolve_revision(
+        source,
+        release,
+        expected_sha=sha,
+        allow_unreleased=verification == "unverified",
+    )
+
+
+def plan_repository_context(
+    target: Path,
+    payload: Mapping[str, object],
+    answers: Mapping[str, object],
+    *,
+    use_saved_visibility: bool = False,
+) -> tuple[RepositoryContext, str | None, str | None]:
+    """Re-resolve the repository facts stored by a machine plan."""
+    saved = plan_mapping(payload, "repository")
+    visibility = answers.get("project_visibility")
+    if not isinstance(visibility, str):
+        raise CliError("Machine plan has no project_visibility answer.")
+    explicit = visibility if saved.get("source") == "explicit" else None
+    saved_visibility = visibility if use_saved_visibility else None
+    return (
+        repository_context(target, explicit, saved_visibility=saved_visibility),
+        explicit,
+        saved_visibility,
+    )
 
 
 def json_differences(
@@ -1752,6 +1909,7 @@ def print_plan(plan: ResolvedPlan) -> None:
         print_group("Automatic merge", plan.files.merge)
         print_group("Manual merge", plan.files.manual)
         print_group("Unable to determine", plan.files.unknown)
+        print_group("Delete", plan.files.delete)
         status, reason = plan_status(plan.files)
         print(f"Conflict risk: {status} - {reason}")
     elif plan.update is not None:
@@ -1770,24 +1928,6 @@ def confirm(args: argparse.Namespace) -> bool:
             "--non-interactive requires --yes before files may change."
         )
     return input("Apply this plan? [y/N] ").strip().lower() in {"y", "yes"}
-
-
-def require_unreleased_plan_opt_in(
-    verification: object, allow_unreleased: bool
-) -> None:
-    """Require a fresh explicit trust bypass when applying an unsafe plan."""
-    if verification not in {"unverified", "development-unreleased"}:
-        return
-    if not allow_unreleased:
-        raise CliError(
-            "Applying an unreleased template plan requires "
-            "--allow-unreleased again."
-        )
-    print(
-        "WARNING: --allow-unreleased bypasses release identity, "
-        "immutability, attestation, and signature verification.",
-        file=sys.stderr,
-    )
 
 
 def checked_destination(root: Path, relative_name: str) -> Path:
@@ -1869,6 +2009,43 @@ def target_file_snapshot(target: Path) -> dict[str, str]:
         name: file_fingerprint(path)
         for name, path in sorted(project_files(target).items())
     }
+
+
+def repository_snapshot(target: Path) -> dict[str, object]:
+    """Capture one clean repository state for a transaction plan."""
+    head, changes, status_sha256 = target_state(target)
+    return {
+        "target_changes": list(changes),
+        "target_files": target_file_snapshot(target),
+        "target_head": head,
+        "target_status_sha256": status_sha256,
+    }
+
+
+def init_target_snapshot(target: Path) -> dict[str, object]:
+    """Capture the empty destination state required by init."""
+    return {
+        "target_exists": target.exists(),
+        "target_files": target_file_snapshot(target),
+    }
+
+
+def validate_init_target_snapshot(
+    target: Path, expected: Mapping[str, object]
+) -> None:
+    """Reject any init destination change after planning."""
+    expected_exists = expected.get("target_exists")
+    expected_files = expected.get("target_files")
+    if (
+        not isinstance(expected_exists, bool)
+        or not isinstance(expected_files, dict)
+        or target.exists() != expected_exists
+        or target_file_snapshot(target) != expected_files
+    ):
+        raise CliError(
+            "Init target changed after the plan was created or confirmed; "
+            "create a new plan."
+        )
 
 
 def git_changed_paths(target: Path) -> set[str]:
@@ -2035,8 +2212,29 @@ def candidate_effects(
             tuple(sorted(merges)),
             planned.manual,
             planned.unknown,
+            planned.delete,
         ),
         dict(sorted(artifacts.items())),
+    )
+
+
+def changed_candidate_artifacts(candidate: Path) -> dict[str, str]:
+    """Fingerprint every changed file produced in a candidate clone."""
+    files = project_files(candidate)
+    return {
+        name: file_fingerprint(files[name])
+        for name in sorted(git_changed_paths(candidate))
+        if name in files
+    }
+
+
+def deleted_candidate_paths(candidate: Path) -> tuple[str, ...]:
+    """Return files deleted by one candidate update."""
+    files = project_files(candidate)
+    return tuple(
+        name
+        for name in sorted(git_changed_paths(candidate))
+        if name not in files
     )
 
 
@@ -2152,6 +2350,52 @@ def prepare_adoption_candidate(
     return effects, artifacts, verification
 
 
+def validate_applied_patch_or_rollback(
+    target: Path,
+    patch: Path,
+    target_snapshot: Mapping[str, object],
+    expected_before: Mapping[str, str],
+    expected_artifacts: Mapping[str, str],
+    delete_paths: tuple[str, ...],
+) -> None:
+    """Detect a late target race and safely undo only intact CLI effects."""
+    expected_after = dict(expected_before)
+    for relative_name in delete_paths:
+        expected_after.pop(relative_name, None)
+    expected_after.update(expected_artifacts)
+    actual_after = target_file_snapshot(target)
+    expected_head = target_snapshot.get("target_head")
+    actual_head, _ = git_target_state(target)
+    if actual_head == expected_head and actual_after == expected_after:
+        return
+
+    planned_paths = set(expected_artifacts) | set(delete_paths)
+    planned_effects_intact = all(
+        actual_after.get(name) == expected_after.get(name)
+        for name in planned_paths
+    )
+    if planned_effects_intact:
+        reverse = ["git", "-C", str(target), "apply", "-R", "-p2"]
+        rollback_check = run(
+            [*reverse, "--check", str(patch)], capture=True, check=False
+        )
+        if rollback_check.returncode == 0:
+            rollback = run([*reverse, str(patch)], capture=True, check=False)
+            rolled_back = target_file_snapshot(target)
+            if rollback.returncode == 0 and all(
+                rolled_back.get(name) == expected_before.get(name)
+                for name in planned_paths
+            ):
+                raise CliError(
+                    "Repository changed while the candidate patch was applied; "
+                    "CLI changes were rolled back. Create a new plan."
+                )
+    raise CliError(
+        "Repository changed while the candidate patch was applied and an "
+        "automatic rollback was unsafe or failed; inspect the working tree."
+    )
+
+
 def write_candidate_patch(
     candidate: Path,
     target: Path,
@@ -2166,7 +2410,6 @@ def write_candidate_patch(
     after = patch.parent / "after"
     before.mkdir()
     after.mkdir()
-    candidate_files = project_files(candidate)
     target_files = project_files(target)
     expected_artifacts = {
         name: value
@@ -2174,12 +2417,15 @@ def write_candidate_patch(
         if isinstance(name, str) and isinstance(value, str)
     }
     if len(expected_artifacts) != len(artifacts):
-        raise CliError("Adoption plan contains invalid artifact fingerprints.")
-    actual_artifacts = {
-        name: file_fingerprint(candidate_files[name])
-        for name in sorted(git_changed_paths(candidate))
-        if name in candidate_files
-    }
+        raise CliError("Machine plan contains invalid artifact fingerprints.")
+    raw_target_files = target_snapshot.get("target_files")
+    if not isinstance(raw_target_files, dict) or not all(
+        isinstance(name, str) and isinstance(value, str)
+        for name, value in raw_target_files.items()
+    ):
+        raise CliError("Machine plan contains an invalid target snapshot.")
+    expected_before = cast(dict[str, str], raw_target_files)
+    actual_artifacts = changed_candidate_artifacts(candidate)
     if actual_artifacts != expected_artifacts:
         raise CliError(
             "Candidate effects differ from the verified plan; create a new "
@@ -2229,6 +2475,14 @@ def write_candidate_patch(
                 or "Git rejected the candidate patch."
             )
             raise CliError(detail)
+    validate_applied_patch_or_rollback(
+        target,
+        patch,
+        target_snapshot,
+        expected_before,
+        expected_artifacts,
+        delete_paths,
+    )
 
 
 def create_adoption_lockfiles(target: Path, answers: dict[str, object]) -> None:
@@ -2820,7 +3074,9 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "Run adopt --finalize --dry-run first, then apply its machine "
             "plan with --finalize --apply-plan."
         )
-    if any((args.source, args.to, args.expected_sha)):
+    if any((args.source, args.to, args.expected_sha)) or (
+        args.allow_unreleased and args.apply_plan is None
+    ):
         raise CliError(
             "adopt --finalize uses the source and release saved by the "
             "pending adoption; do not pass release-selection options."
@@ -2851,6 +3107,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             raise CliError(
                 "Finalize plan does not match this target repository."
             )
+        authorize_plan_release(saved, args.allow_unreleased)
 
     pending = read_pending_adoption(target)
     raw_template = pending["template"]
@@ -2903,8 +3160,6 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "answers or restart adoption from a clean commit."
         )
     allow_unreleased = verification == "development-unreleased"
-    if args.apply_plan is not None:
-        require_unreleased_plan_opt_in(verification, args.allow_unreleased)
     revision = resolve_revision(
         source,
         release,
@@ -3104,6 +3359,140 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
     return 0
 
 
+def build_init_plan(
+    candidate: Path,
+    target: Path,
+    revision: Revision,
+    repository: RepositoryContext,
+    answers: dict[str, object],
+    capabilities: dict[str, object],
+    generated_at: str,
+) -> ResolvedPlan:
+    """Verify a complete init candidate and bind its exact output."""
+    write_provenance(candidate, revision, applied_at=generated_at)
+    try:
+        verify_project(candidate)
+    except CliError as error:
+        verification = f"failed: {error}"
+    else:
+        verification = "passed"
+    artifacts = {
+        name: file_fingerprint(path)
+        for name, path in sorted(project_files(candidate).items())
+    }
+    files = Plan(tuple(artifacts), (), (), (), (), ())
+    transaction = {
+        "applicable": verification == "passed",
+        "artifacts": artifacts,
+        "deleted_paths": [],
+        "generated_at": generated_at,
+        **init_target_snapshot(target),
+        "verification": verification,
+    }
+    return ResolvedPlan(
+        mode="init",
+        target=target,
+        revision=revision,
+        repository=repository,
+        answers=answers,
+        capabilities=capabilities,
+        files=files,
+        transaction=transaction,
+    )
+
+
+def install_init_candidate(
+    candidate: Path, target: Path, transaction: Mapping[str, object]
+) -> None:
+    """Atomically publish one already verified init candidate."""
+    artifacts = transaction.get("artifacts")
+    if not isinstance(artifacts, dict) or not all(
+        isinstance(name, str) and isinstance(value, str)
+        for name, value in artifacts.items()
+    ):
+        raise CliError("Machine plan contains invalid artifact fingerprints.")
+    actual = {
+        name: file_fingerprint(path)
+        for name, path in sorted(project_files(candidate).items())
+    }
+    if actual != artifacts:
+        raise CliError(
+            "Candidate effects differ from the verified plan; create a new "
+            "plan."
+        )
+    validate_init_target_snapshot(target, transaction)
+    candidate.replace(target)
+
+
+def command_apply_init_plan(args: argparse.Namespace, target: Path) -> int:
+    """Rebuild, verify, and atomically apply one saved init plan."""
+    if args.dry_run or args.json or args.plan_file is not None:
+        raise CliError(
+            "--apply-plan cannot be combined with --dry-run, --json, or "
+            "--plan-file."
+        )
+    if any((args.source, args.to, args.expected_sha)):
+        raise CliError(
+            "--apply-plan uses the source and SHA saved by dry-run; do not "
+            "pass release-selection options."
+        )
+    if args.data:
+        raise CliError("--apply-plan uses the answers saved by dry-run.")
+    saved = read_machine_plan(args.apply_plan.expanduser().resolve())
+    if saved.get("mode") != "init" or saved.get("target") != str(target):
+        raise CliError("Init plan does not match this target path.")
+    authorize_plan_release(saved, args.allow_unreleased)
+    transaction = plan_mapping(saved, "transaction")
+    if transaction.get("applicable") is not True:
+        raise CliError(
+            "Init plan is review-only; resolve the reported failure, then "
+            "create a new plan."
+        )
+    answers = plan_mapping(saved, "answers")
+    capabilities = plan_mapping(saved, "release_capabilities")
+    generated_at = transaction.get("generated_at")
+    if not isinstance(generated_at, str):
+        raise CliError("Init plan has no generation timestamp.")
+    validate_copy_target(target, "init")
+    revision = plan_revision(saved)
+    repository, explicit_visibility, _ = plan_repository_context(
+        target, saved, answers
+    )
+    if not target.parent.is_dir():
+        raise CliError("init target parent must already exist.")
+    with tempfile.TemporaryDirectory(
+        prefix=".csarc-init-", dir=target.parent
+    ) as temporary:
+        candidate = Path(temporary) / "candidate"
+        candidate.mkdir()
+        copier_copy(revision.source, revision, candidate, answers)
+        fresh = build_init_plan(
+            candidate,
+            target,
+            revision,
+            repository,
+            answers,
+            capabilities,
+            generated_at,
+        )
+        saved_binding = transaction_binding(saved)
+        fresh_binding = transaction_binding(machine_plan_payload(fresh))
+        if fresh_binding != saved_binding:
+            differences = json_differences(saved_binding, fresh_binding)
+            raise CliError(
+                "Init inputs or rendered output drifted after dry-run; create "
+                f"a new plan. Differing fields: {'; '.join(differences[:10])}"
+            )
+        print_plan(fresh)
+        if not confirm(args):
+            return 0
+        validate_repository_context(target, repository, explicit_visibility)
+        validate_init_target_snapshot(target, transaction)
+        install_init_candidate(candidate, target, transaction)
+    settings_plan(target)
+    return 0
+
+
 def predicted_adoption_effects(target: Path, planned: Plan) -> Plan:
     """Include the checkpoint or provenance file in a review-only forecast."""
     runtime = (
@@ -3211,6 +3600,7 @@ def command_apply_adoption_plan(  # noqa: C901
     saved = read_adoption_plan(plan_path)
     if saved.get("mode") != "adopt" or saved.get("target") != str(target):
         raise CliError("Adoption plan does not match this target repository.")
+    authorize_plan_release(saved, args.allow_unreleased)
     raw_adoption = saved.get("adoption")
     raw_template = saved.get("template")
     raw_answers = saved.get("answers")
@@ -3250,7 +3640,6 @@ def command_apply_adoption_plan(  # noqa: C901
         or verification not in {"verified", "unverified"}
     ):
         raise CliError("Adoption plan has invalid template identity.")
-    require_unreleased_plan_opt_in(verification, args.allow_unreleased)
     require_clean_repository(target)
     revision = resolve_revision(
         source,
@@ -3340,7 +3729,9 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         if mode == "adopt"
         else args.path.expanduser().resolve()
     )
-    if mode == "adopt" and args.apply_plan is None:
+    if mode == "init" and args.apply_plan is not None:
+        return command_apply_init_plan(args, target)
+    if mode in {"init", "adopt"} and args.apply_plan is None:
         args.dry_run = True
     if mode == "adopt" and args.finalize:
         return command_finalize_adoption(args)
@@ -3396,14 +3787,15 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
                 generated_at,
             )
         else:
-            plan = ResolvedPlan(
-                mode=mode,
-                target=target,
-                revision=revision,
-                repository=repository,
-                answers=answers,
-                capabilities=capabilities,
-                files=compare_stage(stage, target, adopt=False),
+            generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+            plan = build_init_plan(
+                stage,
+                target,
+                revision,
+                repository,
+                answers,
+                capabilities,
+                generated_at,
             )
         if args.json:
             print(
@@ -3415,20 +3807,14 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
             print_plan(plan)
         if mode == "adopt" and args.dry_run:
             write_adoption_reports(plan, args.report_dir, emit=not args.json)
+        if mode == "init" and args.dry_run:
+            write_lifecycle_plan(plan, args.plan_file, emit=not args.json)
         if mode == "adopt":
             milestone_description_plan(target, emit=not args.json)
         if args.dry_run or not confirm(args):
             return 0
-        if mode == "init":
-            if target.exists():
-                target.rmdir()
-            shutil.copytree(stage, target, symlinks=True)
-        else:
-            raise CliError("Adoption requires a saved machine plan.")
+        raise CliError(f"{mode} requires a saved machine plan.")
 
-    verify_project(target)
-    write_provenance(target, revision)
-    settings_plan(target)
     return 0
 
 
@@ -3619,14 +4005,309 @@ def update_plan_answers(
     return result, update_data
 
 
+def prepare_update_candidate(
+    target: Path,
+    candidate: Path,
+    target_revision: Revision,
+    previous: dict[str, object] | None,
+    update_data: Mapping[str, str],
+    generated_at: str,
+) -> tuple[Plan, dict[str, str], tuple[str, ...], str]:
+    """Run and verify a complete Copier update outside the target repo."""
+    clone_target(target, candidate)
+    candidate = candidate.resolve()
+    copier_data = [
+        part
+        for key, value in sorted(update_data.items())
+        for part in ("--data", f"{key}={value}")
+    ]
+    result = run(
+        [
+            sys.executable,
+            "-m",
+            "copier",
+            "update",
+            "--trust",
+            "--defaults",
+            "--conflict",
+            "inline",
+            "--vcs-ref",
+            target_revision.sha,
+            *copier_data,
+            str(candidate),
+        ],
+        capture=True,
+        check=False,
+    )
+    conflicts = find_conflicts(candidate)
+    if result.returncode != 0 or conflicts:
+        detail = (
+            ", ".join(conflicts)
+            if conflicts
+            else result.stderr.strip()
+            or result.stdout.strip()
+            or "Copier exited non-zero"
+        )
+        verification = f"failed: update conflict ({detail})"
+    else:
+        pin_answer_commit(candidate, target_revision.sha)
+        write_provenance(
+            candidate,
+            target_revision,
+            previous,
+            applied_at=generated_at,
+        )
+        try:
+            verify_project(candidate)
+        except CliError as error:
+            verification = f"failed: {error}"
+        else:
+            verification = "passed"
+    deleted = deleted_candidate_paths(candidate)
+    planned = compare_stage(candidate, target, adopt=False)
+    planned = Plan(
+        planned.add,
+        planned.overwrite,
+        tuple(path for path in planned.preserve if path not in deleted),
+        planned.merge,
+        planned.manual,
+        planned.unknown,
+        deleted,
+    )
+    effects, artifacts = candidate_effects(candidate, target, planned)
+    return effects, artifacts, deleted, verification
+
+
+def build_update_transaction_plan(
+    target: Path,
+    candidate: Path,
+    target_revision: Revision,
+    previous: dict[str, object] | None,
+    repository: RepositoryContext,
+    answers: dict[str, object],
+    capabilities: dict[str, object],
+    status: dict[str, object],
+    update_data: Mapping[str, str],
+    requested_data: Mapping[str, str],
+    generated_at: str,
+    *,
+    accept_legacy: bool,
+    from_release: str | None,
+) -> ResolvedPlan:
+    """Build one verified update plan without changing the target repo."""
+    snapshot = repository_snapshot(target)
+    files, artifacts, deleted, verification = prepare_update_candidate(
+        target,
+        candidate,
+        target_revision,
+        previous,
+        update_data,
+        generated_at,
+    )
+    transaction = {
+        "accept_legacy": accept_legacy,
+        "applicable": verification == "passed",
+        "artifacts": artifacts,
+        "deleted_paths": list(deleted),
+        "from_release": from_release,
+        "generated_at": generated_at,
+        "requested_data": dict(sorted(requested_data.items())),
+        **snapshot,
+        "verification": verification,
+    }
+    return ResolvedPlan(
+        mode="update",
+        target=target,
+        revision=target_revision,
+        repository=repository,
+        answers=answers,
+        capabilities=capabilities,
+        files=files,
+        update=status,
+        transaction=transaction,
+    )
+
+
+def command_apply_update_plan(  # noqa: C901
+    args: argparse.Namespace, target: Path
+) -> int:
+    """Rebuild, verify, and apply exactly one saved update plan."""
+    if args.dry_run or args.check or args.json or args.plan_file is not None:
+        raise CliError(
+            "--apply-plan cannot be combined with --dry-run, --check, --json, "
+            "or --plan-file."
+        )
+    if any(
+        (
+            args.to,
+            args.expected_sha,
+            args.accept_legacy,
+            args.from_release,
+        )
+    ):
+        raise CliError(
+            "--apply-plan uses the release identity saved by dry-run; do not "
+            "pass release-selection options."
+        )
+    if args.data:
+        raise CliError("--apply-plan uses the answers saved by dry-run.")
+    plan_path = args.apply_plan.expanduser().resolve()
+    if plan_path == target or target in plan_path.parents:
+        raise CliError("Machine plans must remain outside the target repo.")
+    saved = read_machine_plan(plan_path)
+    if saved.get("mode") != "update" or saved.get("target") != str(target):
+        raise CliError("Update plan does not match this target repository.")
+    authorize_plan_release(saved, args.allow_unreleased)
+    transaction = plan_mapping(saved, "transaction")
+    if transaction.get("applicable") is not True:
+        raise CliError(
+            "Update plan is review-only; resolve the reported failure, then "
+            "create a new plan."
+        )
+    raw_requested = plan_mapping(transaction, "requested_data")
+    if not all(
+        isinstance(key, str) and isinstance(value, str)
+        for key, value in raw_requested.items()
+    ):
+        raise CliError("Update plan contains invalid requested answers.")
+    requested_data = cast(dict[str, str], raw_requested)
+    generated_at = transaction.get("generated_at")
+    accept_legacy = transaction.get("accept_legacy")
+    from_release = transaction.get("from_release")
+    if (
+        not isinstance(generated_at, str)
+        or not isinstance(accept_legacy, bool)
+        or (from_release is not None and not isinstance(from_release, str))
+    ):
+        raise CliError("Update plan has invalid replay metadata.")
+    require_clean_repository(target)
+    planned_revision = plan_revision(saved)
+    saved_answers = read_copier_answers(target / ".copier-answers.yml")
+    saved_visibility = saved_answers.get("project_visibility")
+    repository = repository_context(
+        target,
+        requested_data.get("project_visibility"),
+        saved_visibility=(
+            saved_visibility if isinstance(saved_visibility, str) else None
+        ),
+    )
+    candidate_answers, update_data = update_plan_answers(
+        saved_answers, requested_data, repository
+    )
+    status, target_revision, previous = update_status(
+        target,
+        planned_revision.label,
+        expected_sha=planned_revision.sha,
+        allow_unreleased=not planned_revision.verified,
+        accept_legacy=accept_legacy,
+        from_release=from_release,
+    )
+    current_capabilities = capability_preflight(
+        target / "scripts" / "release_policy.py", target, emit=False
+    )
+    source = status.get("source")
+    if not isinstance(source, str):
+        raise CliError("Update source must be a string.")
+    with tempfile.TemporaryDirectory(prefix="csarc-update-apply-") as temporary:
+        temporary_root = Path(temporary).resolve()
+        stage = temporary_root / "project"
+        stage.mkdir()
+        copier_copy(
+            source,
+            target_revision,
+            stage,
+            candidate_answers,
+            skip_tasks=True,
+        )
+        answers = read_copier_answers(stage / ".copier-answers.yml")
+        preflight = capability_preflight(
+            stage / "scripts" / "release_policy.py", target, emit=False
+        )
+        current_capabilities = dict(current_capabilities)
+        target_capabilities = dict(preflight)
+        current_capabilities.pop("observed_at", None)
+        target_capabilities.pop("observed_at", None)
+        answers_changed = answers != saved_answers
+        capabilities_changed = target_capabilities != current_capabilities
+        update_available = bool(status["update_available"]) or any(
+            (answers_changed, capabilities_changed)
+        )
+        status.update(
+            {
+                "answers_changed": answers_changed,
+                "capabilities_changed": capabilities_changed,
+                "status": "outdated" if update_available else "current",
+                "update_available": update_available,
+            }
+        )
+        candidate = temporary_root / "candidate"
+        fresh = build_update_transaction_plan(
+            target,
+            candidate,
+            target_revision,
+            previous,
+            repository,
+            answers,
+            preflight,
+            status,
+            update_data,
+            requested_data,
+            generated_at,
+            accept_legacy=accept_legacy,
+            from_release=from_release,
+        )
+        saved_binding = transaction_binding(saved)
+        fresh_binding = transaction_binding(machine_plan_payload(fresh))
+        if fresh_binding != saved_binding:
+            differences = json_differences(saved_binding, fresh_binding)
+            raise CliError(
+                "Update inputs or rendered output drifted after dry-run; "
+                "create a new plan. Differing fields: "
+                f"{'; '.join(differences[:10])}"
+            )
+        print_plan(fresh)
+        milestone_plan = milestone_description_plan(target)
+        if not confirm(args):
+            return 0
+        explicit_visibility = requested_data.get("project_visibility")
+        validate_repository_context(
+            target,
+            repository,
+            explicit_visibility,
+            saved_visibility=(
+                saved_visibility if isinstance(saved_visibility, str) else None
+            ),
+        )
+        validate_target_snapshot(target, transaction)
+        artifacts = plan_mapping(transaction, "artifacts")
+        deleted = transaction.get("deleted_paths")
+        if not isinstance(deleted, list) or not all(
+            isinstance(path, str) for path in deleted
+        ):
+            raise CliError("Update plan contains invalid deleted paths.")
+        write_candidate_patch(
+            candidate,
+            target,
+            temporary_root / "update.patch",
+            artifacts=artifacts,
+            target_snapshot=transaction,
+            delete_paths=tuple(deleted),
+        )
+    settings_plan(target)
+    apply_milestone_description_plan(milestone_plan)
+    return 0
+
+
 def command_update(args: argparse.Namespace) -> int:
-    """Check or apply a Copier smart update."""
+    """Check or plan a Copier smart update."""
     target = resolve_repository_target(args.path)
     if (target / PENDING_ADOPTION_FILE).is_file():
         raise CliError(
             "Adoption is pending; complete the manual merge and run "
             "csarc adopt --finalize before update."
         )
+    if args.apply_plan is not None:
+        return command_apply_update_plan(args, target)
     answers_path = target / ".copier-answers.yml"
     if not answers_path.is_file():
         raise CliError("Missing .copier-answers.yml; use csarc adopt first.")
@@ -3692,16 +4373,6 @@ def command_update(args: argparse.Namespace) -> int:
             "update_available": update_available,
         }
     )
-    target_snapshot: dict[str, object] = {}
-    if not args.check:
-        require_clean_repository(target)
-        head, changes, status_sha256 = target_state(target)
-        target_snapshot = {
-            "target_changes": list(changes),
-            "target_files": target_file_snapshot(target),
-            "target_head": head,
-            "target_status_sha256": status_sha256,
-        }
     plan = ResolvedPlan(
         mode="update",
         target=target,
@@ -3722,78 +4393,34 @@ def command_update(args: argparse.Namespace) -> int:
             print_plan(plan)
         return 1 if status["update_available"] else 0
 
-    copier_data = [
-        part
-        for key, value in sorted(update_data.items())
-        for part in ("--data", f"{key}={value}")
-    ]
-    preview = run(
-        [
-            sys.executable,
-            "-m",
-            "copier",
-            "update",
-            "--trust",
-            "--defaults",
-            "--pretend",
-            "--vcs-ref",
-            str(status["target_sha"]),
-            *copier_data,
-            str(target),
-        ],
-        capture=True,
-        check=False,
-    )
-    if preview.returncode != 0:
-        raise CliError(preview.stderr.strip() or preview.stdout.strip())
-    print_plan(plan)
-    print("Copier smart-update preview:")
-    print(
-        preview.stdout.strip()
-        or "  (Copier returned no preview details; files may still change.)"
-    )
-    milestone_plan = milestone_description_plan(target)
-    if args.dry_run or not confirm(args):
-        return 0
-
-    validate_repository_context(
-        target,
-        plan.repository,
-        explicit_data.get("project_visibility"),
-        saved_visibility=(
-            saved_visibility if isinstance(saved_visibility, str) else None
-        ),
-    )
-    validate_target_snapshot(target, target_snapshot)
-    result = run(
-        [
-            sys.executable,
-            "-m",
-            "copier",
-            "update",
-            "--trust",
-            "--defaults",
-            "--conflict",
-            "inline",
-            "--vcs-ref",
-            str(status["target_sha"]),
-            *copier_data,
-            str(target),
-        ],
-        check=False,
-    )
-    conflicts = find_conflicts(target)
-    if result.returncode != 0 or conflicts:
-        detail = ", ".join(conflicts) if conflicts else "Copier exited non-zero"
-        raise CliError(
-            f"Update needs manual conflict resolution ({detail}); "
-            "differences were preserved."
+    require_clean_repository(target)
+    generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+    with tempfile.TemporaryDirectory(prefix="csarc-update-plan-") as temporary:
+        plan = build_update_transaction_plan(
+            target,
+            Path(temporary).resolve() / "candidate",
+            target_revision,
+            previous,
+            repository,
+            answers,
+            preflight,
+            status,
+            update_data,
+            explicit_data,
+            generated_at,
+            accept_legacy=args.accept_legacy,
+            from_release=args.from_release,
         )
-    pin_answer_commit(target, str(status["target_sha"]))
-    verify_project(target)
-    write_provenance(target, target_revision, previous)
-    settings_plan(target)
-    apply_milestone_description_plan(milestone_plan)
+    print_plan(plan)
+    transaction = plan.transaction
+    if transaction is not None:
+        print(f"Candidate verification: {transaction['verification']}")
+    write_lifecycle_plan(
+        plan,
+        args.plan_file,
+        emit=not args.json,
+    )
+    milestone_description_plan(target)
     return 0
 
 
@@ -3802,7 +4429,7 @@ def add_write_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="plan without writing (the default for adopt)",
+        help="plan without writing (the default for lifecycle commands)",
     )
     parser.add_argument("--yes", action="store_true")
     parser.add_argument("--non-interactive", action="store_true")
@@ -3831,13 +4458,13 @@ def parser() -> argparse.ArgumentParser:
             "--data", action="append", default=[], metavar="KEY=VALUE"
         )
         subparser.add_argument("--json", action="store_true")
+        subparser.add_argument(
+            "--apply-plan",
+            type=Path,
+            metavar="PATH",
+            help="apply one unchanged machine plan from dry-run",
+        )
         if name == "adopt":
-            subparser.add_argument(
-                "--apply-plan",
-                type=Path,
-                metavar="PATH",
-                help="apply one unchanged machine plan from dry-run",
-            )
             subparser.add_argument(
                 "--finalize",
                 action="store_true",
@@ -3848,6 +4475,13 @@ def parser() -> argparse.ArgumentParser:
                 type=Path,
                 metavar="PATH",
                 help="write dry-run Markdown and PDF reports outside the repo",
+            )
+        else:
+            subparser.add_argument(
+                "--plan-file",
+                type=Path,
+                metavar="PATH",
+                help="write the machine plan to this external path",
             )
         add_write_options(subparser)
 
@@ -3862,6 +4496,8 @@ def parser() -> argparse.ArgumentParser:
     update.add_argument("--allow-unreleased", action="store_true")
     update.add_argument("--check", action="store_true")
     update.add_argument("--json", action="store_true")
+    update.add_argument("--apply-plan", type=Path, metavar="PATH")
+    update.add_argument("--plan-file", type=Path, metavar="PATH")
     update.add_argument(
         "--data", action="append", default=[], metavar="KEY=VALUE"
     )

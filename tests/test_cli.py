@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -121,27 +123,101 @@ enable_release_attestations:
     return source, commit(source, "test: template version one")
 
 
-def initialize_project(tmp_path: Path) -> tuple[Path, Path, str]:
-    """Create a generated project pinned to the first template commit."""
-    source, first_sha = make_template(tmp_path)
-    project = tmp_path / "new-project"
+def lifecycle_plan_path(target: Path, mode: str) -> Path:
+    """Return the default external plan path for init or update."""
+    return target.parent / f"{target.name}-csarc-{mode}-plan.json"
+
+
+def copy_real_template(destination: Path) -> None:
+    """Create an independent Git source from the repository's tracked tree."""
+    shutil.copytree(
+        ROOT,
+        destination,
+        ignore=shutil.ignore_patterns(
+            ".git", ".venv", ".mypy_cache", ".pytest_cache", ".ruff_cache"
+        ),
+    )
+    git(destination, "init", "-b", "main")
+    git(destination, "config", "user.name", "CLI Test")
+    git(destination, "config", "user.email", "cli-test@example.invalid")
+
+
+def apply_init(arguments: list[str], target: Path) -> None:
+    """Plan and apply one init transaction."""
+    assert main(arguments) == 0
     assert (
         main(
             [
                 "init",
-                str(project),
-                "--source",
-                str(source),
-                "--to",
-                first_sha,
+                str(target),
+                "--apply-plan",
+                str(lifecycle_plan_path(target, "init")),
                 "--allow-unreleased",
                 "--yes",
                 "--non-interactive",
-                "--data",
-                "language=ci",
             ]
         )
         == 0
+    )
+
+
+def apply_update(arguments: list[str], target: Path) -> int:
+    """Plan and apply one update transaction."""
+    assert main(arguments) == 0
+    return main(
+        [
+            "update",
+            str(target),
+            "--apply-plan",
+            str(lifecycle_plan_path(target, "update")),
+            "--allow-unreleased",
+            "--yes",
+            "--non-interactive",
+        ]
+    )
+
+
+def apply_adopt(arguments: list[str], target: Path) -> None:
+    """Plan and apply one adoption transaction."""
+    assert main(arguments) == 0
+    plan = (
+        target.parent
+        / f"{target.name}-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    assert (
+        main(
+            [
+                "adopt",
+                str(target),
+                "--apply-plan",
+                str(plan),
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+
+
+def initialize_project(tmp_path: Path) -> tuple[Path, Path, str]:
+    """Create a generated project pinned to the first template commit."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / "new-project"
+    apply_init(
+        [
+            "init",
+            str(project),
+            "--source",
+            str(source),
+            "--to",
+            first_sha,
+            "--allow-unreleased",
+            "--data",
+            "language=ci",
+        ],
+        project,
     )
     return source, project, first_sha
 
@@ -271,7 +347,21 @@ def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
 
     assert main([*arguments, "--dry-run"]) == 0
     assert not project.exists()
-    assert main([*arguments, "--yes", "--non-interactive"]) == 0
+    plan_path = lifecycle_plan_path(project, "init")
+    payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert payload["transaction"]["applicable"] is True
+    assert cli.PROVENANCE_FILE.as_posix() in payload["transaction"]["artifacts"]
+    apply_arguments = [
+        "init",
+        str(project),
+        "--apply-plan",
+        str(plan_path),
+        "--yes",
+        "--non-interactive",
+    ]
+    assert main(apply_arguments) == 2
+    assert not project.exists()
+    assert main([*apply_arguments, "--allow-unreleased"]) == 0
     answers = (project / ".copier-answers.yml").read_text(encoding="utf-8")
     assert f"_commit: {first_sha}" in answers
     assert (project / "managed.txt").read_text() == "template version one\n"
@@ -280,6 +370,258 @@ def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
     )
     assert provenance["commit_sha"] == first_sha
     assert provenance["verification"] == "development-unreleased"
+
+
+@pytest.mark.parametrize("entrypoint", ("init", "adopt"))
+def test_lifecycle_plan_replay_updates_v1_to_v2(
+    tmp_path: Path, entrypoint: str
+) -> None:
+    """Replay init or adopt v1, then update the clean target to v2."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / f"{entrypoint}-lifecycle"
+    arguments = [
+        entrypoint,
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        first_sha,
+        "--allow-unreleased",
+        "--data",
+        "language=ci",
+    ]
+    if entrypoint == "init":
+        apply_init(arguments, project)
+        git(project, "init", "-b", "main")
+        git(project, "config", "user.name", "CLI Test")
+        git(project, "config", "user.email", "cli-test@example.invalid")
+    else:
+        project.mkdir()
+        (project / "product.txt").write_text("preserve me\n", encoding="utf-8")
+        git(project, "init", "-b", "main")
+        git(project, "config", "user.name", "CLI Test")
+        git(project, "config", "user.email", "cli-test@example.invalid")
+        commit(project, "test: existing product")
+        apply_adopt(arguments, project)
+    commit(project, f"test: {entrypoint} template v1")
+
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    second_sha = commit(source, "test: template version two")
+    assert (
+        apply_update(
+            [
+                "update",
+                str(project),
+                "--to",
+                second_sha,
+                "--allow-unreleased",
+            ],
+            project,
+        )
+        == 0
+    )
+
+    update_plan = json.loads(
+        lifecycle_plan_path(project, "update").read_text(encoding="utf-8")
+    )
+    transaction = update_plan["transaction"]
+    assert transaction["verification"] == "passed"
+    for relative_name, digest in transaction["artifacts"].items():
+        assert cli.file_fingerprint(project / relative_name) == digest
+    assert (project / "managed.txt").read_text(encoding="utf-8") == (
+        "template version two\n"
+    )
+    if entrypoint == "adopt":
+        assert (project / "product.txt").read_text(encoding="utf-8") == (
+            "preserve me\n"
+        )
+    provenance = json.loads(
+        (project / cli.PROVENANCE_FILE).read_text(encoding="utf-8")
+    )
+    assert provenance["commit_sha"] == second_sha
+    assert provenance["previous"]["commit_sha"] == first_sha
+    assert f"_commit: {second_sha}" in (
+        project / ".copier-answers.yml"
+    ).read_text(encoding="utf-8")
+
+
+def test_update_verification_failure_is_zero_write_and_safely_replayable(
+    tmp_path: Path,
+) -> None:
+    """Keep a failed candidate external, then accept a newly verified plan."""
+    source, project, _ = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated project")
+    (source / "template" / "managed.txt").write_text(
+        "unverified version two\n", encoding="utf-8"
+    )
+    write_executable(
+        source / "template" / "scripts" / "verify",
+        "#!/usr/bin/env bash\nset -euo pipefail\nexit 23\n",
+    )
+    failing_sha = commit(source, "test: failing template verification")
+    before = cli.target_file_snapshot(project)
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                failing_sha,
+                "--allow-unreleased",
+            ]
+        )
+        == 0
+    )
+    plan_path = lifecycle_plan_path(project, "update")
+    failed_plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert failed_plan["transaction"]["applicable"] is False
+    assert "verification failed" in failed_plan["transaction"]["verification"]
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--allow-unreleased",
+            ]
+        )
+        == 2
+    )
+    assert cli.target_file_snapshot(project) == before
+
+    write_executable(
+        source / "template" / "scripts" / "verify",
+        "#!/usr/bin/env bash\nset -euo pipefail\ntest -f managed.txt\n",
+    )
+    verified_sha = commit(source, "test: repair template verification")
+    assert (
+        apply_update(
+            [
+                "update",
+                str(project),
+                "--to",
+                verified_sha,
+                "--allow-unreleased",
+            ],
+            project,
+        )
+        == 0
+    )
+    assert (project / "managed.txt").read_text(encoding="utf-8") == (
+        "unverified version two\n"
+    )
+    assert (
+        json.loads((project / cli.PROVENANCE_FILE).read_text(encoding="utf-8"))[
+            "commit_sha"
+        ]
+        == verified_sha
+    )
+
+
+def test_init_verification_failure_is_zero_write_and_safely_replayable(
+    tmp_path: Path,
+) -> None:
+    """Reject an unverified init candidate without creating the target."""
+    source, _ = make_template(tmp_path)
+    project = tmp_path / "init-verification"
+    write_executable(
+        source / "template" / "scripts" / "verify",
+        "#!/usr/bin/env bash\nset -euo pipefail\nexit 23\n",
+    )
+    failing_sha = commit(source, "test: failing init verification")
+    arguments = [
+        "init",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        failing_sha,
+        "--allow-unreleased",
+    ]
+
+    assert main(arguments) == 0
+    plan_path = lifecycle_plan_path(project, "init")
+    failed_plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert failed_plan["transaction"]["applicable"] is False
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--allow-unreleased",
+            ]
+        )
+        == 2
+    )
+    assert not project.exists()
+
+    write_executable(
+        source / "template" / "scripts" / "verify",
+        "#!/usr/bin/env bash\nset -euo pipefail\ntest -f managed.txt\n",
+    )
+    verified_sha = commit(source, "test: repair init verification")
+    apply_init(
+        [
+            "init",
+            str(project),
+            "--source",
+            str(source),
+            "--to",
+            verified_sha,
+            "--allow-unreleased",
+        ],
+        project,
+    )
+    assert (project / "managed.txt").is_file()
+
+
+def test_init_rejects_destination_drift_after_planning(tmp_path: Path) -> None:
+    """Do not replace a destination created after an init plan."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "late-destination"
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+            ]
+        )
+        == 0
+    )
+    project.mkdir()
+    sentinel = project / "product.txt"
+    sentinel.write_text("do not replace\n", encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--apply-plan",
+                str(lifecycle_plan_path(project, "init")),
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
+    )
+    assert sentinel.read_text(encoding="utf-8") == "do not replace\n"
+    assert not (project / "managed.txt").exists()
 
 
 def test_capability_preflight_uses_readable_github_origin(
@@ -747,6 +1089,20 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
                 "--finalize",
                 "--apply-plan",
                 str(finalize_plan_path(project)),
+            ]
+        )
+        == 2
+    )
+    assert "--allow-unreleased again" in capsys.readouterr().err
+    assert git(project, "status", "--porcelain") == pending_status
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--finalize",
+                "--apply-plan",
+                str(finalize_plan_path(project)),
                 "--allow-unreleased",
                 "--non-interactive",
                 "--yes",
@@ -1023,7 +1379,9 @@ def test_real_template_adoption_resumes_after_manifest_merge(
     lock_name: str,
 ) -> None:
     """Finalize real Python and TypeScript adoptions without prior locks."""
-    revision_sha = git(ROOT, "rev-parse", "HEAD")
+    source = tmp_path / "real-template-source"
+    copy_real_template(source)
+    revision_sha = commit(source, "test: copy real template")
     project = tmp_path / f"existing-{language}"
     reference = tmp_path / f"reference-{language}"
     data = cli.base_data(
@@ -1033,8 +1391,8 @@ def test_real_template_adoption_resumes_after_manifest_merge(
     )
     data["project_visibility"] = "private"
     cli.copier_copy(
-        str(ROOT),
-        cli.Revision(revision_sha, revision_sha, str(ROOT)),
+        str(source),
+        cli.Revision(revision_sha, revision_sha, str(source)),
         reference,
         data,
     )
@@ -1068,7 +1426,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
         "adopt",
         str(project),
         "--source",
-        str(ROOT),
+        str(source),
         "--to",
         revision_sha,
         "--allow-unreleased",
@@ -1139,22 +1497,83 @@ def test_real_template_adoption_resumes_after_manifest_merge(
     assert not (project / cli.PENDING_ADOPTION_FILE).exists()
 
 
-def test_real_existing_adoption_uses_fixed_ownership_policies(
+def test_real_existing_adoption_updates_without_losing_product_decisions(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Adopt the pilot collision shape without replacing product-owned files."""
-    revision = git(ROOT, "rev-parse", "HEAD")
+    """Adopt and update a realistic product through two verified releases."""
+    source = tmp_path / "controlled-release-source"
+    copy_real_template(source)
+    (source / "template" / "decision.txt").write_text(
+        "template decision v1\n", encoding="utf-8"
+    )
+    lifecycle_version = source / "template" / "lifecycle-version.txt"
+    lifecycle_version.write_text("lifecycle v1\n", encoding="utf-8")
+    retired = source / "template" / "retired-after-v1.txt"
+    retired.write_text("retire in v2\n", encoding="utf-8")
+    first_sha = commit(source, "test: controlled release v1")
+    releases = {"v1.0.0": first_sha}
+
+    def verified_revision(
+        source_value: str,
+        requested: str | None,
+        *,
+        expected_sha: str | None = None,
+        allow_unreleased: bool = False,
+        client: cli.ReleaseClient | None = None,
+    ) -> cli.Revision:
+        del client
+        assert source_value == str(source)
+        assert allow_unreleased is False
+        tag = requested or max(releases)
+        sha = releases[tag]
+        if expected_sha is not None and expected_sha != sha:
+            raise CliError(
+                "Expected commit SHA does not match the verified release."
+            )
+        return cli.Revision(
+            tag,
+            sha,
+            str(source),
+            cli.CANONICAL_REPOSITORY,
+            cli.CANONICAL_REPOSITORY_ID,
+            1 if tag == "v1.0.0" else 2,
+            sha,
+            True,
+            True,
+            True,
+        )
+
+    monkeypatch.setattr(cli, "resolve_revision", verified_revision)
     project = tmp_path / "existing CSARC-測試"
+    data = cli.base_data(
+        project,
+        "adopt",
+        {
+            "language": "python",
+            "project_name": "Product Identity",
+            "project_slug": "product-identity",
+        },
+    )
+    data["project_visibility"] = "private"
+    reference = tmp_path / "reference-v1"
+    reference.mkdir()
+    cli.copier_copy(
+        str(source),
+        verified_revision(str(source), "v1.0.0", expected_sha=first_sha),
+        reference,
+        data,
+    )
     (project / ".github" / "workflows").mkdir(parents=True)
     (project / "README.md").write_text("# Product README\n", encoding="utf-8")
     (project / "CHANGELOG.md").write_text(
         "# Product changes\n", encoding="utf-8"
     )
     (project / "AGENTS.md").write_text(
-        "# Product agent rules\r\n\r\nKeep this rule.\r\n",
+        "# Product agent rules\n\nKeep this rule.\n",
         encoding="utf-8",
     )
-    (project / ".gitignore").write_bytes(b"product-cache/\r\n.env\r\n")
+    (project / ".gitignore").write_bytes(b"product-cache/\n.env\n")
     product_release = project / ".github" / "workflows" / "release.yml"
     product_release.write_text(
         "name: Product release\n"
@@ -1167,12 +1586,26 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         '      - run: "true"\n',
         encoding="utf-8",
     )
+    manifest = project / "pyproject.toml"
+    manifest.write_text(
+        (reference / "pyproject.toml").read_text(encoding="utf-8")
+        + '\n[tool.product]\ndecision = "keep"\n',
+        encoding="utf-8",
+    )
+    decision = project / "decision.txt"
+    decision.write_text("product decision\n", encoding="utf-8")
     write_executable(
         project / "scripts" / "verify-product",
         "#!/usr/bin/env bash\nset -euo pipefail\n"
         "grep -q '^# Product README$' README.md\n"
-        "grep -q '^name: Product release$' .github/workflows/release.yml\n",
+        "grep -q '^# Product changes$' CHANGELOG.md\n"
+        "grep -q '^name: Product release$' .github/workflows/release.yml\n"
+        "grep -q 'decision = \"keep\"' pyproject.toml\n"
+        "grep -q '^version = 1$' uv.lock\n"
+        "grep -q '^product decision$' decision.txt\n"
+        "grep -q '^template decision v1$' decision.txt\n",
     )
+    run(["uv", "lock", "--python", "3.14"], project)
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
@@ -1181,12 +1614,13 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "adopt",
         str(project),
         "--source",
-        str(ROOT),
+        str(source),
         "--to",
-        revision,
-        "--allow-unreleased",
+        "v1.0.0",
+        "--expected-sha",
+        first_sha,
         "--data",
-        "language=ci",
+        "language=python",
         "--data",
         "project_name=Product Identity",
         "--data",
@@ -1199,18 +1633,20 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         / "existing CSARC-測試-csarc-adoption-report"
         / cli.ADOPTION_PLAN_BASENAME
     )
-    payload = json.loads(plan_path.read_text(encoding="utf-8"))
-    assert payload["files"]["manual_merge"] == []
+    payload = cli.read_adoption_plan(plan_path)
+    assert payload["template"]["verification"] == "verified"
+    assert payload["files"]["manual_merge"] == [
+        "decision.txt",
+        "pyproject.toml",
+    ]
     assert payload["files"]["unknown"] == []
     assert payload["files"]["automatic_merge"] == [".gitignore", "AGENTS.md"]
     assert "README.md" in payload["files"]["preserve"]
     assert "CHANGELOG.md" in payload["files"]["preserve"]
     assert ".github/workflows/release.yml" in payload["files"]["preserve"]
     assert ".github/workflows/csarc-release.yml" in payload["files"]["add"]
-    assert cli.PROVENANCE_FILE.as_posix() in payload["files"]["add"]
     assert payload["adoption"]["project_verification_hook"] == "configured"
-    assert payload["adoption"]["verification"] == "passed"
-    assert payload["answers"]["package_name"] == "product_identity"
+    assert payload["adoption"]["verification"] == "deferred-manual-merge"
 
     assert (
         main(
@@ -1219,27 +1655,32 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
                 str(project),
                 "--apply-plan",
                 str(plan_path),
-                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 1
+    )
+    decision.write_text(
+        "product decision\ntemplate decision v1\n", encoding="utf-8"
+    )
+    assert main(["adopt", str(project), "--finalize"]) == 0
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--finalize",
+                "--apply-plan",
+                str(finalize_plan_path(project)),
                 "--yes",
                 "--non-interactive",
             ]
         )
         == 0
     )
-    assert (project / "README.md").read_text(encoding="utf-8") == (
-        "# Product README\n"
-    )
-    assert (project / "CHANGELOG.md").read_text(encoding="utf-8") == (
-        "# Product changes\n"
-    )
-    assert product_release.read_text(encoding="utf-8").startswith(
-        "name: Product release"
-    )
     assert (project / ".github" / "workflows" / "csarc-release.yml").is_file()
     assert "Keep this rule." in (project / "AGENTS.md").read_text(
-        encoding="utf-8"
-    )
-    assert cli.AGENTS_BLOCK_START in (project / "AGENTS.md").read_text(
         encoding="utf-8"
     )
     ignore_lines = (
@@ -1247,6 +1688,88 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     )
     assert ignore_lines[:2] == ["product-cache/", ".env"]
     assert ignore_lines.count(".env") == 1
+    assert (
+        project / "scripts" / "verify-product"
+    ).stat().st_mode & stat.S_IXUSR
+
+    finalize_plan = cli.read_adoption_plan(finalize_plan_path(project))
+    finalize_artifacts = finalize_plan["adoption"]["artifacts"]
+    for relative_name, digest in finalize_artifacts.items():
+        assert cli.file_fingerprint(project / relative_name) == digest
+    protected = {
+        relative_name: (project / relative_name).read_bytes()
+        for relative_name in (
+            "README.md",
+            "CHANGELOG.md",
+            "AGENTS.md",
+            ".gitignore",
+            ".github/workflows/release.yml",
+            "pyproject.toml",
+            "uv.lock",
+            "decision.txt",
+            "scripts/verify-product",
+        )
+    }
+    commit(project, "test: adopt controlled release v1")
+
+    lifecycle_version.write_text("lifecycle v2\n", encoding="utf-8")
+    retired.unlink()
+    second_sha = commit(source, "test: controlled release v2")
+    releases["v2.0.0"] = second_sha
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                "v2.0.0",
+                "--expected-sha",
+                second_sha,
+            ]
+        )
+        == 0
+    )
+    update_plan_path = lifecycle_plan_path(project, "update")
+    update_plan = cli.read_machine_plan(update_plan_path)
+    transaction = update_plan["transaction"]
+    assert transaction["verification"] == "passed"
+    assert update_plan["template"]["sha"] == second_sha
+    assert update_plan["files"]["delete"] == ["retired-after-v1.txt"]
+    assert "retired-after-v1.txt" not in update_plan["files"]["preserve"]
+    assert set(transaction["artifacts"]) == (
+        set(update_plan["files"]["add"])
+        | set(update_plan["files"]["overwrite"])
+        | set(update_plan["files"]["automatic_merge"])
+    )
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--apply-plan",
+                str(update_plan_path),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+
+    for relative_name, content in protected.items():
+        assert (project / relative_name).read_bytes() == content
+    assert (project / "lifecycle-version.txt").read_text(encoding="utf-8") == (
+        "lifecycle v2\n"
+    )
+    assert not (project / "retired-after-v1.txt").exists()
+    for relative_name, digest in transaction["artifacts"].items():
+        assert cli.file_fingerprint(project / relative_name) == digest
+    provenance = json.loads(
+        (project / cli.PROVENANCE_FILE).read_text(encoding="utf-8")
+    )
+    assert provenance["release_tag"] == "v2.0.0"
+    assert provenance["commit_sha"] == second_sha
+    assert provenance["previous"]["release_tag"] == "v1.0.0"
+    assert provenance["previous"]["commit_sha"] == first_sha
 
 
 def test_adoption_report_classifies_unknown_content(
@@ -1517,7 +2040,7 @@ def test_adopt_help_describes_report_directory(
     assert "--apply-plan PATH" in help_text
     assert "--finalize" in help_text
     assert "--report-dir PATH" in help_text
-    assert "plan without writing (the default for adopt)" in help_text
+    assert "plan without writing (the default for lifecycle" in help_text
 
 
 def test_adopt_reports_dirty_tree_without_mutating_it(tmp_path: Path) -> None:
@@ -1865,6 +2388,63 @@ def test_candidate_patch_rejects_unplanned_effects(tmp_path: Path) -> None:
     assert not (project / "unexpected.txt").exists()
 
 
+def test_candidate_patch_rolls_back_after_late_external_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Undo only CLI writes when an unplanned path races with git apply."""
+    project = tmp_path / "race-target"
+    project.mkdir()
+    managed = project / "managed.txt"
+    product = project / "product.txt"
+    managed.write_text("managed v1\n", encoding="utf-8")
+    product.write_text("product v1\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    candidate = tmp_path / "race-candidate"
+    cli.clone_target(project, candidate)
+    candidate_managed = candidate / "managed.txt"
+    candidate_managed.write_text("managed v2\n", encoding="utf-8")
+    patch_path = tmp_path / "race.patch"
+    snapshot = cli.repository_snapshot(project)
+    original_run = cli.run
+    raced = False
+
+    def run_with_late_race(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal raced
+        result = original_run(command, cwd=cwd, capture=capture, check=check)
+        if (
+            not raced
+            and command[:5] == ["git", "-C", str(project), "apply", "-p2"]
+            and "--check" not in command
+            and "-R" not in command
+        ):
+            product.write_text("external race\n", encoding="utf-8")
+            raced = True
+        return result
+
+    monkeypatch.setattr(cli, "run", run_with_late_race)
+    with pytest.raises(CliError, match="CLI changes were rolled back"):
+        cli.write_candidate_patch(
+            candidate,
+            project,
+            patch_path,
+            artifacts={"managed.txt": cli.file_fingerprint(candidate_managed)},
+            target_snapshot=snapshot,
+        )
+
+    assert raced is True
+    assert managed.read_text(encoding="utf-8") == "managed v1\n"
+    assert product.read_text(encoding="utf-8") == "external race\n"
+
+
 def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
     """Run the project hook in the candidate and keep target bytes unchanged."""
     source, revision = make_template(tmp_path)
@@ -1904,9 +2484,62 @@ def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
     assert payload["adoption"]["applicable"] is False
     assert payload["adoption"]["project_verification_hook"] == "configured"
     assert str(payload["adoption"]["verification"]).startswith("failed:")
-    assert main(["adopt", str(project), "--apply-plan", str(plan_path)]) == 2
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--allow-unreleased",
+            ]
+        )
+        == 2
+    )
     assert git(project, "status", "--porcelain") == before
     assert not (project / "managed.txt").exists()
+
+
+def test_adopt_dry_run_rejects_csarc_symlink_without_external_writes(
+    tmp_path: Path,
+) -> None:
+    """Never follow a repository-controlled .csarc directory symlink."""
+    source, revision = make_template(tmp_path)
+    external = tmp_path / "external-state"
+    external.mkdir()
+    sentinel = external / "sentinel.txt"
+    sentinel.write_text("unchanged\n", encoding="utf-8")
+    project = tmp_path / "symlinked-state-product"
+    project.mkdir()
+    (project / ".csarc").symlink_to(external, target_is_directory=True)
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: repository-controlled state symlink")
+    before = cli.target_file_snapshot(project)
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+            ]
+        )
+        == 2
+    )
+    assert cli.target_file_snapshot(project) == before
+    assert sentinel.read_text(encoding="utf-8") == "unchanged\n"
+    assert not (external / "provenance.json").exists()
+    assert not (external / "adoption-pending.json").exists()
+    assert not (
+        tmp_path / "symlinked-state-product-csarc-adoption-report"
+    ).exists()
 
 
 def test_fixed_merges_preserve_product_content_and_crlf() -> None:
@@ -2267,15 +2900,32 @@ def test_update_check_dry_run_apply_and_conflict(
     )
     assert git(project, "status", "--porcelain") == before
     assert managed.read_text(encoding="utf-8") == "template version two\n"
-    assert "files may still change" in capsys.readouterr().out
+    plan_path = lifecycle_plan_path(project, "update")
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert plan["transaction"]["verification"] == "passed"
+    capsys.readouterr()
 
+    before_apply = cli.target_file_snapshot(project)
     assert (
         main(
             [
                 "update",
                 str(project),
-                "--to",
-                second_sha,
+                "--apply-plan",
+                str(plan_path),
+            ]
+        )
+        == 2
+    )
+    assert "--allow-unreleased again" in capsys.readouterr().err
+    assert cli.target_file_snapshot(project) == before_apply
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
                 "--allow-unreleased",
                 "--yes",
                 "--non-interactive",
@@ -2305,6 +2955,7 @@ def test_update_check_dry_run_apply_and_conflict(
     commit(project, "test: customize managed file")
     managed.write_text("template version three\n", encoding="utf-8")
     third_sha = commit(source, "test: template version three")
+    before_content = (project / "managed.txt").read_text(encoding="utf-8")
 
     assert (
         main(
@@ -2314,13 +2965,27 @@ def test_update_check_dry_run_apply_and_conflict(
                 "--to",
                 third_sha,
                 "--allow-unreleased",
-                "--yes",
-                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    failed_plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert failed_plan["transaction"]["applicable"] is False
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--allow-unreleased",
             ]
         )
         == 2
     )
-    assert "<<<<<<<" in (project / "managed.txt").read_text(encoding="utf-8")
+    assert (project / "managed.txt").read_text(
+        encoding="utf-8"
+    ) == before_content
 
 
 def test_update_rechecks_committed_head_after_confirmation(
@@ -2340,6 +3005,19 @@ def test_update_rechecks_committed_head_after_confirmation(
     )
     revision = commit(source, "test: template version two")
 
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+            ]
+        )
+        == 0
+    )
+
     def drift_during_confirmation(_: str) -> str:
         (project / "product.txt").write_text("after\n", encoding="utf-8")
         commit(project, "test: concurrent product change")
@@ -2351,8 +3029,8 @@ def test_update_rechecks_committed_head_after_confirmation(
             [
                 "update",
                 str(project),
-                "--to",
-                revision,
+                "--apply-plan",
+                str(lifecycle_plan_path(project, "update")),
                 "--allow-unreleased",
             ]
         )
@@ -2392,6 +3070,19 @@ def test_update_rechecks_repository_context_after_confirmation(
         cli, "repository_context", lambda *args, **kwargs: current[0]
     )
 
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+            ]
+        )
+        == 0
+    )
+
     def drift_during_confirmation(_: str) -> str:
         current[0] = cli.RepositoryContext(
             "different/repository",
@@ -2409,8 +3100,8 @@ def test_update_rechecks_repository_context_after_confirmation(
             [
                 "update",
                 str(project),
-                "--to",
-                revision,
+                "--apply-plan",
+                str(lifecycle_plan_path(project, "update")),
                 "--allow-unreleased",
             ]
         )
@@ -2447,6 +3138,21 @@ def test_update_rechecks_snapshot_after_repository_context(
         "github",
         True,
     )
+    monkeypatch.setattr(
+        cli, "repository_context", lambda *args, **kwargs: stable
+    )
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+            ]
+        )
+        == 0
+    )
     calls = 0
 
     def context_with_target_drift(*args: object, **kwargs: object) -> object:
@@ -2463,8 +3169,8 @@ def test_update_rechecks_snapshot_after_repository_context(
             [
                 "update",
                 str(project),
-                "--to",
-                revision,
+                "--apply-plan",
+                str(lifecycle_plan_path(project, "update")),
                 "--allow-unreleased",
                 "--yes",
                 "--non-interactive",
@@ -2479,6 +3185,98 @@ def test_update_rechecks_snapshot_after_repository_context(
     )
 
 
+def test_update_replay_rejects_source_answers_and_rendered_output_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Keep every replay input external until the saved plan still matches."""
+    source, project, _ = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated project")
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    revision = commit(source, "test: template version two")
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+            ]
+        )
+        == 0
+    )
+    plan_path = lifecycle_plan_path(project, "update")
+    apply_arguments = [
+        "update",
+        str(project),
+        "--apply-plan",
+        str(plan_path),
+        "--allow-unreleased",
+        "--yes",
+        "--non-interactive",
+    ]
+    baseline = cli.target_file_snapshot(project)
+
+    unavailable = tmp_path / "template-source-unavailable"
+    source.rename(unavailable)
+    assert main(apply_arguments) == 2
+    assert cli.target_file_snapshot(project) == baseline
+    unavailable.rename(source)
+
+    answers_path = project / ".copier-answers.yml"
+    original_answers = answers_path.read_bytes()
+    answers_path.write_bytes(original_answers + b"project_name: Drifted\n")
+    drifted = cli.target_file_snapshot(project)
+    assert main(apply_arguments) == 2
+    assert cli.target_file_snapshot(project) == drifted
+    answers_path.write_bytes(original_answers)
+    assert git(project, "status", "--porcelain") == ""
+
+    original_prepare = cli.prepare_update_candidate
+
+    def render_drift(
+        target: Path,
+        candidate: Path,
+        target_revision: cli.Revision,
+        previous: dict[str, object] | None,
+        update_data: Mapping[str, str],
+        generated_at: str,
+    ) -> tuple[cli.Plan, dict[str, str], tuple[str, ...], str]:
+        result = original_prepare(
+            target,
+            candidate,
+            target_revision,
+            previous,
+            update_data,
+            generated_at,
+        )
+        effects, artifacts, deleted, verification = result
+        managed = candidate / "managed.txt"
+        managed.write_text("rendered drift\n", encoding="utf-8")
+        artifacts = dict(artifacts)
+        artifacts["managed.txt"] = cli.file_fingerprint(managed)
+        return effects, artifacts, deleted, verification
+
+    capsys.readouterr()
+    with monkeypatch.context() as context:
+        context.setattr(cli, "prepare_update_candidate", render_drift)
+        assert main(apply_arguments) == 2
+    assert "rendered output drifted" in capsys.readouterr().err
+    assert cli.target_file_snapshot(project) == baseline
+
+    assert main(apply_arguments) == 0
+    assert (project / "managed.txt").read_text(encoding="utf-8") == (
+        "template version two\n"
+    )
+
+
 def test_update_recomputes_visibility_defaults_from_github(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2487,23 +3285,19 @@ def test_update_recomputes_visibility_defaults_from_github(
     """Migrate stale private defaults when GitHub reports a public repo."""
     source, first_sha = make_template(tmp_path)
     project = tmp_path / "public-project"
-    assert (
-        main(
-            [
-                "init",
-                str(project),
-                "--source",
-                str(source),
-                "--to",
-                first_sha,
-                "--allow-unreleased",
-                "--data",
-                "language=python",
-                "--yes",
-                "--non-interactive",
-            ]
-        )
-        == 0
+    apply_init(
+        [
+            "init",
+            str(project),
+            "--source",
+            str(source),
+            "--to",
+            first_sha,
+            "--allow-unreleased",
+            "--data",
+            "language=python",
+        ],
+        project,
     )
     capsys.readouterr()
     git(project, "init", "-b", "main")
@@ -2682,6 +3476,18 @@ def test_non_interactive_writes_require_yes(tmp_path: Path) -> None:
                 str(source),
                 "--to",
                 first_sha,
+                "--allow-unreleased",
+            ]
+        )
+        == 0
+    )
+    assert (
+        main(
+            [
+                "init",
+                str(project),
+                "--apply-plan",
+                str(lifecycle_plan_path(project, "init")),
                 "--allow-unreleased",
                 "--non-interactive",
             ]

@@ -9,7 +9,7 @@
    `uv` obtains an isolated Python when needed; never require a global Python
    installation or edit a shell profile or global environment. Run the
    requested `csarc init`, `adopt`, or `update` command as a dry-run first;
-   `adopt` and `adopt --finalize` default to dry-run when no `--apply-plan` is
+   every lifecycle write defaults to dry-run when no `--apply-plan` is
    supplied. For a release-specific request, pass both `--to` and
    `--expected-sha`.
 4. Summarize the verified release, full commit SHA, release capability
@@ -24,11 +24,12 @@
 5. Stop and wait for explicit confirmation before changing files.
    Treat an unverified `code_owner` as unknown and call it out before accepting
    the plan; a confirmed missing team is blocking.
-6. After confirmation, apply an adoption only with the exact machine plan
-   emitted by dry-run and `--yes --non-interactive`. For init or update, reuse
-   the resolved tag and full SHA explicitly. Report the `./scripts/verify`
-   result. Applying a plan created from an unreleased development source must
-   require `--allow-unreleased` again; a recomputable plan digest is not trust.
+6. After confirmation, apply init, adoption, or update only with the exact
+   external machine plan emitted by dry-run and `--yes --non-interactive`;
+   never repeat release or answer options during apply. Report the
+   `./scripts/verify` result. Applying a plan created from an unreleased
+   development source requires `--allow-unreleased` again; a recomputable plan
+   digest is not trust.
    If adoption creates a resumable manual-merge checkpoint, complete
    only the listed merges, run `adopt --finalize --dry-run`, review its new
    external plan, wait for confirmation again, then use `adopt --finalize

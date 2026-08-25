@@ -13,6 +13,7 @@ PROMPT_MODULE = runpy.run_path(
 )
 REPOSITORY = PROMPT_MODULE["REPOSITORY"]
 render = PROMPT_MODULE["render"]
+prompt = PROMPT_MODULE["prompt"]
 
 
 def test_render_uses_one_release_identity_everywhere() -> None:
@@ -40,6 +41,31 @@ def test_render_uses_one_release_identity_everywhere() -> None:
     assert provenance["release_tag"] == "v1.2.3"
     assert prompts.split("\n\n---", maxsplit=1)[0] not in notes
     assert "csarc adopt" in notes
+
+
+@pytest.mark.parametrize(
+    ("mode", "apply_command"),
+    [
+        (
+            "init",
+            "csarc init <target-path> --apply-plan PATH "
+            "--yes --non-interactive",
+        ),
+        ("adopt", "csarc adopt --apply-plan PATH --yes --non-interactive"),
+        ("update", "csarc update --apply-plan PATH --yes --non-interactive"),
+    ],
+)
+def test_release_prompt_applies_only_the_reviewed_plan(
+    mode: str, apply_command: str
+) -> None:
+    """Keep every release prompt aligned with the transactional CLI."""
+    rendered = prompt(mode, "v1.2.3", "a" * 40)
+    after_confirmation = rendered.split("確認後", maxsplit=1)[1]
+
+    assert f"`{apply_command}`" in after_confirmation
+    assert "--to" not in after_confirmation
+    assert "--expected-sha" not in after_confirmation
+    assert "相同 tag" not in after_confirmation
 
 
 @pytest.mark.parametrize(
