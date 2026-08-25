@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import runpy
 from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml  # type: ignore[import-untyped]
 
 MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "delivery_sync.py")
@@ -1088,19 +1088,25 @@ def test_private_ruleset_checks_use_human_authorized_fallback(
 
 def untrusted_admin_secret_references(source: str) -> set[str]:
     """Return admin secret references exposed by untrusted workflow events."""
-    workflow = yaml.safe_load(source)
-    triggers = (
-        workflow.get("on", workflow.get(True, {}))
-        if isinstance(workflow, dict)
-        else {}
+    lines = source.splitlines()
+    on_index = next(
+        (index for index, line in enumerate(lines) if line.startswith("on:")),
+        None,
     )
-    if isinstance(triggers, dict):
-        events = set(triggers)
-    elif isinstance(triggers, list):
-        events = {str(event) for event in triggers}
-    else:
-        events = {str(triggers)}
-    if not events & {"pull_request", "merge_group"}:
+    if on_index is None:
+        return set()
+    declaration = lines[on_index].removeprefix("on:")
+    untrusted = bool(
+        re.search(r"\b(?:pull_request|merge_group)\b", declaration)
+    )
+    if not declaration.strip():
+        for line in lines[on_index + 1 :]:
+            if line and not line[0].isspace():
+                break
+            untrusted |= bool(
+                re.match(r"^  (?:pull_request|merge_group):", line)
+            )
+    if not untrusted:
         return set()
     names = {
         "CSARC_SYNC_TOKEN",
