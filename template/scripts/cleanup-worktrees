@@ -89,32 +89,52 @@ is_selected() {
 merged_pr_reaches_ref() {
   local start_sha="$1"
   local index=0
-  local sha rows state merge_sha
+  local sha rows number state merged_at merge_sha base_ref head_sha
+  local integration_full integration_branch
+  local -a candidates
   local queue=("$start_sha")
   local seen=" $start_sha "
+
+  integration_full="$(git rev-parse --symbolic-full-name "$integration_ref")"
+  case "$integration_full" in
+    refs/heads/*) integration_branch="${integration_full#refs/heads/}" ;;
+    refs/remotes/*/*)
+      integration_branch="${integration_full#refs/remotes/}"
+      integration_branch="${integration_branch#*/}"
+      ;;
+    *)
+      echo "Integration ref is not a branch: $integration_ref" >&2
+      return 2
+      ;;
+  esac
 
   while ((index < ${#queue[@]})); do
     sha="${queue[$index]}"
     ((index += 1))
     if ! rows="$(
       gh api "repos/{owner}/{repo}/commits/$sha/pulls" \
-        --jq '.[] | [.state, (.merge_commit_sha // "-")] | join("|")'
+        --jq '.[] | [.number, .state, (.merged_at // "-"), (.merge_commit_sha // "-"), (.base.ref // "-"), (.head.sha // "-")] | join("|")'
     )"; then
       echo "Could not verify pull requests for commit $sha." >&2
       return 2
     fi
-    while IFS='|' read -r state merge_sha; do
-      [[ -n "$state" ]] || continue
-      [[ "$state" != "open" ]] || return 1
-      [[ "$merge_sha" != "-" ]] || continue
-      if git merge-base --is-ancestor "$merge_sha" "$integration_ref"; then
-        return 0
-      fi
-      if [[ "$seen" != *" $merge_sha "* ]]; then
-        queue+=("$merge_sha")
-        seen+="$merge_sha "
+    candidates=()
+    while IFS='|' read -r number state merged_at merge_sha base_ref head_sha; do
+      [[ -n "$number" ]] || continue
+      if [[ "$state" != "open" && "$merged_at" != "-" && \
+        "$merge_sha" != "-" && "$head_sha" == "$sha" ]]; then
+        candidates+=("$merge_sha|$base_ref")
       fi
     done <<<"$rows"
+    ((${#candidates[@]} <= 1)) || return 1
+    ((${#candidates[@]} == 1)) || continue
+    IFS='|' read -r merge_sha base_ref <<<"${candidates[0]}"
+    git merge-base --is-ancestor "$merge_sha" "$integration_ref" || return 1
+    [[ "$base_ref" != "$integration_branch" ]] || return 0
+    if [[ "$seen" != *" $merge_sha "* ]]; then
+      queue+=("$merge_sha")
+      seen+="$merge_sha "
+    fi
   done
   return 1
 }

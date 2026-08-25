@@ -64,6 +64,8 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；CI 
 
 本 repo 採 delivery 模式：可同時有多條 Milestone delivery branch；一般孤立 Issue 進入 `dev/next`，確實需要獨立 soak／canary 時才使用一次性的 `dev/i<Issue 編號>-<簡稱>`。它們都以受審查的 promotion PR 進入 `main`；只有明確 hotfix 可直接 target main。CI 是可攜的 integration test layer，外部測試環境則屬 canary layer。
 
+選定 Issue 後執行 `./scripts/issue_path_status.py --issue <number>`；它只讀 live GitHub 狀態，輸出 route、risk、允許動作、必要 evidence 與唯一下一步。`blocked`／`unknown` 不會被當成可合併；完整契約見 [`docs/ci-policy.md`](docs/ci-policy.md#單一-issue-path-preflight)。
+
 ```mermaid
 flowchart LR
   A1["Milestone A Issues"] --> MA["dev/m7-delivery"]

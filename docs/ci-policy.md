@@ -36,6 +36,50 @@ CI 是沒有獨立測試環境時的可攜式 integration layer；外部環境�
 `dev/next` 一起驗證、canary 目標與停止條件。Hotfix 也不是快速通道：它仍跑 full
 tier、保留 promotion evidence 並立即形成 release 邊界。
 
+### 單一 Issue path preflight
+
+開始或接手工作，以及 GitHub 上的 Issue、PR、branch、review 或 checks 改變後，重跑
+同一個唯讀入口：
+
+```bash
+./scripts/issue_path_status.py --issue <issue-number>
+```
+
+入口只使用 GitHub GET API 與 repo 內的 branch strategy 宣告，不會建立 branch、留言、
+切換 Draft／Ready、偽造 check 或合併。JSON 固定回報 durable `state`、`guard`、推導出的
+`route`／`risk`、repository `capability`、允許動作、必要與已觀察 evidence，以及唯一
+`next_step`。有 Milestone 的 Issue 選唯一 `dev/m*`，standalone 選 `dev/next`；明確
+`hotfix` 或 `promotion` 才能進 `main`。生成專案從 `.csarc/profile.json` 讀取
+`branch_strategy`，中央模板 repo 則使用其已知的 delivery 模式；repository identity
+預設從 GitHub origin 讀取，只有非標準本機 remote 才需另傳 `--repo`。
+`guard=clear` 回傳 0、`guard=blocked` 回傳 1；GitHub／輸入讀取失敗回傳 2。
+
+同號的多張 open PR／多條 remote work branch、必要 branch 缺少、非本 repo head、
+base ancestry 或 head ref 漂移、未勾選 acceptance、較新的 blocker、required check
+失敗，以及 single-writer Ruleset／lifecycle interface 為 `blocked` 或 `unknown` 時，
+`guard` 都是 `blocked`，且不會列出 merge 動作。Elevated、promotion 與 hotfix 還必須
+有綁定目前 head、非作者本人、非 bot 的 maintainer approval。Draft 必須填完 Scope、
+Completed verification、Pending verification、Known risks 與 Dependencies / non-parallel
+work；未完成時使用 `Refs`，不可用 closing keyword。Stacked PR 必須有唯一鏈回 integration
+branch；merged 狀態還會驗證該鏈及 terminal merge commit 確實包含在 live integration
+ref，不能只憑 `merged_at` 宣稱 Integrated／Delivered。這個入口只指出下一步；真正的
+metadata／merge mutation 仍由 lifecycle lease holder 或政策允許的 human maintainer
+執行。
+
+若 target branch 尚未包含 #240 的 canonical lifecycle helper，工具即使看見部分
+Ruleset 也會將 single-writer capability 回報為 `unknown`，不列出 merge 動作。介面存在
+且證明 approval、stale-review、last-push、thread resolution 與 no-bypass 後，只先列出
+原子的 `pr_lifecycle.py acquire`；取得 lease 與 human maintainer 的 exact PR/head
+authorization 後，以 `--lease`、`--owner`、`--authorization-url` 重跑，canonical
+read-only `check` 全部通過才回報 `allowed`。
+
+Routine PR 若所有 live failed runs 都由 `promotion_gate.py` 證明為 exact-head zero-step
+billing block，入口會列出既有 `note-quota-fallback` 命令。它只接受一則 repo、PR、
+SHA、完整 run URL 集合與本機驗證結果都相符的 canonical note；note 有效且 single-writer
+capability 為 `allowed` 後才列出 lease／merge。Elevated、promotion、hotfix 或任何
+非 quota failure 不得走這條路；promotion／hotfix 的 zero-step 狀態只會導向既有雙方
+attestation／authorization 流程。
+
 ## 四層執行契約
 
 | 層次 | 事件 | 執行內容 | Required／取消規則 | 成本目的 |

@@ -27,6 +27,8 @@ merged="$fixture_root/merged"
 dirty="$fixture_root/dirty"
 unmerged="$fixture_root/unmerged"
 squashed="$fixture_root/squashed"
+wrong_route="$fixture_root/wrong-route"
+ambiguous="$fixture_root/ambiguous"
 current="$fixture_root/current"
 locked="$fixture_root/locked"
 detached="$fixture_root/detached"
@@ -34,6 +36,8 @@ add_worktree merged "$merged"
 add_worktree dirty "$dirty"
 add_worktree unmerged "$unmerged"
 add_worktree squashed "$squashed"
+add_worktree wrong-route "$wrong_route"
+add_worktree ambiguous "$ambiguous"
 add_worktree current "$current"
 add_worktree locked "$locked"
 git -C "$repo" worktree add -q --detach "$detached" main
@@ -41,6 +45,8 @@ git -C "$repo" worktree add -q --detach "$detached" main
 for branch in merged dirty current locked; do
   git -C "$repo" merge -q --no-ff -m "merge $branch" "$branch"
 done
+git -C "$repo" merge -q --no-ff -m "merge wrong route" wrong-route
+git -C "$repo" merge -q --no-ff -m "merge ambiguous" ambiguous
 git -C "$repo" merge -q --squash squashed >/dev/null 2>&1
 git -C "$repo" commit -q -m "squash squashed"
 printf 'dirty\n' >>"$dirty/dirty.txt"
@@ -49,7 +55,22 @@ git -C "$repo" worktree lock "$locked"
 integration_sha="$(git -C "$repo" rev-parse main)"
 for path in "$merged" "$dirty" "$squashed" "$current" "$locked"; do
   head_sha="$(git -C "$path" rev-parse HEAD)"
-  printf '%s %s\n' "$head_sha" "$integration_sha" >>"$fixture_root/merged-prs"
+  printf '%s|1|closed|2026-08-25T01:00:00Z|%s|main|%s\n' \
+    "$head_sha" "$integration_sha" "$head_sha" \
+    >>"$fixture_root/merged-prs"
+done
+merged_head="$(git -C "$merged" rev-parse HEAD)"
+printf '%s|99|open|-|-|feature/stack|different-head\n' "$merged_head" \
+  >>"$fixture_root/merged-prs"
+wrong_head="$(git -C "$wrong_route" rev-parse HEAD)"
+printf '%s|2|closed|2026-08-25T01:00:00Z|%s|dev/other|%s\n' \
+  "$wrong_head" "$integration_sha" "$wrong_head" \
+  >>"$fixture_root/merged-prs"
+ambiguous_head="$(git -C "$ambiguous" rev-parse HEAD)"
+for number in 3 4; do
+  printf '%s|%s|closed|2026-08-25T01:00:00Z|%s|main|%s\n' \
+    "$ambiguous_head" "$number" "$integration_sha" "$ambiguous_head" \
+    >>"$fixture_root/merged-prs"
 done
 
 cat >"$fixture_root/bin/gh" <<'EOF'
@@ -58,7 +79,7 @@ set -euo pipefail
 
 sha="${2%/pulls}"
 sha="${sha##*/}"
-awk -v sha="$sha" '$1 == sha { print "closed|" $2 }' "$MOCK_MERGED_PRS"
+awk -F '|' -v sha="$sha" '$1 == sha { print $2 "|" $3 "|" $4 "|" $5 "|" $6 "|" $7 }' "$MOCK_MERGED_PRS"
 EOF
 chmod +x "$fixture_root/bin/gh"
 export MOCK_MERGED_PRS="$fixture_root/merged-prs"
@@ -69,6 +90,10 @@ grep -Fq $'candidate\tsquashed\t' <<<"$startup_run"
 grep -Fq $'skip\tdirty\t' <<<"$startup_run"
 grep -Fq $'skip\tlocked\t' <<<"$startup_run"
 grep -Fq $'skip\tnot verified merged\t' <<<"$startup_run"
+grep -Fq $'skip\tnot verified merged\t'"$(cd "$wrong_route" && pwd -P)" \
+  <<<"$startup_run"
+grep -Fq $'skip\tnot verified merged\t'"$(cd "$ambiguous" && pwd -P)" \
+  <<<"$startup_run"
 grep -Fq $'skip\tdetached\t' <<<"$startup_run"
 test -e "$merged"
 
@@ -79,6 +104,8 @@ grep -Fq $'skip\tcurrent worktree\t' <<<"$current_run"
   --apply --worktree "$merged" main >/dev/null)
 test ! -e "$merged"
 test -e "$squashed"
+test -e "$wrong_route"
+test -e "$ambiguous"
 
 (cd "$repo" && PATH="$fixture_root/bin:$PATH" "$script_path" --apply main >/dev/null)
 test ! -e "$squashed"
@@ -87,5 +114,7 @@ test -e "$dirty"
 test -e "$unmerged"
 test -e "$detached"
 test -e "$locked"
+test -e "$wrong_route"
+test -e "$ambiguous"
 
-echo "Worktree cleanup cases passed: 8"
+echo "Worktree cleanup cases passed: 10"

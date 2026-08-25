@@ -26,6 +26,8 @@ grep -q 'verify-quota-main' docs/ci-policy.md
 grep -q 'release_eligible.*false' docs/ci-policy.md
 cmp -s scripts/promotion_gate.py template/scripts/promotion_gate.py
 cmp -s tests/test_promotion_gate.py template/tests/test_promotion_gate.py
+cmp -s scripts/issue_path_status.py template/scripts/issue_path_status.py
+cmp -s tests/test_issue_path_status.py template/tests/test_issue_path_status.py
 for summary_file in AGENTS.md README.md template/AGENTS.md.jinja \
   template/README.md.jinja; do
   grep -q 'docs/ci-policy.md#actions-額度-fallback' "$summary_file"
@@ -71,6 +73,7 @@ uv run ruff format --check \
   tests/test_ci_tier.py \
   tests/test_promotion_gate.py \
   tests/test_delivery_sync.py \
+  tests/test_issue_path_status.py \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
   tests/test_release_consumption.py \
@@ -78,6 +81,7 @@ uv run ruff format --check \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/issue_path_status.py \
   scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -94,6 +98,7 @@ uv run ruff check \
   tests/test_ci_tier.py \
   tests/test_promotion_gate.py \
   tests/test_delivery_sync.py \
+  tests/test_issue_path_status.py \
   tests/test_release_policy.py \
   tests/test_release_prompt.py \
   tests/test_release_consumption.py \
@@ -101,6 +106,7 @@ uv run ruff check \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/issue_path_status.py \
   scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -115,6 +121,7 @@ uv run mypy \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/issue_path_status.py \
   scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -656,7 +663,8 @@ if ! uv pip install \
 fi
 uv pip check --python "$lower_bounds_root/.venv/bin/python"
 if ! "$lower_bounds_root/.venv/bin/python" -m pytest \
-  tests/test_delivery_sync.py tests/test_milestone_lifecycle.py tests/test_release_policy.py \
+  tests/test_delivery_sync.py tests/test_issue_path_status.py \
+  tests/test_milestone_lifecycle.py tests/test_release_policy.py \
   tests/test_spec_to_issue.py; then
   echo "Root tests fail with the declared direct dependency lower bounds."
   exit 1
@@ -1455,6 +1463,7 @@ test -x "$fixture_root/default-project/scripts/check-update-conflicts"
 test -x "$fixture_root/default-project/scripts/install-gitleaks"
 test -x "$fixture_root/default-project/scripts/verify-fast"
 test -f "$fixture_root/default-project/scripts/ci_tier.py"
+test -x "$fixture_root/default-project/scripts/issue_path_status.py"
 test -x "$fixture_root/default-project/scripts/promotion_gate.py"
 test ! -f "$fixture_root/default-project/.pre-commit-config.yaml"
 test ! -f "$fixture_root/default-project/package.json"
