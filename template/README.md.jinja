@@ -3,11 +3,11 @@
 {% set has_container = (container_mode | default("none")) != "none" -%}
 # {{ project_name }}
 
-<!-- 請在這裡補上 CI 徽章，例如：
-[![CI](https://github.com/<org>/<repo>/actions/workflows/ci.yml/badge.svg)](https://github.com/<org>/<repo>/actions/workflows/ci.yml)
--->
+[![CI]({{ repository_url }}/actions/workflows/ci.yml/badge.svg)]({{ repository_url }}/actions/workflows/ci.yml)
 
+<!-- csarc-project-description:start -->
 {{ project_description }}
+<!-- csarc-project-description:end -->
 
 [開啟專案內部網站](docs/index.html)
 
@@ -24,7 +24,7 @@
 
 ## 專案概述
 
-本 repo 使用 CSARC 公版，語言 profile 是 `{{ language }}`。請在這裡補上主要使用者、解決的問題、輸出與不處理的範圍；完整團隊流程放在內部網站，不在 README 重複。
+本 repo 使用 CSARC 公版，語言 profile 是 `{{ language }}`。完整團隊流程放在內部網站，不在 README 重複。
 
 ## 快速開始
 
@@ -33,7 +33,7 @@
 請從實際 Git root 開啟 Codex／agent workspace；從 repo 上層開啟時，子目錄的 `AGENTS.md` 不一定會自動載入。開始前先在工作目錄執行 `test "$(git rev-parse --show-toplevel)" = "$(pwd -P)"`，失敗就切換到輸出的 Git root，不要複製另一份指引到父目錄。
 
 ```bash
-git clone <repository-url>
+git clone {{ repository_url }}
 cd {{ project_slug }}
 {% if branch_strategy == "delivery" %}git switch -c dev/next
 git push -u origin dev/next
@@ -44,7 +44,13 @@ git push -u origin dev
 ./scripts/apply-repository-settings.sh plan
 ```
 
-請在這裡補上產品最短可成功的啟動或呼叫範例。
+產品最短可成功的啟動或呼叫方式：
+
+<!-- csarc-project-run-command:start -->
+```bash
+{{ project_run_command }}
+```
+<!-- csarc-project-run-command:end -->
 
 {% if project_mode == "existing" %}> 既有案導入：Copier 已保留原本的 manifest。先人工合併 dev 相依、版本與工具設定，再重建 lockfile；`coverage_mode=diff` 預設比較 `origin/main`。{% endif %}
 {% if branch_strategy == "delivery" %}> 本案選用 delivery 模式：Milestone 使用 `dev/m<編號>-<簡稱>`，一般孤立 Issue 使用 `dev/next`，確實需要獨立 soak／canary 的孤立 Issue 才使用一次性的 `dev/i<Issue 編號>-<簡稱>`；它們都以 promotion PR 進入 `main`。{% elif branch_strategy == "dev" %}> 本案選用 `dev` 模式，因為有長期共用測試環境。維護者首次啟用時須從 `main` 建立並推送 `dev`。{% else %}> 本案使用 main 模式，短分支通過 PR 後直接合併到 `main`。{% endif %}
@@ -180,4 +186,4 @@ CLI 會先預覽 Copier smart diff、conflict risk 與 Milestone description mig
 
 ## 負責人與支援
 
-程式與政策 owner 是 `{{ code_owner }}`；governance workflow 會從 `.github/REVIEWERS` 輪派一位非作者 reviewer。一般問題使用 GitHub Issue；疑似資安事件或敏感資料走組織核准的內部通報管道，詳見 [`SECURITY.md`](SECURITY.md)。
+程式與政策 owner 是 `{{ code_owner }}`；governance workflow 會從 `.github/REVIEWERS` 輪派一位非作者 reviewer。一般問題與疑似資安問題依 [`SECURITY.md`](SECURITY.md) 使用核准的通報管道；預設 GitHub Issue 是公開的，不得張貼 secrets、credentials、personal data 或其他敏感內容。

@@ -18,7 +18,7 @@ window.CSARC_SITE_CONTENT = {
       "pnpm 11"{% endif %}
     ],
     commands: [
-      "git clone <repository-url>",
+      "git clone {{ repository_url }}",
       "cd {{ project_slug }}",
       "./scripts/verify"
     ]

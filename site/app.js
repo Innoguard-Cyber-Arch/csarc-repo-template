@@ -544,18 +544,20 @@ trustPolicy: no-downgrade`
         },
         {
           title: '回報本專案自身的漏洞，不是掃相依套件',
-          goal: '掃描工具只看得到已知模式；有人主動回報才補得到掃描漏抓的問題。Issue 是公開索引的，通報流程要先把人導離開 Issue。',
-          summary: '不寫死聯絡信箱或 SLA：模板不知道下游專案的實際通報管道，假造一個反而誤導回報者。專案 owner 必須在 `SECURITY.md` 填入實際管道與回應期待後，這份政策才算生效。',
+          goal: '掃描工具只看得到已知模式；有人主動回報才補得到掃描漏抓的問題。GitHub Issue 是公開索引的，必須避免張貼任何敏感資料。',
+          summary: '本公版與生成專案預設使用實際 repository 的 GitHub Issues，建立後維護者會收到通知。公開 Issue 不得包含 secrets、credentials、personal data 或其他敏感內容；不寫死未核准的 email 或 SLA，驗證腳本也會拒絕未完成的 placeholder。',
           file: 'SECURITY.md',
           code: `## Reporting a vulnerability
 
-Do not open a public GitHub Issue for a
-suspected vulnerability, exploit code,
-credentials, tokens, or customer data.
+Open a GitHub Issue. Maintainers receive
+notifications for new Issues.
 
-<!-- Project owner: replace with the actual
-private reporting channel and expected
-acknowledgement window. -->`
+GitHub Issues are public. Do not post secrets,
+credentials, personal data, or other sensitive
+details.
+
+No acknowledgement or resolution SLA is
+invented.`
         }
       ],
       deploy: [
