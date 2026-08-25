@@ -195,9 +195,12 @@ jobs:
           tests/test_cli.py::test_lifecycle_plan_replay_updates_v1_to_v2
           tests/test_cli.py::test_real_init_and_adoption_update_through_verified_releases
           tests/test_cli.py::test_runtime_state_rejects_symlinked_parent
+          tests/test_cli.py::test_conflict_scan_does_not_follow_symlinks_or_read_fifos
           tests/test_cli.py::test_fixed_merges_preserve_product_content_and_crlf
           tests/test_cli.py::test_adoption_preserves_executable_and_checked_patch_symlink
           tests/test_cli.py::test_candidate_patch_rolls_back_after_late_external_drift
+          tests/test_cli.py::test_candidate_patch_blocks_concurrent_commit_with_linked_worktree_lock
+          tests/test_cli.py::test_candidate_patch_does_not_reverse_after_head_bypasses_lock
 
   governance:
     name: remote governance
