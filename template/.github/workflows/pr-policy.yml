@@ -2,7 +2,7 @@ name: PR policy
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled, ready_for_review, converted_to_draft]
   merge_group:
     types: [checks_requested]
 
@@ -37,10 +37,21 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_DELIVERY_CUTOVER_ISSUE: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && '185' || '0' }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
+
+          if [[ "${PR_DRAFT:-false}" == "true" ]]; then
+            review_state="draft"
+          elif [[ "${PR_DRAFT:-false}" == "false" ]]; then
+            review_state="ready"
+          else
+            echo "PR_DRAFT must be true or false."
+            exit 1
+          fi
+          echo "PR review state: ${review_state}"
 
           if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?:\ .+ ]]; then
             echo "Use: type(scope): short English summary"
@@ -160,10 +171,14 @@ jobs:
           fi
 
           branch_pattern='^(feat|fix|docs|refactor|test|build|ci|chore|revert)/([0-9]+)-[a-z0-9][a-z0-9-]*$'
+          link_verb_pattern='(Closes|Fixes|Resolves)'
+          if [[ "$review_state" == "draft" ]]; then
+            link_verb_pattern='(Closes|Fixes|Resolves|Refs)'
+          fi
           if [[ "${promotion:-false}" == "true" ]]; then
-            closing_issue_pattern='(Closes|Fixes|Resolves)[[:space:]]+#([0-9]+)([^0-9]|$)'
-            if [[ ! "${PR_BODY:-}" =~ $closing_issue_pattern ]]; then
-              echo "A delivery promotion must close its promotion Issue."
+            issue_link_pattern="${link_verb_pattern}[[:space:]]+#([0-9]+)([^0-9]|$)"
+            if [[ ! "${PR_BODY:-}" =~ $issue_link_pattern ]]; then
+              echo "A delivery promotion must reference its Issue; Ready requires a closing keyword."
               exit 1
             fi
             issue_number="${BASH_REMATCH[2]}"
@@ -173,15 +188,44 @@ jobs:
               exit 1
             fi
             issue_number="${BASH_REMATCH[2]}"
-            issue_link_pattern="(Closes|Fixes|Resolves)[[:space:]]+#${issue_number}([^0-9]|$)"
+            issue_link_pattern="${link_verb_pattern}[[:space:]]+#${issue_number}([^0-9]|$)"
             if [[ ! "${PR_BODY:-}" =~ $issue_link_pattern ]]; then
-              echo "PR body must include Closes #${issue_number}."
+              echo "PR body must reference #${issue_number}; Ready requires a closing keyword."
               exit 1
             fi
           fi
+
+          if [[ "$review_state" == "draft" ]]; then
+            for field in "Scope" "Completed verification" "Pending verification" "Known risks" "Dependencies / non-parallel work"; do
+              field_pattern="^[[:space:]]*-[[:space:]]+${field}:[[:space:]]+[^[:space:]]"
+              if ! grep -Eq "$field_pattern" <<<"${PR_BODY:-}"; then
+                echo "Draft PR body must provide: ${field}."
+                exit 1
+              fi
+            done
+          fi
+
+          closing_reference_pattern='(Closes|Fixes|Resolves)[[:space:]]+#[0-9]+'
+          closing_count=0
+          unexpected_closing=false
+          while IFS= read -r closing_reference; do
+            [[ -z "$closing_reference" ]] && continue
+            closing_count=$((closing_count + 1))
+            if [[ ! "$closing_reference" =~ \#${issue_number}$ ]]; then
+              unexpected_closing=true
+            fi
+          done < <(grep -Eo "$closing_reference_pattern" <<<"${PR_BODY:-}" || true)
+          if [[ "$unexpected_closing" == "true" || "$closing_count" -gt 1 ]]; then
+            echo "A pull request may close only its single primary Issue."
+            exit 1
+          fi
+          require_complete=false
+          if [[ "$review_state" == "ready" || "$closing_count" -gt 0 ]]; then
+            require_complete=true
+          fi
           unchecked_task_pattern='^[[:space:]]*-[[:space:]]+\[[[:space:]]*\]'
-          if grep -Eq "$unchecked_task_pattern" <<<"${PR_BODY:-}"; then
-            echo "Complete every pull request checklist item before using a closing keyword."
+          if [[ "$require_complete" == "true" ]] && grep -Eq "$unchecked_task_pattern" <<<"${PR_BODY:-}"; then
+            echo "Complete every pull request checklist item before using a closing keyword or marking Ready."
             exit 1
           fi
 
@@ -209,8 +253,8 @@ jobs:
             echo "Issue #${issue_number} must exist and remain open until merge."
             exit 1
           fi
-          if [[ "$issue_has_unchecked" == "true" ]]; then
-            echo "Issue #${issue_number} still has unchecked acceptance tasks."
+          if [[ "$require_complete" == "true" && "$issue_has_unchecked" == "true" ]]; then
+            echo "Issue #${issue_number} still has unchecked acceptance tasks; closing keywords and Ready are blocked."
             exit 1
           fi
           if [[ -x ./scripts/validate-issue-title ]]; then

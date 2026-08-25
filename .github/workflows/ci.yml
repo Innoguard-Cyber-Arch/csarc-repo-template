@@ -2,6 +2,7 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
@@ -45,6 +46,7 @@ jobs:
     outputs:
       tier: ${{ steps.plan.outputs.tier }}
       reason: ${{ steps.plan.outputs.reason }}
+      review_state: ${{ steps.plan.outputs.review_state }}
       scopes: ${{ steps.plan.outputs.scopes }}
       run_governance: ${{ steps.plan.outputs.run_governance }}
       run_osv: ${{ steps.plan.outputs.run_osv }}
@@ -66,6 +68,7 @@ jobs:
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           PR_BASE: ${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || '' }}
           PR_HEAD: ${{ github.event.pull_request.head.ref || github.event.merge_group.head_ref || '' }}
+          PR_DRAFT: ${{ github.event.pull_request.draft || false }}
         run: |
           files="$RUNNER_TEMP/changed-files"
           if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]]; then
@@ -76,6 +79,9 @@ jobs:
           args=()
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             args+=(--force-full)
+          fi
+          if [[ "$EVENT_NAME" == "pull_request" && "$PR_DRAFT" == "true" ]]; then
+            args+=(--draft)
           fi
           python3 scripts/ci_tier.py \
             --event "$EVENT_NAME" \
@@ -246,7 +252,11 @@ jobs:
           OSV_RESULT: ${{ needs.osv.result }}
           RUNTIME_RESULT: ${{ needs.python-runtime.result }}
           ZIZMOR_RESULT: ${{ needs.zizmor.result }}
+          REVIEW_STATE: ${{ needs.fast.outputs.review_state }}
         run: |
+          if [[ "$REVIEW_STATE" == "draft" ]]; then
+            echo "::notice::Draft WIP targeted checks passed; full verification remains pending until Ready."
+          fi
           test "$FAST_RESULT" = success
           for result in "$ADOPTION_MACOS_RESULT" "$GOVERNANCE_RESULT" "$OSV_RESULT" "$RUNTIME_RESULT" "$ZIZMOR_RESULT"; do
             [[ "$result" == success || "$result" == skipped ]]
