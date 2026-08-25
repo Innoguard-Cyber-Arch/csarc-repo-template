@@ -4,6 +4,18 @@
 保留英文 H2 標題，讓人與自動化都能辨識結構。Milestone 只保留足以理解、
 規劃與驗收 story 的內容；完整設計細節請連回 spec、Issue 或決策紀錄。
 
+Milestone title 使用專案慣用語言的 3–80 字元 outcome phrase，不要求英文或
+三個單字；不得以 `Milestone`（含全形拉丁等價字）或狀態標記開頭，也不得只寫
+序號。Issue title 另依 AGENTS.md 使用 12–80 個 ASCII 字元與至少三個單字；
+delivery branch 則使用 `dev/m<編號>-<小寫 ASCII slug>`，不把 title 當 branch
+名稱。建立前可用下列唯讀 dry-run 同時檢查 open 與待建立的 title；adopt／
+update 的 description migration 不會自動改名。
+
+```console
+uv run --no-project python scripts/spec_to_issue.py audit-milestones \
+  --repo owner/repo --title "Proposed outcome"
+```
+
 ```markdown
 ## Problem
 
