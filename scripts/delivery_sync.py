@@ -1117,8 +1117,7 @@ def validate_promotion(
         or not isinstance(base, dict)
         or base.get("ref") != "main"
         or not isinstance(head, dict)
-        or head.get("ref")
-        not in {"dev/next", STANDALONE_PROMOTION_BRIDGE}
+        or head.get("ref") not in {"dev/next", STANDALONE_PROMOTION_BRIDGE}
         or head.get("sha") != head_sha
         or not isinstance(head_repo, dict)
         or head_repo.get("full_name") != repo
@@ -1152,9 +1151,11 @@ def promotion_source_sha(
         or FULL_SHA.fullmatch(base_sha) is None
     ):
         raise RuntimeError("Promotion has no valid dev/next source")
-    if require_live_source and ref_sha(
-        api, repo, STANDALONE_PROMOTION_BRIDGE
-    ) != promotion_head_sha:
+    if (
+        require_live_source
+        and ref_sha(api, repo, STANDALONE_PROMOTION_BRIDGE)
+        != promotion_head_sha
+    ):
         raise RuntimeError("Promotion bridge ref no longer matches its head")
     status, payload = api.request(
         "GET", f"repos/{repo}/git/commits/{promotion_head_sha}"
@@ -1183,14 +1184,10 @@ def promotion_source_sha(
     )
     source = require_response(status, payload, "read dev/next source")
     bridge_tree = (
-        bridge.get("tree", {}).get("sha")
-        if isinstance(bridge, dict)
-        else None
+        bridge.get("tree", {}).get("sha") if isinstance(bridge, dict) else None
     )
     source_tree = (
-        source.get("tree", {}).get("sha")
-        if isinstance(source, dict)
-        else None
+        source.get("tree", {}).get("sha") if isinstance(source, dict) else None
     )
     if not isinstance(source_tree, str) or bridge_tree != source_tree:
         raise RuntimeError(
@@ -1508,9 +1505,10 @@ def prepare_dev_next(  # noqa: C901
     refreshed = validate_promotion(api, repo, number, head_sha, merged=False)
     if refreshed["base"].get("sha") != base_sha:
         raise RuntimeError("Promotion changed after transaction acquisition")
-    if ref_sha(api, repo, "main") != base_sha or promotion_source_sha(
-        api, repo, refreshed, head_sha
-    ) != source_sha:
+    if (
+        ref_sha(api, repo, "main") != base_sha
+        or promotion_source_sha(api, repo, refreshed, head_sha) != source_sha
+    ):
         raise RuntimeError(
             "Promotion refs changed after transaction acquisition"
         )
@@ -1551,9 +1549,11 @@ def prepare_dev_next(  # noqa: C901
         )
         if refreshed["base"].get("sha") != base_sha:
             raise RuntimeError("Promotion changed while enabling preservation")
-        if ref_sha(api, repo, "main") != base_sha or promotion_source_sha(
-            api, repo, refreshed, head_sha
-        ) != source_sha:
+        if (
+            ref_sha(api, repo, "main") != base_sha
+            or promotion_source_sha(api, repo, refreshed, head_sha)
+            != source_sha
+        ):
             raise RuntimeError(
                 "Promotion refs changed while enabling preservation"
             )
@@ -1669,13 +1669,16 @@ def complete_dev_next(  # noqa: C901
         pull = validate_promotion(
             admin_api, repo, number, head_sha, merged=True
         )
-        if promotion_source_sha(
-            admin_api,
-            repo,
-            pull,
-            head_sha,
-            require_live_source=False,
-        ) != source_sha:
+        if (
+            promotion_source_sha(
+                admin_api,
+                repo,
+                pull,
+                head_sha,
+                require_live_source=False,
+            )
+            != source_sha
+        ):
             raise RuntimeError("Promotion source changed before restoration")
         api = admin_api
     if record.get("state") == "completed":
@@ -1800,8 +1803,7 @@ def abort_dev_next(  # noqa: C901
         or not isinstance(base, dict)
         or base.get("ref") != "main"
         or not isinstance(head, dict)
-        or head.get("ref")
-        not in {"dev/next", STANDALONE_PROMOTION_BRIDGE}
+        or head.get("ref") not in {"dev/next", STANDALONE_PROMOTION_BRIDGE}
         or head.get("sha") != head_sha
         or not isinstance(head_repo, dict)
         or head_repo.get("full_name") != repo
@@ -1846,13 +1848,16 @@ def abort_dev_next(  # noqa: C901
         pull = pull_request(admin_api, repo, number)
         if pull.get("state") != "closed" or pull.get("merged") is not False:
             raise RuntimeError("Live promotion changed before abort")
-        if promotion_source_sha(
-            admin_api,
-            repo,
-            pull,
-            head_sha,
-            require_live_source=False,
-        ) != source_sha:
+        if (
+            promotion_source_sha(
+                admin_api,
+                repo,
+                pull,
+                head_sha,
+                require_live_source=False,
+            )
+            != source_sha
+        ):
             raise RuntimeError("Promotion source changed before abort")
         api = admin_api
     prepared_commit = (

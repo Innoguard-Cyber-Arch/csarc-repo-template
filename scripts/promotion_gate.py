@@ -1601,9 +1601,7 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:  # noqa: C901
     token = os.environ.get("GH_TOKEN", "")
     validate_quota_preflight(evidence, args, token, validate_comments=False)
     preservation: dict[str, Any] | None = None
-    if (evidence.get("route") or {}).get(
-        "kind"
-    ) == "standalone-batch":
+    if (evidence.get("route") or {}).get("kind") == "standalone-batch":
         preservation = evidence.get("dev_next_preservation")
         live_preservation = run_dev_next_preservation(
             "inspect-dev-next",
@@ -1668,10 +1666,14 @@ def verify_main(args: argparse.Namespace) -> None:
         if isinstance(item, dict)
     ):
         raise RuntimeError("Candidate has no successful verify check")
-    if evidence.get("head_ref") in {
-        "dev/next",
-        STANDALONE_PROMOTION_BRIDGE,
-    } or (evidence.get("route") or {}).get("kind") == "standalone-batch":
+    if (
+        evidence.get("head_ref")
+        in {
+            "dev/next",
+            STANDALONE_PROMOTION_BRIDGE,
+        }
+        or (evidence.get("route") or {}).get("kind") == "standalone-batch"
+    ):
         preservation = evidence.get("dev_next_preservation")
         if not isinstance(preservation, dict):
             raise RuntimeError("dev/next preservation evidence is missing")
@@ -1724,10 +1726,14 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
     for field, value in expected.items():
         if evidence.get(field) != value:
             raise RuntimeError(f"Fallback evidence {field} does not match main")
-    needs_preservation = evidence.get("head_ref") in {
-        "dev/next",
-        STANDALONE_PROMOTION_BRIDGE,
-    } or (evidence.get("route") or {}).get("kind") == "standalone-batch"
+    needs_preservation = (
+        evidence.get("head_ref")
+        in {
+            "dev/next",
+            STANDALONE_PROMOTION_BRIDGE,
+        }
+        or (evidence.get("route") or {}).get("kind") == "standalone-batch"
+    )
     preservation = evidence.get("dev_next_preservation")
     if needs_preservation and (
         (evidence.get("route") or {}).get("kind") != "standalone-batch"

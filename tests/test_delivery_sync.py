@@ -941,19 +941,15 @@ def test_bridge_prepare_and_inspect_preserve_dev_next_source(
     install_memory_ledger(monkeypatch, ledger)
     api = StandaloneBridgeAPI()
 
-    prepared = json.loads(
-        prepare_dev_next(api, "acme/repo", 42, BRIDGE_SHA)
-    )
+    prepared = json.loads(prepare_dev_next(api, "acme/repo", 42, BRIDGE_SHA))
     record = prepared["transaction"]
     assert record["head_sha"] == SOURCE_SHA
     assert record["promotion_head_ref"] == "promote/next"
     assert record["promotion_head_sha"] == BRIDGE_SHA
-    assert '"promotion_head_ref":"promote/next"' in prepared[
-        "authorization_body"
-    ]
-    inspected = json.loads(
-        inspect_dev_next(api, "acme/repo", 42, BRIDGE_SHA)
+    assert (
+        '"promotion_head_ref":"promote/next"' in prepared["authorization_body"]
     )
+    inspected = json.loads(inspect_dev_next(api, "acme/repo", 42, BRIDGE_SHA))
     assert inspected["transaction"] == record
 
 
@@ -1562,9 +1558,7 @@ def test_admin_secret_is_limited_to_trusted_workflow_definitions() -> None:
 def test_post_merge_accepts_promotion_bridge() -> None:
     """Trusted post-merge workflows accept both promotion bridge routes."""
     root = Path(__file__).parents[1] / ".github/workflows"
-    workflow = (
-        root / "promotion-post-merge.yml"
-    ).read_text()
+    workflow = (root / "promotion-post-merge.yml").read_text()
     assert ('! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$') in workflow
     assert '"$head_ref" != "promote/next"' in workflow
     release = (root / "release-please.yml").read_text()
