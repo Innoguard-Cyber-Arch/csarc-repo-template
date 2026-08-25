@@ -1285,7 +1285,10 @@ def set_auto_delete(api: API, repo: str, enabled: bool) -> None:
 
 
 def delete_promotion_bridge(
-    record: dict[str, Any], remote: str | None = None
+    record: dict[str, Any],
+    remote: str | None = None,
+    *,
+    git_env: dict[str, str] | None = None,
 ) -> str:
     """Delete one terminal bridge with an explicit Git force-with-lease."""
     validate_preservation_record(record)
@@ -1305,6 +1308,7 @@ def delete_promotion_bridge(
         [git, "ls-remote", "--exit-code", "--refs", target, full_ref],
         check=False,
         capture_output=True,
+        env=git_env,
         text=True,
     )
     if observed.returncode == 2 and not observed.stdout.strip():
@@ -1322,6 +1326,7 @@ def delete_promotion_bridge(
         [git, "push", lease, target, f":{full_ref}"],
         check=False,
         capture_output=True,
+        env=git_env,
         text=True,
     )
     if deleted.returncode:

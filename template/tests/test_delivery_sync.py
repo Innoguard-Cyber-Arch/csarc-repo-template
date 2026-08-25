@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import runpy
 import subprocess
@@ -320,14 +321,31 @@ def terminal_bridge_record(bridge_sha: str) -> dict[str, Any]:
     return record
 
 
-def bridge_git_fixture(tmp_path: Path) -> tuple[Path, Path, str, str]:
+def bridge_git_fixture(
+    tmp_path: Path,
+) -> tuple[Path, Path, str, str, dict[str, str]]:
     """Create self-contained expected and advanced bridge Git objects."""
+    git_env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("GIT_CONFIG_")
+    }
+    git_env["GIT_CONFIG_GLOBAL"] = os.devnull
+    git_env["GIT_CONFIG_NOSYSTEM"] = "1"
     source = tmp_path / "source"
     remote = tmp_path / "remote.git"
     subprocess.run(
-        ["git", "init", "-b", "main", str(source)],
+        [
+            "git",
+            "init",
+            "--object-format=sha1",
+            "-b",
+            "main",
+            str(source),
+        ],
         check=True,
         capture_output=True,
+        env=git_env,
         text=True,
     )
     for key, value in (("user.name", "Test"), ("user.email", "test@example")):
@@ -336,6 +354,7 @@ def bridge_git_fixture(tmp_path: Path) -> tuple[Path, Path, str, str]:
             cwd=source,
             check=True,
             capture_output=True,
+            env=git_env,
             text=True,
         )
     subprocess.run(
@@ -343,6 +362,7 @@ def bridge_git_fixture(tmp_path: Path) -> tuple[Path, Path, str, str]:
         cwd=source,
         check=True,
         capture_output=True,
+        env=git_env,
         text=True,
     )
     expected_sha = subprocess.run(
@@ -350,6 +370,7 @@ def bridge_git_fixture(tmp_path: Path) -> tuple[Path, Path, str, str]:
         cwd=source,
         check=True,
         capture_output=True,
+        env=git_env,
         text=True,
     ).stdout.strip()
     subprocess.run(
@@ -357,6 +378,7 @@ def bridge_git_fixture(tmp_path: Path) -> tuple[Path, Path, str, str]:
         cwd=source,
         check=True,
         capture_output=True,
+        env=git_env,
         text=True,
     )
     live_sha = subprocess.run(
@@ -364,15 +386,17 @@ def bridge_git_fixture(tmp_path: Path) -> tuple[Path, Path, str, str]:
         cwd=source,
         check=True,
         capture_output=True,
+        env=git_env,
         text=True,
     ).stdout.strip()
     subprocess.run(
-        ["git", "init", "--bare", str(remote)],
+        ["git", "init", "--bare", "--object-format=sha1", str(remote)],
         check=True,
         capture_output=True,
+        env=git_env,
         text=True,
     )
-    return source, remote, expected_sha, live_sha
+    return source, remote, expected_sha, live_sha, git_env
 
 
 def install_memory_ledger(
@@ -1119,7 +1143,9 @@ def test_terminal_bridge_cleanup_deletes_only_the_expected_ref(
     tmp_path: Path,
 ) -> None:
     """The owner cleanup uses a deletion-only explicit force-with-lease."""
-    source, remote, _expected_sha, bridge_sha = bridge_git_fixture(tmp_path)
+    source, remote, _expected_sha, bridge_sha, git_env = bridge_git_fixture(
+        tmp_path
+    )
     subprocess.run(
         [
             "git",
@@ -1130,10 +1156,11 @@ def test_terminal_bridge_cleanup_deletes_only_the_expected_ref(
         cwd=source,
         check=True,
         capture_output=True,
+        env=git_env,
         text=True,
     )
     record = terminal_bridge_record(bridge_sha)
-    result = delete_promotion_bridge(record, str(remote))
+    result = delete_promotion_bridge(record, str(remote), git_env=git_env)
     assert f"--force-with-lease=refs/heads/promote/next:{bridge_sha}" in result
     assert f"--head-sha {bridge_sha}" in bridge_cleanup_command(record)
     absent = subprocess.run(
@@ -1147,6 +1174,7 @@ def test_terminal_bridge_cleanup_deletes_only_the_expected_ref(
         ],
         check=False,
         capture_output=True,
+        env=git_env,
         text=True,
     )
     assert absent.returncode == 2
@@ -1154,22 +1182,28 @@ def test_terminal_bridge_cleanup_deletes_only_the_expected_ref(
 
 def test_bridge_cleanup_refuses_an_advanced_ref(tmp_path: Path) -> None:
     """A stale cleanup lease cannot delete a reused fixed bridge ref."""
-    source, remote, expected_sha, live_sha = bridge_git_fixture(tmp_path)
+    source, remote, expected_sha, live_sha, git_env = bridge_git_fixture(
+        tmp_path
+    )
     subprocess.run(
         ["git", "push", str(remote), f"{live_sha}:refs/heads/promote/next"],
         cwd=source,
         check=True,
         capture_output=True,
+        env=git_env,
         text=True,
     )
     with pytest.raises(RuntimeError, match="no longer matches"):
         delete_promotion_bridge(
-            terminal_bridge_record(expected_sha), str(remote)
+            terminal_bridge_record(expected_sha),
+            str(remote),
+            git_env=git_env,
         )
     observed = subprocess.run(
         ["git", "ls-remote", str(remote), "refs/heads/promote/next"],
         check=True,
         capture_output=True,
+        env=git_env,
         text=True,
     ).stdout
     assert observed.startswith(live_sha)
@@ -1179,9 +1213,11 @@ def test_bridge_cleanup_is_idempotent_and_never_deletes_dev_next(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An absent bridge is done, while direct dev/next is never a target."""
-    _source, remote, _expected_sha, bridge_sha = bridge_git_fixture(tmp_path)
+    _source, remote, _expected_sha, bridge_sha, git_env = bridge_git_fixture(
+        tmp_path
+    )
     assert "already absent" in delete_promotion_bridge(
-        terminal_bridge_record(bridge_sha), str(remote)
+        terminal_bridge_record(bridge_sha), str(remote), git_env=git_env
     )
 
     direct = preservation_record(state="completed", mode="ruleset-protected")
@@ -1206,6 +1242,29 @@ def test_bridge_cleanup_rejects_a_nonterminal_record(
     )
     with pytest.raises(RuntimeError, match="terminal record"):
         delete_promotion_bridge(preservation_record(bridge=True))
+
+
+def test_bridge_git_fixture_ignores_inherited_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Signing and hook policy from the host cannot poison fixture commits."""
+    poison = tmp_path / "poison.gitconfig"
+    poison.write_text(
+        "[commit]\n\tgpgSign = true\n[core]\n\thooksPath = /invalid\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(poison))
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "commit.gpgSign")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "true")
+    _source, _remote, expected_sha, live_sha, git_env = bridge_git_fixture(
+        tmp_path
+    )
+    assert re.fullmatch(r"[0-9a-f]{40}", expected_sha)
+    assert re.fullmatch(r"[0-9a-f]{40}", live_sha)
+    assert git_env["GIT_CONFIG_GLOBAL"] == os.devnull
+    assert git_env["GIT_CONFIG_NOSYSTEM"] == "1"
+    assert "GIT_CONFIG_COUNT" not in git_env
 
 
 def test_bridge_cleanup_uses_the_ledger_repository_not_local_origin(
