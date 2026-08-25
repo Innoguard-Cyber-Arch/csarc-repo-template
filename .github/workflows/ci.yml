@@ -175,6 +175,25 @@ jobs:
           RESULT: ${{ job.status }}
         run: echo "- Python compatibility 3.14.0 — $RESULT" >> "$GITHUB_STEP_SUMMARY"
 
+  adoption-macos:
+    name: adoption e2e macOS
+    needs: fast
+    if: ${{ needs.fast.outputs.tier == 'full' }}
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - run: uv sync --locked --python 3.14
+      - run: >-
+          uv run pytest -q
+          tests/test_cli.py::test_real_existing_adoption_uses_fixed_ownership_policies
+
   governance:
     name: remote governance
     needs: fast
@@ -233,7 +252,7 @@ jobs:
   verify:
     name: verify
     if: ${{ always() }}
-    needs: [fast, canonical-full, python-compatibility, governance, osv, zizmor]
+    needs: [fast, canonical-full, python-compatibility, adoption-macos, governance, osv, zizmor]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
@@ -242,6 +261,7 @@ jobs:
           FAST_RESULT: ${{ needs.fast.result }}
           TIER: ${{ needs.fast.outputs.tier }}
           CANONICAL_RESULT: ${{ needs.canonical-full.result }}
+          ADOPTION_MACOS_RESULT: ${{ needs.adoption-macos.result }}
           GOVERNANCE_RESULT: ${{ needs.governance.result }}
           OSV_RESULT: ${{ needs.osv.result }}
           PYTHON_COMPATIBILITY_RESULT: ${{ needs.python-compatibility.result }}
@@ -251,9 +271,11 @@ jobs:
           if [[ "$TIER" == full ]]; then
             test "$CANONICAL_RESULT" = success
             test "$PYTHON_COMPATIBILITY_RESULT" = success
+            test "$ADOPTION_MACOS_RESULT" = success
           else
             test "$CANONICAL_RESULT" = skipped
             test "$PYTHON_COMPATIBILITY_RESULT" = skipped
+            test "$ADOPTION_MACOS_RESULT" = skipped
           fi
           for result in "$GOVERNANCE_RESULT" "$OSV_RESULT" "$ZIZMOR_RESULT"; do
             [[ "$result" == success || "$result" == skipped ]]
