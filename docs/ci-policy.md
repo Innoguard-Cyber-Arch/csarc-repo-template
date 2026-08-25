@@ -240,9 +240,11 @@ run URL 機械式確認 zero-step billing block（拒絕任何已執行 step 的
 即時確認或留言授權；新 commit 使既有 note 失效並須重新驗證、重新產生。只有 repo
 現行政策已允許 author self-merge 時（見下方 Alpha 例外），agent 才可合併。
 子命令只接受依 repository branch strategy 判定為非 promotion 的 PR，會要求乾淨
-worktree 與精確 PR head、執行 repo 內建完整 verifier、再次確認 live head 未變，並將
-固定的 `passed` 結果與每個 `--unreproduced-check` 寫入 note；verification 失敗時不會
-輸出可用 note。
+worktree 與精確 PR head、完整分頁讀取該 head 的 latest Check Runs，並要求所有
+`--blocked-run-url` 精確等於自動發現的失敗 Actions run 集合；漏列失敗、非 Actions
+失敗、未完成／不支援的 check 或非成功 commit status 都會 fail closed。工具執行 repo
+內建完整 verifier 後會再次確認 live head 與 check 集合未變，並將固定的 `passed` 結果
+與每個 `--unreproduced-check` 寫入 note；verification 失敗時不會輸出可用 note。
 
 例如 delivery strategy 的一般 PR 可執行：
 

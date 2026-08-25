@@ -611,6 +611,76 @@ def require_run_url(url: str, repo: str) -> None:
         )
 
 
+def failed_pull_request_run_urls(  # noqa: C901
+    repo: str, head_sha: str, token: str
+) -> list[str]:
+    """Return every latest failed Actions run for one pull-request head."""
+    check_runs: list[dict[str, Any]] = []
+    total: int | None = None
+    page = 1
+    while total is None or len(check_runs) < total:
+        payload = github_get(
+            repo,
+            f"commits/{head_sha}/check-runs?filter=latest&per_page=100&page={page}",
+            token,
+        )
+        items = payload.get("check_runs") if isinstance(payload, dict) else None
+        count = (
+            payload.get("total_count") if isinstance(payload, dict) else None
+        )
+        if not isinstance(items, list) or not isinstance(count, int):
+            raise RuntimeError("Pull request check runs are incomplete")
+        if total is not None and count != total:
+            raise RuntimeError(
+                "Pull request check run count changed during pagination"
+            )
+        total = count
+        check_runs.extend(item for item in items if isinstance(item, dict))
+        if not items and len(check_runs) < total:
+            raise RuntimeError("Pull request check runs are incomplete")
+        page += 1
+    if len(check_runs) != total:
+        raise RuntimeError("Pull request check runs are incomplete")
+
+    statuses = github_get(repo, f"commits/{head_sha}/status", token)
+    status_items = (
+        statuses.get("statuses") if isinstance(statuses, dict) else None
+    )
+    if not isinstance(status_items, list) or any(
+        not isinstance(item, dict) or item.get("state") != "success"
+        for item in status_items
+    ):
+        raise RuntimeError("Pull request has a non-success commit status")
+
+    run_urls: set[str] = set()
+    for check in check_runs:
+        conclusion = check.get("conclusion")
+        if conclusion in {"success", "neutral", "skipped"}:
+            continue
+        if conclusion != "failure":
+            raise RuntimeError(
+                "Pull request has an unfinished or unsupported check"
+            )
+        details_url = str(check.get("details_url") or "")
+        parsed = urllib.parse.urlparse(details_url)
+        match = re.fullmatch(
+            rf"/{re.escape(repo)}/actions/runs/(\d+)(?:/job/\d+)?",
+            parsed.path,
+        )
+        if (
+            parsed.scheme != "https"
+            or parsed.netloc != "github.com"
+            or match is None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise RuntimeError("Pull request has a failed non-Actions check")
+        run_urls.add(f"https://github.com/{repo}/actions/runs/{match.group(1)}")
+    if not run_urls:
+        raise RuntimeError("Pull request has no failed Actions run")
+    return sorted(run_urls)
+
+
 def require_zero_step_run(  # noqa: C901
     url: str,
     repo: str,
@@ -1188,7 +1258,7 @@ def finalize(args: argparse.Namespace) -> None:
     write_evidence(args.output, evidence)
 
 
-def note_quota_fallback(args: argparse.Namespace) -> None:
+def note_quota_fallback(args: argparse.Namespace) -> None:  # noqa: C901
     """Print a routine PR's quota fallback note after proving zero-step."""
     if not args.blocked_run_url:
         raise RuntimeError("At least one blocked Actions run is required")
@@ -1240,7 +1310,12 @@ def note_quota_fallback(args: argparse.Namespace) -> None:
         raise RuntimeError("Routine quota fallback requires a clean worktree")
     if git_output("rev-parse", "HEAD") != head_sha:
         raise RuntimeError("Worktree HEAD must equal the pull request head")
-    for url in args.blocked_run_url:
+    blocked_run_urls = failed_pull_request_run_urls(args.repo, head_sha, token)
+    if set(args.blocked_run_url) != set(blocked_run_urls):
+        raise RuntimeError(
+            "Blocked run URLs must exactly match every live failed check"
+        )
+    for url in blocked_run_urls:
         require_run_url(url, args.repo)
         require_zero_step_run(
             url, args.repo, args.pr, head_ref, head_sha, token
@@ -1281,12 +1356,19 @@ def note_quota_fallback(args: argparse.Namespace) -> None:
         raise RuntimeError(
             "Pull request or worktree changed during local verification"
         )
+    if (
+        failed_pull_request_run_urls(args.repo, head_sha, token)
+        != blocked_run_urls
+    ):
+        raise RuntimeError(
+            "Pull request checks changed during local verification"
+        )
     print(  # noqa: T201
         quota_fallback_note(
             args.repo,
             args.pr,
             head_sha,
-            sorted(args.blocked_run_url),
+            blocked_run_urls,
             verification_command[0],
             args.unreproduced_check,
         )

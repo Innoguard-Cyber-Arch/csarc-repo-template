@@ -282,7 +282,10 @@ def test_blocked_run_must_match_head_and_have_no_started_steps(
 
 
 def _routine_pr_get(
-    jobs: list[dict[str, object]], *, promotion: bool = False
+    jobs: list[dict[str, object]],
+    *,
+    promotion: bool = False,
+    failed_run_ids: tuple[int, ...] = (200,),
 ) -> Callable[[str, str, str], object]:
     head_ref = (
         "dev/m9-low-friction-ai-sdlc" if promotion else "enhancement/42-change"
@@ -306,6 +309,22 @@ def _routine_pr_get(
                     "repo": {"full_name": "owner/repo"},
                 },
             }
+        if path.startswith("commits/head/check-runs?"):
+            return {
+                "total_count": len(failed_run_ids),
+                "check_runs": [
+                    {
+                        "conclusion": "failure",
+                        "details_url": (
+                            "https://github.com/owner/repo/actions/runs/"
+                            f"{run_id}/job/{run_id + 1}"
+                        ),
+                    }
+                    for run_id in failed_run_ids
+                ],
+            }
+        if path == "commits/head/status":
+            return {"statuses": []}
         if "/jobs?" in path:
             return {"total_count": len(jobs), "jobs": jobs}
         if path.startswith("check-runs/"):
@@ -398,6 +417,35 @@ def test_note_quota_fallback_rejects_a_real_failure(
     )
     with pytest.raises(RuntimeError, match="zero-step"):
         note_quota_fallback(args)
+
+
+def test_note_quota_fallback_rejects_an_omitted_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A caller cannot omit another failed check from the fallback note."""
+    jobs = [{"id": 7, "runner_id": 0, "steps": [], "conclusion": "failure"}]
+    monkeypatch.setitem(
+        note_quota_fallback.__globals__,
+        "github_get",
+        _routine_pr_get(jobs, failed_run_ids=(200, 201)),
+    )
+    monkeypatch.setitem(
+        note_quota_fallback.__globals__,
+        "git_output",
+        lambda *arguments: "" if arguments[0] == "status" else "head",
+    )
+    with pytest.raises(RuntimeError, match="exactly match every live failed"):
+        note_quota_fallback(
+            SimpleNamespace(
+                repo="owner/repo",
+                pr=42,
+                branch_strategy="delivery",
+                blocked_run_url=[
+                    "https://github.com/owner/repo/actions/runs/200"
+                ],
+                unreproduced_check=[],
+            )
+        )
 
 
 def test_note_quota_fallback_rejects_promotion(
