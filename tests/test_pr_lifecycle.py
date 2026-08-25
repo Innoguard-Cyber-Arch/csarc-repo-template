@@ -85,6 +85,7 @@ class FakeGitHub:
         self.commit_payloads: dict[str, dict[str, Any]] = {}
         self.labels = {"bug"}
         self.milestone: str | None = None
+        self.body = "Ready for review."
 
     def viewer(self, explicit_actor: str = "") -> str:
         """Return the task's authenticated actor."""
@@ -100,7 +101,7 @@ class FakeGitHub:
             "merge_commit_sha": "d" * 40 if self.merged else None,
             "draft": self.draft,
             "title": "fix(ci): serialize lifecycle writes",
-            "body": "Ready for review.",
+            "body": self.body,
             "labels": [{"name": name} for name in sorted(self.labels)],
             "milestone": (
                 {"title": self.milestone}
@@ -1314,6 +1315,46 @@ def test_label_and_milestone_edits_run_inside_two_lease_checks(
             add_label=["enhancement"],
             remove_label=["bug"],
             milestone="M1",
+            remove_milestone=False,
+        ),
+        github,
+    )
+    assert checks == 2
+
+
+def test_body_edit_runs_inside_two_lease_checks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A checklist update uses the canonical writer and verifies the result."""
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
+    body_path = tmp_path / "body.md"
+    body_path.write_text("- [x] Reviewed\n", encoding="utf-8")
+    checks = 0
+    github = FakeGitHub("a" * 40)
+
+    def check_lease(*_arguments: object) -> None:
+        nonlocal checks
+        checks += 1
+
+    def edit(command: list[str], **_kwargs: object) -> str:
+        assert command[-2:] == ["--body-file", str(body_path)]
+        github.body = body_path.read_text(encoding="utf-8")
+        return ""
+
+    monkeypatch.setitem(edit_metadata.__globals__, "require_lease", check_lease)
+    monkeypatch.setitem(edit_metadata.__globals__, "run", edit)
+    edit_metadata(
+        SimpleNamespace(
+            repo="owner/repo",
+            pr_number=42,
+            head_sha="a" * 40,
+            owner="task/merge",
+            lease=lease_path,
+            body_file=body_path,
+            add_label=[],
+            remove_label=[],
+            milestone=None,
             remove_milestone=False,
         ),
         github,

@@ -1189,8 +1189,20 @@ def mutate_state(args: argparse.Namespace, github: GitHub) -> None:
         )
 
 
+def read_body_file(body_file: Path | None) -> str | None:
+    """Read an optional UTF-8 pull-request body."""
+    if body_file is None:
+        return None
+    try:
+        return body_file.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise RuntimeError(
+            "Pull request body file is not valid UTF-8"
+        ) from error
+
+
 def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
-    """Edit labels or milestone only while the exact lease remains live."""
+    """Edit the body, labels, or milestone while the lease remains live."""
     lease = read_lease(args.lease)
     require_caller(lease, args.owner, getattr(args, "actor", ""), github)
     require_lease(github, lease, args.repo, args.pr_number, args.head_sha)
@@ -1200,13 +1212,20 @@ def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
         for item in pull.get("labels", [])
         if isinstance(item, dict) and isinstance(item.get("name"), str)
     }
-    if not (
-        args.add_label
-        or args.remove_label
-        or args.milestone is not None
-        or args.remove_milestone
+    body_file = getattr(args, "body_file", None)
+    requested_body = read_body_file(body_file)
+    if not any(
+        (
+            body_file is not None,
+            args.add_label,
+            args.remove_label,
+            args.milestone is not None,
+            args.remove_milestone,
+        )
     ):
-        raise RuntimeError("At least one label or milestone edit is required")
+        raise RuntimeError(
+            "At least one body, label, or milestone edit is required"
+        )
     if any(
         "\n" in label or not label
         for label in args.add_label + args.remove_label
@@ -1214,6 +1233,8 @@ def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
         raise RuntimeError("Label names must be non-empty single-line values")
     expected_labels = (labels | set(args.add_label)) - set(args.remove_label)
     command = ["gh", "pr", "edit", str(args.pr_number), "--repo", args.repo]
+    if body_file is not None:
+        command.extend(("--body-file", str(body_file)))
     for label in args.add_label:
         command.extend(("--add-label", label))
     for label in args.remove_label:
@@ -1234,7 +1255,15 @@ def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
     milestone_matches = (
         args.milestone is None or milestone.get("title") == args.milestone
     ) and (not args.remove_milestone or updated.get("milestone") is None)
-    if updated_labels != expected_labels or not milestone_matches:
+    body_matches = requested_body is None or (
+        str(updated.get("body") or "").replace("\r\n", "\n").rstrip("\n")
+        == requested_body.replace("\r\n", "\n").rstrip("\n")
+    )
+    if (
+        updated_labels != expected_labels
+        or not milestone_matches
+        or not body_matches
+    ):
         raise RuntimeError("Pull request metadata did not change as requested")
 
 
@@ -1803,6 +1832,7 @@ def parser() -> argparse.ArgumentParser:
                 "--state", choices=("ready", "draft"), required=True
             )
         if name == "edit":
+            command.add_argument("--body-file", type=Path)
             command.add_argument("--add-label", action="append", default=[])
             command.add_argument("--remove-label", action="append", default=[])
             milestone = command.add_mutually_exclusive_group()

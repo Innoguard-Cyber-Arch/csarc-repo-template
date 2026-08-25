@@ -235,7 +235,7 @@ remote commit／base／head 漂移時一律停止。只有 remote commit 格式�
 可驗證的過期 lease 可用 atomic compare-and-swap 回收；新 audit 會保留被回收 commit。
 
 持有 lease 的 task 只能透過同一工具的 `state` 執行 Ready／Draft，透過 `edit` 改
-label／milestone，並用 `authorization-template` 產生綁定該 PR 與完整 head SHA 的唯一文字，
+body／label／milestone，並用 `authorization-template` 產生綁定該 PR 與完整 head SHA 的唯一文字，
 交由具 live maintain/admin 權限的人類原樣張貼。禁止直接呼叫 `gh pr ready`、`gh pr edit`
 或 `gh pr merge`。其他 task 在 lease 釋放前只做唯讀複審，若找到 blocker，先通知 owner，
 並用 `[P0]`、`[P1]` 或 `[merge-blocker]` 開頭；只有明確
