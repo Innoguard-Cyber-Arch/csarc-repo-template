@@ -2686,9 +2686,10 @@ def test_git_index_lock_preserves_a_replacement_and_primary_error(
         )
     )
 
-    with pytest.raises(
-        RuntimeError, match="primary transaction failure"
-    ), cli.hold_git_index_lock(project):
+    with (
+        pytest.raises(RuntimeError, match="primary transaction failure"),
+        cli.hold_git_index_lock(project),
+    ):
         lock_path.unlink()
         lock_path.write_text("replacement one\n", encoding="utf-8")
         raise RuntimeError("primary transaction failure")
@@ -2696,9 +2697,10 @@ def test_git_index_lock_preserves_a_replacement_and_primary_error(
     assert lock_path.read_text(encoding="utf-8") == "replacement one\n"
     lock_path.unlink()
 
-    with pytest.raises(
-        CliError, match="index lock changed during apply"
-    ), cli.hold_git_index_lock(project):
+    with (
+        pytest.raises(CliError, match="index lock changed during apply"),
+        cli.hold_git_index_lock(project),
+    ):
         lock_path.unlink()
         lock_path.write_text("replacement two\n", encoding="utf-8")
 

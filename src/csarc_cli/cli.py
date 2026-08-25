@@ -2041,10 +2041,7 @@ def hold_git_index_lock(target: Path) -> Iterator[None]:
     try:
         descriptor = os.open(
             lock_path,
-            os.O_WRONLY
-            | os.O_CREAT
-            | os.O_EXCL
-            | getattr(os, "O_NOFOLLOW", 0),
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
             0o600,
         )
     except FileExistsError as error:
@@ -2453,10 +2450,14 @@ def validate_applied_patch_or_rollback(
             rollback = run([*reverse, str(patch)], capture=True, check=False)
             rolled_back = target_file_snapshot(target)
             rolled_back_head, _ = git_target_state(target)
-            if rollback.returncode == 0 and all(
-                rolled_back.get(name) == expected_before.get(name)
-                for name in planned_paths
-            ) and rolled_back_head == expected_head:
+            if (
+                rollback.returncode == 0
+                and all(
+                    rolled_back.get(name) == expected_before.get(name)
+                    for name in planned_paths
+                )
+                and rolled_back_head == expected_head
+            ):
                 raise CliError(
                     "Repository changed while the candidate patch was applied; "
                     "CLI changes were rolled back. Create a new plan."
