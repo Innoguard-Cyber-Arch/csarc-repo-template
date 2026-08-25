@@ -9,13 +9,17 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
+import sys
+import tempfile
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 UNCHECKED = re.compile(r"(?m)^\s*-\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(r"(?:Closes|Fixes|Resolves)\s+#(\d+)(?:\D|$)", re.I)
@@ -26,6 +30,33 @@ CONVENTIONAL_TITLE = re.compile(
     r"(?:\([a-z0-9._/-]+\))?(!)?: "
 )
 INTENT_RANK = {"no-release": 0, "patch": 1, "minor": 2, "major": 3}
+MAINTAINER_ASSOCIATIONS = {"OWNER", "MEMBER"}
+REQUIRED_QUOTA_WORKFLOWS = {
+    ".github/workflows/ci.yml",
+    ".github/workflows/promotion.yml",
+}
+BILLING_GATE_ANNOTATION_MESSAGE = (
+    "The job was not started because recent account payments have failed or "
+    "your spending limit needs to be increased. Please check the 'Billing & "
+    "plans' section in your settings"
+)
+PREFLIGHT_REFETCH = "promotion preflight live refetch"
+
+
+class RejectRedirects(urllib.request.HTTPRedirectHandler):
+    """Never forward a GitHub bearer credential through a redirect."""
+
+    def redirect_request(
+        self,
+        _request: urllib.request.Request,
+        _file: object,
+        _code: int,
+        _message: str,
+        _headers: object,
+        _new_url: str,
+    ) -> None:
+        """Reject every redirect."""
+        return None
 
 
 @dataclass(frozen=True)
@@ -239,8 +270,45 @@ def github_get(repo: str, path: str, token: str) -> object:
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
-    with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310
+    opener = urllib.request.build_opener(RejectRedirects())
+    with opener.open(request, timeout=20) as response:
         return json.load(response)
+
+
+def repository_variables(repo: str, token: str) -> dict[str, str]:
+    """Read every repository Actions variable without trusting one page."""
+    variables: dict[str, str] = {}
+    total: int | None = None
+    page = 1
+    while total is None or len(variables) < total:
+        payload = github_get(
+            repo, f"actions/variables?per_page=100&page={page}", token
+        )
+        items = payload.get("variables") if isinstance(payload, dict) else None
+        count = (
+            payload.get("total_count") if isinstance(payload, dict) else None
+        )
+        if not isinstance(items, list) or not isinstance(count, int):
+            raise RuntimeError("Repository variable list is incomplete")
+        if total is not None and count != total:
+            raise RuntimeError("Repository variable count changed")
+        total = count
+        for item in items:
+            name = item.get("name") if isinstance(item, dict) else None
+            value = item.get("value") if isinstance(item, dict) else None
+            if (
+                not isinstance(name, str)
+                or not isinstance(value, str)
+                or name in variables
+            ):
+                raise RuntimeError("Repository variable list is invalid")
+            variables[name] = value
+        if not items and len(variables) < total:
+            raise RuntimeError("Repository variable list is incomplete")
+        page += 1
+    if len(variables) != total:
+        raise RuntimeError("Repository variable list is incomplete")
+    return variables
 
 
 def milestone_issues(
@@ -306,6 +374,82 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def safe_destination(path: Path) -> Path:
+    """Reject a symlinked output or parent before opening anything."""
+    destination = Path(os.path.abspath(path))
+    for parent in (destination.parent, *destination.parent.parents):
+        mode = os.lstat(parent).st_mode
+        if stat.S_ISLNK(mode) or not stat.S_ISDIR(mode):
+            raise RuntimeError("Output parent must be a real directory")
+    try:
+        mode = os.lstat(destination).st_mode
+    except FileNotFoundError:
+        pass
+    else:
+        if not stat.S_ISREG(mode):
+            raise RuntimeError("Output destination must be a regular file")
+    return destination
+
+
+def atomic_output(path: Path, writer: Callable[[BinaryIO], object]) -> None:
+    """Atomically replace a regular output without following any symlink."""
+    destination = safe_destination(path)
+    descriptor, name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", dir=destination.parent
+    )
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            writer(stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, destination)
+        if os.name != "nt":
+            directory = os.open(destination.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def write_evidence(path: Path, evidence: dict[str, object]) -> None:
+    """Write machine-readable evidence through the safe output path."""
+    content = (json.dumps(evidence, indent=2) + "\n").encode()
+    atomic_output(path, lambda stream: stream.write(content))
+
+
+def require_distinct_paths(*paths: Path) -> None:
+    """Reject aliases that could replace an input or candidate archive."""
+    resolved = [safe_destination(path) for path in paths]
+    if len({str(path) for path in resolved}) != len(resolved):
+        raise RuntimeError("Evidence and archive paths must be distinct")
+    for index, left in enumerate(resolved):
+        for right in resolved[index + 1 :]:
+            if (
+                left.exists()
+                and right.exists()
+                and os.path.samefile(left, right)
+            ):
+                raise RuntimeError(
+                    "Evidence and archive paths must be distinct"
+                )
+
+
+def local_verification_command() -> list[str]:
+    """Select the checked-in verifier for root or generated repositories."""
+    for candidate in ("scripts/verify-template.sh", "scripts/verify"):
+        path = Path(candidate)
+        try:
+            mode = os.lstat(path).st_mode
+        except FileNotFoundError:
+            continue
+        if stat.S_ISREG(mode):
+            return [f"./{candidate}"]
+    raise RuntimeError("No repository verification command is available")
+
+
 def write_outputs(path: Path | None, values: dict[str, object]) -> None:
     """Append scalar outputs for later workflow jobs."""
     if path is None:
@@ -326,8 +470,10 @@ def write_summary(path: Path | None, lines: list[str]) -> None:
         summary.write("\n".join(lines) + "\n")
 
 
-def require_comment_url(url: str, repo: str, pr_number: int) -> None:
-    """Require an immutable GitHub comment reference on the promotion PR."""
+def require_comment_url(
+    url: str, repo: str, pr_number: int, expected_body: str, token: str
+) -> dict[str, Any]:
+    """Refetch an exact human maintainer statement on the promotion PR."""
     parsed = urllib.parse.urlparse(url)
     if (
         parsed.scheme != "https"
@@ -337,6 +483,115 @@ def require_comment_url(url: str, repo: str, pr_number: int) -> None:
     ):
         raise RuntimeError(
             "Fallback references must be GitHub comments on the promotion PR"
+        )
+    identifier = parsed.fragment.removeprefix("issuecomment-")
+    comment = github_get(repo, f"issues/comments/{identifier}", token)
+    user = comment.get("user") if isinstance(comment, dict) else None
+    if (
+        not isinstance(comment, dict)
+        or comment.get("html_url") != url
+        or comment.get("issue_url")
+        != f"https://api.github.com/repos/{repo}/issues/{pr_number}"
+        or comment.get("body") != expected_body
+        or comment.get("author_association") not in MAINTAINER_ASSOCIATIONS
+        or not isinstance(user, dict)
+        or user.get("type") != "User"
+        or not isinstance(user.get("login"), str)
+    ):
+        raise RuntimeError(
+            "Fallback comment is not an exact maintainer statement"
+        )
+    return comment
+
+
+def fallback_statement(
+    kind: str, evidence: dict[str, Any], run_urls: list[str]
+) -> str:
+    """Bind a human statement to one exact promotion candidate."""
+    fields = preflight_binding(evidence)
+    fields["runs"] = sorted(run_urls)
+    binding = json.dumps(
+        fields,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    statements = {
+        "attestation": (
+            "I have billing visibility and confirm this zero-step billing "
+            "block is an authorized one-time exception for this exact "
+            "evidence."
+        ),
+        "authorization": (
+            "I authorize this exact one-time fallback without admin bypass or "
+            "a successful Check Run."
+        ),
+    }
+    return f"Actions quota fallback {kind}\n\n`{binding}`\n\n{statements[kind]}"
+
+
+def quota_fallback_note(
+    repo: str,
+    pr_number: int,
+    head_sha: str,
+    run_urls: list[str],
+    verification_command: str,
+    unreproduced_checks: list[str],
+) -> str:
+    """Bind a routine pull request's quota fallback note to one commit."""
+    fields = {
+        "repository": repo,
+        "pull_request": pr_number,
+        "head_sha": head_sha,
+        "runs": sorted(run_urls),
+        "verification": {
+            "command": verification_command,
+            "result": "passed",
+            "unreproduced_checks": sorted(unreproduced_checks),
+        },
+    }
+    binding = json.dumps(fields, sort_keys=True, separators=(",", ":"))
+    statement = (
+        "Every listed blocked run on this exact commit is GitHub's zero-step "
+        "billing gate, not a real failure; full local verification passed "
+        "for this exact commit. This repository's plan structurally runs "
+        "over its included Actions minutes, so this is a standing, "
+        "accepted operating condition rather than an incident. No release, "
+        "publishing, deployment, provenance, or canary success is claimed."
+    )
+    return f"Actions quota fallback note\n\n`{binding}`\n\n{statement}"
+
+
+def preflight_binding(evidence: dict[str, Any]) -> dict[str, object]:
+    """Return every security-relevant field from preflight evidence."""
+    archive = evidence.get("candidate_archive") or {}
+    return {
+        "schema_version": evidence.get("schema_version"),
+        "repository": evidence.get("repository"),
+        "route": evidence.get("route"),
+        "pull_request": evidence.get("pull_request"),
+        "promotion_pull_request": evidence.get("promotion_pull_request"),
+        "tracking_issue": evidence.get("tracking_issue"),
+        "tracking_issue_state": evidence.get("tracking_issue_state"),
+        "base_ref": evidence.get("base_ref"),
+        "base_sha": evidence.get("base_sha"),
+        "head_ref": evidence.get("head_ref"),
+        "head_sha": evidence.get("head_sha"),
+        "candidate_sha": evidence.get("candidate_sha"),
+        "candidate_tree": evidence.get("candidate_tree"),
+        "archive_sha256": archive.get("sha256"),
+        "included_issues": evidence.get("included_issues"),
+        "release": evidence.get("release"),
+        "canary": evidence.get("canary"),
+    }
+
+
+def require_same_preflight(
+    evidence: dict[str, Any], rebuilt: dict[str, Any]
+) -> None:
+    """Reject local preflight JSON that differs from live reconstruction."""
+    if preflight_binding(evidence) != preflight_binding(rebuilt):
+        raise RuntimeError(
+            "Promotion preflight evidence does not match live reconstruction"
         )
 
 
@@ -356,33 +611,396 @@ def require_run_url(url: str, repo: str) -> None:
         )
 
 
-def require_zero_step_run(
-    url: str, repo: str, head_sha: str, token: str
-) -> None:
-    """Prove that one failed run never acquired a runner or executed a step."""
+def failed_pull_request_run_urls(  # noqa: C901
+    repo: str, head_sha: str, token: str
+) -> list[str]:
+    """Return every latest failed Actions run for one pull-request head."""
+    check_runs: list[dict[str, Any]] = []
+    total: int | None = None
+    page = 1
+    while total is None or len(check_runs) < total:
+        payload = github_get(
+            repo,
+            f"commits/{head_sha}/check-runs?filter=latest&per_page=100&page={page}",
+            token,
+        )
+        items = payload.get("check_runs") if isinstance(payload, dict) else None
+        count = (
+            payload.get("total_count") if isinstance(payload, dict) else None
+        )
+        if not isinstance(items, list) or not isinstance(count, int):
+            raise RuntimeError("Pull request check runs are incomplete")
+        if total is not None and count != total:
+            raise RuntimeError(
+                "Pull request check run count changed during pagination"
+            )
+        total = count
+        check_runs.extend(item for item in items if isinstance(item, dict))
+        if not items and len(check_runs) < total:
+            raise RuntimeError("Pull request check runs are incomplete")
+        page += 1
+    if len(check_runs) != total:
+        raise RuntimeError("Pull request check runs are incomplete")
+
+    statuses = github_get(repo, f"commits/{head_sha}/status", token)
+    status_items = (
+        statuses.get("statuses") if isinstance(statuses, dict) else None
+    )
+    if not isinstance(status_items, list) or any(
+        not isinstance(item, dict) or item.get("state") != "success"
+        for item in status_items
+    ):
+        raise RuntimeError("Pull request has a non-success commit status")
+
+    run_urls: set[str] = set()
+    for check in check_runs:
+        conclusion = check.get("conclusion")
+        if conclusion in {"success", "neutral", "skipped"}:
+            continue
+        if conclusion != "failure":
+            raise RuntimeError(
+                "Pull request has an unfinished or unsupported check"
+            )
+        details_url = str(check.get("details_url") or "")
+        parsed = urllib.parse.urlparse(details_url)
+        match = re.fullmatch(
+            rf"/{re.escape(repo)}/actions/runs/(\d+)(?:/job/\d+)?",
+            parsed.path,
+        )
+        if (
+            parsed.scheme != "https"
+            or parsed.netloc != "github.com"
+            or match is None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise RuntimeError("Pull request has a failed non-Actions check")
+        run_urls.add(f"https://github.com/{repo}/actions/runs/{match.group(1)}")
+    if not run_urls:
+        raise RuntimeError("Pull request has no failed Actions run")
+    return sorted(run_urls)
+
+
+def require_zero_step_run(  # noqa: C901
+    url: str,
+    repo: str,
+    pr_number: int,
+    head_ref: str,
+    head_sha: str,
+    token: str,
+) -> str:
+    """Prove one PR run was stopped by GitHub's zero-step billing gate."""
     run_id = urllib.parse.urlparse(url).path.rsplit("/", 1)[-1]
     run = github_get(repo, f"actions/runs/{run_id}", token)
-    jobs = github_get(repo, f"actions/runs/{run_id}/jobs", token)
     if (
         not isinstance(run, dict)
+        or run.get("id") != int(run_id)
         or run.get("head_sha") != head_sha
+        or run.get("head_branch") != head_ref
+        or run.get("event") != "pull_request"
+        or run.get("status") != "completed"
         or run.get("conclusion") != "failure"
-        or not isinstance(jobs, dict)
-        or not isinstance(jobs.get("jobs"), list)
-        or not jobs["jobs"]
+        or not isinstance(run.get("repository"), dict)
+        or run["repository"].get("full_name") != repo
+        or not isinstance(run.get("head_repository"), dict)
+        or run["head_repository"].get("full_name") != repo
     ):
         raise RuntimeError("Blocked run does not match the failed PR head")
+    pull_requests = run.get("pull_requests")
+    if not isinstance(pull_requests, list) or not any(
+        isinstance(item, dict) and item.get("number") == pr_number
+        for item in pull_requests
+    ):
+        raise RuntimeError("Blocked run belongs to another pull request")
+    jobs: list[dict[str, Any]] = []
+    total: int | None = None
+    page = 1
+    while total is None or len(jobs) < total:
+        payload = github_get(
+            repo,
+            f"actions/runs/{run_id}/jobs?per_page=100&page={page}",
+            token,
+        )
+        items = payload.get("jobs") if isinstance(payload, dict) else None
+        count = (
+            payload.get("total_count") if isinstance(payload, dict) else None
+        )
+        if not isinstance(items, list) or not isinstance(count, int):
+            raise RuntimeError("Blocked run jobs are incomplete")
+        if total is not None and count != total:
+            raise RuntimeError(
+                "Blocked run job count changed during pagination"
+            )
+        total = count
+        jobs.extend(item for item in items if isinstance(item, dict))
+        if not items and len(jobs) < total:
+            raise RuntimeError("Blocked run jobs are incomplete")
+        page += 1
+    if not jobs or len(jobs) != total:
+        raise RuntimeError("Blocked run jobs are incomplete")
     if any(
-        not isinstance(job, dict)
-        or job.get("runner_id") not in (None, 0)
-        or bool(job.get("steps"))
-        for job in jobs["jobs"]
+        job.get("runner_id") not in (None, 0) or bool(job.get("steps"))
+        for job in jobs
     ):
         raise RuntimeError("Quota fallback requires zero-step hosted jobs")
+    failed_jobs = [job for job in jobs if job.get("conclusion") == "failure"]
+    if not failed_jobs:
+        raise RuntimeError("Blocked run contains no failed hosted job")
+    for job in failed_jobs:
+        annotations: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            payload = github_get(
+                repo,
+                f"check-runs/{job.get('id')}/annotations?per_page=100&page={page}",
+                token,
+            )
+            if not isinstance(payload, list):
+                raise RuntimeError("Blocked job annotations are incomplete")
+            annotations.extend(
+                item for item in payload if isinstance(item, dict)
+            )
+            if len(payload) < 100:
+                break
+            page += 1
+        if (
+            len(annotations) != 1
+            or annotations[0].get("message") != BILLING_GATE_ANNOTATION_MESSAGE
+        ):
+            raise RuntimeError(
+                "Blocked job does not match GitHub's zero-step billing gate"
+            )
+    return str(run.get("path", ""))
+
+
+def rebuild_quota_preflight(
+    evidence: dict[str, Any],
+    pull: dict[str, Any],
+    args: argparse.Namespace,
+    token: str,
+) -> dict[str, Any]:
+    """Recreate preflight from live GitHub state and the checked-out head."""
+    repo = str(evidence["repository"])
+    variables = repository_variables(repo, token)
+    route = evidence.get("route") or {}
+    strategy = "dev" if route.get("kind") == "dev-promotion" else "delivery"
+    with tempfile.TemporaryDirectory(dir=args.archive.parent) as directory:
+        root = Path(directory)
+        event_path = root / "event.json"
+        event_path.write_text(
+            json.dumps(
+                {"number": evidence["pull_request"], "pull_request": pull}
+            ),
+            encoding="utf-8",
+        )
+        output = root / "preflight.json"
+        prepare(
+            argparse.Namespace(
+                event="pull_request",
+                event_path=event_path,
+                repo=repo,
+                branch_strategy=strategy,
+                candidate_sha=evidence["head_sha"],
+                workflow_run=evidence.get("workflow_run", "local-fallback"),
+                canary_command=variables.get("CSARC_CANARY_COMMAND", ""),
+                canary_environment=variables.get(
+                    "CSARC_CANARY_ENVIRONMENT", ""
+                ),
+                archive=root / args.archive.name,
+                output=output,
+                github_output=None,
+                summary=None,
+            )
+        )
+        rebuilt = json.loads(output.read_text(encoding="utf-8"))
+    if not isinstance(rebuilt, dict):
+        raise RuntimeError("Rebuilt promotion preflight is invalid")
+    return rebuilt
+
+
+def validate_quota_preflight(  # noqa: C901
+    evidence: dict[str, Any], args: argparse.Namespace, token: str
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Refetch every mutable input for one exact quota fallback."""
+    repo = str(evidence["repository"])
+    pr_number = int(evidence["pull_request"])
+    repository = github_get(repo, "", token)
+    pull = github_get(repo, f"pulls/{pr_number}", token)
+    base = pull.get("base") if isinstance(pull, dict) else None
+    head = pull.get("head") if isinstance(pull, dict) else None
+    if (
+        not isinstance(repository, dict)
+        or repository.get("full_name") != repo
+        or repository.get("archived") is not False
+        or repository.get("default_branch") != "main"
+        or not isinstance(pull, dict)
+        or pull.get("number") != pr_number
+        or pull.get("state") != "open"
+        or pull.get("merged") is not False
+        or not isinstance(base, dict)
+        or base.get("ref") != "main"
+        or base.get("sha") != evidence.get("base_sha")
+        or not isinstance(head, dict)
+        or head.get("ref") != evidence.get("head_ref")
+        or head.get("sha") != evidence.get("head_sha")
+        or not same_repository(pull, repo)
+    ):
+        raise RuntimeError("Live promotion identity does not match evidence")
+    labels = {
+        item["name"]
+        for item in pull.get("labels", [])
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    route = evidence.get("route") or {}
+    strategy = "dev" if route.get("kind") == "dev-promotion" else "delivery"
+    if asdict(route_for("main", str(head["ref"]), labels, strategy)) != route:
+        raise RuntimeError("Live promotion route does not match evidence")
+    current_main = github_get(repo, "git/ref/heads/main", token)
+    main_object = (
+        current_main.get("object") if isinstance(current_main, dict) else None
+    )
+    commit = github_get(repo, f"git/commits/{head['sha']}", token)
+    tree = commit.get("tree") if isinstance(commit, dict) else None
+    if (
+        not isinstance(main_object, dict)
+        or main_object.get("sha") != evidence.get("base_sha")
+        or not isinstance(tree, dict)
+        or tree.get("sha") != evidence.get("candidate_tree")
+        or not contains_commit(str(base["sha"]), str(head["sha"]))
+        or git_output("status", "--porcelain")
+        or git_output("rev-parse", "HEAD") != head["sha"]
+        or git_output("rev-parse", "HEAD^{tree}")
+        != evidence.get("candidate_tree")
+    ):
+        raise RuntimeError("Live promotion base, tree, or checkout changed")
+    archive = evidence.get("candidate_archive") or {}
+    try:
+        archive_mode = os.lstat(safe_destination(args.archive)).st_mode
+    except FileNotFoundError as error:
+        raise RuntimeError("Candidate archive is missing") from error
+    if (
+        not stat.S_ISREG(archive_mode)
+        or archive.get("name") != args.archive.name
+        or sha256(args.archive) != archive.get("sha256")
+    ):
+        raise RuntimeError("Candidate archive does not match evidence")
+    with tempfile.TemporaryDirectory(dir=args.archive.parent) as directory:
+        rebuilt = Path(directory) / args.archive.name
+        atomic_output(
+            rebuilt,
+            lambda stream: subprocess.run(  # noqa: S603
+                [
+                    shutil.which("git") or "git",
+                    "archive",
+                    "--format=tar.gz",
+                    str(head["sha"]),
+                ],
+                check=True,
+                stdout=stream,
+            ),
+        )
+        if sha256(rebuilt) != archive.get("sha256"):
+            raise RuntimeError("Candidate archive cannot be reproduced")
+    require_same_preflight(
+        evidence, rebuild_quota_preflight(evidence, pull, args, token)
+    )
+    run_urls = sorted(args.blocked_run_url)
+    run_ids: list[int] = []
+    for url in run_urls:
+        require_run_url(url, repo)
+        run_ids.append(int(urllib.parse.urlparse(url).path.rsplit("/", 1)[-1]))
+    query = urllib.parse.urlencode(
+        {"event": "pull_request", "head_sha": head["sha"]}
+    )
+    failed_ids: set[int] = set()
+    page = 1
+    total: int | None = None
+    seen = 0
+    while total is None or seen < total:
+        payload = github_get(
+            repo,
+            f"actions/runs?{query}&per_page=100&page={page}",
+            token,
+        )
+        runs = (
+            payload.get("workflow_runs") if isinstance(payload, dict) else None
+        )
+        count = (
+            payload.get("total_count") if isinstance(payload, dict) else None
+        )
+        if not isinstance(runs, list) or not isinstance(count, int):
+            raise RuntimeError("Pull-request run list is incomplete")
+        if total is not None and count != total:
+            raise RuntimeError(
+                "Pull-request run count changed during pagination"
+            )
+        total = count
+        seen += len(runs)
+        failed_ids.update(
+            int(run["id"])
+            for run in runs
+            if isinstance(run, dict)
+            and isinstance(run.get("id"), int)
+            and run.get("conclusion") == "failure"
+        )
+        if any(
+            not isinstance(run, dict)
+            or run.get("status") != "completed"
+            or run.get("conclusion")
+            not in {"success", "skipped", "neutral", "failure"}
+            for run in runs
+        ):
+            raise RuntimeError("A pull-request run has a non-quota failure")
+        if not runs and seen < total:
+            raise RuntimeError("Pull-request run list is incomplete")
+        if len(runs) < 100:
+            break
+        page += 1
+    if seen != total:
+        raise RuntimeError("Pull-request run list is incomplete")
+    if (
+        not failed_ids
+        or set(run_ids) != failed_ids
+        or len(run_ids) != len(set(run_ids))
+    ):
+        raise RuntimeError(
+            "Blocked URLs must cover every failed pull-request run"
+        )
+    paths = {
+        require_zero_step_run(
+            url,
+            repo,
+            pr_number,
+            str(head["ref"]),
+            str(head["sha"]),
+            token,
+        )
+        for url in run_urls
+    }
+    if not REQUIRED_QUOTA_WORKFLOWS.issubset(paths):
+        raise RuntimeError(
+            "Required CI and promotion runs are not both blocked"
+        )
+    attestation = require_comment_url(
+        args.attestation_url,
+        repo,
+        pr_number,
+        fallback_statement("attestation", evidence, run_urls),
+        token,
+    )
+    authorization = require_comment_url(
+        args.authorization_url,
+        repo,
+        pr_number,
+        fallback_statement("authorization", evidence, run_urls),
+        token,
+    )
+    return attestation, authorization
 
 
 def prepare(args: argparse.Namespace) -> None:  # noqa: C901
     """Validate promotion prerequisites and create the candidate bundle."""
+    require_distinct_paths(args.archive, args.output)
     event = json.loads(args.event_path.read_text(encoding="utf-8"))
     if args.event != "pull_request":
         route = Route("merge-queue", False)
@@ -410,13 +1028,20 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     "Promotion and hotfix branches must come from "
                     "this repository"
                 )
-            number = issue_number(pull_request.get("body") or "")
+            title = pull_request.get("title")
+            body = pull_request.get("body") or ""
+            if not isinstance(title, str) or not isinstance(body, str):
+                raise RuntimeError(
+                    "Promotion pull request metadata is incomplete"
+                )
+            number = issue_number(body)
             if number is None and route.kind != "dev-promotion":
                 raise RuntimeError(
                     "Promotion pull request must close its tracking Issue"
                 )
             token = os.environ.get("GH_TOKEN", "")
             tracking_issue: dict[str, Any] = {}
+            tracking_issue_state: dict[str, object] | None = None
             if number is not None:
                 issue = github_get(args.repo, f"issues/{number}", token)
                 if not isinstance(issue, dict) or issue.get("state") != "open":
@@ -424,7 +1049,13 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                         "Promotion tracking Issue must exist and remain open"
                     )
                 tracking_issue = issue
-                if UNCHECKED.search(issue.get("body") or ""):
+                issue_body = issue.get("body") or ""
+                if not isinstance(issue_body, str):
+                    raise RuntimeError(
+                        "Promotion tracking Issue metadata is incomplete"
+                    )
+                issue_title = str(issue.get("title") or "")
+                if UNCHECKED.search(issue_body):
                     raise RuntimeError(
                         "Promotion Issue has unchecked acceptance criteria"
                     )
@@ -452,6 +1083,16 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     raise RuntimeError(
                         "Standalone promotion or hotfix cannot use a Milestone"
                     )
+                tracking_issue_state = {
+                    "number": number,
+                    "state": "open",
+                    "title": issue_title,
+                    "body_sha256": hashlib.sha256(
+                        issue_body.encode()
+                    ).hexdigest(),
+                    "labels": sorted(tracking_labels),
+                    "milestone": issue_milestone,
+                }
             included: list[dict[str, object]] = []
             if route.milestone is not None:
                 if number is None:
@@ -501,8 +1142,8 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 included_prs = [
                     {
                         "number": pull_request["number"],
-                        "title": pull_request["title"],
-                        "intent": release_intent(pull_request["title"]),
+                        "title": title,
+                        "intent": release_intent(title),
                     }
                 ]
             else:
@@ -516,7 +1157,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
             intent = highest_release_intent(
                 [str(item["title"]) for item in included_prs]
             )
-            promotion_intent = release_intent(pull_request["title"])
+            promotion_intent = release_intent(title)
             if promotion_intent != intent:
                 raise RuntimeError(
                     "Promotion pull-request title must declare the batch's "
@@ -526,22 +1167,33 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
             candidate_tree = git_output(
                 "rev-parse", f"{candidate_sha}^{{tree}}"
             )
-            subprocess.run(  # noqa: S603
-                [
-                    shutil.which("git") or "git",
-                    "archive",
-                    "--format=tar.gz",
-                    f"--output={args.archive}",
-                    candidate_sha,
-                ],
-                check=True,
+            atomic_output(
+                args.archive,
+                lambda stream: subprocess.run(  # noqa: S603
+                    [
+                        shutil.which("git") or "git",
+                        "archive",
+                        "--format=tar.gz",
+                        candidate_sha,
+                    ],
+                    check=True,
+                    stdout=stream,
+                ),
             )
             evidence = {
                 "schema_version": 1,
                 "repository": args.repo,
                 "route": asdict(route),
                 "pull_request": pull_request["number"],
+                "promotion_pull_request": {
+                    "number": pull_request["number"],
+                    "title": title,
+                    "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+                    "closing_issue": number,
+                    "labels": sorted(labels),
+                },
                 "tracking_issue": number,
+                "tracking_issue_state": tracking_issue_state,
                 "base_ref": base,
                 "base_sha": base_sha,
                 "head_ref": head,
@@ -555,16 +1207,14 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 "included_issues": included,
                 "release": {
                     "intent": intent,
-                    "promotion_title": pull_request["title"],
+                    "promotion_title": title,
                     "included_pull_requests": included_prs,
                 },
                 "canary": asdict(canary),
                 "workflow_run": args.workflow_run,
                 "created_at": datetime.now(UTC).isoformat(),
             }
-    args.output.write_text(
-        json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
-    )
+    write_evidence(args.output, evidence)
     write_outputs(
         args.github_output,
         {
@@ -605,13 +1255,129 @@ def finalize(args: argparse.Namespace) -> None:
         "status": "required-peer-check",
     }
     evidence["gate"] = "passed"
-    args.output.write_text(
-        json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
+    write_evidence(args.output, evidence)
+
+
+def note_quota_fallback(args: argparse.Namespace) -> None:  # noqa: C901
+    """Print a routine PR's quota fallback note after proving zero-step."""
+    if not args.blocked_run_url:
+        raise RuntimeError("At least one blocked Actions run is required")
+    token = os.environ.get("GH_TOKEN", "")
+    pull = github_get(args.repo, f"pulls/{args.pr}", token)
+    base = pull.get("base") if isinstance(pull, dict) else None
+    head = pull.get("head") if isinstance(pull, dict) else None
+    if (
+        not isinstance(pull, dict)
+        or pull.get("number") != args.pr
+        or pull.get("state") != "open"
+        or pull.get("merged") is not False
+        or not isinstance(base, dict)
+        or not isinstance(head, dict)
+        or not same_repository(pull, args.repo)
+    ):
+        raise RuntimeError("Pull request identity could not be resolved")
+    head_sha = str(head.get("sha") or "")
+    head_ref = str(head.get("ref") or "")
+    if not head_sha or not head_ref:
+        raise RuntimeError("Pull request head is incomplete")
+    labels = {
+        item["name"]
+        for item in pull.get("labels", [])
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    route = route_for(
+        str(base.get("ref") or ""),
+        str(head.get("ref") or ""),
+        labels,
+        args.branch_strategy,
+    )
+    base_ref = str(base.get("ref") or "")
+    if route.kind != "not-applicable" or (
+        base_ref == "main"
+        and (
+            head_ref == "dev"
+            or head_ref == "dev/next"
+            or MILESTONE_BRANCH.fullmatch(head_ref)
+            or ISOLATED_BRANCH.fullmatch(head_ref)
+            or head_ref.startswith("release-please--")
+            or bool(labels & {"promotion", "hotfix"})
+        )
+    ):
+        raise RuntimeError(
+            "Routine quota fallback only applies to non-promotion pull requests"
+        )
+    if git_output("status", "--porcelain"):
+        raise RuntimeError("Routine quota fallback requires a clean worktree")
+    if git_output("rev-parse", "HEAD") != head_sha:
+        raise RuntimeError("Worktree HEAD must equal the pull request head")
+    blocked_run_urls = failed_pull_request_run_urls(args.repo, head_sha, token)
+    if set(args.blocked_run_url) != set(blocked_run_urls):
+        raise RuntimeError(
+            "Blocked run URLs must exactly match every live failed check"
+        )
+    for url in blocked_run_urls:
+        require_run_url(url, args.repo)
+        require_zero_step_run(
+            url, args.repo, args.pr, head_ref, head_sha, token
+        )
+    verification_command = local_verification_command()
+    subprocess.run(  # noqa: S603
+        verification_command, check=True, stdout=sys.stderr
+    )
+    latest_pull = github_get(args.repo, f"pulls/{args.pr}", token)
+    latest_base = (
+        latest_pull.get("base") if isinstance(latest_pull, dict) else None
+    )
+    latest_head = (
+        latest_pull.get("head") if isinstance(latest_pull, dict) else None
+    )
+    latest_labels = (
+        issue_labels(latest_pull) if isinstance(latest_pull, dict) else set()
+    )
+    if (
+        not isinstance(latest_pull, dict)
+        or latest_pull.get("state") != "open"
+        or latest_pull.get("merged") is not False
+        or not isinstance(latest_base, dict)
+        or latest_base.get("ref") != base.get("ref")
+        or not isinstance(latest_head, dict)
+        or latest_head.get("sha") != head_sha
+        or latest_head.get("ref") != head_ref
+        or route_for(
+            str(latest_base.get("ref") or ""),
+            str(latest_head.get("ref") or ""),
+            latest_labels,
+            args.branch_strategy,
+        ).kind
+        != "not-applicable"
+        or git_output("status", "--porcelain")
+        or git_output("rev-parse", "HEAD") != head_sha
+    ):
+        raise RuntimeError(
+            "Pull request or worktree changed during local verification"
+        )
+    if (
+        failed_pull_request_run_urls(args.repo, head_sha, token)
+        != blocked_run_urls
+    ):
+        raise RuntimeError(
+            "Pull request checks changed during local verification"
+        )
+    print(  # noqa: T201
+        quota_fallback_note(
+            args.repo,
+            args.pr,
+            head_sha,
+            blocked_run_urls,
+            verification_command[0],
+            args.unreproduced_check,
+        )
     )
 
 
-def finalize_quota_fallback(args: argparse.Namespace) -> None:  # noqa: C901
+def finalize_quota_fallback(args: argparse.Namespace) -> None:
     """Record a non-release promotion gate from exact local evidence."""
+    require_distinct_paths(args.input, args.output, args.archive)
     evidence = json.loads(args.input.read_text(encoding="utf-8"))
     required = (
         "repository",
@@ -635,57 +1401,37 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:  # noqa: C901
         raise RuntimeError("Local candidate must equal the pull request head")
     if (evidence.get("canary") or {}).get("state") == "allowed":
         raise RuntimeError("Quota fallback cannot replace a configured canary")
-    if git_output("status", "--porcelain"):
-        raise RuntimeError("Quota fallback requires a clean worktree")
-    if git_output("rev-parse", "HEAD") != evidence["head_sha"]:
-        raise RuntimeError("Worktree HEAD must equal the pull request head")
-
-    repo = str(evidence["repository"])
-    pr_number = int(evidence["pull_request"])
-    token = os.environ.get("GH_TOKEN", "")
-    current_main = github_get(repo, "git/ref/heads/main", token)
-    main_object = (
-        current_main.get("object") if isinstance(current_main, dict) else None
-    )
-    if (
-        not isinstance(main_object, dict)
-        or main_object.get("sha") != evidence["base_sha"]
-        or not contains_commit(evidence["base_sha"], evidence["head_sha"])
-    ):
-        raise RuntimeError("Promotion base or ancestry changed after preflight")
-    require_comment_url(args.attestation_url, repo, pr_number)
-    require_comment_url(args.authorization_url, repo, pr_number)
+    if evidence.get("gate") is not None:
+        raise RuntimeError("Quota fallback evidence was already finalized")
     if args.attestation_url == args.authorization_url:
         raise RuntimeError(
             "Attestation and authorization must be separate comments"
         )
     if not args.blocked_run_url:
         raise RuntimeError("At least one blocked Actions run is required")
-    for url in args.blocked_run_url:
-        require_run_url(url, repo)
-        require_zero_step_run(url, repo, evidence["head_sha"], token)
-    if not args.verification_command:
-        raise RuntimeError(
-            "At least one local verification command is required"
-        )
+    token = os.environ.get("GH_TOKEN", "")
+    attestation, authorization = validate_quota_preflight(evidence, args, token)
+    verification_command = local_verification_command()
+    subprocess.run(verification_command, check=True)  # noqa: S603
+    validate_quota_preflight(evidence, args, token)
 
     evidence["canary"]["result"] = "artifact-only"
     evidence["full_check"] = {
         "context": "verify",
         "status": "local-quota-attested",
-        "commands": args.verification_command,
+        "commands": [verification_command[0], PREFLIGHT_REFETCH],
     }
     evidence["quota_fallback"] = {
         "attestation_url": args.attestation_url,
         "authorization_url": args.authorization_url,
-        "blocked_run_urls": args.blocked_run_url,
+        "attestation_author": attestation["user"]["login"],
+        "authorization_author": authorization["user"]["login"],
+        "blocked_run_urls": sorted(args.blocked_run_url),
         "created_at": datetime.now(UTC).isoformat(),
     }
     evidence["gate"] = "quota-fallback"
     evidence["release_eligible"] = False
-    args.output.write_text(
-        json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
-    )
+    write_evidence(args.output, evidence)
 
 
 def verify_main(args: argparse.Namespace) -> None:
@@ -724,12 +1470,10 @@ def verify_main(args: argparse.Namespace) -> None:
         "tree_identity": "verified",
         "verified_at": datetime.now(UTC).isoformat(),
     }
-    args.output.write_text(
-        json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
-    )
+    write_evidence(args.output, evidence)
 
 
-def verify_quota_main(args: argparse.Namespace) -> None:
+def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
     """Verify main tree identity without converting fallback into CI success."""
     evidence = json.loads(args.evidence.read_text(encoding="utf-8"))
     if (
@@ -739,6 +1483,8 @@ def verify_quota_main(args: argparse.Namespace) -> None:
         != "local-quota-attested"
     ):
         raise RuntimeError("Promotion quota fallback evidence is incomplete")
+    if evidence.get("post_merge") is not None:
+        raise RuntimeError("Promotion quota fallback was already verified")
     expected = {
         "repository": args.repo,
         "pull_request": args.pr_number,
@@ -747,24 +1493,126 @@ def verify_quota_main(args: argparse.Namespace) -> None:
     for field, value in expected.items():
         if evidence.get(field) != value:
             raise RuntimeError(f"Fallback evidence {field} does not match main")
+    token = os.environ.get("GH_TOKEN", "")
+    repository = github_get(args.repo, "", token)
+    current_main = github_get(args.repo, "git/ref/heads/main", token)
+    main_object = (
+        current_main.get("object") if isinstance(current_main, dict) else None
+    )
+    main_sha = (
+        str(main_object.get("sha")) if isinstance(main_object, dict) else ""
+    )
+    pull = github_get(args.repo, f"pulls/{args.pr_number}", token)
+    base = pull.get("base") if isinstance(pull, dict) else None
+    head = pull.get("head") if isinstance(pull, dict) else None
+    if (
+        not isinstance(repository, dict)
+        or repository.get("full_name") != args.repo
+        or repository.get("archived") is not False
+        or repository.get("default_branch") != "main"
+        or main_sha != args.main_sha
+        or not isinstance(pull, dict)
+        or pull.get("number") != args.pr_number
+        or pull.get("state") != "closed"
+        or pull.get("merged") is not True
+        or not pull.get("merged_at")
+        or pull.get("merge_commit_sha") != main_sha
+        or not isinstance(base, dict)
+        or base.get("ref") != "main"
+        or base.get("sha") != evidence.get("base_sha")
+        or not isinstance(head, dict)
+        or head.get("ref") != evidence.get("head_ref")
+        or head.get("sha") != evidence.get("head_sha")
+        or not same_repository(pull, args.repo)
+    ):
+        raise RuntimeError("Live merged promotion does not match evidence")
+    commit = github_get(args.repo, f"git/commits/{main_sha}", token)
+    tree = commit.get("tree") if isinstance(commit, dict) else None
+    parents = commit.get("parents") if isinstance(commit, dict) else None
+    if (
+        not isinstance(tree, dict)
+        or tree.get("sha") != evidence.get("candidate_tree")
+        or not isinstance(parents, list)
+        or len(parents) != 1
+        or not isinstance(parents[0], dict)
+        or parents[0].get("sha") != evidence.get("base_sha")
+        or main_sha == evidence.get("head_sha")
+    ):
+        raise RuntimeError("Main is not the exact squash-merged candidate tree")
+    sources: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        payload = github_get(
+            args.repo,
+            f"commits/{main_sha}/pulls?per_page=100&page={page}",
+            token,
+        )
+        if not isinstance(payload, list):
+            raise RuntimeError("Main source pull-request list is incomplete")
+        sources.extend(item for item in payload if isinstance(item, dict))
+        if len(payload) < 100:
+            break
+        page += 1
+    exact_sources = [
+        item
+        for item in sources
+        if item.get("merge_commit_sha") == main_sha
+        and item.get("merged_at")
+        and isinstance(item.get("base"), dict)
+        and item["base"].get("ref") == "main"
+    ]
+    if (
+        len(exact_sources) != 1
+        or exact_sources[0].get("number") != args.pr_number
+    ):
+        raise RuntimeError("Main commit has no unique promotion source")
+    quota = evidence.get("quota_fallback") or {}
+    run_urls = quota.get("blocked_run_urls")
+    if not isinstance(run_urls, list) or any(
+        not isinstance(url, str) for url in run_urls
+    ):
+        raise RuntimeError("Fallback evidence has no blocked-run binding")
+    require_comment_url(
+        str(quota.get("attestation_url", "")),
+        args.repo,
+        args.pr_number,
+        fallback_statement("attestation", evidence, run_urls),
+        token,
+    )
+    require_comment_url(
+        str(quota.get("authorization_url", "")),
+        args.repo,
+        args.pr_number,
+        fallback_statement("authorization", evidence, run_urls),
+        token,
+    )
+    executable = shutil.which("git")
+    if executable is None:
+        raise RuntimeError("Git is required")
+    subprocess.run(  # noqa: S603
+        [executable, "fetch", "--quiet", "origin", "main"], check=True
+    )
     if git_output("status", "--porcelain"):
         raise RuntimeError("Main verification requires a clean worktree")
-    if git_output("rev-parse", "HEAD") != args.main_sha:
-        raise RuntimeError("Worktree HEAD must equal the merged main SHA")
-    current_tree = git_output("rev-parse", f"{args.main_sha}^{{tree}}")
+    if (
+        git_output("rev-parse", "refs/remotes/origin/main") != main_sha
+        or git_output("rev-parse", "HEAD") != main_sha
+    ):
+        raise RuntimeError(
+            "Local checkout and origin/main must equal merged main"
+        )
+    current_tree = git_output("rev-parse", f"{main_sha}^{{tree}}")
     if current_tree != evidence.get("candidate_tree"):
         raise RuntimeError(
             "Merged main tree differs from the verified candidate tree"
         )
     evidence["post_merge"] = {
-        "main_sha": args.main_sha,
+        "main_sha": main_sha,
         "main_tree": current_tree,
         "tree_identity": "verified-local-quota-fallback",
         "verified_at": datetime.now(UTC).isoformat(),
     }
-    args.output.write_text(
-        json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
-    )
+    write_evidence(args.output, evidence)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -797,15 +1645,25 @@ def parser() -> argparse.ArgumentParser:
     fallback_command = commands.add_parser("finalize-quota-fallback")
     fallback_command.add_argument("--input", type=Path, required=True)
     fallback_command.add_argument("--output", type=Path, required=True)
+    fallback_command.add_argument("--archive", type=Path, required=True)
     fallback_command.add_argument("--attestation-url", required=True)
     fallback_command.add_argument("--authorization-url", required=True)
     fallback_command.add_argument(
         "--blocked-run-url", action="append", default=[]
     )
-    fallback_command.add_argument(
-        "--verification-command", action="append", default=[]
-    )
     fallback_command.set_defaults(handler=finalize_quota_fallback)
+
+    note_command = commands.add_parser("note-quota-fallback")
+    note_command.add_argument("--repo", required=True)
+    note_command.add_argument("--pr", type=int, required=True)
+    note_command.add_argument(
+        "--branch-strategy", choices=("main", "dev", "delivery"), required=True
+    )
+    note_command.add_argument("--blocked-run-url", action="append", default=[])
+    note_command.add_argument(
+        "--unreproduced-check", action="append", default=[]
+    )
+    note_command.set_defaults(handler=note_quota_fallback)
 
     verify_command = commands.add_parser("verify-main")
     verify_command.add_argument("--repo", required=True)
