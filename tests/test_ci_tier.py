@@ -29,7 +29,8 @@ scope_for = MODULE["scope_for"]
         ("template/.github/workflows/ci.yml.jinja", "workflow"),
         (".github/actions/setup/action.yml", "workflow"),
         ("scripts/verify-fast", "shell"),
-        ("scripts/apply-repository-settings.sh", "shell"),
+        ("scripts/apply-repository-settings.sh", "governance"),
+        ("scripts/check-governance-drift", "governance"),
         ("template/scripts/verify.jinja", "shell"),
         ("uv.lock", "dependency"),
         ("template/pyproject.toml.jinja", "dependency"),
@@ -121,6 +122,23 @@ def test_risk_scopes_enable_only_their_expensive_check(
     plan = classify("pull_request", "dev/next", "chore/9-change", set(), [path])
     assert plan.tier == "fast"
     assert getattr(plan, flag)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/apply-repository-settings.sh",
+        "scripts/check-governance-drift",
+    ],
+)
+def test_governance_checkers_run_only_remote_governance(path: str) -> None:
+    """Route governance checkers without unrelated security scans."""
+    plan = classify("pull_request", "dev/next", "fix/276-route", set(), [path])
+    assert plan.tier == "fast"
+    assert plan.scopes == ("governance",)
+    assert plan.run_governance
+    assert not plan.run_osv
+    assert not plan.run_zizmor
 
 
 @pytest.mark.parametrize(
