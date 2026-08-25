@@ -75,6 +75,30 @@ jobs:
               echo "Release follow-up must have the push before SHA as its only parent." >&2
               exit 1
             }
+            repository_id="$(gh api "repos/$GITHUB_REPOSITORY" --jq .id)"
+            [[ "$repository_id" =~ ^[0-9]+$ ]] || {
+              echo "Repository identity is unavailable." >&2
+              exit 1
+            }
+            rules="$(gh api "repos/$GITHUB_REPOSITORY/rules/branches/main")" || {
+              echo "Cannot verify the required release-follow-up workflow." >&2
+              exit 1
+            }
+            jq -e --argjson repository_id "$repository_id" '
+              any(
+                .[];
+                .type == "workflows" and
+                any(
+                  .parameters.workflows[]?;
+                  .path == ".github/workflows/release-follow-up-policy.yml" and
+                  .ref == "refs/heads/main" and
+                  .repository_id == $repository_id
+                )
+              )
+            ' <<<"$rules" >/dev/null || {
+              echo "Release follow-up was not protected by the exact trusted workflow." >&2
+              exit 1
+            }
             expected_file_count="$(
               gh api "repos/$GITHUB_REPOSITORY/pulls/$pr_number" --jq .changed_files
             )"

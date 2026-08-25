@@ -114,6 +114,20 @@ cat > "$fixture/bin/gh" <<'SH'
 set -euo pipefail
 
 case "$*" in
+  *"rules/branches/main"*)
+    [[ "${MOCK_RULES_UNAVAILABLE:-false}" != true ]] || exit 1
+    jq -cn --argjson repository_id "${MOCK_REPOSITORY_ID:-123}" '[{
+      type: "workflows",
+      parameters: {workflows: [{
+        path: ".github/workflows/release-follow-up-policy.yml",
+        ref: "refs/heads/main",
+        repository_id: $repository_id
+      }]}
+    }]'
+    ;;
+  *"--jq .id"*)
+    printf '%s\n' "${MOCK_REPOSITORY_ID:-123}"
+    ;;
   *"/commits/"*"/pulls?per_page=100"*)
     [[ "$*" == *"--paginate"* && "$*" == *"--slurp"* ]]
     commit_sha="${*#*\/commits\/}"
@@ -248,6 +262,7 @@ run_gate() {
       MOCK_COMMITTER="$committer" \
       MOCK_COMMIT_AUTHOR="$author" \
       MOCK_ACTOR_PERMISSION="$actor_permission" \
+      MOCK_RULES_UNAVAILABLE="${MOCK_RULES_UNAVAILABLE:-false}" \
       GITHUB_REPOSITORY="owner/repo" \
       GITHUB_SHA="$(git rev-parse HEAD)" \
       PUSH_BEFORE="$push_before" \
@@ -304,6 +319,7 @@ run_release_gate() {
       MOCK_COMMITTER="$committer" \
       MOCK_COMMIT_AUTHOR="$author" \
       MOCK_ACTOR_PERMISSION="$actor_permission" \
+      MOCK_RULES_UNAVAILABLE="${MOCK_RULES_UNAVAILABLE:-false}" \
       CANONICAL_REPOSITORY="canonical/repo" \
       GITHUB_EVENT_NAME="push" \
       GITHUB_REPOSITORY="owner/repo" \
@@ -326,6 +342,17 @@ run_gate "$test_repo" \
 run_premerge_gate "$test_repo" "$base_sha" >/dev/null
 run_release_gate "$test_repo" \
   "$(pull_request_json "$base_sha" "$head_sha")" >/dev/null
+if MOCK_RULES_UNAVAILABLE=true run_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" \
+  "CHANGELOG.md" >/dev/null 2>&1; then
+  echo "Post-merge gate accepted a release follow-up without trusted workflow evidence." >&2
+  exit 1
+fi
+if MOCK_RULES_UNAVAILABLE=true run_release_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" >/dev/null 2>&1; then
+  echo "Release source gate accepted a release follow-up without trusted workflow evidence." >&2
+  exit 1
+fi
 
 human_pull="$(pull_request_json "$base_sha" "$head_sha" 42 maintainer)"
 run_gate "$test_repo" "$human_pull" "CHANGELOG.md" "" "" web-flow \
