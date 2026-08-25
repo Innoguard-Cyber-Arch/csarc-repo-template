@@ -42,7 +42,10 @@ paired_files=(
   scripts/promotion_gate.py
   scripts/check-update-conflicts
   scripts/cleanup-worktrees
+  scripts/install-actionlint
   scripts/install-gitleaks
+  scripts/install-shellcheck
+  scripts/lint-workflows-shell
   scripts/release_policy.py
   scripts/scan-secrets
   scripts/spec_to_issue.py

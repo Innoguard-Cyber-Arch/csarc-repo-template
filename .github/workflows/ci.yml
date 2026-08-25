@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
@@ -18,27 +18,6 @@ permissions:
   pull-requests: read
 
 jobs:
-  decision-site:
-    name: decision site artifact
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.14"
-      - name: Verify portable decision site
-        run: python scripts/render_site.py --check
-      - name: Upload portable decision site
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: portable-decision-site
-          path: docs/index.html
-          if-no-files-found: error
-          retention-days: 14
-
   fast:
     name: route and fast checks
     runs-on: ubuntu-latest
@@ -106,6 +85,16 @@ jobs:
           CSARC_CI_TIER: ${{ steps.plan.outputs.tier }}
           CSARC_PYTHON_VERSION: "3.14"
         run: ./scripts/verify-fast
+      - name: Verify portable decision site
+        run: python3 scripts/render_site.py --check
+      - name: Upload portable decision site
+        if: ${{ steps.plan.outputs.upload_site == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: portable-decision-site
+          path: docs/index.html
+          if-no-files-found: error
+          retention-days: 14
       - name: Record routing duration
         if: ${{ always() }}
         env:
@@ -132,25 +121,21 @@ jobs:
           name: ci-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: ci-plan.json
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90
 
-  python-runtime:
-    name: full Python ${{ matrix.python-version }}
+  canonical-full:
+    name: canonical full (Python 3.14 + Node 24)
     needs: fast
     if: ${{ needs.fast.outputs.tier == 'full' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.14.0", "3.14"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.14"
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
@@ -161,7 +146,39 @@ jobs:
           node-version: "24"
       - run: ./scripts/verify-template.sh
         env:
-          CSARC_PYTHON_VERSION: ${{ matrix.python-version }}
+          CSARC_PYTHON_VERSION: "3.14"
+      - name: Record canonical evidence
+        if: ${{ always() }}
+        env:
+          RESULT: ${{ job.status }}
+        run: echo "- Canonical full (Python 3.14 + Node 24) — $RESULT" >> "$GITHUB_STEP_SUMMARY"
+
+  python-compatibility:
+    name: Python compatibility (3.14.0)
+    needs: fast
+    if: ${{ needs.fast.outputs.tier == 'full' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14.0"
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Run runtime-sensitive tests
+        env:
+          UV_PROJECT_ENVIRONMENT: .venv-3.14.0
+          UV_PYTHON: "3.14.0"
+        run: |
+          uv sync --locked --python "$UV_PYTHON"
+          uv run pytest
+      - name: Record Python compatibility evidence
+        if: ${{ always() }}
+        env:
+          RESULT: ${{ job.status }}
+        run: echo "- Python compatibility 3.14.0 — $RESULT" >> "$GITHUB_STEP_SUMMARY"
 
   adoption-macos:
     name: adoption e2e macOS
@@ -240,17 +257,19 @@ jobs:
   verify:
     name: verify
     if: ${{ always() }}
-    needs: [fast, python-runtime, adoption-macos, governance, osv, zizmor]
+    needs: [fast, canonical-full, python-compatibility, adoption-macos, governance, osv, zizmor]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
       - name: Require every applicable check
         env:
           FAST_RESULT: ${{ needs.fast.result }}
+          TIER: ${{ needs.fast.outputs.tier }}
+          CANONICAL_RESULT: ${{ needs.canonical-full.result }}
           ADOPTION_MACOS_RESULT: ${{ needs.adoption-macos.result }}
           GOVERNANCE_RESULT: ${{ needs.governance.result }}
           OSV_RESULT: ${{ needs.osv.result }}
-          RUNTIME_RESULT: ${{ needs.python-runtime.result }}
+          PYTHON_COMPATIBILITY_RESULT: ${{ needs.python-compatibility.result }}
           ZIZMOR_RESULT: ${{ needs.zizmor.result }}
           REVIEW_STATE: ${{ needs.fast.outputs.review_state }}
         run: |
@@ -258,6 +277,15 @@ jobs:
             echo "::notice::Draft WIP targeted checks passed; full verification remains pending until Ready."
           fi
           test "$FAST_RESULT" = success
-          for result in "$ADOPTION_MACOS_RESULT" "$GOVERNANCE_RESULT" "$OSV_RESULT" "$RUNTIME_RESULT" "$ZIZMOR_RESULT"; do
+          if [[ "$TIER" == full ]]; then
+            test "$CANONICAL_RESULT" = success
+            test "$PYTHON_COMPATIBILITY_RESULT" = success
+            test "$ADOPTION_MACOS_RESULT" = success
+          else
+            test "$CANONICAL_RESULT" = skipped
+            test "$PYTHON_COMPATIBILITY_RESULT" = skipped
+            test "$ADOPTION_MACOS_RESULT" = skipped
+          fi
+          for result in "$GOVERNANCE_RESULT" "$OSV_RESULT" "$ZIZMOR_RESULT"; do
             [[ "$result" == success || "$result" == skipped ]]
           done
