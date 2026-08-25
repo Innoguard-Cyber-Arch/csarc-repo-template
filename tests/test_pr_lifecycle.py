@@ -76,7 +76,7 @@ class FakeGitHub:
         ]
         self.audit_comments: list[str] = []
         self.protected = True
-        self.required_review_count = 1
+        self.required_review_count: object = 1
         self.additional_pull_rules: list[dict[str, object]] = []
         self.additional_check_rules: list[dict[str, object]] = []
         self.authorization_type = "User"
@@ -1503,8 +1503,8 @@ def test_alpha_marker_rejects_non_routine_routes(
     elif invalid_route == "branch":
         github.head_ref = "promote/m10-release-backed-adoption"
     else:
-        github.pull = lambda _number=42: {  # type: ignore[method-assign]
-            **FakeGitHub.pull(github),
+        github.pull = lambda number=42: {  # type: ignore[method-assign]
+            **FakeGitHub.pull(github, number),
             "head": {
                 "ref": github.head_ref,
                 "sha": github.head,
@@ -1545,6 +1545,8 @@ def test_alpha_work_branch_must_close_its_matching_issue(
         "Closes #4\u0662",
         "F\u0130XES #42",
         "Clo\u017fes #42",
+        "closes #42",
+        "Closes\n#42",
     ],
 )
 def test_alpha_work_branch_rejects_false_closing_tokens(

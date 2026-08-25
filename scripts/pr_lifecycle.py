@@ -43,8 +43,7 @@ ISSUE_WORK_BRANCH = re.compile(
 ALPHA_SELF_MERGE_MARKER = "Alpha 自行合併 / self-merged"
 UNCHECKED = re.compile(r"(?m)^\s*[-*+]\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(
-    r"(?<!\w)(?:Closes|Fixes|Resolves)\s+#([1-9][0-9]*)(?!\w)",
-    re.I | re.ASCII,
+    r"(?<!\w)(?:Closes|Fixes|Resolves)[ \t]+#([1-9][0-9]*)(?!\w)"
 )
 BLOCKER = re.compile(
     r"(?i)^(?:blocked|blocker)\s*:|^\[merge-blocker\]|^\[P[01]\]"
