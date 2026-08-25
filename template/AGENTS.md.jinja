@@ -79,7 +79,6 @@ Existing-repository history changes start read-only: propose semantic story grou
 - Never commit secrets, tokens, private keys, or populated `.env` files. Use GitHub Secrets or approved secret management for automation.
 - Review `scripts/apply-repository-settings.sh plan` before `apply`; do not operate production or external infrastructure without explicit authorization.
 - Do not bypass failed CI, required checks, resolved-conversation requirements, CODEOWNER review, or human approval except for the exact quota-only, SHA-bound local verification fallback defined above; that exception does not waive human authorization or any non-local control.
-- Alpha 階段的非 default-branch routine Issue PR 不要求 reviewer，但必須持有 lifecycle lease、通過工具 gate、保留 exact-head human maintainer authorization，並在 PR 內文以獨立一行精確加註 `Alpha 自行合併 / self-merged`。這個 opt-in 只接受以唯一 closing reference 關閉仍 open、Milestone 與 base 相符之同號 Issue 的 `type/<issue>-*` work branch，且只能進入 `dev/next` 或 `dev/m*`。Reviewed sync 仍須 independent review，因為 commit parents 無法證明 conflict resolution 的 tree 內容。這個例外不得用於 sync、default-branch promotion、hotfix 或 release，不得清除 unresolved blocker／changes requested，也不得把 403 或其他 unknown platform capability 當成 server enforcement；此時 `check` 只能回報 `human-only`，`merge` 必須拒絕 agent merge。
 
 ## Code Review Rules
 
