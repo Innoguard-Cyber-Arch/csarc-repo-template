@@ -37,7 +37,7 @@ MILESTONE_STATUS_PREFIX = re.compile(
     r"^(?:\[(?:draft|wip|planned|in progress|blocked|open|closed|done|"
     r"草稿|規劃中|進行中|受阻|已完成|已關閉)\]|"
     r"(?:draft|wip|planned|in progress|blocked|open|closed|done|"
-    r"草稿|規劃中|進行中|受阻|已完成|已關閉)\s*[:\-/—])",
+    r"草稿|規劃中|進行中|受阻|已完成|已關閉)(?:\s+|\s*[:\-/—]))",
     re.IGNORECASE,
 )
 LOGGER = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ def milestone_title_violations(title: str) -> tuple[str, ...]:
         )
     if normalized.casefold().startswith("milestone"):
         violations.append("omit the redundant Milestone prefix")
-    if re.fullmatch(r"(?:#|no\.?\s*)?\d+", normalized, re.IGNORECASE):
+    if re.fullmatch(r"(?:#|no\.?\s*)?\d+[.。]?", normalized, re.IGNORECASE):
         violations.append("replace the sequence number with an outcome phrase")
     if MILESTONE_STATUS_PREFIX.match(normalized):
         violations.append("omit the status prefix")
