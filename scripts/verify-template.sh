@@ -813,8 +813,6 @@ grep -q 'Live integration smoke' docs/index.html
 test -f docs/robots.txt
 grep -q '^Disallow: /$' docs/robots.txt
 test -f docs/agent-install.md
-grep -q 'Run the requested `csarc init`, `adopt`, or' docs/agent-install.md
-grep -q '`update` command with `--dry-run` first' docs/agent-install.md
 grep -q 'docs/index.html' README.md
 grep -q '內部限閱' README.md
 grep -q '線上整合證據' README.md

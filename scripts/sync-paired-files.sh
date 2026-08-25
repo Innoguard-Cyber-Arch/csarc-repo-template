@@ -34,6 +34,7 @@ paired_files=(
   policies/dev-next-ruleset.json
   policies/labels.json
   policies/repository.json
+  docs/behavior-verification-contract.md
   docs/ci-policy.md
   docs/milestone-description.md
   docs/adr/README.md

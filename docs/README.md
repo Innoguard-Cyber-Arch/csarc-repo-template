@@ -46,6 +46,7 @@
 - [`release-security-and-dependencies.md`](adr/release-security-and-dependencies.md)
 - [`spec-story-and-work-items.md`](adr/spec-story-and-work-items.md)
 - [`agent-collaboration.md`](adr/agent-collaboration.md)
+- [`low-friction-ai-sdlc.md`](adr/low-friction-ai-sdlc.md) — Proposed；外部比較、最小 state model 與政策草案
 - [`portable-decision-site.md`](adr/portable-decision-site.md)
 
 截至 2026-08-24、建立 #223 前的完整 GitHub 盤點與每條決策線對照，見 [`history-audit-2026-08.md`](history-audit-2026-08.md)。
@@ -57,6 +58,7 @@
 | 單檔交付物 | `docs/index.html` | 由 `site/` 重建的 portable presentation；內嵌樣式、程式與媒體，不直接編輯 |
 | 網站來源 | `site/` | 分開維護 HTML 內容、特殊視覺、互動與原始圖片；詳見 `site/README.md` |
 | 操作契約 | `docs/agent-install.md`、`docs/milestone-description.md` | 已發布且可能由固定版本 URL 讀取的介面；路徑保持穩定 |
+| 驗證契約 | [`docs/behavior-verification-contract.md`](behavior-verification-contract.md) | 行為／風險對應最窄 regression 與必要 E2E／live 證據 |
 | Runbook | `docs/live-integration.md`、`docs/artifact-consumption.md` | 維護者執行線上驗證或排查交付鏈時使用 |
 | 實證 | `docs/pilot-adoption.md` | 真實 consuming repository 的採用、更新與限制證據 |
 
