@@ -153,6 +153,13 @@ jobs:
             if [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
               promotion=true
               promotion_milestone="${BASH_REMATCH[1]}"
+            elif [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^promote/m([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
+              if [[ ",${PR_LABELS:-}," != *,promotion,* ]]; then
+                echo "A promotion bridge must use the promotion label."
+                exit 1
+              fi
+              promotion=true
+              promotion_milestone="${BASH_REMATCH[1]}"
             elif [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^dev/i([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
               promotion=true
               promotion_issue="${BASH_REMATCH[1]}"

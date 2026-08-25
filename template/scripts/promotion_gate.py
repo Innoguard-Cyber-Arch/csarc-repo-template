@@ -28,6 +28,7 @@ else:
 UNCHECKED = re.compile(r"(?m)^\s*-\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(r"(?:Closes|Fixes|Resolves)\s+#(\d+)(?:\D|$)", re.I)
 MILESTONE_BRANCH = re.compile(r"^dev/m(\d+)-[a-z0-9][a-z0-9-]*$")
+PROMOTION_BRIDGE = re.compile(r"^promote/m(\d+)-([a-z0-9][a-z0-9-]*)$")
 ISOLATED_BRANCH = re.compile(r"^dev/i(\d+)-[a-z0-9][a-z0-9-]*$")
 CONVENTIONAL_TITLE = re.compile(
     r"^(feat|fix|docs|refactor|test|build|ci|chore|revert)"
@@ -107,6 +108,9 @@ def route_for(
     match = MILESTONE_BRANCH.fullmatch(head)
     if match and "promotion" in labels:
         return Route("milestone", True, int(match.group(1)))
+    bridge = PROMOTION_BRIDGE.fullmatch(head)
+    if bridge and "promotion" in labels:
+        return Route("milestone", True, int(bridge.group(1)))
     isolated = ISOLATED_BRANCH.fullmatch(head)
     if isolated and "promotion" in labels:
         return Route("isolated", True, issue=int(isolated.group(1)))
@@ -184,9 +188,12 @@ def included_pull_requests(  # noqa: C901
     head_sha: str,
     delivery_branch: str,
     token: str,
+    milestone: int | None = None,
+    bridge_head_sha: str | None = None,
 ) -> list[dict[str, object]]:
     """Find merged pull requests represented by the exact delivery range."""
     included: dict[int, dict[str, object]] = {}
+    saw_bridge_head = bridge_head_sha is None
     page = 1
     while True:
         query = urllib.parse.urlencode({"per_page": 100, "page": page})
@@ -201,34 +208,62 @@ def included_pull_requests(  # noqa: C901
         for commit in commits:
             sha = commit.get("sha") if isinstance(commit, dict) else None
             if not isinstance(sha, str):
+                if bridge_head_sha is not None:
+                    raise RuntimeError(
+                        "GitHub returned invalid bridge commit provenance"
+                    )
+                continue
+            if sha == bridge_head_sha:
+                saw_bridge_head = True
                 continue
             pull_requests = github_get(repo, f"commits/{sha}/pulls", token)
             if not isinstance(pull_requests, list):
                 raise RuntimeError(
                     "GitHub returned an invalid associated pull-request list"
                 )
+            matched = False
             for pull_request in pull_requests:
                 if not isinstance(pull_request, dict):
                     continue
                 base = pull_request.get("base")
                 number = pull_request.get("number")
                 title = pull_request.get("title")
+                base_ref = base.get("ref") if isinstance(base, dict) else None
+                base_milestone = (
+                    MILESTONE_BRANCH.fullmatch(base_ref)
+                    if isinstance(base_ref, str)
+                    else None
+                )
                 if (
                     pull_request.get("merged_at") is None
                     or not isinstance(base, dict)
-                    or base.get("ref") != delivery_branch
+                    or (
+                        base_ref != delivery_branch
+                        and (
+                            milestone is None
+                            or base_milestone is None
+                            or int(base_milestone.group(1)) != milestone
+                        )
+                    )
                     or not isinstance(number, int)
                     or not isinstance(title, str)
                 ):
                     continue
+                matched = True
                 included[number] = {
                     "number": number,
                     "title": title,
                     "intent": release_intent(title),
                 }
+            if bridge_head_sha is not None and not matched:
+                raise RuntimeError(
+                    f"Bridge commit {sha} has no same-Milestone merged PR"
+                )
         if len(commits) < 100:
             break
         page += 1
+    if not saw_bridge_head:
+        raise RuntimeError("GitHub comparison omitted the promotion bridge")
     return [included[number] for number in sorted(included)]
 
 
@@ -347,6 +382,51 @@ def git_output(*arguments: str) -> str:
         capture_output=True,
         text=True,
     ).stdout.strip()
+
+
+def promotion_bridge_source(
+    repo: str,
+    branch: str,
+    base_sha: str,
+    head_sha: str,
+    candidate_sha: str,
+    milestone: int | None,
+    token: str,
+) -> dict[str, str] | None:
+    """Verify a temporary bridge made only from source delivery and main."""
+    match = PROMOTION_BRIDGE.fullmatch(branch)
+    if match is None:
+        return None
+    if milestone is None or int(match.group(1)) != milestone:
+        raise RuntimeError("Promotion bridge and Issue Milestones differ")
+    source_ref = f"dev/m{match.group(1)}-{match.group(2)}"
+    source = github_get(
+        repo,
+        f"git/ref/heads/{urllib.parse.quote(source_ref, safe='')}",
+        token,
+    )
+    source_object = source.get("object") if isinstance(source, dict) else None
+    source_sha = (
+        source_object.get("sha") if isinstance(source_object, dict) else None
+    )
+    if not isinstance(source_sha, str):
+        raise RuntimeError("GitHub returned an invalid bridge source reference")
+    parents = git_output("rev-list", "--parents", "-n", "1", head_sha).split()
+    if parents != [head_sha, source_sha, base_sha]:
+        raise RuntimeError(
+            "Promotion bridge must merge current main into source delivery"
+        )
+    source_tree = git_output("rev-parse", f"{source_sha}^{{tree}}")
+    if (
+        git_output("rev-parse", f"{head_sha}^{{tree}}") != source_tree
+        or git_output("rev-parse", f"{candidate_sha}^{{tree}}") != source_tree
+    ):
+        raise RuntimeError("Promotion bridge must preserve the source tree")
+    return {
+        "source_ref": source_ref,
+        "source_sha": source_sha,
+        "source_tree": source_tree,
+    }
 
 
 def contains_commit(ancestor: str, descendant: str) -> bool:
@@ -557,8 +637,19 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
             head_sha = pull_request["head"]["sha"]
             if not isinstance(current_main_sha, str):
                 raise RuntimeError("GitHub returned an invalid main reference")
+            bridge = promotion_bridge_source(
+                args.repo,
+                head,
+                base_sha,
+                head_sha,
+                args.candidate_sha,
+                route.milestone,
+                token,
+            )
             delivery_branch = (
-                head
+                str(bridge["source_ref"])
+                if bridge is not None
+                else head
                 if route.kind
                 in {
                     "milestone",
@@ -591,7 +682,13 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 ]
             else:
                 included_prs = included_pull_requests(
-                    args.repo, base_sha, head_sha, head, token
+                    args.repo,
+                    base_sha,
+                    head_sha,
+                    head,
+                    token,
+                    route.milestone if bridge is not None else None,
+                    head_sha if bridge is not None else None,
                 )
                 if not included_prs:
                     raise RuntimeError(
@@ -631,6 +728,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 "head_ref": head,
                 "head_sha": head_sha,
                 "main_sync": main_evidence,
+                "promotion_bridge": bridge,
                 "candidate_sha": candidate_sha,
                 "candidate_tree": candidate_tree,
                 "candidate_archive": {
@@ -736,9 +834,27 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:  # noqa: C901
         main_object.get("sha") if isinstance(main_object, dict) else None
     )
     route_kind = (evidence.get("route") or {}).get("kind")
+    route_milestone = (evidence.get("route") or {}).get("milestone")
     head_ref = evidence.get("head_ref")
+    bridge = (
+        promotion_bridge_source(
+            repo,
+            head_ref,
+            str(evidence["base_sha"]),
+            str(evidence["head_sha"]),
+            str(evidence["candidate_sha"]),
+            route_milestone if isinstance(route_milestone, int) else None,
+            token,
+        )
+        if isinstance(head_ref, str)
+        else None
+    )
+    if evidence.get("promotion_bridge") != bridge:
+        raise RuntimeError("Promotion bridge evidence changed after preflight")
     delivery_branch = (
-        head_ref
+        str(bridge["source_ref"])
+        if bridge is not None
+        else head_ref
         if isinstance(head_ref, str)
         and route_kind
         in {"milestone", "standalone-batch", "isolated", "dev-promotion"}

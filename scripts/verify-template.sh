@@ -1509,6 +1509,14 @@ test "$(cat "$fixture_root/default-project/CLAUDE.md")" = "@AGENTS.md"
 test -f "$fixture_root/default-project/policies/rulesets.json"
 test -f "$fixture_root/default-project/.github/workflows/governance-comment.yml"
 test -f "$fixture_root/default-project/.github/workflows/promotion.yml"
+# The GitHub expression is literal workflow content.
+# shellcheck disable=SC2016
+grep -Fq 'CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}' \
+  "$fixture_root/default-project/.github/workflows/promotion.yml"
+# The shell variable is literal workflow content.
+# shellcheck disable=SC2016
+grep -Fq -- '--candidate-sha "$CANDIDATE_SHA"' \
+  "$fixture_root/default-project/.github/workflows/promotion.yml"
 test -f "$fixture_root/default-project/docs/ci-policy.md"
 # Backticks are literal documentation content.
 # shellcheck disable=SC2016
