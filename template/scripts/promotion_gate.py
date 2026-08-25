@@ -11,6 +11,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import urllib.parse
 import urllib.request
@@ -40,6 +41,39 @@ BILLING_GATE_ANNOTATION_MESSAGE = (
     "plans' section in your settings"
 )
 PREFLIGHT_REFETCH = "promotion preflight live refetch"
+
+
+def run_dev_next_preservation(
+    action: str,
+    repo: str,
+    pr_number: int,
+    head_sha: str,
+    main_sha: str = "",
+) -> str:
+    """Run the shared dev/next lifecycle guard with fixed arguments."""
+    command = [
+        sys.executable,
+        str(Path(__file__).with_name("delivery_sync.py")),
+        action,
+        "--repo",
+        repo,
+        "--pr-number",
+        str(pr_number),
+        "--head-sha",
+        head_sha,
+    ]
+    if main_sha:
+        command.extend(("--main-sha", main_sha))
+    completed = subprocess.run(  # noqa: S603
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = completed.stdout.strip()
+    if not result:
+        raise RuntimeError("dev/next preservation returned no evidence")
+    return result
 
 
 class RejectRedirects(urllib.request.HTTPRedirectHandler):
@@ -1194,6 +1228,16 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:
     verification_command = local_verification_command()
     subprocess.run(verification_command, check=True)  # noqa: S603
     validate_quota_preflight(evidence, args, token)
+    preservation = ""
+    if (evidence.get("route") or {}).get(
+        "kind"
+    ) == "standalone-batch" and evidence.get("head_ref") == "dev/next":
+        preservation = run_dev_next_preservation(
+            "prepare-dev-next",
+            str(evidence["repository"]),
+            int(evidence["pull_request"]),
+            str(evidence["head_sha"]),
+        )
 
     evidence["canary"]["result"] = "artifact-only"
     evidence["full_check"] = {
@@ -1209,6 +1253,8 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:
         "blocked_run_urls": sorted(args.blocked_run_url),
         "created_at": datetime.now(UTC).isoformat(),
     }
+    if preservation:
+        evidence["dev_next_preservation"] = {"prepare": preservation}
     evidence["gate"] = "quota-fallback"
     evidence["release_eligible"] = False
     write_evidence(args.output, evidence)
@@ -1273,6 +1319,15 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
     for field, value in expected.items():
         if evidence.get(field) != value:
             raise RuntimeError(f"Fallback evidence {field} does not match main")
+    needs_preservation = evidence.get("head_ref") == "dev/next"
+    preservation = evidence.get("dev_next_preservation")
+    if needs_preservation and (
+        (evidence.get("route") or {}).get("kind") != "standalone-batch"
+        or not isinstance(preservation, dict)
+        or not isinstance(preservation.get("prepare"), str)
+        or not preservation["prepare"]
+    ):
+        raise RuntimeError("dev/next was not prepared for quota fallback")
     token = os.environ.get("GH_TOKEN", "")
     repository = github_get(args.repo, "", token)
     current_main = github_get(args.repo, "git/ref/heads/main", token)
@@ -1385,6 +1440,14 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
     if current_tree != evidence.get("candidate_tree"):
         raise RuntimeError(
             "Merged main tree differs from the verified candidate tree"
+        )
+    if needs_preservation and isinstance(preservation, dict):
+        preservation["complete"] = run_dev_next_preservation(
+            "complete-dev-next",
+            args.repo,
+            args.pr_number,
+            args.head_sha,
+            main_sha,
         )
     evidence["post_merge"] = {
         "main_sha": main_sha,

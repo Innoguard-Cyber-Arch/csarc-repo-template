@@ -573,6 +573,23 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
         "rebuild_quota_preflight",
         lambda evidence, *_: evidence,
     )
+    preservation_calls: list[tuple[str, str, int, str, str]] = []
+
+    def fake_preservation(
+        action: str,
+        repo: str,
+        pr_number: int,
+        head_sha: str,
+        main_sha: str = "",
+    ) -> str:
+        preservation_calls.append((action, repo, pr_number, head_sha, main_sha))
+        return "temporary-auto-delete-disabled (blocked)"
+
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "run_dev_next_preservation",
+        fake_preservation,
+    )
     monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: None)
     arguments = SimpleNamespace(
         input=source,
@@ -593,6 +610,12 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
     evidence = json.loads(target.read_text(encoding="utf-8"))
     assert evidence["gate"] == "quota-fallback"
     assert evidence["release_eligible"] is False
+    assert evidence["dev_next_preservation"]["prepare"] == (
+        "temporary-auto-delete-disabled (blocked)"
+    )
+    assert preservation_calls == [
+        ("prepare-dev-next", "owner/repo", 42, "head", "")
+    ]
     assert evidence["full_check"] == {
         "context": "verify",
         "status": "local-quota-attested",
@@ -802,6 +825,7 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
                 "base_sha": "base",
                 "head_ref": "dev/next",
                 "head_sha": "head",
+                "route": {"kind": "standalone-batch", "relevant": True},
                 "candidate_tree": "tree",
                 "full_check": {"status": "local-quota-attested"},
                 "quota_fallback": {
@@ -814,6 +838,9 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
                     "blocked_run_urls": [
                         "https://github.com/owner/repo/actions/runs/200"
                     ],
+                },
+                "dev_next_preservation": {
+                    "prepare": "temporary-auto-delete-disabled (blocked)"
                 },
             }
         ),
@@ -882,6 +909,23 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
     monkeypatch.setitem(
         verify_quota_main.__globals__, "require_comment_url", lambda *_: {}
     )
+    preservation_calls: list[tuple[str, str, int, str, str]] = []
+
+    def fake_preservation(
+        action: str,
+        repo: str,
+        pr_number: int,
+        head_sha: str,
+        main_sha: str = "",
+    ) -> str:
+        preservation_calls.append((action, repo, pr_number, head_sha, main_sha))
+        return "auto-delete-restored"
+
+    monkeypatch.setitem(
+        verify_quota_main.__globals__,
+        "run_dev_next_preservation",
+        fake_preservation,
+    )
     monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: None)
     arguments = SimpleNamespace(
         evidence=source,
@@ -897,6 +941,21 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
         "verified-local-quota-fallback"
     )
     assert evidence["release_eligible"] is False
+    assert evidence["dev_next_preservation"]["complete"] == (
+        "auto-delete-restored"
+    )
+    assert preservation_calls == [
+        ("complete-dev-next", "owner/repo", 42, "head", "main")
+    ]
+    original = json.loads(source.read_text(encoding="utf-8"))
+    del original["dev_next_preservation"]
+    source.write_text(json.dumps(original), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="was not prepared"):
+        verify_quota_main(arguments)
+    original["dev_next_preservation"] = {
+        "prepare": "temporary-auto-delete-disabled (blocked)"
+    }
+    source.write_text(json.dumps(original), encoding="utf-8")
     scenario["value"] = "ambiguous"
     with pytest.raises(RuntimeError, match="unique promotion source"):
         verify_quota_main(arguments)
@@ -1029,8 +1088,10 @@ def test_quota_main_refetches_the_unique_squash_source(
                 "base_sha": "base",
                 "head_ref": "dev/next",
                 "head_sha": "head",
+                "route": {"kind": "standalone-batch", "relevant": True},
                 "candidate_tree": "tree",
                 "full_check": {"status": "local-quota-attested"},
+                "dev_next_preservation": {"prepare": "prepared"},
             }
         ),
         encoding="utf-8",

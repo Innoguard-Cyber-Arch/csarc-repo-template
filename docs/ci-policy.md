@@ -260,7 +260,10 @@ checks 並記錄結果；平台不再允許補跑時，另開 Issue 保留缺口
    `./scripts/verify-template.sh`，生成專案為 `./scripts/verify`），並以 live
    repository variables 重建 promotion preflight，
    不接受呼叫者提供的命令字串。若 canary 是 `allowed`，fallback 不得替代它；只有
-   `blocked`／`unknown` 可維持 artifact-only。
+   `blocked`／`unknown` 可維持 artifact-only。若 route 是 `dev/next` 的
+   standalone batch，工具還會以相同 PR number 與 head SHA 執行
+   `delivery_sync.py prepare-dev-next`；平台 deletion protection 無法驗證時，先暫停
+   auto-delete，且必須在這項 prepare 證據完成後才可合併。
 3. 先在同一 PR 留下標題為 `Actions quota fallback attestation` 的標準留言，再由 human
    maintainer 留下 `Actions quota fallback authorization`。兩則留言都必須使用工具定義的
    canonical JSON，精確綁定 repository、PR、base/head SHA、candidate tree、archive digest
@@ -270,7 +273,10 @@ checks 並記錄結果；平台不再允許補跑時，另開 Issue 保留缺口
    `release_eligible` 固定為 `false`。
 4. 僅以非 admin 的 squash merge 合併。更新乾淨的 `main` checkout 後執行
    `verify-quota-main`，確認 main tree 等於已驗證 candidate tree，並把結果留在 PR；
-   不符時停止、revert／修正，不重寫歷史。
+   `dev/next` route 還會要求前述 prepare 證據，以 merged PR、head SHA 與 current main
+   SHA 執行 `delivery_sync.py complete-dev-next`，確認長期 branch 未消失且 tree lineage
+   一致後才恢復短期 branch 的 auto-delete。任何一步不符都停止、revert／修正，不重寫
+   歷史。
 
 新 commit、base SHA 漂移、candidate tree 改變、任何非 zero-step 失敗，或 attestation／
 authorization 不屬於同一 PR，都會使 fallback 失效。這份本機 evidence 只允許合併，
