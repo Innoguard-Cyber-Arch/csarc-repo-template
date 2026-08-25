@@ -266,7 +266,7 @@ description: 英文標題摘要重點，內文用中文定義改動
 body:
   - id: kind
     type: dropdown
-    options: [bug, enhancement, documentation, duplicate]
+    options: [feature, task, bug, documentation, duplicate]
   - id: problem
     type: textarea
   - id: acceptance
@@ -284,16 +284,16 @@ contact_links: []
 # issue-triage.yml assigns the author and work label.`
         },
         {
-          title: '只有可端到端驗收的 story 才建立 Milestone',
-          goal: 'Milestone 是可選的 1..N Issues 成果層，不靠工作數量決定，也不重複掛 PR。',
-          summary: 'description 以 Problem、Outcome、Acceptance criteria、Plan、Out of scope、Verification 與 References 寫清楚 story；spec 預設同步 Issue，只有 `tracking: story` 同步 Milestone。',
+          title: 'Feature 管 story，Milestone 管有期限的 delivery',
+          goal: 'Feature parent 連接可獨立交付的 Task／Bug subissues；Milestone 只在有真實 due date 時建立。',
+          summary: '`tracking: story` 同步 Feature parent；Milestone 掛 leaf Issues 與其 PR，不掛 parent。dependency 只表達真實阻塞，Projects 預設關閉。',
           file: 'docs/milestone-description.md＋scripts/spec_to_issue.py',
           code: `---
 id: SPEC-001
 priority: P1
 estimate: 1-3 days
 status: proposed
-# Optional: create or update one Milestone instead of one Issue.
+# Optional: create or update one Feature parent instead of one Task.
 tracking: story
 ---
 
@@ -310,7 +310,7 @@ tracking: story
         {
           title: '工作合併後才以最小權限同步追蹤與生命週期',
           goal: 'PR 內容不直接取得寫入權限；同一 spec ID 不重複開單，並依最新遠端狀態收尾 story。',
-          summary: '`spec-to-issue.yml` 在整合分支同步 Issue 或 Milestone；`milestone-lifecycle.yml` 只在 Issues 全關且 acceptance criteria 全勾選時關閉 Milestone，有 open work 或未完成 criterion 時重開。',
+          summary: '`spec-to-issue.yml` 在整合分支同步 Task 或 Feature Issue；`milestone-policy.yml` 要求 due date，`milestone-lifecycle.yml` 只在 leaf Issues 全關且 acceptance criteria 全勾選時關閉 Milestone。',
           file: 'spec-to-issue.yml＋milestone-lifecycle.yml',
           code: `on:
   push:

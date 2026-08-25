@@ -2,6 +2,40 @@
 
 本檔是 Issue [#223](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/223) 的一次性 backfill ledger。它證明哪些 GitHub 歷史被讀取、如何重跑，以及哪些內容沒有存在於平台；它不是另一份 current spec 或 decision log。
 
+## Work-item metadata normalization — 2026-08-25
+
+Issue [#300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/300) 與 [Milestone #11](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/milestone/11) 將 SDD story 改以 native Feature parent 表達、可獨立驗證的工作改為 Task／Bug subissues，Milestone 則只表達有期限的 delivery bucket。Projects 保持關閉。
+
+回填前有 137 張 Issues、161 張 PRs、10 個 Milestones。建立 #300–#303 並完成回填後的 API 重查結果如下：
+
+- 142 張 Issues 全都有 assignee；141 張有 native Type。#72 已標成 duplicate，刻意不虛構 Type。
+- 28 張 Bug 全都有語意可證明的 Feature parent；31 張 Issues 有 parent，14 張 Issues 有 subissues。
+- 161 張既有 PRs 全都有 assignee 與恰好一個 `bug`、`enhancement` 或 `documentation` 分類 label；沒有互斥分類衝突。
+- 能從 Issue 關聯可靠推得 delivery context 的 65 張 PRs 有 Milestone；其餘 96 張不猜測。兩張 open PR #289、#296 都已有非作者 reviewer request。
+- 161 張歷史 PRs 的 reviews endpoint 都是零筆；review 是實際審查事件，不能以事後 metadata 冒充。
+- Open Milestones #8–#11 的 due date 分別為 2026-09-01、09-08、09-15、09-22。Closed Milestones #1–#7 的原始期限不可知，因此不倒填。
+- #301 由 `gh issue develop` 建立並有 native Development branch。GitHub public API 目前不能替既有 branch／PR 補建 Development link；歷史項目保留可稽核的 closing reference，不偽裝成 native link。
+
+Bug parent 回填依實際功能脈絡分組，而非只看標題或 label：
+
+| Feature parent | Bug subissues |
+| --- | --- |
+| #7 | #9, #10, #27, #94 |
+| #14 | #18 |
+| #28 | #26, #33, #163 |
+| #29 | #12 |
+| #62 | #146 |
+| #67 | #148 |
+| #98 | #142, #225 |
+| #116 | #195, #196, #197, #198, #250 |
+| #122 | #144 |
+| #180 | #238, #288, #292, #295 |
+| #181 | #199, #276, #277 |
+| #219 | #256 |
+| #233 | #240 |
+
+這次 normalization 只補平台可驗證的事實；沒有替 standalone／parent Issue 強制掛 Milestone，也沒有替缺少可靠 Issue 關聯的舊 PR 猜測 delivery、替已完成 PR 補造 review，或替已關閉 Milestone 猜測 due date。
+
 ## Cutoff and result
 
 - **Repository:** `Innoguard-Cyber-Arch/csarc-repo-template`

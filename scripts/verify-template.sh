@@ -163,6 +163,8 @@ uvx --from "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)" \
 uv run python scripts/spec_to_issue.py validate
 bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
+python3 -m py_compile scripts/sync_work_item_metadata.py
+python3 -m py_compile template/scripts/sync_work_item_metadata.py
 bash -n scripts/check-update-conflicts
 bash -n template/scripts/check-update-conflicts
 bash -n template/scripts/check-project-metadata
@@ -821,7 +823,7 @@ grep -q '真實 consuming repo 與採用證據' docs/index.html
 grep -q 'issues/74' docs/index.html
 grep -q 'issues/79' docs/index.html
 grep -q 'Spec 格式決策｜' docs/index.html
-grep -q '預設 Issue，明確 Story 才建 Milestone' docs/index.html
+grep -q '預設 Task，明確 Story 才建 Feature' docs/index.html
 grep -q '<meta name="robots" content="noindex,nofollow">' docs/index.html
 grep -q 'internal-notice' docs/index.html
 grep -q '請勿公開分享此連結' docs/index.html
@@ -1010,6 +1012,8 @@ grep -q "Target the delivery branch or immediate stack parent" AGENTS.md
 grep -q 'Use `Closes`, `Fixes`, or `Resolves` only after every PR and referenced-Issue item has evidence' AGENTS.md
 grep -q 'one branch and worktree per independent task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
+grep -q 'gh issue develop' AGENTS.md
+grep -q 'Projects stay disabled' AGENTS.md
 grep -q 'search open and closed Issues' AGENTS.md
 grep -q 'Never silently reverse an earlier decision' AGENTS.md
 grep -q 'whether creating through the UI, CLI, or API' AGENTS.md
@@ -1108,6 +1112,11 @@ test "$(grep -c '^## ' .github/pull_request_template.md)" -eq 3
 grep -q '^## Purpose$' .github/pull_request_template.md
 grep -q '^## 完成清單$' .github/pull_request_template.md
 grep -q '^## 補充$' .github/pull_request_template.md
+grep -q './scripts/verify-template.sh' .github/pull_request_template.md
+grep -q 'types: \[opened, edited, synchronize, reopened, ready_for_review, assigned, unassigned, labeled, unlabeled, milestoned, demilestoned\]' \
+  .github/workflows/pr-policy.yml
+grep -Fq 'if [[ -f scripts/sync_work_item_metadata.py ]]' \
+  .github/workflows/pr-policy.yml
 grep -q '^  pull_request:$' .github/workflows/governance-comment.yml
 grep -q 'types: \[opened, reopened, ready_for_review\]' \
   .github/workflows/governance-comment.yml
@@ -1786,7 +1795,7 @@ grep -q '^## Scope and sources of truth$' \
 grep -q '^## Commands$' "$fixture_root/default-project/AGENTS.md"
 grep -q '^## Code Review Rules$' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'pull request chain ends there' \
+grep -q 'work branch whose pull request chain ends there' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'Target the delivery branch or immediate stack parent' \
   "$fixture_root/default-project/AGENTS.md"
@@ -1976,10 +1985,22 @@ grep -q '^## 補充$' \
   "$fixture_root/default-project/.github/pull_request_template.md"
 grep -q 'Closing keywords require every task' \
   "$fixture_root/default-project/.github/pull_request_template.md"
+grep -q './scripts/verify' \
+  "$fixture_root/default-project/.github/pull_request_template.md"
+if grep -q './scripts/verify-template.sh' \
+  "$fixture_root/default-project/.github/pull_request_template.md"; then
+  echo "Generated PR template references the template-repository verifier."
+  exit 1
+fi
+grep -q 'feature.*task.*bug.*documentation.*duplicate' \
+  "$fixture_root/default-project/README.md"
+grep -q 'linked Issue.*assignee.*Milestone' \
+  "$fixture_root/default-project/README.md"
 grep -q 'referenced Issue checklist' \
   "$fixture_root/default-project/docs/index.html"
 test -f "$fixture_root/default-project/.github/workflows/issue-triage.yml"
 test -f "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
+test -f "$fixture_root/default-project/.github/workflows/milestone-policy.yml"
 test -f "$fixture_root/default-project/docs/milestone-description.md"
 test -f "$fixture_root/default-project/scripts/sync_milestone_state.py"
 grep -q '^## Plan$' \
@@ -1990,6 +2011,10 @@ grep -q '專案團隊慣用的語言' \
   "$fixture_root/default-project/docs/milestone-description.md"
 grep -q 'types: \[closed, reopened, milestoned\]' \
   "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
+grep -q 'types: \[created, edited, opened\]' \
+  "$fixture_root/default-project/.github/workflows/milestone-policy.yml"
+grep -q 'must have a real due date' \
+  "$fixture_root/default-project/.github/workflows/milestone-policy.yml"
 grep -q 'github.event.issue.milestone.number' \
   "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
 grep -q 'docs/milestone-description.md' \

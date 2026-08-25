@@ -35,7 +35,7 @@
 - [`SPEC-006-trusted-release-provenance.md`](specs/SPEC-006-trusted-release-provenance.md) — release、security、dependencies 與 provenance
 - [`SPEC-007-portable-decision-documentation.md`](specs/SPEC-007-portable-decision-documentation.md) — canonical docs 與 portable presentation
 
-`tracking: issue` 或預設值會同步 Issue；`tracking: story` 同步 Story Milestone；`tracking: none` 用於已存在、仍需持續維護但不應新建 work item 的 current spec。
+`tracking: issue` 或預設值會同步 Task Issue；`tracking: story` 同步可容納 native subissues 的 Feature parent；`tracking: none` 用於已存在、仍需持續維護但不應新建 work item 的 current spec。Milestone 另作有 due date 的 delivery／release bucket，不再兼任 story identity。
 
 ## Decision records
 
@@ -49,7 +49,7 @@
 - [`agent-collaboration.md`](adr/agent-collaboration.md)
 - [`portable-decision-site.md`](adr/portable-decision-site.md)
 
-截至 2026-08-24、建立 #223 前的完整 GitHub 盤點與每條決策線對照，見 [`history-audit-2026-08.md`](history-audit-2026-08.md)。
+2026-08-24 的完整 GitHub 盤點、2026-08-25 的 work-item metadata normalization 與每條決策線對照，見 [`history-audit-2026-08.md`](history-audit-2026-08.md)。
 
 ## Other documentation
 

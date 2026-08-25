@@ -9,15 +9,18 @@ body:
         **標題規則：**使用 12–80 個英文 ASCII 字元及至少三個詞，直接描述成果；
         不加 `[Bug]` 或 `bug:` 前綴，不以句點結尾。例如：`Add dependency policy checks`。
         建立前先依 AGENTS.md 搜尋相關 open／closed Issues；在「補充」列出沿用、
-        取代或駁回的既有決策與理由，若沒有候選則記錄搜尋範圍。
+        取代或駁回的既有決策與理由，若沒有候選則記錄搜尋範圍。Feature 是 SDD
+        parent；可獨立交付的 Task／Bug 設為 subissue。只有真實先後限制才設 blocked by；
+        Feature 內發現的 Bug 必須掛 parent，獨立 Bug 則在補充說明為何沒有 parent。
   - type: dropdown
     id: kind
     attributes:
       label: 類型
-      description: 只選最符合這張 Issue 的一種；若後來確認已有相同工作，改為 duplicate。
+      description: Feature=成果 parent；Task/Bug=可獨立交付 subissue；documentation/duplicate 保留特殊用途。
       options:
+        - feature
+        - task
         - bug
-        - enhancement
         - documentation
         - duplicate
     validations:
@@ -41,6 +44,6 @@ body:
     id: supplement
     attributes:
       label: 補充
-      description: 選填：相關決策與沿用／取代理由、驗證方式、風險，或導入方自訂項目。
+      description: 選填：parent／dependency 理由、相關決策與沿用／取代理由、驗證方式或風險。
     validations:
       required: false

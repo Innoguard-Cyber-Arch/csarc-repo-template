@@ -1,0 +1,25 @@
+name: Milestone policy
+
+on:
+  milestone:
+    types: [created, edited, opened]
+
+permissions:
+  contents: read
+
+jobs:
+  due-date:
+    name: due date
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require a real delivery deadline
+        env:
+          MILESTONE_DUE_ON: ${{ github.event.milestone.due_on }}
+          MILESTONE_TITLE: ${{ github.event.milestone.title }}
+        run: |
+          if [[ -z "${MILESTONE_DUE_ON:-}" ]]; then
+            echo "Milestone '${MILESTONE_TITLE}' must have a real due date." >&2
+            exit 1
+          fi
+          echo "Milestone '${MILESTONE_TITLE}' is due ${MILESTONE_DUE_ON}."

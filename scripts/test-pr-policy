@@ -10,11 +10,13 @@ trap 'rm -rf "$fixture"' EXIT
 case_count=0
 export PR_ISSUE_TITLE="Add verified report workflow"
 export PR_ISSUE_BODY="All acceptance tasks are complete."
+export PR_DEVELOPMENT_CUTOVER_PR="42"
+export PR_ASSIGNEES="contributor,github-actions[bot]"
 export PR_AUTHOR="github-actions[bot]"
 export PR_CHANGED_FILES="CHANGELOG.md"
 export PR_HEAD_REPOSITORY="acme/project"
 export PR_HEAD_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-export PR_NUMBER="42"
+export PR_NUMBER="41"
 
 release_component="$(
   python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["packages"]["."]["component"])' \
@@ -55,12 +57,14 @@ while (( $# > 0 )); do
   fi
 done
 
-IFS=';' read -ra edges <<<"${PR_BASE_GRAPH:-}"
-for edge in "${edges[@]}"; do
-  if [[ "${edge%%=*}" == "$head_branch" ]]; then
-    tr ',' '\n' <<<"${edge#*=}"
-  fi
-done
+if [[ -n "${PR_BASE_GRAPH:-}" ]]; then
+  IFS=';' read -ra edges <<<"$PR_BASE_GRAPH"
+  for edge in "${edges[@]}"; do
+    if [[ "${edge%%=*}" == "$head_branch" ]]; then
+      tr ',' '\n' <<<"${edge#*=}"
+    fi
+  done
+fi
 SH
 chmod +x "$fixture/gh"
 export GITHUB_REPOSITORY="acme/project"
@@ -136,7 +140,7 @@ fail|version automation missing label|main|build(python): adopt Python 3.15|-|ma
 fail|missing PR label|main|feat(api): add report|-|main|feat/42-report|Closes #42|open|-
 fail|multiple PR labels|main|feat(api): add report|enhancement,documentation|main|feat/42-report|Closes #42|open|-
 fail|duplicate PR label|main|feat(api): add report|enhancement,duplicate|main|feat/42-report|Closes #42|open|-
-fail|mismatched PR label|main|fix(api): handle timeout|enhancement|main|fix/42-timeout|Closes #42|open|-
+pass|title intent differs from work label|main|fix(api): handle timeout|enhancement|main|fix/42-timeout|Closes #42|open|-
 fail|unsupported title type|main|feature(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
 fail|non ASCII title|main|feat(api): 新增報表|enhancement|main|feat/42-report|Closes #42|open|-
 fail|uppercase scope|main|feat(API): add report|enhancement|main|feat/42-report|Closes #42|open|-
@@ -157,6 +161,77 @@ fail|delivery automation targets main|delivery|build(deps): bump pytest|enhancem
 fail|delivery sync mismatch|delivery|chore(sync): merge main into milestone|enhancement|dev/m8-other|sync/main-to-m7-staged-ci-abcdef0|-|-|-
 fail|unknown branch strategy|staging|feat(api): add report|enhancement|staging|feat/42-report|Closes #42|open|-
 CASES
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="main" \
+PR_NUMBER="42" \
+PR_TITLE="feat(api): add linked report" \
+PR_LABELS="enhancement" \
+PR_BASE="main" \
+PR_HEAD="feat/301-linked-report" \
+PR_BODY="Closes #301" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_TITLE="Add verified report workflow" \
+PR_LINKED_BRANCHES="feat/301-linked-report" \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="main" \
+  PR_NUMBER="42" \
+  PR_TITLE="feat(api): add unlinked report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/301-unlinked-report" \
+  PR_BODY="Closes #301" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Add verified report workflow" \
+  PR_LINKED_BRANCHES="" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a branch missing from the Issue Development links."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="main" \
+PR_NUMBER="41" \
+PR_TITLE="feat(api): finish active work" \
+PR_LABELS="enhancement" \
+PR_BASE="main" \
+PR_HEAD="feat/301-active-work" \
+PR_BODY="Closes #301" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_TITLE="Add verified report workflow" \
+PR_LINKED_BRANCHES="" \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add mismatched report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_LABELS="bug" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a label that differs from the linked Issue."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add wrong milestone report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+  PR_MILESTONE_NUMBER="8" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a Milestone that differs from the linked Issue."
+  exit 1
+fi
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
