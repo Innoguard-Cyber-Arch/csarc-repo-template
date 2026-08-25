@@ -3,7 +3,7 @@ name: Delivery sync
 on:
   pull_request:
     branches: [main, dev, "dev/**"]
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review, closed]
   merge_group:
     types: [checks_requested]
   push:
@@ -17,7 +17,9 @@ concurrency:
 jobs:
   gate:
     name: delivery-sync
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+    if: >-
+      ${{ github.event_name == 'merge_group' ||
+      (github.event_name == 'pull_request' && github.event.action != 'closed') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -59,6 +61,36 @@ jobs:
           --base-sha "$QUEUE_BASE_SHA"
           --queue-ref "$QUEUE_HEAD_REF"
           --queue-sha "$QUEUE_HEAD_SHA"
+
+  abort-preservation:
+    name: abort dev next preservation
+    if: >-
+      ${{ github.event_name == 'pull_request' && github.event.action == 'closed' &&
+      github.event.pull_request.merged == false &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.ref == 'dev/next' &&
+      github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Check out the trusted target branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+      - name: Abort the exact preservation transaction
+        env:
+          GH_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN || github.token }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: >-
+          python3 scripts/delivery_sync.py abort-dev-next
+          --repo "$GITHUB_REPOSITORY"
+          --pr-number "$PR_NUMBER"
+          --head-sha "$PR_HEAD_SHA"
 
   reconcile:
     name: reconcile

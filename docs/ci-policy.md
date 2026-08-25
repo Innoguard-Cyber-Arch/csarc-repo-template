@@ -246,6 +246,24 @@ fallback 不取代 release、publishing、deployment approval、secrets、proven
 CODEOWNER review 或任何無法本機重現的控制。額度恢復後須補跑該 SHA 的 GitHub
 checks 並記錄結果；平台不再允許補跑時，另開 Issue 保留缺口，不得宣稱追溯成功。
 
+### `dev/next` promotion preservation
+
+每一個 `dev/next` → `main` promotion（一般 hosted、merge queue、manual 或 quota
+fallback）都必須先由管理者對精確 PR/head 執行 `delivery_sync.py prepare-dev-next`。
+`policies/dev-next-ruleset.json` 只保護 `dev/next` 與
+`csarc/dev-next-preservation-ledger`：兩者都禁止刪除與 non-fast-forward 更新，其他
+`dev/*` branch 仍可按生命週期清理。gate 會重新讀取 ledger 的完整單 parent 歷史、live
+PR/refs、effective rules 與 repository setting；rules API、ledger protection 或 exact
+prepared transaction 無法驗證時一律 fail closed。
+
+一般 promotion 的 preflight evidence 會綁定 exact prepared ledger commit；main
+post-merge verifier 以同一 evidence append `restoring-complete`，再恢復暫停的
+auto-delete 並 append `completed`。關閉未合併 PR 則由 delivery-sync append
+`restoring-abort` 後恢復並 append `aborted`。`preparing` 配上已停用 setting、`prepared`
+配上已恢復 setting，或 PATCH 結果不明時都不自動猜測 ownership，必須人工檢查後重跑
+exact restoring operation。完成的 main base 不可重用；aborted operation 釋放該 base，
+但同一 operation ID 不可 replay。
+
 ### Promotion PR 的額外 fallback 證據
 
 `dev/m*`、`dev/next`、`dev/i*` 或 delivery strategy 的 `dev` promotion 到 `main`

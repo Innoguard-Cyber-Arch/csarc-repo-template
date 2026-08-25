@@ -512,6 +512,7 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
                     "sha256": "digest",
                 },
                 "canary": {"state": "blocked"},
+                "dev_next_preservation": preservation_evidence(),
             }
         ),
         encoding="utf-8",
@@ -645,7 +646,7 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
     assert evidence["release_eligible"] is False
     assert evidence["dev_next_preservation"] == preservation_evidence()
     assert preservation_calls == [
-        ("prepare-dev-next", "owner/repo", 42, "head", "", "", "")
+        ("inspect-dev-next", "owner/repo", 42, "head", "", "", "")
     ]
     assert evidence["full_check"] == {
         "context": "verify",
@@ -838,6 +839,75 @@ def test_verify_main_requires_successful_full_check(
                 output=tmp_path / "verified.json",
             )
         )
+
+
+def test_verify_main_completes_standard_dev_next_preservation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The standard post-main path closes the exact prepared transaction."""
+    source = tmp_path / "evidence.json"
+    checks = tmp_path / "checks.json"
+    target = tmp_path / "verified.json"
+    source.write_text(
+        json.dumps(
+            {
+                "gate": "passed",
+                "repository": "owner/repo",
+                "pull_request": 42,
+                "head_ref": "dev/next",
+                "head_sha": "head",
+                "candidate_tree": "tree",
+                "dev_next_preservation": preservation_evidence(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    checks.write_text(
+        json.dumps(
+            {"check_runs": [{"name": "verify", "conclusion": "success"}]}
+        ),
+        encoding="utf-8",
+    )
+    calls: list[tuple[object, ...]] = []
+
+    def complete(*arguments: object) -> dict[str, object]:
+        calls.append(arguments)
+        return {"ledger_commit": "f" * 40, "transaction": {}}
+
+    monkeypatch.setitem(
+        verify_main.__globals__, "git_output", lambda *_: "tree"
+    )
+    monkeypatch.setitem(
+        verify_main.__globals__, "run_dev_next_preservation", complete
+    )
+    verify_main(
+        SimpleNamespace(
+            evidence=source,
+            checks=checks,
+            repo="owner/repo",
+            pr_number=42,
+            head_sha="head",
+            main_sha="main",
+            output=target,
+        )
+    )
+    assert calls == [
+        (
+            "complete-dev-next",
+            "owner/repo",
+            42,
+            "head",
+            "main",
+            "e" * 64,
+            "d" * 40,
+        )
+    ]
+    assert (
+        json.loads(target.read_text())["dev_next_preservation"]["completion"][
+            "ledger_commit"
+        ]
+        == "f" * 40
+    )
 
 
 def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901

@@ -332,6 +332,16 @@ case "$2" in
       printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"}]'
     fi
     ;;
+  repos/acme/project/rules/branches/csarc%2Fdev-next-preservation-ledger)
+    if [[ "${MOCK_GOVERNANCE:-protected}" == "error" ]]; then
+      echo "403 cannot inspect effective rules" >&2
+      exit 1
+    elif [[ "${MOCK_GOVERNANCE:-protected}" == "ledger-incomplete" ]]; then
+      printf '[]\n'
+    else
+      printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"}]'
+    fi
+    ;;
   *)
     echo "Unexpected gh API path: $2" >&2
     exit 2
@@ -502,10 +512,15 @@ if incomplete_check="$(run_settings_fixture team check "" false false incomplete
 fi
 grep -q 'missing non_fast_forward rule' <<<"$incomplete_check"
 if dev_next_incomplete="$(run_settings_fixture team check "" false false dev-next-incomplete 2>&1)"; then
-  echo "Missing dev/next deletion protection must fail governance checks."
+  echo "Missing dev/next preservation rules must fail governance checks."
   exit 1
 fi
-grep -q 'dev/next is missing deletion protection' <<<"$dev_next_incomplete"
+grep -q 'dev/next is missing rules:' <<<"$dev_next_incomplete"
+if ledger_incomplete="$(run_settings_fixture team check "" false false ledger-incomplete 2>&1)"; then
+  echo "Missing ledger preservation rules must fail governance checks."
+  exit 1
+fi
+grep -q 'preservation ledger is missing rules:' <<<"$ledger_incomplete"
 if unavailable_check="$(run_settings_fixture team check "" false false error 2>&1)"; then
   echo "Unreadable effective branch rules must fail governance checks."
   exit 1
@@ -1085,10 +1100,16 @@ if ruleset["enforcement"] != "active":
 if "deletion" in rules:
     raise SystemExit("General dev/* governance must allow short-branch cleanup.")
 if dev_next_ruleset["conditions"]["ref_name"] != {
-    "include": ["refs/heads/dev/next"],
+    "include": [
+        "refs/heads/dev/next",
+        "refs/heads/csarc/dev-next-preservation-ledger",
+    ],
     "exclude": [],
-} or dev_next_ruleset["rules"] != [{"type": "deletion"}]:
-    raise SystemExit("Deletion protection must target only dev/next.")
+} or {rule["type"] for rule in dev_next_ruleset["rules"]} != {
+    "deletion",
+    "non_fast_forward",
+}:
+    raise SystemExit("Preservation rules must target only the two durable refs.")
 if pull_request["required_approving_review_count"] < 1:
     raise SystemExit("The repository Ruleset must require approval.")
 if not pull_request["require_code_owner_review"]:
@@ -1103,6 +1124,8 @@ if not {
 PY
 grep -q '"refs/heads/dev/\*"' policies/rulesets.json
 grep -q '"refs/heads/dev/next"' policies/dev-next-ruleset.json
+grep -q '"refs/heads/csarc/dev-next-preservation-ledger"' \
+  policies/dev-next-ruleset.json
 
 pr_title_pattern='^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+'
 valid_pr_title() {

@@ -1174,6 +1174,13 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 "workflow_run": args.workflow_run,
                 "created_at": datetime.now(UTC).isoformat(),
             }
+            if route.kind == "standalone-batch" and head == "dev/next":
+                evidence["dev_next_preservation"] = run_dev_next_preservation(
+                    "inspect-dev-next",
+                    args.repo,
+                    int(pull_request["number"]),
+                    str(head_sha),
+                )
     write_evidence(args.output, evidence)
     write_outputs(
         args.github_output,
@@ -1258,13 +1265,15 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:
     if (evidence.get("route") or {}).get(
         "kind"
     ) == "standalone-batch" and evidence.get("head_ref") == "dev/next":
-        preservation = run_dev_next_preservation(
-            "prepare-dev-next",
+        preservation = evidence.get("dev_next_preservation")
+        live_preservation = run_dev_next_preservation(
+            "inspect-dev-next",
             str(evidence["repository"]),
             int(evidence["pull_request"]),
             str(evidence["head_sha"]),
         )
-        evidence["dev_next_preservation"] = preservation
+        if preservation != live_preservation:
+            raise RuntimeError("dev/next preservation evidence changed")
 
     attestation, authorization = validate_quota_preflight(evidence, args, token)
     verification_command = local_verification_command()
@@ -1320,6 +1329,30 @@ def verify_main(args: argparse.Namespace) -> None:
         if isinstance(item, dict)
     ):
         raise RuntimeError("Candidate has no successful verify check")
+    if evidence.get("head_ref") == "dev/next":
+        preservation = evidence.get("dev_next_preservation")
+        if not isinstance(preservation, dict):
+            raise RuntimeError("dev/next preservation evidence is missing")
+        transaction = preservation.get("transaction")
+        prepared_commit = preservation.get("ledger_commit")
+        operation_id = (
+            transaction.get("operation_id")
+            if isinstance(transaction, dict)
+            else None
+        )
+        if not isinstance(operation_id, str) or not isinstance(
+            prepared_commit, str
+        ):
+            raise RuntimeError("dev/next preservation evidence is invalid")
+        preservation["completion"] = run_dev_next_preservation(
+            "complete-dev-next",
+            args.repo,
+            args.pr_number,
+            args.head_sha,
+            args.main_sha,
+            operation_id,
+            prepared_commit,
+        )
     evidence["post_merge"] = {
         "main_sha": args.main_sha,
         "main_tree": current_tree,

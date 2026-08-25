@@ -375,7 +375,11 @@ PY
     echo "Cannot inspect effective dev/next rules for $repo." >&2
     echo "$dev_next_rules" >&2
     check_errors=$((check_errors + 1))
-  elif ! ruleset_drift="$(python3 - "$ruleset_payload" "$dev_next_ruleset_payload" "$branch_rules" "$dev_next_rules" 2>&1 <<'PY'
+  elif ! ledger_rules="$(gh api "repos/$repo/rules/branches/csarc%2Fdev-next-preservation-ledger" 2>&1)"; then
+    echo "Cannot inspect effective preservation ledger rules for $repo." >&2
+    echo "$ledger_rules" >&2
+    check_errors=$((check_errors + 1))
+  elif ! ruleset_drift="$(python3 - "$ruleset_payload" "$dev_next_ruleset_payload" "$branch_rules" "$dev_next_rules" "$ledger_rules" 2>&1 <<'PY'
 import json
 import sys
 
@@ -383,6 +387,7 @@ desired = json.load(open(sys.argv[1], encoding="utf-8"))
 desired_dev_next = json.load(open(sys.argv[2], encoding="utf-8"))
 effective = json.loads(sys.argv[3])
 effective_dev_next = json.loads(sys.argv[4])
+effective_ledger = json.loads(sys.argv[5])
 desired_by_type = {rule["type"]: rule for rule in desired["rules"]}
 effective_by_type = {}
 for rule in effective:
@@ -392,10 +397,20 @@ errors = []
 for rule_type in ("non_fast_forward", "pull_request", "required_status_checks"):
     if rule_type not in effective_by_type:
         errors.append(f"missing {rule_type} rule")
-if not any(rule.get("type") == "deletion" for rule in effective_dev_next):
-    errors.append("dev/next is missing deletion protection")
-if desired_dev_next["conditions"]["ref_name"]["include"] != ["refs/heads/dev/next"]:
-    errors.append("dev/next deletion policy is not narrowly targeted")
+required_preservation_rules = {"deletion", "non_fast_forward"}
+for name, rules in (
+    ("dev/next", effective_dev_next),
+    ("preservation ledger", effective_ledger),
+):
+    observed = {rule.get("type") for rule in rules}
+    missing = sorted(required_preservation_rules - observed)
+    if missing:
+        errors.append(f"{name} is missing rules: {', '.join(missing)}")
+if desired_dev_next["conditions"]["ref_name"]["include"] != [
+    "refs/heads/dev/next",
+    "refs/heads/csarc/dev-next-preservation-ledger",
+]:
+    errors.append("preservation policy does not target only its two exact refs")
 
 desired_pull_request = desired_by_type["pull_request"]["parameters"]
 pull_request_rules = effective_by_type.get("pull_request", [])
@@ -431,7 +446,7 @@ PY
     echo "Ruleset settings drift: $ruleset_drift" >&2
     check_errors=$((check_errors + 1))
   else
-    echo "Repository governance ready: $default_branch has the required effective rules; delivery-sync verifies dev/next deletion protection before promotion."
+    echo "Repository governance ready: $default_branch has the required effective rules; delivery-sync verifies dev/next and its ledger before promotion."
   fi
 
   if (( check_errors > 0 )); then

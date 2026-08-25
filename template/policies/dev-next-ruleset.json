@@ -5,11 +5,15 @@
   "bypass_actors": [],
   "conditions": {
     "ref_name": {
-      "include": ["refs/heads/dev/next"],
+      "include": [
+        "refs/heads/dev/next",
+        "refs/heads/csarc/dev-next-preservation-ledger"
+      ],
       "exclude": []
     }
   },
   "rules": [
-    {"type": "deletion"}
+    {"type": "deletion"},
+    {"type": "non_fast_forward"}
   ]
 }

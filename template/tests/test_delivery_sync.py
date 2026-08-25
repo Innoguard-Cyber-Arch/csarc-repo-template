@@ -26,6 +26,7 @@ merge_group_gate = MODULE["merge_group_gate"]
 prepare_dev_next = MODULE["prepare_dev_next"]
 preservation_operation = MODULE["preservation_operation"]
 read_preservation_record = MODULE["read_preservation_record"]
+valid_preservation_transition = MODULE["valid_preservation_transition"]
 read_active_states = MODULE["read_active_states"]
 reconcile = MODULE["reconcile"]
 select_auto_mode = MODULE["select_auto_mode"]
@@ -77,6 +78,8 @@ class PromotionAPI:
         setting: bool = True,
         rules_status: int = 200,
         rules: list[dict[str, object]] | None = None,
+        ledger_rules_status: int = 200,
+        ledger_rules: list[dict[str, object]] | None = None,
         missing_dev_next: bool = False,
         drift_after_patch: bool = False,
     ) -> None:
@@ -84,6 +87,11 @@ class PromotionAPI:
         self.setting = setting
         self.rules_status = rules_status
         self.rules = rules if rules is not None else []
+        self.ledger_rules_status = ledger_rules_status
+        self.ledger_rules = ledger_rules or [
+            {"type": "deletion"},
+            {"type": "non_fast_forward"},
+        ]
         self.missing_dev_next = missing_dev_next
         self.drift_after_patch = drift_after_patch
         self.calls: list[tuple[str, str, dict[str, object] | None]] = []
@@ -114,6 +122,10 @@ class PromotionAPI:
             return 200, {"delete_branch_on_merge": self.setting}
         if method == "GET" and path.endswith("/rules/branches/dev%2Fnext"):
             return self.rules_status, self.rules
+        if method == "GET" and path.endswith(
+            "/rules/branches/csarc%2Fdev-next-preservation-ledger"
+        ):
+            return self.ledger_rules_status, self.ledger_rules
         if method == "GET" and path in {
             f"repos/acme/repo/git/commits/{HEAD_SHA}",
             f"repos/acme/repo/git/commits/{MAIN_SHA}",
@@ -150,12 +162,21 @@ class MemoryLedger:
         assert previous == (self.checkpoint[0] if self.checkpoint else None)
         commit = f"{self.counter:040x}"
         self.counter += 1
-        self.checkpoint = commit, record
+        self.checkpoint = (
+            commit,
+            {
+                **record,
+                "previous_ledger_commit": previous,
+            },
+        )
         return self.checkpoint
 
 
 def preservation_record(
-    *, state: str = "prepared", mode: str = "temporary-auto-delete"
+    *,
+    state: str = "prepared",
+    mode: str = "temporary-auto-delete",
+    previous_ledger_commit: str | None = None,
 ) -> dict[str, Any]:
     """Return one exact ledger record for the promotion fixture."""
     return {
@@ -172,6 +193,7 @@ def preservation_record(
         "mode": mode,
         "prior_auto_delete": True,
         "state": state,
+        "previous_ledger_commit": previous_ledger_commit,
     }
 
 
@@ -304,41 +326,36 @@ def test_manual_sync_is_deterministic_and_reviewed() -> None:
     assert "git push origin dev/m7-staged-ci" not in commands
 
 
-def test_promotion_gate_requires_verified_deletion_protection() -> None:
-    """A direct promotion cannot merge while GitHub may delete dev/next."""
-    protected = FakeAPI(
-        [
-            (200, promotion()),
-            (200, {"object": {"sha": BASE_SHA}}),
-            (200, {"object": {"sha": HEAD_SHA}}),
-            (200, {"delete_branch_on_merge": True}),
-            (200, [{"type": "deletion"}]),
-        ]
+def test_promotion_gate_requires_verified_deletion_protection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A direct promotion requires exact remote transaction evidence."""
+    record = preservation_record(mode="ruleset-protected")
+    monkeypatch.setitem(
+        gate.__globals__,
+        "read_preservation_record",
+        lambda *_: (LEDGER_SHA, record),
     )
-    assert (
+    protected = PromotionAPI(
+        rules=[{"type": "deletion"}, {"type": "non_fast_forward"}]
+    )
+    result = gate(
+        protected,
+        "acme/repo",
+        "main",
+        HEAD_SHA,
+        head_ref="dev/next",
+        pr_number=42,
+    )
+    assert "ruleset-protected" in result
+    assert LEDGER_SHA in result
+
+    monkeypatch.setitem(
+        gate.__globals__, "read_preservation_record", lambda *_: None
+    )
+    with pytest.raises(RuntimeError, match="no prepared preservation"):
         gate(
             protected,
-            "acme/repo",
-            "main",
-            HEAD_SHA,
-            head_ref="dev/next",
-            pr_number=42,
-        )
-        == "deletion-protected"
-    )
-
-    api = FakeAPI(
-        [
-            (200, promotion()),
-            (200, {"object": {"sha": BASE_SHA}}),
-            (200, {"object": {"sha": HEAD_SHA}}),
-            (200, {"delete_branch_on_merge": True}),
-            (200, [{"type": "non_fast_forward"}]),
-        ]
-    )
-    with pytest.raises(RuntimeError, match="can be auto-deleted"):
-        gate(
-            api,
             "acme/repo",
             "main",
             HEAD_SHA,
@@ -356,7 +373,7 @@ def test_promotion_gate_requires_owned_disabled_setting(
         gate.__globals__, "read_preservation_record", lambda *_: None
     )
     with pytest.raises(
-        RuntimeError, match="without a preservation transaction"
+        RuntimeError, match="no prepared preservation transaction"
     ):
         gate(
             api,
@@ -391,7 +408,9 @@ def test_promotion_gate_accepts_only_the_exact_prepared_transaction(
     assert LEDGER_SHA in result
 
 
-def test_merge_group_revalidates_one_exact_promotion() -> None:
+def test_merge_group_revalidates_one_exact_promotion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A queue candidate is rebound to one live same-repository promotion."""
     queue_sha = "f" * 40
     queue_ref = "refs/heads/gh-readonly-queue/main/pr-42-deadbeef"
@@ -406,20 +425,26 @@ def test_merge_group_revalidates_one_exact_promotion() -> None:
             (200, {"object": {"sha": HEAD_SHA}}),
             (200, {"status": "ahead"}),
             (200, {"status": "ahead"}),
-            (200, {"delete_branch_on_merge": True}),
-            (200, [{"type": "deletion"}]),
+            (200, [{"type": "deletion"}, {"type": "non_fast_forward"}]),
+            (200, [{"type": "deletion"}, {"type": "non_fast_forward"}]),
         ]
     )
-    assert (
-        merge_group_gate(
-            api,
-            "acme/repo",
-            queue_ref,
-            queue_sha,
-            "refs/heads/main",
-            BASE_SHA,
-        )
-        == "deletion-protected"
+    record = preservation_record(mode="ruleset-protected")
+    monkeypatch.setitem(
+        merge_group_gate.__globals__,
+        "read_preservation_record",
+        lambda *_: (LEDGER_SHA, record),
+    )
+    assert merge_group_gate(
+        api,
+        "acme/repo",
+        queue_ref,
+        queue_sha,
+        "refs/heads/main",
+        BASE_SHA,
+    ) == (
+        f"ruleset-protected; transaction {record['operation_id']} "
+        f"at {LEDGER_SHA}"
     )
     assert api.calls[0][1].endswith(queue_branch)
 
@@ -518,17 +543,106 @@ def test_prepare_rejects_external_disabled_setting(
     assert ledger.checkpoint is None
 
 
-def test_prepare_recovers_after_prepared_checkpoint_before_setting(
+def test_prepare_rejects_prepared_checkpoint_with_setting_drift(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A retry completes an exact prepared transaction after interruption."""
+    """A prepared record never adopts an externally restored setting."""
     prepared = preservation_record()
     ledger = MemoryLedger((LEDGER_SHA, prepared))
     install_memory_ledger(monkeypatch, ledger)
     api = PromotionAPI(setting=True)
-    result = json.loads(prepare_dev_next(api, "acme/repo", 42, HEAD_SHA))
-    assert result["ledger_commit"] == LEDGER_SHA
+    with pytest.raises(RuntimeError, match="external setting drift"):
+        prepare_dev_next(api, "acme/repo", 42, HEAD_SHA)
+    assert api.setting is True
+
+
+def test_prepare_rejects_ambiguous_preparing_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A preparing record cannot claim a false repository setting."""
+    preparing = preservation_record(state="preparing")
+    ledger = MemoryLedger((LEDGER_SHA, preparing))
+    install_memory_ledger(monkeypatch, ledger)
+    api = PromotionAPI(setting=False)
+    with pytest.raises(RuntimeError, match="ambiguous setting ownership"):
+        prepare_dev_next(api, "acme/repo", 42, HEAD_SHA)
     assert api.setting is False
+    assert not any(method == "PATCH" for method, _path, _body in api.calls)
+
+
+def test_prepare_cas_loser_never_restores_the_winner_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A losing append must not undo another contender's false setting."""
+    ledger = MemoryLedger()
+
+    def lose_prepared_append(
+        _api: object,
+        _repo: str,
+        previous: str | None,
+        record: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        if record["state"] == "prepared":
+            ledger.checkpoint = (
+                "f" * 40,
+                {**record, "previous_ledger_commit": previous},
+            )
+            raise RuntimeError("Preservation ledger changed concurrently")
+        return ledger.append(_api, _repo, previous, record)
+
+    monkeypatch.setitem(
+        prepare_dev_next.__globals__, "read_preservation_record", ledger.read
+    )
+    monkeypatch.setitem(
+        prepare_dev_next.__globals__,
+        "append_preservation_record",
+        lose_prepared_append,
+    )
+    api = PromotionAPI()
+    with pytest.raises(RuntimeError, match="manual recovery"):
+        prepare_dev_next(api, "acme/repo", 42, HEAD_SHA)
+    assert api.setting is False
+    assert [body for method, _path, body in api.calls if method == "PATCH"] == [
+        {"delete_branch_on_merge": False}
+    ]
+
+
+def test_aborted_base_accepts_a_new_operation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An abort releases its main base without permitting operation replay."""
+    old = preservation_record(state="aborted")
+    old["pull_request"] = 41
+    old["head_sha"] = "9" * 40
+    old["operation_id"] = preservation_operation(
+        "acme/repo", 41, BASE_SHA, "9" * 40
+    )
+    ledger = MemoryLedger((LEDGER_SHA, old))
+    install_memory_ledger(monkeypatch, ledger)
+    api = PromotionAPI()
+    result = json.loads(prepare_dev_next(api, "acme/repo", 42, HEAD_SHA))
+    assert result["transaction"]["state"] == "prepared"
+    assert result["transaction"]["base_sha"] == BASE_SHA
+
+
+def test_ledger_transition_rejects_skips_and_operation_reuse() -> None:
+    """Only adjacent canonical states and fresh operation IDs can append."""
+    preparing = preservation_record(state="preparing")
+    prepared = {
+        **preparing,
+        "state": "prepared",
+        "previous_ledger_commit": LEDGER_SHA,
+    }
+    completed = {
+        **prepared,
+        "state": "completed",
+        "main_sha": MAIN_SHA,
+        "prepared_ledger_commit": LEDGER_SHA,
+    }
+    assert valid_preservation_transition(prepared, preparing, LEDGER_SHA)
+    assert not valid_preservation_transition(completed, preparing, LEDGER_SHA)
+    replay = {**preparing, "previous_ledger_commit": LEDGER_SHA}
+    assert not valid_preservation_transition(replay, completed, LEDGER_SHA)
 
 
 def test_prepare_rolls_back_if_main_drifts(
@@ -673,18 +787,30 @@ def test_ledger_create_collision_fails_closed() -> None:
 
 def test_ledger_record_must_be_canonical_and_exact() -> None:
     """Read one structured checkpoint through the immutable Git objects."""
-    record = preservation_record()
+    record = preservation_record(state="preparing")
     content = json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n"
     api = FakeAPI(
         [
             (200, {"object": {"sha": LEDGER_SHA}}),
-            (200, {"tree": {"sha": "e" * 40}}),
+            (
+                200,
+                {
+                    "sha": LEDGER_SHA,
+                    "message": (
+                        "csarc dev/next preservation "
+                        f"{record['operation_id']} preparing"
+                    ),
+                    "tree": {"sha": "e" * 40},
+                    "parents": [{"sha": BASE_SHA}],
+                },
+            ),
             (
                 200,
                 {
                     "tree": [
                         {
                             "path": "transaction.json",
+                            "mode": "100644",
                             "type": "blob",
                             "sha": "f" * 40,
                         }
@@ -701,6 +827,37 @@ def test_ledger_record_must_be_canonical_and_exact() -> None:
         ]
     )
     assert read_preservation_record(api, "acme/repo") == (LEDGER_SHA, record)
+
+
+def test_ledger_reader_rejects_a_merge_commit() -> None:
+    """A merge parent cannot hide a divergent preservation history."""
+    api = FakeAPI(
+        [
+            (200, {"object": {"sha": LEDGER_SHA}}),
+            (
+                200,
+                {
+                    "sha": LEDGER_SHA,
+                    "tree": {"sha": "e" * 40},
+                    "parents": [{"sha": BASE_SHA}, {"sha": "f" * 40}],
+                },
+            ),
+        ]
+    )
+    with pytest.raises(RuntimeError, match="invalid preservation commit"):
+        read_preservation_record(api, "acme/repo")
+
+
+def test_ledger_protection_is_mandatory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unreadable ledger ruleset cannot authorize a promotion."""
+    ledger = MemoryLedger()
+    install_memory_ledger(monkeypatch, ledger)
+    api = PromotionAPI(ledger_rules_status=403)
+    with pytest.raises(RuntimeError, match="ledger protection is unavailable"):
+        prepare_dev_next(api, "acme/repo", 42, HEAD_SHA)
+    assert ledger.checkpoint is None
 
 
 def test_delivery_reconcile_requires_dev_next() -> None:
