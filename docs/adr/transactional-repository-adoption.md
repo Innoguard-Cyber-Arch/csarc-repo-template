@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-24
-- **來源 Issue：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219)
+- **來源 Issues：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250)
 - **實作 PR：**[#231](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/231)
 
 ## 問題與限制
@@ -30,7 +30,7 @@ Generic prompt 需要保持穩定且不硬編工作路徑，但不能因此移�
 - 產品 `.github/workflows/release.yml` 保留；existing mode 另產生 `.github/workflows/csarc-release.yml`。
 - 其他無固定語意的碰撞維持明確人工處理與 resumable checkpoint，不導入通用三方合併引擎。
 
-Python 以 `uvx --python 3.14` 逐次選擇，不修改 shell profile、`PATH` 或全域環境。Ubuntu 與 macOS 跑完整 adoption 測試；Windows 使用 WSL2，native Windows 明確 fail closed。
+Release prompt 以 exact commit 從 canonical GitHub repository 執行 CLI；`uvx --python 3.14` 逐次取得隔離 runtime，不要求預先安裝全域 Python，也不修改 shell profile、`PATH` 或全域環境。Ubuntu 與 macOS 跑完整 adoption 測試；Windows 使用 WSL2，native Windows 明確 fail closed。
 
 ## 評估過的替代方案
 
