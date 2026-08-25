@@ -6,8 +6,10 @@ import json
 import runpy
 import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from threading import Barrier
 from types import SimpleNamespace
 from typing import Any
 
@@ -17,9 +19,16 @@ MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "pr_lifecycle.py")
 )
 acquire = MODULE["acquire"]
+authorization = MODULE["authorization"]
+authorization_statement = MODULE["authorization_statement"]
+create_refs = MODULE["create_refs"]
+GitHub = MODULE["GitHub"]
+lease_message = MODULE["lease_message"]
 merge = MODULE["merge"]
 merge_snapshot = MODULE["merge_snapshot"]
 read_lease = MODULE["read_lease"]
+require_lease = MODULE["require_lease"]
+require_successful_checks = MODULE["require_successful_checks"]
 release_refs = MODULE["release_refs"]
 remote_repository = MODULE["remote_repository"]
 _GIT = shutil.which("git")
@@ -47,6 +56,14 @@ class FakeGitHub:
         ]
         self.audit_comments: list[str] = []
         self.protected = True
+        self.authorization_type = "User"
+        self.authorization_body: str | None = None
+        self.permission = "maintain"
+        self.merged = False
+        self.base_ref = "main"
+        self.base_sha = "b" * 40
+        self.default_branch = "main"
+        self.canonical_lease: dict[str, object] | None = None
 
     def viewer(self) -> str:
         """Return the task's authenticated actor."""
@@ -56,11 +73,13 @@ class FakeGitHub:
         """Return one live PR fixture."""
         return {
             "number": 42,
-            "state": "open",
-            "merged": False,
+            "state": "closed" if self.merged else "open",
+            "merged": self.merged,
+            "merge_commit_sha": "d" * 40 if self.merged else None,
             "draft": self.draft,
+            "title": "fix(ci): serialize lifecycle writes",
             "body": "Ready for review.",
-            "base": {"ref": "main", "sha": "b" * 40},
+            "base": {"ref": self.base_ref, "sha": self.base_sha},
             "head": {
                 "ref": "dev/next",
                 "sha": self.head,
@@ -71,29 +90,28 @@ class FakeGitHub:
     def get(self, _repo: str, path: str) -> object:
         """Return one REST fixture."""
         if path == "":
-            return {"default_branch": "main"}
+            return {"default_branch": self.default_branch}
         if path == "pulls/42":
             return self.pull()
         if path == "issues/comments/99":
-            binding = {
-                "repository": "owner/repo",
-                "pull_request": 42,
-                "head_sha": self.head,
-            }
             return {
                 "html_url": (
                     "https://github.com/owner/repo/pull/42#issuecomment-99"
                 ),
                 "issue_url": "https://api.github.com/repos/owner/repo/issues/42",
                 "author_association": "OWNER",
-                "user": {"login": self.authorization_actor},
+                "user": {
+                    "login": self.authorization_actor,
+                    "type": self.authorization_type,
+                },
                 "created_at": self.authorization_created_at,
-                "body": (
-                    "PR lifecycle merge authorization\n\n"
-                    "`"
-                    + json.dumps(binding, sort_keys=True, separators=(",", ":"))
-                    + "`"
-                ),
+                "body": self.authorization_body
+                or authorization_statement("owner/repo", 42, self.head),
+            }
+        if path == f"collaborators/{self.authorization_actor}/permission":
+            return {
+                "permission": self.permission,
+                "user": {"login": self.authorization_actor},
             }
         if path == "rules/branches/main":
             if not self.protected:
@@ -120,6 +138,37 @@ class FakeGitHub:
             ]
         if path == "rulesets/7":
             return {"enforcement": "active", "bypass_actors": []}
+        if path == f"git/commits/{'a' * 40}":
+            return {"sha": "a" * 40, "tree": {"sha": "e" * 40}}
+        if path == f"git/commits/{'c' * 40}" and self.canonical_lease:
+            return {
+                "sha": "c" * 40,
+                "message": lease_message(self.canonical_lease),
+                "parents": [{"sha": "a" * 40}],
+                "tree": {"sha": "e" * 40},
+            }
+        raise AssertionError(path)
+
+    def collection(
+        self,
+        _repo: str,
+        path: str,
+        key: str,
+        response_sha: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return successful exact-head check fixtures."""
+        assert response_sha in {None, self.head}
+        if key == "check_runs" and path.startswith(f"commits/{self.head}/"):
+            return [
+                {
+                    "name": "verify",
+                    "head_sha": self.head,
+                    "status": "completed",
+                    "conclusion": "success",
+                }
+            ]
+        if key == "statuses" and path.startswith(f"commits/{self.head}/"):
+            return []
         raise AssertionError(path)
 
     def pages(self, _repo: str, path: str) -> list[dict[str, Any]]:
@@ -138,6 +187,14 @@ class FakeGitHub:
         return {
             "html_url": "https://github.com/owner/repo/pull/42#issuecomment-1"
         }
+
+    def merge(
+        self, _repo: str, _number: int, head_sha: str, _title: str
+    ) -> dict[str, Any]:
+        """Record one synchronous exact-head merge."""
+        assert head_sha == self.head
+        self.merged = True
+        return {"merged": True, "sha": "d" * 40}
 
 
 def git(path: Path, *arguments: str) -> str:
@@ -193,11 +250,6 @@ def test_236_concurrent_lifecycle_writer_cannot_acquire(
         ttl_seconds=600,
         output=tmp_path / "first.json",
     )
-    acquire(first, github)
-    lease = read_lease(first.output)
-    assert len(lease["refs"]) == 2
-    assert github.audit_comments
-
     second = SimpleNamespace(
         **{
             **vars(first),
@@ -205,9 +257,27 @@ def test_236_concurrent_lifecycle_writer_cannot_acquire(
             "output": tmp_path / "second.json",
         }
     )
-    with pytest.raises(RuntimeError, match="already holds"):
-        acquire(second, github)
-    assert not second.output.exists()
+    barrier = Barrier(2)
+    original_create = create_refs
+
+    def simultaneous_create(commit: str, refs: list[str]) -> None:
+        barrier.wait(timeout=5)
+        original_create(commit, refs)
+
+    monkeypatch.setitem(acquire.__globals__, "create_refs", simultaneous_create)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(acquire, arguments, github)
+            for arguments in (first, second)
+        ]
+    errors = [future.exception() for future in futures]
+    assert sum(error is None for error in errors) == 1
+    assert sum(isinstance(error, RuntimeError) for error in errors) == 1
+    outputs = [path for path in (first.output, second.output) if path.exists()]
+    assert len(outputs) == 1
+    lease = read_lease(outputs[0])
+    assert len(lease["refs"]) == 2
+    assert github.audit_comments
     release_refs(lease)
 
 
@@ -219,8 +289,13 @@ def lease_fixture() -> dict[str, object]:
         "repository": "owner/repo",
         "pull_request": 42,
         "head_sha": "a" * 40,
+        "head_tree": "e" * 40,
+        "base_ref": "main",
+        "base_sha": "b" * 40,
+        "default_branch": "main",
         "owner": "task/merge",
         "actor": "agent",
+        "nonce": "f" * 32,
         "acquired_at": acquired.isoformat().replace("+00:00", "Z"),
         "expires_at": (datetime.now(UTC) + timedelta(hours=1))
         .isoformat()
@@ -230,17 +305,185 @@ def lease_fixture() -> dict[str, object]:
             "refs/heads/csarc/leases/pr-42",
             "refs/heads/csarc/leases/promotion",
         ],
+        "audit_url": "https://github.com/owner/repo/pull/42#issuecomment-1",
     }
 
 
 def bind_remote_lease(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make remote ref checks observe the fixture lease."""
     monkeypatch.setitem(
-        merge_snapshot.__globals__, "remote_ref", lambda _ref: "c" * 40
+        merge_snapshot.__globals__, "require_lease", lambda *_: None
+    )
+
+
+def bind_canonical_remote(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make remote refs point to the canonical fixture commit."""
+    monkeypatch.setitem(
+        require_lease.__globals__, "require_origin", lambda _repo: None
     )
     monkeypatch.setitem(
-        merge_snapshot.__globals__, "require_origin", lambda _repo: None
+        require_lease.__globals__, "remote_ref", lambda _ref: "c" * 40
     )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("owner", "task/attacker"),
+        ("expires_at", "2099-01-01T00:00:00Z"),
+    ],
+)
+def test_lease_evidence_must_match_the_remote_commit(
+    field: str, value: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Editing owner or expiry cannot forge remote lease ownership."""
+    bind_canonical_remote(monkeypatch)
+    canonical = lease_fixture()
+    github = FakeGitHub("a" * 40)
+    github.canonical_lease = canonical
+    tampered = {**canonical, field: value}
+    with pytest.raises(RuntimeError, match="canonical evidence"):
+        require_lease(github, tampered, "owner/repo", 42, "a" * 40)
+
+
+@pytest.mark.parametrize("part", ["parent", "tree"])
+def test_remote_lease_must_reuse_the_exact_head_commit(
+    part: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A same-message commit cannot substitute another parent or tree."""
+    bind_canonical_remote(monkeypatch)
+    canonical = lease_fixture()
+    github = FakeGitHub("a" * 40)
+    github.canonical_lease = canonical
+    original_get = github.get
+
+    def tampered_get(repo: str, path: str) -> object:
+        payload = original_get(repo, path)
+        if path == f"git/commits/{'c' * 40}" and isinstance(payload, dict):
+            payload = dict(payload)
+            if part == "parent":
+                payload["parents"] = [{"sha": "9" * 40}]
+            else:
+                payload["tree"] = {"sha": "9" * 40}
+        return payload
+
+    github.get = tampered_get  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="canonical evidence"):
+        require_lease(github, canonical, "owner/repo", 42, "a" * 40)
+
+
+def test_retargeting_to_default_requires_the_promotion_lease(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A base retarget cannot change the lane covered by an active lease."""
+    bind_canonical_remote(monkeypatch)
+    canonical = lease_fixture()
+    canonical["base_ref"] = "dev/next"
+    canonical["refs"] = ["refs/heads/csarc/leases/pr-42"]
+    github = FakeGitHub("a" * 40)
+    github.canonical_lease = canonical
+    with pytest.raises(RuntimeError, match="promotion lease scope drifted"):
+        require_lease(github, canonical, "owner/repo", 42, "a" * 40)
+
+
+@pytest.mark.parametrize(
+    ("actor_type", "body"),
+    [
+        ("Bot", None),
+        ("User", "Authorization revoked"),
+    ],
+)
+def test_authorization_requires_an_exact_affirmative_human_statement(
+    actor_type: str, body: str | None
+) -> None:
+    """Bot identities and non-affirmative text cannot authorize a merge."""
+    github = FakeGitHub("a" * 40)
+    github.authorization_type = actor_type
+    github.authorization_body = body
+    with pytest.raises(RuntimeError, match="exact maintainer statement"):
+        authorization(
+            github,
+            "owner/repo",
+            42,
+            "a" * 40,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+        )
+
+
+def test_authorization_requires_live_maintainer_permission() -> None:
+    """A stale MEMBER association cannot replace live repository permission."""
+    github = FakeGitHub("a" * 40)
+    github.permission = "read"
+    with pytest.raises(RuntimeError, match="lacks maintainer permission"):
+        authorization(
+            github,
+            "owner/repo",
+            42,
+            "a" * 40,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+        )
+
+
+def test_keyed_github_collections_flatten_every_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Required-check discovery cannot silently ignore later pages."""
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **_kwargs: object) -> str:
+        commands.append(command)
+        return json.dumps(
+            [
+                {"check_runs": [{"name": "first"}]},
+                {"check_runs": [{"name": "second"}]},
+            ]
+        )
+
+    monkeypatch.setitem(GitHub.collection.__globals__, "run", fake_run)
+    assert [
+        item["name"]
+        for item in GitHub().collection(
+            "owner/repo", "commits/abc/check-runs?per_page=100", "check_runs"
+        )
+    ] == ["first", "second"]
+    assert "--paginate" in commands[0]
+
+
+def test_required_check_must_succeed_on_the_exact_head() -> None:
+    """A successful check attached to another SHA cannot satisfy protection."""
+    github = FakeGitHub("a" * 40)
+
+    def stale_collection(
+        _repo: str,
+        _path: str,
+        key: str,
+        _response_sha: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if key == "check_runs":
+            return [
+                {
+                    "name": "verify",
+                    "head_sha": "f" * 40,
+                    "status": "completed",
+                    "conclusion": "success",
+                }
+            ]
+        return []
+
+    github.collection = stale_collection  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", "a" * 40, {("verify", None)}
+        )
+
+
+def test_required_check_must_match_its_pinned_github_app() -> None:
+    """A same-name check from another integration cannot satisfy protection."""
+    github = FakeGitHub("a" * 40)
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", "a" * 40, {("verify", 1234)}
+        )
 
 
 def test_236_newer_draft_event_invalidates_authorization(
@@ -406,6 +649,29 @@ def test_untrusted_comment_cannot_resolve_a_maintainer_blocker(
         )
 
 
+@pytest.mark.parametrize("marker", ["-", "*", "+"])
+def test_all_markdown_list_markers_block_unchecked_items(
+    marker: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every CommonMark bullet form preserves the checklist merge gate."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    original_pull = github.pull
+
+    def unchecked_pull() -> dict[str, Any]:
+        pull = original_pull()
+        pull["body"] = f"{marker} [ ] unresolved"
+        return pull
+
+    github.pull = unchecked_pull  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="unchecked checklist"):
+        merge_snapshot(
+            github,
+            lease_fixture(),
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+        )
+
+
 def test_tampered_lease_cannot_delete_an_arbitrary_ref(tmp_path: Path) -> None:
     """Edited evidence cannot turn release into an arbitrary ref delete."""
     payload = lease_fixture()
@@ -450,3 +716,71 @@ def test_merge_never_calls_gh_when_protection_is_degraded(
             FakeGitHub("a" * 40),
         )
     assert not called
+
+
+def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A merge cannot become queued auto-merge or target a later head."""
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
+    monkeypatch.setitem(
+        merge.__globals__, "merge_snapshot", lambda *_: {"merge_mode": "agent"}
+    )
+    monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
+    released = False
+
+    def record_release(_lease: dict[str, Any]) -> None:
+        nonlocal released
+        released = True
+
+    monkeypatch.setitem(merge.__globals__, "release_refs", record_release)
+    github = FakeGitHub("a" * 40)
+    merge(
+        SimpleNamespace(
+            repo="owner/repo",
+            pr_number=42,
+            head_sha="a" * 40,
+            owner="task/merge",
+            lease=lease_path,
+            authorization_url=(
+                "https://github.com/owner/repo/pull/42#issuecomment-99"
+            ),
+        ),
+        github,
+    )
+    assert github.merged
+    assert released
+
+
+def test_merge_does_not_release_a_lease_for_an_unconfirmed_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An ambiguous REST result remains locked for manual inspection."""
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
+    monkeypatch.setitem(
+        merge.__globals__, "merge_snapshot", lambda *_: {"merge_mode": "agent"}
+    )
+    monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
+    monkeypatch.setitem(
+        merge.__globals__,
+        "release_refs",
+        lambda _lease: pytest.fail("lease was released"),
+    )
+    github = FakeGitHub("a" * 40)
+    github.merge = lambda *_: {"merged": False, "sha": None}  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="synchronously merge"):
+        merge(
+            SimpleNamespace(
+                repo="owner/repo",
+                pr_number=42,
+                head_sha="a" * 40,
+                owner="task/merge",
+                lease=lease_path,
+                authorization_url=(
+                    "https://github.com/owner/repo/pull/42#issuecomment-99"
+                ),
+            ),
+            github,
+        )
