@@ -274,6 +274,7 @@ def validate_promotion(
     head_repo = head.get("repo") if isinstance(head, dict) else None
     if (
         pull.get("merged") is not merged
+        or pull.get("state") != ("closed" if merged else "open")
         or not isinstance(base, dict)
         or base.get("ref") != "main"
         or not isinstance(head, dict)

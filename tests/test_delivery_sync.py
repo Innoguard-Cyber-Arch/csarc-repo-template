@@ -34,6 +34,7 @@ def promotion(*, merged: bool = False) -> dict[str, Any]:
     return {
         "number": 42,
         "merged": merged,
+        "state": "closed" if merged else "open",
         "merge_commit_sha": MAIN_SHA if merged else None,
         "base": {"ref": "main", "sha": BASE_SHA},
         "head": {
@@ -214,6 +215,16 @@ def test_promotion_gate_requires_verified_deletion_protection() -> None:
             head_ref="dev/next",
             pr_number=42,
         )
+
+
+def test_prepare_rejects_a_closed_unmerged_pull_request() -> None:
+    """A stale closed pull request cannot change repository cleanup."""
+    pull = promotion()
+    pull["state"] = "closed"
+    api = FakeAPI([(200, pull)])
+    with pytest.raises(RuntimeError, match="does not match"):
+        prepare_dev_next(api, "acme/repo", 42, HEAD_SHA)
+    assert not any(method == "PATCH" for method, _path, _body in api.calls)
 
 
 @pytest.mark.parametrize("rules_status", [403, 500])
