@@ -19,7 +19,10 @@ def prompt(mode: str, tag: str, sha: str) -> str:
         "adopt": "在目前開啟的既有 Git repository 導入 CSARC 公版",
         "update": "更新目前開啟且已導入 CSARC 的 Git repository",
     }
-    command = f"uvx --python 3.14 --from csarc-repo-cli csarc {mode}"
+    command = (
+        "uvx --python 3.14 --from "
+        f"'git+https://github.com/{REPOSITORY}.git@{sha}' csarc {mode}"
+    )
     target_instruction = (
         "自行依工作脈絡判斷名稱與位置，無法唯一判斷時先詢問；"
         if mode == "init"
