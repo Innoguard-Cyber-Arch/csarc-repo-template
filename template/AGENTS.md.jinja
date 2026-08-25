@@ -49,7 +49,8 @@ Existing-repository history changes start read-only: propose semantic story grou
 
 ## Actions quota fallback
 
-- The only eligible case is a human maintainer with billing visibility confirming a GitHub Actions zero-step billing block (payment failure or spending limit) is an authorized one-time exception; the specific GitHub billing reason does not need to be determined. All other failures remain blocked.
+- A zero-step billing block is standing and accepted where the plan runs over included Actions minutes; others stay blocked.
+- Routine Issue PRs merge on a zero-step check, local verification, and a fallback note, without confirmation; promotion PRs to `main` keep the attestation/authorization procedure.
 - Follow the complete SHA/tree-bound procedure, including the non-release promotion path, in [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback). Never create or falsify a successful Check Run.
 
 ## Editing boundaries

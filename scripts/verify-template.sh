@@ -159,14 +159,16 @@ grep -q 'from titles or labels alone' docs/agent-install.md
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' docs/index.html
 grep -q '^## Actions quota fallback$' AGENTS.md
 grep -q '^## Actions quota fallback$' template/AGENTS.md.jinja
-grep -q 'is an authorized one-time exception' AGENTS.md
-grep -q 'is an authorized one-time exception' template/AGENTS.md.jinja
+grep -q 'structurally runs over its included Actions minutes' AGENTS.md
+grep -q 'runs over included Actions minutes' template/AGENTS.md.jinja
+grep -q 'Actions quota fallback note' AGENTS.md
 grep -q 'failed payments.*spending limit' docs/ci-policy.md
 grep -q 'HEAD.*PR head SHA' docs/ci-policy.md
 grep -q 'Actions quota fallback attestation' docs/ci-policy.md
+grep -q 'Actions quota fallback note' docs/ci-policy.md
 grep -q 'runner 註記本身不構成證據' README.md
 grep -q 'runner 註記本身不構成證據' template/README.md.jinja
-grep -q '額度耗盡.*human' docs/index.html
+grep -q '額度耗盡.*機械式確認' docs/index.html
 grep -q '額度 fallback.*human' template/site/index.html.jinja
 bash -n scripts/run-live-workflow-probe
 bash -n scripts/test-pr-policy
@@ -739,6 +741,12 @@ test -f docs/README.md
 test -f docs/adr/README.md
 test -f docs/adr/portable-decision-site.md
 test -f docs/adr/transactional-repository-adoption.md
+test -f docs/adr/selective-ci-automation-adoption.md
+grep -q 'groups.official-actions' \
+  docs/adr/selective-ci-automation-adoption.md
+grep -q 'none.*verify.*ghcr' \
+  docs/adr/selective-ci-automation-adoption.md
+grep -q 'docs/adr/selective-ci-automation-adoption.md' site/app.js
 grep -q '可重現的 self-contained HTML' \
   docs/adr/portable-decision-site.md
 grep -q '不自動保存聊天逐字稿' \
@@ -774,6 +782,7 @@ grep -q '請勿公開分享此連結' docs/index.html
 grep -q '存取控制決策｜' docs/index.html
 grep -q '可維護來源 → self-contained HTML' docs/index.html
 grep -q 'docs/adr/portable-decision-site.md' docs/index.html
+grep -q 'docs/adr/selective-ci-automation-adoption.md' docs/index.html
 grep -q 'durable project memory' docs/index.html
 grep -q 'Spec-Driven Development' docs/index.html
 grep -q 'Architecture Decision Records' docs/index.html
@@ -784,8 +793,8 @@ grep -q 'Live integration smoke' docs/index.html
 test -f docs/robots.txt
 grep -q '^Disallow: /$' docs/robots.txt
 test -f docs/agent-install.md
-grep -q 'Run the requested `csarc init`, `adopt`, or' docs/agent-install.md
-grep -q '`update` command with `--dry-run` first' docs/agent-install.md
+grep -q 'Run the CLI from the verified release commit:' docs/agent-install.md
+grep -q '`adopt` and `adopt --finalize` default' docs/agent-install.md
 grep -q 'docs/index.html' README.md
 grep -q '內部限閱' README.md
 grep -q '線上整合證據' README.md
@@ -814,9 +823,9 @@ grep -q '^            capability: Release handoff$' .github/workflows/live-integ
 grep -q '^            capability: Governance drift$' .github/workflows/live-integration.yml
 grep -q '^  workflow_dispatch:$' .github/workflows/osv.yml
 grep -q '^  workflow_dispatch:$' template/.github/workflows/osv.yml
-grep -q 'uvx --python 3.14 --from csarc-repo-cli csarc init' README.md
-grep -q 'uvx --python 3.14 --from csarc-repo-cli csarc adopt' README.md
-grep -q 'uvx --python 3.14 --from csarc-repo-cli csarc update' README.md
+grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init" README.md
+grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt" README.md
+grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update" README.md
 grep -q -- '--apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json' README.md
 grep -q 'generated Markdown and machine plan' docs/agent-install.md
 grep -q 'csarc-adoption-report' docs/index.html
@@ -824,7 +833,7 @@ grep -q 'repo 外的 Markdown、machine plan' docs/pilot-adoption.md
 grep -q '^### 建立新 repo$' README.md
 grep -q '^### 導入既有 repo$' README.md
 grep -q '^### 更新已導入的 repo$' README.md
-test "$(grep -c '^請使用 Python 3.14 與官方 csarc CLI' README.md)" -eq 3
+test "$(grep -c '^請使用 uv 從 canonical GitHub repository' README.md)" -eq 3
 ! grep -q '^目標路徑：' README.md
 ! grep -q '<resolved-full-commit-sha>' README.md
 grep -q 'CLI 會從 canonical immutable Release 解析並驗證 full SHA' README.md
@@ -846,7 +855,7 @@ if grep -q 'repos/${GITHUB_REPOSITORY}/immutable-releases' \
 fi
 grep -q 'render_release_prompt.py' .github/workflows/release-template.yml
 test "$(grep -c 'release_policy.py prepare' \
-  .github/workflows/release-template.yml)" = 2
+  .github/workflows/release-template.yml)" = 1
 grep -q 'source_run_id:' .github/workflows/release-template.yml
 grep -q 'release_policy.py verify-boundary' \
   .github/workflows/release-template.yml
@@ -856,8 +865,11 @@ if grep -q 'tags: \["v\*"\]' .github/workflows/release-template.yml; then
 fi
 grep -q 'gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes' \
   .github/workflows/release-template.yml
-grep -q "CSARC_ENABLE_PYPI_PUBLISHING == 'true'" \
-  .github/workflows/release-template.yml
+if grep -Eq 'publish-pypi|CSARC_ENABLE_PYPI_PUBLISHING' \
+  .github/workflows/release-template.yml; then
+  echo "The root CLI must not publish to PyPI." >&2
+  exit 1
+fi
 test -f scripts/release_policy.py
 test -f version.txt
 release_tag="$(git tag --points-at HEAD --list 'v[0-9]*' --sort=-version:refname | head -1)"
@@ -2107,6 +2119,8 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   "$repo_root" "$fixture_root/all-features-project"
 prime_gitleaks_cache "$fixture_root/all-features-project"
 assert_agent_guidance "$fixture_root/all-features-project"
+grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<reviewed-full-commit-sha>' csarc update" \
+  "$fixture_root/all-features-project/README.md"
 
 test -f "$fixture_root/all-features-project/.pre-commit-config.yaml"
 test -f "$fixture_root/all-features-project/.github/workflows/template-update.yml"

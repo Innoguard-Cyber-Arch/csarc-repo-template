@@ -8,6 +8,7 @@ import runpy
 import shutil
 import subprocess
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -25,8 +26,10 @@ highest_release_intent = MODULE["highest_release_intent"]
 included_pull_requests = MODULE["included_pull_requests"]
 local_verification_command = MODULE["local_verification_command"]
 main_is_current = MODULE["main_is_current"]
+note_quota_fallback = MODULE["note_quota_fallback"]
 prepare = MODULE["prepare"]
 parser = MODULE["parser"]
+quota_fallback_note = MODULE["quota_fallback_note"]
 BILLING_GATE_ANNOTATION_MESSAGE = MODULE["BILLING_GATE_ANNOTATION_MESSAGE"]
 RejectRedirects = MODULE["RejectRedirects"]
 repository_variables = MODULE["repository_variables"]
@@ -331,6 +334,67 @@ def test_blocked_run_must_match_head_and_have_no_started_steps(
     )
     with pytest.raises(RuntimeError, match="zero-step"):
         require_zero_step_run(run_url, "owner/repo", 42, "dev/next", "head", "")
+
+
+def _routine_pr_get(
+    jobs: list[dict[str, object]],
+) -> Callable[[str, str, str], object]:
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path == "pulls/42":
+            return {"head": {"sha": "head", "ref": "dev/next"}}
+        if "/jobs?" in path:
+            return {"total_count": len(jobs), "jobs": jobs}
+        if path.startswith("check-runs/"):
+            return [{"message": BILLING_GATE_ANNOTATION_MESSAGE}]
+        return {
+            "id": 200,
+            "head_sha": "head",
+            "head_branch": "dev/next",
+            "event": "pull_request",
+            "status": "completed",
+            "conclusion": "failure",
+            "path": ".github/workflows/ci.yml",
+            "pull_requests": [{"number": 42}],
+            "repository": {"full_name": "owner/repo"},
+            "head_repository": {"full_name": "owner/repo"},
+        }
+
+    return fake_get
+
+
+def test_note_quota_fallback_prints_note_for_zero_step_block(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A routine PR gets an automatic note once every failure is zero-step."""
+    jobs = [{"id": 7, "runner_id": 0, "steps": [], "conclusion": "failure"}]
+    monkeypatch.setitem(
+        note_quota_fallback.__globals__, "github_get", _routine_pr_get(jobs)
+    )
+    run_url = "https://github.com/owner/repo/actions/runs/200"
+    args = SimpleNamespace(repo="owner/repo", pr=42, blocked_run_url=[run_url])
+    note_quota_fallback(args)
+    output = capsys.readouterr().out
+    assert "Actions quota fallback note" in output
+    binding = json.loads(output.split("`")[1])
+    assert binding["pull_request"] == 42
+    assert binding["head_sha"] == "head"
+    assert binding["runs"] == [run_url]
+
+
+def test_note_quota_fallback_rejects_a_real_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A job that actually ran a step cannot be waved through as quota."""
+    jobs = [
+        {"runner_id": 7, "steps": [{"name": "tests"}], "conclusion": "failure"}
+    ]
+    monkeypatch.setitem(
+        note_quota_fallback.__globals__, "github_get", _routine_pr_get(jobs)
+    )
+    run_url = "https://github.com/owner/repo/actions/runs/200"
+    args = SimpleNamespace(repo="owner/repo", pr=42, blocked_run_url=[run_url])
+    with pytest.raises(RuntimeError, match="zero-step"):
+        note_quota_fallback(args)
 
 
 def test_prepare_builds_milestone_candidate_evidence(
