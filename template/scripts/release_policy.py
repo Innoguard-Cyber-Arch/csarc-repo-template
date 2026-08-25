@@ -1183,11 +1183,7 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
             for page in commit_pages
         ):
             raise SystemExit("release follow-up commit response is invalid")
-        commits = [
-            commit
-            for page in commit_pages
-            for commit in page
-        ]
+        commits = [commit for page in commit_pages for commit in page]
         errors = release_follow_up_errors(
             args.root.resolve(),
             args.repo,

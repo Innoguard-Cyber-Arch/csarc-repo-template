@@ -58,9 +58,7 @@ def test_release_follow_up_accepts_only_automation_owned_changes(
             "sha": valid_sha,
             "author": {"login": "github-actions[bot]"},
             "committer": {"login": "web-flow"},
-            "commit": {
-                "verification": {"verified": True, "reason": "valid"}
-            },
+            "commit": {"verification": {"verified": True, "reason": "valid"}},
         }
     ]
     valid = {
@@ -138,9 +136,7 @@ def test_release_follow_up_accepts_only_automation_owned_changes(
             "sha": valid_sha,
             "author": {"login": "github-actions[bot]"},
             "committer": {"login": "maintainer"},
-            "commit": {
-                "verification": {"verified": True, "reason": "valid"}
-            },
+            "commit": {"verification": {"verified": True, "reason": "valid"}},
         }
     ]
     assert release_follow_up_errors(
