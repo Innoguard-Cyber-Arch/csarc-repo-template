@@ -184,6 +184,21 @@ if PR_DRAFT="true" \
 fi
 
 case_count=$((case_count + 1))
+if PR_DRAFT="false" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="${complete_draft_body}\n\nCloses #99" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_BODY="All acceptance tasks are complete." \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a secondary closing reference on a complete Ready pull request."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
 if PR_DRAFT="true" \
   PR_BRANCH_STRATEGY="main" \
   PR_TITLE="feat(api): add report" \

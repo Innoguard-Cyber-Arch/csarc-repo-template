@@ -215,8 +215,8 @@ jobs:
               unexpected_closing=true
             fi
           done < <(grep -Eo "$closing_reference_pattern" <<<"${PR_BODY:-}" || true)
-          if [[ "$review_state" == "draft" && ( "$unexpected_closing" == "true" || "$closing_count" -gt 1 ) ]]; then
-            echo "A Draft may close only its single primary Issue."
+          if [[ "$unexpected_closing" == "true" || "$closing_count" -gt 1 ]]; then
+            echo "A pull request may close only its single primary Issue."
             exit 1
           fi
           require_complete=false
