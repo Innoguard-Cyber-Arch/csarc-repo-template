@@ -1780,6 +1780,25 @@ def test_real_init_and_adoption_update_through_verified_releases(
         assert plan["template"]["sha"] == second_sha
         assert plan["files"]["delete"] == ["retired-after-v1.txt"]
         assert "retired-after-v1.txt" not in plan["files"]["preserve"]
+        effect_sets = [
+            set(plan["files"][effect])
+            for effect in (
+                "add",
+                "overwrite",
+                "preserve",
+                "automatic_merge",
+                "manual_merge",
+                "unknown",
+                "delete",
+            )
+        ]
+        assert all(
+            not left & right
+            for index, left in enumerate(effect_sets)
+            for right in effect_sets[index + 1 :]
+        )
+        assert plan["files"]["manual_merge"] == []
+        assert plan["files"]["unknown"] == []
         assert (
             main(
                 [
@@ -3233,6 +3252,8 @@ def test_update_check_dry_run_apply_and_conflict(
     )
     failed_plan = json.loads(plan_path.read_text(encoding="utf-8"))
     assert failed_plan["transaction"]["applicable"] is False
+    assert "managed.txt" in failed_plan["files"]["manual_merge"]
+    assert "managed.txt" not in failed_plan["files"]["overwrite"]
     assert (
         main(
             [

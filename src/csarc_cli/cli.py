@@ -2264,14 +2264,16 @@ def candidate_effects(
             merges.append(name)
         else:
             overwrites.append(name)
+    classified = set(additions) | set(overwrites) | set(merges)
+    classified.update(planned.delete)
     return (
         Plan(
             tuple(sorted(additions)),
             tuple(sorted(overwrites)),
-            planned.preserve,
+            tuple(path for path in planned.preserve if path not in classified),
             tuple(sorted(merges)),
-            planned.manual,
-            planned.unknown,
+            tuple(path for path in planned.manual if path not in classified),
+            tuple(path for path in planned.unknown if path not in classified),
             planned.delete,
         ),
         dict(sorted(artifacts.items())),
@@ -4175,7 +4177,10 @@ def prepare_update_candidate(
         planned.unknown,
         deleted,
     )
-    effects, artifacts = candidate_effects(candidate, target, planned)
+    if verification == "passed":
+        effects, artifacts = candidate_effects(candidate, target, planned)
+    else:
+        effects, artifacts = planned, {}
     return effects, artifacts, deleted, verification
 
 
