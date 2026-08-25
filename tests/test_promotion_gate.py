@@ -640,7 +640,11 @@ def test_github_get_uses_authenticated_cli_without_environment_token(
     monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/gh")
     monkeypatch.setattr(subprocess, "run", fake_run)
     assert github_get("owner/repo", "issues/42", "") == {"state": "open"}
-    assert calls == [["/usr/bin/gh", "api", "repos/owner/repo/issues/42"]]
+    assert github_get("owner/repo", "", "") == {"state": "open"}
+    assert calls == [
+        ["/usr/bin/gh", "api", "repos/owner/repo/issues/42"],
+        ["/usr/bin/gh", "api", "repos/owner/repo"],
+    ]
 
 
 def test_blocked_run_must_match_head_and_have_no_started_steps(

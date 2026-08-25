@@ -408,6 +408,9 @@ def promotion_main_evidence(
 
 def github_get(repo: str, path: str, token: str) -> object:
     """Read one GitHub REST endpoint with the workflow token."""
+    resource = f"repos/{repo}"
+    if path:
+        resource += f"/{path.lstrip('/')}"
     if not token:
         executable = shutil.which("gh")
         if executable is None:
@@ -415,14 +418,14 @@ def github_get(repo: str, path: str, token: str) -> object:
                 "GH_TOKEN or an authenticated GitHub CLI is required"
             )
         result = subprocess.run(  # noqa: S603
-            [executable, "api", f"repos/{repo}/{path.lstrip('/')}"],
+            [executable, "api", resource],
             check=True,
             capture_output=True,
             text=True,
         )
         return json.loads(result.stdout)
     request = urllib.request.Request(
-        f"https://api.github.com/repos/{repo}/{path.lstrip('/')}",
+        f"https://api.github.com/{resource}",
         headers={
             "Accept": "application/vnd.github+json",
             "Authorization": f"Bearer {token}",
