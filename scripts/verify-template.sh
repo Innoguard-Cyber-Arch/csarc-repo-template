@@ -145,14 +145,16 @@ grep -q 'from titles or labels alone' docs/agent-install.md
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' docs/index.html
 grep -q '^## Actions quota fallback$' AGENTS.md
 grep -q '^## Actions quota fallback$' template/AGENTS.md.jinja
-grep -q 'is an authorized one-time exception' AGENTS.md
-grep -q 'is an authorized one-time exception' template/AGENTS.md.jinja
+grep -q 'structurally runs over its included Actions minutes' AGENTS.md
+grep -q 'runs over included Actions minutes' template/AGENTS.md.jinja
+grep -q 'Actions quota fallback note' AGENTS.md
 grep -q 'failed payments.*spending limit' docs/ci-policy.md
 grep -q 'HEAD.*PR head SHA' docs/ci-policy.md
 grep -q 'Actions quota fallback attestation' docs/ci-policy.md
+grep -q 'Actions quota fallback note' docs/ci-policy.md
 grep -q 'runner 註記本身不構成證據' README.md
 grep -q 'runner 註記本身不構成證據' template/README.md.jinja
-grep -q '額度耗盡.*human' docs/index.html
+grep -q '額度耗盡.*機械式確認' docs/index.html
 grep -q '額度 fallback.*human' template/site/index.html.jinja
 bash -n scripts/run-live-workflow-probe
 bash -n scripts/test-pr-policy
