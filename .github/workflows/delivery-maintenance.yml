@@ -103,6 +103,10 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event_name == 'push' && github.sha || github.event.repository.default_branch }}
+      - name: Configure authenticated Git transport for lifecycle leases
+        env:
+          GH_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN || github.token }}
+        run: gh auth setup-git
       - name: Reconcile active delivery branches
         env:
           BRANCH_STRATEGY: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && 'delivery' || '' }}

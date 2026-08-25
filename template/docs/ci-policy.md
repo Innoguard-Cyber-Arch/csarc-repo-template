@@ -271,6 +271,43 @@ identity；合併後立即形成 patch release 邊界。接著由每條進行中
   schedule 執行；reviewer assignment 只在 opened、reopened 或 ready-for-review
   觸發，不在每次 synchronize 重做。
 
+## PR lifecycle single-writer
+
+任何 agent 要把既有 PR 轉 Ready／Draft、改 label／milestone、準備 merge authorization
+或合併前，必須先以 `scripts/pr_lifecycle.py acquire` 對精確 repository、PR、head SHA
+與 task owner 建立 lease evidence。工具會用 create-only atomic push 同時取得該 PR 的
+remote ref 與以 base branch 雜湊命名的共用 destination-lane ref；任何兩張指向同一 base
+的 PR 都不能同時持有 merge lane。取得失敗、lease
+remote commit／base／head 漂移時一律停止。只有 remote commit 格式、parent、tree 與期限皆
+可驗證的過期 lease 可用 atomic compare-and-swap 回收；新 audit 會保留被回收 commit。
+
+持有 lease 的 task 只能透過同一工具的 `state` 執行 Ready／Draft，透過 `edit` 改
+body／label／milestone，並用 `authorization-template` 產生綁定該 PR 與完整 head SHA 的唯一文字，
+交由具 live maintain/admin 權限的人類原樣張貼。禁止直接呼叫 `gh pr ready`、`gh pr edit`
+或 `gh pr merge`。其他 task 在 lease 釋放前只做唯讀複審，若找到 blocker，先通知 owner，
+並用 `[P0]`、`[P1]` 或 `[merge-blocker]` 開頭；只有明確
+`[merge-blocker-resolved]` 可解除。不得自行改 PR state。Owner 在動作完成或明確放棄後
+才執行 `release`。Remote commit 與 audit comment 只公開隨機 capability 的 digest；raw
+capability 只存在 owner 的本機 evidence，任何 state／edit／release 前都重新驗證。
+GitHub App caller 必須從 pinned token action 的 `app-slug` 明確傳入 actor；一般 token 只
+接受 `/user` 可驗證的 identity，無法驗證時 fail closed。Audit 建立回應與後續 refetch 都
+必須吻合該 actor、repository、PR 與 canonical body。
+
+`check` 與 `merge` 會在 lease 內分頁重讀 timeline、一般留言、inline review comments、
+submitted COMMENTED review bodies、reviews、checklists、base、
+exact-head required checks 與 effective Ruleset；較新的 Draft、blocker 或任何漂移都使授權
+失效。`merge` 在 REST PUT 前再對 PR 與 destination lane refs 執行 exact CAS，且只使用
+SHA-bound synchronous REST merge。無法證明 approval、last-push、
+thread resolution、required checks 與 no bypass 時，包含 GitHub Free private repository，
+agent 必須停在 `human-only`，由人類在 GitHub 上手動合併。
+
+Release Please action 會在回傳精確 PR number／head 前建立或修改 branch、Draft 與 labels，
+無法原子綁定這個 exact-PR lease，因此 Private Free degraded mode 的 repository workflow
+會停用自動 release PR 建立／更新，並明確 fail closed 為
+`release pull request (human-only)`，且不授予 PR／contents write。Human maintainer 建立
+或更新 release PR 後，後續 metadata／state 寫入仍必須走 lifecycle lease；不得把這個降級
+宣稱為已序列化的自動 release writer。
+
 ## Actions 額度 fallback
 
 本 repo 是 GitHub Teams private plan，結構性地會超出每月 included Actions
