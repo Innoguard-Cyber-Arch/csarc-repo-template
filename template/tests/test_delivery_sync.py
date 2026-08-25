@@ -742,14 +742,17 @@ def test_merge_group_revalidates_other_exact_promotion_heads(
         ]
     )
 
-    assert merge_group_gate(
-        api,
-        "acme/repo",
-        "refs/heads/gh-readonly-queue/main/pr-42-deadbeef",
-        queue_sha,
-        "refs/heads/main",
-        BASE_SHA,
-    ) == f"exact queue candidate for {head_ref}"
+    assert (
+        merge_group_gate(
+            api,
+            "acme/repo",
+            "refs/heads/gh-readonly-queue/main/pr-42-deadbeef",
+            queue_sha,
+            "refs/heads/main",
+            BASE_SHA,
+        )
+        == f"exact queue candidate for {head_ref}"
+    )
     encoded = urllib.parse.quote(head_ref, safe="")
     assert any(path.endswith(encoded) for _method, path, _payload in api.calls)
 
@@ -1363,13 +1366,9 @@ def test_admin_secret_is_limited_to_trusted_workflow_definitions() -> None:
 def test_post_merge_accepts_promotion_bridge() -> None:
     """The trusted main verifier accepts the Milestone bridge route."""
     workflow = (
-        Path(__file__).parents[1]
-        / ".github/workflows/promotion-post-merge.yml"
+        Path(__file__).parents[1] / ".github/workflows/promotion-post-merge.yml"
     ).read_text()
-    assert (
-        '! "$head_ref" =~ '
-        "^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$"
-    ) in workflow
+    assert ('! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$') in workflow
 
 
 def test_delivery_reconcile_requires_dev_next() -> None:
