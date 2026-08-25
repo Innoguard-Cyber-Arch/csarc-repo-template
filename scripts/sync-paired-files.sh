@@ -48,6 +48,7 @@ paired_files=(
   scripts/sync_milestone_state.py
   scripts/test-issue-triage
   scripts/test-pr-policy
+  scripts/test-release-follow-up-gates
   scripts/test-worktree-cleanup
   scripts/validate-issue-title
   tests/test_ci_tier.py
