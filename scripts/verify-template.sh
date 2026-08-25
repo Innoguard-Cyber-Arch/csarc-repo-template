@@ -145,8 +145,8 @@ grep -q 'from titles or labels alone' docs/agent-install.md
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' docs/index.html
 grep -q '^## Actions quota fallback$' AGENTS.md
 grep -q '^## Actions quota fallback$' template/AGENTS.md.jinja
-grep -q 'included Actions minutes are exhausted' AGENTS.md
-grep -q 'included Actions minutes are exhausted' template/AGENTS.md.jinja
+grep -q 'is an authorized one-time exception' AGENTS.md
+grep -q 'is an authorized one-time exception' template/AGENTS.md.jinja
 grep -q 'failed payments.*spending limit' docs/ci-policy.md
 grep -q 'HEAD.*PR head SHA' docs/ci-policy.md
 grep -q 'Actions quota fallback attestation' docs/ci-policy.md
@@ -1460,7 +1460,7 @@ grep -q 'verify-quota-main' \
   "$fixture_root/default-project/docs/ci-policy.md"
 grep -q 'SHA/tree-bound.*non-release promotion path' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q '付款失敗、budget.*平台.*設定.*權限.*未知原因.*測試失敗' \
+grep -q '錯誤 budget.*平台事故.*權限.*原因不明.*測試失敗' \
   "$fixture_root/default-project/docs/index.html"
 grep -q '一般 Issue PR 跑 change-aware fast checks' \
   "$fixture_root/default-project/docs/site-content.js"
