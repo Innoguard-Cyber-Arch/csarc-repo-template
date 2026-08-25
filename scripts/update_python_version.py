@@ -194,7 +194,11 @@ def update_files(
         ".github/workflows/reusable-ci.yml",
         "scripts/verify-template.sh",
         "template/.github/workflows/ci.yml.jinja",
-        "template/.github/workflows/release.yml.jinja",
+        (
+            "template/.github/workflows/"
+            "{% if project_mode == 'existing' %}csarc-release"
+            "{% else %}release{% endif %}.yml.jinja"
+        ),
         "template/scripts/verify.jinja",
     ):
         replace_all(repo_root / relative_path, old, new)
