@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import unquote, urldefrag, urlparse
@@ -30,6 +31,15 @@ ADR_SECTIONS = (
 )
 MARKDOWN_LINK = re.compile(r"(?<!!)\[[^]]+]\(([^)\s]+)\)")
 FULLWIDTH_COLON = "\N{FULLWIDTH COLON}"
+MILESTONE_TITLE_MIN_LENGTH = 3
+MILESTONE_TITLE_MAX_LENGTH = 80
+MILESTONE_STATUS_PREFIX = re.compile(
+    r"^(?:\[(?:draft|wip|planned|in progress|blocked|open|closed|done|"
+    r"草稿|規劃中|進行中|受阻|已完成|已關閉)\]|"
+    r"(?:draft|wip|planned|in progress|blocked|open|closed|done|"
+    r"草稿|規劃中|進行中|受阻|已完成|已關閉)\s*[:\-/—])",
+    re.IGNORECASE,
+)
 LOGGER = logging.getLogger(__name__)
 
 
@@ -50,6 +60,28 @@ class Spec:
     status: str
     tracking: str
     body: str
+
+
+def milestone_title_violations(title: str) -> tuple[str, ...]:
+    """Return every mechanical Milestone title violation."""
+    normalized = unicodedata.normalize("NFKC", title.strip())
+    violations: list[str] = []
+    if (
+        not MILESTONE_TITLE_MIN_LENGTH
+        <= len(normalized)
+        <= MILESTONE_TITLE_MAX_LENGTH
+    ):
+        violations.append(
+            f"use {MILESTONE_TITLE_MIN_LENGTH}-"
+            f"{MILESTONE_TITLE_MAX_LENGTH} characters"
+        )
+    if normalized.casefold().startswith("milestone"):
+        violations.append("omit the redundant Milestone prefix")
+    if re.fullmatch(r"(?:#|no\.?\s*)?\d+", normalized, re.IGNORECASE):
+        violations.append("replace the sequence number with an outcome phrase")
+    if MILESTONE_STATUS_PREFIX.match(normalized):
+        violations.append("omit the status prefix")
+    return tuple(violations)
 
 
 def _parse_front_matter(
@@ -92,6 +124,12 @@ def _validate_metadata(path: Path, metadata: dict[str, str]) -> None:
         raise SpecError(f"{path}: status must be one of {sorted(STATUSES)}")
     if metadata.get("tracking", "issue") not in TRACKING:
         raise SpecError(f"{path}: tracking must be one of {sorted(TRACKING)}")
+    if metadata.get("tracking", "issue") == "story":
+        violations = milestone_title_violations(metadata["title"])
+        if violations:
+            raise SpecError(
+                f"{path}: invalid Milestone title: {'; '.join(violations)}"
+            )
 
 
 def _validate_body(path: Path, body: str) -> None:
@@ -347,6 +385,55 @@ def find_milestone(repo: str, spec_id: str) -> int | None:
     return None
 
 
+def open_milestone_titles(repo: str) -> list[tuple[int, str]]:
+    """Return every open Milestone title across GitHub API pages."""
+    result = run_gh(
+        [
+            "api",
+            "--paginate",
+            "--slurp",
+            f"repos/{repo}/milestones?state=open&per_page=100",
+        ]
+    )
+    pages: object = json.loads(result or "[]")
+    if not isinstance(pages, list):
+        raise SpecError("GitHub returned an invalid Milestone list")
+    titles: list[tuple[int, str]] = []
+    for page in pages:
+        if not isinstance(page, list):
+            raise SpecError("GitHub returned an invalid Milestone page")
+        for item in page:
+            if not isinstance(item, dict):
+                raise SpecError("GitHub returned invalid Milestone metadata")
+            number = item.get("number")
+            title = item.get("title")
+            if not isinstance(number, int) or not isinstance(title, str):
+                raise SpecError("GitHub returned invalid Milestone metadata")
+            titles.append((number, title))
+    return titles
+
+
+def audit_milestone_titles(repo: str, proposed: list[str]) -> bool:
+    """Dry-run title validation for open and proposed Milestones."""
+    valid = True
+    candidates = [
+        *(
+            (f"Milestone #{number}", title)
+            for number, title in open_milestone_titles(repo)
+        ),
+        *(("Proposed Milestone", title) for title in proposed),
+    ]
+    for label, title in candidates:
+        violations = milestone_title_violations(title)
+        if violations:
+            valid = False
+            for reason in violations:
+                LOGGER.error("invalid: %s %r: %s", label, title, reason)
+        else:
+            LOGGER.info("valid: %s %r", label, title)
+    return valid
+
+
 def sync_milestone(spec: Spec, repo: str, source_url: str) -> None:
     """Create or update one story Milestone without inventing child Issues."""
     description = build_milestone_description(spec, source_url)
@@ -517,7 +604,14 @@ def main() -> int:
         default=os.environ.get("GITHUB_SERVER_URL", "https://github.com"),
     )
 
+    audit = subparsers.add_parser("audit-milestones")
+    audit.add_argument("--repo", required=True)
+    audit.add_argument("--title", action="append", default=[])
+
     args = parser.parse_args()
+    if args.command == "audit-milestones":
+        return 0 if audit_milestone_titles(args.repo, args.title) else 1
+
     specs = [parse_spec(path) for path in discover_specs(args.paths)]
 
     if args.command == "validate":

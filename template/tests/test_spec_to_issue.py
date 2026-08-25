@@ -10,6 +10,7 @@ SPEC_MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "spec_to_issue.py")
 )
 SpecError = SPEC_MODULE["SpecError"]
+audit_milestone_titles = SPEC_MODULE["audit_milestone_titles"]
 build_issue_body = SPEC_MODULE["build_issue_body"]
 build_milestone_description = SPEC_MODULE["build_milestone_description"]
 discover_adrs = SPEC_MODULE["discover_adrs"]
@@ -18,6 +19,8 @@ find_issue = SPEC_MODULE["find_issue"]
 find_milestone = SPEC_MODULE["find_milestone"]
 load_labels = SPEC_MODULE["load_labels"]
 main = SPEC_MODULE["main"]
+milestone_title_violations = SPEC_MODULE["milestone_title_violations"]
+open_milestone_titles = SPEC_MODULE["open_milestone_titles"]
 parse_spec_text = SPEC_MODULE["parse_spec_text"]
 sync_spec = SPEC_MODULE["sync_spec"]
 sync_milestone = SPEC_MODULE["sync_milestone"]
@@ -85,6 +88,46 @@ def test_story_tracking_is_explicit() -> None:
                 "status: proposed", "status: proposed\ntracking: epic"
             ),
         )
+
+
+@pytest.mark.parametrize(
+    ("title", "reason"),
+    [
+        ("Milestone 12 delivery", "Milestone prefix"),
+        (
+            "\uff2d\uff49\uff4c\uff45\uff53\uff54\uff4f\uff4e\uff45 "
+            "\uff11\uff12 delivery",
+            "Milestone prefix",
+        ),
+        ("#12", "sequence number"),
+        ("WIP: Repeatable delivery", "status prefix"),
+        ("A" * 81, "3-80 characters"),
+    ],
+)
+def test_milestone_title_rejects_mechanical_anti_patterns(
+    title: str, reason: str
+) -> None:
+    assert any(reason in item for item in milestone_title_violations(title))
+
+
+@pytest.mark.parametrize(
+    "title",
+    ["Repeatable release delivery", "降低導入失敗風險"],
+)
+def test_milestone_title_accepts_outcomes_in_project_language(
+    title: str,
+) -> None:
+    assert milestone_title_violations(title) == ()
+
+
+def test_story_spec_rejects_invalid_milestone_title() -> None:
+    story = VALID_SPEC.replace(
+        "title: Add a health endpoint",
+        "title: Milestone 12",
+    ).replace("status: proposed", "status: approved\ntracking: story")
+
+    with pytest.raises(SpecError, match="Milestone prefix"):
+        parse_spec_text(Path("docs/specs/SPEC-001-health.md"), story)
 
 
 def test_current_spec_can_explicitly_skip_work_item_sync(
@@ -338,6 +381,38 @@ def test_find_milestone_is_paginated_and_idempotent(
     assert find_milestone("owner/repo", "SPEC-001") == 7
     assert "--paginate" in calls[0]
     assert "--slurp" in calls[0]
+
+
+def test_milestone_title_audit_is_paginated_and_read_only(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    calls: list[list[str]] = []
+
+    def fake_run_gh(arguments: list[str]) -> str:
+        calls.append(arguments)
+        return json.dumps(
+            [
+                [{"number": 7, "title": "Repeatable release delivery"}],
+                [{"number": 8, "title": "Draft: Better adoption"}],
+            ]
+        )
+
+    monkeypatch.setitem(
+        open_milestone_titles.__globals__, "run_gh", fake_run_gh
+    )
+
+    assert not audit_milestone_titles("owner/repo", ["改善交付流程", "42"])
+    assert calls == [
+        [
+            "api",
+            "--paginate",
+            "--slurp",
+            "repos/owner/repo/milestones?state=open&per_page=100",
+        ]
+    ]
+    assert "status prefix" in caplog.text
+    assert "sequence number" in caplog.text
 
 
 def test_sync_keeps_spec_id_out_of_issue_title(

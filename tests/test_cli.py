@@ -622,6 +622,7 @@ Issue #1.
     patches = [call for call in calls if "PATCH" in call]
     assert len(patches) == 1
     assert patches[0][4].endswith("milestones/1")
+    assert not any(field.startswith("title=") for field in patches[0])
     assert cli.milestone_headings(plan.changes[0].after) == (
         cli.CURRENT_MILESTONE_HEADINGS
     )
