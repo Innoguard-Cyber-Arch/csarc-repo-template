@@ -4,14 +4,19 @@
    repository's name or location cannot be inferred unambiguously; do not put
    a guessed path into the user prompt.
 2. Use only `https://github.com/Innoguard-Cyber-Arch/csarc-repo-template`.
-3. Select Python per invocation with `uvx --python 3.14`; never edit a shell
-   profile or global environment. Run the requested `csarc init`, `adopt`, or
-   `update` command with `--dry-run` first. For a release-specific request,
-   pass both `--to` and `--expected-sha`. For `adopt`, also pass `--report-dir`
-   with a location outside the target repository. Before `init` or `adopt`,
-   obtain the approved project description, shortest working product command,
-   and private security reporting channel. Pass an explicit
-   `security_reporting_channel` answer; never invent an email address, URL,
+3. Run the CLI from the verified release commit:
+   `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<verified-full-sha>'`.
+   `uv` obtains an isolated Python when needed; never require a global Python
+   installation or edit a shell profile or global environment. Run the
+   requested `csarc init`, `adopt`, or `update` command as a dry-run first;
+   `adopt` and `adopt --finalize` default to dry-run when no `--apply-plan` is
+   supplied. For a release-specific request, pass both `--to` and
+   `--expected-sha`. For `adopt`, also pass `--report-dir` with a location
+   outside the target repository. Before `init` or `adopt`, confirm the
+   project description, shortest working product command, and security
+   reporting channel. The default channel is the repository's public GitHub
+   Issues page; warn users never to post secrets, credentials, personal data,
+   or other sensitive details there. Never invent an email address,
    acknowledgement window, or resolution SLA.
 4. Summarize the verified release, full commit SHA, release capability
    preflight, settings, conflict risk, and every file classified as add,

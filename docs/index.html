@@ -1508,7 +1508,7 @@
           <h3>公版會替 repo 準備</h3>
           <p class="scope-row"><strong>規劃與 AI 契約</strong><span>可選 Story Milestone → 1..N Issues → 各自 PR；spec 可同步 Issue 或 Story</span></p>
           <p class="scope-row"><strong>驗證與合併</strong><span><code>./scripts/verify</code>＋分層 CI＋PR；並行 Milestone 各自整合，promotion 才進 main</span></p>
-          <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件</span></p>
+          <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件；已有 Containerfile 可選配容器驗證／GHCR</span></p>
           <p class="scope-row"><strong>可持續同步</strong><span>公版更新成為可審查差異，不會直接覆蓋產品程式</span></p>
         </section>
         <section class="start-paths" aria-label="三種導入方式">
@@ -1679,7 +1679,7 @@
           <p class="recommendation-copy"><strong>Fast：</strong>每張一般 PR 跑 secret scan、格式、lint、型別、單元測試與必要 template smoke；docs-only 不啟動語言或生成矩陣。<br><strong>Full：</strong><code>dev/* → main</code> promotion、hotfix、merge queue 與手動 dispatch 才執行全部 runtime、profiles、Copier update、release 與安全回歸。<br><strong>條件式供應鏈：</strong>workflow 變更加跑 Zizmor，相依變更加跑 OSV，治理宣告變更加跑 remote governance；三者另有週期排程。未知路徑 fail closed 到 full。<br><strong>穩定門禁：</strong><code>verify</code> aggregate 每次都回報，不適用的重型 job 明確視為 skipped，避免 required check 永久 Pending；summary／artifact 記錄 tier、原因、scope 與 duration。完整契約見 <code>docs/ci-policy.md</code>。</p>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>分層規則：</strong><code>scripts/ci_tier.py</code>＋<code>scripts/verify-fast</code>＋<code>docs/ci-policy.md</code></li><li><strong>完整入口：</strong><code>scripts/verify</code>；公版為 <code>scripts/verify-template.sh</code></li><li><strong>常駐門禁：</strong><code>title</code>＋<code>delivery-sync</code>＋<code>verify</code>＋<code>promotion</code>；OSV、Zizmor 與 remote governance 由 job-level 條件或週期排程執行</li><li><strong>額度耗盡：</strong>只有帳務可見的 human 確認免費分鐘歸零，且 job 未執行任何 step，才可對精確 PR SHA 產生一次性本機驗證聲明；promotion 另綁定 candidate/main tree，且不可發布</li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>分層規則：</strong><code>scripts/ci_tier.py</code>＋<code>scripts/verify-fast</code>＋<code>docs/ci-policy.md</code></li><li><strong>完整入口：</strong><code>scripts/verify</code>；公版為 <code>scripts/verify-template.sh</code></li><li><strong>常駐門禁：</strong><code>title</code>＋<code>delivery-sync</code>＋<code>verify</code>＋<code>promotion</code>；OSV、Zizmor 與 remote governance 由 job-level 條件或週期排程執行</li><li><strong>額度耗盡：</strong>zero-step billing block 被機械式確認、且 job 未執行任何 step 時，一般 PR 只需本機驗證通過即可留言合併；promotion 另綁定 candidate/main tree、維持雙方確認，且不可發布</li></ul></aside>
     </section>
 
     <section class="slide decision-slide" data-track="method" aria-label="步驟一規劃工作與 GitHub Issues">
@@ -1763,7 +1763,7 @@
         </tbody>
       </table>
       <p class="context-line"><strong>SemVer scope｜</strong>整份公版只用一個 SemVer：<code>fix(scope)</code> 升 patch、<code>feat(scope)</code> 升 minor、<code>!</code> 升 major；scope 可標 <code>ci</code>、<code>python</code>、<code>typescript</code> 或 <code>template</code>，只要任何已支援 profile 不相容，就視為整份公版的破壞性變更。</p>
-      <aside class="selection-note"><strong>選配登記：PyPI／npm 發布</strong><span>GitHub Release 是所有 profile 的共同基線；registry 依語言分開選配，預設全部關閉。公版根目錄的 PyPI job 只有在 repository variable <code>CSARC_ENABLE_PYPI_PUBLISHING=true</code> 時才執行，也不會阻擋基線 GitHub Release。PyPI／npm 都使用 GitHub environment 與 OIDC 短效憑證，發布 job 才有 <code>id-token: write</code>，不讀取長效 registry token。啟用前，package owner 必須在 registry 登記完全相符的 organization／repository、workflow 檔名（公版為 <code>release-template.yml</code>）與 environment；PyPI 首次發布可先建立 pending publisher，npm 則需由既有 package owner 在 package Settings 建立 trusted publisher。npm 路徑需要 GitHub-hosted runner、Node 22.14+ 與 npm 11.5.1+，公版使用 Node 24。</span></aside>
+      <aside class="selection-note"><strong>選配登記：PyPI／npm 發布</strong><span>GitHub Release 是所有 profile 的共同基線；registry 是生成專案依語言分開選配的能力，預設全部關閉。Root CLI 只隨 GitHub Release 交付，不發布到 PyPI，也沒有 registry publishing job。生成專案的 PyPI／npm job 使用 GitHub environment 與 OIDC 短效憑證，不讀取長效 registry token；CI/CD-only 不產生 registry job。啟用前，package owner 必須在 registry 登記完全相符的 organization／repository、workflow <code>release.yml</code> 與 environment。PyPI 首次發布可先建立 pending publisher；npm 則需由既有 package owner 建立 trusted publisher，並使用 GitHub-hosted runner、Node 22.14+ 與 npm 11.5.1+。</span></aside>
     </section>
 
     <section class="slide decision-slide" data-page="14 / 16" data-track="rollout" aria-label="分階段導入策略">
@@ -2405,9 +2405,18 @@ jobs:
       ],
       supply: [
         {
+          title: '決定｜CI/CD 只按已證明需求與 repository 能力選擇性採用',
+          goal: '避免整批搬入不相關的 job、權限與維護負擔，讓每項自動化都有可驗證的啟用條件。',
+          summary: '近期只合併官方 `actions/*` 的 minor／patch 更新；major 與第三方 Actions 維持獨立。容器交付預設為 `none`，只有既有 Containerfile 與 smoke command 才啟用 `verify`，通過 release boundary 且具 registry 寫入能力才啟用 `ghcr`。通用 Containerfile、雲端部署、Kubernetes、多架構 placeholder、長效 token 與第二套更新身分均延後到真實需求出現再評估。',
+          file: 'docs/adr/selective-ci-automation-adoption.md',
+          code: `adopt now: actions/* minor + patch grouping
+capability-gated: container none | verify | ghcr
+defer: speculative build, publish, and deployment paths`
+        },
+        {
           title: '一般套件新版觀察三天，再由測試與人員決定是否合併',
           goal: '安全更新不等待；三天規則主要降低剛發布惡意版本的早期風險。',
-          summary: 'Dependabot 同時管理 `uv` 與 `npm` 生態；`cooldown.default-days=3` 延後一般升版，安全更新仍立即提出。',
+          summary: 'Dependabot 同時管理 GitHub Actions、`uv` 與 `npm` 生態；`cooldown.default-days=3` 延後一般升版，安全更新仍立即提出。只有官方 `actions/*` 的 minor／patch 會合併成一張 PR；major 與第三方 Actions 保持獨立，方便審查與回退。',
           file: '.github/dependabot.yml',
           code: `updates:
   - package-ecosystem: uv
@@ -2492,6 +2501,17 @@ matrix:
     output-file: sbom.cdx.json`
         },
         {
+          title: '有 Containerfile 才啟用容器驗證與 GHCR 交付',
+          goal: '讓已有容器的產品取得一致門禁，同時讓非容器 repo 維持零 Docker job 與零 registry write 權限。',
+          summary: '`none` 不產生工作；`verify` 在 PR 使用 Buildx cache、smoke test 與 Trivy HIGH／CRITICAL scan，但不 push；`ghcr` 才從已驗證 release source 建置一次並保存相同 image bytes，推送版本與 commit SHA tag、附加 provenance／SPDX SBOM，再以 digest pull 與 smoke。Runtime 部署仍由產品另訂。',
+          file: 'copier.yml＋ci.yml＋csarc-release.yml＋profiles/catalog.yaml',
+          code: `container_mode: none | verify | ghcr
+containerfile_path: path/to/Containerfile
+container_smoke_command: docker run --rm "$IMAGE" --help
+
+# Only the release publishing job receives packages: write.`
+        },
+        {
           title: '決定｜保留 Dependabot 與 pnpm 的原生門禁',
           goal: '讓 dependency PR 繼續觸發既有 CI/CD checks，且不要求每個導入者安裝高權限 App 或保存長效 PAT。',
           summary: '不導入 Renovate：Dependabot 使用 GitHub 原生 automation identity，現有 PR checks 可直接執行。Dependabot cooldown 管理自動升版 PR 的三天等待；pnpm minimumReleaseAge 也保護本機與 CI resolution，並非完全重複。pnpm trustPolicy、OSV、resolver 上下界檢查與 SBOM 各自保留原本職責。若未來 Dependabot 無法表達已發生的跨 repo 需求，而且已有可維護的非 GITHUB_TOKEN 身分，再另案重評。',
@@ -2506,20 +2526,20 @@ trustPolicy: no-downgrade`
         },
         {
           title: '回報本專案自身的漏洞，不是掃相依套件',
-          goal: '掃描工具只看得到已知模式；有人主動回報才補得到掃描漏抓的問題。Issue 是公開索引的，通報流程要先把人導離開 Issue。',
-          summary: '不寫死聯絡信箱或 SLA：模板不知道下游專案的實際通報管道，假造一個反而誤導回報者。Copier 要求專案 owner 明確提供組織核准的私密通報指引，生成後由驗證腳本拒絕未完成的 placeholder。',
+          goal: '掃描工具只看得到已知模式；有人主動回報才補得到掃描漏抓的問題。GitHub Issue 是公開索引的，必須避免張貼任何敏感資料。',
+          summary: '本公版與生成專案預設使用實際 repository 的 GitHub Issues，建立後維護者會收到通知。公開 Issue 不得包含 secrets、credentials、personal data 或其他敏感內容；不寫死未核准的 email 或 SLA，驗證腳本也會拒絕未完成的 placeholder。',
           file: 'SECURITY.md',
           code: `## Reporting a vulnerability
 
-Do not open a public GitHub Issue for a
-suspected vulnerability, exploit code,
-credentials, tokens, or customer data.
+Open a GitHub Issue. Maintainers receive
+notifications for new Issues.
 
-Use the organization-approved private
-reporting channel recorded for this project.
+GitHub Issues are public. Do not post secrets,
+credentials, personal data, or other sensitive
+details.
 
-No acknowledgement or resolution time is
-promised unless that channel states one.`
+No acknowledgement or resolution SLA is
+invented.`
         }
       ],
       deploy: [
@@ -2703,10 +2723,10 @@ python_typescript: {stage: alpha}`
         title: '建立新 repo',
         goal: 'CLI 會選取核准 release、解析完整 commit SHA、顯示計畫，確認後才以 Copier 建立與驗證。',
         location: 'Terminal',
-        code: `uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project
+        code: `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project
 
 # CI or an explicitly authorized agent:
-uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project \\
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project \\
   --yes --non-interactive`
       },
       existing: {
@@ -2714,12 +2734,12 @@ uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project \\
         goal: 'CLI 自行找出 Git root；--dry-run 可讀取 dirty tree，但只在 repo 外產生 Markdown、PDF 與不可套用的 machine plan。乾淨 tree 會先在暫存 clone 完成固定合併、產品 hook 與完整驗證，再鎖定可套用 plan；需要人工合併時，finalize 也必須重新 dry-run 並套用同一份第二階段 plan。',
         location: '既有 repo 根目錄',
         code: `git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --python 3.14 --from csarc-repo-cli csarc adopt --dry-run
-uvx --python 3.14 --from csarc-repo-cli csarc adopt \\
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt --dry-run
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt \\
   --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
 # Only when the first apply creates a manual-merge checkpoint:
-uvx --python 3.14 --from csarc-repo-cli csarc adopt --finalize --dry-run
-uvx --python 3.14 --from csarc-repo-cli csarc adopt --finalize \\
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt --finalize --dry-run
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt --finalize \\
   --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json`
       },
       update: {
@@ -2727,12 +2747,12 @@ uvx --python 3.14 --from csarc-repo-cli csarc adopt --finalize \\
         goal: 'CLI 讀取 .copier-answers.yml，解析核准 release，以 Copier smart update 顯示新版差異；衝突時保留差異並 fail closed。',
         location: '專案 repo 根目錄',
         code: `git switch -c chore/<issue-number>-update-repo-template
-uvx --python 3.14 --from csarc-repo-cli csarc update --check --json
-uvx --python 3.14 --from csarc-repo-cli csarc update`
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update --check --json
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update`
       },
       mac: {
         title: 'macOS 本機需求',
-        goal: '共同安裝 Git、GitHub CLI、uv；TypeScript／混合案再使用 Node 與 pnpm。只有 GitHub 連線操作需要登入。',
+        goal: '共同安裝 Git、GitHub CLI、uv；uv 會為薄 CLI 按次取得隔離 Python，不要求全域 Python。TypeScript／混合案再使用 Node 與 pnpm。只有 GitHub 連線操作需要登入。',
         location: 'Terminal',
         code: `brew install git gh uv node pnpm
 

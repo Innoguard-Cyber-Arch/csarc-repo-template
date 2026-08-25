@@ -1,13 +1,15 @@
 # Agent collaboration and durable handoff ADR
 
 - **狀態：**Accepted
-- **日期：**2026-08-24
-- **來源 Issues：**[#126](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/126), [#145](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/145), [#155](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/155), [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171), [#177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177)
+- **日期：**2026-08-25
+- **來源 Issues：**[#126](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/126), [#145](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/145), [#155](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/155), [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171), [#177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177), [#241](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/241)
 - **實作 PRs：**[#127](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/127), [#147](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/147), [#158](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/158), [#173](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/173), [#185](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/185)
 
 ## 問題與限制
 
 多個 agent 若共用 working directory，checkout、未提交檔案與工具狀態會互相污染；若新 session 不查歷史，也會重做或反轉先前決策。遠端 Actions 無法清理本機 worktree，agent 自述也不能取代平台 evidence。
+
+GitHub Agents 頁籤可把 repository 工作交給 cloud coding agents，但 session 會依模型與處理 token 消耗 AI credits，並使用 GitHub Actions minutes。目前沒有實測證據顯示這項額外用量能抵銷既有本機 agent 與 GitHub delivery loop 的成本。
 
 ## 決定
 
@@ -16,6 +18,7 @@
 - Durable constraint 經使用者確認後摘要進 Issue，再由 scoped PR 更新 decision record；不保存 raw conversation 或 unconfirmed inference。
 - 建立 worktree 的 agent 在 merge／abandon 後負責安全清理；只清理自己建立、乾淨且可證明已整合的 worktree。
 - 本機驗證 attestation 只有在精確 quota-only 條件與 human authorization 下成立，且只綁定一個 SHA。
+- GitHub Issue、PR、review 與 CI 維持協作與治理基線；Agents 頁籤已評估但暫不納入，不新增 setup workflow、custom agent 或 repository policy。
 
 ## 歷史 disposition
 
@@ -39,7 +42,10 @@
 | 強制安裝 Worktrunk／特定 orchestrator | 不採用作 baseline；native Git 必須可用 |
 | 用背景 daemon 或 Actions 清本機 worktree | 不採用；遠端看不到 agent host，隱式刪除風險高 |
 | 只靠 agent 記憶先前對話 | 不採用；session 與工具切換後不可依賴 |
+| GitHub Agents 頁籤作為預設執行層 | 暫不採用；會增加依 token 計價的 AI credits 與 Actions 用量，現階段沒有成本效益證據 |
 
 ## 重新評估條件
 
 若 host platform 提供有 ownership、dirty-state 保護與可稽核 lifecycle 的原生 worktree 管理，可替代部分本機步驟；GitHub work item、repository memory 與合併門禁仍保留。
+
+當真實 backlog 出現足量、可獨立驗收的非同步工作，且可先訂出 AI credits／Actions 成本上限，再驗證 Agents 產生的 branch 與 PR 能通過本 repo policy 時，重新評估把 Agents 頁籤列為升級執行層。

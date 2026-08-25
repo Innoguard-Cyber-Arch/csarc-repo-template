@@ -6,6 +6,7 @@
 {% set python_latest_minor = python_latest.split(".")[1] | int -%}
 {% set has_python = language in ["python", "python-typescript"] -%}
 {% set has_typescript = language in ["typescript", "python-typescript"] -%}
+{% set has_container = (container_mode | default("none")) != "none" -%}
 name: CI
 
 on:
@@ -260,10 +261,52 @@ jobs:
       - name: Audit workflow definitions
         run: uvx --from zizmor==1.29.0 zizmor . --format plain
 
+{%- if has_container %}
+  container:
+    name: container verification
+    needs: fast
+    if: {% raw %}${{ needs.fast.result == 'success' && needs.fast.outputs.tier != 'docs' }}{% endraw %}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - name: Build the container image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.18.0
+        with:
+          context: .
+          file: {{ containerfile_path }}
+          load: true
+          push: false
+          tags: csarc-local:{% raw %}${{ github.sha }}{% endraw %}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke-test the container image
+        env:
+          IMAGE: csarc-local:{% raw %}${{ github.sha }}{% endraw %}
+        run: |
+{{ container_smoke_command | indent(10, true) }}
+      - name: Scan the container image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: csarc-local:{% raw %}${{ github.sha }}{% endraw %}
+          scan-type: image
+          scanners: vuln
+          vuln-type: os,library
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          exit-code: 1
+{%- endif %}
+
   verify:
     name: verify
     if: {% raw %}${{ always() }}{% endraw %}
-    needs: [fast, full, governance, osv, zizmor]
+    needs: [fast, full, governance, osv, zizmor{% if has_container %}, container{% endif %}]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
@@ -274,8 +317,11 @@ jobs:
           GOVERNANCE_RESULT: {% raw %}${{ needs.governance.result }}{% endraw %}
           OSV_RESULT: {% raw %}${{ needs.osv.result }}{% endraw %}
           ZIZMOR_RESULT: {% raw %}${{ needs.zizmor.result }}{% endraw %}
+{%- if has_container %}
+          CONTAINER_RESULT: {% raw %}${{ needs.container.result }}{% endraw %}
+{%- endif %}
         run: |
           test "$FAST_RESULT" = success
-          for result in "$FULL_RESULT" "$GOVERNANCE_RESULT" "$OSV_RESULT" "$ZIZMOR_RESULT"; do
+          for result in "$FULL_RESULT" "$GOVERNANCE_RESULT" "$OSV_RESULT" "$ZIZMOR_RESULT"{% if has_container %} "$CONTAINER_RESULT"{% endif %}; do
             [[ "$result" == success || "$result" == skipped ]]
           done

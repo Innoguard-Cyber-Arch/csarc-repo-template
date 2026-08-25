@@ -50,6 +50,19 @@ tier、保留 promotion evidence 並立即形成 release 邊界。
 manifest／lockfile 加跑 OSV，治理宣告或 checker 加跑 remote governance；無法分類
 的路徑升級為 full，不會以檔名判斷後直接放行。
 
+### 選配容器交付
+
+只有既有 repo 明確設定 `container_mode` 並提供產品自己的 Dockerfile／Containerfile
+與 `$IMAGE` smoke command，才生成容器工作。`verify` 與 `ghcr` 都在非 docs PR 使用
+Buildx GHA cache 建置但不 push，接著執行啟動測試與 Trivy HIGH／CRITICAL 掃描；
+PR job 只有唯讀權限。`ghcr` 另在已驗證 release-source 邊界建置一次，保存 image
+bytes、checksum 與 SPDX SBOM；發布 job 才取得 `packages`／`id-token`／`attestations`
+write，將相同 bytes 推到版本與 commit SHA tag、附加 OCI attestation，再以 digest
+pull、驗證與 smoke test。`none` 不生成 job、Docker Dependabot 或 registry 權限。
+
+這是成品交付，不是 runtime deployment。公版不產生通用 Dockerfile、Kubernetes、
+雲端部署或 multi-arch matrix；部署環境、健康檢查與回復仍由產品 repo 定義。
+
 ## `main` 回同步到進行中的 delivery branch
 
 `main` 每次前進後，delivery-sync workflow 會列舉 `dev/next`、所有
@@ -213,38 +226,56 @@ identity；合併後立即形成 patch release 邊界。接著由每條進行中
 
 ## Actions 額度 fallback
 
-這個一次性流程只適用於具帳務可見性的 human maintainer 已明確確認當期 included
-GitHub Actions minutes 耗盡。只提到 failed payments 或 spending limit 的 runner 註記
-不足以證明符合條件；付款失敗、錯誤 budget、平台事故、workflow／權限錯誤、原因不明，
-或任何已開始執行 step 後失敗的 job 都維持 blocked。
+本 repo 是 GitHub Teams private plan，結構性地會超出每月 included Actions
+minutes；這是這個 repo 從一開始就會遇到的常態限制，不是需要升級方案或等待
+「恢復」才能解決的一次性事故。
+
+這個流程適用於 GitHub Actions job 出現 zero-step billing block：GitHub 的
+runner 未啟動訊息提及 failed payments 或 spending limit，工具以其精確、泛用的
+billing 註記文字機械式辨識，不判讀實際帳務子原因——GitHub 帳務方案的內部差異
+不是這個 repo 的治理範圍。一般測試失敗、workflow／權限錯誤、平台事故、原因
+不明，或任何已開始執行 step 後才失敗的 job，都不算 zero-step billing block，
+仍然維持 blocked。
 
 合併前必須確認 worktree 乾淨且 `HEAD` 等於 PR head SHA，執行完整本機驗證與每個可
-忠實重現的 required check；任何失敗都停止，GitHub-only checks 則逐項列出。通過後，
-在 PR 留下標題為 `Actions quota fallback attestation` 的留言，記錄 head SHA、受阻 run
-URL 與 annotation、human quota confirmation、UTC 時間、環境與工具版本、完整命令、
-結果及未重現 checks。Human maintainer 必須再針對該 PR 明確授權；新 commit 使聲明
-失效並須重新驗證、記錄與授權。不得建立或偽造成功 Check Run。
+忠實重現的 required check；任何失敗都停止，GitHub-only checks 則逐項列出。不得
+建立或偽造成功 Check Run。fallback 不取代 release、publishing、deployment
+approval、secrets、provenance、CODEOWNER review 或任何無法本機重現的控制。額度
+恢復後須補跑該 SHA 的 GitHub checks 並記錄結果；平台不再允許補跑時，另開 Issue
+保留缺口，不得宣稱追溯成功。
 
-只有 repo 現行政策已允許 author self-merge 時，agent 才可在上述條件完整後合併。
-fallback 不取代 release、publishing、deployment approval、secrets、provenance、
-CODEOWNER review 或任何無法本機重現的控制。額度恢復後須補跑該 SHA 的 GitHub
-checks 並記錄結果；平台不再允許補跑時，另開 Issue 保留缺口，不得宣稱追溯成功。
+### 一般 Issue PR
+
+通過本機驗證後，用 `scripts/promotion_gate.py note-quota-fallback` 對每個受阻
+run URL 機械式確認 zero-step billing block（拒絕任何已執行 step 的 job），在 PR
+留下標題為 `Actions quota fallback note` 的留言，記錄 head SHA、受阻 run URL、
+驗證命令與結果、未重現 checks。留言產生後即可合併，不需要 human maintainer 另外
+即時確認或留言授權；新 commit 使既有 note 失效並須重新驗證、重新產生。只有 repo
+現行政策已允許 author self-merge 時（見下方 Alpha 例外），agent 才可合併。
 
 ### Promotion PR 的額外 fallback 證據
 
 `dev/m*`、`dev/next`、`dev/i*` 或 delivery strategy 的 `dev` promotion 到 `main`
-可使用同一個 quota-only 例外；一般 main PR、release follow-up 與 hotfix 不因此新增
-快速通道。除前述共同條件外，必須使用既有 `scripts/promotion_gate.py`，依序完成：
+是實際的 release 邊界，風險層級不同，維持較嚴格的雙方確認，可使用同一個
+quota-only 例外；一般 main PR、release follow-up 與 hotfix 不因此新增快速通道。
+除前述共同條件外，必須使用既有 `scripts/promotion_gate.py`，依序完成：
 
 1. 在乾淨、精確等於 promotion PR head 的 worktree 執行 `prepare`，且
    `--candidate-sha` 必須是該 head SHA；保存 candidate archive、SHA-256、base/head SHA、
    candidate tree、納入 PR、SemVer intent 與 canary 三態。
-2. 執行完整本機驗證與所有可忠實重現的 required checks。若 canary 是 `allowed`，
-   fallback 不得替代它；只有 `blocked`／`unknown` 可維持 artifact-only。
-3. 先在同一 PR 留下標準 attestation，再由 human maintainer 對相同 head SHA 留下
-   明確授權。使用兩則留言 URL、所有 zero-step blocked run URL 與實際驗證命令執行
-   `finalize-quota-fallback`，產生 machine-readable evidence。此 evidence 的 gate 是
-   `quota-fallback`、`release_eligible` 固定為 `false`；把 JSON 與 archive digest 留在 PR。
+2. `finalize-quota-fallback` 只接受 preflight archive、兩則留言 URL 與所有 blocked run
+   URL；工具會自行選擇 repo 內建 verifier（模板來源 repo 為
+   `./scripts/verify-template.sh`，生成專案為 `./scripts/verify`），並以 live
+   repository variables 重建 promotion preflight，
+   不接受呼叫者提供的命令字串。若 canary 是 `allowed`，fallback 不得替代它；只有
+   `blocked`／`unknown` 可維持 artifact-only。
+3. 先在同一 PR 留下標題為 `Actions quota fallback attestation` 的標準留言，再由 human
+   maintainer 留下 `Actions quota fallback authorization`。兩則留言都必須使用工具定義的
+   canonical JSON，精確綁定 repository、PR、base/head SHA、candidate tree、archive digest
+   與完整 blocked-run set；前者明示具 billing visibility 且確認為已授權的一次性
+   billing zero-step block 特例處理，後者明示一次性、無 admin bypass 的授權。工具會
+   refetch 留言、作者資格與 live GitHub identity；輸出的 gate 是 `quota-fallback`、
+   `release_eligible` 固定為 `false`。
 4. 僅以非 admin 的 squash merge 合併。更新乾淨的 `main` checkout 後執行
    `verify-quota-main`，確認 main tree 等於已驗證 candidate tree，並把結果留在 PR；
    不符時停止、revert／修正，不重寫歷史。

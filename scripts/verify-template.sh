@@ -149,11 +149,13 @@ grep -q 'from titles or labels alone' docs/agent-install.md
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' docs/index.html
 grep -q '^## Actions quota fallback$' AGENTS.md
 grep -q '^## Actions quota fallback$' template/AGENTS.md.jinja
-grep -q 'included Actions minutes are exhausted' AGENTS.md
-grep -q 'included Actions minutes are exhausted' template/AGENTS.md.jinja
+grep -q 'structurally runs over its included Actions minutes' AGENTS.md
+grep -q 'runs over included Actions minutes' template/AGENTS.md.jinja
+grep -q 'Actions quota fallback note' AGENTS.md
 grep -q 'failed payments.*spending limit' docs/ci-policy.md
 grep -q 'HEAD.*PR head SHA' docs/ci-policy.md
 grep -q 'Actions quota fallback attestation' docs/ci-policy.md
+grep -q 'Actions quota fallback note' docs/ci-policy.md
 grep -q 'runner 註記本身不構成證據' README.md
 grep -q 'runner 註記本身不構成證據' template/README.md.jinja
 if rg -F \
@@ -165,7 +167,13 @@ if rg -F \
   echo "Root documentation contains unfinished project metadata."
   exit 1
 fi
-grep -q '額度耗盡.*human' docs/index.html
+grep -qF \
+  'https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/new' \
+  SECURITY.md
+grep -qF 'Maintainers receive notifications for new Issues.' SECURITY.md
+grep -qF 'GitHub Issues are public.' SECURITY.md
+grep -qF 'secrets, credentials, personal data' SECURITY.md
+grep -q '額度耗盡.*機械式確認' docs/index.html
 grep -q '額度 fallback.*human' template/site/index.html.jinja
 bash -n scripts/run-live-workflow-probe
 bash -n scripts/test-pr-policy
@@ -708,6 +716,12 @@ test -f docs/README.md
 test -f docs/adr/README.md
 test -f docs/adr/portable-decision-site.md
 test -f docs/adr/transactional-repository-adoption.md
+test -f docs/adr/selective-ci-automation-adoption.md
+grep -q 'groups.official-actions' \
+  docs/adr/selective-ci-automation-adoption.md
+grep -q 'none.*verify.*ghcr' \
+  docs/adr/selective-ci-automation-adoption.md
+grep -q 'docs/adr/selective-ci-automation-adoption.md' site/app.js
 grep -q '可重現的 self-contained HTML' \
   docs/adr/portable-decision-site.md
 grep -q '不自動保存聊天逐字稿' \
@@ -725,7 +739,7 @@ grep -q 'ai-guardrail' docs/pilot-adoption.md
 grep -q 'run 32664445831' docs/pilot-adoption.md
 grep -q 'docs/pilot-adoption.md' README.md
 test "$(grep -c '^[[:space:]]*stage: beta$' profiles/catalog.yaml)" -eq 2
-test "$(grep -c '^[[:space:]]*stage: alpha$' profiles/catalog.yaml)" -eq 5
+test "$(grep -c '^[[:space:]]*stage: alpha$' profiles/catalog.yaml)" -eq 6
 grep -q '<title>CSARC Repo Template｜AI 輔助 SDLC 團隊公版</title>' \
   docs/index.html
 grep -q '先辨識 GitHub 方案' docs/index.html
@@ -743,6 +757,7 @@ grep -q '請勿公開分享此連結' docs/index.html
 grep -q '存取控制決策｜' docs/index.html
 grep -q '可維護來源 → self-contained HTML' docs/index.html
 grep -q 'docs/adr/portable-decision-site.md' docs/index.html
+grep -q 'docs/adr/selective-ci-automation-adoption.md' docs/index.html
 grep -q 'durable project memory' docs/index.html
 grep -q 'Spec-Driven Development' docs/index.html
 grep -q 'Architecture Decision Records' docs/index.html
@@ -753,8 +768,8 @@ grep -q 'Live integration smoke' docs/index.html
 test -f docs/robots.txt
 grep -q '^Disallow: /$' docs/robots.txt
 test -f docs/agent-install.md
-grep -q 'Run the requested `csarc init`, `adopt`, or' docs/agent-install.md
-grep -q '`update` command with `--dry-run` first' docs/agent-install.md
+grep -q 'Run the CLI from the verified release commit:' docs/agent-install.md
+grep -q '`adopt` and `adopt --finalize` default' docs/agent-install.md
 grep -q 'docs/index.html' README.md
 grep -q '內部限閱' README.md
 grep -q '線上整合證據' README.md
@@ -783,9 +798,9 @@ grep -q '^            capability: Release handoff$' .github/workflows/live-integ
 grep -q '^            capability: Governance drift$' .github/workflows/live-integration.yml
 grep -q '^  workflow_dispatch:$' .github/workflows/osv.yml
 grep -q '^  workflow_dispatch:$' template/.github/workflows/osv.yml
-grep -q 'uvx --python 3.14 --from csarc-repo-cli csarc init' README.md
-grep -q 'uvx --python 3.14 --from csarc-repo-cli csarc adopt' README.md
-grep -q 'uvx --python 3.14 --from csarc-repo-cli csarc update' README.md
+grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init" README.md
+grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt" README.md
+grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update" README.md
 grep -q -- '--apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json' README.md
 grep -q 'generated Markdown and machine plan' docs/agent-install.md
 grep -q 'csarc-adoption-report' docs/index.html
@@ -793,7 +808,7 @@ grep -q 'repo 外的 Markdown、machine plan' docs/pilot-adoption.md
 grep -q '^### 建立新 repo$' README.md
 grep -q '^### 導入既有 repo$' README.md
 grep -q '^### 更新已導入的 repo$' README.md
-test "$(grep -c '^請使用 Python 3.14 與官方 csarc CLI' README.md)" -eq 3
+test "$(grep -c '^請使用 uv 從 canonical GitHub repository' README.md)" -eq 3
 ! grep -q '^目標路徑：' README.md
 ! grep -q '<resolved-full-commit-sha>' README.md
 grep -q 'CLI 會從 canonical immutable Release 解析並驗證 full SHA' README.md
@@ -815,7 +830,7 @@ if grep -q 'repos/${GITHUB_REPOSITORY}/immutable-releases' \
 fi
 grep -q 'render_release_prompt.py' .github/workflows/release-template.yml
 test "$(grep -c 'release_policy.py prepare' \
-  .github/workflows/release-template.yml)" = 2
+  .github/workflows/release-template.yml)" = 1
 grep -q 'source_run_id:' .github/workflows/release-template.yml
 grep -q 'release_policy.py verify-boundary' \
   .github/workflows/release-template.yml
@@ -825,8 +840,11 @@ if grep -q 'tags: \["v\*"\]' .github/workflows/release-template.yml; then
 fi
 grep -q 'gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes' \
   .github/workflows/release-template.yml
-grep -q "CSARC_ENABLE_PYPI_PUBLISHING == 'true'" \
-  .github/workflows/release-template.yml
+if grep -Eq 'publish-pypi|CSARC_ENABLE_PYPI_PUBLISHING' \
+  .github/workflows/release-template.yml; then
+  echo "The root CLI must not publish to PyPI." >&2
+  exit 1
+fi
 test -f scripts/release_policy.py
 test -f version.txt
 release_tag="$(git tag --points-at HEAD --list 'v[0-9]*' --sort=-version:refname | head -1)"
@@ -1026,6 +1044,24 @@ if grep -q '^  pull_request:$' .github/workflows/zizmor.yml; then
   exit 1
 fi
 grep -q 'target-branch: dev/next' .github/dependabot.yml
+uv run python - .github/dependabot.yml <<'PY'
+import sys
+
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as dependabot_file:
+    updates = yaml.safe_load(dependabot_file)["updates"]
+actions = next(
+    update for update in updates
+    if update["package-ecosystem"] == "github-actions"
+)
+assert actions["groups"] == {
+    "official-actions": {
+        "patterns": ["actions/*"],
+        "update-types": ["minor", "patch"],
+    }
+}
+PY
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
 
 # Issues #74 and #110: keep the native dependency updater so its PRs trigger
@@ -1086,15 +1122,22 @@ if valid_pr_title "feat: 新增報表功能"; then
   exit 1
 fi
 
-# Invalid trust-boundary values must fail before producing a usable project.
-if uv run copier copy --trust --defaults --vcs-ref HEAD \
-  --data project_slug="missing-security" \
+# The approved default must resolve to this repository's public Issue form.
+default_security_project="$fixture_root/default-security"
+uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_slug="default-security" \
   --data language=ci \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
-  "$repo_root" "$fixture_root/missing-security" >/dev/null 2>&1; then
-  echo "Copier accepted a missing security reporting channel."
-  exit 1
-fi
+  "$repo_root" "$default_security_project" >/dev/null
+grep -qF \
+  'Open a GitHub Issue at https://github.com/Innoguard-Cyber-Arch/default-security/issues/new; maintainers receive notifications for new Issues.' \
+  "$default_security_project/SECURITY.md"
+grep -qF 'GitHub Issues are public.' "$default_security_project/SECURITY.md"
+grep -qF \
+  'secrets, credentials, personal data' \
+  "$default_security_project/SECURITY.md"
+
+# Invalid trust-boundary values must fail before producing a usable project.
 for invalid_metadata in \
   'project_description= ToDo ' \
   'project_run_command= tbD ' \
@@ -1141,6 +1184,30 @@ if uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/invalid-workflow-ref" >/dev/null 2>&1; then
   echo "Copier accepted a non-hexadecimal workflow commit SHA."
+  exit 1
+fi
+if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_mode=existing \
+  --data project_slug="invalid-container-path" \
+  --data language=ci \
+  --data container_mode=verify \
+  --data containerfile_path="../Dockerfile" \
+  --data 'container_smoke_command=docker run --rm "$IMAGE"' \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$fixture_root/invalid-container-path" >/dev/null 2>&1; then
+  echo "Copier accepted an unsafe container file path."
+  exit 1
+fi
+if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_mode=existing \
+  --data project_slug="invalid-container-smoke" \
+  --data language=ci \
+  --data container_mode=verify \
+  --data containerfile_path="Dockerfile" \
+  --data container_smoke_command="docker ps" \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$fixture_root/invalid-container-smoke" >/dev/null 2>&1; then
+  echo "Copier accepted a container smoke command without IMAGE."
   exit 1
 fi
 
@@ -1326,6 +1393,22 @@ grep -q '"language_profile": "python"' \
   "$fixture_root/default-project/.csarc/profile.json"
 grep -q '"branch_strategy": "delivery"' \
   "$fixture_root/default-project/.csarc/profile.json"
+grep -q '"container": false' \
+  "$fixture_root/default-project/.csarc/profile.json"
+grep -q '"mode": "none"' \
+  "$fixture_root/default-project/.csarc/profile.json"
+test ! -f "$fixture_root/default-project/Dockerfile"
+test ! -f "$fixture_root/default-project/Containerfile"
+if grep -q '^  container:$\|docker/setup-buildx-action@\|aquasecurity/trivy-action@' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"; then
+  echo "Container CI must not exist when the module is disabled."
+  exit 1
+fi
+if grep -q '^  publish-container:$\|^      packages: write$' \
+  "$fixture_root/default-project/.github/workflows/release.yml"; then
+  echo "Container publishing permissions must not exist when disabled."
+  exit 1
+fi
 test "$("$fixture_root/default-project/scripts/detect-language-profile" --suggest)" = \
   "python"
 test -f "$fixture_root/default-project/CHANGELOG.md"
@@ -1567,7 +1650,7 @@ grep -q 'verify-quota-main' \
   "$fixture_root/default-project/docs/ci-policy.md"
 grep -q 'SHA/tree-bound.*non-release promotion path' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q '付款失敗、budget.*平台.*設定.*權限.*未知原因.*測試失敗' \
+grep -q '錯誤 budget.*平台事故.*權限.*原因不明.*測試失敗' \
   "$fixture_root/default-project/docs/index.html"
 grep -q '一般 Issue PR 跑 change-aware fast checks' \
   "$fixture_root/default-project/docs/site-content.js"
@@ -2092,6 +2175,8 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   "$repo_root" "$fixture_root/all-features-project"
 prime_gitleaks_cache "$fixture_root/all-features-project"
 assert_agent_guidance "$fixture_root/all-features-project"
+grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<reviewed-full-commit-sha>' csarc update" \
+  "$fixture_root/all-features-project/README.md"
 
 test -f "$fixture_root/all-features-project/.pre-commit-config.yaml"
 test -f "$fixture_root/all-features-project/.github/workflows/template-update.yml"
@@ -2338,6 +2423,90 @@ grep -q '^PRODUCT_SECURITY_MARKER$' "$adoption_project/SECURITY.md"
 grep -q 'project_mode: existing' "$adoption_project/.copier-answers.yml"
 grep -q '"template_mode": "existing"' \
   "$adoption_project/.csarc/profile.json"
+
+# Optional containers use a product-owned Containerfile. The ai-guardrail
+# pilot uses the same nested evaluation/Dockerfile shape.
+container_project="$fixture_root/container-project"
+mkdir -p "$container_project/evaluation"
+cat > "$container_project/evaluation/Dockerfile" <<'DOCKERFILE'
+FROM alpine:3.22
+CMD ["/bin/true"]
+DOCKERFILE
+uv run copier copy --trust --defaults --overwrite --vcs-ref HEAD \
+  --data project_mode=existing \
+  --data project_name="Container Project" \
+  --data project_slug="container-project" \
+  --data language=ci \
+  --data container_mode=ghcr \
+  --data containerfile_path=evaluation/Dockerfile \
+  --data 'container_smoke_command=docker run --rm "$IMAGE"' \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$container_project"
+prime_gitleaks_cache "$container_project"
+grep -q '"container": true' "$container_project/.csarc/profile.json"
+grep -q '"mode": "ghcr"' "$container_project/.csarc/profile.json"
+grep -q '"file": "evaluation/Dockerfile"' \
+  "$container_project/.csarc/profile.json"
+grep -q '容器模式 ghcr' "$container_project/docs/site-content.js"
+grep -q '^  - package-ecosystem: docker$' \
+  "$container_project/.github/dependabot.yml"
+grep -q '^    directory: /evaluation$' \
+  "$container_project/.github/dependabot.yml"
+grep -q '^  container:$' "$container_project/.github/workflows/ci.yml"
+grep -q 'cache-to: type=gha,mode=max' \
+  "$container_project/.github/workflows/ci.yml"
+grep -q 'aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25' \
+  "$container_project/.github/workflows/ci.yml"
+if grep -q '^      packages: write$' \
+  "$container_project/.github/workflows/ci.yml"; then
+  echo "Pull request container verification must not write packages."
+  exit 1
+fi
+grep -q '^  container-build:$' \
+  "$container_project/.github/workflows/csarc-release.yml"
+grep -q '^  publish-container:$' \
+  "$container_project/.github/workflows/csarc-release.yml"
+grep -q '^      packages: write$' \
+  "$container_project/.github/workflows/csarc-release.yml"
+grep -q 'actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a' \
+  "$container_project/.github/workflows/csarc-release.yml"
+grep -q 'actions/attest-sbom@4651f806c01d8637787e274ac3b56de9a85cc6a3' \
+  "$container_project/.github/workflows/csarc-release.yml"
+grep -q 'docker pull "$IMAGE"' \
+  "$container_project/.github/workflows/csarc-release.yml"
+if grep -q '^  push:$\|workflow_run:\|PAT\|personal.access.token' \
+  "$container_project/.github/workflows/csarc-release.yml"; then
+  echo "Container publishing must retain the verified release boundary."
+  exit 1
+fi
+(
+  cd "$container_project"
+  ./scripts/verify
+  "$repo_root/.venv/bin/zizmor" . --format plain
+)
+
+container_verify_project="$fixture_root/container-verify-project"
+mkdir -p "$container_verify_project"
+cat > "$container_verify_project/Containerfile" <<'CONTAINERFILE'
+FROM alpine:3.22
+CMD ["/bin/true"]
+CONTAINERFILE
+uv run copier copy --trust --defaults --overwrite --vcs-ref HEAD \
+  --data project_mode=existing \
+  --data project_slug="container-verify-project" \
+  --data language=ci \
+  --data container_mode=verify \
+  --data containerfile_path=Containerfile \
+  --data 'container_smoke_command=docker run --rm "$IMAGE"' \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$container_verify_project"
+grep -q '^  container:$' \
+  "$container_verify_project/.github/workflows/ci.yml"
+if grep -q '^  container-build:$\|^  publish-container:$\|^      packages: write$' \
+  "$container_verify_project/.github/workflows/csarc-release.yml"; then
+  echo "Verify-only containers must not publish to a registry."
+  exit 1
+fi
 
 # Verify that an adopted repository can receive a later template version.
 update_source="$fixture_root/update-source"
