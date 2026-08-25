@@ -76,33 +76,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: ./scripts/apply-repository-settings.sh check
 
-  publish-pypi:
-    name: publish CLI to PyPI
-    if: ${{ vars.CSARC_ENABLE_PYPI_PUBLISHING == 'true' }}
-    needs: publish
-    environment: pypi
-    permissions:
-      contents: read
-      id-token: write
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          enable-cache: false
-      - name: Verify the immutable tag version
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: >-
-          uv run --no-project python scripts/release_policy.py prepare
-          --tag "$RELEASE_TAG"
-      - run: uv build
-      - name: Publish with trusted identity
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
-
   publish:
     name: publish immutable release
     needs: governance

@@ -423,6 +423,15 @@ jobs:
       ],
       supply: [
         {
+          title: '決定｜CI/CD 只按已證明需求與 repository 能力選擇性採用',
+          goal: '避免整批搬入不相關的 job、權限與維護負擔，讓每項自動化都有可驗證的啟用條件。',
+          summary: '近期只合併官方 `actions/*` 的 minor／patch 更新；major 與第三方 Actions 維持獨立。容器交付預設為 `none`，只有既有 Containerfile 與 smoke command 才啟用 `verify`，通過 release boundary 且具 registry 寫入能力才啟用 `ghcr`。通用 Containerfile、雲端部署、Kubernetes、多架構 placeholder、長效 token 與第二套更新身分均延後到真實需求出現再評估。',
+          file: 'docs/adr/selective-ci-automation-adoption.md',
+          code: `adopt now: actions/* minor + patch grouping
+capability-gated: container none | verify | ghcr
+defer: speculative build, publish, and deployment paths`
+        },
+        {
           title: '一般套件新版觀察三天，再由測試與人員決定是否合併',
           goal: '安全更新不等待；三天規則主要降低剛發布惡意版本的早期風險。',
           summary: 'Dependabot 同時管理 GitHub Actions、`uv` 與 `npm` 生態；`cooldown.default-days=3` 延後一般升版，安全更新仍立即提出。只有官方 `actions/*` 的 minor／patch 會合併成一張 PR；major 與第三方 Actions 保持獨立，方便審查與回退。',
@@ -512,10 +521,10 @@ matrix:
         {
           title: '有 Containerfile 才啟用容器驗證與 GHCR 交付',
           goal: '讓已有容器的產品取得一致門禁，同時讓非容器 repo 維持零 Docker job 與零 registry write 權限。',
-          summary: '`none` 不產生工作；`verify` 在 PR 使用 Buildx cache、smoke test 與 Trivy HIGH／CRITICAL scan，但不 push；`ghcr` 才從已驗證 release source 建置一次並保存相同 image bytes，推送版本與 commit SHA tag、附加 provenance／SPDX SBOM，再以 digest pull 與 smoke。ai-guardrail 的 `evaluation/Dockerfile` 是第一個具體使用情境；runtime 部署仍由產品另訂。',
+          summary: '`none` 不產生工作；`verify` 在 PR 使用 Buildx cache、smoke test 與 Trivy HIGH／CRITICAL scan，但不 push；`ghcr` 才從已驗證 release source 建置一次並保存相同 image bytes，推送版本與 commit SHA tag、附加 provenance／SPDX SBOM，再以 digest pull 與 smoke。Runtime 部署仍由產品另訂。',
           file: 'copier.yml＋ci.yml＋csarc-release.yml＋profiles/catalog.yaml',
           code: `container_mode: none | verify | ghcr
-containerfile_path: evaluation/Dockerfile
+containerfile_path: path/to/Containerfile
 container_smoke_command: docker run --rm "$IMAGE" --help
 
 # Only the release publishing job receives packages: write.`
@@ -730,10 +739,10 @@ python_typescript: {stage: alpha}`
         title: '建立新 repo',
         goal: 'CLI 會選取核准 release、解析完整 commit SHA、顯示計畫，確認後才以 Copier 建立與驗證。',
         location: 'Terminal',
-        code: `uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project
+        code: `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project
 
 # CI or an explicitly authorized agent:
-uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project \\
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project \\
   --yes --non-interactive`
       },
       existing: {
@@ -741,12 +750,12 @@ uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project \\
         goal: 'CLI 自行找出 Git root；--dry-run 可讀取 dirty tree，但只在 repo 外產生 Markdown、PDF 與不可套用的 machine plan。乾淨 tree 會先在暫存 clone 完成固定合併、產品 hook 與完整驗證，再鎖定可套用 plan；需要人工合併時，finalize 也必須重新 dry-run 並套用同一份第二階段 plan。',
         location: '既有 repo 根目錄',
         code: `git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --python 3.14 --from csarc-repo-cli csarc adopt --dry-run
-uvx --python 3.14 --from csarc-repo-cli csarc adopt \\
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt --dry-run
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt \\
   --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
 # Only when the first apply creates a manual-merge checkpoint:
-uvx --python 3.14 --from csarc-repo-cli csarc adopt --finalize --dry-run
-uvx --python 3.14 --from csarc-repo-cli csarc adopt --finalize \\
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt --finalize --dry-run
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt --finalize \\
   --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json`
       },
       update: {
@@ -754,12 +763,12 @@ uvx --python 3.14 --from csarc-repo-cli csarc adopt --finalize \\
         goal: 'CLI 讀取 .copier-answers.yml，解析核准 release，以 Copier smart update 顯示新版差異；衝突時保留差異並 fail closed。',
         location: '專案 repo 根目錄',
         code: `git switch -c chore/<issue-number>-update-repo-template
-uvx --python 3.14 --from csarc-repo-cli csarc update --check --json
-uvx --python 3.14 --from csarc-repo-cli csarc update`
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update --check --json
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update`
       },
       mac: {
         title: 'macOS 本機需求',
-        goal: '共同安裝 Git、GitHub CLI、uv；TypeScript／混合案再使用 Node 與 pnpm。只有 GitHub 連線操作需要登入。',
+        goal: '共同安裝 Git、GitHub CLI、uv；uv 會為薄 CLI 按次取得隔離 Python，不要求全域 Python。TypeScript／混合案再使用 Node 與 pnpm。只有 GitHub 連線操作需要登入。',
         location: 'Terminal',
         code: `brew install git gh uv node pnpm
 
