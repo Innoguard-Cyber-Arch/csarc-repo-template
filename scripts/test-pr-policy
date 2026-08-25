@@ -228,6 +228,23 @@ if PR_DRAFT="false" \
 fi
 
 case_count=$((case_count + 1))
+policy_output="$fixture/policy-output"
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="feat(api): add stacked report" \
+PR_LABELS="enhancement" \
+PR_BASE="feat/41-parent" \
+PR_HEAD="feat/42-report" \
+PR_BODY="Closes #42" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_MILESTONE_NUMBER="7" \
+PR_BASE_GRAPH="feat/41-parent=dev/m7-staged-ci" \
+GITHUB_REPOSITORY="acme/project" \
+GITHUB_OUTPUT="$policy_output" \
+PATH="$fixture:$PATH" \
+  "$validator" >/dev/null
+grep -qx 'delivery_base=dev/m7-staged-ci' "$policy_output"
+
+case_count=$((case_count + 1))
 PR_BRANCH_STRATEGY="delivery" \
 PR_TITLE="feat(api): add report" \
 PR_LABELS="enhancement" \
@@ -249,6 +266,48 @@ PR_ISSUE_STATE="open" \
 PR_ISSUE_MILESTONE_NUMBER="7" \
 PR_ISSUE_LABELS="enhancement,promotion" \
   "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="feat!: promote milestone seven bridge" \
+PR_LABELS="enhancement,promotion" \
+PR_BASE="main" \
+PR_HEAD="promote/m7-staged-ci" \
+PR_BODY="Closes #42" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_MILESTONE_NUMBER="7" \
+PR_ISSUE_LABELS="enhancement,promotion" \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="feat!: promote unlabeled bridge" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="promote/m7-staged-ci" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+  PR_ISSUE_LABELS="enhancement,promotion" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted an unlabeled promotion bridge."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="feat!: promote wrong milestone bridge" \
+  PR_LABELS="enhancement,promotion" \
+  PR_BASE="main" \
+  PR_HEAD="promote/m7-staged-ci" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="8" \
+  PR_ISSUE_LABELS="enhancement,promotion" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a bridge for another Milestone."
+  exit 1
+fi
 
 case_count=$((case_count + 1))
 PR_BRANCH_STRATEGY="delivery" \
