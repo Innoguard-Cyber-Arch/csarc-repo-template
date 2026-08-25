@@ -7,12 +7,14 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
 from collections.abc import Mapping
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -703,14 +705,13 @@ def pending_adoption_data(
 
 def write_pending_adoption(target: Path, payload: dict[str, object]) -> None:
     """Atomically persist an incomplete adoption checkpoint."""
-    destination = target / PENDING_ADOPTION_FILE
+    destination = checked_destination(target, PENDING_ADOPTION_FILE.as_posix())
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(".tmp")
-    temporary.write_text(
+    destination = checked_destination(target, PENDING_ADOPTION_FILE.as_posix())
+    atomic_replace_text(
+        destination,
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
     )
-    temporary.replace(destination)
 
 
 def read_pending_adoption(target: Path) -> dict[str, object]:
@@ -793,24 +794,25 @@ def write_provenance(
     applied_at: str | None = None,
 ) -> None:
     """Atomically persist verified release provenance."""
-    destination = target / PROVENANCE_FILE
+    destination = checked_destination(target, PROVENANCE_FILE.as_posix())
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(".tmp")
-    temporary.write_text(
+    destination = checked_destination(target, PROVENANCE_FILE.as_posix())
+    atomic_replace_text(
+        destination,
         json.dumps(
             provenance_data(revision, previous, applied_at=applied_at),
             indent=2,
             sort_keys=True,
         )
         + "\n",
-        encoding="utf-8",
     )
-    temporary.replace(destination)
 
 
 def read_provenance(target: Path) -> dict[str, object] | None:
     """Read saved provenance without trusting its fields yet."""
-    path = target / PROVENANCE_FILE
+    path = checked_destination(target, PROVENANCE_FILE.as_posix())
+    if path.is_symlink():
+        raise CliError("Saved provenance must not be a symlink.")
     if not path.is_file():
         return None
     try:
@@ -864,12 +866,20 @@ def merge_gitignore(existing: str, generated: str) -> str:
     return newline.join([*lines, *separator, *additions]) + newline
 
 
+def is_regular_file(path: Path) -> bool:
+    """Return whether a path is a regular file without following links."""
+    try:
+        return stat.S_ISREG(path.lstat().st_mode)
+    except FileNotFoundError, NotADirectoryError:
+        return False
+
+
 def apply_adoption_policies(stage: Path, target: Path) -> tuple[str, ...]:
     """Apply the small fixed set of safe existing-repository merges."""
     merged: list[str] = []
     agents = target / "AGENTS.md"
     staged_agents = stage / "AGENTS.md"
-    if agents.is_file() and staged_agents.is_file():
+    if is_regular_file(agents) and is_regular_file(staged_agents):
         staged_agents.write_text(
             merge_agents_file(
                 agents.read_text(encoding="utf-8"),
@@ -880,7 +890,7 @@ def apply_adoption_policies(stage: Path, target: Path) -> tuple[str, ...]:
         merged.append("AGENTS.md")
     gitignore = target / ".gitignore"
     staged_gitignore = stage / ".gitignore"
-    if gitignore.is_file() and staged_gitignore.is_file():
+    if is_regular_file(gitignore) and is_regular_file(staged_gitignore):
         staged_gitignore.write_text(
             merge_gitignore(
                 gitignore.read_text(encoding="utf-8"),
@@ -890,6 +900,25 @@ def apply_adoption_policies(stage: Path, target: Path) -> tuple[str, ...]:
         )
         merged.append(".gitignore")
     return tuple(sorted(merged))
+
+
+def comparison_destination(target: Path, relative_name: str) -> Path | None:
+    """Return a safe destination; reject symlink ancestors."""
+    try:
+        return checked_destination(target, relative_name)
+    except CliError:
+        current = target
+        for part in Path(relative_name).parts[:-1]:
+            current /= part
+            try:
+                mode = current.lstat().st_mode
+            except FileNotFoundError:
+                continue
+            if stat.S_ISLNK(mode):
+                raise
+            if not stat.S_ISDIR(mode):
+                return None
+        return None
 
 
 def compare_stage(
@@ -908,18 +937,26 @@ def compare_stage(
     manual: list[str] = []
     unknown: list[str] = []
     for relative_name, staged_path in staged.items():
-        existing_path = existing.get(relative_name)
+        existing_path = comparison_destination(target, relative_name)
         if existing_path is None:
+            unknown.append(relative_name)
+            continue
+        try:
+            existing_mode = existing_path.lstat().st_mode
+        except FileNotFoundError:
             add.append(relative_name)
+            continue
+        if not (stat.S_ISREG(existing_mode) or stat.S_ISLNK(existing_mode)):
+            unknown.append(relative_name)
             continue
         if file_fingerprint(staged_path) == file_fingerprint(existing_path):
             preserve.append(relative_name)
         elif relative_name in merged_paths:
             merge.append(relative_name)
         elif adopt:
-            regular_files = (
-                not staged_path.is_symlink() and not existing_path.is_symlink()
-            )
+            regular_files = stat.S_ISREG(
+                staged_path.lstat().st_mode
+            ) and stat.S_ISREG(existing_mode)
             destination = unknown
             if regular_files:
                 staged_content = staged_path.read_bytes()
@@ -945,7 +982,8 @@ def plan_status(plan: Plan) -> tuple[str, str]:
     if plan.unknown:
         return (
             "Unable to determine",
-            "Non-text path collisions need human inspection.",
+            "Directory, ancestor, special-file, or non-text path collisions "
+            "need human inspection.",
         )
     if plan.manual:
         return (
@@ -1083,7 +1121,8 @@ def adoption_report_markdown(
         (
             path,
             "file type, executable bit, link target, or non-text content "
-            "differs",
+            "differs; a directory, ancestor, or special-file collision is "
+            "also possible",
         )
         for path in plan.unknown
     )
@@ -1307,6 +1346,112 @@ def adoption_plan_payload(plan: ResolvedPlan) -> dict[str, object]:
     return payload
 
 
+def directory_fd_matches_path(directory_fd: int, path: Path) -> bool:
+    """Return whether a path still names the directory held by an open fd."""
+    try:
+        opened = os.fstat(directory_fd)
+        current = os.stat(path, follow_symlinks=False)
+    except OSError:
+        return False
+    return (
+        stat.S_ISDIR(current.st_mode)
+        and opened.st_dev == current.st_dev
+        and opened.st_ino == current.st_ino
+    )
+
+
+def atomic_replace_text(destination: Path, content: str) -> None:
+    """Replace text through a pinned, non-symlink parent directory."""
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    directory_flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        parent_fd = os.open(destination.parent, directory_flags)
+    except OSError as error:
+        raise CliError(
+            f"Cannot safely open destination directory: {destination.parent}"
+        ) from error
+    temporary_name = f".{destination.name}.{secrets.token_hex(16)}.tmp"
+    backup_name = f".{destination.name}.{secrets.token_hex(16)}.bak"
+    backup_created = False
+    try:
+        if not directory_fd_matches_path(parent_fd, destination.parent):
+            raise CliError("Destination directory changed while writing.")
+        temporary_fd = os.open(
+            temporary_name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+            dir_fd=parent_fd,
+        )
+        temporary_stat = os.fstat(temporary_fd)
+        with os.fdopen(temporary_fd, mode="w", encoding="utf-8") as output:
+            output.write(content)
+            output.flush()
+        if not directory_fd_matches_path(parent_fd, destination.parent):
+            raise CliError("Destination directory changed while writing.")
+        try:
+            existing_fd = os.open(
+                destination.name,
+                os.O_RDONLY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_NONBLOCK", 0),
+                dir_fd=parent_fd,
+            )
+        except FileNotFoundError:
+            pass
+        else:
+            with os.fdopen(existing_fd, mode="rb") as existing:
+                existing_mode = os.fstat(existing.fileno()).st_mode
+                if not stat.S_ISREG(existing_mode):
+                    raise CliError(
+                        f"Destination is not a regular file: {destination}"
+                    )
+                backup_fd = os.open(
+                    backup_name,
+                    os.O_WRONLY
+                    | os.O_CREAT
+                    | os.O_EXCL
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    stat.S_IMODE(existing_mode),
+                    dir_fd=parent_fd,
+                )
+                with os.fdopen(backup_fd, mode="wb") as backup:
+                    os.fchmod(backup.fileno(), stat.S_IMODE(existing_mode))
+                    shutil.copyfileobj(existing, backup)
+                    backup.flush()
+            backup_created = True
+        os.replace(
+            temporary_name,
+            destination.name,
+            src_dir_fd=parent_fd,
+            dst_dir_fd=parent_fd,
+        )
+        if not directory_fd_matches_path(parent_fd, destination.parent):
+            current = os.stat(
+                destination.name, dir_fd=parent_fd, follow_symlinks=False
+            )
+            if (
+                current.st_dev == temporary_stat.st_dev
+                and current.st_ino == temporary_stat.st_ino
+            ):
+                if backup_created:
+                    os.replace(
+                        backup_name,
+                        destination.name,
+                        src_dir_fd=parent_fd,
+                        dst_dir_fd=parent_fd,
+                    )
+                    backup_created = False
+                else:
+                    os.unlink(destination.name, dir_fd=parent_fd)
+            raise CliError("Destination directory changed while writing.")
+    finally:
+        with suppress(FileNotFoundError):
+            os.unlink(temporary_name, dir_fd=parent_fd)
+        with suppress(FileNotFoundError):
+            os.unlink(backup_name, dir_fd=parent_fd)
+        os.close(parent_fd)
+
+
 def read_adoption_plan(path: Path) -> dict[str, object]:
     """Read a machine plan and reject accidental or malicious edits."""
     try:
@@ -1340,6 +1485,47 @@ def adoption_binding(payload: dict[str, object]) -> dict[str, object]:
         "target": payload.get("target"),
         "template": payload.get("template"),
     }
+
+
+def json_differences(
+    saved: object, rebuilt: object, path: str = "$"
+) -> tuple[str, ...]:
+    """Describe differing JSON leaves without hiding the fail-closed reason."""
+    if type(saved) is not type(rebuilt):
+        return (f"{path}: saved={saved!r}, rebuilt={rebuilt!r}",)
+    if isinstance(saved, dict) and isinstance(rebuilt, dict):
+        differences: list[str] = []
+        for key in sorted(set(saved) | set(rebuilt)):
+            child = f"{path}.{key}"
+            if key not in saved:
+                differences.append(
+                    f"{child}: saved=<missing>, rebuilt={rebuilt[key]!r}"
+                )
+            elif key not in rebuilt:
+                differences.append(
+                    f"{child}: saved={saved[key]!r}, rebuilt=<missing>"
+                )
+            else:
+                differences.extend(
+                    json_differences(saved[key], rebuilt[key], child)
+                )
+        return tuple(differences)
+    if isinstance(saved, list) and isinstance(rebuilt, list):
+        differences = []
+        if len(saved) != len(rebuilt):
+            differences.append(
+                f"{path}.length: saved={len(saved)}, rebuilt={len(rebuilt)}"
+            )
+        for index, (saved_item, rebuilt_item) in enumerate(
+            zip(saved, rebuilt, strict=False)
+        ):
+            differences.extend(
+                json_differences(saved_item, rebuilt_item, f"{path}[{index}]")
+            )
+        return tuple(differences)
+    if saved != rebuilt:
+        return (f"{path}: saved={saved!r}, rebuilt={rebuilt!r}",)
+    return ()
 
 
 def target_state(target: Path) -> tuple[str, tuple[str, ...], str]:
@@ -1425,36 +1611,36 @@ def write_adoption_reports(
     plan_path = directory / ADOPTION_PLAN_BASENAME
     directory.mkdir(parents=True, exist_ok=True)
     generated_at = str(plan.adoption["generated_at"])
-    markdown_temporary = markdown_path.with_suffix(".md.tmp")
-    pdf_temporary = pdf_path.with_suffix(".pdf.tmp")
-    plan_temporary = plan_path.with_suffix(".json.tmp")
-    with markdown_temporary.open("w", encoding="utf-8") as markdown:
-        markdown.write(
-            adoption_report_markdown(
-                plan.target,
-                plan.revision,
-                plan.repository,
-                plan.answers,
-                plan.files,
-                generated_at,
-                plan.adoption,
-            )
-        )
-    markdown_temporary.replace(markdown_path)
-    plan_temporary.write_text(
+    atomic_replace_text(
+        markdown_path,
+        adoption_report_markdown(
+            plan.target,
+            plan.revision,
+            plan.repository,
+            plan.answers,
+            plan.files,
+            generated_at,
+            plan.adoption,
+        ),
+    )
+    atomic_replace_text(
+        plan_path,
         json.dumps(adoption_plan_payload(plan), indent=2, sort_keys=True)
         + "\n",
-        encoding="utf-8",
     )
-    plan_temporary.replace(plan_path)
-    created_pdf = False
     pdf_path.unlink(missing_ok=True)
-    pdf_temporary.unlink(missing_ok=True)
+    pdf_temporary: Path | None = None
     try:
-        with pdf_temporary.open("wb") as pdf:
-            created_pdf = True
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=directory,
+            prefix=f".{pdf_path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as pdf:
+            pdf_temporary = Path(pdf.name)
             draw_adoption_pdf(
-                pdf,
+                cast(BinaryIO, pdf),
                 plan.target,
                 plan.revision,
                 plan.repository,
@@ -1462,9 +1648,10 @@ def write_adoption_reports(
                 plan.files,
                 generated_at,
             )
+            pdf.flush()
         pdf_temporary.replace(pdf_path)
     except Exception as error:
-        if created_pdf:
+        if pdf_temporary is not None:
             pdf_temporary.unlink(missing_ok=True)
         print(
             "WARNING: PDF report generation failed; Markdown and the machine "
@@ -1473,7 +1660,7 @@ def write_adoption_reports(
         )
     if emit:
         print(f"Markdown report: {markdown_path}")
-        if pdf_path.is_file():
+        if pdf_path.is_file() and not pdf_path.is_symlink():
             print(f"PDF report: {pdf_path}")
         print(f"Machine plan: {plan_path}")
     return markdown_path, pdf_path, plan_path
@@ -1583,6 +1770,24 @@ def confirm(args: argparse.Namespace) -> bool:
             "--non-interactive requires --yes before files may change."
         )
     return input("Apply this plan? [y/N] ").strip().lower() in {"y", "yes"}
+
+
+def require_unreleased_plan_opt_in(
+    verification: object, allow_unreleased: bool
+) -> None:
+    """Require a fresh explicit trust bypass when applying an unsafe plan."""
+    if verification not in {"unverified", "development-unreleased"}:
+        return
+    if not allow_unreleased:
+        raise CliError(
+            "Applying an unreleased template plan requires "
+            "--allow-unreleased again."
+        )
+    print(
+        "WARNING: --allow-unreleased bypasses release identity, "
+        "immutability, attestation, and signature verification.",
+        file=sys.stderr,
+    )
 
 
 def checked_destination(root: Path, relative_name: str) -> Path:
@@ -2236,6 +2441,26 @@ def repository_context(  # noqa: C901
     )
 
 
+def validate_repository_context(
+    target: Path,
+    expected: RepositoryContext,
+    explicit_visibility: str | None,
+    *,
+    saved_visibility: str | None = None,
+) -> None:
+    """Reject repository context drift after a plan was confirmed."""
+    current = repository_context(
+        target,
+        explicit_visibility,
+        saved_visibility=saved_visibility,
+    )
+    if current.as_dict() != expected.as_dict():
+        raise CliError(
+            "Repository context changed after the plan was created or "
+            "confirmed; create a new plan."
+        )
+
+
 def gh_milestone_payload(arguments: list[str]) -> object:
     """Run one GitHub Milestone API request and validate its JSON shape."""
     try:
@@ -2514,6 +2739,10 @@ def base_data(
     if mode == "adopt":
         data["coverage_mode"] = "diff"
     data.update(values)
+    if "package_name" not in values:
+        data["package_name"] = (
+            str(data["project_slug"]).replace("-", "_").replace(".", "_")
+        )
     return data
 
 
@@ -2591,7 +2820,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "Run adopt --finalize --dry-run first, then apply its machine "
             "plan with --finalize --apply-plan."
         )
-    if any((args.source, args.to, args.expected_sha, args.allow_unreleased)):
+    if any((args.source, args.to, args.expected_sha)):
         raise CliError(
             "adopt --finalize uses the source and release saved by the "
             "pending adoption; do not pass release-selection options."
@@ -2674,6 +2903,8 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "answers or restart adoption from a clean commit."
         )
     allow_unreleased = verification == "development-unreleased"
+    if args.apply_plan is not None:
+        require_unreleased_plan_opt_in(verification, args.allow_unreleased)
     revision = resolve_revision(
         source,
         release,
@@ -2852,6 +3083,12 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             return 0
         if not confirm(args):
             return 0
+        validate_repository_context(
+            target,
+            repository,
+            explicit_visibility,
+            saved_visibility=saved_visibility,
+        )
         validate_target_snapshot(target, adoption)
         write_candidate_patch(
             candidate,
@@ -2961,7 +3198,7 @@ def command_apply_adoption_plan(  # noqa: C901
             "--apply-plan cannot be combined with --dry-run, --report-dir, "
             "or --json."
         )
-    if any((args.source, args.to, args.expected_sha, args.allow_unreleased)):
+    if any((args.source, args.to, args.expected_sha)):
         raise CliError(
             "--apply-plan uses the source and SHA saved by dry-run; do not "
             "pass release-selection options."
@@ -3013,6 +3250,7 @@ def command_apply_adoption_plan(  # noqa: C901
         or verification not in {"verified", "unverified"}
     ):
         raise CliError("Adoption plan has invalid template identity.")
+    require_unreleased_plan_opt_in(verification, args.allow_unreleased)
     require_clean_repository(target)
     revision = resolve_revision(
         source,
@@ -3045,10 +3283,16 @@ def command_apply_adoption_plan(  # noqa: C901
             generated_at,
         )
         fresh_payload = adoption_plan_payload(fresh)
-        if adoption_binding(fresh_payload) != adoption_binding(saved):
+        saved_binding = adoption_binding(saved)
+        fresh_binding = adoption_binding(fresh_payload)
+        if fresh_binding != saved_binding:
+            differences = json_differences(saved_binding, fresh_binding)
+            detail = "; ".join(differences[:10])
+            if len(differences) > 10:
+                detail += f"; ... and {len(differences) - 10} more"
             raise CliError(
                 "Repository or rendered output drifted after dry-run; create "
-                "a new adoption plan."
+                f"a new adoption plan. Differing fields: {detail}"
             )
         if (
             fresh.adoption is None
@@ -3062,6 +3306,11 @@ def command_apply_adoption_plan(  # noqa: C901
         milestone_plan = milestone_description_plan(target)
         if not confirm(args):
             return 0
+        validate_repository_context(
+            target,
+            fresh.repository,
+            explicit_visibility,
+        )
         validate_target_snapshot(target, fresh.adoption)
         write_candidate_patch(
             candidate,
@@ -3091,6 +3340,8 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         if mode == "adopt"
         else args.path.expanduser().resolve()
     )
+    if mode == "adopt" and args.apply_plan is None:
+        args.dry_run = True
     if mode == "adopt" and args.finalize:
         return command_finalize_adoption(args)
     if mode == "adopt" and args.apply_plan is not None:
@@ -3104,12 +3355,6 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         raise CliError("--json requires --dry-run for init or adopt.")
     if args.json and mode == "adopt" and args.report_dir is not None:
         raise CliError("--report-dir cannot be combined with --json.")
-    if mode == "adopt" and not args.dry_run:
-        raise CliError(
-            "Run adopt --dry-run first, then apply its machine plan with "
-            "--apply-plan."
-        )
-
     source = args.source or CANONICAL_SOURCE
     revision = resolve_revision(
         source,
@@ -3133,7 +3378,8 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         stage = Path(temporary) / "project"
         stage.mkdir()
         copier_copy(revision.source, revision, stage, data)
-        answers = read_copier_answers(stage / ".copier-answers.yml")
+        answers: dict[str, object] = dict(data)
+        answers.update(read_copier_answers(stage / ".copier-answers.yml"))
         capabilities = capability_preflight(
             stage / "scripts" / "release_policy.py", target, emit=False
         )
@@ -3446,6 +3692,16 @@ def command_update(args: argparse.Namespace) -> int:
             "update_available": update_available,
         }
     )
+    target_snapshot: dict[str, object] = {}
+    if not args.check:
+        require_clean_repository(target)
+        head, changes, status_sha256 = target_state(target)
+        target_snapshot = {
+            "target_changes": list(changes),
+            "target_files": target_file_snapshot(target),
+            "target_head": head,
+            "target_status_sha256": status_sha256,
+        }
     plan = ResolvedPlan(
         mode="update",
         target=target,
@@ -3466,7 +3722,6 @@ def command_update(args: argparse.Namespace) -> int:
             print_plan(plan)
         return 1 if status["update_available"] else 0
 
-    require_clean_repository(target)
     copier_data = [
         part
         for key, value in sorted(update_data.items())
@@ -3501,6 +3756,15 @@ def command_update(args: argparse.Namespace) -> int:
     if args.dry_run or not confirm(args):
         return 0
 
+    validate_repository_context(
+        target,
+        plan.repository,
+        explicit_data.get("project_visibility"),
+        saved_visibility=(
+            saved_visibility if isinstance(saved_visibility, str) else None
+        ),
+    )
+    validate_target_snapshot(target, target_snapshot)
     result = run(
         [
             sys.executable,
@@ -3535,7 +3799,11 @@ def command_update(args: argparse.Namespace) -> int:
 
 def add_write_options(parser: argparse.ArgumentParser) -> None:
     """Add shared confirmation and dry-run switches."""
-    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="plan without writing (the default for adopt)",
+    )
     parser.add_argument("--yes", action="store_true")
     parser.add_argument("--non-interactive", action="store_true")
 
