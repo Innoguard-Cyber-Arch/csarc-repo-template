@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import runpy
+import tomllib
 from pathlib import Path
 
 import pytest
+import yaml
 
-MODULE = runpy.run_path(
-    str(Path(__file__).parents[1] / "scripts" / "ci_tier.py")
-)
+ROOT = Path(__file__).parents[1]
+MODULE = runpy.run_path(str(ROOT / "scripts" / "ci_tier.py"))
 classify = MODULE["classify"]
 scope_for = MODULE["scope_for"]
+risks_for = MODULE["risks_for"]
 
 
 @pytest.mark.parametrize(
@@ -233,6 +235,8 @@ def test_push_does_not_repeat_the_verified_source_tree() -> None:
     """A merged tree records post-merge evidence without another full suite."""
     plan = classify("push", "", "", set(), ["src/pkg/core.py"])
     assert plan.tier == "post-merge"
+    assert plan.stage == "post-merge"
+    assert not plan.run_deep
 
 
 def test_manual_and_merge_queue_runs_are_full() -> None:
@@ -243,3 +247,111 @@ def test_manual_and_merge_queue_runs_are_full() -> None:
     queued = classify("merge_group", "main", "queue", set(), ["README.md"])
     assert manual.tier == queued.tier == "full"
     assert manual.upload_site
+
+
+@pytest.mark.parametrize(
+    ("path", "risk"),
+    [
+        ("scripts/ci_tier.py", "ci-router"),
+        ("pyproject.toml", "test-harness"),
+        ("copier.yml", "generator"),
+        ("src/csarc_cli/cli.py", "cli-adoption-update"),
+        (".github/workflows/release-template.yml", "release"),
+        (".github/dependabot.yml", "security"),
+        ("uv.lock", "security"),
+        ("scripts/promotion_gate.py", "promotion"),
+        ("scripts/verify_release_consumption.py", "provenance"),
+        ("unexpected.bin", "unknown"),
+    ],
+)
+def test_high_risk_families_are_explicit(path: str, risk: str) -> None:
+    """Keep costly or security-sensitive families out of cheap docs routing."""
+    assert risk in risks_for(path)
+
+
+def test_issue_and_integrated_stages_apply_risk_differently() -> None:
+    """Issue work stays scoped while the exact main candidate fails closed."""
+    issue = classify(
+        "pull_request",
+        "dev/m9-low-friction-ai-sdlc",
+        "enhancement/317-staged-verification",
+        set(),
+        ["src/csarc_cli/cli.py"],
+    )
+    integrated = classify(
+        "pull_request",
+        "main",
+        "enhancement/317-staged-verification",
+        set(),
+        ["src/csarc_cli/cli.py"],
+    )
+    assert (issue.stage, issue.tier) == ("issue", "fast")
+    assert (integrated.stage, integrated.tier) == ("integrated", "full")
+    assert integrated.reason.startswith("direct-to-main risk:")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/ci_tier.py",
+        "pyproject.toml",
+        "copier.yml",
+        "src/csarc_cli/cli.py",
+        ".github/workflows/release-template.yml",
+        "uv.lock",
+        "scripts/promotion_gate.py",
+        "scripts/verify_release_consumption.py",
+    ],
+)
+def test_direct_main_risk_families_fail_closed(path: str) -> None:
+    """Escalate bot and standalone main routes when their risk is elevated."""
+    plan = classify(
+        "pull_request", "main", "dependabot/or-standalone", set(), [path]
+    )
+    assert plan.tier == "full"
+    assert plan.stage == "integrated"
+
+
+def test_schedule_and_release_run_the_deep_matrix() -> None:
+    """Reserve long cross-platform checks for scheduled and release stages."""
+    scheduled = classify("schedule", "", "", set(), ["README.md"])
+    release = classify(
+        "pull_request",
+        "main",
+        "release-please--branches--main",
+        set(),
+        [".release-please-manifest.json"],
+    )
+    assert scheduled.tier == release.tier == "full"
+    assert scheduled.run_deep and release.run_deep
+
+
+def test_pytest_profiles_are_declared_strictly() -> None:
+    """Reject unknown test profiles instead of silently broadening a gate."""
+    pytest_config = tomllib.loads((ROOT / "pyproject.toml").read_text())[
+        "tool"
+    ]["pytest"]["ini_options"]
+    assert "--strict-markers" in pytest_config["addopts"]
+    assert {item.split(":", 1)[0] for item in pytest_config["markers"]} == {
+        "large",
+        "runtime",
+        "quarantine",
+    }
+
+
+def test_required_aggregate_is_unconditional_and_routing_is_job_level() -> None:
+    """Conclude the stable check while expensive jobs remain conditional."""
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    )
+    jobs = workflow["jobs"]
+    assert jobs["verify"]["if"] == "${{ always() }}"
+    assert "fast" in jobs["verify"]["needs"]
+    full_job = next(
+        name for name in ("canonical-full", "canonical", "full") if name in jobs
+    )
+    assert jobs[full_job]["if"] == ("${{ needs.fast.outputs.tier == 'full' }}")
+    if "adoption-macos" in jobs:
+        assert jobs["adoption-macos"]["if"] == (
+            "${{ needs.fast.outputs.run_deep == 'true' }}"
+        )

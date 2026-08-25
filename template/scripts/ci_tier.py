@@ -15,12 +15,15 @@ class Plan:
     """Machine-readable CI routing decision."""
 
     tier: str
+    stage: str
     reason: str
     review_state: str
     scopes: tuple[str, ...]
+    risks: tuple[str, ...]
     run_governance: bool
     run_osv: bool
     run_zizmor: bool
+    run_deep: bool
     upload_site: bool
 
 
@@ -96,6 +99,69 @@ def affects_decision_site(path: str) -> bool:
     }
 
 
+def risks_for(path: str) -> set[str]:
+    """Identify changes that require explicit, fail-closed routing."""
+    name = Path(path).name.removesuffix(".jinja")
+    scope = scope_for(path)
+    risks: set[str] = set()
+    if path == "copier.yml" or path.startswith("template/"):
+        risks.add("generator")
+    if path.startswith("src/csarc_cli/") or path == "tests/test_cli.py":
+        risks.add("cli-adoption-update")
+    if (
+        path in {"pyproject.toml", "template/pyproject.toml.jinja"}
+        or path.startswith(("tests/", "template/tests/"))
+        or name in {"verify-fast", "verify-template.sh", "verify"}
+    ):
+        risks.add("test-harness")
+    if "release" in name or path in {
+        ".release-please-manifest.json",
+        "release-please-config.json",
+        "version.txt",
+    }:
+        risks.add("release")
+    if (
+        name in {"SECURITY.md", "scan-secrets", "zizmor.yml", "osv.yml"}
+        or scope == "dependency"
+        or path.startswith(".github/dependency-review-config")
+        or path
+        in {".github/dependabot.yml", "template/.github/dependabot.yml.jinja"}
+    ):
+        risks.add("security")
+    if "promotion" in name:
+        risks.add("promotion")
+    if "provenance" in path or name in {
+        "verify_release_consumption.py",
+        "test_release_consumption.py",
+        "artifact-consumption.md",
+    }:
+        risks.add("provenance")
+    if (
+        name == "ci_tier.py"
+        or path.endswith("/.github/workflows/ci.yml.jinja")
+        or path
+        in {
+            ".github/workflows/ci.yml",
+            ".github/workflows/reusable-ci.yml",
+        }
+    ):
+        risks.add("ci-router")
+    if scope == "unknown":
+        risks.add("unknown")
+    return risks
+
+
+def full_risk_reason(
+    stage: str, scopes: tuple[str, ...], risks: tuple[str, ...]
+) -> str | None:
+    """Explain why a candidate must escalate to the integrated full gate."""
+    if "unknown" in scopes:
+        return "unknown high-risk path"
+    if stage == "integrated" and risks:
+        return "direct-to-main risk: " + ", ".join(risks)
+    return None
+
+
 def classify(
     event: str,
     base: str,
@@ -107,7 +173,22 @@ def classify(
     force_full: bool = False,
 ) -> Plan:
     """Select a safe tier from the event, delivery stage, and changed paths."""
+    force_full = force_full or event == "schedule"
     scopes = tuple(sorted({scope_for(path) for path in changed_files}))
+    risks = tuple(
+        sorted({risk for path in changed_files for risk in risks_for(path)})
+    )
+    stage = (
+        "post-merge"
+        if event == "push"
+        else "scheduled"
+        if event == "schedule"
+        else "manual"
+        if force_full or event == "workflow_dispatch"
+        else "integrated"
+        if base == "main"
+        else "issue"
+    )
     promotion = (
         event in {"pull_request", "merge_group"}
         and base == "main"
@@ -129,9 +210,14 @@ def classify(
         else "not-applicable"
     )
     if force_full:
-        tier, reason = "full", "manual full verification"
+        reason = (
+            "scheduled deep verification"
+            if event == "schedule"
+            else "manual full verification"
+        )
+        tier = "full"
     elif review_state == "draft":
-        tier = "docs" if scopes == ("docs",) else "fast"
+        tier = "docs" if scopes == ("docs",) and not risks else "fast"
         reason = (
             "draft work in progress; full verification deferred until ready"
         )
@@ -146,8 +232,8 @@ def classify(
         tier, reason = "post-merge", "pull request result already verified"
     elif not changed_files:
         tier, reason = "full", "changed paths unavailable"
-    elif "unknown" in scopes:
-        tier, reason = "full", "unknown high-risk path"
+    elif risk_reason := full_risk_reason(stage, scopes, risks):
+        tier, reason = "full", risk_reason
     elif scopes == ("docs",):
         tier, reason = "docs", "documentation-only change"
     else:
@@ -155,12 +241,16 @@ def classify(
     full = tier == "full"
     return Plan(
         tier=tier,
+        stage=stage,
         reason=reason,
         review_state=review_state,
         scopes=scopes,
+        risks=risks,
         run_governance=full or "governance" in scopes,
         run_osv=full or "dependency" in scopes,
         run_zizmor=full or "workflow" in scopes,
+        run_deep=event == "schedule"
+        or (stage == "integrated" and "release" in risks),
         upload_site=(
             force_full
             or promotion
@@ -182,12 +272,15 @@ def write_outputs(path: Path, plan: Plan) -> None:
     """Expose scalar plan fields as GitHub Actions step outputs."""
     values = {
         "tier": plan.tier,
+        "stage": plan.stage,
         "reason": plan.reason,
         "review_state": plan.review_state,
         "scopes": ",".join(plan.scopes),
+        "risks": ",".join(plan.risks),
         "run_governance": str(plan.run_governance).lower(),
         "run_osv": str(plan.run_osv).lower(),
         "run_zizmor": str(plan.run_zizmor).lower(),
+        "run_deep": str(plan.run_deep).lower(),
         "upload_site": str(plan.upload_site).lower(),
     }
     with path.open("a", encoding="utf-8") as output:
@@ -201,12 +294,15 @@ def render_summary(plan: Plan) -> str:
     return (
         "## CI routing\n\n"
         f"- Tier: `{plan.tier}`\n"
+        f"- Stage: `{plan.stage}`\n"
         f"- Reason: {plan.reason}\n"
         f"- Review state: `{plan.review_state}`\n"
         f"- Scopes: `{scopes}`\n"
+        f"- Risks: `{', '.join(plan.risks) or 'none'}`\n"
         f"- Remote governance: `{plan.run_governance}`\n"
         f"- OSV: `{plan.run_osv}`\n"
         f"- Zizmor: `{plan.run_zizmor}`\n"
+        f"- Deep matrix: `{plan.run_deep}`\n"
         f"- Decision site artifact: `{plan.upload_site}`\n"
     )
 

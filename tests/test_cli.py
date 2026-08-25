@@ -312,6 +312,7 @@ class FakeReleaseClient:
             raise self.commit_error
 
 
+@pytest.mark.runtime
 def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
     """Init previews without writes, then creates and verifies the project."""
     source, first_sha = make_template(tmp_path)
@@ -1065,6 +1066,7 @@ def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 @pytest.mark.parametrize(
     ("language", "manifest_name", "lock_name"),
     [

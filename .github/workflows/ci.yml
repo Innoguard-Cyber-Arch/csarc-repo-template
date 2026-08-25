@@ -5,6 +5,8 @@ on:
     types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft]
   merge_group:
     types: [checks_requested]
+  schedule:
+    - cron: "17 3 * * 1"
   workflow_dispatch:
 
 concurrency:
@@ -24,12 +26,15 @@ jobs:
     timeout-minutes: 15
     outputs:
       tier: ${{ steps.plan.outputs.tier }}
+      stage: ${{ steps.plan.outputs.stage }}
       reason: ${{ steps.plan.outputs.reason }}
       review_state: ${{ steps.plan.outputs.review_state }}
       scopes: ${{ steps.plan.outputs.scopes }}
+      risks: ${{ steps.plan.outputs.risks }}
       run_governance: ${{ steps.plan.outputs.run_governance }}
       run_osv: ${{ steps.plan.outputs.run_osv }}
       run_zizmor: ${{ steps.plan.outputs.run_zizmor }}
+      run_deep: ${{ steps.plan.outputs.run_deep }}
     steps:
       - name: Start timing
         id: started
@@ -173,7 +178,7 @@ jobs:
           UV_PYTHON: "3.14.0"
         run: |
           uv sync --locked --python "$UV_PYTHON"
-          uv run pytest -m "not large"
+          uv run pytest -m runtime
       - name: Record Python compatibility evidence
         if: ${{ always() }}
         env:
@@ -183,7 +188,7 @@ jobs:
   adoption-macos:
     name: adoption e2e macOS
     needs: fast
-    if: ${{ needs.fast.outputs.tier == 'full' }}
+    if: ${{ needs.fast.outputs.run_deep == 'true' }}
     runs-on: macos-latest
     timeout-minutes: 10
     steps:
@@ -196,7 +201,7 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - run: uv sync --locked --python 3.14
       - run: >-
-          uv run pytest -q
+          uv run pytest -q -m large
           tests/test_cli.py::test_real_existing_adoption_uses_fixed_ownership_policies
 
   governance:
@@ -265,6 +270,7 @@ jobs:
         env:
           FAST_RESULT: ${{ needs.fast.result }}
           TIER: ${{ needs.fast.outputs.tier }}
+          RUN_DEEP: ${{ needs.fast.outputs.run_deep }}
           REVIEW_STATE: ${{ needs.fast.outputs.review_state }}
           CANONICAL_RESULT: ${{ needs.canonical-full.result }}
           ADOPTION_MACOS_RESULT: ${{ needs.adoption-macos.result }}
@@ -280,10 +286,13 @@ jobs:
           if [[ "$TIER" == full ]]; then
             test "$CANONICAL_RESULT" = success
             test "$PYTHON_COMPATIBILITY_RESULT" = success
-            test "$ADOPTION_MACOS_RESULT" = success
           else
             test "$CANONICAL_RESULT" = skipped
             test "$PYTHON_COMPATIBILITY_RESULT" = skipped
+          fi
+          if [[ "$RUN_DEEP" == true ]]; then
+            test "$ADOPTION_MACOS_RESULT" = success
+          else
             test "$ADOPTION_MACOS_RESULT" = skipped
           fi
           for result in "$GOVERNANCE_RESULT" "$OSV_RESULT" "$ZIZMOR_RESULT"; do

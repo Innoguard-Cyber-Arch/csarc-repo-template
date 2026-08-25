@@ -49,10 +49,12 @@ strict = true
 files = ["src", "scripts", "tests"]
 
 [tool.pytest.ini_options]
-addopts = "-q"
+addopts = "-q --strict-markers"
 testpaths = ["tests"]
 markers = [
-  "large: long-running generated-project or adoption coverage reserved for the full gate",
+  "large: long-running end-to-end coverage reserved for the integrated full gate",
+  "runtime: minimal behavior that must pass on every supported Python runtime",
+  "quarantine: tracked flaky coverage with an owner, issue, and expiry; never a required-gate bypass",
 ]
 
 [tool.coverage.run]

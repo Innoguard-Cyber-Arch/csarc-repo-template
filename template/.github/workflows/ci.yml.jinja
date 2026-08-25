@@ -14,6 +14,8 @@ on:
     types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft]
   merge_group:
     types: [checks_requested]
+  schedule:
+    - cron: "17 3 * * 1"
   workflow_dispatch:
 
 concurrency:
@@ -33,12 +35,15 @@ jobs:
     timeout-minutes: 15
     outputs:
       tier: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
+      stage: {% raw %}${{ steps.plan.outputs.stage }}{% endraw %}
       reason: {% raw %}${{ steps.plan.outputs.reason }}{% endraw %}
       review_state: {% raw %}${{ steps.plan.outputs.review_state }}{% endraw %}
       scopes: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
+      risks: {% raw %}${{ steps.plan.outputs.risks }}{% endraw %}
       run_governance: {% raw %}${{ steps.plan.outputs.run_governance }}{% endraw %}
       run_osv: {% raw %}${{ steps.plan.outputs.run_osv }}{% endraw %}
       run_zizmor: {% raw %}${{ steps.plan.outputs.run_zizmor }}{% endraw %}
+      run_deep: {% raw %}${{ steps.plan.outputs.run_deep }}{% endraw %}
     steps:
       - name: Start timing
         id: started
