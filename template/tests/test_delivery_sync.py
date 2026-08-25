@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import runpy
 from pathlib import Path
@@ -24,6 +25,7 @@ append_preservation_record = MODULE["append_preservation_record"]
 merge_group_gate = MODULE["merge_group_gate"]
 prepare_dev_next = MODULE["prepare_dev_next"]
 preservation_operation = MODULE["preservation_operation"]
+read_preservation_record = MODULE["read_preservation_record"]
 read_active_states = MODULE["read_active_states"]
 reconcile = MODULE["reconcile"]
 select_auto_mode = MODULE["select_auto_mode"]
@@ -516,6 +518,19 @@ def test_prepare_rejects_external_disabled_setting(
     assert ledger.checkpoint is None
 
 
+def test_prepare_recovers_after_prepared_checkpoint_before_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A retry completes an exact prepared transaction after interruption."""
+    prepared = preservation_record()
+    ledger = MemoryLedger((LEDGER_SHA, prepared))
+    install_memory_ledger(monkeypatch, ledger)
+    api = PromotionAPI(setting=True)
+    result = json.loads(prepare_dev_next(api, "acme/repo", 42, HEAD_SHA))
+    assert result["ledger_commit"] == LEDGER_SHA
+    assert api.setting is False
+
+
 def test_prepare_rolls_back_if_main_drifts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -644,9 +659,9 @@ def test_ledger_create_collision_fails_closed() -> None:
     """A create-ref conflict never pretends to own the transaction."""
     api = FakeAPI(
         [
-            (201, {"sha": "blob"}),
-            (201, {"sha": "tree"}),
-            (201, {"sha": "commit"}),
+            (201, {"sha": "1" * 40}),
+            (201, {"sha": "2" * 40}),
+            (201, {"sha": "3" * 40}),
             (422, {"message": "Reference already exists"}),
         ]
     )
@@ -654,6 +669,38 @@ def test_ledger_create_collision_fails_closed() -> None:
         append_preservation_record(
             api, "acme/repo", None, preservation_record(state="preparing")
         )
+
+
+def test_ledger_record_must_be_canonical_and_exact() -> None:
+    """Read one structured checkpoint through the immutable Git objects."""
+    record = preservation_record()
+    content = json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n"
+    api = FakeAPI(
+        [
+            (200, {"object": {"sha": LEDGER_SHA}}),
+            (200, {"tree": {"sha": "e" * 40}}),
+            (
+                200,
+                {
+                    "tree": [
+                        {
+                            "path": "transaction.json",
+                            "type": "blob",
+                            "sha": "f" * 40,
+                        }
+                    ]
+                },
+            ),
+            (
+                200,
+                {
+                    "encoding": "base64",
+                    "content": base64.b64encode(content.encode()).decode(),
+                },
+            ),
+        ]
+    )
+    assert read_preservation_record(api, "acme/repo") == (LEDGER_SHA, record)
 
 
 def test_delivery_reconcile_requires_dev_next() -> None:

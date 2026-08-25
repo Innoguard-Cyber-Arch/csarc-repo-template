@@ -363,7 +363,7 @@ def read_preservation_record(
     tree_sha = (
         commit.get("tree", {}).get("sha") if isinstance(commit, dict) else None
     )
-    if not isinstance(tree_sha, str):
+    if not isinstance(tree_sha, str) or FULL_SHA.fullmatch(tree_sha) is None:
         raise RuntimeError("GitHub returned an invalid preservation commit")
     status, payload = api.request("GET", f"repos/{repo}/git/trees/{tree_sha}")
     tree = require_response(status, payload, "read preservation tree")
@@ -375,6 +375,7 @@ def read_preservation_record(
         and item.get("path") == PRESERVATION_LEDGER_PATH
         and item.get("type") == "blob"
         and isinstance(item.get("sha"), str)
+        and FULL_SHA.fullmatch(str(item["sha"])) is not None
     ]
     if not isinstance(entries, list) or len(matches) != 1:
         raise RuntimeError("Preservation ledger has no unique transaction")
@@ -417,7 +418,7 @@ def append_preservation_record(
     )
     blob = require_response(status, payload, "create preservation blob")
     blob_sha = blob.get("sha") if isinstance(blob, dict) else None
-    if not isinstance(blob_sha, str):
+    if not isinstance(blob_sha, str) or FULL_SHA.fullmatch(blob_sha) is None:
         raise RuntimeError("GitHub returned an invalid preservation blob")
     tree_payload: dict[str, object] = {
         "tree": [
@@ -441,7 +442,10 @@ def append_preservation_record(
             if isinstance(previous, dict)
             else None
         )
-        if not isinstance(base_tree, str):
+        if (
+            not isinstance(base_tree, str)
+            or FULL_SHA.fullmatch(base_tree) is None
+        ):
             raise RuntimeError("Previous preservation checkpoint is invalid")
         tree_payload["base_tree"] = base_tree
     status, payload = api.request(
@@ -449,7 +453,7 @@ def append_preservation_record(
     )
     tree = require_response(status, payload, "create preservation tree")
     tree_sha = tree.get("sha") if isinstance(tree, dict) else None
-    if not isinstance(tree_sha, str):
+    if not isinstance(tree_sha, str) or FULL_SHA.fullmatch(tree_sha) is None:
         raise RuntimeError("GitHub returned an invalid preservation tree")
     commit_payload: dict[str, object] = {
         "message": (
@@ -464,7 +468,10 @@ def append_preservation_record(
     )
     commit = require_response(status, payload, "create preservation checkpoint")
     commit_sha = commit.get("sha") if isinstance(commit, dict) else None
-    if not isinstance(commit_sha, str):
+    if (
+        not isinstance(commit_sha, str)
+        or FULL_SHA.fullmatch(commit_sha) is None
+    ):
         raise RuntimeError("GitHub returned an invalid preservation checkpoint")
     encoded = urllib.parse.quote(PRESERVATION_LEDGER_BRANCH, safe="")
     if previous_commit is None:
@@ -727,11 +734,27 @@ def prepare_dev_next(  # noqa: C901
         if mode == "ruleset-protected":
             if deletion_protection_state(api, repo) != "protected":
                 raise RuntimeError("Dev/next deletion protection changed")
-        elif (
-            repository_settings(api, repo).get("delete_branch_on_merge")
-            is not False
-        ):
-            raise RuntimeError("Automatic branch deletion was not disabled")
+        else:
+            live_setting = repository_settings(api, repo).get(
+                "delete_branch_on_merge"
+            )
+            recovered_setting = False
+            if live_setting is True:
+                set_auto_delete(api, repo, False)
+                recovered_setting = True
+            elif live_setting is not False:
+                raise RuntimeError(
+                    "Automatic branch deletion setting is unavailable"
+                )
+            if read_preservation_record(api, repo) != (
+                ledger_commit,
+                record,
+            ):
+                if recovered_setting:
+                    set_auto_delete(api, repo, True)
+                raise RuntimeError(
+                    "Preservation transaction changed concurrently"
+                )
         return canonical_json(preservation_evidence(ledger_commit, record))
 
     if (
