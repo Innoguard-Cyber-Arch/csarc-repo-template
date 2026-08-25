@@ -25,7 +25,7 @@ Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript �
 
 本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。`template/` 是下發內容；根目錄則讓公版本身使用同一套規則。
 
-目前可用：CI/CD-only、Python-only、TypeScript-only、混合四種 profile，以及 Issue／spec、PR checks、驗證、打包、checksum、SBOM 與 capability-adaptive 自動升版。GitHub 設定腳本會先辨識方案與實際 API 能力。
+目前可用：CI/CD-only、Python-only、TypeScript-only、混合四種 profile，以及 Issue／spec、PR checks、驗證、打包、checksum、SBOM、選配容器驗證／GHCR 交付與 capability-adaptive 自動升版。GitHub 設定腳本會先辨識方案與實際 API 能力。
 
 ## 快速開始
 
@@ -35,7 +35,7 @@ Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript �
 
 ```bash
 uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project
-uvx --python 3.14 --from csarc-repo-cli csarc adopt --dry-run
+uvx --python 3.14 --from csarc-repo-cli csarc adopt
 uvx --python 3.14 --from csarc-repo-cli csarc update --check --json
 ```
 
@@ -89,7 +89,7 @@ Promotion 另由穩定的 `promotion` context 封裝候選 source 與 SHA/tree �
 
 ### Actions 額度耗盡的一次性驗證
 
-只有具帳務可見性的 human maintainer 確認當期 included Actions minutes 已耗盡時，才可能使用本機 fallback；runner 註記本身不構成證據。Promotion 到 `main` 另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
+只有具帳務可見性的 human maintainer 確認 GitHub Actions 出現的 zero-step billing block（付款失敗或 spending limit）視為已授權的一次性特例時，才可能使用本機 fallback；runner 註記本身不構成證據，也不要求判斷實際帳務原因。Promotion 到 `main` 另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹，因此已刪除與尚未提交的機密都不會靜默略過；尚未 `git init` 的新專案仍可安全掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 
@@ -105,9 +105,9 @@ Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交
 
 ## 發布與維運
 
-公版的單一版本來源是 root `.release-please-manifest.json`；`version.txt`、`pyproject.toml`、`uv.lock`、README、docs、CHANGELOG、`v*` tag 與發布成品必須一致。`template/.release-please-manifest.json` 與模板內的 package/version 檔則是新生成專案自己的 `0.1.0` 起點，不跟隨公版 release number。Promotion 已完成完整驗證；release workflow 只接受綁定該 main SHA 的 source evidence，再建置、計算 digest、產生 SBOM／attestation 並驗證 immutable Release，不重跑完整模板與 runtime 矩陣。生成專案依 profile 產生 wheel、npm tarball 或兩者，將 distributions、`SHA256SUMS`、CycloneDX SBOM 與包含 tag／commit／workflow run 的 metadata 附加至 GitHub Release；CI/CD-only 只有 GitHub Release 的來源封存檔，不假裝有語言成品。attestation 產生後，只有 PyPI／npm 再發布路徑會在啟用對應選項時強制驗證；一般下載仍由消費者執行 `gh attestation verify`。現在只有持續交付，沒有通用部署流程。
+公版的單一版本來源是 root `.release-please-manifest.json`；`version.txt`、`pyproject.toml`、`uv.lock`、README、docs、CHANGELOG、`v*` tag 與發布成品必須一致。`template/.release-please-manifest.json` 與模板內的 package/version 檔則是新生成專案自己的 `0.1.0` 起點，不跟隨公版 release number。Promotion 已完成完整驗證；release workflow 只接受綁定該 main SHA 的 source evidence，再建置、計算 digest、產生 SBOM／attestation 並驗證 immutable Release，不重跑完整模板與 runtime 矩陣。生成專案依 profile 產生 wheel、npm tarball 或兩者，將 distributions、`SHA256SUMS`、CycloneDX SBOM 與包含 tag／commit／workflow run 的 metadata 附加至 GitHub Release；CI/CD-only 只有 GitHub Release 的來源封存檔，不假裝有語言成品。已有產品 Containerfile 的既有 repo 可另選 `verify` 或 `ghcr`：前者只在 PR build／smoke／scan，後者才從已驗證 release source 將相同映像 bytes 發布至 GHCR、附加 provenance 與 SPDX SBOM，並以 digest 再測一次。attestation 產生後，只有明確啟用的 registry 路徑會在發布時強制驗證；一般下載仍由消費者執行 `gh attestation verify`。這仍是持續交付，不包含通用 runtime 部署。
 
-GitHub Release 是所有 profile 的共同基線；PyPI／npm 依語言分開選配，預設全部關閉，且都使用 GitHub environment 與 OIDC 短效憑證，不讀取長效 registry token。啟用條件、trusted publisher 登記步驟與 Node／npm 版本需求見附錄同一章節。
+GitHub Release 是所有 profile 的共同基線；PyPI／npm 依語言分開選配，GHCR 則只供已有 Containerfile 的既有 repo 選配，預設全部關閉，且不讀取長效 registry token。容器選項是 `none`、`verify`、`ghcr`；非容器專案不會取得 Docker job 或 `packages: write`。啟用條件、trusted publisher 登記步驟與 Node／npm 版本需求見附錄同一章節。
 
 | Runtime 實測政策 | 模式與行為 | 保證、限制與 fallback |
 | --- | --- | --- |
@@ -139,14 +139,14 @@ uvx --python 3.14 --from csarc-repo-cli csarc init ./my-project
 
 ```bash
 git switch -c chore/<issue-number>-adopt-csarc-template
-uvx --python 3.14 --from csarc-repo-cli csarc adopt --dry-run
+uvx --python 3.14 --from csarc-repo-cli csarc adopt
 uvx --python 3.14 --from csarc-repo-cli csarc adopt \
   --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
 ```
 
-`adopt --dry-run` 可檢查 dirty working tree，但只產生 repo 外的 Markdown、PDF 與 machine-readable plan，不修改 repo；dirty plan 只能審查，清理或提交既有工作後必須重跑。plan 鎖定 target HEAD、Release full SHA、answers 與輸出 digest；正式導入只接受 `--apply-plan`，有任何漂移便停止。CLI 會先在暫存 clone 產生完整候選、執行驗證與 patch check，成功後才改目標 repo。README／CHANGELOG 保留為 project-owned，`.gitignore` 使用 ordered union，`AGENTS.md` 只更新 CSARC managed block，產品既有 `release.yml` 則與 `csarc-release.yml` 分離。
+`adopt` 預設就是 dry-run；明確寫出 `--dry-run` 仍相容。它可檢查 dirty working tree，但只產生 repo 外的 Markdown、PDF 與 machine-readable plan，不修改 repo；dirty plan 只能審查，清理或提交既有工作後必須重跑。plan 鎖定 target HEAD、Release full SHA、answers 與輸出 digest；正式導入只接受 `--apply-plan`，有任何漂移便停止。CLI 會先在暫存 clone 產生完整候選、執行驗證與 patch check，成功後才改目標 repo。README／CHANGELOG 保留為 project-owned，`.gitignore` 使用 ordered union，`AGENTS.md` 只更新 CSARC managed block，產品既有 `release.yml` 則與 `csarc-release.yml` 分離。
 
-若第一階段列出 manual merge，先完成清單中的人工結果，再執行 `adopt --finalize --dry-run`；它會重建並驗證完整候選，將人工結果與完整 working-tree state 綁進同一個 repo 外 plan。確認後只能用 `adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json` 套用；直接執行 `--finalize` 或任何 plan 後漂移都會停止。
+若第一階段列出 manual merge，先完成清單中的人工結果，再執行 `adopt --finalize`；它同樣預設為 dry-run，會重建並驗證完整候選，將人工結果與完整 working-tree state 綁進同一個 repo 外 plan。確認後只能用 `adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json` 套用；任何 plan 後漂移都會停止。
 
 ### 更新已導入的 repo
 

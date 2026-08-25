@@ -84,7 +84,7 @@
           <h3>公版會替 repo 準備</h3>
           <p class="scope-row"><strong>規劃與 AI 契約</strong><span>可選 Story Milestone → 1..N Issues → 各自 PR；spec 可同步 Issue 或 Story</span></p>
           <p class="scope-row"><strong>驗證與合併</strong><span><code>./scripts/verify</code>＋分層 CI＋PR；並行 Milestone 各自整合，promotion 才進 main</span></p>
-          <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件</span></p>
+          <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件；已有 Containerfile 可選配容器驗證／GHCR</span></p>
           <p class="scope-row"><strong>可持續同步</strong><span>公版更新成為可審查差異，不會直接覆蓋產品程式</span></p>
         </section>
         <section class="start-paths" aria-label="三種導入方式">
@@ -255,7 +255,7 @@
           <p class="recommendation-copy"><strong>Fast：</strong>每張一般 PR 跑 secret scan、格式、lint、型別、單元測試與必要 template smoke；docs-only 不啟動語言或生成矩陣。<br><strong>Full：</strong><code>dev/* → main</code> promotion、hotfix、merge queue 與手動 dispatch 才執行全部 runtime、profiles、Copier update、release 與安全回歸。<br><strong>條件式供應鏈：</strong>workflow 變更加跑 Zizmor，相依變更加跑 OSV，治理宣告變更加跑 remote governance；三者另有週期排程。未知路徑 fail closed 到 full。<br><strong>穩定門禁：</strong><code>verify</code> aggregate 每次都回報，不適用的重型 job 明確視為 skipped，避免 required check 永久 Pending；summary／artifact 記錄 tier、原因、scope 與 duration。完整契約見 <code>docs/ci-policy.md</code>。</p>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>分層規則：</strong><code>scripts/ci_tier.py</code>＋<code>scripts/verify-fast</code>＋<code>docs/ci-policy.md</code></li><li><strong>完整入口：</strong><code>scripts/verify</code>；公版為 <code>scripts/verify-template.sh</code></li><li><strong>常駐門禁：</strong><code>title</code>＋<code>delivery-sync</code>＋<code>verify</code>＋<code>promotion</code>；OSV、Zizmor 與 remote governance 由 job-level 條件或週期排程執行</li><li><strong>額度耗盡：</strong>只有帳務可見的 human 確認免費分鐘歸零，且 job 未執行任何 step，才可對精確 PR SHA 產生一次性本機驗證聲明；promotion 另綁定 candidate/main tree，且不可發布</li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>分層規則：</strong><code>scripts/ci_tier.py</code>＋<code>scripts/verify-fast</code>＋<code>docs/ci-policy.md</code></li><li><strong>完整入口：</strong><code>scripts/verify</code>；公版為 <code>scripts/verify-template.sh</code></li><li><strong>常駐門禁：</strong><code>title</code>＋<code>delivery-sync</code>＋<code>verify</code>＋<code>promotion</code>；OSV、Zizmor 與 remote governance 由 job-level 條件或週期排程執行</li><li><strong>額度耗盡：</strong>只有帳務可見的 human 確認 zero-step billing block 視為已授權的一次性特例，且 job 未執行任何 step，才可對精確 PR SHA 產生一次性本機驗證聲明；promotion 另綁定 candidate/main tree，且不可發布</li></ul></aside>
     </section>
 
     <section class="slide decision-slide" data-track="method" aria-label="步驟一規劃工作與 GitHub Issues">

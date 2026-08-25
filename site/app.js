@@ -425,7 +425,7 @@ jobs:
         {
           title: '一般套件新版觀察三天，再由測試與人員決定是否合併',
           goal: '安全更新不等待；三天規則主要降低剛發布惡意版本的早期風險。',
-          summary: 'Dependabot 同時管理 `uv` 與 `npm` 生態；`cooldown.default-days=3` 延後一般升版，安全更新仍立即提出。',
+          summary: 'Dependabot 同時管理 GitHub Actions、`uv` 與 `npm` 生態；`cooldown.default-days=3` 延後一般升版，安全更新仍立即提出。只有官方 `actions/*` 的 minor／patch 會合併成一張 PR；major 與第三方 Actions 保持獨立，方便審查與回退。',
           file: '.github/dependabot.yml',
           code: `updates:
   - package-ecosystem: uv
@@ -508,6 +508,17 @@ matrix:
     path: \${{ runner.temp }}/sbom-root
     format: cyclonedx-json
     output-file: sbom.cdx.json`
+        },
+        {
+          title: '有 Containerfile 才啟用容器驗證與 GHCR 交付',
+          goal: '讓已有容器的產品取得一致門禁，同時讓非容器 repo 維持零 Docker job 與零 registry write 權限。',
+          summary: '`none` 不產生工作；`verify` 在 PR 使用 Buildx cache、smoke test 與 Trivy HIGH／CRITICAL scan，但不 push；`ghcr` 才從已驗證 release source 建置一次並保存相同 image bytes，推送版本與 commit SHA tag、附加 provenance／SPDX SBOM，再以 digest pull 與 smoke。ai-guardrail 的 `evaluation/Dockerfile` 是第一個具體使用情境；runtime 部署仍由產品另訂。',
+          file: 'copier.yml＋ci.yml＋csarc-release.yml＋profiles/catalog.yaml',
+          code: `container_mode: none | verify | ghcr
+containerfile_path: evaluation/Dockerfile
+container_smoke_command: docker run --rm "$IMAGE" --help
+
+# Only the release publishing job receives packages: write.`
         },
         {
           title: '決定｜保留 Dependabot 與 pnpm 的原生門禁',

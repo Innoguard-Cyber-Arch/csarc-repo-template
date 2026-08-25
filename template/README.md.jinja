@@ -1,5 +1,6 @@
 {% set has_python = language in ["python", "python-typescript"] -%}
 {% set has_typescript = language in ["typescript", "python-typescript"] -%}
+{% set has_container = (container_mode | default("none")) != "none" -%}
 # {{ project_name }}
 
 <!-- 請在這裡補上 CI 徽章，例如：
@@ -75,6 +76,7 @@ flowchart LR
 | 共用 | `.github/`、`policies/`、`docs/adr/`、`docs/specs/`、`scripts/verify` |
 {% if has_python %}| Python | `src/`、`tests/`、uv、Ruff、mypy、pytest；CI 驗證 {% if python_support_mode == "latest" %}3.14.0 與最新 3.14.x{% else %}{{ python_min_version }}.0，以及 {{ python_min_version }}～3.14 每個 feature release 的最新 patch{% endif %} |
 {% endif %}{% if has_typescript %}| TypeScript | `typescript/`、pnpm 11、Biome、strict TypeScript、Vitest；Node 24+ |
+{% endif %}{% if has_container %}| 容器 | `{{ containerfile_path }}`、Buildx cache、smoke test 與 Trivy；build context 固定為 repo root |
 {% endif %}| 內部網站 | `site/` 公版來源；`docs/site-content.js` 與 `docs/site-theme.css` 專案內容；`docs/index.html` portable bundle |
 
 語言宣告記在 `.csarc/profile.json`；`scripts/detect-language-profile --suggest` 會檢查實際檔案是否一致。
@@ -103,7 +105,7 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 
 ### Actions 額度耗盡的一次性驗證
 
-只有具帳務可見性的 human maintainer 確認當期 included Actions minutes 已耗盡時，才可能使用本機 fallback；runner 註記本身不構成證據。{% if branch_strategy in ["dev", "delivery"] %}Promotion 到 `main` 另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release。{% endif %}完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
+只有具帳務可見性的 human maintainer 確認 GitHub Actions 出現的 zero-step billing block（付款失敗或 spending limit）視為已授權的一次性特例時，才可能使用本機 fallback；runner 註記本身不構成證據，也不要求判斷實際帳務原因。{% if branch_strategy in ["dev", "delivery"] %}Promotion 到 `main` 另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release。{% endif %}完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹；尚未 `git init` 的新專案仍可掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 
@@ -115,6 +117,9 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 {% else %}目前驗證包含{% if has_python %} Ruff、mypy、pytest、{{ coverage_threshold }}% coverage、wheel 與相依下界{% endif %}{% if language == "python-typescript" %}，以及{% endif %}{% if has_typescript %} Biome、TypeScript、Vitest {{ coverage_threshold }}% coverage 與 npm tarball{% endif %}，最後再檢查 spec、機密字串與 lockfile。
 
 Coverage 是找出未測程式碼的訊號，不等於測試品質，也不取代風險分析與人工 review。新案以 global coverage 建立基線；既有案先用 diff coverage 約束本次變更。只有缺陷紀錄、關鍵模組或風險改變時才調整 {{ coverage_threshold }}% 門檻，不要只為提高百分比加入沒有驗證行為的測試。
+{% endif %}
+
+{% if has_container %}容器模式是 `{{ container_mode }}`：非 docs PR 會用 `{{ containerfile_path }}` 建置 image，執行設定的 `$IMAGE` smoke command，再以 Trivy 阻擋 HIGH／CRITICAL 漏洞。這個 job 不 push image，也沒有 registry write permission；本機 `./scripts/verify` 只驗證設定與 Containerfile 存在，實際 image build 由 GitHub-hosted runner 執行。
 {% endif %}
 
 ## 設定與密鑰
@@ -138,7 +143,7 @@ release workflow 使用 Actions 內建 `GITHUB_TOKEN`，不需要設定 GitHub A
 
 ## 發布與維運
 
-PR 只顯示升版意圖：`fix(scope)` 是 patch、`feat(scope)` 是 minor、`!` 是 major，其餘是 no-release；不在 PR 階段預約確切版本。進入整合分支後才以實際 commit／tag 順序配置版本，過期或亂序 run 會停止。{% if branch_strategy in ["dev", "delivery"] %}因 repo 採 squash merge，promotion PR 的英文標題必須代表納入 PR 中最高的 SemVer 等級；Milestone 完成時 promotion 一次，`dev/next` 預設每週固定一個 release window 批次 promotion，無 release-worthy 變更就略過，hotfix 才立即發版。{% endif %}release-please 或 direct mode 建立 release 後，只能帶著已核對的 release-source run ID 明確 dispatch 成品 workflow；direct mode 只接受已由人工 PR 寫入版本與 CHANGELOG 的最新整合分支，否則停在 verification-only。任意 `v*` tag push 不會啟動發布；artifact workflow 會核對 promotion evidence 後建置、產生 digest／SBOM／attestation 與驗證 immutable Release，但不重跑完整 runtime CI。{% if language == "ci" %}版本記在 `version.txt`，tag 發布 GitHub Release 的來源封存檔；沒有語言成品、registry 消費路徑或空驗證 job。{% else %}核准的 `v*` tag 會產生{% if has_python %} wheel／sdist{% endif %}{% if language == "python-typescript" %}與{% endif %}{% if has_typescript %} npm tarball{% endif %}、SHA-256、SBOM 與來源 metadata，並附加到對應 GitHub Release。下載後執行 `gh release download <tag>`，再於下載目錄執行 `shasum -a 256 -c SHA256SUMS`；{% if enable_release_attestations | default(false) %}另以 `gh attestation verify <artifact> --repo <owner/repo> --signer-workflow <owner/repo>/.github/workflows/release.yml --source-ref refs/tags/<tag>` 驗證 provenance。{% endif %}{% endif %}目前沒有通用部署流程；批次與追溯規則見 [`docs/ci-policy.md`](docs/ci-policy.md)。
+PR 只顯示升版意圖：`fix(scope)` 是 patch、`feat(scope)` 是 minor、`!` 是 major，其餘是 no-release；不在 PR 階段預約確切版本。進入整合分支後才以實際 commit／tag 順序配置版本，過期或亂序 run 會停止。{% if branch_strategy in ["dev", "delivery"] %}因 repo 採 squash merge，promotion PR 的英文標題必須代表納入 PR 中最高的 SemVer 等級；Milestone 完成時 promotion 一次，`dev/next` 預設每週固定一個 release window 批次 promotion，無 release-worthy 變更就略過，hotfix 才立即發版。{% endif %}release-please 或 direct mode 建立 release 後，只能帶著已核對的 release-source run ID 明確 dispatch 成品 workflow；direct mode 只接受已由人工 PR 寫入版本與 CHANGELOG 的最新整合分支，否則停在 verification-only。任意 `v*` tag push 不會啟動發布；artifact workflow 會核對 promotion evidence 後建置、產生 digest／SBOM／attestation 與驗證 immutable Release，但不重跑完整 runtime CI。{% if language == "ci" %}版本記在 `version.txt`，tag 發布 GitHub Release 的來源封存檔；沒有語言套件成品或空驗證 job。{% else %}核准的 `v*` tag 會產生{% if has_python %} wheel／sdist{% endif %}{% if language == "python-typescript" %}與{% endif %}{% if has_typescript %} npm tarball{% endif %}、SHA-256、SBOM 與來源 metadata，並附加到對應 GitHub Release。下載後執行 `gh release download <tag>`，再於下載目錄執行 `shasum -a 256 -c SHA256SUMS`；{% if enable_release_attestations | default(false) %}另以 `gh attestation verify <artifact> --repo <owner/repo> --signer-workflow <owner/repo>/.github/workflows/release.yml --source-ref refs/tags/<tag>` 驗證 provenance。{% endif %}{% endif %}{% if (container_mode | default("none")) == "verify" %}容器只保留 CI 驗證，不會發布 registry。{% elif (container_mode | default("none")) == "ghcr" %}容器 release job 只接受同一條已驗證來源，保存已 smoke／scan 的 image bytes，發布版本與 commit SHA tag 至 GHCR，附加 provenance／SPDX SBOM 後以 digest 重跑 smoke test；只有發布 job 取得 `packages: write`。{% endif %}目前沒有通用 runtime 部署流程；批次與追溯規則見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
 | Runtime 實測政策 | 模式與行為 | 保證、限制與 fallback |
 | --- | --- | --- |

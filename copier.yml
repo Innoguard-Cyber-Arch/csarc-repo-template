@@ -89,6 +89,30 @@ language:
     Python and TypeScript: python-typescript
   default: python
 
+container_mode:
+  type: str
+  help: Verify an existing container image in CI, and optionally publish it to GHCR from verified releases
+  choices:
+    Disabled: none
+    Build, smoke-test, and scan only: verify
+    Build, verify, and publish to GHCR: ghcr
+  default: none
+  when: "{{ project_mode == 'existing' }}"
+
+containerfile_path:
+  type: str
+  help: Repository-relative Dockerfile or Containerfile used with the repository root as build context
+  default: Dockerfile
+  when: "{{ (container_mode | default('none')) != 'none' }}"
+  validator: "{% if containerfile_path.startswith('/') or '..' in containerfile_path.split('/') or not (containerfile_path | regex_search('^[A-Za-z0-9._/-]+$')) %}Use a safe repository-relative path without spaces or parent traversal.{% endif %}"
+
+container_smoke_command:
+  type: str
+  help: One-line shell command that smoke-tests the built image through the IMAGE environment variable
+  default: ""
+  when: "{{ (container_mode | default('none')) != 'none' }}"
+  validator: "{% if not container_smoke_command.strip() or '$IMAGE' not in container_smoke_command or '\n' in container_smoke_command %}Use one non-empty line that references $IMAGE, for example docker run --rm \"$IMAGE\" --help.{% endif %}"
+
 branch_strategy:
   type: str
   help: Choose how issue branches are integrated before promotion to main
