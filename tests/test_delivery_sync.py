@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "delivery_sync.py")
@@ -940,10 +940,14 @@ def test_abort_only_restores_the_owned_transaction(
     api = PromotionAPI(setting=False)
     closed = promotion()
     closed["state"] = "closed"
-    api.request = lambda method, path, payload=None: (
-        (200, closed)
-        if method == "GET" and path.endswith("/pulls/42")
-        else PromotionAPI.request(api, method, path, payload)
+    monkeypatch.setattr(
+        api,
+        "request",
+        lambda method, path, payload=None: (
+            (200, closed)
+            if method == "GET" and path.endswith("/pulls/42")
+            else PromotionAPI.request(api, method, path, payload)
+        ),
     )
     result = json.loads(
         abort_dev_next(
@@ -968,10 +972,14 @@ def test_abort_rejects_ambiguous_preparing_false_setting(
     api = PromotionAPI(setting=False)
     closed = promotion()
     closed["state"] = "closed"
-    api.request = lambda method, path, payload=None: (
-        (200, closed)
-        if method == "GET" and path.endswith("/pulls/42")
-        else PromotionAPI.request(api, method, path, payload)
+    monkeypatch.setattr(
+        api,
+        "request",
+        lambda method, path, payload=None: (
+            (200, closed)
+            if method == "GET" and path.endswith("/pulls/42")
+            else PromotionAPI.request(api, method, path, payload)
+        ),
     )
     with pytest.raises(RuntimeError, match="ambiguous setting ownership"):
         abort_dev_next(

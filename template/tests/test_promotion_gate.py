@@ -94,7 +94,9 @@ def test_hosted_restoration_is_explicit_and_never_replaces_gh_token(
         "c" * 64,
         "d" * 40,
     )
-    assert "--hosted" in captured["command"]
+    command = captured["command"]
+    assert isinstance(command, list)
+    assert "--hosted" in command
     environment = captured["env"]
     assert isinstance(environment, dict)
     assert environment["GH_TOKEN"] == github_value
