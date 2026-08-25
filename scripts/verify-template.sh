@@ -1603,6 +1603,8 @@ grep -q '"context": "delivery-sync"' \
   "$fixture_root/default-project/policies/rulesets.json"
 grep -q '"context": "promotion"' \
   "$fixture_root/default-project/policies/rulesets.json"
+test -f \
+  "$fixture_root/default-project/.github/workflows/release-follow-up-policy.yml"
 grep -q '"refs/heads/dev/\*"' \
   "$fixture_root/default-project/policies/rulesets.json"
 test -x "$fixture_root/default-project/scripts/apply-repository-settings.sh"

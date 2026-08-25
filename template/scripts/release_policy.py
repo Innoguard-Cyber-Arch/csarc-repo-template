@@ -154,14 +154,18 @@ def release_follow_up_errors(  # noqa: C901
     actor: str,
     changed_files: list[str],
     commits: list[dict[str, Any]],
+    actor_permission: str = "",
 ) -> list[str]:
     """Reject release follow-ups outside the automation-owned boundary."""
     errors: list[str] = []
     if head_repo != repo:
         errors.append("release follow-up must come from this repository")
-    if actor != RELEASE_PLEASE_ACTOR:
+    automation_actor = actor == RELEASE_PLEASE_ACTOR
+    maintainer_actor = bool(actor) and actor_permission in {"admin", "maintain"}
+    if not automation_actor and not maintainer_actor:
         errors.append(
-            "release follow-up must be authored by github-actions[bot]"
+            "release follow-up must be authored by github-actions[bot] "
+            "or a live repository maintainer"
         )
     if not re.fullmatch(r"[0-9a-f]{40}", head_sha):
         errors.append("release follow-up head is not a full commit SHA")
@@ -176,18 +180,24 @@ def release_follow_up_errors(  # noqa: C901
             if isinstance(commit_data, dict)
             else None
         )
+        expected_author = RELEASE_PLEASE_ACTOR if automation_actor else actor
+        allowed_committers = (
+            {RELEASE_PLEASE_COMMITTER}
+            if automation_actor
+            else {actor, RELEASE_PLEASE_COMMITTER}
+        )
         if (
             not isinstance(author, dict)
-            or author.get("login") != RELEASE_PLEASE_ACTOR
+            or author.get("login") != expected_author
             or not isinstance(committer, dict)
-            or committer.get("login") != RELEASE_PLEASE_COMMITTER
+            or committer.get("login") not in allowed_committers
             or not isinstance(verification, dict)
             or verification.get("verified") is not True
             or verification.get("reason") != "valid"
         ):
             errors.append(
                 "release follow-up commits must be verified GitHub commits "
-                "authored by github-actions[bot]"
+                "owned by the trusted release actor"
             )
             break
 
@@ -1166,6 +1176,7 @@ def parser() -> argparse.ArgumentParser:
     verify_follow_up.add_argument("--head-repo", required=True)
     verify_follow_up.add_argument("--head-sha", required=True)
     verify_follow_up.add_argument("--actor", required=True)
+    verify_follow_up.add_argument("--actor-permission", default="")
     verify_follow_up.add_argument("--changed-files", type=Path, required=True)
     verify_follow_up.add_argument("--commits", type=Path, required=True)
     verify_follow_up.add_argument("--root", type=Path, default=Path.cwd())
@@ -1193,6 +1204,7 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
             args.actor,
             args.changed_files.read_text(encoding="utf-8").splitlines(),
             commits,
+            args.actor_permission,
         )
         if errors:
             raise SystemExit("; ".join(errors))

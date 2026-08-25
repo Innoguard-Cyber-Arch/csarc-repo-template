@@ -80,6 +80,40 @@ def test_release_follow_up_accepts_only_automation_owned_changes(
     }
     assert release_follow_up_errors(**valid) == []
 
+    maintainer = dict(valid)
+    maintainer.update(
+        actor="maintainer",
+        actor_permission="maintain",
+        commits=[
+            {
+                "sha": valid_sha,
+                "author": {"login": "maintainer"},
+                "committer": {"login": "web-flow"},
+                "commit": {
+                    "verification": {"verified": True, "reason": "valid"}
+                },
+            }
+        ],
+    )
+    assert release_follow_up_errors(**maintainer) == []
+    maintainer["actor_permission"] = "write"
+    assert release_follow_up_errors(**maintainer)
+    wrong_author = dict(maintainer)
+    wrong_author.update(
+        actor_permission="admin",
+        commits=[
+            {
+                "sha": valid_sha,
+                "author": {"login": "attacker"},
+                "committer": {"login": "web-flow"},
+                "commit": {
+                    "verification": {"verified": True, "reason": "valid"}
+                },
+            }
+        ],
+    )
+    assert release_follow_up_errors(**wrong_author)
+
     assert release_follow_up_errors(
         tmp_path,
         "owner/repo",

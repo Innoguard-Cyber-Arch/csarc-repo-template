@@ -35,6 +35,7 @@ jobs:
         env:
           CANONICAL_REPOSITORY: Innoguard-Cyber-Arch/csarc-repo-template
           GH_TOKEN: ${{ github.token }}
+          PUSH_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
           pull_requests="$(
@@ -60,11 +61,18 @@ jobs:
           pr_title="$(jq -r .title <<<"$pull_request")"
           labels="$(jq -r '[.labels[].name] | join(",")' <<<"$pull_request")"
           if [[ "$head_ref" == release-please--* ]]; then
-            base_sha="$(jq -r '.base.sha // empty' <<<"$pull_request")"
             head_sha="$(jq -r '.head.sha // empty' <<<"$pull_request")"
-            [[ "$base_sha" =~ ^[0-9a-f]{40}$ && "$base_sha" != "$GITHUB_SHA" ]] \
-              && git merge-base --is-ancestor "$base_sha" "$GITHUB_SHA" || {
-              echo "Release follow-up base SHA is missing or is not an ancestor of main." >&2
+            expected_base="$PUSH_BEFORE"
+            if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+              expected_base="$(git rev-parse "$GITHUB_SHA^")"
+            fi
+            read -r merge_sha base_sha extra_parent \
+              < <(git rev-list --parents -n 1 "$GITHUB_SHA")
+            [[ "$merge_sha" == "$GITHUB_SHA" \
+              && "$base_sha" =~ ^[0-9a-f]{40}$ \
+              && -z "${extra_parent:-}" \
+              && "$base_sha" == "$expected_base" ]] || {
+              echo "Release follow-up must have the push before SHA as its only parent." >&2
               exit 1
             }
             expected_file_count="$(
@@ -91,12 +99,22 @@ jobs:
               > "$commits_json"
             trusted_root="$(mktemp -d "$RUNNER_TEMP/release-follow-up-policy.XXXXXX")"
             git archive "$base_sha" | tar -x -C "$trusted_root"
+            actor="$(jq -r '.user.login // empty' <<<"$pull_request")"
+            actor_permission=""
+            if [[ "$actor" != "github-actions[bot]" ]]; then
+              encoded_actor="$(jq -rn --arg value "$actor" '$value | @uri')"
+              actor_permission="$(
+                gh api "repos/$GITHUB_REPOSITORY/collaborators/$encoded_actor/permission" \
+                  --jq '.permission // empty'
+              )"
+            fi
             python3 "$trusted_root/scripts/release_policy.py" verify-release-follow-up \
               --repo "$GITHUB_REPOSITORY" \
               --head "$head_ref" \
               --head-repo "$(jq -r '.head.repo.full_name // empty' <<<"$pull_request")" \
               --head-sha "$head_sha" \
-              --actor "$(jq -r '.user.login // empty' <<<"$pull_request")" \
+              --actor "$actor" \
+              --actor-permission "$actor_permission" \
               --changed-files "$RUNNER_TEMP/release-follow-up-files" \
               --commits "$commits_json" \
               --root "$trusted_root"
@@ -137,15 +155,30 @@ jobs:
           collect_boundary() {
             local main_sha="$1"
             local index="$2"
-            local boundary_pr pr_number head_sha boundary_head boundary_labels run_id candidate_sha proof
-            boundary_pr="$(
-              gh api "repos/$GITHUB_REPOSITORY/commits/$main_sha/pulls" \
-                --jq '[.[] | select(.merged_at != null and .base.ref == "main")] | last // empty'
+            local boundary_pr boundary_pr_count boundary_pull_requests
+            local pr_number head_sha boundary_head boundary_labels run_id candidate_sha proof
+            boundary_pull_requests="$(
+              gh api --paginate --slurp \
+                "repos/$GITHUB_REPOSITORY/commits/$main_sha/pulls?per_page=100"
             )"
-            [[ -n "$boundary_pr" ]] || {
+            boundary_pr_count="$(
+              jq --arg sha "$main_sha" \
+                '[.[][] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)] | length' \
+                <<<"$boundary_pull_requests"
+            )"
+            [[ "$boundary_pr_count" != "0" ]] || {
               echo "No reviewed pull request found for $main_sha."
               return 2
             }
+            [[ "$boundary_pr_count" == "1" ]] || {
+              echo "Commit $main_sha must have exactly one merged pull request with the same merge SHA; found $boundary_pr_count." >&2
+              return 1
+            }
+            boundary_pr="$(
+              jq -c --arg sha "$main_sha" \
+                '[.[][] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)][0]' \
+                <<<"$boundary_pull_requests"
+            )"
             boundary_head="$(jq -r .head.ref <<<"$boundary_pr")"
             boundary_labels="$(jq -r '[.labels[].name] | join(",")' <<<"$boundary_pr")"
             if [[ "$boundary_head" != "dev" && "$boundary_head" != dev/* && ",$boundary_labels," != *,hotfix,* ]]; then

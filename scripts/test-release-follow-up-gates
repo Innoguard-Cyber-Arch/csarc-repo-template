@@ -68,12 +68,11 @@ for workflow in \
   grep -Fq 'pulls/$pr_number/commits?per_page=100' "$workflow"
   grep -Fq 'git archive "$base_sha"' "$workflow"
   grep -Fq '"$trusted_root/scripts/release_policy.py" verify-release-follow-up' "$workflow"
-  if sed -n '1,100p' "$workflow" | \
-    grep -Fq '"$GITHUB_SHA^" "$GITHUB_SHA"'; then
+  if grep -Fq '"$GITHUB_SHA^" "$GITHUB_SHA"' "$workflow"; then
     echo "Post-merge release verification still checks only the final commit." >&2
     exit 1
   fi
-  if sed -n '1,100p' "$workflow" | grep -Fq 'last // empty'; then
+  if grep -Fq 'last // empty' "$workflow"; then
     echo "Post-merge source selection still accepts an arbitrary associated PR." >&2
     exit 1
   fi
@@ -81,6 +80,33 @@ done
 
 grep -Fq 'git archive "$PR_BASE_SHA"' \
   "$repo_root/.github/workflows/promotion.yml"
+grep -Fq 'commits/$main_sha/pulls?per_page=100' \
+  "$repo_root/.github/workflows/release-please.yml"
+grep -Fq -- '--paginate --slurp' \
+  "$repo_root/.github/workflows/release-please.yml"
+grep -Fq '"$base_sha" == "$PUSH_BEFORE"' \
+  "$repo_root/.github/workflows/promotion-post-merge.yml"
+grep -Fq '"$base_sha" == "$expected_base"' \
+  "$repo_root/.github/workflows/release-please.yml"
+trusted_workflow="$repo_root/.github/workflows/release-follow-up-policy.yml"
+grep -Fq 'pull_request_target:' "$trusted_workflow"
+grep -Fq 'ref: ${{ github.event.repository.default_branch }}' "$trusted_workflow"
+grep -Fq 'rules/branches/$encoded_base' "$trusted_workflow"
+grep -Fq '.type == "workflows"' "$trusted_workflow"
+grep -Fq '.path == ".github/workflows/release-follow-up-policy.yml"' \
+  "$trusted_workflow"
+grep -Fq '.repository_id == $repository_id' "$trusted_workflow"
+[[ "$(grep -Fc 'git/ref/heads/$encoded_base' "$trusted_workflow")" == 2 ]]
+if grep -Eq 'ref:.*pull_request.*head|checkout.*pull_request.*head' \
+  "$trusted_workflow"; then
+  echo "Trusted release policy must not check out the pull-request head." >&2
+  exit 1
+fi
+if rg -l '^    name: release-follow-up$' "$repo_root/.github/workflows" | \
+  grep -Fvx "$trusted_workflow" >/dev/null; then
+  echo "An untrusted workflow can spoof the release-follow-up context." >&2
+  exit 1
+fi
 
 mkdir -p "$fixture/bin"
 cat > "$fixture/bin/gh" <<'SH'
@@ -90,11 +116,18 @@ set -euo pipefail
 case "$*" in
   *"/commits/"*"/pulls?per_page=100"*)
     [[ "$*" == *"--paginate"* && "$*" == *"--slurp"* ]]
-    if [[ -n "${MOCK_PULL_REQUEST_PAGES:-}" ]]; then
+    commit_sha="${*#*\/commits\/}"
+    commit_sha="${commit_sha%%/pulls*}"
+    if [[ "$commit_sha" != "${GITHUB_SHA:-}" && -n "${MOCK_BOUNDARY_PULL_REQUEST_PAGES:-}" ]]; then
+      printf '%s\n' "$MOCK_BOUNDARY_PULL_REQUEST_PAGES"
+    elif [[ -n "${MOCK_PULL_REQUEST_PAGES:-}" ]]; then
       printf '%s\n' "$MOCK_PULL_REQUEST_PAGES"
     else
       jq -cn --argjson page "$MOCK_PULL_REQUESTS" '[$page]'
     fi
+    ;;
+  *"/collaborators/"*"/permission"*)
+    printf '%s\n' "${MOCK_ACTOR_PERMISSION:-write}"
     ;;
   *"/pulls/"*"/commits?per_page=100"*)
     [[ "$*" == *"--paginate"* && "$*" == *"--slurp"* ]]
@@ -170,10 +203,12 @@ pull_request_json() {
   local base="$1"
   local head="$2"
   local number="${3:-42}"
+  local actor="${4:-github-actions[bot]}"
   jq -cn \
     --arg base "$base" \
     --arg head "$head" \
     --argjson number "$number" \
+    --arg actor "$actor" \
     '[{
       number: $number,
       title: "chore(main): release 0.2.0",
@@ -186,7 +221,7 @@ pull_request_json() {
         sha: $head,
         repo: {full_name: "owner/repo"}
       },
-      user: {login: "github-actions[bot]"}
+      user: {login: $actor}
     }]'
 }
 
@@ -197,6 +232,9 @@ run_gate() {
   local expected_file_count="${4:-}"
   local pull_request_pages="${5:-}"
   local committer="${6:-web-flow}"
+  local author="${7:-github-actions[bot]}"
+  local actor_permission="${8:-write}"
+  local push_before="${9:-$(git -C "$repo" rev-parse HEAD^)}"
   local runner_temp="$repo/runner-temp"
   mkdir -p "$runner_temp"
   (
@@ -208,8 +246,11 @@ run_gate() {
       MOCK_FILE_COUNT_OVERRIDE="$expected_file_count" \
       MOCK_HEAD_SHA="$(git rev-parse HEAD)" \
       MOCK_COMMITTER="$committer" \
+      MOCK_COMMIT_AUTHOR="$author" \
+      MOCK_ACTOR_PERMISSION="$actor_permission" \
       GITHUB_REPOSITORY="owner/repo" \
       GITHUB_SHA="$(git rev-parse HEAD)" \
+      PUSH_BEFORE="$push_before" \
       GITHUB_OUTPUT="$runner_temp/github-output" \
       GH_TOKEN="test-token" \
       RUNNER_TEMP="$runner_temp" \
@@ -246,6 +287,10 @@ run_release_gate() {
   local pull_requests="$2"
   local pull_request_pages="${3:-}"
   local committer="${4:-web-flow}"
+  local boundary_pull_request_pages="${5:-}"
+  local author="${6:-github-actions[bot]}"
+  local actor_permission="${7:-write}"
+  local push_before="${8:-$(git -C "$repo" rev-parse HEAD^)}"
   local runner_temp="$repo/release-runner-temp"
   mkdir -p "$runner_temp"
   (
@@ -253,12 +298,17 @@ run_release_gate() {
     PATH="$fixture/bin:$PATH" \
       MOCK_PULL_REQUESTS="$pull_requests" \
       MOCK_PULL_REQUEST_PAGES="$pull_request_pages" \
+      MOCK_BOUNDARY_PULL_REQUEST_PAGES="$boundary_pull_request_pages" \
       MOCK_CHANGED_FILES="CHANGELOG.md" \
       MOCK_HEAD_SHA="$(git rev-parse HEAD)" \
       MOCK_COMMITTER="$committer" \
+      MOCK_COMMIT_AUTHOR="$author" \
+      MOCK_ACTOR_PERMISSION="$actor_permission" \
       CANONICAL_REPOSITORY="canonical/repo" \
+      GITHUB_EVENT_NAME="push" \
       GITHUB_REPOSITORY="owner/repo" \
       GITHUB_SHA="$(git rev-parse HEAD)" \
+      PUSH_BEFORE="$push_before" \
       GITHUB_OUTPUT="$runner_temp/github-output" \
       GH_TOKEN="test-token" \
       RUNNER_TEMP="$runner_temp" \
@@ -276,6 +326,29 @@ run_gate "$test_repo" \
 run_premerge_gate "$test_repo" "$base_sha" >/dev/null
 run_release_gate "$test_repo" \
   "$(pull_request_json "$base_sha" "$head_sha")" >/dev/null
+
+human_pull="$(pull_request_json "$base_sha" "$head_sha" 42 maintainer)"
+run_gate "$test_repo" "$human_pull" "CHANGELOG.md" "" "" web-flow \
+  maintainer maintain >/dev/null
+run_release_gate "$test_repo" "$human_pull" "" web-flow "" \
+  maintainer maintain >/dev/null
+if run_gate "$test_repo" "$human_pull" "CHANGELOG.md" "" "" web-flow \
+  maintainer write >/dev/null 2>&1; then
+  echo "Post-merge gate accepted a human release owner without maintain permission." >&2
+  exit 1
+fi
+if run_gate "$test_repo" "$(pull_request_json "$base_sha" "$head_sha")" \
+  "CHANGELOG.md" "" "" web-flow \
+  github-actions\[bot\] write "$(printf 'b%.0s' {1..40})" >/dev/null 2>&1; then
+  echo "Post-merge gate accepted a push before SHA that was not the merge parent." >&2
+  exit 1
+fi
+if run_release_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" "" web-flow "" \
+  github-actions\[bot\] write "$(printf 'b%.0s' {1..40})" >/dev/null 2>&1; then
+  echo "Release source gate accepted a push before SHA that was not the merge parent." >&2
+  exit 1
+fi
 
 if run_gate "$test_repo" \
   "$(pull_request_json "$base_sha" "$head_sha")" \
@@ -346,6 +419,35 @@ fi
 if run_release_gate \
   "$test_repo" "$single_pr" "$paginated_ambiguous" >/dev/null 2>&1; then
   echo "Release source gate ignored an exact source PR on page two." >&2
+  exit 1
+fi
+
+boundary_exact="$(
+  jq -cn \
+    --arg sha "$base_sha" \
+    '[{
+      number: 50,
+      title: "feat: promote batch",
+      labels: [{name: "promotion"}],
+      merged_at: "2026-08-23T00:00:00Z",
+      merge_commit_sha: $sha,
+      base: {ref: "main"},
+      head: {ref: "dev/next", sha: $sha}
+    }]'
+)"
+boundary_page_one="$(
+  jq -cn --argjson exact "$boundary_exact" '$exact + [range(29) | {}]'
+)"
+boundary_page_two="$(jq -cn --argjson exact "$boundary_exact" '$exact | map(.number = 51)')"
+boundary_paginated_ambiguous="$(
+  jq -cn \
+    --argjson first "$boundary_page_one" \
+    --argjson second "$boundary_page_two" \
+    '[$first, $second]'
+)"
+if run_release_gate "$test_repo" "$single_pr" "" web-flow \
+  "$boundary_paginated_ambiguous" >/dev/null 2>&1; then
+  echo "Release source history ignored an exact boundary PR on page two." >&2
   exit 1
 fi
 

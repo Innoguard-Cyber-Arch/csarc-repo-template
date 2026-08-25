@@ -261,6 +261,18 @@ Release Please action 會在回傳精確 PR number／head 前建立或修改 bra
 或更新 release PR 後，後續 metadata／state 寫入仍必須走 lifecycle lease；不得把這個降級
 宣稱為已序列化的自動 release writer。
 
+Direct-main release follow-up 另外要求 default branch 上的
+`release-follow-up-policy.yml`，並要求 organization effective Ruleset 以 exact repository
+ID、`refs/heads/main` 與 workflow path 將它設為 required workflow。這個
+`pull_request_target` workflow 只 checkout
+default branch，不執行 PR head；它從 live API 重新取得 PR、destination ref、完整 files 與
+commits，並在驗證前後確認 destination SHA 未移動。Ruleset 無法讀取、workflow 未受強制，
+或 live ref 漂移時一律 fail closed；尤其 GitHub Free private repository 不得把候選分支內
+同名 job 當成 trusted gate，必須停在 human-only，且不得使用 direct-main release
+follow-up exemption。可信 gate 接受 GitHub Actions 的 verified Release Please commits，或
+live permission 為 `maintain`／`admin` 且每筆 commit 都由該 maintainer 擁有的 verified
+human-maintained release branch。
+
 ## Actions 額度 fallback
 
 本 repo 是 GitHub Teams private plan，結構性地會超出每月 included Actions

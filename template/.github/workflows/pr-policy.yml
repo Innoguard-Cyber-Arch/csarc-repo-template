@@ -130,12 +130,21 @@ jobs:
             gh api --paginate --slurp \
               "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/commits?per_page=100" \
               > "$release_commits"
+            actor_permission=""
+            if [[ "$PR_AUTHOR" != "github-actions[bot]" ]]; then
+              encoded_actor="$(jq -rn --arg value "$PR_AUTHOR" '$value | @uri')"
+              actor_permission="$(
+                gh api "repos/$GITHUB_REPOSITORY/collaborators/$encoded_actor/permission" \
+                  --jq '.permission // empty'
+              )"
+            fi
             python3 scripts/release_policy.py verify-release-follow-up \
               --repo "$GITHUB_REPOSITORY" \
               --head "$PR_HEAD" \
               --head-repo "$PR_HEAD_REPOSITORY" \
               --head-sha "$PR_HEAD_SHA" \
               --actor "$PR_AUTHOR" \
+              --actor-permission "$actor_permission" \
               --changed-files "$release_files" \
               --commits "$release_commits"
             rm "$release_files" "$release_commits"

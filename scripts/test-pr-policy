@@ -39,6 +39,10 @@ case "$*" in
     printf '%s\n' "${PR_CHANGED_FILES:-CHANGELOG.md}"
     exit 0
     ;;
+  *"/collaborators/"*"/permission"*)
+    printf '%s\n' "${PR_ACTOR_PERMISSION:-write}"
+    exit 0
+    ;;
 esac
 
 head_branch=""
@@ -59,6 +63,8 @@ for edge in "${edges[@]}"; do
 done
 SH
 chmod +x "$fixture/gh"
+export GITHUB_REPOSITORY="acme/project"
+export PATH="$fixture:$PATH"
 
 {
   printf '#!/usr/bin/env bash\n'
@@ -165,6 +171,19 @@ if PR_BRANCH_STRATEGY="delivery" \
   echo "PR policy accepted a human commit on the automation PR."
   exit 1
 fi
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="chore(main): release 0.2.0" \
+PR_LABELS="enhancement" \
+PR_BASE="main" \
+PR_HEAD="$release_branch" \
+PR_AUTHOR="maintainer" \
+PR_COMMIT_AUTHOR="maintainer" \
+PR_ACTOR_PERMISSION="maintain" \
+PR_BODY="" \
+PR_ISSUE_STATE="" \
+  "$validator" >/dev/null
 
 while IFS='|' read -r name actor head_repo changed_files head; do
   case_count=$((case_count + 1))

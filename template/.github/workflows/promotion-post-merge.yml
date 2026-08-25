@@ -29,6 +29,7 @@ jobs:
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
+          PUSH_BEFORE: ${{ github.event.before }}
         run: |
           pull_requests="$(
             gh api --paginate --slurp \
@@ -51,11 +52,14 @@ jobs:
           head_ref="$(jq -r .head.ref <<<"$pull_request")"
           if [[ "$head_ref" == release-please--* ]]; then
             pr_number="$(jq -r .number <<<"$pull_request")"
-            base_sha="$(jq -r '.base.sha // empty' <<<"$pull_request")"
             head_sha="$(jq -r '.head.sha // empty' <<<"$pull_request")"
-            [[ "$base_sha" =~ ^[0-9a-f]{40}$ && "$base_sha" != "$GITHUB_SHA" ]] \
-              && git merge-base --is-ancestor "$base_sha" "$GITHUB_SHA" || {
-              echo "Release follow-up base SHA is missing or is not an ancestor of main." >&2
+            read -r merge_sha base_sha extra_parent \
+              < <(git rev-list --parents -n 1 "$GITHUB_SHA")
+            [[ "$merge_sha" == "$GITHUB_SHA" \
+              && "$base_sha" =~ ^[0-9a-f]{40}$ \
+              && -z "${extra_parent:-}" \
+              && "$base_sha" == "$PUSH_BEFORE" ]] || {
+              echo "Release follow-up must have the push before SHA as its only parent." >&2
               exit 1
             }
             expected_file_count="$(
@@ -82,12 +86,22 @@ jobs:
               > "$commits_json"
             trusted_root="$(mktemp -d "$RUNNER_TEMP/release-follow-up-policy.XXXXXX")"
             git archive "$base_sha" | tar -x -C "$trusted_root"
+            actor="$(jq -r '.user.login // empty' <<<"$pull_request")"
+            actor_permission=""
+            if [[ "$actor" != "github-actions[bot]" ]]; then
+              encoded_actor="$(jq -rn --arg value "$actor" '$value | @uri')"
+              actor_permission="$(
+                gh api "repos/$GITHUB_REPOSITORY/collaborators/$encoded_actor/permission" \
+                  --jq '.permission // empty'
+              )"
+            fi
             python3 "$trusted_root/scripts/release_policy.py" verify-release-follow-up \
               --repo "$GITHUB_REPOSITORY" \
               --head "$head_ref" \
               --head-repo "$(jq -r '.head.repo.full_name // empty' <<<"$pull_request")" \
               --head-sha "$head_sha" \
-              --actor "$(jq -r '.user.login // empty' <<<"$pull_request")" \
+              --actor "$actor" \
+              --actor-permission "$actor_permission" \
               --changed-files "$RUNNER_TEMP/release-follow-up-files" \
               --commits "$commits_json" \
               --root "$trusted_root"
