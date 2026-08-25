@@ -1008,7 +1008,7 @@ grep -q '^## Code Review Rules$' AGENTS.md
 grep -q "pull request chain ends there" AGENTS.md
 grep -q "Target the delivery branch or immediate stack parent" AGENTS.md
 grep -q 'Use `Closes`, `Fixes`, or `Resolves` only after every PR and referenced-Issue item has evidence' AGENTS.md
-grep -q 'one branch and one Git worktree per task' AGENTS.md
+grep -q 'one branch and worktree per independent task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
 grep -q 'search open and closed Issues' AGENTS.md
 grep -q 'Never silently reverse an earlier decision' AGENTS.md
@@ -1792,7 +1792,7 @@ grep -q 'Target the delivery branch or immediate stack parent' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'Use `Closes`, `Fixes`, or `Resolves` only after every PR and referenced-Issue item has evidence' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'one branch and one Git worktree per task' \
+grep -q 'one branch and worktree per independent task' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'search open and closed Issues' \
   "$fixture_root/default-project/AGENTS.md"
@@ -2914,9 +2914,7 @@ fi
 update_source="$fixture_root/update-source"
 update_project="$fixture_root/update-project"
 mkdir -p "$update_source"
-legacy_memory_base=f1ecc6e4fa2bb03e7c322e5d8dd69265a7c34513
-git cat-file -e "$legacy_memory_base^{commit}"
-git archive "$legacy_memory_base" | tar -x -C "$update_source"
+git -C "$repo_root" archive HEAD | tar -x -C "$update_source"
 
 git -C "$update_source" init -b main
 git -C "$update_source" config user.name "Template Test"
@@ -2944,6 +2942,7 @@ printf '%s\n' 'window.PROJECT_OWNED_SITE = true;' \
   >> "$update_project/docs/site-content.js"
 printf '%s\n' '/* PROJECT_OWNED_THEME */' \
   >> "$update_project/docs/site-theme.css"
+mkdir -p "$update_project/docs/decisions"
 cp "$repo_root/docs/adr/agent-collaboration.md" \
   "$update_project/docs/decisions/project-owned.md"
 printf '%s\n' '' 'PROJECT_OWNED_MEMORY' \
