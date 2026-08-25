@@ -22,6 +22,7 @@ highest_release_intent = MODULE["highest_release_intent"]
 included_pull_requests = MODULE["included_pull_requests"]
 main_is_current = MODULE["main_is_current"]
 prepare = MODULE["prepare"]
+promotion_bridge_source = MODULE["promotion_bridge_source"]
 promotion_main_evidence = MODULE["promotion_main_evidence"]
 require_zero_step_run = MODULE["require_zero_step_run"]
 route_for = MODULE["route_for"]
@@ -39,6 +40,14 @@ GIT: str = _GIT
     ("base", "head", "labels", "strategy", "kind", "milestone"),
     [
         ("main", "dev/m7-staged-ci", {"promotion"}, "delivery", "milestone", 7),
+        (
+            "main",
+            "promote/m7-staged-ci",
+            {"promotion"},
+            "delivery",
+            "milestone",
+            7,
+        ),
         (
             "main",
             "dev/next",
@@ -65,6 +74,14 @@ GIT: str = _GIT
             None,
         ),
         ("main", "feat/42-work", set(), "delivery", "invalid-main-route", None),
+        (
+            "main",
+            "promote/next",
+            {"promotion"},
+            "delivery",
+            "invalid-main-route",
+            None,
+        ),
         ("main", "dev", set(), "dev", "dev-promotion", None),
         ("main", "feat/42-work", set(), "main", "not-applicable", None),
     ],
@@ -157,6 +174,85 @@ def test_included_pull_requests_are_deduplicated_and_scoped(
     ) == [{"number": 10, "title": "fix: timeout", "intent": "patch"}]
 
 
+def test_bridge_provenance_accepts_only_same_milestone_pull_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Accept reviewed sibling work without crossing a delivery boundary."""
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path.startswith("compare/"):
+            return {
+                "commits": [
+                    {"sha": "work"},
+                    {"sha": "bridge"},
+                ]
+            }
+        assert path == "commits/work/pulls"
+        return [
+            {
+                "number": 10,
+                "title": "fix: accepted sibling",
+                "merged_at": "2026-01-01T00:00:00Z",
+                "base": {"ref": "dev/m7-staged-ci"},
+            },
+            {
+                "number": 11,
+                "title": "feat: wrong milestone",
+                "merged_at": "2026-01-01T00:00:00Z",
+                "base": {"ref": "dev/m8-other"},
+            },
+            {
+                "number": 12,
+                "title": "feat: standalone",
+                "merged_at": "2026-01-01T00:00:00Z",
+                "base": {"ref": "dev/next"},
+            },
+        ]
+
+    monkeypatch.setitem(
+        included_pull_requests.__globals__, "github_get", fake_get
+    )
+    assert included_pull_requests(
+        "owner/repo",
+        "main",
+        "bridge",
+        "promote/m7-staged-ci",
+        "token",
+        milestone=7,
+        bridge_head_sha="bridge",
+    ) == [{"number": 10, "title": "fix: accepted sibling", "intent": "patch"}]
+
+
+def test_bridge_provenance_rejects_an_unreviewed_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every source-side bridge commit must come from a merged Milestone PR."""
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path.startswith("compare/"):
+            return {
+                "commits": [
+                    {"sha": "unreviewed"},
+                    {"sha": "bridge"},
+                ]
+            }
+        return []
+
+    monkeypatch.setitem(
+        included_pull_requests.__globals__, "github_get", fake_get
+    )
+    with pytest.raises(RuntimeError, match="no same-Milestone merged PR"):
+        included_pull_requests(
+            "owner/repo",
+            "main",
+            "bridge",
+            "promote/m7-staged-ci",
+            "token",
+            milestone=7,
+            bridge_head_sha="bridge",
+        )
+
+
 def test_milestone_requires_closed_checked_non_promotion_work() -> None:
     """Block open and unchecked work while ignoring PRs and promotion Issues."""
     issues = [
@@ -185,6 +281,145 @@ def test_latest_main_requires_matching_base_and_ancestry() -> None:
     assert main_is_current("abc", "abc", True)
     assert not main_is_current("new", "old", True)
     assert not main_is_current("abc", "abc", False)
+
+
+def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bridge a real conflict while preserving the source candidate tree."""
+
+    def run_git(
+        *arguments: str, check: bool = True
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(  # noqa: S603
+            [GIT, *arguments],
+            cwd=tmp_path,
+            check=check,
+            capture_output=True,
+            text=True,
+        )
+
+    run_git("init", "-b", "main")
+    run_git("config", "user.email", "test@example.com")
+    run_git("config", "user.name", "Test")
+    tracked = tmp_path / "tracked.txt"
+    tracked.write_text("base\n", encoding="utf-8")
+    run_git("add", ".")
+    run_git("commit", "-m", "base")
+
+    run_git("checkout", "-b", "dev/m7-staged-ci")
+    tracked.write_text("source\n", encoding="utf-8")
+    run_git("commit", "-am", "source")
+    source_sha = run_git("rev-parse", "HEAD").stdout.strip()
+    source_tree = run_git("rev-parse", "HEAD^{tree}").stdout.strip()
+
+    run_git("checkout", "main")
+    tracked.write_text("main\n", encoding="utf-8")
+    run_git("commit", "-am", "main")
+    base_sha = run_git("rev-parse", "HEAD").stdout.strip()
+    assert (
+        run_git(
+            "merge-tree", "--write-tree", base_sha, source_sha, check=False
+        ).returncode
+        != 0
+    )
+
+    bridge_sha = run_git(
+        "commit-tree",
+        source_tree,
+        "-p",
+        source_sha,
+        "-p",
+        base_sha,
+        "-m",
+        "promotion bridge",
+    ).stdout.strip()
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        assert path == "git/ref/heads/dev%2Fm7-staged-ci"
+        return {"object": {"sha": source_sha}}
+
+    monkeypatch.setitem(
+        promotion_bridge_source.__globals__, "github_get", fake_get
+    )
+    monkeypatch.chdir(tmp_path)
+    assert promotion_bridge_source(
+        "owner/repo",
+        "promote/m7-staged-ci",
+        base_sha,
+        bridge_sha,
+        bridge_sha,
+        7,
+        "token",
+    ) == {
+        "source_ref": "dev/m7-staged-ci",
+        "source_sha": source_sha,
+        "source_tree": source_tree,
+    }
+
+
+@pytest.mark.parametrize(
+    ("branch", "milestone", "parents", "candidate_tree", "message"),
+    [
+        (
+            "promote/m8-other",
+            7,
+            "bridge source main",
+            "source-tree",
+            "Milestones differ",
+        ),
+        (
+            "promote/m7-staged-ci",
+            7,
+            "bridge main source",
+            "source-tree",
+            "merge current main",
+        ),
+        (
+            "promote/m7-staged-ci",
+            7,
+            "bridge source main",
+            "different-tree",
+            "preserve the source tree",
+        ),
+    ],
+)
+def test_promotion_bridge_rejects_wrong_scope_graph_or_tree(
+    monkeypatch: pytest.MonkeyPatch,
+    branch: str,
+    milestone: int,
+    parents: str,
+    candidate_tree: str,
+    message: str,
+) -> None:
+    """Reject cross-Milestone, reversed-parent, or changed-tree bridges."""
+    monkeypatch.setitem(
+        promotion_bridge_source.__globals__,
+        "github_get",
+        lambda *_: {"object": {"sha": "source"}},
+    )
+
+    def fake_git(*arguments: str) -> str:
+        if arguments[0] == "rev-list":
+            return parents
+        if arguments[-1] == "candidate^{tree}":
+            return candidate_tree
+        return "source-tree"
+
+    monkeypatch.setitem(
+        promotion_bridge_source.__globals__, "git_output", fake_git
+    )
+    with pytest.raises(RuntimeError, match=message):
+        promotion_bridge_source(
+            "owner/repo",
+            branch,
+            "main",
+            "bridge",
+            "candidate",
+            milestone,
+            "token",
+        )
 
 
 def test_promotion_accepts_exact_squash_sync_evidence(
@@ -555,6 +790,69 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
         "status": "local-quota-attested",
         "commands": ["./scripts/verify-template.sh"],
     }
+
+
+def test_finalize_quota_fallback_rejects_bridge_source_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Re-resolve the bridge source instead of trusting preflight evidence."""
+    source = tmp_path / "source.json"
+    source.write_text(
+        json.dumps(
+            {
+                "repository": "owner/repo",
+                "pull_request": 42,
+                "route": {
+                    "kind": "milestone",
+                    "relevant": True,
+                    "milestone": 7,
+                },
+                "base_sha": "main",
+                "head_ref": "promote/m7-staged-ci",
+                "head_sha": "bridge",
+                "candidate_sha": "bridge",
+                "candidate_tree": "tree",
+                "candidate_archive": {"sha256": "digest"},
+                "promotion_bridge": {
+                    "source_ref": "dev/m7-staged-ci",
+                    "source_sha": "old-source",
+                    "source_tree": "tree",
+                },
+                "canary": {"state": "blocked"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "git_output",
+        lambda *arguments: "" if arguments[0] == "status" else "bridge",
+    )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "github_get",
+        lambda *_: {"object": {"sha": "main"}},
+    )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "promotion_bridge_source",
+        lambda *_: {
+            "source_ref": "dev/m7-staged-ci",
+            "source_sha": "new-source",
+            "source_tree": "tree",
+        },
+    )
+    with pytest.raises(RuntimeError, match="changed after preflight"):
+        finalize_quota_fallback(
+            SimpleNamespace(
+                input=source,
+                output=tmp_path / "target.json",
+                attestation_url="unused",
+                authorization_url="unused",
+                blocked_run_url=[],
+                verification_command=[],
+            )
+        )
 
 
 @pytest.mark.parametrize(

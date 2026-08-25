@@ -12,7 +12,8 @@ CI 是沒有獨立測試環境時的可攜式 integration layer；外部環境�
   若一張孤立 Issue 確實要獨立 soak／canary，才使用一次性的
   `dev/i<Issue 編號>-<簡稱>`；同號 Issue 不掛 Milestone、加上 `promotion` label，
   並由該 branch 的 promotion PR 關閉。完成後刪除 branch。
-- `dev/* → main` 的 promotion，以及標示 `hotfix` 的緊急修正，必須跑 full tier。
+- `dev/* → main` 的 promotion、下述一次性 `promote/m* → main` bridge，以及標示
+  `hotfix` 的緊急修正，必須跑 full tier。
 - `main` 更新後，尚在進行的 delivery branch 先透過受審查的 `sync/main-to-*` PR
   納入新結果，再接受新的 Issue PR 或 promotion。
 
@@ -123,6 +124,27 @@ Promotion 的 squash fallback 使用與 PR policy 相同的 REST 證據鏈，並
 PR 的 base SHA 等於當前 `main`、head ref 等於正確 delivery branch，以及該 branch
 包含已驗證的 sync squash commit；採用的 `direct-ancestry` 或 `squash-sync-pr-N` 會寫入
 preflight evidence。Hotfix 不適用此 fallback，仍須直接包含當前 `main`。
+
+若 reviewed squash sync 已讓 source delivery tree 包含 current main，但 GitHub 的三方
+merge 仍把原 promotion 判為 conflicting，可從 source delivery 建立一次性的 sibling
+bridge；不得 force-push 或直接推送到既有 delivery branch，也不得修改 merge settings：
+
+```bash
+git fetch origin main dev/m<編號>-<簡稱>
+git switch -c promote/m<編號>-<簡稱> origin/dev/m<編號>-<簡稱>
+git merge --no-ff -s ours origin/main
+test "$(git rev-parse HEAD^{tree})" = \
+  "$(git rev-parse origin/dev/m<編號>-<簡稱>^{tree})"
+git push -u origin promote/m<編號>-<簡稱>
+gh pr create --base main --head promote/m<編號>-<簡稱> --label promotion
+```
+
+Preflight 會把 `promote/mN-slug` 唯一對應到 `dev/mN-slug`，要求 bridge commit 的
+first parent 是該 source delivery 最新 SHA、second parent 是 current main，並確認
+bridge、workflow candidate 與 source tree 完全相同。Included PR provenance 只接受
+bridge ancestry 中已合併到同一 Milestone `dev/mN-*` 的 PR；跨 Milestone、`dev/next`、
+沒有 merged PR 的額外 commit、source ref 漂移或 tree 漂移都 fail closed。Bridge PR
+完成後即刪除暫時 branch；原 delivery branch 不重寫。
 
 Promotion 會封裝候選 source archive，記錄 PR、base/head SHA、candidate tree、
 Milestone 與納入 Issues，並把完整 CI 的 `verify` 當成並列 required gate。合併後
