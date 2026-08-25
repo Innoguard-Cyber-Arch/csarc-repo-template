@@ -695,6 +695,12 @@ test -f docs/README.md
 test -f docs/adr/README.md
 test -f docs/adr/portable-decision-site.md
 test -f docs/adr/transactional-repository-adoption.md
+test -f docs/adr/selective-ci-automation-adoption.md
+grep -q 'groups.official-actions' \
+  docs/adr/selective-ci-automation-adoption.md
+grep -q 'none.*verify.*ghcr' \
+  docs/adr/selective-ci-automation-adoption.md
+grep -q 'docs/adr/selective-ci-automation-adoption.md' site/app.js
 grep -q '可重現的 self-contained HTML' \
   docs/adr/portable-decision-site.md
 grep -q '不自動保存聊天逐字稿' \
@@ -730,6 +736,7 @@ grep -q '請勿公開分享此連結' docs/index.html
 grep -q '存取控制決策｜' docs/index.html
 grep -q '可維護來源 → self-contained HTML' docs/index.html
 grep -q 'docs/adr/portable-decision-site.md' docs/index.html
+grep -q 'docs/adr/selective-ci-automation-adoption.md' docs/index.html
 grep -q 'durable project memory' docs/index.html
 grep -q 'Spec-Driven Development' docs/index.html
 grep -q 'Architecture Decision Records' docs/index.html
