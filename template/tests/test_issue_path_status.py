@@ -6,6 +6,7 @@ import base64
 import hashlib
 import runpy
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -121,6 +122,8 @@ def pull(
         "- Known risks: None\n"
         "- Dependencies / non-parallel work: None"
     )
+    if not draft:
+        contract += "\n\nAlpha 自行合併 / self-merged"
     return {
         "number": number,
         "state": state,
@@ -425,6 +428,39 @@ def test_valid_stacked_pr_chain_reaches_the_delivery_branch() -> None:
     assert decision.pull_request["base_sha"] == "parent"
 
 
+def test_ready_stacked_pr_waits_for_parent_then_retargets() -> None:
+    """A stack is visible in Draft but an Issue merges only to its route."""
+    child = pull(
+        draft=False, base="enhancement/254-parent", base_sha="parent"
+    )
+    parent = pull(
+        281,
+        draft=False,
+        base="dev/m9-sdlc",
+        base_sha="base",
+        head="enhancement/254-parent",
+        head_sha="parent",
+    )
+    data = observation(
+        pulls=[child],
+        branches={
+            "main": "main",
+            "dev/m9-sdlc": "base",
+            "enhancement/254-parent": "parent",
+            "feat/266-path-status": "head",
+        },
+        files=["src/status.py"],
+        checks="passing",
+    )
+    data["all_pulls"] = [child, parent]
+    data["chain_ancestry"]["base...parent"] = True
+    decision = derive_status(data)
+    assert decision.state == "Ready"
+    assert decision.guard == "blocked"
+    assert "open stack parent" in decision.reason
+    assert "retarget" in decision.next_step
+
+
 @pytest.mark.parametrize(
     ("parent_base_sha", "parent_ancestry", "reason"),
     [
@@ -561,6 +597,33 @@ def test_ready_pr_requires_one_primary_closing_reference() -> None:
     decision = derive_status(data)
     assert decision.guard == "blocked"
     assert "one closing reference" in decision.reason
+
+
+def test_ready_quota_path_requires_the_self_merge_marker() -> None:
+    """Status cannot offer merge-quota when its writer would reject it."""
+    current = pull(draft=False)
+    current["body"] = str(current["body"]).replace(
+        "\n\nAlpha 自行合併 / self-merged", ""
+    )
+    data = observation(
+        pulls=[current],
+        branches={
+            "main": "main",
+            "dev/m9-sdlc": "base",
+            "feat/266-path-status": "head",
+        },
+        files=["src/status.py"],
+        checks="quota-blocked",
+        blocked_run_urls=[
+            "https://github.com/owner/repo/actions/runs/42"
+        ],
+        quota_note=True,
+        capability="allowed",
+    )
+    decision = derive_status(data)
+    assert decision.guard == "blocked"
+    assert "self-merge note" in decision.reason
+    assert "merge-quota" not in decision.next_step
 
 
 @pytest.mark.parametrize("checks", ["passing", "quota-blocked"])
@@ -708,6 +771,11 @@ def test_exact_quota_note_allows_only_the_guarded_merge_path() -> None:
     assert decision.guard == "blocked"
     assert decision.allowed_actions == ("inspect",)
 
+    data["capability"]["lease_status"] = {"state": "available"}
+    decision = derive_status(data)
+    assert decision.guard == "clear"
+    assert "merge-quota" in decision.next_step
+
 
 def test_quota_note_must_match_repo_pr_head_runs_and_verification() -> None:
     """A stale or partial note cannot authorize the routine fallback."""
@@ -734,6 +802,58 @@ def test_quota_note_must_match_repo_pr_head_runs_and_verification() -> None:
     )
     assert not has_exact_quota_note(
         [comment], "owner/repo", 300, "head", [run], "attacker"
+    )
+    stale = {
+        **comment,
+        "body": quota_fallback_note(
+            "owner/repo",
+            300,
+            "old-head",
+            [run],
+            "./scripts/verify-template.sh",
+            ["hosted runner identity"],
+        ),
+    }
+    untrusted = {
+        **comment,
+        "user": {"login": "attacker", "type": "User"},
+    }
+    assert has_exact_quota_note(
+        [stale, untrusted, comment],
+        "owner/repo",
+        300,
+        "head",
+        [run],
+        "author",
+    )
+    wrong_runs = {
+        **comment,
+        "body": quota_fallback_note(
+            "owner/repo",
+            300,
+            "head",
+            ["https://github.com/owner/repo/actions/runs/99"],
+            "./scripts/verify-template.sh",
+            ["hosted runner identity"],
+        ),
+    }
+    assert not has_exact_quota_note(
+        [comment, wrong_runs], "owner/repo", 300, "head", [run], "author"
+    )
+    old = {**comment, "created_at": "2026-08-25T01:00:00Z"}
+    current = {**comment, "created_at": "2026-08-25T03:00:00Z"}
+    boundary = datetime(2026, 8, 25, 2, 0, tzinfo=UTC)
+    assert not has_exact_quota_note(
+        [old], "owner/repo", 300, "head", [run], "author", boundary
+    )
+    assert has_exact_quota_note(
+        [old, current],
+        "owner/repo",
+        300,
+        "head",
+        [run],
+        "author",
+        boundary,
     )
 
 
@@ -1290,6 +1410,39 @@ def test_capability_blocks_when_canonical_lease_is_held(
     assert capability["lease_status"] == {
         "state": "held",
         "reason": "another owner holds it",
+    }
+
+
+def test_capability_still_reports_lease_when_protection_is_unreadable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Routine quota can use its lease while ordinary merge stays unknown."""
+
+    class FakeGitHub:
+        def get(self, _repo: str, _path: str = "") -> object:
+            return lifecycle_content()
+
+    monkeypatch.setitem(
+        inspect_capability.__globals__,
+        "effective_protection",
+        lambda *_: ("unknown", "GitHub rules API returned 403", set()),
+    )
+    monkeypatch.setitem(
+        inspect_capability.__globals__,
+        "lease_status_snapshot",
+        lambda *_: {"state": "available", "reason": "atomic acquire"},
+    )
+    capability = inspect_capability(
+        FakeGitHub(),
+        "owner/repo",
+        {"permissions": {"push": True}},
+        pull(draft=False, head_sha="a" * 40),
+        "b" * 40,
+    )
+    assert capability["state"] == "unknown"
+    assert capability["lease_status"] == {
+        "state": "available",
+        "reason": "atomic acquire",
     }
 
 

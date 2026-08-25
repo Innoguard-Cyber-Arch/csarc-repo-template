@@ -402,10 +402,10 @@ PR 內文含 `Alpha 自行合併 / self-merged`、恰一個本 repo closing Issu
 unknown scope 一律拒絕；最後仍以 destination lease CAS、base SHA 與 merge response 驗證
 封住併發漂移。
 
-合併到非 default integration branch 後，GitHub 不會自動關閉 closing Issue，因此 lifecycle
-會保留原 lease。持有同一 lease 的 actor 必須執行 `close-issue`，工具會重新驗證 merged PR
-head/base、squash parent、完整 stacked containment、Issue／PR checklist 與 live route；成功關閉
-（或確認已關閉）後才釋放 lease：
+合併到非 default integration branch 時，GitHub 不會自動關閉 closing Issue，因此 lifecycle
+會在同一個未過期 lease 內重新驗證 merged PR head/base、squash parent、route／containment 與
+Issue／PR checklist，關閉（或確認已關閉）Issue 後才釋放 lease。若 merge 已成功但關閉或
+lease release 回應失敗，可在該 lease 到期前以同一 actor 重跑 recovery：
 
 ```bash
 ./scripts/pr_lifecycle.py close-issue \
@@ -413,8 +413,9 @@ head/base、squash parent、完整 stacked containment、Issue／PR checklist �
   --owner <task-id> --lease /tmp/pr-42-lease.json
 ```
 
-route 尚未整合、containment 漂移、actor 不符或 evidence 不完整時一律 fail closed；不得改用
-未受 lease 保護的手動 `gh issue close` 取代。
+route 尚未整合、containment 漂移、actor 不符、lease 到期或 evidence 不完整時一律 fail
+closed；不得改用未受 lease 保護的手動 `gh issue close` 取代。沒有 closing Issue 的
+sync／automation PR 會在 merge 驗證完成後直接釋放 lease。
 
 ### `dev/next` promotion preservation
 

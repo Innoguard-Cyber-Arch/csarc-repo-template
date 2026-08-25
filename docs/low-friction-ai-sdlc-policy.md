@@ -27,8 +27,8 @@ agent 執行工作需要知道的最短路徑。
 6. **依風險合併 delivery。** Routine PR 跑 policy／fast／stable aggregate；elevated PR
    升 full 並要求 human review。只有持有 #240 lifecycle lease 的 writer，或 degraded
    模式下的 human maintainer，可以執行 Ready／Draft／metadata／merge 寫入。非 default
-   merge 會保留 lease，直到同一 actor 以 canonical `close-issue` 重新驗證 route／containment
-   與 checklist，補正 GitHub 不會自動關閉的 Issue。
+   Issue merge 會在同一個未過期 lease 內以 canonical `close-issue` 驗證 route／containment
+   與 checklist，補正 GitHub 不會自動關閉的 Issue，再釋放 lease。
 7. **在 delivery boundary 才 promotion。** delivery owner 等 batch／Milestone scope
    完成，先以 reviewed PR 同步 current `main`，再以 immutable base/head/tree 跑 full、
    canary 三態與 promotion evidence。合併 `main` 後核對 tree identity，才進 release。
@@ -112,8 +112,9 @@ operational walkthrough；以下 `Then` 仍是該 walkthrough 的 acceptance con
   內容屬 routine，完整本機驗證成功。
 - **When** 現行 #254 canonical tool 證明完整 failed-run set 與本機驗證，並產生綁定
   SHA、run URLs、命令、結果與未重現 checks 的 note。
-- **Then** Alpha self-merge 可在 live head/base 未變時以非 admin squash merge，不需逐 PR
-  human authorization；#240 日後再以 lease 序列化 writer，但不是現行 #254 的前置條件。
+- **Then** Alpha self-merge 可在 live head/base 未變時透過 #240 lease 與 canonical
+  `merge-quota` 執行非 admin squash merge，不需逐 PR human authorization；不得繞過
+  lease 直接呼叫 merge API。
 
 ### 6. Milestone promotion
 

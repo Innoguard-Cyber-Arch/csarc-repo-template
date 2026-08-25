@@ -52,7 +52,7 @@ Existing-repository history changes start read-only: propose semantic story grou
 - A zero-step billing block is standing and accepted where the plan runs over included Actions minutes; others stay blocked.
 - Routine Issue PRs merge on a zero-step check, local verification, and a fallback note, without confirmation; promotion PRs to `main` keep the attestation/authorization procedure.
 - Perform that routine exception only through `scripts/pr_lifecycle.py merge-quota` while holding its exact-head remote lease; never call the merge API directly.
-- A non-default merge retains that lease until the same actor runs `scripts/pr_lifecycle.py close-issue`; do not close the integrated Issue outside the lifecycle tool.
+- A non-default Issue merge must close its Issue in the same lifecycle command before releasing the lease; use `scripts/pr_lifecycle.py close-issue` only to recover an interrupted close while that lease remains valid, and never close it manually.
 - Follow the complete SHA/tree-bound procedure, including the non-release promotion path, in [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback). Never create or falsify a successful Check Run.
 
 ## Editing boundaries

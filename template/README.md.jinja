@@ -108,7 +108,7 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 只有 GitHub Actions 的 zero-step billing block 被機械式確認、且本機驗證通過時，才可能使用本機 fallback；runner 註記本身不構成證據。一般 Issue PR 留一則說明留言即可合併，不需要即時人工確認{% if branch_strategy in ["dev", "delivery"] %}；Promotion 到 `main` 仍維持 human attestation/authorization 雙方確認，另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release{% endif %}。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
 
 一般 Issue 的實際 fallback 合併仍須持有 exact-head remote lease，並只透過 `scripts/pr_lifecycle.py merge-quota` 執行；不得直接呼叫 merge API。
-合併到非 default integration branch 後會保留同一 lease，直到原 actor 以 `scripts/pr_lifecycle.py close-issue` 驗證 merged containment 並關閉 Issue；不得手動繞過。
+合併到非 default integration branch 時，lifecycle 會在同一 lease 內驗證 merged containment、關閉 Issue，再釋放 lease；只有中斷 recovery 才由原 actor 於 lease 有效期內重跑 `scripts/pr_lifecycle.py close-issue`，不得手動繞過。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹；尚未 `git init` 的新專案仍可掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 

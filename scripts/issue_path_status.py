@@ -26,6 +26,7 @@ from pr_lifecycle import (
     lease_status_snapshot,
     local_branch_strategy,
 )
+from pr_lifecycle import blocker_state as lifecycle_blocker_state
 from promotion_gate import (
     failed_pull_request_run_urls,
     has_exact_quota_note,
@@ -37,12 +38,6 @@ SUCCESSFUL_CONCLUSIONS = {"neutral", "skipped", "success"}
 FULL_SHA = re.compile(r"[0-9a-f]{40}")
 MAINTAINER_ASSOCIATIONS = {"MEMBER", "OWNER"}
 GITHUB_ACTIONS_APP_ID = 15368
-BLOCKER = re.compile(
-    r"(?i)^(?:blocked|blocker)\s*:|^\[merge-blocker\]|^\[P[01]\]"
-)
-BLOCKER_RESOLVED = re.compile(
-    r"(?i)^merge blocker resolved\s*:|^\[merge-blocker-resolved\]"
-)
 UNCHECKED = re.compile(r"(?m)^\s*[-*+]\s+\[\s*\]")
 DRAFT_FIELDS = (
     "Scope",
@@ -629,21 +624,9 @@ def unresolved_blocker(
     comments: list[dict[str, Any]], reviews: list[dict[str, Any]]
 ) -> str | None:
     """Return the newest unresolved maintainer blocker URL."""
-    blocker: tuple[str, str] | None = None
-    resolved = ""
-    for comment in comments:
-        if comment.get("author_association") not in MAINTAINER_ASSOCIATIONS:
-            continue
-        created = str(comment.get("created_at") or "")
-        body = str(comment.get("body") or "").lstrip()
-        if BLOCKER_RESOLVED.search(body) and created > resolved:
-            resolved = created
-        elif BLOCKER.search(body) and (
-            blocker is None or created >= blocker[0]
-        ):
-            blocker = (created, str(comment.get("html_url") or "unknown URL"))
-    if blocker is not None and blocker[0] >= resolved:
-        return blocker[1]
+    blocker, _ = lifecycle_blocker_state(comments)
+    if blocker is not None:
+        return str(blocker.get("html_url") or "unknown URL")
     current: dict[str, tuple[str, str, str]] = {}
     for review in sorted(
         reviews, key=lambda item: str(item.get("submitted_at") or "")
@@ -748,6 +731,12 @@ def pull_contract_problem(
                 "status.",
             )
         return None
+    if "Alpha 自行合併 / self-merged" not in body:
+        return (
+            "The Ready pull request lacks the required Alpha self-merge note",
+            "Add `Alpha 自行合併 / self-merged` to the PR body, then rerun "
+            "status.",
+        )
     if [(name.casefold(), number) for name, number in closing] != [expected]:
         return (
             "A Ready pull request needs one closing reference to its Issue",
@@ -1139,6 +1128,15 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
             pull,
             ("update-draft", "run-targeted", "run-full-local"),
         )
+    if len(chain) > 2:
+        return decision(
+            "Ready",
+            "blocked",
+            "The issue pull request still targets an open stack parent",
+            "Wait for the parent to integrate, retarget this PR to "
+            f"{route['base']}, then rerun status.",
+            pull,
+        )
 
     checks = str(observation.get("checks", "missing"))
     if checks == "quota-blocked" and risk["class"] == "routine":
@@ -1201,7 +1199,11 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
             "then rerun status.",
             pull,
         )
-    if capability.get("state") != "allowed":
+    quota_lease_available = (
+        checks == "accepted-routine-quota-fallback"
+        and (capability.get("lease_status") or {}).get("state") == "available"
+    )
+    if capability.get("state") != "allowed" and not quota_lease_available:
         return decision(
             "Ready",
             "blocked",
@@ -1421,12 +1423,6 @@ def inspect_capability(
     protection, reason, required = effective_protection(
         github, repo, str(base.get("ref") or "")
     )
-    if protection != "enforced":
-        return {
-            "state": "blocked" if protection == "blocked" else "unknown",
-            "reason": reason,
-            "required": [],
-        }
     pull_number = pull.get("number")
     head_sha = (pull.get("head") or {}).get("sha")
     if (
@@ -1446,16 +1442,26 @@ def inspect_capability(
             required, key=lambda item: (item[0], item[1] or -1)
         )
     ]
-    if lease_state == "available":
+    if lease_state == "available" and protection == "enforced":
         return {
             "state": "allowed",
             "reason": "protected lifecycle lease may be acquired atomically",
             "required": contexts,
             "lease_status": lease,
         }
+    state = (
+        "blocked"
+        if lease_state == "held" or protection == "blocked"
+        else "unknown"
+    )
+    detail = (
+        str(lease.get("reason") or "lease status is unavailable")
+        if lease_state != "available"
+        else reason
+    )
     return {
-        "state": "blocked" if lease_state == "held" else "unknown",
-        "reason": str(lease.get("reason") or "lease status is unavailable"),
+        "state": state,
+        "reason": detail,
         "required": contexts,
         "lease_status": lease,
     }
@@ -1685,6 +1691,7 @@ def inspect_issue(  # noqa: C901
         if review.get("state") == "COMMENTED" and review.get("body")
     )
     observation["blocker"] = unresolved_blocker(comments, reviews)
+    _, blocker_boundary = lifecycle_blocker_state(comments)
     observation["human_approval"] = has_human_approval(
         reviews,
         str((pull.get("user") or {}).get("login") or ""),
@@ -1697,6 +1704,7 @@ def inspect_issue(  # noqa: C901
         head_sha,
         list(observation.get("blocked_run_urls", [])),
         str((pull.get("user") or {}).get("login") or ""),
+        blocker_boundary,
     )
     return derive_status(observation)
 

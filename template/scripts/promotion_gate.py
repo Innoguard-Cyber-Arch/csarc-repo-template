@@ -627,25 +627,47 @@ def has_exact_quota_note(
     head_sha: str,
     run_urls: list[str],
     signer: str,
+    after: datetime | None = None,
 ) -> bool:
     """Accept one canonical routine note bound to every live failed run."""
-    notes = 0
+    candidates = 0
     matching = 0
     for comment in comments:
         match = QUOTA_NOTE.match(str(comment.get("body") or ""))
         if match is None:
             continue
-        notes += 1
+        if (
+            str((comment.get("user") or {}).get("login") or "").casefold()
+            != signer.casefold()
+        ):
+            continue
         try:
             binding = json.loads(match.group(1))
         except json.JSONDecodeError:
-            return False
+            continue
+        if not (
+            isinstance(binding, dict)
+            and binding.get("repository") == repo
+            and binding.get("pull_request") == pull_number
+            and binding.get("head_sha") == head_sha
+        ):
+            continue
+        if after is not None:
+            created_at = comment.get("created_at")
+            try:
+                created = datetime.fromisoformat(
+                    str(created_at).replace("Z", "+00:00")
+                )
+            except ValueError:
+                continue
+            if created.tzinfo is None or created.astimezone(UTC) <= after:
+                continue
+        candidates += 1
         verification = (
-            binding.get("verification") if isinstance(binding, dict) else None
+            binding.get("verification")
         )
         if (
-            isinstance(binding, dict)
-            and set(binding)
+            set(binding)
             == {
                 "repository",
                 "pull_request",
@@ -657,8 +679,6 @@ def has_exact_quota_note(
             and binding.get("pull_request") == pull_number
             and binding.get("head_sha") == head_sha
             and binding.get("runs") == sorted(run_urls)
-            and str((comment.get("user") or {}).get("login") or "").casefold()
-            == signer.casefold()
             and isinstance(verification, dict)
             and verification.get("command")
             in {"./scripts/verify", "./scripts/verify-template.sh"}
@@ -681,7 +701,7 @@ def has_exact_quota_note(
             )
         ):
             matching += 1
-    return notes == matching == 1
+    return candidates == matching == 1
 
 
 def preflight_binding(

@@ -134,7 +134,7 @@ stateDiagram-v2
 | `Open` | Issue 尚未有有效 owner／Draft | 團隊使用者或 agent 可認領 | branch 存在不等於已認領，仍要查 PR／worktree。 |
 | `Draft` | 一張對正確 base 的 Draft 公開 scope、owner、依賴與待辦 | Issue owner 可更新；其他人 review-only | 不可 merge、不可用 closing keyword 宣稱完成、不可視為已通過 full verify。 |
 | `Ready` | acceptance 完成、targeted 與完整本機驗證通過、無較新的 blocker | Issue owner可請 review；reviewer 決定 approval | Ready 不等於有 merge authority，且新 commit／base drift 會退回待驗證。 |
-| `Integrated` | exact Issue candidate 已受審查合併到正確 delivery branch，且 Issue 已關閉 | lease holder 或 human maintainer | 非 default base 的 closing keyword 不保證 Issue 已關；lifecycle 保留 merge lease，並以 `close-issue` 重驗 route／containment／checklist 後補正。 |
+| `Integrated` | exact Issue candidate 已受審查合併到正確 delivery branch，且 Issue 已關閉 | lease holder 或 human maintainer | 非 default base 的 closing keyword 不保證 Issue 已關；lifecycle 會在同一未過期 merge lease 內重驗 route／containment／checklist、補正 Issue，再釋放 lease。 |
 | `Candidate` | delivery scope 完成、包含 current `main`，promotion evidence 綁定 live base/head/tree | delivery owner 建立；human／platform核准例外 | artifact-only 不等於 external canary，local fallback 不等於 release evidence。 |
 | `Delivered` | verified candidate 已進 `main` 且 post-merge tree identity 成立 | human 或受保護 automation | merge timestamp 本身不證明 release／provenance 成功。 |
 
