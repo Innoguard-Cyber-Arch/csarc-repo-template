@@ -1,12 +1,13 @@
 {% set has_python = language in ["python", "python-typescript"] -%}
 {% set has_typescript = language in ["typescript", "python-typescript"] -%}
+{% set has_container = (container_mode | default("none")) != "none" -%}
 # {{ project_name }}
 
-<!-- 請在這裡補上 CI 徽章，例如：
-[![CI](https://github.com/<org>/<repo>/actions/workflows/ci.yml/badge.svg)](https://github.com/<org>/<repo>/actions/workflows/ci.yml)
--->
+[![CI]({{ repository_url }}/actions/workflows/ci.yml/badge.svg)]({{ repository_url }}/actions/workflows/ci.yml)
 
+<!-- csarc-project-description:start -->
 {{ project_description }}
+<!-- csarc-project-description:end -->
 
 [開啟專案內部網站](docs/index.html)
 
@@ -23,7 +24,7 @@
 
 ## 專案概述
 
-本 repo 使用 CSARC 公版，語言 profile 是 `{{ language }}`。請在這裡補上主要使用者、解決的問題、輸出與不處理的範圍；完整團隊流程放在內部網站，不在 README 重複。
+本 repo 使用 CSARC 公版，語言 profile 是 `{{ language }}`。完整團隊流程放在內部網站，不在 README 重複。
 
 ## 快速開始
 
@@ -32,7 +33,7 @@
 請從實際 Git root 開啟 Codex／agent workspace；從 repo 上層開啟時，子目錄的 `AGENTS.md` 不一定會自動載入。開始前先在工作目錄執行 `test "$(git rev-parse --show-toplevel)" = "$(pwd -P)"`，失敗就切換到輸出的 Git root，不要複製另一份指引到父目錄。
 
 ```bash
-git clone <repository-url>
+git clone {{ repository_url }}
 cd {{ project_slug }}
 {% if branch_strategy == "delivery" %}git switch -c dev/next
 git push -u origin dev/next
@@ -43,7 +44,13 @@ git push -u origin dev
 ./scripts/apply-repository-settings.sh plan
 ```
 
-請在這裡補上產品最短可成功的啟動或呼叫範例。
+產品最短可成功的啟動或呼叫方式：
+
+<!-- csarc-project-run-command:start -->
+```bash
+{{ project_run_command }}
+```
+<!-- csarc-project-run-command:end -->
 
 {% if project_mode == "existing" %}> 既有案導入：Copier 已保留原本的 manifest。先人工合併 dev 相依、版本與工具設定，再重建 lockfile；`coverage_mode=diff` 預設比較 `origin/main`。{% endif %}
 {% if branch_strategy == "delivery" %}> 本案選用 delivery 模式：Milestone 使用 `dev/m<編號>-<簡稱>`，一般孤立 Issue 使用 `dev/next`，確實需要獨立 soak／canary 的孤立 Issue 才使用一次性的 `dev/i<Issue 編號>-<簡稱>`；它們都以 promotion PR 進入 `main`。{% elif branch_strategy == "dev" %}> 本案選用 `dev` 模式，因為有長期共用測試環境。維護者首次啟用時須從 `main` 建立並推送 `dev`。{% else %}> 本案使用 main 模式，短分支通過 PR 後直接合併到 `main`。{% endif %}
@@ -65,7 +72,7 @@ flowchart LR
   MAIN -. "reviewed sync PR" .-> DI
 ```
 
-`main` 前進後，所有未合併的 delivery／stacked PR 都必須先納入最新 main；PR policy 會在既有 `title` runner 內 fail closed，delivery-sync workflow 則只在 main push 列出建立 `sync/main-to-*` PR 的手動指令並使過期 policy 失效。預設不自動寫入；只有明確設定 `CSARC_AUTO_SYNC=true`、提供會觸發 PR checks 的 `CSARC_SYNC_TOKEN`，且 branch／PR write probes 都為 allowed 時才自動開 PR，blocked／unknown 一律回到相同手動流程。
+`main` 前進後，所有未合併的 delivery／stacked PR 都必須先納入最新 main；PR policy 會在既有 `title` runner 內 fail closed，delivery-maintenance workflow 則在 trusted main push 列出建立 `sync/main-to-*` PR 的手動指令並使過期 policy 失效。預設不自動寫入；只有明確設定 `CSARC_AUTO_SYNC=true`、提供會觸發 PR checks 的 `CSARC_SYNC_TOKEN`，且 branch／PR write probes 都為 allowed 時才自動開 PR，blocked／unknown 一律回到相同手動流程。
 {% endif %}
 
 ## 技術與目錄
@@ -75,6 +82,7 @@ flowchart LR
 | 共用 | `.github/`、`policies/`、`docs/adr/`、`docs/specs/`、`scripts/verify` |
 {% if has_python %}| Python | `src/`、`tests/`、uv、Ruff、mypy、pytest；CI 驗證 {% if python_support_mode == "latest" %}3.14.0 與最新 3.14.x{% else %}{{ python_min_version }}.0，以及 {{ python_min_version }}～3.14 每個 feature release 的最新 patch{% endif %} |
 {% endif %}{% if has_typescript %}| TypeScript | `typescript/`、pnpm 11、Biome、strict TypeScript、Vitest；Node 24+ |
+{% endif %}{% if has_container %}| 容器 | `{{ containerfile_path }}`、Buildx cache、smoke test 與 Trivy；build context 固定為 repo root |
 {% endif %}| 內部網站 | `site/` 公版來源；`docs/site-content.js` 與 `docs/site-theme.css` 專案內容；`docs/index.html` portable bundle |
 
 語言宣告記在 `.csarc/profile.json`；`scripts/detect-language-profile --suggest` 會檢查實際檔案是否一致。
@@ -84,13 +92,13 @@ flowchart LR
 
 ## 開發與驗證
 
-交付模型是「可選 Story Milestone → 1..N Issues → 各自 PR」。Milestone 只代表可端到端驗收的成果，不是每張 Issue 的必填分類；SDD、一般規劃、使用者 story 或導入盤點都可能成為來源。建立 Issue／Milestone 前，agent 會以具體關鍵字限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR，先向使用者摘要；若已獲准直接建立，則在補充或 Milestone `References` 記錄每項決策是沿用、取代或駁回及理由。description 使用 [`docs/milestone-description.md`](docs/milestone-description.md) 的 Problem、Outcome、Acceptance criteria、Plan、Out of scope、Verification 與 References；英文 H2 是穩定結構，內文使用專案團隊慣用語言。PR 不重複掛入 Milestone。最後一張 open Issue 關閉且所有 acceptance checkbox 已確認時，workflow 才會關閉 Milestone；Issue reopen、open Issue 掛入或 criterion 取消勾選時則重開。
+工作模型是「SDD → Feature parent → Task／Bug subissues → 各自 PR」。只有可獨立負責、測試或交付的工作才拆 subissue；dependency 只表示真實 blocked／blocking。Milestone 另作有 due date 的 delivery／release bucket，掛 leaf Issues 與其 PR，不掛 Feature parent。GitHub Projects 預設關閉。建立 work item 前，agent 會以具體關鍵字限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR，先向使用者摘要；若已獲准直接建立，則在補充或 Milestone `References` 記錄每項決策是沿用、取代或駁回及理由。最後一張 open Issue 關閉且所有 acceptance checkbox 已確認時，workflow 才會關閉 Milestone；Issue reopen、open Issue 掛入或 criterion 取消勾選時則重開。
 
 1. 簡單工作先開「開發工作」Issue；標題以 12–80 個英文 ASCII 字元及至少三個詞直接描述成果，例如 `Add dependency policy checks`。Issue 不使用 PR 的 Conventional Commit 格式。
-2. 開單者會自動成為負責人，並選一個分類：`bug`、`enhancement`、`documentation` 或 `duplicate`。前三者在 organization 啟用原生 Issue Types 時分別同步成 `Bug`、`Feature`、`Task`；不支援時仍以 label 正常運作。`duplicate` 是結案處置，不是假造的新 Issue Type。
-3. {% if branch_strategy == "delivery" %}從 Issue 所屬的 `dev/m<Milestone 編號>-<簡稱>` 建立工作分支；沒有 Milestone 時，預設從 `dev/next` 建立，只有在 Issue 記錄獨立 soak／canary 理由時，才直接使用一次性的 `dev/i<Issue 編號>-<簡稱>` 工作與 promotion。{% else %}從 `{{ branch_strategy }}` 或最終 PR 回 `{{ branch_strategy }}` 的未合併工作分支建立。{% endif %}一般工作分支使用 `type/<issue-number>-short-slug`；若新增需求超出 Issue 的完成條件，另開 Issue 與分支。若後來確認重複，連結 canonical Issue 並用 GitHub 的 Duplicate 原生原因關閉；純 triage 不改檔案，可不開分支與 PR。
+2. 開單者會自動成為負責人，並選一個類型：`feature`、`task`、`bug`、`documentation` 或 `duplicate`。前四者在 organization 啟用原生 Issue Types 時同步成 `Feature`、`Task`、`Bug`、`Task`，並以 `enhancement`、`bug` 或 `documentation` label 保留跨 Issue／PR 分類；不支援原生 Type 時仍以 label 正常運作。`duplicate` 是結案處置，不是假造的新 Issue Type。
+3. {% if branch_strategy == "delivery" %}從 Issue 所屬的 `dev/m<Milestone 編號>-<簡稱>` 建立工作分支；沒有 Milestone 時，預設從 `dev/next` 建立，只有在 Issue 記錄獨立 soak／canary 理由時，才直接使用一次性的 `dev/i<Issue 編號>-<簡稱>` 工作與 promotion。{% else %}從 `{{ branch_strategy }}` 或最終 PR 回 `{{ branch_strategy }}` 的未合併工作分支建立。{% endif %}一般工作分支使用 `gh issue develop <issue> --base <delivery> --name type/<issue-number>-short-slug` 建立，確保 GitHub Development 關聯；若新增需求超出 Issue 的完成條件，另開 Issue 與分支。若後來確認重複，連結 canonical Issue 並用 GitHub 的 Duplicate 原生原因關閉；純 triage 不改檔案，可不開分支與 PR。
 4. 執行 `./scripts/verify`；AI 遵守 `AGENTS.md`，一般情況下不能自行合併。
-5. PR 指向{% if branch_strategy == "delivery" %}對應 delivery branch{% else %} `{{ branch_strategy }}`{% endif %}或 stack 中的直接上游分支；整條 open PR 鏈必須最終回到該 integration branch。使用 `Closes #<issue-number>` 前，PR 與 referenced Issue 不得留有未勾選 task；PR policy 會直接拒絕，避免局部完成卻自動結案。風險或回退放在選填補充；PR 沒有原生 Issue Type／Issue Form，只使用 Markdown template，並恰選一個 change label：`fix`→`bug`、`docs`→`documentation`，其餘允許的 Conventional Commit type→`enhancement`。
+5. PR 指向{% if branch_strategy == "delivery" %}對應 delivery branch{% else %} `{{ branch_strategy }}`{% endif %}或 stack 中的直接上游分支；整條 open PR 鏈必須最終回到該 integration branch。使用 `Closes #<issue-number>` 前，PR 與 referenced Issue 不得留有未勾選 task；PR policy 會直接拒絕，避免局部完成卻自動結案。風險或回退放在選填補充；PR 沒有原生 Issue Type／Issue Form，只使用 Markdown template，並從 linked Issue 同步 assignee、Milestone 與恰好一個 `bug`、`enhancement` 或 `documentation` 分類 label。
 6. 一般情況下，CI 與人工審查都通過才合併；只有下列 Actions 額度例外且 human maintainer 明確授權時，agent 才可依 repo 現行 self-merge 政策合併。{% if branch_strategy == "delivery" %}Milestone 建立時同時建立一張 `promotion` Issue；完成後用 `dev/m* → main` PR 關閉它。一般孤立工作由 `dev/next → main` 批次 promotion；`dev/i*` 的同號 Issue 本身就是 promotion Issue，合併後刪除該暫時 branch。只有 standalone `fix/*` 加上 `hotfix` label 才能直接 main。{% elif branch_strategy == "dev" %}準備發布時，再用一張審查過的 PR 將 `dev` 升版到 `main`。{% endif %}
 
 多個可寫 agents 平行執行時，一項任務使用一個 branch 與一個獨立 worktree，且只平行處理範圍互不依賴的工作；開始前先辨識目前是否已在 agent 平台管理的 worktree，不強制讓同一 branch 出現在多個 worktrees，也不自行刪除其他工具建立或含未提交變更的 worktree。原生 [`git worktree`](https://git-scm.com/docs/git-worktree) 是可攜基線；[Worktrunk](https://github.com/max-sixty/worktrunk) 可選擇簡化建立、切換與清理，但屬於本機／agent orchestration 輔助工具，不是本模板或生成 repo 的必要相依。worktree 只隔離工作目錄，整合仍以 PR、CI、人工審查及合併後完整驗證為準。
@@ -103,7 +111,7 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 
 ### Actions 額度耗盡的一次性驗證
 
-只有具帳務可見性的 human maintainer 確認當期 included Actions minutes 已耗盡時，才可能使用本機 fallback；runner 註記本身不構成證據。{% if branch_strategy in ["dev", "delivery"] %}Promotion 到 `main` 另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release。{% endif %}完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
+只有 GitHub Actions 的 zero-step billing block 被機械式確認、且本機驗證通過時，才可能使用本機 fallback；runner 註記本身不構成證據。一般 Issue PR 留一則說明留言即可合併，不需要即時人工確認{% if branch_strategy in ["dev", "delivery"] %}；Promotion 到 `main` 仍維持 human attestation/authorization 雙方確認，另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release{% endif %}。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹；尚未 `git init` 的新專案仍可掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 
@@ -115,6 +123,9 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 {% else %}目前驗證包含{% if has_python %} Ruff、mypy、pytest、{{ coverage_threshold }}% coverage、wheel 與相依下界{% endif %}{% if language == "python-typescript" %}，以及{% endif %}{% if has_typescript %} Biome、TypeScript、Vitest {{ coverage_threshold }}% coverage 與 npm tarball{% endif %}，最後再檢查 spec、機密字串與 lockfile。
 
 Coverage 是找出未測程式碼的訊號，不等於測試品質，也不取代風險分析與人工 review。新案以 global coverage 建立基線；既有案先用 diff coverage 約束本次變更。只有缺陷紀錄、關鍵模組或風險改變時才調整 {{ coverage_threshold }}% 門檻，不要只為提高百分比加入沒有驗證行為的測試。
+{% endif %}
+
+{% if has_container %}容器模式是 `{{ container_mode }}`：非 docs PR 會用 `{{ containerfile_path }}` 建置 image，執行設定的 `$IMAGE` smoke command，再以 Trivy 阻擋 HIGH／CRITICAL 漏洞。這個 job 不 push image，也沒有 registry write permission；本機 `./scripts/verify` 只驗證設定與 Containerfile 存在，實際 image build 由 GitHub-hosted runner 執行。
 {% endif %}
 
 ## 設定與密鑰
@@ -138,7 +149,7 @@ release workflow 使用 Actions 內建 `GITHUB_TOKEN`，不需要設定 GitHub A
 
 ## 發布與維運
 
-PR 只顯示升版意圖：`fix(scope)` 是 patch、`feat(scope)` 是 minor、`!` 是 major，其餘是 no-release；不在 PR 階段預約確切版本。進入整合分支後才以實際 commit／tag 順序配置版本，過期或亂序 run 會停止。{% if branch_strategy in ["dev", "delivery"] %}因 repo 採 squash merge，promotion PR 的英文標題必須代表納入 PR 中最高的 SemVer 等級；Milestone 完成時 promotion 一次，`dev/next` 預設每週固定一個 release window 批次 promotion，無 release-worthy 變更就略過，hotfix 才立即發版。{% endif %}release-please 或 direct mode 建立 release 後，只能帶著已核對的 release-source run ID 明確 dispatch 成品 workflow；direct mode 只接受已由人工 PR 寫入版本與 CHANGELOG 的最新整合分支，否則停在 verification-only。任意 `v*` tag push 不會啟動發布；artifact workflow 會核對 promotion evidence 後建置、產生 digest／SBOM／attestation 與驗證 immutable Release，但不重跑完整 runtime CI。{% if language == "ci" %}版本記在 `version.txt`，tag 發布 GitHub Release 的來源封存檔；沒有語言成品、registry 消費路徑或空驗證 job。{% else %}核准的 `v*` tag 會產生{% if has_python %} wheel／sdist{% endif %}{% if language == "python-typescript" %}與{% endif %}{% if has_typescript %} npm tarball{% endif %}、SHA-256、SBOM 與來源 metadata，並附加到對應 GitHub Release。下載後執行 `gh release download <tag>`，再於下載目錄執行 `shasum -a 256 -c SHA256SUMS`；{% if enable_release_attestations | default(false) %}另以 `gh attestation verify <artifact> --repo <owner/repo> --signer-workflow <owner/repo>/.github/workflows/release.yml --source-ref refs/tags/<tag>` 驗證 provenance。{% endif %}{% endif %}目前沒有通用部署流程；批次與追溯規則見 [`docs/ci-policy.md`](docs/ci-policy.md)。
+PR 只顯示升版意圖：`fix(scope)` 是 patch、`feat(scope)` 是 minor、`!` 是 major，其餘是 no-release；不在 PR 階段預約確切版本。進入整合分支後才以實際 commit／tag 順序配置版本，過期或亂序 run 會停止。{% if branch_strategy in ["dev", "delivery"] %}因 repo 採 squash merge，promotion PR 的英文標題必須代表納入 PR 中最高的 SemVer 等級；Milestone 完成時 promotion 一次，`dev/next` 預設每週固定一個 release window 批次 promotion，無 release-worthy 變更就略過，hotfix 才立即發版。{% endif %}release-please 或 direct mode 建立 release 後，只能帶著已核對的 release-source run ID 明確 dispatch 成品 workflow；direct mode 只接受已由人工 PR 寫入版本與 CHANGELOG 的最新整合分支，否則停在 verification-only。任意 `v*` tag push 不會啟動發布；artifact workflow 會核對 promotion evidence 後建置、產生 digest／SBOM／attestation 與驗證 immutable Release，但不重跑完整 runtime CI。{% if language == "ci" %}版本記在 `version.txt`，tag 發布 GitHub Release 的來源封存檔；沒有語言套件成品或空驗證 job。{% else %}核准的 `v*` tag 會產生{% if has_python %} wheel／sdist{% endif %}{% if language == "python-typescript" %}與{% endif %}{% if has_typescript %} npm tarball{% endif %}、SHA-256、SBOM 與來源 metadata，並附加到對應 GitHub Release。下載後執行 `gh release download <tag>`，再於下載目錄執行 `shasum -a 256 -c SHA256SUMS`；{% if enable_release_attestations | default(false) %}另以 `gh attestation verify <artifact> --repo <owner/repo> --signer-workflow <owner/repo>/.github/workflows/release.yml --source-ref refs/tags/<tag>` 驗證 provenance。{% endif %}{% endif %}{% if (container_mode | default("none")) == "verify" %}容器只保留 CI 驗證，不會發布 registry。{% elif (container_mode | default("none")) == "ghcr" %}容器 release job 只接受同一條已驗證來源，保存已 smoke／scan 的 image bytes，發布版本與 commit SHA tag 至 GHCR，附加 provenance／SPDX SBOM 後以 digest 重跑 smoke test；只有發布 job 取得 `packages: write`。{% endif %}目前沒有通用 runtime 部署流程；批次與追溯規則見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
 | Runtime 實測政策 | 模式與行為 | 保證、限制與 fallback |
 | --- | --- | --- |
@@ -175,4 +186,4 @@ CLI 會先預覽 Copier smart diff、conflict risk 與 Milestone description mig
 
 ## 負責人與支援
 
-程式與政策 owner 是 `{{ code_owner }}`；governance workflow 會從 `.github/REVIEWERS` 輪派一位非作者 reviewer。一般問題使用 GitHub Issue；疑似資安事件或敏感資料走組織核准的內部通報管道，詳見 [`SECURITY.md`](SECURITY.md)。
+程式與政策 owner 是 `{{ code_owner }}`；governance workflow 會從 `.github/REVIEWERS` 輪派一位非作者 reviewer。一般問題與疑似資安問題依 [`SECURITY.md`](SECURITY.md) 使用核准的通報管道；預設 GitHub Issue 是公開的，不得張貼 secrets、credentials、personal data 或其他敏感內容。
