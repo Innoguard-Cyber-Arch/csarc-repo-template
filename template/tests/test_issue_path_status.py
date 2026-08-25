@@ -35,7 +35,7 @@ def observation(
     work_branches: list[str] | None = None,
     files: list[str] | None = None,
     checks: str = "missing",
-    capability: str = "allowed",
+    capability: str = "unknown",
     blocker: str | None = None,
     base_current: bool = True,
     blocked_run_urls: list[str] | None = None,
@@ -199,6 +199,7 @@ def test_hotfix_is_always_a_full_main_route() -> None:
         branches={"main": "main", "fix/266-outage": "head"},
         files=["src/fix.py"],
         checks="passing",
+        capability="allowed",
         human_approval=True,
     )
     decision = derive_status(data)
@@ -480,6 +481,7 @@ def test_exact_quota_note_allows_only_the_guarded_merge_path() -> None:
         checks="quota-blocked",
         blocked_run_urls=[run],
         quota_note=True,
+        capability="allowed",
         human_approval=True,
     )
     decision = derive_status(data)
@@ -920,27 +922,6 @@ def test_unknown_single_writer_capability_never_allows_merge() -> None:
     assert "human-only" in decision.next_step
 
 
-def test_available_lifecycle_guard_offers_only_atomic_acquire() -> None:
-    """A verified interface without a lease cannot expose merge."""
-    data = observation(
-        pulls=[pull(draft=False)],
-        branches={
-            "main": "main",
-            "dev/next": "next",
-            "dev/m9-sdlc": "base",
-            "feat/266-path-status": "head",
-        },
-        files=["src/status.py"],
-        checks="passing",
-        capability="available",
-    )
-    decision = derive_status(data)
-    assert decision.guard == "blocked"
-    assert decision.allowed_actions == ("acquire-lease",)
-    assert "pr_lifecycle.py acquire" in decision.next_step
-    assert "--authorization-url" in decision.next_step
-
-
 def test_required_check_keeps_its_github_app_identity() -> None:
     """A same-named check from another App cannot satisfy a protected rule."""
     runs = [
@@ -955,8 +936,8 @@ def test_required_check_keeps_its_github_app_identity() -> None:
     assert check_state(runs, [], {("verify", 2)}) == "passing"
 
 
-def test_capability_requires_active_no_bypass_rules_and_lifecycle() -> None:
-    """The canonical guard may expose acquire, but not merge without a lease."""
+def test_capability_requires_stable_canonical_lease_status() -> None:
+    """The current helper cannot stand in for #240's pending status API."""
 
     class FakeGitHub:
         def get(self, _repo: str, path: str = "") -> object:
@@ -968,71 +949,14 @@ def test_capability_requires_active_no_bypass_rules_and_lifecycle() -> None:
                 }
             raise AssertionError(path)
 
-    lifecycle = SimpleNamespace(
-        effective_protection=lambda *_args: (
-            "enforced",
-            "protected",
-            {("verify", 1)},
-        ),
-        read_lease=lambda _path: {},
-        require_caller=lambda *_args: None,
-        merge_snapshot=lambda *_args: {},
-    )
     capability = inspect_capability(
         FakeGitHub(),
         "owner/repo",
         {"permissions": {"push": True}},
         pull(draft=False),
-        lifecycle_module=lifecycle,
     )
-    assert capability["state"] == "available"
-    assert capability["required"] == [
-        {"context": "verify", "integration_id": 1}
-    ]
-
-
-def test_capability_allows_merge_only_after_canonical_lease_check() -> None:
-    """The #240 snapshot binds lease, authorization, PR, base, and head."""
-
-    class FakeGitHub:
-        def get(self, _repo: str, path: str = "") -> object:
-            assert path.startswith("contents/scripts/pr_lifecycle.py")
-            return {
-                "type": "file",
-                "path": "scripts/pr_lifecycle.py",
-                "sha": "script",
-            }
-
-    lifecycle = SimpleNamespace(
-        effective_protection=lambda *_args: (
-            "enforced",
-            "protected",
-            {("verify", 1)},
-        ),
-        read_lease=lambda _path: {"lease": "validated"},
-        require_caller=lambda *_args: None,
-        merge_snapshot=lambda *_args: {
-            "repository": "owner/repo",
-            "pull_request": 300,
-            "head_sha": "head",
-            "base_ref": "dev/m9-sdlc",
-            "base_sha": "base",
-            "authorization_url": "https://github.com/owner/repo/pull/300#issuecomment-1",
-            "merge_mode": "agent",
-        },
-    )
-    capability = inspect_capability(
-        FakeGitHub(),
-        "owner/repo",
-        {"permissions": {"push": True}},
-        pull(draft=False),
-        Path("lease.json"),
-        "task/266",
-        "https://github.com/owner/repo/pull/300#issuecomment-1",
-        lifecycle,
-    )
-    assert capability["state"] == "allowed"
-    assert capability["authorization_url"].endswith("issuecomment-1")
+    assert capability["state"] == "unknown"
+    assert "lease-status interface" in capability["reason"]
 
 
 def test_missing_push_permission_is_unknown() -> None:

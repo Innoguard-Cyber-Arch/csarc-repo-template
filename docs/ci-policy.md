@@ -66,12 +66,11 @@ ref，不能只憑 `merged_at` 宣稱 Integrated／Delivered。這個入口只�
 metadata／merge mutation 仍由 lifecycle lease holder 或政策允許的 human maintainer
 執行。
 
-若 target branch 尚未包含 #240 的 canonical lifecycle helper，工具即使看見部分
-Ruleset 也會將 single-writer capability 回報為 `unknown`，不列出 merge 動作。介面存在
-且證明 approval、stale-review、last-push、thread resolution 與 no-bypass 後，只先列出
-原子的 `pr_lifecycle.py acquire`；取得 lease 與 human maintainer 的 exact PR/head
-authorization 後，以 `--lease`、`--owner`、`--authorization-url` 重跑，canonical
-read-only `check` 全部通過才回報 `allowed`。
+若 target branch 尚未包含 #240 的 stable GET-only `lease-status` 介面，工具即使看見
+lifecycle script 也會將 single-writer capability 回報為 `unknown`，不列出 merge 動作。
+待該介面能以 canonical 邏輯證明 approval、stale-review、last-push、thread resolution、
+no-bypass、remote lease 與 exact PR/head authorization 後，#266 才會接線並允許下一步；
+不得以本工具自行複製較弱的規則或把測試 fixture 當成 live capability。
 
 Routine PR 若所有 live failed runs 都由 `promotion_gate.py` 證明為 exact-head zero-step
 billing block，入口會列出既有 `note-quota-fallback` 命令。它只接受一則 repo、PR、

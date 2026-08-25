@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib
 import json
 import re
 import shutil
@@ -12,7 +11,7 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any
 
 from ci_tier import classify as classify_ci
 from promotion_gate import (
@@ -91,16 +90,6 @@ class GitHub:
             endpoint = f"{endpoint}/{path.lstrip('/')}"
         return self._read([endpoint])
 
-    def viewer(self, explicit_actor: str = "") -> str:
-        """Read the authenticated user for the canonical lifecycle guard."""
-        if explicit_actor:
-            return explicit_actor
-        payload = self._read(["user"])
-        login = payload.get("login") if isinstance(payload, dict) else None
-        if not isinstance(login, str) or not login:
-            raise RuntimeError("Authenticated GitHub actor is unavailable")
-        return login
-
     def pages(self, repo: str, path: str) -> list[dict[str, Any]]:
         """Read and flatten every page of one list resource."""
         payload = self._read(
@@ -124,16 +113,6 @@ class GitHub:
 
     def keyed(self, repo: str, path: str, key: str) -> list[dict[str, Any]]:
         """Read a paginated object collection such as check runs."""
-        return self.collection(repo, path, key)
-
-    def collection(
-        self,
-        repo: str,
-        path: str,
-        key: str,
-        response_sha: str | None = None,
-    ) -> list[dict[str, Any]]:
-        """Read a keyed collection for the canonical lifecycle guard."""
         payload = self._read(
             [
                 "--paginate",
@@ -148,45 +127,12 @@ class GitHub:
         items: list[dict[str, Any]] = []
         for page in payload:
             entries = page.get(key) if isinstance(page, dict) else None
-            if (
-                response_sha is not None
-                and isinstance(page, dict)
-                and page.get("sha") != response_sha
-            ):
-                raise RuntimeError(
-                    f"GitHub collection {path} is for another SHA"
-                )
             if not isinstance(entries, list) or not all(
                 isinstance(item, dict) for item in entries
             ):
                 raise RuntimeError(f"GitHub collection {path} has no {key}")
             items.extend(entries)
         return items
-
-
-class _Lifecycle(Protocol):
-    """Read-only surface exported by the canonical #240 helper."""
-
-    def effective_protection(
-        self, github: GitHub, repo: str, branch: str
-    ) -> tuple[str, str, set[tuple[str, int | None]]]: ...
-
-    def read_lease(self, path: Path) -> dict[str, Any]: ...
-
-    def require_caller(
-        self,
-        lease: dict[str, Any],
-        owner: str,
-        actor: str,
-        github: GitHub,
-    ) -> None: ...
-
-    def merge_snapshot(
-        self,
-        github: GitHub,
-        lease: dict[str, Any],
-        authorization_url: str,
-    ) -> dict[str, object]: ...
 
 
 def labels(payload: dict[str, Any]) -> set[str]:
@@ -1148,19 +1094,6 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
             "then rerun status.",
             pull,
         )
-    if capability.get("state") == "available":
-        return decision(
-            "Ready",
-            "blocked",
-            "The canonical lifecycle guard is available but no lease is held",
-            "Run ./scripts/pr_lifecycle.py acquire "
-            f"--repo {repo} --pr-number {pull['number']} --head-sha "
-            f"{head.get('sha')} --owner <task-owner> --output <lease.json>; "
-            "obtain its exact authorization comment, then rerun status with "
-            "--lease, --owner, and --authorization-url.",
-            pull,
-            ("acquire-lease",),
-        )
     if capability.get("state") != "allowed":
         return decision(
             "Ready",
@@ -1250,17 +1183,13 @@ def local_repository() -> str:
     return match.group(1)
 
 
-def inspect_capability(  # noqa: C901
+def inspect_capability(
     github: GitHub,
     repo: str,
     repository: dict[str, Any],
     pull: dict[str, Any],
-    lease: Path | None = None,
-    owner: str | None = None,
-    authorization_url: str | None = None,
-    lifecycle_module: _Lifecycle | None = None,
 ) -> dict[str, object]:
-    """Delegate read-only capability proof to the canonical #240 guard."""
+    """Fail closed until #240 ships its canonical read-only status API."""
     permissions = repository.get("permissions") or {}
     if permissions.get("push") is not True:
         return {
@@ -1271,31 +1200,16 @@ def inspect_capability(  # noqa: C901
             "required": [],
         }
     base = pull.get("base") or {}
-    head = pull.get("head") or {}
-    base_ref = base.get("ref")
     base_sha = base.get("sha")
-    head_sha = head.get("sha")
-    pull_number = pull.get("number")
-    if not all(
-        (
-            isinstance(base_ref, str),
-            isinstance(base_sha, str),
-            isinstance(head_sha, str),
-            isinstance(pull_number, int),
-        )
-    ):
+    if not isinstance(base_sha, str):
         return {
             "state": "unknown",
             "reason": "pull request identity is incomplete",
             "required": [],
         }
-    base_name = cast(str, base_ref)
-    base_commit = cast(str, base_sha)
-    head_commit = cast(str, head_sha)
-    number = cast(int, pull_number)
     try:
         lifecycle_file = github.get(
-            repo, f"contents/scripts/pr_lifecycle.py?ref={base_commit}"
+            repo, f"contents/scripts/pr_lifecycle.py?ref={base_sha}"
         )
     except RuntimeError as error:
         return {"state": "unknown", "reason": str(error), "required": []}
@@ -1310,132 +1224,13 @@ def inspect_capability(  # noqa: C901
             "reason": "canonical lifecycle script is unavailable on the base",
             "required": [],
         }
-    if lifecycle_module is None:
-        path = Path(__file__).with_name("pr_lifecycle.py")
-        if not path.is_file():
-            return {
-                "state": "unknown",
-                "reason": "canonical local lifecycle interface is unavailable",
-                "required": [],
-            }
-        executable = shutil.which("git")
-        if executable is None:
-            return {
-                "state": "unknown",
-                "reason": "Git is unavailable for lifecycle identity proof",
-                "required": [],
-            }
-        blob = subprocess.run(  # noqa: S603
-            [executable, "hash-object", str(path)],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        if blob.returncode or blob.stdout.strip() != lifecycle_file.get("sha"):
-            return {
-                "state": "unknown",
-                "reason": "local lifecycle helper differs from the base",
-                "required": [],
-            }
-        try:
-            imported = importlib.import_module("pr_lifecycle")
-        except ImportError as error:
-            return {"state": "unknown", "reason": str(error), "required": []}
-        module_file = getattr(imported, "__file__", None)
-        if not isinstance(module_file, str) or Path(module_file).resolve() != (
-            path.resolve()
-        ):
-            return {
-                "state": "unknown",
-                "reason": "canonical local lifecycle interface is ambiguous",
-                "required": [],
-            }
-        lifecycle_module = cast(_Lifecycle, imported)
-    functions = (
-        "effective_protection",
-        "read_lease",
-        "require_caller",
-        "merge_snapshot",
-    )
-    if any(
-        not callable(getattr(lifecycle_module, name, None))
-        for name in functions
-    ):
-        return {
-            "state": "unknown",
-            "reason": "canonical lifecycle read-only interface is incomplete",
-            "required": [],
-        }
-    try:
-        protection, reason, required = lifecycle_module.effective_protection(
-            github, repo, base_name
-        )
-    except RuntimeError as error:
-        return {"state": "unknown", "reason": str(error), "required": []}
-    required_output = [
-        {"context": context, "integration_id": integration_id}
-        for context, integration_id in sorted(
-            required, key=lambda item: (item[0], item[1] or -1)
-        )
-    ]
-    if protection != "enforced":
-        return {
-            "state": "blocked" if protection == "blocked" else "unknown",
-            "reason": str(reason),
-            "required": required_output,
-        }
-    supplied = (lease is not None, bool(owner), bool(authorization_url))
-    if not any(supplied):
-        return {
-            "state": "available",
-            "reason": (
-                "canonical #240 lease guard is available but not acquired"
-            ),
-            "required": required_output,
-        }
-    if not all(supplied):
-        return {
-            "state": "blocked",
-            "reason": (
-                "lease, owner, and authorization URL must be supplied together"
-            ),
-            "required": required_output,
-        }
-    lease_path = cast(Path, lease)
-    owner_name = cast(str, owner)
-    authorization = cast(str, authorization_url)
-    try:
-        lease_payload = lifecycle_module.read_lease(lease_path)
-        lifecycle_module.require_caller(lease_payload, owner_name, "", github)
-        snapshot = lifecycle_module.merge_snapshot(
-            github, lease_payload, authorization
-        )
-    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
-        return {
-            "state": "blocked",
-            "reason": f"canonical lifecycle check failed: {error}",
-            "required": required_output,
-        }
-    if (
-        not isinstance(snapshot, dict)
-        or snapshot.get("repository") != repo
-        or snapshot.get("pull_request") != number
-        or snapshot.get("head_sha") != head_commit
-        or snapshot.get("base_ref") != base_name
-        or snapshot.get("base_sha") != base_commit
-        or snapshot.get("authorization_url") != authorization
-        or snapshot.get("merge_mode") != "agent"
-    ):
-        return {
-            "state": "blocked",
-            "reason": "canonical lifecycle snapshot does not authorize this PR",
-            "required": required_output,
-        }
     return {
-        "state": "allowed",
-        "reason": "canonical lease and exact merge authorization are current",
-        "required": required_output,
-        "authorization_url": authorization_url,
+        "state": "unknown",
+        "reason": (
+            "canonical lifecycle helper has no stable read-only lease-status "
+            "interface"
+        ),
+        "required": [],
     }
 
 
@@ -1444,9 +1239,6 @@ def inspect_issue(  # noqa: C901
     repo: str,
     issue_number: int,
     branch_strategy: str,
-    lease: Path | None = None,
-    owner: str | None = None,
-    authorization_url: str | None = None,
 ) -> Decision:
     """Read live GitHub state once and derive one safe next step."""
     repository = github.get(repo)
@@ -1588,9 +1380,6 @@ def inspect_issue(  # noqa: C901
         repo,
         repository,
         pull,
-        lease,
-        owner,
-        authorization_url,
     )
     observation["capability"] = capability
     head_repo = head.get("repo") or {}
@@ -1679,30 +1468,14 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo")
     parser.add_argument("--issue", type=int, required=True)
-    parser.add_argument("--lease", type=Path)
-    parser.add_argument("--owner")
-    parser.add_argument("--authorization-url")
     args = parser.parse_args()
     try:
-        supplied = (
-            args.lease is not None,
-            bool(args.owner),
-            bool(args.authorization_url),
-        )
-        if any(supplied) and not all(supplied):
-            raise RuntimeError(
-                "--lease, --owner, and --authorization-url are required "
-                "together"
-            )
         repo = args.repo or local_repository()
         decision = inspect_issue(
             GitHub(),
             repo,
             args.issue,
             local_branch_strategy(),
-            args.lease,
-            args.owner,
-            args.authorization_url,
         )
     except (RuntimeError, ValueError, json.JSONDecodeError) as error:
         print(  # noqa: T201
