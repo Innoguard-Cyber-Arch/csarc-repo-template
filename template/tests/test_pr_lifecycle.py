@@ -545,10 +545,14 @@ def test_issue_label_helper_rejects_a_pull_request(
 ) -> None:
     """Issue automation cannot use its canonical helper to mutate a PR."""
     github = FakeGitHub("a" * 40)
-    github.get = lambda _repo, _path: {  # type: ignore[method-assign]
-        "number": 42,
-        "pull_request": {"url": "https://api.github.com/pulls/42"},
-    }
+    monkeypatch.setattr(
+        github,
+        "get",
+        lambda _repo, _path: {
+            "number": 42,
+            "pull_request": {"url": "https://api.github.com/pulls/42"},
+        },
+    )
     monkeypatch.setitem(
         edit_standalone_issue.__globals__,
         "run",
@@ -700,15 +704,22 @@ def test_merge_confirmation_cas_covers_pr_and_destination_lane(
 ) -> None:
     """The final merge window fences both exact remote lease refs."""
     commands: list[list[str]] = []
+
+    def record_run(command: list[str], **_kwargs: object) -> str:
+        commands.append(command)
+        return ""
+
     monkeypatch.setitem(
         confirm_refs.__globals__,
         "run",
-        lambda command, **_kwargs: commands.append(command) or "",
+        record_run,
     )
     lease = lease_fixture()
     confirm_refs(lease)
     command = commands[0]
-    for ref in lease["refs"]:
+    refs = lease["refs"]
+    assert isinstance(refs, list)
+    for ref in refs:
         assert f"--force-with-lease={ref}:{lease['lease_commit']}" in command
         assert f"{lease['lease_commit']}:{ref}" in command
 
@@ -1208,7 +1219,7 @@ def test_all_markdown_list_markers_block_unchecked_items(
         pull["body"] = f"{marker} [ ] unresolved"
         return pull
 
-    github.pull = unchecked_pull  # type: ignore[method-assign]
+    monkeypatch.setattr(github, "pull", unchecked_pull)
     with pytest.raises(RuntimeError, match="unchecked checklist"):
         merge_snapshot(
             github,
@@ -1331,11 +1342,13 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
     github = FakeGitHub("a" * 40)
     original_merge = github.merge
 
-    def record_merge(*args: object) -> dict[str, Any]:
+    def record_merge(
+        repo: str, number: int, head_sha: str, title: str
+    ) -> dict[str, Any]:
         mutations.append("merge-put")
-        return original_merge(*args)  # type: ignore[arg-type]
+        return original_merge(repo, number, head_sha, title)
 
-    github.merge = record_merge  # type: ignore[method-assign]
+    monkeypatch.setattr(github, "merge", record_merge)
     merge(
         SimpleNamespace(
             repo="owner/repo",
