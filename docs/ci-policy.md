@@ -79,6 +79,15 @@ git push -u origin sync/main-to-<delivery>-<main-sha>
 gh pr create --base <delivery-branch> --head sync/main-to-<delivery>-<main-sha>
 ```
 
+Sync PR 使用 repository 允許的 merge method；squash-only repository 直接以一般
+squash merge 合併，不需暫時開啟 merge commits 或使用 admin override。PR policy
+優先接受 proposed head 對當前 `main` 的直接 ancestry；若 squash 使 ancestry 不再保留，
+則透過 GitHub REST 核對 deterministic sync branch 對應的 PR 已合併至正確 delivery
+branch、該 PR head 確實包含完整的當前 main SHA，且 PR 的 `merge_commit_sha` 已包含在
+proposed head。任一 API 查詢失敗、main 已前進、PR 未合併、base 不符、sync head 未含
+該 main SHA，或 proposed head 未含該 squash commit 時都 fail closed；branch 名稱與
+commit message 本身不算證據。
+
 若發生 conflict，owner 在 `sync/*` branch 解決、說明取捨並重新跑受影響 checks；
 不得直接 push、force-push 或在 delivery branch 上解 conflict。若
 `CSARC_AUTO_SYNC=true`、`CSARC_SYNC_TOKEN` 可觸發後續 PR checks，且 branch／PR

@@ -115,6 +115,15 @@ def includes_main(compare_status: str) -> bool:
     return compare_status in {"ahead", "identical"}
 
 
+def is_delivery_branch(branch: str) -> bool:
+    """Return whether a branch is a supported delivery destination."""
+    return bool(
+        branch == "dev/next"
+        or DELIVERY_BRANCH.fullmatch(branch)
+        or ISOLATED_BRANCH.fullmatch(branch)
+    )
+
+
 def capability_state(status: int) -> str:
     """Map a non-mutating validation probe to the shared tri-state model."""
     if status == 422:
@@ -168,18 +177,79 @@ def read_main_sha(api: API, repo: str) -> str:
     return main_sha
 
 
-def gate(api: API, repo: str, base: str, head_sha: str) -> str:
+def merged_sync_pr_number(
+    api: API,
+    repo: str,
+    delivery_branch: str,
+    main_sha: str,
+    proposed_head_sha: str,
+) -> int | None:
+    """Return a merged squash sync PR whose commit is in the proposed head."""
+    sync_branch = sync_branch_name(delivery_branch, main_sha)
+    owner = repo.split("/", 1)[0]
+    query = urllib.parse.urlencode(
+        {
+            "state": "closed",
+            "head": f"{owner}:{sync_branch}",
+            "base": delivery_branch,
+            "per_page": 100,
+        }
+    )
+    status, payload = api.request("GET", f"repos/{repo}/pulls?{query}")
+    pulls = require_response(status, payload, "find merged sync PR")
+    if not isinstance(pulls, list):
+        raise RuntimeError("GitHub returned invalid sync pull request state")
+    for pull in pulls:
+        if not isinstance(pull, dict):
+            continue
+        base = pull.get("base")
+        head = pull.get("head")
+        number = pull.get("number")
+        merge_sha = pull.get("merge_commit_sha")
+        if (
+            not isinstance(base, dict)
+            or not isinstance(head, dict)
+            or not isinstance(number, int)
+            or pull.get("state") != "closed"
+            or not isinstance(pull.get("merged_at"), str)
+            or base.get("ref") != delivery_branch
+            or head.get("ref") != sync_branch
+            or not isinstance(merge_sha, str)
+            or not isinstance(head.get("sha"), str)
+        ):
+            continue
+        sync_head_sha = head["sha"]
+        if not includes_main(compare(api, repo, main_sha, sync_head_sha)):
+            continue
+        if includes_main(compare(api, repo, merge_sha, proposed_head_sha)):
+            return number
+    return None
+
+
+def gate(
+    api: API,
+    repo: str,
+    base: str,
+    head_sha: str,
+    delivery_base: str = "",
+) -> str:
     """Fail a non-main PR unless its proposed head contains current main."""
     if base == "main":
         return "not-applicable"
     main_sha = read_main_sha(api, repo)
     compare_status = compare(api, repo, main_sha, head_sha)
-    if not includes_main(compare_status):
-        raise RuntimeError(
-            f"PR head does not contain current main {main_sha}; "
-            "merge main through a reviewed sync branch first"
+    if includes_main(compare_status):
+        return compare_status
+    if delivery_base and is_delivery_branch(delivery_base):
+        sync_pr = merged_sync_pr_number(
+            api, repo, delivery_base, main_sha, head_sha
         )
-    return compare_status
+        if sync_pr is not None:
+            return f"squash-sync-pr-{sync_pr}"
+    raise RuntimeError(
+        f"PR head does not contain current main {main_sha} or its verified "
+        "reviewed sync squash; synchronize main first"
+    )
 
 
 def sync_branch_name(delivery_branch: str, main_sha: str) -> str:
@@ -412,6 +482,7 @@ def main() -> None:
     parser.add_argument("command", choices=("gate", "reconcile"))
     parser.add_argument("--repo", required=True)
     parser.add_argument("--base", default="")
+    parser.add_argument("--delivery-base", default="")
     parser.add_argument("--head-sha", default="")
     parser.add_argument("--main-sha", default="")
     parser.add_argument("--auto", choices=("true", "false"), default="false")
@@ -429,7 +500,13 @@ def main() -> None:
         if args.command == "gate":
             if not args.base or not args.head_sha:
                 raise RuntimeError("gate requires --base and --head-sha")
-            result = gate(api, args.repo, args.base, args.head_sha)
+            result = gate(
+                api,
+                args.repo,
+                args.base,
+                args.head_sha,
+                args.delivery_base,
+            )
             print(f"delivery sync gate: {result}")  # noqa: T201
         else:
             main_sha = args.main_sha or read_main_sha(api, args.repo)
