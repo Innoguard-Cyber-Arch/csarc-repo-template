@@ -15,7 +15,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 STATES = {"allowed", "blocked", "unknown"}
@@ -27,6 +27,8 @@ DEPENDABOT_FALLBACK = (
     "Keep GitHub Dependabot via .github/dependabot.yml and the existing "
     "required CI/CD checks."
 )
+RELEASE_PLEASE_ACTOR = "github-actions[bot]"
+RELEASE_PLEASE_COMMITTER = "web-flow"
 
 
 @dataclass(frozen=True)
@@ -141,6 +143,121 @@ def release_intent(title: str) -> str:
     if match.group(1) in {"fix", "revert"}:
         return "patch"
     return "no-release"
+
+
+def release_follow_up_errors(  # noqa: C901
+    root: Path,
+    repo: str,
+    head: str,
+    head_repo: str,
+    head_sha: str,
+    actor: str,
+    changed_files: list[str],
+    commits: list[dict[str, Any]],
+    actor_permission: str = "",
+) -> list[str]:
+    """Reject release follow-ups outside the automation-owned boundary."""
+    errors: list[str] = []
+    if head_repo != repo:
+        errors.append("release follow-up must come from this repository")
+    automation_actor = actor == RELEASE_PLEASE_ACTOR
+    maintainer_actor = bool(actor) and actor_permission in {"admin", "maintain"}
+    if not automation_actor and not maintainer_actor:
+        errors.append(
+            "release follow-up must be authored by github-actions[bot] "
+            "or a live repository maintainer"
+        )
+    if not re.fullmatch(r"[0-9a-f]{40}", head_sha):
+        errors.append("release follow-up head is not a full commit SHA")
+    elif not commits or commits[-1].get("sha") != head_sha:
+        errors.append("release follow-up commits do not end at the PR head")
+    for commit in commits:
+        author = commit.get("author")
+        committer = commit.get("committer")
+        commit_data = commit.get("commit")
+        verification = (
+            commit_data.get("verification")
+            if isinstance(commit_data, dict)
+            else None
+        )
+        expected_author = RELEASE_PLEASE_ACTOR if automation_actor else actor
+        allowed_committers = (
+            {RELEASE_PLEASE_COMMITTER}
+            if automation_actor
+            else {actor, RELEASE_PLEASE_COMMITTER}
+        )
+        if (
+            not isinstance(author, dict)
+            or author.get("login") != expected_author
+            or not isinstance(committer, dict)
+            or committer.get("login") not in allowed_committers
+            or not isinstance(verification, dict)
+            or verification.get("verified") is not True
+            or verification.get("reason") != "valid"
+        ):
+            errors.append(
+                "release follow-up commits must be verified GitHub commits "
+                "owned by the trusted release actor"
+            )
+            break
+
+    try:
+        config = json.loads(
+            (root / "release-please-config.json").read_text(encoding="utf-8")
+        )
+        packages = config["packages"]
+        package = packages["."]
+        component = package["component"]
+        release_type = package.get("release-type", config.get("release-type"))
+        if not isinstance(component, str) or not component:
+            raise ValueError("release component is missing")
+        if release_type not in {"simple", "python", "node"}:
+            raise ValueError("release type is unsupported")
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        errors.append(f"release-please configuration is invalid: {error}")
+        return errors
+
+    expected_head = f"release-please--branches--main--components--{component}"
+    if head != expected_head:
+        errors.append(f"release follow-up branch must be {expected_head}")
+
+    allowed = {".release-please-manifest.json", "CHANGELOG.md"}
+    release_file = {
+        "simple": "version.txt",
+        "python": "pyproject.toml",
+        "node": "package.json",
+    }[release_type]
+    allowed.add(release_file)
+    for item in package.get("extra-files", []):
+        value = (
+            item
+            if isinstance(item, str)
+            else item.get("path")
+            if isinstance(item, dict)
+            else None
+        )
+        if not isinstance(value, str):
+            errors.append("release-please extra-files entry is invalid")
+            continue
+        path = PurePosixPath(value)
+        if path.is_absolute() or ".." in path.parts:
+            errors.append(f"release-please extra-files path is unsafe: {value}")
+            continue
+        allowed.add(path.as_posix())
+    for lockfile in ("uv.lock", "pnpm-lock.yaml"):
+        if (root / lockfile).is_file():
+            allowed.add(lockfile)
+
+    changed = {path for path in changed_files if path}
+    if not changed:
+        errors.append("release follow-up has no changed files")
+    unexpected = sorted(changed - allowed)
+    if unexpected:
+        errors.append(
+            "release follow-up changes non-release files: "
+            + ", ".join(unexpected)
+        )
+    return errors
 
 
 def bump_version(version: str, messages: list[str]) -> str | None:
@@ -1053,12 +1170,46 @@ def parser() -> argparse.ArgumentParser:
     verify = subparsers.add_parser("verify-version")
     verify.add_argument("--tag")
     verify.add_argument("--root", type=Path, default=Path.cwd())
+    verify_follow_up = subparsers.add_parser("verify-release-follow-up")
+    verify_follow_up.add_argument("--repo", required=True)
+    verify_follow_up.add_argument("--head", required=True)
+    verify_follow_up.add_argument("--head-repo", required=True)
+    verify_follow_up.add_argument("--head-sha", required=True)
+    verify_follow_up.add_argument("--actor", required=True)
+    verify_follow_up.add_argument("--actor-permission", default="")
+    verify_follow_up.add_argument("--changed-files", type=Path, required=True)
+    verify_follow_up.add_argument("--commits", type=Path, required=True)
+    verify_follow_up.add_argument("--root", type=Path, default=Path.cwd())
     return result
 
 
 def main(arguments: list[str] | None = None) -> int:  # noqa: C901
     """Run capability detection, direct release, or build preparation."""
     args = parser().parse_args(arguments)
+    if args.command == "verify-release-follow-up":
+        commit_pages = json.loads(args.commits.read_text(encoding="utf-8"))
+        if not isinstance(commit_pages, list) or any(
+            not isinstance(page, list)
+            or any(not isinstance(commit, dict) for commit in page)
+            for page in commit_pages
+        ):
+            raise SystemExit("release follow-up commit response is invalid")
+        commits = [commit for page in commit_pages for commit in page]
+        errors = release_follow_up_errors(
+            args.root.resolve(),
+            args.repo,
+            args.head,
+            args.head_repo,
+            args.head_sha,
+            args.actor,
+            args.changed_files.read_text(encoding="utf-8").splitlines(),
+            commits,
+            args.actor_permission,
+        )
+        if errors:
+            raise SystemExit("; ".join(errors))
+        print("Release follow-up source is verified.")  # noqa: T201
+        return 0
     if args.command == "boundary":
         write_boundary(
             simple_release_boundary(

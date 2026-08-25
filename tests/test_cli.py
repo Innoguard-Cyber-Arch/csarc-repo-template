@@ -175,7 +175,7 @@ def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
         "--data",
         "language=ci",
     ]
-    assert main([*arguments, "--dry-run"]) == 0
+    assert main(arguments) == 0
     plan = (
         tmp_path
         / "pending-product-csarc-adoption-report"
@@ -649,7 +649,7 @@ def test_milestone_description_plan_degrades_without_api_access(
     assert "review them manually" in output
 
 
-def test_adopt_requires_clean_tree_and_preserves_product_files(
+def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Adopt detects Python and never changes the existing manifest."""
@@ -836,6 +836,57 @@ def test_adopt_finalize_rejects_repository_drift(
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
 
 
+def test_adopt_finalize_rechecks_repository_context_after_confirmation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Reject repository context drift while finalize waits for approval."""
+    _, project = initialize_pending_adoption(tmp_path)
+    assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 0
+    stable = cli.RepositoryContext(
+        None,
+        None,
+        None,
+        "private",
+        "saved",
+        False,
+        "No GitHub origin or GH_REPO was found.",
+    )
+    current = [stable]
+    monkeypatch.setattr(
+        cli, "repository_context", lambda *args, **kwargs: current[0]
+    )
+
+    def drift_during_confirmation(_: str) -> str:
+        current[0] = cli.RepositoryContext(
+            "different/repository",
+            "different",
+            "organization",
+            "public",
+            "github",
+            True,
+        )
+        return "yes"
+
+    monkeypatch.setattr("builtins.input", drift_during_confirmation)
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--finalize",
+                "--apply-plan",
+                str(finalize_plan_path(project)),
+            ]
+        )
+        == 2
+    )
+    assert "Repository context changed" in capsys.readouterr().err
+    assert (project / cli.PENDING_ADOPTION_FILE).is_file()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+
 def test_adopt_finalize_failure_keeps_actionable_pending_state(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -862,8 +913,9 @@ def test_adopt_finalize_requires_matching_second_stage_plan(
 ) -> None:
     """Bind accepted manual results and recheck them after confirmation."""
     _, project = initialize_pending_adoption(tmp_path)
-    assert main(["adopt", str(project), "--finalize", "--yes"]) == 2
-    assert "--finalize --dry-run first" in capsys.readouterr().err
+    assert main(["adopt", str(project), "--finalize", "--yes"]) == 0
+    assert finalize_plan_path(project).is_file()
+    capsys.readouterr()
     manifest = project / "pyproject.toml"
     reviewed = manifest.read_bytes()
     assert main(["adopt", str(project), "--finalize", "--dry-run"]) == 0
@@ -970,7 +1022,13 @@ def test_real_template_adoption_resumes_after_manifest_merge(
     data = cli.base_data(
         project,
         "adopt",
-        {"coverage_mode": "global", "language": language},
+        {
+            "coverage_mode": "global",
+            "language": language,
+            "security_reporting_channel": (
+                "Use the synthetic fixture's private reporting channel."
+            ),
+        },
     )
     data["project_visibility"] = "private"
     cli.copier_copy(
@@ -1017,6 +1075,9 @@ def test_real_template_adoption_resumes_after_manifest_merge(
         f"language={language}",
         "--data",
         "coverage_mode=global",
+        "--data",
+        "security_reporting_channel=Use the synthetic fixture's "
+        "private reporting channel.",
     ]
     assert main([*arguments, "--dry-run"]) == 0
     plan_path = (
@@ -1126,9 +1187,16 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "--allow-unreleased",
         "--data",
         "language=ci",
+        "--data",
+        "security_reporting_channel=Use the synthetic fixture's "
+        "private reporting channel.",
+        "--data",
+        "project_name=Product Identity",
+        "--data",
+        "project_slug=product-identity",
     ]
 
-    assert main([*arguments, "--dry-run"]) == 0
+    assert main(arguments) == 0
     plan_path = (
         tmp_path
         / "existing CSARC-測試-csarc-adoption-report"
@@ -1145,6 +1213,7 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert cli.PROVENANCE_FILE.as_posix() in payload["files"]["add"]
     assert payload["adoption"]["project_verification_hook"] == "configured"
     assert payload["adoption"]["verification"] == "passed"
+    assert payload["answers"]["package_name"] == "product_identity"
 
     assert (
         main(
@@ -1303,6 +1372,64 @@ def test_adoption_report_failure_keeps_markdown(
     assert git(project, "status", "--porcelain") == before
 
 
+@pytest.mark.parametrize(
+    "temporary_name",
+    [
+        f"{cli.ADOPTION_REPORT_BASENAME}.md.tmp",
+        f"{cli.ADOPTION_REPORT_BASENAME}.pdf.tmp",
+        cli.ADOPTION_PLAN_BASENAME.replace(".json", ".json.tmp"),
+    ],
+)
+def test_adoption_reports_ignore_predictable_temporary_symlinks(
+    tmp_path: Path,
+    temporary_name: str,
+) -> None:
+    """Never truncate a victim through a predictable report temporary path."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "report-symlink-product"
+    project.mkdir()
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: report symlink product")
+    report_dir = tmp_path / "reports"
+    report_dir.mkdir()
+    victim = tmp_path / "victim.txt"
+    victim.write_text("do not replace\n", encoding="utf-8")
+    planted = report_dir / temporary_name
+    planted.symlink_to(victim)
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--dry-run",
+                "--report-dir",
+                str(report_dir),
+            ]
+        )
+        == 0
+    )
+
+    assert victim.read_text(encoding="utf-8") == "do not replace\n"
+    assert planted.is_symlink()
+    for name in (
+        f"{cli.ADOPTION_REPORT_BASENAME}.md",
+        f"{cli.ADOPTION_REPORT_BASENAME}.pdf",
+        cli.ADOPTION_PLAN_BASENAME,
+    ):
+        output = report_dir / name
+        assert output.is_file()
+        assert not output.is_symlink()
+
+
 def test_adoption_report_path_and_settings_are_safe(tmp_path: Path) -> None:
     """Keep reports outside the repo and omit arbitrary Copier data values."""
     project = (tmp_path / "product").resolve()
@@ -1392,6 +1519,7 @@ def test_adopt_help_describes_report_directory(
     assert "--apply-plan PATH" in help_text
     assert "--finalize" in help_text
     assert "--report-dir PATH" in help_text
+    assert "plan without writing (the default for adopt)" in help_text
 
 
 def test_adopt_reports_dirty_tree_without_mutating_it(tmp_path: Path) -> None:
@@ -1538,8 +1666,21 @@ def test_adopt_rejects_plan_tampering_and_target_drift(
     (project / "product.txt").write_text("new product\n", encoding="utf-8")
     commit(project, "test: move target head")
     assert main(["adopt", str(project), "--apply-plan", str(plan_path)]) == 2
-    assert "drifted after dry-run" in capsys.readouterr().err
+    error = capsys.readouterr().err
+    assert "drifted after dry-run" in error
+    assert "$.adoption.target_head" in error
     assert not (project / "managed.txt").exists()
+
+
+def test_json_differences_reports_paths_and_values() -> None:
+    """Explain plan drift at the exact JSON leaves that changed."""
+    assert cli.json_differences(
+        {"artifacts": {"managed.txt": "old"}, "files": ["a"]},
+        {"artifacts": {"managed.txt": "new"}, "files": ["a", "b"]},
+    ) == (
+        "$.artifacts.managed.txt: saved='old', rebuilt='new'",
+        "$.files.length: saved=1, rebuilt=2",
+    )
 
 
 def test_adopt_rechecks_target_after_confirmation(
@@ -1590,6 +1731,74 @@ def test_adopt_rechecks_target_after_confirmation(
         capsys.readouterr().err
     )
     assert product.read_bytes() == b"changed while waiting\n"
+    assert not (project / "managed.txt").exists()
+    assert not (project / cli.PROVENANCE_FILE).exists()
+
+
+def test_adopt_rechecks_repository_context_after_confirmation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Reject repository context drift while apply waits for approval."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "context-drift-product"
+    project.mkdir()
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: context drift product")
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--data",
+        "language=ci",
+    ]
+    assert main([*arguments, "--dry-run"]) == 0
+    stable = cli.RepositoryContext(
+        None,
+        None,
+        None,
+        "private",
+        "safe-default",
+        False,
+        "No GitHub origin or GH_REPO was found.",
+    )
+    current = [stable]
+    monkeypatch.setattr(
+        cli, "repository_context", lambda *args, **kwargs: current[0]
+    )
+
+    def drift_during_confirmation(_: str) -> str:
+        current[0] = cli.RepositoryContext(
+            "different/repository",
+            "different",
+            "organization",
+            "public",
+            "github",
+            True,
+        )
+        return "yes"
+
+    monkeypatch.setattr("builtins.input", drift_during_confirmation)
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(finalize_plan_path(project)),
+            ]
+        )
+        == 2
+    )
+    assert "Repository context changed" in capsys.readouterr().err
     assert not (project / "managed.txt").exists()
     assert not (project / cli.PROVENANCE_FILE).exists()
 
@@ -1685,6 +1894,34 @@ def test_fixed_merges_preserve_product_content_and_crlf() -> None:
     assert ignored == "dist/\r\n.env\r\n\r\n.venv/\r\n"
 
 
+@pytest.mark.parametrize("name", ["AGENTS.md", ".gitignore"])
+def test_adoption_policies_do_not_follow_final_symlinks(
+    tmp_path: Path, name: str
+) -> None:
+    """Leave final symlinks for unknown-file review without reading them."""
+    stage = tmp_path / "stage"
+    target = tmp_path / "target"
+    stage.mkdir()
+    target.mkdir()
+    generated = (
+        f"{cli.AGENTS_BLOCK_START}\ngenerated\n{cli.AGENTS_BLOCK_END}\n"
+        if name == "AGENTS.md"
+        else "generated ignore\n"
+    )
+    (stage / name).write_text(generated, encoding="utf-8")
+    external = tmp_path / f"external-{name.lstrip('.')}"
+    external.write_text(f"external {name}\n", encoding="utf-8")
+    (target / name).symlink_to(external)
+
+    merged = cli.apply_adoption_policies(stage, target)
+    plan = cli.compare_stage(stage, target, adopt=True, merged_paths=merged)
+
+    assert merged == ()
+    assert plan.unknown == (name,)
+    assert (stage / name).read_text(encoding="utf-8") == generated
+    assert external.read_text(encoding="utf-8") == f"external {name}\n"
+
+
 def test_compare_stage_includes_file_traits_without_following_links(
     tmp_path: Path,
 ) -> None:
@@ -1704,6 +1941,75 @@ def test_compare_stage_includes_file_traits_without_following_links(
 
     assert plan.manual == ("mode.txt",)
     assert plan.unknown == ("link-drift", "link-target")
+
+
+@pytest.mark.parametrize(
+    ("collision", "unknown_path"),
+    [
+        ("target-directory", "collision"),
+        ("target-file-ancestor", "collision/managed.txt"),
+        (
+            "target-multilevel-file-ancestor",
+            "collision/nested/managed.txt",
+        ),
+    ],
+)
+def test_adopt_reports_file_directory_collisions_without_writes(
+    tmp_path: Path,
+    collision: str,
+    unknown_path: str,
+) -> None:
+    """Classify file-directory collisions before building a candidate."""
+    source, _ = make_template(tmp_path)
+    project = tmp_path / collision
+    project.mkdir()
+    if collision == "target-directory":
+        (source / "template" / "collision").write_text(
+            "template file\n", encoding="utf-8"
+        )
+        (project / "collision").mkdir()
+        (project / "collision" / "owned.txt").write_text(
+            "owned\n", encoding="utf-8"
+        )
+    else:
+        managed = source / "template" / unknown_path
+        managed.parent.mkdir(parents=True)
+        managed.write_text("template file\n", encoding="utf-8")
+        (project / "collision").write_text("owned\n", encoding="utf-8")
+    revision = commit(source, "test: add file directory collision")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: collision product")
+    before = cli.target_file_snapshot(project)
+    status = git(project, "status", "--porcelain")
+    report_dir = tmp_path / f"{collision}-report"
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--dry-run",
+                "--report-dir",
+                str(report_dir),
+            ]
+        )
+        == 0
+    )
+
+    report = (report_dir / f"{cli.ADOPTION_REPORT_BASENAME}.md").read_text(
+        encoding="utf-8"
+    )
+    assert f"`{unknown_path}`" in report
+    assert "directory, ancestor, or special-file collision" in report
+    assert cli.target_file_snapshot(project) == before
+    assert git(project, "status", "--porcelain") == status
 
 
 def test_adopt_dry_run_rejects_symlink_ancestor_without_writes(
@@ -1985,6 +2291,221 @@ def test_update_check_dry_run_apply_and_conflict(
         == 2
     )
     assert "<<<<<<<" in (project / "managed.txt").read_text(encoding="utf-8")
+
+
+def test_update_rechecks_committed_head_after_confirmation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Reject a clean committed target change made during confirmation."""
+    source, project, _ = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    (project / "product.txt").write_text("before\n", encoding="utf-8")
+    commit(project, "test: generated project")
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    revision = commit(source, "test: template version two")
+
+    def drift_during_confirmation(_: str) -> str:
+        (project / "product.txt").write_text("after\n", encoding="utf-8")
+        commit(project, "test: concurrent product change")
+        return "yes"
+
+    monkeypatch.setattr("builtins.input", drift_during_confirmation)
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+            ]
+        )
+        == 2
+    )
+    assert "Repository changed" in capsys.readouterr().err
+    assert (project / "managed.txt").read_text(encoding="utf-8") == (
+        "template version one\n"
+    )
+
+
+def test_update_rechecks_repository_context_after_confirmation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Reject repository origin or visibility drift before Copier writes."""
+    source, project, _ = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated project")
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    revision = commit(source, "test: template version two")
+    stable = cli.RepositoryContext(
+        "owner/repository",
+        "owner",
+        "organization",
+        "private",
+        "github",
+        True,
+    )
+    current = [stable]
+    monkeypatch.setattr(
+        cli, "repository_context", lambda *args, **kwargs: current[0]
+    )
+
+    def drift_during_confirmation(_: str) -> str:
+        current[0] = cli.RepositoryContext(
+            "different/repository",
+            "different",
+            "organization",
+            "public",
+            "github",
+            True,
+        )
+        return "yes"
+
+    monkeypatch.setattr("builtins.input", drift_during_confirmation)
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+            ]
+        )
+        == 2
+    )
+    assert "Repository context changed" in capsys.readouterr().err
+    assert (project / "managed.txt").read_text(encoding="utf-8") == (
+        "template version one\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("saved_channel", "explicit_channel", "expected_channel"),
+    [
+        (
+            "Open a GitHub Issue at https://github.com/old/repository/"
+            "issues/new; maintainers receive notifications for new Issues.",
+            None,
+            "Open a GitHub Issue at https://github.com/new/repository/"
+            "issues/new; maintainers receive notifications for new Issues.",
+        ),
+        (
+            "Use the approved private reporting channel.",
+            None,
+            "Use the approved private reporting channel.",
+        ),
+        (
+            "Open a GitHub Issue at https://github.com/old/repository/"
+            "issues/new; maintainers receive notifications for new Issues.",
+            "Use the newly approved reporting channel.",
+            "Use the newly approved reporting channel.",
+        ),
+    ],
+)
+def test_update_repository_rename_preserves_custom_security_channel(
+    saved_channel: str,
+    explicit_channel: str | None,
+    expected_channel: str,
+) -> None:
+    """Only move a repository-derived reporting channel to the new URL."""
+    answers: dict[str, object] = {
+        "language": "python",
+        "project_visibility": "private",
+        "repository_url": "https://github.com/old/repository",
+        "security_reporting_channel": saved_channel,
+    }
+    explicit_data = (
+        {"security_reporting_channel": explicit_channel}
+        if explicit_channel is not None
+        else {}
+    )
+    repository = cli.RepositoryContext(
+        "new/repository",
+        "new",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+
+    result, update_data = cli.update_plan_answers(
+        answers, explicit_data, repository
+    )
+
+    assert result["repository_url"] == "https://github.com/new/repository"
+    assert result["security_reporting_channel"] == expected_channel
+    if saved_channel == expected_channel and explicit_channel is None:
+        assert "security_reporting_channel" not in update_data
+
+
+def test_update_rechecks_snapshot_after_repository_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Reject target drift introduced while repository context is refreshed."""
+    source, project, _ = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    product = project / "product.txt"
+    product.write_text("before\n", encoding="utf-8")
+    commit(project, "test: generated project")
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    revision = commit(source, "test: template version two")
+    stable = cli.RepositoryContext(
+        "owner/repository",
+        "owner",
+        "organization",
+        "private",
+        "github",
+        True,
+    )
+    calls = 0
+
+    def context_with_target_drift(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            product.write_text("after\n", encoding="utf-8")
+            commit(project, "test: context-query product change")
+        return stable
+
+    monkeypatch.setattr(cli, "repository_context", context_with_target_drift)
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
+    )
+    assert calls == 2
+    assert "Repository changed" in capsys.readouterr().err
+    assert (project / "managed.txt").read_text(encoding="utf-8") == (
+        "template version one\n"
+    )
 
 
 def test_update_recomputes_visibility_defaults_from_github(
