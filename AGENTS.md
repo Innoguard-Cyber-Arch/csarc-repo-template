@@ -25,7 +25,7 @@
 9. Add or update the narrowest regression check that proves non-trivial behavior.
 10. Run targeted checks while iterating, then run `./scripts/verify-template.sh` before opening or updating a pull request.
 11. Create a final Issue labeled `promotion` when planning a delivery Milestone, and keep it open while work merges into the Milestone branch. An isolated `dev/i*` Issue itself is the promotion Issue. Before closing either kind, re-check the acceptance criteria and promotion evidence. The lifecycle workflow closes a zero-open-Issue Milestone only when every acceptance checkbox is checked, and reopens it when open work or an unchecked criterion returns.
-12. Before using `Closes`, `Fixes`, or `Resolves`, complete every task in the pull request and referenced Issue; do not check work that lacks its stated evidence. Open an Issue pull request against its delivery branch or immediate parent in the stack; only a promotion, release-please, or qualified hotfix may target `main`. Never merge it yourself except under an explicit repository self-merge policy and the quota fallback documented in `docs/ci-policy.md`.
+12. Use `Closes`, `Fixes`, or `Resolves` only after every PR and referenced-Issue item has evidence. Target the delivery branch or immediate stack parent; only promotion, release-please, or qualified hotfix may target `main`. Before any automated PR Ready/Draft, authorization, label/milestone, or merge write, acquire its remote lease and use `scripts/pr_lifecycle.py`; other tasks remain read-only. Never merge except under the documented self-merge and quota fallback.
 13. After a pull request is merged, the agent that created its worktree must leave that worktree, fetch its delivery branch, and run `./scripts/cleanup-worktrees --apply --worktree <path> origin/<delivery-branch>` from another checkout. If the task is explicitly abandoned instead, its creator may remove only that clean worktree with `git worktree remove <path>`; keep the branch. Platform-managed worktrees stay under the platform lifecycle. For repository-wide maintenance, review the command's default dry run before omitting `--worktree`; it never removes main, current, locked, detached, dirty, unmerged, or unverifiable worktrees.
 14. Report what changed, which verification ran, and any remaining limitation.
 
@@ -76,7 +76,7 @@ Duplicate triage may close an Issue without code changes when it links the canon
 - Never commit secrets, tokens, private keys, or populated `.env` files.
 - Review the plan output before applying repository settings; do not operate production or external infrastructure without explicit authorization.
 - Do not bypass required checks, human approval, CODEOWNER review, or supply-chain verification except for the exact quota-only, SHA-bound local verification fallback defined above; that exception does not waive human authorization or any non-local control.
-- Alpha 階段允許作者自行合併；在 PR 內文加註 `Alpha 自行合併 / self-merged`，作為 working loop 中「never merge it yourself」規則的已知例外。
+- Alpha 階段允許作者自行合併，但只能持有 lifecycle lease、通過工具 gate 並在 PR 內文加註 `Alpha 自行合併 / self-merged`。
 
 ## Code Review Rules
 

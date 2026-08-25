@@ -305,27 +305,26 @@ jobs:
           echo "$RELEASE_REASON" >> "$GITHUB_STEP_SUMMARY"
 
   release-pr:
-    name: release pull request
+    name: release pull request (human-only)
     needs: [source, capabilities]
     if: >-
       ${{ needs.capabilities.outputs.mode == 'release-pr' &&
       github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
+      release_created: ${{ steps.guard.outputs.release_created }}
+      tag_name: ${{ steps.guard.outputs.tag_name }}
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Open or update the release pull request
-        id: release
-        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+      - name: Fail closed before an opaque release pull request write
+        id: guard
+        run: |
+          echo "release_created=false" >> "$GITHUB_OUTPUT"
+          echo "tag_name=" >> "$GITHUB_OUTPUT"
+          echo "::error::Private Free degraded mode: Release Please cannot atomically bind its pre-PR Draft, label, and branch writes to an exact lifecycle lease. Automated release PR creation and updates are disabled. A human maintainer must create or update the release PR; later PR metadata and state changes must use scripts/pr_lifecycle.py."
+          exit 1
 
   dispatch-release-pr:
     name: dispatch release pull request artifacts
