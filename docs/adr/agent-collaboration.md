@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-25
-- **來源 Issues：**[#126](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/126), [#145](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/145), [#155](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/155), [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171), [#177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#241](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/241)
+- **來源 Issues：**[#126](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/126), [#145](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/145), [#155](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/155), [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171), [#177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177), [#204](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/204), [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240), [#241](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/241), [#308](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/308)
 - **實作 PRs：**[#127](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/127), [#147](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/147), [#158](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/158), [#173](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/173), [#185](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/185)
 
 ## 問題與限制
@@ -16,7 +16,9 @@ GitHub Agents 頁籤可把 repository 工作交給 cloud coding agents，但 ses
 - 每個平行可寫任務使用獨立 branch 與 worktree，只平行處理可分離範圍；PR、CI 與最終整合仍是共同門禁。
 - 建立工作前以 2–4 個具體詞限量搜尋 open／closed Issues，閱讀 body、comments 與 linked PR；在新 work item 記錄沿用、取代或駁回。
 - Durable constraint 經使用者確認後摘要進 Issue，再由 scoped PR 更新 decision record；不保存 raw conversation 或 unconfirmed inference。
-- 建立 worktree 的 agent 在 merge／abandon 後負責安全清理；只清理自己建立、乾淨且可證明已整合的 worktree。
+- Agent 預設在非雲端同步的本機檔案系統操作 active checkout、worktree、environment 與 cache。若起始路徑由 File Provider 管理，例行工作不要求使用者額外確認或設定；agent 改用本機 checkout 並保留既有變更。
+- 建立 worktree 的 agent 在 merge／abandon 後負責 scoped 安全清理；每次 agent 啟動只讀 worktree metadata，不執行全 repo 內容與網路掃描。全域 dry-run 保留為明確的 repository maintenance。
+- Delegated agent 執行範圍內檢查並回報；PR owner 或 integrating agent 對每個最終 candidate tree 執行一次完整驗證。
 - 本機驗證 attestation 只有在精確 quota-only 條件與 human authorization 下成立，且只綁定一個 SHA。
 - GitHub Issue、PR、review 與 CI 維持協作與治理基線；Agents 頁籤已評估但暫不納入，不新增 setup workflow、custom agent 或 repository policy。
 - PR lifecycle 寫入以 repository remote ref 作 atomic single-writer lease；每張 PR 同時取得依 destination branch 決定的 lane lease。Lease 綁定 PR、base、完整 head SHA、期限與不公開的隨機 capability；只有可驗證的過期 lease 可被 atomic 回收。Agent 的 Ready／Draft、label／milestone、authorization preparation 與 merge 一律走 `scripts/pr_lifecycle.py`，其他 task 維持唯讀；無法在取得精確 PR/head 前綁定 lease 的 Release Please writer fail closed 為 human-only。
@@ -30,7 +32,7 @@ GitHub Agents 頁籤可把 repository 工作交給 cloud coding agents，但 ses
 | Preserved | 以 bounded GitHub history search 取代第一版向量／語意資料庫 | [#145](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/145)／[#147](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/147) |
 | Rejected | Agent 自動保存完整聊天或把推論升格為決策 | [#177](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/177)／[#185](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/185) |
 | Preserved | Actions 無法替代 agent host 上的 worktree cleanup | [#155](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/155)／[#158](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/158) |
-| Unresolved | 下一個 agent 的 startup cleanup 保險在 cutoff 時尚未合併 | [#204](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/204)／[PR #210](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/210) |
+| Superseded | 每個 agent 啟動時全域掃描所有 worktree；實測在 43 個 worktree 與 File Provider 路徑下無界卡住，改由 creator-scoped cleanup 與明確維護取代 | [#204](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/204)／[PR #210](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/210)／[#308](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/308) |
 | Preserved | Worktree isolation 不涵蓋 GitHub control plane；以遠端 PR／promotion lease 補足 | [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240) |
 
 ## Ownership 與驗證
@@ -44,6 +46,8 @@ GitHub Agents 頁籤可把 repository 工作交給 cloud coding agents，但 ses
 | 多 agent 共用一個 working directory | 不採用；branch 無法隔離未提交狀態 |
 | 強制安裝 Worktrunk／特定 orchestrator | 不採用作 baseline；native Git 必須可用 |
 | 用背景 daemon 或 Actions 清本機 worktree | 不採用；遠端看不到 agent host，隱式刪除風險高 |
+| 每個 agent 啟動時掃描全 repo worktrees | 不採用；成本隨 worktree、檔案 I/O 與 GitHub API 呼叫無界增加 |
+| 在 cloud-synced File Provider 路徑操作 active repository | 不採用；placeholder hydration 與同步衝突不符合 Git 所需的穩定本機 I/O |
 | 只靠 agent 記憶先前對話 | 不採用；session 與工具切換後不可依賴 |
 | GitHub Agents 頁籤作為預設執行層 | 暫不採用；會增加依 token 計價的 AI credits 與 Actions 用量，現階段沒有成本效益證據 |
 | 只用本機 lock file 或 worktree 路徑互斥 | 不採用；無法涵蓋另一個 process、host 或 GitHub client |
