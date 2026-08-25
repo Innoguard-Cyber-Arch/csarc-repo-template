@@ -1360,6 +1360,18 @@ def test_admin_secret_is_limited_to_trusted_workflow_definitions() -> None:
         assert "secrets.CSARC_SYNC_TOKEN" in source
 
 
+def test_post_merge_accepts_promotion_bridge() -> None:
+    """The trusted main verifier accepts the Milestone bridge route."""
+    workflow = (
+        Path(__file__).parents[1]
+        / ".github/workflows/promotion-post-merge.yml"
+    ).read_text()
+    assert (
+        '! "$head_ref" =~ '
+        "^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$"
+    ) in workflow
+
+
 def test_delivery_reconcile_requires_dev_next() -> None:
     """An empty ref list cannot masquerade as synchronized delivery state."""
     api = FakeAPI([(200, []), (200, [])])
