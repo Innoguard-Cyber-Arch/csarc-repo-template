@@ -11,7 +11,12 @@
    requested `csarc init`, `adopt`, or `update` command as a dry-run first;
    `adopt` and `adopt --finalize` default to dry-run when no `--apply-plan` is
    supplied. For a release-specific request, pass both `--to` and
-   `--expected-sha`.
+   `--expected-sha`. Before `init` or `adopt`, confirm the project description,
+   shortest working product command, and security reporting channel. The
+   default channel is the repository's public GitHub Issues page; warn users
+   never to post secrets, credentials, personal data, or other sensitive
+   details there. Never invent an email address, acknowledgement window, or
+   resolution SLA.
 4. Summarize the verified release, full commit SHA, release capability
    preflight, settings, conflict risk, and every file classified as add,
    overwrite, preserve, automatic merge, manual merge, or unable to determine.

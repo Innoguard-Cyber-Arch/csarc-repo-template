@@ -20,9 +20,27 @@ jobs:
     name: title
     runs-on: ubuntu-latest
     steps:
-      - name: Accept the already-validated merge queue candidate
+      - name: Check out the queued target branch
         if: ${{ github.event_name == 'merge_group' }}
-        run: echo "Pull request policy and delivery synchronization were validated before merge queue entry."
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.merge_group.base_sha }}
+      - name: Revalidate the queued promotion
+        if: ${{ github.event_name == 'merge_group' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QUEUE_BASE_REF: ${{ github.event.merge_group.base_ref }}
+          QUEUE_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          QUEUE_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          QUEUE_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: >-
+          python3 scripts/delivery_sync.py merge-group-gate
+          --repo "$GITHUB_REPOSITORY"
+          --base "$QUEUE_BASE_REF"
+          --base-sha "$QUEUE_BASE_SHA"
+          --queue-ref "$QUEUE_HEAD_REF"
+          --queue-sha "$QUEUE_HEAD_SHA"
       - if: ${{ github.event_name == 'pull_request' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -36,9 +54,13 @@ jobs:
           PR_BASE: ${{ github.event.pull_request.base.ref }}
           PR_BRANCH_STRATEGY: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && 'delivery' || '' }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_DELIVERY_CUTOVER_ISSUE: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && '185' || '0' }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
@@ -118,6 +140,33 @@ jobs:
           fi
 
           if [[ "$PR_BASE" == "main" && "$PR_HEAD" == release-please--* ]]; then
+            release_files="${RUNNER_TEMP:-/tmp}/release-follow-up-files-${GITHUB_RUN_ID:-$$}.txt"
+            gh api --paginate \
+              "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
+              --jq '.[] | .filename, (.previous_filename // empty)' \
+              > "$release_files"
+            release_commits="${RUNNER_TEMP:-/tmp}/release-follow-up-commits-${GITHUB_RUN_ID:-$$}.json"
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/commits?per_page=100" \
+              > "$release_commits"
+            actor_permission=""
+            if [[ "$PR_AUTHOR" != "github-actions[bot]" ]]; then
+              encoded_actor="$(jq -rn --arg value "$PR_AUTHOR" '$value | @uri')"
+              actor_permission="$(
+                gh api "repos/$GITHUB_REPOSITORY/collaborators/$encoded_actor/permission" \
+                  --jq '.permission // empty'
+              )"
+            fi
+            python3 scripts/release_policy.py verify-release-follow-up \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$PR_HEAD" \
+              --head-repo "$PR_HEAD_REPOSITORY" \
+              --head-sha "$PR_HEAD_SHA" \
+              --actor "$PR_AUTHOR" \
+              --actor-permission "$actor_permission" \
+              --changed-files "$release_files" \
+              --commits "$release_commits"
+            rm "$release_files" "$release_commits"
             exit 0
           fi
           if [[ "$branch_strategy" == "dev" && "$PR_BASE" == "main" ]]; then
@@ -160,6 +209,12 @@ jobs:
               fi
               promotion=true
               promotion_milestone="${BASH_REMATCH[1]}"
+            elif [[ "$PR_BASE" == "main" && "$PR_HEAD" == "promote/next" ]]; then
+              if [[ ",${PR_LABELS:-}," != *,promotion,* ]]; then
+                echo "A promotion bridge must use the promotion label."
+                exit 1
+              fi
+              promotion=true
             elif [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^dev/i([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
               promotion=true
               promotion_issue="${BASH_REMATCH[1]}"
@@ -313,10 +368,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_BASE: ${{ github.event.pull_request.base.ref }}
           PR_DELIVERY_BASE: ${{ steps.policy.outputs.delivery_base }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: >-
           python3 scripts/delivery_sync.py gate
           --repo "$GITHUB_REPOSITORY"
           --base "$PR_BASE"
           --delivery-base "$PR_DELIVERY_BASE"
+          --head-ref "$PR_HEAD"
           --head-sha "$PR_HEAD_SHA"
+          --pr-number "$PR_NUMBER"

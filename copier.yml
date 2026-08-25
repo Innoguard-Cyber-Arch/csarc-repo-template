@@ -41,6 +41,8 @@ _skip_if_exists:
   - "docs/adr/**/*.md"
   - "docs/site-content.js"
   - "docs/site-theme.css"
+  - "{% if project_mode == 'existing' %}/README.md{% else %}__overwrite_readme__{% endif %}"
+  - "{% if project_mode == 'existing' %}/SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"
   - "{% if project_mode == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"
   - "{% if project_mode == 'existing' %}package.json{% else %}__overwrite_node_manifest__{% endif %}"
 _tasks:
@@ -77,7 +79,9 @@ project_slug:
 
 project_description:
   type: str
-  default: A Cyber-Arch project
+  help: Organization-approved one-sentence purpose for README and package metadata
+  default: "Source code and delivery automation for {{ project_name }}."
+  validator: "{% if not project_description | default('', true) | trim or project_description | trim | lower in ['a cyber-arch project', 'todo', 'tbd', 'placeholder'] or '<' in project_description %}Enter the approved project purpose without placeholder text.{% endif %}"
 
 language:
   type: str
@@ -88,6 +92,30 @@ language:
     TypeScript only: typescript
     Python and TypeScript: python-typescript
   default: python
+
+container_mode:
+  type: str
+  help: Verify an existing container image in CI, and optionally publish it to GHCR from verified releases
+  choices:
+    Disabled: none
+    Build, smoke-test, and scan only: verify
+    Build, verify, and publish to GHCR: ghcr
+  default: none
+  when: "{{ project_mode == 'existing' }}"
+
+containerfile_path:
+  type: str
+  help: Repository-relative Dockerfile or Containerfile used with the repository root as build context
+  default: Dockerfile
+  when: "{{ (container_mode | default('none')) != 'none' }}"
+  validator: "{% if containerfile_path.startswith('/') or '..' in containerfile_path.split('/') or not (containerfile_path | regex_search('^[A-Za-z0-9._/-]+$')) %}Use a safe repository-relative path without spaces or parent traversal.{% endif %}"
+
+container_smoke_command:
+  type: str
+  help: One-line shell command that smoke-tests the built image through the IMAGE environment variable
+  default: ""
+  when: "{{ (container_mode | default('none')) != 'none' }}"
+  validator: "{% if not container_smoke_command.strip() or '$IMAGE' not in container_smoke_command or '\n' in container_smoke_command %}Use one non-empty line that references $IMAGE, for example docker run --rm \"$IMAGE\" --help.{% endif %}"
 
 branch_strategy:
   type: str
@@ -110,6 +138,24 @@ code_owner:
   help: Existing GitHub team used by CODEOWNERS, for example @Innoguard-Cyber-Arch/platform
   default: "@Innoguard-Cyber-Arch/arch"
   validator: "{% if not code_owner.startswith('@Innoguard-Cyber-Arch/') %}Use an existing @Innoguard-Cyber-Arch/<team> owner.{% endif %}"
+
+project_run_command:
+  type: str
+  help: Shortest command that successfully starts or invokes the product
+  default: "{% if language == 'python' %}uv run python -c 'import {{ package_name }}'{% elif language == 'typescript' %}pnpm run build{% elif language == 'python-typescript' %}uv run python -c 'import {{ package_name }}' && pnpm run build{% else %}./scripts/verify{% endif %}"
+  validator: "{% if not project_run_command | default('', true) | trim or project_run_command | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in project_run_command %}Enter a working product command without placeholder text.{% endif %}"
+
+repository_url:
+  type: str
+  help: Canonical GitHub repository URL used by badges and package metadata
+  default: "https://github.com/{{ code_owner.split('/')[0] | replace('@', '') }}/{{ project_slug }}"
+  validator: "{% if not repository_url | default('', true) | regex_search('^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') %}Use https://github.com/owner/repository without a trailing slash or .git suffix.{% endif %}"
+
+security_reporting_channel:
+  type: str
+  help: Organization-approved vulnerability reporting instructions
+  default: "Open a GitHub Issue at {{ repository_url }}/issues/new; maintainers receive notifications for new Issues."
+  validator: "{% if not security_reporting_channel | default('', true) | trim or security_reporting_channel | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in security_reporting_channel %}Enter the approved reporting channel without placeholder text; do not invent an email address or SLA.{% endif %}"
 
 reviewers:
   type: str

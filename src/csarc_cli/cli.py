@@ -1012,6 +1012,9 @@ def report_settings(data: dict[str, object]) -> str:
     allowed = {
         "branch_strategy",
         "code_owner",
+        "container_mode",
+        "container_smoke_command",
+        "containerfile_path",
         "coverage_mode",
         "coverage_threshold",
         "enable_codeql",
@@ -2746,6 +2749,14 @@ def base_data(
     return data
 
 
+def default_security_reporting_channel(repository_url: str) -> str:
+    """Return the template's repository-derived public reporting channel."""
+    return (
+        f"Open a GitHub Issue at {repository_url}/issues/new; "
+        "maintainers receive notifications for new Issues."
+    )
+
+
 def require_clean_repository(target: Path) -> None:
     """Require an existing repository with no tracked or untracked changes."""
     inside = run(
@@ -3374,6 +3385,8 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
     )
     data = base_data(target, mode, explicit_data)
     data["project_visibility"] = repository.visibility
+    if repository.repository is not None:
+        data["repository_url"] = f"https://github.com/{repository.repository}"
     with tempfile.TemporaryDirectory(prefix="csarc-plan-") as temporary:
         stage = Path(temporary) / "project"
         stage.mkdir()
@@ -3581,7 +3594,7 @@ def update_status(
     return status, target_revision, previous
 
 
-def update_plan_answers(
+def update_plan_answers(  # noqa: C901
     answers: dict[str, object],
     explicit_data: dict[str, str],
     repository: RepositoryContext,
@@ -3591,6 +3604,20 @@ def update_plan_answers(
     update_data = dict(explicit_data)
     saved_visibility = answers.get("project_visibility")
     update_data["project_visibility"] = repository.visibility
+    if repository.repository is not None:
+        repository_url = f"https://github.com/{repository.repository}"
+        previous_url = answers.get("repository_url")
+        previous_channel = answers.get("security_reporting_channel")
+        update_data["repository_url"] = repository_url
+        if (
+            "security_reporting_channel" not in explicit_data
+            and isinstance(previous_url, str)
+            and previous_channel
+            == default_security_reporting_channel(previous_url)
+        ):
+            update_data["security_reporting_channel"] = (
+                default_security_reporting_channel(repository_url)
+            )
     if saved_visibility != repository.visibility:
         enabled = (
             repository.visibility == "public"
