@@ -316,9 +316,7 @@ def test_note_quota_fallback_prints_note_for_zero_step_block(
         note_quota_fallback.__globals__, "github_get", _routine_pr_get(jobs)
     )
     run_url = "https://github.com/owner/repo/actions/runs/200"
-    args = SimpleNamespace(
-        repo="owner/repo", pr=42, blocked_run_url=[run_url]
-    )
+    args = SimpleNamespace(repo="owner/repo", pr=42, blocked_run_url=[run_url])
     note_quota_fallback(args)
     output = capsys.readouterr().out
     assert "Actions quota fallback note" in output
@@ -339,9 +337,7 @@ def test_note_quota_fallback_rejects_a_real_failure(
         note_quota_fallback.__globals__, "github_get", _routine_pr_get(jobs)
     )
     run_url = "https://github.com/owner/repo/actions/runs/200"
-    args = SimpleNamespace(
-        repo="owner/repo", pr=42, blocked_run_url=[run_url]
-    )
+    args = SimpleNamespace(repo="owner/repo", pr=42, blocked_run_url=[run_url])
     with pytest.raises(RuntimeError, match="zero-step"):
         note_quota_fallback(args)
 
