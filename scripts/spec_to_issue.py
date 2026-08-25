@@ -77,9 +77,7 @@ def milestone_title_violations(title: str) -> tuple[str, ...]:
         )
     if normalized.casefold().startswith("milestone"):
         violations.append("omit the redundant Milestone prefix")
-    if re.fullmatch(
-        r"(?:#|no\.?\s*)?\d+[.。]?", normalized, re.IGNORECASE
-    ):
+    if re.fullmatch(r"(?:#|no\.?\s*)?\d+[.。]?", normalized, re.IGNORECASE):
         violations.append("replace the sequence number with an outcome phrase")
     if MILESTONE_STATUS_PREFIX.match(normalized):
         violations.append("omit the status prefix")
