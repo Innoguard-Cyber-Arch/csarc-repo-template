@@ -22,6 +22,7 @@ highest_release_intent = MODULE["highest_release_intent"]
 included_pull_requests = MODULE["included_pull_requests"]
 main_is_current = MODULE["main_is_current"]
 prepare = MODULE["prepare"]
+promotion_main_evidence = MODULE["promotion_main_evidence"]
 require_zero_step_run = MODULE["require_zero_step_run"]
 route_for = MODULE["route_for"]
 same_repository = MODULE["same_repository"]
@@ -184,6 +185,97 @@ def test_latest_main_requires_matching_base_and_ancestry() -> None:
     assert main_is_current("abc", "abc", True)
     assert not main_is_current("new", "old", True)
     assert not main_is_current("abc", "abc", False)
+
+
+def test_promotion_accepts_exact_squash_sync_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bind squash evidence to the current main, delivery branch, and head."""
+    calls: list[tuple[object, str, str, str, str]] = []
+
+    def merged_sync(
+        api: object,
+        repo: str,
+        delivery_branch: str,
+        main_sha: str,
+        head_sha: str,
+    ) -> int:
+        calls.append((api, repo, delivery_branch, main_sha, head_sha))
+        return 283
+
+    api = object()
+    monkeypatch.setattr(
+        MODULE["delivery_sync"], "merged_sync_pr_number", merged_sync
+    )
+    assert (
+        promotion_main_evidence(
+            api,
+            "owner/repo",
+            "main-sha",
+            "main-sha",
+            "dev/m7-staged-ci",
+            "delivery-head",
+            False,
+        )
+        == "squash-sync-pr-283"
+    )
+    assert calls == [
+        (
+            api,
+            "owner/repo",
+            "dev/m7-staged-ci",
+            "main-sha",
+            "delivery-head",
+        )
+    ]
+
+
+def test_promotion_main_evidence_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reject main drift, non-delivery routes, absent proof, and API errors."""
+    calls = 0
+
+    def no_sync(*_args: object) -> None:
+        nonlocal calls
+        calls += 1
+        return None
+
+    monkeypatch.setattr(
+        MODULE["delivery_sync"], "merged_sync_pr_number", no_sync
+    )
+    api = object()
+    assert (
+        promotion_main_evidence(
+            api, "owner/repo", "main", "main", None, "head", False
+        )
+        is None
+    )
+    assert (
+        promotion_main_evidence(
+            api, "owner/repo", "new", "old", "dev/next", "head", False
+        )
+        is None
+    )
+    assert calls == 0
+    assert (
+        promotion_main_evidence(
+            api, "owner/repo", "main", "main", "dev/next", "head", False
+        )
+        is None
+    )
+    assert calls == 1
+
+    def failed_sync(*_args: object) -> None:
+        raise RuntimeError("find merged sync PR failed with HTTP 500")
+
+    monkeypatch.setattr(
+        MODULE["delivery_sync"], "merged_sync_pr_number", failed_sync
+    )
+    with pytest.raises(RuntimeError, match="HTTP 500"):
+        promotion_main_evidence(
+            api, "owner/repo", "main", "main", "dev/next", "head", False
+        )
 
 
 def test_promotion_source_must_be_the_same_repository() -> None:
@@ -357,6 +449,7 @@ def test_prepare_builds_milestone_candidate_evidence(
             }
         ],
     }
+    assert evidence["main_sync"] == "direct-ancestry"
 
 
 def test_finalize_accepts_artifact_only_blocked_canary(tmp_path: Path) -> None:
@@ -404,6 +497,7 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
                 "pull_request": 42,
                 "route": {"kind": "standalone-batch", "relevant": True},
                 "base_sha": "base",
+                "head_ref": "dev/next",
                 "head_sha": "head",
                 "candidate_sha": "head",
                 "candidate_tree": "tree",
@@ -421,7 +515,12 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
     monkeypatch.setitem(
         finalize_quota_fallback.__globals__,
         "contains_commit",
-        lambda *_: True,
+        lambda *_: False,
+    )
+    monkeypatch.setattr(
+        MODULE["delivery_sync"],
+        "merged_sync_pr_number",
+        lambda *_: 283,
     )
 
     def fallback_get(_repo: str, path: str, _token: str) -> object:

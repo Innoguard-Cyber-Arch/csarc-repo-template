@@ -80,8 +80,9 @@ gh pr create --base <delivery-branch> --head sync/main-to-<delivery>-<main-sha>
 ```
 
 Sync PR 使用 repository 允許的 merge method；squash-only repository 直接以一般
-squash merge 合併，不需暫時開啟 merge commits 或使用 admin override。PR policy
-優先接受 proposed head 對當前 `main` 的直接 ancestry；若 squash 使 ancestry 不再保留，
+squash merge 合併，不需暫時開啟 merge commits 或使用 admin override。PR policy 與
+promotion preflight 優先接受 proposed head 對當前 `main` 的直接 ancestry；若 squash
+使 ancestry 不再保留，
 則透過 GitHub REST 核對 deterministic sync branch 對應的 PR 已合併至正確 delivery
 branch、該 PR head 確實包含完整的當前 main SHA，且 PR 的 `merge_commit_sha` 已包含在
 proposed head。任一 API 查詢失敗、main 已前進、PR 未合併、base 不符、sync head 未含
@@ -117,6 +118,11 @@ hotfix 則必須先確認 branch 包含最新 `main`。Milestone promotion 還�
 Milestone 中，除 promotion Issue 外的工作均已關閉且沒有未勾選的 acceptance
 criterion。`dev/i<編號>-*` 則核對同號、無 Milestone 且標示 `promotion` 的 open
 Issue，不能借用別張 Issue 或偽裝 Milestone。
+
+Promotion 的 squash fallback 使用與 PR policy 相同的 REST 證據鏈，並綁定 promotion
+PR 的 base SHA 等於當前 `main`、head ref 等於正確 delivery branch，以及該 branch
+包含已驗證的 sync squash commit；採用的 `direct-ancestry` 或 `squash-sync-pr-N` 會寫入
+preflight evidence。Hotfix 不適用此 fallback，仍須直接包含當前 `main`。
 
 Promotion 會封裝候選 source archive，記錄 PR、base/head SHA、candidate tree、
 Milestone 與納入 Issues，並把完整 CI 的 `verify` 當成並列 required gate。合併後
