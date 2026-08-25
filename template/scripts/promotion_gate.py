@@ -71,9 +71,6 @@ def run_dev_next_preservation(
     if prepared_ledger_commit:
         command.extend(("--prepared-ledger-commit", prepared_ledger_commit))
     environment = os.environ.copy()
-    sync_token = environment.get("CSARC_SYNC_TOKEN", "")
-    if action == "inspect-dev-next" and sync_token:
-        environment["GH_TOKEN"] = sync_token
     if (
         action in {"complete-dev-next", "abort-dev-next"}
         and environment.get("GITHUB_ACTIONS") == "true"

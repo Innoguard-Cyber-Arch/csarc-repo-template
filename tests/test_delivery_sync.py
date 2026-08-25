@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "delivery_sync.py")
@@ -437,6 +438,9 @@ def test_promotion_gate_accepts_only_the_exact_prepared_transaction(
     )
     assert str(record["operation_id"]) in result
     assert LEDGER_SHA in result
+    assert not any(
+        "/actions/secrets/" in path for _method, path, _ in api.calls
+    )
 
 
 def test_temporary_authorization_requires_two_exact_human_maintainers() -> None:
@@ -1074,21 +1078,75 @@ def test_private_ruleset_checks_use_human_authorized_fallback(
     assert result["completion_mode"] == "hosted"
 
 
-def test_hosted_workflows_never_fallback_to_github_token() -> None:
-    """Generated hosted restoration always requests the dedicated secret."""
+def untrusted_admin_secret_references(source: str) -> set[str]:
+    """Return admin secret references exposed by untrusted workflow events."""
+    workflow = yaml.safe_load(source)
+    triggers = (
+        workflow.get("on", workflow.get(True, {}))
+        if isinstance(workflow, dict)
+        else {}
+    )
+    if isinstance(triggers, dict):
+        events = set(triggers)
+    elif isinstance(triggers, list):
+        events = {str(event) for event in triggers}
+    else:
+        events = {str(triggers)}
+    if not events & {"pull_request", "merge_group"}:
+        return set()
+    names = {
+        "CSARC_SYNC_TOKEN",
+        "CSARC_ADMIN_TOKEN",
+        "GH_ADMIN_TOKEN",
+        "ADMIN_TOKEN",
+    }
+    return {name for name in names if f"secrets.{name}" in source}
+
+
+def test_untrusted_workflows_cannot_reference_admin_secrets() -> None:
+    """PR-controlled workflows never receive administration tokens."""
     root = Path(__file__).parents[1]
-    delivery = (root / ".github/workflows/delivery-sync.yml").read_text()
-    promotion = (root / ".github/workflows/promotion.yml").read_text()
-    abort_step = delivery.split(
-        "- name: Abort the exact preservation transaction", maxsplit=1
-    )[1].split("\n\n", maxsplit=1)[0]
-    verify_step = promotion.split(
-        "- name: Verify main tree identity and full CI result", maxsplit=1
-    )[1].split("\n      - name:", maxsplit=1)[0]
-    for step in (abort_step, verify_step):
-        assert "CSARC_SYNC_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN }}" in step
-        assert "GH_TOKEN: ${{ github.token }}" in step
-        assert "secrets.CSARC_SYNC_TOKEN || github.token" not in step
+    for trigger in ("pull_request", "merge_group"):
+        unsafe = f"""
+on: [{trigger}]
+jobs:
+  leak:
+    env:
+      TOKEN: ${{{{ secrets.CSARC_SYNC_TOKEN }}}}
+"""
+        assert untrusted_admin_secret_references(unsafe) == {"CSARC_SYNC_TOKEN"}
+    workflows = (root / ".github/workflows").glob("*.y*ml")
+    for workflow in workflows:
+        assert not untrusted_admin_secret_references(workflow.read_text()), (
+            workflow
+        )
+
+    for name in ("delivery-sync.yml", "promotion.yml"):
+        source = (root / ".github/workflows" / name).read_text()
+        assert "secrets.CSARC_SYNC_TOKEN" not in source
+        assert "GH_TOKEN: ${{ github.token }}" in source
+
+
+def test_admin_secret_is_limited_to_trusted_workflow_definitions() -> None:
+    """Privileged restoration runs only from default-branch workflow sources."""
+    root = Path(__file__).parents[1] / ".github/workflows"
+    maintenance = (root / "delivery-maintenance.yml").read_text()
+    post_merge = (root / "promotion-post-merge.yml").read_text()
+    close_signal = (root / "dev-next-close.yml").read_text()
+    assert 'workflows: ["Dev next preservation close"]' in maintenance
+    assert "ref: ${{ github.event.repository.default_branch }}" in maintenance
+    assert "actions/workflows/dev-next-close.yml" in maintenance
+    assert "actions/runs/$RUN_ID/pull_requests?per_page=100" in maintenance
+    assert "gh api --paginate" in maintenance
+    assert "pull_request:" not in maintenance
+    assert "merge_group:" not in maintenance
+    assert "pull_request:" in close_signal
+    assert "secrets." not in close_signal
+    assert "push:" in post_merge
+    assert "pull_request:" not in post_merge
+    assert "merge_group:" not in post_merge
+    for source in (maintenance, post_merge):
+        assert "secrets.CSARC_SYNC_TOKEN" in source
 
 
 def test_delivery_reconcile_requires_dev_next() -> None:

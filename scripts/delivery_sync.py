@@ -223,14 +223,6 @@ def gate(
         ledger_commit, record, _authorizations = require_prepared_preservation(
             api, repo, pr_number, str(pull["base"]["sha"]), head_sha
         )
-        if (
-            record["mode"] == "temporary-auto-delete"
-            and sync_secret_state(api, repo) != "configured"
-        ):
-            raise RuntimeError(
-                "Hosted restoration is unavailable; a human maintainer must "
-                "complete or abort the exact prepared transaction"
-            )
         return (
             f"{record['mode']}; transaction "
             f"{record['operation_id']} at {ledger_commit}"
@@ -835,8 +827,10 @@ def prepared_preservation_evidence(
     number: int,
     ledger_commit: str,
     record: dict[str, Any],
+    *,
+    include_completion_mode: bool = True,
 ) -> dict[str, Any]:
-    """Describe the prepared checkpoint and its hosted completion capability."""
+    """Describe the prepared checkpoint and optional hosted capability."""
     evidence = preservation_evidence(ledger_commit, record)
     if record["mode"] == "ruleset-protected":
         evidence["completion_mode"] = "ruleset-protected"
@@ -849,6 +843,8 @@ def prepared_preservation_evidence(
         str(record["operation_id"]),
         ledger_commit,
     )
+    if not include_completion_mode:
+        return evidence
     evidence["completion_mode"] = (
         "hosted"
         if sync_secret_state(api, repo) == "configured"
@@ -1341,7 +1337,12 @@ def inspect_dev_next(api: API, repo: str, number: int, head_sha: str) -> str:
         api, repo, number, base_sha, head_sha
     )
     evidence = prepared_preservation_evidence(
-        api, repo, number, ledger_commit, record
+        api,
+        repo,
+        number,
+        ledger_commit,
+        record,
+        include_completion_mode=False,
     )
     evidence["human_authorizations"] = authorizations
     return canonical_json(evidence)
@@ -1621,7 +1622,7 @@ def associated_pull_requests(
     return pulls
 
 
-def merge_group_gate(  # noqa: C901
+def merge_group_gate(
     api: API,
     repo: str,
     queue_ref: str,
@@ -1664,14 +1665,6 @@ def merge_group_gate(  # noqa: C901
     ledger_commit, record, _authorizations = require_prepared_preservation(
         api, repo, number, base_sha, head_sha
     )
-    if (
-        record["mode"] == "temporary-auto-delete"
-        and sync_secret_state(api, repo) != "configured"
-    ):
-        raise RuntimeError(
-            "Hosted restoration is unavailable; a human maintainer must "
-            "complete or abort the exact prepared transaction"
-        )
     return (
         f"{record['mode']}; transaction "
         f"{record['operation_id']} at {ledger_commit}"

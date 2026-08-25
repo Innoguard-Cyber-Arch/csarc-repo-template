@@ -18,10 +18,13 @@ paired_files=(
   .github/ISSUE_TEMPLATE/work-item.yml
   .github/workflows/governance-comment.yml
   .github/workflows/governance-drift.yml
+  .github/workflows/dev-next-close.yml
+  .github/workflows/delivery-maintenance.yml
   .github/workflows/delivery-sync.yml
   .github/workflows/issue-triage.yml
   .github/workflows/milestone-lifecycle.yml
   .github/workflows/osv.yml
+  .github/workflows/promotion-post-merge.yml
   .github/workflows/promotion.yml
   .github/workflows/pr-policy.yml
   .github/workflows/release-please.yml

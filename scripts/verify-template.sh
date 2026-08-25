@@ -22,6 +22,20 @@ grep -q 'verify-quota-main' docs/ci-policy.md
 grep -q 'release_eligible.*false' docs/ci-policy.md
 cmp -s scripts/promotion_gate.py template/scripts/promotion_gate.py
 cmp -s tests/test_promotion_gate.py template/tests/test_promotion_gate.py
+test -f .github/workflows/delivery-maintenance.yml
+test -f .github/workflows/dev-next-close.yml
+test -f .github/workflows/promotion-post-merge.yml
+test -f template/.github/workflows/delivery-maintenance.yml
+test -f template/.github/workflows/dev-next-close.yml
+test -f template/.github/workflows/promotion-post-merge.yml
+for workflow in .github/workflows/{delivery-sync,promotion}.yml \
+  template/.github/workflows/{delivery-sync,promotion}.yml; do
+  if grep -Eq 'secrets\.(CSARC_SYNC_TOKEN|CSARC_ADMIN_TOKEN|GH_ADMIN_TOKEN|ADMIN_TOKEN)' \
+    "$workflow"; then
+    echo "$workflow exposes an administration token to an untrusted event."
+    exit 1
+  fi
+done
 for summary_file in AGENTS.md README.md template/AGENTS.md.jinja \
   template/README.md.jinja; do
   grep -q 'docs/ci-policy.md#actions-額度-fallback' "$summary_file"
@@ -1509,6 +1523,9 @@ test -f "$fixture_root/default-project/policies/rulesets.json"
 test -f "$fixture_root/default-project/policies/dev-next-ruleset.json"
 test -f "$fixture_root/default-project/.github/workflows/governance-comment.yml"
 test -f "$fixture_root/default-project/.github/workflows/promotion.yml"
+test -f "$fixture_root/default-project/.github/workflows/promotion-post-merge.yml"
+test -f "$fixture_root/default-project/.github/workflows/delivery-maintenance.yml"
+test -f "$fixture_root/default-project/.github/workflows/dev-next-close.yml"
 test -f "$fixture_root/default-project/docs/ci-policy.md"
 grep -q '穩定的 `verify` aggregate context' \
   "$fixture_root/default-project/docs/ci-policy.md"

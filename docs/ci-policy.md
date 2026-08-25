@@ -277,6 +277,13 @@ Hosted temporary restoration 只使用獨立的 `CSARC_SYNC_TOKEN`，不會退�
 hosted complete／abort 在 append restoring checkpoint 前，先用該 token 對目前 setting 做
 no-op PATCH 並 refetch，以證明當下仍有 admin write。secret 缺失或驗證為 403 時不更新
 ledger／setting，workflow 失敗並輸出綁定 exact transaction 的人工 command。
+`promotion.yml` 與 `delivery-sync.yml` 的 `pull_request`／`merge_group` jobs 只使用 read-only
+`github.token`，不引用管理 secret；temporary prepare 必須事先由 human maintainer 或其他
+受保護的 trusted path 完成。只有從 default branch 載入的
+`promotion-post-merge.yml` push job 與 `delivery-maintenance.yml` workflow-run／push／manual
+jobs 可取得 `CSARC_SYNC_TOKEN`。PR close 只觸發不含 secret 的 `dev-next-close.yml`；後續
+trusted workflow 會重新查驗 workflow ID 與唯一 closed PR，且不得 checkout 或執行 PR
+head 的程式碼。
 
 ### Promotion PR 的額外 fallback 證據
 
