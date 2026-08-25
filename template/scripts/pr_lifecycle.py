@@ -1735,11 +1735,17 @@ def scan_writers(root: Path) -> None:
         relative = path.relative_to(root)
         if (
             not path.is_file()
-            or "__pycache__" in relative.parts
+            or ("__pycache__" in relative.parts and path.suffix == ".pyc")
             or canonical_scanner_helper(root, path)
         ):
             continue
-        found = writer_violations(path.read_text(encoding="utf-8"))
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as error:
+            raise RuntimeError(
+                f"Automation file is not valid UTF-8: {relative}"
+            ) from error
+        found = writer_violations(text)
         violations.extend(f"{relative}: {item}" for item in found)
     if violations:
         raise RuntimeError(

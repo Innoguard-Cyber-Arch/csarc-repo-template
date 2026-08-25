@@ -526,6 +526,29 @@ def test_writer_scanner_ignores_python_bytecode_cache(tmp_path: Path) -> None:
     scan_writers(tmp_path)
 
 
+def test_writer_scanner_checks_source_inside_bytecode_cache(
+    tmp_path: Path,
+) -> None:
+    """A cache directory name must not hide a lifecycle writer."""
+    source = tmp_path / "scripts/__pycache__/evil.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        'import requests\nrequests.patch("https://api.github.com/repos/o/r/issues/42")\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match=r"__pycache__/evil\.py"):
+        scan_writers(tmp_path)
+
+
+def test_writer_scanner_rejects_non_utf8_automation(tmp_path: Path) -> None:
+    """Unreadable automation must fail closed with its repository path."""
+    binary = tmp_path / "scripts/__pycache__/evil.bin"
+    binary.parent.mkdir(parents=True)
+    binary.write_bytes(b"\x8d\x00")
+    with pytest.raises(RuntimeError, match=r"__pycache__/evil\.bin"):
+        scan_writers(tmp_path)
+
+
 @pytest.mark.parametrize("symlink_part", ["leaf", "ancestor"])
 def test_writer_scanner_does_not_trust_symlinked_canonical_paths(
     tmp_path: Path, symlink_part: str
