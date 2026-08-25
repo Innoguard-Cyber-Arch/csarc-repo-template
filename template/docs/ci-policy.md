@@ -70,6 +70,9 @@ metadata／merge mutation 仍由 lifecycle lease holder 或政策允許的 human
 `csarc-pr-lifecycle-lease-status/v1` 的 canonical lifecycle helper。它組合該 helper 的
 GET-only `lease-status` 與 effective Ruleset：approval、stale-review、last-push、thread
 resolution、required checks 或 no-bypass 任一無法證明即為 `blocked`／`unknown`。
+GitHub Contents API 回傳的 base blob 必須能重算出同一 Git object SHA，且 bytes 與入口
+實際 import 的本機 helper 完全相同；Issue branch 只保留 marker 卻改寫 helper 不會取得
+capability。
 `available` 只代表兩個 remote lease refs 都可由後續 atomic acquire 嘗試取得，不代表已
 持有 lease；`held` 代表其他 status caller 只能唯讀。入口只會把 acquire 列為下一步，
 實際 merge 仍由持有 raw capability 的 lifecycle owner 重新驗證授權與 live state。
