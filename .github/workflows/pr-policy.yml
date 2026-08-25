@@ -67,7 +67,6 @@ jobs:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_BASE: ${{ github.event.pull_request.base.ref }}
           PR_BRANCH_STRATEGY: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && 'delivery' || '' }}
-          PR_BODY: ${{ github.event.pull_request.body }}
           PR_DELIVERY_CUTOVER_ISSUE: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && '185' || '0' }}
           PR_DEVELOPMENT_CUTOVER_PR: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && '306' || '1' }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
@@ -108,7 +107,8 @@ jobs:
               (.assignees | type) == "array" and
               all(.assignees[]; type == "object" and (.login | type) == "string" and (.login | length) > 0) and
               has("milestone") and
-              (.milestone == null or ((.milestone | type) == "object" and (.milestone.number | type) == "number" and .milestone.number > 0 and .milestone.number == (.milestone.number | floor)))
+              (.milestone == null or ((.milestone | type) == "object" and (.milestone.number | type) == "number" and .milestone.number > 0 and .milestone.number == (.milestone.number | floor))) and
+              has("body") and (.body == null or (.body | type) == "string")
             ' <<<"$pr_payload" >/dev/null; then
               echo "Live pull request metadata is incomplete or malformed."
               exit 1
@@ -116,6 +116,7 @@ jobs:
             PR_LABELS="$(jq -r '[.labels[].name] | join(",")' <<<"$pr_payload")"
             pr_assignees="$(jq -r '[.assignees[].login] | join(",")' <<<"$pr_payload")"
             pr_milestone_number="$(jq -r '.milestone.number // 0' <<<"$pr_payload")"
+            PR_BODY="$(jq -r '.body // ""' <<<"$pr_payload")"
           fi
 
           release_intent="no-release"
@@ -278,7 +279,7 @@ jobs:
               exit 1
             fi
             issue_number="${BASH_REMATCH[2]}"
-            issue_link_pattern="(Closes|Fixes|Resolves)[[:space:]]+#${issue_number}([^0-9]|$)"
+            issue_link_pattern="(Closes|Fixes|Resolves)[[:space:]]+#${issue_number}([^[:alnum:]_]|$)"
             if [[ ! "${PR_BODY:-}" =~ $issue_link_pattern ]]; then
               echo "PR body must include Closes #${issue_number}."
               exit 1
@@ -344,22 +345,64 @@ jobs:
             exit 1
           fi
           if [[ "${promotion:-false}" != "true" ]] && (( PR_NUMBER >= development_cutover_pr )); then
-            if [[ "${PR_LINKED_BRANCHES+x}" == "x" ]]; then
-              linked_branches="$PR_LINKED_BRANCHES"
+            if [[ "$PR_BASE" == "main" ]]; then
+              if [[ "${PR_POLICY_FIXTURE:-false}" == "true" ]]; then
+                if [[ "${PR_CLOSING_ISSUES_JSON+x}" == "x" ]]; then
+                  closing_issues="$PR_CLOSING_ISSUES_JSON"
+                else
+                  closing_issues="$(
+                    jq -cn \
+                      --arg repo "$GITHUB_REPOSITORY" \
+                      --argjson pr "$PR_NUMBER" \
+                      --argjson issue "$issue_number" \
+                      '{data: {repository: {pullRequest: {number: $pr, closingIssuesReferences: {nodes: [{number: $issue, repository: {nameWithOwner: $repo}}], pageInfo: {hasNextPage: false}}}}}}'
+                  )"
+                fi
+              else
+                repo_owner="${GITHUB_REPOSITORY%%/*}"
+                repo_name="${GITHUB_REPOSITORY#*/}"
+                if ! closing_issues="$(
+                  gh api graphql \
+                    -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){number closingIssuesReferences(first:100){nodes{number repository{nameWithOwner}} pageInfo{hasNextPage}}}}}' \
+                    -f owner="$repo_owner" -f name="$repo_name" -F number="$PR_NUMBER"
+                )" || [[ -z "$closing_issues" ]]; then
+                  echo "Cannot read the live pull request closing Issue relationship."
+                  exit 1
+                fi
+              fi
+              if ! jq -e \
+                --arg repo "$GITHUB_REPOSITORY" \
+                --argjson pr "$PR_NUMBER" \
+                --argjson issue "$issue_number" '
+                  .data.repository.pullRequest as $pull |
+                  ($pull | type == "object") and
+                  ($pull.number == $pr) and
+                  ($pull.closingIssuesReferences | type == "object") and
+                  ($pull.closingIssuesReferences.nodes | type == "array") and
+                  ($pull.closingIssuesReferences.nodes | length == 1) and
+                  ($pull.closingIssuesReferences.pageInfo.hasNextPage == false) and
+                  ($pull.closingIssuesReferences.nodes[0] |
+                    type == "object" and
+                    .number == $issue and
+                    (.repository | type == "object") and
+                    (.repository.nameWithOwner | type == "string") and
+                    ((.repository.nameWithOwner | ascii_downcase) == ($repo | ascii_downcase)))
+                ' <<<"$closing_issues" >/dev/null; then
+                echo "PR #${PR_NUMBER} must have exactly one authoritative closing Issue relationship to ${GITHUB_REPOSITORY}#${issue_number}."
+                exit 1
+              fi
             else
-              repo_owner="${GITHUB_REPOSITORY%%/*}"
-              repo_name="${GITHUB_REPOSITORY#*/}"
-              linked_branches="$(
-                gh api graphql \
-                  -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){linkedBranches(first:100){nodes{ref{name}}}}}}' \
-                  -f owner="$repo_owner" -f name="$repo_name" -F number="$issue_number" \
-                  --jq '.data.repository.issue.linkedBranches.nodes[].ref.name'
-              )"
-            fi
-            if ! grep -Fxq "$PR_HEAD" <<<"$linked_branches"; then
-              echo "PR branch $PR_HEAD must be created as a Development linked branch for Issue #${issue_number}."
-              echo "Use: gh issue develop ${issue_number} --base ${PR_BASE} --name ${PR_HEAD}"
-              exit 1
+              body_closing_issues=()
+              while IFS= read -r body_closing_issue; do
+                [[ -n "$body_closing_issue" ]] && body_closing_issues+=("$body_closing_issue")
+              done < <(
+                python3 -c 'import re, sys; sys.stdout.writelines(f"{match}\n" for match in re.findall(r"(?<!\w)(?:Closes|Fixes|Resolves)[ \t]+#([0-9]+)(?!\w)", sys.stdin.read()))' \
+                  <<<"${PR_BODY:-}"
+              )
+              if (( ${#body_closing_issues[@]} != 1 )) || [[ "${body_closing_issues[0]}" != "$issue_number" ]]; then
+                echo "A non-default routine pull request must have exactly one live closing keyword for Issue #${issue_number}."
+                exit 1
+              fi
             fi
           fi
           if [[ "$issue_has_unchecked" == "true" ]]; then

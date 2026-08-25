@@ -32,15 +32,67 @@ set -euo pipefail
 if [[ "$*" == "api --method GET repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER" ]]; then
   case "${PR_LIVE_METADATA_STATE:-valid}" in
     valid)
+      live_body="${PR_BODY:-}"
+      [[ "${PR_LIVE_BODY+x}" == "x" ]] && live_body="$PR_LIVE_BODY"
       jq -cn \
         --arg labels "${PR_LIVE_LABELS:-enhancement}" \
         --arg assignees "${PR_LIVE_ASSIGNEES-github-actions[bot]}" \
         --arg milestone "${PR_LIVE_MILESTONE:-null}" \
-        '{labels: ($labels | split(",") | map({name: .})), assignees: ($assignees | if . == "" then [] else split(",") | map({login: .}) end), milestone: (if $milestone == "null" then null else {number: ($milestone | tonumber)} end)}'
+        --arg body "$live_body" \
+        '{labels: ($labels | split(",") | map({name: .})), assignees: ($assignees | if . == "" then [] else split(",") | map({login: .}) end), milestone: (if $milestone == "null" then null else {number: ($milestone | tonumber)} end), body: $body}'
       ;;
     api-error) exit 1 ;;
     empty) ;;
     partial) printf '%s\n' '{"labels":[{"name":"enhancement"}]}' ;;
+    malformed) printf '%s\n' '{' ;;
+    *) exit 2 ;;
+  esac
+  exit 0
+fi
+
+if [[ "$*" == *"closingIssuesReferences"* ]]; then
+  case "${PR_CLOSING_RELATIONSHIP_STATE:-valid}" in
+    valid)
+      jq -cn \
+        --arg repo "$GITHUB_REPOSITORY" \
+        --argjson pr "$PR_NUMBER" \
+        --argjson issue "${PR_CLOSING_ISSUE_NUMBER:-42}" \
+        '{data: {repository: {pullRequest: {number: $pr, closingIssuesReferences: {nodes: [{number: $issue, repository: {nameWithOwner: $repo}}], pageInfo: {hasNextPage: false}}}}}}'
+      ;;
+    empty)
+      jq -cn \
+        --argjson pr "$PR_NUMBER" \
+        '{data: {repository: {pullRequest: {number: $pr, closingIssuesReferences: {nodes: [], pageInfo: {hasNextPage: false}}}}}}'
+      ;;
+    wrong-repo)
+      jq -cn \
+        --argjson pr "$PR_NUMBER" \
+        '{data: {repository: {pullRequest: {number: $pr, closingIssuesReferences: {nodes: [{number: 42, repository: {nameWithOwner: "attacker/project"}}], pageInfo: {hasNextPage: false}}}}}}'
+      ;;
+    wrong-issue)
+      jq -cn \
+        --arg repo "$GITHUB_REPOSITORY" \
+        --argjson pr "$PR_NUMBER" \
+        '{data: {repository: {pullRequest: {number: $pr, closingIssuesReferences: {nodes: [{number: 43, repository: {nameWithOwner: $repo}}], pageInfo: {hasNextPage: false}}}}}}'
+      ;;
+    wrong-pr-number)
+      jq -cn \
+        --arg repo "$GITHUB_REPOSITORY" \
+        '{data: {repository: {pullRequest: {number: 41, closingIssuesReferences: {nodes: [{number: 42, repository: {nameWithOwner: $repo}}], pageInfo: {hasNextPage: false}}}}}}'
+      ;;
+    duplicate)
+      jq -cn \
+        --arg repo "$GITHUB_REPOSITORY" \
+        --argjson pr "$PR_NUMBER" \
+        '{data: {repository: {pullRequest: {number: $pr, closingIssuesReferences: {nodes: [{number: 42, repository: {nameWithOwner: $repo}}, {number: 42, repository: {nameWithOwner: $repo}}], pageInfo: {hasNextPage: false}}}}}}'
+      ;;
+    paginated)
+      jq -cn \
+        --arg repo "$GITHUB_REPOSITORY" \
+        --argjson pr "$PR_NUMBER" \
+        '{data: {repository: {pullRequest: {number: $pr, closingIssuesReferences: {nodes: [{number: 42, repository: {nameWithOwner: $repo}}], pageInfo: {hasNextPage: true}}}}}}'
+      ;;
+    api-error) exit 1 ;;
     malformed) printf '%s\n' '{' ;;
     *) exit 2 ;;
   esac
@@ -108,9 +160,12 @@ fi
 
 case_count=$((case_count + 1))
 PR_POLICY_FIXTURE=false \
+PR_NUMBER="42" \
 PR_LIVE_LABELS="enhancement" \
 PR_LIVE_ASSIGNEES="github-actions[bot]" \
 PR_LIVE_MILESTONE="7" \
+PR_LIVE_BODY="Closes #42" \
+PR_CLOSING_RELATIONSHIP_STATE="api-error" \
 PR_BRANCH_STRATEGY="delivery" \
 PR_TITLE="feat(api): use live metadata" \
 PR_LABELS="bug" \
@@ -118,11 +173,144 @@ PR_ASSIGNEES="stale-user" \
 PR_MILESTONE_NUMBER="8" \
 PR_BASE="dev/m7-staged-ci" \
 PR_HEAD="feat/42-live-metadata" \
-PR_BODY="Closes #42" \
+PR_BODY="Closes #999" \
 PR_ISSUE_STATE="open" \
 PR_ISSUE_LABELS="enhancement" \
 PR_ISSUE_MILESTONE_NUMBER="7" \
   "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+PR_POLICY_FIXTURE=false \
+PR_NUMBER="42" \
+PR_LIVE_MILESTONE="7" \
+PR_LIVE_BODY="Fixes #42" \
+PR_CLOSING_RELATIONSHIP_STATE="api-error" \
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="fix(api): use live stacked body" \
+PR_BASE="fix/41-parent" \
+PR_HEAD="fix/42-live-body" \
+PR_BODY="Fixes #999" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_LABELS="enhancement" \
+PR_ISSUE_MILESTONE_NUMBER="7" \
+PR_BASE_GRAPH="fix/41-parent=dev/m7-staged-ci" \
+  "$validator" >/dev/null
+
+while IFS='|' read -r name live_body; do
+  case_count=$((case_count + 1))
+  if PR_POLICY_FIXTURE=false \
+    PR_NUMBER="42" \
+    PR_LIVE_MILESTONE="7" \
+    PR_LIVE_BODY="$live_body" \
+    PR_CLOSING_RELATIONSHIP_STATE="api-error" \
+    PR_BRANCH_STRATEGY="delivery" \
+    PR_TITLE="feat(api): reject invalid live body" \
+    PR_BASE="dev/m7-staged-ci" \
+    PR_HEAD="feat/42-invalid-live-body" \
+    PR_BODY="Closes #42" \
+    PR_ISSUE_STATE="open" \
+    PR_ISSUE_MILESTONE_NUMBER="7" \
+      "$validator" >/dev/null 2>&1; then
+    echo "PR policy accepted $name live closing keywords."
+    exit 1
+  fi
+done <<'CASES'
+wrong Issue|Fixes #43
+multiple|Closes #42 and Resolves #42
+missing|No closing relationship
+embedded keyword|UnFixes #42
+word-prefixed keyword|PrefixCloses #42
+identifier-prefixed keyword|_Resolves #42
+alpha suffix|Fixes #42abc
+underscore suffix|Fixes #42_extra
+adjacent multiple|Closes #42;Fixes #42
+CASES
+
+for closing_keyword in Closes Fixes Resolves; do
+  case_count=$((case_count + 1))
+  PR_POLICY_FIXTURE=false \
+  PR_NUMBER="42" \
+  PR_LIVE_MILESTONE="7" \
+  PR_LIVE_BODY=$'Context before the relationship.\n\n- '"$closing_keyword #42"$'\n\nContext after it.' \
+  PR_CLOSING_RELATIONSHIP_STATE="api-error" \
+  PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="feat(api): accept multiline live body" \
+  PR_BASE="dev/m7-staged-ci" \
+  PR_HEAD="feat/42-multiline-live-body" \
+  PR_BODY="Closes #999" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+    "$validator" >/dev/null
+done
+
+case_count=$((case_count + 1))
+if PR_POLICY_FIXTURE=false \
+  PR_NUMBER="42" \
+  PR_LIVE_BODY="Closes #43" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): reject stale event body" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-stale-event-body" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted the event body instead of live metadata."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+PR_POLICY_FIXTURE=false \
+PR_NUMBER="42" \
+PR_LIVE_LABELS="enhancement,promotion" \
+PR_LIVE_MILESTONE="7" \
+PR_LIVE_BODY=$'Closes #42\nResolves #43' \
+PR_CLOSING_RELATIONSHIP_STATE="api-error" \
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="feat!: promote without routine fallback" \
+PR_BASE="main" \
+PR_HEAD="dev/m7-staged-ci" \
+PR_BODY="Closes #999" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_LABELS="enhancement,promotion" \
+PR_ISSUE_MILESTONE_NUMBER="7" \
+  "$validator" >/dev/null
+
+while IFS='|' read -r name head base; do
+  case_count=$((case_count + 1))
+  PR_POLICY_FIXTURE=false \
+  PR_NUMBER="42" \
+  PR_LIVE_BODY="" \
+  PR_CLOSING_RELATIONSHIP_STATE="api-error" \
+  PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="chore(ci): verify non-routine route" \
+  PR_BASE="$base" \
+  PR_HEAD="$head" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="" \
+    "$validator" >/dev/null
+done <<'CASES'
+sync|sync/main-to-m7-staged-ci-abcdef0|dev/m7-staged-ci
+bot|dependabot/pip/pytest-9|dev/next
+CASES
+
+for relationship_state in \
+  api-error empty wrong-repo wrong-issue wrong-pr-number duplicate paginated malformed; do
+  case_count=$((case_count + 1))
+  if PR_POLICY_FIXTURE=false \
+    PR_NUMBER="42" \
+    PR_LIVE_METADATA_STATE="valid" \
+    PR_CLOSING_RELATIONSHIP_STATE="$relationship_state" \
+    PR_BRANCH_STRATEGY="main" \
+    PR_TITLE="feat(api): reject bad closing relationship" \
+    PR_BASE="main" \
+    PR_HEAD="feat/42-bad-relationship" \
+    PR_BODY="Closes #42" \
+    PR_ISSUE_STATE="open" \
+      "$validator" >/dev/null 2>&1; then
+    echo "PR policy accepted $relationship_state closing Issue metadata."
+    exit 1
+  fi
+done
 
 for metadata_state in api-error empty partial malformed; do
   case_count=$((case_count + 1))
@@ -282,7 +470,7 @@ PR_HEAD="feat/301-linked-report" \
 PR_BODY="Closes #301" \
 PR_ISSUE_STATE="open" \
 PR_ISSUE_TITLE="Add verified report workflow" \
-PR_LINKED_BRANCHES="feat/301-linked-report" \
+PR_CLOSING_ISSUES_JSON='{"data":{"repository":{"pullRequest":{"number":42,"closingIssuesReferences":{"nodes":[{"number":301,"repository":{"nameWithOwner":"acme/project"}}],"pageInfo":{"hasNextPage":false}}}}}}' \
   "$validator" >/dev/null
 
 case_count=$((case_count + 1))
@@ -295,9 +483,9 @@ if PR_BRANCH_STRATEGY="main" \
   PR_BODY="Closes #301" \
   PR_ISSUE_STATE="open" \
   PR_ISSUE_TITLE="Add verified report workflow" \
-  PR_LINKED_BRANCHES="" \
+  PR_CLOSING_ISSUES_JSON="" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a branch missing from the Issue Development links."
+  echo "PR policy accepted a missing closing Issue relationship."
   exit 1
 fi
 
@@ -311,7 +499,7 @@ PR_HEAD="feat/301-active-work" \
 PR_BODY="Closes #301" \
 PR_ISSUE_STATE="open" \
 PR_ISSUE_TITLE="Add verified report workflow" \
-PR_LINKED_BRANCHES="" \
+PR_CLOSING_ISSUES_JSON="" \
   "$validator" >/dev/null
 
 case_count=$((case_count + 1))
