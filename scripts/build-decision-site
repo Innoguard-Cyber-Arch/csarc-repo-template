@@ -2,16 +2,18 @@
 set -euo pipefail
 
 if (($# > 1)) || { (($# == 1)) && [[ "$1" != "--check" ]]; }; then
-  printf 'Usage: scripts/build-hugo-preview [--check]\n' >&2
+  printf 'Usage: scripts/build-decision-site [--check]\n' >&2
   exit 2
 fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 hugo_bin="$("$repo_root/scripts/install-hugo")"
 
+python3 "$repo_root/scripts/check-decision-site-navigation"
+
 "$hugo_bin" \
   --source "$repo_root" \
-  --config decision-site/hugo.toml \
+  --config site/hugo.toml \
   --destination "$repo_root/dist/hugo-site" \
   --cleanDestinationDir \
   --noBuildLock \
@@ -19,22 +21,25 @@ hugo_bin="$("$repo_root/scripts/install-hugo")"
   --quiet
 
 sources=(dist/hugo-site/index.html dist/hugo-site/en/index.html)
-outputs=(dist/hugo-preview.html dist/hugo-preview.en.html)
+outputs=(docs/index.html docs/index.en.html)
 
 for index in 0 1; do
-  python3 "$repo_root/scripts/render_site.py" \
-    --root "$repo_root" \
-    --source "${sources[$index]}" \
+  render_args=(
+    --root "$repo_root"
+    --source "${sources[$index]}"
     --output "${outputs[$index]}"
-
+  )
   if (($# == 1)); then
-    python3 "$repo_root/scripts/render_site.py" \
-      --root "$repo_root" \
-      --source "${sources[$index]}" \
-      --output "${outputs[$index]}" \
-      --check
+    render_args+=(--check)
   fi
+  python3 "$repo_root/scripts/render_site.py" "${render_args[@]}"
 done
+
+# Keep an ignored, bundled copy of the replaced page for visual regression checks.
+python3 "$repo_root/scripts/render_site.py" \
+  --root "$repo_root" \
+  --source dist/hugo-site/fidelity.html \
+  --output dist/hugo-fidelity.html
 
 llms_source=dist/hugo-site/llms.txt
 llms_translation_source=dist/hugo-site/en/llms.txt
@@ -48,7 +53,7 @@ fi
 if (($# == 1)); then
   for output in "${llms_outputs[@]}"; do
     if ! cmp -s "$repo_root/$llms_source" "$repo_root/$output"; then
-      printf '%s is stale; run scripts/build-hugo-preview\n' "$output" >&2
+      printf '%s is stale; run scripts/build-decision-site\n' "$output" >&2
       exit 1
     fi
   done
@@ -58,7 +63,8 @@ else
   done
 fi
 
-printf 'Hugo previews: %s, %s\n' \
+printf 'Decision site: %s, %s\n' \
   "$repo_root/${outputs[0]}" "$repo_root/${outputs[1]}"
+printf 'Legacy visual baseline: %s\n' "$repo_root/dist/hugo-fidelity.html"
 printf 'LLM indexes: %s, %s\n' \
   "$repo_root/${llms_outputs[0]}" "$repo_root/${llms_outputs[1]}"

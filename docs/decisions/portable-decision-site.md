@@ -17,17 +17,17 @@
 
 採用「repository 內可維護來源 → 可重現的 self-contained HTML」：
 
-1. `docs/index.html` 保持已提交、可直接傳送、可用 `file://` 開啟的單檔交付物；CSS、JavaScript、font、SVG 與 raster images 全部內嵌。
-2. 編輯來源與 bundled output 分離。`site/` 保留特殊設計所需的版型、內容、樣式、互動與媒體；`scripts/render_site.py` 負責產生 `docs/index.html`。生成檔不是擴充點，也不直接手改。
-3. 不導入 Hugo、Docusaurus、Backstage 或另一套前端 toolchain。現階段的需求是單一簡報，最小 renderer 與既有 `uv` baseline 即可；只有多頁搜尋、跨 repo catalog 或翻譯需求實際出現時才重新評估。
-4. canonical decision records 放在 `docs/decisions/`。簡報呈現決策摘要與連結，但不再是唯一可編輯來源；runbook、實證與 spec 各自維持不同生命週期。
+1. `docs/index.html` 與 `docs/index.en.html` 保持已提交、可直接傳送、可用 `file://` 開啟的單檔交付物；CSS、JavaScript、font、SVG 與 raster images 全部內嵌。
+2. 編輯來源與 bundled output 分離。`site/content/` 維護中英文 Markdown，`site/layouts/` 維護 Hugo 結構，`site/static/` 維護樣式、互動與媒體；`scripts/build-decision-site` 先由 Hugo 建置到 `dist/`，再沿用 `scripts/render_site.py` 產生交付檔。生成檔不是擴充點，也不直接手改。
+3. 採用固定版本的 Hugo 空白畫布模板，不導入 Docusaurus、Backstage 或另一套前端 runtime。Hugo 只負責編譯，交付物仍維持單檔、離線、零外部 runtime 依賴。
+4. canonical decision records 放在 `docs/decisions/`。簡報呈現決策摘要與連結，但不再是唯一可編輯來源；runbook、TDD、實證與 spec 各自維持不同生命週期，也不掛入 Hugo content tree。
 5. root 與 Copier 下發專案遵守相同 portable contract，但可以有不同 presentation layout。共用設計基礎由公版維護，root 可以增加 deck-specific 呈現，生成專案則使用 handbook layout。
 
-## 2026-08-24 Hugo 候選管線
+## 2026-08-25 Hugo 正式切換
 
 Issue #205 以兩次真實 spike 重新檢查第 3 點。mdBook 的書本導覽與現有卡片式簡報衝突；Hugo 0.165.0 的自訂單頁 output format 則能保留既有視覺，並把輸出直接交給未修改的 `scripts/render_site.py`。因此只局部取代「不導入 Hugo」的限制，保留單檔、離線 `file://`、零外部 runtime asset 與 checked-in output 的全部契約。
 
-候選 source 放在 `decision-site/`，預覽只寫入已忽略的 `dist/`。在 Issue #209 經維護者確認並切換前，`site/` 與 `docs/index.html` 仍是正式來源與交付物；候選 layout 暫時唯讀取用既有 body 與 assets，避免遷移期間維護兩份內容。
+Issue #209 經維護者實際檢視後，Hugo source 收斂到通用的 `site/` 結構，正式取代手寫 `site/index.html`，並輸出 `docs/index.html` 與 `docs/index.en.html`。Hugo publish directory 固定在已忽略的 `dist/`，不會掃描或覆寫 `docs/decisions/`、`docs/specs/` 與其他既有文件。舊頁移到 `site/legacy/index.html`，只作文字、圖片與視覺回歸基準；仍被基準頁引用的樣式、互動與資產保留在 `site/static/`，確認不再使用後才移除。
 
 ## Ownership 與更新
 
@@ -35,7 +35,7 @@ Issue #205 以兩次真實 spike 重新檢查第 3 點。mdBook 的書本導覽�
 | --- | --- | --- |
 | Renderer、基礎設計 tokens、共用元件與驗證 | 公版 | 隨公版更新，產生可審查差異 |
 | 專案內容與允許的 theme overrides | consuming project | 首次建立後保留，不靜默覆寫 |
-| `docs/index.html` | renderer output | 由來源重建；CI 驗證沒有 stale 或人工修改 |
+| `docs/index.html`、`docs/index.en.html` | renderer output | 由來源重建；CI 驗證沒有 stale 或人工修改 |
 | Decision records、specs 與產品實證 | owning repository | 專案擁有；公版只提供結構與規則 |
 
 專案內容契約必須宣告 `schemaVersion`。同一 major 版本新增欄位時提供相容預設；移除或改變語意時提供明確 migration 與可審查報告，不能靠覆寫 project-owned content 解決。

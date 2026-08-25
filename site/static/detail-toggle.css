@@ -1,8 +1,14 @@
-.detail-level-control {
+.reading-controls {
   position: fixed;
-  left: 50%;
-  bottom: 10px;
+  top: 2px;
+  right: 18px;
   z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.detail-level-control {
   display: flex;
   align-items: center;
   gap: 3px;
@@ -14,7 +20,6 @@
   color: var(--ink);
   font-size: 14px;
   font-weight: 800;
-  transform: translateX(-50%);
 }
 
 .detail-level-control[hidden] { display: none; }
@@ -22,8 +27,6 @@
 .controls[hidden],
 .view-controls[hidden],
 .progress[hidden] { display: none; }
-
-.detail-level-control > span { padding: 0 7px; }
 
 .detail-level-control button {
   min-width: 54px;
@@ -48,10 +51,6 @@
 }
 
 .language-control {
-  position: fixed;
-  top: 8px;
-  right: 18px;
-  z-index: 61;
   display: flex;
   gap: 3px;
   padding: 3px;
@@ -80,14 +79,179 @@
   outline-offset: 2px;
 }
 
-.markdown-slide {
-  padding: 4% 5.5%;
+.markdown-slide:not(.legacy-slide) {
+  padding: 3% 3.6% 3% 11.9%;
 }
 
-.markdown-slide h2 {
+.markdown-slide:not(.legacy-slide) header {
+  position: relative;
+  padding-right: 330px;
+}
+
+.markdown-slide:not(.legacy-slide) h2 {
   max-width: 1180px;
   font-size: 36px;
   white-space: normal;
+}
+
+.legacy-content { display: contents; }
+
+.legacy-content [hidden] { display: none !important; }
+
+.legacy-slide .basic-header {
+  position: relative;
+  padding-right: 330px;
+}
+
+.legacy-slide .basic-header h2 {
+  max-width: 1180px;
+  font-size: 36px;
+  white-space: normal;
+}
+
+.legacy-slide > .basic-header,
+.legacy-slide > .basic-summary {
+  display: none;
+}
+
+.journey-code {
+  flex: 0 0 27px;
+}
+
+.journey-item a > span:last-child {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+html[data-detail-level="technical"] .legacy-slide.decision-slide[data-track="method"] .decision-strip {
+  flex: 0 0 auto;
+}
+
+.config-guidance--paged > p {
+  margin-bottom: 5px;
+}
+
+.config-tour-trigger {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "title file"
+    "summary summary";
+  padding: 8px 11px;
+  border-left-width: 6px;
+}
+
+.config-tour-trigger .config-trigger-title::after {
+  content: "";
+}
+
+.config-tour-trigger .config-trigger-file {
+  color: var(--ink);
+  font-family: inherit;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.technical-tour-trigger {
+  margin-top: 8px;
+  border-left-color: var(--optional);
+}
+
+html[data-detail-level="simple"] .technical-tour-trigger {
+  display: none;
+}
+
+.config-overlay--paged {
+  top: 8%;
+  right: 4.7%;
+  bottom: 7%;
+  left: 13.7%;
+  width: auto;
+}
+
+.config-overlay--paged .config-overlay-card {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+
+.config-overlay-stage {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.config-overlay--paged .config-overlay-stage .code {
+  flex: 1;
+  min-height: 110px;
+  max-height: none;
+}
+
+.technical-supplement-page {
+  min-height: 0;
+  overflow: auto;
+}
+
+.technical-supplement-page[hidden] {
+  display: none;
+}
+
+.technical-supplement-page > .selection-note,
+.technical-supplement-page > .decision-register,
+.technical-supplement-page > .context-line,
+.technical-supplement-page > .reference {
+  margin: 0;
+}
+
+.technical-supplement-page > .context-line {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.config-overlay-pager {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: 140px 1fr 140px;
+  align-items: center;
+  gap: 12px;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.config-overlay-pager button {
+  padding: 8px 12px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: white;
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.config-overlay-pager button:last-child {
+  background: var(--ink);
+  color: white;
+}
+
+.config-overlay-pager button:disabled {
+  border-color: var(--line);
+  background: var(--soft);
+  color: var(--muted);
+  cursor: default;
+}
+
+.config-overlay-pager button:focus-visible {
+  outline: 4px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+.config-overlay-pager output {
+  font-size: 18px;
+  font-weight: 850;
+  text-align: center;
 }
 
 .markdown-body {
@@ -97,10 +261,17 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
   gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
 }
 
 .markdown-body > p:first-child,
 .markdown-body > table {
+  grid-column: 1 / -1;
+}
+
+.markdown-body > .detail-panel {
   grid-column: 1 / -1;
 }
 
@@ -146,6 +317,40 @@
 .markdown-body th,
 .markdown-body td {
   padding: 8px 10px;
+}
+
+.markdown-slide.dense .markdown-body {
+  gap: 8px;
+}
+
+.markdown-slide.dense .markdown-body > p:first-child {
+  padding: 9px 12px;
+  font-size: 18px;
+}
+
+.markdown-slide.dense .markdown-body li,
+.markdown-slide.dense .markdown-body td,
+.markdown-slide.dense .markdown-body th,
+.markdown-slide.dense .technical-detail p {
+  font-size: 15px;
+  line-height: 1.22;
+}
+
+.markdown-slide.dense .markdown-body th,
+.markdown-slide.dense .markdown-body td {
+  padding: 5px 7px;
+}
+
+#ecosystem .markdown-body img {
+  width: 28px;
+  height: 28px;
+  margin-right: 7px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  object-fit: contain;
+  vertical-align: middle;
 }
 
 .technical-detail {

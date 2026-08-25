@@ -29,12 +29,14 @@ jobs:
         with:
           python-version: "3.14"
       - name: Verify portable decision site
-        run: python scripts/render_site.py --check
+        run: ./scripts/build-decision-site --check
       - name: Upload portable decision site
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: portable-decision-site
-          path: docs/index.html
+          path: |
+            docs/index.html
+            docs/index.en.html
           if-no-files-found: error
           retention-days: 14
 

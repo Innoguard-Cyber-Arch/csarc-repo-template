@@ -6,6 +6,7 @@
 {{- $summaryKey := cond $english "summary_en" "summary_zh_tw" -}}
 {{- $sourceLabelKey := cond $english "source_label_en" "source_label_zh_tw" -}}
 <section class="slide markdown-slide glossary-slide" id="glossary" data-content-key="glossary-index" aria-label="{{ index $glossary $titleKey }}">
+  {{ partial "journey-rail.html" (dict "Page" .Page "Key" "glossary-index") }}
   <header><span class="selection-sequence">Glossary</span><h2>{{ index $glossary $titleKey }}</h2></header>
   <p class="glossary-intro">{{ index $glossary $introKey }}</p>
   <div class="glossary-index">
@@ -23,6 +24,7 @@
 </section>
 {{- range $glossary.groups }}
 <section class="slide markdown-slide glossary-slide" id="glossary-group-{{ .key }}" data-content-key="glossary-{{ .key }}" aria-label="{{ index . $titleKey }}">
+  {{ partial "journey-rail.html" (dict "Page" $.Page "Key" (printf "glossary-%s" .key)) }}
   <header><span class="selection-sequence">Glossary</span><h2>{{ index . $titleKey }}</h2></header>
   <div class="glossary-grid">
     {{- range .terms }}

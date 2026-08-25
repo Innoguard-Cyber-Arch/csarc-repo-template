@@ -76,7 +76,7 @@ def main() -> int:
     """Compare both language sources and report the first structural drift."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--content-dir", type=Path, default=Path("decision-site/content")
+        "--content-dir", type=Path, default=Path("site/content")
     )
     args = parser.parse_args()
     try:

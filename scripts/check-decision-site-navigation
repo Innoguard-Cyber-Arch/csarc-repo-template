@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Reject sidebar labels that cannot fit the fixed-width presentation rail."""
+
+from __future__ import annotations
+
+import re
+import sys
+import unicodedata
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PARTIAL = ROOT / "site/layouts/partials/journey-rail.html"
+MAX_COLUMNS = 10
+ITEM = re.compile(r'^\s*\(dict\s+(?P<attributes>.+)\)\s*$', re.MULTILINE)
+ATTRIBUTE = re.compile(r'"(?P<name>[^"]+)"\s+"(?P<value>[^"]*)"')
+
+
+def display_columns(value: str) -> int:
+    return sum(
+        2 if unicodedata.east_asian_width(character) in {"F", "W"} else 1
+        for character in value
+    )
+
+
+def main() -> int:
+    source = PARTIAL.read_text(encoding="utf-8")
+    violations: list[str] = []
+    count = 0
+
+    for match in ITEM.finditer(source):
+        attributes = dict(
+            (attribute["name"], attribute["value"])
+            for attribute in ATTRIBUTE.finditer(match["attributes"])
+        )
+        if "key" not in attributes:
+            continue
+        for language in ("zh", "en"):
+            label = attributes.get(language, "")
+            columns = display_columns(label)
+            count += 1
+            if columns > MAX_COLUMNS:
+                violations.append(
+                    f"{attributes['key']} {language}: {label!r} uses {columns} columns; "
+                    f"maximum is {MAX_COLUMNS} (five full-width characters)"
+                )
+
+    if violations:
+        print("Decision-site navigation labels must be rewritten to fit the sidebar:", file=sys.stderr)
+        print("\n".join(f"- {violation}" for violation in violations), file=sys.stderr)
+        return 1
+
+    print(
+        f"Decision-site navigation: {count} labels fit within five full-width characters"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

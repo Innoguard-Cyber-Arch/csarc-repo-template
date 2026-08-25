@@ -33,6 +33,12 @@
 
   function show(index, updateHash = true) {
     closeDisclosures();
+    document.querySelectorAll('.config-overlay').forEach(overlay => {
+      overlay.hidden = true;
+    });
+    document.querySelectorAll('[aria-expanded="true"]').forEach(trigger => {
+      trigger.setAttribute('aria-expanded', 'false');
+    });
     current = Math.max(0, Math.min(slides.length - 1, index));
     slides.forEach((slide, slideIndex) => {
       const active = slideIndex === current;
