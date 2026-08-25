@@ -2644,6 +2644,14 @@ def base_data(
     return data
 
 
+def default_security_reporting_channel(repository_url: str) -> str:
+    """Return the template's repository-derived public reporting channel."""
+    return (
+        f"Open a GitHub Issue at {repository_url}/issues/new; "
+        "maintainers receive notifications for new Issues."
+    )
+
+
 def require_clean_repository(target: Path) -> None:
     """Require an existing repository with no tracked or untracked changes."""
     inside = run(
@@ -3489,9 +3497,19 @@ def update_plan_answers(  # noqa: C901
     saved_visibility = answers.get("project_visibility")
     update_data["project_visibility"] = repository.visibility
     if repository.repository is not None:
-        update_data["repository_url"] = (
-            f"https://github.com/{repository.repository}"
-        )
+        repository_url = f"https://github.com/{repository.repository}"
+        previous_url = answers.get("repository_url")
+        previous_channel = answers.get("security_reporting_channel")
+        update_data["repository_url"] = repository_url
+        if (
+            "security_reporting_channel" not in explicit_data
+            and isinstance(previous_url, str)
+            and previous_channel
+            == default_security_reporting_channel(previous_url)
+        ):
+            update_data["security_reporting_channel"] = (
+                default_security_reporting_channel(repository_url)
+            )
     if saved_visibility != repository.visibility:
         enabled = (
             repository.visibility == "public"

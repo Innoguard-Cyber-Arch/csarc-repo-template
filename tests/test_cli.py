@@ -2384,6 +2384,65 @@ def test_update_rechecks_repository_context_after_confirmation(
     )
 
 
+@pytest.mark.parametrize(
+    ("saved_channel", "explicit_channel", "expected_channel"),
+    [
+        (
+            "Open a GitHub Issue at https://github.com/old/repository/"
+            "issues/new; maintainers receive notifications for new Issues.",
+            None,
+            "Open a GitHub Issue at https://github.com/new/repository/"
+            "issues/new; maintainers receive notifications for new Issues.",
+        ),
+        (
+            "Use the approved private reporting channel.",
+            None,
+            "Use the approved private reporting channel.",
+        ),
+        (
+            "Open a GitHub Issue at https://github.com/old/repository/"
+            "issues/new; maintainers receive notifications for new Issues.",
+            "Use the newly approved reporting channel.",
+            "Use the newly approved reporting channel.",
+        ),
+    ],
+)
+def test_update_repository_rename_preserves_custom_security_channel(
+    saved_channel: str,
+    explicit_channel: str | None,
+    expected_channel: str,
+) -> None:
+    """Only move a repository-derived reporting channel to the new URL."""
+    answers: dict[str, object] = {
+        "language": "python",
+        "project_visibility": "private",
+        "repository_url": "https://github.com/old/repository",
+        "security_reporting_channel": saved_channel,
+    }
+    explicit_data = (
+        {"security_reporting_channel": explicit_channel}
+        if explicit_channel is not None
+        else {}
+    )
+    repository = cli.RepositoryContext(
+        "new/repository",
+        "new",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+
+    result, update_data = cli.update_plan_answers(
+        answers, explicit_data, repository
+    )
+
+    assert result["repository_url"] == "https://github.com/new/repository"
+    assert result["security_reporting_channel"] == expected_channel
+    if saved_channel == expected_channel and explicit_channel is None:
+        assert "security_reporting_channel" not in update_data
+
+
 def test_update_rechecks_snapshot_after_repository_context(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

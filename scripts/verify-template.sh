@@ -1424,33 +1424,53 @@ grep -q 'README.md has unfinished run command metadata' \
   <<<"$metadata_error"
 cp "$fixture_root/default-project/README.md" "$metadata_probe/README.md"
 cp "$fixture_root/default-project/SECURITY.md" "$metadata_probe/SECURITY.md"
-printf '%s\n' ' ToDo ' >> "$metadata_probe/README.md"
-printf '%s\n' ' tBd ' >> "$metadata_probe/SECURITY.md"
+sed 's/A "quoted" project/ ToDo /' "$metadata_probe/README.md" \
+  > "$metadata_probe/README.md.tmp"
+mv "$metadata_probe/README.md.tmp" "$metadata_probe/README.md"
+sed "s/Use the synthetic fixture's private reporting channel\./ PLACEholder /" \
+  "$metadata_probe/SECURITY.md" > "$metadata_probe/SECURITY.md.tmp"
+mv "$metadata_probe/SECURITY.md.tmp" "$metadata_probe/SECURITY.md"
 if metadata_error="$(
   cd "$metadata_probe"
   ./scripts/check-project-metadata 2>&1
 )"; then
-  echo "Generated verification must reject TODO/TBD metadata."
+  echo "Generated verification must reject controlled placeholder metadata."
   exit 1
 fi
-grep -q 'README.md has unfinished project description or run command metadata' \
+grep -q 'README.md has unfinished project description metadata' \
   <<<"$metadata_error"
 grep -q 'SECURITY.md has unfinished security reporting channel metadata' \
   <<<"$metadata_error"
 cp "$fixture_root/default-project/README.md" "$metadata_probe/README.md"
 cp "$fixture_root/default-project/SECURITY.md" "$metadata_probe/SECURITY.md"
-printf '%s\n' ' pLaCeHoLdEr ' >> "$metadata_probe/README.md"
-printf '%s\n' ' PLACEholder ' >> "$metadata_probe/SECURITY.md"
+printf '%s\n' '' '## Product roadmap' ' ToDo ' ' PLACEholder ' \
+  >> "$metadata_probe/README.md"
+printf '%s\n' '' '## Internal notes' ' tBd ' \
+  >> "$metadata_probe/SECURITY.md"
+(
+  cd "$metadata_probe"
+  ./scripts/check-project-metadata
+)
+rm "$metadata_probe/README.md"
 if metadata_error="$(
   cd "$metadata_probe"
   ./scripts/check-project-metadata 2>&1
 )"; then
-  echo "Generated verification must reject placeholder metadata."
+  echo "Generated verification must require README.md."
   exit 1
 fi
-grep -q 'README.md has unfinished project description or run command metadata' \
+grep -q 'README.md is required for project metadata verification' \
   <<<"$metadata_error"
-grep -q 'SECURITY.md has unfinished security reporting channel metadata' \
+cp "$fixture_root/default-project/README.md" "$metadata_probe/README.md"
+rm "$metadata_probe/SECURITY.md"
+if metadata_error="$(
+  cd "$metadata_probe"
+  ./scripts/check-project-metadata 2>&1
+)"; then
+  echo "Generated verification must require SECURITY.md."
+  exit 1
+fi
+grep -q 'SECURITY.md is required for project metadata verification' \
   <<<"$metadata_error"
 test ! -f "$fixture_root/default-project/.github/workflows/codeql.yml"
 grep -q '"language_profile": "python"' \
@@ -2496,6 +2516,7 @@ grep -q '"template_mode": "existing"' \
 # pilot uses the same nested evaluation/Dockerfile shape.
 container_project="$fixture_root/container-project"
 mkdir -p "$container_project/evaluation"
+printf '%s\n' '# Container product' > "$container_project/README.md"
 cat > "$container_project/evaluation/Dockerfile" <<'DOCKERFILE'
 FROM alpine:3.22
 CMD ["/bin/true"]

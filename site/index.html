@@ -304,7 +304,7 @@
           <p class="recommendation-copy"><strong>等待：</strong>Dependabot 一般升版先等三天；pnpm 另以嚴格 resolver 阻擋發布未滿三天的直接或間接套件，並拒絕 publisher trust 降級。遇到 trust downgrade 時先確認發布者與 provenance，不要直接停用 policy。<br><strong>漏洞：</strong>OSV 對已公開漏洞立即通知，不套用等待期。<br><strong>內容：</strong><code>uv.lock</code> 保存 SHA-256；<code>pnpm-lock.yaml</code> 保存 integrity hash；發布時解壓真正成品，再附 checksum 與非空 SBOM。<br><strong>限制：</strong>雜湊不證明來源善意，SBOM 也不會自行阻擋漏洞。</p>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>兩種生態的一般升版等三天：</strong><code>.github/dependabot.yml</code>；<strong>pnpm 本機也嚴格等待：</strong><code>pnpm-workspace.yaml</code></li><li><strong>凍結安裝並比對兩種 lockfile 雜湊：</strong><code>scripts/verify</code></li><li><strong>掃已知漏洞：</strong><code>osv.yml</code>　<strong>發布 checksum／SBOM：</strong><code>release.yml</code></li><li><strong>回報本專案自身的漏洞：</strong><code>SECURITY.md</code>；不寫死聯絡信箱或 SLA，由專案 owner 填入實際通報管道</li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>兩種生態的一般升版等三天：</strong><code>.github/dependabot.yml</code>；<strong>pnpm 本機也嚴格等待：</strong><code>pnpm-workspace.yaml</code></li><li><strong>凍結安裝並比對兩種 lockfile 雜湊：</strong><code>scripts/verify</code></li><li><strong>掃已知漏洞：</strong><code>osv.yml</code>　<strong>發布 checksum／SBOM：</strong><code>release.yml</code></li><li><strong>回報本專案自身的漏洞：</strong><code>SECURITY.md</code>；預設使用實際 repository 的公開 GitHub Issues，不寫死未核准的 email 或 SLA，也不得張貼敏感內容</li></ul></aside>
       <aside id="renovate-preset-overlay" class="config-overlay term-overlay" hidden role="region" aria-label="中央共用更新規則說明">
         <div class="config-overlay-card">
           <button class="config-overlay-close" type="button" aria-label="關閉名詞說明">×</button>

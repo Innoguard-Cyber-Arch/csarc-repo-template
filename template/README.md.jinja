@@ -5,7 +5,9 @@
 
 [![CI]({{ repository_url }}/actions/workflows/ci.yml/badge.svg)]({{ repository_url }}/actions/workflows/ci.yml)
 
+<!-- csarc-project-description:start -->
 {{ project_description }}
+<!-- csarc-project-description:end -->
 
 [開啟專案內部網站](docs/index.html)
 
@@ -44,9 +46,11 @@ git push -u origin dev
 
 產品最短可成功的啟動或呼叫方式：
 
+<!-- csarc-project-run-command:start -->
 ```bash
 {{ project_run_command }}
 ```
+<!-- csarc-project-run-command:end -->
 
 {% if project_mode == "existing" %}> 既有案導入：Copier 已保留原本的 manifest。先人工合併 dev 相依、版本與工具設定，再重建 lockfile；`coverage_mode=diff` 預設比較 `origin/main`。{% endif %}
 {% if branch_strategy == "delivery" %}> 本案選用 delivery 模式：Milestone 使用 `dev/m<編號>-<簡稱>`，一般孤立 Issue 使用 `dev/next`，確實需要獨立 soak／canary 的孤立 Issue 才使用一次性的 `dev/i<Issue 編號>-<簡稱>`；它們都以 promotion PR 進入 `main`。{% elif branch_strategy == "dev" %}> 本案選用 `dev` 模式，因為有長期共用測試環境。維護者首次啟用時須從 `main` 建立並推送 `dev`。{% else %}> 本案使用 main 模式，短分支通過 PR 後直接合併到 `main`。{% endif %}
