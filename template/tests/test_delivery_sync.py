@@ -320,6 +320,61 @@ def terminal_bridge_record(bridge_sha: str) -> dict[str, Any]:
     return record
 
 
+def bridge_git_fixture(tmp_path: Path) -> tuple[Path, Path, str, str]:
+    """Create self-contained expected and advanced bridge Git objects."""
+    source = tmp_path / "source"
+    remote = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "init", "-b", "main", str(source)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    for key, value in (("user.name", "Test"), ("user.email", "test@example")):
+        subprocess.run(
+            ["git", "config", key, value],
+            cwd=source,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "expected"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    expected_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "commit", "--allow-empty", "-m", "advanced"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    live_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "init", "--bare", str(remote)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return source, remote, expected_sha, live_sha
+
+
 def install_memory_ledger(
     monkeypatch: pytest.MonkeyPatch, ledger: MemoryLedger
 ) -> None:
@@ -1064,21 +1119,7 @@ def test_terminal_bridge_cleanup_deletes_only_the_expected_ref(
     tmp_path: Path,
 ) -> None:
     """The owner cleanup uses a deletion-only explicit force-with-lease."""
-    remote = tmp_path / "remote.git"
-    subprocess.run(
-        ["git", "init", "--bare", str(remote)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    repository = Path(__file__).parents[1]
-    bridge_sha = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=repository,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    source, remote, _expected_sha, bridge_sha = bridge_git_fixture(tmp_path)
     subprocess.run(
         [
             "git",
@@ -1086,7 +1127,7 @@ def test_terminal_bridge_cleanup_deletes_only_the_expected_ref(
             str(remote),
             f"{bridge_sha}:refs/heads/promote/next",
         ],
-        cwd=repository,
+        cwd=source,
         check=True,
         capture_output=True,
         text=True,
@@ -1113,31 +1154,10 @@ def test_terminal_bridge_cleanup_deletes_only_the_expected_ref(
 
 def test_bridge_cleanup_refuses_an_advanced_ref(tmp_path: Path) -> None:
     """A stale cleanup lease cannot delete a reused fixed bridge ref."""
-    remote = tmp_path / "remote.git"
-    subprocess.run(
-        ["git", "init", "--bare", str(remote)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    repository = Path(__file__).parents[1]
-    live_sha = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=repository,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    expected_sha = subprocess.run(
-        ["git", "rev-parse", "HEAD^"],
-        cwd=repository,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    source, remote, expected_sha, live_sha = bridge_git_fixture(tmp_path)
     subprocess.run(
         ["git", "push", str(remote), f"{live_sha}:refs/heads/promote/next"],
-        cwd=repository,
+        cwd=source,
         check=True,
         capture_output=True,
         text=True,
@@ -1159,19 +1179,7 @@ def test_bridge_cleanup_is_idempotent_and_never_deletes_dev_next(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An absent bridge is done, while direct dev/next is never a target."""
-    remote = tmp_path / "remote.git"
-    subprocess.run(
-        ["git", "init", "--bare", str(remote)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    bridge_sha = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    _source, remote, _expected_sha, bridge_sha = bridge_git_fixture(tmp_path)
     assert "already absent" in delete_promotion_bridge(
         terminal_bridge_record(bridge_sha), str(remote)
     )
