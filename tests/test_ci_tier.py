@@ -27,7 +27,9 @@ scope_for = MODULE["scope_for"]
         ("uv.lock", "dependency"),
         ("template/pyproject.toml.jinja", "dependency"),
         ("policies/rulesets.json", "governance"),
+        ("policies/dev-next-ruleset.json", "governance"),
         ("template/policies/rulesets.json.jinja", "governance"),
+        ("template/policies/dev-next-ruleset.json", "governance"),
         ("unexpected.bin", "unknown"),
     ],
 )
@@ -93,6 +95,7 @@ def test_draft_defers_full_but_keeps_targeted_risk_checks(
         (".github/workflows/ci.yml", "run_zizmor"),
         ("uv.lock", "run_osv"),
         ("policies/rulesets.json", "run_governance"),
+        ("policies/dev-next-ruleset.json", "run_governance"),
     ],
 )
 def test_risk_scopes_enable_only_their_expensive_check(
