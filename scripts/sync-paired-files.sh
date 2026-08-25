@@ -38,6 +38,7 @@ paired_files=(
   scripts/check-governance-drift
   scripts/ci_tier.py
   scripts/delivery_sync.py
+  scripts/pr_lifecycle.py
   scripts/promotion_gate.py
   scripts/check-update-conflicts
   scripts/cleanup-worktrees
@@ -53,6 +54,7 @@ paired_files=(
   tests/test_ci_tier.py
   tests/test_spec_to_issue.py
   tests/test_delivery_sync.py
+  tests/test_pr_lifecycle.py
   tests/test_promotion_gate.py
   tests/test_milestone_lifecycle.py
   tests/test_release_policy.py

@@ -22,6 +22,8 @@ grep -q 'verify-quota-main' docs/ci-policy.md
 grep -q 'release_eligible.*false' docs/ci-policy.md
 cmp -s scripts/promotion_gate.py template/scripts/promotion_gate.py
 cmp -s tests/test_promotion_gate.py template/tests/test_promotion_gate.py
+cmp -s scripts/pr_lifecycle.py template/scripts/pr_lifecycle.py
+cmp -s tests/test_pr_lifecycle.py template/tests/test_pr_lifecycle.py
 for summary_file in AGENTS.md README.md template/AGENTS.md.jinja \
   template/README.md.jinja; do
   grep -q 'docs/ci-policy.md#actions-額度-fallback' "$summary_file"
@@ -65,6 +67,7 @@ uv run ruff format --check \
   tests/test_cli.py \
   tests/test_milestone_lifecycle.py \
   tests/test_ci_tier.py \
+  tests/test_pr_lifecycle.py \
   tests/test_promotion_gate.py \
   tests/test_delivery_sync.py \
   tests/test_release_policy.py \
@@ -74,6 +77,7 @@ uv run ruff format --check \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/pr_lifecycle.py \
   scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -88,6 +92,7 @@ uv run ruff check \
   tests/test_cli.py \
   tests/test_milestone_lifecycle.py \
   tests/test_ci_tier.py \
+  tests/test_pr_lifecycle.py \
   tests/test_promotion_gate.py \
   tests/test_delivery_sync.py \
   tests/test_release_policy.py \
@@ -97,6 +102,7 @@ uv run ruff check \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/pr_lifecycle.py \
   scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -111,6 +117,7 @@ uv run mypy \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/pr_lifecycle.py \
   scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -1482,6 +1489,7 @@ test -x "$fixture_root/default-project/scripts/install-gitleaks"
 test -x "$fixture_root/default-project/scripts/verify-fast"
 test -f "$fixture_root/default-project/scripts/ci_tier.py"
 test -x "$fixture_root/default-project/scripts/promotion_gate.py"
+test -x "$fixture_root/default-project/scripts/pr_lifecycle.py"
 test ! -f "$fixture_root/default-project/.pre-commit-config.yaml"
 test ! -f "$fixture_root/default-project/package.json"
 test ! -f "$fixture_root/default-project/pnpm-workspace.yaml"
