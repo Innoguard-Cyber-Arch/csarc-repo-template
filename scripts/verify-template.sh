@@ -1014,14 +1014,15 @@ grep -q 'search open and closed Issues' AGENTS.md
 grep -q 'Never silently reverse an earlier decision' AGENTS.md
 grep -q 'whether creating through the UI, CLI, or API' AGENTS.md
 grep -q 'create and link a follow-up Issue first' AGENTS.md
-# Backticks are literal documentation content.
-# shellcheck disable=SC2016
-grep -Fq 'run `./scripts/cleanup-worktrees` in its default dry-run mode and report any candidates' \
-  AGENTS.md
-# Backticks are literal documentation content.
-# shellcheck disable=SC2016
-grep -Fq 'run `./scripts/cleanup-worktrees` in its default dry-run mode and report any candidates' \
+grep -Fq 'reserve unscoped cleanup for explicit maintenance' AGENTS.md
+grep -Fq 'reserve unscoped cleanup for explicit maintenance' \
   template/AGENTS.md.jinja
+grep -Fq 'cloud-synced File Provider path' AGENTS.md
+grep -Fq 'cloud-synced File Provider path' template/AGENTS.md.jinja
+grep -Fq 'without routine user confirmation' AGENTS.md
+grep -Fq 'without routine user confirmation' template/AGENTS.md.jinja
+grep -Fq 'once per final candidate tree' AGENTS.md
+grep -Fq 'once per final candidate tree' template/AGENTS.md.jinja
 grep -q '^## References$' docs/milestone-description.md
 grep -q 'bounded' docs/agent-install.md
 grep -q '沿用、取代或駁回' docs/index.html
@@ -1799,9 +1800,13 @@ grep -q 'whether creating through the UI, CLI, or API' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'create and link a follow-up Issue first' \
   "$fixture_root/default-project/AGENTS.md"
-# Backticks are literal documentation content.
-# shellcheck disable=SC2016
-grep -Fq 'run `./scripts/cleanup-worktrees` in its default dry-run mode and report any candidates' \
+grep -Fq 'reserve unscoped cleanup for explicit maintenance' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -Fq 'cloud-synced File Provider path' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -Fq 'without routine user confirmation' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -Fq 'once per final candidate tree' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'uv run pytest <test-path>' \
   "$fixture_root/default-project/AGENTS.md"
