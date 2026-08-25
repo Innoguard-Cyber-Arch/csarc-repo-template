@@ -108,10 +108,11 @@ def risks_for(path: str) -> set[str]:
     """Identify changes that require explicit, fail-closed routing."""
     name = Path(path).name.removesuffix(".jinja")
     scope = scope_for(path)
-    risks = (
-        {"verifier"}
+    risks = {scope} & {"workflow", "governance"}
+    risks.update(
+        ("verifier",)
         if path.startswith(("scripts/", "template/scripts/"))
-        else set()
+        else ()
     )
     if path == "copier.yml" or path.startswith("template/"):
         risks.add("generator")
@@ -187,6 +188,17 @@ def classify(
     risks = tuple(
         sorted({risk for path in changed_files for risk in risks_for(path)})
     )
+    delivery = re.fullmatch(r"dev/(m[1-9][0-9]*-[a-z0-9][a-z0-9-]*)", base)
+    sync = re.fullmatch(
+        r"sync/main-to-(m[1-9][0-9]*-[a-z0-9][a-z0-9-]*)-[0-9a-f]{7,40}",
+        head,
+    )
+    reviewed_sync = (
+        event == "pull_request"
+        and delivery is not None
+        and sync is not None
+        and delivery.group(1) == sync.group(1)
+    )
     stage = (
         "post-merge"
         if event == "push"
@@ -194,6 +206,8 @@ def classify(
         if event == "schedule"
         else "manual"
         if force_full or event == "workflow_dispatch"
+        else "sync"
+        if reviewed_sync
         else "integrated"
         if base == "main"
         else "issue"
@@ -243,11 +257,16 @@ def classify(
         tier, reason = "full", "changed paths unavailable"
     elif risk_reason := full_risk_reason(stage, scopes, risks):
         tier, reason = "full", risk_reason
-    elif scopes == ("docs",):
+    elif scopes == ("docs",) and not reviewed_sync:
         tier, reason = "docs", "documentation-only change"
     else:
-        tier, reason = "fast", "change-aware pull request verification"
-    full = tier == "full"
+        tier = "fast"
+        reason = (
+            "reviewed main sync"
+            if reviewed_sync
+            else "change-aware pull request verification"
+        )
+    scheduled = stage == "scheduled"
     return Plan(
         tier=tier,
         stage=stage,
@@ -255,9 +274,9 @@ def classify(
         review_state=review_state,
         scopes=scopes,
         risks=risks,
-        run_governance=full or "governance" in scopes,
-        run_osv=full or "dependency" in scopes,
-        run_zizmor=full or "workflow" in scopes,
+        run_governance=scheduled or "governance" in scopes,
+        run_osv=scheduled or "dependency" in scopes,
+        run_zizmor=scheduled or "workflow" in scopes,
         run_deep=review_state != "draft"
         and (
             event == "schedule"

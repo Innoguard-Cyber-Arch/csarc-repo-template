@@ -11,7 +11,7 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft]
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
   schedule:
@@ -43,6 +43,7 @@ jobs:
       run_governance: {% raw %}${{ steps.plan.outputs.run_governance }}{% endraw %}
       run_osv: {% raw %}${{ steps.plan.outputs.run_osv }}{% endraw %}
       run_zizmor: {% raw %}${{ steps.plan.outputs.run_zizmor }}{% endraw %}
+      run_deep: {% raw %}${{ steps.plan.outputs.run_deep }}{% endraw %}
     steps:
       - name: Start timing
         id: started
@@ -160,6 +161,7 @@ jobs:
     uses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@{{ workflow_ref }}
     with:
       language-profile: "{{ language }}"
+      run-runtime-matrix: {% raw %}${{ needs.fast.outputs.run_deep == 'true' }}{% endraw %}
 {%- if has_python %}
       canonical-python-version: "{{ python_latest }}"
       python-versions: >-
@@ -218,7 +220,7 @@ jobs:
   python-compatibility:
     name: Python compatibility ({% raw %}${{ matrix.runtime }}{% endraw %})
     needs: fast
-    if: {% raw %}${{ needs.fast.outputs.tier == 'full' }}{% endraw %}
+    if: {% raw %}${{ needs.fast.outputs.run_deep == 'true' }}{% endraw %}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -289,7 +291,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: {% raw %}${{ github.event.pull_request.base.sha || github.sha }}{% endraw %}
+          ref: {% raw %}${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}{% endraw %}
       - name: Check effective repository governance
         env:
           GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
@@ -400,6 +402,7 @@ jobs:
           RUN_GOVERNANCE: {% raw %}${{ needs.fast.outputs.run_governance }}{% endraw %}
           RUN_OSV: {% raw %}${{ needs.fast.outputs.run_osv }}{% endraw %}
           RUN_ZIZMOR: {% raw %}${{ needs.fast.outputs.run_zizmor }}{% endraw %}
+          RUN_DEEP: {% raw %}${{ needs.fast.outputs.run_deep }}{% endraw %}
           REVIEW_STATE: {% raw %}${{ needs.fast.outputs.review_state }}{% endraw %}
 {%- if use_reusable_workflow %}
           FULL_RESULT: {% raw %}${{ needs.full.result }}{% endraw %}
@@ -443,14 +446,14 @@ jobs:
           if [[ "$TIER" == full ]]; then
 {% if use_reusable_workflow %}            test "$FULL_RESULT" = success
 {% else %}            test "$CANONICAL_RESULT" = success
-{% if has_python %}            test "$PYTHON_COMPATIBILITY_RESULT" = success
-{% endif %}{% if language == "python-typescript" %}            test "$TYPESCRIPT_RESULT" = success
+{% if language == "python-typescript" %}            test "$TYPESCRIPT_RESULT" = success
 {% endif %}{% endif %}          else
 {% if use_reusable_workflow %}            test "$FULL_RESULT" = skipped
 {% else %}            test "$CANONICAL_RESULT" = skipped
-{% if has_python %}            test "$PYTHON_COMPATIBILITY_RESULT" = skipped
-{% endif %}{% if language == "python-typescript" %}            test "$TYPESCRIPT_RESULT" = skipped
+{% if language == "python-typescript" %}            test "$TYPESCRIPT_RESULT" = skipped
 {% endif %}{% endif %}          fi
+{% if not use_reusable_workflow and has_python %}          require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility
+{% endif %}
           require_routed "$RUN_GOVERNANCE" "$GOVERNANCE_RESULT" governance
           require_routed "$RUN_OSV" "$OSV_RESULT" osv
           require_routed "$RUN_ZIZMOR" "$ZIZMOR_RESULT" zizmor

@@ -71,11 +71,11 @@ Promotion 可使用 merge queue，但 queue ref、base SHA、source PR 與 candi
 
 - docs：結構與文件驗證；網站來源變更才產生 preview artifact。
 - fast：lint、型別與受影響測試。
-- full：完整支援矩陣、template rendering、治理、安全與 runtime checks。
+- full：完整 canonical verification 與 template rendering；runtime matrix、remote governance、OSV 與 Zizmor 仍由 stage／changed scope 個別路由，scheduled 才全部執行。
 - post-merge：SHA／tree／provenance identity，不重跑已通過的 full matrix。
 - scheduled／release：全歷史、最深矩陣與長時間供應鏈檢查。
 
-Workflow、governance、generator、CLI adoption/update、release、安全、promotion、provenance、unknown path、hotfix 與 merge_group 都屬 fail-closed 升級範圍。完整測試責任與 flaky／quarantine 規則另見 behavior verification contract。
+Workflow、governance、generator、CLI adoption/update、release、安全、promotion、provenance、unknown path、hotfix 與 merge_group 都屬 fail-closed 風險範圍；直接進 main 時升級 full，ordinary Issue PR 則保留 scoped fast 與對應 auxiliary job。完整測試責任與 flaky／quarantine 規則另見 behavior verification contract。
 
 ### 選配容器交付
 

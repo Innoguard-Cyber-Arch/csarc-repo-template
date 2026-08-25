@@ -192,12 +192,11 @@ def test_governance_checkers_run_only_remote_governance(path: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("base", "head", "labels", "reason"),
+    ("head", "labels", "reason"),
     [
-        ("main", "dev/m7-ci", set(), "delivery promotion"),
-        ("main", "fix/9-outage", {"hotfix"}, "hotfix to main"),
+        ("dev/m7-ci", set(), "delivery promotion"),
+        ("fix/9-outage", {"hotfix"}, "hotfix to main"),
         (
-            "main",
             "fix/321-recover-v012-release",
             {"release-recovery"},
             "release recovery to main",
@@ -205,14 +204,38 @@ def test_governance_checkers_run_only_remote_governance(path: str) -> None:
     ],
 )
 def test_promotion_and_hotfix_use_full_tier(
-    base: str, head: str, labels: set[str], reason: str
+    head: str, labels: set[str], reason: str
 ) -> None:
-    """Run the complete matrix at every delivery route that can change main."""
-    plan = classify("pull_request", base, head, labels, ["src/pkg/core.py"])
+    """Run canonical verification without unrelated auxiliary matrices."""
+    plan = classify("pull_request", "main", head, labels, ["src/pkg/core.py"])
     assert plan.tier == "full"
     assert plan.reason == reason
-    assert plan.run_governance and plan.run_osv and plan.run_zizmor
+    assert not any((plan.run_governance, plan.run_osv, plan.run_zizmor))
+    assert not plan.run_deep
     assert plan.upload_site == (reason == "delivery promotion")
+
+
+@pytest.mark.parametrize(
+    ("path", "flag"),
+    [
+        ("policies/rulesets.json", "run_governance"),
+        ("uv.lock", "run_osv"),
+        (".github/workflows/ci.yml", "run_zizmor"),
+    ],
+)
+def test_hotfix_routes_only_the_relevant_auxiliary_check(
+    path: str, flag: str
+) -> None:
+    """Keep high-risk hotfix checks fail closed without broad fan-out."""
+    plan = classify("pull_request", "main", "fix/9-outage", {"hotfix"}, [path])
+    flags = {
+        "run_governance": plan.run_governance,
+        "run_osv": plan.run_osv,
+        "run_zizmor": plan.run_zizmor,
+    }
+    assert plan.tier == "full"
+    assert flags[flag]
+    assert sum(flags.values()) == 1
 
 
 def test_unknown_and_missing_paths_fail_safe_to_full() -> None:
@@ -269,6 +292,10 @@ def test_manual_and_merge_queue_runs_are_full() -> None:
     ("path", "risk"),
     [
         ("scripts/ci_tier.py", "ci-router"),
+        (".github/workflows/governance-comment.yml", "workflow"),
+        (".github/actions/setup/action.yml", "workflow"),
+        (".github/CODEOWNERS", "governance"),
+        ("policies/rulesets.json", "governance"),
         ("pyproject.toml", "test-harness"),
         ("copier.yml", "generator"),
         ("src/csarc_cli/cli.py", "cli-adoption-update"),
@@ -301,7 +328,27 @@ def test_issue_and_integrated_stages_apply_risk_differently() -> None:
         set(),
         ["src/csarc_cli/cli.py"],
     )
+    sync = classify(
+        "pull_request",
+        "dev/m9-low-friction-ai-sdlc",
+        "sync/main-to-m9-low-friction-ai-sdlc-abcdef012345",
+        set(),
+        ["README.md"],
+    )
+    mismatched_sync = classify(
+        "pull_request",
+        "dev/m9-low-friction-ai-sdlc",
+        "sync/main-to-m8-other-abcdef012345",
+        set(),
+        ["README.md"],
+    )
     assert (issue.stage, issue.tier) == ("issue", "fast")
+    assert (sync.stage, sync.tier, sync.reason) == (
+        "sync",
+        "fast",
+        "reviewed main sync",
+    )
+    assert (mismatched_sync.stage, mismatched_sync.tier) == ("issue", "docs")
     assert (integrated.stage, integrated.tier) == ("integrated", "full")
     assert integrated.reason.startswith("direct-to-main risk:")
 
@@ -310,6 +357,10 @@ def test_issue_and_integrated_stages_apply_risk_differently() -> None:
     "path",
     [
         "scripts/ci_tier.py",
+        ".github/workflows/governance-comment.yml",
+        ".github/actions/setup/action.yml",
+        ".github/CODEOWNERS",
+        "policies/rulesets.json",
         "pyproject.toml",
         "copier.yml",
         "src/csarc_cli/cli.py",
@@ -340,6 +391,13 @@ def test_schedule_and_release_run_the_deep_matrix() -> None:
     )
     assert scheduled.tier == release.tier == "full"
     assert scheduled.run_deep and release.run_deep
+    assert all(
+        (
+            scheduled.run_governance,
+            scheduled.run_osv,
+            scheduled.run_zizmor,
+        )
+    )
 
 
 def test_draft_release_defers_the_deep_matrix() -> None:
@@ -396,6 +454,56 @@ def test_required_aggregate_is_unconditional_and_routing_is_job_level() -> None:
         assert jobs["adoption-macos"]["if"] == (
             "${{ needs.fast.outputs.run_deep == 'true' }}"
         )
+    if "python-compatibility" in jobs:
+        assert jobs["python-compatibility"]["if"] == (
+            "${{ needs.fast.outputs.run_deep == 'true' }}"
+        )
+        assert aggregate["env"]["RUN_DEEP"] == (
+            "${{ needs.fast.outputs.run_deep }}"
+        )
+        assert (
+            'require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT"'
+            in aggregate["run"]
+        )
+
+
+def test_pr_metadata_edits_recompute_routing() -> None:
+    """Re-run routing when a pull request is retargeted or edited."""
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    )
+    triggers = workflow.get("on", workflow.get(True))
+    assert "edited" in triggers["pull_request"]["types"]
+
+
+def test_governance_checks_the_candidate_revision() -> None:
+    """Never validate governance policy from the pull request base revision."""
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    )
+    checkout = workflow["jobs"]["governance"]["steps"][0]
+    assert checkout["with"]["ref"] == (
+        "${{ github.event.pull_request.head.sha || "
+        "github.event.merge_group.head_sha || github.sha }}"
+    )
+
+
+def test_reusable_ci_routes_the_runtime_matrix_explicitly() -> None:
+    """Let callers request compatibility without duplicating canonical full."""
+    path = ROOT / ".github" / "workflows" / "reusable-ci.yml"
+    if not path.exists():
+        pytest.skip("generated projects consume the repository workflow")
+    workflow = yaml.safe_load(path.read_text())
+    jobs = workflow["jobs"]
+    assert jobs["python-compatibility"]["if"] == (
+        "contains(inputs.language-profile, 'python') && "
+        "inputs.run-runtime-matrix"
+    )
+    aggregate = jobs["verify"]["steps"][0]
+    assert aggregate["env"]["RUN_RUNTIME_MATRIX"] == (
+        "${{ inputs.run-runtime-matrix }}"
+    )
+    assert '"$RUN_RUNTIME_MATRIX" == true' in aggregate["run"]
 
 
 def test_changed_path_discovery_exposes_both_sides_of_a_rename(

@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft]
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
   schedule:
@@ -161,7 +161,7 @@ jobs:
   python-compatibility:
     name: Python compatibility (3.14.0)
     needs: fast
-    if: ${{ needs.fast.outputs.tier == 'full' }}
+    if: ${{ needs.fast.outputs.run_deep == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -214,7 +214,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
       - name: Check effective repository governance
         env:
           GH_TOKEN: ${{ github.token }}
@@ -304,11 +304,10 @@ jobs:
           test "$FAST_RESULT" = success
           if [[ "$TIER" == full ]]; then
             test "$CANONICAL_RESULT" = success
-            test "$PYTHON_COMPATIBILITY_RESULT" = success
           else
             test "$CANONICAL_RESULT" = skipped
-            test "$PYTHON_COMPATIBILITY_RESULT" = skipped
           fi
+          require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility
           require_routed "$RUN_DEEP" "$ADOPTION_MACOS_RESULT" adoption-macos
           require_routed "$RUN_GOVERNANCE" "$GOVERNANCE_RESULT" governance
           require_routed "$RUN_OSV" "$OSV_RESULT" osv

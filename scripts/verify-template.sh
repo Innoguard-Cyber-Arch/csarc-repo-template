@@ -1003,7 +1003,9 @@ grep -q '^    name: canonical full (Python 3.14 + Node 24)$' \
 grep -q '^  python-compatibility:$' .github/workflows/ci.yml
 grep -q '^    name: Python compatibility (3.14.0)$' \
   .github/workflows/ci.yml
-grep -q 'uv run pytest -m "not large"' .github/workflows/ci.yml
+grep -Fq "if: \${{ needs.fast.outputs.run_deep == 'true' }}" \
+  .github/workflows/ci.yml
+grep -q 'uv run pytest' .github/workflows/ci.yml
 test "$(grep -c 'run: ./scripts/verify-template.sh' .github/workflows/ci.yml)" -eq 1
 if grep -q '^  python-runtime:$' .github/workflows/ci.yml; then
   echo "Root full verification must not repeat for every runtime."
@@ -1016,6 +1018,8 @@ grep -q '^  python-compatibility:$' .github/workflows/reusable-ci.yml
 grep -q '^  typescript:$' .github/workflows/reusable-ci.yml
 grep -q './scripts/verify python-compatibility' \
   .github/workflows/reusable-ci.yml
+grep -q '^      run-runtime-matrix:$' .github/workflows/reusable-ci.yml
+grep -q 'inputs.run-runtime-matrix' .github/workflows/reusable-ci.yml
 grep -q './scripts/verify typescript' .github/workflows/reusable-ci.yml
 # shellcheck disable=SC2016 # Match the literal workflow variable.
 grep -q 'test "$PYTHON_COMPATIBILITY_RESULT" = success' \
@@ -1693,6 +1697,8 @@ if reusable_text == "true":
     if match is None:
         raise SystemExit("Reusable workflow compatibility input is missing")
     actual = json.loads(match.group(1))
+    if "run-runtime-matrix: ${{ needs.fast.outputs.run_deep == 'true' }}" not in workflow:
+        raise SystemExit("Reusable workflow runtime routing is missing")
 else:
     match = re.search(
         r"  python-compatibility:\n.*?"
@@ -1707,6 +1713,8 @@ else:
         raise SystemExit("Inline workflow canonical runtime is missing")
     if "./scripts/verify python-compatibility" not in workflow:
         raise SystemExit("Inline compatibility command is missing")
+    if "if: ${{ needs.fast.outputs.run_deep == 'true' }}" not in workflow:
+        raise SystemExit("Inline runtime routing is missing")
 if actual != expected_compatibility:
     raise SystemExit(
         f"Unexpected compatibility matrix: {actual!r} != "
@@ -2413,6 +2421,8 @@ grep -q -- '- "3.14.0"' \
 grep -q '^    name: canonical full (Python 3.14)$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q '^  python-compatibility:$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -Fq "if: \${{ needs.fast.outputs.run_deep == 'true' }}" \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 if grep -q '^  typescript:$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"; then
