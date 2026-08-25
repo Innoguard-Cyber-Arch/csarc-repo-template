@@ -28,6 +28,7 @@ reject_controlled_placeholder() {
   local start="<!-- csarc-$3:start -->"
   local end="<!-- csarc-$3:end -->"
   if awk -v start="$start" -v end="$end" '
+    { sub(/\r$/, "") }
     $0 == start { controlled = 1; next }
     $0 == end { controlled = 0; next }
     controlled {

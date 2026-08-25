@@ -1430,6 +1430,11 @@ mv "$metadata_probe/README.md.tmp" "$metadata_probe/README.md"
 sed "s/Use the synthetic fixture's private reporting channel\./ PLACEholder /" \
   "$metadata_probe/SECURITY.md" > "$metadata_probe/SECURITY.md.tmp"
 mv "$metadata_probe/SECURITY.md.tmp" "$metadata_probe/SECURITY.md"
+for metadata_file in README.md SECURITY.md; do
+  awk '{ printf "%s\r\n", $0 }' "$metadata_probe/$metadata_file" \
+    > "$metadata_probe/$metadata_file.tmp"
+  mv "$metadata_probe/$metadata_file.tmp" "$metadata_probe/$metadata_file"
+done
 if metadata_error="$(
   cd "$metadata_probe"
   ./scripts/check-project-metadata 2>&1
@@ -1443,6 +1448,15 @@ grep -q 'SECURITY.md has unfinished security reporting channel metadata' \
   <<<"$metadata_error"
 cp "$fixture_root/default-project/README.md" "$metadata_probe/README.md"
 cp "$fixture_root/default-project/SECURITY.md" "$metadata_probe/SECURITY.md"
+for metadata_file in README.md SECURITY.md; do
+  awk '{ printf "%s\r\n", $0 }' "$metadata_probe/$metadata_file" \
+    > "$metadata_probe/$metadata_file.tmp"
+  mv "$metadata_probe/$metadata_file.tmp" "$metadata_probe/$metadata_file"
+done
+(
+  cd "$metadata_probe"
+  ./scripts/check-project-metadata
+)
 printf '%s\n' '' '## Product roadmap' ' ToDo ' ' PLACEholder ' \
   >> "$metadata_probe/README.md"
 printf '%s\n' '' '## Internal notes' ' tBd ' \
