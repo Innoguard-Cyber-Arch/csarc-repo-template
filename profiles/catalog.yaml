@@ -147,6 +147,21 @@ compositions:
     profiles:
       - typescript
 
+optional_modules:
+  container_delivery:
+    stage: alpha
+    issue: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/242
+    pilot_repository: Innoguard-Cyber-Arch/ai-guardrail
+    pilot_containerfile: evaluation/Dockerfile
+    applies_to: existing_repositories_with_a_product_owned_containerfile
+    modes:
+      none: no_container_jobs_or_permissions
+      verify: build_smoke_and_scan_without_registry_write
+      ghcr: verified_release_to_ghcr_with_provenance_and_sbom
+    build_context: repository_root
+    platforms: [linux/amd64]
+    deployment: project_specific
+
 promotion_requirements:
   - real_consuming_repository
   - documented_owner
@@ -173,3 +188,10 @@ promotion_evidence:
     status: pending_real_consuming_repository
   python_typescript:
     status: pending_real_consuming_repository
+  container_delivery:
+    status: pilot_candidate_identified
+    repository: Innoguard-Cyber-Arch/ai-guardrail
+    containerfile: evaluation/Dockerfile
+    evidence:
+      - https://github.com/Innoguard-Cyber-Arch/ai-guardrail/issues/1
+      - https://github.com/Innoguard-Cyber-Arch/ai-guardrail/pull/2

@@ -25,7 +25,7 @@ Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript �
 
 本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。`template/` 是下發內容；根目錄則讓公版本身使用同一套規則。
 
-目前可用：CI/CD-only、Python-only、TypeScript-only、混合四種 profile，以及 Issue／spec、PR checks、驗證、打包、checksum、SBOM 與 capability-adaptive 自動升版。GitHub 設定腳本會先辨識方案與實際 API 能力。
+目前可用：CI/CD-only、Python-only、TypeScript-only、混合四種 profile，以及 Issue／spec、PR checks、驗證、打包、checksum、SBOM、選配容器驗證／GHCR 交付與 capability-adaptive 自動升版。GitHub 設定腳本會先辨識方案與實際 API 能力。
 
 ## 快速開始
 
@@ -105,9 +105,9 @@ Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交
 
 ## 發布與維運
 
-公版的單一版本來源是 root `.release-please-manifest.json`；`version.txt`、`pyproject.toml`、`uv.lock`、README、docs、CHANGELOG、`v*` tag 與發布成品必須一致。`template/.release-please-manifest.json` 與模板內的 package/version 檔則是新生成專案自己的 `0.1.0` 起點，不跟隨公版 release number。Promotion 已完成完整驗證；release workflow 只接受綁定該 main SHA 的 source evidence，再建置、計算 digest、產生 SBOM／attestation 並驗證 immutable Release，不重跑完整模板與 runtime 矩陣。生成專案依 profile 產生 wheel、npm tarball 或兩者，將 distributions、`SHA256SUMS`、CycloneDX SBOM 與包含 tag／commit／workflow run 的 metadata 附加至 GitHub Release；CI/CD-only 只有 GitHub Release 的來源封存檔，不假裝有語言成品。attestation 產生後，只有 PyPI／npm 再發布路徑會在啟用對應選項時強制驗證；一般下載仍由消費者執行 `gh attestation verify`。現在只有持續交付，沒有通用部署流程。
+公版的單一版本來源是 root `.release-please-manifest.json`；`version.txt`、`pyproject.toml`、`uv.lock`、README、docs、CHANGELOG、`v*` tag 與發布成品必須一致。`template/.release-please-manifest.json` 與模板內的 package/version 檔則是新生成專案自己的 `0.1.0` 起點，不跟隨公版 release number。Promotion 已完成完整驗證；release workflow 只接受綁定該 main SHA 的 source evidence，再建置、計算 digest、產生 SBOM／attestation 並驗證 immutable Release，不重跑完整模板與 runtime 矩陣。生成專案依 profile 產生 wheel、npm tarball 或兩者，將 distributions、`SHA256SUMS`、CycloneDX SBOM 與包含 tag／commit／workflow run 的 metadata 附加至 GitHub Release；CI/CD-only 只有 GitHub Release 的來源封存檔，不假裝有語言成品。已有產品 Containerfile 的既有 repo 可另選 `verify` 或 `ghcr`：前者只在 PR build／smoke／scan，後者才從已驗證 release source 將相同映像 bytes 發布至 GHCR、附加 provenance 與 SPDX SBOM，並以 digest 再測一次。attestation 產生後，只有明確啟用的 registry 路徑會在發布時強制驗證；一般下載仍由消費者執行 `gh attestation verify`。這仍是持續交付，不包含通用 runtime 部署。
 
-GitHub Release 是所有 profile 的共同基線；PyPI／npm 依語言分開選配，預設全部關閉，且都使用 GitHub environment 與 OIDC 短效憑證，不讀取長效 registry token。啟用條件、trusted publisher 登記步驟與 Node／npm 版本需求見附錄同一章節。
+GitHub Release 是所有 profile 的共同基線；PyPI／npm 依語言分開選配，GHCR 則只供已有 Containerfile 的既有 repo 選配，預設全部關閉，且不讀取長效 registry token。容器選項是 `none`、`verify`、`ghcr`；非容器專案不會取得 Docker job 或 `packages: write`。啟用條件、trusted publisher 登記步驟與 Node／npm 版本需求見附錄同一章節。
 
 | Runtime 實測政策 | 模式與行為 | 保證、限制與 fallback |
 | --- | --- | --- |

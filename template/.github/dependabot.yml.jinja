@@ -36,3 +36,13 @@ updates:
         patterns: ["*"]
         update-types: [minor, patch]
 {%- endif %}
+{%- if (container_mode | default("none")) != "none" %}
+  - package-ecosystem: docker
+    directory: /{% if "/" in containerfile_path %}{{ containerfile_path.rsplit("/", 1)[0] }}{% endif %}
+    target-branch: {% if branch_strategy == "delivery" %}dev/next{% else %}{{ branch_strategy }}{% endif %}
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    labels: [enhancement]
+{%- endif %}

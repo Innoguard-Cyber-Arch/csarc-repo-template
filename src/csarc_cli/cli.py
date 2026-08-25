@@ -1010,6 +1010,9 @@ def report_settings(data: dict[str, object]) -> str:
     allowed = {
         "branch_strategy",
         "code_owner",
+        "container_mode",
+        "container_smoke_command",
+        "containerfile_path",
         "coverage_mode",
         "coverage_threshold",
         "enable_codeql",

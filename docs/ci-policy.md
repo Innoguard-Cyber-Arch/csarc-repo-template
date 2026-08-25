@@ -50,6 +50,19 @@ tier、保留 promotion evidence 並立即形成 release 邊界。
 manifest／lockfile 加跑 OSV，治理宣告或 checker 加跑 remote governance；無法分類
 的路徑升級為 full，不會以檔名判斷後直接放行。
 
+### 選配容器交付
+
+只有既有 repo 明確設定 `container_mode` 並提供產品自己的 Dockerfile／Containerfile
+與 `$IMAGE` smoke command，才生成容器工作。`verify` 與 `ghcr` 都在非 docs PR 使用
+Buildx GHA cache 建置但不 push，接著執行啟動測試與 Trivy HIGH／CRITICAL 掃描；
+PR job 只有唯讀權限。`ghcr` 另在已驗證 release-source 邊界建置一次，保存 image
+bytes、checksum 與 SPDX SBOM；發布 job 才取得 `packages`／`id-token`／`attestations`
+write，將相同 bytes 推到版本與 commit SHA tag、附加 OCI attestation，再以 digest
+pull、驗證與 smoke test。`none` 不生成 job、Docker Dependabot 或 registry 權限。
+
+這是成品交付，不是 runtime deployment。公版不產生通用 Dockerfile、Kubernetes、
+雲端部署或 multi-arch matrix；部署環境、健康檢查與回復仍由產品 repo 定義。
+
 ## `main` 回同步到進行中的 delivery branch
 
 `main` 每次前進後，delivery-sync workflow 會列舉 `dev/next`、所有
