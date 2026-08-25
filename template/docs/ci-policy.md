@@ -244,6 +244,26 @@ worktree 與精確 PR head、執行 repo 內建完整 verifier、再次確認 li
 固定的 `passed` 結果與每個 `--unreproduced-check` 寫入 note；verification 失敗時不會
 輸出可用 note。
 
+例如 delivery strategy 的一般 PR 可執行：
+
+```bash
+./scripts/promotion_gate.py note-quota-fallback \
+  --repo owner/repo \
+  --pr 42 \
+  --branch-strategy delivery \
+  --blocked-run-url https://github.com/owner/repo/actions/runs/123 \
+  --unreproduced-check "GitHub-hosted runner identity"
+```
+
+stdout 會以單一留言格式輸出標題與 JSON binding；生成專案的 canonical verifier 是
+`./scripts/verify`（公版來源 repo 則是 `./scripts/verify-template.sh`）：
+
+```text
+Actions quota fallback note
+
+`{"head_sha":"<PR head SHA>","pull_request":42,"repository":"owner/repo","runs":["https://github.com/owner/repo/actions/runs/123"],"verification":{"command":"./scripts/verify","result":"passed","unreproduced_checks":["GitHub-hosted runner identity"]}}`
+```
+
 ### Promotion PR 的額外 fallback 證據
 
 `dev/m*`、`dev/next`、`dev/i*` 或 delivery strategy 的 `dev` promotion 到 `main`
