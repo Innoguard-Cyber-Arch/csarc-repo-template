@@ -5,6 +5,7 @@ from __future__ import annotations
 import runpy
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,6 +13,7 @@ MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "pytest_policy.py")
 )
 validate_quarantine = MODULE["validate_quarantine"]
+pytest_collection_modifyitems = MODULE["pytest_collection_modifyitems"]
 
 
 def test_quarantine_requires_complete_live_metadata() -> None:
@@ -32,6 +34,12 @@ def test_quarantine_requires_complete_live_metadata() -> None:
     "values",
     [
         {},
+        {
+            "owner": "@",
+            "issue": "https://github.com/owner/repo/issues/123",
+            "expires": "2026-08-26",
+            "remove_when": "fixed",
+        },
         {
             "owner": "maintainer",
             "issue": "https://github.com/owner/repo/issues/123",
@@ -73,3 +81,28 @@ def test_quarantine_rejects_positional_metadata() -> None:
             },
             today=date(2026, 8, 25),
         )
+
+
+def test_collection_validates_every_inherited_quarantine_marker() -> None:
+    """An invalid module marker cannot hide behind a valid test marker."""
+    valid = SimpleNamespace(
+        args=(),
+        kwargs={
+            "owner": "@maintainer",
+            "issue": "https://github.com/owner/repo/issues/123",
+            "expires": "2999-01-01",
+            "remove_when": "fixed",
+        },
+    )
+    expired = SimpleNamespace(
+        args=(),
+        kwargs={
+            "owner": "@maintainer",
+            "issue": "https://github.com/owner/repo/issues/123",
+            "expires": "2000-01-01",
+            "remove_when": "fixed",
+        },
+    )
+    item = SimpleNamespace(iter_markers=lambda name: [valid, expired])
+    with pytest.raises(pytest.UsageError, match="expired"):
+        pytest_collection_modifyitems([item])
