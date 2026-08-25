@@ -1013,6 +1013,24 @@ if grep -q '^  pull_request:$' .github/workflows/zizmor.yml; then
   exit 1
 fi
 grep -q 'target-branch: dev/next' .github/dependabot.yml
+uv run python - .github/dependabot.yml <<'PY'
+import sys
+
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as dependabot_file:
+    updates = yaml.safe_load(dependabot_file)["updates"]
+actions = next(
+    update for update in updates
+    if update["package-ecosystem"] == "github-actions"
+)
+assert actions["groups"] == {
+    "official-actions": {
+        "patterns": ["actions/*"],
+        "update-types": ["minor", "patch"],
+    }
+}
+PY
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
 
 # Issues #74 and #110: keep the native dependency updater so its PRs trigger
