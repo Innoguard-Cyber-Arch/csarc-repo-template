@@ -4,6 +4,14 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+for workflow in .github/workflows/{delivery-sync,promotion}.yml; do
+  if grep -Eq 'secrets\.(CSARC_SYNC_TOKEN|CSARC_ADMIN_TOKEN|GH_ADMIN_TOKEN|ADMIN_TOKEN)' \
+    "$workflow"; then
+    echo "$workflow exposes an administration token to an untrusted event."
+    exit 1
+  fi
+done
+
 verify_python={{ "true" if language in ["python", "python-typescript"] else "false" }}
 verify_typescript="${CSARC_VERIFY_TYPESCRIPT:-{{ "true" if language in ["typescript", "python-typescript"] else "false" }}}"
 temporary_paths=()
@@ -141,6 +149,7 @@ PY
 "${platform_python[@]}" -m json.tool policies/actions.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/labels.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/rulesets.json >/dev/null
+"${platform_python[@]}" -m json.tool policies/dev-next-ruleset.json >/dev/null
 "${platform_python[@]}" -m json.tool release-please-config.json >/dev/null
 "${platform_python[@]}" -m json.tool .release-please-manifest.json >/dev/null
 "${platform_python[@]}" - <<'PY'

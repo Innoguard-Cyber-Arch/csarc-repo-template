@@ -1,0 +1,22 @@
+name: Dev next preservation close
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  signal:
+    name: request trusted preservation abort
+    if: >-
+      ${{ github.event.pull_request.merged == false &&
+      github.event.pull_request.head.ref == 'dev/next' &&
+      github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: echo "A trusted workflow will revalidate this closed promotion."
