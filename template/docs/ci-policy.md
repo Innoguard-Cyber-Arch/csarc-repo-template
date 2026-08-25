@@ -66,11 +66,13 @@ ref，不能只憑 `merged_at` 宣稱 Integrated／Delivered。這個入口只�
 metadata／merge mutation 仍由 lifecycle lease holder 或政策允許的 human maintainer
 執行。
 
-若 target branch 尚未包含 #240 的 stable GET-only `lease-status` 介面，工具即使看見
-lifecycle script 也會將 single-writer capability 回報為 `unknown`，不列出 merge 動作。
-待該介面能以 canonical 邏輯證明 approval、stale-review、last-push、thread resolution、
-no-bypass、remote lease 與 exact PR/head authorization 後，#266 才會接線並允許下一步；
-不得以本工具自行複製較弱的規則或把測試 fixture 當成 live capability。
+入口只接受 target branch 上宣告
+`csarc-pr-lifecycle-lease-status/v1` 的 canonical lifecycle helper。它組合該 helper 的
+GET-only `lease-status` 與 effective Ruleset：approval、stale-review、last-push、thread
+resolution、required checks 或 no-bypass 任一無法證明即為 `blocked`／`unknown`。
+`available` 只代表兩個 remote lease refs 都可由後續 atomic acquire 嘗試取得，不代表已
+持有 lease；`held` 代表其他 status caller 只能唯讀。入口只會把 acquire 列為下一步，
+實際 merge 仍由持有 raw capability 的 lifecycle owner 重新驗證授權與 live state。
 
 Routine PR 若所有 live failed runs 都由 `promotion_gate.py` 證明為 exact-head zero-step
 billing block，入口會列出既有 `note-quota-fallback` 命令。它只接受一則 repo、PR、
@@ -293,10 +295,24 @@ GitHub App caller 必須從 pinned token action 的 `app-slug` 明確傳入 acto
 接受 `/user` 可驗證的 identity，無法驗證時 fail closed。Audit 建立回應與後續 refetch 都
 必須吻合該 actor、repository、PR 與 canonical body。
 
+任何 task 都可在不取得 lease 的情況下唯讀查詢：
+
+```bash
+./scripts/pr_lifecycle.py lease-status \
+  --repo <owner/repo> --pr-number <number> --head-sha <full-sha>
+```
+
+輸出 schema v1、repository、PR、exact head/base、兩個計算後的 remote refs，以及
+`available`、`held` 或 `unknown`。`available` 只允許下一步嘗試 atomic `acquire`；不能
+當成已持有 lease，也不能單獨授權任何 mutation。
+
 `check` 與 `merge` 會在 lease 內分頁重讀 timeline、一般留言、inline review comments、
 submitted COMMENTED review bodies、reviews、checklists、base、
 exact-head required checks 與 effective Ruleset；較新的 Draft、blocker 或任何漂移都使授權
-失效。`merge` 在 REST PUT 前再對 PR 與 destination lane refs 執行 exact CAS，且只使用
+失效。即使 blocker 已明確解除，merge authorization 仍必須晚於最新 blocker 與 resolution
+邊界，舊 authorization 不會恢復有效。`lease-status` 唯讀重用相同的 live PR、base 與
+remote lease 驗證，只輸出 versioned JSON 的 `available`、`held` 或 `unknown`；可用
+`available` 不代表已取得 lease。`merge` 在 REST PUT 前再對 PR 與 destination lane refs 執行 exact CAS，且只使用
 SHA-bound synchronous REST merge。無法證明 approval、last-push、
 thread resolution、required checks 與 no bypass 時，包含 GitHub Free private repository，
 agent 必須停在 `human-only`，由人類在 GitHub 上手動合併。

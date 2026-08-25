@@ -152,6 +152,8 @@ test -x scripts/apply-repository-settings.sh
 test -x scripts/detect-language-profile
 test -x scripts/pr_lifecycle.py
 grep -q 'scripts/pr_lifecycle.py' AGENTS.md
+grep -q '^LEASE_STATUS_INTERFACE = "csarc-pr-lifecycle-lease-status/v1"$' \
+  scripts/pr_lifecycle.py
 grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md
 grep -q 'release pull request (human-only)' docs/ci-policy.md
 "${platform_python[@]}" scripts/pr_lifecycle.py scan-writers --root .

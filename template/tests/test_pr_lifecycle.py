@@ -34,6 +34,7 @@ expired_remote_lease = MODULE["expired_remote_lease"]
 GitHub = MODULE["GitHub"]
 LEASE_CORE_FIELDS = MODULE["LEASE_CORE_FIELDS"]
 lease_message = MODULE["lease_message"]
+lease_status_snapshot = MODULE["lease_status_snapshot"]
 merge = MODULE["merge"]
 merge_snapshot = MODULE["merge_snapshot"]
 read_lease = MODULE["read_lease"]
@@ -1138,6 +1139,43 @@ def test_237_unresolved_blocker_survives_ready_and_authorization(
         )
 
 
+def test_authorization_must_postdate_resolved_blocker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resolving a blocker cannot revive an older merge authorization."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.comments = [
+        {
+            "created_at": "2026-08-25T01:02:00Z",
+            "body": "[merge-blocker] A regression remains.",
+            "html_url": "https://github.com/owner/repo/pull/42#issuecomment-97",
+            "author_association": "MEMBER",
+        },
+        {
+            "created_at": "2026-08-25T01:03:00Z",
+            "body": "[merge-blocker-resolved] Fixed and re-reviewed.",
+            "html_url": "https://github.com/owner/repo/pull/42#issuecomment-98",
+            "author_association": "OWNER",
+        },
+    ]
+    with pytest.raises(RuntimeError, match="postdate"):
+        merge_snapshot(
+            github,
+            lease_fixture(),
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+        )
+    github.authorization_created_at = "2026-08-25T01:04:00Z"
+    assert (
+        merge_snapshot(
+            github,
+            lease_fixture(),
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+        )["merge_mode"]
+        == "agent"
+    )
+
+
 @pytest.mark.parametrize("source", ["inline", "review"])
 def test_inline_and_commented_review_blockers_are_enforced(
     source: str, monkeypatch: pytest.MonkeyPatch
@@ -1319,6 +1357,120 @@ def test_all_markdown_list_markers_block_unchecked_items(
             lease_fixture(),
             "https://github.com/owner/repo/pull/42#issuecomment-99",
         )
+
+
+def test_lease_status_reports_available_when_refs_are_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Available means an atomic acquire may be attempted, not ownership."""
+    monkeypatch.setitem(
+        lease_status_snapshot.__globals__, "require_origin", lambda _repo: None
+    )
+    monkeypatch.setitem(
+        lease_status_snapshot.__globals__, "remote_ref", lambda _ref: None
+    )
+    status = lease_status_snapshot(
+        FakeGitHub("a" * 40), "owner/repo", 42, "a" * 40
+    )
+    assert status["schema_version"] == 1
+    assert status["state"] == "available"
+    assert status["base_ref"] == "main"
+    assert status["base_sha"] == "b" * 40
+    assert status["lease_refs"] == [
+        "refs/heads/csarc/leases/pr-42",
+        base_lane_ref("main"),
+    ]
+    assert "holder" not in status
+
+
+def test_lease_status_reports_a_canonical_active_holder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An active canonical remote lease is visible without its capability."""
+    monkeypatch.setitem(
+        lease_status_snapshot.__globals__, "require_origin", lambda _repo: None
+    )
+    monkeypatch.setitem(
+        lease_status_snapshot.__globals__,
+        "remote_ref",
+        lambda _ref: "c" * 40,
+    )
+    github = FakeGitHub("a" * 40)
+    canonical = lease_fixture()
+    canonical["acquired_at"] = (
+        (datetime.now(UTC) - timedelta(minutes=1))
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+    github.canonical_lease = canonical
+    status = lease_status_snapshot(github, "owner/repo", 42, "a" * 40)
+    assert status["state"] == "held"
+    assert status["holder"] == {
+        "pull_request": 42,
+        "head_sha": "a" * 40,
+        "base_ref": "main",
+        "base_sha": "b" * 40,
+        "owner": "task/merge",
+        "actor": "agent",
+        "expires_at": github.canonical_lease["expires_at"],
+        "lease_commit": "c" * 40,
+    }
+
+
+def test_lease_status_reports_a_shared_lane_held_by_another_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second PR observes the destination lane owner without acquiring."""
+    monkeypatch.setitem(
+        lease_status_snapshot.__globals__, "require_origin", lambda _repo: None
+    )
+    lane = base_lane_ref("main")
+    monkeypatch.setitem(
+        lease_status_snapshot.__globals__,
+        "remote_ref",
+        lambda ref: "c" * 40 if ref == lane else None,
+    )
+    github = FakeGitHub("a" * 40)
+    canonical = lease_fixture()
+    canonical.update(
+        {
+            "pull_request": 43,
+            "owner": "task/parallel",
+            "acquired_at": (datetime.now(UTC) - timedelta(minutes=1))
+            .isoformat()
+            .replace("+00:00", "Z"),
+            "refs": ["refs/heads/csarc/leases/pr-43", lane],
+        }
+    )
+    github.canonical_lease = canonical
+    status = lease_status_snapshot(github, "owner/repo", 42, "a" * 40)
+    assert status["state"] == "held"
+    holder = status["holder"]
+    assert isinstance(holder, dict)
+    assert holder["pull_request"] == 43
+    assert holder["owner"] == "task/parallel"
+
+
+def test_lease_status_fails_closed_on_malformed_remote_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Malformed remote commits are unknown rather than held or available."""
+    monkeypatch.setitem(
+        lease_status_snapshot.__globals__, "require_origin", lambda _repo: None
+    )
+    monkeypatch.setitem(
+        lease_status_snapshot.__globals__,
+        "remote_ref",
+        lambda _ref: "c" * 40,
+    )
+    github = FakeGitHub("a" * 40)
+    github.commit_payloads[f"git/commits/{'c' * 40}"] = {
+        "sha": "c" * 40,
+        "message": "not a lease",
+    }
+    status = lease_status_snapshot(github, "owner/repo", 42, "a" * 40)
+    assert status["state"] == "unknown"
+    assert "canonical" in str(status["reason"])
 
 
 def test_tampered_lease_cannot_delete_an_arbitrary_ref(tmp_path: Path) -> None:

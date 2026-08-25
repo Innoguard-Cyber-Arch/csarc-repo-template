@@ -86,7 +86,7 @@ flowchart LR
 
 交付模型是「可選 Story Milestone → 1..N Issues → 各自 PR」。Milestone 只代表可端到端驗收的成果，不是每張 Issue 的必填分類；SDD、一般規劃、使用者 story 或導入盤點都可能成為來源。建立 Issue／Milestone 前，agent 會以具體關鍵字限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR，先向使用者摘要；若已獲准直接建立，則在補充或 Milestone `References` 記錄每項決策是沿用、取代或駁回及理由。description 使用 [`docs/milestone-description.md`](docs/milestone-description.md) 的 Problem、Outcome、Acceptance criteria、Plan、Out of scope、Verification 與 References；英文 H2 是穩定結構，內文使用專案團隊慣用語言。PR 不重複掛入 Milestone。最後一張 open Issue 關閉且所有 acceptance checkbox 已確認時，workflow 才會關閉 Milestone；Issue reopen、open Issue 掛入或 criterion 取消勾選時則重開。
 
-選定 Issue 後執行 `./scripts/issue_path_status.py --issue <number>`；它從 `.csarc/profile.json` 與 live GitHub 唯讀推導 route、risk、允許動作、必要 evidence 與唯一下一步。`blocked`／`unknown` 不會被當成可合併；完整契約見 [`docs/ci-policy.md`](docs/ci-policy.md#單一-issue-path-preflight)。
+選定 Issue 後執行 `./scripts/issue_path_status.py --issue <number>`；它從 `.csarc/profile.json` 與 live GitHub 唯讀推導 route，並透過 canonical `pr_lifecycle.py lease-status` 判斷 atomic acquire 是否可嘗試，再輸出 risk、允許動作、必要 evidence 與唯一下一步。`available` 不等於已持有 lease，`blocked`／`unknown` 也不會被當成可合併；完整契約見 [`docs/ci-policy.md`](docs/ci-policy.md#單一-issue-path-preflight)。
 
 1. 簡單工作先開「開發工作」Issue；標題以 12–80 個英文 ASCII 字元及至少三個詞直接描述成果，例如 `Add dependency policy checks`。Issue 不使用 PR 的 Conventional Commit 格式。
 2. 開單者會自動成為負責人，並選一個分類：`bug`、`enhancement`、`documentation` 或 `duplicate`。前三者在 organization 啟用原生 Issue Types 時分別同步成 `Bug`、`Feature`、`Task`；不支援時仍以 label 正常運作。`duplicate` 是結案處置，不是假造的新 Issue Type。

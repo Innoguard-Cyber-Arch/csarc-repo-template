@@ -16,9 +16,11 @@ import tempfile
 import urllib.parse
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 LEASE_SCHEMA = 2
+LEASE_STATUS_SCHEMA = 1
+LEASE_STATUS_INTERFACE = "csarc-pr-lifecycle-lease-status/v1"
 MAX_TTL_SECONDS = 7200
 MIN_OPERATION_SECONDS = 30
 MAINTAINER_ASSOCIATIONS = {"MEMBER", "OWNER"}
@@ -237,6 +239,13 @@ class GitHub:
         return result
 
 
+class GitHubReader(Protocol):
+    """Structural interface shared by read-only policy entrypoints."""
+
+    def get(self, repo: str, path: str) -> object:
+        """Read one REST resource."""
+
+
 def remote_repository(url: str) -> str:
     """Resolve an origin URL to its GitHub owner/name identity."""
     patterns = (
@@ -280,7 +289,7 @@ def lease_refs(pull: dict[str, Any], default_branch: str) -> list[str]:
 
 
 def live_pull(
-    github: GitHub, repo: str, pr_number: int, head_sha: str
+    github: GitHubReader, repo: str, pr_number: int, head_sha: str
 ) -> dict[str, Any]:
     """Require one open pull request at the exact expected head."""
     payload = github.get(repo, f"pulls/{pr_number}")
@@ -297,7 +306,7 @@ def live_pull(
     return payload
 
 
-def branch_sha(github: GitHub, repo: str, branch: str) -> str:
+def branch_sha(github: GitHubReader, repo: str, branch: str) -> str:
     """Return the exact live commit of one destination branch."""
     payload = github.get(
         repo, f"git/ref/heads/{urllib.parse.quote(branch, safe='')}"
@@ -627,10 +636,10 @@ def create_refs(
     run(command)
 
 
-def expired_remote_lease(
-    github: GitHub, repo: str, commit_sha: str, held_ref: str
+def remote_lease_core(
+    github: GitHubReader, repo: str, commit_sha: str, held_ref: str
 ) -> dict[str, Any]:
-    """Validate one canonical expired lease before an atomic reclaim."""
+    """Read and validate one canonical remote lease commit."""
     payload = github.get(repo, f"git/commits/{commit_sha}")
     if not isinstance(payload, dict) or payload.get("sha") != commit_sha:
         raise RuntimeError("Existing lease commit is unavailable")
@@ -686,9 +695,118 @@ def expired_remote_lease(
         or (head.get("tree") or {}).get("sha") != core["head_tree"]
     ):
         raise RuntimeError("Existing lease commit parent or tree is invalid")
-    if expires_at > datetime.now(UTC):
+    return core
+
+
+def expired_remote_lease(
+    github: GitHubReader, repo: str, commit_sha: str, held_ref: str
+) -> dict[str, Any]:
+    """Validate one canonical expired lease before an atomic reclaim."""
+    core = remote_lease_core(github, repo, commit_sha, held_ref)
+    if parse_time(core["expires_at"], "Existing lease") > datetime.now(UTC):
         raise RuntimeError("Another owner already holds the PR lifecycle lease")
     return core
+
+
+def lease_status_snapshot(
+    github: GitHubReader, repo: str, pr_number: int, head_sha: str
+) -> dict[str, object]:
+    """Return read-only availability for one exact PR lifecycle lease."""
+    result: dict[str, object] = {
+        "schema_version": LEASE_STATUS_SCHEMA,
+        "interface": LEASE_STATUS_INTERFACE,
+        "repository": repo,
+        "pull_request": pr_number,
+        "head_sha": head_sha,
+        "base_ref": None,
+        "base_sha": None,
+        "lease_refs": [],
+        "state": "unknown",
+        "reason": "live lease state has not been inspected",
+    }
+    try:
+        if REPOSITORY.fullmatch(repo) is None or pr_number < 1:
+            raise RuntimeError("Pull request identity is invalid")
+        if SHA.fullmatch(head_sha) is None:
+            raise RuntimeError("Head SHA is invalid")
+        require_origin(repo)
+        pull = live_pull(github, repo, pr_number, head_sha)
+        repository = github.get(repo, "")
+        base = pull.get("base") or {}
+        base_ref = base.get("ref")
+        base_sha = base.get("sha")
+        if (
+            not isinstance(repository, dict)
+            or not isinstance(repository.get("default_branch"), str)
+            or not isinstance(base_ref, str)
+            or SHA.fullmatch(str(base_sha or "")) is None
+        ):
+            raise RuntimeError("Pull request base identity is unavailable")
+        if branch_sha(github, repo, base_ref) != base_sha:
+            raise RuntimeError("Pull request destination branch advanced")
+        refs = lease_refs(pull, repository["default_branch"])
+        result.update(
+            {
+                "base_ref": base_ref,
+                "base_sha": base_sha,
+                "lease_refs": refs,
+            }
+        )
+        observed = {ref: remote_ref(ref) for ref in refs}
+        commits = {commit for commit in observed.values() if commit is not None}
+        if not commits:
+            result.update(
+                {
+                    "state": "available",
+                    "reason": (
+                        "both lease refs are absent; atomic acquire may be "
+                        "attempted"
+                    ),
+                }
+            )
+            return result
+        if len(commits) != 1 or (observed[refs[0]] and not observed[refs[1]]):
+            raise RuntimeError("Remote lease refs are inconsistent")
+        commit = commits.pop()
+        cores = [
+            remote_lease_core(github, repo, commit, ref)
+            for ref, value in observed.items()
+            if value is not None
+        ]
+        if any(core != cores[0] for core in cores[1:]):
+            raise RuntimeError("Remote lease refs do not share one lease")
+        core = cores[0]
+        expires_at = parse_time(core["expires_at"], "Existing lease")
+        if expires_at <= datetime.now(UTC):
+            result.update(
+                {
+                    "state": "available",
+                    "reason": (
+                        "canonical lease is expired; atomic reclaim may be "
+                        "attempted"
+                    ),
+                }
+            )
+            return result
+        result.update(
+            {
+                "state": "held",
+                "reason": "a canonical unexpired lease holds a required ref",
+                "holder": {
+                    "pull_request": core["pull_request"],
+                    "head_sha": core["head_sha"],
+                    "base_ref": core["base_ref"],
+                    "base_sha": core["base_sha"],
+                    "owner": core["owner"],
+                    "actor": core["actor"],
+                    "expires_at": core["expires_at"],
+                    "lease_commit": commit,
+                },
+            }
+        )
+    except (KeyError, RuntimeError) as error:
+        result["reason"] = str(error)
+    return result
 
 
 def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
@@ -853,8 +971,10 @@ def authorization_statement(repo: str, pr_number: int, head_sha: str) -> str:
     )
 
 
-def unresolved_blocker(comments: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Return the latest unresolved merge-blocker marker."""
+def blocker_state(
+    comments: list[dict[str, Any]],
+) -> tuple[dict[str, Any] | None, datetime | None]:
+    """Return the unresolved blocker and latest trusted blocker boundary."""
     latest_blocker: tuple[datetime, dict[str, Any]] | None = None
     latest_resolution: datetime | None = None
     for comment in comments:
@@ -870,11 +990,27 @@ def unresolved_blocker(comments: list[dict[str, Any]]) -> dict[str, Any] | None:
             latest_blocker is None or created >= latest_blocker[0]
         ):
             latest_blocker = (created, comment)
-    if latest_blocker is None:
-        return None
-    if latest_resolution is not None and latest_resolution > latest_blocker[0]:
-        return None
-    return latest_blocker[1]
+    boundary = max(
+        (
+            value
+            for value in (
+                latest_blocker[0] if latest_blocker else None,
+                latest_resolution,
+            )
+            if value is not None
+        ),
+        default=None,
+    )
+    if latest_blocker is None or (
+        latest_resolution is not None and latest_resolution > latest_blocker[0]
+    ):
+        return None, boundary
+    return latest_blocker[1], boundary
+
+
+def unresolved_blocker(comments: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Return the latest unresolved merge-blocker marker."""
+    return blocker_state(comments)[0]
 
 
 def current_reviews(reviews: list[dict[str, Any]]) -> dict[str, str]:
@@ -901,7 +1037,7 @@ def current_reviews(reviews: list[dict[str, Any]]) -> dict[str, str]:
 
 
 def effective_protection(
-    github: GitHub, repo: str, branch: str
+    github: GitHubReader, repo: str, branch: str
 ) -> tuple[str, str, set[tuple[str, int | None]]]:
     """Prove review, last-push, thread, checks, and no-bypass enforcement."""
     try:
@@ -1090,11 +1226,15 @@ def merge_snapshot(  # noqa: C901
         and review.get("submitted_at")
         and review.get("body")
     )
-    blocker = unresolved_blocker(comments)
+    blocker, blocker_boundary = blocker_state(comments)
     if blocker is not None:
         raise RuntimeError(
             "An unresolved blocking comment prevents merge: "
             + str(blocker.get("html_url") or "unknown URL")
+        )
+    if blocker_boundary is not None and authorized_at <= blocker_boundary:
+        raise RuntimeError(
+            "Authorization does not postdate the latest blocker resolution"
         )
     review_states = current_reviews(reviews)
     blockers = sorted(
@@ -1348,6 +1488,14 @@ def authorization_template(args: argparse.Namespace, github: GitHub) -> None:
     sys.stdout.write(
         authorization_statement(args.repo, args.pr_number, args.head_sha)
     )
+
+
+def lease_status(args: argparse.Namespace, github: GitHub) -> None:
+    """Print the canonical read-only lease status for one exact PR head."""
+    snapshot = lease_status_snapshot(
+        github, args.repo, args.pr_number, args.head_sha
+    )
+    sys.stdout.write(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
 
 
 def edit_standalone_issue(args: argparse.Namespace, github: GitHub) -> None:
@@ -1802,6 +1950,11 @@ def parser() -> argparse.ArgumentParser:
     acquire_command.add_argument("--ttl-seconds", type=int, default=3600)
     acquire_command.add_argument("--output", type=Path, required=True)
     acquire_command.set_defaults(handler=acquire)
+    status_command = commands.add_parser("lease-status")
+    status_command.add_argument("--repo", required=True)
+    status_command.add_argument("--pr-number", required=True, type=int)
+    status_command.add_argument("--head-sha", required=True)
+    status_command.set_defaults(handler=lease_status)
     scan_command = commands.add_parser("scan-writers")
     scan_command.add_argument("--root", type=Path, default=Path.cwd())
     scan_command.set_defaults(scan_root=True)

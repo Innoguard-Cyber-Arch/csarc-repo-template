@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import json
 import re
 import shutil
@@ -14,6 +16,11 @@ from pathlib import Path
 from typing import Any
 
 from ci_tier import classify as classify_ci
+from pr_lifecycle import (
+    LEASE_STATUS_INTERFACE,
+    effective_protection,
+    lease_status_snapshot,
+)
 from promotion_gate import (
     failed_pull_request_run_urls,
     quota_fallback_note,
@@ -22,6 +29,7 @@ from promotion_gate import (
 
 ISSUE_BRANCH = r"[a-z][a-z0-9-]*"
 SUCCESSFUL_CONCLUSIONS = {"neutral", "skipped", "success"}
+FULL_SHA = re.compile(r"[0-9a-f]{40}")
 MAINTAINER_ASSOCIATIONS = {"MEMBER", "OWNER"}
 BLOCKER = re.compile(
     r"(?i)^(?:blocked|blocker)\s*:|^\[merge-blocker\]|^\[P[01]\]"
@@ -1109,10 +1117,10 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
         "clear",
         "Route, refs, blockers, required checks, and single-writer capability "
         "are current",
-        "Acquire the lifecycle lease for this exact head and perform the one "
-        "authorized merge attempt.",
+        "Acquire the lifecycle lease for this exact head, then use the "
+        "canonical lifecycle gate for the merge decision.",
         pull,
-        ("acquire-lease", "merge-once"),
+        ("acquire-lease",),
     )
 
 
@@ -1189,7 +1197,7 @@ def inspect_capability(
     repository: dict[str, Any],
     pull: dict[str, Any],
 ) -> dict[str, object]:
-    """Fail closed until #240 ships its canonical read-only status API."""
+    """Compose canonical protection and lease availability read-only."""
     permissions = repository.get("permissions") or {}
     if permissions.get("push") is not True:
         return {
@@ -1217,20 +1225,71 @@ def inspect_capability(
         not isinstance(lifecycle_file, dict)
         or lifecycle_file.get("type") != "file"
         or lifecycle_file.get("path") != "scripts/pr_lifecycle.py"
-        or not isinstance(lifecycle_file.get("sha"), str)
+        or FULL_SHA.fullmatch(str(lifecycle_file.get("sha") or "")) is None
+        or lifecycle_file.get("encoding") != "base64"
+        or not isinstance(lifecycle_file.get("content"), str)
     ):
         return {
             "state": "unknown",
             "reason": "canonical lifecycle script is unavailable on the base",
             "required": [],
         }
+    try:
+        source = base64.b64decode(
+            "".join(lifecycle_file["content"].split()), validate=True
+        ).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError) as _error:
+        return {
+            "state": "unknown",
+            "reason": "canonical lifecycle script content is malformed",
+            "required": [],
+        }
+    if f'LEASE_STATUS_INTERFACE = "{LEASE_STATUS_INTERFACE}"' not in source:
+        return {
+            "state": "unknown",
+            "reason": "canonical lifecycle lease-status interface is absent",
+            "required": [],
+        }
+    protection, reason, required = effective_protection(
+        github, repo, str(base.get("ref") or "")
+    )
+    if protection != "enforced":
+        return {
+            "state": "blocked" if protection == "blocked" else "unknown",
+            "reason": reason,
+            "required": [],
+        }
+    pull_number = pull.get("number")
+    head_sha = (pull.get("head") or {}).get("sha")
+    if (
+        not isinstance(pull_number, int)
+        or FULL_SHA.fullmatch(str(head_sha or "")) is None
+    ):
+        return {
+            "state": "unknown",
+            "reason": "pull request identity is incomplete",
+            "required": [],
+        }
+    lease = lease_status_snapshot(github, repo, pull_number, str(head_sha))
+    lease_state = lease.get("state")
+    contexts = [
+        {"context": context, "integration_id": integration_id}
+        for context, integration_id in sorted(
+            required, key=lambda item: (item[0], item[1] or -1)
+        )
+    ]
+    if lease_state == "available":
+        return {
+            "state": "allowed",
+            "reason": "protected lifecycle lease may be acquired atomically",
+            "required": contexts,
+            "lease_status": lease,
+        }
     return {
-        "state": "unknown",
-        "reason": (
-            "canonical lifecycle helper has no stable read-only lease-status "
-            "interface"
-        ),
-        "required": [],
+        "state": "blocked" if lease_state == "held" else "unknown",
+        "reason": str(lease.get("reason") or "lease status is unavailable"),
+        "required": contexts,
+        "lease_status": lease,
     }
 
 

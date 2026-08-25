@@ -22,6 +22,8 @@ grep -q 'before marking Ready or updating a Ready PR' AGENTS.md
 grep -q 'before marking Ready or updating a Ready PR' template/AGENTS.md.jinja
 grep -q 'scripts/pr_lifecycle.py' AGENTS.md
 grep -q 'scripts/pr_lifecycle.py' template/AGENTS.md.jinja
+grep -q '^LEASE_STATUS_INTERFACE = "csarc-pr-lifecycle-lease-status/v1"$' \
+  scripts/pr_lifecycle.py
 grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md
 grep -q '\[P0\].*\[P1\].*\[merge-blocker\]' docs/ci-policy.md
 grep -q 'release pull request (human-only)' docs/ci-policy.md

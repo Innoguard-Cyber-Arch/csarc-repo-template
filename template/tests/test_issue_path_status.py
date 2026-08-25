@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import runpy
 import sys
 from pathlib import Path
@@ -211,7 +212,7 @@ def test_hotfix_is_always_a_full_main_route() -> None:
         "promotion",
         "tree-identity",
     ]
-    assert decision.allowed_actions == ("acquire-lease", "merge-once")
+    assert decision.allowed_actions == ("acquire-lease",)
 
 
 def test_hotfix_rejects_a_non_fix_issue_branch() -> None:
@@ -486,7 +487,7 @@ def test_exact_quota_note_allows_only_the_guarded_merge_path() -> None:
     )
     decision = derive_status(data)
     assert decision.guard == "clear"
-    assert decision.allowed_actions == ("acquire-lease", "merge-once")
+    assert decision.allowed_actions == ("acquire-lease",)
     assert "note-quota-fallback" not in decision.next_step
 
     data["capability"]["state"] = "unknown"
@@ -936,8 +937,10 @@ def test_required_check_keeps_its_github_app_identity() -> None:
     assert check_state(runs, [], {("verify", 2)}) == "passing"
 
 
-def test_capability_requires_stable_canonical_lease_status() -> None:
-    """The current helper cannot stand in for #240's pending status API."""
+def test_capability_composes_canonical_protection_and_available_lease(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the canonical interface and enforceable controls allow acquire."""
 
     class FakeGitHub:
         def get(self, _repo: str, path: str = "") -> object:
@@ -945,18 +948,76 @@ def test_capability_requires_stable_canonical_lease_status() -> None:
                 return {
                     "type": "file",
                     "path": "scripts/pr_lifecycle.py",
-                    "sha": "script",
+                    "sha": "c" * 40,
+                    "encoding": "base64",
+                    "content": base64.b64encode(
+                        b'LEASE_STATUS_INTERFACE = "csarc-pr-lifecycle-'
+                        b'lease-status/v1"'
+                    ).decode(),
                 }
             raise AssertionError(path)
 
+    monkeypatch.setitem(
+        inspect_capability.__globals__,
+        "effective_protection",
+        lambda *_: ("enforced", "protected", {("verify", 7)}),
+    )
+    monkeypatch.setitem(
+        inspect_capability.__globals__,
+        "lease_status_snapshot",
+        lambda *_: {"state": "available", "reason": "atomic acquire"},
+    )
     capability = inspect_capability(
         FakeGitHub(),
         "owner/repo",
         {"permissions": {"push": True}},
-        pull(draft=False),
+        pull(draft=False, head_sha="a" * 40),
     )
-    assert capability["state"] == "unknown"
-    assert "lease-status interface" in capability["reason"]
+    assert capability["state"] == "allowed"
+    assert capability["required"] == [
+        {"context": "verify", "integration_id": 7}
+    ]
+
+
+def test_capability_blocks_when_canonical_lease_is_held(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A live lease keeps another status caller read-only."""
+
+    class FakeGitHub:
+        def get(self, _repo: str, _path: str = "") -> object:
+            return {
+                "type": "file",
+                "path": "scripts/pr_lifecycle.py",
+                "sha": "c" * 40,
+                "encoding": "base64",
+                "content": base64.b64encode(
+                    b'LEASE_STATUS_INTERFACE = "csarc-pr-lifecycle-'
+                    b'lease-status/v1"'
+                ).decode(),
+            }
+
+    monkeypatch.setitem(
+        inspect_capability.__globals__,
+        "effective_protection",
+        lambda *_: ("enforced", "protected", {("verify", None)}),
+    )
+    monkeypatch.setitem(
+        inspect_capability.__globals__,
+        "lease_status_snapshot",
+        lambda *_: {"state": "held", "reason": "another owner holds it"},
+    )
+    capability = inspect_capability(
+        FakeGitHub(),
+        "owner/repo",
+        {"permissions": {"push": True}},
+        pull(draft=False, head_sha="a" * 40),
+    )
+    assert capability["state"] == "blocked"
+    assert capability["lease_status"] == {
+        "state": "held",
+        "reason": "another owner holds it",
+    }
 
 
 def test_missing_push_permission_is_unknown() -> None:
