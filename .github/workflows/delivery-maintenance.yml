@@ -1,0 +1,129 @@
+name: Delivery maintenance
+
+on: # zizmor: ignore[dangerous-triggers] trusted default-branch workflow
+  workflow_run:
+    workflows: ["Dev next preservation close"]
+    types: [completed]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: delivery-maintenance-${{ github.repository }}-${{ github.event.workflow_run.id || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  abort-preservation:
+    name: abort dev next preservation
+    if: >-
+      ${{ github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Check out the trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
+      - name: Resolve one exact closed promotion
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_WORKFLOW_ID: ${{ github.event.workflow_run.workflow_id }}
+        run: |
+          expected_workflow_id="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/dev-next-close.yml" --jq .id
+          )"
+          [[ "$RUN_WORKFLOW_ID" == "$expected_workflow_id" ]] || {
+            echo "Workflow run did not come from the trusted close signal." >&2
+            exit 1
+          }
+          pull_requests="$(
+            gh api --paginate \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/pull_requests?per_page=100" |
+              jq -s 'add'
+          )"
+          matches="$(
+            jq -c --arg repo "$GITHUB_REPOSITORY" '[.[] | select(
+              .state == "closed" and .merged_at == null and
+              .base.ref == "main" and
+              (.head.ref == "dev/next" or .head.ref == "promote/next") and
+              .head.repo.full_name == $repo
+            )]' <<<"$pull_requests"
+          )"
+          count="$(jq 'length' <<<"$matches")"
+          if [[ "$count" == 0 ]]; then
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [[ "$count" == 1 ]] || {
+            echo "Close signal has no unique preservation promotion." >&2
+            exit 1
+          }
+          pr_number="$(jq -r '.[0].number' <<<"$matches")"
+          pull_request="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr_number")"
+          jq -e --arg repo "$GITHUB_REPOSITORY" '
+            .state == "closed" and .merged == false and
+            .base.ref == "main" and
+            (.head.ref == "dev/next" or .head.ref == "promote/next") and
+            .head.repo.full_name == $repo
+          ' <<<"$pull_request" >/dev/null
+          echo "relevant=true" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$(jq -r .head.sha <<<"$pull_request")" >> "$GITHUB_OUTPUT"
+      - name: Abort the exact preservation transaction
+        if: ${{ steps.resolve.outputs.relevant == 'true' }}
+        env:
+          CSARC_SYNC_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+        run: >-
+          python3 scripts/delivery_sync.py abort-dev-next
+          --hosted
+          --repo "$GITHUB_REPOSITORY"
+          --pr-number "$PR_NUMBER"
+          --head-sha "$PR_HEAD_SHA"
+
+  reconcile:
+    name: reconcile
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event_name == 'push' && github.sha || github.event.repository.default_branch }}
+      - name: Configure authenticated Git transport for lifecycle leases
+        env:
+          GH_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN || github.token }}
+        run: gh auth setup-git
+      - name: Reconcile active delivery branches
+        env:
+          BRANCH_STRATEGY: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && 'delivery' || '' }}
+          GH_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN || github.token }}
+          MAIN_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
+          SYNC_AUTO: ${{ vars.CSARC_AUTO_SYNC == 'true' && 'true' || 'false' }}
+          SYNC_TOKEN_KIND: ${{ secrets.CSARC_SYNC_TOKEN != '' && 'external' || 'github-token' }}
+        run: |
+          branch_strategy="$BRANCH_STRATEGY"
+          if [[ -z "$branch_strategy" ]]; then
+            branch_strategy="$(jq -er '.branch_strategy | select(. == "main" or . == "dev" or . == "delivery")' .csarc/profile.json)"
+          fi
+          python3 scripts/delivery_sync.py reconcile \
+            --repo "$GITHUB_REPOSITORY" \
+            --main-sha "$MAIN_SHA" \
+            --auto "$SYNC_AUTO" \
+            --branch-strategy "$branch_strategy" \
+            --token-kind "$SYNC_TOKEN_KIND" | tee -a "$GITHUB_STEP_SUMMARY"

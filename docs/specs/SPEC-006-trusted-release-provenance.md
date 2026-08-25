@@ -14,7 +14,7 @@ tracking: none
 
 ## Outcome
 
-每個正式 release 都能從 promotion／hotfix evidence 追到 exact source，再驗證 tag、immutable GitHub Release、artifact digest、SBOM、provenance 與可選 registry publishing；能力不足時停止或明確降級，不產生假成功。
+每個正式 release 都能從 promotion／hotfix evidence 追到 exact source，再驗證 tag、immutable GitHub Release、artifact digest、SBOM 與 provenance；生成專案可另外選配 registry publishing。能力不足時停止或明確降級，不產生假成功。
 
 ## Context
 
@@ -24,16 +24,16 @@ tracking: none
 
 - [x] PR 只宣告 SemVer intent；精確版本由已合併 default-branch history 與 promotion boundary 決定。
 - [x] Tagged source、版本欄位、CHANGELOG、prompt 與 provenance 指向同一版本與 commit。
-- [ ] Release target 與 wheel／sdist metadata 也經獨立驗證並指向同一版本與 commit；此項等待 #203 交付。
+- [x] Root GitHub Release 從已驗證 tagged source 建置 wheel／sdist；沒有實際 root registry 消費者時不維護跨 registry 發布路徑。
 - [x] Release 保存 distributions、SHA-256、非空 CycloneDX SBOM 與 source metadata；啟用時加上 GitHub artifact attestations。
 - [x] Consumer 或 registry publishing 在使用成品前驗 repository、tag、source／artifact digest 與 signer workflow identity。
-- [x] PyPI／npm 使用 opt-in OIDC trusted publishing；baseline 不要求長效 token，未完成 license／publisher bootstrap 不宣稱可發布。
+- [x] PyPI／npm 只供生成專案 opt-in OIDC trusted publishing；root CLI 不發布到 PyPI，baseline 不要求長效 token。
 - [x] Dependency 與 source safety 由 lockfile、Dependabot、等待政策、publisher trust、OSV、Gitleaks 與 plan-aware CodeQL 分工，不用一項工具冒充全部供應鏈控制。
 - [x] 已發布 immutable Release 不被重寫；歷史缺失證據明記為缺失，不補造 attestation。
 
 ## Plan
 
-此 spec 維持已落地 trust chain；build-once／publish-same-bytes 與安裝入口等 open work 完成後再更新 current contract。
+此 spec 維持已落地 trust chain；root CLI 從核准 GitHub Release commit 執行，新增 distribution channel 必須等 owner 提出實際需求後再重新評估。
 
 ## Out of scope
 
@@ -44,7 +44,7 @@ tracking: none
 ## Verification
 
 - `./scripts/verify-template.sh`
-- `scripts/release_policy.py` 對 proposed tag 與既有 source metadata 做 fail-closed 驗證；Release target 與 wheel／sdist metadata gate 等待 #203。
+- `scripts/release_policy.py` 對 proposed tag 與既有 source metadata 做 fail-closed 驗證；root release workflow 只從通過驗證的 tagged checkout 建置一次 GitHub Release artifacts。
 - `scripts/verify_release_consumption.py` 同時證明成功 consumption 與受控 digest mismatch 失敗。
 - Live release evidence 連回 immutable GitHub Release 與 workflow run。
 
@@ -58,5 +58,5 @@ tracking: none
 - [Issue #110](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/110)／[PR #143](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/143)
 - [Issue #123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123)／[PR #128](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/128)
 - [Issue #142](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/142)／[PR #151](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/151)
-- Open work: [#170](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/170), [#195](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/195), [#203](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/203)
+- Distribution correction: [#170](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/170), [#195](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/195), and [#203](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/203) are superseded by [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250).
 - [Release, security, and dependency ADR](../adr/release-security-and-dependencies.md)

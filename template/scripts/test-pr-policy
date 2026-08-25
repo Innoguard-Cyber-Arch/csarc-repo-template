@@ -3,16 +3,47 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
+cd "$repo_root"
 fixture="$(mktemp -d)"
 validator="$fixture/validator"
 trap 'rm -rf "$fixture"' EXIT
 case_count=0
 export PR_ISSUE_TITLE="Add verified report workflow"
 export PR_ISSUE_BODY="All acceptance tasks are complete."
+export PR_AUTHOR="github-actions[bot]"
+export PR_CHANGED_FILES="CHANGELOG.md"
+export PR_HEAD_REPOSITORY="acme/project"
+export PR_HEAD_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+export PR_NUMBER="42"
+
+release_component="$(
+  python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["packages"]["."]["component"])' \
+    "$repo_root/release-please-config.json"
+)"
+release_branch="release-please--branches--main--components--$release_component"
 
 cat > "$fixture/gh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+
+case "$*" in
+  *"/pulls/"*"/commits?per_page=100"*)
+    jq -cn \
+      --arg sha "$PR_HEAD_SHA" \
+      --arg author "${PR_COMMIT_AUTHOR:-github-actions[bot]}" \
+      --arg committer "${PR_COMMITTER:-web-flow}" \
+      '[[{sha: $sha, author: {login: $author}, committer: {login: $committer}, commit: {verification: {verified: true, reason: "valid"}}}]]'
+    exit 0
+    ;;
+  *"/pulls/"*"/files?per_page=100"*)
+    printf '%s\n' "${PR_CHANGED_FILES:-CHANGELOG.md}"
+    exit 0
+    ;;
+  *"/collaborators/"*"/permission"*)
+    printf '%s\n' "${PR_ACTOR_PERMISSION:-write}"
+    exit 0
+    ;;
+esac
 
 head_branch=""
 while (( $# > 0 )); do
@@ -32,6 +63,8 @@ for edge in "${edges[@]}"; do
 done
 SH
 chmod +x "$fixture/gh"
+export GITHUB_REPOSITORY="acme/project"
+export PATH="$fixture:$PATH"
 
 {
   printf '#!/usr/bin/env bash\n'
@@ -55,6 +88,7 @@ while IFS='|' read -r expected name strategy title labels base head body issue_s
   [[ "$body" == "-" ]] && body=""
   [[ "$issue_state" == "-" ]] && issue_state=""
   [[ "$base_graph" == "-" ]] && base_graph=""
+  [[ "$head" == "@release-please" ]] && head="$release_branch"
   case_count=$((case_count + 1))
 
   if output="$(
@@ -89,7 +123,7 @@ pass|dev work|dev|fix(api): handle timeout|bug|dev|fix/42-timeout|Fixes #42|open
 pass|dev stack|dev|fix(api): handle timeout|bug|fix/41-parent|fix/42-timeout|Fixes #42|open|fix/41-parent=dev
 pass|documentation|main|docs(api): explain reports|documentation|main|docs/42-reports|Closes #42|open|-
 pass|dev promotion|dev|feat!: promote tested changes|enhancement|main|dev|-|-|-
-pass|release please|main|chore(main): release 0.2.0|enhancement|main|release-please--branches--main--components--repo|-|-|-
+pass|release please|main|chore(main): release 0.2.0|enhancement|main|@release-please|-|-|-
 pass|dependabot|main|build(deps): bump pytest|enhancement|main|dependabot/pip/pytest-9|-|-|-
 pass|version automation|main|build(python): adopt Python 3.15|enhancement|main|automation/python-3.15|-|-|-
 pass|delivery standalone|delivery|feat(api): add report|enhancement|dev/next|feat/42-report|Closes #42|open|-
@@ -122,6 +156,58 @@ fail|delivery non-fix hotfix|delivery|feat(api): rush report|enhancement,hotfix|
 fail|delivery automation targets main|delivery|build(deps): bump pytest|enhancement|main|dependabot/pip/pytest-9|-|-|-
 fail|delivery sync mismatch|delivery|chore(sync): merge main into milestone|enhancement|dev/m8-other|sync/main-to-m7-staged-ci-abcdef0|-|-|-
 fail|unknown branch strategy|staging|feat(api): add report|enhancement|staging|feat/42-report|Closes #42|open|-
+CASES
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="chore(main): release 0.2.0" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="$release_branch" \
+  PR_COMMITTER="maintainer" \
+  PR_BODY="" \
+  PR_ISSUE_STATE="" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a human commit on the automation PR."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="chore(main): release 0.2.0" \
+PR_LABELS="enhancement" \
+PR_BASE="main" \
+PR_HEAD="$release_branch" \
+PR_AUTHOR="maintainer" \
+PR_COMMIT_AUTHOR="maintainer" \
+PR_ACTOR_PERMISSION="maintain" \
+PR_BODY="" \
+PR_ISSUE_STATE="" \
+  "$validator" >/dev/null
+
+while IFS='|' read -r name actor head_repo changed_files head; do
+  case_count=$((case_count + 1))
+  [[ "$head" == "@release-please" ]] && head="$release_branch"
+  if PR_BRANCH_STRATEGY="delivery" \
+    PR_TITLE="chore(main): release 0.2.0" \
+    PR_LABELS="enhancement" \
+    PR_BASE="main" \
+    PR_HEAD="$head" \
+    PR_AUTHOR="$actor" \
+    PR_HEAD_REPOSITORY="$head_repo" \
+    PR_CHANGED_FILES="$changed_files" \
+    PR_BODY="" \
+    PR_ISSUE_STATE="" \
+      "$validator" >/dev/null 2>&1; then
+    echo "PR policy accepted invalid release follow-up '$name'."
+    exit 1
+  fi
+done <<'CASES'
+forged branch|github-actions[bot]|acme/project|CHANGELOG.md|release-please--forged
+untrusted actor|attacker|acme/project|CHANGELOG.md|@release-please
+fork source|github-actions[bot]|fork/project|CHANGELOG.md|@release-please
+product source|github-actions[bot]|acme/project|src/product.py|@release-please
+workflow source|github-actions[bot]|acme/project|.github/workflows/ci.yml|@release-please
 CASES
 
 case_count=$((case_count + 1))
@@ -175,6 +261,33 @@ PR_ISSUE_STATE="open" \
 PR_ISSUE_MILESTONE_NUMBER="7" \
 PR_ISSUE_LABELS="enhancement,promotion" \
   "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="feat!: promote standalone bridge" \
+PR_LABELS="enhancement,promotion" \
+PR_BASE="main" \
+PR_HEAD="promote/next" \
+PR_BODY="Closes #42" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_MILESTONE_NUMBER="0" \
+PR_ISSUE_LABELS="enhancement,promotion" \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="feat!: promote milestone as standalone" \
+  PR_LABELS="enhancement,promotion" \
+  PR_BASE="main" \
+  PR_HEAD="promote/next" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+  PR_ISSUE_LABELS="enhancement,promotion" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a standalone bridge with a Milestone."
+  exit 1
+fi
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
