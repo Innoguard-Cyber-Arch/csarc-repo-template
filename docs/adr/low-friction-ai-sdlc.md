@@ -155,7 +155,7 @@ flowchart LR
 
 | 類別 | 判定 | 必要 gate | 例外授權 |
 | --- | --- | --- | --- |
-| Routine Issue | docs、局部行為或已知低風險路徑，route classifier 能完整解釋 | targeted behavior checks、policy、fast、stable aggregate；Ready 前一次完整本機驗證 | #240 互斥落地後，zero-step quota 可依 #254 自動 note／merge；否則 human-only。 |
+| Routine Issue | docs、局部行為或已知低風險路徑，route classifier 能完整解釋 | targeted behavior checks、policy、fast、stable aggregate；Ready 前一次完整本機驗證 | 現行 #254 已允許 zero-step quota 的 canonical note／Alpha self-merge；#240 日後只增加 writer serialization。 |
 | Elevated Issue | workflow、權限、security、dependency／lock、governance、release、跨 profile 或 unknown path | full tier、獨立 human review、exact source/destination 再確認 | 只有 human maintainer 可接受風險或改分類；不能用 quota note 自動降級。 |
 | Promotion／hotfix | 任何進 `main` 的 delivery candidate 或正式環境緊急修正 | current-main、full、candidate tree、review、canary 三態、post-merge identity | quota fallback 仍需 human attestation／authorization；release-only controls 不可本機取代。 |
 | Periodic／release | drift、OSV、Zizmor、artifact、SBOM、provenance | 排程或 verified main source；idempotent evidence | 不阻塞 routine PR，但失敗會阻止受影響 promotion／release。 |
