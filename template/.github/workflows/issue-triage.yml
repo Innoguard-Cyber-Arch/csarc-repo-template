@@ -2,7 +2,7 @@ name: Issue triage
 
 on:
   issues:
-    types: [opened, edited, reopened, labeled, closed]
+    types: [opened, edited, reopened, closed]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.issue.number }}
@@ -29,10 +29,8 @@ jobs:
       - name: Assign author and apply issue classification
         env:
           GH_TOKEN: ${{ github.token }}
-          ISSUE_ACTION: ${{ github.event.action }}
           ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
           ISSUE_BODY: ${{ github.event.issue.body }}
-          ISSUE_EVENT_LABEL: ${{ github.event.label.name }}
           ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_STATE_REASON: ${{ github.event.issue.state_reason }}
@@ -51,14 +49,8 @@ jobs:
           state_reason="$(printf '%s' "${ISSUE_STATE_REASON:-}" | tr '[:upper:]' '[:lower:]')"
           if [[ "$state_reason" == "duplicate" ]]; then
             issue_class="duplicate"
-          elif [[ "${ISSUE_ACTION:-}" == "labeled" ]]; then
-            case "${ISSUE_EVENT_LABEL:-}" in
-              bug|enhancement|documentation|duplicate)
-                issue_class="$ISSUE_EVENT_LABEL"
-                ;;
-            esac
           fi
-          if [[ -z "$issue_class" && "${ISSUE_ACTION:-}" == "opened" ]]; then
+          if [[ -z "$issue_class" ]]; then
             issue_class="$(
               awk '
                 /^### 類型$/ { found = 1; next }
@@ -73,14 +65,6 @@ jobs:
                 break
               fi
             done
-          fi
-          if [[ -z "$issue_class" ]]; then
-            issue_class="$(
-              awk '
-                /^### 類型$/ { found = 1; next }
-                found && NF { print; exit }
-              ' <<<"${ISSUE_BODY:-}"
-            )"
           fi
           case "$issue_class" in
             bug|enhancement|documentation|duplicate) ;;

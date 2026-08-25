@@ -48,6 +48,7 @@ jobs:
           CANONICAL_REPOSITORY: Innoguard-Cyber-Arch/csarc-repo-template
           CANARY_COMMAND: ${{ vars.CSARC_CANARY_COMMAND }}
           CANARY_ENVIRONMENT: ${{ vars.CSARC_CANARY_ENVIRONMENT }}
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -65,7 +66,7 @@ jobs:
             --event-path "$GITHUB_EVENT_PATH" \
             --repo "$GITHUB_REPOSITORY" \
             --branch-strategy "$branch_strategy" \
-            --candidate-sha "$GITHUB_SHA" \
+            --candidate-sha "$CANDIDATE_SHA" \
             --workflow-run "$RUN_URL" \
             --canary-command "$CANARY_COMMAND" \
             --canary-environment "$CANARY_ENVIRONMENT" \

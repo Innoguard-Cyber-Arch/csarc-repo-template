@@ -26,6 +26,7 @@ has_human_approval = MODULE["has_human_approval"]
 inspect_issue = MODULE["inspect_issue"]
 inspect_capability = MODULE["inspect_capability"]
 native_links = MODULE["_native_links"]
+promotion_bridge_evidence = MODULE["promotion_bridge_evidence"]
 route_for = MODULE["route_for"]
 unresolved_blocker = MODULE["unresolved_blocker"]
 
@@ -240,6 +241,167 @@ def test_standalone_batch_promotion_selects_dev_next() -> None:
     assert decision.route["kind"] == "standalone-batch-promotion"
     assert decision.route["head"] == "dev/next"
     assert decision.allowed_actions == ("acquire-lease",)
+
+
+def test_milestone_promotion_bridge_uses_its_matching_delivery_source() -> None:
+    """A reviewed bridge may preserve a delivery tree while adding main."""
+    current = pull(
+        draft=False,
+        base="main",
+        base_sha="main",
+        head="promote/m9-sdlc",
+        head_sha="bridge",
+    )
+    data = observation(
+        issue_labels=["promotion"],
+        pulls=[current],
+        branches={
+            "main": "main",
+            "dev/m9-sdlc": "source",
+            "promote/m9-sdlc": "bridge",
+        },
+        files=["src/release.py"],
+        checks="passing",
+        capability="allowed",
+        human_approval=True,
+    )
+    data["promotion_bridge"] = {
+        "valid": True,
+        "source_ref": "dev/m9-sdlc",
+        "source_sha": "source",
+        "source_tree": "tree",
+    }
+    decision = derive_status(data)
+    assert decision.guard == "clear"
+    assert decision.route["head"] == "promote/m9-sdlc"
+    assert decision.route["delivery"] == "dev/m9-sdlc"
+
+
+def test_milestone_promotion_bridge_fails_closed_on_source_or_tree_drift() -> (
+    None
+):
+    """Bridge naming and immutable commit evidence must agree."""
+    issue = {
+        "number": 266,
+        "labels": [{"name": "promotion"}],
+        "milestone": {"number": 9},
+    }
+    wrong_source = route_for(
+        issue,
+        {
+            "main": "main",
+            "dev/m9-other": "source",
+            "promote/m9-sdlc": "bridge",
+        },
+        "delivery",
+    )
+    assert wrong_source["valid"] is False
+
+    route = route_for(
+        issue,
+        {
+            "main": "main",
+            "dev/m9-sdlc": "source",
+            "promote/m9-sdlc": "bridge",
+        },
+        "delivery",
+    )
+    current = pull(
+        draft=False,
+        base="main",
+        base_sha="main",
+        head="promote/m9-sdlc",
+        head_sha="bridge",
+    )
+
+    class FakeGitHub:
+        def __init__(self, parents: list[str], bridge_tree: str) -> None:
+            self.parents = parents
+            self.bridge_tree = bridge_tree
+
+        def get(self, _repo: str, path: str = "") -> object:
+            if path == "git/commits/bridge":
+                return {
+                    "parents": [{"sha": sha} for sha in self.parents],
+                    "tree": {"sha": self.bridge_tree},
+                }
+            if path == "git/commits/source":
+                return {"tree": {"sha": "source-tree"}}
+            raise AssertionError(path)
+
+    branches = {
+        "main": "main",
+        "dev/m9-sdlc": "source",
+        "promote/m9-sdlc": "bridge",
+    }
+    valid = promotion_bridge_evidence(
+        FakeGitHub(["source", "main"], "source-tree"),
+        "owner/repo",
+        route,
+        current,
+        branches,
+    )
+    assert valid["valid"] is True
+    for invalid in (
+        promotion_bridge_evidence(
+            FakeGitHub(["wrong-source", "main"], "source-tree"),
+            "owner/repo",
+            route,
+            current,
+            branches,
+        ),
+        promotion_bridge_evidence(
+            FakeGitHub(["source", "main"], "changed-tree"),
+            "owner/repo",
+            route,
+            current,
+            branches,
+        ),
+    ):
+        assert invalid["valid"] is False
+
+    data = observation(
+        issue_labels=["promotion"],
+        pulls=[current],
+        branches=branches,
+        files=["src/release.py"],
+        checks="passing",
+        capability="allowed",
+        human_approval=True,
+    )
+    data["promotion_bridge"] = invalid
+    decision = derive_status(data)
+    assert decision.guard == "blocked"
+    assert "tree changed" in decision.reason
+
+
+@pytest.mark.parametrize(
+    "branches",
+    [
+        {
+            "main": "main",
+            "dev/m9-other": "source",
+            "promote/m9-sdlc": "bridge",
+        },
+        {
+            "main": "main",
+            "dev/m9-sdlc": "source",
+            "promote/m9-sdlc": "bridge-a",
+            "promote/m9-extra": "bridge-b",
+        },
+    ],
+)
+def test_invalid_promotion_bridge_has_specific_recovery(
+    branches: dict[str, str],
+) -> None:
+    """An ambiguous bridge reports the exact branch pair to repair."""
+    decision = derive_status(
+        observation(issue_labels=["promotion"], branches=branches)
+    )
+    assert decision.guard == "blocked"
+    assert "dev/m9-<slug>" in decision.next_step
+    assert "promote/m9-<same-slug>" in decision.next_step
+    assert "duplicate bridge refs" in decision.next_step
 
 
 def test_hotfix_is_always_a_full_main_route() -> None:

@@ -235,6 +235,42 @@ def route_for(  # noqa: C901
                     rf"dev/m{milestone_number}-[a-z0-9][a-z0-9-]*", branch
                 )
             )
+            bridges = sorted(
+                branch
+                for branch in branches
+                if re.fullmatch(
+                    rf"promote/m{milestone_number}-[a-z0-9][a-z0-9-]*",
+                    branch,
+                )
+            )
+            if bridges:
+                bridge = bridges[0] if len(bridges) == 1 else ""
+                source = (
+                    "dev/" + bridge.removeprefix("promote/") if bridge else ""
+                )
+                if len(candidates) != 1 or source != candidates[0]:
+                    return {
+                        "kind": "milestone-promotion",
+                        "valid": False,
+                        "reason": (
+                            "promotion bridge has no unique matching delivery "
+                            "source"
+                        ),
+                        "candidates": [*candidates, *bridges],
+                    }
+                return {
+                    "kind": "milestone-promotion",
+                    "valid": "main" in branches,
+                    "base": "main",
+                    "head": bridge,
+                    "head_pattern": None,
+                    "delivery": source,
+                    "bridge": True,
+                    "reason": (
+                        "promotion bridge derived from the live Milestone "
+                        "delivery ref"
+                    ),
+                }
             kind = "milestone-promotion"
         else:
             candidates = sorted(
@@ -861,6 +897,7 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
             "chain_ancestry": observation.get("chain_ancestry", {}),
             "merged_route": observation.get("merged_route"),
             "merged_lease_status": observation.get("merged_lease_status"),
+            "promotion_bridge": observation.get("promotion_bridge"),
             "issue_state": issue.get("state"),
         }
         return Decision(
@@ -881,12 +918,24 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
         )
 
     if not route.get("valid"):
+        next_step = (
+            "Create or restore exactly one policy-named delivery branch, "
+            "then rerun status."
+        )
+        if route.get("kind") == "milestone-promotion":
+            milestone = issue.get("milestone") or {}
+            number = milestone.get("number")
+            next_step = (
+                f"Keep exactly one dev/m{number}-<slug> source and one "
+                f"promote/m{number}-<same-slug> bridge; retire mismatched or "
+                "duplicate bridge refs through the reviewed branch path, "
+                "then rerun status."
+            )
         return decision(
             "Open",
             "blocked",
             str(route.get("reason")),
-            "Create or restore exactly one policy-named delivery branch, "
-            "then rerun status.",
+            next_step,
         )
 
     pulls = [
@@ -1108,6 +1157,23 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
             f"Refresh PR #{pull['number']} at the live head and rerun status.",
             pull,
         )
+    bridge = observation.get("promotion_bridge")
+    if route.get("bridge") and (
+        not isinstance(bridge, dict) or bridge.get("valid") is not True
+    ):
+        reason = (
+            str(bridge.get("reason"))
+            if isinstance(bridge, dict)
+            else "promotion bridge evidence is missing"
+        )
+        return decision(
+            "Draft" if pull.get("draft") else "Candidate",
+            "blocked",
+            reason,
+            "Recreate the promotion bridge from the live delivery source and "
+            "current main without changing its tree, then rerun status.",
+            pull,
+        )
     all_pulls = observation.get("all_pulls", observation.get("pulls", []))
     chain_valid, chain, chain_reason = base_chain(
         pull,
@@ -1288,6 +1354,70 @@ def _branch_map(items: list[dict[str, Any]]) -> dict[str, str]:
         if isinstance(name, str) and isinstance(sha, str):
             result[name] = sha
     return result
+
+
+def promotion_bridge_evidence(
+    github: GitHub,
+    repo: str,
+    route: dict[str, object],
+    pull: dict[str, Any],
+    branches: dict[str, str],
+) -> dict[str, object]:
+    """Verify one bridge is exactly source delivery plus the current base."""
+    head = pull.get("head") or {}
+    base = pull.get("base") or {}
+    head_ref = head.get("ref")
+    head_sha = head.get("sha")
+    base_sha = base.get("sha")
+    source_ref = route.get("delivery")
+    source_sha = branches.get(str(source_ref or ""))
+    if not all(
+        isinstance(value, str) and value
+        for value in (head_ref, head_sha, base_sha, source_ref, source_sha)
+    ):
+        return {
+            "valid": False,
+            "reason": "promotion bridge identity is incomplete",
+        }
+    try:
+        bridge = github.get(repo, f"git/commits/{head_sha}")
+        source = github.get(repo, f"git/commits/{source_sha}")
+    except RuntimeError as error:
+        return {"valid": False, "reason": str(error)}
+    parents = bridge.get("parents") if isinstance(bridge, dict) else None
+    parent_shas = (
+        [item.get("sha") for item in parents if isinstance(item, dict)]
+        if isinstance(parents, list)
+        else []
+    )
+    bridge_tree = (
+        (bridge.get("tree") or {}).get("sha")
+        if isinstance(bridge, dict)
+        else None
+    )
+    source_tree = (
+        (source.get("tree") or {}).get("sha")
+        if isinstance(source, dict)
+        else None
+    )
+    valid = bool(
+        head_ref == route.get("head")
+        and branches.get(str(head_ref)) == head_sha
+        and parent_shas == [source_sha, base_sha]
+        and isinstance(bridge_tree, str)
+        and bridge_tree == source_tree
+    )
+    return {
+        "valid": valid,
+        "reason": (
+            "promotion bridge preserves the live delivery source tree"
+            if valid
+            else "promotion bridge source, parents, or tree changed"
+        ),
+        "source_ref": source_ref,
+        "source_sha": source_sha,
+        "source_tree": source_tree,
+    }
 
 
 def _native_links(
@@ -1690,6 +1820,10 @@ def inspect_issue(  # noqa: C901
     base_ref = str(base.get("ref") or "")
     base_sha = branches.get(base_ref, "")
     head = pull.get("head") or {}
+    if route.get("bridge"):
+        observation["promotion_bridge"] = promotion_bridge_evidence(
+            github, repo, route, pull, branches
+        )
     capability = inspect_capability(
         github,
         repo,

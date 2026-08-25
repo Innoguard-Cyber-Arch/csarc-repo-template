@@ -12,7 +12,8 @@ CI 是沒有獨立測試環境時的可攜式 integration layer；外部環境�
   若一張孤立 Issue 確實要獨立 soak／canary，才使用一次性的
   `dev/i<Issue 編號>-<簡稱>`；同號 Issue 不掛 Milestone、加上 `promotion` label，
   並由該 branch 的 promotion PR 關閉。完成後刪除 branch。
-- `dev/* → main` 的 promotion，以及標示 `hotfix` 的緊急修正，必須跑 full tier。
+- `dev/* → main` 的 promotion、下述一次性 `promote/m* → main` bridge，以及標示
+  `hotfix` 的緊急修正，必須跑 full tier。
 - `main` 更新後，尚在進行的 delivery branch 先透過受審查的 `sync/main-to-*` PR
   納入新結果，再接受新的 Issue PR 或 promotion。
 
@@ -92,15 +93,27 @@ attestation／authorization 流程。
 
 | 層次 | 事件 | 執行內容 | Required／取消規則 | 成本目的 |
 | --- | --- | --- | --- | --- |
-| Policy | 每張 PR | PR 標題／Issue 關聯、branch route、delivery sync、review policy | `title`、`delivery-sync`、`promotion` 與 `verify` 都會產生；新 commit 可取消舊的一般 PR run | 先用便宜、確定性的規則拒絕錯誤流程 |
-| Docs／fast | 純文件或一般 Issue／sync PR | secret scan、格式、lint、型別、單元與 policy tests；模板範圍另做單一預設 profile smoke | 由穩定的 `verify` aggregate 彙總；同 PR 新 commit 取消舊 run | 每次整合保留快速回饋，不支付完整矩陣 |
+| Policy | 每張 PR | 同一個 runner 檢查 PR 標題／Issue 關聯、branch route、delivery sync 與 review policy | `title`、`promotion` 與 `verify` 都會產生；新 commit 可取消舊的一般 PR run | 先用便宜、確定性的規則拒絕錯誤流程 |
+| Docs／fast | 純文件或一般 Issue／sync PR | secret scan、格式、lint、型別、單元與 policy tests；workflow／shell scope 加跑 actionlint／ShellCheck，模板範圍另做單一預設 profile smoke | 由穩定的 `verify` aggregate 彙總；同 PR 新 commit 取消舊 run | 每次整合保留快速回饋，不支付完整矩陣 |
 | Full | promotion、hotfix、merge queue、手動 dispatch、未知高風險路徑 | 所有支援 runtime、profiles、Copier update、release policy、安全與整合回歸 | `verify` 與 `promotion` 必須成功；候選 run 不取消 | 只在交付邊界支付一次完整信心成本 |
 | Periodic／release | daily／weekly schedule 或已驗證的發布邊界 | OSV、Zizmor、governance drift、artifact、digest、SBOM、provenance | 排程不阻塞普通 PR；發布只接受 release-source evidence，重跑採 idempotent | 把時間性風險與成品工作移出每個 commit |
 
+Full tier 將 runtime 無關的 lint、文件、治理、profile、Copier create／adopt／update、
+package metadata 與完整成品檢查集中在最新 Python 的 `canonical full` 一次執行。
+Python compatibility jobs 只做 locked install 與 runtime-sensitive tests：精確最低版
+`.0` 一定保留，從最低支援版到 3.14 的每個 feature release 也都保留；最新 3.14
+由 canonical 覆蓋，其餘 runtime 不再重跑相同的完整 suite。混合 profile 的
+TypeScript install、test、coverage、build 與 pack 另在單一 Node 24 job 執行，canonical
+透過既有 `CSARC_VERIFY_TYPESCRIPT=false` 避免重複。TypeScript-only 仍由單一 canonical
+Node job 完整驗證，Python-only 則不啟動 Node job。
+
 `scripts/ci_tier.py` 依事件、base／head、labels 與 changed paths 做 fail-closed
-分類。純 `docs/` 或 Markdown 只跑 docs tier；workflow 變更加跑 Zizmor，相依
-manifest／lockfile 加跑 OSV，治理宣告或 checker 加跑 remote governance；無法分類
-的路徑升級為 full，不會以檔名判斷後直接放行。
+分類。`site/**`、根目錄 Issue forms 與一般 Markdown 明確歸入 docs tier，根目錄
+`.gitignore` 歸入 fast；workflow 變更加跑 Zizmor，相依 manifest／lockfile 加跑
+OSV，治理宣告或 checker 加跑 remote governance。release／version 等未分類高風險
+路徑仍升級為 full，不會只為省 runner 而直接放行。Portable decision site 的 render
+check 在 fast job 內固定執行；只有 site 來源、相關 project docs、手動驗證或 promotion
+才上傳 artifact。
 
 ## Draft ownership 與 Ready 邊界
 
@@ -136,15 +149,29 @@ git push -u origin sync/main-to-<delivery>-<main-sha>
 gh pr create --base <delivery-branch> --head sync/main-to-<delivery>-<main-sha>
 ```
 
+Sync PR 使用 repository 允許的 merge method；squash-only repository 直接以一般
+squash merge 合併，不需暫時開啟 merge commits 或使用 admin override。PR policy 與
+promotion preflight 優先接受 proposed head 對當前 `main` 的直接 ancestry；若 squash
+使 ancestry 不再保留，
+則透過 GitHub REST 核對 deterministic sync branch 對應的 PR 已合併至正確 delivery
+branch、該 PR head 確實包含完整的當前 main SHA，且 PR 的 `merge_commit_sha` 已包含在
+proposed head。任一 API 查詢失敗、main 已前進、PR 未合併、base 不符、sync head 未含
+該 main SHA，或 proposed head 未含該 squash commit 時都 fail closed；branch 名稱與
+commit message 本身不算證據。
+
 若發生 conflict，owner 在 `sync/*` branch 解決、說明取捨並重新跑受影響 checks；
 不得直接 push、force-push 或在 delivery branch 上解 conflict。若
 `CSARC_AUTO_SYNC=true`、`CSARC_SYNC_TOKEN` 可觸發後續 PR checks，且 branch／PR
 write probes 都是 `allowed`，workflow 才能自動建立相同 PR。任何能力為 `blocked`
 或 `unknown` 都只輸出上述手動指令，不猜測權限、不把未同步視為成功。
+main push 的 reconcile 只對過期 PR 的合併後 `title` policy context 寫入 failure，
+不寫 success；同步後的新 SHA 必須重新通過完整 PR policy，不能用 status 繞過標題、
+Issue 關聯或 branch route。
 
 ## Required checks 與 concurrency
 
-Ruleset 固定要求 `title`、`delivery-sync`、`promotion` 與 `verify`。穩定的 `verify` aggregate context
+Ruleset 固定要求 `title`、`promotion` 與 `verify`；delivery sync 已併入 `title`，
+不再留下獨立 required context。穩定的 `verify` aggregate context
 每次都建立，並彙總 fast、full、OSV、Zizmor 與 remote governance 的
 `success`／`skipped` 結果；因此不適用的重型 job 不會因 workflow-level path filter
 留下永久 Pending。
@@ -161,6 +188,32 @@ hotfix 則必須先確認 branch 包含最新 `main`。Milestone promotion 還�
 Milestone 中，除 promotion Issue 外的工作均已關閉且沒有未勾選的 acceptance
 criterion。`dev/i<編號>-*` 則核對同號、無 Milestone 且標示 `promotion` 的 open
 Issue，不能借用別張 Issue 或偽裝 Milestone。
+
+Promotion 的 squash fallback 使用與 PR policy 相同的 REST 證據鏈，並綁定 promotion
+PR 的 base SHA 等於當前 `main`、head ref 等於正確 delivery branch，以及該 branch
+包含已驗證的 sync squash commit；採用的 `direct-ancestry` 或 `squash-sync-pr-N` 會寫入
+preflight evidence。Hotfix 不適用此 fallback，仍須直接包含當前 `main`。
+
+若 reviewed squash sync 已讓 source delivery tree 包含 current main，但 GitHub 的三方
+merge 仍把原 promotion 判為 conflicting，可從 source delivery 建立一次性的 sibling
+bridge；不得 force-push 或直接推送到既有 delivery branch，也不得修改 merge settings：
+
+```bash
+git fetch origin main dev/m<編號>-<簡稱>
+git switch -c promote/m<編號>-<簡稱> origin/dev/m<編號>-<簡稱>
+git merge --no-ff -s ours origin/main
+test "$(git rev-parse HEAD^{tree})" = \
+  "$(git rev-parse origin/dev/m<編號>-<簡稱>^{tree})"
+git push -u origin promote/m<編號>-<簡稱>
+gh pr create --base main --head promote/m<編號>-<簡稱> --label promotion
+```
+
+Preflight 會把 `promote/mN-slug` 唯一對應到 `dev/mN-slug`，要求 bridge commit 的
+first parent 是該 source delivery 最新 SHA、second parent 是 current main，並確認
+bridge、workflow candidate 與 source tree 完全相同。Included PR provenance 只接受
+bridge ancestry 中已合併到同一 Milestone `dev/mN-*` 的 PR；跨 Milestone、`dev/next`、
+沒有 merged PR 的額外 commit、source ref 漂移或 tree 漂移都 fail closed。Bridge PR
+完成後即刪除暫時 branch；原 delivery branch 不重寫。
 
 Promotion 會封裝候選 source archive，記錄 PR、base/head SHA、candidate tree、
 Milestone 與納入 Issues，並把完整 CI 的 `verify` 當成並列 required gate。合併後
@@ -274,6 +327,8 @@ identity；合併後立即形成 patch release 邊界。接著由每條進行中
 ## 安全掃描與治理頻率
 
 - Gitleaks 留在每張 PR 的 docs／fast／full 路徑。
+- actionlint 與 ShellCheck 在 workflow／shell 相關變更、full tier，以及既有每週
+  workflow audit 排程執行；兩者固定版本並驗證下載 checksum。
 - OSV 在相依或供應鏈設定變更、full tier，以及每週排程執行。
 - Zizmor 在 workflow／action 相關變更、full tier，以及每週排程執行。
 - Remote governance 在治理宣告／checker 變更、full tier，以及既有 daily drift
@@ -453,8 +508,9 @@ human maintainer 原樣留言授權。合併前 live ledger ref 必須仍精確�
 
 一般 promotion 的 preflight evidence 會綁定 exact prepared ledger commit；main
 post-merge verifier 以同一 evidence append `restoring-complete`，再恢復暫停的
-auto-delete 並 append `completed`。關閉未合併 PR 則由 delivery-sync append
-`restoring-abort` 後恢復並 append `aborted`。`preparing` 配上已停用 setting、`prepared`
+auto-delete 並 append `completed`。關閉未合併 PR 則由 `dev-next-close.yml` 發出 signal，
+再由 `delivery-maintenance.yml` append `restoring-abort`、恢復並 append `aborted`。
+`preparing` 配上已停用 setting、`prepared`
 配上已恢復 setting，或 PATCH 結果不明時都不自動猜測 ownership，必須人工檢查後重跑
 exact restoring operation。完成的 main base 不可重用；aborted operation 釋放該 base，
 但同一 operation ID 不可 replay。
@@ -464,11 +520,11 @@ Hosted temporary restoration 只使用獨立的 `CSARC_SYNC_TOKEN`，不會退�
 hosted complete／abort 在 append restoring checkpoint 前，先用該 token 對目前 setting 做
 no-op PATCH 並 refetch，以證明當下仍有 admin write。secret 缺失或驗證為 403 時不更新
 ledger／setting，workflow 失敗並輸出綁定 exact transaction 的人工 command。
-`promotion.yml` 與 `delivery-sync.yml` 的 `pull_request`／`merge_group` jobs 只使用 read-only
+`promotion.yml` 與 `pr-policy.yml` 的 `pull_request`／`merge_group` jobs 只使用 read-only
 `github.token`，不引用管理 secret；temporary prepare 必須事先由 human maintainer 或其他
 受保護的 trusted path 完成。只有從 default branch 載入的
-`promotion-post-merge.yml` push job 與 `delivery-maintenance.yml` workflow-run／push／manual
-jobs 可取得 `CSARC_SYNC_TOKEN`。PR close 只觸發不含 secret 的 `dev-next-close.yml`；後續
+`promotion-post-merge.yml` push job、`delivery-sync.yml` main-push／manual reconcile 與
+`delivery-maintenance.yml` workflow-run job 可取得 `CSARC_SYNC_TOKEN`。PR close 只觸發不含 secret 的 `dev-next-close.yml`；後續
 trusted workflow 會重新查驗 workflow ID 與唯一 closed PR，且不得 checkout 或執行 PR
 head 的程式碼。
 
@@ -538,14 +594,24 @@ authorization 不屬於同一 PR，都會使 fallback 失效。這份本機 evid
 ## 成本與證據
 
 模板 repo 的導入前基線是一般 PR update 約 14 billed Linux runner-minutes。
-分層後的一般 Issue PR 預期啟動 CI fast、CI aggregate、PR policy 與 delivery sync
-四個 job，估計 4 billed minutes，即約減少 71%；PR 首次開啟另有一次 reviewer
-assignment。這是 job-minute 模型估計，不是實際帳單數字。
+分層後的一般文件／來源 Issue PR，最多啟動 PR policy、CI fast 與 CI aggregate
+三個 runner job；首次 reviewer assignment 再多一個 job。以每個短 job 至少計一分鐘，
+14→3／4 job-minute 規劃模型分別估計減少約 79%／71%。這是明確標示的 job-minute 規劃估算，不是 hosted 實測
+或實際帳單數字。
 
-每次 CI 都會上傳 `ci-plan-<run-id>-<attempt>` artifact，並在 workflow summary
-記錄 tier、原因、scopes、條件式檢查與 fast job 秒數。Actions 可正常啟動後，應以
-一般 Issue PR 的實際 run/job duration 驗證至少 70% 降幅，營運驗收由
-[#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189) 追蹤；
-額度、付款或平台問題不得被記成成功測量。Promotion 的 quota-only fallback 仍須完整
-執行同一套本機 full verification；它不是 hosted runner-minute 的成功量測，不能用來
-完成 #189。
+Runner 可用且 CI 已啟動時，workflow 會上傳 `ci-plan-<run-id>-<attempt>` artifact，並在
+workflow summary 記錄 tier、原因、scopes、條件式檢查與 fast job 秒數。Hosted duration 與 `ci-plan` artifact 僅作
+optional telemetry，用來校準規劃模型，不是 Milestone、promotion 或產品
+交付的必要驗收條件。任何 zero-step job 都不算 hosted success 或成本測量；額度、付款、
+平台或權限問題也不得被記成成功 telemetry。Portable baseline 不要求管理員升級 GitHub
+方案、調整帳單、建立 PAT／GitHub App 或維護自架 runner。
+
+[#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189) 與
+[#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199) 原本把成功 hosted 量測或恢復視為完成前提；
+[#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287) 已以 capability-adaptive telemetry 取代該前提。
+Telemetry 可用性不改變本機 full verification、promotion tree evidence、security 或 supply-chain gates。
+Promotion 的 quota-only fallback 仍須完整執行同一套本機 full verification，且不能冒充 hosted 成功。
+Hosted runner 可用時，full tier 以 `canonical full`、`Python compatibility (<runtime>)` 與
+`TypeScript (Node <version>)` 分開留下 job result、duration 與 billed runner telemetry；
+`verify` aggregate 依 tier 與 profile 要求所有適用 job 必須 success，
+只允許真正不適用的 job skipped，避免漏啟動被誤判成功。

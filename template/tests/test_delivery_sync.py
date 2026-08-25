@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import runpy
 import shutil
@@ -14,9 +15,11 @@ from typing import Any
 import pytest
 
 _GIT = shutil.which("git")
-if _GIT is None:
-    raise RuntimeError("Git is required for delivery sync tests")
+_BASH = shutil.which("bash")
+if _GIT is None or _BASH is None:
+    raise RuntimeError("Git and Bash are required for delivery sync tests")
 GIT: str = _GIT
+BASH: str = _BASH
 
 MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "delivery_sync.py")
@@ -28,6 +31,7 @@ gate = MODULE["gate"]
 includes_main = MODULE["includes_main"]
 label_sync_pr = MODULE["label_sync_pr"]
 trusted_policy_worktree = MODULE["trusted_policy_worktree"]
+invalidate_stale_pr_policy = MODULE["invalidate_stale_pr_policy"]
 manual_commands = MODULE["manual_commands"]
 complete_dev_next = MODULE["complete_dev_next"]
 abort_dev_next = MODULE["abort_dev_next"]
@@ -244,6 +248,26 @@ def install_memory_ledger(
     )
 
 
+def sync_pull(
+    main_sha: str,
+    *,
+    base: str = "dev/m7-ci",
+    merged_at: str | None = "2026-08-25T05:49:23Z",
+) -> dict[str, Any]:
+    """Return REST evidence for one deterministic reviewed sync PR."""
+    return {
+        "number": 283,
+        "state": "closed",
+        "merged_at": merged_at,
+        "merge_commit_sha": "squash-sha",
+        "base": {"ref": base},
+        "head": {
+            "ref": sync_branch_name(base, main_sha),
+            "sha": "sync-head-sha",
+        },
+    }
+
+
 def test_active_delivery_branches_follow_open_milestones() -> None:
     """Keep dev/next and only Milestone branches whose Milestone is open."""
     refs = [
@@ -323,6 +347,107 @@ def test_gate_accepts_main_and_current_delivery_heads() -> None:
     assert gate(api, "acme/repo", "dev/m7-ci", "head-sha") == "ahead"
 
 
+def test_gate_accepts_verified_squash_sync_for_a_stacked_head() -> None:
+    """Accept a reviewed sync squash only when its content is in the head."""
+    main_sha = "a" * 40
+    api = FakeAPI(
+        [
+            (200, {"object": {"sha": main_sha}}),
+            (200, {"status": "diverged"}),
+            (200, [sync_pull(main_sha)]),
+            (200, {"status": "ahead"}),
+            (200, {"status": "ahead"}),
+        ]
+    )
+
+    assert (
+        gate(
+            api,
+            "acme/repo",
+            "feat/41-parent",
+            "proposed-head",
+            "dev/m7-ci",
+        )
+        == "squash-sync-pr-283"
+    )
+    assert "state=closed" in api.calls[2][1]
+    assert "head=acme%3Async%2Fmain-to-m7-ci-aaaaaaaaaaaa" in api.calls[2][1]
+    assert "base=dev%2Fm7-ci" in api.calls[2][1]
+
+
+@pytest.mark.parametrize(
+    "pull",
+    [
+        sync_pull("a" * 40, merged_at=None),
+        sync_pull("a" * 40, base="dev/m8-other"),
+        sync_pull("b" * 40),
+    ],
+    ids=("unmerged", "wrong-base", "previous-main"),
+)
+def test_gate_rejects_unrelated_sync_pull_evidence(
+    pull: dict[str, Any],
+) -> None:
+    """Reject unmerged, wrong-base, and previous-main sync pull requests."""
+    api = FakeAPI(
+        [
+            (200, {"object": {"sha": "a" * 40}}),
+            (200, {"status": "diverged"}),
+            (200, [pull]),
+        ]
+    )
+    with pytest.raises(RuntimeError, match="verified reviewed sync squash"):
+        gate(
+            api,
+            "acme/repo",
+            "dev/m7-ci",
+            "proposed-head",
+            "dev/m7-ci",
+        )
+
+
+def test_gate_rejects_sync_branch_without_current_main() -> None:
+    """A deterministic branch name cannot replace commit ancestry proof."""
+    main_sha = "a" * 40
+    api = FakeAPI(
+        [
+            (200, {"object": {"sha": main_sha}}),
+            (200, {"status": "diverged"}),
+            (200, [sync_pull(main_sha)]),
+            (200, {"status": "diverged"}),
+        ]
+    )
+    with pytest.raises(RuntimeError, match="verified reviewed sync squash"):
+        gate(
+            api,
+            "acme/repo",
+            "dev/m7-ci",
+            "proposed-head",
+            "dev/m7-ci",
+        )
+
+
+def test_gate_rejects_head_without_sync_squash_commit() -> None:
+    """A reviewed sync does not cover a head missing its squash commit."""
+    main_sha = "a" * 40
+    api = FakeAPI(
+        [
+            (200, {"object": {"sha": main_sha}}),
+            (200, {"status": "diverged"}),
+            (200, [sync_pull(main_sha)]),
+            (200, {"status": "ahead"}),
+            (200, {"status": "diverged"}),
+        ]
+    )
+    with pytest.raises(RuntimeError, match="verified reviewed sync squash"):
+        gate(
+            api,
+            "acme/repo",
+            "dev/m7-ci",
+            "proposed-head",
+            "dev/m7-ci",
+        )
+
+
 def test_gate_rejects_a_stale_stacked_head() -> None:
     """Any non-main PR fails closed after main advances."""
     api = FakeAPI(
@@ -346,6 +471,48 @@ def test_second_main_advance_invalidates_previous_success() -> None:
     )
     with pytest.raises(RuntimeError, match="main-two"):
         gate(second, "acme/repo", "dev/next", "head-sha")
+
+
+def test_main_advance_invalidates_only_stale_combined_policy() -> None:
+    """Never publish a success status that could bypass the PR policy job."""
+    api = FakeAPI(
+        [
+            (
+                200,
+                [
+                    {
+                        "base": {"ref": "dev/m7-ci"},
+                        "head": {"sha": "current-head"},
+                    },
+                    {
+                        "base": {"ref": "dev/m7-ci"},
+                        "head": {"sha": "stale-head"},
+                    },
+                    {"base": {"ref": "main"}, "head": {"sha": "main-pr"}},
+                ],
+            ),
+            (200, {"status": "ahead"}),
+            (200, {"status": "diverged"}),
+            (201, {"state": "failure"}),
+        ]
+    )
+
+    invalidate_stale_pr_policy(api, "acme/repo", "main-two")
+
+    status_calls = [call for call in api.calls if call[0] == "POST"]
+    assert status_calls == [
+        (
+            "POST",
+            "repos/acme/repo/statuses/stale-head",
+            {
+                "state": "failure",
+                "context": "title",
+                "description": (
+                    "PR head must synchronize current main before merge"
+                ),
+            },
+        )
+    ]
 
 
 def test_manual_sync_is_deterministic_and_reviewed() -> None:
@@ -564,6 +731,53 @@ def test_merge_group_revalidates_one_exact_promotion(
         f"at {LEDGER_SHA}"
     )
     assert api.calls[0][1].endswith(queue_branch)
+
+
+@pytest.mark.parametrize(
+    ("base_ref", "head_ref"),
+    [
+        ("main", "dev/m9-sdlc"),
+        ("main", "promote/m9-sdlc"),
+        ("main", "dev/i266-sdlc"),
+        ("main", "fix/266-hotfix"),
+        ("dev/m9-sdlc", "feat/266-status"),
+    ],
+)
+def test_merge_group_skips_non_dev_next_routes(
+    base_ref: str, head_ref: str
+) -> None:
+    """The combined title context does not block unrelated queue routes."""
+    queue_sha = "f" * 40
+    queue_ref = f"refs/heads/gh-readonly-queue/{base_ref}/pr-42-deadbeef"
+    api = FakeAPI(
+        [
+            (200, {"object": {"sha": queue_sha}}),
+            (200, [{"number": 42}]),
+            (
+                200,
+                {
+                    "number": 42,
+                    "base": {"ref": base_ref, "sha": BASE_SHA},
+                    "head": {
+                        "ref": head_ref,
+                        "sha": HEAD_SHA,
+                        "repo": {"full_name": "acme/repo"},
+                    },
+                },
+            ),
+        ]
+    )
+    assert (
+        merge_group_gate(
+            api,
+            "acme/repo",
+            queue_ref,
+            queue_sha,
+            f"refs/heads/{base_ref}",
+            BASE_SHA,
+        )
+        == "not-applicable"
+    )
 
 
 def test_merge_group_rejects_ambiguous_associated_pulls() -> None:
@@ -1126,6 +1340,187 @@ def untrusted_admin_secret_references(source: str) -> set[str]:
     return {name for name in names if f"secrets.{name}" in source}
 
 
+def workflow_step(source: str, name: str) -> str:
+    """Extract one literal workflow run block for a shell regression."""
+    lines = source.splitlines()
+    marker = f"      - name: {name}"
+    start = lines.index(marker)
+    run = lines.index("        run: |", start) + 1
+    body: list[str] = []
+    for line in lines[run:]:
+        if line.startswith("          "):
+            body.append(line[10:])
+        elif not line:
+            body.append("")
+        else:
+            break
+    return "\n".join(body)
+
+
+def run_policy_step(
+    tmp_path: Path,
+    source: str,
+    name: str,
+    helper_help: str,
+    environment: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
+    """Run one policy step against a fake trusted-base helper."""
+    scripts = tmp_path / "scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+    calls = tmp_path / "calls.jsonl"
+    (scripts / "delivery_sync.py").write_text(
+        """import json
+import os
+import sys
+
+if sys.argv[1:] == ["--help"]:
+    print(os.environ["HELP"])
+else:
+    with open(os.environ["CALLS"], "a", encoding="utf-8") as stream:
+        stream.write(json.dumps(sys.argv[1:]) + "\\n")
+""",
+        encoding="utf-8",
+    )
+    return subprocess.run(  # noqa: S603
+        [BASH, "-c", workflow_step(source, name)],
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "CALLS": str(calls),
+            "HELP": helper_help,
+            **environment,
+        },
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def policy_step_calls(tmp_path: Path) -> list[list[str]]:
+    """Read fake helper calls made after capability detection."""
+    path = tmp_path / "calls.jsonl"
+    return (
+        [json.loads(line) for line in path.read_text().splitlines()]
+        if path.exists()
+        else []
+    )
+
+
+def test_policy_gate_supports_legacy_and_current_base_helpers(
+    tmp_path: Path,
+) -> None:
+    """A transition executes only the capability exposed by the base."""
+    policy = (
+        Path(__file__).parents[1] / ".github/workflows/pr-policy.yml"
+    ).read_text()
+    assert (
+        "ref: ${{ github.event.pull_request.base.sha || "
+        "github.event.merge_group.base_sha }}" in policy
+    )
+    common = {
+        "GITHUB_REPOSITORY": "acme/repo",
+        "PR_BASE": "dev/m9-sdlc",
+        "PR_DELIVERY_BASE": "dev/m9-sdlc",
+        "PR_HEAD": "feat/266-status",
+        "PR_HEAD_SHA": "a" * 40,
+        "PR_NUMBER": "42",
+    }
+    name = "Require the proposed head to contain current main"
+
+    legacy = run_policy_step(
+        tmp_path / "legacy",
+        policy,
+        name,
+        "gate reconcile --head-sha --delivery-base",
+        common,
+    )
+    assert legacy.returncode == 0, legacy.stderr
+    assert policy_step_calls(tmp_path / "legacy") == [
+        [
+            "gate",
+            "--repo",
+            "acme/repo",
+            "--base",
+            "dev/m9-sdlc",
+            "--delivery-base",
+            "dev/m9-sdlc",
+            "--head-sha",
+            "a" * 40,
+        ]
+    ]
+
+    current = run_policy_step(
+        tmp_path / "current",
+        policy,
+        name,
+        "gate merge-group-gate --head-ref --pr-number",
+        common,
+    )
+    assert current.returncode == 0, current.stderr
+    assert policy_step_calls(tmp_path / "current")[0][-4:] == [
+        "--head-ref",
+        "feat/266-status",
+        "--pr-number",
+        "42",
+    ]
+
+    blocked = run_policy_step(
+        tmp_path / "blocked",
+        policy,
+        name,
+        "gate reconcile --head-sha --delivery-base",
+        {**common, "PR_BASE": "main", "PR_HEAD": "dev/next"},
+    )
+    assert blocked.returncode != 0
+    assert policy_step_calls(tmp_path / "blocked") == []
+
+
+def test_merge_group_requires_the_trusted_base_subcommand(
+    tmp_path: Path,
+) -> None:
+    """A legacy base cannot silently skip merge-queue preservation."""
+    policy = (
+        Path(__file__).parents[1] / ".github/workflows/pr-policy.yml"
+    ).read_text()
+    environment = {
+        "GITHUB_REPOSITORY": "acme/repo",
+        "QUEUE_BASE_REF": "refs/heads/main",
+        "QUEUE_BASE_SHA": "b" * 40,
+        "QUEUE_HEAD_REF": "refs/heads/gh-readonly-queue/main/pr-42-deadbeef",
+        "QUEUE_HEAD_SHA": "a" * 40,
+    }
+    name = "Revalidate the queued promotion"
+    legacy = run_policy_step(
+        tmp_path / "legacy", policy, name, "gate reconcile", environment
+    )
+    assert legacy.returncode != 0
+    assert policy_step_calls(tmp_path / "legacy") == []
+
+    current = run_policy_step(
+        tmp_path / "current",
+        policy,
+        name,
+        "gate merge-group-gate",
+        environment,
+    )
+    assert current.returncode == 0, current.stderr
+    assert policy_step_calls(tmp_path / "current") == [
+        [
+            "merge-group-gate",
+            "--repo",
+            "acme/repo",
+            "--base",
+            "refs/heads/main",
+            "--base-sha",
+            "b" * 40,
+            "--queue-ref",
+            "refs/heads/gh-readonly-queue/main/pr-42-deadbeef",
+            "--queue-sha",
+            "a" * 40,
+        ]
+    ]
+
+
 def test_untrusted_workflows_cannot_reference_admin_secrets() -> None:
     """PR-controlled workflows never receive administration tokens."""
     root = Path(__file__).parents[1]
@@ -1144,16 +1539,18 @@ jobs:
             workflow
         )
 
-    for name in ("delivery-sync.yml", "promotion.yml"):
-        source = (root / ".github/workflows" / name).read_text()
-        assert "secrets.CSARC_SYNC_TOKEN" not in source
-        assert "GH_TOKEN: ${{ github.token }}" in source
+    promotion = (root / ".github/workflows/promotion.yml").read_text()
+    assert "secrets.CSARC_SYNC_TOKEN" not in promotion
+    assert "GH_TOKEN: ${{ github.token }}" in promotion
 
 
 def test_admin_secret_is_limited_to_trusted_workflow_definitions() -> None:
     """Privileged restoration runs only from default-branch workflow sources."""
     root = Path(__file__).parents[1] / ".github/workflows"
     maintenance = (root / "delivery-maintenance.yml").read_text()
+    delivery_sync = (root / "delivery-sync.yml").read_text()
+    policy = (root / "pr-policy.yml").read_text()
+    promotion = (root / "promotion.yml").read_text()
     post_merge = (root / "promotion-post-merge.yml").read_text()
     close_signal = (root / "dev-next-close.yml").read_text()
     assert 'workflows: ["Dev next preservation close"]' in maintenance
@@ -1163,12 +1560,36 @@ def test_admin_secret_is_limited_to_trusted_workflow_definitions() -> None:
     assert "gh api --paginate" in maintenance
     assert "pull_request:" not in maintenance
     assert "merge_group:" not in maintenance
+    assert "push:" not in maintenance
+    assert "workflow_dispatch:" not in maintenance
+    assert "push:" in delivery_sync
+    assert "pull_request:" not in delivery_sync
+    assert "merge_group:" not in delivery_sync
+    assert "gh auth setup-git" in delivery_sync
+    assert "delivery_sync.py reconcile" in delivery_sync
+    assert (
+        sum(
+            "delivery_sync.py reconcile" in path.read_text()
+            for path in root.glob("*.yml")
+        )
+        == 1
+    )
+    assert "delivery_sync.py merge-group-gate" in policy
+    assert '--delivery-base "$PR_DELIVERY_BASE"' in policy
+    assert '--head-ref "$PR_HEAD"' in policy
+    assert '--pr-number "$PR_NUMBER"' in policy
+    assert (
+        "CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}"
+        in promotion
+    )
+    assert '--candidate-sha "$CANDIDATE_SHA"' in promotion
     assert "pull_request:" in close_signal
     assert "secrets." not in close_signal
     assert "push:" in post_merge
     assert "pull_request:" not in post_merge
     assert "merge_group:" not in post_merge
-    for source in (maintenance, post_merge):
+    assert '"$head_ref" != promote/m*' in post_merge
+    for source in (maintenance, post_merge, delivery_sync):
         assert "secrets.CSARC_SYNC_TOKEN" in source
 
 

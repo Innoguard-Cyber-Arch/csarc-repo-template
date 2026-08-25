@@ -44,6 +44,8 @@ known-first-party = [{{ package_name | tojson }}, "scripts"]
 python_version = "{{ python_target }}"
 strict = true
 files = ["src", "scripts", "tests"]
+mypy_path = "src:scripts"
+explicit_package_bases = true
 
 [tool.pytest.ini_options]
 addopts = "-q"

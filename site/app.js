@@ -40,9 +40,9 @@
 - Required final check: ./scripts/verify`
         },
         {
-          title: 'AI 能執行工作，但不能自行合併',
-          goal: 'AGENTS.md 說明工作方式；GitHub 權限與 Ruleset 才是不能繞過的控制點。',
-          summary: 'Actions 預設唯讀；repository toggle 允許 release workflow 建立 PR，但只有該 job 取得 pull-requests: write。Ruleset 仍要求至少一位人員與 CODEOWNER 審查。',
+          title: 'AI 能執行工作，合併須有明確政策授權',
+          goal: 'AGENTS.md 說明工作方式與例外；GitHub 權限與 Ruleset 才是不能繞過的控制點。',
+          summary: 'Actions 預設唯讀；repository toggle 允許 release workflow 建立 PR，但只有該 job 取得 pull-requests: write。一般路徑仍遵守 Ruleset、人員與 CODEOWNER 審查；Alpha routine self-merge 只適用於 repo policy 明列的受限路徑，promotion 仍需 human authorization。',
           file: 'policies/actions.json＋policies/rulesets.json＋CODEOWNERS',
           code: `policies/actions.json
 {

@@ -70,7 +70,7 @@ canonical_path() (
 )
 
 for index in "${!selected_paths[@]}"; do
-  if ! selected_paths[$index]="$(canonical_path "${selected_paths[$index]}")"; then
+  if ! selected_paths[index]="$(canonical_path "${selected_paths[index]}")"; then
     echo "Worktree does not exist: ${selected_paths[$index]}" >&2
     exit 2
   fi

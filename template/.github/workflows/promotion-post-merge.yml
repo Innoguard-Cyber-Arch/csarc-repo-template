@@ -54,7 +54,8 @@ jobs:
             echo "skip_verification=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [[ "$head_ref" != "dev" && "$head_ref" != dev/* && ",$labels," != *,hotfix,* ]]; then
+          if [[ "$head_ref" != "dev" && "$head_ref" != dev/* &&
+                "$head_ref" != promote/m* && ",$labels," != *,hotfix,* ]]; then
             echo "Main commit did not come from a promotion or hotfix." >&2
             exit 1
           fi

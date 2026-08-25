@@ -4,9 +4,6 @@ on: # zizmor: ignore[dangerous-triggers] trusted default-branch workflow
   workflow_run:
     workflows: ["Dev next preservation close"]
     types: [completed]
-  push:
-    branches: [main]
-  workflow_dispatch:
 
 concurrency:
   group: delivery-maintenance-${{ github.repository }}-${{ github.event.workflow_run.id || github.sha }}
@@ -88,40 +85,3 @@ jobs:
           --repo "$GITHUB_REPOSITORY"
           --pr-number "$PR_NUMBER"
           --head-sha "$PR_HEAD_SHA"
-
-  reconcile:
-    name: reconcile
-    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-      pull-requests: write
-      statuses: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          ref: ${{ github.event_name == 'push' && github.sha || github.event.repository.default_branch }}
-      - name: Configure authenticated Git transport for lifecycle leases
-        env:
-          GH_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN || github.token }}
-        run: gh auth setup-git
-      - name: Reconcile active delivery branches
-        env:
-          BRANCH_STRATEGY: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && 'delivery' || '' }}
-          GH_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN || github.token }}
-          MAIN_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
-          SYNC_AUTO: ${{ vars.CSARC_AUTO_SYNC == 'true' && 'true' || 'false' }}
-          SYNC_TOKEN_KIND: ${{ secrets.CSARC_SYNC_TOKEN != '' && 'external' || 'github-token' }}
-        run: |
-          branch_strategy="$BRANCH_STRATEGY"
-          if [[ -z "$branch_strategy" ]]; then
-            branch_strategy="$(jq -er '.branch_strategy | select(. == "main" or . == "dev" or . == "delivery")' .csarc/profile.json)"
-          fi
-          python3 scripts/delivery_sync.py reconcile \
-            --repo "$GITHUB_REPOSITORY" \
-            --main-sha "$MAIN_SHA" \
-            --auto "$SYNC_AUTO" \
-            --branch-strategy "$branch_strategy" \
-            --token-kind "$SYNC_TOKEN_KIND" | tee -a "$GITHUB_STEP_SUMMARY"

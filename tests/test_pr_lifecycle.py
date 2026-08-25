@@ -1643,16 +1643,20 @@ def test_merge_snapshot_binds_a_promotion_closer_to_its_issue_route(
     monkeypatch.setitem(
         merge_snapshot.__globals__, "local_branch_strategy", lambda: "delivery"
     )
-    call = lambda: merge_snapshot(  # noqa: E731
-        github,
-        lease_fixture(),
-        "https://github.com/owner/repo/pull/42#issuecomment-99",
-    )
     if passes:
-        assert call()["merge_mode"] == "agent"
+        snapshot = merge_snapshot(
+            github,
+            lease_fixture(),
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+        )
+        assert snapshot["merge_mode"] == "agent"
     else:
         with pytest.raises(RuntimeError, match="canonical route"):
-            call()
+            merge_snapshot(
+                github,
+                lease_fixture(),
+                "https://github.com/owner/repo/pull/42#issuecomment-99",
+            )
 
 
 def test_merge_snapshot_marks_a_direct_delivery_issue_for_atomic_close(
