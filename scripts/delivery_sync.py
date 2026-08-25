@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,7 @@ from typing import Any, Protocol
 DELIVERY_BRANCH = re.compile(r"^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$")
 ISOLATED_BRANCH = re.compile(r"^dev/i[0-9]+-[a-z0-9][a-z0-9-]*$")
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
+REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 CAPABILITY_STATES = {"allowed", "blocked", "unknown"}
 MAINTAINER_ASSOCIATIONS = {"MEMBER", "OWNER"}
 MAINTAINER_PERMISSIONS = {"admin", "maintain"}
@@ -396,7 +398,8 @@ def validate_preservation_record(  # noqa: C901
                 f"Dev/next preservation record has invalid {field}"
             )
     if (
-        FULL_SHA.fullmatch(str(record["base_sha"])) is None
+        REPOSITORY.fullmatch(str(record["repository"])) is None
+        or FULL_SHA.fullmatch(str(record["base_sha"])) is None
         or FULL_SHA.fullmatch(str(record["head_sha"])) is None
         or re.fullmatch(r"[0-9a-f]{64}", str(record["operation_id"])) is None
         or record["mode"] not in {"ruleset-protected", "temporary-auto-delete"}
@@ -794,11 +797,15 @@ def preservation_evidence(
     ledger_commit: str, record: dict[str, Any]
 ) -> dict[str, Any]:
     """Return the exact remote checkpoint bound into other evidence."""
-    return {
+    evidence = {
         "ledger_ref": f"refs/heads/{PRESERVATION_LEDGER_BRANCH}",
         "ledger_commit": ledger_commit,
         "transaction": record,
     }
+    cleanup = bridge_cleanup_command(record)
+    if cleanup:
+        evidence["bridge_cleanup_command"] = cleanup
+    return evidence
 
 
 def preservation_authorization_statement(
@@ -956,6 +963,23 @@ def manual_restoration_command(
     if prepared_commit:
         command.append(f"--prepared-ledger-commit {prepared_commit}")
     return " ".join(command)
+
+
+def bridge_cleanup_command(record: dict[str, Any]) -> str:
+    """Return the owner command for one terminal standalone bridge."""
+    if record.get("promotion_head_ref") != STANDALONE_PROMOTION_BRIDGE:
+        return ""
+    if record.get("state") not in {"completed", "aborted"}:
+        return ""
+    return " ".join(
+        [
+            "GH_TOKEN=<admin-token>",
+            "python3 scripts/delivery_sync.py cleanup-promotion-bridge",
+            f"--repo {record['repository']}",
+            f"--operation-id {record['operation_id']}",
+            f"--head-sha {record['promotion_head_sha']}",
+        ]
+    )
 
 
 def prepared_preservation_evidence(
@@ -1260,6 +1284,88 @@ def set_auto_delete(api: API, repo: str, enabled: bool) -> None:
         raise RuntimeError(f"Automatic branch deletion was not {action}d")
 
 
+def delete_promotion_bridge(
+    record: dict[str, Any], remote: str | None = None
+) -> str:
+    """Delete one terminal bridge with an explicit Git force-with-lease."""
+    validate_preservation_record(record)
+    if record.get("promotion_head_ref") != STANDALONE_PROMOTION_BRIDGE:
+        return "not applicable to a direct dev/next promotion"
+    if record.get("state") not in {"completed", "aborted"}:
+        raise RuntimeError(
+            "Promotion bridge cleanup requires a terminal record"
+        )
+    git = shutil.which("git")
+    if git is None:
+        raise RuntimeError("Promotion bridge cleanup requires git")
+    target = remote or f"https://github.com/{record['repository']}.git"
+    expected_sha = str(record["promotion_head_sha"])
+    full_ref = f"refs/heads/{STANDALONE_PROMOTION_BRIDGE}"
+    observed = subprocess.run(  # noqa: S603
+        [git, "ls-remote", "--exit-code", "--refs", target, full_ref],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if observed.returncode == 2 and not observed.stdout.strip():
+        return f"{STANDALONE_PROMOTION_BRIDGE} is already absent"
+    if observed.returncode:
+        detail = observed.stderr.strip() or observed.stdout.strip()
+        raise RuntimeError(f"Could not inspect promotion bridge: {detail}")
+    expected_line = f"{expected_sha}\t{full_ref}"
+    if observed.stdout.strip() != expected_line:
+        raise RuntimeError(
+            "Promotion bridge ref no longer matches the transaction"
+        )
+    lease = f"--force-with-lease={full_ref}:{expected_sha}"
+    deleted = subprocess.run(  # noqa: S603
+        [git, "push", lease, target, f":{full_ref}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if deleted.returncode:
+        detail = deleted.stderr.strip() or deleted.stdout.strip()
+        raise RuntimeError(f"Promotion bridge cleanup was refused: {detail}")
+    return f"deleted {full_ref} at {expected_sha} with {lease}"
+
+
+def cleanup_promotion_bridge(
+    api: API,
+    repo: str,
+    operation_id: str,
+    head_sha: str,
+) -> str:
+    """Authenticate and delete the terminal bridge bound by the ledger."""
+    checkpoint = read_preservation_record(api, repo)
+    if checkpoint is None:
+        raise RuntimeError("Preservation transaction is missing")
+    _ledger_commit, record = checkpoint
+    if (
+        record.get("repository") != repo
+        or record.get("operation_id") != operation_id
+        or record.get("promotion_head_sha") != head_sha
+    ):
+        raise RuntimeError("Preservation ledger belongs to another promotion")
+    if record.get("state") not in {"completed", "aborted"}:
+        raise RuntimeError(
+            "Promotion bridge cleanup requires a terminal record"
+        )
+    gh = shutil.which("gh")
+    if gh is None:
+        raise RuntimeError("Promotion bridge cleanup requires gh")
+    configured = subprocess.run(  # noqa: S603
+        [gh, "auth", "setup-git"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if configured.returncode:
+        detail = configured.stderr.strip() or configured.stdout.strip()
+        raise RuntimeError(f"Could not configure Git authentication: {detail}")
+    return delete_promotion_bridge(record)
+
+
 def finish_restoration(  # noqa: C901
     api: API,
     repo: str,
@@ -1317,7 +1423,10 @@ def finish_restoration(  # noqa: C901
                         action,
                         repo,
                         int(record["pull_request"]),
-                        str(record["head_sha"]),
+                        str(
+                            record.get("promotion_head_sha")
+                            or record["head_sha"]
+                        ),
                         main_sha=main_sha or "",
                         operation_id=str(record["operation_id"]),
                         prepared_commit=prepared_commit or "",
@@ -2316,6 +2425,7 @@ def main() -> None:  # noqa: C901
             "inspect-dev-next",
             "complete-dev-next",
             "abort-dev-next",
+            "cleanup-promotion-bridge",
         ),
     )
     parser.add_argument("--repo", required=True)
@@ -2410,6 +2520,19 @@ def main() -> None:  # noqa: C901
                     args.operation_id or None,
                     hosted=args.hosted,
                     admin_api=admin_api,
+                )
+            )
+        elif args.command == "cleanup-promotion-bridge":
+            if not args.operation_id or not args.head_sha:
+                raise RuntimeError(
+                    "cleanup-promotion-bridge requires the operation and head"
+                )
+            print(  # noqa: T201
+                cleanup_promotion_bridge(
+                    api,
+                    args.repo,
+                    args.operation_id,
+                    args.head_sha,
                 )
             )
         else:

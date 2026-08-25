@@ -178,6 +178,11 @@ gh pr create --base main --head promote/next --label promotion
 transaction 同時綁定 source `dev/next` SHA 與 bridge head ref/SHA，因此固定 branch 名稱
 遭重用、任一 ref／parent／tree 漂移或 source history 被改寫時都 fail closed；source
 僅快轉前進時，complete／abort 仍能以已記錄的 source SHA 安全完成。
+Terminal evidence 會輸出 creator/owner cleanup 指令；該工具先核對 terminal ledger，再對
+ledger repository 的 canonical GitHub URL 執行帶有 exact
+`--force-with-lease=refs/heads/promote/next:<bridge-sha>` 的 deletion-only Git push。Ref
+已不存在時視為完成；ref 已前進時拒絕刪除，且永不以此流程刪除 `dev/next`，本機
+`origin` 也不能改變刪除目標。
 
 Promotion 會封裝候選 source archive，記錄 PR、base/head SHA、candidate tree、
 Milestone 與納入 Issues，並把完整 CI 的 `verify` 當成並列 required gate。合併後

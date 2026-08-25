@@ -1,11 +1,14 @@
 """Tests for delivery branch synchronization decisions."""
 
+# ruff: noqa: S603, S607 -- Tests run fixed Git commands against temp repos.
+
 from __future__ import annotations
 
 import base64
 import json
 import re
 import runpy
+import subprocess
 import urllib.parse
 from pathlib import Path
 from typing import Any
@@ -26,6 +29,10 @@ manual_commands = MODULE["manual_commands"]
 complete_dev_next = MODULE["complete_dev_next"]
 abort_dev_next = MODULE["abort_dev_next"]
 append_preservation_record = MODULE["append_preservation_record"]
+bridge_cleanup_command = MODULE["bridge_cleanup_command"]
+cleanup_promotion_bridge = MODULE["cleanup_promotion_bridge"]
+delete_promotion_bridge = MODULE["delete_promotion_bridge"]
+finish_restoration = MODULE["finish_restoration"]
 merge_group_gate = MODULE["merge_group_gate"]
 prepare_dev_next = MODULE["prepare_dev_next"]
 inspect_dev_next = MODULE["inspect_dev_next"]
@@ -292,6 +299,25 @@ def preservation_record(
         "state": state,
         "previous_ledger_commit": previous_ledger_commit,
     }
+
+
+def terminal_bridge_record(bridge_sha: str) -> dict[str, Any]:
+    """Return a completed bridge record bound to a real Git object."""
+    record = preservation_record(
+        state="completed", mode="ruleset-protected", bridge=True
+    )
+    record["promotion_head_sha"] = bridge_sha
+    record["operation_id"] = preservation_operation(
+        "acme/repo",
+        42,
+        BASE_SHA,
+        SOURCE_SHA,
+        "promote/next",
+        bridge_sha,
+    )
+    record["main_sha"] = MAIN_SHA
+    record["prepared_ledger_commit"] = LEDGER_SHA
+    return record
 
 
 def install_memory_ledger(
@@ -977,6 +1003,9 @@ def test_bridge_complete_uses_source_tree(
     )
     assert result["transaction"]["state"] == "completed"
     assert result["transaction"]["head_sha"] == SOURCE_SHA
+    cleanup = result["bridge_cleanup_command"]
+    assert f"--operation-id {record['operation_id']}" in cleanup
+    assert f"--head-sha {BRIDGE_SHA}" in cleanup
 
 
 def test_bridge_abort_restores_after_source_advances(
@@ -1002,6 +1031,225 @@ def test_bridge_abort_restores_after_source_advances(
     )
     assert result["transaction"]["state"] == "aborted"
     assert result["transaction"]["head_sha"] == SOURCE_SHA
+    assert f"--head-sha {BRIDGE_SHA}" in result["bridge_cleanup_command"]
+
+
+@pytest.mark.parametrize("terminal", ["complete", "abort"])
+def test_bridge_manual_restoration_uses_the_pr_head(
+    terminal: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Recovery commands pass the bridge SHA expected by pull validation."""
+    record = preservation_record(bridge=True)
+    ledger = MemoryLedger((LEDGER_SHA, record))
+    install_memory_ledger(monkeypatch, ledger)
+    api = StandaloneBridgeAPI(setting=False)
+    api.secret_status = 404
+    with pytest.raises(RuntimeError) as raised:
+        finish_restoration(
+            api,
+            "acme/repo",
+            LEDGER_SHA,
+            record,
+            terminal,
+            main_sha=MAIN_SHA if terminal == "complete" else None,
+            prepared_commit=LEDGER_SHA,
+            hosted=True,
+        )
+    message = str(raised.value)
+    assert f"--head-sha {BRIDGE_SHA}" in message
+    assert f"--head-sha {SOURCE_SHA}" not in message
+
+
+def test_terminal_bridge_cleanup_deletes_only_the_expected_ref(
+    tmp_path: Path,
+) -> None:
+    """The owner cleanup uses a deletion-only explicit force-with-lease."""
+    remote = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "init", "--bare", str(remote)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    repository = Path(__file__).parents[1]
+    bridge_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        [
+            "git",
+            "push",
+            str(remote),
+            f"{bridge_sha}:refs/heads/promote/next",
+        ],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    record = terminal_bridge_record(bridge_sha)
+    result = delete_promotion_bridge(record, str(remote))
+    assert f"--force-with-lease=refs/heads/promote/next:{bridge_sha}" in result
+    assert f"--head-sha {bridge_sha}" in bridge_cleanup_command(record)
+    absent = subprocess.run(
+        [
+            "git",
+            "ls-remote",
+            "--exit-code",
+            "--refs",
+            str(remote),
+            "refs/heads/promote/next",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert absent.returncode == 2
+
+
+def test_bridge_cleanup_refuses_an_advanced_ref(tmp_path: Path) -> None:
+    """A stale cleanup lease cannot delete a reused fixed bridge ref."""
+    remote = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "init", "--bare", str(remote)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    repository = Path(__file__).parents[1]
+    live_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    expected_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD^"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(
+        ["git", "push", str(remote), f"{live_sha}:refs/heads/promote/next"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    with pytest.raises(RuntimeError, match="no longer matches"):
+        delete_promotion_bridge(
+            terminal_bridge_record(expected_sha), str(remote)
+        )
+    observed = subprocess.run(
+        ["git", "ls-remote", str(remote), "refs/heads/promote/next"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert observed.startswith(live_sha)
+
+
+def test_bridge_cleanup_is_idempotent_and_never_deletes_dev_next(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An absent bridge is done, while direct dev/next is never a target."""
+    remote = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "init", "--bare", str(remote)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    bridge_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert "already absent" in delete_promotion_bridge(
+        terminal_bridge_record(bridge_sha), str(remote)
+    )
+
+    direct = preservation_record(state="completed", mode="ruleset-protected")
+    direct["main_sha"] = MAIN_SHA
+    direct["prepared_ledger_commit"] = LEDGER_SHA
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("direct dev/next was deleted"),
+    )
+    assert "not applicable" in delete_promotion_bridge(direct, str(remote))
+
+
+def test_bridge_cleanup_rejects_a_nonterminal_record(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prepared bridge evidence cannot authorize deletion."""
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("nonterminal bridge was deleted"),
+    )
+    with pytest.raises(RuntimeError, match="terminal record"):
+        delete_promotion_bridge(preservation_record(bridge=True))
+
+
+def test_bridge_cleanup_uses_the_ledger_repository_not_local_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A mismatched local origin can never redirect a production deletion."""
+    calls: list[list[str]] = []
+
+    def absent(
+        arguments: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(arguments)
+        return subprocess.CompletedProcess(arguments, 2, "", "")
+
+    monkeypatch.setattr(subprocess, "run", absent)
+    record = terminal_bridge_record("1" * 40)
+    assert "already absent" in delete_promotion_bridge(record)
+    assert calls[0][-2] == "https://github.com/acme/repo.git"
+    assert "origin" not in calls[0]
+
+
+def test_bridge_cleanup_rejects_a_cross_repository_ledger(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ledger repository cannot redirect cleanup away from the CLI repo."""
+    record = terminal_bridge_record("1" * 40)
+    record["repository"] = "other/repo"
+    record["operation_id"] = preservation_operation(
+        "other/repo",
+        42,
+        BASE_SHA,
+        SOURCE_SHA,
+        "promote/next",
+        "1" * 40,
+    )
+    monkeypatch.setitem(
+        cleanup_promotion_bridge.__globals__,
+        "read_preservation_record",
+        lambda *_: (LEDGER_SHA, record),
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("cross-repo cleanup ran Git"),
+    )
+    with pytest.raises(RuntimeError, match="another promotion"):
+        cleanup_promotion_bridge(
+            object(),
+            "acme/repo",
+            str(record["operation_id"]),
+            "1" * 40,
+        )
 
 
 @pytest.mark.parametrize("rules_status", [403, 500])
