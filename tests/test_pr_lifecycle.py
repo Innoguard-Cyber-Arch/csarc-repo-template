@@ -518,6 +518,14 @@ def test_writer_scanner_does_not_trust_a_nested_canonical_basename(
         scan_writers(tmp_path)
 
 
+def test_writer_scanner_ignores_python_bytecode_cache(tmp_path: Path) -> None:
+    """Generated Python bytecode must not make a local scan nondeterministic."""
+    cache = tmp_path / "scripts/__pycache__/helper.pyc"
+    cache.parent.mkdir(parents=True)
+    cache.write_bytes(b"\x8d\x00")
+    scan_writers(tmp_path)
+
+
 @pytest.mark.parametrize("symlink_part", ["leaf", "ancestor"])
 def test_writer_scanner_does_not_trust_symlinked_canonical_paths(
     tmp_path: Path, symlink_part: str

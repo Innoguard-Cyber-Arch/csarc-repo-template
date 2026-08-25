@@ -1732,10 +1732,15 @@ def scan_writers(root: Path) -> None:
     ]
     violations: list[str] = []
     for path in sorted(set(paths)):
-        if not path.is_file() or canonical_scanner_helper(root, path):
+        relative = path.relative_to(root)
+        if (
+            not path.is_file()
+            or "__pycache__" in relative.parts
+            or canonical_scanner_helper(root, path)
+        ):
             continue
         found = writer_violations(path.read_text(encoding="utf-8"))
-        violations.extend(f"{path.relative_to(root)}: {item}" for item in found)
+        violations.extend(f"{relative}: {item}" for item in found)
     if violations:
         raise RuntimeError(
             "Unleased PR lifecycle writer:\n" + "\n".join(violations)
