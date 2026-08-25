@@ -1710,7 +1710,9 @@ def canonical_scanner_helper(root: Path, path: Path) -> bool:
         resolved_root = root.resolve(strict=True)
         resolved = path.resolve(strict=True)
         resolved.relative_to(resolved_root)
-    except (FileNotFoundError, ValueError):
+    except FileNotFoundError:
+        return False
+    except ValueError:
         return False
     return resolved == resolved_root / relative
 
