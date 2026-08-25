@@ -779,6 +779,10 @@ def preflight_binding(
 ) -> dict[str, object]:
     """Return every security-relevant field from preflight evidence."""
     archive = evidence.get("candidate_archive") or {}
+    canary = evidence.get("canary") or {}
+    stable_canary = {
+        key: value for key, value in canary.items() if key != "result"
+    }
     binding: dict[str, object] = {
         "schema_version": evidence.get("schema_version"),
         "repository": evidence.get("repository"),
@@ -798,7 +802,7 @@ def preflight_binding(
         "archive_sha256": archive.get("sha256"),
         "included_issues": evidence.get("included_issues"),
         "release": evidence.get("release"),
-        "canary": evidence.get("canary"),
+        "canary": stable_canary,
     }
     if include_preservation:
         binding["dev_next_preservation"] = evidence.get("dev_next_preservation")
@@ -1719,6 +1723,15 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
         != "local-quota-attested"
     ):
         raise RuntimeError("Promotion quota fallback evidence is incomplete")
+    canary = evidence.get("canary")
+    if (
+        not isinstance(canary, dict)
+        or canary.get("state") not in {"blocked", "unknown"}
+        or canary.get("result") != "artifact-only"
+    ):
+        raise RuntimeError(
+            "Promotion quota fallback canary evidence is invalid"
+        )
     if evidence.get("post_merge") is not None:
         raise RuntimeError("Promotion quota fallback was already verified")
     expected = {
