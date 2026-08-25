@@ -871,8 +871,8 @@ grep -q '^## Working loop$' AGENTS.md
 grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
 grep -q "pull request chain ends there" AGENTS.md
-grep -q "against its delivery branch or immediate parent in the stack" AGENTS.md
-grep -q 'complete every task in the pull request and referenced Issue' AGENTS.md
+grep -q "Target the delivery branch or immediate stack parent" AGENTS.md
+grep -q 'Use `Closes`, `Fixes`, or `Resolves` only after every PR and referenced-Issue item has evidence' AGENTS.md
 grep -q 'one branch and one Git worktree per task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
 grep -q 'search open and closed Issues' AGENTS.md
@@ -1469,9 +1469,9 @@ grep -q '^## Code Review Rules$' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'pull request chain ends there' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'against its delivery branch or immediate parent in the stack' \
+grep -q 'Target the delivery branch or immediate stack parent' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'complete every task in the pull request and referenced Issue' \
+grep -q 'Use `Closes`, `Fixes`, or `Resolves` only after every PR and referenced-Issue item has evidence' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'one branch and one Git worktree per task' \
   "$fixture_root/default-project/AGENTS.md"
@@ -1917,7 +1917,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
 assert_agent_guidance "$fixture_root/main-branch-project"
 grep -q 'pull request chain ends at `main`' \
   "$fixture_root/main-branch-project/AGENTS.md"
-grep -q 'against `main` or its immediate parent in the stack' \
+grep -q 'Target `main` or the immediate stack parent' \
   "$fixture_root/main-branch-project/AGENTS.md"
 
 # A release version bump must not make the generated smoke test stale.
@@ -1987,7 +1987,7 @@ grep -q '"branch_strategy": "dev"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
 grep -q 'pull request chain ends at `dev`' \
   "$fixture_root/typescript-project/AGENTS.md"
-grep -q 'against `dev` or its immediate parent in the stack' \
+grep -q 'Target `dev` or the immediate stack parent' \
   "$fixture_root/typescript-project/AGENTS.md"
 grep -q '^  merge_group:$' \
   "$fixture_root/typescript-project/.github/workflows/ci.yml"
