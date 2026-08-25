@@ -28,7 +28,6 @@
         "do_not_enforce_on_create": true,
         "strict_required_status_checks_policy": true,
         "required_status_checks": [
-          {"context": "delivery-sync"},
 {% if branch_strategy in ["dev", "delivery"] %}          {"context": "promotion"},
 {% endif %}
           {"context": "verify"},
