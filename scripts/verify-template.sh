@@ -22,6 +22,20 @@ grep -q 'verify-quota-main' docs/ci-policy.md
 grep -q 'release_eligible.*false' docs/ci-policy.md
 cmp -s scripts/promotion_gate.py template/scripts/promotion_gate.py
 cmp -s tests/test_promotion_gate.py template/tests/test_promotion_gate.py
+test -f .github/workflows/delivery-maintenance.yml
+test -f .github/workflows/dev-next-close.yml
+test -f .github/workflows/promotion-post-merge.yml
+test -f template/.github/workflows/delivery-maintenance.yml
+test -f template/.github/workflows/dev-next-close.yml
+test -f template/.github/workflows/promotion-post-merge.yml
+for workflow in .github/workflows/{delivery-sync,promotion}.yml \
+  template/.github/workflows/{delivery-sync,promotion}.yml; do
+  if grep -Eq 'secrets\.(CSARC_SYNC_TOKEN|CSARC_ADMIN_TOKEN|GH_ADMIN_TOKEN|ADMIN_TOKEN)' \
+    "$workflow"; then
+    echo "$workflow exposes an administration token to an untrusted event."
+    exit 1
+  fi
+done
 for summary_file in AGENTS.md README.md template/AGENTS.md.jinja \
   template/README.md.jinja; do
   grep -q 'docs/ci-policy.md#actions-額度-fallback' "$summary_file"
@@ -324,7 +338,27 @@ case "$2" in
       printf '[]\n'
       exit 0
     fi
-    printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_review_thread_resolution":true,"required_approving_review_count":1}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"delivery-sync"},{"context":"promotion"},{"context":"verify"},{"context":"title"}]}}]'
+    printf '%s\n' '[{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_review_thread_resolution":true,"required_approving_review_count":1}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"delivery-sync"},{"context":"promotion"},{"context":"verify"},{"context":"title"}]}}]'
+    ;;
+  repos/acme/project/rules/branches/dev%2Fnext)
+    if [[ "${MOCK_GOVERNANCE:-protected}" == "error" ]]; then
+      echo "403 cannot inspect effective rules" >&2
+      exit 1
+    elif [[ "${MOCK_GOVERNANCE:-protected}" == "dev-next-incomplete" ]]; then
+      printf '[]\n'
+    else
+      printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"}]'
+    fi
+    ;;
+  repos/acme/project/rules/branches/csarc%2Fdev-next-preservation-ledger)
+    if [[ "${MOCK_GOVERNANCE:-protected}" == "error" ]]; then
+      echo "403 cannot inspect effective rules" >&2
+      exit 1
+    elif [[ "${MOCK_GOVERNANCE:-protected}" == "ledger-incomplete" ]]; then
+      printf '[]\n'
+    else
+      printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"}]'
+    fi
     ;;
   *)
     echo "Unexpected gh API path: $2" >&2
@@ -494,7 +528,17 @@ if incomplete_check="$(run_settings_fixture team check "" false false incomplete
   echo "Incomplete effective branch rules must fail governance checks."
   exit 1
 fi
-grep -q 'missing deletion rule' <<<"$incomplete_check"
+grep -q 'missing non_fast_forward rule' <<<"$incomplete_check"
+if dev_next_incomplete="$(run_settings_fixture team check "" false false dev-next-incomplete 2>&1)"; then
+  echo "Missing dev/next preservation rules must fail governance checks."
+  exit 1
+fi
+grep -q 'dev/next is missing rules:' <<<"$dev_next_incomplete"
+if ledger_incomplete="$(run_settings_fixture team check "" false false ledger-incomplete 2>&1)"; then
+  echo "Missing ledger preservation rules must fail governance checks."
+  exit 1
+fi
+grep -q 'preservation ledger is missing rules:' <<<"$ledger_incomplete"
 if unavailable_check="$(run_settings_fixture team check "" false false error 2>&1)"; then
   echo "Unreadable effective branch rules must fail governance checks."
   exit 1
@@ -1046,6 +1090,7 @@ assert actions["groups"] == {
 }
 PY
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
+grep -q '"name": "CSARC preserve dev next"' policies/dev-next-ruleset.json
 
 # Issues #74 and #110: keep the native dependency updater so its PRs trigger
 # required checks without another privileged identity. pnpm also enforces the
@@ -1069,6 +1114,9 @@ import json
 from pathlib import Path
 
 ruleset = json.loads(Path("policies/rulesets.json").read_text(encoding="utf-8"))
+dev_next_ruleset = json.loads(
+    Path("policies/dev-next-ruleset.json").read_text(encoding="utf-8")
+)
 rules = {rule["type"]: rule.get("parameters", {}) for rule in ruleset["rules"]}
 pull_request = rules["pull_request"]
 checks = {
@@ -1077,6 +1125,19 @@ checks = {
 }
 if ruleset["enforcement"] != "active":
     raise SystemExit("The repository Ruleset must be active.")
+if "deletion" in rules:
+    raise SystemExit("General dev/* governance must allow short-branch cleanup.")
+if dev_next_ruleset["conditions"]["ref_name"] != {
+    "include": [
+        "refs/heads/dev/next",
+        "refs/heads/csarc/dev-next-preservation-ledger",
+    ],
+    "exclude": [],
+} or {rule["type"] for rule in dev_next_ruleset["rules"]} != {
+    "deletion",
+    "non_fast_forward",
+}:
+    raise SystemExit("Preservation rules must target only the two durable refs.")
 if pull_request["required_approving_review_count"] < 1:
     raise SystemExit("The repository Ruleset must require approval.")
 if not pull_request["require_code_owner_review"]:
@@ -1090,6 +1151,9 @@ if not {
     raise SystemExit("The repository Ruleset is missing required checks.")
 PY
 grep -q '"refs/heads/dev/\*"' policies/rulesets.json
+grep -q '"refs/heads/dev/next"' policies/dev-next-ruleset.json
+grep -q '"refs/heads/csarc/dev-next-preservation-ledger"' \
+  policies/dev-next-ruleset.json
 
 pr_title_pattern='^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+'
 valid_pr_title() {
@@ -1470,8 +1534,12 @@ if grep -q 'pnpm exec vitest' "$fixture_root/default-project/AGENTS.md"; then
 fi
 test "$(cat "$fixture_root/default-project/CLAUDE.md")" = "@AGENTS.md"
 test -f "$fixture_root/default-project/policies/rulesets.json"
+test -f "$fixture_root/default-project/policies/dev-next-ruleset.json"
 test -f "$fixture_root/default-project/.github/workflows/governance-comment.yml"
 test -f "$fixture_root/default-project/.github/workflows/promotion.yml"
+test -f "$fixture_root/default-project/.github/workflows/promotion-post-merge.yml"
+test -f "$fixture_root/default-project/.github/workflows/delivery-maintenance.yml"
+test -f "$fixture_root/default-project/.github/workflows/dev-next-close.yml"
 test -f "$fixture_root/default-project/docs/ci-policy.md"
 grep -q '穩定的 `verify` aggregate context' \
   "$fixture_root/default-project/docs/ci-policy.md"
@@ -1652,11 +1720,11 @@ grep -q 'git diff --no-renames --name-only' \
 grep -Fq 'pulls/$pr_number/files?per_page=100' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -Fq '.merge_commit_sha == $sha' \
-  "$fixture_root/default-project/.github/workflows/promotion.yml"
+  "$fixture_root/default-project/.github/workflows/promotion-post-merge.yml"
 grep -Fq '.merge_commit_sha == $sha' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -Fq '"$trusted_root/scripts/release_policy.py" verify-release-follow-up' \
-  "$fixture_root/default-project/.github/workflows/promotion.yml"
+  "$fixture_root/default-project/.github/workflows/promotion-post-merge.yml"
 grep -Fq '"$trusted_root/scripts/release_policy.py" verify-release-follow-up' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'config-file: release-please-config.json' \

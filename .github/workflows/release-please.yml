@@ -61,6 +61,7 @@ jobs:
           labels="$(jq -r '[.labels[].name] | join(",")' <<<"$pull_request")"
           if [[ "$head_ref" == release-please--* ]]; then
             base_sha="$(jq -r '.base.sha // empty' <<<"$pull_request")"
+            head_sha="$(jq -r '.head.sha // empty' <<<"$pull_request")"
             [[ "$base_sha" =~ ^[0-9a-f]{40}$ && "$base_sha" != "$GITHUB_SHA" ]] \
               && git merge-base --is-ancestor "$base_sha" "$GITHUB_SHA" || {
               echo "Release follow-up base SHA is missing or is not an ancestor of main." >&2
@@ -84,14 +85,20 @@ jobs:
             }
             jq -r '.[][] | .filename, (.previous_filename // empty)' \
               "$files_json" > "$RUNNER_TEMP/release-follow-up-files"
+            commits_json="$RUNNER_TEMP/release-follow-up-commits.json"
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/pulls/$pr_number/commits?per_page=100" \
+              > "$commits_json"
             trusted_root="$(mktemp -d "$RUNNER_TEMP/release-follow-up-policy.XXXXXX")"
             git archive "$base_sha" | tar -x -C "$trusted_root"
             python3 "$trusted_root/scripts/release_policy.py" verify-release-follow-up \
               --repo "$GITHUB_REPOSITORY" \
               --head "$head_ref" \
               --head-repo "$(jq -r '.head.repo.full_name // empty' <<<"$pull_request")" \
+              --head-sha "$head_sha" \
               --actor "$(jq -r '.user.login // empty' <<<"$pull_request")" \
               --changed-files "$RUNNER_TEMP/release-follow-up-files" \
+              --commits "$commits_json" \
               --root "$trusted_root"
           fi
           branch_strategy=main

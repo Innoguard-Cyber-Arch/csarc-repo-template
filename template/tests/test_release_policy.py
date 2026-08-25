@@ -52,11 +52,20 @@ def test_release_follow_up_accepts_only_automation_owned_changes(
     )
     (tmp_path / "uv.lock").touch()
     valid_head = "release-please--branches--main--components--demo"
+    valid_sha = "a" * 40
+    valid_commits = [
+        {
+            "sha": valid_sha,
+            "author": {"login": "github-actions[bot]"},
+            "committer": {"login": "github-actions[bot]"},
+        }
+    ]
     valid = {
         "root": tmp_path,
         "repo": "owner/repo",
         "head": valid_head,
         "head_repo": "owner/repo",
+        "head_sha": valid_sha,
         "actor": "github-actions[bot]",
         "changed_files": [
             ".release-please-manifest.json",
@@ -66,6 +75,7 @@ def test_release_follow_up_accepts_only_automation_owned_changes(
             "src/demo/__init__.py",
             "README.md",
         ],
+        "commits": valid_commits,
     }
     assert release_follow_up_errors(**valid) == []
 
@@ -74,40 +84,78 @@ def test_release_follow_up_accepts_only_automation_owned_changes(
         "owner/repo",
         "release-please--forged",
         "owner/repo",
+        valid_sha,
         "github-actions[bot]",
         ["CHANGELOG.md"],
+        valid_commits,
     )
     assert release_follow_up_errors(
         tmp_path,
         "owner/repo",
         valid_head,
         "fork/repo",
+        valid_sha,
         "github-actions[bot]",
         ["CHANGELOG.md"],
+        valid_commits,
     )
     assert release_follow_up_errors(
         tmp_path,
         "owner/repo",
         valid_head,
         "owner/repo",
+        valid_sha,
         "attacker",
         ["CHANGELOG.md"],
+        valid_commits,
     )
     assert release_follow_up_errors(
         tmp_path,
         "owner/repo",
         valid_head,
         "owner/repo",
+        valid_sha,
         "github-actions[bot]",
         ["src/product.py"],
+        valid_commits,
     )
     assert release_follow_up_errors(
         tmp_path,
         "owner/repo",
         valid_head,
         "owner/repo",
+        valid_sha,
         "github-actions[bot]",
         [".github/workflows/ci.yml"],
+        valid_commits,
+    )
+
+    human_commit = [
+        {
+            "sha": valid_sha,
+            "author": {"login": "github-actions[bot]"},
+            "committer": {"login": "maintainer"},
+        }
+    ]
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        valid_sha,
+        "github-actions[bot]",
+        ["pyproject.toml"],
+        human_commit,
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        "b" * 40,
+        "github-actions[bot]",
+        ["CHANGELOG.md"],
+        valid_commits,
     )
 
 

@@ -39,6 +39,7 @@ jobs:
           PR_DELIVERY_CUTOVER_ISSUE: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && '185' || '0' }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -125,13 +126,19 @@ jobs:
               "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
               --jq '.[] | .filename, (.previous_filename // empty)' \
               > "$release_files"
+            release_commits="${RUNNER_TEMP:-/tmp}/release-follow-up-commits-${GITHUB_RUN_ID:-$$}.json"
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/commits?per_page=100" \
+              > "$release_commits"
             python3 scripts/release_policy.py verify-release-follow-up \
               --repo "$GITHUB_REPOSITORY" \
               --head "$PR_HEAD" \
               --head-repo "$PR_HEAD_REPOSITORY" \
+              --head-sha "$PR_HEAD_SHA" \
               --actor "$PR_AUTHOR" \
-              --changed-files "$release_files"
-            rm "$release_files"
+              --changed-files "$release_files" \
+              --commits "$release_commits"
+            rm "$release_files" "$release_commits"
             exit 0
           fi
           if [[ "$branch_strategy" == "dev" && "$PR_BASE" == "main" ]]; then

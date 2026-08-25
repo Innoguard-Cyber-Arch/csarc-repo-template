@@ -149,8 +149,10 @@ def release_follow_up_errors(  # noqa: C901
     repo: str,
     head: str,
     head_repo: str,
+    head_sha: str,
     actor: str,
     changed_files: list[str],
+    commits: list[dict[str, Any]],
 ) -> list[str]:
     """Reject release follow-ups outside the automation-owned boundary."""
     errors: list[str] = []
@@ -160,6 +162,22 @@ def release_follow_up_errors(  # noqa: C901
         errors.append(
             "release follow-up must be authored by github-actions[bot]"
         )
+    if not commits or commits[-1].get("sha") != head_sha:
+        errors.append("release follow-up commits do not end at the PR head")
+    for commit in commits:
+        author = commit.get("author")
+        committer = commit.get("committer")
+        if (
+            not isinstance(author, dict)
+            or author.get("login") != RELEASE_PLEASE_ACTOR
+            or not isinstance(committer, dict)
+            or committer.get("login") != RELEASE_PLEASE_ACTOR
+        ):
+            errors.append(
+                "release follow-up commits must be authored and committed "
+                "by github-actions[bot]"
+            )
+            break
 
     try:
         config = json.loads(
@@ -1134,8 +1152,10 @@ def parser() -> argparse.ArgumentParser:
     verify_follow_up.add_argument("--repo", required=True)
     verify_follow_up.add_argument("--head", required=True)
     verify_follow_up.add_argument("--head-repo", required=True)
+    verify_follow_up.add_argument("--head-sha", required=True)
     verify_follow_up.add_argument("--actor", required=True)
     verify_follow_up.add_argument("--changed-files", type=Path, required=True)
+    verify_follow_up.add_argument("--commits", type=Path, required=True)
     verify_follow_up.add_argument("--root", type=Path, default=Path.cwd())
     return result
 
@@ -1144,13 +1164,23 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
     """Run capability detection, direct release, or build preparation."""
     args = parser().parse_args(arguments)
     if args.command == "verify-release-follow-up":
+        commit_pages = json.loads(args.commits.read_text(encoding="utf-8"))
+        commits = [
+            commit
+            for page in commit_pages
+            if isinstance(page, list)
+            for commit in page
+            if isinstance(commit, dict)
+        ]
         errors = release_follow_up_errors(
             args.root.resolve(),
             args.repo,
             args.head,
             args.head_repo,
+            args.head_sha,
             args.actor,
             args.changed_files.read_text(encoding="utf-8").splitlines(),
+            commits,
         )
         if errors:
             raise SystemExit("; ".join(errors))

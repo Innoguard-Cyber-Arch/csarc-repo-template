@@ -13,6 +13,7 @@ export PR_ISSUE_BODY="All acceptance tasks are complete."
 export PR_AUTHOR="github-actions[bot]"
 export PR_CHANGED_FILES="CHANGELOG.md"
 export PR_HEAD_REPOSITORY="acme/project"
+export PR_HEAD_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 export PR_NUMBER="42"
 
 release_component="$(
@@ -26,6 +27,14 @@ cat > "$fixture/gh" <<'SH'
 set -euo pipefail
 
 case "$*" in
+  *"/pulls/"*"/commits?per_page=100"*)
+    jq -cn \
+      --arg sha "$PR_HEAD_SHA" \
+      --arg author "${PR_COMMIT_AUTHOR:-github-actions[bot]}" \
+      --arg committer "${PR_COMMITTER:-github-actions[bot]}" \
+      '[[{sha: $sha, author: {login: $author}, committer: {login: $committer}}]]'
+    exit 0
+    ;;
   *"/pulls/"*"/files?per_page=100"*)
     printf '%s\n' "${PR_CHANGED_FILES:-CHANGELOG.md}"
     exit 0
@@ -142,6 +151,20 @@ fail|delivery automation targets main|delivery|build(deps): bump pytest|enhancem
 fail|delivery sync mismatch|delivery|chore(sync): merge main into milestone|enhancement|dev/m8-other|sync/main-to-m7-staged-ci-abcdef0|-|-|-
 fail|unknown branch strategy|staging|feat(api): add report|enhancement|staging|feat/42-report|Closes #42|open|-
 CASES
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="chore(main): release 0.2.0" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="$release_branch" \
+  PR_COMMITTER="maintainer" \
+  PR_BODY="" \
+  PR_ISSUE_STATE="" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a human commit on the automation PR."
+  exit 1
+fi
 
 while IFS='|' read -r name actor head_repo changed_files head; do
   case_count=$((case_count + 1))

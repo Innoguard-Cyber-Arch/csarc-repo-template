@@ -17,7 +17,7 @@ trap 'rm -rf "$fixture"' EXIT
     in_run && /^$/ { print; next }
     in_run && /^          / { sub(/^          /, ""); print; next }
     in_run { exit }
-  ' "$repo_root/.github/workflows/promotion.yml"
+  ' "$repo_root/.github/workflows/promotion-post-merge.yml"
 } > "$gate"
 chmod +x "$gate"
 
@@ -60,11 +60,12 @@ if ! grep -q 'pull_request_count' "$release_gate"; then
 fi
 
 for workflow in \
-  "$repo_root/.github/workflows/promotion.yml" \
+  "$repo_root/.github/workflows/promotion-post-merge.yml" \
   "$repo_root/.github/workflows/release-please.yml"; do
   grep -Fq '.merge_commit_sha == $sha' "$workflow"
   grep -Fq 'commits/$GITHUB_SHA/pulls?per_page=100' "$workflow"
   grep -Fq 'pulls/$pr_number/files?per_page=100' "$workflow"
+  grep -Fq 'pulls/$pr_number/commits?per_page=100' "$workflow"
   grep -Fq 'git archive "$base_sha"' "$workflow"
   grep -Fq '"$trusted_root/scripts/release_policy.py" verify-release-follow-up' "$workflow"
   if sed -n '1,100p' "$workflow" | \
@@ -94,6 +95,14 @@ case "$*" in
     else
       jq -cn --argjson page "$MOCK_PULL_REQUESTS" '[$page]'
     fi
+    ;;
+  *"/pulls/"*"/commits?per_page=100"*)
+    [[ "$*" == *"--paginate"* && "$*" == *"--slurp"* ]]
+    jq -cn \
+      --arg sha "$MOCK_HEAD_SHA" \
+      --arg author "${MOCK_COMMIT_AUTHOR:-github-actions[bot]}" \
+      --arg committer "${MOCK_COMMITTER:-github-actions[bot]}" \
+      '[[{sha: $sha, author: {login: $author}, committer: {login: $committer}}]]'
     ;;
   *"/pulls/"*"/files?per_page=100"*)
     [[ "$*" == *"--paginate"* && "$*" == *"--slurp"* ]]
@@ -167,11 +176,14 @@ pull_request_json() {
     --argjson number "$number" \
     '[{
       number: $number,
+      title: "chore(main): release 0.2.0",
+      labels: [],
       merged_at: "2026-08-24T00:00:00Z",
       merge_commit_sha: $head,
       base: {ref: "main", sha: $base},
       head: {
         ref: "release-please--branches--main--components--demo",
+        sha: $head,
         repo: {full_name: "owner/repo"}
       },
       user: {login: "github-actions[bot]"}
@@ -184,6 +196,7 @@ run_gate() {
   local changed_files="$3"
   local expected_file_count="${4:-}"
   local pull_request_pages="${5:-}"
+  local committer="${6:-github-actions[bot]}"
   local runner_temp="$repo/runner-temp"
   mkdir -p "$runner_temp"
   (
@@ -193,6 +206,8 @@ run_gate() {
       MOCK_PULL_REQUEST_PAGES="$pull_request_pages" \
       MOCK_CHANGED_FILES="$changed_files" \
       MOCK_FILE_COUNT_OVERRIDE="$expected_file_count" \
+      MOCK_HEAD_SHA="$(git rev-parse HEAD)" \
+      MOCK_COMMITTER="$committer" \
       GITHUB_REPOSITORY="owner/repo" \
       GITHUB_SHA="$(git rev-parse HEAD)" \
       GITHUB_OUTPUT="$runner_temp/github-output" \
@@ -205,17 +220,22 @@ run_gate() {
 run_premerge_gate() {
   local repo="$1"
   local base="$2"
+  local committer="${3:-github-actions[bot]}"
   local runner_temp="$repo/pre-merge-runner-temp"
   mkdir -p "$runner_temp"
   (
     cd "$repo"
-    GITHUB_EVENT_NAME="pull_request" \
+    PATH="$fixture/bin:$PATH" \
+      MOCK_HEAD_SHA="$(git rev-parse HEAD)" \
+      MOCK_COMMITTER="$committer" \
+      GITHUB_EVENT_NAME="pull_request" \
       GITHUB_REPOSITORY="owner/repo" \
       PR_AUTHOR="github-actions[bot]" \
       PR_BASE_SHA="$base" \
       PR_HEAD="release-please--branches--main--components--demo" \
       PR_HEAD_REPOSITORY="owner/repo" \
       PR_HEAD_SHA="$(git rev-parse HEAD)" \
+      PR_NUMBER="42" \
       RUNNER_TEMP="$runner_temp" \
       "$premerge_gate"
   )
@@ -225,6 +245,7 @@ run_release_gate() {
   local repo="$1"
   local pull_requests="$2"
   local pull_request_pages="${3:-}"
+  local committer="${4:-github-actions[bot]}"
   local runner_temp="$repo/release-runner-temp"
   mkdir -p "$runner_temp"
   (
@@ -233,6 +254,9 @@ run_release_gate() {
       MOCK_PULL_REQUESTS="$pull_requests" \
       MOCK_PULL_REQUEST_PAGES="$pull_request_pages" \
       MOCK_CHANGED_FILES="CHANGELOG.md" \
+      MOCK_HEAD_SHA="$(git rev-parse HEAD)" \
+      MOCK_COMMITTER="$committer" \
+      CANONICAL_REPOSITORY="canonical/repo" \
       GITHUB_REPOSITORY="owner/repo" \
       GITHUB_SHA="$(git rev-parse HEAD)" \
       GITHUB_OUTPUT="$runner_temp/github-output" \
@@ -250,6 +274,26 @@ run_gate "$test_repo" \
   "$(pull_request_json "$base_sha" "$head_sha")" \
   "CHANGELOG.md" >/dev/null
 run_premerge_gate "$test_repo" "$base_sha" >/dev/null
+run_release_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" >/dev/null
+
+if run_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" \
+  "CHANGELOG.md" "" "" "maintainer" >/dev/null 2>&1; then
+  echo "Post-merge gate accepted a human commit on the automation PR." >&2
+  exit 1
+fi
+if run_premerge_gate "$test_repo" "$base_sha" "maintainer" \
+  >/dev/null 2>&1; then
+  echo "Pre-merge gate accepted a human commit on the automation PR." >&2
+  exit 1
+fi
+if run_release_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" "" "maintainer" \
+  >/dev/null 2>&1; then
+  echo "Release source gate accepted a human commit on the automation PR." >&2
+  exit 1
+fi
 
 if run_gate "$test_repo" \
   "$(pull_request_json "$base_sha" "$head_sha")" \
