@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 import subprocess
 from pathlib import Path
@@ -188,6 +189,7 @@ def initialize_pending_adoption(tmp_path: Path) -> tuple[Path, Path]:
                 str(project),
                 "--apply-plan",
                 str(plan),
+                "--allow-unreleased",
                 "--yes",
                 "--non-interactive",
             ]
@@ -707,6 +709,7 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
                 str(project),
                 "--apply-plan",
                 str(plan_path),
+                "--allow-unreleased",
                 "--yes",
                 "--non-interactive",
             ]
@@ -744,6 +747,7 @@ def test_adopt_defaults_to_dry_run_and_preserves_product_files(
                 "--finalize",
                 "--apply-plan",
                 str(finalize_plan_path(project)),
+                "--allow-unreleased",
                 "--non-interactive",
                 "--yes",
             ]
@@ -878,6 +882,7 @@ def test_adopt_finalize_rechecks_repository_context_after_confirmation(
                 "--finalize",
                 "--apply-plan",
                 str(finalize_plan_path(project)),
+                "--allow-unreleased",
             ]
         )
         == 2
@@ -938,6 +943,7 @@ def test_adopt_finalize_requires_matching_second_stage_plan(
                 "--finalize",
                 "--apply-plan",
                 str(plan_path),
+                "--allow-unreleased",
             ]
         )
         == 2
@@ -966,6 +972,7 @@ def test_adopt_finalize_rejects_unexpected_worktree_state(
                 "--finalize",
                 "--apply-plan",
                 str(finalize_plan_path(project)),
+                "--allow-unreleased",
                 "--yes",
                 "--non-interactive",
             ]
@@ -1083,6 +1090,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
                 str(project),
                 "--apply-plan",
                 str(plan_path),
+                "--allow-unreleased",
                 "--yes",
                 "--non-interactive",
             ]
@@ -1119,6 +1127,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
                 "--finalize",
                 "--apply-plan",
                 str(finalize_plan_path(project)),
+                "--allow-unreleased",
                 "--non-interactive",
                 "--yes",
             ]
@@ -1210,6 +1219,7 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
                 str(project),
                 "--apply-plan",
                 str(plan_path),
+                "--allow-unreleased",
                 "--yes",
                 "--non-interactive",
             ]
@@ -1554,6 +1564,7 @@ def test_adopt_reports_dirty_tree_without_mutating_it(tmp_path: Path) -> None:
                 str(project),
                 "--apply-plan",
                 str(plan),
+                "--allow-unreleased",
                 "--yes",
             ]
         )
@@ -1564,7 +1575,9 @@ def test_adopt_reports_dirty_tree_without_mutating_it(tmp_path: Path) -> None:
 
 
 def test_adopt_infers_unicode_repository_and_applies_exact_plan(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     """Infer the Git root and count provenance in a portable exact plan."""
     source, revision = make_template(tmp_path)
@@ -1598,12 +1611,16 @@ def test_adopt_infers_unicode_repository_and_applies_exact_plan(
     assert cli.PROVENANCE_FILE.as_posix() in payload["files"]["add"]
     assert payload["adoption"]["artifacts"][cli.PROVENANCE_FILE.as_posix()]
 
+    assert main(["adopt", "--apply-plan", str(plan_path)]) == 2
+    assert "requires --allow-unreleased again" in capsys.readouterr().err
+
     assert (
         main(
             [
                 "adopt",
                 "--apply-plan",
                 str(plan_path),
+                "--allow-unreleased",
                 "--yes",
                 "--non-interactive",
             ]
@@ -1646,14 +1663,36 @@ def test_adopt_rejects_plan_tampering_and_target_drift(
         original.replace('"mode": "adopt"', '"mode": "init"'),
         encoding="utf-8",
     )
-    assert main(["adopt", str(project), "--apply-plan", str(plan_path)]) == 2
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--allow-unreleased",
+            ]
+        )
+        == 2
+    )
     assert "digest does not match" in capsys.readouterr().err
     assert not (project / "managed.txt").exists()
 
     plan_path.write_text(original, encoding="utf-8")
     (project / "product.txt").write_text("new product\n", encoding="utf-8")
     commit(project, "test: move target head")
-    assert main(["adopt", str(project), "--apply-plan", str(plan_path)]) == 2
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--allow-unreleased",
+            ]
+        )
+        == 2
+    )
     error = capsys.readouterr().err
     assert "drifted after dry-run" in error
     assert "$.adoption.target_head" in error
@@ -1711,6 +1750,7 @@ def test_adopt_rechecks_target_after_confirmation(
                 str(project),
                 "--apply-plan",
                 str(finalize_plan_path(project)),
+                "--allow-unreleased",
             ]
         )
         == 2
@@ -1782,6 +1822,7 @@ def test_adopt_rechecks_repository_context_after_confirmation(
                 str(project),
                 "--apply-plan",
                 str(finalize_plan_path(project)),
+                "--allow-unreleased",
             ]
         )
         == 2
@@ -2144,6 +2185,7 @@ def test_adoption_preserves_executable_and_checked_patch_symlink(
                 str(project),
                 "--apply-plan",
                 str(plan_path),
+                "--allow-unreleased",
                 "--yes",
                 "--non-interactive",
             ]
@@ -2929,6 +2971,137 @@ def test_provenance_validation_and_legacy_migration(tmp_path: Path) -> None:
     )
     assert migrated.verified
     assert prior is not None and prior["verification"] == "legacy-unverified"
+
+
+def test_runtime_state_rejects_symlinked_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep adoption checkpoints and provenance inside the target repo."""
+    revision = cli.Revision("local", "a" * 40, str(tmp_path))
+    writers = (
+        lambda target: cli.write_pending_adoption(target, {}),
+        lambda target: cli.write_provenance(target, revision),
+    )
+
+    for index, writer in enumerate(writers):
+        target = tmp_path / f"target-{index}"
+        external = tmp_path / f"external-{index}"
+        target.mkdir()
+        external.mkdir()
+        sentinel = external / "sentinel.txt"
+        sentinel.write_text("outside\n", encoding="utf-8")
+        (target / ".csarc").symlink_to(external, target_is_directory=True)
+
+        with pytest.raises(CliError, match="symlink or non-directory"):
+            writer(target)
+
+        assert sentinel.read_text(encoding="utf-8") == "outside\n"
+        assert tuple(external.iterdir()) == (sentinel,)
+
+    target = tmp_path / "read-target"
+    state = target / ".csarc"
+    state.mkdir(parents=True)
+    external = tmp_path / "external-provenance.json"
+    external.write_text("{}\n", encoding="utf-8")
+    (target / cli.PROVENANCE_FILE).symlink_to(external)
+
+    with pytest.raises(CliError, match="must not be a symlink"):
+        cli.read_provenance(target)
+
+    fifo = state / "fifo"
+    os.mkfifo(fifo)
+    with pytest.raises(CliError, match="not a regular file"):
+        cli.atomic_replace_text(fifo, "replacement\n")
+
+    target = tmp_path / "race-target"
+    state = target / ".csarc"
+    moved_state = target / ".csarc-before-race"
+    external = tmp_path / "race-external"
+    state.mkdir(parents=True)
+    external.mkdir()
+    real_open = cli.os.open
+
+    def swap_parent_before_open(
+        path: str | bytes | Path,
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        if Path(path) == state and dir_fd is None and state.is_dir():
+            state.rename(moved_state)
+            state.symlink_to(external, target_is_directory=True)
+        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(cli.os, "open", swap_parent_before_open)
+    with pytest.raises(CliError, match="Cannot safely open"):
+        cli.write_provenance(target, revision)
+    assert tuple(external.iterdir()) == ()
+
+    target = tmp_path / "post-open-race-target"
+    state = target / ".csarc"
+    moved_state = target / ".csarc-before-race"
+    external = tmp_path / "post-open-race-external"
+    state.mkdir(parents=True)
+    external.mkdir()
+
+    def swap_parent_after_open(
+        path: str | bytes | Path,
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        opened = real_open(path, flags, mode, dir_fd=dir_fd)
+        if Path(path) == state and dir_fd is None and state.is_dir():
+            state.rename(moved_state)
+            state.symlink_to(external, target_is_directory=True)
+        return opened
+
+    monkeypatch.setattr(cli.os, "open", swap_parent_after_open)
+    with pytest.raises(CliError, match="changed while writing"):
+        cli.write_provenance(target, revision)
+    assert tuple(external.iterdir()) == ()
+    assert tuple(moved_state.iterdir()) == ()
+
+    monkeypatch.setattr(cli.os, "open", real_open)
+    target = tmp_path / "replace-race-target"
+    state = target / ".csarc"
+    moved_state = target / ".csarc-before-race"
+    external = tmp_path / "replace-race-external"
+    state.mkdir(parents=True)
+    external.mkdir()
+    provenance = target / cli.PROVENANCE_FILE
+    provenance.write_text("original\n", encoding="utf-8")
+    real_replace = cli.os.replace
+    swapped = False
+
+    def swap_parent_before_replace(
+        source: str | bytes | Path,
+        destination: str | bytes | Path,
+        *,
+        src_dir_fd: int | None = None,
+        dst_dir_fd: int | None = None,
+    ) -> None:
+        nonlocal swapped
+        if destination == provenance.name and not swapped:
+            swapped = True
+            state.rename(moved_state)
+            state.symlink_to(external, target_is_directory=True)
+        real_replace(
+            source,
+            destination,
+            src_dir_fd=src_dir_fd,
+            dst_dir_fd=dst_dir_fd,
+        )
+
+    monkeypatch.setattr(cli.os, "replace", swap_parent_before_replace)
+    with pytest.raises(CliError, match="changed while writing"):
+        cli.write_provenance(target, revision)
+    assert (moved_state / provenance.name).read_text(encoding="utf-8") == (
+        "original\n"
+    )
+    assert tuple(external.iterdir()) == ()
 
 
 def test_github_api_errors(monkeypatch: pytest.MonkeyPatch) -> None:

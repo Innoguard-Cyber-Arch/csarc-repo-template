@@ -27,7 +27,9 @@
 6. After confirmation, apply an adoption only with the exact machine plan
    emitted by dry-run and `--yes --non-interactive`. For init or update, reuse
    the resolved tag and full SHA explicitly. Report the `./scripts/verify`
-   result. If adoption creates a resumable manual-merge checkpoint, complete
+   result. Applying a plan created from an unreleased development source must
+   require `--allow-unreleased` again; a recomputable plan digest is not trust.
+   If adoption creates a resumable manual-merge checkpoint, complete
    only the listed merges, run `adopt --finalize --dry-run`, review its new
    external plan, wait for confirmation again, then use `adopt --finalize
    --apply-plan PATH`. Direct finalize and any unplanned working-tree or manual
