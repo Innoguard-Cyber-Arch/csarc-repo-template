@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import runpy
 import shutil
@@ -19,11 +20,14 @@ MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "pr_lifecycle.py")
 )
 acquire = MODULE["acquire"]
+audit_message = MODULE["audit_message"]
 authorization = MODULE["authorization"]
 authorization_statement = MODULE["authorization_statement"]
 create_refs = MODULE["create_refs"]
 edit_metadata = MODULE["edit_metadata"]
+expired_remote_lease = MODULE["expired_remote_lease"]
 GitHub = MODULE["GitHub"]
+LEASE_CORE_FIELDS = MODULE["LEASE_CORE_FIELDS"]
 lease_message = MODULE["lease_message"]
 merge = MODULE["merge"]
 merge_snapshot = MODULE["merge_snapshot"]
@@ -48,6 +52,7 @@ class FakeGitHub:
         self.authorization_actor = "maintainer"
         self.timeline: list[dict[str, Any]] = []
         self.comments: list[dict[str, Any]] = []
+        self.comment_snapshots: list[list[dict[str, Any]]] = []
         self.reviews: list[dict[str, Any]] = [
             {
                 "user": {"login": "reviewer"},
@@ -63,8 +68,11 @@ class FakeGitHub:
         self.merged = False
         self.base_ref = "main"
         self.base_sha = "b" * 40
+        self.destination_sha = self.base_sha
+        self.merge_parent = self.base_sha
         self.default_branch = "main"
         self.canonical_lease: dict[str, object] | None = None
+        self.commit_payloads: dict[str, dict[str, Any]] = {}
         self.labels = {"bug"}
         self.milestone: str | None = None
 
@@ -96,12 +104,20 @@ class FakeGitHub:
             },
         }
 
-    def get(self, _repo: str, path: str) -> object:
+    def get(self, _repo: str, path: str) -> object:  # noqa: C901
         """Return one REST fixture."""
+        if path in self.commit_payloads:
+            return self.commit_payloads[path]
         if path == "":
             return {"default_branch": self.default_branch}
         if path == "pulls/42":
             return self.pull()
+        if path == "git/ref/heads/main":
+            return {
+                "object": {
+                    "sha": "d" * 40 if self.merged else self.destination_sha
+                }
+            }
         if path == "issues/comments/99":
             return {
                 "html_url": (
@@ -156,6 +172,18 @@ class FakeGitHub:
                 "parents": [{"sha": "a" * 40}],
                 "tree": {"sha": "e" * 40},
             }
+        if path == f"git/commits/{'d' * 40}" and self.merged:
+            return {
+                "sha": "d" * 40,
+                "parents": [{"sha": self.merge_parent}],
+            }
+        if path == "issues/comments/1" and self.canonical_lease:
+            return {
+                "html_url": self.canonical_lease["audit_url"],
+                "issue_url": "https://api.github.com/repos/owner/repo/issues/42",
+                "user": {"login": self.canonical_lease["actor"]},
+                "body": audit_message(self.canonical_lease),
+            }
         raise AssertionError(path)
 
     def collection(
@@ -185,6 +213,8 @@ class FakeGitHub:
         if path.startswith("issues/42/timeline"):
             return self.timeline
         if path.startswith("issues/42/comments"):
+            if self.comment_snapshots:
+                return self.comment_snapshots.pop(0)
             return self.comments
         if path.startswith("pulls/42/reviews"):
             return self.reviews
@@ -284,9 +314,11 @@ def test_236_concurrent_lifecycle_writer_cannot_acquire(
     barrier = Barrier(2)
     original_create = create_refs
 
-    def simultaneous_create(commit: str, refs: list[str]) -> None:
+    def simultaneous_create(
+        commit: str, refs: list[str], expected: dict[str, str | None]
+    ) -> None:
         barrier.wait(timeout=5)
-        original_create(commit, refs)
+        original_create(commit, refs, expected)
 
     monkeypatch.setitem(acquire.__globals__, "create_refs", simultaneous_create)
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -302,6 +334,11 @@ def test_236_concurrent_lifecycle_writer_cannot_acquire(
     lease = read_lease(outputs[0])
     assert len(lease["refs"]) == 2
     assert github.audit_comments
+    commit_message = git(
+        work, "show", "-s", "--format=%B", lease["lease_commit"]
+    )
+    assert lease["capability"] not in commit_message
+    assert lease["capability"] not in github.audit_comments[0]
     release_refs(lease)
 
 
@@ -309,7 +346,7 @@ def lease_fixture() -> dict[str, object]:
     """Return an unexpired in-memory lease."""
     acquired = datetime(2026, 8, 25, 1, 0, tzinfo=UTC)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "repository": "owner/repo",
         "pull_request": 42,
         "head_sha": "a" * 40,
@@ -319,7 +356,8 @@ def lease_fixture() -> dict[str, object]:
         "default_branch": "main",
         "owner": "task/merge",
         "actor": "agent",
-        "nonce": "f" * 32,
+        "capability": "f" * 64,
+        "capability_digest": hashlib.sha256(("f" * 64).encode()).hexdigest(),
         "acquired_at": acquired.isoformat().replace("+00:00", "Z"),
         "expires_at": (datetime.now(UTC) + timedelta(hours=1))
         .isoformat()
@@ -329,6 +367,7 @@ def lease_fixture() -> dict[str, object]:
             "refs/heads/csarc/leases/pr-42",
             "refs/heads/csarc/leases/promotion",
         ],
+        "reclaimed_commits": [],
         "audit_url": "https://github.com/owner/repo/pull/42#issuecomment-1",
     }
 
@@ -407,6 +446,91 @@ def test_retargeting_to_default_requires_the_promotion_lease(
     github = FakeGitHub("a" * 40)
     github.canonical_lease = canonical
     with pytest.raises(RuntimeError, match="promotion lease scope drifted"):
+        require_lease(github, canonical, "owner/repo", 42, "a" * 40)
+
+
+def test_destination_branch_advance_invalidates_the_lease(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The live destination ref must remain at the lease's exact base SHA."""
+    bind_canonical_remote(monkeypatch)
+    canonical = lease_fixture()
+    github = FakeGitHub("a" * 40)
+    github.canonical_lease = canonical
+    github.destination_sha = "9" * 40
+    with pytest.raises(RuntimeError, match="destination branch advanced"):
+        require_lease(github, canonical, "owner/repo", 42, "a" * 40)
+
+
+def test_only_a_canonical_expired_remote_lease_can_be_reclaimed() -> None:
+    """Expiry alone cannot authorize replacing an arbitrary remote commit."""
+    expired = lease_fixture()
+    expired["acquired_at"] = "2019-12-31T23:55:00Z"
+    expired["expires_at"] = "2020-01-01T00:00:00Z"
+    core = {field: expired[field] for field in LEASE_CORE_FIELDS}
+    github = FakeGitHub("a" * 40)
+    github.commit_payloads[f"git/commits/{'c' * 40}"] = {
+        "sha": "c" * 40,
+        "message": lease_message(core),
+        "parents": [{"sha": "a" * 40}],
+        "tree": {"sha": "e" * 40},
+    }
+    assert (
+        expired_remote_lease(
+            github,
+            "owner/repo",
+            "c" * 40,
+            "refs/heads/csarc/leases/pr-42",
+        )["expires_at"]
+        == "2020-01-01T00:00:00Z"
+    )
+    github.commit_payloads[f"git/commits/{'c' * 40}"]["tree"] = {
+        "sha": "9" * 40
+    }
+    with pytest.raises(RuntimeError, match="parent or tree"):
+        expired_remote_lease(
+            github,
+            "owner/repo",
+            "c" * 40,
+            "refs/heads/csarc/leases/pr-42",
+        )
+
+
+def test_capability_and_audit_url_cannot_be_forged(tmp_path: Path) -> None:
+    """Local evidence must hold the capability and exact PR audit URL."""
+    for field, value in (
+        ("capability", "0" * 64),
+        (
+            "audit_url",
+            "https://github.com/other/repo/pull/42#issuecomment-1",
+        ),
+    ):
+        payload = lease_fixture()
+        payload[field] = value
+        path = tmp_path / f"{field}.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(RuntimeError):
+            read_lease(path)
+
+
+def test_remote_audit_comment_is_refetched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deleting or editing the public audit record invalidates the lease."""
+    bind_canonical_remote(monkeypatch)
+    canonical = lease_fixture()
+    github = FakeGitHub("a" * 40)
+    github.canonical_lease = canonical
+    original_get = github.get
+
+    def edited_comment(repo: str, path: str) -> object:
+        payload = original_get(repo, path)
+        if path == "issues/comments/1" and isinstance(payload, dict):
+            return {**payload, "body": "edited"}
+        return payload
+
+    github.get = edited_comment  # type: ignore[assignment]
+    with pytest.raises(RuntimeError, match="audit comment"):
         require_lease(github, canonical, "owner/repo", 42, "a" * 40)
 
 
@@ -786,7 +910,12 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
     lease_path = tmp_path / "lease.json"
     lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
     monkeypatch.setitem(
-        merge.__globals__, "merge_snapshot", lambda *_: {"merge_mode": "agent"}
+        merge.__globals__,
+        "merge_snapshot",
+        lambda *_: {
+            "merge_mode": "agent",
+            "title": "fix(ci): serialize lifecycle writes",
+        },
     )
     monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
     released = False
@@ -814,6 +943,78 @@ def test_merge_uses_synchronous_sha_bound_rest_and_confirms_result(
     assert released
 
 
+def test_final_merge_snapshot_rejects_a_new_p1_blocker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A blocker arriving after the first check wins before the merge PUT."""
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
+    bind_remote_lease(monkeypatch)
+    monkeypatch.setitem(merge.__globals__, "release_refs", lambda _lease: None)
+    github = FakeGitHub("a" * 40)
+    github.comment_snapshots = [
+        [],
+        [
+            {
+                "created_at": "2026-08-25T01:02:00Z",
+                "body": "[P1] A late security regression remains.",
+                "html_url": (
+                    "https://github.com/owner/repo/pull/42#issuecomment-101"
+                ),
+                "author_association": "MEMBER",
+            }
+        ],
+    ]
+    with pytest.raises(RuntimeError, match="unresolved blocking comment"):
+        merge(
+            SimpleNamespace(
+                repo="owner/repo",
+                pr_number=42,
+                head_sha="a" * 40,
+                owner="task/merge",
+                lease=lease_path,
+                authorization_url=(
+                    "https://github.com/owner/repo/pull/42#issuecomment-99"
+                ),
+            ),
+            github,
+        )
+    assert not github.merged
+
+
+def test_merge_rejects_the_wrong_destination_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A merge response is insufficient without target and parent identity."""
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
+    monkeypatch.setitem(
+        merge.__globals__,
+        "merge_snapshot",
+        lambda *_: {
+            "merge_mode": "agent",
+            "title": "fix(ci): serialize lifecycle writes",
+        },
+    )
+    monkeypatch.setitem(merge.__globals__, "release_refs", lambda _lease: None)
+    github = FakeGitHub("a" * 40)
+    github.merge_parent = "9" * 40
+    with pytest.raises(RuntimeError, match="does not match"):
+        merge(
+            SimpleNamespace(
+                repo="owner/repo",
+                pr_number=42,
+                head_sha="a" * 40,
+                owner="task/merge",
+                lease=lease_path,
+                authorization_url=(
+                    "https://github.com/owner/repo/pull/42#issuecomment-99"
+                ),
+            ),
+            github,
+        )
+
+
 def test_merge_does_not_release_a_lease_for_an_unconfirmed_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -821,7 +1022,12 @@ def test_merge_does_not_release_a_lease_for_an_unconfirmed_result(
     lease_path = tmp_path / "lease.json"
     lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
     monkeypatch.setitem(
-        merge.__globals__, "merge_snapshot", lambda *_: {"merge_mode": "agent"}
+        merge.__globals__,
+        "merge_snapshot",
+        lambda *_: {
+            "merge_mode": "agent",
+            "title": "fix(ci): serialize lifecycle writes",
+        },
     )
     monkeypatch.setitem(merge.__globals__, "require_lease", lambda *_: None)
     monkeypatch.setitem(

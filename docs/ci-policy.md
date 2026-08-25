@@ -230,19 +230,30 @@ identity；合併後立即形成 patch release 邊界。接著由每條進行中
 或合併前，必須先以 `scripts/pr_lifecycle.py acquire` 對精確 repository、PR、head SHA
 與 task owner 建立 lease evidence。工具會用 create-only atomic push 同時取得該 PR 的
 remote ref；目標是 default branch 時也必須取得共用 promotion ref。取得失敗、lease
-過期、remote commit／base／head 漂移時一律停止，不得覆寫、搶占或刪除其他 owner 的 ref。
+remote commit／base／head 漂移時一律停止。只有 remote commit 格式、parent、tree 與期限皆
+可驗證的過期 lease 可用 atomic compare-and-swap 回收；新 audit 會保留被回收 commit。
 
 持有 lease 的 task 只能透過同一工具的 `state` 執行 Ready／Draft，透過 `edit` 改
 label／milestone，並用 `authorization-template` 產生綁定該 PR 與完整 head SHA 的唯一文字，
 交由具 live maintain/admin 權限的人類原樣張貼。禁止直接呼叫 `gh pr ready`、`gh pr edit`
 或 `gh pr merge`。其他 task 在 lease 釋放前只做唯讀複審，若找到 blocker，先通知 owner，
-不得自行改 PR state。Owner 在動作完成或明確放棄後才執行 `release`。
+並用 `[P0]`、`[P1]` 或 `[merge-blocker]` 開頭；只有明確
+`[merge-blocker-resolved]` 可解除。不得自行改 PR state。Owner 在動作完成或明確放棄後
+才執行 `release`。Remote commit 與 audit comment 只公開隨機 capability 的 digest；raw
+capability 只存在 owner 的本機 evidence，任何 state／edit／release 前都重新驗證。
 
 `check` 與 `merge` 會在 lease 內重新讀取 timeline、comments、reviews、checklists、base、
 exact-head required checks 與 effective Ruleset；較新的 Draft、blocker 或任何漂移都使授權
 失效。`merge` 只使用 SHA-bound synchronous REST merge。無法證明 approval、last-push、
 thread resolution、required checks 與 no bypass 時，包含 GitHub Free private repository，
 agent 必須停在 `human-only`，由人類在 GitHub 上手動合併。
+
+Release Please action 會在回傳精確 PR number／head 前建立或修改 branch、Draft 與 labels，
+無法原子綁定這個 exact-PR lease，因此 Private Free degraded mode 的 repository workflow
+會停用自動 release PR 建立／更新，並明確 fail closed 為
+`release pull request (human-only)`，且不授予 PR／contents write。Human maintainer 建立
+或更新 release PR 後，後續 metadata／state 寫入仍必須走 lifecycle lease；不得把這個降級
+宣稱為已序列化的自動 release writer。
 
 ## Actions 額度 fallback
 

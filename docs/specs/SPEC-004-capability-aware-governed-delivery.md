@@ -28,6 +28,7 @@ GitHub plan、repository visibility、organization policy 與 token scope 會改
 - [x] 平台能力使用 allowed／blocked／unknown，只有已確認可用時啟用較強 automation；未知不當作 allowed。
 - [x] GitHub Free private 缺少 Ruleset／team review enforcement 時顯示 `DEGRADED`，但仍執行可攜式 checks 與個別 reviewer request。
 - [x] 平行 task 的 Ready／Draft／label／milestone／authorization／merge 寫入只能透過 repository remote lease 工具序列化；default-branch PR 另共用 promotion lane lease。
+- [x] 無法在 pre-PR writer 與精確 PR/head 間原子轉移 lease 的 automation 明確 fail closed；不把 human-only release PR 路徑宣稱為已序列化。
 - [x] Agent merge 只在 live review、last-push approval、required checks 與 no-bypass Ruleset 可證明時啟用；Free private 或 unknown capability 一律停在 human-only manual merge。
 - [x] 不要求長效 PAT、額外 GitHub App、降低 branch protection 或修改 organization policy 才能使用 baseline。
 - [x] Promotion、release 與 Milestone completion 由完整 acceptance 與 evidence gate，而不是只看分支名稱或 open Issue 數。

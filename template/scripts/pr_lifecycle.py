@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -16,16 +17,19 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-LEASE_SCHEMA = 1
+LEASE_SCHEMA = 2
 MAX_TTL_SECONDS = 7200
 MIN_OPERATION_SECONDS = 30
 MAINTAINER_ASSOCIATIONS = {"MEMBER", "OWNER"}
 SHA = re.compile(r"[0-9a-f]{40}")
+SHA256 = re.compile(r"[0-9a-f]{64}")
 OWNER = re.compile(r"[A-Za-z0-9._/@:-]{1,200}")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 UNCHECKED = re.compile(r"(?m)^\s*[-*+]\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(r"(?:Closes|Fixes|Resolves)\s+#(\d+)(?:\D|$)", re.I)
-BLOCKER = re.compile(r"(?i)^(?:blocked|blocker)\s*:|^\[merge-blocker\]")
+BLOCKER = re.compile(
+    r"(?i)^(?:blocked|blocker)\s*:|^\[merge-blocker\]|^\[P[01]\]"
+)
 BLOCKER_RESOLVED = re.compile(
     r"(?i)^merge blocker resolved\s*:|^\[merge-blocker-resolved\]"
 )
@@ -43,10 +47,11 @@ LEASE_CORE_FIELDS = (
     "default_branch",
     "owner",
     "actor",
-    "nonce",
+    "capability_digest",
     "acquired_at",
     "expires_at",
     "refs",
+    "reclaimed_commits",
 )
 
 
@@ -281,6 +286,21 @@ def live_pull(
     return payload
 
 
+def branch_sha(github: GitHub, repo: str, branch: str) -> str:
+    """Return the exact live commit of one destination branch."""
+    payload = github.get(
+        repo, f"git/ref/heads/{urllib.parse.quote(branch, safe='')}"
+    )
+    sha = (
+        (payload.get("object") or {}).get("sha")
+        if isinstance(payload, dict)
+        else None
+    )
+    if not isinstance(sha, str) or SHA.fullmatch(sha) is None:
+        raise RuntimeError("Destination branch ref is unavailable")
+    return sha
+
+
 def remote_ref(ref: str) -> str | None:
     """Return the exact origin ref SHA, rejecting ambiguous output."""
     output = run(["git", "ls-remote", "--refs", "origin", ref])
@@ -336,11 +356,13 @@ def read_lease(path: Path) -> dict[str, Any]:
         "default_branch": str,
         "owner": str,
         "actor": str,
-        "nonce": str,
+        "capability": str,
+        "capability_digest": str,
         "acquired_at": str,
         "expires_at": str,
         "lease_commit": str,
         "refs": list,
+        "reclaimed_commits": list,
         "audit_url": str,
     }
     if any(
@@ -358,14 +380,31 @@ def read_lease(path: Path) -> dict[str, Any]:
         REPOSITORY.fullmatch(payload["repository"]) is None
         or OWNER.fullmatch(payload["owner"]) is None
         or not payload["actor"]
-        or re.fullmatch(r"[0-9a-f]{32}", payload["nonce"]) is None
+        or SHA256.fullmatch(payload["capability"]) is None
+        or SHA256.fullmatch(payload["capability_digest"]) is None
         or not payload["base_ref"]
         or not payload["default_branch"]
         or payload["pull_request"] < 1
     ):
         raise RuntimeError("Lease evidence has invalid identity fields")
-    if set(payload) != {*LEASE_CORE_FIELDS, "lease_commit", "audit_url"}:
+    if set(payload) != {
+        *LEASE_CORE_FIELDS,
+        "capability",
+        "lease_commit",
+        "audit_url",
+    }:
         raise RuntimeError("Lease evidence contains unexpected fields")
+    if (
+        hashlib.sha256(payload["capability"].encode()).hexdigest()
+        != payload["capability_digest"]
+    ):
+        raise RuntimeError("Lease capability does not match its remote digest")
+    if not all(
+        isinstance(commit, str) and SHA.fullmatch(commit)
+        for commit in payload["reclaimed_commits"]
+    ):
+        raise RuntimeError("Lease reclaim history is invalid")
+    validate_audit_url(payload)
     validate_refs(payload)
     return payload
 
@@ -385,6 +424,26 @@ def validate_refs(lease: dict[str, Any]) -> None:
         raise RuntimeError("Lease refs are invalid")
 
 
+def audit_comment_id(lease: dict[str, Any]) -> str:
+    """Validate and return the lease audit comment identifier."""
+    parsed = urllib.parse.urlparse(str(lease.get("audit_url", "")))
+    expected = f"/{lease['repository']}/pull/{lease['pull_request']}"
+    match = re.fullmatch(r"issuecomment-([0-9]+)", parsed.fragment)
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc.casefold() != "github.com"
+        or parsed.path.casefold() != expected.casefold()
+        or match is None
+    ):
+        raise RuntimeError("Lease audit URL is invalid")
+    return match.group(1)
+
+
+def validate_audit_url(lease: dict[str, Any]) -> None:
+    """Reject evidence whose audit URL is not bound to its pull request."""
+    audit_comment_id(lease)
+
+
 def lease_core(lease: dict[str, Any]) -> dict[str, object]:
     """Return the exact fields committed as immutable lease evidence."""
     return {field: lease[field] for field in LEASE_CORE_FIELDS}
@@ -395,6 +454,17 @@ def lease_message(lease: dict[str, Any]) -> str:
     return (
         f"chore: lease PR #{lease['pull_request']}\n\n"
         f"{canonical_json(lease_core(lease))}"
+    )
+
+
+def audit_message(lease: dict[str, Any]) -> str:
+    """Return public lease evidence without the raw capability."""
+    public = {**lease_core(lease), "lease_commit": lease["lease_commit"]}
+    return (
+        "PR lifecycle lease acquired\n\n"
+        f"`{canonical_json(public)}`\n\n"
+        "All automated Ready, Draft, authorization, metadata, and merge "
+        "writes for this PR are serialized by the refs above."
     )
 
 
@@ -432,10 +502,16 @@ def require_lease(
         or lease["refs"] != lease_refs(pull, lease["default_branch"])
     ):
         raise RuntimeError("Pull request base or promotion lease scope drifted")
+    if branch_sha(github, repo, lease["base_ref"]) != lease["base_sha"]:
+        raise RuntimeError("Pull request destination branch advanced")
 
 
 def require_committed_lease(github: GitHub, lease: dict[str, Any]) -> None:
     """Match mutable evidence to its canonical remote commit and refs."""
+    capability = str(lease.get("capability", ""))
+    digest = hashlib.sha256(capability.encode()).hexdigest()
+    if not secrets.compare_digest(digest, str(lease["capability_digest"])):
+        raise RuntimeError("Lease capability is invalid")
     refs = lease["refs"]
     for ref in refs:
         if remote_ref(ref) != lease["lease_commit"]:
@@ -461,6 +537,20 @@ def require_committed_lease(github: GitHub, lease: dict[str, Any]) -> None:
         raise RuntimeError(
             "Remote lease commit does not match canonical evidence"
         )
+    comment_id = audit_comment_id(lease)
+    comment = github.get(repo, f"issues/comments/{comment_id}")
+    user = comment.get("user") or {} if isinstance(comment, dict) else {}
+    if (
+        not isinstance(comment, dict)
+        or comment.get("html_url") != lease["audit_url"]
+        or not str(comment.get("issue_url", "")).endswith(
+            f"/issues/{lease['pull_request']}"
+        )
+        or comment.get("body") != audit_message(lease)
+        or str(user.get("login", "")).casefold()
+        != str(lease["actor"]).casefold()
+    ):
+        raise RuntimeError("Remote lease audit comment is invalid")
 
 
 def require_caller(lease: dict[str, Any], owner: str, github: GitHub) -> None:
@@ -485,16 +575,88 @@ def release_refs(lease: dict[str, Any]) -> None:
     run(command)
 
 
-def create_refs(commit: str, refs: list[str]) -> None:
+def create_refs(
+    commit: str,
+    refs: list[str],
+    expected: dict[str, str | None] | None = None,
+) -> None:
     """Atomically create absent lease refs without overwriting a winner."""
+    expected = expected or {ref: None for ref in refs}
     command = ["git", "push", "--atomic", "--porcelain"]
-    command.extend(f"--force-with-lease={ref}:" for ref in refs)
+    command.extend(
+        f"--force-with-lease={ref}:{expected.get(ref) or ''}" for ref in refs
+    )
     command.append("origin")
     command.extend(f"{commit}:{ref}" for ref in refs)
     run(command)
 
 
-def acquire(args: argparse.Namespace, github: GitHub) -> None:
+def expired_remote_lease(
+    github: GitHub, repo: str, commit_sha: str, held_ref: str
+) -> dict[str, Any]:
+    """Validate one canonical expired lease before an atomic reclaim."""
+    payload = github.get(repo, f"git/commits/{commit_sha}")
+    if not isinstance(payload, dict) or payload.get("sha") != commit_sha:
+        raise RuntimeError("Existing lease commit is unavailable")
+    message = payload.get("message")
+    if not isinstance(message, str) or "\n\n" not in message:
+        raise RuntimeError("Existing lease commit is not canonical")
+    _, encoded = message.split("\n\n", 1)
+    try:
+        core = json.loads(encoded)
+    except json.JSONDecodeError as error:
+        raise RuntimeError("Existing lease commit is not canonical") from error
+    if (
+        not isinstance(core, dict)
+        or set(core) != set(LEASE_CORE_FIELDS)
+        or core.get("schema_version") != LEASE_SCHEMA
+        or str(core.get("repository", "")).casefold() != repo.casefold()
+        or not isinstance(core.get("pull_request"), int)
+        or int(core["pull_request"]) < 1
+        or OWNER.fullmatch(str(core.get("owner", ""))) is None
+        or not isinstance(core.get("actor"), str)
+        or not core["actor"]
+        or not isinstance(core.get("refs"), list)
+        or held_ref not in core["refs"]
+        or not isinstance(core.get("reclaimed_commits"), list)
+        or not all(
+            isinstance(commit, str) and SHA.fullmatch(commit)
+            for commit in core["reclaimed_commits"]
+        )
+        or SHA.fullmatch(str(core.get("head_sha", ""))) is None
+        or SHA.fullmatch(str(core.get("head_tree", ""))) is None
+        or SHA.fullmatch(str(core.get("base_sha", ""))) is None
+        or SHA256.fullmatch(str(core.get("capability_digest", ""))) is None
+        or payload.get("message") != lease_message(core)
+    ):
+        raise RuntimeError("Existing lease commit is not canonical")
+    try:
+        validate_refs(core)
+        acquired_at = parse_time(core.get("acquired_at"), "Existing lease")
+        expires_at = parse_time(core.get("expires_at"), "Existing lease")
+    except (KeyError, RuntimeError) as error:
+        raise RuntimeError("Existing lease commit is not canonical") from error
+    ttl = (expires_at - acquired_at).total_seconds()
+    if not 60 <= ttl <= MAX_TTL_SECONDS:
+        raise RuntimeError("Existing lease commit is not canonical")
+    parents = payload.get("parents")
+    tree = payload.get("tree") or {}
+    head = github.get(repo, f"git/commits/{core['head_sha']}")
+    if (
+        not isinstance(parents, list)
+        or [item.get("sha") for item in parents if isinstance(item, dict)]
+        != [core["head_sha"]]
+        or tree.get("sha") != core["head_tree"]
+        or not isinstance(head, dict)
+        or (head.get("tree") or {}).get("sha") != core["head_tree"]
+    ):
+        raise RuntimeError("Existing lease commit parent or tree is invalid")
+    if expires_at > datetime.now(UTC):
+        raise RuntimeError("Another owner already holds the PR lifecycle lease")
+    return core
+
+
+def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     """Atomically acquire the PR and optional promotion-lane refs."""
     if SHA.fullmatch(args.head_sha) is None:
         raise RuntimeError(
@@ -514,17 +676,23 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:
     ):
         raise RuntimeError("Repository default branch is unavailable")
     refs = lease_refs(pull, repository["default_branch"])
-    if any(remote_ref(ref) is not None for ref in refs):
-        raise RuntimeError("Another owner already holds the PR lifecycle lease")
-
     base = pull.get("base") or {}
     if (
         not isinstance(base.get("ref"), str)
         or SHA.fullmatch(str(base.get("sha", ""))) is None
     ):
         raise RuntimeError("Pull request base identity is unavailable")
+    if branch_sha(github, args.repo, base["ref"]) != base["sha"]:
+        raise RuntimeError(
+            "Pull request base does not match its destination ref"
+        )
+    observed = {ref: remote_ref(ref) for ref in refs}
+    for ref, existing in observed.items():
+        if existing is not None:
+            expired_remote_lease(github, args.repo, existing, ref)
     acquired = datetime.now(UTC)
     tree = run(["git", "rev-parse", f"{args.head_sha}^{{tree}}"])
+    capability = secrets.token_hex(32)
     core: dict[str, object] = {
         "schema_version": LEASE_SCHEMA,
         "repository": args.repo,
@@ -536,12 +704,15 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:
         "default_branch": repository["default_branch"],
         "owner": args.owner,
         "actor": github.viewer(),
-        "nonce": secrets.token_hex(16),
+        "capability_digest": hashlib.sha256(capability.encode()).hexdigest(),
         "acquired_at": acquired.isoformat().replace("+00:00", "Z"),
         "expires_at": (acquired + timedelta(seconds=args.ttl_seconds))
         .isoformat()
         .replace("+00:00", "Z"),
         "refs": refs,
+        "reclaimed_commits": sorted(
+            {commit for commit in observed.values() if commit is not None}
+        ),
     }
     commit_env = os.environ.copy()
     commit_env.update(
@@ -559,21 +730,19 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:
     )
     if SHA.fullmatch(commit) is None:
         raise RuntimeError("Git did not create a valid lease commit")
-    create_refs(commit, refs)
-    evidence = {**core, "lease_commit": commit}
+    create_refs(commit, refs, observed)
+    evidence = {**core, "capability": capability, "lease_commit": commit}
     try:
         comment = github.comment(
             args.repo,
             args.pr_number,
-            "PR lifecycle lease acquired\n\n"
-            f"`{canonical_json(evidence)}`\n\n"
-            "All automated Ready, Draft, authorization, and merge writes for "
-            "this PR are serialized by the refs above.",
+            audit_message(evidence),
         )
         audit_url = comment.get("html_url")
         if not isinstance(audit_url, str):
             raise RuntimeError("Lease audit comment has no URL")
         evidence["audit_url"] = audit_url
+        validate_audit_url(evidence)
         write_json(args.output, evidence)
     except Exception:
         release_refs(evidence)
@@ -913,6 +1082,9 @@ def merge_snapshot(  # noqa: C901
     base_ref = base.get("ref")
     if not isinstance(base_ref, str):
         raise RuntimeError("Pull request base branch is unavailable")
+    title = pull.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise RuntimeError("Pull request title is unavailable")
     protection, reason, required_contexts = effective_protection(
         github, repo, base_ref
     )
@@ -928,6 +1100,9 @@ def merge_snapshot(  # noqa: C901
         "repository": repo,
         "pull_request": pr_number,
         "head_sha": head_sha,
+        "base_ref": lease["base_ref"],
+        "base_sha": lease["base_sha"],
+        "title": title,
         "authorization_url": authorization_url,
         "authorization_created_at": auth["created_at"],
         "authorization_actor": authorization_actor,
@@ -1026,11 +1201,12 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
             "Agent merge is blocked: server-side protection is unavailable or "
             "incomplete; a human maintainer must merge manually"
         )
-    require_lease(github, lease, args.repo, args.pr_number, args.head_sha)
-    pull = live_pull(github, args.repo, args.pr_number, args.head_sha)
-    title = pull.get("title")
-    if not isinstance(title, str) or not title.strip():
-        raise RuntimeError("Pull request title is unavailable")
+    snapshot = merge_snapshot(github, lease, args.authorization_url)
+    title = str(snapshot["title"])
+    if branch_sha(github, args.repo, lease["base_ref"]) != lease["base_sha"]:
+        raise RuntimeError(
+            "Pull request destination branch advanced before merge"
+        )
     result = github.merge(args.repo, args.pr_number, args.head_sha, title)
     merge_sha = result.get("sha")
     if result.get("merged") is not True or not isinstance(merge_sha, str):
@@ -1038,11 +1214,19 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
             "GitHub did not synchronously merge the pull request"
         )
     merged = github.get(args.repo, f"pulls/{args.pr_number}")
+    merge_commit = github.get(args.repo, f"git/commits/{merge_sha}")
+    parents = (
+        merge_commit.get("parents") if isinstance(merge_commit, dict) else None
+    )
     if (
         not isinstance(merged, dict)
         or merged.get("merged") is not True
         or (merged.get("head") or {}).get("sha") != args.head_sha
         or merged.get("merge_commit_sha") != merge_sha
+        or branch_sha(github, args.repo, lease["base_ref"]) != merge_sha
+        or not isinstance(parents, list)
+        or [item.get("sha") for item in parents if isinstance(item, dict)]
+        != [lease["base_sha"]]
     ):
         raise RuntimeError(
             "Merged pull request state does not match the response"

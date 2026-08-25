@@ -56,6 +56,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Configure authenticated Git transport for lifecycle leases
+        env:
+          GH_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN || github.token }}
+        run: gh auth setup-git
       - name: Reconcile active delivery branches
         env:
           GH_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN || github.token }}

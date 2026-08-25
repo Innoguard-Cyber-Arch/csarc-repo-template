@@ -95,7 +95,6 @@ jobs:
               gh pr create \
                 --base dev/next \
                 --head "$branch" \
-                --label enhancement \
                 --title "build(python): adopt Python ${version}" \
                 --body "$pr_body"
             )"
@@ -104,12 +103,31 @@ jobs:
           head_sha="$(git rev-parse HEAD)"
           lease="$RUNNER_TEMP/python-version-pr-lease.json"
           lease_owner="github-actions/${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}"
+          lease_acquired=false
+          release_lease() {
+            status=$?
+            trap - EXIT
+            if [[ "$lease_acquired" == true ]]; then
+              if ! uv run --no-project python scripts/pr_lifecycle.py release \
+                --repo "$GITHUB_REPOSITORY" \
+                --pr-number "$pr_number" \
+                --owner "$lease_owner" \
+                --lease "$lease"; then
+                if [[ "$status" -eq 0 ]]; then
+                  status=1
+                fi
+              fi
+            fi
+            exit "$status"
+          }
+          trap release_lease EXIT
           uv run --no-project python scripts/pr_lifecycle.py acquire \
             --repo "$GITHUB_REPOSITORY" \
             --pr-number "$pr_number" \
             --head-sha "$head_sha" \
             --owner "$lease_owner" \
             --output "$lease"
+          lease_acquired=true
           uv run --no-project python scripts/pr_lifecycle.py edit \
             --repo "$GITHUB_REPOSITORY" \
             --pr-number "$pr_number" \
@@ -117,8 +135,3 @@ jobs:
             --owner "$lease_owner" \
             --lease "$lease" \
             --add-label enhancement
-          uv run --no-project python scripts/pr_lifecycle.py release \
-            --repo "$GITHUB_REPOSITORY" \
-            --pr-number "$pr_number" \
-            --owner "$lease_owner" \
-            --lease "$lease"

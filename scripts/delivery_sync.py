@@ -7,10 +7,14 @@ import argparse
 import json
 import os
 import re
+import subprocess
+import sys
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
 DELIVERY_BRANCH = re.compile(r"^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$")
@@ -198,10 +202,73 @@ def manual_commands(delivery_branch: str, main_sha: str) -> str:
             "git merge --no-ff origin/main",
             f"git push -u origin {sync_branch}",
             f"gh pr create --base {delivery_branch} --head {sync_branch} "
-            f"--title 'chore(sync): merge main into {delivery_branch}' "
-            "--label enhancement",
+            f"--title 'chore(sync): merge main into {delivery_branch}'",
+            "# Add the enhancement label only through pr_lifecycle.py edit.",
         ]
     )
+
+
+def lifecycle_command(arguments: list[str]) -> None:
+    """Run one fail-closed PR lifecycle operation."""
+    result = subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            str(Path(__file__).with_name("pr_lifecycle.py")),
+            *arguments,
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(f"PR lifecycle operation failed: {detail}")
+
+
+def label_sync_pr(repo: str, number: int, head_sha: str) -> None:
+    """Label a newly created sync PR while holding its exact remote lease."""
+    owner = (
+        "github-actions/"
+        f"{os.environ.get('GITHUB_RUN_ID', 'local')}/"
+        f"{os.environ.get('GITHUB_RUN_ATTEMPT', '1')}"
+    )
+    with tempfile.TemporaryDirectory(
+        prefix="csarc-delivery-lease-"
+    ) as directory:
+        evidence = Path(directory) / "lease.json"
+        common = [
+            "--repo",
+            repo,
+            "--pr-number",
+            str(number),
+            "--owner",
+            owner,
+        ]
+        lifecycle_command(
+            [
+                "acquire",
+                *common,
+                "--head-sha",
+                head_sha,
+                "--output",
+                str(evidence),
+            ]
+        )
+        try:
+            lifecycle_command(
+                [
+                    "edit",
+                    *common,
+                    "--head-sha",
+                    head_sha,
+                    "--lease",
+                    str(evidence),
+                    "--add-label",
+                    "enhancement",
+                ]
+            )
+        finally:
+            lifecycle_command(["release", *common, "--lease", str(evidence)])
 
 
 def probe_capabilities(api: API, repo: str, main_sha: str) -> tuple[str, str]:
@@ -296,14 +363,15 @@ def create_sync_pr(
     pull = require_response(status, payload, "create sync PR")
     number = pull.get("number") if isinstance(pull, dict) else None
     url = pull.get("html_url") if isinstance(pull, dict) else None
-    if not isinstance(number, int) or not isinstance(url, str):
+    head = pull.get("head") if isinstance(pull, dict) else None
+    head_sha = head.get("sha") if isinstance(head, dict) else None
+    if (
+        not isinstance(number, int)
+        or not isinstance(url, str)
+        or not isinstance(head_sha, str)
+    ):
         raise RuntimeError("GitHub returned an invalid pull request response")
-    status, payload = api.request(
-        "POST",
-        f"repos/{repo}/issues/{number}/labels",
-        {"labels": ["enhancement"]},
-    )
-    require_response(status, payload, "label sync PR")
+    label_sync_pr(repo, number, head_sha)
     return url
 
 
