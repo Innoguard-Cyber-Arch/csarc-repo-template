@@ -25,6 +25,10 @@ append_preservation_record = MODULE["append_preservation_record"]
 merge_group_gate = MODULE["merge_group_gate"]
 prepare_dev_next = MODULE["prepare_dev_next"]
 preservation_operation = MODULE["preservation_operation"]
+preservation_authorization_statement = MODULE[
+    "preservation_authorization_statement"
+]
+require_temporary_authorizations = MODULE["require_temporary_authorizations"]
 read_preservation_record = MODULE["read_preservation_record"]
 valid_preservation_transition = MODULE["valid_preservation_transition"]
 read_active_states = MODULE["read_active_states"]
@@ -82,6 +86,7 @@ class PromotionAPI:
         ledger_rules: list[dict[str, object]] | None = None,
         missing_dev_next: bool = False,
         drift_after_patch: bool = False,
+        secret_status: int = 200,
     ) -> None:
         self.merged = merged
         self.setting = setting
@@ -94,9 +99,10 @@ class PromotionAPI:
         ]
         self.missing_dev_next = missing_dev_next
         self.drift_after_patch = drift_after_patch
+        self.secret_status = secret_status
         self.calls: list[tuple[str, str, dict[str, object] | None]] = []
 
-    def request(
+    def request(  # noqa: C901
         self, method: str, path: str, payload: dict[str, object] | None = None
     ) -> tuple[int, Any]:
         self.calls.append((method, path, payload))
@@ -126,6 +132,15 @@ class PromotionAPI:
             "/rules/branches/csarc%2Fdev-next-preservation-ledger"
         ):
             return self.ledger_rules_status, self.ledger_rules
+        if (
+            method == "GET"
+            and path == "repos/acme/repo/actions/secrets/CSARC_SYNC_TOKEN"
+        ):
+            return self.secret_status, (
+                {"name": "CSARC_SYNC_TOKEN"}
+                if self.secret_status == 200
+                else {"message": "Not Found"}
+            )
         if method == "GET" and path in {
             f"repos/acme/repo/git/commits/{HEAD_SHA}",
             f"repos/acme/repo/git/commits/{MAIN_SHA}",
@@ -208,6 +223,14 @@ def install_memory_ledger(
         prepare_dev_next.__globals__,
         "append_preservation_record",
         ledger.append,
+    )
+    monkeypatch.setitem(
+        prepare_dev_next.__globals__,
+        "require_temporary_authorizations",
+        lambda *_: [
+            {"actor": "alice", "url": "https://example.test/1"},
+            {"actor": "bob", "url": "https://example.test/2"},
+        ],
     )
 
 
@@ -395,6 +418,14 @@ def test_promotion_gate_accepts_only_the_exact_prepared_transaction(
         "read_preservation_record",
         lambda *_: (LEDGER_SHA, record),
     )
+    monkeypatch.setitem(
+        gate.__globals__,
+        "require_temporary_authorizations",
+        lambda *_: [
+            {"actor": "alice", "url": "https://example.test/1"},
+            {"actor": "bob", "url": "https://example.test/2"},
+        ],
+    )
     api = PromotionAPI(setting=False)
     result = gate(
         api,
@@ -406,6 +437,79 @@ def test_promotion_gate_accepts_only_the_exact_prepared_transaction(
     )
     assert str(record["operation_id"]) in result
     assert LEDGER_SHA in result
+
+
+def test_temporary_authorization_requires_two_exact_human_maintainers() -> None:
+    """Only exact comments from two currently privileged humans count."""
+    operation = preservation_operation("acme/repo", 42, BASE_SHA, HEAD_SHA)
+    statement = preservation_authorization_statement(
+        "acme/repo", 42, BASE_SHA, HEAD_SHA, operation, LEDGER_SHA
+    )
+    api = FakeAPI(
+        [
+            (
+                200,
+                [
+                    {
+                        "body": statement,
+                        "author_association": "OWNER",
+                        "html_url": "https://example.test/1",
+                        "user": {"login": "alice", "type": "User"},
+                    },
+                    {
+                        "body": statement,
+                        "author_association": "MEMBER",
+                        "html_url": "https://example.test/2",
+                        "user": {"login": "bob", "type": "User"},
+                    },
+                ],
+            ),
+            (200, {"permission": "admin", "user": {"login": "alice"}}),
+            (200, {"permission": "maintain", "user": {"login": "bob"}}),
+        ]
+    )
+    assert [
+        item["actor"]
+        for item in require_temporary_authorizations(
+            api,
+            "acme/repo",
+            42,
+            BASE_SHA,
+            HEAD_SHA,
+            operation,
+            LEDGER_SHA,
+        )
+    ] == ["alice", "bob"]
+
+
+def test_promotion_gate_rejects_authorized_ref_rewrite(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The unprotected live ref must remain at the authorized exact commit."""
+    record = preservation_record()
+    checkpoints = iter([(LEDGER_SHA, record), ("e" * 40, record)])
+    monkeypatch.setitem(
+        gate.__globals__,
+        "read_preservation_record",
+        lambda *_: next(checkpoints),
+    )
+    monkeypatch.setitem(
+        gate.__globals__,
+        "require_temporary_authorizations",
+        lambda *_: [
+            {"actor": "alice", "url": "https://example.test/1"},
+            {"actor": "bob", "url": "https://example.test/2"},
+        ],
+    )
+    with pytest.raises(RuntimeError, match="ledger ref changed"):
+        gate(
+            PromotionAPI(setting=False),
+            "acme/repo",
+            "main",
+            HEAD_SHA,
+            head_ref="dev/next",
+            pr_number=42,
+        )
 
 
 def test_merge_group_revalidates_one_exact_promotion(
@@ -531,6 +635,24 @@ def test_prepare_fallback_is_explicit_and_idempotent(
     assert not any(method == "PATCH" for method, _path, _body in api.calls)
 
 
+def test_prepare_without_sync_secret_is_explicitly_human_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing hosted credentials are recorded without pretending automation."""
+    api = PromotionAPI(
+        rules_status=403,
+        ledger_rules_status=403,
+        secret_status=404,
+    )
+    ledger = MemoryLedger()
+    install_memory_ledger(monkeypatch, ledger)
+    evidence = json.loads(prepare_dev_next(api, "acme/repo", 42, HEAD_SHA))
+    assert evidence["completion_mode"] == "human-only"
+    assert evidence["authorization_body"].endswith(
+        "I authorize this exact prepared preservation transaction."
+    )
+
+
 def test_prepare_rejects_external_disabled_setting(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -648,13 +770,15 @@ def test_ledger_transition_rejects_skips_and_operation_reuse() -> None:
 def test_prepare_rolls_back_if_main_drifts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A changed promotion context cannot leave repository cleanup disabled."""
+    """An ambiguous mutation never claims it is safe to restore cleanup."""
     ledger = MemoryLedger()
     install_memory_ledger(monkeypatch, ledger)
     api = PromotionAPI(drift_after_patch=True)
-    with pytest.raises(RuntimeError, match="changed while enabling"):
+    with pytest.raises(RuntimeError, match="manual recovery"):
         prepare_dev_next(api, "acme/repo", 42, HEAD_SHA)
-    assert api.setting is True
+    assert api.setting is False
+    assert ledger.checkpoint is not None
+    assert ledger.checkpoint[1]["state"] == "preparing"
 
 
 def test_complete_restores_cleanup_and_is_idempotent(
@@ -697,6 +821,67 @@ def test_complete_restores_cleanup_and_is_idempotent(
         == evidence
     )
     assert not any(method == "PATCH" for method, _path, _body in api.calls)
+
+
+def test_hosted_complete_without_sync_secret_leaves_prepared_checkpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hosted run never substitutes github.token for the admin token."""
+    prepared = preservation_record()
+    ledger = MemoryLedger((LEDGER_SHA, prepared))
+    install_memory_ledger(monkeypatch, ledger)
+    api = PromotionAPI(merged=True, setting=False)
+    with pytest.raises(RuntimeError, match="GH_TOKEN=<admin-token>"):
+        complete_dev_next(
+            api,
+            "acme/repo",
+            42,
+            HEAD_SHA,
+            MAIN_SHA,
+            str(prepared["operation_id"]),
+            LEDGER_SHA,
+            hosted=True,
+        )
+    assert ledger.checkpoint == (LEDGER_SHA, prepared)
+    assert api.setting is False
+
+
+def test_hosted_complete_checks_admin_write_before_restoring_checkpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An admin PATCH failure leaves the authorized prepared commit current."""
+    prepared = preservation_record()
+    ledger = MemoryLedger((LEDGER_SHA, prepared))
+    install_memory_ledger(monkeypatch, ledger)
+    reader = PromotionAPI(merged=True, setting=False)
+    admin = PromotionAPI(merged=True, setting=False)
+    original_request = admin.request
+
+    def reject_patch(
+        method: str,
+        path: str,
+        payload: dict[str, object] | None = None,
+    ) -> tuple[int, Any]:
+        if method == "PATCH" and path == "repos/acme/repo":
+            admin.calls.append((method, path, payload))
+            return 403, {"message": "Forbidden"}
+        return original_request(method, path, payload)
+
+    admin.request = reject_patch  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="HTTP 403"):
+        complete_dev_next(
+            reader,
+            "acme/repo",
+            42,
+            HEAD_SHA,
+            MAIN_SHA,
+            str(prepared["operation_id"]),
+            LEDGER_SHA,
+            hosted=True,
+            admin_api=admin,
+        )
+    assert ledger.checkpoint == (LEDGER_SHA, prepared)
+    assert admin.setting is False
 
 
 def test_complete_rejects_another_operation_without_restoring(
@@ -744,8 +929,8 @@ def test_complete_rejects_an_auto_deleted_dev_next(
 def test_abort_only_restores_the_owned_transaction(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A closed unmerged PR can recover an interrupted owned mutation."""
-    prepared = preservation_record(state="preparing")
+    """A closed unmerged PR can restore an exactly prepared transaction."""
+    prepared = preservation_record()
     ledger = MemoryLedger((LEDGER_SHA, prepared))
     install_memory_ledger(monkeypatch, ledger)
     api = PromotionAPI(setting=False)
@@ -767,6 +952,34 @@ def test_abort_only_restores_the_owned_transaction(
     )
     assert result["transaction"]["state"] == "aborted"
     assert api.setting is True
+
+
+def test_abort_rejects_ambiguous_preparing_false_setting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A preparing record never proves ownership of a false setting."""
+    preparing = preservation_record(state="preparing")
+    ledger = MemoryLedger((LEDGER_SHA, preparing))
+    install_memory_ledger(monkeypatch, ledger)
+    api = PromotionAPI(setting=False)
+    closed = promotion()
+    closed["state"] = "closed"
+    api.request = lambda method, path, payload=None: (
+        (200, closed)
+        if method == "GET" and path.endswith("/pulls/42")
+        else PromotionAPI.request(api, method, path, payload)
+    )
+    with pytest.raises(RuntimeError, match="ambiguous setting ownership"):
+        abort_dev_next(
+            api,
+            "acme/repo",
+            42,
+            HEAD_SHA,
+            str(preparing["operation_id"]),
+        )
+    assert api.setting is False
+    assert ledger.checkpoint == (LEDGER_SHA, preparing)
+    assert not any(method == "PATCH" for method, _path, _body in api.calls)
 
 
 def test_ledger_create_collision_fails_closed() -> None:
@@ -848,16 +1061,34 @@ def test_ledger_reader_rejects_a_merge_commit() -> None:
         read_preservation_record(api, "acme/repo")
 
 
-def test_ledger_protection_is_mandatory(
+def test_private_ruleset_checks_use_human_authorized_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An unreadable ledger ruleset cannot authorize a promotion."""
+    """Canonical private-repository 403s still reach the safe fallback."""
     ledger = MemoryLedger()
     install_memory_ledger(monkeypatch, ledger)
-    api = PromotionAPI(ledger_rules_status=403)
-    with pytest.raises(RuntimeError, match="ledger protection is unavailable"):
-        prepare_dev_next(api, "acme/repo", 42, HEAD_SHA)
-    assert ledger.checkpoint is None
+    api = PromotionAPI(rules_status=403, ledger_rules_status=403)
+    result = json.loads(prepare_dev_next(api, "acme/repo", 42, HEAD_SHA))
+    assert result["transaction"]["mode"] == "temporary-auto-delete"
+    assert result["transaction"]["state"] == "prepared"
+    assert result["completion_mode"] == "hosted"
+
+
+def test_hosted_workflows_never_fallback_to_github_token() -> None:
+    """Generated hosted restoration always requests the dedicated secret."""
+    root = Path(__file__).parents[1]
+    delivery = (root / ".github/workflows/delivery-sync.yml").read_text()
+    promotion = (root / ".github/workflows/promotion.yml").read_text()
+    abort_step = delivery.split(
+        "- name: Abort the exact preservation transaction", maxsplit=1
+    )[1].split("\n\n", maxsplit=1)[0]
+    verify_step = promotion.split(
+        "- name: Verify main tree identity and full CI result", maxsplit=1
+    )[1].split("\n      - name:", maxsplit=1)[0]
+    for step in (abort_step, verify_step):
+        assert "CSARC_SYNC_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN }}" in step
+        assert "GH_TOKEN: ${{ github.token }}" in step
+        assert "secrets.CSARC_SYNC_TOKEN || github.token" not in step
 
 
 def test_delivery_reconcile_requires_dev_next() -> None:

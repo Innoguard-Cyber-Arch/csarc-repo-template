@@ -33,6 +33,7 @@ repository_variables = MODULE["repository_variables"]
 require_same_preflight = MODULE["require_same_preflight"]
 require_zero_step_run = MODULE["require_zero_step_run"]
 route_for = MODULE["route_for"]
+run_dev_next_preservation = MODULE["run_dev_next_preservation"]
 same_repository = MODULE["same_repository"]
 unfinished_milestone_issues = MODULE["unfinished_milestone_issues"]
 verify_main = MODULE["verify_main"]
@@ -62,6 +63,39 @@ def preservation_evidence() -> dict[str, object]:
             "state": "prepared",
         },
     }
+
+
+def test_hosted_restoration_is_explicit_and_never_replaces_gh_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pass the separate admin secret through the hosted environment."""
+    captured: dict[str, object] = {}
+    github_value = "github-value"
+    admin_value = "admin-value"
+
+    def run(command: list[str], **kwargs: object) -> SimpleNamespace:
+        captured["command"] = command
+        captured["env"] = kwargs["env"]
+        return SimpleNamespace(stdout=json.dumps(preservation_evidence()))
+
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GH_TOKEN", github_value)
+    monkeypatch.setenv("CSARC_SYNC_TOKEN", admin_value)
+    monkeypatch.setattr(subprocess, "run", run)
+    run_dev_next_preservation(
+        "complete-dev-next",
+        "owner/repo",
+        42,
+        "a" * 40,
+        "b" * 40,
+        "c" * 64,
+        "d" * 40,
+    )
+    assert "--hosted" in captured["command"]
+    environment = captured["env"]
+    assert isinstance(environment, dict)
+    assert environment["GH_TOKEN"] == github_value
+    assert environment["CSARC_SYNC_TOKEN"] == admin_value
 
 
 @pytest.mark.parametrize(

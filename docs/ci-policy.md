@@ -253,8 +253,16 @@ fallback）都必須先由管理者對精確 PR/head 執行 `delivery_sync.py pr
 `policies/dev-next-ruleset.json` 只保護 `dev/next` 與
 `csarc/dev-next-preservation-ledger`：兩者都禁止刪除與 non-fast-forward 更新，其他
 `dev/*` branch 仍可按生命週期清理。gate 會重新讀取 ledger 的完整單 parent 歷史、live
-PR/refs、effective rules 與 repository setting；rules API、ledger protection 或 exact
-prepared transaction 無法驗證時一律 fail closed。
+PR/refs、effective rules 與 repository setting。只有兩個 ref 的 effective rules 都可驗證時
+才採 `ruleset-protected`；private repository 無法讀取 rules API 時可採下述 temporary mode，
+但任何無法綁定 exact prepared transaction 的情況仍一律 fail closed。
+
+Temporary mode 的 ledger ref 可能不受保護，因此 ref 本身不是 trust anchor。工具輸出的
+canonical authorization body 會綁定 repository、PR、base/head SHA、operation ID 與
+exact prepared ledger commit SHA，且必須由兩位不同、當下仍具 admin／maintain 權限的
+human maintainer 原樣留言授權。合併前 live ledger ref 必須仍精確指向該 SHA；合併或中止後
+只能沿包含該 authorized SHA 的 canonical 單 parent history 完成 transaction。ref 被移動、
+刪除、改寫或無法讀取時一律停止並交由人工恢復。
 
 一般 promotion 的 preflight evidence 會綁定 exact prepared ledger commit；main
 post-merge verifier 以同一 evidence append `restoring-complete`，再恢復暫停的
@@ -263,6 +271,12 @@ auto-delete 並 append `completed`。關閉未合併 PR 則由 delivery-sync app
 配上已恢復 setting，或 PATCH 結果不明時都不自動猜測 ownership，必須人工檢查後重跑
 exact restoring operation。完成的 main base 不可重用；aborted operation 釋放該 base，
 但同一 operation ID 不可 replay。
+
+Hosted temporary restoration 只使用獨立的 `CSARC_SYNC_TOKEN`，不會退回
+`github.token`。Prepare evidence 會以 secret metadata 標示 `hosted` 或 `human-only`；
+hosted complete／abort 在 append restoring checkpoint 前，先用該 token 對目前 setting 做
+no-op PATCH 並 refetch，以證明當下仍有 admin write。secret 缺失或驗證為 403 時不更新
+ledger／setting，workflow 失敗並輸出綁定 exact transaction 的人工 command。
 
 ### Promotion PR 的額外 fallback 證據
 

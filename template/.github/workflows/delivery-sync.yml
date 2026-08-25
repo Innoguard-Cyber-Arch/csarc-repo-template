@@ -34,6 +34,7 @@ jobs:
       - name: Require the proposed head to contain current main
         if: ${{ github.event_name == 'pull_request' }}
         env:
+          CSARC_SYNC_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN }}
           GH_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN || github.token }}
           PR_BASE: ${{ github.event.pull_request.base.ref }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
@@ -83,11 +84,13 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha }}
       - name: Abort the exact preservation transaction
         env:
-          GH_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN || github.token }}
+          CSARC_SYNC_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: >-
           python3 scripts/delivery_sync.py abort-dev-next
+          --hosted
           --repo "$GITHUB_REPOSITORY"
           --pr-number "$PR_NUMBER"
           --head-sha "$PR_HEAD_SHA"

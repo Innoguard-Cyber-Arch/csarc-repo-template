@@ -19,6 +19,9 @@ DELIVERY_BRANCH = re.compile(r"^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$")
 ISOLATED_BRANCH = re.compile(r"^dev/i[0-9]+-[a-z0-9][a-z0-9-]*$")
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 CAPABILITY_STATES = {"allowed", "blocked", "unknown"}
+MAINTAINER_ASSOCIATIONS = {"MEMBER", "OWNER"}
+MAINTAINER_PERMISSIONS = {"admin", "maintain"}
+SYNC_SECRET = "CSARC_SYNC_TOKEN"  # noqa: S105
 PRESERVATION_LEDGER_BRANCH = "csarc/dev-next-preservation-ledger"
 PRESERVATION_LEDGER_PATH = "transaction.json"
 PRESERVATION_STATES = {
@@ -217,9 +220,17 @@ def gate(
             raise RuntimeError("Promotion base no longer matches current main")
         if ref_sha(api, repo, "dev/next") != head_sha:
             raise RuntimeError("dev/next no longer matches the promotion head")
-        ledger_commit, record = require_prepared_preservation(
+        ledger_commit, record, _authorizations = require_prepared_preservation(
             api, repo, pr_number, str(pull["base"]["sha"]), head_sha
         )
+        if (
+            record["mode"] == "temporary-auto-delete"
+            and sync_secret_state(api, repo) != "configured"
+        ):
+            raise RuntimeError(
+                "Hosted restoration is unavailable; a human maintainer must "
+                "complete or abort the exact prepared transaction"
+            )
         return (
             f"{record['mode']}; transaction "
             f"{record['operation_id']} at {ledger_commit}"
@@ -341,11 +352,24 @@ def validate_preservation_record(  # noqa: C901
         main_sha is None or prepared_commit is None
     ):
         raise RuntimeError("Completing preservation record is incomplete")
-    completing_fields = {"main_sha", "prepared_ledger_commit"}
-    base_fields = set(required) | completing_fields
-    if set(record) - base_fields or (
-        record["state"] not in {"restoring-complete", "completed"}
-        and completing_fields & set(record)
+    terminal_fields = {"main_sha", "prepared_ledger_commit"}
+    base_fields = set(required) | terminal_fields
+    if (
+        set(record) - base_fields
+        or (
+            record["state"]
+            not in {
+                "restoring-complete",
+                "restoring-abort",
+                "completed",
+                "aborted",
+            }
+            and "prepared_ledger_commit" in record
+        )
+        or (
+            record["state"] not in {"restoring-complete", "completed"}
+            and "main_sha" in record
+        )
     ):
         raise RuntimeError("Dev/next preservation record has unexpected fields")
     if str(record["state"]).startswith("restoring-") and (
@@ -490,17 +514,23 @@ def valid_preservation_transition(  # noqa: C901
             )
         return newer.get("prepared_ledger_commit") == older_commit
     if state == "restoring-abort":
-        return newer["mode"] == "temporary-auto-delete" and old_state in {
-            "preparing",
-            "prepared",
-        }
+        if newer["mode"] != "temporary-auto-delete":
+            return False
+        if old_state == "prepared":
+            return newer.get("prepared_ledger_commit") == older_commit
+        return (
+            old_state == "preparing" and "prepared_ledger_commit" not in newer
+        )
     if state == "aborted":
         expected_states = (
             {"restoring-abort"}
             if newer["mode"] == "temporary-auto-delete"
             else {"preparing", "prepared"}
         )
-        return old_state in expected_states
+        return old_state in expected_states and (
+            newer.get("prepared_ledger_commit")
+            == older.get("prepared_ledger_commit")
+        )
     return False
 
 
@@ -661,6 +691,172 @@ def preservation_evidence(
     }
 
 
+def preservation_authorization_statement(
+    repo: str,
+    number: int,
+    base_sha: str,
+    head_sha: str,
+    operation_id: str,
+    prepared_commit: str,
+) -> str:
+    """Return the exact two-person fallback authorization statement."""
+    binding = {
+        "base_sha": base_sha,
+        "head_sha": head_sha,
+        "ledger_commit": prepared_commit,
+        "operation_id": operation_id,
+        "pull_request": number,
+        "repository": repo,
+    }
+    return (
+        "Dev/next preservation authorization\n\n"
+        f"`{canonical_json(binding)}`\n\n"
+        "I authorize this exact prepared preservation transaction."
+    )
+
+
+def paged_items(api: API, repo: str, path: str) -> list[dict[str, Any]]:
+    """Read every page of one GitHub REST collection."""
+    items: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        separator = "&" if "?" in path else "?"
+        status, payload = api.request(
+            "GET", f"repos/{repo}/{path}{separator}per_page=100&page={page}"
+        )
+        data = require_response(status, payload, f"read {path}")
+        if not isinstance(data, list) or not all(
+            isinstance(item, dict) for item in data
+        ):
+            raise RuntimeError(f"GitHub returned invalid {path}")
+        items.extend(data)
+        if len(data) < 100:
+            return items
+        page += 1
+
+
+def require_temporary_authorizations(
+    api: API,
+    repo: str,
+    number: int,
+    base_sha: str,
+    head_sha: str,
+    operation_id: str,
+    prepared_commit: str,
+) -> list[dict[str, str]]:
+    """Require two distinct humans to bind the unprotected ledger commit."""
+    expected = preservation_authorization_statement(
+        repo, number, base_sha, head_sha, operation_id, prepared_commit
+    )
+    accepted: dict[str, dict[str, str]] = {}
+    for comment in paged_items(api, repo, f"issues/{number}/comments"):
+        user = comment.get("user") or {}
+        login = user.get("login") if isinstance(user, dict) else None
+        if (
+            comment.get("body") != expected
+            or comment.get("author_association") not in MAINTAINER_ASSOCIATIONS
+            or not isinstance(login, str)
+            or user.get("type") != "User"
+            or not isinstance(comment.get("html_url"), str)
+        ):
+            continue
+        status, payload = api.request(
+            "GET",
+            f"repos/{repo}/collaborators/"
+            f"{urllib.parse.quote(login, safe='')}/permission",
+        )
+        permission = require_response(
+            status, payload, "read preservation authorizer permission"
+        )
+        if (
+            isinstance(permission, dict)
+            and permission.get("permission") in MAINTAINER_PERMISSIONS
+            and (permission.get("user") or {}).get("login") == login
+        ):
+            accepted[login.casefold()] = {
+                "actor": login,
+                "url": str(comment["html_url"]),
+            }
+    if len(accepted) < 2:
+        raise RuntimeError(
+            "Temporary preservation requires two distinct human "
+            "authorizations for the exact prepared ledger commit"
+        )
+    return [accepted[key] for key in sorted(accepted)]
+
+
+def sync_secret_state(api: API, repo: str) -> str:
+    """Return whether the dedicated hosted restoration secret is configured."""
+    status, payload = api.request(
+        "GET", f"repos/{repo}/actions/secrets/{SYNC_SECRET}"
+    )
+    if (
+        status == 200
+        and isinstance(payload, dict)
+        and payload.get("name") == SYNC_SECRET
+    ):
+        return "configured"
+    if status == 404:
+        return "missing"
+    return "unknown"
+
+
+def manual_restoration_command(
+    action: str,
+    repo: str,
+    number: int,
+    head_sha: str,
+    *,
+    main_sha: str = "",
+    operation_id: str = "",
+    prepared_commit: str = "",
+) -> str:
+    """Return the exact command required for human-only restoration."""
+    command = [
+        "GH_TOKEN=<admin-token>",
+        "python3 scripts/delivery_sync.py",
+        action,
+        f"--repo {repo}",
+        f"--pr-number {number}",
+        f"--head-sha {head_sha}",
+    ]
+    if main_sha:
+        command.append(f"--main-sha {main_sha}")
+    if operation_id:
+        command.append(f"--operation-id {operation_id}")
+    if prepared_commit:
+        command.append(f"--prepared-ledger-commit {prepared_commit}")
+    return " ".join(command)
+
+
+def prepared_preservation_evidence(
+    api: API,
+    repo: str,
+    number: int,
+    ledger_commit: str,
+    record: dict[str, Any],
+) -> dict[str, Any]:
+    """Describe the prepared checkpoint and its hosted completion capability."""
+    evidence = preservation_evidence(ledger_commit, record)
+    if record["mode"] == "ruleset-protected":
+        evidence["completion_mode"] = "ruleset-protected"
+        return evidence
+    evidence["authorization_body"] = preservation_authorization_statement(
+        repo,
+        number,
+        str(record["base_sha"]),
+        str(record["head_sha"]),
+        str(record["operation_id"]),
+        ledger_commit,
+    )
+    evidence["completion_mode"] = (
+        "hosted"
+        if sync_secret_state(api, repo) == "configured"
+        else "human-only"
+    )
+    return evidence
+
+
 def require_preservation_identity(
     record: dict[str, Any],
     repo: str,
@@ -692,10 +888,8 @@ def require_prepared_preservation(
     number: int,
     base_sha: str,
     head_sha: str,
-) -> tuple[str, dict[str, Any]]:
+) -> tuple[str, dict[str, Any], list[dict[str, str]]]:
     """Refetch the exact prepared operation and its live safeguards."""
-    if ledger_protection_state(api, repo) != "protected":
-        raise RuntimeError("Preservation ledger protection is unavailable")
     checkpoint = read_preservation_record(api, repo)
     if checkpoint is None:
         raise RuntimeError("Dev/next has no prepared preservation transaction")
@@ -704,8 +898,12 @@ def require_prepared_preservation(
     if record.get("state") != "prepared":
         raise RuntimeError("Dev/next preservation transaction is not prepared")
     if record.get("mode") == "ruleset-protected":
-        if deletion_protection_state(api, repo) != "protected":
-            raise RuntimeError("Dev/next deletion protection changed")
+        if (
+            deletion_protection_state(api, repo) != "protected"
+            or ledger_protection_state(api, repo) != "protected"
+        ):
+            raise RuntimeError("Dev/next or ledger protection changed")
+        authorizations: list[dict[str, str]] = []
     elif (
         record.get("mode") != "temporary-auto-delete"
         or record.get("prior_auto_delete") is not True
@@ -713,7 +911,19 @@ def require_prepared_preservation(
         is not False
     ):
         raise RuntimeError("Prepared transaction no longer owns cleanup")
-    return ledger_commit, record
+    else:
+        authorizations = require_temporary_authorizations(
+            api,
+            repo,
+            number,
+            base_sha,
+            head_sha,
+            str(record["operation_id"]),
+            ledger_commit,
+        )
+        if read_preservation_record(api, repo) != (ledger_commit, record):
+            raise RuntimeError("Authorized preservation ledger ref changed")
+    return ledger_commit, record, authorizations
 
 
 def pull_request(api: API, repo: str, number: int) -> dict[str, Any]:
@@ -828,6 +1038,7 @@ def finish_restoration(  # noqa: C901
     *,
     main_sha: str | None = None,
     prepared_commit: str | None = None,
+    hosted: bool = False,
 ) -> tuple[str, dict[str, Any]]:
     """CAS ownership, restore cleanup, and append the terminal state."""
     restoring = f"restoring-{terminal}"
@@ -835,8 +1046,11 @@ def finish_restoration(  # noqa: C901
         raise ValueError("invalid preservation terminal state")
     terminal_state = "completed" if terminal == "complete" else "aborted"
     if record["mode"] == "ruleset-protected":
-        if deletion_protection_state(api, repo) != "protected":
-            raise RuntimeError("Dev/next deletion protection changed")
+        if (
+            deletion_protection_state(api, repo) != "protected"
+            or ledger_protection_state(api, repo) != "protected"
+        ):
+            raise RuntimeError("Dev/next or ledger protection changed")
         final = {**record, "state": terminal_state}
         if terminal == "complete":
             final.update(
@@ -854,16 +1068,39 @@ def finish_restoration(  # noqa: C901
                 "Prepared preservation has external setting drift; "
                 "manual recovery is required"
             )
+        if record["state"] == "preparing" and setting is False:
+            raise RuntimeError(
+                "Preparing preservation has ambiguous setting ownership; "
+                "manual recovery is required"
+            )
         if setting not in {True, False}:
             raise RuntimeError(
                 "Automatic branch deletion setting is unavailable"
             )
+        if hosted:
+            if sync_secret_state(api, repo) != "configured":
+                action = f"{terminal}-dev-next"
+                raise RuntimeError(
+                    "Hosted restoration requires CSARC_SYNC_TOKEN. Run: "
+                    + manual_restoration_command(
+                        action,
+                        repo,
+                        int(record["pull_request"]),
+                        str(record["head_sha"]),
+                        main_sha=main_sha or "",
+                        operation_id=str(record["operation_id"]),
+                        prepared_commit=prepared_commit or "",
+                    )
+                )
+            set_auto_delete(api, repo, setting)
         restoring_record = {**record, "state": restoring}
         if terminal == "complete":
             restoring_record.update(
                 main_sha=main_sha,
                 prepared_ledger_commit=prepared_commit,
             )
+        elif record["state"] == "prepared":
+            restoring_record["prepared_ledger_commit"] = prepared_commit
         ledger_commit, record = append_preservation_record(
             api, repo, ledger_commit, restoring_record
         )
@@ -901,15 +1138,15 @@ def prepare_dev_next(  # noqa: C901
         raise RuntimeError("Promotion base no longer matches current main")
     if ref_sha(api, repo, "dev/next") != head_sha:
         raise RuntimeError("dev/next no longer matches the promotion head")
-    require_ledger_protection(api, repo)
     settings = repository_settings(api, repo)
     protection = deletion_protection_state(api, repo)
+    ledger_protection = ledger_protection_state(api, repo)
     setting = settings.get("delete_branch_on_merge")
     if not isinstance(setting, bool):
         raise RuntimeError("Automatic branch deletion setting is unavailable")
     mode = (
         "ruleset-protected"
-        if protection == "protected"
+        if protection == ledger_protection == "protected"
         else "temporary-auto-delete"
     )
     operation_id = preservation_operation(repo, number, base_sha, head_sha)
@@ -979,8 +1216,11 @@ def prepare_dev_next(  # noqa: C901
         raise RuntimeError("Preservation mode changed during preparation")
     if record["state"] == "prepared":
         if mode == "ruleset-protected":
-            if deletion_protection_state(api, repo) != "protected":
-                raise RuntimeError("Dev/next deletion protection changed")
+            if (
+                deletion_protection_state(api, repo) != "protected"
+                or ledger_protection_state(api, repo) != "protected"
+            ):
+                raise RuntimeError("Dev/next or ledger protection changed")
         else:
             live_setting = repository_settings(api, repo).get(
                 "delete_branch_on_merge"
@@ -1001,7 +1241,11 @@ def prepare_dev_next(  # noqa: C901
                 raise RuntimeError(
                     "Preservation transaction changed concurrently"
                 )
-        return canonical_json(preservation_evidence(ledger_commit, record))
+        return canonical_json(
+            prepared_preservation_evidence(
+                api, repo, number, ledger_commit, record
+            )
+        )
 
     if (
         validate_promotion(api, repo, number, head_sha, merged=False)[
@@ -1020,12 +1264,14 @@ def prepare_dev_next(  # noqa: C901
     observed = read_preservation_record(api, repo)
     if observed != (ledger_commit, record):
         raise RuntimeError("Preservation transaction changed concurrently")
-    changed_setting = False
     disable_attempted = False
     try:
         if mode == "ruleset-protected":
-            if deletion_protection_state(api, repo) != "protected":
-                raise RuntimeError("Dev/next deletion protection changed")
+            if (
+                deletion_protection_state(api, repo) != "protected"
+                or ledger_protection_state(api, repo) != "protected"
+            ):
+                raise RuntimeError("Dev/next or ledger protection changed")
         else:
             live_setting = repository_settings(api, repo).get(
                 "delete_branch_on_merge"
@@ -1033,7 +1279,6 @@ def prepare_dev_next(  # noqa: C901
             if live_setting is True:
                 disable_attempted = True
                 set_auto_delete(api, repo, False)
-                changed_setting = True
             elif live_setting is False:
                 raise RuntimeError(
                     "Preparing preservation has ambiguous setting ownership; "
@@ -1069,27 +1314,17 @@ def prepare_dev_next(  # noqa: C901
             api, repo, ledger_commit, prepared
         )
     except RuntimeError as error:
-        if changed_setting:
-            current = read_preservation_record(api, repo)
-            if current != (ledger_commit, record):
-                raise RuntimeError(
-                    "Preparation ownership changed after disabling cleanup; "
-                    "manual recovery is required"
-                ) from error
-            try:
-                finish_restoration(api, repo, ledger_commit, record, "abort")
-            except RuntimeError as recovery_error:
-                raise RuntimeError(
-                    "Preparation rollback is ambiguous; manual recovery is "
-                    "required"
-                ) from recovery_error
-        elif disable_attempted:
+        if disable_attempted:
             raise RuntimeError(
                 "Cleanup update outcome is ambiguous; manual recovery is "
                 "required"
             ) from error
         raise
-    return canonical_json(preservation_evidence(ledger_commit, prepared))
+    return canonical_json(
+        prepared_preservation_evidence(
+            api, repo, number, ledger_commit, prepared
+        )
+    )
 
 
 def inspect_dev_next(api: API, repo: str, number: int, head_sha: str) -> str:
@@ -1102,10 +1337,14 @@ def inspect_dev_next(api: API, repo: str, number: int, head_sha: str) -> str:
         raise RuntimeError("Promotion base no longer matches current main")
     if ref_sha(api, repo, "dev/next") != head_sha:
         raise RuntimeError("dev/next no longer matches the promotion head")
-    ledger_commit, record = require_prepared_preservation(
+    ledger_commit, record, authorizations = require_prepared_preservation(
         api, repo, number, base_sha, head_sha
     )
-    return canonical_json(preservation_evidence(ledger_commit, record))
+    evidence = prepared_preservation_evidence(
+        api, repo, number, ledger_commit, record
+    )
+    evidence["human_authorizations"] = authorizations
+    return canonical_json(evidence)
 
 
 def complete_dev_next(  # noqa: C901
@@ -1116,12 +1355,14 @@ def complete_dev_next(  # noqa: C901
     main_sha: str,
     operation_id: str,
     prepared_commit: str,
+    *,
+    hosted: bool = False,
+    admin_api: API | None = None,
 ) -> str:
     """Verify continuity and close the exact remote transaction."""
     if FULL_SHA.fullmatch(main_sha) is None:
         raise RuntimeError("Merged main SHA is required")
     pull = validate_promotion(api, repo, number, head_sha, merged=True)
-    require_ledger_protection(api, repo)
     base = pull.get("base")
     base_sha = base.get("sha") if isinstance(base, dict) else None
     if not isinstance(base_sha, str):
@@ -1133,6 +1374,30 @@ def complete_dev_next(  # noqa: C901
     require_preservation_identity(
         record, repo, number, base_sha, head_sha, operation_id
     )
+    if record.get("mode") == "ruleset-protected":
+        if deletion_protection_state(api, repo) != "protected":
+            raise RuntimeError("Dev/next deletion protection changed")
+        require_ledger_protection(api, repo)
+    elif record.get("mode") == "temporary-auto-delete" and hosted:
+        if admin_api is None:
+            raise RuntimeError(
+                "Hosted restoration requires CSARC_SYNC_TOKEN. Run: "
+                + manual_restoration_command(
+                    "complete-dev-next",
+                    repo,
+                    number,
+                    head_sha,
+                    main_sha=main_sha,
+                    operation_id=operation_id,
+                    prepared_commit=prepared_commit,
+                )
+            )
+        if read_preservation_record(admin_api, repo) != checkpoint:
+            raise RuntimeError("Authorized preservation ledger ref changed")
+        pull = validate_promotion(
+            admin_api, repo, number, head_sha, merged=True
+        )
+        api = admin_api
     if record.get("state") == "completed":
         if (
             record.get("main_sha") != main_sha
@@ -1144,6 +1409,16 @@ def complete_dev_next(  # noqa: C901
             )
         ):
             raise RuntimeError("Completed preservation transaction is invalid")
+        if record.get("mode") == "temporary-auto-delete":
+            require_temporary_authorizations(
+                api,
+                repo,
+                number,
+                base_sha,
+                head_sha,
+                operation_id,
+                prepared_commit,
+            )
         return canonical_json(preservation_evidence(ledger_commit, record))
     if record.get("state") not in {"prepared", "restoring-complete"}:
         raise RuntimeError(
@@ -1156,6 +1431,16 @@ def complete_dev_next(  # noqa: C901
     if record.get("state") == "prepared" and ledger_commit != prepared_commit:
         raise RuntimeError(
             "Remote preservation checkpoint does not match evidence"
+        )
+    if record.get("mode") == "temporary-auto-delete":
+        require_temporary_authorizations(
+            api,
+            repo,
+            number,
+            base_sha,
+            head_sha,
+            operation_id,
+            prepared_commit,
         )
     if pull.get("merge_commit_sha") != main_sha:
         raise RuntimeError("Promotion merge commit does not match main")
@@ -1203,16 +1488,20 @@ def complete_dev_next(  # noqa: C901
         "complete",
         main_sha=main_sha,
         prepared_commit=prepared_commit,
+        hosted=hosted,
     )
     return canonical_json(preservation_evidence(ledger_commit, completed))
 
 
-def abort_dev_next(
+def abort_dev_next(  # noqa: C901
     api: API,
     repo: str,
     number: int,
     head_sha: str,
     operation_id: str | None,
+    *,
+    hosted: bool = False,
+    admin_api: API | None = None,
 ) -> str:
     """Restore cleanup after an exact promotion was closed without merging."""
     pull = pull_request(api, repo, number)
@@ -1233,7 +1522,6 @@ def abort_dev_next(
         or head_repo.get("full_name") != repo
     ):
         raise RuntimeError("Only an exact closed, unmerged promotion can abort")
-    require_ledger_protection(api, repo)
     checkpoint = read_preservation_record(api, repo)
     if checkpoint is None:
         raise RuntimeError("Preservation transaction is missing")
@@ -1241,6 +1529,47 @@ def abort_dev_next(
     require_preservation_identity(
         record, repo, number, base_sha, head_sha, operation_id
     )
+    if record.get("mode") == "ruleset-protected":
+        if deletion_protection_state(api, repo) != "protected":
+            raise RuntimeError("Dev/next deletion protection changed")
+        require_ledger_protection(api, repo)
+    elif record.get("mode") == "temporary-auto-delete" and hosted:
+        if admin_api is None:
+            raise RuntimeError(
+                "Hosted restoration requires CSARC_SYNC_TOKEN. Run: "
+                + manual_restoration_command(
+                    "abort-dev-next",
+                    repo,
+                    number,
+                    head_sha,
+                    operation_id=str(record["operation_id"]),
+                )
+            )
+        if read_preservation_record(admin_api, repo) != checkpoint:
+            raise RuntimeError("Authorized preservation ledger ref changed")
+        pull = pull_request(admin_api, repo, number)
+        if pull.get("state") != "closed" or pull.get("merged") is not False:
+            raise RuntimeError("Live promotion changed before abort")
+        api = admin_api
+    prepared_commit = (
+        ledger_commit
+        if record.get("state") == "prepared"
+        else record.get("prepared_ledger_commit")
+    )
+    if record.get("mode") == "temporary-auto-delete" and record.get(
+        "state"
+    ) in {"prepared", "restoring-abort", "aborted"}:
+        if not isinstance(prepared_commit, str):
+            raise RuntimeError("Authorized prepared checkpoint is missing")
+        require_temporary_authorizations(
+            api,
+            repo,
+            number,
+            base_sha,
+            head_sha,
+            str(record["operation_id"]),
+            prepared_commit,
+        )
     if record.get("state") == "aborted":
         if (
             record.get("mode") == "temporary-auto-delete"
@@ -1256,7 +1585,15 @@ def abort_dev_next(
     }:
         raise RuntimeError("Preservation transaction cannot be aborted")
     ledger_commit, aborted = finish_restoration(
-        api, repo, ledger_commit, record, "abort"
+        api,
+        repo,
+        ledger_commit,
+        record,
+        "abort",
+        prepared_commit=(
+            prepared_commit if isinstance(prepared_commit, str) else None
+        ),
+        hosted=hosted,
     )
     return canonical_json(preservation_evidence(ledger_commit, aborted))
 
@@ -1284,7 +1621,7 @@ def associated_pull_requests(
     return pulls
 
 
-def merge_group_gate(
+def merge_group_gate(  # noqa: C901
     api: API,
     repo: str,
     queue_ref: str,
@@ -1324,9 +1661,17 @@ def merge_group_gate(
         raise RuntimeError("Merge queue candidate does not contain its base")
     if not includes_main(compare(api, repo, head_sha, queue_sha)):
         raise RuntimeError("Merge queue candidate does not contain dev/next")
-    ledger_commit, record = require_prepared_preservation(
+    ledger_commit, record, _authorizations = require_prepared_preservation(
         api, repo, number, base_sha, head_sha
     )
+    if (
+        record["mode"] == "temporary-auto-delete"
+        and sync_secret_state(api, repo) != "configured"
+    ):
+        raise RuntimeError(
+            "Hosted restoration is unavailable; a human maintainer must "
+            "complete or abort the exact prepared transaction"
+        )
     return (
         f"{record['mode']}; transaction "
         f"{record['operation_id']} at {ledger_commit}"
@@ -1588,6 +1933,7 @@ def main() -> None:  # noqa: C901
     parser.add_argument("--pr-number", type=int, default=0)
     parser.add_argument("--operation-id", default="")
     parser.add_argument("--prepared-ledger-commit", default="")
+    parser.add_argument("--hosted", action="store_true")
     parser.add_argument("--queue-ref", default="")
     parser.add_argument("--queue-sha", default="")
     parser.add_argument("--base-sha", default="")
@@ -1607,6 +1953,8 @@ def main() -> None:  # noqa: C901
     if not token:
         raise SystemExit("GH_TOKEN is required")
     api = GitHubAPI(token)
+    sync_token = os.environ.get(SYNC_SECRET, "")
+    admin_api = GitHubAPI(sync_token) if sync_token else None
     try:
         if args.command == "gate":
             if not args.base or not args.head_sha:
@@ -1653,6 +2001,8 @@ def main() -> None:  # noqa: C901
                     args.main_sha,
                     args.operation_id,
                     args.prepared_ledger_commit,
+                    hosted=args.hosted,
+                    admin_api=admin_api,
                 )
             )
         elif args.command == "abort-dev-next":
@@ -1663,6 +2013,8 @@ def main() -> None:  # noqa: C901
                     args.pr_number,
                     args.head_sha,
                     args.operation_id or None,
+                    hosted=args.hosted,
+                    admin_api=admin_api,
                 )
             )
         else:
