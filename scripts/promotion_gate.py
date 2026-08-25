@@ -49,7 +49,9 @@ def run_dev_next_preservation(
     pr_number: int,
     head_sha: str,
     main_sha: str = "",
-) -> str:
+    operation_id: str = "",
+    prepared_ledger_commit: str = "",
+) -> dict[str, Any]:
     """Run the shared dev/next lifecycle guard with fixed arguments."""
     command = [
         sys.executable,
@@ -64,6 +66,10 @@ def run_dev_next_preservation(
     ]
     if main_sha:
         command.extend(("--main-sha", main_sha))
+    if operation_id:
+        command.extend(("--operation-id", operation_id))
+    if prepared_ledger_commit:
+        command.extend(("--prepared-ledger-commit", prepared_ledger_commit))
     completed = subprocess.run(  # noqa: S603
         command,
         check=True,
@@ -73,7 +79,19 @@ def run_dev_next_preservation(
     result = completed.stdout.strip()
     if not result:
         raise RuntimeError("dev/next preservation returned no evidence")
-    return result
+    try:
+        evidence = json.loads(result)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(
+            "dev/next preservation returned invalid evidence"
+        ) from error
+    if (
+        not isinstance(evidence, dict)
+        or not isinstance(evidence.get("ledger_commit"), str)
+        or not isinstance(evidence.get("transaction"), dict)
+    ):
+        raise RuntimeError("dev/next preservation returned invalid evidence")
+    return evidence
 
 
 class RejectRedirects(urllib.request.HTTPRedirectHandler):
@@ -541,7 +559,7 @@ def fallback_statement(
     kind: str, evidence: dict[str, Any], run_urls: list[str]
 ) -> str:
     """Bind a human statement to one exact promotion candidate."""
-    fields = preflight_binding(evidence)
+    fields = preflight_binding(evidence, include_preservation=True)
     fields["runs"] = sorted(run_urls)
     binding = json.dumps(
         fields,
@@ -562,10 +580,12 @@ def fallback_statement(
     return f"Actions quota fallback {kind}\n\n`{binding}`\n\n{statements[kind]}"
 
 
-def preflight_binding(evidence: dict[str, Any]) -> dict[str, object]:
+def preflight_binding(
+    evidence: dict[str, Any], *, include_preservation: bool = False
+) -> dict[str, object]:
     """Return every security-relevant field from preflight evidence."""
     archive = evidence.get("candidate_archive") or {}
-    return {
+    binding: dict[str, object] = {
         "schema_version": evidence.get("schema_version"),
         "repository": evidence.get("repository"),
         "route": evidence.get("route"),
@@ -584,6 +604,9 @@ def preflight_binding(evidence: dict[str, Any]) -> dict[str, object]:
         "release": evidence.get("release"),
         "canary": evidence.get("canary"),
     }
+    if include_preservation:
+        binding["dev_next_preservation"] = evidence.get("dev_next_preservation")
+    return binding
 
 
 def require_same_preflight(
@@ -750,7 +773,11 @@ def rebuild_quota_preflight(
 
 
 def validate_quota_preflight(  # noqa: C901
-    evidence: dict[str, Any], args: argparse.Namespace, token: str
+    evidence: dict[str, Any],
+    args: argparse.Namespace,
+    token: str,
+    *,
+    validate_comments: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Refetch every mutable input for one exact quota fallback."""
     repo = str(evidence["repository"])
@@ -912,6 +939,8 @@ def validate_quota_preflight(  # noqa: C901
         raise RuntimeError(
             "Required CI and promotion runs are not both blocked"
         )
+    if not validate_comments:
+        return {}, {}
     attestation = require_comment_url(
         args.attestation_url,
         repo,
@@ -1224,11 +1253,8 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:
     if not args.blocked_run_url:
         raise RuntimeError("At least one blocked Actions run is required")
     token = os.environ.get("GH_TOKEN", "")
-    attestation, authorization = validate_quota_preflight(evidence, args, token)
-    verification_command = local_verification_command()
-    subprocess.run(verification_command, check=True)  # noqa: S603
-    validate_quota_preflight(evidence, args, token)
-    preservation = ""
+    validate_quota_preflight(evidence, args, token, validate_comments=False)
+    preservation: dict[str, Any] | None = None
     if (evidence.get("route") or {}).get(
         "kind"
     ) == "standalone-batch" and evidence.get("head_ref") == "dev/next":
@@ -1238,6 +1264,12 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:
             int(evidence["pull_request"]),
             str(evidence["head_sha"]),
         )
+        evidence["dev_next_preservation"] = preservation
+
+    attestation, authorization = validate_quota_preflight(evidence, args, token)
+    verification_command = local_verification_command()
+    subprocess.run(verification_command, check=True)  # noqa: S603
+    validate_quota_preflight(evidence, args, token)
 
     evidence["canary"]["result"] = "artifact-only"
     evidence["full_check"] = {
@@ -1253,8 +1285,6 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:
         "blocked_run_urls": sorted(args.blocked_run_url),
         "created_at": datetime.now(UTC).isoformat(),
     }
-    if preservation:
-        evidence["dev_next_preservation"] = {"prepare": preservation}
     evidence["gate"] = "quota-fallback"
     evidence["release_eligible"] = False
     write_evidence(args.output, evidence)
@@ -1324,8 +1354,8 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
     if needs_preservation and (
         (evidence.get("route") or {}).get("kind") != "standalone-batch"
         or not isinstance(preservation, dict)
-        or not isinstance(preservation.get("prepare"), str)
-        or not preservation["prepare"]
+        or not isinstance(preservation.get("ledger_commit"), str)
+        or not isinstance(preservation.get("transaction"), dict)
     ):
         raise RuntimeError("dev/next was not prepared for quota fallback")
     token = os.environ.get("GH_TOKEN", "")
@@ -1442,12 +1472,23 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
             "Merged main tree differs from the verified candidate tree"
         )
     if needs_preservation and isinstance(preservation, dict):
-        preservation["complete"] = run_dev_next_preservation(
+        transaction = preservation.get("transaction")
+        if not isinstance(transaction, dict):
+            raise RuntimeError("dev/next preservation transaction is invalid")
+        operation_id = transaction.get("operation_id")
+        prepared_commit = preservation.get("ledger_commit")
+        if not isinstance(operation_id, str) or not isinstance(
+            prepared_commit, str
+        ):
+            raise RuntimeError("dev/next preservation transaction is invalid")
+        preservation["completion"] = run_dev_next_preservation(
             "complete-dev-next",
             args.repo,
             args.pr_number,
             args.head_sha,
             main_sha,
+            operation_id,
+            prepared_commit,
         )
     evidence["post_merge"] = {
         "main_sha": main_sha,

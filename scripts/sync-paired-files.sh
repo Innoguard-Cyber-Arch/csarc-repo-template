@@ -28,6 +28,7 @@ paired_files=(
   .github/workflows/spec-to-issue.yml
   .github/workflows/zizmor.yml
   policies/actions.json
+  policies/dev-next-ruleset.json
   policies/labels.json
   policies/repository.json
   docs/ci-policy.md

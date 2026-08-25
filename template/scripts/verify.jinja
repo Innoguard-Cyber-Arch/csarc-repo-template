@@ -141,6 +141,7 @@ PY
 "${platform_python[@]}" -m json.tool policies/actions.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/labels.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/rulesets.json >/dev/null
+"${platform_python[@]}" -m json.tool policies/dev-next-ruleset.json >/dev/null
 "${platform_python[@]}" -m json.tool release-please-config.json >/dev/null
 "${platform_python[@]}" -m json.tool .release-please-manifest.json >/dev/null
 "${platform_python[@]}" - <<'PY'

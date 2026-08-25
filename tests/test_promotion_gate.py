@@ -43,6 +43,27 @@ if _GIT is None:
 GIT: str = _GIT
 
 
+def preservation_evidence() -> dict[str, object]:
+    """Return one structured remote checkpoint for quota fallback tests."""
+    return {
+        "ledger_ref": "refs/heads/csarc/dev-next-preservation-ledger",
+        "ledger_commit": "d" * 40,
+        "transaction": {
+            "schema_version": 1,
+            "repository": "owner/repo",
+            "pull_request": 42,
+            "base_ref": "main",
+            "base_sha": "base",
+            "head_ref": "dev/next",
+            "head_sha": "head",
+            "operation_id": "e" * 64,
+            "mode": "temporary-auto-delete",
+            "prior_auto_delete": True,
+            "state": "prepared",
+        },
+    }
+
+
 @pytest.mark.parametrize(
     ("base", "head", "labels", "strategy", "kind", "milestone"),
     [
@@ -573,7 +594,7 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
         "rebuild_quota_preflight",
         lambda evidence, *_: evidence,
     )
-    preservation_calls: list[tuple[str, str, int, str, str]] = []
+    preservation_calls: list[tuple[str, str, int, str, str, str, str]] = []
 
     def fake_preservation(
         action: str,
@@ -581,9 +602,21 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
         pr_number: int,
         head_sha: str,
         main_sha: str = "",
-    ) -> str:
-        preservation_calls.append((action, repo, pr_number, head_sha, main_sha))
-        return "temporary-auto-delete-disabled (blocked)"
+        operation_id: str = "",
+        prepared_ledger_commit: str = "",
+    ) -> dict[str, object]:
+        preservation_calls.append(
+            (
+                action,
+                repo,
+                pr_number,
+                head_sha,
+                main_sha,
+                operation_id,
+                prepared_ledger_commit,
+            )
+        )
+        return preservation_evidence()
 
     monkeypatch.setitem(
         finalize_quota_fallback.__globals__,
@@ -610,11 +643,9 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
     evidence = json.loads(target.read_text(encoding="utf-8"))
     assert evidence["gate"] == "quota-fallback"
     assert evidence["release_eligible"] is False
-    assert evidence["dev_next_preservation"]["prepare"] == (
-        "temporary-auto-delete-disabled (blocked)"
-    )
+    assert evidence["dev_next_preservation"] == preservation_evidence()
     assert preservation_calls == [
-        ("prepare-dev-next", "owner/repo", 42, "head", "")
+        ("prepare-dev-next", "owner/repo", 42, "head", "", "", "")
     ]
     assert evidence["full_check"] == {
         "context": "verify",
@@ -839,9 +870,7 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
                         "https://github.com/owner/repo/actions/runs/200"
                     ],
                 },
-                "dev_next_preservation": {
-                    "prepare": "temporary-auto-delete-disabled (blocked)"
-                },
+                "dev_next_preservation": preservation_evidence(),
             }
         ),
         encoding="utf-8",
@@ -909,7 +938,7 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
     monkeypatch.setitem(
         verify_quota_main.__globals__, "require_comment_url", lambda *_: {}
     )
-    preservation_calls: list[tuple[str, str, int, str, str]] = []
+    preservation_calls: list[tuple[str, str, int, str, str, str, str]] = []
 
     def fake_preservation(
         action: str,
@@ -917,9 +946,23 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
         pr_number: int,
         head_sha: str,
         main_sha: str = "",
-    ) -> str:
-        preservation_calls.append((action, repo, pr_number, head_sha, main_sha))
-        return "auto-delete-restored"
+        operation_id: str = "",
+        prepared_ledger_commit: str = "",
+    ) -> dict[str, object]:
+        preservation_calls.append(
+            (
+                action,
+                repo,
+                pr_number,
+                head_sha,
+                main_sha,
+                operation_id,
+                prepared_ledger_commit,
+            )
+        )
+        completed = preservation_evidence()
+        completed["ledger_commit"] = "f" * 40
+        return completed
 
     monkeypatch.setitem(
         verify_quota_main.__globals__,
@@ -941,20 +984,27 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
         "verified-local-quota-fallback"
     )
     assert evidence["release_eligible"] is False
-    assert evidence["dev_next_preservation"]["complete"] == (
-        "auto-delete-restored"
+    assert (
+        evidence["dev_next_preservation"]["completion"]["ledger_commit"]
+        == "f" * 40
     )
     assert preservation_calls == [
-        ("complete-dev-next", "owner/repo", 42, "head", "main")
+        (
+            "complete-dev-next",
+            "owner/repo",
+            42,
+            "head",
+            "main",
+            "e" * 64,
+            "d" * 40,
+        )
     ]
     original = json.loads(source.read_text(encoding="utf-8"))
     del original["dev_next_preservation"]
     source.write_text(json.dumps(original), encoding="utf-8")
     with pytest.raises(RuntimeError, match="was not prepared"):
         verify_quota_main(arguments)
-    original["dev_next_preservation"] = {
-        "prepare": "temporary-auto-delete-disabled (blocked)"
-    }
+    original["dev_next_preservation"] = preservation_evidence()
     source.write_text(json.dumps(original), encoding="utf-8")
     scenario["value"] = "ambiguous"
     with pytest.raises(RuntimeError, match="unique promotion source"):
@@ -1038,6 +1088,11 @@ def test_quota_finalize_refetches_live_pull_request(
     monkeypatch.setitem(
         finalize_quota_fallback.__globals__, "github_get", fake_get
     )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "run_dev_next_preservation",
+        lambda *_args, **_kwargs: preservation_evidence(),
+    )
     with pytest.raises(RuntimeError, match="Live promotion"):
         finalize_quota_fallback(
             SimpleNamespace(
@@ -1091,7 +1146,7 @@ def test_quota_main_refetches_the_unique_squash_source(
                 "route": {"kind": "standalone-batch", "relevant": True},
                 "candidate_tree": "tree",
                 "full_check": {"status": "local-quota-attested"},
-                "dev_next_preservation": {"prepare": "prepared"},
+                "dev_next_preservation": preservation_evidence(),
             }
         ),
         encoding="utf-8",
@@ -1280,12 +1335,14 @@ def test_authorization_statement_binds_full_preflight() -> None:
         "repository": "owner/repo",
         "route": {"kind": "standalone-batch", "relevant": True},
         "canary": {"state": "blocked", "environment": None},
+        "dev_next_preservation": preservation_evidence(),
     }
     statement = fallback_statement("authorization", evidence, ["run"])
     binding = json.loads(statement.split("`")[1])
     assert binding["schema_version"] == 1
     assert binding["route"] == evidence["route"]
     assert binding["canary"] == evidence["canary"]
+    assert binding["dev_next_preservation"] == preservation_evidence()
 
 
 def test_repository_variables_reads_every_page(

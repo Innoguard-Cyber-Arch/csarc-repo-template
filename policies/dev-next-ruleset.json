@@ -1,0 +1,15 @@
+{
+  "name": "CSARC preserve dev next",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/dev/next"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {"type": "deletion"}
+  ]
+}

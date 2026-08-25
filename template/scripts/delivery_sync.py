@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 import os
 import re
@@ -17,6 +19,12 @@ DELIVERY_BRANCH = re.compile(r"^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$")
 ISOLATED_BRANCH = re.compile(r"^dev/i[0-9]+-[a-z0-9][a-z0-9-]*$")
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 CAPABILITY_STATES = {"allowed", "blocked", "unknown"}
+PRESERVATION_LEDGER_BRANCH = "csarc/dev-next-preservation-ledger"
+PRESERVATION_LEDGER_PATH = "transaction.json"
+PRESERVATION_STATES = {"preparing", "prepared", "completed", "aborted"}
+MERGE_QUEUE_REF = re.compile(
+    r"^refs/heads/gh-readonly-queue/main/pr-([1-9][0-9]*)-[A-Za-z0-9_-]+$"
+)
 
 
 class RejectRedirects(urllib.request.HTTPRedirectHandler):
@@ -202,17 +210,18 @@ def gate(
             raise RuntimeError("Promotion base no longer matches current main")
         if ref_sha(api, repo, "dev/next") != head_sha:
             raise RuntimeError("dev/next no longer matches the promotion head")
-        if (
-            repository_settings(api, repo).get("delete_branch_on_merge")
-            is False
-        ):
-            return (
-                "temporary-auto-delete-disabled; after merge run "
-                f"complete-dev-next for PR {pr_number}, head {head_sha}, "
-                "and the merged main SHA"
-            )
-        if deletion_protection_state(api, repo) == "protected":
+        settings = repository_settings(api, repo)
+        protection = deletion_protection_state(api, repo)
+        if protection == "protected":
             return "deletion-protected"
+        if settings.get("delete_branch_on_merge") is False:
+            ledger_commit, record = require_prepared_preservation(
+                api, repo, pr_number, str(pull["base"]["sha"]), head_sha
+            )
+            return (
+                "temporary-auto-delete-disabled; transaction "
+                f"{record['operation_id']} at {ledger_commit}"
+            )
         raise RuntimeError(
             "dev/next can be auto-deleted; run `python3 "
             "scripts/delivery_sync.py prepare-dev-next "
@@ -246,6 +255,302 @@ def ref_sha(api: API, repo: str, branch: str) -> str:
     if not isinstance(sha, str):
         raise RuntimeError(f"GitHub returned an invalid {branch} ref")
     return sha
+
+
+def canonical_json(value: object) -> str:
+    """Return the stable representation stored in the remote ledger."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def preservation_operation(
+    repo: str, number: int, base_sha: str, head_sha: str
+) -> str:
+    """Derive one operation ID shared by contenders for the same promotion."""
+    identity = canonical_json(
+        {
+            "base_sha": base_sha,
+            "head_sha": head_sha,
+            "pull_request": number,
+            "repository": repo,
+        }
+    )
+    return hashlib.sha256(identity.encode()).hexdigest()
+
+
+def validate_preservation_record(record: object) -> dict[str, Any]:
+    """Reject malformed or ambiguous ledger records."""
+    if not isinstance(record, dict):
+        raise RuntimeError("Dev/next preservation ledger record is invalid")
+    required = {
+        "schema_version": 1,
+        "repository": str,
+        "pull_request": int,
+        "base_ref": "main",
+        "base_sha": str,
+        "head_ref": "dev/next",
+        "head_sha": str,
+        "operation_id": str,
+        "mode": str,
+        "prior_auto_delete": bool,
+        "state": str,
+    }
+    for field, expected in required.items():
+        value = record.get(field)
+        if isinstance(expected, type):
+            if not isinstance(value, expected):
+                raise RuntimeError(
+                    f"Dev/next preservation record has invalid {field}"
+                )
+        elif value != expected:
+            raise RuntimeError(
+                f"Dev/next preservation record has invalid {field}"
+            )
+    if (
+        FULL_SHA.fullmatch(str(record["base_sha"])) is None
+        or FULL_SHA.fullmatch(str(record["head_sha"])) is None
+        or re.fullmatch(r"[0-9a-f]{64}", str(record["operation_id"])) is None
+        or record["mode"] not in {"ruleset-protected", "temporary-auto-delete"}
+        or record["state"] not in PRESERVATION_STATES
+        or (
+            record["mode"] == "temporary-auto-delete"
+            and record["prior_auto_delete"] is not True
+        )
+    ):
+        raise RuntimeError("Dev/next preservation ledger record is invalid")
+    main_sha = record.get("main_sha")
+    if main_sha is not None and (
+        not isinstance(main_sha, str) or FULL_SHA.fullmatch(main_sha) is None
+    ):
+        raise RuntimeError("Dev/next preservation record has invalid main_sha")
+    prepared_commit = record.get("prepared_ledger_commit")
+    if prepared_commit is not None and (
+        not isinstance(prepared_commit, str)
+        or FULL_SHA.fullmatch(prepared_commit) is None
+    ):
+        raise RuntimeError(
+            "Dev/next preservation record has invalid prepared checkpoint"
+        )
+    if record["state"] == "completed" and (
+        main_sha is None or prepared_commit is None
+    ):
+        raise RuntimeError("Completed preservation record is incomplete")
+    return record
+
+
+def read_preservation_record(
+    api: API, repo: str
+) -> tuple[str, dict[str, Any]] | None:
+    """Read the append-only preservation ledger head and canonical record."""
+    encoded = urllib.parse.quote(PRESERVATION_LEDGER_BRANCH, safe="")
+    status, payload = api.request(
+        "GET", f"repos/{repo}/git/ref/heads/{encoded}"
+    )
+    if status == 404:
+        return None
+    ref = require_response(status, payload, "read preservation ledger")
+    commit_sha = (
+        ref.get("object", {}).get("sha") if isinstance(ref, dict) else None
+    )
+    if (
+        not isinstance(commit_sha, str)
+        or FULL_SHA.fullmatch(commit_sha) is None
+    ):
+        raise RuntimeError("GitHub returned an invalid preservation ledger ref")
+    status, payload = api.request(
+        "GET", f"repos/{repo}/git/commits/{commit_sha}"
+    )
+    commit = require_response(status, payload, "read preservation checkpoint")
+    tree_sha = (
+        commit.get("tree", {}).get("sha") if isinstance(commit, dict) else None
+    )
+    if not isinstance(tree_sha, str):
+        raise RuntimeError("GitHub returned an invalid preservation commit")
+    status, payload = api.request("GET", f"repos/{repo}/git/trees/{tree_sha}")
+    tree = require_response(status, payload, "read preservation tree")
+    entries = tree.get("tree") if isinstance(tree, dict) else None
+    matches = [
+        item
+        for item in entries or []
+        if isinstance(item, dict)
+        and item.get("path") == PRESERVATION_LEDGER_PATH
+        and item.get("type") == "blob"
+        and isinstance(item.get("sha"), str)
+    ]
+    if not isinstance(entries, list) or len(matches) != 1:
+        raise RuntimeError("Preservation ledger has no unique transaction")
+    status, payload = api.request(
+        "GET", f"repos/{repo}/git/blobs/{matches[0]['sha']}"
+    )
+    blob = require_response(status, payload, "read preservation record")
+    if (
+        not isinstance(blob, dict)
+        or blob.get("encoding") != "base64"
+        or not isinstance(blob.get("content"), str)
+    ):
+        raise RuntimeError("GitHub returned an invalid preservation record")
+    try:
+        encoded_content = "".join(blob["content"].split())
+        content = base64.b64decode(encoded_content, validate=True).decode()
+        record = json.loads(content)
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError(
+            "Preservation ledger record is not canonical JSON"
+        ) from error
+    validated = validate_preservation_record(record)
+    if content != canonical_json(validated) + "\n":
+        raise RuntimeError("Preservation ledger record is not canonical JSON")
+    return commit_sha, validated
+
+
+def append_preservation_record(
+    api: API,
+    repo: str,
+    previous_commit: str | None,
+    record: dict[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    """Append one record with a create-only or non-force ref update."""
+    validated = validate_preservation_record(record)
+    status, payload = api.request(
+        "POST",
+        f"repos/{repo}/git/blobs",
+        {"content": canonical_json(validated) + "\n", "encoding": "utf-8"},
+    )
+    blob = require_response(status, payload, "create preservation blob")
+    blob_sha = blob.get("sha") if isinstance(blob, dict) else None
+    if not isinstance(blob_sha, str):
+        raise RuntimeError("GitHub returned an invalid preservation blob")
+    tree_payload: dict[str, object] = {
+        "tree": [
+            {
+                "path": PRESERVATION_LEDGER_PATH,
+                "mode": "100644",
+                "type": "blob",
+                "sha": blob_sha,
+            }
+        ]
+    }
+    if previous_commit is not None:
+        status, payload = api.request(
+            "GET", f"repos/{repo}/git/commits/{previous_commit}"
+        )
+        previous = require_response(
+            status, payload, "read previous preservation checkpoint"
+        )
+        base_tree = (
+            previous.get("tree", {}).get("sha")
+            if isinstance(previous, dict)
+            else None
+        )
+        if not isinstance(base_tree, str):
+            raise RuntimeError("Previous preservation checkpoint is invalid")
+        tree_payload["base_tree"] = base_tree
+    status, payload = api.request(
+        "POST", f"repos/{repo}/git/trees", tree_payload
+    )
+    tree = require_response(status, payload, "create preservation tree")
+    tree_sha = tree.get("sha") if isinstance(tree, dict) else None
+    if not isinstance(tree_sha, str):
+        raise RuntimeError("GitHub returned an invalid preservation tree")
+    commit_payload: dict[str, object] = {
+        "message": (
+            "csarc dev/next preservation "
+            f"{validated['operation_id']} {validated['state']}"
+        ),
+        "tree": tree_sha,
+        "parents": [] if previous_commit is None else [previous_commit],
+    }
+    status, payload = api.request(
+        "POST", f"repos/{repo}/git/commits", commit_payload
+    )
+    commit = require_response(status, payload, "create preservation checkpoint")
+    commit_sha = commit.get("sha") if isinstance(commit, dict) else None
+    if not isinstance(commit_sha, str):
+        raise RuntimeError("GitHub returned an invalid preservation checkpoint")
+    encoded = urllib.parse.quote(PRESERVATION_LEDGER_BRANCH, safe="")
+    if previous_commit is None:
+        status, payload = api.request(
+            "POST",
+            f"repos/{repo}/git/refs",
+            {
+                "ref": f"refs/heads/{PRESERVATION_LEDGER_BRANCH}",
+                "sha": commit_sha,
+            },
+        )
+    else:
+        status, payload = api.request(
+            "PATCH",
+            f"repos/{repo}/git/refs/heads/{encoded}",
+            {"sha": commit_sha, "force": False},
+        )
+    if status in {409, 422}:
+        raise RuntimeError("Preservation ledger changed concurrently")
+    require_response(status, payload, "advance preservation ledger")
+    observed = read_preservation_record(api, repo)
+    if observed != (commit_sha, validated):
+        raise RuntimeError("Preservation ledger did not retain the checkpoint")
+    return commit_sha, validated
+
+
+def preservation_evidence(
+    ledger_commit: str, record: dict[str, Any]
+) -> dict[str, Any]:
+    """Return the exact remote checkpoint bound into other evidence."""
+    return {
+        "ledger_ref": f"refs/heads/{PRESERVATION_LEDGER_BRANCH}",
+        "ledger_commit": ledger_commit,
+        "transaction": record,
+    }
+
+
+def require_preservation_identity(
+    record: dict[str, Any],
+    repo: str,
+    number: int,
+    base_sha: str,
+    head_sha: str,
+    operation_id: str | None = None,
+) -> None:
+    """Require one ledger operation to match the exact promotion."""
+    expected_operation = preservation_operation(
+        repo, number, base_sha, head_sha
+    )
+    if (
+        record.get("repository") != repo
+        or record.get("pull_request") != number
+        or record.get("base_ref") != "main"
+        or record.get("base_sha") != base_sha
+        or record.get("head_ref") != "dev/next"
+        or record.get("head_sha") != head_sha
+        or record.get("operation_id") != expected_operation
+        or (operation_id is not None and operation_id != expected_operation)
+    ):
+        raise RuntimeError("Preservation ledger belongs to another promotion")
+
+
+def require_prepared_preservation(
+    api: API,
+    repo: str,
+    number: int,
+    base_sha: str,
+    head_sha: str,
+) -> tuple[str, dict[str, Any]]:
+    """Refetch the exact prepared operation that owns disabled cleanup."""
+    checkpoint = read_preservation_record(api, repo)
+    if checkpoint is None:
+        raise RuntimeError(
+            "Automatic deletion is disabled without a preservation transaction"
+        )
+    ledger_commit, record = checkpoint
+    require_preservation_identity(record, repo, number, base_sha, head_sha)
+    if (
+        record.get("state") != "prepared"
+        or record.get("mode") != "temporary-auto-delete"
+        or record.get("prior_auto_delete") is not True
+    ):
+        raise RuntimeError(
+            "Automatic deletion is not owned by a prepared transaction"
+        )
+    return ledger_commit, record
 
 
 def pull_request(api: API, repo: str, number: int) -> dict[str, Any]:
@@ -327,48 +632,217 @@ def set_auto_delete(api: API, repo: str, enabled: bool) -> None:
         raise RuntimeError(f"Automatic branch deletion was not {action}d")
 
 
-def prepare_dev_next(api: API, repo: str, number: int, head_sha: str) -> str:
-    """Prevent auto-delete before one exact dev/next promotion merge."""
+def prepare_dev_next(  # noqa: C901
+    api: API, repo: str, number: int, head_sha: str
+) -> str:
+    """Prevent auto-delete under one remote, resumable transaction."""
     pull = validate_promotion(api, repo, number, head_sha, merged=False)
     base = pull["base"]
-    if ref_sha(api, repo, "main") != base.get("sha"):
+    base_sha = base.get("sha")
+    if not isinstance(base_sha, str) or FULL_SHA.fullmatch(base_sha) is None:
+        raise RuntimeError("Promotion base SHA is invalid")
+    if ref_sha(api, repo, "main") != base_sha:
         raise RuntimeError("Promotion base no longer matches current main")
     if ref_sha(api, repo, "dev/next") != head_sha:
         raise RuntimeError("dev/next no longer matches the promotion head")
     settings = repository_settings(api, repo)
-    if settings.get("delete_branch_on_merge") is False:
-        return "temporary-auto-delete-disabled"
     protection = deletion_protection_state(api, repo)
-    if protection == "protected":
-        return "deletion-protected"
-    status, payload = api.request(
-        "PATCH", f"repos/{repo}", {"delete_branch_on_merge": False}
+    setting = settings.get("delete_branch_on_merge")
+    if not isinstance(setting, bool):
+        raise RuntimeError("Automatic branch deletion setting is unavailable")
+    mode = (
+        "ruleset-protected"
+        if protection == "protected"
+        else "temporary-auto-delete"
     )
-    require_response(status, payload, "disable automatic branch deletion")
-    try:
-        if (
+    operation_id = preservation_operation(repo, number, base_sha, head_sha)
+    checkpoint = read_preservation_record(api, repo)
+    created = False
+    if checkpoint is not None:
+        ledger_commit, record = checkpoint
+        same_operation = record.get("operation_id") == operation_id
+        if same_operation:
+            require_preservation_identity(
+                record, repo, number, base_sha, head_sha, operation_id
+            )
+            if record.get("state") not in {"preparing", "prepared"}:
+                raise RuntimeError(
+                    "This preservation transaction is already terminal"
+                )
+        else:
+            if (
+                record.get("state") not in {"completed", "aborted"}
+                or record.get("base_sha") == base_sha
+            ):
+                raise RuntimeError(
+                    "Another preservation transaction owns this main base"
+                )
+            if mode == "temporary-auto-delete" and setting is not True:
+                raise RuntimeError(
+                    "Automatic deletion was disabled outside this transaction"
+                )
+            record = {
+                "schema_version": 1,
+                "repository": repo,
+                "pull_request": number,
+                "base_ref": "main",
+                "base_sha": base_sha,
+                "head_ref": "dev/next",
+                "head_sha": head_sha,
+                "operation_id": operation_id,
+                "mode": mode,
+                "prior_auto_delete": setting,
+                "state": "preparing",
+            }
+            ledger_commit, record = append_preservation_record(
+                api, repo, ledger_commit, record
+            )
+            created = True
+    else:
+        if mode == "temporary-auto-delete" and setting is not True:
+            raise RuntimeError(
+                "Automatic deletion was disabled outside this transaction"
+            )
+        record = {
+            "schema_version": 1,
+            "repository": repo,
+            "pull_request": number,
+            "base_ref": "main",
+            "base_sha": base_sha,
+            "head_ref": "dev/next",
+            "head_sha": head_sha,
+            "operation_id": operation_id,
+            "mode": mode,
+            "prior_auto_delete": setting,
+            "state": "preparing",
+        }
+        ledger_commit, record = append_preservation_record(
+            api, repo, None, record
+        )
+        created = True
+
+    if record["mode"] != mode:
+        raise RuntimeError("Preservation mode changed during preparation")
+    if record["state"] == "prepared":
+        if mode == "ruleset-protected":
+            if deletion_protection_state(api, repo) != "protected":
+                raise RuntimeError("Dev/next deletion protection changed")
+        elif (
             repository_settings(api, repo).get("delete_branch_on_merge")
             is not False
         ):
             raise RuntimeError("Automatic branch deletion was not disabled")
+        return canonical_json(preservation_evidence(ledger_commit, record))
+
+    if (
+        validate_promotion(api, repo, number, head_sha, merged=False)[
+            "base"
+        ].get("sha")
+        != base_sha
+    ):
+        raise RuntimeError("Promotion changed after transaction acquisition")
+    if (
+        ref_sha(api, repo, "main") != base_sha
+        or ref_sha(api, repo, "dev/next") != head_sha
+    ):
+        raise RuntimeError(
+            "Promotion refs changed after transaction acquisition"
+        )
+    observed = read_preservation_record(api, repo)
+    if observed != (ledger_commit, record):
+        raise RuntimeError("Preservation transaction changed concurrently")
+    changed_setting = False
+    try:
+        if mode == "ruleset-protected":
+            if deletion_protection_state(api, repo) != "protected":
+                raise RuntimeError("Dev/next deletion protection changed")
+        else:
+            live_setting = repository_settings(api, repo).get(
+                "delete_branch_on_merge"
+            )
+            if live_setting is True:
+                set_auto_delete(api, repo, False)
+                changed_setting = True
+            elif live_setting is False and created:
+                raise RuntimeError(
+                    "Automatic deletion changed outside the new transaction"
+                )
+            elif live_setting is not False:
+                raise RuntimeError(
+                    "Automatic branch deletion setting is unavailable"
+                )
+            if (
+                repository_settings(api, repo).get("delete_branch_on_merge")
+                is not False
+            ):
+                raise RuntimeError("Automatic branch deletion was not disabled")
         if (
-            ref_sha(api, repo, "main") != base.get("sha")
+            validate_promotion(api, repo, number, head_sha, merged=False)[
+                "base"
+            ].get("sha")
+            != base_sha
+        ):
+            raise RuntimeError("Promotion changed while enabling preservation")
+        if (
+            ref_sha(api, repo, "main") != base_sha
             or ref_sha(api, repo, "dev/next") != head_sha
         ):
-            raise RuntimeError("Promotion refs changed while enabling fallback")
+            raise RuntimeError(
+                "Promotion refs changed while enabling preservation"
+            )
+        if read_preservation_record(api, repo) != (ledger_commit, record):
+            raise RuntimeError("Preservation transaction changed concurrently")
+        prepared = {**record, "state": "prepared"}
+        ledger_commit, prepared = append_preservation_record(
+            api, repo, ledger_commit, prepared
+        )
     except RuntimeError:
-        set_auto_delete(api, repo, True)
+        if changed_setting:
+            set_auto_delete(api, repo, True)
         raise
-    return f"temporary-auto-delete-disabled ({protection})"
+    return canonical_json(preservation_evidence(ledger_commit, prepared))
 
 
-def complete_dev_next(
-    api: API, repo: str, number: int, head_sha: str, main_sha: str
+def complete_dev_next(  # noqa: C901
+    api: API,
+    repo: str,
+    number: int,
+    head_sha: str,
+    main_sha: str,
+    operation_id: str,
+    prepared_commit: str,
 ) -> str:
-    """Verify continuity after merge and restore normal branch cleanup."""
+    """Verify continuity and close the exact remote transaction."""
     if FULL_SHA.fullmatch(main_sha) is None:
         raise RuntimeError("Merged main SHA is required")
     pull = validate_promotion(api, repo, number, head_sha, merged=True)
+    base = pull.get("base")
+    base_sha = base.get("sha") if isinstance(base, dict) else None
+    if not isinstance(base_sha, str):
+        raise RuntimeError("Merged promotion base SHA is invalid")
+    checkpoint = read_preservation_record(api, repo)
+    if checkpoint is None:
+        raise RuntimeError("Preservation transaction is missing")
+    ledger_commit, record = checkpoint
+    require_preservation_identity(
+        record, repo, number, base_sha, head_sha, operation_id
+    )
+    if record.get("state") == "completed":
+        if (
+            record.get("main_sha") != main_sha
+            or record.get("prepared_ledger_commit") != prepared_commit
+            or (
+                record.get("mode") == "temporary-auto-delete"
+                and repository_settings(api, repo).get("delete_branch_on_merge")
+                is not True
+            )
+        ):
+            raise RuntimeError("Completed preservation transaction is invalid")
+        return canonical_json(preservation_evidence(ledger_commit, record))
+    if record.get("state") != "prepared" or ledger_commit != prepared_commit:
+        raise RuntimeError(
+            "Remote preservation checkpoint does not match evidence"
+        )
     if pull.get("merge_commit_sha") != main_sha:
         raise RuntimeError("Promotion merge commit does not match main")
     if ref_sha(api, repo, "main") != main_sha:
@@ -405,10 +879,166 @@ def complete_dev_next(
         raise RuntimeError(
             "Merged main tree differs from the dev/next candidate"
         )
-    if repository_settings(api, repo).get("delete_branch_on_merge") is False:
-        set_auto_delete(api, repo, True)
-        return "auto-delete-restored"
-    return "auto-delete-already-enabled"
+    if read_preservation_record(api, repo) != (ledger_commit, record):
+        raise RuntimeError("Preservation transaction changed concurrently")
+    if record.get("mode") == "temporary-auto-delete":
+        if record.get("prior_auto_delete") is not True:
+            raise RuntimeError("Transaction does not own automatic deletion")
+        setting = repository_settings(api, repo).get("delete_branch_on_merge")
+        if setting is False:
+            set_auto_delete(api, repo, True)
+        elif setting is not True:
+            raise RuntimeError(
+                "Automatic branch deletion setting is unavailable"
+            )
+    completed = {
+        **record,
+        "state": "completed",
+        "main_sha": main_sha,
+        "prepared_ledger_commit": prepared_commit,
+    }
+    ledger_commit, completed = append_preservation_record(
+        api, repo, ledger_commit, completed
+    )
+    return canonical_json(preservation_evidence(ledger_commit, completed))
+
+
+def abort_dev_next(
+    api: API,
+    repo: str,
+    number: int,
+    head_sha: str,
+    operation_id: str,
+) -> str:
+    """Restore cleanup after an exact promotion was closed without merging."""
+    pull = pull_request(api, repo, number)
+    base = pull.get("base")
+    head = pull.get("head")
+    head_repo = head.get("repo") if isinstance(head, dict) else None
+    base_sha = base.get("sha") if isinstance(base, dict) else None
+    if (
+        pull.get("state") != "closed"
+        or pull.get("merged") is not False
+        or not isinstance(base_sha, str)
+        or not isinstance(base, dict)
+        or base.get("ref") != "main"
+        or not isinstance(head, dict)
+        or head.get("ref") != "dev/next"
+        or head.get("sha") != head_sha
+        or not isinstance(head_repo, dict)
+        or head_repo.get("full_name") != repo
+    ):
+        raise RuntimeError("Only an exact closed, unmerged promotion can abort")
+    checkpoint = read_preservation_record(api, repo)
+    if checkpoint is None:
+        raise RuntimeError("Preservation transaction is missing")
+    ledger_commit, record = checkpoint
+    require_preservation_identity(
+        record, repo, number, base_sha, head_sha, operation_id
+    )
+    if record.get("state") == "aborted":
+        if (
+            record.get("mode") == "temporary-auto-delete"
+            and repository_settings(api, repo).get("delete_branch_on_merge")
+            is not True
+        ):
+            raise RuntimeError("Aborted preservation did not restore cleanup")
+        return canonical_json(preservation_evidence(ledger_commit, record))
+    if record.get("state") not in {"preparing", "prepared"}:
+        raise RuntimeError("Preservation transaction cannot be aborted")
+    if record.get("mode") == "temporary-auto-delete":
+        if record.get("prior_auto_delete") is not True:
+            raise RuntimeError("Transaction does not own automatic deletion")
+        setting = repository_settings(api, repo).get("delete_branch_on_merge")
+        if setting is False:
+            set_auto_delete(api, repo, True)
+        elif setting is not True:
+            raise RuntimeError(
+                "Automatic branch deletion setting is unavailable"
+            )
+    aborted = {**record, "state": "aborted"}
+    ledger_commit, aborted = append_preservation_record(
+        api, repo, ledger_commit, aborted
+    )
+    return canonical_json(preservation_evidence(ledger_commit, aborted))
+
+
+def associated_pull_requests(
+    api: API, repo: str, commit_sha: str
+) -> list[dict[str, Any]]:
+    """Read every pull request associated with one exact commit."""
+    pulls: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        status, payload = api.request(
+            "GET",
+            f"repos/{repo}/commits/{commit_sha}/pulls?per_page=100&page={page}",
+        )
+        data = require_response(
+            status, payload, "read merge queue pull requests"
+        )
+        if not isinstance(data, list):
+            raise RuntimeError("GitHub returned an invalid associated PR list")
+        pulls.extend(item for item in data if isinstance(item, dict))
+        if len(data) < 100:
+            break
+        page += 1
+    return pulls
+
+
+def merge_group_gate(  # noqa: C901
+    api: API,
+    repo: str,
+    queue_ref: str,
+    queue_sha: str,
+    base_ref: str,
+    base_sha: str,
+) -> str:
+    """Bind one merge-queue candidate to one live dev/next promotion."""
+    match = MERGE_QUEUE_REF.fullmatch(queue_ref)
+    if (
+        match is None
+        or base_ref != "refs/heads/main"
+        or FULL_SHA.fullmatch(queue_sha) is None
+        or FULL_SHA.fullmatch(base_sha) is None
+    ):
+        raise RuntimeError("Merge queue event is not an exact main candidate")
+    number = int(match.group(1))
+    queue_branch = queue_ref.removeprefix("refs/heads/")
+    if ref_sha(api, repo, queue_branch) != queue_sha:
+        raise RuntimeError("Merge queue ref no longer matches this event")
+    pulls = associated_pull_requests(api, repo, queue_sha)
+    if len(pulls) != 1 or pulls[0].get("number") != number:
+        raise RuntimeError("Merge queue commit has no unique pull request")
+    candidate = pull_request(api, repo, number)
+    head = candidate.get("head")
+    if not isinstance(head, dict) or not isinstance(head.get("sha"), str):
+        raise RuntimeError("Queued promotion has an invalid head")
+    head_sha = str(head["sha"])
+    pull = validate_promotion(api, repo, number, head_sha, merged=False)
+    if pull.get("base", {}).get("sha") != base_sha:
+        raise RuntimeError("Queued promotion base does not match this event")
+    if ref_sha(api, repo, "main") != base_sha:
+        raise RuntimeError("Current main changed after merge queue entry")
+    if ref_sha(api, repo, "dev/next") != head_sha:
+        raise RuntimeError("Current dev/next changed after merge queue entry")
+    if not includes_main(compare(api, repo, base_sha, queue_sha)):
+        raise RuntimeError("Merge queue candidate does not contain its base")
+    if not includes_main(compare(api, repo, head_sha, queue_sha)):
+        raise RuntimeError("Merge queue candidate does not contain dev/next")
+    settings = repository_settings(api, repo)
+    protection = deletion_protection_state(api, repo)
+    if protection == "protected":
+        return "deletion-protected"
+    if settings.get("delete_branch_on_merge") is False:
+        ledger_commit, record = require_prepared_preservation(
+            api, repo, number, base_sha, head_sha
+        )
+        return (
+            "temporary-auto-delete-disabled; transaction "
+            f"{record['operation_id']} at {ledger_commit}"
+        )
+    raise RuntimeError("Queued dev/next promotion can delete its source branch")
 
 
 def manual_commands(delivery_branch: str, main_sha: str) -> str:
@@ -643,12 +1273,19 @@ def reconcile(
     return results
 
 
-def main() -> None:
+def main() -> None:  # noqa: C901
     """Run the PR gate or main-push reconciliation mode."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "command",
-        choices=("gate", "reconcile", "prepare-dev-next", "complete-dev-next"),
+        choices=(
+            "gate",
+            "merge-group-gate",
+            "reconcile",
+            "prepare-dev-next",
+            "complete-dev-next",
+            "abort-dev-next",
+        ),
     )
     parser.add_argument("--repo", required=True)
     parser.add_argument("--base", default="")
@@ -656,6 +1293,11 @@ def main() -> None:
     parser.add_argument("--head-ref", default="")
     parser.add_argument("--main-sha", default="")
     parser.add_argument("--pr-number", type=int, default=0)
+    parser.add_argument("--operation-id", default="")
+    parser.add_argument("--prepared-ledger-commit", default="")
+    parser.add_argument("--queue-ref", default="")
+    parser.add_argument("--queue-sha", default="")
+    parser.add_argument("--base-sha", default="")
     parser.add_argument("--auto", choices=("true", "false"), default="false")
     parser.add_argument(
         "--branch-strategy",
@@ -685,11 +1327,26 @@ def main() -> None:
                 pr_number=args.pr_number,
             )
             print(f"delivery sync gate: {result}")  # noqa: T201
+        elif args.command == "merge-group-gate":
+            result = merge_group_gate(
+                api,
+                args.repo,
+                args.queue_ref,
+                args.queue_sha,
+                args.base,
+                args.base_sha,
+            )
+            print(f"delivery sync gate: {result}")  # noqa: T201
         elif args.command == "prepare-dev-next":
             print(  # noqa: T201
                 prepare_dev_next(api, args.repo, args.pr_number, args.head_sha)
             )
         elif args.command == "complete-dev-next":
+            if not args.operation_id or not args.prepared_ledger_commit:
+                raise RuntimeError(
+                    "complete-dev-next requires the prepared operation and "
+                    "ledger commit"
+                )
             print(  # noqa: T201
                 complete_dev_next(
                     api,
@@ -697,6 +1354,20 @@ def main() -> None:
                     args.pr_number,
                     args.head_sha,
                     args.main_sha,
+                    args.operation_id,
+                    args.prepared_ledger_commit,
+                )
+            )
+        elif args.command == "abort-dev-next":
+            if not args.operation_id:
+                raise RuntimeError("abort-dev-next requires --operation-id")
+            print(  # noqa: T201
+                abort_dev_next(
+                    api,
+                    args.repo,
+                    args.pr_number,
+                    args.head_sha,
+                    args.operation_id,
                 )
             )
         else:

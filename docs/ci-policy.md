@@ -255,28 +255,33 @@ checks 並記錄結果；平台不再允許補跑時，另開 Issue 保留缺口
 1. 在乾淨、精確等於 promotion PR head 的 worktree 執行 `prepare`，且
    `--candidate-sha` 必須是該 head SHA；保存 candidate archive、SHA-256、base/head SHA、
    candidate tree、納入 PR、SemVer intent 與 canary 三態。
-2. `finalize-quota-fallback` 只接受 preflight archive、兩則留言 URL 與所有 blocked run
-   URL；工具會自行選擇 repo 內建 verifier（模板來源 repo 為
+2. `dev/next` 的 standalone batch 必須先用相同 PR number 與 head SHA 執行
+   `delivery_sync.py prepare-dev-next`。工具先在遠端 append-only Git ledger 以
+   non-force fast-forward 建立唯一 transaction，綁定 repository、PR、base/head SHA 與
+   原本為 `true` 的 auto-delete，再於平台 deletion protection 無法驗證時暫停
+   auto-delete。若 API 不支援可信 ledger、已有其他 transaction，或 setting 原本就是
+   `false`，一律 fail closed；中止 promotion 時先關閉未合併 PR，再以同 operation ID
+   執行 `abort-dev-next` 恢復。
+3. 在同一 PR 留下標題為 `Actions quota fallback attestation` 的標準留言，再由 human
+   maintainer 留下 `Actions quota fallback authorization`。兩則留言都必須使用工具定義的
+   canonical JSON，精確綁定 repository、PR、base/head SHA、candidate tree、archive digest、
+   完整 blocked-run set 與上述 remote ledger commit／transaction。前者明示具 billing
+   visibility 且確認為已授權的一次性 billing zero-step block 特例處理，後者明示一次性、
+   無 admin bypass 的授權。
+4. `finalize-quota-fallback` 只接受 preflight archive、兩則留言 URL 與所有 blocked run
+   URL；工具會 refetch 同一 remote transaction，自行選擇 repo 內建 verifier（模板來源 repo 為
    `./scripts/verify-template.sh`，生成專案為 `./scripts/verify`），並以 live
    repository variables 重建 promotion preflight，
    不接受呼叫者提供的命令字串。若 canary 是 `allowed`，fallback 不得替代它；只有
-   `blocked`／`unknown` 可維持 artifact-only。若 route 是 `dev/next` 的
-   standalone batch，工具還會以相同 PR number 與 head SHA 執行
-   `delivery_sync.py prepare-dev-next`；平台 deletion protection 無法驗證時，先暫停
-   auto-delete，且必須在這項 prepare 證據完成後才可合併。
-3. 先在同一 PR 留下標題為 `Actions quota fallback attestation` 的標準留言，再由 human
-   maintainer 留下 `Actions quota fallback authorization`。兩則留言都必須使用工具定義的
-   canonical JSON，精確綁定 repository、PR、base/head SHA、candidate tree、archive digest
-   與完整 blocked-run set；前者明示具 billing visibility 且確認為已授權的一次性
-   billing zero-step block 特例處理，後者明示一次性、無 admin bypass 的授權。工具會
-   refetch 留言、作者資格與 live GitHub identity；輸出的 gate 是 `quota-fallback`、
-   `release_eligible` 固定為 `false`。
-4. 僅以非 admin 的 squash merge 合併。更新乾淨的 `main` checkout 後執行
+   `blocked`／`unknown` 可維持 artifact-only。工具也會 refetch 留言、作者資格與 live
+   GitHub identity；輸出的 gate 是 `quota-fallback`、`release_eligible` 固定為 `false`。
+5. 僅以非 admin 的 squash merge 合併。更新乾淨的 `main` checkout 後執行
    `verify-quota-main`，確認 main tree 等於已驗證 candidate tree，並把結果留在 PR；
-   `dev/next` route 還會要求前述 prepare 證據，以 merged PR、head SHA 與 current main
-   SHA 執行 `delivery_sync.py complete-dev-next`，確認長期 branch 未消失且 tree lineage
-   一致後才恢復短期 branch 的 auto-delete。任何一步不符都停止、revert／修正，不重寫
-   歷史。
+   `dev/next` route 還會重新讀取 canonical authorization 所綁定的 prepared ledger commit，
+   只用同一 operation、merged PR、head SHA 與 current main SHA 執行
+   `delivery_sync.py complete-dev-next`。工具確認長期 branch 未消失、tree lineage 一致後，
+   才把該 transaction append 為 completed 並恢復原本的 auto-delete；任何一步不符都停止、
+   revert／修正，不重寫歷史。
 
 新 commit、base SHA 漂移、candidate tree 改變、任何非 zero-step 失敗，或 attestation／
 authorization 不屬於同一 PR，都會使 fallback 失效。這份本機 evidence 只允許合併，
