@@ -663,9 +663,7 @@ def has_exact_quota_note(
             if created.tzinfo is None or created.astimezone(UTC) <= after:
                 continue
         candidates += 1
-        verification = (
-            binding.get("verification")
-        )
+        verification = binding.get("verification")
         if (
             set(binding)
             == {

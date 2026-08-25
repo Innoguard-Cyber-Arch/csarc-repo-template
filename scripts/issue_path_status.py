@@ -20,11 +20,13 @@ from typing import Any
 from ci_tier import classify as classify_ci
 from pr_lifecycle import (
     LEASE_STATUS_INTERFACE,
+    authority_boundary,
     closing_issue_references,
     effective_protection,
     issue_references,
     lease_status_snapshot,
     local_branch_strategy,
+    merged_lease_status_snapshot,
 )
 from pr_lifecycle import blocker_state as lifecycle_blocker_state
 from promotion_gate import (
@@ -92,6 +94,16 @@ class GitHub:
         if path:
             endpoint = f"{endpoint}/{path.lstrip('/')}"
         return self._read([endpoint])
+
+    def viewer(self, explicit_actor: str = "") -> str:
+        """Return a caller-supplied App actor or the authenticated user."""
+        if explicit_actor:
+            return explicit_actor
+        payload = self._read(["user"])
+        login = payload.get("login") if isinstance(payload, dict) else None
+        if not isinstance(login, str) or not login:
+            raise RuntimeError("Authenticated GitHub actor is unavailable")
+        return login
 
     def pages(self, repo: str, path: str) -> list[dict[str, Any]]:
         """Read and flatten every page of one list resource."""
@@ -319,8 +331,7 @@ def linked_pull(
     body = str(pull.get("body") or "")
     number = pull.get("number")
     related = (
-        isinstance(number, int)
-        and (repo.casefold(), number) in native_links
+        isinstance(number, int) and (repo.casefold(), number) in native_links
     ) or any(
         reference_repo.casefold() == repo.casefold()
         and reference_number == issue_number
@@ -702,9 +713,10 @@ def pull_contract_problem(
             "rerun status.",
         )
     references = issue_references(body, repo)
-    if len(references) != 1 or (
-        references[0][0].casefold(), references[0][1]
-    ) != expected:
+    if (
+        len(references) != 1
+        or (references[0][0].casefold(), references[0][1]) != expected
+    ):
         return (
             "The pull request must reference exactly one primary Issue in "
             "this repository",
@@ -848,6 +860,7 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
             "base_chain": observation.get("base_chain", []),
             "chain_ancestry": observation.get("chain_ancestry", {}),
             "merged_route": observation.get("merged_route"),
+            "merged_lease_status": observation.get("merged_lease_status"),
             "issue_state": issue.get("state"),
         }
         return Decision(
@@ -941,6 +954,35 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
                     "then rerun status.",
                     latest,
                 )
+            recovery = observation.get("merged_lease_status") or {}
+            if not promotion and recovery.get("state") == "held":
+                head_sha = str((latest.get("head") or {}).get("sha") or "")
+                owner = str((recovery.get("holder") or {}).get("owner") or "")
+                return decision(
+                    "Integrated",
+                    "blocked",
+                    "A retained merge lease still requires final cleanup",
+                    "Using the retained merge lease, run "
+                    "./scripts/pr_lifecycle.py close-issue "
+                    f"--repo {repo} --pr-number {latest['number']} "
+                    f"--head-sha {head_sha} --lease <lease.json> "
+                    f"--owner {owner}, then rerun status.",
+                    latest,
+                    ("close-issue",),
+                )
+            if (
+                not promotion
+                and recovery
+                and recovery.get("state") != "available"
+            ):
+                return decision(
+                    "Integrated",
+                    "blocked",
+                    "The retained merge lease cannot be used safely",
+                    "Ask a human maintainer to inspect or repair the retained "
+                    "lease before continuing.",
+                    latest,
+                )
             if issue.get("state") != "closed":
                 if promotion:
                     return decision(
@@ -951,18 +993,14 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
                         "then rerun status.",
                         latest,
                     )
-                head_sha = str((latest.get("head") or {}).get("sha") or "")
                 return decision(
                     "Integrated",
                     "blocked",
-                    "The non-default integration merge left its Issue open",
-                    "Using the retained merge lease, run "
-                    "./scripts/pr_lifecycle.py close-issue "
-                    f"--repo {repo} --pr-number {latest['number']} "
-                    f"--head-sha {head_sha} --lease <lease.json> "
-                    "--owner <task-owner>, then rerun status.",
+                    "The integration merge left its Issue open without a "
+                    "usable retained lease",
+                    "Ask a human maintainer to inspect the merge and retained "
+                    "lease evidence before correcting the Issue state.",
                     latest,
-                    ("close-issue",),
                 )
             return decision(
                 "Delivered" if promotion else "Integrated",
@@ -1201,6 +1239,11 @@ def derive_status(observation: dict[str, Any]) -> Decision:  # noqa: C901
         )
     quota_lease_available = (
         checks == "accepted-routine-quota-fallback"
+        and capability.get("state") != "blocked"
+        and (
+            capability.get("state") == "allowed"
+            or capability.get("quota_fallback") is True
+        )
         and (capability.get("lease_status") or {}).get("state") == "available"
     )
     if capability.get("state") != "allowed" and not quota_lease_available:
@@ -1353,40 +1396,48 @@ def local_repository() -> str:
 def require_base_lifecycle_interface(
     github: GitHub, repo: str, base_sha: str
 ) -> None:
-    """Bind the imported lifecycle helper to the exact base Git blob."""
-    lifecycle_file = github.get(
-        repo, f"contents/scripts/pr_lifecycle.py?ref={base_sha}"
-    )
-    if (
-        not isinstance(lifecycle_file, dict)
-        or lifecycle_file.get("type") != "file"
-        or lifecycle_file.get("path") != "scripts/pr_lifecycle.py"
-        or FULL_SHA.fullmatch(str(lifecycle_file.get("sha") or "")) is None
-        or lifecycle_file.get("encoding") != "base64"
-        or not isinstance(lifecycle_file.get("content"), str)
+    """Bind every imported policy helper to its exact terminal-base blob."""
+    scripts = Path(__file__).resolve().parent
+    sources: dict[str, str] = {}
+    for name in (
+        "pr_lifecycle.py",
+        "ci_tier.py",
+        "promotion_gate.py",
+        "issue_path_status.py",
     ):
-        raise RuntimeError(
-            "canonical lifecycle script is unavailable on the base"
-        )
-    try:
-        base_bytes = base64.b64decode(
-            "".join(lifecycle_file["content"].split()), validate=True
-        )
-        source = base_bytes.decode("utf-8")
-        local_bytes = (
-            Path(__file__).resolve().with_name("pr_lifecycle.py").read_bytes()
-        )
-    except (binascii.Error, OSError, UnicodeDecodeError) as error:
-        raise RuntimeError(
-            "canonical lifecycle script content is malformed"
-        ) from error
-    git_blob = b"blob " + str(len(base_bytes)).encode() + b"\0" + base_bytes
-    content_sha = hashlib.sha1(git_blob, usedforsecurity=False).hexdigest()
-    if content_sha != lifecycle_file["sha"] or local_bytes != base_bytes:
-        raise RuntimeError(
-            "local lifecycle helper does not match the exact base blob"
-        )
-    if f'LEASE_STATUS_INTERFACE = "{LEASE_STATUS_INTERFACE}"' not in source:
+        path = f"scripts/{name}"
+        response = github.get(repo, f"contents/{path}?ref={base_sha}")
+        if (
+            not isinstance(response, dict)
+            or response.get("type") != "file"
+            or response.get("path") != path
+            or FULL_SHA.fullmatch(str(response.get("sha") or "")) is None
+            or response.get("encoding") != "base64"
+            or not isinstance(response.get("content"), str)
+        ):
+            raise RuntimeError(
+                f"canonical policy helper {path} is unavailable on the base"
+            )
+        try:
+            base_bytes = base64.b64decode(
+                "".join(response["content"].split()), validate=True
+            )
+            sources[name] = base_bytes.decode("utf-8")
+            local_bytes = scripts.joinpath(name).read_bytes()
+        except (binascii.Error, OSError, UnicodeDecodeError) as error:
+            raise RuntimeError(
+                f"canonical policy helper {path} is malformed"
+            ) from error
+        git_blob = b"blob " + str(len(base_bytes)).encode() + b"\0" + base_bytes
+        content_sha = hashlib.sha1(git_blob, usedforsecurity=False).hexdigest()
+        if content_sha != response["sha"] or local_bytes != base_bytes:
+            raise RuntimeError(
+                f"local policy helper {path} does not match the base blob"
+            )
+    if (
+        f'LEASE_STATUS_INTERFACE = "{LEASE_STATUS_INTERFACE}"'
+        not in sources["pr_lifecycle.py"]
+    ):
         raise RuntimeError(
             "canonical lifecycle lease-status interface is absent"
         )
@@ -1449,6 +1500,10 @@ def inspect_capability(
             "required": contexts,
             "lease_status": lease,
         }
+    quota_fallback = protection == "unknown" and (
+        re.search(r"\b403\b", reason) is not None
+        or "Upgrade to GitHub Pro" in reason
+    )
     state = (
         "blocked"
         if lease_state == "held" or protection == "blocked"
@@ -1464,6 +1519,7 @@ def inspect_capability(
         "reason": detail,
         "required": contexts,
         "lease_status": lease,
+        "quota_fallback": quota_fallback,
     }
 
 
@@ -1566,11 +1622,37 @@ def inspect_issue(  # noqa: C901
                 ],
             }
         observation["merged_routes"] = merged_routes
-        if merged and route.get("base") == "main":
+        if merged:
             latest = max(merged, key=lambda item: str(item.get("merged_at")))
             latest_route = merged_routes.get(str(latest.get("number")), {})
             merge_sha = latest_route.get("terminal_merge_sha")
-            if latest_route.get("valid") and isinstance(merge_sha, str):
+            if (
+                latest_route.get("valid")
+                and route.get("base") != "main"
+                and isinstance((latest.get("head") or {}).get("sha"), str)
+            ):
+                try:
+                    require_base_lifecycle_interface(
+                        github, repo, str(branches[str(route["base"])])
+                    )
+                    observation["merged_lease_status"] = (
+                        merged_lease_status_snapshot(
+                            github,
+                            repo,
+                            int(latest["number"]),
+                            str((latest.get("head") or {})["sha"]),
+                        )
+                    )
+                except (KeyError, RuntimeError) as error:
+                    observation["merged_lease_status"] = {
+                        "state": "unknown",
+                        "reason": str(error),
+                    }
+            if (
+                route.get("base") == "main"
+                and latest_route.get("valid")
+                and isinstance(merge_sha, str)
+            ):
                 try:
                     post_merge_runs = github.keyed(
                         repo,
@@ -1651,9 +1733,9 @@ def inspect_issue(  # noqa: C901
             key = f"{ancestor}...{descendant}"
             try:
                 comparison = github.get(repo, f"compare/{key}")
-                ancestry[key] = isinstance(
-                    comparison, dict
-                ) and comparison.get("status") in {"ahead", "identical"}
+                ancestry[key] = isinstance(comparison, dict) and comparison.get(
+                    "status"
+                ) in {"ahead", "identical"}
             except RuntimeError:
                 ancestry[key] = False
     observation["chain_ancestry"] = ancestry
@@ -1692,6 +1774,12 @@ def inspect_issue(  # noqa: C901
     )
     observation["blocker"] = unresolved_blocker(comments, reviews)
     _, blocker_boundary = lifecycle_blocker_state(comments)
+    pr_timeline = github.pages(
+        repo, f"issues/{pull['number']}/timeline?per_page=100"
+    )
+    note_boundary = authority_boundary(comments, pr_timeline)
+    if blocker_boundary is not None:
+        note_boundary = max(blocker_boundary, note_boundary or blocker_boundary)
     observation["human_approval"] = has_human_approval(
         reviews,
         str((pull.get("user") or {}).get("login") or ""),
@@ -1704,7 +1792,7 @@ def inspect_issue(  # noqa: C901
         head_sha,
         list(observation.get("blocked_run_urls", [])),
         str((pull.get("user") or {}).get("login") or ""),
-        blocker_boundary,
+        note_boundary,
     )
     return derive_status(observation)
 

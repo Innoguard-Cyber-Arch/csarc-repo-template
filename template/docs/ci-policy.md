@@ -57,8 +57,9 @@ tier、保留 promotion evidence 並立即形成 release 邊界。
 同號的多張 open PR／多條 remote work branch、必要 branch 缺少、非本 repo head、
 非 promotion PR head 未符合 `<type>/<issue-number>-*`（hotfix 必須是 `fix/<issue-number>-*`）、
 base ancestry 或 head ref 漂移、未勾選 acceptance、較新的 blocker、required check
-失敗，以及 single-writer Ruleset／lifecycle interface 為 `blocked` 或 `unknown` 時，
-`guard` 都是 `blocked`，且不會列出 merge 動作。Elevated、promotion 與 hotfix 還必須
+失敗，以及 single-writer lifecycle interface 為 `blocked` 時，`guard` 都是 `blocked`，
+且不會列出 merge 動作；Ruleset 為 `unknown` 時一般 merge 也維持 blocked，只有下述
+完整驗證的 routine quota 例外可使用獨立驗證為 `available` 的 lease。Elevated、promotion 與 hotfix 還必須
 有綁定目前 head、非作者本人、非 bot 的 maintainer approval。Draft 必須填完 Scope、
 Completed verification、Pending verification、Known risks 與 Dependencies / non-parallel
 work；未完成時使用 `Refs`，不可用 closing keyword。Stacked PR 必須有唯一鏈回 integration
@@ -80,8 +81,10 @@ capability。
 
 Routine PR 若所有 live failed runs 都由 `promotion_gate.py` 證明為 exact-head zero-step
 billing block，入口會列出既有 `note-quota-fallback` 命令。它只接受一則 repo、PR、
-SHA、完整 run URL 集合與本機驗證結果都相符的 canonical note；note 有效且 single-writer
-capability 為 `allowed` 後才列出 lease／merge。Elevated、promotion、hotfix 或任何
+SHA、完整 run URL 集合與本機驗證結果都相符的 canonical note；note 有效、capability
+不是明確 `blocked`，且 canonical lease 為 `available` 後才列出 lease／`merge-quota`。
+Ruleset 可驗為 enforced 時 capability 為 `allowed`；Private Free API 回 403 而成為
+`unknown` 時，也只允許這個獨立重驗所有 evidence 的 quota-only 入口。Elevated、promotion、hotfix 或任何
 非 quota failure 不得走這條路；promotion／hotfix 的 zero-step 狀態只會導向既有雙方
 attestation／authorization 流程。
 
@@ -280,7 +283,7 @@ identity；合併後立即形成 patch release 邊界。接著由每條進行中
 ## PR lifecycle single-writer
 
 任何 agent 要把既有 PR 轉 Ready／Draft、改 label／milestone、準備 merge authorization
-或合併前，必須先以 `scripts/pr_lifecycle.py acquire` 對精確 repository、PR、head SHA
+或合併前，必須先在 exact terminal policy-base SHA 的乾淨 detached checkout，以 `scripts/pr_lifecycle.py acquire` 對精確 repository、PR、head SHA
 與 task owner 建立 lease evidence。工具會用 create-only atomic push 同時取得該 PR 的
 remote ref 與以 base branch 雜湊命名的共用 destination-lane ref；任何兩張指向同一 base
 的 PR 都不能同時持有 merge lane。取得失敗、lease
@@ -308,7 +311,10 @@ GitHub App caller 必須從 pinned token action 的 `app-slug` 明確傳入 acto
 
 輸出 schema v1、repository、PR、exact head/base、兩個計算後的 remote refs，以及
 `available`、`held` 或 `unknown`。`available` 只允許下一步嘗試 atomic `acquire`；不能
-當成已持有 lease，也不能單獨授權任何 mutation。
+當成已持有 lease，也不能單獨授權任何 mutation。所有 lifecycle write 都必須從 exact
+terminal policy-base SHA 的乾淨 detached checkout 執行，並在 mutation 前驗證 HEAD、
+origin 與 dirty state；PR candidate checkout 只作 live data，不能提供 writer 或其 policy
+dependencies。
 
 `check` 與 `merge` 會在 lease 內分頁重讀 timeline、一般留言、inline review comments、
 submitted COMMENTED review bodies、reviews、checklists、base、
@@ -396,9 +402,10 @@ Actions quota fallback note
 ```
 
 `merge-quota` 不接受 authorization URL；它會在 lease 內前後各重讀一次 live PR，要求
-PR 內文含 `Alpha 自行合併 / self-merged`、恰一個本 repo closing Issue 且沒有未勾選
+PR author 與 current lease actor 相同、內文含 `Alpha 自行合併 / self-merged`、恰一個本 repo closing Issue 且沒有未勾選
 項目，重新列舉該 head 的完整 failed run 集合、逐一驗證 zero-step billing block，並核對
-唯一 canonical note。Promotion、hotfix、workflow／governance、dependency、template 與
+唯一 canonical note，且 note 必須晚於最新 blocker／resolution 與 Draft transition。
+Promotion、hotfix、workflow／governance、dependency、template 與
 unknown scope 一律拒絕；最後仍以 destination lease CAS、base SHA 與 merge response 驗證
 封住併發漂移。
 
@@ -414,8 +421,10 @@ lease release 回應失敗，可在該 lease 到期前以同一 actor 重跑 rec
 ```
 
 route 尚未整合、containment 漂移、actor 不符、lease 到期或 evidence 不完整時一律 fail
-closed；不得改用未受 lease 保護的手動 `gh issue close` 取代。沒有 closing Issue 的
-sync／automation PR 會在 merge 驗證完成後直接釋放 lease。
+closed；status 只有在 retained lease 的 identity、TTL 與目前 actor 都仍有效時才列出
+`close-issue`。其餘狀態交由 maintainer 查明或修復 lease，不得改用未受 lease 保護的手動
+`gh issue close` 取代。沒有 closing Issue、且符合 canonical branch route 的
+sync／automation PR 會在 merge 驗證完成後直接釋放 lease；任意未連結 feature branch 不屬於此例外。
 
 ### `dev/next` promotion preservation
 

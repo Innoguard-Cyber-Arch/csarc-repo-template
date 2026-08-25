@@ -10,6 +10,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -39,6 +40,9 @@ SHA256 = re.compile(r"[0-9a-f]{64}")
 OWNER = re.compile(r"[A-Za-z0-9._/@:-]{1,200}")
 ACTOR = re.compile(r"[A-Za-z0-9_.-]+(?:\[bot\])?")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+POLICY_BASE_REF = re.compile(
+    r"(?:main|dev|dev/next|dev/(?:m|i)[1-9][0-9]*-[a-z0-9][a-z0-9-]*)"
+)
 UNCHECKED = re.compile(r"(?m)^\s*[-*+]\s+\[\s*\]")
 CLOSING_REFERENCE = re.compile(
     r"(?i)\b(?:close(?:s|d)?|fix(?:es|ed)?|resolve(?:s|d)?)\s+"
@@ -310,6 +314,9 @@ class GitHubReader(Protocol):
     def get(self, repo: str, path: str) -> object:
         """Read one REST resource."""
 
+    def viewer(self, explicit_actor: str = "") -> str:
+        """Return the authenticated actor identity."""
+
 
 def remote_repository(url: str) -> str:
     """Resolve an origin URL to its GitHub owner/name identity."""
@@ -330,6 +337,71 @@ def require_origin(repo: str) -> None:
     origin = remote_repository(run(["git", "remote", "get-url", "origin"]))
     if origin.casefold() != repo.casefold():
         raise RuntimeError("origin does not match the requested repository")
+
+
+def require_trusted_checkout(repo: str, base_ref: str, base_sha: str) -> None:
+    """Run writers only from a clean detached canonical policy base."""
+    if (
+        POLICY_BASE_REF.fullmatch(base_ref) is None
+        or SHA.fullmatch(base_sha) is None
+    ):
+        raise RuntimeError("Mutation target is not a canonical policy base")
+    require_origin(repo)
+    if run(["git", "rev-parse", "HEAD"]) != base_sha:
+        raise RuntimeError(
+            "Lifecycle mutations must run from the exact terminal base SHA"
+        )
+    git = shutil.which("git")
+    if git is None:
+        raise RuntimeError("Git is unavailable")
+    symbolic = subprocess.run(  # noqa: S603
+        [git, "symbolic-ref", "-q", "HEAD"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if symbolic.returncode not in {0, 1}:
+        raise RuntimeError("Detached checkout state is unavailable")
+    if symbolic.returncode == 0:
+        raise RuntimeError("Lifecycle mutations require a detached checkout")
+    if run(["git", "status", "--porcelain=v1", "--untracked-files=all"]):
+        raise RuntimeError("Lifecycle mutations require a clean checkout")
+
+
+def require_cli_mutation_checkout(
+    args: argparse.Namespace, github: GitHub
+) -> None:
+    """Resolve and verify the trusted base before any CLI write."""
+    if args.handler_name == "issue-edit":
+        repository = github.get(args.repo, "")
+        default_branch = (
+            repository.get("default_branch")
+            if isinstance(repository, dict)
+            else None
+        )
+        if not isinstance(default_branch, str):
+            raise RuntimeError("Repository default branch is unavailable")
+        require_trusted_checkout(
+            args.repo,
+            default_branch,
+            branch_sha(github, args.repo, default_branch),
+        )
+        return
+    if args.handler_name == "acquire":
+        pull = live_pull(github, args.repo, args.pr_number, args.head_sha)
+        base = pull.get("base") or {}
+        base_ref = base.get("ref")
+        base_sha = base.get("sha")
+        if not isinstance(base_ref, str) or not isinstance(base_sha, str):
+            raise RuntimeError("Pull request base identity is unavailable")
+        require_trusted_checkout(args.repo, base_ref, base_sha)
+        return
+    lease = read_lease(args.lease)
+    require_trusted_checkout(
+        str(lease["repository"]),
+        str(lease["base_ref"]),
+        str(lease["base_sha"]),
+    )
 
 
 def pr_ref(pr_number: int) -> str:
@@ -874,6 +946,114 @@ def lease_status_snapshot(
     return result
 
 
+def merged_lease_status_snapshot(
+    github: GitHubReader,
+    repo: str,
+    pr_number: int,
+    head_sha: str,
+    explicit_actor: str = "",
+) -> dict[str, object]:
+    """Report whether this actor can finish one retained merge lease."""
+    result: dict[str, object] = {
+        "repository": repo,
+        "pull_request": pr_number,
+        "head_sha": head_sha,
+        "state": "unknown",
+        "reason": "retained merge lease has not been inspected",
+    }
+    try:
+        require_origin(repo)
+        pull = github.get(repo, f"pulls/{pr_number}")
+        repository = github.get(repo, "")
+        if not isinstance(pull, dict) or not isinstance(repository, dict):
+            raise RuntimeError("Merged pull request identity is unavailable")
+        base = pull.get("base") or {}
+        head = pull.get("head") or {}
+        base_ref = base.get("ref")
+        base_sha = base.get("sha")
+        default_branch = repository.get("default_branch")
+        if (
+            pull.get("merged") is not True
+            or pull.get("state") != "closed"
+            or pull.get("number") != pr_number
+            or head.get("sha") != head_sha
+            or (head.get("repo") or {}).get("full_name") != repo
+            or not isinstance(base_ref, str)
+            or SHA.fullmatch(str(base_sha or "")) is None
+            or not isinstance(default_branch, str)
+        ):
+            raise RuntimeError("Merged pull request identity is incomplete")
+        refs = lease_refs(pull, default_branch)
+        result.update(
+            {"base_ref": base_ref, "base_sha": base_sha, "refs": refs}
+        )
+        observed = {ref: remote_ref(ref) for ref in refs}
+        commits = {sha for sha in observed.values() if sha is not None}
+        if not commits:
+            result.update(
+                {
+                    "state": "available",
+                    "reason": "no retained merge lease exists",
+                }
+            )
+            return result
+        if len(commits) != 1 or any(
+            value is None for value in observed.values()
+        ):
+            raise RuntimeError("Retained merge lease refs are inconsistent")
+        commit = commits.pop()
+        cores = [remote_lease_core(github, repo, commit, ref) for ref in refs]
+        if cores[0] != cores[1]:
+            raise RuntimeError("Retained merge lease refs disagree")
+        core = cores[0]
+        if (
+            core["repository"].casefold() != repo.casefold()
+            or core["pull_request"] != pr_number
+            or core["head_sha"] != head_sha
+            or core["base_ref"] != base_ref
+            or core["base_sha"] != base_sha
+            or core["default_branch"] != default_branch
+            or core["refs"] != refs
+        ):
+            raise RuntimeError("Retained merge lease scope does not match")
+        if parse_time(core["expires_at"], "Retained lease") <= datetime.now(
+            UTC
+        ) + timedelta(seconds=MIN_OPERATION_SECONDS):
+            result.update(
+                {
+                    "state": "blocked",
+                    "reason": "retained merge lease is expired or expiring",
+                }
+            )
+            return result
+        if (
+            github.viewer(explicit_actor).casefold()
+            != str(core["actor"]).casefold()
+        ):
+            result.update(
+                {
+                    "state": "blocked",
+                    "reason": "retained merge lease belongs to another actor",
+                }
+            )
+            return result
+        result.update(
+            {
+                "state": "held",
+                "reason": "current actor holds the retained merge lease",
+                "holder": {
+                    "owner": core["owner"],
+                    "actor": core["actor"],
+                    "expires_at": core["expires_at"],
+                    "lease_commit": commit,
+                },
+            }
+        )
+    except (KeyError, RuntimeError) as error:
+        result["reason"] = str(error)
+    return result
+
+
 def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
     """Atomically acquire the PR and destination-lane refs."""
     if SHA.fullmatch(args.head_sha) is None:
@@ -1076,6 +1256,26 @@ def blocker_state(
 def unresolved_blocker(comments: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Return the latest unresolved merge-blocker marker."""
     return blocker_state(comments)[0]
+
+
+def authority_boundary(
+    comments: list[dict[str, Any]], timeline: list[dict[str, Any]]
+) -> datetime | None:
+    """Return the latest blocker or Draft transition that resets authority."""
+    _, blocker_boundary = blocker_state(comments)
+    draft_boundaries = [
+        parse_time(item.get("created_at"), "Draft event")
+        for item in timeline
+        if item.get("event") in DRAFT_EVENTS
+    ]
+    return max(
+        [
+            boundary
+            for boundary in [blocker_boundary, *draft_boundaries]
+            if boundary is not None
+        ],
+        default=None,
+    )
 
 
 def current_reviews(reviews: list[dict[str, Any]]) -> dict[str, str]:
@@ -1315,7 +1515,7 @@ def require_single_closing_issue(
         raise RuntimeError(
             "Pull request must have exactly one closing reference in this "
             "repository"
-    )
+        )
     issue_number = closing[0][1]
     require_complete_issue(
         github, repo, issue_number, require_open=require_open
@@ -1323,8 +1523,37 @@ def require_single_closing_issue(
     return issue_number
 
 
+def canonical_unlinked_automation(pull: dict[str, Any], strategy: str) -> bool:
+    """Recognize only the no-Issue routes allowed by PR policy."""
+    base_ref = str((pull.get("base") or {}).get("ref") or "")
+    head_ref = str((pull.get("head") or {}).get("ref") or "")
+    if head_ref.startswith("release-please--"):
+        return base_ref == "main"
+    if head_ref.startswith(("dependabot/", "automation/")):
+        expected = {"main": "main", "dev": "dev", "delivery": "dev/next"}
+        return base_ref == expected.get(strategy)
+    if strategy != "delivery" or not base_ref.startswith("dev/"):
+        return False
+    key = base_ref.removeprefix("dev/")
+    return (
+        re.fullmatch(
+            rf"sync/main-to-{re.escape(key)}-[0-9a-f]{{7,40}}", head_ref
+        )
+        is not None
+        and re.fullmatch(
+            r"(?:next|m[1-9][0-9]*-[a-z0-9][a-z0-9-]*|"
+            r"i[1-9][0-9]*-[a-z0-9][a-z0-9-]*)",
+            key,
+        )
+        is not None
+    )
+
+
 def validate_merge_issue_links(
-    github: GitHub, repo: str, pull: dict[str, Any]
+    github: GitHub,
+    repo: str,
+    pull: dict[str, Any],
+    strategy: str,
 ) -> list[int]:
     """Validate Issue closers while permitting an unlinked sync PR."""
     closing = closing_issue_references(str(pull.get("body") or ""), repo)
@@ -1332,24 +1561,31 @@ def validate_merge_issue_links(
         raise RuntimeError(
             "Pull request must have closing references only in this repository"
         )
+    if closing and len(closing) != 1:
+        raise RuntimeError(
+            "A tracked pull request must have exactly one closing reference"
+        )
     head_ref = str((pull.get("head") or {}).get("ref") or "")
+    if not closing and not canonical_unlinked_automation(pull, strategy):
+        raise RuntimeError(
+            "A zero-closer pull request must use a canonical automation route"
+        )
     issue_branch = re.fullmatch(
         r"[a-z][a-z0-9-]*/([1-9][0-9]*)-[a-z0-9][a-z0-9-]*",
         head_ref,
     )
     if issue_branch is not None:
         expected = int(issue_branch.group(1))
-        if len(closing) != 1 or (
-            closing[0][0].casefold(), closing[0][1]
-        ) != (repo.casefold(), expected):
+        if len(closing) != 1 or (closing[0][0].casefold(), closing[0][1]) != (
+            repo.casefold(),
+            expected,
+        ):
             raise RuntimeError(
                 "Issue pull request must have exactly one closing reference "
                 "to its matching local Issue"
             )
     for issue_number in sorted({number for _, number in closing}):
-        require_complete_issue(
-            github, repo, issue_number, require_open=True
-        )
+        require_complete_issue(github, repo, issue_number, require_open=True)
     return [number for _, number in closing]
 
 
@@ -1404,37 +1640,24 @@ def merge_snapshot(  # noqa: C901
     )
     if not approvers:
         raise RuntimeError("An independent approving review is required")
-    issue_numbers = validate_merge_issue_links(github, repo, pull)
+    strategy = local_branch_strategy()
+    issue_numbers = validate_merge_issue_links(github, repo, pull, strategy)
 
     base = pull.get("base") or {}
     base_ref = base.get("ref")
     if not isinstance(base_ref, str):
         raise RuntimeError("Pull request base branch is unavailable")
-    head_ref = str((pull.get("head") or {}).get("ref") or "")
-    issue_branch = re.fullmatch(
-        r"[a-z][a-z0-9-]*/([1-9][0-9]*)-[a-z0-9][a-z0-9-]*",
-        head_ref,
-    )
-    if issue_branch is not None:
-        issue = github.get(repo, f"issues/{issue_numbers[0]}")
+    for issue_number in issue_numbers:
+        issue = github.get(repo, f"issues/{issue_number}")
         if not isinstance(issue, dict):
             raise RuntimeError("Closing Issue identity is unavailable")
-        route = open_issue_route_snapshot(
+        open_issue_route_snapshot(
             github,
             repo,
             issue,
             pull,
-            local_branch_strategy(),
+            strategy,
             routine_only=False,
-        )
-        if base_ref != route.get("base"):
-            raise RuntimeError(
-                "Issue pull request must target its canonical integration "
-                "branch before merge"
-            )
-    elif issue_numbers and base_ref != lease["default_branch"]:
-        raise RuntimeError(
-            "A non-default automation pull request cannot close Issues"
         )
     title = pull.get("title")
     if not isinstance(title, str) or not title.strip():
@@ -1516,6 +1739,28 @@ def open_issue_route_snapshot(
         routine_only and route.get("kind") in elevated_routes
     ):
         raise RuntimeError("Routine quota merge has no valid Issue route")
+    base_ref = str((pull.get("base") or {}).get("ref") or "")
+    head_ref = str((pull.get("head") or {}).get("ref") or "")
+    expected_head = route.get("head")
+    issue_number = issue.get("number")
+    pattern = (
+        rf"fix/{issue_number}-[a-z0-9][a-z0-9-]*"
+        if route.get("kind") == "hotfix"
+        else rf"[a-z][a-z0-9-]*/{issue_number}-[a-z0-9][a-z0-9-]*"
+    )
+    pattern_matches = re.fullmatch(pattern, head_ref) is not None
+    if (
+        base_ref != route.get("base")
+        or (
+            isinstance(expected_head, str)
+            and expected_head
+            and head_ref != expected_head
+        )
+        or (not expected_head and not pattern_matches)
+    ):
+        raise RuntimeError(
+            "Issue pull request does not match its canonical route"
+        )
     pulls = github.pages(repo, "pulls?state=all&per_page=100")
     valid, members, _, reason = _open_base_chain(
         pull, pulls, str(route["base"]), repo
@@ -1610,6 +1855,10 @@ def routine_quota_snapshot(  # noqa: C901
     issue_comments, _, blocker_boundary = merge_discussion_snapshot(
         github, repo, pr_number
     )
+    timeline = github.pages(repo, f"issues/{pr_number}/timeline?per_page=100")
+    note_boundary = authority_boundary(issue_comments, timeline)
+    if blocker_boundary is not None:
+        note_boundary = max(blocker_boundary, note_boundary or blocker_boundary)
     issue_number = require_single_closing_issue(github, repo, pull)
     issue = github.get(repo, f"issues/{issue_number}")
     if not isinstance(issue, dict):
@@ -1621,10 +1870,13 @@ def routine_quota_snapshot(  # noqa: C901
         raise RuntimeError(
             "Routine quota merge must target the canonical integration branch"
         )
-    if re.fullmatch(
-        rf"[a-z][a-z0-9-]*/{issue_number}-[a-z0-9][a-z0-9-]*",
-        str(head.get("ref") or ""),
-    ) is None:
+    if (
+        re.fullmatch(
+            rf"[a-z][a-z0-9-]*/{issue_number}-[a-z0-9][a-z0-9-]*",
+            str(head.get("ref") or ""),
+        )
+        is None
+    ):
         raise RuntimeError(
             "Routine quota merge head does not match its closing Issue"
         )
@@ -1632,6 +1884,12 @@ def routine_quota_snapshot(  # noqa: C901
     if actor != str(lease["actor"]).casefold():
         raise RuntimeError(
             "Authenticated GitHub actor changed after lease acquisition"
+        )
+    author = str((pull.get("user") or {}).get("login") or "").casefold()
+    author_type = str((pull.get("user") or {}).get("type") or "")
+    if actor != author or author_type not in {"User", "Bot"}:
+        raise RuntimeError(
+            "Routine quota merge must be executed by the pull request author"
         )
     token = os.environ.get("GH_TOKEN", "")
     run_urls = failed_pull_request_run_urls(repo, head_sha, token)
@@ -1651,7 +1909,7 @@ def routine_quota_snapshot(  # noqa: C901
         head_sha,
         run_urls,
         str(lease["actor"]),
-        blocker_boundary,
+        note_boundary,
     ):
         raise RuntimeError(
             "Exactly one canonical routine quota note must match every live "
@@ -1671,6 +1929,7 @@ def routine_quota_snapshot(  # noqa: C901
         "risk": "routine",
         "blocked_run_urls": run_urls,
         "merge_mode": "routine-quota",
+        "close_issue": lease["base_ref"] != lease["default_branch"],
     }
 
 
@@ -1689,9 +1948,10 @@ def merged_issue_snapshot(  # noqa: C901
     ) + timedelta(seconds=MIN_OPERATION_SECONDS):
         raise RuntimeError("Lease expired before the Issue close mutation")
     require_committed_lease(github, lease)
-    if github.viewer(explicit_actor).casefold() != str(
-        lease["actor"]
-    ).casefold():
+    if (
+        github.viewer(explicit_actor).casefold()
+        != str(lease["actor"]).casefold()
+    ):
         raise RuntimeError(
             "Authenticated GitHub actor changed after lease acquisition"
         )
@@ -1714,15 +1974,11 @@ def merged_issue_snapshot(  # noqa: C901
         raise RuntimeError("Merged pull request does not match the lease")
     merge_commit = github.get(repo, f"git/commits/{merge_sha}")
     parents = (
-        merge_commit.get("parents")
-        if isinstance(merge_commit, dict)
-        else None
+        merge_commit.get("parents") if isinstance(merge_commit, dict) else None
     )
-    if (
-        not isinstance(parents, list)
-        or [item.get("sha") for item in parents if isinstance(item, dict)]
-        != [lease["base_sha"]]
-    ):
+    if not isinstance(parents, list) or [
+        item.get("sha") for item in parents if isinstance(item, dict)
+    ] != [lease["base_sha"]]:
         raise RuntimeError("Merged commit does not preserve the leased base")
     if UNCHECKED.search(str(pull.get("body") or "")):
         raise RuntimeError("Pull request has an unchecked checklist item")
@@ -1730,10 +1986,13 @@ def merged_issue_snapshot(  # noqa: C901
     issue_number = require_single_closing_issue(
         github, repo, pull, require_open=False
     )
-    if re.fullmatch(
-        rf"[a-z][a-z0-9-]*/{issue_number}-[a-z0-9][a-z0-9-]*",
-        str(head.get("ref") or ""),
-    ) is None:
+    if (
+        re.fullmatch(
+            rf"[a-z][a-z0-9-]*/{issue_number}-[a-z0-9][a-z0-9-]*",
+            str(head.get("ref") or ""),
+        )
+        is None
+    ):
         raise RuntimeError("Merged pull request head does not match its Issue")
     issue = github.get(repo, f"issues/{issue_number}")
     if not isinstance(issue, dict):
@@ -1978,10 +2237,14 @@ def merge_quota(args: argparse.Namespace, github: GitHub) -> None:
     lease = read_lease(args.lease)
     require_caller(lease, args.owner, getattr(args, "actor", ""), github)
     routine_quota_snapshot(github, lease, getattr(args, "actor", ""))
-    snapshot = routine_quota_snapshot(
-        github, lease, getattr(args, "actor", "")
+    snapshot = routine_quota_snapshot(github, lease, getattr(args, "actor", ""))
+    merge_exact(
+        args,
+        github,
+        lease,
+        str(snapshot["title"]),
+        close_issue=bool(snapshot["close_issue"]),
     )
-    merge_exact(args, github, lease, str(snapshot["title"]), close_issue=True)
 
 
 def close_merged_issue_under_lease(
@@ -2004,9 +2267,7 @@ def close_merged_issue_under_lease(
             or result.get("state") != "closed"
         ):
             raise RuntimeError("GitHub did not close the exact Issue")
-        issue = github.get(
-            str(lease["repository"]), f"issues/{issue_number}"
-        )
+        issue = github.get(str(lease["repository"]), f"issues/{issue_number}")
         if not isinstance(issue, dict) or issue.get("state") != "closed":
             raise RuntimeError("Closed Issue state could not be verified")
     return snapshot
@@ -2512,12 +2773,14 @@ def parser() -> argparse.ArgumentParser:
     acquire_command.add_argument("--actor", default="")
     acquire_command.add_argument("--ttl-seconds", type=int, default=3600)
     acquire_command.add_argument("--output", type=Path, required=True)
-    acquire_command.set_defaults(handler=acquire)
+    acquire_command.set_defaults(handler=acquire, handler_name="acquire")
     status_command = commands.add_parser("lease-status")
     status_command.add_argument("--repo", required=True)
     status_command.add_argument("--pr-number", required=True, type=int)
     status_command.add_argument("--head-sha", required=True)
-    status_command.set_defaults(handler=lease_status)
+    status_command.set_defaults(
+        handler=lease_status, handler_name="lease-status"
+    )
     scan_command = commands.add_parser("scan-writers")
     scan_command.add_argument("--root", type=Path, default=Path.cwd())
     scan_command.set_defaults(scan_root=True)
@@ -2530,7 +2793,9 @@ def parser() -> argparse.ArgumentParser:
     issue_type = issue_edit.add_mutually_exclusive_group()
     issue_type.add_argument("--type", dest="issue_type")
     issue_type.add_argument("--remove-type", action="store_true")
-    issue_edit.set_defaults(handler=edit_standalone_issue)
+    issue_edit.set_defaults(
+        handler=edit_standalone_issue, handler_name="issue-edit"
+    )
 
     for name in (
         "state",
@@ -2572,6 +2837,17 @@ def main() -> None:  # noqa: C901
     args = parser().parse_args()
     github = GitHub()
     try:
+        if getattr(args, "handler_name", "") in {
+            "acquire",
+            "issue-edit",
+            "state",
+            "edit",
+            "merge",
+            "merge-quota",
+            "close-issue",
+            "release",
+        }:
+            require_cli_mutation_checkout(args, github)
         if hasattr(args, "scan_root"):
             scan_writers(args.root.resolve())
         elif hasattr(args, "handler"):

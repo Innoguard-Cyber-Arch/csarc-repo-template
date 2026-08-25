@@ -64,7 +64,7 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；CI 
 
 本 repo 採 delivery 模式：可同時有多條 Milestone delivery branch；一般孤立 Issue 進入 `dev/next`，確實需要獨立 soak／canary 時才使用一次性的 `dev/i<Issue 編號>-<簡稱>`。它們都以受審查的 promotion PR 進入 `main`；只有明確 hotfix 可直接 target main。CI 是可攜的 integration test layer，外部測試環境則屬 canary layer。
 
-選定 Issue 後執行 `./scripts/issue_path_status.py --issue <number>`；它只讀 live GitHub 狀態，並透過 canonical `pr_lifecycle.py lease-status` 判斷 atomic acquire 是否可嘗試，輸出 route、risk、允許動作、必要 evidence 與唯一下一步。`available` 不等於已持有 lease，`blocked`／`unknown` 也不會被當成可合併；完整契約見 [`docs/ci-policy.md`](docs/ci-policy.md#單一-issue-path-preflight)。
+選定 Issue 後執行 `./scripts/issue_path_status.py --issue <number>`；它只讀 live GitHub 狀態，並透過 canonical `pr_lifecycle.py lease-status` 判斷 atomic acquire 是否可嘗試，輸出 route、risk、允許動作、必要 evidence 與唯一下一步。`available` 不等於已持有 lease，明確 `blocked` 絕不會被當成可合併；Ruleset `unknown` 時只有完整驗證的 routine quota-only path 可繼續，其餘仍 fail closed。完整契約見 [`docs/ci-policy.md`](docs/ci-policy.md#單一-issue-path-preflight)。
 
 ```mermaid
 flowchart LR
@@ -93,7 +93,7 @@ Promotion 另由穩定的 `promotion` context 封裝候選 source 與 SHA/tree �
 
 只有 GitHub Actions 的 zero-step billing block 被機械式確認、且本機驗證通過時，才可能使用本機 fallback；runner 註記本身不構成證據。一般 Issue PR 留一則說明留言即可合併，不需要即時人工確認；Promotion 到 `main` 仍維持 human attestation/authorization 雙方確認，另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
 
-一般 Issue 的實際 fallback 合併仍須持有 exact-head remote lease，並只透過 `scripts/pr_lifecycle.py merge-quota` 執行；不得直接呼叫 merge API。
+一般 Issue 的實際 fallback 合併仍須持有 exact-head remote lease，並只從 exact terminal policy-base SHA 的乾淨 detached checkout 執行 `scripts/pr_lifecycle.py merge-quota`；candidate worktree 只能提供 live PR 資料，不得直接呼叫 merge API。
 合併到非 default integration branch 時，lifecycle 會在同一 lease 內驗證 merged containment、關閉 Issue，再釋放 lease；只有中斷 recovery 才由原 actor 於 lease 有效期內重跑 `scripts/pr_lifecycle.py close-issue`，不得手動繞過。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹，因此已刪除與尚未提交的機密都不會靜默略過；尚未 `git init` 的新專案仍可安全掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。

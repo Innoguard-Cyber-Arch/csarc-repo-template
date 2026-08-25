@@ -30,13 +30,16 @@ route_for = MODULE["route_for"]
 unresolved_blocker = MODULE["unresolved_blocker"]
 
 
-def lifecycle_content(content: bytes | None = None) -> dict[str, str]:
-    """Return one exact GitHub Contents response for the lifecycle helper."""
-    payload = content or (SCRIPTS / "pr_lifecycle.py").read_bytes()
+def lifecycle_content(
+    content: bytes | None = None,
+    path: str = "scripts/pr_lifecycle.py",
+) -> dict[str, str]:
+    """Return one exact GitHub Contents response for a policy helper."""
+    payload = content or (SCRIPTS / Path(path).name).read_bytes()
     git_blob = b"blob " + str(len(payload)).encode() + b"\0" + payload
     return {
         "type": "file",
-        "path": "scripts/pr_lifecycle.py",
+        "path": path,
         "sha": hashlib.sha1(git_blob, usedforsecurity=False).hexdigest(),
         "encoding": "base64",
         "content": base64.b64encode(payload).decode(),
@@ -76,9 +79,7 @@ def observation(
         },
         "branches": branch_map,
         "pulls": pull_items,
-        "native_links": {
-            ("owner/repo", pull["number"]) for pull in pull_items
-        },
+        "native_links": {("owner/repo", pull["number"]) for pull in pull_items},
         "work_branches": work_branches or [],
         "files": files or [],
         "checks": checks,
@@ -430,9 +431,7 @@ def test_valid_stacked_pr_chain_reaches_the_delivery_branch() -> None:
 
 def test_ready_stacked_pr_waits_for_parent_then_retargets() -> None:
     """A stack is visible in Draft but an Issue merges only to its route."""
-    child = pull(
-        draft=False, base="enhancement/254-parent", base_sha="parent"
-    )
+    child = pull(draft=False, base="enhancement/254-parent", base_sha="parent")
     parent = pull(
         281,
         draft=False,
@@ -614,9 +613,7 @@ def test_ready_quota_path_requires_the_self_merge_marker() -> None:
         },
         files=["src/status.py"],
         checks="quota-blocked",
-        blocked_run_urls=[
-            "https://github.com/owner/repo/actions/runs/42"
-        ],
+        blocked_run_urls=["https://github.com/owner/repo/actions/runs/42"],
         quota_note=True,
         capability="allowed",
     )
@@ -772,9 +769,15 @@ def test_exact_quota_note_allows_only_the_guarded_merge_path() -> None:
     assert decision.allowed_actions == ("inspect",)
 
     data["capability"]["lease_status"] = {"state": "available"}
+    data["capability"]["quota_fallback"] = True
     decision = derive_status(data)
     assert decision.guard == "clear"
     assert "merge-quota" in decision.next_step
+
+    data["capability"]["state"] = "blocked"
+    decision = derive_status(data)
+    assert decision.guard == "blocked"
+    assert "merge-quota" not in decision.next_step
 
 
 def test_quota_note_must_match_repo_pr_head_runs_and_verification() -> None:
@@ -789,7 +792,7 @@ def test_quota_note_must_match_repo_pr_head_runs_and_verification() -> None:
             [run],
             "./scripts/verify-template.sh",
             ["hosted runner identity"],
-        )
+        ),
     }
     assert has_exact_quota_note(
         [comment], "owner/repo", 300, "head", [run], "author"
@@ -1017,12 +1020,49 @@ def test_integrated_issue_has_one_auditable_close_action() -> None:
             "containment": [],
         }
     }
+    data["merged_lease_status"] = {
+        "state": "held",
+        "holder": {"owner": "task/merge"},
+    }
     decision = derive_status(data)
     assert decision.state == "Integrated"
     assert decision.guard == "blocked"
     assert decision.allowed_actions == ("close-issue",)
     assert "pr_lifecycle.py close-issue" in decision.next_step
     assert "retained merge lease" in decision.next_step
+
+
+@pytest.mark.parametrize("issue_state", ["open", "closed"])
+def test_integrated_issue_does_not_offer_an_unusable_close_action(
+    issue_state: str,
+) -> None:
+    """Only the current retained lease holder can run close-issue."""
+    merged = pull(
+        draft=False,
+        state="closed",
+        merged_at="2026-08-25T02:00:00Z",
+        merge_commit_sha="merge",
+    )
+    data = observation(pulls=[merged])
+    data["issue"]["state"] = issue_state
+    data["merged_routes"] = {
+        "300": {
+            "valid": True,
+            "reason": "Merged PR chain reaches the expected integration branch",
+            "chain": ["feat/266-path-status", "dev/m9-sdlc"],
+            "terminal_merge_sha": "merge",
+            "containment": [],
+        }
+    }
+    data["merged_lease_status"] = {
+        "state": "blocked",
+        "reason": "retained merge lease is expired",
+    }
+    decision = derive_status(data)
+    assert decision.allowed_actions == ("inspect",)
+    assert "close-issue" not in decision.next_step
+    assert decision.guard == "blocked"
+    assert "cannot be used safely" in decision.reason
 
 
 def test_live_promotion_collects_containment_and_post_merge_evidence(  # noqa: C901
@@ -1135,15 +1175,15 @@ def test_live_promotion_collects_containment_and_post_merge_evidence(  # noqa: C
         FakeGitHub(999),
         FakeGitHub(workflow_path=".github/workflows/rogue.yml"),
     ):
-        spoofed = inspect_issue(
-            spoofed_source, "owner/repo", 266, "delivery"
-        )
+        spoofed = inspect_issue(spoofed_source, "owner/repo", 266, "delivery")
         assert spoofed.state == "Candidate"
         assert spoofed.guard == "blocked"
         assert "post-merge tree evidence" in spoofed.reason
 
 
-def test_live_merged_stack_proves_child_and_terminal_containment() -> None:
+def test_live_merged_stack_proves_child_and_terminal_containment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A stacked child is integrated only when each merge is contained."""
     child = pull(
         draft=False,
@@ -1164,6 +1204,16 @@ def test_live_merged_stack_proves_child_and_terminal_containment() -> None:
         state="closed",
         merged_at="2026-08-25T02:00:00Z",
         merge_commit_sha="parent-merge",
+    )
+    monkeypatch.setitem(
+        inspect_issue.__globals__,
+        "require_base_lifecycle_interface",
+        lambda *_: None,
+    )
+    monkeypatch.setitem(
+        inspect_issue.__globals__,
+        "merged_lease_status_snapshot",
+        lambda *_: {"state": "available", "reason": "no retained lease"},
     )
 
     class FakeGitHub:
@@ -1353,8 +1403,9 @@ def test_capability_composes_canonical_protection_and_available_lease(
 
     class FakeGitHub:
         def get(self, _repo: str, path: str = "") -> object:
-            if path.startswith("contents/scripts/pr_lifecycle.py"):
-                return lifecycle_content()
+            if path.startswith("contents/scripts/"):
+                source = path.split("?", 1)[0].removeprefix("contents/")
+                return lifecycle_content(path=source)
             raise AssertionError(path)
 
     monkeypatch.setitem(
@@ -1387,7 +1438,8 @@ def test_capability_blocks_when_canonical_lease_is_held(
 
     class FakeGitHub:
         def get(self, _repo: str, _path: str = "") -> object:
-            return lifecycle_content()
+            source = _path.split("?", 1)[0].removeprefix("contents/")
+            return lifecycle_content(path=source)
 
     monkeypatch.setitem(
         inspect_capability.__globals__,
@@ -1420,7 +1472,8 @@ def test_capability_still_reports_lease_when_protection_is_unreadable(
 
     class FakeGitHub:
         def get(self, _repo: str, _path: str = "") -> object:
-            return lifecycle_content()
+            source = _path.split("?", 1)[0].removeprefix("contents/")
+            return lifecycle_content(path=source)
 
     monkeypatch.setitem(
         inspect_capability.__globals__,
@@ -1444,17 +1497,62 @@ def test_capability_still_reports_lease_when_protection_is_unreadable(
         "state": "available",
         "reason": "atomic acquire",
     }
+    assert capability["quota_fallback"] is True
 
 
-def test_capability_rejects_a_modified_head_lifecycle_helper(
+def test_unrelated_unknown_protection_cannot_use_the_quota_exception(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A work branch cannot spoof allowed by retaining the interface marker."""
-    base_bytes = (SCRIPTS / "pr_lifecycle.py").read_bytes() + b"\n# changed\n"
+    """Only the documented private-plan 403 can use quota-only capability."""
 
     class FakeGitHub:
-        def get(self, _repo: str, _path: str = "") -> object:
-            return lifecycle_content(base_bytes)
+        def get(self, _repo: str, path: str = "") -> object:
+            source = path.split("?", 1)[0].removeprefix("contents/")
+            return lifecycle_content(path=source)
+
+    monkeypatch.setitem(
+        inspect_capability.__globals__,
+        "effective_protection",
+        lambda *_: ("unknown", "malformed rules response", set()),
+    )
+    monkeypatch.setitem(
+        inspect_capability.__globals__,
+        "lease_status_snapshot",
+        lambda *_: {"state": "available", "reason": "atomic acquire"},
+    )
+    capability = inspect_capability(
+        FakeGitHub(),
+        "owner/repo",
+        {"permissions": {"push": True}},
+        pull(draft=False, head_sha="a" * 40),
+        "b" * 40,
+    )
+    assert capability["state"] == "unknown"
+    assert capability["quota_fallback"] is False
+
+
+@pytest.mark.parametrize(
+    "tampered_name",
+    [
+        "pr_lifecycle.py",
+        "ci_tier.py",
+        "promotion_gate.py",
+        "issue_path_status.py",
+    ],
+)
+def test_capability_rejects_a_modified_policy_helper(
+    tampered_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A work branch cannot replace any dependency used by the writer."""
+
+    class FakeGitHub:
+        def get(self, _repo: str, path: str = "") -> object:
+            source = path.split("?", 1)[0].removeprefix("contents/")
+            content = (SCRIPTS / Path(source).name).read_bytes()
+            if Path(source).name == tampered_name:
+                content += b"\n# changed\n"
+            return lifecycle_content(content, source)
 
     called = False
 
@@ -1477,7 +1575,7 @@ def test_capability_rejects_a_modified_head_lifecycle_helper(
         "b" * 40,
     )
     assert capability["state"] == "unknown"
-    assert "exact base blob" in str(capability["reason"])
+    assert "base blob" in str(capability["reason"])
     assert not called
 
 
@@ -1485,14 +1583,17 @@ def test_capability_trusts_terminal_policy_base_not_a_stack_parent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A mutable parent cannot replace the terminal branch's lifecycle code."""
-    local = (SCRIPTS / "pr_lifecycle.py").read_bytes()
 
     class FakeGitHub:
         def get(self, _repo: str, path: str = "") -> object:
+            source = path.split("?", 1)[0].removeprefix("contents/")
+            local = (SCRIPTS / Path(source).name).read_bytes()
             if path.endswith("ref=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"):
-                return lifecycle_content(local + b"\n# stale terminal\n")
+                return lifecycle_content(
+                    local + b"\n# stale terminal\n", source
+                )
             if path.endswith("ref=cccccccccccccccccccccccccccccccccccccccc"):
-                return lifecycle_content(local)
+                return lifecycle_content(local, source)
             raise AssertionError(path)
 
     called = False
@@ -1516,7 +1617,7 @@ def test_capability_trusts_terminal_policy_base_not_a_stack_parent(
         "b" * 40,
     )
     assert capability["state"] == "unknown"
-    assert "exact base blob" in str(capability["reason"])
+    assert "base blob" in str(capability["reason"])
     assert not called
 
 
