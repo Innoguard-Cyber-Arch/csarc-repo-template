@@ -19,7 +19,6 @@ paired_files=(
   .github/workflows/governance-drift.yml
   .github/workflows/dev-next-close.yml
   .github/workflows/delivery-maintenance.yml
-  .github/workflows/delivery-sync.yml
   .github/workflows/issue-triage.yml
   .github/workflows/milestone-lifecycle.yml
   .github/workflows/osv.yml
@@ -46,7 +45,10 @@ paired_files=(
   scripts/promotion_gate.py
   scripts/check-update-conflicts
   scripts/cleanup-worktrees
+  scripts/install-actionlint
   scripts/install-gitleaks
+  scripts/install-shellcheck
+  scripts/lint-workflows-shell
   scripts/release_policy.py
   scripts/scan-secrets
   scripts/spec_to_issue.py

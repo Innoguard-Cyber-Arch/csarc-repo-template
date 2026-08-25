@@ -1157,7 +1157,15 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     (project / ".gitignore").write_bytes(b"product-cache/\r\n.env\r\n")
     product_release = project / ".github" / "workflows" / "release.yml"
     product_release.write_text(
-        "name: Product release\non: workflow_dispatch\n", encoding="utf-8"
+        "name: Product release\n"
+        "on: workflow_dispatch\n"
+        "permissions: {}\n"
+        "jobs:\n"
+        "  release:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        '      - run: "true"\n',
+        encoding="utf-8",
     )
     write_executable(
         project / "scripts" / "verify-product",
