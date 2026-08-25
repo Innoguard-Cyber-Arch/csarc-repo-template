@@ -153,6 +153,15 @@ def includes_main(compare_status: str) -> bool:
     return compare_status in {"ahead", "identical"}
 
 
+def is_delivery_branch(branch: str) -> bool:
+    """Return whether a branch is a supported delivery destination."""
+    return bool(
+        branch == "dev/next"
+        or DELIVERY_BRANCH.fullmatch(branch)
+        or ISOLATED_BRANCH.fullmatch(branch)
+    )
+
+
 def capability_state(status: int) -> str:
     """Map a non-mutating validation probe to the shared tri-state model."""
     if status == 422:
@@ -206,11 +215,61 @@ def read_main_sha(api: API, repo: str) -> str:
     return main_sha
 
 
+def merged_sync_pr_number(
+    api: API,
+    repo: str,
+    delivery_branch: str,
+    main_sha: str,
+    proposed_head_sha: str,
+) -> int | None:
+    """Return a merged squash sync PR whose commit is in the proposed head."""
+    sync_branch = sync_branch_name(delivery_branch, main_sha)
+    owner = repo.split("/", 1)[0]
+    query = urllib.parse.urlencode(
+        {
+            "state": "closed",
+            "head": f"{owner}:{sync_branch}",
+            "base": delivery_branch,
+            "per_page": 100,
+        }
+    )
+    status, payload = api.request("GET", f"repos/{repo}/pulls?{query}")
+    pulls = require_response(status, payload, "find merged sync PR")
+    if not isinstance(pulls, list):
+        raise RuntimeError("GitHub returned invalid sync pull request state")
+    for pull in pulls:
+        if not isinstance(pull, dict):
+            continue
+        base = pull.get("base")
+        head = pull.get("head")
+        number = pull.get("number")
+        merge_sha = pull.get("merge_commit_sha")
+        if (
+            not isinstance(base, dict)
+            or not isinstance(head, dict)
+            or not isinstance(number, int)
+            or pull.get("state") != "closed"
+            or not isinstance(pull.get("merged_at"), str)
+            or base.get("ref") != delivery_branch
+            or head.get("ref") != sync_branch
+            or not isinstance(merge_sha, str)
+            or not isinstance(head.get("sha"), str)
+        ):
+            continue
+        sync_head_sha = head["sha"]
+        if not includes_main(compare(api, repo, main_sha, sync_head_sha)):
+            continue
+        if includes_main(compare(api, repo, merge_sha, proposed_head_sha)):
+            return number
+    return None
+
+
 def gate(
     api: API,
     repo: str,
     base: str,
     head_sha: str,
+    delivery_base: str = "",
     *,
     head_ref: str = "",
     pr_number: int = 0,
@@ -233,12 +292,18 @@ def gate(
         )
     main_sha = read_main_sha(api, repo)
     compare_status = compare(api, repo, main_sha, head_sha)
-    if not includes_main(compare_status):
-        raise RuntimeError(
-            f"PR head does not contain current main {main_sha}; "
-            "merge main through a reviewed sync branch first"
+    if includes_main(compare_status):
+        return compare_status
+    if delivery_base and is_delivery_branch(delivery_base):
+        sync_pr = merged_sync_pr_number(
+            api, repo, delivery_base, main_sha, head_sha
         )
-    return compare_status
+        if sync_pr is not None:
+            return f"squash-sync-pr-{sync_pr}"
+    raise RuntimeError(
+        f"PR head does not contain current main {main_sha} or its verified "
+        "reviewed sync squash; synchronize main first"
+    )
 
 
 def sync_branch_name(delivery_branch: str, main_sha: str) -> str:
@@ -1634,7 +1699,7 @@ def merge_group_gate(
     base_ref: str,
     base_sha: str,
 ) -> str:
-    """Bind one merge-queue candidate to one live dev/next promotion."""
+    """Bind one merge-queue candidate to its live pull request and refs."""
     match = MERGE_QUEUE_REF.fullmatch(queue_ref)
     if (
         match is None
@@ -1651,21 +1716,34 @@ def merge_group_gate(
     if len(pulls) != 1 or pulls[0].get("number") != number:
         raise RuntimeError("Merge queue commit has no unique pull request")
     candidate = pull_request(api, repo, number)
+    base = candidate.get("base")
     head = candidate.get("head")
-    if not isinstance(head, dict) or not isinstance(head.get("sha"), str):
-        raise RuntimeError("Queued promotion has an invalid head")
+    head_repo = head.get("repo") if isinstance(head, dict) else None
+    if (
+        candidate.get("merged") is not False
+        or candidate.get("state") != "open"
+        or not isinstance(base, dict)
+        or base.get("ref") != "main"
+        or base.get("sha") != base_sha
+        or not isinstance(head, dict)
+        or not isinstance(head.get("ref"), str)
+        or not isinstance(head.get("sha"), str)
+        or not isinstance(head_repo, dict)
+        or head_repo.get("full_name") != repo
+    ):
+        raise RuntimeError("Queued pull request does not match this event")
+    head_ref = str(head["ref"])
     head_sha = str(head["sha"])
-    pull = validate_promotion(api, repo, number, head_sha, merged=False)
-    if pull.get("base", {}).get("sha") != base_sha:
-        raise RuntimeError("Queued promotion base does not match this event")
     if ref_sha(api, repo, "main") != base_sha:
         raise RuntimeError("Current main changed after merge queue entry")
-    if ref_sha(api, repo, "dev/next") != head_sha:
-        raise RuntimeError("Current dev/next changed after merge queue entry")
+    if ref_sha(api, repo, head_ref) != head_sha:
+        raise RuntimeError("Pull request head changed after merge queue entry")
     if not includes_main(compare(api, repo, base_sha, queue_sha)):
         raise RuntimeError("Merge queue candidate does not contain its base")
     if not includes_main(compare(api, repo, head_sha, queue_sha)):
-        raise RuntimeError("Merge queue candidate does not contain dev/next")
+        raise RuntimeError("Merge queue candidate does not contain its head")
+    if head_ref != "dev/next":
+        return f"exact queue candidate for {head_ref}"
     ledger_commit, record, _authorizations = require_prepared_preservation(
         api, repo, number, base_sha, head_sha
     )
@@ -1889,8 +1967,8 @@ def read_active_states(
     ]
 
 
-def update_open_pr_statuses(api: API, repo: str, main_sha: str) -> None:
-    """Invalidate stale delivery PR checks whenever main advances."""
+def invalidate_stale_pr_policy(api: API, repo: str, main_sha: str) -> None:
+    """Invalidate the combined PR policy whenever main advances."""
     status, payload = api.request(
         "GET", f"repos/{repo}/pulls?state=open&per_page=100"
     )
@@ -1902,24 +1980,21 @@ def update_open_pr_statuses(api: API, repo: str, main_sha: str) -> None:
         head_sha = pull.get("head", {}).get("sha")
         if base == "main" or not isinstance(head_sha, str):
             continue
-        current = includes_main(compare(api, repo, main_sha, head_sha))
-        state = "success" if current else "failure"
-        description = (
-            "PR head contains current main"
-            if current
-            else "PR head must synchronize current main before merge"
-        )
+        if includes_main(compare(api, repo, main_sha, head_sha)):
+            continue
         status_code, status_payload = api.request(
             "POST",
             f"repos/{repo}/statuses/{head_sha}",
             {
-                "state": state,
-                "context": "delivery-sync",
-                "description": description,
+                "state": "failure",
+                "context": "title",
+                "description": (
+                    "PR head must synchronize current main before merge"
+                ),
             },
         )
         require_response(
-            status_code, status_payload, "update delivery-sync status"
+            status_code, status_payload, "invalidate stale PR policy"
         )
 
 
@@ -1939,7 +2014,7 @@ def reconcile(
         main_sha,
         require_dev_next=branch_strategy == "delivery",
     )
-    update_open_pr_statuses(api, repo, main_sha)
+    invalidate_stale_pr_policy(api, repo, main_sha)
     stale = [state for state in states if not state.current]
     if not stale:
         return ["All active delivery branches contain current main."]
@@ -1988,6 +2063,7 @@ def main() -> None:  # noqa: C901
     )
     parser.add_argument("--repo", required=True)
     parser.add_argument("--base", default="")
+    parser.add_argument("--delivery-base", default="")
     parser.add_argument("--head-sha", default="")
     parser.add_argument("--head-ref", default="")
     parser.add_argument("--main-sha", default="")
@@ -2025,6 +2101,7 @@ def main() -> None:  # noqa: C901
                 args.repo,
                 args.base,
                 args.head_sha,
+                args.delivery_base,
                 head_ref=args.head_ref,
                 pr_number=args.pr_number,
             )

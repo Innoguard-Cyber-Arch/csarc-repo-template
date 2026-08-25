@@ -8,6 +8,12 @@ trap 'rm -rf "$test_root"' EXIT
 validator="$test_root/validator"
 title_validator="$repo_root/scripts/validate-issue-title"
 
+if grep -Eq 'types:.*labeled' \
+  "$repo_root/.github/workflows/issue-triage.yml"; then
+  echo "Issue triage must not subscribe to its own label changes."
+  exit 1
+fi
+
 valid_titles=(
   "Fix authentication timeout handling"
   "Document GitHub App setup"
@@ -62,8 +68,6 @@ export PATH="$test_root/bin:$PATH"
 export GH_LOG="$test_root/gh.log"
 export GITHUB_REPOSITORY="owner/repo"
 export ISSUE_AUTHOR="contributor"
-export ISSUE_ACTION="opened"
-export ISSUE_EVENT_LABEL=""
 export ISSUE_NUMBER="42"
 export ISSUE_STATE_REASON=""
 export ISSUE_TITLE="Add dependency policy checks"
@@ -88,21 +92,15 @@ grep -q -- '--add-label duplicate' "$GH_LOG"
 grep -q -- '--remove-type' "$GH_LOG"
 
 : > "$GH_LOG"
-ISSUE_ACTION="labeled" ISSUE_EVENT_LABEL="duplicate" \
-ISSUE_BODY="" ISSUE_LABELS="enhancement,duplicate" "$validator"
+ISSUE_BODY=$'### 類型\n\nbug' \
+ISSUE_LABELS="enhancement" "$validator"
 grep -q -- '--remove-label enhancement' "$GH_LOG"
 grep -q -- '--add-assignee contributor' "$GH_LOG"
-grep -q -- '--add-label duplicate' "$GH_LOG"
+grep -q -- '--add-label bug' "$GH_LOG"
+grep -q -- '--type Bug' "$GH_LOG"
 
 : > "$GH_LOG"
-ISSUE_ACTION="edited" ISSUE_BODY=$'### 類型\n\nbug' \
-ISSUE_LABELS="enhancement" "$validator"
-grep -q -- '--add-assignee contributor' "$GH_LOG"
-grep -q -- '--add-label enhancement' "$GH_LOG"
-grep -q -- '--type Feature' "$GH_LOG"
-
-: > "$GH_LOG"
-ISSUE_ACTION="closed" ISSUE_STATE_REASON="duplicate" \
+ISSUE_STATE_REASON="duplicate" \
 ISSUE_BODY="" ISSUE_LABELS="bug" "$validator"
 grep -q -- '--remove-label bug' "$GH_LOG"
 grep -q -- '--add-assignee contributor' "$GH_LOG"
@@ -120,4 +118,4 @@ if ISSUE_BODY="" ISSUE_LABELS="" "$validator" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Issue title cases passed: 10; triage cases passed: 8"
+echo "Issue title cases passed: 10; triage cases passed: 7"

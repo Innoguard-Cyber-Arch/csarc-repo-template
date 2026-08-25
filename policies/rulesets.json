@@ -27,7 +27,6 @@
         "do_not_enforce_on_create": true,
         "strict_required_status_checks_policy": true,
         "required_status_checks": [
-          {"context": "delivery-sync"},
           {"context": "promotion"},
           {"context": "verify"},
           {"context": "title"}

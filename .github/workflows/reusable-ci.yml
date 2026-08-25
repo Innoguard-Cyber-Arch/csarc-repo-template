@@ -6,9 +6,12 @@ on:
       language-profile:
         type: string
         default: python
+      canonical-python-version:
+        type: string
+        default: "3.14"
       python-versions:
         type: string
-        default: '["3.14.0", "3.14"]'
+        default: '["3.14.0"]'
       node-version:
         type: string
         default: "24"
@@ -17,10 +20,45 @@ permissions:
   contents: read
 
 jobs:
-  runtime:
-    name: runtime (${{ matrix.runtime }})
+  canonical:
+    name: canonical full
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: contains(inputs.language-profile, 'python')
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ inputs.canonical-python-version }}
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - if: inputs.language-profile == 'typescript'
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: "11.22.0"
+          run_install: false
+      - if: inputs.language-profile == 'typescript'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+      - name: Run canonical full verification
+        run: ./scripts/verify
+        env:
+          CSARC_PYTHON_VERSION: ${{ inputs.canonical-python-version }}
+          CSARC_VERIFY_TYPESCRIPT: ${{ inputs.language-profile == 'typescript' && 'true' || 'false' }}
+      - name: Record canonical evidence
+        if: ${{ always() }}
+        env:
+          RESULT: ${{ job.status }}
+        run: echo "- Canonical full — $RESULT" >> "$GITHUB_STEP_SUMMARY"
+
+  python-compatibility:
+    name: Python compatibility (${{ matrix.runtime }})
+    if: contains(inputs.language-profile, 'python')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -29,35 +67,70 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - if: contains(inputs.language-profile, 'python')
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.runtime }}
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - if: contains(inputs.language-profile, 'typescript')
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-        with:
-          version: "11.22.0"
-          run_install: false
-      - if: contains(inputs.language-profile, 'typescript')
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: ${{ inputs.node-version }}
-          cache: pnpm
-      - name: Verify declared language modules
-        run: ./scripts/verify
+      - name: Run runtime-sensitive tests
+        run: ./scripts/verify python-compatibility
         env:
           CSARC_PYTHON_VERSION: ${{ matrix.runtime }}
           UV_PROJECT_ENVIRONMENT: .venv-${{ matrix.runtime }}
+      - name: Record Python compatibility evidence
+        if: ${{ always() }}
+        env:
+          RESULT: ${{ job.status }}
+          RUNTIME: ${{ matrix.runtime }}
+        run: echo "- Python compatibility $RUNTIME — $RESULT" >> "$GITHUB_STEP_SUMMARY"
+
+  typescript:
+    name: TypeScript (Node ${{ inputs.node-version }})
+    if: inputs.language-profile == 'python-typescript'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: "11.22.0"
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: pnpm
+      - name: Verify TypeScript module
+        run: ./scripts/verify typescript
+      - name: Record TypeScript evidence
+        if: ${{ always() }}
+        env:
+          NODE_VERSION: ${{ inputs.node-version }}
+          RESULT: ${{ job.status }}
+        run: echo "- TypeScript Node $NODE_VERSION — $RESULT" >> "$GITHUB_STEP_SUMMARY"
 
   verify:
     name: verify
     if: ${{ always() }}
-    needs: runtime
+    needs: [canonical, python-compatibility, typescript]
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
-      - name: Require every runtime
+      - name: Require canonical and every applicable compatibility check
         env:
-          RUNTIME_RESULT: ${{ needs.runtime.result }}
-        run: test "$RUNTIME_RESULT" = success
+          CANONICAL_RESULT: ${{ needs.canonical.result }}
+          LANGUAGE_PROFILE: ${{ inputs.language-profile }}
+          PYTHON_COMPATIBILITY_RESULT: ${{ needs.python-compatibility.result }}
+          TYPESCRIPT_RESULT: ${{ needs.typescript.result }}
+        run: |
+          test "$CANONICAL_RESULT" = success
+          if [[ "$LANGUAGE_PROFILE" == *python* ]]; then
+            test "$PYTHON_COMPATIBILITY_RESULT" = success
+          else
+            test "$PYTHON_COMPATIBILITY_RESULT" = skipped
+          fi
+          if [[ "$LANGUAGE_PROFILE" == python-typescript ]]; then
+            test "$TYPESCRIPT_RESULT" = success
+          else
+            test "$TYPESCRIPT_RESULT" = skipped
+          fi

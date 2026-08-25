@@ -14,7 +14,11 @@ shift $(( $# > 0 ? 1 : 0 ))
 for option in "$@"; do
   case "$option" in
     --prune-labels) prune_labels=true ;;
-    --allow-unprotected) allow_unprotected=true ;;
+    --allow-unprotected)
+      # Retain this parsed option for CLI compatibility.
+      # shellcheck disable=SC2034
+      allow_unprotected=true
+      ;;
     *)
       echo "Usage: $0 [plan|apply|check] [--prune-labels] [--allow-unprotected]"
       exit 2
@@ -134,6 +138,8 @@ print_ruleset_guidance() {
 load_graphql_ruleset() {
   local graphql_result graphql_state
   if ! graphql_result="$(
+    # GraphQL variables are intentionally literal in the query document.
+    # shellcheck disable=SC2016
     gh api graphql \
       -f query='query($owner: String!, $name: String!) {
         repository(owner: $owner, name: $name) {

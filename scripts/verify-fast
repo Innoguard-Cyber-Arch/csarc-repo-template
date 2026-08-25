@@ -17,6 +17,12 @@ if [[ "$tier" == "docs" ]]; then
   exit 0
 fi
 
+run_static_checks=false
+if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
+  run_static_checks=true
+  ./scripts/lint-workflows-shell
+fi
+
 uv sync --locked --python "$UV_PYTHON"
 uv run ruff format --check src scripts tests
 uv run ruff check src scripts tests
@@ -28,6 +34,7 @@ uv run pytest
 ./scripts/test-worktree-cleanup
 
 if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
+  "$scopes" == *,shell,* ||
   "$scopes" == *,dependency,* || "$scopes" == *,governance,* ]]; then
   smoke_root="$(mktemp -d)"
   trap 'rm -rf "$smoke_root"' EXIT
@@ -36,6 +43,11 @@ if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
     --data package_name=fast_template_smoke \
     --data code_owner=@Innoguard-Cyber-Arch/template-maintainers \
     "$repo_root" "$smoke_root/project" >/dev/null
+  if $run_static_checks; then
+    mkdir -p "$smoke_root/project/.cache"
+    cp -R .cache/actionlint .cache/shellcheck "$smoke_root/project/.cache/"
+    "$smoke_root/project/scripts/lint-workflows-shell"
+  fi
   "$smoke_root/project/scripts/test-pr-policy"
   "$smoke_root/project/scripts/test-release-follow-up-gates"
   python3 -m json.tool "$smoke_root/project/.csarc/profile.json" >/dev/null

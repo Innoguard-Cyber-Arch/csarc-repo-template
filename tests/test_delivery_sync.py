@@ -6,6 +6,7 @@ import base64
 import json
 import re
 import runpy
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,7 @@ create_sync_pr = MODULE["create_sync_pr"]
 gate = MODULE["gate"]
 includes_main = MODULE["includes_main"]
 label_sync_pr = MODULE["label_sync_pr"]
+invalidate_stale_pr_policy = MODULE["invalidate_stale_pr_policy"]
 manual_commands = MODULE["manual_commands"]
 complete_dev_next = MODULE["complete_dev_next"]
 abort_dev_next = MODULE["abort_dev_next"]
@@ -236,6 +238,26 @@ def install_memory_ledger(
     )
 
 
+def sync_pull(
+    main_sha: str,
+    *,
+    base: str = "dev/m7-ci",
+    merged_at: str | None = "2026-08-25T05:49:23Z",
+) -> dict[str, Any]:
+    """Return REST evidence for one deterministic reviewed sync PR."""
+    return {
+        "number": 283,
+        "state": "closed",
+        "merged_at": merged_at,
+        "merge_commit_sha": "squash-sha",
+        "base": {"ref": base},
+        "head": {
+            "ref": sync_branch_name(base, main_sha),
+            "sha": "sync-head-sha",
+        },
+    }
+
+
 def test_active_delivery_branches_follow_open_milestones() -> None:
     """Keep dev/next and only Milestone branches whose Milestone is open."""
     refs = [
@@ -315,6 +337,107 @@ def test_gate_accepts_main_and_current_delivery_heads() -> None:
     assert gate(api, "acme/repo", "dev/m7-ci", "head-sha") == "ahead"
 
 
+def test_gate_accepts_verified_squash_sync_for_a_stacked_head() -> None:
+    """Accept a reviewed sync squash only when its content is in the head."""
+    main_sha = "a" * 40
+    api = FakeAPI(
+        [
+            (200, {"object": {"sha": main_sha}}),
+            (200, {"status": "diverged"}),
+            (200, [sync_pull(main_sha)]),
+            (200, {"status": "ahead"}),
+            (200, {"status": "ahead"}),
+        ]
+    )
+
+    assert (
+        gate(
+            api,
+            "acme/repo",
+            "feat/41-parent",
+            "proposed-head",
+            "dev/m7-ci",
+        )
+        == "squash-sync-pr-283"
+    )
+    assert "state=closed" in api.calls[2][1]
+    assert "head=acme%3Async%2Fmain-to-m7-ci-aaaaaaaaaaaa" in api.calls[2][1]
+    assert "base=dev%2Fm7-ci" in api.calls[2][1]
+
+
+@pytest.mark.parametrize(
+    "pull",
+    [
+        sync_pull("a" * 40, merged_at=None),
+        sync_pull("a" * 40, base="dev/m8-other"),
+        sync_pull("b" * 40),
+    ],
+    ids=("unmerged", "wrong-base", "previous-main"),
+)
+def test_gate_rejects_unrelated_sync_pull_evidence(
+    pull: dict[str, Any],
+) -> None:
+    """Reject unmerged, wrong-base, and previous-main sync pull requests."""
+    api = FakeAPI(
+        [
+            (200, {"object": {"sha": "a" * 40}}),
+            (200, {"status": "diverged"}),
+            (200, [pull]),
+        ]
+    )
+    with pytest.raises(RuntimeError, match="verified reviewed sync squash"):
+        gate(
+            api,
+            "acme/repo",
+            "dev/m7-ci",
+            "proposed-head",
+            "dev/m7-ci",
+        )
+
+
+def test_gate_rejects_sync_branch_without_current_main() -> None:
+    """A deterministic branch name cannot replace commit ancestry proof."""
+    main_sha = "a" * 40
+    api = FakeAPI(
+        [
+            (200, {"object": {"sha": main_sha}}),
+            (200, {"status": "diverged"}),
+            (200, [sync_pull(main_sha)]),
+            (200, {"status": "diverged"}),
+        ]
+    )
+    with pytest.raises(RuntimeError, match="verified reviewed sync squash"):
+        gate(
+            api,
+            "acme/repo",
+            "dev/m7-ci",
+            "proposed-head",
+            "dev/m7-ci",
+        )
+
+
+def test_gate_rejects_head_without_sync_squash_commit() -> None:
+    """A reviewed sync does not cover a head missing its squash commit."""
+    main_sha = "a" * 40
+    api = FakeAPI(
+        [
+            (200, {"object": {"sha": main_sha}}),
+            (200, {"status": "diverged"}),
+            (200, [sync_pull(main_sha)]),
+            (200, {"status": "ahead"}),
+            (200, {"status": "diverged"}),
+        ]
+    )
+    with pytest.raises(RuntimeError, match="verified reviewed sync squash"):
+        gate(
+            api,
+            "acme/repo",
+            "dev/m7-ci",
+            "proposed-head",
+            "dev/m7-ci",
+        )
+
+
 def test_gate_rejects_a_stale_stacked_head() -> None:
     """Any non-main PR fails closed after main advances."""
     api = FakeAPI(
@@ -338,6 +461,48 @@ def test_second_main_advance_invalidates_previous_success() -> None:
     )
     with pytest.raises(RuntimeError, match="main-two"):
         gate(second, "acme/repo", "dev/next", "head-sha")
+
+
+def test_main_advance_invalidates_only_stale_combined_policy() -> None:
+    """Never publish a success status that could bypass the PR policy job."""
+    api = FakeAPI(
+        [
+            (
+                200,
+                [
+                    {
+                        "base": {"ref": "dev/m7-ci"},
+                        "head": {"sha": "current-head"},
+                    },
+                    {
+                        "base": {"ref": "dev/m7-ci"},
+                        "head": {"sha": "stale-head"},
+                    },
+                    {"base": {"ref": "main"}, "head": {"sha": "main-pr"}},
+                ],
+            ),
+            (200, {"status": "ahead"}),
+            (200, {"status": "diverged"}),
+            (201, {"state": "failure"}),
+        ]
+    )
+
+    invalidate_stale_pr_policy(api, "acme/repo", "main-two")
+
+    status_calls = [call for call in api.calls if call[0] == "POST"]
+    assert status_calls == [
+        (
+            "POST",
+            "repos/acme/repo/statuses/stale-head",
+            {
+                "state": "failure",
+                "context": "title",
+                "description": (
+                    "PR head must synchronize current main before merge"
+                ),
+            },
+        )
+    ]
 
 
 def test_manual_sync_is_deterministic_and_reviewed() -> None:
@@ -529,7 +694,6 @@ def test_merge_group_revalidates_one_exact_promotion(
             (200, {"object": {"sha": queue_sha}}),
             (200, [{"number": 42}]),
             (200, promotion()),
-            (200, promotion()),
             (200, {"object": {"sha": BASE_SHA}}),
             (200, {"object": {"sha": HEAD_SHA}}),
             (200, {"status": "ahead"}),
@@ -556,6 +720,41 @@ def test_merge_group_revalidates_one_exact_promotion(
         f"at {LEDGER_SHA}"
     )
     assert api.calls[0][1].endswith(queue_branch)
+
+
+@pytest.mark.parametrize("head_ref", ["dev/m7-ci", "promote/m7-ci"])
+def test_merge_group_revalidates_other_exact_promotion_heads(
+    head_ref: str,
+) -> None:
+    """Non-dev/next promotions keep exact queue and live-ref validation."""
+    queue_sha = "f" * 40
+    queued = promotion()
+    queued["head"]["ref"] = head_ref
+    api = FakeAPI(
+        [
+            (200, {"object": {"sha": queue_sha}}),
+            (200, [{"number": 42}]),
+            (200, queued),
+            (200, {"object": {"sha": BASE_SHA}}),
+            (200, {"object": {"sha": HEAD_SHA}}),
+            (200, {"status": "ahead"}),
+            (200, {"status": "ahead"}),
+        ]
+    )
+
+    assert (
+        merge_group_gate(
+            api,
+            "acme/repo",
+            "refs/heads/gh-readonly-queue/main/pr-42-deadbeef",
+            queue_sha,
+            "refs/heads/main",
+            BASE_SHA,
+        )
+        == f"exact queue candidate for {head_ref}"
+    )
+    encoded = urllib.parse.quote(head_ref, safe="")
+    assert any(path.endswith(encoded) for _method, path, _payload in api.calls)
 
 
 def test_merge_group_rejects_ambiguous_associated_pulls() -> None:
@@ -1136,7 +1335,7 @@ jobs:
             workflow
         )
 
-    for name in ("delivery-sync.yml", "promotion.yml"):
+    for name in ("pr-policy.yml", "promotion.yml"):
         source = (root / ".github/workflows" / name).read_text()
         assert "secrets.CSARC_SYNC_TOKEN" not in source
         assert "GH_TOKEN: ${{ github.token }}" in source
@@ -1162,6 +1361,14 @@ def test_admin_secret_is_limited_to_trusted_workflow_definitions() -> None:
     assert "merge_group:" not in post_merge
     for source in (maintenance, post_merge):
         assert "secrets.CSARC_SYNC_TOKEN" in source
+
+
+def test_post_merge_accepts_promotion_bridge() -> None:
+    """The trusted main verifier accepts the Milestone bridge route."""
+    workflow = (
+        Path(__file__).parents[1] / ".github/workflows/promotion-post-merge.yml"
+    ).read_text()
+    assert ('! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$') in workflow
 
 
 def test_delivery_reconcile_requires_dev_next() -> None:
@@ -1292,3 +1499,46 @@ def test_reconcile_fans_out_with_capability_fallback() -> None:
     assert any("dev/m7-ci is diverged" in result for result in results)
     assert any("dev/m8-api is behind" in result for result in results)
     assert any("dev/next is diverged" in result for result in results)
+
+
+def test_reconcile_invalidates_stale_title_policy() -> None:
+    """Main reconciliation invalidates the active combined policy context."""
+    api = FakeAPI(
+        [
+            (
+                200,
+                [{"ref": "refs/heads/dev/next", "object": {"sha": "next"}}],
+            ),
+            (200, []),
+            (200, {"status": "ahead"}),
+            (
+                200,
+                [
+                    {
+                        "base": {"ref": "dev/next"},
+                        "head": {"sha": "stale-head"},
+                    }
+                ],
+            ),
+            (200, {"status": "diverged"}),
+            (201, {"state": "failure"}),
+        ]
+    )
+
+    assert reconcile(
+        api,
+        "acme/repo",
+        "main-two",
+        auto_requested=False,
+        external_token=False,
+    ) == ["All active delivery branches contain current main."]
+    status_payloads = [
+        payload for method, _path, payload in api.calls if method == "POST"
+    ]
+    assert status_payloads == [
+        {
+            "state": "failure",
+            "context": "title",
+            "description": "PR head must synchronize current main before merge",
+        }
+    ]

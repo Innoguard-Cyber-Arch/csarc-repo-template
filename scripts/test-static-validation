@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+actionlint_bin="$("$repo_root/scripts/install-actionlint")"
+shellcheck_bin="$("$repo_root/scripts/install-shellcheck")"
+
+if "$actionlint_bin" \
+  "$repo_root/tests/fixtures/static-validation/invalid-workflow.yml" \
+  >/dev/null 2>&1; then
+  echo "Actionlint accepted an intentionally invalid workflow." >&2
+  exit 1
+fi
+if "$shellcheck_bin" \
+  "$repo_root/tests/fixtures/static-validation/invalid-shell.sh" \
+  >/dev/null 2>&1; then
+  echo "ShellCheck accepted an intentionally invalid shell script." >&2
+  exit 1
+fi

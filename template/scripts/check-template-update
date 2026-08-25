@@ -32,6 +32,8 @@ PY
 title="Update repository from Copier template"
 body_file="$(mktemp)"
 trap 'rm -f "$body_file"' EXIT
+# These values are assigned by the validated Python output above.
+# shellcheck disable=SC2154
 cat > "$body_file" <<EOF
 ### 類型
 
