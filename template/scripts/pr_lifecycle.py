@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import os
@@ -1339,34 +1340,57 @@ def edit_issue_labels(args: argparse.Namespace, github: GitHub) -> None:
     run(command)
 
 
-def writer_violations(text: str) -> list[str]:
-    """Find PR lifecycle writes outside this module, including split tokens."""
-    compact = re.sub(r"[^a-z0-9_./@-]+", "", text.casefold())
+def compact_tokens(text: str) -> str:
+    """Remove source-language separators without hiding command tokens."""
+    return re.sub(r"[^a-z0-9_./@-]+", "", text.casefold())
+
+
+def lifecycle_api_target(compact: str) -> bool:
+    """Return whether text names a mutable pull-request or Issue endpoint."""
+    repository = r"repos/(?:[^/?]+/)?[^/?]+"
+    prefix = repository + r"/(?:pulls|issues)/[^/?]+"
+    return bool(
+        re.search(prefix + r"(?:[?]|$)", compact)
+        or re.search(prefix + r"/(?:labels|milestones)(?:[/?-]|$)", compact)
+        or re.search(repository + r"/pulls/.+?/merge(?:[?]|$)", compact)
+    )
+
+
+def command_writer_violations(text: str) -> list[str]:
+    """Find lifecycle writes in shell or YAML logical command blocks."""
     violations: list[str] = []
-    direct_commands = [
-        "gh" + "pr" + operation for operation in ("ready", "edit", "merge")
-    ]
-    if any(command in compact for command in direct_commands):
-        violations.append("direct gh pr lifecycle command")
-    if "gh" + "pr" + "create" in compact and any(
-        option in compact for option in ("--label", "--milestone", "--draft")
-    ):
-        violations.append("PR creation with an unleased metadata/state write")
-    shell = text.casefold().replace("\\\n", " ")
-    if any(
-        "ghissueedit" in re.sub(r"[^a-z0-9_-]+", "", line)
-        and any(
-            option in line
+    shell = text.replace("\\\r\n", " ").replace("\\\n", " ")
+    for block in shell.splitlines():
+        compact = compact_tokens(block)
+        if any(
+            f"ghpr{operation}" in compact
+            for operation in ("ready", "edit", "merge")
+        ):
+            violations.append("direct gh pr lifecycle command")
+        if "ghprcreate" in compact and any(
+            option in compact
+            for option in ("--label", "--milestone", "--draft")
+        ):
+            violations.append(
+                "PR creation with an unleased metadata/state write"
+            )
+        if "ghissueedit" in compact and any(
+            option in compact
             for option in (
                 "--add-label",
                 "--remove-label",
                 "--milestone",
                 "--remove-milestone",
             )
+        ):
+            violations.append("gh issue metadata write")
+        mutating_rest = re.search(
+            r"(?:--method|-x)(?:patch|put|post|delete)", compact
         )
-        for line in shell.splitlines()
-    ):
-        violations.append("gh issue metadata write")
+        if mutating_rest and lifecycle_api_target(compact):
+            violations.append("REST pull-request or issue metadata write")
+
+    compact = compact_tokens(text)
     graphql_writers = [
         "convert" + "pullrequest" + "todraft",
         "mark" + "pullrequest" + "readyforreview",
@@ -1383,25 +1407,196 @@ def writer_violations(text: str) -> list[str]:
     release_writer = "googleapis/" + "release-please-" + "action@"
     if release_writer in compact:
         violations.append("opaque release pull-request writer")
-    mutating_rest = re.search(
-        r"(?:--method|-x|request|requests.)(?:patch|put|post|delete)",
-        compact,
-    )
-    if mutating_rest and re.search(
-        r"repos/.{1,160}/pulls/.{0,160}/merge", compact
-    ):
-        violations.append("REST pull-request merge")
-    if mutating_rest and re.search(
-        r"repos/.{1,160}/(?:pulls|issues)/[^/?]+(?:[?]|$)", compact
-    ):
-        violations.append("REST pull-request or issue metadata write")
-    if mutating_rest and re.search(
-        r"repos/.{1,160}/(?:pulls|issues)/.{0,160}/"
-        r"(?:labels|milestones)",
-        compact,
-    ):
-        violations.append("REST pull-request or issue metadata write")
     return violations
+
+
+def ast_name(node: ast.AST, aliases: dict[str, str]) -> str:
+    """Return a dotted call name, resolving imported module aliases."""
+    if isinstance(node, ast.Name):
+        return aliases.get(node.id, node.id)
+    if isinstance(node, ast.Attribute):
+        prefix = ast_name(node.value, aliases)
+        return f"{prefix}.{node.attr}" if prefix else node.attr
+    if isinstance(node, ast.Call):
+        name = ast_name(node.func, aliases)
+        return f"{name}()" if name else ""
+    return ""
+
+
+def ast_text(node: ast.AST, values: dict[str, str]) -> str | None:
+    """Resolve string constants while retaining safe dynamic placeholders."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.Name):
+        return values.get(node.id)
+    if isinstance(node, ast.JoinedStr):
+        return "".join(
+            value.value
+            if isinstance(value, ast.Constant) and isinstance(value.value, str)
+            else "dynamic"
+            for value in node.values
+        )
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = ast_text(node.left, values)
+        right = ast_text(node.right, values)
+        return None if left is None or right is None else left + right
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "str"
+    ):
+        return "dynamic"
+    return None
+
+
+def ast_argv(
+    node: ast.AST, values: dict[str, str], sequences: dict[str, list[str]]
+) -> list[str] | None:
+    """Resolve a constant subprocess argv, preserving dynamic arguments."""
+    if isinstance(node, ast.Name):
+        return sequences.get(node.id)
+    if isinstance(node, (ast.List, ast.Tuple)):
+        result: list[str] = []
+        for item in node.elts:
+            if isinstance(item, ast.Starred):
+                expanded = ast_argv(item.value, values, sequences)
+                if expanded is None:
+                    return None
+                result.extend(expanded)
+                continue
+            result.append(ast_text(item, values) or "dynamic")
+        return result
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = ast_argv(node.left, values, sequences)
+        right = ast_argv(node.right, values, sequences)
+        return None if left is None or right is None else left + right
+    text = ast_text(node, values)
+    return [text] if text is not None else None
+
+
+def python_writer_violations(text: str) -> list[str]:  # noqa: C901
+    """Inspect Python calls structurally instead of flattening source text."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return []
+    aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for item in node.names:
+                aliases[item.asname or item.name] = item.name
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for item in node.names:
+                aliases[item.asname or item.name] = f"{node.module}.{item.name}"
+
+    values: dict[str, str] = {}
+    sequences: dict[str, list[str]] = {}
+    clients: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = (
+            node.targets if isinstance(node, ast.Assign) else [node.target]
+        )
+        value = node.value
+        client = (
+            ast_name(value.func, aliases).casefold().replace("()", "")
+            if isinstance(value, ast.Call)
+            else ""
+        )
+        resolved_text = ast_text(value, values) if value is not None else None
+        resolved_argv = (
+            ast_argv(value, values, sequences) if value is not None else None
+        )
+        for target in targets:
+            if isinstance(target, ast.Name):
+                if resolved_text is not None:
+                    values[target.id] = resolved_text
+                if resolved_argv is not None:
+                    sequences[target.id] = resolved_argv
+                if client in {
+                    "httpx.asyncclient",
+                    "httpx.client",
+                    "requests.session",
+                }:
+                    clients[target.id] = client
+
+    violations: list[str] = []
+    subprocess_calls = {
+        "os.popen",
+        "os.system",
+        "subprocess.call",
+        "subprocess.check_call",
+        "subprocess.check_output",
+        "subprocess.Popen",
+        "subprocess.run",
+    }
+    write_methods = {"delete", "patch", "post", "put"}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = ast_name(node.func, aliases)
+        if name in subprocess_calls and node.args:
+            argv = ast_argv(node.args[0], values, sequences)
+            if argv is not None:
+                violations.extend(command_writer_violations(" ".join(argv)))
+
+        parts = name.casefold().replace("()", "").split(".")
+        if parts and parts[0] in clients:
+            parts = [*clients[parts[0]].split("."), *parts[1:]]
+        root = parts[0] if parts else ""
+        leaf = parts[-1] if parts else ""
+        if root not in {"httpx", "requests", "urllib"}:
+            continue
+        keywords = {item.arg: item.value for item in node.keywords if item.arg}
+        method: str | None = None
+        url_node: ast.AST | None = None
+        if name.casefold().endswith("urllib.request.request"):
+            url_node = node.args[0] if node.args else keywords.get("url")
+            method_node = keywords.get("method")
+            if method_node is not None:
+                resolved = ast_text(method_node, values)
+                method = resolved.casefold() if resolved is not None else None
+            elif "data" in keywords or len(node.args) > 1:
+                method = "post"
+            else:
+                method = "get"
+        elif leaf in write_methods | {"get", "head", "options"}:
+            method = leaf
+            url_node = node.args[0] if node.args else keywords.get("url")
+        elif leaf == "request":
+            method_node = node.args[0] if node.args else keywords.get("method")
+            url_node = (
+                node.args[1] if len(node.args) > 1 else keywords.get("url")
+            )
+            resolved = (
+                ast_text(method_node, values)
+                if method_node is not None
+                else None
+            )
+            method = resolved.casefold() if resolved is not None else None
+        else:
+            continue
+        url = ast_text(url_node, values) if url_node is not None else None
+        lifecycle_target = url is not None and lifecycle_api_target(
+            compact_tokens(url)
+        )
+        if method in write_methods and (
+            lifecycle_target or root in {"httpx", "requests"}
+        ):
+            violations.append("Python HTTP client lifecycle mutation")
+        elif method not in write_methods | {"get", "head", "options"} and (
+            lifecycle_target or root in {"httpx", "requests"}
+        ):
+            violations.append("Python HTTP method cannot be proven read-only")
+    return violations
+
+
+def writer_violations(text: str) -> list[str]:
+    """Find lifecycle writes in scripts and workflows."""
+    return sorted(
+        set(command_writer_violations(text) + python_writer_violations(text))
+    )
 
 
 def scan_writers(root: Path) -> None:

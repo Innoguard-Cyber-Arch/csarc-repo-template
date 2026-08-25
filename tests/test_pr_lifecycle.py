@@ -301,7 +301,7 @@ def test_origin_must_resolve_to_the_exact_github_repository(url: str) -> None:
     [
         "run: |\n  gh pr \\\n    edit 42 --add-label bug\n",
         'subprocess.run(["gh", "pr", "ready", "42"])',
-        'api.request("PATCH", f"repos/{repo}/pulls/" f"{number}")',
+        'requests.request("PATCH", f"repos/{repo}/pulls/" f"{number}")',
         "gh api -X PATCH repos/owner/repo/pulls/42 --field draft=true",
         'query = "mutation { markPullRequest" "ReadyForReview(input: $x) }"',
         "gh pr create --base dev/next --head fix/x --label bug",
@@ -333,6 +333,97 @@ def test_origin_must_resolve_to_the_exact_github_repository(url: str) -> None:
 def test_writer_scanner_catches_split_lifecycle_mutations(source: str) -> None:
     """Whitespace and source-string concatenation cannot evade the scan."""
     assert writer_violations(source)
+
+
+def test_writer_scanner_parses_multiline_subprocess_argv() -> None:
+    """A Python argv list cannot hide an Issue label mutation."""
+    source = """
+import subprocess
+
+subprocess.run(
+    [
+        "gh",
+        "issue",
+        "edit",
+        "42",
+        "--add-" "label",
+        "bug",
+    ],
+    check=True,
+)
+"""
+    assert "gh issue metadata write" in writer_violations(source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        """
+import requests
+
+requests.request(
+    method="PA" "TCH",
+    url="https://api.github.com/repos/o/r/pulls/42",
+)
+""",
+        """
+import requests
+
+requests.Session().delete(
+    "https://api.github.com/repos/o/r/issues/42/labels/bug"
+)
+""",
+        """
+import requests
+
+session = requests.Session()
+session.delete("https://api.github.com/repos/o/r/issues/42/labels/bug")
+""",
+        """
+import httpx
+
+httpx.Client().post("https://api.github.com/repos/o/r/issues/42/labels")
+""",
+        """
+import urllib.request
+
+urllib.request.Request(
+    "https://api.github.com/repos/o/r/pulls/42",
+    method="PATCH",
+)
+""",
+    ],
+)
+def test_writer_scanner_parses_http_client_calls(source: str) -> None:
+    """Known HTTP clients cannot hide lifecycle writes behind syntax."""
+    assert "Python HTTP client lifecycle mutation" in writer_violations(source)
+
+
+def test_writer_scanner_fails_closed_on_an_unknown_http_method() -> None:
+    """Dynamic methods cannot make lifecycle endpoints look read-only."""
+    source = """
+import requests
+
+requests.request(
+    method=selected_method,
+    url=selected_url,
+)
+"""
+    assert "Python HTTP method cannot be proven read-only" in writer_violations(
+        source
+    )
+
+
+def test_writer_scanner_allows_proven_read_only_http_calls() -> None:
+    """Known GET calls do not block ordinary API inspection."""
+    source = """
+import requests
+import urllib.request
+
+requests.request("GET", "https://api.github.com/repos/o/r/pulls/42")
+urllib.request.Request("https://api.github.com/repos/o/r/issues/42")
+"""
+    assert not writer_violations(source)
 
 
 def test_writer_scanner_covers_root_and_template_automation(
