@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - if: ${{ github.event_name == 'pull_request' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,12 +34,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: >-
           python3 scripts/delivery_sync.py gate
           --repo "$GITHUB_REPOSITORY"
           --base "$PR_BASE"
+          --head-ref "$PR_HEAD"
           --head-sha "$PR_HEAD_SHA"
+          --pr-number "$PR_NUMBER"
       - name: Accept the already-synchronized merge queue candidate
         if: ${{ github.event_name == 'merge_group' }}
         run: echo "Delivery synchronization was validated before merge queue entry."
@@ -58,13 +63,19 @@ jobs:
           persist-credentials: false
       - name: Reconcile active delivery branches
         env:
+          BRANCH_STRATEGY: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && 'delivery' || '' }}
           GH_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN || github.token }}
           MAIN_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
           SYNC_AUTO: ${{ vars.CSARC_AUTO_SYNC == 'true' && 'true' || 'false' }}
           SYNC_TOKEN_KIND: ${{ secrets.CSARC_SYNC_TOKEN != '' && 'external' || 'github-token' }}
         run: |
+          branch_strategy="$BRANCH_STRATEGY"
+          if [[ -z "$branch_strategy" ]]; then
+            branch_strategy="$(jq -er '.branch_strategy | select(. == "main" or . == "dev" or . == "delivery")' .csarc/profile.json)"
+          fi
           python3 scripts/delivery_sync.py reconcile \
             --repo "$GITHUB_REPOSITORY" \
             --main-sha "$MAIN_SHA" \
             --auto "$SYNC_AUTO" \
+            --branch-strategy "$branch_strategy" \
             --token-kind "$SYNC_TOKEN_KIND" | tee -a "$GITHUB_STEP_SUMMARY"

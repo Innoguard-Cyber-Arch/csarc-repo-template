@@ -17,9 +17,31 @@ create_sync_pr = MODULE["create_sync_pr"]
 gate = MODULE["gate"]
 includes_main = MODULE["includes_main"]
 manual_commands = MODULE["manual_commands"]
+complete_dev_next = MODULE["complete_dev_next"]
+prepare_dev_next = MODULE["prepare_dev_next"]
+read_active_states = MODULE["read_active_states"]
 reconcile = MODULE["reconcile"]
 select_auto_mode = MODULE["select_auto_mode"]
 sync_branch_name = MODULE["sync_branch_name"]
+
+HEAD_SHA = "a" * 40
+BASE_SHA = "b" * 40
+MAIN_SHA = "c" * 40
+
+
+def promotion(*, merged: bool = False) -> dict[str, Any]:
+    """Return one exact same-repository dev/next promotion."""
+    return {
+        "number": 42,
+        "merged": merged,
+        "merge_commit_sha": MAIN_SHA if merged else None,
+        "base": {"ref": "main", "sha": BASE_SHA},
+        "head": {
+            "ref": "dev/next",
+            "sha": HEAD_SHA,
+            "repo": {"full_name": "acme/repo"},
+        },
+    }
 
 
 class FakeAPI:
@@ -149,6 +171,164 @@ def test_manual_sync_is_deterministic_and_reviewed() -> None:
     assert "git merge --no-ff origin/main" in commands
     assert "gh pr create --base dev/m7-staged-ci" in commands
     assert "git push origin dev/m7-staged-ci" not in commands
+
+
+def test_promotion_gate_requires_verified_deletion_protection() -> None:
+    """A direct promotion cannot merge while GitHub may delete dev/next."""
+    protected = FakeAPI(
+        [
+            (200, promotion()),
+            (200, {"object": {"sha": BASE_SHA}}),
+            (200, {"object": {"sha": HEAD_SHA}}),
+            (200, {"delete_branch_on_merge": True}),
+            (200, [{"type": "deletion"}]),
+        ]
+    )
+    assert (
+        gate(
+            protected,
+            "acme/repo",
+            "main",
+            HEAD_SHA,
+            head_ref="dev/next",
+            pr_number=42,
+        )
+        == "deletion-protected"
+    )
+
+    api = FakeAPI(
+        [
+            (200, promotion()),
+            (200, {"object": {"sha": BASE_SHA}}),
+            (200, {"object": {"sha": HEAD_SHA}}),
+            (200, {"delete_branch_on_merge": True}),
+            (200, [{"type": "non_fast_forward"}]),
+        ]
+    )
+    with pytest.raises(RuntimeError, match="can be auto-deleted"):
+        gate(
+            api,
+            "acme/repo",
+            "main",
+            HEAD_SHA,
+            head_ref="dev/next",
+            pr_number=42,
+        )
+
+
+@pytest.mark.parametrize("rules_status", [403, 500])
+def test_prepare_fallback_is_explicit_and_idempotent(
+    rules_status: int,
+) -> None:
+    """Blocked or unknown rule checks safely disable only the merge window."""
+    responses = [
+        (200, promotion()),
+        (200, {"object": {"sha": BASE_SHA}}),
+        (200, {"object": {"sha": HEAD_SHA}}),
+        (200, {"delete_branch_on_merge": True}),
+        (rules_status, {"message": "unavailable"}),
+        (200, {"delete_branch_on_merge": False}),
+        (200, {"delete_branch_on_merge": False}),
+        (200, {"object": {"sha": BASE_SHA}}),
+        (200, {"object": {"sha": HEAD_SHA}}),
+    ]
+    api = FakeAPI(responses)
+    expected = "blocked" if rules_status == 403 else "unknown"
+    assert prepare_dev_next(api, "acme/repo", 42, HEAD_SHA) == (
+        f"temporary-auto-delete-disabled ({expected})"
+    )
+    assert (
+        "PATCH",
+        "repos/acme/repo",
+        {"delete_branch_on_merge": False},
+    ) in api.calls
+
+    rerun = FakeAPI(
+        [
+            (200, promotion()),
+            (200, {"object": {"sha": BASE_SHA}}),
+            (200, {"object": {"sha": HEAD_SHA}}),
+            (200, {"delete_branch_on_merge": False}),
+        ]
+    )
+    assert prepare_dev_next(rerun, "acme/repo", 42, HEAD_SHA) == (
+        "temporary-auto-delete-disabled"
+    )
+    assert not any(method == "PATCH" for method, _path, _body in rerun.calls)
+
+
+def test_prepare_rolls_back_if_main_drifts() -> None:
+    """A changed promotion context cannot leave repository cleanup disabled."""
+    api = FakeAPI(
+        [
+            (200, promotion()),
+            (200, {"object": {"sha": BASE_SHA}}),
+            (200, {"object": {"sha": HEAD_SHA}}),
+            (200, {"delete_branch_on_merge": True}),
+            (200, []),
+            (200, {"delete_branch_on_merge": False}),
+            (200, {"delete_branch_on_merge": False}),
+            (200, {"object": {"sha": "d" * 40}}),
+            (200, {"delete_branch_on_merge": True}),
+            (200, {"delete_branch_on_merge": True}),
+        ]
+    )
+    with pytest.raises(RuntimeError, match="changed while enabling"):
+        prepare_dev_next(api, "acme/repo", 42, HEAD_SHA)
+    assert api.calls[-2] == (
+        "PATCH",
+        "repos/acme/repo",
+        {"delete_branch_on_merge": True},
+    )
+
+
+def test_complete_restores_cleanup_and_is_idempotent() -> None:
+    """Bind cleanup restoration to the merged PR, main, tree, and live ref."""
+    evidence = [
+        (200, promotion(merged=True)),
+        (200, {"object": {"sha": MAIN_SHA}}),
+        (200, {"object": {"sha": HEAD_SHA}}),
+        (200, {"tree": {"sha": "tree"}}),
+        (200, {"tree": {"sha": "tree"}}),
+    ]
+    api = FakeAPI(
+        [
+            *evidence,
+            (200, {"delete_branch_on_merge": False}),
+            (200, {"delete_branch_on_merge": True}),
+            (200, {"delete_branch_on_merge": True}),
+        ]
+    )
+    assert complete_dev_next(api, "acme/repo", 42, HEAD_SHA, MAIN_SHA) == (
+        "auto-delete-restored"
+    )
+
+    rerun = FakeAPI([*evidence, (200, {"delete_branch_on_merge": True})])
+    assert (
+        complete_dev_next(rerun, "acme/repo", 42, HEAD_SHA, MAIN_SHA)
+        == "auto-delete-already-enabled"
+    )
+    assert not any(method == "PATCH" for method, _path, _body in rerun.calls)
+
+
+def test_complete_rejects_an_auto_deleted_dev_next() -> None:
+    """A missing long-lived branch can never pass post-merge evidence."""
+    api = FakeAPI(
+        [
+            (200, promotion(merged=True)),
+            (200, {"object": {"sha": MAIN_SHA}}),
+            (404, {"message": "Not Found"}),
+        ]
+    )
+    with pytest.raises(RuntimeError, match="read dev/next failed"):
+        complete_dev_next(api, "acme/repo", 42, HEAD_SHA, MAIN_SHA)
+
+
+def test_delivery_reconcile_requires_dev_next() -> None:
+    """An empty ref list cannot masquerade as synchronized delivery state."""
+    api = FakeAPI([(200, []), (200, [])])
+    with pytest.raises(RuntimeError, match="dev/next is missing"):
+        read_active_states(api, "acme/repo", "main", require_dev_next=True)
 
 
 def test_existing_sync_pr_deduplicates_same_main_sha() -> None:

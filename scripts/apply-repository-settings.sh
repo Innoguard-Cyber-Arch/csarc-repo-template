@@ -117,7 +117,7 @@ fi
 
 print_ruleset_guidance() {
   echo "- DEGRADED required governance: $default_branch is not protected on this private repository."
-  echo "- PRESERVED desired Ruleset: policies/rulesets.json remains ready for a supported plan or public repository."
+  echo "- PRESERVED desired Ruleset: policies/rulesets.json keeps deletion protection ready for dev/next on a supported plan or public repository."
   echo "- API LIMIT: GitHub REST and GraphQL reject Ruleset creation and updates on this plan, even with enforcement disabled."
   echo "- OPTIONAL: an administrator may preconfigure a disabled Ruleset in the GitHub web UI; this script can detect but cannot create it."
   echo "  https://github.com/$repo/settings/rules"
@@ -420,7 +420,7 @@ PY
     echo "Ruleset settings drift: $ruleset_drift" >&2
     check_errors=$((check_errors + 1))
   else
-    echo "Repository governance ready: $default_branch has the required effective rules."
+    echo "Repository governance ready: $default_branch has the required effective rules; delivery-sync verifies dev/next deletion protection before promotion."
   fi
 
   if (( check_errors > 0 )); then

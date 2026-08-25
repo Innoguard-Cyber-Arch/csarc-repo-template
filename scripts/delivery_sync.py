@@ -15,7 +15,24 @@ from typing import Any, Protocol
 
 DELIVERY_BRANCH = re.compile(r"^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$")
 ISOLATED_BRANCH = re.compile(r"^dev/i[0-9]+-[a-z0-9][a-z0-9-]*$")
+FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 CAPABILITY_STATES = {"allowed", "blocked", "unknown"}
+
+
+class RejectRedirects(urllib.request.HTTPRedirectHandler):
+    """Never forward a GitHub bearer credential through a redirect."""
+
+    def redirect_request(
+        self,
+        _request: urllib.request.Request,
+        _file: object,
+        _code: int,
+        _message: str,
+        _headers: object,
+        _new_url: str,
+    ) -> None:
+        """Reject every redirect."""
+        return None
 
 
 class GitHubAPI:
@@ -29,6 +46,7 @@ class GitHubAPI:
             raise ValueError("GitHub API URL must use HTTPS")
         self.token = token
         self.base_url = base_url.rstrip("/")
+        self.opener = urllib.request.build_opener(RejectRedirects())
 
     def request(
         self, method: str, path: str, payload: dict[str, object] | None = None
@@ -46,9 +64,7 @@ class GitHubAPI:
             },
         )
         try:
-            with urllib.request.urlopen(  # noqa: S310
-                request, timeout=20
-            ) as response:
+            with self.opener.open(request, timeout=20) as response:
                 body = response.read().decode()
                 return response.status, json.loads(body) if body else None
         except urllib.error.HTTPError as error:
@@ -168,10 +184,41 @@ def read_main_sha(api: API, repo: str) -> str:
     return main_sha
 
 
-def gate(api: API, repo: str, base: str, head_sha: str) -> str:
-    """Fail a non-main PR unless its proposed head contains current main."""
+def gate(
+    api: API,
+    repo: str,
+    base: str,
+    head_sha: str,
+    *,
+    head_ref: str = "",
+    pr_number: int = 0,
+) -> str:
+    """Fail stale PRs and unprotected direct dev/next promotions."""
     if base == "main":
-        return "not-applicable"
+        if head_ref != "dev/next":
+            return "not-applicable"
+        pull = validate_promotion(api, repo, pr_number, head_sha, merged=False)
+        if ref_sha(api, repo, "main") != pull["base"].get("sha"):
+            raise RuntimeError("Promotion base no longer matches current main")
+        if ref_sha(api, repo, "dev/next") != head_sha:
+            raise RuntimeError("dev/next no longer matches the promotion head")
+        if (
+            repository_settings(api, repo).get("delete_branch_on_merge")
+            is False
+        ):
+            return (
+                "temporary-auto-delete-disabled; after merge run "
+                f"complete-dev-next for PR {pr_number}, head {head_sha}, "
+                "and the merged main SHA"
+            )
+        if deletion_protection_state(api, repo) == "protected":
+            return "deletion-protected"
+        raise RuntimeError(
+            "dev/next can be auto-deleted; run `python3 "
+            "scripts/delivery_sync.py prepare-dev-next "
+            f"--repo {repo} --pr-number {pr_number} --head-sha {head_sha}` "
+            "with an administrator token, then rerun this check"
+        )
     main_sha = read_main_sha(api, repo)
     compare_status = compare(api, repo, main_sha, head_sha)
     if not includes_main(compare_status):
@@ -186,6 +233,181 @@ def sync_branch_name(delivery_branch: str, main_sha: str) -> str:
     """Return the deterministic branch name used to deduplicate sync work."""
     key = delivery_branch.removeprefix("dev/")
     return f"sync/main-to-{key}-{main_sha[:12]}"
+
+
+def ref_sha(api: API, repo: str, branch: str) -> str:
+    """Read one exact branch ref without accepting a missing branch."""
+    encoded = urllib.parse.quote(branch, safe="")
+    status, payload = api.request(
+        "GET", f"repos/{repo}/git/ref/heads/{encoded}"
+    )
+    data = require_response(status, payload, f"read {branch}")
+    sha = data.get("object", {}).get("sha") if isinstance(data, dict) else None
+    if not isinstance(sha, str):
+        raise RuntimeError(f"GitHub returned an invalid {branch} ref")
+    return sha
+
+
+def pull_request(api: API, repo: str, number: int) -> dict[str, Any]:
+    """Read one exact pull request."""
+    status, payload = api.request("GET", f"repos/{repo}/pulls/{number}")
+    data = require_response(status, payload, "read promotion pull request")
+    if not isinstance(data, dict) or data.get("number") != number:
+        raise RuntimeError("GitHub returned an invalid promotion pull request")
+    return data
+
+
+def validate_promotion(
+    api: API,
+    repo: str,
+    number: int,
+    head_sha: str,
+    *,
+    merged: bool,
+) -> dict[str, Any]:
+    """Bind preservation work to one same-repository dev/next promotion."""
+    if number < 1 or FULL_SHA.fullmatch(head_sha) is None:
+        raise RuntimeError("Promotion number and head SHA are required")
+    pull = pull_request(api, repo, number)
+    base = pull.get("base")
+    head = pull.get("head")
+    head_repo = head.get("repo") if isinstance(head, dict) else None
+    if (
+        pull.get("merged") is not merged
+        or not isinstance(base, dict)
+        or base.get("ref") != "main"
+        or not isinstance(head, dict)
+        or head.get("ref") != "dev/next"
+        or head.get("sha") != head_sha
+        or not isinstance(head_repo, dict)
+        or head_repo.get("full_name") != repo
+    ):
+        raise RuntimeError("Live promotion does not match dev/next evidence")
+    return pull
+
+
+def repository_settings(api: API, repo: str) -> dict[str, Any]:
+    """Read observable repository settings."""
+    status, payload = api.request("GET", f"repos/{repo}")
+    data = require_response(status, payload, "read repository settings")
+    if not isinstance(data, dict):
+        raise RuntimeError("GitHub returned invalid repository settings")
+    return data
+
+
+def deletion_protection_state(api: API, repo: str) -> str:
+    """Classify effective deletion protection without trusting ambiguity."""
+    status, payload = api.request(
+        "GET", f"repos/{repo}/rules/branches/dev%2Fnext"
+    )
+    if status in {401, 403, 404}:
+        return "blocked"
+    if not 200 <= status < 300 or not isinstance(payload, list):
+        return "unknown"
+    if any(
+        isinstance(rule, dict) and rule.get("type") == "deletion"
+        for rule in payload
+    ):
+        return "protected"
+    return "unprotected"
+
+
+def set_auto_delete(api: API, repo: str, enabled: bool) -> None:
+    """Set and verify automatic merged-branch deletion."""
+    status, payload = api.request(
+        "PATCH", f"repos/{repo}", {"delete_branch_on_merge": enabled}
+    )
+    action = "restore" if enabled else "disable"
+    require_response(status, payload, f"{action} automatic branch deletion")
+    if (
+        repository_settings(api, repo).get("delete_branch_on_merge")
+        is not enabled
+    ):
+        raise RuntimeError(f"Automatic branch deletion was not {action}d")
+
+
+def prepare_dev_next(api: API, repo: str, number: int, head_sha: str) -> str:
+    """Prevent auto-delete before one exact dev/next promotion merge."""
+    pull = validate_promotion(api, repo, number, head_sha, merged=False)
+    base = pull["base"]
+    if ref_sha(api, repo, "main") != base.get("sha"):
+        raise RuntimeError("Promotion base no longer matches current main")
+    if ref_sha(api, repo, "dev/next") != head_sha:
+        raise RuntimeError("dev/next no longer matches the promotion head")
+    settings = repository_settings(api, repo)
+    if settings.get("delete_branch_on_merge") is False:
+        return "temporary-auto-delete-disabled"
+    protection = deletion_protection_state(api, repo)
+    if protection == "protected":
+        return "deletion-protected"
+    status, payload = api.request(
+        "PATCH", f"repos/{repo}", {"delete_branch_on_merge": False}
+    )
+    require_response(status, payload, "disable automatic branch deletion")
+    try:
+        if (
+            repository_settings(api, repo).get("delete_branch_on_merge")
+            is not False
+        ):
+            raise RuntimeError("Automatic branch deletion was not disabled")
+        if (
+            ref_sha(api, repo, "main") != base.get("sha")
+            or ref_sha(api, repo, "dev/next") != head_sha
+        ):
+            raise RuntimeError("Promotion refs changed while enabling fallback")
+    except RuntimeError:
+        set_auto_delete(api, repo, True)
+        raise
+    return f"temporary-auto-delete-disabled ({protection})"
+
+
+def complete_dev_next(
+    api: API, repo: str, number: int, head_sha: str, main_sha: str
+) -> str:
+    """Verify continuity after merge and restore normal branch cleanup."""
+    if FULL_SHA.fullmatch(main_sha) is None:
+        raise RuntimeError("Merged main SHA is required")
+    pull = validate_promotion(api, repo, number, head_sha, merged=True)
+    if pull.get("merge_commit_sha") != main_sha:
+        raise RuntimeError("Promotion merge commit does not match main")
+    if ref_sha(api, repo, "main") != main_sha:
+        raise RuntimeError("Current main does not match the promotion merge")
+    live_dev_next = ref_sha(api, repo, "dev/next")
+    if live_dev_next != head_sha and (
+        not includes_main(compare(api, repo, head_sha, live_dev_next))
+        or not includes_main(compare(api, repo, main_sha, live_dev_next))
+    ):
+        raise RuntimeError("dev/next no longer preserves the promoted lineage")
+    head_status, head_payload = api.request(
+        "GET", f"repos/{repo}/git/commits/{head_sha}"
+    )
+    main_status, main_payload = api.request(
+        "GET", f"repos/{repo}/git/commits/{main_sha}"
+    )
+    head_commit = require_response(
+        head_status, head_payload, "read promotion head"
+    )
+    main_commit = require_response(
+        main_status, main_payload, "read merged main"
+    )
+    head_tree = (
+        head_commit.get("tree", {}).get("sha")
+        if isinstance(head_commit, dict)
+        else None
+    )
+    main_tree = (
+        main_commit.get("tree", {}).get("sha")
+        if isinstance(main_commit, dict)
+        else None
+    )
+    if not isinstance(head_tree, str) or main_tree != head_tree:
+        raise RuntimeError(
+            "Merged main tree differs from the dev/next candidate"
+        )
+    if repository_settings(api, repo).get("delete_branch_on_merge") is False:
+        set_auto_delete(api, repo, True)
+        return "auto-delete-restored"
+    return "auto-delete-already-enabled"
 
 
 def manual_commands(delivery_branch: str, main_sha: str) -> str:
@@ -308,7 +530,7 @@ def create_sync_pr(
 
 
 def read_active_states(
-    api: API, repo: str, main_sha: str
+    api: API, repo: str, main_sha: str, *, require_dev_next: bool = False
 ) -> list[DeliveryState]:
     """Read and compare every active delivery branch."""
     status, payload = api.request(
@@ -326,9 +548,14 @@ def read_active_states(
         for item in milestones
         if isinstance(item, dict) and isinstance(item.get("number"), int)
     }
+    active = active_delivery_branches(refs, open_numbers)
+    if require_dev_next and not any(
+        branch == "dev/next" for branch, _sha in active
+    ):
+        raise RuntimeError("Required delivery branch dev/next is missing")
     return [
         DeliveryState(branch, sha, includes_main(state), state)
-        for branch, sha in active_delivery_branches(refs, open_numbers)
+        for branch, sha in active
         for state in [compare(api, repo, main_sha, sha)]
     ]
 
@@ -374,9 +601,15 @@ def reconcile(
     *,
     auto_requested: bool,
     external_token: bool,
+    branch_strategy: str = "delivery",
 ) -> list[str]:
     """Report or create one deduplicated sync PR per stale active branch."""
-    states = read_active_states(api, repo, main_sha)
+    states = read_active_states(
+        api,
+        repo,
+        main_sha,
+        require_dev_next=branch_strategy == "delivery",
+    )
     update_open_pr_statuses(api, repo, main_sha)
     stale = [state for state in states if not state.current]
     if not stale:
@@ -412,12 +645,22 @@ def reconcile(
 def main() -> None:
     """Run the PR gate or main-push reconciliation mode."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=("gate", "reconcile"))
+    parser.add_argument(
+        "command",
+        choices=("gate", "reconcile", "prepare-dev-next", "complete-dev-next"),
+    )
     parser.add_argument("--repo", required=True)
     parser.add_argument("--base", default="")
     parser.add_argument("--head-sha", default="")
+    parser.add_argument("--head-ref", default="")
     parser.add_argument("--main-sha", default="")
+    parser.add_argument("--pr-number", type=int, default=0)
     parser.add_argument("--auto", choices=("true", "false"), default="false")
+    parser.add_argument(
+        "--branch-strategy",
+        choices=("main", "dev", "delivery"),
+        default="delivery",
+    )
     parser.add_argument(
         "--token-kind",
         choices=("github-token", "external"),
@@ -432,8 +675,29 @@ def main() -> None:
         if args.command == "gate":
             if not args.base or not args.head_sha:
                 raise RuntimeError("gate requires --base and --head-sha")
-            result = gate(api, args.repo, args.base, args.head_sha)
+            result = gate(
+                api,
+                args.repo,
+                args.base,
+                args.head_sha,
+                head_ref=args.head_ref,
+                pr_number=args.pr_number,
+            )
             print(f"delivery sync gate: {result}")  # noqa: T201
+        elif args.command == "prepare-dev-next":
+            print(  # noqa: T201
+                prepare_dev_next(api, args.repo, args.pr_number, args.head_sha)
+            )
+        elif args.command == "complete-dev-next":
+            print(  # noqa: T201
+                complete_dev_next(
+                    api,
+                    args.repo,
+                    args.pr_number,
+                    args.head_sha,
+                    args.main_sha,
+                )
+            )
         else:
             main_sha = args.main_sha or read_main_sha(api, args.repo)
             for line in reconcile(
@@ -442,6 +706,7 @@ def main() -> None:
                 main_sha,
                 auto_requested=args.auto == "true",
                 external_token=args.token_kind == "external",  # noqa: S105
+                branch_strategy=args.branch_strategy,
             ):
                 print(line)  # noqa: T201
     except RuntimeError as error:
