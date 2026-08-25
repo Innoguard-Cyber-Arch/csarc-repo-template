@@ -101,7 +101,10 @@ class GitHub:
 
     def get(self, repo: str, path: str) -> object:
         """Read one REST resource."""
-        return json.loads(run(["gh", "api", f"repos/{repo}/{path}"]))
+        endpoint = f"repos/{repo}"
+        if path:
+            endpoint = f"{endpoint}/{path}"
+        return json.loads(run(["gh", "api", endpoint]))
 
     def viewer(self, explicit_actor: str = "") -> str:
         """Return a verified user, or an explicitly supplied App actor."""

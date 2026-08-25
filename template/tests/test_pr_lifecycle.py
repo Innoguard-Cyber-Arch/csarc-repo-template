@@ -600,6 +600,21 @@ def test_github_app_actor_must_come_from_trusted_caller_input(
     assert calls == [["gh", "api", "user"]]
 
 
+def test_github_get_repository_omits_trailing_slash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Use GitHub's canonical repository endpoint for root metadata."""
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], **_kwargs: object) -> str:
+        calls.append(command)
+        return '{"default_branch": "main"}'
+
+    monkeypatch.setitem(GitHub.get.__globals__, "run", fake_run)
+    assert GitHub().get("owner/repo", "") == {"default_branch": "main"}
+    assert calls == [["gh", "api", "repos/owner/repo"]]
+
+
 def test_concurrent_prs_cannot_acquire_the_same_destination_lane(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
