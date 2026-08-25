@@ -24,6 +24,7 @@ acquire = MODULE["acquire"]
 audit_message = MODULE["audit_message"]
 authorization = MODULE["authorization"]
 authorization_statement = MODULE["authorization_statement"]
+authorization_template = MODULE["authorization_template"]
 base_lane_ref = MODULE["base_lane_ref"]
 confirm_refs = MODULE["confirm_refs"]
 create_refs = MODULE["create_refs"]
@@ -985,6 +986,36 @@ def test_authorization_requires_an_exact_affirmative_human_statement(
         )
 
 
+def test_authorization_template_outputs_the_exact_accepted_body(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Piping the generated template must not add an invalid trailing byte."""
+    lease_path = tmp_path / "lease.json"
+    lease_path.write_text(json.dumps(lease_fixture()), encoding="utf-8")
+    monkeypatch.setitem(
+        authorization_template.__globals__, "require_caller", lambda *_: None
+    )
+    monkeypatch.setitem(
+        authorization_template.__globals__, "require_lease", lambda *_: None
+    )
+    authorization_template(
+        SimpleNamespace(
+            repo="owner/repo",
+            pr_number=42,
+            head_sha="a" * 40,
+            owner="task/merge",
+            actor="",
+            lease=lease_path,
+        ),
+        FakeGitHub("a" * 40),
+    )
+    assert capsys.readouterr().out == authorization_statement(
+        "owner/repo", 42, "a" * 40
+    )
+
+
 def test_authorization_requires_live_maintainer_permission() -> None:
     """A stale MEMBER association cannot replace live repository permission."""
     github = FakeGitHub("a" * 40)
@@ -1337,9 +1368,13 @@ def test_body_edit_runs_inside_two_lease_checks(
         nonlocal checks
         checks += 1
 
-    def edit(command: list[str], **_kwargs: object) -> str:
-        assert command[-2:] == ["--body-file", str(body_path)]
-        github.body = body_path.read_text(encoding="utf-8")
+    def edit(
+        command: list[str], *, input_text: str | None = None, **_kwargs: object
+    ) -> str:
+        assert command[-2:] == ["--body-file", "-"]
+        body_path.write_text("replacement", encoding="utf-8")
+        assert input_text == "- [x] Reviewed\n"
+        github.body = input_text or ""
         return ""
 
     monkeypatch.setitem(edit_metadata.__globals__, "require_lease", check_lease)

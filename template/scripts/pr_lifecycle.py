@@ -1233,8 +1233,8 @@ def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
         raise RuntimeError("Label names must be non-empty single-line values")
     expected_labels = (labels | set(args.add_label)) - set(args.remove_label)
     command = ["gh", "pr", "edit", str(args.pr_number), "--repo", args.repo]
-    if body_file is not None:
-        command.extend(("--body-file", str(body_file)))
+    if requested_body is not None:
+        command.extend(("--body-file", "-"))
     for label in args.add_label:
         command.extend(("--add-label", label))
     for label in args.remove_label:
@@ -1243,7 +1243,7 @@ def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
         command.extend(("--milestone", args.milestone))
     elif args.remove_milestone:
         command.append("--remove-milestone")
-    run(command)
+    run(command, input_text=requested_body)
     require_lease(github, lease, args.repo, args.pr_number, args.head_sha)
     updated = live_pull(github, args.repo, args.pr_number, args.head_sha)
     updated_labels = {
@@ -1339,7 +1339,7 @@ def authorization_template(args: argparse.Namespace, github: GitHub) -> None:
     require_caller(lease, args.owner, getattr(args, "actor", ""), github)
     require_lease(github, lease, args.repo, args.pr_number, args.head_sha)
     sys.stdout.write(
-        authorization_statement(args.repo, args.pr_number, args.head_sha) + "\n"
+        authorization_statement(args.repo, args.pr_number, args.head_sha)
     )
 
 
