@@ -6,6 +6,7 @@ import base64
 import json
 import re
 import runpy
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -693,7 +694,6 @@ def test_merge_group_revalidates_one_exact_promotion(
             (200, {"object": {"sha": queue_sha}}),
             (200, [{"number": 42}]),
             (200, promotion()),
-            (200, promotion()),
             (200, {"object": {"sha": BASE_SHA}}),
             (200, {"object": {"sha": HEAD_SHA}}),
             (200, {"status": "ahead"}),
@@ -720,6 +720,38 @@ def test_merge_group_revalidates_one_exact_promotion(
         f"at {LEDGER_SHA}"
     )
     assert api.calls[0][1].endswith(queue_branch)
+
+
+@pytest.mark.parametrize("head_ref", ["dev/m7-ci", "promote/m7-ci"])
+def test_merge_group_revalidates_other_exact_promotion_heads(
+    head_ref: str,
+) -> None:
+    """Non-dev/next promotions keep exact queue and live-ref validation."""
+    queue_sha = "f" * 40
+    queued = promotion()
+    queued["head"]["ref"] = head_ref
+    api = FakeAPI(
+        [
+            (200, {"object": {"sha": queue_sha}}),
+            (200, [{"number": 42}]),
+            (200, queued),
+            (200, {"object": {"sha": BASE_SHA}}),
+            (200, {"object": {"sha": HEAD_SHA}}),
+            (200, {"status": "ahead"}),
+            (200, {"status": "ahead"}),
+        ]
+    )
+
+    assert merge_group_gate(
+        api,
+        "acme/repo",
+        "refs/heads/gh-readonly-queue/main/pr-42-deadbeef",
+        queue_sha,
+        "refs/heads/main",
+        BASE_SHA,
+    ) == f"exact queue candidate for {head_ref}"
+    encoded = urllib.parse.quote(head_ref, safe="")
+    assert any(path.endswith(encoded) for _method, path, _payload in api.calls)
 
 
 def test_merge_group_rejects_ambiguous_associated_pulls() -> None:
@@ -1456,3 +1488,46 @@ def test_reconcile_fans_out_with_capability_fallback() -> None:
     assert any("dev/m7-ci is diverged" in result for result in results)
     assert any("dev/m8-api is behind" in result for result in results)
     assert any("dev/next is diverged" in result for result in results)
+
+
+def test_reconcile_invalidates_stale_title_policy() -> None:
+    """Main reconciliation invalidates the active combined policy context."""
+    api = FakeAPI(
+        [
+            (
+                200,
+                [{"ref": "refs/heads/dev/next", "object": {"sha": "next"}}],
+            ),
+            (200, []),
+            (200, {"status": "ahead"}),
+            (
+                200,
+                [
+                    {
+                        "base": {"ref": "dev/next"},
+                        "head": {"sha": "stale-head"},
+                    }
+                ],
+            ),
+            (200, {"status": "diverged"}),
+            (201, {"state": "failure"}),
+        ]
+    )
+
+    assert reconcile(
+        api,
+        "acme/repo",
+        "main-two",
+        auto_requested=False,
+        external_token=False,
+    ) == ["All active delivery branches contain current main."]
+    status_payloads = [
+        payload for method, _path, payload in api.calls if method == "POST"
+    ]
+    assert status_payloads == [
+        {
+            "state": "failure",
+            "context": "title",
+            "description": "PR head must synchronize current main before merge",
+        }
+    ]

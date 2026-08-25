@@ -1699,7 +1699,7 @@ def merge_group_gate(
     base_ref: str,
     base_sha: str,
 ) -> str:
-    """Bind one merge-queue candidate to one live dev/next promotion."""
+    """Bind one merge-queue candidate to its live pull request and refs."""
     match = MERGE_QUEUE_REF.fullmatch(queue_ref)
     if (
         match is None
@@ -1716,21 +1716,34 @@ def merge_group_gate(
     if len(pulls) != 1 or pulls[0].get("number") != number:
         raise RuntimeError("Merge queue commit has no unique pull request")
     candidate = pull_request(api, repo, number)
+    base = candidate.get("base")
     head = candidate.get("head")
-    if not isinstance(head, dict) or not isinstance(head.get("sha"), str):
-        raise RuntimeError("Queued promotion has an invalid head")
+    head_repo = head.get("repo") if isinstance(head, dict) else None
+    if (
+        candidate.get("merged") is not False
+        or candidate.get("state") != "open"
+        or not isinstance(base, dict)
+        or base.get("ref") != "main"
+        or base.get("sha") != base_sha
+        or not isinstance(head, dict)
+        or not isinstance(head.get("ref"), str)
+        or not isinstance(head.get("sha"), str)
+        or not isinstance(head_repo, dict)
+        or head_repo.get("full_name") != repo
+    ):
+        raise RuntimeError("Queued pull request does not match this event")
+    head_ref = str(head["ref"])
     head_sha = str(head["sha"])
-    pull = validate_promotion(api, repo, number, head_sha, merged=False)
-    if pull.get("base", {}).get("sha") != base_sha:
-        raise RuntimeError("Queued promotion base does not match this event")
     if ref_sha(api, repo, "main") != base_sha:
         raise RuntimeError("Current main changed after merge queue entry")
-    if ref_sha(api, repo, "dev/next") != head_sha:
-        raise RuntimeError("Current dev/next changed after merge queue entry")
+    if ref_sha(api, repo, head_ref) != head_sha:
+        raise RuntimeError("Pull request head changed after merge queue entry")
     if not includes_main(compare(api, repo, base_sha, queue_sha)):
         raise RuntimeError("Merge queue candidate does not contain its base")
     if not includes_main(compare(api, repo, head_sha, queue_sha)):
-        raise RuntimeError("Merge queue candidate does not contain dev/next")
+        raise RuntimeError("Merge queue candidate does not contain its head")
+    if head_ref != "dev/next":
+        return f"exact queue candidate for {head_ref}"
     ledger_commit, record, _authorizations = require_prepared_preservation(
         api, repo, number, base_sha, head_sha
     )
@@ -1985,40 +1998,6 @@ def invalidate_stale_pr_policy(api: API, repo: str, main_sha: str) -> None:
         )
 
 
-def update_open_pr_statuses(api: API, repo: str, main_sha: str) -> None:
-    """Invalidate stale delivery PR checks whenever main advances."""
-    status, payload = api.request(
-        "GET", f"repos/{repo}/pulls?state=open&per_page=100"
-    )
-    pulls = require_response(status, payload, "list open pull requests")
-    if not isinstance(pulls, list):
-        raise RuntimeError("GitHub returned invalid pull request state")
-    for pull in pulls:
-        base = pull.get("base", {}).get("ref")
-        head_sha = pull.get("head", {}).get("sha")
-        if base == "main" or not isinstance(head_sha, str):
-            continue
-        current = includes_main(compare(api, repo, main_sha, head_sha))
-        state = "success" if current else "failure"
-        description = (
-            "PR head contains current main"
-            if current
-            else "PR head must synchronize current main before merge"
-        )
-        status_code, status_payload = api.request(
-            "POST",
-            f"repos/{repo}/statuses/{head_sha}",
-            {
-                "state": state,
-                "context": "delivery-sync",
-                "description": description,
-            },
-        )
-        require_response(
-            status_code, status_payload, "update delivery-sync status"
-        )
-
-
 def reconcile(
     api: API,
     repo: str,
@@ -2035,7 +2014,7 @@ def reconcile(
         main_sha,
         require_dev_next=branch_strategy == "delivery",
     )
-    update_open_pr_statuses(api, repo, main_sha)
+    invalidate_stale_pr_policy(api, repo, main_sha)
     stale = [state for state in states if not state.current]
     if not stale:
         return ["All active delivery branches contain current main."]
