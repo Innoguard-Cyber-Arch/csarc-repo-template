@@ -435,7 +435,7 @@ def promotion_evidence(
         "minor": "feat: work",
         "major": "feat!: work",
     }[intent]
-    return {
+    evidence: dict[str, object] = {
         "gate": "passed",
         "route": {
             "kind": kind,
@@ -452,6 +452,7 @@ def promotion_evidence(
                     "number": number,
                     "title": title,
                     "intent": intent,
+                    **({"issue": number} if kind == "milestone" else {}),
                 }
             ],
         },
@@ -462,6 +463,12 @@ def promotion_evidence(
             "tree_identity": "verified",
         },
     }
+    if kind == "milestone":
+        evidence["milestone_promotion"] = {
+            "mode": "checkpoint",
+            "declared_issues": [number],
+        }
+    return evidence
 
 
 @pytest.mark.parametrize(
@@ -479,6 +486,76 @@ def test_release_boundary_traces_each_delivery_route(kind: str) -> None:
     assert result["boundaries"][0]["included_issues"] == [
         {"number": 10, "title": "Work"}
     ]
+    if kind == "milestone":
+        assert result["boundaries"][0]["milestone_promotion"] == {
+            "mode": "checkpoint",
+            "declared_issues": [10],
+        }
+    else:
+        assert "milestone_promotion" not in result["boundaries"][0]
+
+
+@pytest.mark.parametrize(
+    "promotion",
+    [
+        None,
+        {"mode": "unknown", "declared_issues": [10]},
+        {"mode": "checkpoint", "declared_issues": None},
+        {"mode": "checkpoint", "declared_issues": [10, 10]},
+        {"mode": "checkpoint", "declared_issues": [11]},
+        {"mode": "final", "declared_issues": []},
+    ],
+)
+def test_milestone_release_boundary_rejects_invalid_scope(
+    promotion: object,
+) -> None:
+    """Release eligibility requires canonical milestone Issue evidence."""
+    evidence = promotion_evidence("milestone", "patch", 10)
+    if promotion is None:
+        evidence.pop("milestone_promotion")
+    else:
+        evidence["milestone_promotion"] = promotion
+    with pytest.raises(ValueError, match=r"milestone|checkpoint"):
+        aggregate_release_boundaries([evidence], "main", "promotion")
+
+
+def test_milestone_release_boundary_binds_issues_to_pull_requests() -> None:
+    """Included Issue evidence cannot omit or invent reviewed PR scope."""
+    evidence = promotion_evidence("milestone", "patch", 10)
+    release = evidence["release"]
+    assert isinstance(release, dict)
+    pull_requests = release["included_pull_requests"]
+    assert isinstance(pull_requests, list)
+    assert isinstance(pull_requests[0], dict)
+    pull_requests[0].pop("issue")
+    with pytest.raises(ValueError, match="no Issue binding"):
+        aggregate_release_boundaries([evidence], "main", "promotion")
+    evidence = promotion_evidence("milestone", "patch", 10)
+    evidence["included_issues"] = [{"number": 11, "title": "Invented"}]
+    with pytest.raises(ValueError, match="does not match its PRs"):
+        aggregate_release_boundaries([evidence], "main", "promotion")
+
+
+def test_final_milestone_release_boundary_keeps_canonical_scope() -> None:
+    """Final mode uses the same PR-to-Issue binding without a declaration."""
+    evidence = promotion_evidence("milestone", "patch", 10)
+    evidence["milestone_promotion"] = {
+        "mode": "final",
+        "declared_issues": None,
+    }
+    result = aggregate_release_boundaries([evidence], "main", "promotion")
+    assert result["boundaries"][0]["milestone_promotion"] == {
+        "mode": "final",
+        "declared_issues": None,
+    }
+
+
+def test_non_milestone_boundary_rejects_milestone_scope() -> None:
+    """Standalone evidence cannot smuggle a milestone checkpoint."""
+    evidence = promotion_evidence("standalone-batch", "patch", 10)
+    evidence["milestone_promotion"] = None
+    with pytest.raises(ValueError, match="non-milestone"):
+        aggregate_release_boundaries([evidence], "main", "promotion")
 
 
 def test_release_boundary_uses_highest_intent_and_is_idempotent() -> None:

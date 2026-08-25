@@ -18,6 +18,7 @@ import pytest
 MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "promotion_gate.py")
 )
+checkpoint_issue_numbers = MODULE["checkpoint_issue_numbers"]
 classify_canary = MODULE["classify_canary"]
 finalize = MODULE["finalize"]
 finalize_quota_fallback = MODULE["finalize_quota_fallback"]
@@ -25,8 +26,10 @@ fallback_statement = MODULE["fallback_statement"]
 github_get = MODULE["github_get"]
 highest_release_intent = MODULE["highest_release_intent"]
 included_pull_requests = MODULE["included_pull_requests"]
+issue_number = MODULE["issue_number"]
 local_verification_command = MODULE["local_verification_command"]
 main_is_current = MODULE["main_is_current"]
+milestone_included_issues = MODULE["milestone_included_issues"]
 note_quota_fallback = MODULE["note_quota_fallback"]
 prepare = MODULE["prepare"]
 parser = MODULE["parser"]
@@ -37,9 +40,11 @@ repository_variables = MODULE["repository_variables"]
 require_same_preflight = MODULE["require_same_preflight"]
 promotion_bridge_source = MODULE["promotion_bridge_source"]
 promotion_main_evidence = MODULE["promotion_main_evidence"]
+pull_request_issue_number = MODULE["pull_request_issue_number"]
 require_zero_step_run = MODULE["require_zero_step_run"]
 route_for = MODULE["route_for"]
 run_dev_next_preservation = MODULE["run_dev_next_preservation"]
+sync_pull_request_main_sha = MODULE["sync_pull_request_main_sha"]
 same_repository = MODULE["same_repository"]
 unfinished_milestone_issues = MODULE["unfinished_milestone_issues"]
 verify_main = MODULE["verify_main"]
@@ -276,22 +281,28 @@ def test_included_pull_requests_are_deduplicated_and_scoped(
                 {
                     "number": 10,
                     "title": "fix: timeout",
+                    "body": "Closes #10",
                     "merged_at": "2026-01-01T00:00:00Z",
                     "base": {"ref": "dev/m7-staged-ci"},
+                    "head": {"ref": "fix/10-timeout"},
                 }
             ]
         return [
             {
                 "number": 10,
                 "title": "fix: timeout",
+                "body": "Closes #10",
                 "merged_at": "2026-01-01T00:00:00Z",
                 "base": {"ref": "dev/m7-staged-ci"},
+                "head": {"ref": "fix/10-timeout"},
             },
             {
                 "number": 11,
                 "title": "feat: unrelated",
+                "body": "Closes #11",
                 "merged_at": "2026-01-01T00:00:00Z",
                 "base": {"ref": "dev/next"},
+                "head": {"ref": "feat/11-unrelated"},
             },
         ]
 
@@ -301,6 +312,273 @@ def test_included_pull_requests_are_deduplicated_and_scoped(
     assert included_pull_requests(
         "owner/repo", "base", "head", "dev/m7-staged-ci", "token"
     ) == [{"number": 10, "title": "fix: timeout", "intent": "patch"}]
+    assert (
+        included_pull_requests(
+            "owner/repo",
+            "base",
+            "head",
+            "dev/m7-staged-ci",
+            "token",
+            track_work_issues=True,
+        )[0]["issue"]
+        == 10
+    )
+
+
+def test_repeated_syncs_require_per_sync_reviewed_provenance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Accept historical and current syncs only with their own evidence."""
+    old_main = "a" * 40
+    current_main = "b" * 40
+
+    def sync_pull_request(
+        number: int, name: str, main_sha: str
+    ) -> dict[str, object]:
+        return {
+            "number": number,
+            "title": "chore(sync): merge reviewed main",
+            "body": "Reviewed sync evidence.",
+            "merged_at": "2026-01-01T00:00:00Z",
+            "base": {"ref": "dev/m10-adoption"},
+            "head": {
+                "ref": f"sync/main-to-m10-adoption-{main_sha[:12]}",
+                "sha": f"{name}-head",
+                "repo": {"full_name": "owner/repo"},
+            },
+        }
+
+    old_sync = sync_pull_request(12, "old", old_main)
+    current_sync = sync_pull_request(13, "current", current_main)
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path.startswith("compare/"):
+            return {"commits": [{"sha": "old-merge"}, {"sha": "current-merge"}]}
+        if path == "commits/old-merge/pulls":
+            return [old_sync]
+        if path == "commits/current-merge/pulls":
+            return [current_sync]
+        if path == "git/commits/old-head":
+            return {"parents": [{"sha": "old-delivery"}, {"sha": old_main}]}
+        if path == "git/commits/current-head":
+            return {
+                "parents": [
+                    {"sha": "current-delivery"},
+                    {"sha": current_main},
+                ]
+            }
+        raise AssertionError(path)
+
+    monkeypatch.setitem(
+        included_pull_requests.__globals__, "github_get", fake_get
+    )
+    monkeypatch.setattr(MODULE["delivery_sync"], "compare", lambda *_: "ahead")
+    calls: list[tuple[str, str]] = []
+
+    def merged_sync(
+        _api: object,
+        _repo: str,
+        _delivery_branch: str,
+        main_sha: str,
+        head_sha: str,
+    ) -> int:
+        calls.append((main_sha, head_sha))
+        return 12 if main_sha == old_main else 13
+
+    monkeypatch.setattr(
+        MODULE["delivery_sync"],
+        "merged_sync_pr_number",
+        merged_sync,
+    )
+    assert included_pull_requests(
+        "owner/repo",
+        current_main,
+        "candidate",
+        "dev/m10-adoption",
+        "token",
+        track_work_issues=True,
+    ) == [
+        {
+            "number": 12,
+            "title": "chore(sync): merge reviewed main",
+            "intent": "no-release",
+            "issue": None,
+        },
+        {
+            "number": 13,
+            "title": "chore(sync): merge reviewed main",
+            "intent": "no-release",
+            "issue": None,
+        },
+    ]
+    assert calls == [(old_main, "candidate"), (current_main, "candidate")]
+    monkeypatch.setattr(
+        MODULE["delivery_sync"],
+        "merged_sync_pr_number",
+        lambda _api, _repo, _branch, main_sha, _head: (
+            12 if main_sha == old_main else None
+        ),
+    )
+    with pytest.raises(RuntimeError, match="reviewed merge provenance"):
+        included_pull_requests(
+            "owner/repo",
+            current_main,
+            "candidate",
+            "dev/m10-adoption",
+            "token",
+            track_work_issues=True,
+        )
+
+
+def test_legacy_short_sync_requires_empty_canonical_reaffirmation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Accept #309 only when the included #313 lineage is tree-identical."""
+    main_sha = "3ea6134e82916f24d37b5c7fa988f9ca9a6beaa7"
+    legacy_base = "a0f537cfccfa63935a42f13d534397a70f1a8a04"
+    legacy_head = "f60165e99872a6b631e169722eb6c5fc6b4b0a42"
+    legacy_merge = "e2d2a6cc6bbf7b5696c51aa42f6a0971fc13920e"
+    canonical_head = "8319635905d7c36d161ea694792bc9de6c964978"
+    canonical_merge = "36670426a656717d2d0fa92fc3ee31615939ad44"
+    main_tree = "fc38cd5a03d38bff5431ac1cef775f1a28f67d08"
+    canonical_tree = {"sha": main_tree}
+
+    def sync_pull(
+        number: int,
+        head_ref: str,
+        head_sha: str,
+        base_sha: str,
+        merge_sha: str,
+    ) -> dict[str, object]:
+        return {
+            "number": number,
+            "title": "chore(sync): merge main into delivery",
+            "body": "Reviewed sync evidence.",
+            "merged_at": "2026-08-25T00:00:00Z",
+            "merge_commit_sha": merge_sha,
+            "base": {
+                "ref": "dev/m10-release-backed-adoption",
+                "sha": base_sha,
+            },
+            "head": {
+                "ref": head_ref,
+                "sha": head_sha,
+                "repo": {"full_name": "owner/repo"},
+            },
+        }
+
+    legacy = sync_pull(
+        309,
+        "sync/main-to-m10-release-backed-adoption-3ea6134",
+        legacy_head,
+        legacy_base,
+        legacy_merge,
+    )
+    canonical = sync_pull(
+        313,
+        "sync/main-to-m10-release-backed-adoption-3ea6134e8291",
+        canonical_head,
+        legacy_merge,
+        canonical_merge,
+    )
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path.startswith("compare/"):
+            return {
+                "commits": [
+                    {"sha": legacy_merge},
+                    {"sha": canonical_merge},
+                ]
+            }
+        if path == f"commits/{legacy_merge}/pulls":
+            return [legacy]
+        if path == f"commits/{canonical_merge}/pulls":
+            return [canonical]
+        if path == f"git/commits/{legacy_head}":
+            return {
+                "parents": [{"sha": legacy_base}, {"sha": main_sha}],
+                "tree": {"sha": main_tree},
+            }
+        if path == f"git/commits/{canonical_head}":
+            return {
+                "parents": [{"sha": legacy_merge}, {"sha": main_sha}],
+                "tree": canonical_tree,
+            }
+        if path in {
+            f"git/commits/{legacy_merge}",
+            f"git/commits/{main_sha}",
+        }:
+            return {"tree": {"sha": main_tree}}
+        raise AssertionError(path)
+
+    monkeypatch.setitem(
+        included_pull_requests.__globals__, "github_get", fake_get
+    )
+    monkeypatch.setattr(MODULE["delivery_sync"], "compare", lambda *_: "ahead")
+    monkeypatch.setattr(
+        MODULE["delivery_sync"],
+        "merged_sync_pr_number",
+        lambda *_: 313,
+    )
+    expected = [
+        {
+            "number": 309,
+            "title": "chore(sync): merge main into delivery",
+            "intent": "no-release",
+            "issue": None,
+        },
+        {
+            "number": 313,
+            "title": "chore(sync): merge main into delivery",
+            "intent": "no-release",
+            "issue": None,
+        },
+    ]
+    assert (
+        included_pull_requests(
+            "owner/repo",
+            main_sha,
+            "candidate",
+            "dev/m10-release-backed-adoption",
+            "token",
+            track_work_issues=True,
+        )
+        == expected
+    )
+    canonical_tree["sha"] = "drift"
+    with pytest.raises(RuntimeError, match="reviewed merge provenance"):
+        included_pull_requests(
+            "owner/repo",
+            main_sha,
+            "candidate",
+            "dev/m10-release-backed-adoption",
+            "token",
+            track_work_issues=True,
+        )
+
+
+def test_milestone_range_rejects_unreviewed_commits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Do not omit hidden direct commits from milestone evidence."""
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path.startswith("compare/"):
+            return {"commits": [{"sha": "hidden"}]}
+        return []
+
+    monkeypatch.setitem(
+        included_pull_requests.__globals__, "github_get", fake_get
+    )
+    with pytest.raises(RuntimeError, match="no eligible merged PR"):
+        included_pull_requests(
+            "owner/repo",
+            "base",
+            "head",
+            "dev/m10-adoption",
+            "token",
+            track_work_issues=True,
+        )
 
 
 @pytest.mark.parametrize(
@@ -331,20 +609,26 @@ def test_bridge_provenance_accepts_only_eligible_pull_requests(
             {
                 "number": 10,
                 "title": "fix: accepted sibling",
+                "body": "Closes #10",
                 "merged_at": "2026-01-01T00:00:00Z",
                 "base": {"ref": "dev/m7-staged-ci"},
+                "head": {"ref": "fix/10-accepted-sibling"},
             },
             {
                 "number": 11,
                 "title": "feat: wrong milestone",
+                "body": "Closes #11",
                 "merged_at": "2026-01-01T00:00:00Z",
                 "base": {"ref": "dev/m8-other"},
+                "head": {"ref": "feat/11-wrong-milestone"},
             },
             {
                 "number": 12,
                 "title": "feat: standalone",
+                "body": "Closes #12",
                 "merged_at": "2026-01-01T00:00:00Z",
                 "base": {"ref": "dev/next"},
+                "head": {"ref": "feat/12-standalone"},
             },
         ]
 
@@ -421,6 +705,211 @@ def test_milestone_requires_closed_checked_non_promotion_work() -> None:
         },
     ]
     assert unfinished_milestone_issues(issues, 4) == [2, 3]
+
+
+def test_checkpoint_marker_is_explicit_unique_and_sorted() -> None:
+    """A checkpoint cannot obtain an ambiguous work-Issue scope."""
+    assert checkpoint_issue_numbers(
+        "Ready\n\n<!-- csarc-promotion-checkpoint: #1, #27 -->"
+    ) == [1, 27]
+    assert checkpoint_issue_numbers("Final promotion") is None
+    for body in (
+        "<!-- csarc-promotion-checkpoint: #27, #1 -->",
+        "<!-- csarc-promotion-checkpoint: #1, #1 -->",
+        "<!-- csarc-promotion-checkpoint: 1, 27 -->",
+        "<!-- csarc-promotion-checkpoint: #0 -->",
+        "<!-- csarc-promotion-checkpoint: #01 -->",
+        "<!-- csarc-promotion-checkpoint: #\uff12 -->",
+        "<!-- CSARC-PROMOTION-CHECKPOINT: #1 -->",
+        (
+            "<!-- csarc-promotion-checkpoint: #1 -->\n"
+            "csarc-promotion-checkpoint: invalid"
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="Checkpoint Issue"):
+            checkpoint_issue_numbers(body)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "PrefixCloses #27",
+        "_Resolves #27",
+        "Closes #0",
+        "Closes #027",
+        "Closes #\uff12\uff17",
+        "Closes #27abc",
+        "Closes #27_extra",
+        "Clo\u017fes #27",
+    ],
+)
+def test_closing_issue_grammar_is_ascii_and_token_bounded(body: str) -> None:
+    """Reject ambiguous or non-ASCII Issue references."""
+    assert issue_number(body) is None
+
+
+def test_closing_issue_grammar_accepts_ascii_case() -> None:
+    """Accept canonical keywords with ordinary ASCII case variation."""
+    assert issue_number("cLoSeS #27.") == 27
+
+
+def test_checkpoint_allows_only_declared_completed_work() -> None:
+    """Leave later work open while binding evidence to the current range."""
+    issues = [
+        {
+            "number": 1,
+            "title": "Completed work",
+            "state": "closed",
+            "body": "- [x] Done",
+            "labels": [],
+        },
+        {
+            "number": 2,
+            "title": "Later work",
+            "state": "open",
+            "body": "- [ ] Later",
+            "labels": [],
+        },
+        {
+            "number": 4,
+            "title": "Checkpoint",
+            "state": "open",
+            "body": "- [x] Ready",
+            "labels": [{"name": "promotion"}],
+        },
+    ]
+    included_prs = [
+        {"number": 10, "title": "feat: work", "issue": 1},
+        {"number": 11, "title": "chore: sync", "issue": None},
+    ]
+    assert milestone_included_issues(issues, 4, included_prs, [1]) == [
+        {"number": 1, "title": "Completed work"}
+    ]
+    with pytest.raises(RuntimeError, match="do not match"):
+        milestone_included_issues(issues, 4, included_prs, [1, 2])
+
+
+def test_final_milestone_still_requires_all_work_complete() -> None:
+    """Final requires all work but reports only its current delivery range."""
+    issues = [
+        {
+            "number": 1,
+            "title": "Earlier checkpoint work",
+            "state": "closed",
+            "body": "- [x] Done",
+            "labels": [],
+        },
+        {
+            "number": 2,
+            "title": "Later work",
+            "state": "open",
+            "body": "- [ ] Later",
+            "labels": [],
+        },
+    ]
+    included_prs = [{"number": 10, "title": "feat: current work", "issue": 2}]
+    with pytest.raises(RuntimeError, match="not complete: #2"):
+        milestone_included_issues(issues, 4, included_prs, None)
+    issues[1].update(state="closed", body="- [x] Later")
+    assert milestone_included_issues(issues, 4, included_prs, None) == [
+        {"number": 2, "title": "Later work"}
+    ]
+
+
+def test_checkpoint_rejects_incomplete_or_unscoped_work() -> None:
+    """Every declared candidate Issue must be completed in this Milestone."""
+    incomplete = [
+        {
+            "number": 1,
+            "title": "Incomplete work",
+            "state": "closed",
+            "body": "- [ ] Verify",
+            "labels": [],
+        }
+    ]
+    included_prs = [{"number": 10, "title": "fix: work", "issue": 1}]
+    with pytest.raises(RuntimeError, match="not closed and complete"):
+        milestone_included_issues(incomplete, 4, included_prs, [1])
+    with pytest.raises(RuntimeError, match="not closed and complete"):
+        milestone_included_issues([], 4, included_prs, [1])
+
+
+def test_included_pull_request_requires_issue_provenance() -> None:
+    """A governed work branch must close its own Issue."""
+    assert (
+        pull_request_issue_number(
+            {
+                "body": "Closes #3\nCloses #27",
+                "head": {"ref": "feat/27-checkpoint"},
+            }
+        )
+        == 27
+    )
+    with pytest.raises(RuntimeError, match="does not close"):
+        pull_request_issue_number(
+            {
+                "body": "Closes #28",
+                "head": {"ref": "feat/27-checkpoint"},
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "pull_request",
+    [
+        {
+            "title": "chore(sync): merge main into dev/m10-adoption",
+            "body": (
+                "Synchronize `abcdef1234567890abcdef1234567890abcdef12` "
+                "into `dev/m10-adoption`."
+            ),
+            "base": {"ref": "dev/m10-adoption"},
+            "head": {
+                "ref": "sync/main-to-m10-adoption-deadbeef0000",
+                "sha": "sync-head",
+                "repo": {"full_name": "owner/repo"},
+            },
+        },
+        {
+            "title": "chore(sync): merge main into dev/m10-adoption",
+            "body": (
+                "Synchronize `abcdef1234567890abcdef1234567890abcdef12` "
+                "into `dev/m10-adoption`."
+            ),
+            "base": {"ref": "dev/m10-adoption"},
+            "head": {
+                "ref": "sync/main-to-m10-adoption-abcdef123456",
+                "sha": "sync-head",
+                "repo": {"full_name": "fork/repo"},
+            },
+        },
+    ],
+)
+def test_sync_pull_request_requires_exact_provenance(
+    pull_request: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sync-looking branch cannot hide work or come from another repo."""
+    monkeypatch.setitem(
+        sync_pull_request_main_sha.__globals__,
+        "github_get",
+        lambda *_: {
+            "parents": [
+                {"sha": "delivery-base"},
+                {"sha": "abcdef1234567890abcdef1234567890abcdef12"},
+            ]
+        },
+    )
+    monkeypatch.setattr(MODULE["delivery_sync"], "compare", lambda *_: "ahead")
+    with pytest.raises(RuntimeError, match="invalid provenance"):
+        sync_pull_request_main_sha(
+            pull_request,
+            "owner/repo",
+            "dev/m10-adoption",
+            "current-main",
+            "token",
+            object(),
+        )
 
 
 def test_latest_main_requires_matching_base_and_ancestry() -> None:
@@ -935,10 +1424,10 @@ def test_note_quota_fallback_rejects_a_real_failure(
         note_quota_fallback(args)
 
 
-def test_prepare_builds_milestone_candidate_evidence(
+def test_prepare_builds_checkpoint_and_recovery_issue_evidence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Bind a completed Milestone promotion to its exact candidate tree."""
+    """Bind a checkpoint and only its completed work to the candidate."""
 
     def run_git(*arguments: str) -> str:
         result = subprocess.run(  # noqa: S603
@@ -978,6 +1467,7 @@ def test_prepare_builds_milestone_candidate_evidence(
     }
     event_path = tmp_path / "event.json"
     event_path.write_text(json.dumps(event), encoding="utf-8")
+    tracking_body = "- [x] Ready\n\n<!-- csarc-promotion-checkpoint: #1 -->"
 
     def fake_get(_repo: str, path: str, _token: str) -> object:
         if path == "issues/99":
@@ -985,7 +1475,7 @@ def test_prepare_builds_milestone_candidate_evidence(
                 "number": 99,
                 "title": "Promotion",
                 "state": "open",
-                "body": "- [x] Ready",
+                "body": tracking_body,
                 "labels": [{"name": "promotion"}],
                 "milestone": {"number": 7},
             }
@@ -997,12 +1487,19 @@ def test_prepare_builds_milestone_candidate_evidence(
     monkeypatch.setitem(
         prepare.__globals__,
         "milestone_issues",
-        lambda *_: [
+        lambda *_, **__: [
             {
                 "number": 1,
                 "title": "Completed work",
                 "state": "closed",
                 "body": "- [x] Done",
+                "labels": [],
+            },
+            {
+                "number": 2,
+                "title": "Later work",
+                "state": "open",
+                "body": "- [ ] Later",
                 "labels": [],
             },
             {
@@ -1017,8 +1514,13 @@ def test_prepare_builds_milestone_candidate_evidence(
     monkeypatch.setitem(
         prepare.__globals__,
         "included_pull_requests",
-        lambda *_: [
-            {"number": 1, "title": "feat: completed work", "intent": "minor"}
+        lambda *_, **__: [
+            {
+                "number": 1,
+                "title": "feat: completed work",
+                "intent": "minor",
+                "issue": 1,
+            }
         ],
     )
     output = tmp_path / "promotion.json"
@@ -1051,9 +1553,13 @@ def test_prepare_builds_milestone_candidate_evidence(
         "number": 99,
         "state": "open",
         "title": "Promotion",
-        "body_sha256": hashlib.sha256(b"- [x] Ready").hexdigest(),
+        "body_sha256": hashlib.sha256(tracking_body.encode()).hexdigest(),
         "labels": ["promotion"],
         "milestone": 7,
+    }
+    assert evidence["milestone_promotion"] == {
+        "mode": "checkpoint",
+        "declared_issues": [1],
     }
     assert evidence["included_issues"] == [
         {"number": 1, "title": "Completed work"}
@@ -1066,10 +1572,53 @@ def test_prepare_builds_milestone_candidate_evidence(
                 "number": 1,
                 "title": "feat: completed work",
                 "intent": "minor",
+                "issue": 1,
             }
         ],
     }
     assert evidence["main_sync"] == "direct-ancestry"
+
+    recovery_body = "- [x] Recovery complete"
+    event_path.write_text(
+        json.dumps(
+            {
+                "number": 321,
+                "pull_request": {
+                    "number": 321,
+                    "title": "fix: recover missing release",
+                    "body": "Closes #321",
+                    "labels": [{"name": "release-recovery"}],
+                    "base": {"ref": "main", "sha": base_sha},
+                    "head": {
+                        "ref": "fix/321-recover-missing-release",
+                        "sha": head_sha,
+                        "repo": {"full_name": "owner/repo"},
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def recovery_get(_repo: str, path: str, _token: str) -> object:
+        if path == "issues/321":
+            return {
+                "number": 321,
+                "title": "Recover missing release",
+                "state": "open",
+                "body": recovery_body,
+                "labels": [{"name": "bug"}],
+                "milestone": {"number": 9},
+            }
+        return {"object": {"sha": base_sha}}
+
+    monkeypatch.setitem(prepare.__globals__, "github_get", recovery_get)
+    prepare(arguments)
+    recovery_evidence = json.loads(output.read_text(encoding="utf-8"))
+    assert recovery_evidence["route"]["kind"] == "release-recovery"
+    assert recovery_evidence["included_issues"] == [
+        {"number": 321, "title": "Recover missing release"}
+    ]
     archive_victim = tmp_path / "archive-victim"
     archive_victim.write_bytes(b"untouched")
     arguments.archive.unlink()
@@ -2125,6 +2674,24 @@ def test_preflight_binding_rejects_changed_pull_request_body() -> None:
     rebuilt = {
         "promotion_pull_request": {"body_sha256": "changed"},
         "tracking_issue_state": {"body_sha256": "issue"},
+    }
+    with pytest.raises(RuntimeError, match="live reconstruction"):
+        require_same_preflight(evidence, rebuilt)
+
+
+def test_preflight_binding_rejects_changed_checkpoint_scope() -> None:
+    """Quota authorization cannot be reused after checkpoint scope drift."""
+    evidence = {
+        "milestone_promotion": {
+            "mode": "checkpoint",
+            "declared_issues": [1],
+        }
+    }
+    rebuilt = {
+        "milestone_promotion": {
+            "mode": "checkpoint",
+            "declared_issues": [1, 2],
+        }
     }
     with pytest.raises(RuntimeError, match="live reconstruction"):
         require_same_preflight(evidence, rebuilt)
