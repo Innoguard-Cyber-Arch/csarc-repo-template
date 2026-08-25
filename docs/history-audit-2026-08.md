@@ -46,9 +46,9 @@ Producer 只輸出 aggregate counts、各 endpoint 的成功／預期數與缺�
 | --- | --- | --- | --- | --- |
 | Durable project memory | [SPEC-002](specs/SPEC-002-durable-project-memory.md) | [Durable project memory](adr/durable-project-memory.md) | #34/#58, #145/#147, #177/#185, #223 | Accepted by #223; delivery pending |
 | Template and update ownership | [SPEC-003](specs/SPEC-003-reproducible-template-lifecycle.md) | [Template lifecycle and ownership](adr/template-lifecycle-and-ownership.md) | #7/#8, #31/#53, #76/#88, #116/#124 | Current plus explicit open gaps |
-| GitHub governance and capabilities | [SPEC-004](specs/SPEC-004-capability-aware-governed-delivery.md) | [Capability-aware governance](adr/capability-aware-governance.md) | #18/#25, #65/#66, #87/#90, #123/#128, #146/#154 | Current; hosted billing unresolved |
+| GitHub governance and capabilities | [SPEC-004](specs/SPEC-004-capability-aware-governed-delivery.md) | [Capability-aware governance](adr/capability-aware-governance.md) | #18/#25, #65/#66, #87/#90, #123/#128, #146/#154 | At cutoff: hosted billing unresolved; later superseded by #287 |
 | Branching and delivery | [SPEC-004](specs/SPEC-004-capability-aware-governed-delivery.md) | [Staged delivery and verification](adr/staged-delivery-and-verification.md) | #122/#125, #179–#184/#186–#193 | Current |
-| Continuous verification | [SPEC-005](specs/SPEC-005-continuous-verification-evidence.md) | [Staged delivery and verification](adr/staged-delivery-and-verification.md) | #37/#52, #99/#136–#137, #140/#150, #171/#173 | Current; hosted measurement unresolved |
+| Continuous verification | [SPEC-005](specs/SPEC-005-continuous-verification-evidence.md) | [Staged delivery and verification](adr/staged-delivery-and-verification.md) | #37/#52, #99/#136–#137, #140/#150, #171/#173 | At cutoff: hosted measurement unresolved; later superseded by #287 |
 | Release and provenance | [SPEC-006](specs/SPEC-006-trusted-release-provenance.md) | [Release, security, and dependencies](adr/release-security-and-dependencies.md) | #29/#60, #98/#118/#129–#135, #123/#128, #142/#151 | Current plus open distribution work |
 | Security and dependencies | [SPEC-006](specs/SPEC-006-trusted-release-provenance.md) | [Release, security, and dependencies](adr/release-security-and-dependencies.md) | #35/#92, #36/#51, #74/#111, #101/#119, #103/#120, #110/#143 | Current |
 | Spec, story, and work item | [SPEC-002](specs/SPEC-002-durable-project-memory.md) | [Spec, story, and work-item boundaries](adr/spec-story-and-work-items.md) | #15/#20, #34/#58, #77/#89, #122/#125, #148/#153, #159/#161 | Current |
@@ -63,7 +63,7 @@ Producer 只輸出 aggregate counts、各 endpoint 的成功／預期數與缺�
 - #64 的 default-token Release PR 假設被 #123 的 adaptive release mode 取代；#142 又取代 ephemeral version materialization。
 - #74 的 Renovate 評估最後由 #110 決定保留 Dependabot；候選設定不是 active capability。
 - #205–#209 與 PR #211、#215、#218 在 cutoff 時仍是候選／open；現行交付物仍由 `site/` 與 `scripts/render_site.py` 產生。
-- #171 的 local attestation 是 narrow quota fallback，不等於 hosted checks；#199 與 #189 仍追蹤恢復與量測。
+- #171 的 local attestation 是 narrow quota fallback，不等於 hosted checks；在本 ledger cutoff 時 #199 與 #189 仍追蹤恢復與量測，後續由 #287 以 optional telemetry 取代其交付前提。
 
 ## Privacy and omissions
 

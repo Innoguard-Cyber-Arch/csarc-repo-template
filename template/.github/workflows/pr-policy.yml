@@ -22,13 +22,14 @@ jobs:
     steps:
       - name: Accept the already-validated merge queue candidate
         if: ${{ github.event_name == 'merge_group' }}
-        run: echo "Pull request policy was validated before merge queue entry."
+        run: echo "Pull request policy and delivery synchronization were validated before merge queue entry."
       - if: ${{ github.event_name == 'pull_request' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.base.sha }}
       - name: Validate pull request policy
+        id: policy
         if: ${{ github.event_name == 'pull_request' }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -138,6 +139,9 @@ jobs:
 
             if [[ "$PR_HEAD" == dependabot/* || "$PR_HEAD" == automation/* ]]; then
               if [[ "$PR_BASE" == "dev/next" ]]; then
+                if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+                  echo "delivery_base=$PR_BASE" >> "$GITHUB_OUTPUT"
+                fi
                 exit 0
               fi
               echo "Automated maintenance must target dev/next in delivery mode."
@@ -147,6 +151,13 @@ jobs:
             promotion_milestone=""
             promotion=false
             if [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
+              promotion=true
+              promotion_milestone="${BASH_REMATCH[1]}"
+            elif [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^promote/m([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
+              if [[ ",${PR_LABELS:-}," != *,promotion,* ]]; then
+                echo "A promotion bridge must use the promotion label."
+                exit 1
+              fi
               promotion=true
               promotion_milestone="${BASH_REMATCH[1]}"
             elif [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^dev/i([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
@@ -293,3 +304,19 @@ jobs:
             fi
             base_branch="${parent_bases[0]}"
           done
+          if [[ "$branch_strategy" == "delivery" && -n "${GITHUB_OUTPUT:-}" ]]; then
+            echo "delivery_base=$base_branch" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Require the proposed head to contain current main
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_DELIVERY_BASE: ${{ steps.policy.outputs.delivery_base }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          python3 scripts/delivery_sync.py gate
+          --repo "$GITHUB_REPOSITORY"
+          --base "$PR_BASE"
+          --delivery-base "$PR_DELIVERY_BASE"
+          --head-sha "$PR_HEAD_SHA"
