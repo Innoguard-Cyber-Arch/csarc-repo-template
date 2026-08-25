@@ -32,3 +32,5 @@ jobs:
           else
             uvx --from zizmor==1.29.0 zizmor . --format plain
           fi
+      - name: Validate workflows and shell scripts
+        run: ./scripts/lint-workflows-shell
