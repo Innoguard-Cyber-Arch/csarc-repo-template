@@ -1400,6 +1400,47 @@ def adoption_binding(payload: dict[str, object]) -> dict[str, object]:
     }
 
 
+def json_differences(
+    saved: object, rebuilt: object, path: str = "$"
+) -> tuple[str, ...]:
+    """Describe differing JSON leaves without hiding the fail-closed reason."""
+    if type(saved) is not type(rebuilt):
+        return (f"{path}: saved={saved!r}, rebuilt={rebuilt!r}",)
+    if isinstance(saved, dict) and isinstance(rebuilt, dict):
+        differences: list[str] = []
+        for key in sorted(set(saved) | set(rebuilt)):
+            child = f"{path}.{key}"
+            if key not in saved:
+                differences.append(
+                    f"{child}: saved=<missing>, rebuilt={rebuilt[key]!r}"
+                )
+            elif key not in rebuilt:
+                differences.append(
+                    f"{child}: saved={saved[key]!r}, rebuilt=<missing>"
+                )
+            else:
+                differences.extend(
+                    json_differences(saved[key], rebuilt[key], child)
+                )
+        return tuple(differences)
+    if isinstance(saved, list) and isinstance(rebuilt, list):
+        differences = []
+        if len(saved) != len(rebuilt):
+            differences.append(
+                f"{path}.length: saved={len(saved)}, rebuilt={len(rebuilt)}"
+            )
+        for index, (saved_item, rebuilt_item) in enumerate(
+            zip(saved, rebuilt, strict=False)
+        ):
+            differences.extend(
+                json_differences(saved_item, rebuilt_item, f"{path}[{index}]")
+            )
+        return tuple(differences)
+    if saved != rebuilt:
+        return (f"{path}: saved={saved!r}, rebuilt={rebuilt!r}",)
+    return ()
+
+
 def target_state(target: Path) -> tuple[str, tuple[str, ...], str]:
     """Return HEAD, status entries, and a stable status digest."""
     head, changes = git_target_state(target)
@@ -2593,6 +2634,10 @@ def base_data(
     if mode == "adopt":
         data["coverage_mode"] = "diff"
     data.update(values)
+    if "package_name" not in values:
+        data["package_name"] = (
+            str(data["project_slug"]).replace("-", "_").replace(".", "_")
+        )
     return data
 
 
@@ -3130,10 +3175,16 @@ def command_apply_adoption_plan(  # noqa: C901
             generated_at,
         )
         fresh_payload = adoption_plan_payload(fresh)
-        if adoption_binding(fresh_payload) != adoption_binding(saved):
+        saved_binding = adoption_binding(saved)
+        fresh_binding = adoption_binding(fresh_payload)
+        if fresh_binding != saved_binding:
+            differences = json_differences(saved_binding, fresh_binding)
+            detail = "; ".join(differences[:10])
+            if len(differences) > 10:
+                detail += f"; ... and {len(differences) - 10} more"
             raise CliError(
                 "Repository or rendered output drifted after dry-run; create "
-                "a new adoption plan."
+                f"a new adoption plan. Differing fields: {detail}"
             )
         if (
             fresh.adoption is None
@@ -3181,6 +3232,8 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         if mode == "adopt"
         else args.path.expanduser().resolve()
     )
+    if mode == "adopt" and args.apply_plan is None:
+        args.dry_run = True
     if mode == "adopt" and args.finalize:
         return command_finalize_adoption(args)
     if mode == "adopt" and args.apply_plan is not None:
@@ -3194,12 +3247,6 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         raise CliError("--json requires --dry-run for init or adopt.")
     if args.json and mode == "adopt" and args.report_dir is not None:
         raise CliError("--report-dir cannot be combined with --json.")
-    if mode == "adopt" and not args.dry_run:
-        raise CliError(
-            "Run adopt --dry-run first, then apply its machine plan with "
-            "--apply-plan."
-        )
-
     source = args.source or CANONICAL_SOURCE
     revision = resolve_revision(
         source,
@@ -3223,7 +3270,8 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         stage = Path(temporary) / "project"
         stage.mkdir()
         copier_copy(revision.source, revision, stage, data)
-        answers = read_copier_answers(stage / ".copier-answers.yml")
+        answers: dict[str, object] = dict(data)
+        answers.update(read_copier_answers(stage / ".copier-answers.yml"))
         capabilities = capability_preflight(
             stage / "scripts" / "release_policy.py", target, emit=False
         )
@@ -3643,7 +3691,11 @@ def command_update(args: argparse.Namespace) -> int:
 
 def add_write_options(parser: argparse.ArgumentParser) -> None:
     """Add shared confirmation and dry-run switches."""
-    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="plan without writing (the default for adopt)",
+    )
     parser.add_argument("--yes", action="store_true")
     parser.add_argument("--non-interactive", action="store_true")
 
