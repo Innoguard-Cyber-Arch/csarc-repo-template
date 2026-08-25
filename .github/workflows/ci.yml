@@ -162,7 +162,7 @@ jobs:
     needs: fast
     if: ${{ needs.fast.outputs.tier == 'full' }}
     runs-on: macos-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -174,7 +174,8 @@ jobs:
       - run: uv sync --locked --python 3.14
       - run: >-
           uv run pytest -q
-          tests/test_cli.py::test_real_existing_adoption_uses_fixed_ownership_policies
+          tests/test_cli.py::test_lifecycle_plan_replay_updates_v1_to_v2
+          tests/test_cli.py::test_real_existing_adoption_updates_without_losing_product_decisions
 
   governance:
     name: remote governance
