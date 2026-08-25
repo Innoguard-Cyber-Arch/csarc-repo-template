@@ -98,7 +98,7 @@ def test_current_spec_can_explicitly_skip_work_item_sync(
         "run_gh",
         lambda arguments: calls.append(arguments),
     )
-    sync_spec(spec, "owner/repo", "main", "https://github.com")
+    sync_spec(spec, "owner/repo", "main", "https://github.com", "maintainer")
 
     assert spec.tracking == "none"
     assert calls == []
@@ -310,10 +310,12 @@ def test_sync_keeps_spec_id_out_of_issue_title(
     monkeypatch.setitem(sync_spec.__globals__, "find_issue", lambda *_: None)
     monkeypatch.setitem(sync_spec.__globals__, "run_gh", fake_run_gh)
 
-    sync_spec(spec, "owner/repo", "main", "https://github.com")
+    sync_spec(spec, "owner/repo", "main", "https://github.com", "maintainer")
 
     create = next(call for call in calls if call[:2] == ["issue", "create"])
     assert create[create.index("--title") + 1] == "Add a health endpoint"
+    assert create[create.index("--assignee") + 1] == "maintainer"
+    assert create[create.index("--type") + 1] == "Task"
 
 
 def test_story_spec_syncs_feature_issue(
@@ -335,10 +337,11 @@ def test_story_spec_syncs_feature_issue(
 
     monkeypatch.setitem(sync_spec.__globals__, "find_issue", lambda *_: None)
     monkeypatch.setitem(sync_spec.__globals__, "run_gh", fake_run_gh)
-    sync_spec(spec, "owner/repo", "main", "https://github.com")
+    sync_spec(spec, "owner/repo", "main", "https://github.com", "maintainer")
 
     create = next(call for call in calls if call[:2] == ["issue", "create"])
-    assert "--type" not in create
+    assert create[create.index("--assignee") + 1] == "maintainer"
+    assert create[create.index("--type") + 1] == "Feature"
     assert bodies and "### 類型\n\nfeature" in bodies[0]
 
 
@@ -361,11 +364,12 @@ def test_story_sync_updates_existing_feature_issue(
 
     monkeypatch.setitem(sync_spec.__globals__, "find_issue", lambda *_: 7)
     monkeypatch.setitem(sync_spec.__globals__, "run_gh", fake_run_gh)
-    sync_spec(spec, "owner/repo", "main", "https://github.com")
+    sync_spec(spec, "owner/repo", "main", "https://github.com", "maintainer")
 
     edit = next(call for call in calls if call[:2] == ["issue", "edit"])
     assert edit[2] == "7"
-    assert "--type" not in edit
+    assert edit[edit.index("--add-assignee") + 1] == "maintainer"
+    assert edit[edit.index("--type") + 1] == "Feature"
     assert bodies and "### 類型\n\nfeature" in bodies[0]
 
 

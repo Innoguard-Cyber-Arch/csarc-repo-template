@@ -312,7 +312,13 @@ def find_issue(repo: str, spec_id: str) -> int | None:
     return None
 
 
-def sync_spec(spec: Spec, repo: str, source_ref: str, server_url: str) -> None:
+def sync_spec(
+    spec: Spec,
+    repo: str,
+    source_ref: str,
+    server_url: str,
+    assignee: str,
+) -> None:
     """Create or update the GitHub Issue that corresponds to one spec."""
     if spec.status == "draft":
         LOGGER.info("skip draft: %s", spec.path)
@@ -320,6 +326,8 @@ def sync_spec(spec: Spec, repo: str, source_ref: str, server_url: str) -> None:
     if spec.tracking == "none":
         LOGGER.info("skip untracked current spec: %s", spec.path)
         return
+    if not assignee or "\n" in assignee:
+        raise SpecError("Issue assignee must be a non-empty GitHub login")
 
     repo_root = Path.cwd().resolve()
     absolute_path = spec.path.resolve()
@@ -331,6 +339,7 @@ def sync_spec(spec: Spec, repo: str, source_ref: str, server_url: str) -> None:
     )
     body = build_issue_body(spec, source_url)
     title = spec.title
+    issue_type = "Feature" if spec.tracking == "story" else "Task"
     issue_number = find_issue(repo, spec.spec_id)
     with tempfile.NamedTemporaryFile(
         "w", encoding="utf-8", delete=False
@@ -351,6 +360,10 @@ def sync_spec(spec: Spec, repo: str, source_ref: str, server_url: str) -> None:
                     str(body_path),
                     "--label",
                     "enhancement",
+                    "--assignee",
+                    assignee,
+                    "--type",
+                    issue_type,
                 ]
             )
             LOGGER.info("created: %s", output)
@@ -368,6 +381,10 @@ def sync_spec(spec: Spec, repo: str, source_ref: str, server_url: str) -> None:
                     str(body_path),
                     "--add-label",
                     "enhancement",
+                    "--add-assignee",
+                    assignee,
+                    "--type",
+                    issue_type,
                 ]
             )
             LOGGER.info("updated: #%s", issue_number)
@@ -439,6 +456,7 @@ def main() -> int:
     sync.add_argument("paths", nargs="*")
     sync.add_argument("--repo", required=True)
     sync.add_argument("--source-ref", required=True)
+    sync.add_argument("--assignee", required=True)
     sync.add_argument(
         "--server-url",
         default=os.environ.get("GITHUB_SERVER_URL", "https://github.com"),
@@ -482,7 +500,13 @@ def main() -> int:
             ]
         )
     for spec in specs:
-        sync_spec(spec, args.repo, args.source_ref, args.server_url)
+        sync_spec(
+            spec,
+            args.repo,
+            args.source_ref,
+            args.server_url,
+            args.assignee,
+        )
     return 0
 
 

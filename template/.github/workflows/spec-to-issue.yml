@@ -52,4 +52,5 @@ jobs:
           uv run --no-project python scripts/spec_to_issue.py sync \
             --repo "$GITHUB_REPOSITORY" \
             --source-ref "$GITHUB_SHA" \
+            --assignee "$GITHUB_ACTOR" \
             "${spec_files[@]}"
