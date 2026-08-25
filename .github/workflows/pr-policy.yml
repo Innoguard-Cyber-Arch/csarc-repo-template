@@ -73,7 +73,6 @@ jobs:
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
@@ -92,14 +91,31 @@ jobs:
             exit 1
           fi
 
-          if [[ "${PR_LABELS+x}" == "x" ]]; then
+          if [[ "${PR_POLICY_FIXTURE:-false}" == "true" ]]; then
             pr_assignees="${PR_ASSIGNEES:-${PR_AUTHOR:-}}"
             pr_milestone_number="${PR_MILESTONE_NUMBER:-${PR_ISSUE_MILESTONE_NUMBER:-0}}"
           else
-            pr_payload="$(${GH_BINARY:-gh} api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER" \
-              --jq '[([.labels[].name] | join(",")), ([.assignees[].login] | join(",")), (.milestone.number // 0)] | @tsv')"
-            IFS=$'\t' read -r PR_LABELS pr_assignees pr_milestone_number \
-              <<<"$pr_payload"
+            if ! pr_payload="$(${GH_BINARY:-gh} api --method GET \
+              "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER")" || \
+              [[ -z "$pr_payload" ]]; then
+              echo "Cannot read live pull request metadata."
+              exit 1
+            fi
+            if ! jq -e '
+              type == "object" and
+              (.labels | type) == "array" and (.labels | length) > 0 and
+              all(.labels[]; type == "object" and (.name | type) == "string" and (.name | length) > 0) and
+              (.assignees | type) == "array" and
+              all(.assignees[]; type == "object" and (.login | type) == "string" and (.login | length) > 0) and
+              has("milestone") and
+              (.milestone == null or ((.milestone | type) == "object" and (.milestone.number | type) == "number" and .milestone.number > 0 and .milestone.number == (.milestone.number | floor)))
+            ' <<<"$pr_payload" >/dev/null; then
+              echo "Live pull request metadata is incomplete or malformed."
+              exit 1
+            fi
+            PR_LABELS="$(jq -r '[.labels[].name] | join(",")' <<<"$pr_payload")"
+            pr_assignees="$(jq -r '[.assignees[].login] | join(",")' <<<"$pr_payload")"
+            pr_milestone_number="$(jq -r '.milestone.number // 0' <<<"$pr_payload")"
           fi
 
           release_intent="no-release"
@@ -151,6 +167,15 @@ jobs:
           if [[ ! "$delivery_cutover_issue" =~ ^[0-9]+$ ]]; then
             echo "PR_DELIVERY_CUTOVER_ISSUE must be a non-negative integer."
             exit 1
+          fi
+
+          release_recovery=false
+          if [[ ",${PR_LABELS:-}," == *,release-recovery,* ]]; then
+            if [[ "$pr_title_type" != "fix" || "$PR_HEAD" != fix/* || "$PR_BASE" != "main" || ",${PR_LABELS:-}," == *,hotfix,* ]]; then
+              echo "A release recovery must be a fix/* branch targeting main with a fix title, and cannot also be a hotfix."
+              exit 1
+            fi
+            release_recovery=true
           fi
 
           if [[ "$PR_BASE" == "main" && "$PR_HEAD" == release-please--* ]]; then
@@ -370,8 +395,11 @@ jobs:
               expected_base_kind="exact"
               expected_base="main"
             elif [[ "$PR_BASE" == "main" ]]; then
+              if [[ "$release_recovery" == "true" ]]; then
+                exit 0
+              fi
               if [[ "$PR_HEAD" != fix/* || ",${PR_LABELS:-}," != *,hotfix,* || "$issue_milestone_number" != "0" ]]; then
-                echo "Only a standalone fix labeled hotfix may target main directly in delivery mode."
+                echo "Only a release recovery or standalone fix labeled hotfix may target main directly in delivery mode."
                 exit 1
               fi
               exit 0

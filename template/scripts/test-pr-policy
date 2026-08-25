@@ -17,6 +17,7 @@ export PR_CHANGED_FILES="CHANGELOG.md"
 export PR_HEAD_REPOSITORY="acme/project"
 export PR_HEAD_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 export PR_NUMBER="41"
+export PR_POLICY_FIXTURE=true
 
 release_component="$(
   python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["packages"]["."]["component"])' \
@@ -27,6 +28,24 @@ release_branch="release-please--branches--main--components--$release_component"
 cat > "$fixture/gh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+
+if [[ "$*" == "api --method GET repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER" ]]; then
+  case "${PR_LIVE_METADATA_STATE:-valid}" in
+    valid)
+      jq -cn \
+        --arg labels "${PR_LIVE_LABELS:-enhancement}" \
+        --arg assignees "${PR_LIVE_ASSIGNEES-github-actions[bot]}" \
+        --arg milestone "${PR_LIVE_MILESTONE:-null}" \
+        '{labels: ($labels | split(",") | map({name: .})), assignees: ($assignees | if . == "" then [] else split(",") | map({login: .}) end), milestone: (if $milestone == "null" then null else {number: ($milestone | tonumber)} end)}'
+      ;;
+    api-error) exit 1 ;;
+    empty) ;;
+    partial) printf '%s\n' '{"labels":[{"name":"enhancement"}]}' ;;
+    malformed) printf '%s\n' '{' ;;
+    *) exit 2 ;;
+  esac
+  exit 0
+fi
 
 case "$*" in
   *"/pulls/"*"/commits?per_page=100"*)
@@ -87,6 +106,94 @@ if ! grep -q 'branch_pattern=' "$validator"; then
   exit 1
 fi
 
+case_count=$((case_count + 1))
+PR_POLICY_FIXTURE=false \
+PR_LIVE_LABELS="enhancement" \
+PR_LIVE_ASSIGNEES="github-actions[bot]" \
+PR_LIVE_MILESTONE="7" \
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="feat(api): use live metadata" \
+PR_LABELS="bug" \
+PR_ASSIGNEES="stale-user" \
+PR_MILESTONE_NUMBER="8" \
+PR_BASE="dev/m7-staged-ci" \
+PR_HEAD="feat/42-live-metadata" \
+PR_BODY="Closes #42" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_LABELS="enhancement" \
+PR_ISSUE_MILESTONE_NUMBER="7" \
+  "$validator" >/dev/null
+
+for metadata_state in api-error empty partial malformed; do
+  case_count=$((case_count + 1))
+  if PR_POLICY_FIXTURE=false \
+    PR_LIVE_METADATA_STATE="$metadata_state" \
+    PR_BRANCH_STRATEGY="main" \
+    PR_TITLE="feat(api): reject bad metadata" \
+    PR_LABELS="enhancement" \
+    PR_BASE="main" \
+    PR_HEAD="feat/42-bad-metadata" \
+    PR_BODY="Closes #42" \
+    PR_ISSUE_STATE="open" \
+      "$validator" >/dev/null 2>&1; then
+    echo "PR policy accepted $metadata_state live pull request metadata."
+    exit 1
+  fi
+done
+
+case_count=$((case_count + 1))
+if PR_POLICY_FIXTURE=1 \
+  PR_LIVE_METADATA_STATE="api-error" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): require explicit fixture mode" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-explicit-fixture" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted an implicit fixture-mode value."
+  exit 1
+fi
+
+while IFS='|' read -r name title head; do
+  case_count=$((case_count + 1))
+  [[ "$head" == "@release-please" ]] && head="$release_branch"
+  PR_POLICY_FIXTURE=false \
+  PR_LIVE_LABELS="enhancement" \
+  PR_LIVE_ASSIGNEES="" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="$title" \
+  PR_LABELS="bug" \
+  PR_ASSIGNEES="stale-user" \
+  PR_BASE="main" \
+  PR_HEAD="$head" \
+  PR_BODY="" \
+  PR_ISSUE_STATE="" \
+    "$validator" >/dev/null
+done <<'CASES'
+Dependabot|build(deps): bump pytest|dependabot/pip/pytest-9
+automation|build(python): adopt Python 3.15|automation/python-3.15
+release please|chore(main): release 0.2.0|@release-please
+CASES
+
+case_count=$((case_count + 1))
+if PR_POLICY_FIXTURE=false \
+  PR_LIVE_LABELS="enhancement" \
+  PR_LIVE_ASSIGNEES="" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): require an assignee" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-require-assignee" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_LABELS="enhancement" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted ordinary Issue work without an assignee."
+  exit 1
+fi
+
 while IFS='|' read -r expected name strategy title labels base head body issue_state base_graph; do
   [[ -z "$expected" || "$expected" == \#* ]] && continue
   [[ "$body" == "-" ]] && body=""
@@ -133,6 +240,7 @@ pass|version automation|main|build(python): adopt Python 3.15|enhancement|main|a
 pass|delivery standalone|delivery|feat(api): add report|enhancement|dev/next|feat/42-report|Closes #42|open|-
 pass|delivery standalone stack|delivery|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=dev/next
 pass|delivery hotfix|delivery|fix(api): stop outage|bug,hotfix|main|fix/42-outage|Fixes #42|open|-
+pass|delivery release recovery|delivery|fix(release): recover missing release|bug,release-recovery|main|fix/42-recover-release|Fixes #42|open|-
 pass|delivery automation|delivery|build(deps): bump pytest|enhancement|dev/next|dependabot/pip/pytest-9|-|-|-
 pass|delivery sync|delivery|chore(sync): merge main into milestone|enhancement|dev/m7-staged-ci|sync/main-to-m7-staged-ci-abcdef0|-|-|-
 pass|delivery isolated sync|delivery|chore(sync): merge main into isolated|enhancement|dev/i42-payment-soak|sync/main-to-i42-payment-soak-abcdef0|-|-|-
@@ -157,6 +265,8 @@ fail|main mode targets dev|main|feat(api): add report|enhancement|dev|feat/42-re
 fail|dev work targets main|dev|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
 fail|delivery work targets main|delivery|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
 fail|delivery non-fix hotfix|delivery|feat(api): rush report|enhancement,hotfix|main|feat/42-report|Closes #42|open|-
+fail|delivery recovery on non-fix branch|delivery|feat(release): recover missing release|enhancement,release-recovery|main|feat/42-recover-release|Closes #42|open|-
+fail|delivery recovery with hotfix|delivery|fix(release): recover missing release|bug,hotfix,release-recovery|main|fix/42-recover-release|Fixes #42|open|-
 fail|delivery automation targets main|delivery|build(deps): bump pytest|enhancement|main|dependabot/pip/pytest-9|-|-|-
 fail|delivery sync mismatch|delivery|chore(sync): merge main into milestone|enhancement|dev/m8-other|sync/main-to-m7-staged-ci-abcdef0|-|-|-
 fail|unknown branch strategy|staging|feat(api): add report|enhancement|staging|feat/42-report|Closes #42|open|-
@@ -363,6 +473,17 @@ if PR_BRANCH_STRATEGY="delivery" \
   echo "PR policy accepted a standalone bridge with a Milestone."
   exit 1
 fi
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="fix(release): recover missing release" \
+PR_LABELS="bug,release-recovery" \
+PR_BASE="main" \
+PR_HEAD="fix/42-recover-release" \
+PR_BODY="Fixes #42" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_MILESTONE_NUMBER="9" \
+  "$validator" >/dev/null
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
