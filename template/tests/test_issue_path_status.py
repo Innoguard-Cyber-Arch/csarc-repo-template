@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import runpy
 import sys
 from pathlib import Path
@@ -25,6 +26,19 @@ inspect_issue = MODULE["inspect_issue"]
 inspect_capability = MODULE["inspect_capability"]
 route_for = MODULE["route_for"]
 unresolved_blocker = MODULE["unresolved_blocker"]
+
+
+def lifecycle_content(content: bytes | None = None) -> dict[str, str]:
+    """Return one exact GitHub Contents response for the lifecycle helper."""
+    payload = content or (SCRIPTS / "pr_lifecycle.py").read_bytes()
+    git_blob = b"blob " + str(len(payload)).encode() + b"\0" + payload
+    return {
+        "type": "file",
+        "path": "scripts/pr_lifecycle.py",
+        "sha": hashlib.sha1(git_blob, usedforsecurity=False).hexdigest(),
+        "encoding": "base64",
+        "content": base64.b64encode(payload).decode(),
+    }
 
 
 def observation(
@@ -945,16 +959,7 @@ def test_capability_composes_canonical_protection_and_available_lease(
     class FakeGitHub:
         def get(self, _repo: str, path: str = "") -> object:
             if path.startswith("contents/scripts/pr_lifecycle.py"):
-                return {
-                    "type": "file",
-                    "path": "scripts/pr_lifecycle.py",
-                    "sha": "c" * 40,
-                    "encoding": "base64",
-                    "content": base64.b64encode(
-                        b'LEASE_STATUS_INTERFACE = "csarc-pr-lifecycle-'
-                        b'lease-status/v1"'
-                    ).decode(),
-                }
+                return lifecycle_content()
             raise AssertionError(path)
 
     monkeypatch.setitem(
@@ -986,16 +991,7 @@ def test_capability_blocks_when_canonical_lease_is_held(
 
     class FakeGitHub:
         def get(self, _repo: str, _path: str = "") -> object:
-            return {
-                "type": "file",
-                "path": "scripts/pr_lifecycle.py",
-                "sha": "c" * 40,
-                "encoding": "base64",
-                "content": base64.b64encode(
-                    b'LEASE_STATUS_INTERFACE = "csarc-pr-lifecycle-'
-                    b'lease-status/v1"'
-                ).decode(),
-            }
+            return lifecycle_content()
 
     monkeypatch.setitem(
         inspect_capability.__globals__,
@@ -1018,6 +1014,40 @@ def test_capability_blocks_when_canonical_lease_is_held(
         "state": "held",
         "reason": "another owner holds it",
     }
+
+
+def test_capability_rejects_a_modified_head_lifecycle_helper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A work branch cannot spoof allowed by retaining the interface marker."""
+    base_bytes = (SCRIPTS / "pr_lifecycle.py").read_bytes() + b"\n# changed\n"
+
+    class FakeGitHub:
+        def get(self, _repo: str, _path: str = "") -> object:
+            return lifecycle_content(base_bytes)
+
+    called = False
+
+    def unexpected(*_args: object) -> object:
+        nonlocal called
+        called = True
+        return None
+
+    monkeypatch.setitem(
+        inspect_capability.__globals__, "effective_protection", unexpected
+    )
+    monkeypatch.setitem(
+        inspect_capability.__globals__, "lease_status_snapshot", unexpected
+    )
+    capability = inspect_capability(
+        FakeGitHub(),
+        "owner/repo",
+        {"permissions": {"push": True}},
+        pull(draft=False, head_sha="a" * 40),
+    )
+    assert capability["state"] == "unknown"
+    assert "exact base blob" in str(capability["reason"])
+    assert not called
 
 
 def test_missing_push_permission_is_unknown() -> None:

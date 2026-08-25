@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import hashlib
 import json
 import re
 import shutil
@@ -1191,6 +1192,48 @@ def local_repository() -> str:
     return match.group(1)
 
 
+def require_base_lifecycle_interface(
+    github: GitHub, repo: str, base_sha: str
+) -> None:
+    """Bind the imported lifecycle helper to the exact base Git blob."""
+    lifecycle_file = github.get(
+        repo, f"contents/scripts/pr_lifecycle.py?ref={base_sha}"
+    )
+    if (
+        not isinstance(lifecycle_file, dict)
+        or lifecycle_file.get("type") != "file"
+        or lifecycle_file.get("path") != "scripts/pr_lifecycle.py"
+        or FULL_SHA.fullmatch(str(lifecycle_file.get("sha") or "")) is None
+        or lifecycle_file.get("encoding") != "base64"
+        or not isinstance(lifecycle_file.get("content"), str)
+    ):
+        raise RuntimeError(
+            "canonical lifecycle script is unavailable on the base"
+        )
+    try:
+        base_bytes = base64.b64decode(
+            "".join(lifecycle_file["content"].split()), validate=True
+        )
+        source = base_bytes.decode("utf-8")
+        local_bytes = (
+            Path(__file__).resolve().with_name("pr_lifecycle.py").read_bytes()
+        )
+    except (binascii.Error, OSError, UnicodeDecodeError) as error:
+        raise RuntimeError(
+            "canonical lifecycle script content is malformed"
+        ) from error
+    git_blob = b"blob " + str(len(base_bytes)).encode() + b"\0" + base_bytes
+    content_sha = hashlib.sha1(git_blob, usedforsecurity=False).hexdigest()
+    if content_sha != lifecycle_file["sha"] or local_bytes != base_bytes:
+        raise RuntimeError(
+            "local lifecycle helper does not match the exact base blob"
+        )
+    if f'LEASE_STATUS_INTERFACE = "{LEASE_STATUS_INTERFACE}"' not in source:
+        raise RuntimeError(
+            "canonical lifecycle lease-status interface is absent"
+        )
+
+
 def inspect_capability(
     github: GitHub,
     repo: str,
@@ -1216,40 +1259,9 @@ def inspect_capability(
             "required": [],
         }
     try:
-        lifecycle_file = github.get(
-            repo, f"contents/scripts/pr_lifecycle.py?ref={base_sha}"
-        )
+        require_base_lifecycle_interface(github, repo, base_sha)
     except RuntimeError as error:
         return {"state": "unknown", "reason": str(error), "required": []}
-    if (
-        not isinstance(lifecycle_file, dict)
-        or lifecycle_file.get("type") != "file"
-        or lifecycle_file.get("path") != "scripts/pr_lifecycle.py"
-        or FULL_SHA.fullmatch(str(lifecycle_file.get("sha") or "")) is None
-        or lifecycle_file.get("encoding") != "base64"
-        or not isinstance(lifecycle_file.get("content"), str)
-    ):
-        return {
-            "state": "unknown",
-            "reason": "canonical lifecycle script is unavailable on the base",
-            "required": [],
-        }
-    try:
-        source = base64.b64decode(
-            "".join(lifecycle_file["content"].split()), validate=True
-        ).decode("utf-8")
-    except (binascii.Error, UnicodeDecodeError) as _error:
-        return {
-            "state": "unknown",
-            "reason": "canonical lifecycle script content is malformed",
-            "required": [],
-        }
-    if f'LEASE_STATUS_INTERFACE = "{LEASE_STATUS_INTERFACE}"' not in source:
-        return {
-            "state": "unknown",
-            "reason": "canonical lifecycle lease-status interface is absent",
-            "required": [],
-        }
     protection, reason, required = effective_protection(
         github, repo, str(base.get("ref") or "")
     )
