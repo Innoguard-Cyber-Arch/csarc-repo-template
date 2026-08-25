@@ -75,10 +75,10 @@ curl -fsSL '<engineering-practice-url>'
 | --- | --- | --- | --- |
 | 選 Issue | 清理 dry-run、限量搜尋歷史、讀 Issue／PR／ADR、判定 Milestone 或 standalone | Issue scope、label、Milestone、既有 branch／worktree／PR | 資訊散在多處；找不到 route 時應停止，不能猜。 |
 | 建 branch／worktree | 從 `dev/m*` 或 `dev/next` 建 `type/*`；特殊情況另判斷 `dev/i*` 或 hotfix | parent branch、乾淨 worktree、單一 Issue scope | 選錯 base 要 retarget／重建；太多 branch 名詞使一般貢獻者先做政策選擇。 |
-| 實作中 | TDD、targeted checks、更新文件／root-template pair | 最窄 regression、lint/type/test | 現行規則在開 PR 前要求 full verify，ownership 在長驗證期間不可見。 |
-| 開 PR／Draft／Ready | push、填 PR body、決定 Draft 或 Ready、等 reviewer | acceptance、closing keyword、`verify-template.sh`、head SHA | #261：Draft 也被最終門檻擋住，別的 agent 可能重複認領；狀態切換沒有單一 owner。 |
+| 實作中 | TDD、targeted checks、更新文件／root-template pair | 最窄 regression、lint/type/test | #261 已讓 targeted checks 後即可開 Draft；尚未自動化的摩擦是使用者仍要自行組合 route、risk 與下一步。 |
+| 開 PR／Draft／Ready | targeted 後開 Draft 揭露 owner／scope／依賴，Ready 前完成 acceptance 與 full verify | closing keyword、`verify-template.sh`、head SHA | #261 已移除開 Draft 前的 full gate；狀態仍分散在 Issue、PR、checks 與 branch，沒有單一 status 入口。 |
 | Issue PR checks | 等 policy、fast、stable `verify`；高風險路徑升 full | route、title、Issue linkage、secret、targeted tests、條件式 security | #201 已把一般路徑收斂為最多三個 runner jobs；unknown 仍應 full，而不是猜低風險。 |
-| Actions quota fallback | 確認 zero-step、跑完整本機驗證、寫 attestation，再等 human authorization | exact head、commands、未重現 checks | #254：結構性 quota 下每張 routine PR 都重複等人；promotion 仍合理需要雙重授權。 |
+| Actions quota fallback | Routine 以 canonical tool 確認完整 zero-step run set、重跑 full 並留單一 note；promotion 才使用 attestation 與 human authorization | exact head、commands、未重現 checks | #254 已移除 routine PR 的逐張 human 等待；promotion 仍合理需要雙重授權。 |
 | Merge 到 delivery | review／授權後合併；非 default base 可能需手動關 Issue | live PR head/base、無 blocker、checks | #240：worktree 不隔離 GitHub；#236/#237 發生 Ready／Draft／merge race，#253 顯示 `baseRefOid` 不是 live destination CAS。 |
 | 等待批次／Milestone | standalone 等 release window；Milestone 等其他 Issues 與 promotion Issue | acceptance、所有非 promotion Issues 完成 | 等待是 delivery 決策，不應讓已完成 issue branch 持續漂移；目前 owner／時機需跨文件理解。 |
 | `main → dev/*` sync | 每條 active delivery 由 owner 開 reviewed sync PR、等 checks／review、解 conflict | 必須包含 current `main` | main 每前進一次都可能新增人工 PR；missing branch 不可當作已同步。 |
@@ -90,9 +90,9 @@ curl -fsSL '<engineering-practice-url>'
 | 證據 | 已觀察摩擦 | 對本提案的要求 |
 | --- | --- | --- |
 | [#238](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/238)／[PR #263](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/263) | PR #237 promotion 後 `delete_branch_on_merge` 刪掉長期 `dev/next`；post-merge workflow 又 zero-step，曾需人工重建。PR #263 已合併 `dev/next`，但本 ADR 不把尚未進本 branch 的行為宣稱為現況。 | 必要 branch 不存在必須 fail closed；保留／恢復需綁定 merged PR 與 current-main identity，`dev/i*` 仍可刪。 |
-| [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240)／Draft [PR #260](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/260) | #236 的 merge call 比另一 task 轉 Draft 早約 1.7 秒；#253 又證明只比 source head 不能防 destination base race。 | 所有 PR lifecycle writes 需一個跨 process lease，merge 前同時重讀 live source、destination、Draft、blocker 與 authorization；未完成前不開放 agent 自動 merge。 |
-| [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254) | Teams private plan 的 quota block 是日常條件；routine PR 每次等第二則 human authorization 是重複儀式。 | routine fallback 可在 zero-step、exact SHA、完整本機驗證、可稽核 note 且 #240 互斥成立時自動化；promotion 不簡化。 |
-| [#261](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/261) | 完整驗證前不能開 Draft，遠端缺少 owner、scope、依賴與進度訊號。 | targeted check 後即可開 Draft；Ready 前才完成 acceptance 與完整驗證。 |
+| [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240)／[PR #260](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/260) | #236 的 merge call 比另一 task 轉 Draft 早約 1.7 秒；#253 又證明只比 source head 不能防 destination base race。PR #260 已進 `dev/next`，尚未進本 delivery branch。 | 合入後，所有 PR lifecycle writes 以跨 process lease 序列化，merge 前重讀 live source、destination、Draft、blocker 與 authorization；這是 future automation，不是現行 #254 routine fallback 的前置條件。 |
+| [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254) | Teams private plan 的 quota block 是日常條件；#254 已讓 routine PR 以 exact-head canonical note 配合 Alpha self-merge，不再逐張等第二則 human authorization。 | 保留已生效的 single-note routine fallback；#240 日後只補 writer 互斥，promotion 仍不簡化。 |
+| [#261](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/261) | #261 已允許 targeted checks 後先開 Draft，讓遠端可見 owner、scope、依賴與待完成驗證。 | 保留現行 early Draft ownership；Ready 前才完成 acceptance 與完整驗證。 |
 
 ## 決定
 
@@ -170,7 +170,8 @@ flowchart LR
 
 以下任一狀況一律 fail closed：route／risk 不明、必要 branch 缺少、lease 無法取得、
 source 或 live destination 漂移、新 Draft／blocking review／未完成 checklist、required check
-未成功且不符合精確 fallback、candidate tree 不符、canary 半設定、release evidence 不符。
+未成功且不符合精確 fallback、candidate tree 不符、allowed canary 未成功、release evidence
+不符。Canary `blocked`／`unknown` 只能維持 artifact-only，不能宣稱 external canary 成功。
 
 ### 既有決策 disposition
 
@@ -198,10 +199,11 @@ control plane、供應鏈與 promotion／release boundary 解釋。
 
 ## 重新評估條件
 
-本 ADR 維持 `Proposed`，直到至少完成：#261 early Draft ownership、#240 single-writer／
-live destination guard、#254 routine quota policy、#265 behavior-oriented tests 與 #266 path
-automation。每張實作 Issue 必須各自更新 root／template、targeted regression 與
-`./scripts/verify-template.sh`；本 PR 不預先修改 workflow 或宣稱上述能力 active。
+本 ADR 維持 `Proposed`。已落地的 #254 routine quota、#261 early Draft ownership 與 #265
+behavior-oriented tests 是現行基線，必須持續保留；#240 single-writer／live destination
+guard 與 #266 path automation 進入本 delivery branch，每張實作 Issue 各自完成 root／
+template、targeted regression 與 `./scripts/verify-template.sh`，並經維護者審查後，才能把
+本提案改為 `Accepted`。本 PR 不預先修改 workflow，也不把 future automation 宣稱為 active。
 
 Milestone #9 應以政策草案的 scenarios 執行 fixture／live dry-run，記錄人工接觸點、等待、
 checks 與復原。#189 的 hosted runner-minute 仍獨立驗收。若實測顯示 routine latency 未降、

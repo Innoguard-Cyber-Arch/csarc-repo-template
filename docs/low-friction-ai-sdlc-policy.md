@@ -52,16 +52,16 @@ promotion。不同 delivery branches 不互相 merge，也不直接 push。
 | `main` 或 PR head 漂移 | 使舊 verification／authorization 失效；重新 sync、解 conflict、重跑受影響 checks | 新 source、destination、tree 重新綁定 evidence。 |
 | 新 Draft event、blocking review、未完成 checklist | lease holder 中止 merge，不自動轉回 Ready | blocker 由有權者明確解除，重新完成 Ready gate。 |
 | Actions zero-step billing block | Routine 依下節；elevated／promotion 走 human fallback | exact SHA、完整本機驗證與未重現 controls 都有記錄。 |
-| Canary `blocked` | 保存 artifact-only，不宣稱 external canary | full gate 仍成功；若產品要求 canary，維持 blocked。 |
-| Canary `unknown`／只設定一半 | 停止，修正 capability 設定 | capability 可明確判為 allowed 或 blocked。 |
+| Canary `blocked`／`unknown`（包含只設定一半） | 保存 artifact-only，不宣稱 external canary | full gate 仍成功；若產品要求 canary，維持 blocked。 |
 | Post-merge tree／release evidence 不符 | 停止 release，開修正 Issue，使用 revert／fix flow | 不重寫 history；新 candidate 重新通過邊界。 |
 
 ## Quota fallback
 
-- **Routine、非 elevated Issue PR：**目標流程是自動確認所有失敗 jobs 都是相同 exact
-  head 的 zero-step billing block，完整本機驗證通過後留一則
-  `Actions quota fallback note`，並在 #240 lease／live destination guard 成立時完成合併。
-  在該互斥尚未生效或 capability unknown 時，維持 human-only；不先套用 #254。
+- **Routine、非 elevated Issue PR：**現行 #254 流程會確認所有失敗 jobs 都是相同 exact
+  head 的 zero-step billing block，由 canonical tool 重跑完整本機驗證並留一則
+  `Actions quota fallback note`；在 Alpha self-merge 政策下不要求每張 PR 另等 human
+  authorization。#240 合入本 delivery 且本提案 Accepted 後，lease／live destination
+  guard 會再序列化同一路徑，但不撤回或延後已生效的 #254 fallback。
 - **Elevated Issue PR：**不因 quota 自動降級；由 human maintainer 判斷是否可用現行
   SHA-bound fallback。
 - **Promotion／hotfix：**維持 attestation + authorization、candidate archive、tree
@@ -106,16 +106,17 @@ promotion。不同 delivery branches 不互相 merge，也不直接 push。
 
 - **Given** 所有 required Actions jobs 都在 exact head 以相同 billing annotation zero-step，
   內容屬 routine，完整本機驗證成功。
-- **When** #240 互斥與 #254 automation 已實作。
-- **Then** automation 留一則含 SHA、run URLs、命令、結果與未重現 checks 的 note；只在
-  live head/base 與 blocker 未變時合併。任一前提 unknown 就退回 human-only。
+- **When** 現行 #254 canonical tool 證明完整 failed-run set 與本機驗證，並產生綁定
+  SHA、run URLs、命令、結果與未重現 checks 的 note。
+- **Then** Alpha self-merge 可在 live head/base 未變時以非 admin squash merge，不需逐 PR
+  human authorization；#240 日後再以 lease 序列化 writer，但不是現行 #254 的前置條件。
 
 ### 6. Milestone promotion
 
 - **Given** 非 promotion Issues 全部完成，delivery 包含 current `main`，candidate
   base/head/tree 已固定。
 - **When** promotion PR 跑 full 與 canary capability check。
-- **Then** allowed canary 必須成功；blocked 可留下 artifact-only，unknown 停止；只有
+- **Then** allowed canary 必須成功；blocked／unknown 可留下 artifact-only；只有
   promotion evidence 與 post-merge tree identity 都成立才交給 release-source。quota
   fallback 仍要 human 雙重證據，且不能發布。
 
