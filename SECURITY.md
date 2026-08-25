@@ -8,19 +8,14 @@ branches.
 
 ## Reporting a vulnerability
 
-Do not open a public GitHub Issue for a suspected vulnerability. Issues are
-public and indexed, so they must never contain exploit code, credentials,
-tokens, or customer data.
+Open a GitHub Issue at
+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/new.
+Maintainers receive notifications for new Issues.
 
-Report through the organization-approved private channel instead of email or
-a public Issue. This template does not invent a contact address or a
-response-time commitment, because neither exists yet at the template level.
-
-<!-- Project owner: replace this section with the actual private reporting
-channel (for example GitHub private vulnerability reporting if enabled for
-this repository, a security contact mailbox, or an internal ticketing
-system) and the expected acknowledgement window before relying on this
-document. -->
+GitHub Issues are public. Do not post secrets, credentials, personal data, or
+other sensitive details. Provide only the non-sensitive information needed to
+describe the concern. This policy does not invent an acknowledgement or
+resolution SLA.
 
 ## Scope
 

@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+status=0
+for required_file in README.md SECURITY.md; do
+  if [[ ! -f "$required_file" ]]; then
+    echo "$required_file is required for project metadata verification." >&2
+    status=1
+  fi
+done
+if ((status != 0)); then
+  exit "$status"
+fi
+
+reject_placeholder() {
+  local file="$1"
+  local field="$2"
+  local placeholder="$3"
+  if grep -Fq -- "$placeholder" "$file"; then
+    echo "$file has unfinished $field metadata: $placeholder" >&2
+    status=1
+  fi
+}
+
+reject_controlled_placeholder() {
+  local file="$1"
+  local field="$2"
+  local start="<!-- csarc-$3:start -->"
+  local end="<!-- csarc-$3:end -->"
+  if awk -v start="$start" -v end="$end" '
+    { sub(/\r$/, "") }
+    $0 == start { controlled = 1; next }
+    $0 == end { controlled = 0; next }
+    controlled {
+      value = tolower($0)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      if (value == "todo" || value == "tbd" || value == "placeholder") {
+        found = 1
+      }
+    }
+    END { exit !found }
+  ' "$file"; then
+    echo "$file has unfinished $field metadata: TODO/TBD/placeholder" >&2
+    status=1
+  fi
+}
+
+reject_placeholder README.md "project description" "A Cyber-Arch project"
+reject_placeholder README.md "project description" "請在這裡補上主要使用者"
+reject_placeholder README.md "run command" "請在這裡補上產品最短"
+reject_placeholder README.md "repository URL" "<repository-url>"
+reject_placeholder README.md "CI badge" "<org>/<repo>"
+reject_controlled_placeholder README.md "project description" \
+  "project-description"
+reject_controlled_placeholder README.md "run command" "project-run-command"
+reject_placeholder SECURITY.md "security reporting channel" \
+  "Project owner: replace"
+reject_controlled_placeholder SECURITY.md "security reporting channel" \
+  "security-reporting-channel"
+if [[ -f pyproject.toml ]]; then
+  reject_placeholder pyproject.toml "repository URL" "<repository-url>"
+fi
+if [[ -f package.json ]]; then
+  reject_placeholder package.json "repository URL" "<repository-url>"
+fi
+
+exit "$status"

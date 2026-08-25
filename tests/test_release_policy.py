@@ -19,6 +19,7 @@ bump_version = MODULE["bump_version"]
 classify_probe = MODULE["classify_probe"]
 direct_release = MODULE["direct_release"]
 release_intent = MODULE["release_intent"]
+release_follow_up_errors = MODULE["release_follow_up_errors"]
 release_boundary_errors = MODULE["release_boundary_errors"]
 release_plan = MODULE["release_plan"]
 release_version_errors = MODULE["release_version_errors"]
@@ -26,6 +27,192 @@ select_release_mode = MODULE["select_release_mode"]
 simple_release_boundary = MODULE["simple_release_boundary"]
 verify_release_version = MODULE["verify_release_version"]
 optional_integration_preflight = MODULE["optional_integration_preflight"]
+
+
+def test_release_follow_up_accepts_only_automation_owned_changes(
+    tmp_path: Path,
+) -> None:
+    """Bind release follow-ups to the canonical bot branch and file set."""
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "python",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": [
+                            {"path": "src/demo/__init__.py"},
+                            "README.md",
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "uv.lock").touch()
+    valid_head = "release-please--branches--main--components--demo"
+    valid_sha = "a" * 40
+    valid_commits = [
+        {
+            "sha": valid_sha,
+            "author": {"login": "github-actions[bot]"},
+            "committer": {"login": "web-flow"},
+            "commit": {"verification": {"verified": True, "reason": "valid"}},
+        }
+    ]
+    valid = {
+        "root": tmp_path,
+        "repo": "owner/repo",
+        "head": valid_head,
+        "head_repo": "owner/repo",
+        "head_sha": valid_sha,
+        "actor": "github-actions[bot]",
+        "changed_files": [
+            ".release-please-manifest.json",
+            "CHANGELOG.md",
+            "pyproject.toml",
+            "uv.lock",
+            "src/demo/__init__.py",
+            "README.md",
+        ],
+        "commits": valid_commits,
+    }
+    assert release_follow_up_errors(**valid) == []
+
+    maintainer = dict(valid)
+    maintainer.update(
+        actor="maintainer",
+        actor_permission="maintain",
+        commits=[
+            {
+                "sha": valid_sha,
+                "author": {"login": "maintainer"},
+                "committer": {"login": "web-flow"},
+                "commit": {
+                    "verification": {"verified": True, "reason": "valid"}
+                },
+            }
+        ],
+    )
+    assert release_follow_up_errors(**maintainer) == []
+    maintainer["actor_permission"] = "write"
+    assert release_follow_up_errors(**maintainer)
+    wrong_author = dict(maintainer)
+    wrong_author.update(
+        actor_permission="admin",
+        commits=[
+            {
+                "sha": valid_sha,
+                "author": {"login": "attacker"},
+                "committer": {"login": "web-flow"},
+                "commit": {
+                    "verification": {"verified": True, "reason": "valid"}
+                },
+            }
+        ],
+    )
+    assert release_follow_up_errors(**wrong_author)
+
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        "release-please--forged",
+        "owner/repo",
+        valid_sha,
+        "github-actions[bot]",
+        ["CHANGELOG.md"],
+        valid_commits,
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "fork/repo",
+        valid_sha,
+        "github-actions[bot]",
+        ["CHANGELOG.md"],
+        valid_commits,
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        valid_sha,
+        "attacker",
+        ["CHANGELOG.md"],
+        valid_commits,
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        valid_sha,
+        "github-actions[bot]",
+        ["src/product.py"],
+        valid_commits,
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        valid_sha,
+        "github-actions[bot]",
+        [".github/workflows/ci.yml"],
+        valid_commits,
+    )
+
+    human_commit = [
+        {
+            "sha": valid_sha,
+            "author": {"login": "github-actions[bot]"},
+            "committer": {"login": "maintainer"},
+            "commit": {"verification": {"verified": True, "reason": "valid"}},
+        }
+    ]
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        valid_sha,
+        "github-actions[bot]",
+        ["pyproject.toml"],
+        human_commit,
+    )
+    unsigned_spoof = [
+        {
+            "sha": valid_sha,
+            "author": {"login": "github-actions[bot]"},
+            "committer": {"login": "web-flow"},
+            "commit": {
+                "verification": {"verified": False, "reason": "unsigned"}
+            },
+        }
+    ]
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        valid_sha,
+        "github-actions[bot]",
+        ["pyproject.toml"],
+        unsigned_spoof,
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        "b" * 40,
+        "github-actions[bot]",
+        ["CHANGELOG.md"],
+        valid_commits,
+    )
 
 
 def capabilities(
