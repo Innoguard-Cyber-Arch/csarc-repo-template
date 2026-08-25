@@ -1547,6 +1547,10 @@ def test_admin_secret_is_limited_to_trusted_workflow_definitions() -> None:
     assert "pull_request:" not in maintenance
     assert "merge_group:" not in maintenance
     assert "pull_request:" in close_signal
+    assert (
+        "github.event.pull_request.head.ref == 'promote/next'" in close_signal
+    )
+    assert maintenance.count('.head.ref == "promote/next"') == 2
     assert "secrets." not in close_signal
     assert "push:" in post_merge
     assert "pull_request:" not in post_merge
