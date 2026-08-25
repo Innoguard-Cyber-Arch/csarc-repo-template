@@ -46,6 +46,7 @@
 - [`release-security-and-dependencies.md`](adr/release-security-and-dependencies.md)
 - [`spec-story-and-work-items.md`](adr/spec-story-and-work-items.md)
 - [`agent-collaboration.md`](adr/agent-collaboration.md)
+- [`low-friction-ai-sdlc.md`](adr/low-friction-ai-sdlc.md) — Proposed；外部比較、最小 state model 與政策草案
 - [`portable-decision-site.md`](adr/portable-decision-site.md)
 
 截至 2026-08-24、建立 #223 前的完整 GitHub 盤點與每條決策線對照，見 [`history-audit-2026-08.md`](history-audit-2026-08.md)。
