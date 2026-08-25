@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -22,12 +23,14 @@ from typing import Any, Protocol
 DELIVERY_BRANCH = re.compile(r"^dev/m([0-9]+)-[a-z0-9][a-z0-9-]*$")
 ISOLATED_BRANCH = re.compile(r"^dev/i[0-9]+-[a-z0-9][a-z0-9-]*$")
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
+REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 CAPABILITY_STATES = {"allowed", "blocked", "unknown"}
 MAINTAINER_ASSOCIATIONS = {"MEMBER", "OWNER"}
 MAINTAINER_PERMISSIONS = {"admin", "maintain"}
 SYNC_SECRET = "CSARC_SYNC_TOKEN"  # noqa: S105
 PRESERVATION_LEDGER_BRANCH = "csarc/dev-next-preservation-ledger"
 PRESERVATION_LEDGER_PATH = "transaction.json"
+STANDALONE_PROMOTION_BRIDGE = "promote/next"
 PRESERVATION_STATES = {
     "preparing",
     "prepared",
@@ -276,15 +279,20 @@ def gate(
 ) -> str:
     """Fail stale PRs and unprotected direct dev/next promotions."""
     if base == "main":
-        if head_ref != "dev/next":
+        if head_ref not in {"dev/next", STANDALONE_PROMOTION_BRIDGE}:
             return "not-applicable"
         pull = validate_promotion(api, repo, pr_number, head_sha, merged=False)
         if ref_sha(api, repo, "main") != pull["base"].get("sha"):
             raise RuntimeError("Promotion base no longer matches current main")
-        if ref_sha(api, repo, "dev/next") != head_sha:
-            raise RuntimeError("dev/next no longer matches the promotion head")
+        source_sha = promotion_source_sha(api, repo, pull, head_sha)
         ledger_commit, record, _authorizations = require_prepared_preservation(
-            api, repo, pr_number, str(pull["base"]["sha"]), head_sha
+            api,
+            repo,
+            pr_number,
+            str(pull["base"]["sha"]),
+            source_sha,
+            promotion_head_ref=head_ref,
+            promotion_head_sha=head_sha,
         )
         return (
             f"{record['mode']}; transaction "
@@ -331,7 +339,12 @@ def canonical_json(value: object) -> str:
 
 
 def preservation_operation(
-    repo: str, number: int, base_sha: str, head_sha: str
+    repo: str,
+    number: int,
+    base_sha: str,
+    head_sha: str,
+    promotion_head_ref: str = "",
+    promotion_head_sha: str = "",
 ) -> str:
     """Derive one operation ID shared by contenders for the same promotion."""
     identity = canonical_json(
@@ -340,6 +353,14 @@ def preservation_operation(
             "head_sha": head_sha,
             "pull_request": number,
             "repository": repo,
+            **(
+                {
+                    "promotion_head_ref": promotion_head_ref,
+                    "promotion_head_sha": promotion_head_sha,
+                }
+                if promotion_head_ref
+                else {}
+            ),
         }
     )
     return hashlib.sha256(identity.encode()).hexdigest()
@@ -377,7 +398,8 @@ def validate_preservation_record(  # noqa: C901
                 f"Dev/next preservation record has invalid {field}"
             )
     if (
-        FULL_SHA.fullmatch(str(record["base_sha"])) is None
+        REPOSITORY.fullmatch(str(record["repository"])) is None
+        or FULL_SHA.fullmatch(str(record["base_sha"])) is None
         or FULL_SHA.fullmatch(str(record["head_sha"])) is None
         or re.fullmatch(r"[0-9a-f]{64}", str(record["operation_id"])) is None
         or record["mode"] not in {"ruleset-protected", "temporary-auto-delete"}
@@ -413,7 +435,35 @@ def validate_preservation_record(  # noqa: C901
         main_sha is None or prepared_commit is None
     ):
         raise RuntimeError("Completing preservation record is incomplete")
-    terminal_fields = {"main_sha", "prepared_ledger_commit"}
+    promotion_head_ref = record.get("promotion_head_ref")
+    promotion_head_sha = record.get("promotion_head_sha")
+    if (promotion_head_ref is None) != (promotion_head_sha is None) or (
+        promotion_head_ref is not None
+        and (
+            promotion_head_ref != STANDALONE_PROMOTION_BRIDGE
+            or not isinstance(promotion_head_sha, str)
+            or FULL_SHA.fullmatch(promotion_head_sha) is None
+        )
+    ):
+        raise RuntimeError(
+            "Dev/next preservation record has invalid promotion head"
+        )
+    expected_operation = preservation_operation(
+        str(record["repository"]),
+        int(record["pull_request"]),
+        str(record["base_sha"]),
+        str(record["head_sha"]),
+        str(promotion_head_ref or ""),
+        str(promotion_head_sha or ""),
+    )
+    if record["operation_id"] != expected_operation:
+        raise RuntimeError("Dev/next preservation operation is invalid")
+    terminal_fields = {
+        "main_sha",
+        "prepared_ledger_commit",
+        "promotion_head_ref",
+        "promotion_head_sha",
+    }
     base_fields = set(required) | terminal_fields
     if (
         set(record) - base_fields
@@ -527,11 +577,13 @@ def same_preservation_operation(
         "base_sha",
         "head_ref",
         "head_sha",
+        "promotion_head_ref",
+        "promotion_head_sha",
         "operation_id",
         "mode",
         "prior_auto_delete",
     )
-    return all(newer[field] == older[field] for field in fields)
+    return all(newer.get(field) == older.get(field) for field in fields)
 
 
 def valid_preservation_transition(  # noqa: C901
@@ -745,11 +797,15 @@ def preservation_evidence(
     ledger_commit: str, record: dict[str, Any]
 ) -> dict[str, Any]:
     """Return the exact remote checkpoint bound into other evidence."""
-    return {
+    evidence = {
         "ledger_ref": f"refs/heads/{PRESERVATION_LEDGER_BRANCH}",
         "ledger_commit": ledger_commit,
         "transaction": record,
     }
+    cleanup = bridge_cleanup_command(record)
+    if cleanup:
+        evidence["bridge_cleanup_command"] = cleanup
+    return evidence
 
 
 def preservation_authorization_statement(
@@ -759,6 +815,8 @@ def preservation_authorization_statement(
     head_sha: str,
     operation_id: str,
     prepared_commit: str,
+    promotion_head_ref: str = "",
+    promotion_head_sha: str = "",
 ) -> str:
     """Return the exact two-person fallback authorization statement."""
     binding = {
@@ -768,6 +826,14 @@ def preservation_authorization_statement(
         "operation_id": operation_id,
         "pull_request": number,
         "repository": repo,
+        **(
+            {
+                "promotion_head_ref": promotion_head_ref,
+                "promotion_head_sha": promotion_head_sha,
+            }
+            if promotion_head_ref
+            else {}
+        ),
     }
     return (
         "Dev/next preservation authorization\n\n"
@@ -804,10 +870,19 @@ def require_temporary_authorizations(
     head_sha: str,
     operation_id: str,
     prepared_commit: str,
+    promotion_head_ref: str = "",
+    promotion_head_sha: str = "",
 ) -> list[dict[str, str]]:
     """Require two distinct humans to bind the unprotected ledger commit."""
     expected = preservation_authorization_statement(
-        repo, number, base_sha, head_sha, operation_id, prepared_commit
+        repo,
+        number,
+        base_sha,
+        head_sha,
+        operation_id,
+        prepared_commit,
+        promotion_head_ref,
+        promotion_head_sha,
     )
     accepted: dict[str, dict[str, str]] = {}
     for comment in paged_items(api, repo, f"issues/{number}/comments"):
@@ -890,6 +965,23 @@ def manual_restoration_command(
     return " ".join(command)
 
 
+def bridge_cleanup_command(record: dict[str, Any]) -> str:
+    """Return the owner command for one terminal standalone bridge."""
+    if record.get("promotion_head_ref") != STANDALONE_PROMOTION_BRIDGE:
+        return ""
+    if record.get("state") not in {"completed", "aborted"}:
+        return ""
+    return " ".join(
+        [
+            "GH_TOKEN=<admin-token>",
+            "python3 scripts/delivery_sync.py cleanup-promotion-bridge",
+            f"--repo {record['repository']}",
+            f"--operation-id {record['operation_id']}",
+            f"--head-sha {record['promotion_head_sha']}",
+        ]
+    )
+
+
 def prepared_preservation_evidence(
     api: API,
     repo: str,
@@ -911,6 +1003,8 @@ def prepared_preservation_evidence(
         str(record["head_sha"]),
         str(record["operation_id"]),
         ledger_commit,
+        str(record.get("promotion_head_ref") or ""),
+        str(record.get("promotion_head_sha") or ""),
     )
     if not include_completion_mode:
         return evidence
@@ -929,10 +1023,19 @@ def require_preservation_identity(
     base_sha: str,
     head_sha: str,
     operation_id: str | None = None,
+    *,
+    promotion_head_ref: str = "dev/next",
+    promotion_head_sha: str = "",
 ) -> None:
     """Require one ledger operation to match the exact promotion."""
+    bridge = promotion_head_ref == STANDALONE_PROMOTION_BRIDGE
     expected_operation = preservation_operation(
-        repo, number, base_sha, head_sha
+        repo,
+        number,
+        base_sha,
+        head_sha,
+        promotion_head_ref if bridge else "",
+        promotion_head_sha if bridge else "",
     )
     if (
         record.get("repository") != repo
@@ -941,6 +1044,10 @@ def require_preservation_identity(
         or record.get("base_sha") != base_sha
         or record.get("head_ref") != "dev/next"
         or record.get("head_sha") != head_sha
+        or record.get("promotion_head_ref")
+        != (promotion_head_ref if bridge else None)
+        or record.get("promotion_head_sha")
+        != (promotion_head_sha if bridge else None)
         or record.get("operation_id") != expected_operation
         or (operation_id is not None and operation_id != expected_operation)
     ):
@@ -953,13 +1060,24 @@ def require_prepared_preservation(
     number: int,
     base_sha: str,
     head_sha: str,
+    *,
+    promotion_head_ref: str = "dev/next",
+    promotion_head_sha: str = "",
 ) -> tuple[str, dict[str, Any], list[dict[str, str]]]:
     """Refetch the exact prepared operation and its live safeguards."""
     checkpoint = read_preservation_record(api, repo)
     if checkpoint is None:
         raise RuntimeError("Dev/next has no prepared preservation transaction")
     ledger_commit, record = checkpoint
-    require_preservation_identity(record, repo, number, base_sha, head_sha)
+    require_preservation_identity(
+        record,
+        repo,
+        number,
+        base_sha,
+        head_sha,
+        promotion_head_ref=promotion_head_ref,
+        promotion_head_sha=promotion_head_sha,
+    )
     if record.get("state") != "prepared":
         raise RuntimeError("Dev/next preservation transaction is not prepared")
     if record.get("mode") == "ruleset-protected":
@@ -985,6 +1103,8 @@ def require_prepared_preservation(
             head_sha,
             str(record["operation_id"]),
             ledger_commit,
+            str(record.get("promotion_head_ref") or ""),
+            str(record.get("promotion_head_sha") or ""),
         )
         if read_preservation_record(api, repo) != (ledger_commit, record):
             raise RuntimeError("Authorized preservation ledger ref changed")
@@ -1021,13 +1141,83 @@ def validate_promotion(
         or not isinstance(base, dict)
         or base.get("ref") != "main"
         or not isinstance(head, dict)
-        or head.get("ref") != "dev/next"
+        or head.get("ref") not in {"dev/next", STANDALONE_PROMOTION_BRIDGE}
         or head.get("sha") != head_sha
         or not isinstance(head_repo, dict)
         or head_repo.get("full_name") != repo
     ):
         raise RuntimeError("Live promotion does not match dev/next evidence")
     return pull
+
+
+def promotion_source_sha(
+    api: API,
+    repo: str,
+    pull: dict[str, Any],
+    promotion_head_sha: str,
+    *,
+    require_live_source: bool = True,
+) -> str:
+    """Resolve and verify the dev/next source protected by a promotion."""
+    base = pull.get("base")
+    head = pull.get("head")
+    base_sha = base.get("sha") if isinstance(base, dict) else None
+    head_ref = head.get("ref") if isinstance(head, dict) else None
+    if head_ref == "dev/next":
+        if require_live_source and ref_sha(api, repo, "dev/next") != (
+            promotion_head_sha
+        ):
+            raise RuntimeError("dev/next no longer matches the promotion head")
+        return promotion_head_sha
+    if (
+        head_ref != STANDALONE_PROMOTION_BRIDGE
+        or not isinstance(base_sha, str)
+        or FULL_SHA.fullmatch(base_sha) is None
+    ):
+        raise RuntimeError("Promotion has no valid dev/next source")
+    if (
+        require_live_source
+        and ref_sha(api, repo, STANDALONE_PROMOTION_BRIDGE)
+        != promotion_head_sha
+    ):
+        raise RuntimeError("Promotion bridge ref no longer matches its head")
+    status, payload = api.request(
+        "GET", f"repos/{repo}/git/commits/{promotion_head_sha}"
+    )
+    bridge = require_response(status, payload, "read promotion bridge")
+    parents = bridge.get("parents") if isinstance(bridge, dict) else None
+    parent_shas = (
+        [item.get("sha") for item in parents if isinstance(item, dict)]
+        if isinstance(parents, list)
+        else []
+    )
+    if len(parent_shas) != 2 or parent_shas[1] != base_sha:
+        raise RuntimeError(
+            "Standalone promotion bridge must merge current main into dev/next"
+        )
+    source_sha = parent_shas[0]
+    if (
+        not isinstance(source_sha, str)
+        or FULL_SHA.fullmatch(source_sha) is None
+    ):
+        raise RuntimeError("Standalone promotion bridge source is invalid")
+    if require_live_source and ref_sha(api, repo, "dev/next") != source_sha:
+        raise RuntimeError("dev/next no longer matches the promotion source")
+    status, payload = api.request(
+        "GET", f"repos/{repo}/git/commits/{source_sha}"
+    )
+    source = require_response(status, payload, "read dev/next source")
+    bridge_tree = (
+        bridge.get("tree", {}).get("sha") if isinstance(bridge, dict) else None
+    )
+    source_tree = (
+        source.get("tree", {}).get("sha") if isinstance(source, dict) else None
+    )
+    if not isinstance(source_tree, str) or bridge_tree != source_tree:
+        raise RuntimeError(
+            "Standalone promotion bridge must preserve the dev/next tree"
+        )
+    return source_sha
 
 
 def repository_settings(api: API, repo: str) -> dict[str, Any]:
@@ -1094,6 +1284,93 @@ def set_auto_delete(api: API, repo: str, enabled: bool) -> None:
         raise RuntimeError(f"Automatic branch deletion was not {action}d")
 
 
+def delete_promotion_bridge(
+    record: dict[str, Any],
+    remote: str | None = None,
+    *,
+    git_env: dict[str, str] | None = None,
+) -> str:
+    """Delete one terminal bridge with an explicit Git force-with-lease."""
+    validate_preservation_record(record)
+    if record.get("promotion_head_ref") != STANDALONE_PROMOTION_BRIDGE:
+        return "not applicable to a direct dev/next promotion"
+    if record.get("state") not in {"completed", "aborted"}:
+        raise RuntimeError(
+            "Promotion bridge cleanup requires a terminal record"
+        )
+    git = shutil.which("git")
+    if git is None:
+        raise RuntimeError("Promotion bridge cleanup requires git")
+    target = remote or f"https://github.com/{record['repository']}.git"
+    expected_sha = str(record["promotion_head_sha"])
+    full_ref = f"refs/heads/{STANDALONE_PROMOTION_BRIDGE}"
+    observed = subprocess.run(  # noqa: S603
+        [git, "ls-remote", "--exit-code", "--refs", target, full_ref],
+        check=False,
+        capture_output=True,
+        env=git_env,
+        text=True,
+    )
+    if observed.returncode == 2 and not observed.stdout.strip():
+        return f"{STANDALONE_PROMOTION_BRIDGE} is already absent"
+    if observed.returncode:
+        detail = observed.stderr.strip() or observed.stdout.strip()
+        raise RuntimeError(f"Could not inspect promotion bridge: {detail}")
+    expected_line = f"{expected_sha}\t{full_ref}"
+    if observed.stdout.strip() != expected_line:
+        raise RuntimeError(
+            "Promotion bridge ref no longer matches the transaction"
+        )
+    lease = f"--force-with-lease={full_ref}:{expected_sha}"
+    deleted = subprocess.run(  # noqa: S603
+        [git, "push", lease, target, f":{full_ref}"],
+        check=False,
+        capture_output=True,
+        env=git_env,
+        text=True,
+    )
+    if deleted.returncode:
+        detail = deleted.stderr.strip() or deleted.stdout.strip()
+        raise RuntimeError(f"Promotion bridge cleanup was refused: {detail}")
+    return f"deleted {full_ref} at {expected_sha} with {lease}"
+
+
+def cleanup_promotion_bridge(
+    api: API,
+    repo: str,
+    operation_id: str,
+    head_sha: str,
+) -> str:
+    """Authenticate and delete the terminal bridge bound by the ledger."""
+    checkpoint = read_preservation_record(api, repo)
+    if checkpoint is None:
+        raise RuntimeError("Preservation transaction is missing")
+    _ledger_commit, record = checkpoint
+    if (
+        record.get("repository") != repo
+        or record.get("operation_id") != operation_id
+        or record.get("promotion_head_sha") != head_sha
+    ):
+        raise RuntimeError("Preservation ledger belongs to another promotion")
+    if record.get("state") not in {"completed", "aborted"}:
+        raise RuntimeError(
+            "Promotion bridge cleanup requires a terminal record"
+        )
+    gh = shutil.which("gh")
+    if gh is None:
+        raise RuntimeError("Promotion bridge cleanup requires gh")
+    configured = subprocess.run(  # noqa: S603
+        [gh, "auth", "setup-git"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if configured.returncode:
+        detail = configured.stderr.strip() or configured.stdout.strip()
+        raise RuntimeError(f"Could not configure Git authentication: {detail}")
+    return delete_promotion_bridge(record)
+
+
 def finish_restoration(  # noqa: C901
     api: API,
     repo: str,
@@ -1151,7 +1428,10 @@ def finish_restoration(  # noqa: C901
                         action,
                         repo,
                         int(record["pull_request"]),
-                        str(record["head_sha"]),
+                        str(
+                            record.get("promotion_head_sha")
+                            or record["head_sha"]
+                        ),
                         main_sha=main_sha or "",
                         operation_id=str(record["operation_id"]),
                         prepared_commit=prepared_commit or "",
@@ -1201,8 +1481,8 @@ def prepare_dev_next(  # noqa: C901
         raise RuntimeError("Promotion base SHA is invalid")
     if ref_sha(api, repo, "main") != base_sha:
         raise RuntimeError("Promotion base no longer matches current main")
-    if ref_sha(api, repo, "dev/next") != head_sha:
-        raise RuntimeError("dev/next no longer matches the promotion head")
+    promotion_head_ref = str(pull["head"]["ref"])
+    source_sha = promotion_source_sha(api, repo, pull, head_sha)
     settings = repository_settings(api, repo)
     protection = deletion_protection_state(api, repo)
     ledger_protection = ledger_protection_state(api, repo)
@@ -1214,14 +1494,36 @@ def prepare_dev_next(  # noqa: C901
         if protection == ledger_protection == "protected"
         else "temporary-auto-delete"
     )
-    operation_id = preservation_operation(repo, number, base_sha, head_sha)
+    bridge_fields = (
+        {
+            "promotion_head_ref": promotion_head_ref,
+            "promotion_head_sha": head_sha,
+        }
+        if promotion_head_ref == STANDALONE_PROMOTION_BRIDGE
+        else {}
+    )
+    operation_id = preservation_operation(
+        repo,
+        number,
+        base_sha,
+        source_sha,
+        promotion_head_ref if bridge_fields else "",
+        head_sha if bridge_fields else "",
+    )
     checkpoint = read_preservation_record(api, repo)
     if checkpoint is not None:
         ledger_commit, record = checkpoint
         same_operation = record.get("operation_id") == operation_id
         if same_operation:
             require_preservation_identity(
-                record, repo, number, base_sha, head_sha, operation_id
+                record,
+                repo,
+                number,
+                base_sha,
+                source_sha,
+                operation_id,
+                promotion_head_ref=promotion_head_ref,
+                promotion_head_sha=head_sha,
             )
             if record.get("state") not in {"preparing", "prepared"}:
                 raise RuntimeError(
@@ -1246,7 +1548,8 @@ def prepare_dev_next(  # noqa: C901
                 "base_ref": "main",
                 "base_sha": base_sha,
                 "head_ref": "dev/next",
-                "head_sha": head_sha,
+                "head_sha": source_sha,
+                **bridge_fields,
                 "operation_id": operation_id,
                 "mode": mode,
                 "prior_auto_delete": setting,
@@ -1267,7 +1570,8 @@ def prepare_dev_next(  # noqa: C901
             "base_ref": "main",
             "base_sha": base_sha,
             "head_ref": "dev/next",
-            "head_sha": head_sha,
+            "head_sha": source_sha,
+            **bridge_fields,
             "operation_id": operation_id,
             "mode": mode,
             "prior_auto_delete": setting,
@@ -1312,16 +1616,12 @@ def prepare_dev_next(  # noqa: C901
             )
         )
 
-    if (
-        validate_promotion(api, repo, number, head_sha, merged=False)[
-            "base"
-        ].get("sha")
-        != base_sha
-    ):
+    refreshed = validate_promotion(api, repo, number, head_sha, merged=False)
+    if refreshed["base"].get("sha") != base_sha:
         raise RuntimeError("Promotion changed after transaction acquisition")
     if (
         ref_sha(api, repo, "main") != base_sha
-        or ref_sha(api, repo, "dev/next") != head_sha
+        or promotion_source_sha(api, repo, refreshed, head_sha) != source_sha
     ):
         raise RuntimeError(
             "Promotion refs changed after transaction acquisition"
@@ -1358,16 +1658,15 @@ def prepare_dev_next(  # noqa: C901
                 is not False
             ):
                 raise RuntimeError("Automatic branch deletion was not disabled")
-        if (
-            validate_promotion(api, repo, number, head_sha, merged=False)[
-                "base"
-            ].get("sha")
-            != base_sha
-        ):
+        refreshed = validate_promotion(
+            api, repo, number, head_sha, merged=False
+        )
+        if refreshed["base"].get("sha") != base_sha:
             raise RuntimeError("Promotion changed while enabling preservation")
         if (
             ref_sha(api, repo, "main") != base_sha
-            or ref_sha(api, repo, "dev/next") != head_sha
+            or promotion_source_sha(api, repo, refreshed, head_sha)
+            != source_sha
         ):
             raise RuntimeError(
                 "Promotion refs changed while enabling preservation"
@@ -1400,10 +1699,16 @@ def inspect_dev_next(api: API, repo: str, number: int, head_sha: str) -> str:
         raise RuntimeError("Promotion base SHA is invalid")
     if ref_sha(api, repo, "main") != base_sha:
         raise RuntimeError("Promotion base no longer matches current main")
-    if ref_sha(api, repo, "dev/next") != head_sha:
-        raise RuntimeError("dev/next no longer matches the promotion head")
+    promotion_head_ref = str(pull["head"]["ref"])
+    source_sha = promotion_source_sha(api, repo, pull, head_sha)
     ledger_commit, record, authorizations = require_prepared_preservation(
-        api, repo, number, base_sha, head_sha
+        api,
+        repo,
+        number,
+        base_sha,
+        source_sha,
+        promotion_head_ref=promotion_head_ref,
+        promotion_head_sha=head_sha,
     )
     evidence = prepared_preservation_evidence(
         api,
@@ -1437,12 +1742,23 @@ def complete_dev_next(  # noqa: C901
     base_sha = base.get("sha") if isinstance(base, dict) else None
     if not isinstance(base_sha, str):
         raise RuntimeError("Merged promotion base SHA is invalid")
+    promotion_head_ref = str(pull["head"]["ref"])
+    source_sha = promotion_source_sha(
+        api, repo, pull, head_sha, require_live_source=False
+    )
     checkpoint = read_preservation_record(api, repo)
     if checkpoint is None:
         raise RuntimeError("Preservation transaction is missing")
     ledger_commit, record = checkpoint
     require_preservation_identity(
-        record, repo, number, base_sha, head_sha, operation_id
+        record,
+        repo,
+        number,
+        base_sha,
+        source_sha,
+        operation_id,
+        promotion_head_ref=promotion_head_ref,
+        promotion_head_sha=head_sha,
     )
     if record.get("mode") == "ruleset-protected":
         if deletion_protection_state(api, repo) != "protected":
@@ -1467,6 +1783,17 @@ def complete_dev_next(  # noqa: C901
         pull = validate_promotion(
             admin_api, repo, number, head_sha, merged=True
         )
+        if (
+            promotion_source_sha(
+                admin_api,
+                repo,
+                pull,
+                head_sha,
+                require_live_source=False,
+            )
+            != source_sha
+        ):
+            raise RuntimeError("Promotion source changed before restoration")
         api = admin_api
     if record.get("state") == "completed":
         if (
@@ -1485,9 +1812,11 @@ def complete_dev_next(  # noqa: C901
                 repo,
                 number,
                 base_sha,
-                head_sha,
+                source_sha,
                 operation_id,
                 prepared_commit,
+                str(record.get("promotion_head_ref") or ""),
+                str(record.get("promotion_head_sha") or ""),
             )
         return canonical_json(preservation_evidence(ledger_commit, record))
     if record.get("state") not in {"prepared", "restoring-complete"}:
@@ -1508,22 +1837,24 @@ def complete_dev_next(  # noqa: C901
             repo,
             number,
             base_sha,
-            head_sha,
+            source_sha,
             operation_id,
             prepared_commit,
+            str(record.get("promotion_head_ref") or ""),
+            str(record.get("promotion_head_sha") or ""),
         )
     if pull.get("merge_commit_sha") != main_sha:
         raise RuntimeError("Promotion merge commit does not match main")
     if ref_sha(api, repo, "main") != main_sha:
         raise RuntimeError("Current main does not match the promotion merge")
     live_dev_next = ref_sha(api, repo, "dev/next")
-    if live_dev_next != head_sha and (
-        not includes_main(compare(api, repo, head_sha, live_dev_next))
+    if live_dev_next != source_sha and (
+        not includes_main(compare(api, repo, source_sha, live_dev_next))
         or not includes_main(compare(api, repo, main_sha, live_dev_next))
     ):
         raise RuntimeError("dev/next no longer preserves the promoted lineage")
     head_status, head_payload = api.request(
-        "GET", f"repos/{repo}/git/commits/{head_sha}"
+        "GET", f"repos/{repo}/git/commits/{source_sha}"
     )
     main_status, main_payload = api.request(
         "GET", f"repos/{repo}/git/commits/{main_sha}"
@@ -1586,18 +1917,29 @@ def abort_dev_next(  # noqa: C901
         or not isinstance(base, dict)
         or base.get("ref") != "main"
         or not isinstance(head, dict)
-        or head.get("ref") != "dev/next"
+        or head.get("ref") not in {"dev/next", STANDALONE_PROMOTION_BRIDGE}
         or head.get("sha") != head_sha
         or not isinstance(head_repo, dict)
         or head_repo.get("full_name") != repo
     ):
         raise RuntimeError("Only an exact closed, unmerged promotion can abort")
+    promotion_head_ref = str(head["ref"])
+    source_sha = promotion_source_sha(
+        api, repo, pull, head_sha, require_live_source=False
+    )
     checkpoint = read_preservation_record(api, repo)
     if checkpoint is None:
         raise RuntimeError("Preservation transaction is missing")
     ledger_commit, record = checkpoint
     require_preservation_identity(
-        record, repo, number, base_sha, head_sha, operation_id
+        record,
+        repo,
+        number,
+        base_sha,
+        source_sha,
+        operation_id,
+        promotion_head_ref=promotion_head_ref,
+        promotion_head_sha=head_sha,
     )
     if record.get("mode") == "ruleset-protected":
         if deletion_protection_state(api, repo) != "protected":
@@ -1620,6 +1962,17 @@ def abort_dev_next(  # noqa: C901
         pull = pull_request(admin_api, repo, number)
         if pull.get("state") != "closed" or pull.get("merged") is not False:
             raise RuntimeError("Live promotion changed before abort")
+        if (
+            promotion_source_sha(
+                admin_api,
+                repo,
+                pull,
+                head_sha,
+                require_live_source=False,
+            )
+            != source_sha
+        ):
+            raise RuntimeError("Promotion source changed before abort")
         api = admin_api
     prepared_commit = (
         ledger_commit
@@ -1636,10 +1989,17 @@ def abort_dev_next(  # noqa: C901
             repo,
             number,
             base_sha,
-            head_sha,
+            source_sha,
             str(record["operation_id"]),
             prepared_commit,
+            str(record.get("promotion_head_ref") or ""),
+            str(record.get("promotion_head_sha") or ""),
         )
+    live_dev_next = ref_sha(api, repo, "dev/next")
+    if live_dev_next != source_sha and not includes_main(
+        compare(api, repo, source_sha, live_dev_next)
+    ):
+        raise RuntimeError("dev/next no longer preserves the promotion source")
     if record.get("state") == "aborted":
         if (
             record.get("mode") == "temporary-auto-delete"
@@ -1742,10 +2102,21 @@ def merge_group_gate(
         raise RuntimeError("Merge queue candidate does not contain its base")
     if not includes_main(compare(api, repo, head_sha, queue_sha)):
         raise RuntimeError("Merge queue candidate does not contain its head")
-    if head_ref != "dev/next":
+    if head_ref not in {"dev/next", STANDALONE_PROMOTION_BRIDGE}:
         return f"exact queue candidate for {head_ref}"
+    source_sha = (
+        head_sha
+        if head_ref == "dev/next"
+        else promotion_source_sha(api, repo, candidate, head_sha)
+    )
     ledger_commit, record, _authorizations = require_prepared_preservation(
-        api, repo, number, base_sha, head_sha
+        api,
+        repo,
+        number,
+        base_sha,
+        source_sha,
+        promotion_head_ref=head_ref,
+        promotion_head_sha=head_sha,
     )
     return (
         f"{record['mode']}; transaction "
@@ -2059,6 +2430,7 @@ def main() -> None:  # noqa: C901
             "inspect-dev-next",
             "complete-dev-next",
             "abort-dev-next",
+            "cleanup-promotion-bridge",
         ),
     )
     parser.add_argument("--repo", required=True)
@@ -2153,6 +2525,19 @@ def main() -> None:  # noqa: C901
                     args.operation_id or None,
                     hosted=args.hosted,
                     admin_api=admin_api,
+                )
+            )
+        elif args.command == "cleanup-promotion-bridge":
+            if not args.operation_id or not args.head_sha:
+                raise RuntimeError(
+                    "cleanup-promotion-bridge requires the operation and head"
+                )
+            print(  # noqa: T201
+                cleanup_promotion_bridge(
+                    api,
+                    args.repo,
+                    args.operation_id,
+                    args.head_sha,
                 )
             )
         else:

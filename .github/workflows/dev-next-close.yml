@@ -14,7 +14,8 @@ jobs:
     name: request trusted preservation abort
     if: >-
       ${{ github.event.pull_request.merged == false &&
-      github.event.pull_request.head.ref == 'dev/next' &&
+      (github.event.pull_request.head.ref == 'dev/next' ||
+      github.event.pull_request.head.ref == 'promote/next') &&
       github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 2

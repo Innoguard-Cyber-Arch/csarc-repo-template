@@ -52,7 +52,8 @@ jobs:
           matches="$(
             jq -c --arg repo "$GITHUB_REPOSITORY" '[.[] | select(
               .state == "closed" and .merged_at == null and
-              .base.ref == "main" and .head.ref == "dev/next" and
+              .base.ref == "main" and
+              (.head.ref == "dev/next" or .head.ref == "promote/next") and
               .head.repo.full_name == $repo
             )]' <<<"$pull_requests"
           )"
@@ -62,14 +63,15 @@ jobs:
             exit 0
           fi
           [[ "$count" == 1 ]] || {
-            echo "Close signal has no unique dev/next promotion." >&2
+            echo "Close signal has no unique preservation promotion." >&2
             exit 1
           }
           pr_number="$(jq -r '.[0].number' <<<"$matches")"
           pull_request="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr_number")"
           jq -e --arg repo "$GITHUB_REPOSITORY" '
             .state == "closed" and .merged == false and
-            .base.ref == "main" and .head.ref == "dev/next" and
+            .base.ref == "main" and
+            (.head.ref == "dev/next" or .head.ref == "promote/next") and
             .head.repo.full_name == $repo
           ' <<<"$pull_request" >/dev/null
           echo "relevant=true" >> "$GITHUB_OUTPUT"
