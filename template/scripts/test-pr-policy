@@ -124,6 +124,94 @@ fail|delivery sync mismatch|delivery|chore(sync): merge main into milestone|enha
 fail|unknown branch strategy|staging|feat(api): add report|enhancement|staging|feat/42-report|Closes #42|open|-
 CASES
 
+draft_body=$'Refs #42\n\n- Scope: Add report output\n- Completed verification: Unit tests pass\n- Pending verification: Full suite before Ready\n- Known risks: None\n- Dependencies / non-parallel work: None\n\n- [x] Run targeted tests\n- [ ] Run full verification'
+
+case_count=$((case_count + 1))
+PR_DRAFT="true" \
+PR_BRANCH_STRATEGY="main" \
+PR_TITLE="feat(api): add report" \
+PR_LABELS="enhancement" \
+PR_BASE="main" \
+PR_HEAD="feat/42-report" \
+PR_BODY="$draft_body" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_BODY=$'- [ ] Verify live behavior' \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_DRAFT="true" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY=$'Refs #42\n\n- Scope: Add report output' \
+  PR_ISSUE_STATE="open" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a Draft without ownership details."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_DRAFT="true" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="${draft_body/Refs #42/Closes #42}" \
+  PR_ISSUE_STATE="open" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted an incomplete Draft that uses a closing keyword."
+  exit 1
+fi
+
+complete_draft_body=$'Closes #42\n\n- Scope: Add report output\n- Completed verification: Full suite passes\n- Pending verification: None\n- Known risks: None\n- Dependencies / non-parallel work: None\n\n- [x] Run targeted tests\n- [x] Run full verification'
+
+case_count=$((case_count + 1))
+if PR_DRAFT="true" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="${complete_draft_body}\n\nCloses #99" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_BODY="All acceptance tasks are complete." \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a secondary closing reference on a complete Draft."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_DRAFT="true" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="$complete_draft_body" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_BODY=$'- [ ] Verify live behavior' \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a closing Draft with unfinished Issue work."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_DRAFT="false" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="Refs #42" \
+  PR_ISSUE_STATE="open" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a Ready pull request without a closing keyword."
+  exit 1
+fi
+
 case_count=$((case_count + 1))
 PR_BRANCH_STRATEGY="delivery" \
 PR_TITLE="feat(api): add report" \

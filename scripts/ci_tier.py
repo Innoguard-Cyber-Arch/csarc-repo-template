@@ -15,6 +15,7 @@ class Plan:
 
     tier: str
     reason: str
+    review_state: str
     scopes: tuple[str, ...]
     run_governance: bool
     run_osv: bool
@@ -65,6 +66,7 @@ def classify(
     labels: set[str],
     changed_files: list[str],
     *,
+    draft: bool = False,
     force_full: bool = False,
 ) -> Plan:
     """Select a safe tier from the event, delivery stage, and changed paths."""
@@ -75,8 +77,18 @@ def classify(
         and (head.startswith("dev/") or "promotion" in labels)
     )
     hotfix = event == "pull_request" and base == "main" and "hotfix" in labels
+    review_state = (
+        ("draft" if event == "pull_request" and draft else "ready")
+        if event == "pull_request"
+        else "not-applicable"
+    )
     if force_full:
         tier, reason = "full", "manual full verification"
+    elif review_state == "draft":
+        tier = "docs" if scopes == ("docs",) else "fast"
+        reason = (
+            "draft work in progress; full verification deferred until ready"
+        )
     elif promotion:
         tier, reason = "full", "delivery promotion"
     elif hotfix:
@@ -97,6 +109,7 @@ def classify(
     return Plan(
         tier=tier,
         reason=reason,
+        review_state=review_state,
         scopes=scopes,
         run_governance=full or "governance" in scopes,
         run_osv=full or "dependency" in scopes,
@@ -118,6 +131,7 @@ def write_outputs(path: Path, plan: Plan) -> None:
     values = {
         "tier": plan.tier,
         "reason": plan.reason,
+        "review_state": plan.review_state,
         "scopes": ",".join(plan.scopes),
         "run_governance": str(plan.run_governance).lower(),
         "run_osv": str(plan.run_osv).lower(),
@@ -135,6 +149,7 @@ def render_summary(plan: Plan) -> str:
         "## CI routing\n\n"
         f"- Tier: `{plan.tier}`\n"
         f"- Reason: {plan.reason}\n"
+        f"- Review state: `{plan.review_state}`\n"
         f"- Scopes: `{scopes}`\n"
         f"- Remote governance: `{plan.run_governance}`\n"
         f"- OSV: `{plan.run_osv}`\n"
@@ -153,6 +168,7 @@ def main() -> None:
     parser.add_argument("--output-json", type=Path, required=True)
     parser.add_argument("--github-output", type=Path)
     parser.add_argument("--summary", type=Path)
+    parser.add_argument("--draft", action="store_true")
     parser.add_argument("--force-full", action="store_true")
     args = parser.parse_args()
     plan = classify(
@@ -161,6 +177,7 @@ def main() -> None:
         args.head,
         {label for label in args.labels.split(",") if label},
         read_paths(args.files_from),
+        draft=args.draft,
         force_full=args.force_full,
     )
     args.output_json.write_text(

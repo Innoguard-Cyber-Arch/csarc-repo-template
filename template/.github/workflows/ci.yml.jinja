@@ -10,6 +10,7 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
@@ -32,6 +33,7 @@ jobs:
     outputs:
       tier: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
       reason: {% raw %}${{ steps.plan.outputs.reason }}{% endraw %}
+      review_state: {% raw %}${{ steps.plan.outputs.review_state }}{% endraw %}
       scopes: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
       run_governance: {% raw %}${{ steps.plan.outputs.run_governance }}{% endraw %}
       run_osv: {% raw %}${{ steps.plan.outputs.run_osv }}{% endraw %}
@@ -53,6 +55,7 @@ jobs:
           LABELS: {% raw %}${{ join(github.event.pull_request.labels.*.name, ',') }}{% endraw %}
           PR_BASE: {% raw %}${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || '' }}{% endraw %}
           PR_HEAD: {% raw %}${{ github.event.pull_request.head.ref || github.event.merge_group.head_ref || '' }}{% endraw %}
+          PR_DRAFT: {% raw %}${{ github.event.pull_request.draft || false }}{% endraw %}
         run: |
           files="$RUNNER_TEMP/changed-files"
           if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]]; then
@@ -63,6 +66,9 @@ jobs:
           args=()
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             args+=(--force-full)
+          fi
+          if [[ "$EVENT_NAME" == "pull_request" && "$PR_DRAFT" == "true" ]]; then
+            args+=(--draft)
           fi
           python3 scripts/ci_tier.py \
             --event "$EVENT_NAME" \
@@ -274,7 +280,11 @@ jobs:
           GOVERNANCE_RESULT: {% raw %}${{ needs.governance.result }}{% endraw %}
           OSV_RESULT: {% raw %}${{ needs.osv.result }}{% endraw %}
           ZIZMOR_RESULT: {% raw %}${{ needs.zizmor.result }}{% endraw %}
+          REVIEW_STATE: {% raw %}${{ needs.fast.outputs.review_state }}{% endraw %}
         run: |
+          if [[ "$REVIEW_STATE" == "draft" ]]; then
+            echo "::notice::Draft WIP targeted checks passed; full verification remains pending until Ready."
+          fi
           test "$FAST_RESULT" = success
           for result in "$FULL_RESULT" "$GOVERNANCE_RESULT" "$OSV_RESULT" "$ZIZMOR_RESULT"; do
             [[ "$result" == success || "$result" == skipped ]]
