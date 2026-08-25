@@ -779,6 +779,12 @@ def preflight_binding(
 ) -> dict[str, object]:
     """Return every security-relevant field from preflight evidence."""
     archive = evidence.get("candidate_archive") or {}
+    canary = evidence.get("canary") or {}
+    stable_canary = {
+        key: canary[key]
+        for key in ("state", "reason", "environment")
+        if key in canary
+    }
     binding: dict[str, object] = {
         "schema_version": evidence.get("schema_version"),
         "repository": evidence.get("repository"),
@@ -798,7 +804,7 @@ def preflight_binding(
         "archive_sha256": archive.get("sha256"),
         "included_issues": evidence.get("included_issues"),
         "release": evidence.get("release"),
-        "canary": evidence.get("canary"),
+        "canary": stable_canary,
     }
     if include_preservation:
         binding["dev_next_preservation"] = evidence.get("dev_next_preservation")

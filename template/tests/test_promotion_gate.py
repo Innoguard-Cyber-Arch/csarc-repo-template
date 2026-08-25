@@ -1958,6 +1958,9 @@ def test_authorization_statement_binds_full_preflight() -> None:
     assert binding["canary"] == evidence["canary"]
     assert binding["dev_next_preservation"] == preservation_evidence()
 
+    evidence["canary"]["result"] = "artifact-only"
+    assert fallback_statement("authorization", evidence, ["run"]) == statement
+
 
 def test_repository_variables_reads_every_page(
     monkeypatch: pytest.MonkeyPatch,
