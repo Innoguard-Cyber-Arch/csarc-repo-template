@@ -6,10 +6,17 @@ import base64
 import json
 import re
 import runpy
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
+
+_GIT = shutil.which("git")
+if _GIT is None:
+    raise RuntimeError("Git is required for delivery sync tests")
+GIT: str = _GIT
 
 MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "delivery_sync.py")
@@ -20,6 +27,7 @@ create_sync_pr = MODULE["create_sync_pr"]
 gate = MODULE["gate"]
 includes_main = MODULE["includes_main"]
 label_sync_pr = MODULE["label_sync_pr"]
+trusted_policy_worktree = MODULE["trusted_policy_worktree"]
 manual_commands = MODULE["manual_commands"]
 complete_dev_next = MODULE["complete_dev_next"]
 abort_dev_next = MODULE["abort_dev_next"]
@@ -1220,12 +1228,12 @@ def test_new_sync_pr_labels_only_through_the_lifecycle_lease(
             ),
         ]
     )
-    labelled: list[tuple[str, int, str, str, str]] = []
+    labelled: list[tuple[str, int, str, str, str, str]] = []
     monkeypatch.setitem(
         create_sync_pr.__globals__,
         "label_sync_pr",
-        lambda repo, number, sha, base_ref, base_sha: labelled.append(
-            (repo, number, sha, base_ref, base_sha)
+        lambda repo, number, sha, head_ref, base_ref, base_sha: labelled.append(
+            (repo, number, sha, head_ref, base_ref, base_sha)
         ),
     )
     assert (
@@ -1234,7 +1242,16 @@ def test_new_sync_pr_labels_only_through_the_lifecycle_lease(
         )
         == "https://github.com/acme/repo/pull/17"
     )
-    assert labelled == [("acme/repo", 17, "a" * 40, "dev/m7-ci", "delivery")]
+    assert labelled == [
+        (
+            "acme/repo",
+            17,
+            "a" * 40,
+            "sync/main-to-m7-ci-abcdef012345",
+            "dev/m7-ci",
+            "delivery",
+        )
+    ]
     assert not any("/labels" in path for _, path, _ in api.calls)
 
 
@@ -1252,10 +1269,15 @@ def test_lifecycle_label_always_releases_its_exact_evidence(
         def __exit__(self, *_args: object) -> None:
             return None
 
-    bases: list[tuple[str, str]] = []
+    bases: list[tuple[str, str, str, str]] = []
 
-    def policy_worktree(base_ref: str, base_sha: str) -> TrustedCheckout:
-        bases.append((base_ref, base_sha))
+    def policy_worktree(
+        base_ref: str,
+        base_sha: str,
+        head_ref: str,
+        head_sha: str,
+    ) -> TrustedCheckout:
+        bases.append((base_ref, base_sha, head_ref, head_sha))
         return TrustedCheckout()
 
     def command(arguments: list[str], *, cwd: Path) -> None:
@@ -1274,16 +1296,84 @@ def test_lifecycle_label_always_releases_its_exact_evidence(
             "acme/repo",
             17,
             "a" * 40,
+            "sync/main-to-m7-ci-abcdef0",
             "dev/m7-ci",
             "b" * 40,
         )
-    assert bases == [("dev/m7-ci", "b" * 40)]
+    assert bases == [
+        (
+            "dev/m7-ci",
+            "b" * 40,
+            "sync/main-to-m7-ci-abcdef0",
+            "a" * 40,
+        )
+    ]
     assert [arguments[0] for arguments, _cwd in commands] == [
         "acquire",
         "edit",
         "release",
     ]
     assert all(cwd == checkout for _arguments, cwd in commands)
+
+
+def test_policy_worktree_fetches_the_exact_remote_base_and_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An API-created sync head is available to the trusted writer checkout."""
+
+    def git(cwd: Path, *arguments: str) -> str:
+        result = subprocess.run(  # noqa: S603
+            [GIT, *arguments],
+            cwd=cwd,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        return result.stdout.strip()
+
+    remote = tmp_path / "remote.git"
+    seed = tmp_path / "seed"
+    runner = tmp_path / "runner"
+    git(tmp_path, "init", "--bare", str(remote))
+    git(tmp_path, "init", str(seed))
+    git(seed, "config", "user.name", "Sync Test")
+    git(seed, "config", "user.email", "sync@example.invalid")
+    policy = seed / "scripts/pr_lifecycle.py"
+    policy.parent.mkdir()
+    policy.write_text("# trusted policy\n", encoding="utf-8")
+    git(seed, "add", ".")
+    git(seed, "commit", "-m", "test: create delivery base")
+    base_sha = git(seed, "rev-parse", "HEAD")
+    (seed / "sync.txt").write_text("main merged\n", encoding="utf-8")
+    git(seed, "add", ".")
+    git(seed, "commit", "-m", "test: create sync head")
+    head_sha = git(seed, "rev-parse", "HEAD")
+    head_ref = "sync/main-to-m7-ci-abcdef0"
+    git(seed, "remote", "add", "origin", str(remote))
+    git(seed, "push", "origin", f"{base_sha}:refs/heads/dev/m7-ci")
+    git(seed, "push", "origin", f"{head_sha}:refs/heads/{head_ref}")
+    git(remote, "symbolic-ref", "HEAD", "refs/heads/dev/m7-ci")
+    git(tmp_path, "clone", str(remote), str(runner))
+    monkeypatch.chdir(runner)
+
+    with trusted_policy_worktree(
+        "dev/m7-ci", base_sha, head_ref, head_sha
+    ) as checkout:
+        assert git(checkout, "rev-parse", "HEAD") == base_sha
+        git(checkout, "cat-file", "-e", f"{head_sha}^{{tree}}")
+        assert git(checkout, "status", "--porcelain=v1") == ""
+        detached = subprocess.run(  # noqa: S603
+            [GIT, "symbolic-ref", "-q", "HEAD"],
+            cwd=checkout,
+            check=False,
+        )
+        assert detached.returncode == 1
+
+    with (
+        pytest.raises(RuntimeError, match="Sync head changed"),
+        trusted_policy_worktree("dev/m7-ci", base_sha, head_ref, "f" * 40),
+    ):
+        pass
 
 
 def test_reconcile_fans_out_with_capability_fallback() -> None:

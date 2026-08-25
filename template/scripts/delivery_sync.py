@@ -1730,11 +1730,24 @@ def git_command(arguments: list[str]) -> str:
 
 
 @contextmanager
-def trusted_policy_worktree(base_ref: str, base_sha: str) -> Iterator[Path]:
+def trusted_policy_worktree(
+    base_ref: str,
+    base_sha: str,
+    head_ref: str,
+    head_sha: str,
+) -> Iterator[Path]:
     """Yield a clean detached checkout of one exact destination base."""
+    if (
+        FULL_SHA.fullmatch(base_sha) is None
+        or FULL_SHA.fullmatch(head_sha) is None
+    ):
+        raise RuntimeError("Lifecycle refs require full commit SHAs")
     git_command(["fetch", "--no-tags", "origin", base_ref])
     if git_command(["rev-parse", "FETCH_HEAD"]) != base_sha:
         raise RuntimeError("Delivery base changed before lifecycle mutation")
+    git_command(["fetch", "--no-tags", "origin", head_ref])
+    if git_command(["rev-parse", "FETCH_HEAD"]) != head_sha:
+        raise RuntimeError("Sync head changed before lifecycle mutation")
     with tempfile.TemporaryDirectory(prefix="csarc-policy-base-") as directory:
         checkout = Path(directory) / "worktree"
         git_command(["worktree", "add", "--detach", str(checkout), base_sha])
@@ -1748,6 +1761,7 @@ def label_sync_pr(
     repo: str,
     number: int,
     head_sha: str,
+    head_ref: str,
     base_ref: str,
     base_sha: str,
 ) -> None:
@@ -1761,7 +1775,12 @@ def label_sync_pr(
         tempfile.TemporaryDirectory(
             prefix="csarc-delivery-lease-"
         ) as directory,
-        trusted_policy_worktree(base_ref, base_sha) as policy_checkout,
+        trusted_policy_worktree(
+            base_ref,
+            base_sha,
+            head_ref,
+            head_sha,
+        ) as policy_checkout,
     ):
         evidence = Path(directory) / "lease.json"
         common = [
@@ -1908,6 +1927,7 @@ def create_sync_pr(
         repo,
         number,
         head_sha,
+        sync_branch,
         delivery_branch,
         delivery_sha,
     )
