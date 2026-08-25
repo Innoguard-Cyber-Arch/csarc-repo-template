@@ -57,6 +57,7 @@
 | 單檔交付物 | `docs/index.html` | 由 `site/` 重建的 portable presentation；內嵌樣式、程式與媒體，不直接編輯 |
 | 網站來源 | `site/` | 分開維護 HTML 內容、特殊視覺、互動與原始圖片；詳見 `site/README.md` |
 | 操作契約 | `docs/agent-install.md`、`docs/milestone-description.md` | 已發布且可能由固定版本 URL 讀取的介面；路徑保持穩定 |
+| 驗證契約 | [`docs/behavior-verification-contract.md`](behavior-verification-contract.md) | 行為／風險對應最窄 regression 與必要 E2E／live 證據 |
 | Runbook | `docs/live-integration.md`、`docs/artifact-consumption.md` | 維護者執行線上驗證或排查交付鏈時使用 |
 | 實證 | `docs/pilot-adoption.md` | 真實 consuming repository 的採用、更新與限制證據 |
 
