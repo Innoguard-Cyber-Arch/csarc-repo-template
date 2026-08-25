@@ -1015,34 +1015,19 @@ test "$(grep -c 'scripts/pr_lifecycle.py edit' \
   .github/workflows/python-version-policy.yml)" -eq 1
 test "$(grep -c 'scripts/pr_lifecycle.py release' \
   .github/workflows/python-version-policy.yml)" -eq 1
-if grep -Eq 'gh pr (ready|edit|merge)' \
-  .github/workflows/python-version-policy.yml; then
-  echo "Version automation must use the PR lifecycle lease tool."
+grep -q 'steps.app-token.outputs.app-slug' \
+  .github/workflows/python-version-policy.yml
+test "$(grep -c -- '--actor "\$lease_actor"' \
+  .github/workflows/python-version-policy.yml)" -eq 3
+if grep -q 'api", "installation' scripts/pr_lifecycle.py; then
+  echo "GitHub App identity must come from trusted action output."
   exit 1
 fi
-uv run --no-project python - <<'PY'
-import re
-from pathlib import Path
-
-paths = [
-    *Path(".github/workflows").glob("*.yml"),
-    *Path("template/.github/workflows").glob("*.yml"),
-    Path("scripts/delivery_sync.py"),
-    Path("template/scripts/delivery_sync.py"),
-]
-for path in paths:
-    text = path.read_text(encoding="utf-8")
-    if re.search(r"gh\s+pr\s+create\b.*?--label\b", text, re.DOTALL):
-        raise SystemExit(f"PR creation must not combine an unleased label write: {path}")
-    if "googleapis/release-please-action@" in text:
-        raise SystemExit(f"Opaque release PR writers must fail closed: {path}")
-    if re.search(r"issues/[^\n]+/labels", text):
-        raise SystemExit(f"Direct PR label REST write bypasses the lifecycle lease: {path}")
-PY
+uv run --no-project python scripts/pr_lifecycle.py scan-writers --root .
 grep -q 'trap release_lease EXIT' .github/workflows/python-version-policy.yml
 grep -q 'pr_lifecycle.py edit' scripts/delivery_sync.py
 grep -q 'gh auth setup-git' .github/workflows/delivery-sync.yml
-if grep -Eq -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
+if grep -Eq -- '--admin|CSARC_VERSION_BOT_APP_ID' \
   .github/workflows/python-version-policy.yml \
   scripts/apply-repository-settings.sh \
   template/scripts/apply-repository-settings.sh; then
@@ -1678,11 +1663,6 @@ grep -q 'release pull request (human-only)' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'cannot atomically bind its pre-PR Draft' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-if grep -q 'googleapis/release-please-action@' \
-  "$fixture_root/default-project/.github/workflows/release-please.yml"; then
-  echo "Opaque release PR writers must fail closed until they can bind a lifecycle lease."
-  exit 1
-fi
 grep -q '^      release_created: \${{ steps.guard.outputs.release_created }}$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q '^      tag_name: \${{ steps.guard.outputs.tag_name }}$' \

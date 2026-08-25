@@ -24,6 +24,7 @@ MAINTAINER_ASSOCIATIONS = {"MEMBER", "OWNER"}
 SHA = re.compile(r"[0-9a-f]{40}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 OWNER = re.compile(r"[A-Za-z0-9._/@:-]{1,200}")
+ACTOR = re.compile(r"[A-Za-z0-9_.-]+(?:\[bot\])?")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 UNCHECKED = re.compile(r"(?m)^\s*[-*+]\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(r"(?:Closes|Fixes|Resolves)\s+#(\d+)(?:\D|$)", re.I)
@@ -101,24 +102,23 @@ class GitHub:
         """Read one REST resource."""
         return json.loads(run(["gh", "api", f"repos/{repo}/{path}"]))
 
-    def viewer(self) -> str:
-        """Return the authenticated user or GitHub App actor."""
+    def viewer(self, explicit_actor: str = "") -> str:
+        """Return a verified user, or an explicitly supplied App actor."""
+        if explicit_actor:
+            if ACTOR.fullmatch(explicit_actor) is None:
+                raise RuntimeError("Explicit GitHub actor is invalid")
+            return explicit_actor
         try:
             payload = json.loads(run(["gh", "api", "user"]))
             login = payload.get("login") if isinstance(payload, dict) else None
             if isinstance(login, str) and login:
                 return login
-        except RuntimeError:
-            pass
-        installation = json.loads(run(["gh", "api", "installation"]))
-        slug = (
-            installation.get("app_slug")
-            if isinstance(installation, dict)
-            else None
-        )
-        if not isinstance(slug, str) or not slug:
-            raise RuntimeError("Authenticated GitHub actor is unavailable")
-        return f"{slug}[bot]"
+        except RuntimeError as error:
+            raise RuntimeError(
+                "Authenticated GitHub actor is unavailable; GitHub App "
+                "callers must pass --actor from trusted action output"
+            ) from error
+        raise RuntimeError("Authenticated GitHub actor is unavailable")
 
     def pages(self, repo: str, path: str) -> list[dict[str, Any]]:
         """Read and flatten every page of a REST collection."""
@@ -259,13 +259,20 @@ def pr_ref(pr_number: int) -> str:
     return f"refs/heads/csarc/leases/pr-{pr_number}"
 
 
+def base_lane_ref(base_ref: str) -> str:
+    """Return one collision-resistant lease ref for a destination branch."""
+    digest = hashlib.sha256(base_ref.encode()).hexdigest()
+    return f"refs/heads/csarc/leases/base-{digest}"
+
+
 def lease_refs(pull: dict[str, Any], default_branch: str) -> list[str]:
-    """Lock the PR and the shared promotion lane when it targets default."""
-    refs = [pr_ref(int(pull["number"]))]
+    """Lock the PR and its shared destination lane."""
+    del default_branch
     base = pull.get("base") or {}
-    if base.get("ref") == default_branch:
-        refs.append("refs/heads/csarc/leases/promotion")
-    return refs
+    base_ref = base.get("ref")
+    if not isinstance(base_ref, str) or not base_ref:
+        raise RuntimeError("Pull request base branch is unavailable")
+    return [pr_ref(int(pull["number"])), base_lane_ref(base_ref)]
 
 
 def live_pull(
@@ -379,7 +386,7 @@ def read_lease(path: Path) -> dict[str, Any]:
     if (
         REPOSITORY.fullmatch(payload["repository"]) is None
         or OWNER.fullmatch(payload["owner"]) is None
-        or not payload["actor"]
+        or ACTOR.fullmatch(payload["actor"]) is None
         or SHA256.fullmatch(payload["capability"]) is None
         or SHA256.fullmatch(payload["capability_digest"]) is None
         or not payload["base_ref"]
@@ -410,12 +417,12 @@ def read_lease(path: Path) -> dict[str, Any]:
 
 
 def validate_refs(lease: dict[str, Any]) -> None:
-    """Limit evidence to the PR ref and optional promotion-lane ref."""
+    """Limit evidence to the PR ref and deterministic destination lane."""
     refs = lease.get("refs")
-    required = pr_ref(int(lease["pull_request"]))
-    expected = [required]
-    if lease.get("base_ref") == lease.get("default_branch"):
-        expected.append("refs/heads/csarc/leases/promotion")
+    expected = [
+        pr_ref(int(lease["pull_request"])),
+        base_lane_ref(str(lease["base_ref"])),
+    ]
     if (
         not isinstance(refs, list)
         or not all(isinstance(ref, str) for ref in refs)
@@ -442,6 +449,24 @@ def audit_comment_id(lease: dict[str, Any]) -> str:
 def validate_audit_url(lease: dict[str, Any]) -> None:
     """Reject evidence whose audit URL is not bound to its pull request."""
     audit_comment_id(lease)
+
+
+def validate_audit_comment(lease: dict[str, Any], comment: object) -> None:
+    """Bind an audit response to the exact PR, actor, and public evidence."""
+    user = comment.get("user") or {} if isinstance(comment, dict) else {}
+    expected_type = "Bot" if str(lease["actor"]).endswith("[bot]") else "User"
+    if (
+        not isinstance(comment, dict)
+        or comment.get("html_url") != lease["audit_url"]
+        or comment.get("issue_url")
+        != "https://api.github.com/repos/"
+        f"{lease['repository']}/issues/{lease['pull_request']}"
+        or comment.get("body") != audit_message(lease)
+        or str(user.get("login", "")).casefold()
+        != str(lease["actor"]).casefold()
+        or user.get("type") != expected_type
+    ):
+        raise RuntimeError("Remote lease audit comment is invalid")
 
 
 def lease_core(lease: dict[str, Any]) -> dict[str, object]:
@@ -501,7 +526,9 @@ def require_lease(
         or lease["base_sha"] != base.get("sha")
         or lease["refs"] != lease_refs(pull, lease["default_branch"])
     ):
-        raise RuntimeError("Pull request base or promotion lease scope drifted")
+        raise RuntimeError(
+            "Pull request base or destination lease scope drifted"
+        )
     if branch_sha(github, repo, lease["base_ref"]) != lease["base_sha"]:
         raise RuntimeError("Pull request destination branch advanced")
 
@@ -539,25 +566,16 @@ def require_committed_lease(github: GitHub, lease: dict[str, Any]) -> None:
         )
     comment_id = audit_comment_id(lease)
     comment = github.get(repo, f"issues/comments/{comment_id}")
-    user = comment.get("user") or {} if isinstance(comment, dict) else {}
-    if (
-        not isinstance(comment, dict)
-        or comment.get("html_url") != lease["audit_url"]
-        or not str(comment.get("issue_url", "")).endswith(
-            f"/issues/{lease['pull_request']}"
-        )
-        or comment.get("body") != audit_message(lease)
-        or str(user.get("login", "")).casefold()
-        != str(lease["actor"]).casefold()
-    ):
-        raise RuntimeError("Remote lease audit comment is invalid")
+    validate_audit_comment(lease, comment)
 
 
-def require_caller(lease: dict[str, Any], owner: str, github: GitHub) -> None:
+def require_caller(
+    lease: dict[str, Any], owner: str, actor: str, github: GitHub
+) -> None:
     """Require the task owner and actor that acquired the lease."""
     if lease["owner"] != owner:
         raise RuntimeError("Task owner does not hold this lifecycle lease")
-    if str(lease["actor"]).casefold() != github.viewer().casefold():
+    if str(lease["actor"]).casefold() != github.viewer(actor).casefold():
         raise RuntimeError(
             "Authenticated GitHub actor changed after lease acquisition"
         )
@@ -572,6 +590,20 @@ def release_refs(lease: dict[str, Any]) -> None:
     command.extend(f"--force-with-lease={ref}:{commit}" for ref in refs)
     command.append("origin")
     command.extend(f":{ref}" for ref in refs)
+    run(command)
+
+
+def confirm_refs(lease: dict[str, Any]) -> None:
+    """CAS every lease ref immediately before the merge mutation."""
+    validate_refs(lease)
+    if parse_time(lease["expires_at"], "Lease") <= datetime.now(UTC):
+        raise RuntimeError("Lease expired before the merge mutation")
+    commit = lease["lease_commit"]
+    refs = lease["refs"]
+    command = ["git", "push", "--atomic", "--porcelain"]
+    command.extend(f"--force-with-lease={ref}:{commit}" for ref in refs)
+    command.append("origin")
+    command.extend(f"{commit}:{ref}" for ref in refs)
     run(command)
 
 
@@ -614,8 +646,7 @@ def expired_remote_lease(
         or not isinstance(core.get("pull_request"), int)
         or int(core["pull_request"]) < 1
         or OWNER.fullmatch(str(core.get("owner", ""))) is None
-        or not isinstance(core.get("actor"), str)
-        or not core["actor"]
+        or ACTOR.fullmatch(str(core.get("actor", ""))) is None
         or not isinstance(core.get("refs"), list)
         or held_ref not in core["refs"]
         or not isinstance(core.get("reclaimed_commits"), list)
@@ -657,7 +688,7 @@ def expired_remote_lease(
 
 
 def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
-    """Atomically acquire the PR and optional promotion-lane refs."""
+    """Atomically acquire the PR and destination-lane refs."""
     if SHA.fullmatch(args.head_sha) is None:
         raise RuntimeError(
             "Head SHA must be 40 lowercase hexadecimal characters"
@@ -703,7 +734,7 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
         "base_sha": base["sha"],
         "default_branch": repository["default_branch"],
         "owner": args.owner,
-        "actor": github.viewer(),
+        "actor": github.viewer(getattr(args, "actor", "")),
         "capability_digest": hashlib.sha256(capability.encode()).hexdigest(),
         "acquired_at": acquired.isoformat().replace("+00:00", "Z"),
         "expires_at": (acquired + timedelta(seconds=args.ttl_seconds))
@@ -739,10 +770,17 @@ def acquire(args: argparse.Namespace, github: GitHub) -> None:  # noqa: C901
             audit_message(evidence),
         )
         audit_url = comment.get("html_url")
-        if not isinstance(audit_url, str):
-            raise RuntimeError("Lease audit comment has no URL")
+        audit_user = comment.get("user") or {}
+        if (
+            not isinstance(audit_url, str)
+            or not isinstance(audit_user, dict)
+            or str(audit_user.get("login", "")).casefold()
+            != str(evidence["actor"]).casefold()
+        ):
+            raise RuntimeError("Lease audit comment has invalid actor or URL")
         evidence["audit_url"] = audit_url
         validate_audit_url(evidence)
+        validate_audit_comment(evidence, comment)
         write_json(args.output, evidence)
     except Exception:
         release_refs(evidence)
@@ -1032,14 +1070,27 @@ def merge_snapshot(  # noqa: C901
         raise RuntimeError(
             "A newer Draft event invalidated merge authorization"
         )
-    comments = github.pages(repo, f"issues/{pr_number}/comments?per_page=100")
+    comments = [
+        *github.pages(repo, f"issues/{pr_number}/comments?per_page=100"),
+        *github.pages(repo, f"pulls/{pr_number}/comments?per_page=100"),
+    ]
+    reviews = github.pages(repo, f"pulls/{pr_number}/reviews?per_page=100")
+    comments.extend(
+        {
+            **review,
+            "created_at": review.get("submitted_at"),
+        }
+        for review in reviews
+        if review.get("state") == "COMMENTED"
+        and review.get("submitted_at")
+        and review.get("body")
+    )
     blocker = unresolved_blocker(comments)
     if blocker is not None:
         raise RuntimeError(
             "An unresolved blocking comment prevents merge: "
             + str(blocker.get("html_url") or "unknown URL")
         )
-    reviews = github.pages(repo, f"pulls/{pr_number}/reviews?per_page=100")
     review_states = current_reviews(reviews)
     blockers = sorted(
         login
@@ -1050,7 +1101,7 @@ def merge_snapshot(  # noqa: C901
         raise RuntimeError(
             "Changes are still requested by: " + ", ".join(blockers)
         )
-    actor = github.viewer().casefold()
+    actor = str(lease["actor"]).casefold()
     approvers = sorted(
         login
         for login, state in review_states.items()
@@ -1115,7 +1166,7 @@ def merge_snapshot(  # noqa: C901
 def mutate_state(args: argparse.Namespace, github: GitHub) -> None:
     """Change Draft state only while the exact lease remains live."""
     lease = read_lease(args.lease)
-    require_caller(lease, args.owner, github)
+    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
     require_lease(github, lease, args.repo, args.pr_number, args.head_sha)
     pull = live_pull(github, args.repo, args.pr_number, args.head_sha)
     current = bool(pull.get("draft"))
@@ -1137,7 +1188,7 @@ def mutate_state(args: argparse.Namespace, github: GitHub) -> None:
 def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
     """Edit labels or milestone only while the exact lease remains live."""
     lease = read_lease(args.lease)
-    require_caller(lease, args.owner, github)
+    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
     require_lease(github, lease, args.repo, args.pr_number, args.head_sha)
     pull = live_pull(github, args.repo, args.pr_number, args.head_sha)
     labels = {
@@ -1186,7 +1237,7 @@ def edit_metadata(args: argparse.Namespace, github: GitHub) -> None:
 def check(args: argparse.Namespace, github: GitHub) -> None:
     """Print the live merge snapshot without mutating GitHub."""
     lease = read_lease(args.lease)
-    require_caller(lease, args.owner, github)
+    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
     snapshot = merge_snapshot(github, lease, args.authorization_url)
     sys.stdout.write(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
 
@@ -1194,7 +1245,7 @@ def check(args: argparse.Namespace, github: GitHub) -> None:
 def merge(args: argparse.Namespace, github: GitHub) -> None:
     """Merge only when both the lease and server-side controls are enforced."""
     lease = read_lease(args.lease)
-    require_caller(lease, args.owner, github)
+    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
     snapshot = merge_snapshot(github, lease, args.authorization_url)
     if snapshot["merge_mode"] != "agent":
         raise RuntimeError(
@@ -1203,6 +1254,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
         )
     snapshot = merge_snapshot(github, lease, args.authorization_url)
     title = str(snapshot["title"])
+    confirm_refs(lease)
     if branch_sha(github, args.repo, lease["base_ref"]) != lease["base_sha"]:
         raise RuntimeError(
             "Pull request destination branch advanced before merge"
@@ -1237,7 +1289,7 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
 def release(args: argparse.Namespace, github: GitHub) -> None:
     """Release only the exact lease held by this evidence file."""
     lease = read_lease(args.lease)
-    require_caller(lease, args.owner, github)
+    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
     if (
         lease["repository"].casefold() != args.repo.casefold()
         or lease["pull_request"] != args.pr_number
@@ -1251,11 +1303,80 @@ def release(args: argparse.Namespace, github: GitHub) -> None:
 def authorization_template(args: argparse.Namespace, github: GitHub) -> None:
     """Print the exact statement a human maintainer may post."""
     lease = read_lease(args.lease)
-    require_caller(lease, args.owner, github)
+    require_caller(lease, args.owner, getattr(args, "actor", ""), github)
     require_lease(github, lease, args.repo, args.pr_number, args.head_sha)
     sys.stdout.write(
         authorization_statement(args.repo, args.pr_number, args.head_sha) + "\n"
     )
+
+
+def writer_violations(text: str) -> list[str]:
+    """Find PR lifecycle writes outside this module, including split tokens."""
+    compact = re.sub(r"[^a-z0-9_./@-]+", "", text.casefold())
+    violations: list[str] = []
+    direct_commands = [
+        "gh" + "pr" + operation for operation in ("ready", "edit", "merge")
+    ]
+    if any(command in compact for command in direct_commands):
+        violations.append("direct gh pr lifecycle command")
+    if "gh" + "pr" + "create" in compact and any(
+        option in compact for option in ("--label", "--milestone", "--draft")
+    ):
+        violations.append("PR creation with an unleased metadata/state write")
+    graphql_writers = [
+        "convert" + "pullrequest" + "todraft",
+        "mark" + "pullrequest" + "readyforreview",
+        "merge" + "pullrequest",
+        "update" + "pullrequest",
+        "add" + "labelstolabelable",
+        "remove" + "labelsfromlabelable",
+    ]
+    if any(
+        re.search(rf"(?:graphql|mutation).{{0,500}}{writer}", compact)
+        for writer in graphql_writers
+    ):
+        violations.append("GraphQL PR lifecycle mutation")
+    release_writer = "googleapis/" + "release-please-" + "action@"
+    if release_writer in compact:
+        violations.append("opaque release pull-request writer")
+    mutating_rest = re.search(
+        r"(?:--method|-x|request)(?:patch|put|post|delete)", compact
+    )
+    if mutating_rest and re.search(
+        r"repos/.{1,160}/pulls/.{0,160}/merge", compact
+    ):
+        violations.append("REST pull-request merge")
+    if mutating_rest and re.search(
+        r"repos/.{1,160}/pulls/[^/?]+(?:[?]|$)", compact
+    ):
+        violations.append("REST pull-request metadata write")
+    if mutating_rest and re.search(
+        r"repos/.{1,160}/issues/.{0,160}/labels", compact
+    ):
+        violations.append("REST pull-request label write")
+    return violations
+
+
+def scan_writers(root: Path) -> None:
+    """Fail when repository automation bypasses the lifecycle tool."""
+    paths = [
+        *root.glob(".github/workflows/*.yml"),
+        *root.glob(".github/workflows/*.yaml"),
+        *root.joinpath("scripts").rglob("*"),
+        *root.glob("template/.github/workflows/*.yml"),
+        *root.glob("template/.github/workflows/*.yaml"),
+        *root.joinpath("template/scripts").rglob("*"),
+    ]
+    violations: list[str] = []
+    for path in sorted(set(paths)):
+        if not path.is_file() or path.name == "pr_lifecycle.py":
+            continue
+        found = writer_violations(path.read_text(encoding="utf-8"))
+        violations.extend(f"{path.relative_to(root)}: {item}" for item in found)
+    if violations:
+        raise RuntimeError(
+            "Unleased PR lifecycle writer:\n" + "\n".join(violations)
+        )
 
 
 def parser() -> argparse.ArgumentParser:
@@ -1267,9 +1388,13 @@ def parser() -> argparse.ArgumentParser:
     acquire_command.add_argument("--pr-number", required=True, type=int)
     acquire_command.add_argument("--head-sha", required=True)
     acquire_command.add_argument("--owner", required=True)
+    acquire_command.add_argument("--actor", default="")
     acquire_command.add_argument("--ttl-seconds", type=int, default=3600)
     acquire_command.add_argument("--output", type=Path, required=True)
     acquire_command.set_defaults(handler=acquire)
+    scan_command = commands.add_parser("scan-writers")
+    scan_command.add_argument("--root", type=Path, default=Path.cwd())
+    scan_command.set_defaults(scan_root=True)
 
     for name in (
         "state",
@@ -1284,6 +1409,7 @@ def parser() -> argparse.ArgumentParser:
         command.add_argument("--pr-number", required=True, type=int)
         command.add_argument("--lease", type=Path, required=True)
         command.add_argument("--owner", required=True)
+        command.add_argument("--actor", default="")
         if name != "release":
             command.add_argument("--head-sha", required=True)
         if name in {"check", "merge"}:
@@ -1307,7 +1433,9 @@ def main() -> None:
     args = parser().parse_args()
     github = GitHub()
     try:
-        if hasattr(args, "handler"):
+        if hasattr(args, "scan_root"):
+            scan_writers(args.root.resolve())
+        elif hasattr(args, "handler"):
             args.handler(args, github)
         elif args.handler_name == "state":
             mutate_state(args, github)
