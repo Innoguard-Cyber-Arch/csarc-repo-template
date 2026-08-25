@@ -326,6 +326,20 @@ def test_schedule_and_release_run_the_deep_matrix() -> None:
     assert scheduled.run_deep and release.run_deep
 
 
+def test_draft_release_defers_the_deep_matrix() -> None:
+    """Draft release work must not start long-running platform coverage."""
+    plan = classify(
+        "pull_request",
+        "main",
+        "release-please--branches--main",
+        set(),
+        [".release-please-manifest.json"],
+        draft=True,
+    )
+    assert plan.tier == "fast"
+    assert not plan.run_deep
+
+
 def test_pytest_profiles_are_declared_strictly() -> None:
     """Reject unknown test profiles instead of silently broadening a gate."""
     pytest_config = tomllib.loads((ROOT / "pyproject.toml").read_text())[
@@ -344,6 +358,8 @@ def test_required_aggregate_is_unconditional_and_routing_is_job_level() -> None:
     workflow = yaml.safe_load(
         (ROOT / ".github" / "workflows" / "ci.yml").read_text()
     )
+    workflow_source = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    assert "git diff --no-renames --name-only -z" in workflow_source
     jobs = workflow["jobs"]
     assert jobs["verify"]["if"] == "${{ always() }}"
     assert "fast" in jobs["verify"]["needs"]
@@ -364,6 +380,12 @@ def test_required_aggregate_is_unconditional_and_routing_is_job_level() -> None:
         assert jobs["adoption-macos"]["if"] == (
             "${{ needs.fast.outputs.run_deep == 'true' }}"
         )
+
+
+def test_generated_fast_gate_excludes_large_tests() -> None:
+    """Generated Issue gates must share the root large-test boundary."""
+    command = (ROOT / "scripts" / "verify-fast").read_text()
+    assert 'uv run pytest -m "not large"' in command
 
 
 @pytest.mark.parametrize(

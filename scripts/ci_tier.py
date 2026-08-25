@@ -253,8 +253,11 @@ def classify(
         run_governance=full or "governance" in scopes,
         run_osv=full or "dependency" in scopes,
         run_zizmor=full or "workflow" in scopes,
-        run_deep=event == "schedule"
-        or (stage == "integrated" and "release" in risks),
+        run_deep=review_state != "draft"
+        and (
+            event == "schedule"
+            or (stage == "integrated" and "release" in risks)
+        ),
         upload_site=(
             force_full
             or promotion

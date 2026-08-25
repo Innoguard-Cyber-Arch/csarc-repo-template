@@ -64,7 +64,7 @@ jobs:
         run: |
           files="$RUNNER_TEMP/changed-files"
           if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]]; then
-            git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$files"
+            git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$files"
           else
             git ls-files -z > "$files"
           fi
