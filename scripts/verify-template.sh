@@ -741,7 +741,7 @@ test -f docs/robots.txt
 grep -q '^Disallow: /$' docs/robots.txt
 test -f docs/agent-install.md
 grep -q 'Run the CLI from the verified release commit:' docs/agent-install.md
-grep -q '`adopt` and `adopt --finalize` default' docs/agent-install.md
+grep -q 'every lifecycle write defaults to dry-run' docs/agent-install.md
 grep -q 'docs/index.html' README.md
 grep -q '內部限閱' README.md
 grep -q '線上整合證據' README.md
