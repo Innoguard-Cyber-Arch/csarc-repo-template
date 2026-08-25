@@ -304,19 +304,24 @@ authorization 不屬於同一 PR，都會使 fallback 失效。這份本機 evid
 ## 成本與證據
 
 模板 repo 的導入前基線是一般 PR update 約 14 billed Linux runner-minutes。
-分層後的一般文件／來源 Issue PR，在首次 reviewer assignment 以外，最多啟動 PR
-policy、CI fast 與 CI aggregate 三個 runner job。以每個短 job 至少計一分鐘估算為
-3 billed minutes，相較 14 分鐘基線約減少 79%；這是 job-minute 模型估計，不是
-實際帳單數字。
+分層後的一般文件／來源 Issue PR，最多啟動 PR policy、CI fast 與 CI aggregate
+三個 runner job；首次 reviewer assignment 再多一個 job。以每個短 job 至少計一分鐘，
+14→3／4 job-minute 規劃模型分別估計減少約 79%／71%。這是明確標示的 job-minute 規劃估算，不是 hosted 實測
+或實際帳單數字。
 
-每次 CI 都會上傳 `ci-plan-<run-id>-<attempt>` artifact，並在 workflow summary
-記錄 tier、原因、scopes、條件式檢查與 fast job 秒數。Actions 可正常啟動後，應以
-一般 Issue PR 的實際 run/job duration 驗證至少 70% 降幅，營運驗收由
-[#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189) 追蹤；
-額度、付款或平台問題不得被記成成功測量，也不得用來跳過 promotion 的 full gate。
-Promotion 的 quota-only fallback 仍須完整執行同一套本機 full verification；它不是
-hosted runner-minute 的成功量測，不能用來完成 #189。
-Full tier 以 `canonical full`、`Python compatibility (<runtime>)` 與
-`TypeScript (Node <version>)` 分開留下 job result、duration 與 billed runner 證據，
-供 #189 比較；`verify` aggregate 依 tier 與 profile 要求所有適用 job 必須 success，
+Runner 可用且 CI 已啟動時，workflow 會上傳 `ci-plan-<run-id>-<attempt>` artifact，並在
+workflow summary 記錄 tier、原因、scopes、條件式檢查與 fast job 秒數。Hosted duration 與 `ci-plan` artifact 僅作
+optional telemetry，用來校準規劃模型，不是 Milestone、promotion 或產品
+交付的必要驗收條件。任何 zero-step job 都不算 hosted success 或成本測量；額度、付款、
+平台或權限問題也不得被記成成功 telemetry。Portable baseline 不要求管理員升級 GitHub
+方案、調整帳單、建立 PAT／GitHub App 或維護自架 runner。
+
+[#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189) 與
+[#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199) 原本把成功 hosted 量測或恢復視為完成前提；
+[#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287) 已以 capability-adaptive telemetry 取代該前提。
+Telemetry 可用性不改變本機 full verification、promotion tree evidence、security 或 supply-chain gates。
+Promotion 的 quota-only fallback 仍須完整執行同一套本機 full verification，且不能冒充 hosted 成功。
+Hosted runner 可用時，full tier 以 `canonical full`、`Python compatibility (<runtime>)` 與
+`TypeScript (Node <version>)` 分開留下 job result、duration 與 billed runner telemetry；
+`verify` aggregate 依 tier 與 profile 要求所有適用 job 必須 success，
 只允許真正不適用的 job skipped，避免漏啟動被誤判成功。

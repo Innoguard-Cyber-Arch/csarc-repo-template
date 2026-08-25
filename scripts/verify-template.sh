@@ -763,6 +763,18 @@ grep -q '線上整合證據' README.md
 test -f docs/live-integration.md
 test -f docs/ci-policy.md
 grep -q '模板 repo 的導入前基線是一般 PR update 約 14' docs/ci-policy.md
+grep -q '14→3／4 job-minute 規劃模型' docs/ci-policy.md
+grep -q '明確標示的 job-minute 規劃估算，不是 hosted 實測' docs/ci-policy.md
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
+grep -q 'Hosted duration 與 `ci-plan` artifact 僅作' docs/ci-policy.md
+grep -q '^optional telemetry' docs/ci-policy.md
+grep -q 'zero-step job 都不算 hosted success' docs/ci-policy.md
+cmp -s docs/ci-policy.md template/docs/ci-policy.md
+grep -q 'M7 必須等待成功 hosted runner' \
+  docs/adr/staged-delivery-and-verification.md
+grep -q 'Hosted telemetry 不可用不阻塞產品交付' \
+  docs/specs/SPEC-005-continuous-verification-evidence.md
 grep -q '孤立 Issue 決策樹' docs/ci-policy.md
 grep -q 'dev/i<Issue 編號>-<簡稱>' docs/ci-policy.md
 grep -q 'Maintainer walkthrough' docs/ci-policy.md
@@ -1501,6 +1513,18 @@ test -f "$fixture_root/default-project/docs/ci-policy.md"
 # Backticks are literal documentation content.
 # shellcheck disable=SC2016
 grep -q '穩定的 `verify` aggregate context' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q '明確標示的 job-minute 規劃估算，不是 hosted 實測' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q '14→3／4 job-minute 規劃模型' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
+grep -q 'Hosted duration 與 `ci-plan` artifact 僅作' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q '^optional telemetry' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q 'zero-step job 都不算 hosted success' \
   "$fixture_root/default-project/docs/ci-policy.md"
 grep -q '孤立 Issue 決策樹' \
   "$fixture_root/default-project/docs/ci-policy.md"
