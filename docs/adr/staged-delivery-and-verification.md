@@ -1,8 +1,8 @@
 # Staged delivery and verification ADR
 
 - **狀態：**Accepted
-- **日期：**2026-08-24
-- **來源 Issues：**[#23](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/23), [#37](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/37), [#99](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/99), [#122](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/122), [#140](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/140), [#144](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/144), [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171), [#179](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/179), [#180](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/180), [#181](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/181), [#182](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/182), [#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189), [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199), [#233](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/233), [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254), [#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287)
+- **日期：**2026-08-25
+- **來源 Issues：**[#23](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/23), [#37](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/37), [#99](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/99), [#122](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/122), [#140](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/140), [#144](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/144), [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171), [#179](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/179), [#180](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/180), [#181](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/181), [#182](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/182), [#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189), [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199), [#233](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/233), [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254), [#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287), [#301](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/301)
 - **實作 PRs：**[#24](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/24), [#52](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/52), [#136](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/136), [#125](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/125), [#150](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/150), [#152](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/152), [#173](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/173), [#186](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/186), [#188](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/188), [#190](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/190), [#191](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/191), [#193](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/193), [#236](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/236)
 
 ## 問題與限制
@@ -11,13 +11,13 @@
 
 ## 決定
 
-- Milestone work 進 `dev/m*`，standalone work 預設進 `dev/next`；有獨立 soak／canary 需求才用暫時 `dev/i*`，hotfix 才直接 main。
+- Milestone work 進 `dev/m*`，standalone work 預設進 `dev/next`；有獨立 soak／canary 需求才用暫時 `dev/i*`，hotfix 才直接 main。每條 work branch 都由 `gh issue develop` 建立，保留 GitHub Development 關係。
 - Main advance 透過 reviewed sync PR 回灌 active delivery branches；promotion 前必須證明包含 current main。
 - CI 分 policy、fast、full、scheduled／release 四層，以 stable aggregate context 收斂結果。
 - Promotion 綁定 base／head SHA、candidate tree、full verification 與 canary 三態；artifact-only 不冒充 external canary。
 - Human-confirmed quota-only、zero-step failure 可讓 promotion 以相同 full verification 與 SHA/tree evidence 合併 main；本機 evidence 固定不可發布，待 hosted checks 補跑。
 - 14→3／4 job-minute 是明確標示的規劃估算；hosted duration 與 `ci-plan` 僅在 runner 可用時作 telemetry，不是交付關卡。Portable baseline 不要求管理員調整帳單、方案或維護額外 runner。
-- Acceptance checklist 未完成時不得使用 closing keyword；Milestone 只在 outcome 與 promotion evidence 完成後關閉。
+- Acceptance checklist 未完成時不得使用 closing keyword；PR metadata 從 linked Issue 同步 assignee、classification label 與 Milestone，離開 draft 時要求非作者 reviewer；Milestone 只在 outcome 與 promotion evidence 完成後關閉。
 - TDD 留下最小 regression 與最終 evidence，不保存逐次 red／green 暫態。
 
 ## 歷史 disposition

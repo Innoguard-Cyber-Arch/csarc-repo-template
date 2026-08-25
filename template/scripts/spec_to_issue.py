@@ -256,32 +256,16 @@ def build_issue_body(spec: Spec, source_url: str) -> str:
             ),
         ]
     )
+    kind = "feature" if spec.tracking == "story" else "task"
     return (
         "### 類型\n\n"
-        "enhancement\n\n"
+        f"{kind}\n\n"
         "### 問題\n\n"
         f"{section_map['problem']}\n\n"
         "### 完成條件\n\n"
         f"{section_map['acceptance criteria']}\n\n"
         "### 補充\n\n"
         f"{supplement}\n"
-    )
-
-
-def build_milestone_description(spec: Spec, source_url: str) -> str:
-    """Build the complete story contract stored in a GitHub Milestone."""
-    return "\n".join(
-        [
-            f"<!-- csarc-story-id: {spec.spec_id} -->",
-            f"> Source: [{spec.path.as_posix()}]({source_url})  ",
-            f"> Owner: {spec.owner}  ",
-            f"> Priority: {spec.priority}  ",
-            f"> Expected size: {spec.estimate}  ",
-            f"> Spec status: {spec.status}",
-            "",
-            spec.body,
-            "",
-        ]
     )
 
 
@@ -328,59 +312,6 @@ def find_issue(repo: str, spec_id: str) -> int | None:
     return None
 
 
-def find_milestone(repo: str, spec_id: str) -> int | None:
-    """Return the existing managed Milestone number, if one exists."""
-    marker = f"<!-- csarc-story-id: {spec_id} -->"
-    result = run_gh(
-        [
-            "api",
-            "--paginate",
-            "--slurp",
-            f"repos/{repo}/milestones?state=all&per_page=100",
-        ]
-    )
-    pages = json.loads(result or "[]")
-    for page in pages:
-        for item in page:
-            if marker in item.get("description", "").splitlines():
-                return int(item["number"])
-    return None
-
-
-def sync_milestone(spec: Spec, repo: str, source_url: str) -> None:
-    """Create or update one story Milestone without inventing child Issues."""
-    description = build_milestone_description(spec, source_url)
-    number = find_milestone(repo, spec.spec_id)
-    fields = [
-        "--raw-field",
-        f"title={spec.title}",
-        "--raw-field",
-        f"description={description}",
-    ]
-    if number is None:
-        output = run_gh(
-            [
-                "api",
-                "--method",
-                "POST",
-                f"repos/{repo}/milestones",
-                *fields,
-            ]
-        )
-        LOGGER.info("created milestone: %s", output)
-        return
-    run_gh(
-        [
-            "api",
-            "--method",
-            "PATCH",
-            f"repos/{repo}/milestones/{number}",
-            *fields,
-        ]
-    )
-    LOGGER.info("updated milestone: %s", number)
-
-
 def sync_spec(spec: Spec, repo: str, source_ref: str, server_url: str) -> None:
     """Create or update the GitHub Issue that corresponds to one spec."""
     if spec.status == "draft":
@@ -400,11 +331,7 @@ def sync_spec(spec: Spec, repo: str, source_ref: str, server_url: str) -> None:
     )
     body = build_issue_body(spec, source_url)
     title = spec.title
-    if spec.tracking == "story":
-        sync_milestone(spec, repo, source_url)
-        return
     issue_number = find_issue(repo, spec.spec_id)
-
     with tempfile.NamedTemporaryFile(
         "w", encoding="utf-8", delete=False
     ) as handle:

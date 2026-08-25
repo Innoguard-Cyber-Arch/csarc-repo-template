@@ -2,7 +2,7 @@ name: PR policy
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+    types: [opened, edited, synchronize, reopened, ready_for_review, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
 
@@ -12,8 +12,8 @@ concurrency:
 
 permissions:
   contents: read
-  issues: read
-  pull-requests: read
+  issues: write
+  pull-requests: write
 
 jobs:
   title:
@@ -28,17 +28,28 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.base.sha }}
+      - name: Synchronize pull request metadata
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: >-
+          python3 scripts/sync_work_item_metadata.py
+          --repo "$GITHUB_REPOSITORY"
+          --pr "$PR_NUMBER"
       - name: Validate pull request policy
         id: policy
         if: ${{ github.event_name == 'pull_request' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_BASE: ${{ github.event.pull_request.base.ref }}
           PR_BRANCH_STRATEGY: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && 'delivery' || '' }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_DELIVERY_CUTOVER_ISSUE: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && '185' || '0' }}
+          PR_DEVELOPMENT_CUTOVER_ISSUE: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && '301' || '1' }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
-          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
@@ -54,6 +65,16 @@ jobs:
             echo "PR title must use ASCII characters only."
             echo "The PR body may be written in Chinese."
             exit 1
+          fi
+
+          if [[ "${PR_LABELS+x}" == "x" ]]; then
+            pr_assignees="${PR_ASSIGNEES:-${PR_AUTHOR:-}}"
+            pr_milestone_number="${PR_MILESTONE_NUMBER:-${PR_ISSUE_MILESTONE_NUMBER:-0}}"
+          else
+            pr_payload="$(${GH_BINARY:-gh} api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER" \
+              --jq '[([.labels[].name] | join(",")), ([.assignees[].login] | join(",")), (.milestone.number // 0)] | @tsv')"
+            IFS=$'\t' read -r PR_LABELS pr_assignees pr_milestone_number \
+              <<<"$pr_payload"
           fi
 
           release_intent="no-release"
@@ -84,16 +105,6 @@ jobs:
           fi
           if [[ ",${PR_LABELS:-}," == *,duplicate,* ]]; then
             echo "The duplicate label is an Issue disposition and cannot classify a pull request."
-            exit 1
-          fi
-
-          expected_label="enhancement"
-          case "$pr_title_type" in
-            fix) expected_label="bug" ;;
-            docs) expected_label="documentation" ;;
-          esac
-          if [[ "$selected_label" != "$expected_label" ]]; then
-            echo "PR title type ${pr_title_type} requires the ${expected_label} label."
             exit 1
           fi
 
@@ -201,7 +212,7 @@ jobs:
             issue_title="${PR_ISSUE_TITLE:-}"
             issue_body="${PR_ISSUE_BODY:-}"
             issue_milestone_number="${PR_ISSUE_MILESTONE_NUMBER:-0}"
-            issue_labels="${PR_ISSUE_LABELS:-}"
+            issue_labels="${PR_ISSUE_LABELS:-$PR_LABELS}"
             issue_has_unchecked=false
             if grep -Eq "$unchecked_task_pattern" <<<"$issue_body"; then
               issue_has_unchecked=true
@@ -219,6 +230,54 @@ jobs:
           if [[ "$issue_state" != "open" ]]; then
             echo "Issue #${issue_number} must exist and remain open until merge."
             exit 1
+          fi
+          if [[ -z "$pr_assignees" ]]; then
+            echo "Assign the pull request to its human author."
+            exit 1
+          fi
+          if [[ -n "${PR_AUTHOR:-}" && ",${pr_assignees}," != *",${PR_AUTHOR},"* ]]; then
+            echo "The pull request author must be an assignee."
+            exit 1
+          fi
+          if [[ "$pr_milestone_number" != "$issue_milestone_number" ]]; then
+            echo "The pull request Milestone must match Issue #${issue_number}."
+            exit 1
+          fi
+          issue_selected_label=""
+          issue_selected_count=0
+          for label in bug enhancement documentation; do
+            if [[ ",${issue_labels:-}," == *",${label},"* ]]; then
+              issue_selected_label="$label"
+              issue_selected_count=$((issue_selected_count + 1))
+            fi
+          done
+          if (( issue_selected_count != 1 )) || [[ "$selected_label" != "$issue_selected_label" ]]; then
+            echo "The pull request classification label must match Issue #${issue_number}."
+            exit 1
+          fi
+          development_cutover_issue="${PR_DEVELOPMENT_CUTOVER_ISSUE:-1}"
+          if [[ ! "$development_cutover_issue" =~ ^[0-9]+$ ]]; then
+            echo "PR_DEVELOPMENT_CUTOVER_ISSUE must be a non-negative integer."
+            exit 1
+          fi
+          if (( issue_number >= development_cutover_issue )); then
+            if [[ "${PR_LINKED_BRANCHES+x}" == "x" ]]; then
+              linked_branches="$PR_LINKED_BRANCHES"
+            else
+              repo_owner="${GITHUB_REPOSITORY%%/*}"
+              repo_name="${GITHUB_REPOSITORY#*/}"
+              linked_branches="$(
+                gh api graphql \
+                  -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){linkedBranches(first:100){nodes{ref{name}}}}}}' \
+                  -f owner="$repo_owner" -f name="$repo_name" -F number="$issue_number" \
+                  --jq '.data.repository.issue.linkedBranches.nodes[].ref.name'
+              )"
+            fi
+            if ! grep -Fxq "$PR_HEAD" <<<"$linked_branches"; then
+              echo "PR branch $PR_HEAD must be created as a Development linked branch for Issue #${issue_number}."
+              echo "Use: gh issue develop ${issue_number} --base ${PR_BASE} --name ${PR_HEAD}"
+              exit 1
+            fi
           fi
           if [[ "$issue_has_unchecked" == "true" ]]; then
             echo "Issue #${issue_number} still has unchecked acceptance tasks."

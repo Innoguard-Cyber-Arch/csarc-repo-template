@@ -16,11 +16,13 @@ paired_files=(
   SECURITY.md
   .github/ISSUE_TEMPLATE/config.yml
   .github/ISSUE_TEMPLATE/work-item.yml
+  .github/pull_request_template.md
   .github/workflows/governance-comment.yml
   .github/workflows/governance-drift.yml
   .github/workflows/delivery-sync.yml
   .github/workflows/issue-triage.yml
   .github/workflows/milestone-lifecycle.yml
+  .github/workflows/milestone-policy.yml
   .github/workflows/osv.yml
   .github/workflows/promotion.yml
   .github/workflows/pr-policy.yml
@@ -49,6 +51,7 @@ paired_files=(
   scripts/scan-secrets
   scripts/spec_to_issue.py
   scripts/sync_milestone_state.py
+  scripts/sync_work_item_metadata.py
   scripts/test-issue-triage
   scripts/test-pr-policy
   scripts/test-worktree-cleanup
@@ -59,6 +62,7 @@ paired_files=(
   tests/test_promotion_gate.py
   tests/test_milestone_lifecycle.py
   tests/test_release_policy.py
+  tests/test_work_item_metadata.py
   zizmor.yml
 )
 

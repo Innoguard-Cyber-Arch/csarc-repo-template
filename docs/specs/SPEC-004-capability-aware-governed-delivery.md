@@ -22,7 +22,7 @@ GitHub plan、repository visibility、organization policy 與 token scope 會改
 
 ## Acceptance criteria
 
-- [x] 每個一般工作先有 Issue；Milestone 是可選的端到端 story，不因 Issue 數量或 spec 存在自動建立。
+- [x] 每個一般工作先有 native Type 與 assignee；Feature 是 SDD parent，Task／Bug 是 subissue，Milestone 只在有真實 due date 的 delivery／release 建立。
 - [x] Delivery 策略以 `dev/m*`、`dev/next`、受限的 `dev/i*` 與 hotfix 路徑區分整合風險，PR base 由 linked Issue 實際狀態驗證。
 - [x] Main 前進後，active delivery branch 透過受審查 sync PR 納入；不直接 push 或在 main 解衝突。
 - [x] 平台能力使用 allowed／blocked／unknown，只有已確認可用時啟用較強 automation；未知不當作 allowed。

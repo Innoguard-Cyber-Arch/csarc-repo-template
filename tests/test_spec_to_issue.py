@@ -11,16 +11,13 @@ SPEC_MODULE = runpy.run_path(
 )
 SpecError = SPEC_MODULE["SpecError"]
 build_issue_body = SPEC_MODULE["build_issue_body"]
-build_milestone_description = SPEC_MODULE["build_milestone_description"]
 discover_adrs = SPEC_MODULE["discover_adrs"]
 discover_specs = SPEC_MODULE["discover_specs"]
 find_issue = SPEC_MODULE["find_issue"]
-find_milestone = SPEC_MODULE["find_milestone"]
 load_labels = SPEC_MODULE["load_labels"]
 main = SPEC_MODULE["main"]
 parse_spec_text = SPEC_MODULE["parse_spec_text"]
 sync_spec = SPEC_MODULE["sync_spec"]
-sync_milestone = SPEC_MODULE["sync_milestone"]
 validate_unique_ids = SPEC_MODULE["validate_unique_ids"]
 validate_adr = SPEC_MODULE["validate_adr"]
 validate_local_links = SPEC_MODULE["validate_local_links"]
@@ -277,21 +274,6 @@ def test_issue_body_links_source_and_identity() -> None:
     assert "## Outcome" not in body
 
 
-def test_milestone_description_has_story_contract() -> None:
-    story = VALID_SPEC.replace(
-        "status: proposed", "status: approved\ntracking: story"
-    )
-    spec = parse_spec_text(Path("docs/specs/SPEC-001-health.md"), story)
-    description = build_milestone_description(
-        spec, "https://github.example/spec"
-    )
-    assert "csarc-story-id: SPEC-001" in description
-    assert "## Acceptance criteria" in description
-    assert "## Plan" in description
-    assert "## Verification" in description
-    assert "## References" in description
-
-
 def test_find_issue_deduplicates_by_spec_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -315,31 +297,6 @@ def test_find_issue_deduplicates_by_spec_id(
     assert "number,body" in calls[0]
 
 
-def test_find_milestone_is_paginated_and_idempotent(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[list[str]] = []
-
-    def fake_run_gh(arguments: list[str]) -> str:
-        calls.append(arguments)
-        return json.dumps(
-            [
-                [],
-                [
-                    {
-                        "number": 7,
-                        "description": "<!-- csarc-story-id: SPEC-001 -->\n",
-                    }
-                ],
-            ]
-        )
-
-    monkeypatch.setitem(find_milestone.__globals__, "run_gh", fake_run_gh)
-    assert find_milestone("owner/repo", "SPEC-001") == 7
-    assert "--paginate" in calls[0]
-    assert "--slurp" in calls[0]
-
-
 def test_sync_keeps_spec_id_out_of_issue_title(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -359,7 +316,7 @@ def test_sync_keeps_spec_id_out_of_issue_title(
     assert create[create.index("--title") + 1] == "Add a health endpoint"
 
 
-def test_story_spec_syncs_milestone_without_creating_issue(
+def test_story_spec_syncs_feature_issue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     story = VALID_SPEC.replace(
@@ -367,22 +324,25 @@ def test_story_spec_syncs_milestone_without_creating_issue(
     )
     spec = parse_spec_text(Path("docs/specs/SPEC-001-health.md"), story)
     calls: list[list[str]] = []
+    bodies: list[str] = []
 
     def fake_run_gh(arguments: list[str]) -> str:
         calls.append(arguments)
-        if "--paginate" in arguments:
-            return "[[]]"
-        return '{"number":7}'
+        if "--body-file" in arguments:
+            body_path = Path(arguments[arguments.index("--body-file") + 1])
+            bodies.append(body_path.read_text(encoding="utf-8"))
+        return "created"
 
+    monkeypatch.setitem(sync_spec.__globals__, "find_issue", lambda *_: None)
     monkeypatch.setitem(sync_spec.__globals__, "run_gh", fake_run_gh)
     sync_spec(spec, "owner/repo", "main", "https://github.com")
 
-    create = next(call for call in calls if "POST" in call)
-    assert "repos/owner/repo/milestones" in create
-    assert not any(call[:2] == ["issue", "create"] for call in calls)
+    create = next(call for call in calls if call[:2] == ["issue", "create"])
+    assert "--type" not in create
+    assert bodies and "### 類型\n\nfeature" in bodies[0]
 
 
-def test_story_sync_updates_existing_milestone(
+def test_story_sync_updates_existing_feature_issue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     story = VALID_SPEC.replace(
@@ -390,24 +350,23 @@ def test_story_sync_updates_existing_milestone(
     )
     spec = parse_spec_text(Path("docs/specs/SPEC-001-health.md"), story)
     calls: list[list[str]] = []
+    bodies: list[str] = []
 
     def fake_run_gh(arguments: list[str]) -> str:
         calls.append(arguments)
+        if "--body-file" in arguments:
+            body_path = Path(arguments[arguments.index("--body-file") + 1])
+            bodies.append(body_path.read_text(encoding="utf-8"))
         return "{}"
 
-    monkeypatch.setitem(
-        sync_milestone.__globals__, "find_milestone", lambda *_: 7
-    )
-    monkeypatch.setitem(sync_milestone.__globals__, "run_gh", fake_run_gh)
-    sync_milestone(spec, "owner/repo", "https://github.example/spec")
+    monkeypatch.setitem(sync_spec.__globals__, "find_issue", lambda *_: 7)
+    monkeypatch.setitem(sync_spec.__globals__, "run_gh", fake_run_gh)
+    sync_spec(spec, "owner/repo", "main", "https://github.com")
 
-    assert calls[0][:5] == [
-        "api",
-        "--method",
-        "PATCH",
-        "repos/owner/repo/milestones/7",
-        "--raw-field",
-    ]
+    edit = next(call for call in calls if call[:2] == ["issue", "edit"])
+    assert edit[2] == "7"
+    assert "--type" not in edit
+    assert bodies and "### 類型\n\nfeature" in bodies[0]
 
 
 def test_load_labels_uses_policy_file(tmp_path: Path) -> None:
