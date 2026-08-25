@@ -226,17 +226,18 @@ identity；合併後立即形成 patch release 邊界。接著由每條進行中
 
 ## Actions 額度 fallback
 
-這個一次性流程只適用於具帳務可見性的 human maintainer 已明確確認當期 included
-GitHub Actions minutes 耗盡。只提到 failed payments 或 spending limit 的 runner 註記
-本身不足以證明符合條件；工具只把 GitHub 的精確泛用 billing 註記當成 zero-step
-billing gate 證據，仍須由具帳務可見性的 human maintainer 明確確認實際原因是 included
-minutes 耗盡。付款失敗、錯誤 budget、平台事故、workflow／權限錯誤、原因不明，
-或任何已開始執行 step 後失敗的 job 都維持 blocked。
+這個一次性流程適用於 GitHub Actions job 出現 zero-step billing block：GitHub 的
+runner 未啟動訊息提及 failed payments 或 spending limit，工具以其精確、泛用的
+billing 註記文字辨識，不要求先行判讀實際帳務原因。具帳務可見性的 human maintainer
+只需明確確認「這次視為已授權的一次性特例處理」，不要求判斷實際原因是 included
+minutes 耗盡還是付款失敗——GitHub 帳務方案的內部差異不是這個 repo 的治理範圍。
+一般測試失敗、workflow／權限錯誤、平台事故、原因不明，或任何已開始執行 step 後
+才失敗的 job，都不算 zero-step billing block，仍然維持 blocked。
 
 合併前必須確認 worktree 乾淨且 `HEAD` 等於 PR head SHA，執行完整本機驗證與每個可
 忠實重現的 required check；任何失敗都停止，GitHub-only checks 則逐項列出。通過後，
 在 PR 留下標題為 `Actions quota fallback attestation` 的留言，記錄 head SHA、受阻 run
-URL 與 annotation、human quota confirmation、UTC 時間、環境與工具版本、完整命令、
+URL 與 annotation、human exception confirmation、UTC 時間、環境與工具版本、完整命令、
 結果及未重現 checks。Human maintainer 必須再針對該 PR 明確授權；新 commit 使聲明
 失效並須重新驗證、記錄與授權。不得建立或偽造成功 Check Run。
 
@@ -263,9 +264,10 @@ checks 並記錄結果；平台不再允許補跑時，另開 Issue 保留缺口
 3. 先在同一 PR 留下標題為 `Actions quota fallback attestation` 的標準留言，再由 human
    maintainer 留下 `Actions quota fallback authorization`。兩則留言都必須使用工具定義的
    canonical JSON，精確綁定 repository、PR、base/head SHA、candidate tree、archive digest
-   與完整 blocked-run set；前者明示具 billing visibility 且 included minutes 已耗盡，後者
-   明示一次性、無 admin bypass 的授權。工具會 refetch 留言、作者資格與 live GitHub
-   identity；輸出的 gate 是 `quota-fallback`、`release_eligible` 固定為 `false`。
+   與完整 blocked-run set；前者明示具 billing visibility 且確認為已授權的一次性
+   billing zero-step block 特例處理，後者明示一次性、無 admin bypass 的授權。工具會
+   refetch 留言、作者資格與 live GitHub identity；輸出的 gate 是 `quota-fallback`、
+   `release_eligible` 固定為 `false`。
 4. 僅以非 admin 的 squash merge 合併。更新乾淨的 `main` checkout 後執行
    `verify-quota-main`，確認 main tree 等於已驗證 candidate tree，並把結果留在 PR；
    不符時停止、revert／修正，不重寫歷史。
