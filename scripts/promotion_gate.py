@@ -32,6 +32,7 @@ UNCHECKED = re.compile(r"(?m)^\s*-\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(r"(?:Closes|Fixes|Resolves)\s+#(\d+)(?:\D|$)", re.I)
 MILESTONE_BRANCH = re.compile(r"^dev/m(\d+)-[a-z0-9][a-z0-9-]*$")
 PROMOTION_BRIDGE = re.compile(r"^promote/m(\d+)-([a-z0-9][a-z0-9-]*)$")
+STANDALONE_PROMOTION_BRIDGE = "promote/next"
 ISOLATED_BRANCH = re.compile(r"^dev/i(\d+)-[a-z0-9][a-z0-9-]*$")
 CONVENTIONAL_TITLE = re.compile(
     r"^(feat|fix|docs|refactor|test|build|ci|chore|revert)"
@@ -177,7 +178,7 @@ class GitHubCLIAPI:
         return 200, github_get(self.repo, path.removeprefix(prefix), "")
 
 
-def route_for(
+def route_for(  # noqa: C901
     base: str, head: str, labels: set[str], branch_strategy: str = "delivery"
 ) -> Route:
     """Classify a pull request without accepting arbitrary main PRs."""
@@ -199,6 +200,8 @@ def route_for(
     bridge = PROMOTION_BRIDGE.fullmatch(head)
     if bridge and "promotion" in labels:
         return Route("milestone", True, int(bridge.group(1)))
+    if head == STANDALONE_PROMOTION_BRIDGE and "promotion" in labels:
+        return Route("standalone-batch", True)
     isolated = ISOLATED_BRANCH.fullmatch(head)
     if isolated and "promotion" in labels:
         return Route("isolated", True, issue=int(isolated.group(1)))
@@ -344,8 +347,11 @@ def included_pull_requests(  # noqa: C901
                     "intent": release_intent(title),
                 }
             if bridge_head_sha is not None and not matched:
+                scope = (
+                    "same-Milestone" if milestone is not None else "eligible"
+                )
                 raise RuntimeError(
-                    f"Bridge commit {sha} has no same-Milestone merged PR"
+                    f"Bridge commit {sha} has no {scope} merged PR"
                 )
         if len(commits) < 100:
             break
@@ -520,11 +526,22 @@ def promotion_bridge_source(
 ) -> dict[str, str] | None:
     """Verify a temporary bridge made only from source delivery and main."""
     match = PROMOTION_BRIDGE.fullmatch(branch)
-    if match is None:
+    if match is None and branch != STANDALONE_PROMOTION_BRIDGE:
         return None
-    if milestone is None or int(match.group(1)) != milestone:
-        raise RuntimeError("Promotion bridge and Issue Milestones differ")
-    source_ref = f"dev/m{match.group(1)}-{match.group(2)}"
+    if branch == STANDALONE_PROMOTION_BRIDGE:
+        if milestone is not None:
+            raise RuntimeError(
+                "Standalone promotion bridge cannot use a Milestone"
+            )
+        source_ref = "dev/next"
+    else:
+        if (
+            match is None
+            or milestone is None
+            or int(match.group(1)) != milestone
+        ):
+            raise RuntimeError("Promotion bridge and Issue Milestones differ")
+        source_ref = f"dev/m{match.group(1)}-{match.group(2)}"
     source = github_get(
         repo,
         f"git/ref/heads/{urllib.parse.quote(source_ref, safe='')}",
@@ -1342,7 +1359,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     args.repo,
                     base_sha,
                     head_sha,
-                    head,
+                    str(bridge["source_ref"]) if bridge is not None else head,
                     token,
                     route.milestone if bridge is not None else None,
                     head_sha if bridge is not None else None,
@@ -1413,7 +1430,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 "workflow_run": args.workflow_run,
                 "created_at": datetime.now(UTC).isoformat(),
             }
-            if route.kind == "standalone-batch" and head == "dev/next":
+            if route.kind == "standalone-batch":
                 evidence["dev_next_preservation"] = run_dev_next_preservation(
                     "inspect-dev-next",
                     args.repo,
@@ -1586,7 +1603,7 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:  # noqa: C901
     preservation: dict[str, Any] | None = None
     if (evidence.get("route") or {}).get(
         "kind"
-    ) == "standalone-batch" and evidence.get("head_ref") == "dev/next":
+    ) == "standalone-batch":
         preservation = evidence.get("dev_next_preservation")
         live_preservation = run_dev_next_preservation(
             "inspect-dev-next",
@@ -1651,7 +1668,10 @@ def verify_main(args: argparse.Namespace) -> None:
         if isinstance(item, dict)
     ):
         raise RuntimeError("Candidate has no successful verify check")
-    if evidence.get("head_ref") == "dev/next":
+    if evidence.get("head_ref") in {
+        "dev/next",
+        STANDALONE_PROMOTION_BRIDGE,
+    } or (evidence.get("route") or {}).get("kind") == "standalone-batch":
         preservation = evidence.get("dev_next_preservation")
         if not isinstance(preservation, dict):
             raise RuntimeError("dev/next preservation evidence is missing")
@@ -1704,7 +1724,10 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
     for field, value in expected.items():
         if evidence.get(field) != value:
             raise RuntimeError(f"Fallback evidence {field} does not match main")
-    needs_preservation = evidence.get("head_ref") == "dev/next"
+    needs_preservation = evidence.get("head_ref") in {
+        "dev/next",
+        STANDALONE_PROMOTION_BRIDGE,
+    } or (evidence.get("route") or {}).get("kind") == "standalone-batch"
     preservation = evidence.get("dev_next_preservation")
     if needs_preservation and (
         (evidence.get("route") or {}).get("kind") != "standalone-batch"

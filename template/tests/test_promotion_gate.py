@@ -7,6 +7,7 @@ import json
 import runpy
 import shutil
 import subprocess
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
@@ -148,7 +149,7 @@ def test_hosted_restoration_is_explicit_and_never_replaces_gh_token(
             "promote/next",
             {"promotion"},
             "delivery",
-            "invalid-main-route",
+            "standalone-batch",
             None,
         ),
         ("main", "dev", set(), "dev", "dev-promotion", None),
@@ -243,8 +244,18 @@ def test_included_pull_requests_are_deduplicated_and_scoped(
     ) == [{"number": 10, "title": "fix: timeout", "intent": "patch"}]
 
 
-def test_bridge_provenance_accepts_only_same_milestone_pull_requests(
+@pytest.mark.parametrize(
+    ("delivery_branch", "milestone", "expected_number"),
+    [
+        ("dev/m7-staged-ci", 7, 10),
+        ("dev/next", None, 12),
+    ],
+)
+def test_bridge_provenance_accepts_only_eligible_pull_requests(
     monkeypatch: pytest.MonkeyPatch,
+    delivery_branch: str,
+    milestone: int | None,
+    expected_number: int,
 ) -> None:
     """Accept reviewed sibling work without crossing a delivery boundary."""
 
@@ -285,11 +296,19 @@ def test_bridge_provenance_accepts_only_same_milestone_pull_requests(
         "owner/repo",
         "main",
         "bridge",
-        "promote/m7-staged-ci",
+        delivery_branch,
         "token",
-        milestone=7,
+        milestone=milestone,
         bridge_head_sha="bridge",
-    ) == [{"number": 10, "title": "fix: accepted sibling", "intent": "patch"}]
+    ) == [
+        {
+            "number": expected_number,
+            "title": "fix: accepted sibling"
+            if expected_number == 10
+            else "feat: standalone",
+            "intent": "patch" if expected_number == 10 else "minor",
+        }
+    ]
 
 
 def test_bridge_provenance_rejects_an_unreviewed_commit(
@@ -352,9 +371,19 @@ def test_latest_main_requires_matching_base_and_ancestry() -> None:
     assert not main_is_current("abc", "abc", False)
 
 
+@pytest.mark.parametrize(
+    ("bridge_branch", "source_branch", "milestone"),
+    [
+        ("promote/m7-staged-ci", "dev/m7-staged-ci", 7),
+        ("promote/next", "dev/next", None),
+    ],
+)
 def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    bridge_branch: str,
+    source_branch: str,
+    milestone: int | None,
 ) -> None:
     """Bridge a real conflict while preserving the source candidate tree."""
 
@@ -377,7 +406,7 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
     run_git("add", ".")
     run_git("commit", "-m", "base")
 
-    run_git("checkout", "-b", "dev/m7-staged-ci")
+    run_git("checkout", "-b", source_branch)
     tracked.write_text("source\n", encoding="utf-8")
     run_git("commit", "-am", "source")
     source_sha = run_git("rev-parse", "HEAD").stdout.strip()
@@ -406,7 +435,8 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
     ).stdout.strip()
 
     def fake_get(_repo: str, path: str, _token: str) -> object:
-        assert path == "git/ref/heads/dev%2Fm7-staged-ci"
+        encoded = urllib.parse.quote(source_branch, safe="")
+        assert path == f"git/ref/heads/{encoded}"
         return {"object": {"sha": source_sha}}
 
     monkeypatch.setitem(
@@ -415,14 +445,14 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
     monkeypatch.chdir(tmp_path)
     assert promotion_bridge_source(
         "owner/repo",
-        "promote/m7-staged-ci",
+        bridge_branch,
         base_sha,
         bridge_sha,
         bridge_sha,
-        7,
+        milestone,
         "token",
     ) == {
-        "source_ref": "dev/m7-staged-ci",
+        "source_ref": source_branch,
         "source_sha": source_sha,
         "source_tree": source_tree,
     }
@@ -431,6 +461,13 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
 @pytest.mark.parametrize(
     ("branch", "milestone", "parents", "candidate_tree", "message"),
     [
+        (
+            "promote/next",
+            7,
+            "bridge source main",
+            "source-tree",
+            "cannot use a Milestone",
+        ),
         (
             "promote/m8-other",
             7,

@@ -263,6 +263,33 @@ PR_ISSUE_LABELS="enhancement,promotion" \
   "$validator" >/dev/null
 
 case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="feat!: promote standalone bridge" \
+PR_LABELS="enhancement,promotion" \
+PR_BASE="main" \
+PR_HEAD="promote/next" \
+PR_BODY="Closes #42" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_MILESTONE_NUMBER="0" \
+PR_ISSUE_LABELS="enhancement,promotion" \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="feat!: promote milestone as standalone" \
+  PR_LABELS="enhancement,promotion" \
+  PR_BASE="main" \
+  PR_HEAD="promote/next" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+  PR_ISSUE_LABELS="enhancement,promotion" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a standalone bridge with a Milestone."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
   PR_TITLE="feat!: promote unlabeled bridge" \
   PR_LABELS="enhancement" \

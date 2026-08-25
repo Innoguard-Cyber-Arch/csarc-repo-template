@@ -12,7 +12,8 @@ CI 是沒有獨立測試環境時的可攜式 integration layer；外部環境�
   若一張孤立 Issue 確實要獨立 soak／canary，才使用一次性的
   `dev/i<Issue 編號>-<簡稱>`；同號 Issue 不掛 Milestone、加上 `promotion` label，
   並由該 branch 的 promotion PR 關閉。完成後刪除 branch。
-- `dev/* → main` 的 promotion、下述一次性 `promote/m* → main` bridge，以及標示
+- `dev/* → main` 的 promotion、下述一次性 `promote/m*`／`promote/next → main`
+  bridge，以及標示
   `hotfix` 的緊急修正，必須跑 full tier。
 - `main` 更新後，尚在進行的 delivery branch 先透過受審查的 `sync/main-to-*` PR
   納入新結果，再接受新的 Issue PR 或 promotion。
@@ -158,6 +159,25 @@ bridge、workflow candidate 與 source tree 完全相同。Included PR provenanc
 bridge ancestry 中已合併到同一 Milestone `dev/mN-*` 的 PR；跨 Milestone、`dev/next`、
 沒有 merged PR 的額外 commit、source ref 漂移或 tree 漂移都 fail closed。Bridge PR
 完成後即刪除暫時 branch；原 delivery branch 不重寫。
+
+Standalone `dev/next` 使用固定的 `promote/next` sibling bridge：
+
+```bash
+git fetch origin main dev/next
+git switch -c promote/next origin/dev/next
+git merge --no-ff -s ours origin/main
+test "$(git rev-parse HEAD^{tree})" = \
+  "$(git rev-parse origin/dev/next^{tree})"
+git push -u origin promote/next
+gh pr create --base main --head promote/next --label promotion
+```
+
+它必須是以 exact `dev/next` source 為 first parent、current
+`main` 為 second parent且保留 source tree 的同 repository merge commit；tracking Issue
+不得屬於 Milestone，included PR provenance 只接受合併到 `dev/next` 的 PR。Preservation
+transaction 同時綁定 source `dev/next` SHA 與 bridge head ref/SHA，因此固定 branch 名稱
+遭重用、任一 ref／parent／tree 漂移或 source history 被改寫時都 fail closed；source
+僅快轉前進時，complete／abort 仍能以已記錄的 source SHA 安全完成。
 
 Promotion 會封裝候選 source archive，記錄 PR、base/head SHA、candidate tree、
 Milestone 與納入 Issues，並把完整 CI 的 `verify` 當成並列 required gate。合併後
