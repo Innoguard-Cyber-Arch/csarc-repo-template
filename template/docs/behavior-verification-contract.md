@@ -37,7 +37,7 @@ render 後才存在的行為，cross-runtime 只驗證 runtime 差異。
 
 | 行為／風險 | 最窄可重現的失敗回歸 | E2E／live 證據 | 盤點結論 |
 | --- | --- | --- | --- |
-| CI router、test harness、generator 或 CLI adoption／update 變更不得偽裝 docs-only | `tests/test_ci_tier.py::test_high_risk_families_are_explicit`、`test_issue_and_integrated_stages_apply_risk_differently` | `ci-plan-*` 的 stage、scope、risk 與 tier | Issue branch 跑 scoped fast；直接進 main 的整合風險升 full |
+| CI router、verifier、test harness、generator 或 CLI adoption／update 變更不得偽裝 docs-only | `tests/test_ci_tier.py::test_high_risk_families_are_explicit`、`test_issue_and_integrated_stages_apply_risk_differently`、`test_verifier_changes_are_explicit_risks` | `ci-plan-*` 的 stage、scope、risk 與 tier | Issue branch 跑 scoped fast；直接進 main 的整合風險升 full |
 | Release 能力或來源不明不得發布 | `tests/test_release_policy.py::test_release_mode_is_fail_closed`、`test_release_source_must_match_the_tag_commit` | `release-please.yml` 的 release-source 與 artifact handoff；真實 tag／Release 屬 live | 保留；unit 決策與 hosted 發布邊界不同，不是重複 |
 | Secret 不得留在 worktree 或 Git history | `scripts/verify-template.sh` 建立兩個合成 secret，要求 `scripts/scan-secrets` 拒絕 | CI fast／full 的 Gitleaks 執行結果 | 保留；合成 fixture 是可故意觸發的 negative regression |
 | Supply-chain 變更不得略過掃描 | `tests/test_ci_tier.py::test_risk_scopes_enable_only_their_expensive_check` 以 `uv.lock` 要求 OSV；`test_promotion_and_hotfix_use_full_tier` 要求 OSV 與 Zizmor | hosted OSV reusable workflow、Zizmor 與週期性掃描 | 保留；standalone workflow 不再對每張 PR 重複，live 漏洞結果屬平台證據 |

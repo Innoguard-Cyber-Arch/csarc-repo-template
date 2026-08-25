@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 ISSUE_URL = re.compile(r"^https://github\.com/[^/]+/[^/]+/issues/[1-9][0-9]*$")
+OWNER = re.compile(r"^@[A-Za-z0-9][A-Za-z0-9/-]*$")
 REQUIRED_FIELDS = {"owner", "issue", "expires", "remove_when"}
 
 
@@ -24,8 +25,9 @@ def validate_quarantine(
         raise pytest.UsageError(
             "quarantine requires owner, issue, expires, and remove_when"
         )
-    if not isinstance(values["owner"], str) or not values["owner"].startswith(
-        "@"
+    if (
+        not isinstance(values["owner"], str)
+        or OWNER.fullmatch(values["owner"]) is None
     ):
         raise pytest.UsageError("quarantine owner must be an @handle")
     if not isinstance(values["issue"], str) or not ISSUE_URL.fullmatch(
@@ -52,6 +54,5 @@ def validate_quarantine(
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """Validate every quarantine marker during collection."""
     for item in items:
-        marker = item.get_closest_marker("quarantine")
-        if marker is not None:
+        for marker in item.iter_markers("quarantine"):
             validate_quarantine(marker.args, marker.kwargs)

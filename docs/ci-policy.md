@@ -83,6 +83,12 @@ Workflow、governance、generator、CLI adoption/update、release、安全、pro
 
 `container_mode=none` 不生成容器 job、Docker Dependabot 或 registry 權限。公版不代替產品設計 Dockerfile、Kubernetes、雲端部署或 multi-arch matrix。
 
+Issue owner 只執行 plan 宣告的 scoped checks；`verify-fast` 跳過 `large`，但不跳過
+`quarantine`。只有 integrator 對 tree identity 不再變動的最終候選執行一次完整 gate。
+`runtime` 是 cross-runtime job 唯一重跑的集合；scheduled／release 才承擔最深矩陣與
+長時間檢查。Changed-file discovery 使用 rename-safe 的 old/new path 語意，不能把
+workflow、security 或 verifier rename 到 docs path 來降級。
+
 ## Actions 額度 fallback
 
 一般情況必須等 required checks 成功。若 GitHub 明確因 included Actions minutes 耗盡，在 runner 尚未分配、steps 為空且 billing annotation 可驗證時擋住工作，可使用 quota fallback；真實測試失敗、取消、逾時或證據不完整都不可套用。

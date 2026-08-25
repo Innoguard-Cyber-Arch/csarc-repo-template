@@ -61,7 +61,12 @@ def scope_for(path: str) -> str:
             "pyproject.toml",
             "uv.lock",
         }
-        or path in {".github/dependabot.yml", "template/.github/dependabot.yml"}
+        or path
+        in {
+            ".github/dependabot.yml",
+            "template/.github/dependabot.yml",
+            "template/.github/dependabot.yml.jinja",
+        }
         or path.startswith(".github/dependency-review-config")
     ):
         return "dependency"

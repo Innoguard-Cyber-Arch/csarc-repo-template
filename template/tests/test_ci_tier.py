@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import runpy
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -14,6 +15,16 @@ MODULE = runpy.run_path(str(ROOT / "scripts" / "ci_tier.py"))
 classify = MODULE["classify"]
 scope_for = MODULE["scope_for"]
 risks_for = MODULE["risks_for"]
+
+
+def git(root: Path, *arguments: str, capture: bool = False) -> str:
+    """Run Git in a disposable test repository."""
+    return subprocess.run(  # noqa: S603
+        ["git", "-C", str(root), *arguments],  # noqa: S607
+        check=True,
+        capture_output=capture,
+        text=True,
+    ).stdout
 
 
 @pytest.mark.parametrize(
@@ -36,6 +47,7 @@ risks_for = MODULE["risks_for"]
         ("template/scripts/verify.jinja", "shell"),
         ("uv.lock", "dependency"),
         ("template/pyproject.toml.jinja", "dependency"),
+        ("template/.github/dependabot.yml.jinja", "dependency"),
         ("policies/rulesets.json", "governance"),
         ("template/policies/rulesets.json.jinja", "governance"),
         ("unexpected.bin", "unknown"),
@@ -153,7 +165,9 @@ def test_risk_scopes_enable_only_their_expensive_check(
     path: str, flag: str
 ) -> None:
     """Keep unrelated security and remote checks out of ordinary PRs."""
-    plan = classify("pull_request", "main", "chore/9-change", set(), [path])
+    plan = classify(
+        "pull_request", "dev/m9-staged-ci", "chore/9-change", set(), [path]
+    )
     assert plan.tier == "fast"
     assert getattr(plan, flag)
 
@@ -167,7 +181,9 @@ def test_risk_scopes_enable_only_their_expensive_check(
 )
 def test_governance_checkers_run_only_remote_governance(path: str) -> None:
     """Route governance checkers without unrelated security scans."""
-    plan = classify("pull_request", "main", "fix/276-route", set(), [path])
+    plan = classify(
+        "pull_request", "dev/m9-staged-ci", "fix/276-route", set(), [path]
+    )
     assert plan.tier == "fast"
     assert plan.scopes == ("governance",)
     assert plan.run_governance
@@ -380,6 +396,27 @@ def test_required_aggregate_is_unconditional_and_routing_is_job_level() -> None:
         assert jobs["adoption-macos"]["if"] == (
             "${{ needs.fast.outputs.run_deep == 'true' }}"
         )
+
+
+def test_changed_path_discovery_exposes_both_sides_of_a_rename(
+    tmp_path: Path,
+) -> None:
+    """A sensitive file renamed under docs must retain its original risk."""
+    git(tmp_path, "init", "-q")
+    git(tmp_path, "config", "user.name", "CI Test")
+    git(tmp_path, "config", "user.email", "ci@example.invalid")
+    workflow = tmp_path / ".github" / "workflows" / "ci.yml"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text("name: CI\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-qm", "base")
+    (tmp_path / "docs").mkdir()
+    git(tmp_path, "mv", ".github/workflows/ci.yml", "docs/ci.yml")
+    changed = git(
+        tmp_path, "diff", "--no-renames", "--name-only", "HEAD", capture=True
+    ).splitlines()
+    assert set(changed) == {".github/workflows/ci.yml", "docs/ci.yml"}
+    assert "ci-router" in risks_for(changed[0])
 
 
 def test_generated_fast_gate_excludes_large_tests() -> None:

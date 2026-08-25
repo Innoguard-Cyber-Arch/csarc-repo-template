@@ -41,7 +41,7 @@ window.CSARC_SITE_CONTENT = {
   workflow: [
     { title: "1｜讀取記憶並定義工作", detail: "先讀 docs/README.md 的 durable project memory 地圖、Spec-Driven Development（SDD）的相關 living specifications 與 Architecture Decision Records（ADR），再限量搜尋 open／closed Issues、comments 與 linked PR；記錄既有決策是沿用、取代或駁回。" },
     { title: "2｜分支與實作", detail: "{% if branch_strategy == 'delivery' %}main 是唯一永久 branch；Milestone 工作進短命 dev/m<編號>-<簡稱>，一般孤立工作、hotfix 與 bot 更新從短分支直接進 main。ordinary PR 不追逐 main movement；各 Milestone 到 final promotion 才做一次 reviewed sync，明列 dependency 的 owner 才可提前同步{% else %}從 {{ branch_strategy }} 或最終回到它的 open PR 分支建立{% endif %} type/<Issue 編號>-簡稱；若超出原單就另開 Issue。確認 duplicate 時連結 canonical Issue 並用原生 Duplicate 原因關閉，純 triage 不需 PR。" },
-    { title: "3｜驗證", detail: "Test-Driven Development（TDD）的回歸測試與必要的 Behavior-Driven Development（BDD）Given／When／Then 情境形成可執行證據。一般 Issue PR 跑 change-aware fast checks{% if has_container %}，另 build、smoke-test 並掃描產品容器{% endif %}；promotion、hotfix、merge queue 或手動 dispatch 才跑 ./scripts/verify 完整矩陣；完整契約見 docs/ci-policy.md。" },
+    { title: "3｜驗證", detail: "Issue owner 跑 change-aware scoped checks，fast 排除 large 但不跳過具 owner、Issue、期限與移除條件的 quarantine{% if has_container %}，另 build、smoke-test 並掃描產品容器{% endif %}；cross-runtime 只重跑 runtime，integrator 只對不再變動的最終候選跑一次 ./scripts/verify 完整 gate；完整契約見 docs/ci-policy.md。" },
     { title: "4｜審查", detail: "非 draft PR 會從導入時設定的 reviewers 排除作者後輪派一位；使用 closing keyword 前，自身與 referenced Issue 不得留有未勾選 task，再依 Conventional Commit title 恰選一個類型標籤。" },
     { title: "5｜交付", detail: "{% if branch_strategy == 'delivery' %}Milestone 完成才形成 promotion release 邊界；standalone 與 bot 直接進 main，全部 no-release 就略過，hotfix 才立即發布；{% endif %}成品 workflow 只接受 release-source evidence，再建立可追溯成品、SHA-256 與非空 SBOM；部署依專案另訂。" }
   ],
