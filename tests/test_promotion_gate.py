@@ -1472,6 +1472,10 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
                 "head_sha": "head",
                 "route": {"kind": "standalone-batch", "relevant": True},
                 "candidate_tree": "tree",
+                "canary": {
+                    "state": "blocked",
+                    "result": "artifact-only",
+                },
                 "full_check": {"status": "local-quota-attested"},
                 "quota_fallback": {
                     "attestation_url": (
@@ -1614,6 +1618,18 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
         )
     ]
     original = json.loads(source.read_text(encoding="utf-8"))
+    for invalid_canary in (
+        {"state": "blocked", "result": "passed"},
+        {"state": "blocked"},
+        {"state": "allowed", "result": "artifact-only"},
+    ):
+        source.write_text(
+            json.dumps({**original, "canary": invalid_canary}),
+            encoding="utf-8",
+        )
+        with pytest.raises(RuntimeError, match="canary evidence is invalid"):
+            verify_quota_main(arguments)
+    source.write_text(json.dumps(original), encoding="utf-8")
     del original["dev_next_preservation"]
     source.write_text(json.dumps(original), encoding="utf-8")
     with pytest.raises(RuntimeError, match="was not prepared"):
@@ -1759,6 +1775,10 @@ def test_quota_main_refetches_the_unique_squash_source(
                 "head_sha": "head",
                 "route": {"kind": "standalone-batch", "relevant": True},
                 "candidate_tree": "tree",
+                "canary": {
+                    "state": "blocked",
+                    "result": "artifact-only",
+                },
                 "full_check": {"status": "local-quota-attested"},
                 "dev_next_preservation": preservation_evidence(),
             }
@@ -1962,6 +1982,9 @@ def test_authorization_statement_binds_full_preflight() -> None:
     assert isinstance(canary, dict)
     canary["result"] = "artifact-only"
     assert fallback_statement("authorization", evidence, ["run"]) == statement
+
+    canary["future_security_field"] = "bound"
+    assert fallback_statement("authorization", evidence, ["run"]) != statement
 
 
 def test_repository_variables_reads_every_page(
