@@ -140,7 +140,7 @@ jobs:
           name: ci-plan-{% raw %}${{ github.run_id }}-${{ github.run_attempt }}{% endraw %}
           path: ci-plan.json
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90
 
 {% if use_reusable_workflow %}
   full:

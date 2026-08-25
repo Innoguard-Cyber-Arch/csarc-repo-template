@@ -116,7 +116,7 @@ jobs:
           name: ci-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: ci-plan.json
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90
 
   canonical-full:
     name: canonical full (Python 3.14 + Node 24)
