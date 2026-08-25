@@ -13,8 +13,8 @@ import stat
 import subprocess
 import sys
 import tempfile
-from collections.abc import Mapping
-from contextlib import suppress
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -2022,6 +2022,69 @@ def repository_snapshot(target: Path) -> dict[str, object]:
     }
 
 
+@contextmanager
+def hold_git_index_lock(target: Path) -> Iterator[None]:
+    """Block ordinary Git index writers during the final apply transaction."""
+    result = run(
+        [
+            "git",
+            "-C",
+            str(target),
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-path",
+            "index.lock",
+        ],
+        capture=True,
+    )
+    lock_path = Path(result.stdout.strip())
+    try:
+        descriptor = os.open(
+            lock_path,
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+    except FileExistsError as error:
+        raise CliError(
+            "Git index is locked; no candidate changes were applied. Finish "
+            "the other Git operation, then retry this plan."
+        ) from error
+    except OSError as error:
+        raise CliError(
+            f"Cannot lock the Git index before applying changes: {error}"
+        ) from error
+    transaction_failed = False
+    try:
+        yield
+    except BaseException:
+        transaction_failed = True
+        raise
+    finally:
+        cleanup_problem: OSError | None = None
+        lock_replaced = False
+        try:
+            held = os.fstat(descriptor)
+            current = lock_path.lstat()
+            if (held.st_dev, held.st_ino) == (current.st_dev, current.st_ino):
+                lock_path.unlink()
+            else:
+                lock_replaced = True
+        except OSError as error:
+            cleanup_problem = error
+        try:
+            os.close(descriptor)
+        except OSError as error:
+            cleanup_problem = cleanup_problem or error
+        if not transaction_failed and (lock_replaced or cleanup_problem):
+            raise CliError(
+                "Git index lock changed during apply; repository state is "
+                "uncertain. Inspect the Git index and working tree."
+            ) from cleanup_problem
+
+
 def init_target_snapshot(target: Path) -> dict[str, object]:
     """Capture the empty destination state required by init."""
     return {
@@ -2368,6 +2431,13 @@ def validate_applied_patch_or_rollback(
     actual_head, _ = git_target_state(target)
     if actual_head == expected_head and actual_after == expected_after:
         return
+    if actual_head != expected_head:
+        raise CliError(
+            "Repository HEAD changed while the candidate patch was applied; "
+            "automatic rollback is unsafe because HEAD changed after apply. "
+            "The CLI effects may have been committed; inspect the commit "
+            "history and working tree."
+        )
 
     planned_paths = set(expected_artifacts) | set(delete_paths)
     planned_effects_intact = all(
@@ -2382,10 +2452,11 @@ def validate_applied_patch_or_rollback(
         if rollback_check.returncode == 0:
             rollback = run([*reverse, str(patch)], capture=True, check=False)
             rolled_back = target_file_snapshot(target)
+            rolled_back_head, _ = git_target_state(target)
             if rollback.returncode == 0 and all(
                 rolled_back.get(name) == expected_before.get(name)
                 for name in planned_paths
-            ):
+            ) and rolled_back_head == expected_head:
                 raise CliError(
                     "Repository changed while the candidate patch was applied; "
                     "CLI changes were rolled back. Create a new plan."
@@ -2462,27 +2533,28 @@ def write_candidate_patch(
         detail = patch_result.stderr.decode(errors="replace").strip()
         raise CliError(detail or "Cannot build candidate patch.")
     patch.write_bytes(patch_result.stdout)
-    for check_only in (True, False):
-        validate_target_snapshot(target, target_snapshot)
-        command = ["git", "-C", str(target), "apply", "-p2"]
-        if check_only:
-            command.append("--check")
-        command.append(str(patch))
-        apply_result = run(command, capture=True, check=False)
-        if apply_result.returncode != 0:
-            detail = (
-                apply_result.stderr.strip()
-                or "Git rejected the candidate patch."
-            )
-            raise CliError(detail)
-    validate_applied_patch_or_rollback(
-        target,
-        patch,
-        target_snapshot,
-        expected_before,
-        expected_artifacts,
-        delete_paths,
-    )
+    with hold_git_index_lock(target):
+        for check_only in (True, False):
+            validate_target_snapshot(target, target_snapshot)
+            command = ["git", "-C", str(target), "apply", "-p2"]
+            if check_only:
+                command.append("--check")
+            command.append(str(patch))
+            apply_result = run(command, capture=True, check=False)
+            if apply_result.returncode != 0:
+                detail = (
+                    apply_result.stderr.strip()
+                    or "Git rejected the candidate patch."
+                )
+                raise CliError(detail)
+        validate_applied_patch_or_rollback(
+            target,
+            patch,
+            target_snapshot,
+            expected_before,
+            expected_artifacts,
+            delete_paths,
+        )
 
 
 def create_adoption_lockfiles(target: Path, answers: dict[str, object]) -> None:

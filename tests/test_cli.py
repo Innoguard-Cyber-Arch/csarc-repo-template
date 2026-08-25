@@ -2502,6 +2502,201 @@ def test_candidate_patch_rolls_back_after_late_external_drift(
     assert product.read_text(encoding="utf-8") == "external race\n"
 
 
+def test_candidate_patch_blocks_concurrent_commit_with_linked_worktree_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hold the worktree's real index lock through post-apply validation."""
+    repository = tmp_path / "committed-race-repository"
+    repository.mkdir()
+    managed = repository / "managed.txt"
+    managed.write_text("managed v1\n", encoding="utf-8")
+    git(repository, "init", "-b", "main")
+    git(repository, "config", "user.name", "CLI Test")
+    git(repository, "config", "user.email", "cli-test@example.invalid")
+    commit(repository, "test: baseline")
+    project = tmp_path / "committed-race-target"
+    git(repository, "worktree", "add", "-b", "race-target", str(project))
+    managed = project / "managed.txt"
+    candidate = tmp_path / "committed-race-candidate"
+    cli.clone_target(project, candidate)
+    candidate_managed = candidate / "managed.txt"
+    candidate_managed.write_text("managed v2\n", encoding="utf-8")
+    patch_path = tmp_path / "committed-race.patch"
+    snapshot = cli.repository_snapshot(project)
+    original_run = cli.run
+    raced = False
+    commit_error: subprocess.CalledProcessError | None = None
+
+    def run_with_committed_race(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal commit_error, raced
+        result = original_run(command, cwd=cwd, capture=capture, check=check)
+        if (
+            not raced
+            and command[:5] == ["git", "-C", str(project), "apply", "-p2"]
+            and "--check" not in command
+            and "-R" not in command
+        ):
+            try:
+                commit(project, "test: concurrent commit of CLI effects")
+            except subprocess.CalledProcessError as error:
+                commit_error = error
+            raced = True
+        return result
+
+    monkeypatch.setattr(cli, "run", run_with_committed_race)
+    cli.write_candidate_patch(
+        candidate,
+        project,
+        patch_path,
+        artifacts={"managed.txt": cli.file_fingerprint(candidate_managed)},
+        target_snapshot=snapshot,
+    )
+
+    assert raced is True
+    assert commit_error is not None
+    assert "index.lock" in commit_error.stderr
+    assert managed.read_text(encoding="utf-8") == "managed v2\n"
+    assert git(project, "show", "HEAD:managed.txt") == "managed v1"
+    assert git(project, "status", "--porcelain") == "M managed.txt"
+    lock_path = Path(
+        git(
+            project,
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-path",
+            "index.lock",
+        )
+    )
+    assert not lock_path.exists()
+
+
+def test_candidate_patch_does_not_reverse_after_head_bypasses_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail closed if a direct ref update commits CLI effects after apply."""
+    project = tmp_path / "head-race-target"
+    project.mkdir()
+    managed = project / "managed.txt"
+    managed.write_text("managed v1\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    candidate = tmp_path / "head-race-candidate"
+    cli.clone_target(project, candidate)
+    candidate_managed = candidate / "managed.txt"
+    candidate_managed.write_text("managed v2\n", encoding="utf-8")
+    patch_path = tmp_path / "head-race.patch"
+    snapshot = cli.repository_snapshot(project)
+    alternate_index = tmp_path / "concurrent.index"
+    alternate_environment = dict(os.environ)
+    alternate_environment["GIT_INDEX_FILE"] = str(alternate_index)
+    original_run = cli.run
+    raced = False
+    reversed_patch = False
+
+    def alternate_git(*arguments: str) -> str:
+        result = subprocess.run(  # noqa: S603
+            ["git", "-C", str(project), *arguments],  # noqa: S607
+            check=True,
+            capture_output=True,
+            text=True,
+            env=alternate_environment,
+        )
+        return result.stdout.strip()
+
+    def run_with_head_race(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        capture: bool = False,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal raced, reversed_patch
+        result = original_run(command, cwd=cwd, capture=capture, check=check)
+        if "-R" in command:
+            reversed_patch = True
+        if (
+            not raced
+            and command[:5] == ["git", "-C", str(project), "apply", "-p2"]
+            and "--check" not in command
+        ):
+            parent = git(project, "rev-parse", "HEAD")
+            alternate_git("read-tree", parent)
+            alternate_git("add", "managed.txt")
+            tree = alternate_git("write-tree")
+            committed = alternate_git(
+                "commit-tree",
+                tree,
+                "-p",
+                parent,
+                "-m",
+                "test: concurrent commit of CLI effects",
+            )
+            git(project, "update-ref", "HEAD", committed, parent)
+            raced = True
+        return result
+
+    monkeypatch.setattr(cli, "run", run_with_head_race)
+    with pytest.raises(
+        CliError, match="rollback is unsafe because HEAD changed"
+    ):
+        cli.write_candidate_patch(
+            candidate,
+            project,
+            patch_path,
+            artifacts={"managed.txt": cli.file_fingerprint(candidate_managed)},
+            target_snapshot=snapshot,
+        )
+
+    assert raced is True
+    assert reversed_patch is False
+    assert managed.read_text(encoding="utf-8") == "managed v2\n"
+    assert git(project, "show", "HEAD:managed.txt") == "managed v2"
+
+
+def test_git_index_lock_preserves_a_replacement_and_primary_error(
+    tmp_path: Path,
+) -> None:
+    """Never remove another writer's lock or mask the transaction error."""
+    project = tmp_path / "lock-replacement-target"
+    project.mkdir()
+    git(project, "init", "-b", "main")
+    lock_path = Path(
+        git(
+            project,
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-path",
+            "index.lock",
+        )
+    )
+
+    with pytest.raises(
+        RuntimeError, match="primary transaction failure"
+    ), cli.hold_git_index_lock(project):
+        lock_path.unlink()
+        lock_path.write_text("replacement one\n", encoding="utf-8")
+        raise RuntimeError("primary transaction failure")
+
+    assert lock_path.read_text(encoding="utf-8") == "replacement one\n"
+    lock_path.unlink()
+
+    with pytest.raises(
+        CliError, match="index lock changed during apply"
+    ), cli.hold_git_index_lock(project):
+        lock_path.unlink()
+        lock_path.write_text("replacement two\n", encoding="utf-8")
+
+    assert lock_path.read_text(encoding="utf-8") == "replacement two\n"
+
+
 def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
     """Run the project hook in the candidate and keep target bytes unchanged."""
     source, revision = make_template(tmp_path)
