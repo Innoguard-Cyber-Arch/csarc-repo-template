@@ -9,7 +9,7 @@
 - `template/` is what downstream repositories receive. Root configuration governs this template repository itself.
 - Use root `docs/specs/` for medium- and long-term design; approved specs synchronize to Issues through the same pipeline shipped to downstream repositories.
 - Use `docs/decisions/` for accepted architecture, tooling, security, compatibility, and platform choices. `docs/index.html` is the portable presentation, not the only editable decision source.
-- Edit the root presentation in `site/`, then rebuild `docs/index.html`; do not hand-edit the generated bundle.
+- Edit the root presentation through the Hugo layers in `site/`: bilingual Markdown belongs in `site/content/`, templates and shortcodes in `site/layouts/`, styles and interactions in `site/static/`, and shared glossary data in `site/data/`. Run `./scripts/build-decision-site` to rebuild `docs/index.html`, `docs/index.en.html`, and the `llms.txt` indexes; do not hand-edit generated outputs. Keep `docs/decisions/`, `docs/specs/`, runbooks, TDD, and other authored engineering records outside Hugo content, and link to them instead of copying them. `site/legacy/index.html` is a read-only parity fixture, not an authoring source.
 - Keep decision records, the deck, and checked-in paths aligned. Do not describe a capability as active unless the template creates and verifies it.
 
 ## Working loop

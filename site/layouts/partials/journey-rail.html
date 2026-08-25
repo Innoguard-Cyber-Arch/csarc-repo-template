@@ -1,0 +1,47 @@
+{{- $english := eq .Page.Lang "en" -}}
+{{- $labelKey := cond $english "en" "zh" -}}
+{{- $items := slice
+  (dict "key" "capability" "tier" "priority" "group" "use" "zh" "能力／導入" "en" "Capability")
+  (dict "key" "flow" "tier" "priority" "group" "use" "zh" "CI/CD 流程" "en" "CI/CD flow")
+  (dict "key" "files" "tier" "priority" "group" "use" "zh" "檔案地圖" "en" "File map")
+  (dict "key" "method" "code" "01" "tier" "priority" "group" "main" "zh" "工作定義" "en" "Work")
+  (dict "key" "agents" "code" "02" "tier" "priority" "group" "main" "zh" "AI 契約" "en" "AI rules")
+  (dict "key" "contract" "code" "03" "tier" "priority" "group" "main" "zh" "驗證＋CI" "en" "Verify")
+  (dict "key" "pr" "code" "04" "tier" "priority" "group" "main" "zh" "PR／合併" "en" "PR merge")
+  (dict "key" "supply" "code" "05" "tier" "priority" "group" "main" "zh" "依賴安全" "en" "Supply")
+  (dict "key" "deploy" "code" "06" "tier" "best" "group" "main" "zh" "版本／交付" "en" "Delivery")
+  (dict "key" "governance" "code" "07" "tier" "priority" "group" "main" "zh" "規則治理" "en" "Governance")
+  (dict "key" "template-release" "code" "08" "tier" "priority" "group" "support" "zh" "模板升級" "en" "Updates")
+  (dict "key" "docs-site" "code" "09" "tier" "priority" "group" "support" "zh" "內部網站" "en" "Docs site")
+  (dict "key" "rollout" "code" "10" "tier" "best" "group" "support" "zh" "導入層級" "en" "Rollout")
+-}}
+{{- $reviewKeys := slice "access-control" "principles" "benchmark" "fleet-inventory" "fleet-governance-thresholds" "spec-format" -}}
+<aside class="journey-rail" aria-label="{{ cond $english "Presentation outline" "簡報目錄" }}">
+  <h3>{{ cond $english "Use template" "使用公版" }}</h3>
+  <ol class="journey-use">
+    {{- range where $items "group" "use" }}
+    <li class="journey-item{{ if eq $.Key .key }} active {{ .tier }}{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+      <a href="#{{ .key }}"><span>{{ index . $labelKey }}</span></a>
+    </li>
+    {{- end }}
+  </ol>
+  <h3>{{ cond $english "Workflow" "開發與維護" }}</h3>
+  <ol class="journey-main">
+    {{- range where $items "group" "main" }}
+    <li class="journey-item{{ if eq $.Key .key }} active {{ .tier }}{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+      <a href="#{{ .key }}"><span class="journey-code">{{ .code }}</span><span>{{ index . $labelKey }}</span></a>
+    </li>
+    {{- end }}
+  </ol>
+  <h3>{{ cond $english "Maintenance" "公版管理" }}</h3>
+  <ol class="journey-support">
+    {{- range where $items "group" "support" }}
+    <li class="journey-item{{ if eq $.Key .key }} active {{ .tier }}{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+      <a href="#{{ .key }}"><span class="journey-code">{{ .code }}</span><span>{{ index . $labelKey }}</span></a>
+    </li>
+    {{- end }}
+  </ol>
+  <a class="journey-bookend appendix{{ if eq .Key "bridge" }} active-bridge{{ end }}" href="#bridge"{{ if eq .Key "bridge" }} aria-current="page"{{ end }}>{{ cond $english "Review" "五月盤點" }}</a>
+  <a class="journey-bookend appendix{{ if eq .Key "ecosystem" }} active-selection{{ end }}" href="#ecosystem"{{ if eq .Key "ecosystem" }} aria-current="page"{{ end }}>{{ cond $english "Tools" "工具附錄" }}</a>
+  <a class="journey-bookend appendix{{ if or (in $reviewKeys .Key) (hasPrefix .Key "glossary") }} active-overview{{ end }}" href="#access-control"{{ if or (in $reviewKeys .Key) (hasPrefix .Key "glossary") }} aria-current="page"{{ end }}>{{ cond $english "Decisions" "決策附錄" }}</a>
+</aside>

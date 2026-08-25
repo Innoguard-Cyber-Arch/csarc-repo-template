@@ -1,6 +1,7 @@
 baseURL = "/"
 title = "CSARC Repo Template｜AI 輔助 SDLC 團隊公版"
 disableKinds = ["taxonomy", "term", "rss", "sitemap", "robotsTXT"]
+disableHugoGeneratorInject = true
 defaultContentLanguage = "zh-tw"
 defaultContentLanguageInSubdir = false
 
@@ -18,11 +19,17 @@ defaultContentLanguageInSubdir = false
   weight = 2
 
 [outputs]
-home = ["candidate", "llms"]
+home = ["presentation", "fidelity", "llms"]
 
-[outputFormats.candidate]
+[outputFormats.presentation]
 mediaType = "text/html"
 baseName = "index"
+isHTML = true
+notAlternative = true
+
+[outputFormats.fidelity]
+mediaType = "text/html"
+baseName = "fidelity"
 isHTML = true
 notAlternative = true
 
@@ -41,21 +48,17 @@ unsafe = true
   max = "0.166.0"
 
   [[module.mounts]]
-  source = "decision-site/content"
+  source = "site/content"
   target = "content"
 
   [[module.mounts]]
-  source = "decision-site/layouts"
+  source = "site/layouts"
   target = "layouts"
 
   [[module.mounts]]
-  source = "decision-site/data"
+  source = "site/data"
   target = "data"
 
   [[module.mounts]]
-  source = "decision-site/static"
+  source = "site/static"
   target = "static"
-
-  [[module.mounts]]
-  source = "site/styles.css"
-  target = "static/styles.css"

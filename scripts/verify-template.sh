@@ -7,7 +7,7 @@ trap 'rm -rf "$fixture_root"' EXIT
 cd "$repo_root"
 
 ./scripts/check-update-conflicts
-python3 scripts/render_site.py --check
+./scripts/build-decision-site --check
 
 prime_gitleaks_cache() {
   local project_root="$1"
@@ -92,7 +92,7 @@ bash -n template/scripts/check-update-conflicts
 bash -n scripts/cleanup-worktrees
 bash -n template/scripts/cleanup-worktrees
 bash -n scripts/install-hugo
-bash -n scripts/build-hugo-preview
+bash -n scripts/build-decision-site
 bash -n scripts/check-governance-drift
 bash -n template/scripts/check-governance-drift
 bash -n scripts/verify-fast
@@ -123,24 +123,27 @@ bash -n template/scripts/validate-issue-title
 ./scripts/test-issue-triage
 bash -n scripts/test-worktree-cleanup
 ./scripts/test-worktree-cleanup
-node --check decision-site/static/detail-toggle.js
-node --check decision-site/static/candidate.js
+node --check site/static/detail-toggle.js
+node --check site/static/deck.js
+node --check site/static/legacy-components.js
 python3 scripts/check-decision-site-translations
-! grep -q 'readFile "site/index.html"' decision-site/layouts/home.candidate.html
-! grep -q '<section' decision-site/content/_index.*.md
+! grep -q 'readFile "site/legacy/index.html"' site/layouts/home.presentation.html
+! grep -q '<section' site/content/_index.*.md
+grep -q 'source = "site/content"' site/hugo.toml
+! grep -q 'source = "docs' site/hugo.toml
 
 translation_fixture="$fixture_root/decision-site-translations"
 mkdir -p "$translation_fixture"
-cp decision-site/content/_index.zh-tw.md "$translation_fixture/"
+cp site/content/_index.zh-tw.md "$translation_fixture/"
 sed 's/key="spec-format"/key="missing-spec-format"/' \
-  decision-site/content/_index.en.md > "$translation_fixture/_index.en.md"
+  site/content/_index.en.md > "$translation_fixture/_index.en.md"
 if python3 scripts/check-decision-site-translations \
   --content-dir "$translation_fixture" >/dev/null 2>&1; then
   echo "Translation verification must reject a missing matching content key."
   exit 1
 fi
 
-python3 - decision-site/content/_index.en.md \
+python3 - site/content/_index.en.md \
   "$translation_fixture/_index.en.md" <<'PY'
 import sys
 from pathlib import Path
@@ -160,8 +163,8 @@ if python3 scripts/check-decision-site-translations \
 fi
 grep -q 'empty content body' "$translation_error"
 
-sed 's/title="Cost of adopting Spec Kit"/title=""/' \
-  decision-site/content/_index.en.md > "$translation_fixture/_index.en.md"
+sed 's/title="Why migration is deferred and what would trigger it"/title=""/' \
+  site/content/_index.en.md > "$translation_fixture/_index.en.md"
 if python3 scripts/check-decision-site-translations \
   --content-dir "$translation_fixture" >/dev/null 2>"$translation_error"; then
   echo "Translation verification must reject an empty title."
@@ -169,7 +172,7 @@ if python3 scripts/check-decision-site-translations \
 fi
 grep -q 'empty title attribute' "$translation_error"
 
-python3 - decision-site/content/_index.en.md \
+python3 - site/content/_index.en.md \
   "$translation_fixture/_index.en.md" <<'PY'
 import sys
 from pathlib import Path
@@ -190,41 +193,46 @@ if python3 scripts/check-decision-site-translations \
 fi
 grep -q 'empty direct content body' "$translation_error"
 
-./scripts/build-hugo-preview --check
+python3 scripts/check-decision-site-parity
 python3 scripts/check-decision-site-glossary
-test "$(grep -o 'class="detail-level-control"' dist/hugo-preview.html | wc -l | tr -d ' ')" = 1
-grep -q 'class="detail-level-control" role="group" aria-label="閱讀深度" hidden' \
-  dist/hugo-preview.html
+test "$(grep -o 'class="detail-level-control"' docs/index.html | wc -l | tr -d ' ')" = 1
+grep -q 'class="detail-level-control" role="group" aria-label="閱讀模式" hidden' \
+  docs/index.html
+grep -q '<html lang="zh-Hant-TW" data-detail-level="simple">' docs/index.html
+grep -q '>概覽</button>' docs/index.html
+grep -q '>維運</button>' docs/index.html
 grep -q '\.detail-level-control\[hidden\] { display: none; }' \
-  dist/hugo-preview.html
-grep -q 'controls.hidden = false' dist/hugo-preview.html
-test "$(grep -o 'class="language-control"' dist/hugo-preview.html | wc -l | tr -d ' ')" = 1
-test "$(grep -o 'class="language-control"' dist/hugo-preview.en.html | wc -l | tr -d ' ')" = 1
-grep -q '<html lang="zh-Hant-TW"' dist/hugo-preview.html
-grep -q '<html lang="en"' dist/hugo-preview.en.html
+  docs/index.html
+grep -q 'controls.hidden = false' docs/index.html
+test "$(grep -o 'class="language-control"' docs/index.html | wc -l | tr -d ' ')" = 1
+test "$(grep -o 'class="language-control"' docs/index.en.html | wc -l | tr -d ' ')" = 1
+grep -q '<html lang="zh-Hant-TW"' docs/index.html
+grep -q '<html lang="en"' docs/index.en.html
+grep -q 'href="index.en.html"' docs/index.html
+grep -q 'href="index.html"' docs/index.en.html
 # Without JavaScript, the first slide remains readable and inactive controls stay hidden.
-test "$(grep -o 'class="slide markdown-slide active' dist/hugo-preview.html | wc -l | tr -d ' ')" = 1
-test "$(grep -o 'class="slide markdown-slide active' dist/hugo-preview.en.html | wc -l | tr -d ' ')" = 1
-grep -q 'class="controls" aria-label="簡報控制" hidden' dist/hugo-preview.html
+test "$(grep -o 'class="slide markdown-slide active' docs/index.html | wc -l | tr -d ' ')" = 1
+test "$(grep -o 'class="slide markdown-slide active' docs/index.en.html | wc -l | tr -d ' ')" = 1
+grep -q 'class="controls" aria-label="簡報控制" hidden' docs/index.html
 grep -q 'class="view-controls" aria-label="畫面縮放控制" hidden' \
-  dist/hugo-preview.html
-grep -q 'slideControls.hidden = false' dist/hugo-preview.html
-grep -q 'data-detail-level="technical"' dist/hugo-preview.html
-grep -q 'csarc-detail-level' dist/hugo-preview.html
-grep -q '@media (prefers-reduced-motion: reduce)' dist/hugo-preview.html
+  docs/index.html
+grep -q 'slideControls.hidden = false' docs/index.html
+grep -q 'data-detail-level="technical"' docs/index.html
+grep -q 'csarc-detail-level' docs/index.html
+grep -q '@media (prefers-reduced-motion: reduce)' docs/index.html
 test "$(grep -o '<html' dist/hugo-site/index.html | wc -l | tr -d ' ')" = 1
 test "$(grep -o '<body' dist/hugo-site/index.html | wc -l | tr -d ' ')" = 1
 test "$(grep -o '<html' dist/hugo-site/en/index.html | wc -l | tr -d ' ')" = 1
 test "$(grep -o '<body' dist/hugo-site/en/index.html | wc -l | tr -d ' ')" = 1
-test "$(grep -o 'class="package-disclosure"' site/index.html | wc -l | tr -d ' ')" = \
-  "$(grep -o 'class="package-disclosure"' dist/hugo-preview.html | wc -l | tr -d ' ')"
-test "$(grep -o 'data-content-key="' dist/hugo-preview.html | wc -l | tr -d ' ')" = \
-  "$(grep -o 'data-content-key="' dist/hugo-preview.en.html | wc -l | tr -d ' ')"
+test "$(grep -o 'class="package-disclosure"' docs/index.html | wc -l | tr -d ' ')" -ge \
+  "$(grep -o 'class="package-disclosure"' site/legacy/index.html | wc -l | tr -d ' ')"
+test "$(grep -o 'data-content-key="' docs/index.html | wc -l | tr -d ' ')" = \
+  "$(grep -o 'data-content-key="' docs/index.en.html | wc -l | tr -d ' ')"
 
 glossary_fixture="$fixture_root/decision-site-glossary"
 mkdir -p "$glossary_fixture"
 sed 's/^summary_en = ".*"$/summary_en = ""/' \
-  decision-site/data/glossary.toml > "$glossary_fixture/missing-translation.toml"
+  site/data/glossary.toml > "$glossary_fixture/missing-translation.toml"
 if python3 scripts/check-decision-site-glossary \
   --source "$glossary_fixture/missing-translation.toml" >/dev/null 2>&1; then
   echo "Glossary verification must reject missing translated text."
@@ -232,10 +240,10 @@ if python3 scripts/check-decision-site-glossary \
 fi
 
 sed 's/href="#glossary-issue"/href="#missing-glossary-issue"/' \
-  dist/hugo-preview.html > "$glossary_fixture/broken-link.html"
+  docs/index.html > "$glossary_fixture/broken-link.html"
 if python3 scripts/check-decision-site-glossary \
   --candidate "$glossary_fixture/broken-link.html" \
-  --candidate dist/hugo-preview.en.html >/dev/null 2>&1; then
+  --candidate docs/index.en.html >/dev/null 2>&1; then
   echo "Glossary verification must reject a broken anchor link."
   exit 1
 fi
@@ -780,9 +788,12 @@ test -f AGENTS.md
 test "$(wc -l < AGENTS.md)" -le 200
 test "$(cat CLAUDE.md)" = "@AGENTS.md"
 test -f docs/index.html
-test -f site/index.html
-test -f site/styles.css
-test -f site/app.js
+test -f site/content/_index.zh-tw.md
+test -f site/content/_index.en.md
+test -f site/layouts/home.presentation.html
+test -f site/static/styles.css
+test -f site/static/app.js
+test -f site/legacy/index.html
 test -f scripts/render_site.py
 test -f docs/README.md
 test -f docs/decisions/README.md

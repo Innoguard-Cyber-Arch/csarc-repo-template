@@ -26,6 +26,14 @@
         },
         {
           "type": "generic",
+          "path": "site/content/_index.zh-tw.md"
+        },
+        {
+          "type": "generic",
+          "path": "site/legacy/index.html"
+        },
+        {
+          "type": "generic",
           "path": "docs/index.html"
         }
       ]

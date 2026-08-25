@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""Verify that the Hugo technical view preserves legacy text and images."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from html.parser import HTMLParser
+from pathlib import Path
+
+VOID_ELEMENTS = {
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr",
+}
+SPECIAL_KEYS = {
+    "五月版 SDLC 建議盤點": "bridge",
+    "開源工具選型總覽": "ecosystem",
+    "內部網站存取控制決策": "access-control",
+    "決策附錄核心原則": "principles",
+    "2026-08 外部基準與線上實測比較": "benchmark",
+    "Fleet 治理採用盤點": "fleet-inventory",
+    "Fleet 治理採用門檻": "fleet-governance-thresholds",
+    "Spec Kit 格式決策": "spec-format",
+}
+
+
+class ContentParser(HTMLParser):
+    """Collect normalized slide text and image descriptions."""
+
+    def __init__(self, *, candidate: bool) -> None:
+        super().__init__(convert_charrefs=True)
+        self.candidate = candidate
+        self.stack: list[str] = []
+        self.slide_depth: int | None = None
+        self.legacy_depth: int | None = None
+        self.key: str | None = None
+        self.text: list[str] = []
+        self.images: list[tuple[str, str]] = []
+        self.slides: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {}
+
+    def handle_starttag(
+        self, tag: str, attrs_list: list[tuple[str, str | None]]
+    ) -> None:
+        attrs = dict(attrs_list)
+        classes = set((attrs.get("class") or "").split())
+        if tag not in VOID_ELEMENTS:
+            self.stack.append(tag)
+        if tag == "section" and "slide" in classes and self.slide_depth is None:
+            self.slide_depth = len(self.stack)
+            if self.candidate:
+                self.key = attrs.get("id")
+            else:
+                self.key = attrs.get("data-track") or SPECIAL_KEYS.get(
+                    attrs.get("aria-label") or ""
+                )
+        if (
+            self.candidate
+            and self.key
+            and tag == "div"
+            and "legacy-content" in classes
+        ):
+            self.legacy_depth = len(self.stack)
+        if tag == "img" and self._capturing():
+            self.images.append((attrs.get("src") or "", attrs.get("alt") or ""))
+
+    def handle_startendtag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        self.handle_starttag(tag, attrs)
+        if tag not in VOID_ELEMENTS:
+            self.handle_endtag(tag)
+
+    def handle_endtag(self, tag: str) -> None:
+        depth = len(self.stack)
+        if self.candidate and tag == "div" and depth == self.legacy_depth:
+            self.legacy_depth = None
+        if tag == "section" and depth == self.slide_depth:
+            if self.key and (not self.candidate or self.text):
+                normalized = " ".join(" ".join(self.text).split())
+                self.slides[self.key] = (normalized, tuple(self.images))
+            self.slide_depth = None
+            self.legacy_depth = None
+            self.key = None
+            self.text = []
+            self.images = []
+        if self.stack:
+            self.stack.pop()
+
+    def handle_data(self, data: str) -> None:
+        if self._capturing() and data.strip():
+            self.text.append(data)
+
+    def _capturing(self) -> bool:
+        return bool(
+            self.key
+            and self.slide_depth is not None
+            and (not self.candidate or self.legacy_depth is not None)
+        )
+
+
+def parse(path: Path, *, candidate: bool) -> dict[str, tuple[str, tuple[tuple[str, str], ...]]]:
+    parser = ContentParser(candidate=candidate)
+    parser.feed(path.read_text(encoding="utf-8"))
+    return parser.slides
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--legacy", type=Path, default=Path("site/legacy/index.html"))
+    parser.add_argument(
+        "--candidate", type=Path, default=Path("dist/hugo-site/index.html")
+    )
+    args = parser.parse_args()
+    try:
+        legacy = parse(args.legacy, candidate=False)
+        candidate = parse(args.candidate, candidate=True)
+    except (OSError, UnicodeError) as error:
+        sys.stderr.write(f"decision-site parity check failed: {error}\n")
+        return 1
+
+    if legacy.keys() != candidate.keys():
+        missing = sorted(legacy.keys() - candidate.keys())
+        extra = sorted(candidate.keys() - legacy.keys())
+        sys.stderr.write(
+            f"decision-site slide mismatch; missing={missing}, extra={extra}\n"
+        )
+        return 1
+    for key in legacy:
+        if legacy[key] != candidate[key]:
+            sys.stderr.write(f"decision-site content mismatch: {key}\n")
+            return 1
+    image_count = sum(len(value[1]) for value in legacy.values())
+    sys.stdout.write(
+        f"Decision-site parity: {len(legacy)} slides, {image_count} images\n"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
