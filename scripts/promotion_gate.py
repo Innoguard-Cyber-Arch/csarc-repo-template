@@ -528,6 +528,28 @@ def fallback_statement(
     return f"Actions quota fallback {kind}\n\n`{binding}`\n\n{statements[kind]}"
 
 
+def quota_fallback_note(
+    repo: str, pr_number: int, head_sha: str, run_urls: list[str]
+) -> str:
+    """Bind a routine pull request's quota fallback note to one commit."""
+    fields = {
+        "repository": repo,
+        "pull_request": pr_number,
+        "head_sha": head_sha,
+        "runs": sorted(run_urls),
+    }
+    binding = json.dumps(fields, sort_keys=True, separators=(",", ":"))
+    statement = (
+        "Every failing check on this exact commit is GitHub's zero-step "
+        "billing gate, not a real failure; full local verification passed "
+        "for this exact commit. This repository's plan structurally runs "
+        "over its included Actions minutes, so this is a standing, "
+        "accepted operating condition rather than an incident. No release, "
+        "publishing, deployment, provenance, or canary success is claimed."
+    )
+    return f"Actions quota fallback note\n\n`{binding}`\n\n{statement}"
+
+
 def preflight_binding(evidence: dict[str, Any]) -> dict[str, object]:
     """Return every security-relevant field from preflight evidence."""
     archive = evidence.get("candidate_archive") or {}
@@ -1155,6 +1177,31 @@ def finalize(args: argparse.Namespace) -> None:
     write_evidence(args.output, evidence)
 
 
+def note_quota_fallback(args: argparse.Namespace) -> None:
+    """Print a routine PR's quota fallback note after proving zero-step."""
+    if not args.blocked_run_url:
+        raise RuntimeError("At least one blocked Actions run is required")
+    token = os.environ.get("GH_TOKEN", "")
+    pull = github_get(args.repo, f"pulls/{args.pr}", token)
+    head = pull.get("head") if isinstance(pull, dict) else None
+    if not isinstance(head, dict):
+        raise RuntimeError("Pull request head could not be resolved")
+    head_sha = str(head.get("sha") or "")
+    head_ref = str(head.get("ref") or "")
+    if not head_sha or not head_ref:
+        raise RuntimeError("Pull request head is incomplete")
+    for url in args.blocked_run_url:
+        require_run_url(url, args.repo)
+        require_zero_step_run(
+            url, args.repo, args.pr, head_ref, head_sha, token
+        )
+    print(  # noqa: T201
+        quota_fallback_note(
+            args.repo, args.pr, head_sha, sorted(args.blocked_run_url)
+        )
+    )
+
+
 def finalize_quota_fallback(args: argparse.Namespace) -> None:
     """Record a non-release promotion gate from exact local evidence."""
     require_distinct_paths(args.input, args.output, args.archive)
@@ -1432,6 +1479,14 @@ def parser() -> argparse.ArgumentParser:
         "--blocked-run-url", action="append", default=[]
     )
     fallback_command.set_defaults(handler=finalize_quota_fallback)
+
+    note_command = commands.add_parser("note-quota-fallback")
+    note_command.add_argument("--repo", required=True)
+    note_command.add_argument("--pr", type=int, required=True)
+    note_command.add_argument(
+        "--blocked-run-url", action="append", default=[]
+    )
+    note_command.set_defaults(handler=note_quota_fallback)
 
     verify_command = commands.add_parser("verify-main")
     verify_command.add_argument("--repo", required=True)
