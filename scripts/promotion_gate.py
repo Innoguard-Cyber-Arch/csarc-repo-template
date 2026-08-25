@@ -1483,9 +1483,7 @@ def parser() -> argparse.ArgumentParser:
     note_command = commands.add_parser("note-quota-fallback")
     note_command.add_argument("--repo", required=True)
     note_command.add_argument("--pr", type=int, required=True)
-    note_command.add_argument(
-        "--blocked-run-url", action="append", default=[]
-    )
+    note_command.add_argument("--blocked-run-url", action="append", default=[])
     note_command.set_defaults(handler=note_quota_fallback)
 
     verify_command = commands.add_parser("verify-main")
