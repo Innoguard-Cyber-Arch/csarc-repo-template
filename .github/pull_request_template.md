@@ -1,16 +1,25 @@
 ## Purpose
 
-<!-- Replace N with the Issue number used in the branch name. -->
+<!-- Draft 使用 Refs #N；完成所有 PR／Issue 項目並轉 Ready 前改成 Closes #N。 -->
 
-Closes #N
+Refs #N
 
 <!-- Work PRs use type/N-short-slug and target the configured integration branch. -->
 
+<!-- Draft 必填；請為每個欄位填入具體內容，沒有風險或依賴時填 None。 -->
+
+- Scope:
+- Completed verification:
+- Pending verification:
+- Known risks:
+- Dependencies / non-parallel work:
+
 ## 完成清單
 
-<!-- Closing keywords require every task here and in the linked Issue to be checked. -->
+<!-- Draft 可保留未勾項目；closing keyword 與 Ready 要求此處及 Issue 全數完成。 -->
 
-- [ ] `./scripts/verify-template.sh` 已通過；恰選一個 change label（`fix`→`bug`、`docs`→`documentation`、其餘 type→`enhancement`）；未超出原 Issue 範圍
+- [ ] 相關 targeted checks 已通過；恰選一個 change label（`fix`→`bug`、`docs`→`documentation`、其餘 type→`enhancement`）；未超出原 Issue 範圍
+- [ ] 轉 Ready 前 `./scripts/verify-template.sh` 已通過
 - [ ] 已測試新專案產生並評估既有專案更新影響；第三方 Actions 固定完整 commit SHA
 
 ## 補充

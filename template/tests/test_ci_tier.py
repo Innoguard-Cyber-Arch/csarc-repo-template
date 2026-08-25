@@ -53,6 +53,38 @@ def test_source_uses_fast_canonical_runtime() -> None:
     )
     assert plan.tier == "fast"
     assert plan.scopes == ("source",)
+    assert plan.review_state == "ready"
+
+
+@pytest.mark.parametrize(
+    ("changed_files", "risk_flags"),
+    [
+        (["uv.lock"], (False, True, False)),
+        (["policies/rulesets.json"], (True, False, False)),
+        (
+            ["policies/rulesets.json", "uv.lock", ".github/workflows/ci.yml"],
+            (True, True, True),
+        ),
+    ],
+)
+def test_draft_defers_full_but_keeps_targeted_risk_checks(
+    changed_files: list[str], risk_flags: tuple[bool, bool, bool]
+) -> None:
+    """Draft WIP records pending full verification without hiding its scope."""
+    plan = classify(
+        "pull_request",
+        "main",
+        "dev/m7-ci",
+        {"promotion"},
+        changed_files,
+        draft=True,
+    )
+    assert plan.tier == "fast"
+    assert plan.review_state == "draft"
+    assert plan.reason == (
+        "draft work in progress; full verification deferred until ready"
+    )
+    assert (plan.run_governance, plan.run_osv, plan.run_zizmor) == risk_flags
 
 
 @pytest.mark.parametrize(

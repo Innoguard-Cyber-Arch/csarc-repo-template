@@ -16,6 +16,10 @@ fi
 grep -q 'uv sync --locked --python 3.14' AGENTS.md
 grep -q 'uv run pytest <test-path>' AGENTS.md
 grep -q 'scripts/render_site.py --check' AGENTS.md
+grep -q 'open Draft PRs, remote branches, and existing worktrees' AGENTS.md
+grep -q 'open Draft PRs, remote branches, and worktrees' template/AGENTS.md.jinja
+grep -q 'before marking Ready or updating a Ready PR' AGENTS.md
+grep -q 'before marking Ready or updating a Ready PR' template/AGENTS.md.jinja
 grep -q 'Actions quota fallback attestation' docs/ci-policy.md
 grep -q 'finalize-quota-fallback' docs/ci-policy.md
 grep -q 'verify-quota-main' docs/ci-policy.md
@@ -945,6 +949,10 @@ test "$(grep -c '^## ' .github/pull_request_template.md)" -eq 3
 grep -q '^## Purpose$' .github/pull_request_template.md
 grep -q '^## 完成清單$' .github/pull_request_template.md
 grep -q '^## 補充$' .github/pull_request_template.md
+for field in Scope 'Completed verification' 'Pending verification' 'Known risks' 'Dependencies / non-parallel work'; do
+  grep -Fq -- "- ${field}:" .github/pull_request_template.md
+  grep -Fq -- "- ${field}:" template/.github/pull_request_template.md
+done
 grep -q '^  pull_request:$' .github/workflows/governance-comment.yml
 grep -q 'types: \[opened, reopened, ready_for_review\]' \
   .github/workflows/governance-comment.yml
@@ -985,9 +993,13 @@ grep -q 'Complete every pull request checklist item' \
   .github/workflows/pr-policy.yml
 grep -q 'still has unchecked acceptance tasks' \
   .github/workflows/pr-policy.yml
+grep -q 'ready_for_review, converted_to_draft' .github/workflows/pr-policy.yml
+grep -q 'PR_DRAFT:' .github/workflows/pr-policy.yml
 grep -q 'Only dev promotion or release-please may target main in dev mode.' \
   .github/workflows/pr-policy.yml
 grep -q '^  merge_group:$' .github/workflows/ci.yml
+grep -q 'ready_for_review, converted_to_draft' .github/workflows/ci.yml
+grep -q 'PR_DRAFT:' .github/workflows/ci.yml
 grep -q '^  workflow_dispatch:$' .github/workflows/ci.yml
 if grep -q '^  push:$' .github/workflows/ci.yml; then
   echo "CI must not repeat a pull request suite after merge."
@@ -1511,7 +1523,7 @@ grep -q '^## 完成清單$' \
   "$fixture_root/default-project/.github/pull_request_template.md"
 grep -q '^## 補充$' \
   "$fixture_root/default-project/.github/pull_request_template.md"
-grep -q 'Closing keywords require every task' \
+grep -q 'Drafts may keep unchecked work' \
   "$fixture_root/default-project/.github/pull_request_template.md"
 grep -q 'referenced Issue checklist' \
   "$fixture_root/default-project/docs/index.html"

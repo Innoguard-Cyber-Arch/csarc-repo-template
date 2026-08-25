@@ -50,6 +50,23 @@ tier、保留 promotion evidence 並立即形成 release 邊界。
 manifest／lockfile 加跑 OSV，治理宣告或 checker 加跑 remote governance；無法分類
 的路徑升級為 full，不會以檔名判斷後直接放行。
 
+## Draft ownership 與 Ready 邊界
+
+開始實作前先查 open Draft PR、remote branch 與既有 worktree。沒有既有 owner 時，
+在最小解法可說明且相關 targeted checks 通過後即可 push 並開 Draft PR；Draft 使用
+`Refs #N`，並列出 scope、已完成與待完成驗證、已知風險，以及依賴或不可平行工作。
+若使用 closing keyword，即使仍是 Draft，也必須先完成 PR 與 Issue 的所有項目。
+
+Draft 的 change-aware CI plan 明確記為 `review_state=draft`，只跑 docs／fast tier 與變更範圍要求的
+OSV、Zizmor、remote governance。Draft 的 `verify` 成功只表示這些 WIP checks 通過，
+不得寫成 full verification 或可合併證據。`ready_for_review` 與
+`converted_to_draft` 都會重新觸發 PR policy 與 CI；Ready plan 不套用 Draft 限制，
+維持原有高風險 full 分類。
+
+轉 Ready 或更新 Ready PR 前，必須在目前內容上通過完整本機 verifier，將 `Refs`
+改成 closing keyword，並完成 PR 與 Issue checklist。任一條件缺少就 fail closed；
+轉回 Draft 後可再次以 targeted checks 協作，但下一次 Ready 前仍須重新確認完整驗證。
+
 ## `main` 回同步到進行中的 delivery branch
 
 `main` 每次前進後，delivery-sync workflow 會列舉 `dev/next`、所有
