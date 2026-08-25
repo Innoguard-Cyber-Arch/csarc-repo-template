@@ -17,7 +17,6 @@ paired_files=(
   .github/ISSUE_TEMPLATE/work-item.yml
   .github/workflows/governance-comment.yml
   .github/workflows/governance-drift.yml
-  .github/workflows/dev-next-close.yml
   .github/workflows/delivery-maintenance.yml
   .github/workflows/issue-triage.yml
   .github/workflows/milestone-lifecycle.yml
@@ -30,7 +29,6 @@ paired_files=(
   .github/workflows/spec-to-issue.yml
   .github/workflows/zizmor.yml
   policies/actions.json
-  policies/dev-next-ruleset.json
   policies/labels.json
   policies/repository.json
   docs/behavior-verification-contract.md

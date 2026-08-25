@@ -23,8 +23,8 @@ GitHub plan、repository visibility、organization policy 與 token scope 會改
 ## Acceptance criteria
 
 - [x] 每個一般工作先有 Issue；Milestone 是可選的端到端 story，不因 Issue 數量或 spec 存在自動建立。
-- [x] Delivery 策略以 `dev/m*`、`dev/next`、受限的 `dev/i*` 與 hotfix 路徑區分整合風險，PR base 由 linked Issue 實際狀態驗證。
-- [x] Main 前進後，active delivery branch 透過受審查 sync PR 納入；不直接 push 或在 main 解衝突。
+- [x] Delivery 策略只為 open Milestone 使用短命 `dev/m*`；standalone、hotfix 與 bot 短分支直接進 `main`，PR base 由 linked Issue 實際狀態驗證。
+- [x] Main 前進不會批次同步或使 ordinary delivery PR stale；final promotion 才以一張受審查 sync PR 納入當時最新 main，明列 dependency 的 owner 可提前同步自己的 delivery。
 - [x] 平台能力使用 allowed／blocked／unknown，只有已確認可用時啟用較強 automation；未知不當作 allowed。
 - [x] GitHub Free private 缺少 Ruleset／team review enforcement 時顯示 `DEGRADED`，但仍執行可攜式 checks 與個別 reviewer request。
 - [x] 平行 task 的 Ready／Draft／label／milestone／authorization／merge 寫入只能透過 repository remote lease 工具序列化；每個 destination branch 另有共用 lane lease。

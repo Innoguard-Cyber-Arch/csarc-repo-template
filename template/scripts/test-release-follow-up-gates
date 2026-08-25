@@ -85,6 +85,17 @@ grep -Fq 'commits/$main_sha/pulls?per_page=100' \
   "$repo_root/.github/workflows/release-please.yml"
 grep -Fq -- '--paginate --slurp' \
   "$repo_root/.github/workflows/release-please.yml"
+grep -Fq 'git describe --tags --abbrev=0 "$GITHUB_SHA^"' \
+  "$repo_root/.github/workflows/release-please.yml"
+grep -Fq 'git rev-list --first-parent --reverse "$revision"' \
+  "$repo_root/.github/workflows/release-please.yml"
+grep -Fq -- '--source-kind "$source_kind"' \
+  "$repo_root/.github/workflows/release-please.yml"
+if grep -Fq -- '--kind main-release-follow-up' \
+  "$repo_root/.github/workflows/release-please.yml"; then
+  echo "Release follow-up bypasses historical promotion evidence." >&2
+  exit 1
+fi
 grep -Fq '"$base_sha" == "$PUSH_BEFORE"' \
   "$repo_root/.github/workflows/promotion-post-merge.yml"
 grep -Fq '"$base_sha" == "$expected_base"' \
@@ -129,11 +140,61 @@ case "$*" in
   *"--jq .id"*)
     printf '%s\n' "${MOCK_REPOSITORY_ID:-123}"
     ;;
+  "run list "*)
+    [[ "${MOCK_POST_MERGE_RUN:-true}" == true ]] && printf '123\n'
+    ;;
+  "run download "*)
+    output_dir=""
+    while [[ "$#" -gt 0 ]]; do
+      if [[ "$1" == --dir ]]; then
+        output_dir="$2"
+        break
+      fi
+      shift
+    done
+    [[ -n "$output_dir" ]]
+    mkdir -p "$output_dir"
+    jq -n \
+      --arg repo "$GITHUB_REPOSITORY" \
+      --arg head "$MOCK_BOUNDARY_SHA" \
+      --arg main "$MOCK_BOUNDARY_SHA" \
+      --arg tree_identity "${MOCK_BOUNDARY_TREE_IDENTITY:-verified}" \
+      --argjson release_eligible "${MOCK_BOUNDARY_RELEASE_ELIGIBLE:-true}" \
+      '{
+        gate: "passed",
+        release_eligible: $release_eligible,
+        repository: $repo,
+        pull_request: 50,
+        head_sha: $head,
+        head_ref: "dev/m7-staged-ci",
+        route: {kind: "milestone", milestone: 7},
+        included_issues: [{number: 7, title: "Work"}],
+        release: {
+          intent: "minor",
+          included_pull_requests: [{number: 7, title: "feat: work", intent: "minor"}]
+        },
+        post_merge: {main_sha: $main, tree_identity: $tree_identity}
+      }' > "$output_dir/main-promotion-evidence.json"
+    ;;
   *"/commits/"*"/pulls?per_page=100"*)
     [[ "$*" == *"--paginate"* && "$*" == *"--slurp"* ]]
-    commit_sha="${*#*\/commits\/}"
+    endpoint="${!#}"
+    commit_sha="${endpoint#*\/commits\/}"
     commit_sha="${commit_sha%%/pulls*}"
-    if [[ "$commit_sha" != "${GITHUB_SHA:-}" && -n "${MOCK_BOUNDARY_PULL_REQUEST_PAGES:-}" ]]; then
+    if [[ -n "${MOCK_STANDALONE_SHA:-}" && "$commit_sha" == "$MOCK_STANDALONE_SHA" ]]; then
+      jq -cn --arg sha "$commit_sha" '[[{
+        number: 60, title: "feat: standalone", labels: [],
+        merged_at: "2026-08-23T00:00:00Z", merge_commit_sha: $sha,
+        base: {ref: "main"}, head: {ref: "feat/60-standalone", sha: $sha}
+      }]]'
+    elif [[ -n "${MOCK_BOT_SHA:-}" && "$commit_sha" == "$MOCK_BOT_SHA" ]]; then
+      jq -cn --arg sha "$commit_sha" '[[{
+        number: 61, title: "fix: dependency", labels: [],
+        merged_at: "2026-08-23T01:00:00Z", merge_commit_sha: $sha,
+        base: {ref: "main"}, head: {ref: "dependabot/pip/httpx-1.0", sha: $sha}
+      }]]'
+    elif [[ -n "${MOCK_BOUNDARY_SHA:-}" &&
+      "$*" == *"/commits/$MOCK_BOUNDARY_SHA/pulls?per_page=100"* ]]; then
       printf '%s\n' "$MOCK_BOUNDARY_PULL_REQUEST_PAGES"
     elif [[ -n "${MOCK_PULL_REQUEST_PAGES:-}" ]]; then
       printf '%s\n' "$MOCK_PULL_REQUEST_PAGES"
@@ -308,6 +369,22 @@ run_release_gate() {
   local actor_permission="${7:-write}"
   local push_before="${8:-$(git -C "$repo" rev-parse HEAD^)}"
   local runner_temp="$repo/release-runner-temp"
+  local boundary_sha
+  boundary_sha="${MOCK_BOUNDARY_SHA_OVERRIDE:-$(git -C "$repo" rev-parse HEAD^)}"
+  if [[ -z "$boundary_pull_request_pages" ]]; then
+    boundary_pull_request_pages="$(
+      jq -cn --arg sha "$boundary_sha" '[[{
+        number: 50,
+        title: "feat: promote batch",
+        labels: [{name: "promotion"}],
+        merged_at: "2026-08-23T00:00:00Z",
+        merge_commit_sha: $sha,
+        base: {ref: "main"},
+        head: {ref: "dev/m7-staged-ci", sha: $sha}
+      }]]'
+    )"
+  fi
+  rm -rf "$repo/promotion-boundaries" "$repo/verified-boundaries"
   mkdir -p "$runner_temp"
   (
     cd "$repo"
@@ -315,6 +392,12 @@ run_release_gate() {
       MOCK_PULL_REQUESTS="$pull_requests" \
       MOCK_PULL_REQUEST_PAGES="$pull_request_pages" \
       MOCK_BOUNDARY_PULL_REQUEST_PAGES="$boundary_pull_request_pages" \
+      MOCK_BOUNDARY_SHA="$boundary_sha" \
+      MOCK_BOUNDARY_RELEASE_ELIGIBLE="${MOCK_BOUNDARY_RELEASE_ELIGIBLE:-true}" \
+      MOCK_BOUNDARY_TREE_IDENTITY="${MOCK_BOUNDARY_TREE_IDENTITY:-verified}" \
+      MOCK_POST_MERGE_RUN="${MOCK_POST_MERGE_RUN:-true}" \
+      MOCK_STANDALONE_SHA="${MOCK_STANDALONE_SHA:-}" \
+      MOCK_BOT_SHA="${MOCK_BOT_SHA:-}" \
       MOCK_CHANGED_FILES="CHANGELOG.md" \
       MOCK_HEAD_SHA="$(git rev-parse HEAD)" \
       MOCK_COMMITTER="$committer" \
@@ -343,6 +426,48 @@ run_gate "$test_repo" \
 run_premerge_gate "$test_repo" "$base_sha" >/dev/null
 run_release_gate "$test_repo" \
   "$(pull_request_json "$base_sha" "$head_sha")" >/dev/null
+if MOCK_BOUNDARY_RELEASE_ELIGIBLE=false run_release_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" >/dev/null 2>&1; then
+  echo "Release source gate accepted release-ineligible promotion evidence." >&2
+  exit 1
+fi
+if MOCK_BOUNDARY_TREE_IDENTITY=failed run_release_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" >/dev/null 2>&1; then
+  echo "Release source gate accepted failed post-merge identity evidence." >&2
+  exit 1
+fi
+if MOCK_POST_MERGE_RUN=false run_release_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" >/dev/null 2>&1; then
+  echo "Release source gate accepted missing post-merge identity evidence." >&2
+  exit 1
+fi
+
+(
+  setup_repo mixed-history
+  git -C "$test_repo" tag v0.1.0
+  printf 'standalone\n' > "$test_repo/standalone.txt"
+  commit_all "$test_repo" "feat: standalone"
+  standalone_sha="$(git -C "$test_repo" rev-parse HEAD)"
+  printf 'bot\n' > "$test_repo/bot.txt"
+  commit_all "$test_repo" "fix: dependency"
+  bot_sha="$(git -C "$test_repo" rev-parse HEAD)"
+  printf 'promotion\n' > "$test_repo/promotion.txt"
+  commit_all "$test_repo" "feat: promote batch"
+  promotion_sha="$(git -C "$test_repo" rev-parse HEAD)"
+  printf '# Changelog\n' > "$test_repo/CHANGELOG.md"
+  commit_all "$test_repo" "release"
+  release_sha="$(git -C "$test_repo" rev-parse HEAD)"
+  MOCK_STANDALONE_SHA="$standalone_sha" MOCK_BOT_SHA="$bot_sha" \
+    MOCK_BOUNDARY_SHA_OVERRIDE="$promotion_sha" \
+    run_release_gate "$test_repo" \
+    "$(pull_request_json "$promotion_sha" "$release_sha")" >/dev/null
+  jq -e '
+    .kind == "release-follow-up" and
+    .release.intent == "minor" and
+    ([.release.included_pull_requests[].number] | sort) == [7, 60, 61] and
+    ([.boundaries[].kind] | unique) == ["main-strategy", "milestone"]
+  ' "$test_repo/main-release-source.json" >/dev/null
+)
 if MOCK_RULES_UNAVAILABLE=true run_gate "$test_repo" \
   "$(pull_request_json "$base_sha" "$head_sha")" \
   "CHANGELOG.md" >/dev/null 2>&1; then
@@ -460,7 +585,7 @@ boundary_exact="$(
       merged_at: "2026-08-23T00:00:00Z",
       merge_commit_sha: $sha,
       base: {ref: "main"},
-      head: {ref: "dev/next", sha: $sha}
+      head: {ref: "dev/m7-staged-ci", sha: $sha}
     }]'
 )"
 boundary_page_one="$(

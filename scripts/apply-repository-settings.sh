@@ -37,7 +37,6 @@ if [[ -z "$repo" ]]; then
   fi
 fi
 ruleset_payload="$repo_root/policies/rulesets.json"
-dev_next_ruleset_payload="$repo_root/policies/dev-next-ruleset.json"
 ruleset_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["name"])' "$ruleset_payload")"
 code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"
 
@@ -122,7 +121,7 @@ fi
 
 print_ruleset_guidance() {
   echo "- DEGRADED required governance: $default_branch is not protected on this private repository."
-  echo "- PRESERVED desired Rulesets: policies/rulesets.json keeps branch governance and policies/dev-next-ruleset.json keeps deletion protection ready for dev/next on a supported plan or public repository."
+  echo "- PRESERVED desired Ruleset: policies/rulesets.json keeps main branch governance ready for a supported plan or public repository."
   echo "- API LIMIT: GitHub REST and GraphQL reject Ruleset creation and updates on this plan, even with enforcement disabled."
   echo "- OPTIONAL: an administrator may preconfigure a disabled Ruleset in the GitHub web UI; this script can detect but cannot create it."
   echo "  https://github.com/$repo/settings/rules"
@@ -377,23 +376,12 @@ PY
     echo "Cannot inspect effective rules for $repo:$default_branch." >&2
     echo "$branch_rules" >&2
     check_errors=$((check_errors + 1))
-  elif ! dev_next_rules="$(gh api "repos/$repo/rules/branches/dev%2Fnext" 2>&1)"; then
-    echo "Cannot inspect effective dev/next rules for $repo." >&2
-    echo "$dev_next_rules" >&2
-    check_errors=$((check_errors + 1))
-  elif ! ledger_rules="$(gh api "repos/$repo/rules/branches/csarc%2Fdev-next-preservation-ledger" 2>&1)"; then
-    echo "Cannot inspect effective preservation ledger rules for $repo." >&2
-    echo "$ledger_rules" >&2
-    check_errors=$((check_errors + 1))
-  elif ! ruleset_drift="$(python3 - "$ruleset_payload" "$dev_next_ruleset_payload" "$branch_rules" "$dev_next_rules" "$ledger_rules" 2>&1 <<'PY'
+  elif ! ruleset_drift="$(python3 - "$ruleset_payload" "$branch_rules" 2>&1 <<'PY'
 import json
 import sys
 
 desired = json.load(open(sys.argv[1], encoding="utf-8"))
-desired_dev_next = json.load(open(sys.argv[2], encoding="utf-8"))
-effective = json.loads(sys.argv[3])
-effective_dev_next = json.loads(sys.argv[4])
-effective_ledger = json.loads(sys.argv[5])
+effective = json.loads(sys.argv[2])
 desired_by_type = {rule["type"]: rule for rule in desired["rules"]}
 effective_by_type = {}
 for rule in effective:
@@ -403,21 +391,6 @@ errors = []
 for rule_type in ("non_fast_forward", "pull_request", "required_status_checks"):
     if rule_type not in effective_by_type:
         errors.append(f"missing {rule_type} rule")
-required_preservation_rules = {"deletion", "non_fast_forward"}
-for name, rules in (
-    ("dev/next", effective_dev_next),
-    ("preservation ledger", effective_ledger),
-):
-    observed = {rule.get("type") for rule in rules}
-    missing = sorted(required_preservation_rules - observed)
-    if missing:
-        errors.append(f"{name} is missing rules: {', '.join(missing)}")
-if desired_dev_next["conditions"]["ref_name"]["include"] != [
-    "refs/heads/dev/next",
-    "refs/heads/csarc/dev-next-preservation-ledger",
-]:
-    errors.append("preservation policy does not target only its two exact refs")
-
 desired_pull_request = desired_by_type["pull_request"]["parameters"]
 pull_request_rules = effective_by_type.get("pull_request", [])
 if pull_request_rules:
@@ -452,7 +425,7 @@ PY
     echo "Ruleset settings drift: $ruleset_drift" >&2
     check_errors=$((check_errors + 1))
   else
-    echo "Repository governance ready: $default_branch has the required effective rules; delivery-sync verifies dev/next and its ledger before promotion."
+    echo "Repository governance ready: $default_branch has the required effective rules."
   fi
 
   if (( check_errors > 0 )); then
@@ -497,7 +470,7 @@ else
   echo "- KEEP labels outside policy (default additive mode)"
 fi
 if [[ "$ruleset_enforcement_available" == true ]]; then
-  echo "- APPLY policies/rulesets.json and policies/dev-next-ruleset.json (enforced by GitHub)"
+  echo "- APPLY policies/rulesets.json (enforced by GitHub)"
   echo "CODEOWNERS team: $code_owner"
 elif [[ "$ruleset_inventory_available" == true ]]; then
   echo "- PRESERVE policies/rulesets.json locally (public APIs cannot create a Ruleset on this plan)"
@@ -559,21 +532,19 @@ if [[ "$prune_labels" == true ]]; then
 fi
 
 if [[ "$ruleset_enforcement_available" == true ]]; then
-  for current_ruleset_payload in "$ruleset_payload" "$dev_next_ruleset_payload"; do
-    current_ruleset_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["name"])' "$current_ruleset_payload")"
-    ruleset_id="$(
-      uv run --no-project python -c \
-        'import json,sys; name=sys.argv[1]; print(next((item["id"] for item in json.load(sys.stdin) if item["name"] == name), ""))' \
-        "$current_ruleset_name" <<<"$ruleset_access"
-    )"
-    if [[ -n "$ruleset_id" ]]; then
-      gh api --method PUT "repos/$repo/rulesets/$ruleset_id" \
-        --input "$current_ruleset_payload" >/dev/null
-    else
-      gh api --method POST "repos/$repo/rulesets" \
-        --input "$current_ruleset_payload" >/dev/null
-    fi
-  done
+  current_ruleset_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["name"])' "$ruleset_payload")"
+  ruleset_id="$(
+    uv run --no-project python -c \
+      'import json,sys; name=sys.argv[1]; print(next((item["id"] for item in json.load(sys.stdin) if item["name"] == name), ""))' \
+      "$current_ruleset_name" <<<"$ruleset_access"
+  )"
+  if [[ -n "$ruleset_id" ]]; then
+    gh api --method PUT "repos/$repo/rulesets/$ruleset_id" \
+      --input "$ruleset_payload" >/dev/null
+  else
+    gh api --method POST "repos/$repo/rulesets" \
+      --input "$ruleset_payload" >/dev/null
+  fi
 fi
 
 GH_REPO="$repo" "$0" check

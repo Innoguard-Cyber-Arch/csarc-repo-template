@@ -2,7 +2,7 @@ name: Promotion gate
 
 on:
   pull_request:
-    branches: [main, dev, "dev/**"]
+    branches: [main, "dev/m*"]
     types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
@@ -21,13 +21,6 @@ permissions:
 jobs:
   preflight:
     name: promotion preflight
-    if: >-
-      ${{ github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' &&
-      (github.event.pull_request.head.ref == 'dev' || startsWith(github.event.pull_request.head.ref, 'dev/') ||
-      startsWith(github.event.pull_request.head.ref, 'release-please--') ||
-      contains(github.event.pull_request.labels.*.name, 'promotion') ||
-      contains(github.event.pull_request.labels.*.name, 'hotfix'))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -144,13 +137,7 @@ jobs:
 
   gate:
     name: promotion
-    if: >-
-      ${{ always() && (github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' &&
-      (github.event.pull_request.head.ref == 'dev' || startsWith(github.event.pull_request.head.ref, 'dev/') ||
-      startsWith(github.event.pull_request.head.ref, 'release-please--') ||
-      contains(github.event.pull_request.labels.*.name, 'promotion') ||
-      contains(github.event.pull_request.labels.*.name, 'hotfix')))) }}
+    if: ${{ always() }}
     needs: [preflight, canary]
     runs-on: ubuntu-latest
     timeout-minutes: 5

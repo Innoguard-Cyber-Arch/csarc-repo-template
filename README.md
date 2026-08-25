@@ -64,26 +64,22 @@ Python 目前以 3.14、uv、Ruff、mypy、pytest 與 src layout 為基線；CI 
 
 交付模型是「可選 Story Milestone → 1..N Issues → 各自 PR」；一張 Issue 對應一個工作分支與一個 PR，CI 與人工審查都通過才合併。完整規則（Issue／PR 內容格式、標題規範、分支與 worktree 使用、closing keyword 限制等）以 [`AGENTS.md`](AGENTS.md) 為唯一權威來源，這裡不重複列出。
 
-本 repo 採 delivery 模式：可同時有多條 Milestone delivery branch；一般孤立 Issue 進入 `dev/next`，確實需要獨立 soak／canary 時才使用一次性的 `dev/i<Issue 編號>-<簡稱>`。它們都以受審查的 promotion PR 進入 `main`；只有明確 hotfix 可直接 target main。CI 是可攜的 integration test layer，外部測試環境則屬 canary layer。
+本 repo 採 delivery 模式，但只有 `main` 是永久 branch。Milestone 可在進行期間使用短命 `dev/m<編號>-<簡稱>`，完成後以受審查的 promotion PR 進入 `main` 並刪除；一般孤立 Issue、hotfix 與 bot 更新都直接以短分支 target `main`。CI 是可攜的 integration test layer，外部測試環境則屬 canary layer。
 
 ```mermaid
 flowchart LR
   A1["Milestone A Issues"] --> MA["dev/m7-delivery"]
   B1["Milestone B Issues"] --> MB["dev/m8-auth"]
-  S["一般孤立 Issues"] --> N["dev/next"]
-  I["需獨立 canary 的 Issue #42"] --> DI["dev/i42-canary"]
+  S["一般孤立 Issues"] --> MAIN
+  B["Dependabot / automation"] --> MAIN
   H["緊急 fix/* + hotfix"] --> MAIN["main"]
   MA -->|promotion: full + canary| MAIN
   MB -->|promotion: full + canary| MAIN
-  N -->|批次 promotion| MAIN
-  DI -->|單獨 promotion| MAIN
-  MAIN -. "reviewed sync PR" .-> MA
-  MAIN -. "reviewed sync PR" .-> MB
-  MAIN -. "reviewed sync PR" .-> N
-  MAIN -. "reviewed sync PR" .-> DI
+  MAIN -. "final promotion sync" .-> MA
+  MAIN -. "final promotion sync" .-> MB
 ```
 
-`main` 前進後，所有未合併的 delivery／stacked PR 都必須先納入最新 main；PR policy 會在既有 `title` runner 內 fail closed，`.github/workflows/delivery-maintenance.yml` 則在 trusted main push 摘要列出每條 active delivery branch 的 `sync/main-to-*` PR 指令並使過期 policy 失效。預設不自動寫入；只有明確設定 `CSARC_AUTO_SYNC=true`、提供會觸發 PR checks 的 `CSARC_SYNC_TOKEN`，且 branch／PR write probes 都為 allowed 時才自動開 PR，blocked／unknown 一律回到相同手動流程。
+`main` 前進不會讓進行中的 ordinary Milestone PR 失效，也不會 fan-out 建立多張 sync PR。Standalone、bot 與 hotfix 的結果預設留在 `main`，等各 Milestone 自己進入 final promotion 才以一次 reviewed `sync/main-to-*` PR 納入；只有某張 Issue PR 的 owner 在 Draft contract 明列真實 dependency 時，才可提前 dispatch 同一個單 branch workflow。Final `dev/m* → main`／`promote/m* → main` preflight 仍綁定最新 main、exact SHA/tree、review 與 provenance；stale 時只指向這一個 reviewed sync action，不直接 push 或改寫 delivery。
 
 公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。兩個入口都會用固定版本與已驗證 checksum 的 actionlint／ShellCheck 檢查 workflows 與 shell scripts；公版驗證另執行 Issue／PR 政策正反例，並注入不合法的 workflow、shell、Python／TypeScript 內容，確認各門禁真的會拒絕。PR CI 依 docs／fast／full 與週期性供應鏈四層執行；一般 PR 除首次 reviewer 操作外最多啟動 policy、fast、verify aggregate 三個 runner，完整矩陣只留給 promotion、hotfix、merge queue 或手動驗證。Full tier 的 runtime 無關完整驗證只在最新 Python canonical job 執行一次；其餘 Python job 僅驗證安裝與 runtime-sensitive tests，混合 TypeScript 則只使用一個獨立 Node job。觸發條件、穩定 required checks、成本估算與實測方式見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
@@ -121,7 +117,7 @@ GitHub Release 是所有 profile 的共同基線；registry 則是生成專案�
 
 整份公版只用一個 SemVer：`fix(scope)` 升 patch、`feat(scope)` 升 minor、`!` 升 major。scope 可標 `ci`、`python`、`typescript` 或 `template`；只要任何已支援 profile 不相容，就視為整份公版的破壞性變更。
 
-release workflow 用內建 `GITHUB_TOKEN` 重測能力：支援時由 release-please 自動開、更新 Release PR；目前組織政策禁止 Actions PR 時，由維護者先開版本／CHANGELOG PR，合併後 direct mode 才能在最新 `main` 建立 draft 與 tag。Milestone 完成時 promotion 一次；`dev/next` 預設由維護團隊每週固定一個 release window 批次 promotion，沒有 release-worthy 變更就略過；hotfix 才立即發版。整批 SemVer 取納入 PR 的最高意圖，全部為 no-release 時不建立空版本。兩種 release 模式都只從已核對的 release-source run 明確 dispatch `release-template.yml`；任意 tag push 不會啟動發布。發布 workflow 不會再於 checkout 後暫時改寫版本；它會先驗證 tagged source、CHANGELOG、tag 與 promotion evidence 一致，再附加 wheel、sdist、release-specific prompt 與 provenance，最後發布並鎖定 immutable GitHub Release；任一步驟失敗都保留 draft。發布後會以 `gh release verify` 重新驗證 attestation。一般 main push 不會重複發版。完整批次與追溯規則見 [`docs/ci-policy.md`](docs/ci-policy.md)。
+release workflow 用內建 `GITHUB_TOKEN` 重測能力：支援時由 release-please 自動開、更新 Release PR；目前組織政策禁止 Actions PR 時，由維護者先開版本／CHANGELOG PR，合併後 direct mode 才能在最新 `main` 建立 draft 與 tag。Milestone 完成時 promotion 一次；一般工作與 bot 更新直接進 `main`，hotfix 才立即發版。整批 SemVer 取納入 PR 的最高意圖，全部為 no-release 時不建立空版本。兩種 release 模式都只從已核對的 release-source run 明確 dispatch `release-template.yml`；任意 tag push 不會啟動發布。發布 workflow 不會再於 checkout 後暫時改寫版本；它會先驗證 tagged source、CHANGELOG、tag 與 promotion evidence 一致，再附加 wheel、sdist、release-specific prompt 與 provenance，最後發布並鎖定 immutable GitHub Release；任一步驟失敗都保留 draft。發布後會以 `gh release verify` 重新驗證 attestation。一般 main push 不會重複發版。完整批次與追溯規則見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
 ## 公版更新
 

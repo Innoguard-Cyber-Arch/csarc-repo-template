@@ -111,7 +111,7 @@ class FakeGitHub:
             ),
             "base": {"ref": self.base_ref, "sha": self.base_sha},
             "head": {
-                "ref": "dev/next",
+                "ref": "dev/m7-staged-ci",
                 "sha": self.head,
                 "repo": {"full_name": "owner/repo"},
             },
@@ -306,7 +306,7 @@ def test_origin_must_resolve_to_the_exact_github_repository(url: str) -> None:
         'requests.request("PATCH", f"repos/{repo}/pulls/" f"{number}")',
         "gh api -X PATCH repos/owner/repo/pulls/42 --field draft=true",
         'query = "mutation { markPullRequest" "ReadyForReview(input: $x) }"',
-        "gh pr create --base dev/next --head fix/x --label bug",
+        "gh pr create --base dev/m7-staged-ci --head fix/x --label bug",
         (
             "requests.patch("
             'f"https://api.github.com/repos/{repo}/pulls/{number}", '
@@ -609,7 +609,8 @@ def test_issue_label_helper_rejects_a_pull_request(
 def test_writer_scanner_allows_pr_creation_without_state_or_metadata() -> None:
     """Creating a plain PR is followed by a separately leased edit."""
     assert not writer_violations(
-        "gh pr create --base dev/next --head fix/x --title fix --body body"
+        "gh pr create --base dev/m7-staged-ci --head fix/x "
+        "--title fix --body body"
     )
 
 
@@ -841,7 +842,7 @@ def test_retargeting_requires_the_destination_lane_lease(
     """A base retarget cannot change the lane covered by an active lease."""
     bind_canonical_remote(monkeypatch)
     canonical = lease_fixture()
-    canonical["base_ref"] = "dev/next"
+    canonical["base_ref"] = "dev/m7-staged-ci"
     canonical["refs"] = ["refs/heads/csarc/leases/pr-42"]
     github = FakeGitHub("a" * 40)
     github.canonical_lease = canonical

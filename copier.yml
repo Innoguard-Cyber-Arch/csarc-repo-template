@@ -52,6 +52,25 @@ _tasks:
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language in ['typescript', 'python-typescript'] }}"
   - command: "uv run --no-project python scripts/render_site.py"
 _migrations:
+  - command:
+      - python3
+      - -c
+      - |-
+        import re
+        from pathlib import Path
+
+        path = Path(".copier-answers.yml")
+        source = path.read_text(encoding="utf-8")
+        migrated, count = re.subn(
+            r"(?m)^(branch_strategy:\s*)(?:dev|'dev'|\"dev\")(\s*(?:#.*)?)$",
+            r"\1main\2",
+            source,
+        )
+        if count > 1:
+            raise SystemExit("Found duplicate legacy branch_strategy answers")
+        if count == 1:
+            path.write_text(migrated, encoding="utf-8")
+    when: "{{ _stage == 'before' }}"
   - command: "uv run --no-project python scripts/render_site.py"
     when: "{{ _stage == 'after' }}"
 _message_after_copy: |
@@ -121,9 +140,8 @@ branch_strategy:
   type: str
   help: Choose how issue branches are integrated before promotion to main
   choices:
-    Milestone delivery branches and rolling dev/next: delivery
+    Main with short-lived Milestone delivery branches: delivery
     Short branch → pull request → main: main
-    Shared test environment → dev → main: dev
   default: delivery
 
 package_name:
