@@ -1691,6 +1691,24 @@ grep -q "steps.plan.outputs.upload_site == 'true'" \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q 'python3 scripts/render_site.py --check' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
+uv run python - \
+  .github/workflows/ci.yml \
+  "$fixture_root/default-project/.github/workflows/ci.yml" <<'PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+for workflow_path in map(Path, sys.argv[1:]):
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    step = next(
+        step
+        for step in workflow["jobs"]["fast"]["steps"]
+        if step.get("name") == "Publish CI routing evidence"
+    )
+    if step["with"]["retention-days"] != 90:
+        raise SystemExit(f"{workflow_path}: CI plan retention must be 90 days")
+PY
 grep -q 'python3 scripts/delivery_sync.py gate' \
   "$fixture_root/default-project/.github/workflows/pr-policy.yml"
 if grep -q '^  pull_request:$' \
