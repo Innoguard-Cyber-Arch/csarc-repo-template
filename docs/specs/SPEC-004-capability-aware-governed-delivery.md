@@ -10,7 +10,7 @@ tracking: none
 
 ## Problem
 
-GitHub plan、repository visibility、organization policy 與 token scope 會改變可用的 Ruleset、review、PR automation、release 與 canary 能力。若流程假設所有能力都存在，就會失敗或把未受保護狀態誤報成安全。
+GitHub plan、repository visibility、organization policy 與 token scope 會改變可用的 Ruleset、review、PR automation、release 與 canary 能力。多個 agent worktree 也會共用相同 PR control plane。若流程假設所有能力都存在或把 worktree 當成遠端互斥，就會失敗、競速 merge，或把未受保護狀態誤報成安全。
 
 ## Outcome
 
@@ -27,6 +27,9 @@ GitHub plan、repository visibility、organization policy 與 token scope 會改
 - [x] Main 前進後，active delivery branch 透過受審查 sync PR 納入；不直接 push 或在 main 解衝突。
 - [x] 平台能力使用 allowed／blocked／unknown，只有已確認可用時啟用較強 automation；未知不當作 allowed。
 - [x] GitHub Free private 缺少 Ruleset／team review enforcement 時顯示 `DEGRADED`，但仍執行可攜式 checks 與個別 reviewer request。
+- [x] 平行 task 的 Ready／Draft／label／milestone／authorization／merge 寫入只能透過 repository remote lease 工具序列化；每個 destination branch 另有共用 lane lease。
+- [x] 無法在 pre-PR writer 與精確 PR/head 間原子轉移 lease 的 automation 明確 fail closed；不把 human-only release PR 路徑宣稱為已序列化。
+- [x] Agent merge 只在 live review、last-push approval、required checks 與 no-bypass Ruleset 可證明時啟用；Free private 或 unknown capability 一律停在 human-only manual merge。
 - [x] 不要求長效 PAT、額外 GitHub App、降低 branch protection 或修改 organization policy 才能使用 baseline。
 - [x] Promotion、release 與 Milestone completion 由完整 acceptance 與 evidence gate，而不是只看分支名稱或 open Issue 數。
 
@@ -43,6 +46,7 @@ GitHub plan、repository visibility、organization policy 與 token scope 會改
 ## Verification
 
 - `./scripts/test-pr-policy`
+- `uv run pytest tests/test_pr_lifecycle.py`
 - `./scripts/apply-repository-settings.sh check`
 - `./scripts/verify-template.sh`
 - promotion 與 sync evidence 必須綁定實際 base／head SHA 或 candidate tree。
@@ -57,3 +61,4 @@ GitHub plan、repository visibility、organization policy 與 token scope 會改
 - [Issues #179–#184](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/179)／[PRs #186–#193](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/186)
 - [Capability-aware governance ADR](../adr/capability-aware-governance.md)
 - [Staged delivery and verification ADR](../adr/staged-delivery-and-verification.md)
+- [Issue #240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240)

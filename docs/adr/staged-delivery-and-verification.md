@@ -30,12 +30,11 @@
 | Preserved | Coverage 是風險訊號，不是品質分數 | [#37](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/37)／[#52](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/52) |
 | Preserved | Promotion quota fallback 僅限 human-confirmed、zero-step、SHA-bound 狀況 | [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171)／[#173](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/173) |
 | Superseded | Promotion 必須等待 hosted runner 才能進 main；quota-only 時改用不可發布的 SHA/tree evidence | [#182](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/182) → [#233](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/233) |
-| Superseded | 「由 human maintainer 確認並恢復 hosted Actions」；前提不成立，本 repo 是 Teams private plan，結構性超額是常態而非事故 | [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199) → [#249](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/249)／[#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254) |
+| Superseded | M7／交付必須等待成功 hosted runner 量測或管理員恢復 Actions；本 repo 的 Teams private 額度限制是常態，runner 可用時只收集 telemetry | [#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189)／[#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199) → [#249](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/249)／[#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254)／[#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287) |
 | Superseded | Quota fallback 逐 PR 要求人工區分「額度用盡」與「付款失敗」 | [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171) → [#249](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/249) |
 | Preserved | 一般 Issue PR 的 quota fallback 自動化：機械式 zero-step 偵測＋本機驗證＋說明留言即可合併；promotion 到 `main` 維持雙方 attestation／authorization | [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254)／[#251](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/251) |
-| Unresolved | 真實 runner-minute 降幅需要至少一次成功 hosted run 才能量測；Teams private plan 結構性超額下缺乏穩定量測窗口 | [#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189) |
-| Superseded | M7 必須等待成功 hosted runner 量測或管理員恢復 Actions | [#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189)／[#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199) → [#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287) |
 | Preserved | Zero-step block 不是 hosted success；本機 full、promotion tree、security 與 supply-chain gates 不因 telemetry 不可用而降低 | [#171](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/171)／[#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254)／[#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287) |
+| Unresolved | 真實 runner-minute 降幅需要至少一次成功 hosted run 才能量測；Teams private plan 結構性超額下缺乏穩定量測窗口 | [#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189) |
 
 ## Ownership 與驗證
 
@@ -55,4 +54,4 @@ Issue owner 負責 scope 與 acceptance；delivery owner 負責 sync conflict �
 
 ## 重新評估條件
 
-若帳務方案改變（例如升級或額度重置後出現空檔）使 hosted Actions 可用，以 #189 的真實 duration、job-minute 與 `ci-plan` telemetry 校準模型；長期維持 Teams private 額度限制則量測持續 blocked，不影響本 ADR 其餘決定的有效性。若實測成本、false routing 或 promotion latency 未達標，以新 Issue 調整，不降低安全與 full gate。
+Hosted runner 可用時收集 duration、job-minute、billed minutes 與 `ci-plan` telemetry 校準模型；長期維持 Teams private 額度限制則 #189 持續 blocked，但不阻塞交付，也不影響本 ADR 其餘決定。若實測成本、false routing 或 promotion latency 與模型顯著不符，以新 Issue 調整；telemetry 不可用不降低安全與 full gate。

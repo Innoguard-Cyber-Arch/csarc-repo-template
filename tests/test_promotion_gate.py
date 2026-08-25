@@ -7,6 +7,7 @@ import json
 import runpy
 import shutil
 import subprocess
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
@@ -38,6 +39,7 @@ promotion_bridge_source = MODULE["promotion_bridge_source"]
 promotion_main_evidence = MODULE["promotion_main_evidence"]
 require_zero_step_run = MODULE["require_zero_step_run"]
 route_for = MODULE["route_for"]
+run_dev_next_preservation = MODULE["run_dev_next_preservation"]
 same_repository = MODULE["same_repository"]
 unfinished_milestone_issues = MODULE["unfinished_milestone_issues"]
 verify_main = MODULE["verify_main"]
@@ -46,6 +48,62 @@ _GIT = shutil.which("git")
 if _GIT is None:
     raise RuntimeError("Git is required for promotion tests")
 GIT: str = _GIT
+
+
+def preservation_evidence() -> dict[str, object]:
+    """Return one structured remote checkpoint for quota fallback tests."""
+    return {
+        "ledger_ref": "refs/heads/csarc/dev-next-preservation-ledger",
+        "ledger_commit": "d" * 40,
+        "transaction": {
+            "schema_version": 1,
+            "repository": "owner/repo",
+            "pull_request": 42,
+            "base_ref": "main",
+            "base_sha": "base",
+            "head_ref": "dev/next",
+            "head_sha": "head",
+            "operation_id": "e" * 64,
+            "mode": "temporary-auto-delete",
+            "prior_auto_delete": True,
+            "state": "prepared",
+        },
+    }
+
+
+def test_hosted_restoration_is_explicit_and_never_replaces_gh_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pass the separate admin secret through the hosted environment."""
+    captured: dict[str, object] = {}
+    github_value = "github-value"
+    admin_value = "admin-value"
+
+    def run(command: list[str], **kwargs: object) -> SimpleNamespace:
+        captured["command"] = command
+        captured["env"] = kwargs["env"]
+        return SimpleNamespace(stdout=json.dumps(preservation_evidence()))
+
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GH_TOKEN", github_value)
+    monkeypatch.setenv("CSARC_SYNC_TOKEN", admin_value)
+    monkeypatch.setattr(subprocess, "run", run)
+    run_dev_next_preservation(
+        "complete-dev-next",
+        "owner/repo",
+        42,
+        "a" * 40,
+        "b" * 40,
+        "c" * 64,
+        "d" * 40,
+    )
+    command = captured["command"]
+    assert isinstance(command, list)
+    assert "--hosted" in command
+    environment = captured["env"]
+    assert isinstance(environment, dict)
+    assert environment["GH_TOKEN"] == github_value
+    assert environment["CSARC_SYNC_TOKEN"] == admin_value
 
 
 @pytest.mark.parametrize(
@@ -91,7 +149,7 @@ GIT: str = _GIT
             "promote/next",
             {"promotion"},
             "delivery",
-            "invalid-main-route",
+            "standalone-batch",
             None,
         ),
         ("main", "dev", set(), "dev", "dev-promotion", None),
@@ -186,8 +244,18 @@ def test_included_pull_requests_are_deduplicated_and_scoped(
     ) == [{"number": 10, "title": "fix: timeout", "intent": "patch"}]
 
 
-def test_bridge_provenance_accepts_only_same_milestone_pull_requests(
+@pytest.mark.parametrize(
+    ("delivery_branch", "milestone", "expected_number"),
+    [
+        ("dev/m7-staged-ci", 7, 10),
+        ("dev/next", None, 12),
+    ],
+)
+def test_bridge_provenance_accepts_only_eligible_pull_requests(
     monkeypatch: pytest.MonkeyPatch,
+    delivery_branch: str,
+    milestone: int | None,
+    expected_number: int,
 ) -> None:
     """Accept reviewed sibling work without crossing a delivery boundary."""
 
@@ -228,11 +296,19 @@ def test_bridge_provenance_accepts_only_same_milestone_pull_requests(
         "owner/repo",
         "main",
         "bridge",
-        "promote/m7-staged-ci",
+        delivery_branch,
         "token",
-        milestone=7,
+        milestone=milestone,
         bridge_head_sha="bridge",
-    ) == [{"number": 10, "title": "fix: accepted sibling", "intent": "patch"}]
+    ) == [
+        {
+            "number": expected_number,
+            "title": "fix: accepted sibling"
+            if expected_number == 10
+            else "feat: standalone",
+            "intent": "patch" if expected_number == 10 else "minor",
+        }
+    ]
 
 
 def test_bridge_provenance_rejects_an_unreviewed_commit(
@@ -295,9 +371,19 @@ def test_latest_main_requires_matching_base_and_ancestry() -> None:
     assert not main_is_current("abc", "abc", False)
 
 
+@pytest.mark.parametrize(
+    ("bridge_branch", "source_branch", "milestone"),
+    [
+        ("promote/m7-staged-ci", "dev/m7-staged-ci", 7),
+        ("promote/next", "dev/next", None),
+    ],
+)
 def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    bridge_branch: str,
+    source_branch: str,
+    milestone: int | None,
 ) -> None:
     """Bridge a real conflict while preserving the source candidate tree."""
 
@@ -320,7 +406,7 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
     run_git("add", ".")
     run_git("commit", "-m", "base")
 
-    run_git("checkout", "-b", "dev/m7-staged-ci")
+    run_git("checkout", "-b", source_branch)
     tracked.write_text("source\n", encoding="utf-8")
     run_git("commit", "-am", "source")
     source_sha = run_git("rev-parse", "HEAD").stdout.strip()
@@ -349,7 +435,8 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
     ).stdout.strip()
 
     def fake_get(_repo: str, path: str, _token: str) -> object:
-        assert path == "git/ref/heads/dev%2Fm7-staged-ci"
+        encoded = urllib.parse.quote(source_branch, safe="")
+        assert path == f"git/ref/heads/{encoded}"
         return {"object": {"sha": source_sha}}
 
     monkeypatch.setitem(
@@ -358,14 +445,14 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
     monkeypatch.chdir(tmp_path)
     assert promotion_bridge_source(
         "owner/repo",
-        "promote/m7-staged-ci",
+        bridge_branch,
         base_sha,
         bridge_sha,
         bridge_sha,
-        7,
+        milestone,
         "token",
     ) == {
-        "source_ref": "dev/m7-staged-ci",
+        "source_ref": source_branch,
         "source_sha": source_sha,
         "source_tree": source_tree,
     }
@@ -374,6 +461,13 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
 @pytest.mark.parametrize(
     ("branch", "milestone", "parents", "candidate_tree", "message"),
     [
+        (
+            "promote/next",
+            7,
+            "bridge source main",
+            "source-tree",
+            "cannot use a Milestone",
+        ),
         (
             "promote/m8-other",
             7,
@@ -1011,7 +1105,9 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
                     "name": archive.name,
                     "sha256": "digest",
                 },
+                "main_sync": "squash-sync-pr-283",
                 "canary": {"state": "blocked"},
+                "dev_next_preservation": preservation_evidence(),
             }
         ),
         encoding="utf-8",
@@ -1104,6 +1200,35 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
         "rebuild_quota_preflight",
         lambda evidence, *_: evidence,
     )
+    preservation_calls: list[tuple[str, str, int, str, str, str, str]] = []
+
+    def fake_preservation(
+        action: str,
+        repo: str,
+        pr_number: int,
+        head_sha: str,
+        main_sha: str = "",
+        operation_id: str = "",
+        prepared_ledger_commit: str = "",
+    ) -> dict[str, object]:
+        preservation_calls.append(
+            (
+                action,
+                repo,
+                pr_number,
+                head_sha,
+                main_sha,
+                operation_id,
+                prepared_ledger_commit,
+            )
+        )
+        return preservation_evidence()
+
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "run_dev_next_preservation",
+        fake_preservation,
+    )
     monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: None)
     arguments = SimpleNamespace(
         input=source,
@@ -1124,6 +1249,10 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
     evidence = json.loads(target.read_text(encoding="utf-8"))
     assert evidence["gate"] == "quota-fallback"
     assert evidence["release_eligible"] is False
+    assert evidence["dev_next_preservation"] == preservation_evidence()
+    assert preservation_calls == [
+        ("inspect-dev-next", "owner/repo", 42, "head", "", "", "")
+    ]
     assert evidence["full_check"] == {
         "context": "verify",
         "status": "local-quota-attested",
@@ -1381,6 +1510,75 @@ def test_verify_main_requires_successful_full_check(
         )
 
 
+def test_verify_main_completes_standard_dev_next_preservation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The standard post-main path closes the exact prepared transaction."""
+    source = tmp_path / "evidence.json"
+    checks = tmp_path / "checks.json"
+    target = tmp_path / "verified.json"
+    source.write_text(
+        json.dumps(
+            {
+                "gate": "passed",
+                "repository": "owner/repo",
+                "pull_request": 42,
+                "head_ref": "dev/next",
+                "head_sha": "head",
+                "candidate_tree": "tree",
+                "dev_next_preservation": preservation_evidence(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    checks.write_text(
+        json.dumps(
+            {"check_runs": [{"name": "verify", "conclusion": "success"}]}
+        ),
+        encoding="utf-8",
+    )
+    calls: list[tuple[object, ...]] = []
+
+    def complete(*arguments: object) -> dict[str, object]:
+        calls.append(arguments)
+        return {"ledger_commit": "f" * 40, "transaction": {}}
+
+    monkeypatch.setitem(
+        verify_main.__globals__, "git_output", lambda *_: "tree"
+    )
+    monkeypatch.setitem(
+        verify_main.__globals__, "run_dev_next_preservation", complete
+    )
+    verify_main(
+        SimpleNamespace(
+            evidence=source,
+            checks=checks,
+            repo="owner/repo",
+            pr_number=42,
+            head_sha="head",
+            main_sha="main",
+            output=target,
+        )
+    )
+    assert calls == [
+        (
+            "complete-dev-next",
+            "owner/repo",
+            42,
+            "head",
+            "main",
+            "e" * 64,
+            "d" * 40,
+        )
+    ]
+    assert (
+        json.loads(target.read_text())["dev_next_preservation"]["completion"][
+            "ledger_commit"
+        ]
+        == "f" * 40
+    )
+
+
 def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1397,6 +1595,7 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
                 "base_sha": "base",
                 "head_ref": "dev/next",
                 "head_sha": "head",
+                "route": {"kind": "standalone-batch", "relevant": True},
                 "candidate_tree": "tree",
                 "full_check": {"status": "local-quota-attested"},
                 "quota_fallback": {
@@ -1410,6 +1609,7 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
                         "https://github.com/owner/repo/actions/runs/200"
                     ],
                 },
+                "dev_next_preservation": preservation_evidence(),
             }
         ),
         encoding="utf-8",
@@ -1477,6 +1677,37 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
     monkeypatch.setitem(
         verify_quota_main.__globals__, "require_comment_url", lambda *_: {}
     )
+    preservation_calls: list[tuple[str, str, int, str, str, str, str]] = []
+
+    def fake_preservation(
+        action: str,
+        repo: str,
+        pr_number: int,
+        head_sha: str,
+        main_sha: str = "",
+        operation_id: str = "",
+        prepared_ledger_commit: str = "",
+    ) -> dict[str, object]:
+        preservation_calls.append(
+            (
+                action,
+                repo,
+                pr_number,
+                head_sha,
+                main_sha,
+                operation_id,
+                prepared_ledger_commit,
+            )
+        )
+        completed = preservation_evidence()
+        completed["ledger_commit"] = "f" * 40
+        return completed
+
+    monkeypatch.setitem(
+        verify_quota_main.__globals__,
+        "run_dev_next_preservation",
+        fake_preservation,
+    )
     monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: None)
     arguments = SimpleNamespace(
         evidence=source,
@@ -1492,6 +1723,28 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
         "verified-local-quota-fallback"
     )
     assert evidence["release_eligible"] is False
+    assert (
+        evidence["dev_next_preservation"]["completion"]["ledger_commit"]
+        == "f" * 40
+    )
+    assert preservation_calls == [
+        (
+            "complete-dev-next",
+            "owner/repo",
+            42,
+            "head",
+            "main",
+            "e" * 64,
+            "d" * 40,
+        )
+    ]
+    original = json.loads(source.read_text(encoding="utf-8"))
+    del original["dev_next_preservation"]
+    source.write_text(json.dumps(original), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="was not prepared"):
+        verify_quota_main(arguments)
+    original["dev_next_preservation"] = preservation_evidence()
+    source.write_text(json.dumps(original), encoding="utf-8")
     scenario["value"] = "ambiguous"
     with pytest.raises(RuntimeError, match="unique promotion source"):
         verify_quota_main(arguments)
@@ -1574,6 +1827,11 @@ def test_quota_finalize_refetches_live_pull_request(
     monkeypatch.setitem(
         finalize_quota_fallback.__globals__, "github_get", fake_get
     )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "run_dev_next_preservation",
+        lambda *_args, **_kwargs: preservation_evidence(),
+    )
     with pytest.raises(RuntimeError, match="Live promotion"):
         finalize_quota_fallback(
             SimpleNamespace(
@@ -1624,8 +1882,10 @@ def test_quota_main_refetches_the_unique_squash_source(
                 "base_sha": "base",
                 "head_ref": "dev/next",
                 "head_sha": "head",
+                "route": {"kind": "standalone-batch", "relevant": True},
                 "candidate_tree": "tree",
                 "full_check": {"status": "local-quota-attested"},
+                "dev_next_preservation": preservation_evidence(),
             }
         ),
         encoding="utf-8",
@@ -1814,12 +2074,14 @@ def test_authorization_statement_binds_full_preflight() -> None:
         "repository": "owner/repo",
         "route": {"kind": "standalone-batch", "relevant": True},
         "canary": {"state": "blocked", "environment": None},
+        "dev_next_preservation": preservation_evidence(),
     }
     statement = fallback_statement("authorization", evidence, ["run"])
     binding = json.loads(statement.split("`")[1])
     assert binding["schema_version"] == 1
     assert binding["route"] == evidence["route"]
     assert binding["canary"] == evidence["canary"]
+    assert binding["dev_next_preservation"] == preservation_evidence()
 
 
 def test_repository_variables_reads_every_page(

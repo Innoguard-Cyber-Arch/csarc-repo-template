@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-24
-- **來源 Issue：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219)
+- **來源 Issues：**[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#250](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/250)
 - **實作 PR：**[#231](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/231)
 
 ## 問題與限制
@@ -17,8 +17,8 @@ Generic prompt 需要保持穩定且不硬編工作路徑，但不能因此移�
 
 既有導入採兩階段流程：
 
-1. `adopt --dry-run` 只讀目標 repo，在 repo 外原子更新 Markdown、PDF 與 machine-readable plan。dirty tree 可產生 review-only plan，但不可套用。
-2. `adopt --apply-plan` 重新驗證 Release、repo identity、HEAD、working tree、answers、檔案決策與 digest；在暫存 clone 產生完整候選，執行 `./scripts/verify` 與 project hook，再以通過 `git apply --check` 的同一份 patch 寫入目標。
+1. `adopt` 在沒有 `--apply-plan` 時預設為 dry-run，只讀目標 repo，並在 repo 外原子更新 Markdown、PDF 與 machine-readable plan；明確的 `--dry-run` 仍相容。dirty tree 可產生 review-only plan，但不可套用。`adopt --finalize` 使用相同安全預設。
+2. `adopt --apply-plan` 重新驗證 Release、repo identity、HEAD、working tree、所有實際 render inputs（包含未寫入 Copier answers 的條件式衍生值）、檔案決策與 digest；在暫存 clone 產生完整候選，執行 `./scripts/verify` 與 project hook，再以通過 `git apply --check` 的同一份 patch 寫入目標。若 binding 不同，錯誤會列出精確 JSON path 與前後值，同時維持 fail closed。
 
 需要人工合併時，第一份 plan 只建立 resumable checkpoint。人工完成清單後，`adopt --finalize --dry-run` 會從已驗證 template 重新推導 managed／manual 集合，在隔離 clone 建立並驗證完成態候選，再把 checkpoint、人工結果、完整允許 working-tree state 與預期 artifacts 綁入新的 repo 外 plan。正式 finalize 只接受該 plan；直接 finalize、非預期檔案或確認前後的任何漂移都停止。
 
@@ -30,7 +30,7 @@ Generic prompt 需要保持穩定且不硬編工作路徑，但不能因此移�
 - 產品 `.github/workflows/release.yml` 保留；existing mode 另產生 `.github/workflows/csarc-release.yml`。
 - 其他無固定語意的碰撞維持明確人工處理與 resumable checkpoint，不導入通用三方合併引擎。
 
-Python 以 `uvx --python 3.14` 逐次選擇，不修改 shell profile、`PATH` 或全域環境。Ubuntu 與 macOS 跑完整 adoption 測試；Windows 使用 WSL2，native Windows 明確 fail closed。
+Release prompt 以 exact commit 從 canonical GitHub repository 執行 CLI；`uvx --python 3.14` 逐次取得隔離 runtime，不要求預先安裝全域 Python，也不修改 shell profile、`PATH` 或全域環境。Ubuntu 與 macOS 跑完整 adoption 測試；Windows 使用 WSL2，native Windows 明確 fail closed。
 
 ## 評估過的替代方案
 
