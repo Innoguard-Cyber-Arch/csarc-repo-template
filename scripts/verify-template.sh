@@ -1795,7 +1795,7 @@ grep -q '^## Scope and sources of truth$' \
 grep -q '^## Commands$' "$fixture_root/default-project/AGENTS.md"
 grep -q '^## Code Review Rules$' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'work branch whose PR chain ends there' \
+grep -q 'work branch whose pull request chain ends there' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'Target the delivery branch or immediate stack parent' \
   "$fixture_root/default-project/AGENTS.md"
