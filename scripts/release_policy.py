@@ -28,6 +28,7 @@ DEPENDABOT_FALLBACK = (
     "required CI/CD checks."
 )
 RELEASE_PLEASE_ACTOR = "github-actions[bot]"
+RELEASE_PLEASE_COMMITTER = "web-flow"
 
 
 @dataclass(frozen=True)
@@ -162,20 +163,31 @@ def release_follow_up_errors(  # noqa: C901
         errors.append(
             "release follow-up must be authored by github-actions[bot]"
         )
-    if not commits or commits[-1].get("sha") != head_sha:
+    if not re.fullmatch(r"[0-9a-f]{40}", head_sha):
+        errors.append("release follow-up head is not a full commit SHA")
+    elif not commits or commits[-1].get("sha") != head_sha:
         errors.append("release follow-up commits do not end at the PR head")
     for commit in commits:
         author = commit.get("author")
         committer = commit.get("committer")
+        commit_data = commit.get("commit")
+        verification = (
+            commit_data.get("verification")
+            if isinstance(commit_data, dict)
+            else None
+        )
         if (
             not isinstance(author, dict)
             or author.get("login") != RELEASE_PLEASE_ACTOR
             or not isinstance(committer, dict)
-            or committer.get("login") != RELEASE_PLEASE_ACTOR
+            or committer.get("login") != RELEASE_PLEASE_COMMITTER
+            or not isinstance(verification, dict)
+            or verification.get("verified") is not True
+            or verification.get("reason") != "valid"
         ):
             errors.append(
-                "release follow-up commits must be authored and committed "
-                "by github-actions[bot]"
+                "release follow-up commits must be verified GitHub commits "
+                "authored by github-actions[bot]"
             )
             break
 
@@ -1165,12 +1177,16 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
     args = parser().parse_args(arguments)
     if args.command == "verify-release-follow-up":
         commit_pages = json.loads(args.commits.read_text(encoding="utf-8"))
+        if not isinstance(commit_pages, list) or any(
+            not isinstance(page, list)
+            or any(not isinstance(commit, dict) for commit in page)
+            for page in commit_pages
+        ):
+            raise SystemExit("release follow-up commit response is invalid")
         commits = [
             commit
             for page in commit_pages
-            if isinstance(page, list)
             for commit in page
-            if isinstance(commit, dict)
         ]
         errors = release_follow_up_errors(
             args.root.resolve(),

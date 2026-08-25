@@ -57,7 +57,10 @@ def test_release_follow_up_accepts_only_automation_owned_changes(
         {
             "sha": valid_sha,
             "author": {"login": "github-actions[bot]"},
-            "committer": {"login": "github-actions[bot]"},
+            "committer": {"login": "web-flow"},
+            "commit": {
+                "verification": {"verified": True, "reason": "valid"}
+            },
         }
     ]
     valid = {
@@ -135,6 +138,9 @@ def test_release_follow_up_accepts_only_automation_owned_changes(
             "sha": valid_sha,
             "author": {"login": "github-actions[bot]"},
             "committer": {"login": "maintainer"},
+            "commit": {
+                "verification": {"verified": True, "reason": "valid"}
+            },
         }
     ]
     assert release_follow_up_errors(
@@ -146,6 +152,26 @@ def test_release_follow_up_accepts_only_automation_owned_changes(
         "github-actions[bot]",
         ["pyproject.toml"],
         human_commit,
+    )
+    unsigned_spoof = [
+        {
+            "sha": valid_sha,
+            "author": {"login": "github-actions[bot]"},
+            "committer": {"login": "web-flow"},
+            "commit": {
+                "verification": {"verified": False, "reason": "unsigned"}
+            },
+        }
+    ]
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        valid_sha,
+        "github-actions[bot]",
+        ["pyproject.toml"],
+        unsigned_spoof,
     )
     assert release_follow_up_errors(
         tmp_path,

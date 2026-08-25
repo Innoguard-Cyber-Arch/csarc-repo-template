@@ -31,8 +31,8 @@ case "$*" in
     jq -cn \
       --arg sha "$PR_HEAD_SHA" \
       --arg author "${PR_COMMIT_AUTHOR:-github-actions[bot]}" \
-      --arg committer "${PR_COMMITTER:-github-actions[bot]}" \
-      '[[{sha: $sha, author: {login: $author}, committer: {login: $committer}}]]'
+      --arg committer "${PR_COMMITTER:-web-flow}" \
+      '[[{sha: $sha, author: {login: $author}, committer: {login: $committer}, commit: {verification: {verified: true, reason: "valid"}}}]]'
     exit 0
     ;;
   *"/pulls/"*"/files?per_page=100"*)

@@ -101,8 +101,8 @@ case "$*" in
     jq -cn \
       --arg sha "$MOCK_HEAD_SHA" \
       --arg author "${MOCK_COMMIT_AUTHOR:-github-actions[bot]}" \
-      --arg committer "${MOCK_COMMITTER:-github-actions[bot]}" \
-      '[[{sha: $sha, author: {login: $author}, committer: {login: $committer}}]]'
+      --arg committer "${MOCK_COMMITTER:-web-flow}" \
+      '[[{sha: $sha, author: {login: $author}, committer: {login: $committer}, commit: {verification: {verified: true, reason: "valid"}}}]]'
     ;;
   *"/pulls/"*"/files?per_page=100"*)
     [[ "$*" == *"--paginate"* && "$*" == *"--slurp"* ]]
@@ -196,7 +196,7 @@ run_gate() {
   local changed_files="$3"
   local expected_file_count="${4:-}"
   local pull_request_pages="${5:-}"
-  local committer="${6:-github-actions[bot]}"
+  local committer="${6:-web-flow}"
   local runner_temp="$repo/runner-temp"
   mkdir -p "$runner_temp"
   (
@@ -220,7 +220,7 @@ run_gate() {
 run_premerge_gate() {
   local repo="$1"
   local base="$2"
-  local committer="${3:-github-actions[bot]}"
+  local committer="${3:-web-flow}"
   local runner_temp="$repo/pre-merge-runner-temp"
   mkdir -p "$runner_temp"
   (
@@ -245,7 +245,7 @@ run_release_gate() {
   local repo="$1"
   local pull_requests="$2"
   local pull_request_pages="${3:-}"
-  local committer="${4:-github-actions[bot]}"
+  local committer="${4:-web-flow}"
   local runner_temp="$repo/release-runner-temp"
   mkdir -p "$runner_temp"
   (
