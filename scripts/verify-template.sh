@@ -283,12 +283,12 @@ fi
 if [[ "$1" == "label" && "$2" == "list" ]]; then
   if [[ "$*" == *"name,color,description"* ]]; then
     if [[ "${MOCK_LABELS_STATE:-match}" == "mismatch" ]]; then
-      printf '%s\n' '[{"name":"bug","color":"ffffff","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"hotfix","color":"B60205","description":"Urgent standalone change promoted directly to main"},{"name":"promotion","color":"5319E7","description":"Final delivery branch promotion to main"},{"name":"task","color":"000000","description":"Custom"}]'
+      printf '%s\n' '[{"name":"bug","color":"ffffff","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"hotfix","color":"B60205","description":"Urgent standalone change promoted directly to main"},{"name":"release-recovery","color":"FBCA04","description":"Audited direct-main recovery of a missing release"},{"name":"promotion","color":"5319E7","description":"Final delivery branch promotion to main"},{"name":"task","color":"000000","description":"Custom"}]'
     else
-      printf '%s\n' '[{"name":"bug","color":"D73A4A","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"hotfix","color":"B60205","description":"Urgent standalone change promoted directly to main"},{"name":"promotion","color":"5319E7","description":"Final delivery branch promotion to main"},{"name":"task","color":"000000","description":"Custom"}]'
+      printf '%s\n' '[{"name":"bug","color":"D73A4A","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"hotfix","color":"B60205","description":"Urgent standalone change promoted directly to main"},{"name":"release-recovery","color":"FBCA04","description":"Audited direct-main recovery of a missing release"},{"name":"promotion","color":"5319E7","description":"Final delivery branch promotion to main"},{"name":"task","color":"000000","description":"Custom"}]'
     fi
   else
-    printf 'bug\nduplicate\nhotfix\npromotion\ntask\n'
+    printf 'bug\nduplicate\nhotfix\nrelease-recovery\npromotion\ntask\n'
   fi
   exit 0
 fi
@@ -514,7 +514,7 @@ if grep -q 'DELETE label: duplicate' <<<"$free_prune_plan"; then
   echo "The duplicate policy label must not be pruned."
   exit 1
 fi
-for delivery_label in hotfix promotion; do
+for delivery_label in hotfix release-recovery promotion; do
   if grep -q "DELETE label: $delivery_label" <<<"$free_prune_plan"; then
     echo "The $delivery_label policy label must not be pruned."
     exit 1
@@ -1117,6 +1117,28 @@ grep -q 'types: \[opened, edited, synchronize, reopened, ready_for_review, assig
   .github/workflows/pr-policy.yml
 grep -Fq 'if [[ -f scripts/sync_work_item_metadata.py ]]' \
   .github/workflows/pr-policy.yml
+cmp -s .github/workflows/pr-policy.yml template/.github/workflows/pr-policy.yml
+cmp -s scripts/test-pr-policy template/scripts/test-pr-policy
+for pr_policy_workflow in .github/workflows/pr-policy.yml \
+  template/.github/workflows/pr-policy.yml; do
+  # Shell variables are literal workflow content.
+  # shellcheck disable=SC2016
+  grep -Fq 'if [[ "${PR_POLICY_FIXTURE:-false}" == "true" ]]' \
+    "$pr_policy_workflow"
+  # Shell variables are literal workflow content.
+  # shellcheck disable=SC2016
+  test "$(grep -Fc 'repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER' \
+    "$pr_policy_workflow")" -eq 1
+  grep -q 'Live pull request metadata is incomplete or malformed.' \
+    "$pr_policy_workflow"
+done
+metadata_sync_line="$(grep -n 'name: Synchronize pull request metadata' \
+  .github/workflows/pr-policy.yml | cut -d: -f1)"
+# Shell variables are literal workflow content.
+# shellcheck disable=SC2016
+live_metadata_line="$(grep -nF 'repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER' \
+  .github/workflows/pr-policy.yml | cut -d: -f1)"
+test "$metadata_sync_line" -lt "$live_metadata_line"
 grep -q '^  pull_request:$' .github/workflows/governance-comment.yml
 grep -q 'types: \[opened, reopened, ready_for_review\]' \
   .github/workflows/governance-comment.yml
