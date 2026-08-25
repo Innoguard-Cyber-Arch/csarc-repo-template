@@ -19,6 +19,7 @@ capability_state = MODULE["capability_state"]
 create_sync_pr = MODULE["create_sync_pr"]
 gate = MODULE["gate"]
 includes_main = MODULE["includes_main"]
+label_sync_pr = MODULE["label_sync_pr"]
 manual_commands = MODULE["manual_commands"]
 complete_dev_next = MODULE["complete_dev_next"]
 abort_dev_next = MODULE["abort_dev_next"]
@@ -1197,6 +1198,63 @@ def test_conflict_stops_before_opening_a_pull_request() -> None:
             api, "acme/repo", "dev/m7-ci", "delivery", "abcdef0123456789"
         )
     assert not any(path.endswith("/pulls") for _, path, _ in api.calls[1:])
+
+
+def test_new_sync_pr_labels_only_through_the_lifecycle_lease(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Creating a PR never writes its label outside the common lease tool."""
+    api = FakeAPI(
+        [
+            (200, []),
+            (404, {"message": "missing"}),
+            (201, {"ref": "created"}),
+            (201, {"sha": "merge"}),
+            (
+                201,
+                {
+                    "number": 17,
+                    "html_url": "https://github.com/acme/repo/pull/17",
+                    "head": {"sha": "a" * 40},
+                },
+            ),
+        ]
+    )
+    labelled: list[tuple[str, int, str]] = []
+    monkeypatch.setitem(
+        create_sync_pr.__globals__,
+        "label_sync_pr",
+        lambda repo, number, sha: labelled.append((repo, number, sha)),
+    )
+    assert (
+        create_sync_pr(
+            api, "acme/repo", "dev/m7-ci", "delivery", "abcdef0123456789"
+        )
+        == "https://github.com/acme/repo/pull/17"
+    )
+    assert labelled == [("acme/repo", 17, "a" * 40)]
+    assert not any("/labels" in path for _, path, _ in api.calls)
+
+
+def test_lifecycle_label_always_releases_its_exact_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed metadata edit does not strand the workflow lease."""
+    commands: list[list[str]] = []
+
+    def command(arguments: list[str]) -> None:
+        commands.append(arguments)
+        if arguments[0] == "edit":
+            raise RuntimeError("edit failed")
+
+    monkeypatch.setitem(label_sync_pr.__globals__, "lifecycle_command", command)
+    with pytest.raises(RuntimeError, match="edit failed"):
+        label_sync_pr("acme/repo", 17, "a" * 40)
+    assert [arguments[0] for arguments in commands] == [
+        "acquire",
+        "edit",
+        "release",
+    ]
 
 
 def test_reconcile_fans_out_with_capability_fallback() -> None:

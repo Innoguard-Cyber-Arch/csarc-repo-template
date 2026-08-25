@@ -1,0 +1,542 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+fixture="$(mktemp -d)"
+gate="$fixture/post-merge-gate"
+premerge_gate="$fixture/pre-merge-gate"
+release_gate="$fixture/release-source-gate"
+trap 'rm -rf "$fixture"' EXIT
+
+{
+  printf '#!/usr/bin/env bash\nset -euo pipefail\n'
+  awk '
+    /^      - name: Resolve the merged pull request and its evidence$/ { found = 1; next }
+    found && /^        run: \|$/ { in_run = 1; next }
+    in_run && /^$/ { print; next }
+    in_run && /^          / { sub(/^          /, ""); print; next }
+    in_run { exit }
+  ' "$repo_root/.github/workflows/promotion-post-merge.yml"
+} > "$gate"
+chmod +x "$gate"
+
+{
+  printf '#!/usr/bin/env bash\nset -euo pipefail\n'
+  awk '
+    /^          if \[\[ "\$GITHUB_EVENT_NAME" == "pull_request" && "\$PR_HEAD" == release-please--\* \]\]; then$/ { in_gate = 1 }
+    in_gate && /^          / {
+      sub(/^          /, "")
+      print
+      if ($0 == "fi") exit
+    }
+  ' "$repo_root/.github/workflows/promotion.yml"
+} > "$premerge_gate"
+chmod +x "$premerge_gate"
+
+{
+  printf '#!/usr/bin/env bash\nset -euo pipefail\n'
+  awk '
+    /^      - name: Require an eligible main source$/ { found = 1; next }
+    found && /^        run: \|$/ { in_run = 1; next }
+    in_run && /^$/ { print; next }
+    in_run && /^          / { sub(/^          /, ""); print; next }
+    in_run { exit }
+  ' "$repo_root/.github/workflows/release-please.yml"
+} > "$release_gate"
+chmod +x "$release_gate"
+
+if ! grep -q 'pull_request_count' "$gate"; then
+  echo "Could not extract the post-merge release follow-up gate." >&2
+  exit 1
+fi
+if ! grep -q 'git archive "$PR_BASE_SHA"' "$premerge_gate"; then
+  echo "Could not extract the pre-merge release follow-up gate." >&2
+  exit 1
+fi
+if ! grep -q 'pull_request_count' "$release_gate"; then
+  echo "Could not extract the release source gate." >&2
+  exit 1
+fi
+
+for workflow in \
+  "$repo_root/.github/workflows/promotion-post-merge.yml" \
+  "$repo_root/.github/workflows/release-please.yml"; do
+  grep -Fq '.merge_commit_sha == $sha' "$workflow"
+  grep -Fq 'commits/$GITHUB_SHA/pulls?per_page=100' "$workflow"
+  grep -Fq 'pulls/$pr_number/files?per_page=100' "$workflow"
+  grep -Fq 'pulls/$pr_number/commits?per_page=100' "$workflow"
+  grep -Fq 'git archive "$base_sha"' "$workflow"
+  grep -Fq '"$trusted_root/scripts/release_policy.py" verify-release-follow-up' "$workflow"
+  if grep -Fq '"$GITHUB_SHA^" "$GITHUB_SHA"' "$workflow"; then
+    echo "Post-merge release verification still checks only the final commit." >&2
+    exit 1
+  fi
+  if grep -Fq 'last // empty' "$workflow"; then
+    echo "Post-merge source selection still accepts an arbitrary associated PR." >&2
+    exit 1
+  fi
+done
+
+grep -Fq 'git archive "$PR_BASE_SHA"' \
+  "$repo_root/.github/workflows/promotion.yml"
+grep -Fq 'commits/$main_sha/pulls?per_page=100' \
+  "$repo_root/.github/workflows/release-please.yml"
+grep -Fq -- '--paginate --slurp' \
+  "$repo_root/.github/workflows/release-please.yml"
+grep -Fq '"$base_sha" == "$PUSH_BEFORE"' \
+  "$repo_root/.github/workflows/promotion-post-merge.yml"
+grep -Fq '"$base_sha" == "$expected_base"' \
+  "$repo_root/.github/workflows/release-please.yml"
+trusted_workflow="$repo_root/.github/workflows/release-follow-up-policy.yml"
+grep -Fq 'pull_request_target:' "$trusted_workflow"
+grep -Fq 'ref: ${{ github.event.repository.default_branch }}' "$trusted_workflow"
+grep -Fq 'rules/branches/$encoded_base' "$trusted_workflow"
+grep -Fq '.type == "workflows"' "$trusted_workflow"
+grep -Fq '.path == ".github/workflows/release-follow-up-policy.yml"' \
+  "$trusted_workflow"
+grep -Fq '.repository_id == $repository_id' "$trusted_workflow"
+[[ "$(grep -Fc 'git/ref/heads/$encoded_base' "$trusted_workflow")" == 2 ]]
+if grep -Eq 'ref:.*pull_request.*head|checkout.*pull_request.*head' \
+  "$trusted_workflow"; then
+  echo "Trusted release policy must not check out the pull-request head." >&2
+  exit 1
+fi
+if rg -l '^    name: release-follow-up$' "$repo_root/.github/workflows" | \
+  grep -Fvx "$trusted_workflow" >/dev/null; then
+  echo "An untrusted workflow can spoof the release-follow-up context." >&2
+  exit 1
+fi
+
+mkdir -p "$fixture/bin"
+cat > "$fixture/bin/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "$*" in
+  *"rules/branches/main"*)
+    [[ "${MOCK_RULES_UNAVAILABLE:-false}" != true ]] || exit 1
+    jq -cn --argjson repository_id "${MOCK_REPOSITORY_ID:-123}" '[{
+      type: "workflows",
+      parameters: {workflows: [{
+        path: ".github/workflows/release-follow-up-policy.yml",
+        ref: "refs/heads/main",
+        repository_id: $repository_id
+      }]}
+    }]'
+    ;;
+  *"--jq .id"*)
+    printf '%s\n' "${MOCK_REPOSITORY_ID:-123}"
+    ;;
+  *"/commits/"*"/pulls?per_page=100"*)
+    [[ "$*" == *"--paginate"* && "$*" == *"--slurp"* ]]
+    commit_sha="${*#*\/commits\/}"
+    commit_sha="${commit_sha%%/pulls*}"
+    if [[ "$commit_sha" != "${GITHUB_SHA:-}" && -n "${MOCK_BOUNDARY_PULL_REQUEST_PAGES:-}" ]]; then
+      printf '%s\n' "$MOCK_BOUNDARY_PULL_REQUEST_PAGES"
+    elif [[ -n "${MOCK_PULL_REQUEST_PAGES:-}" ]]; then
+      printf '%s\n' "$MOCK_PULL_REQUEST_PAGES"
+    else
+      jq -cn --argjson page "$MOCK_PULL_REQUESTS" '[$page]'
+    fi
+    ;;
+  *"/collaborators/"*"/permission"*)
+    printf '%s\n' "${MOCK_ACTOR_PERMISSION:-write}"
+    ;;
+  *"/pulls/"*"/commits?per_page=100"*)
+    [[ "$*" == *"--paginate"* && "$*" == *"--slurp"* ]]
+    jq -cn \
+      --arg sha "$MOCK_HEAD_SHA" \
+      --arg author "${MOCK_COMMIT_AUTHOR:-github-actions[bot]}" \
+      --arg committer "${MOCK_COMMITTER:-web-flow}" \
+      '[[{sha: $sha, author: {login: $author}, committer: {login: $committer}, commit: {verification: {verified: true, reason: "valid"}}}]]'
+    ;;
+  *"/pulls/"*"/files?per_page=100"*)
+    [[ "$*" == *"--paginate"* && "$*" == *"--slurp"* ]]
+    printf '%s\n' "$MOCK_CHANGED_FILES" | \
+      jq -Rsc '
+        split("\n")
+        | map(
+            select(length > 0)
+            | if contains("=>") then
+                split("=>") | {previous_filename: .[0], filename: .[1]}
+              else
+                {filename: .}
+              end
+          )
+        | [.]
+      '
+    ;;
+  *"/pulls/"*)
+    if [[ -n "${MOCK_FILE_COUNT_OVERRIDE:-}" ]]; then
+      printf '%s\n' "$MOCK_FILE_COUNT_OVERRIDE"
+    else
+      printf '%s\n' "$MOCK_CHANGED_FILES" | awk 'NF { count++ } END { print count + 0 }'
+    fi
+    ;;
+  *)
+    echo "Unexpected gh command: $*" >&2
+    exit 2
+    ;;
+esac
+SH
+chmod +x "$fixture/bin/gh"
+
+setup_repo() {
+  local name="$1"
+  test_repo="$fixture/$name"
+  mkdir -p "$test_repo/scripts"
+  git -C "$test_repo" init -q -b main
+  git -C "$test_repo" config user.email test@example.com
+  git -C "$test_repo" config user.name Test
+  cp "$repo_root/scripts/release_policy.py" "$test_repo/scripts/release_policy.py"
+  cat > "$test_repo/release-please-config.json" <<'JSON'
+{
+  "release-type": "simple",
+  "packages": {
+    ".": {
+      "component": "demo"
+    }
+  }
+}
+JSON
+  printf '0.1.0\n' > "$test_repo/version.txt"
+  git -C "$test_repo" add .
+  git -C "$test_repo" commit -qm "base"
+  base_sha="$(git -C "$test_repo" rev-parse HEAD)"
+}
+
+commit_all() {
+  local repo="$1"
+  local message="$2"
+  git -C "$repo" add .
+  git -C "$repo" commit -qm "$message"
+}
+
+pull_request_json() {
+  local base="$1"
+  local head="$2"
+  local number="${3:-42}"
+  local actor="${4:-github-actions[bot]}"
+  jq -cn \
+    --arg base "$base" \
+    --arg head "$head" \
+    --argjson number "$number" \
+    --arg actor "$actor" \
+    '[{
+      number: $number,
+      title: "chore(main): release 0.2.0",
+      labels: [],
+      merged_at: "2026-08-24T00:00:00Z",
+      merge_commit_sha: $head,
+      base: {ref: "main", sha: $base},
+      head: {
+        ref: "release-please--branches--main--components--demo",
+        sha: $head,
+        repo: {full_name: "owner/repo"}
+      },
+      user: {login: $actor}
+    }]'
+}
+
+run_gate() {
+  local repo="$1"
+  local pull_requests="$2"
+  local changed_files="$3"
+  local expected_file_count="${4:-}"
+  local pull_request_pages="${5:-}"
+  local committer="${6:-web-flow}"
+  local author="${7:-github-actions[bot]}"
+  local actor_permission="${8:-write}"
+  local push_before="${9:-$(git -C "$repo" rev-parse HEAD^)}"
+  local runner_temp="$repo/runner-temp"
+  mkdir -p "$runner_temp"
+  (
+    cd "$repo"
+    PATH="$fixture/bin:$PATH" \
+      MOCK_PULL_REQUESTS="$pull_requests" \
+      MOCK_PULL_REQUEST_PAGES="$pull_request_pages" \
+      MOCK_CHANGED_FILES="$changed_files" \
+      MOCK_FILE_COUNT_OVERRIDE="$expected_file_count" \
+      MOCK_HEAD_SHA="$(git rev-parse HEAD)" \
+      MOCK_COMMITTER="$committer" \
+      MOCK_COMMIT_AUTHOR="$author" \
+      MOCK_ACTOR_PERMISSION="$actor_permission" \
+      MOCK_RULES_UNAVAILABLE="${MOCK_RULES_UNAVAILABLE:-false}" \
+      GITHUB_REPOSITORY="owner/repo" \
+      GITHUB_SHA="$(git rev-parse HEAD)" \
+      PUSH_BEFORE="$push_before" \
+      GITHUB_OUTPUT="$runner_temp/github-output" \
+      GH_TOKEN="test-token" \
+      RUNNER_TEMP="$runner_temp" \
+      "$gate"
+  )
+}
+
+run_premerge_gate() {
+  local repo="$1"
+  local base="$2"
+  local committer="${3:-web-flow}"
+  local runner_temp="$repo/pre-merge-runner-temp"
+  mkdir -p "$runner_temp"
+  (
+    cd "$repo"
+    PATH="$fixture/bin:$PATH" \
+      MOCK_HEAD_SHA="$(git rev-parse HEAD)" \
+      MOCK_COMMITTER="$committer" \
+      GITHUB_EVENT_NAME="pull_request" \
+      GITHUB_REPOSITORY="owner/repo" \
+      PR_AUTHOR="github-actions[bot]" \
+      PR_BASE_SHA="$base" \
+      PR_HEAD="release-please--branches--main--components--demo" \
+      PR_HEAD_REPOSITORY="owner/repo" \
+      PR_HEAD_SHA="$(git rev-parse HEAD)" \
+      PR_NUMBER="42" \
+      RUNNER_TEMP="$runner_temp" \
+      "$premerge_gate"
+  )
+}
+
+run_release_gate() {
+  local repo="$1"
+  local pull_requests="$2"
+  local pull_request_pages="${3:-}"
+  local committer="${4:-web-flow}"
+  local boundary_pull_request_pages="${5:-}"
+  local author="${6:-github-actions[bot]}"
+  local actor_permission="${7:-write}"
+  local push_before="${8:-$(git -C "$repo" rev-parse HEAD^)}"
+  local runner_temp="$repo/release-runner-temp"
+  mkdir -p "$runner_temp"
+  (
+    cd "$repo"
+    PATH="$fixture/bin:$PATH" \
+      MOCK_PULL_REQUESTS="$pull_requests" \
+      MOCK_PULL_REQUEST_PAGES="$pull_request_pages" \
+      MOCK_BOUNDARY_PULL_REQUEST_PAGES="$boundary_pull_request_pages" \
+      MOCK_CHANGED_FILES="CHANGELOG.md" \
+      MOCK_HEAD_SHA="$(git rev-parse HEAD)" \
+      MOCK_COMMITTER="$committer" \
+      MOCK_COMMIT_AUTHOR="$author" \
+      MOCK_ACTOR_PERMISSION="$actor_permission" \
+      MOCK_RULES_UNAVAILABLE="${MOCK_RULES_UNAVAILABLE:-false}" \
+      CANONICAL_REPOSITORY="canonical/repo" \
+      GITHUB_EVENT_NAME="push" \
+      GITHUB_REPOSITORY="owner/repo" \
+      GITHUB_SHA="$(git rev-parse HEAD)" \
+      PUSH_BEFORE="$push_before" \
+      GITHUB_OUTPUT="$runner_temp/github-output" \
+      GH_TOKEN="test-token" \
+      RUNNER_TEMP="$runner_temp" \
+      "$release_gate"
+  )
+}
+
+setup_repo valid
+printf '# Changelog\n' > "$test_repo/CHANGELOG.md"
+commit_all "$test_repo" "release"
+head_sha="$(git -C "$test_repo" rev-parse HEAD)"
+run_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" \
+  "CHANGELOG.md" >/dev/null
+run_premerge_gate "$test_repo" "$base_sha" >/dev/null
+run_release_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" >/dev/null
+if MOCK_RULES_UNAVAILABLE=true run_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" \
+  "CHANGELOG.md" >/dev/null 2>&1; then
+  echo "Post-merge gate accepted a release follow-up without trusted workflow evidence." >&2
+  exit 1
+fi
+if MOCK_RULES_UNAVAILABLE=true run_release_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" >/dev/null 2>&1; then
+  echo "Release source gate accepted a release follow-up without trusted workflow evidence." >&2
+  exit 1
+fi
+
+human_pull="$(pull_request_json "$base_sha" "$head_sha" 42 maintainer)"
+run_gate "$test_repo" "$human_pull" "CHANGELOG.md" "" "" web-flow \
+  maintainer maintain >/dev/null
+run_release_gate "$test_repo" "$human_pull" "" web-flow "" \
+  maintainer maintain >/dev/null
+if run_gate "$test_repo" "$human_pull" "CHANGELOG.md" "" "" web-flow \
+  maintainer write >/dev/null 2>&1; then
+  echo "Post-merge gate accepted a human release owner without maintain permission." >&2
+  exit 1
+fi
+if run_gate "$test_repo" "$(pull_request_json "$base_sha" "$head_sha")" \
+  "CHANGELOG.md" "" "" web-flow \
+  github-actions\[bot\] write "$(printf 'b%.0s' {1..40})" >/dev/null 2>&1; then
+  echo "Post-merge gate accepted a push before SHA that was not the merge parent." >&2
+  exit 1
+fi
+if run_release_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" "" web-flow "" \
+  github-actions\[bot\] write "$(printf 'b%.0s' {1..40})" >/dev/null 2>&1; then
+  echo "Release source gate accepted a push before SHA that was not the merge parent." >&2
+  exit 1
+fi
+
+if run_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" \
+  "CHANGELOG.md" "" "" "maintainer" >/dev/null 2>&1; then
+  echo "Post-merge gate accepted a human commit on the automation PR." >&2
+  exit 1
+fi
+if run_premerge_gate "$test_repo" "$base_sha" "maintainer" \
+  >/dev/null 2>&1; then
+  echo "Pre-merge gate accepted a human commit on the automation PR." >&2
+  exit 1
+fi
+if run_release_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" "" "maintainer" \
+  >/dev/null 2>&1; then
+  echo "Release source gate accepted a human commit on the automation PR." >&2
+  exit 1
+fi
+
+if run_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" \
+  "CHANGELOG.md" 2 >/dev/null 2>&1; then
+  echo "Post-merge gate accepted an incomplete paginated file list." >&2
+  exit 1
+fi
+
+if run_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" \
+  "src/product.py=>CHANGELOG.md" >/dev/null 2>&1; then
+  echo "Post-merge gate ignored a renamed non-release source file." >&2
+  exit 1
+fi
+
+if run_gate "$test_repo" '[]' "CHANGELOG.md" >/dev/null 2>&1; then
+  echo "Post-merge gate accepted a commit without an exact source PR." >&2
+  exit 1
+fi
+if run_release_gate "$test_repo" '[]' >/dev/null 2>&1; then
+  echo "Release source gate accepted a commit without an exact source PR." >&2
+  exit 1
+fi
+
+single_pr="$(pull_request_json "$base_sha" "$head_sha")"
+ambiguous="$(jq -cn --argjson first "$single_pr" --argjson second "$single_pr" '$first + ($second | map(.number = 43))')"
+if run_gate "$test_repo" "$ambiguous" "CHANGELOG.md" >/dev/null 2>&1; then
+  echo "Post-merge gate accepted ambiguous exact source PRs." >&2
+  exit 1
+fi
+if run_release_gate "$test_repo" "$ambiguous" >/dev/null 2>&1; then
+  echo "Release source gate accepted ambiguous exact source PRs." >&2
+  exit 1
+fi
+
+first_page="$(jq -cn --argjson exact "$single_pr" '$exact + [range(29) | {}]')"
+second_page="$(pull_request_json "$base_sha" "$head_sha" 43)"
+paginated_ambiguous="$(
+  jq -cn \
+    --argjson first "$first_page" \
+    --argjson second "$second_page" \
+    '[$first, $second]'
+)"
+if run_gate \
+  "$test_repo" "$single_pr" "CHANGELOG.md" "" "$paginated_ambiguous" \
+  >/dev/null 2>&1; then
+  echo "Post-merge gate ignored an exact source PR on page two." >&2
+  exit 1
+fi
+if run_release_gate \
+  "$test_repo" "$single_pr" "$paginated_ambiguous" >/dev/null 2>&1; then
+  echo "Release source gate ignored an exact source PR on page two." >&2
+  exit 1
+fi
+
+boundary_exact="$(
+  jq -cn \
+    --arg sha "$base_sha" \
+    '[{
+      number: 50,
+      title: "feat: promote batch",
+      labels: [{name: "promotion"}],
+      merged_at: "2026-08-23T00:00:00Z",
+      merge_commit_sha: $sha,
+      base: {ref: "main"},
+      head: {ref: "dev/next", sha: $sha}
+    }]'
+)"
+boundary_page_one="$(
+  jq -cn --argjson exact "$boundary_exact" '$exact + [range(29) | {}]'
+)"
+boundary_page_two="$(jq -cn --argjson exact "$boundary_exact" '$exact | map(.number = 51)')"
+boundary_paginated_ambiguous="$(
+  jq -cn \
+    --argjson first "$boundary_page_one" \
+    --argjson second "$boundary_page_two" \
+    '[$first, $second]'
+)"
+if run_release_gate "$test_repo" "$single_pr" "" web-flow \
+  "$boundary_paginated_ambiguous" >/dev/null 2>&1; then
+  echo "Release source history ignored an exact boundary PR on page two." >&2
+  exit 1
+fi
+
+setup_repo multi-commit
+mkdir -p "$test_repo/src"
+printf 'unsafe\n' > "$test_repo/src/product.py"
+commit_all "$test_repo" "change product source"
+printf '# Changelog\n' > "$test_repo/CHANGELOG.md"
+commit_all "$test_repo" "update changelog"
+head_sha="$(git -C "$test_repo" rev-parse HEAD)"
+if run_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" \
+  $'src/product.py\nCHANGELOG.md' >/dev/null 2>&1; then
+  echo "Post-merge gate ignored an earlier release PR source change." >&2
+  exit 1
+fi
+
+setup_repo config-tamper
+mkdir -p "$test_repo/src"
+printf 'unsafe\n' > "$test_repo/src/product.py"
+cat > "$test_repo/release-please-config.json" <<'JSON'
+{
+  "release-type": "simple",
+  "packages": {
+    ".": {
+      "component": "demo",
+      "extra-files": ["release-please-config.json", "src/product.py"]
+    }
+  }
+}
+JSON
+commit_all "$test_repo" "expand candidate allowlist"
+head_sha="$(git -C "$test_repo" rev-parse HEAD)"
+if run_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" \
+  $'release-please-config.json\nsrc/product.py' >/dev/null 2>&1; then
+  echo "Post-merge gate trusted a candidate-expanded release allowlist." >&2
+  exit 1
+fi
+if run_premerge_gate "$test_repo" "$base_sha" >/dev/null 2>&1; then
+  echo "Pre-merge gate trusted a candidate-expanded release allowlist." >&2
+  exit 1
+fi
+
+setup_repo validator-tamper
+mkdir -p "$test_repo/src"
+printf 'unsafe\n' > "$test_repo/src/product.py"
+cat > "$test_repo/scripts/release_policy.py" <<'PY'
+#!/usr/bin/env python3
+raise SystemExit(0)
+PY
+commit_all "$test_repo" "disable candidate validator"
+head_sha="$(git -C "$test_repo" rev-parse HEAD)"
+if run_gate "$test_repo" \
+  "$(pull_request_json "$base_sha" "$head_sha")" \
+  $'scripts/release_policy.py\nsrc/product.py' >/dev/null 2>&1; then
+  echo "Post-merge gate trusted a candidate-modified validator." >&2
+  exit 1
+fi
+if run_premerge_gate "$test_repo" "$base_sha" >/dev/null 2>&1; then
+  echo "Pre-merge gate trusted a candidate-modified validator." >&2
+  exit 1
+fi
+
+echo "Release follow-up gate regression cases passed."

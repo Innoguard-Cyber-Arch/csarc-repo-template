@@ -11,6 +11,7 @@ for workflow in .github/workflows/{delivery-sync,promotion}.yml; do
     exit 1
   fi
 done
+grep -q 'gh auth setup-git' .github/workflows/delivery-maintenance.yml
 
 verify_python={{ "true" if language in ["python", "python-typescript"] else "false" }}
 verify_typescript="${CSARC_VERIFY_TYPESCRIPT:-{{ "true" if language in ["typescript", "python-typescript"] else "false" }}}"
@@ -30,6 +31,7 @@ uv run --no-project python scripts/render_site.py --check
 ./scripts/test-worktree-cleanup
 ./scripts/detect-language-profile
 ./scripts/test-pr-policy
+./scripts/test-release-follow-up-gates
 ./scripts/test-issue-triage
 
 if $verify_python; then
@@ -179,6 +181,11 @@ print(f"release version: {next(iter(versions.values()))}")
 PY
 test -x scripts/apply-repository-settings.sh
 test -x scripts/detect-language-profile
+test -x scripts/pr_lifecycle.py
+grep -q 'scripts/pr_lifecycle.py' AGENTS.md
+grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md
+grep -q 'release pull request (human-only)' docs/ci-policy.md
+"${platform_python[@]}" scripts/pr_lifecycle.py scan-writers --root .
 
 test -f AGENTS.md
 test "$(cat CLAUDE.md)" = "@AGENTS.md"

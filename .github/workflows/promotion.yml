@@ -25,6 +25,7 @@ jobs:
       ${{ github.event_name == 'merge_group' ||
       (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' &&
       (github.event.pull_request.head.ref == 'dev' || startsWith(github.event.pull_request.head.ref, 'dev/') ||
+      startsWith(github.event.pull_request.head.ref, 'release-please--') ||
       contains(github.event.pull_request.labels.*.name, 'promotion') ||
       contains(github.event.pull_request.labels.*.name, 'hotfix'))) }}
     runs-on: ubuntu-latest
@@ -49,6 +50,12 @@ jobs:
           CANARY_COMMAND: ${{ vars.CSARC_CANARY_COMMAND }}
           CANARY_ENVIRONMENT: ${{ vars.CSARC_CANARY_ENVIRONMENT }}
           GH_TOKEN: ${{ github.token }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           branch_strategy=main
@@ -59,6 +66,35 @@ jobs:
             if [[ -n "$profile" ]]; then
               branch_strategy="$(jq -r '.branch_strategy // "main"' <<<"$profile")"
             fi
+          fi
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" && "$PR_HEAD" == release-please--* ]]; then
+            trusted_root="$(mktemp -d "$RUNNER_TEMP/release-follow-up-policy.XXXXXX")"
+            git archive "$PR_BASE_SHA" | tar -x -C "$trusted_root"
+            git diff --no-renames --name-only \
+              "$PR_BASE_SHA" \
+              "$PR_HEAD_SHA" \
+              > "$RUNNER_TEMP/release-follow-up-files"
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/commits?per_page=100" \
+              > "$RUNNER_TEMP/release-follow-up-commits.json"
+            actor_permission=""
+            if [[ "$PR_AUTHOR" != "github-actions[bot]" ]]; then
+              encoded_actor="$(jq -rn --arg value "$PR_AUTHOR" '$value | @uri')"
+              actor_permission="$(
+                gh api "repos/$GITHUB_REPOSITORY/collaborators/$encoded_actor/permission" \
+                  --jq '.permission // empty'
+              )"
+            fi
+            python3 "$trusted_root/scripts/release_policy.py" verify-release-follow-up \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$PR_HEAD" \
+              --head-repo "$PR_HEAD_REPOSITORY" \
+              --head-sha "$PR_HEAD_SHA" \
+              --actor "$PR_AUTHOR" \
+              --actor-permission "$actor_permission" \
+              --changed-files "$RUNNER_TEMP/release-follow-up-files" \
+              --commits "$RUNNER_TEMP/release-follow-up-commits.json" \
+              --root "$trusted_root"
           fi
           python3 scripts/promotion_gate.py prepare \
             --event "$GITHUB_EVENT_NAME" \
@@ -111,6 +147,7 @@ jobs:
       ${{ always() && (github.event_name == 'merge_group' ||
       (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' &&
       (github.event.pull_request.head.ref == 'dev' || startsWith(github.event.pull_request.head.ref, 'dev/') ||
+      startsWith(github.event.pull_request.head.ref, 'release-please--') ||
       contains(github.event.pull_request.labels.*.name, 'promotion') ||
       contains(github.event.pull_request.labels.*.name, 'hotfix')))) }}
     needs: [preflight, canary]

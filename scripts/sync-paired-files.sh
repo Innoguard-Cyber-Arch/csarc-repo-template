@@ -26,6 +26,7 @@ paired_files=(
   .github/workflows/promotion-post-merge.yml
   .github/workflows/promotion.yml
   .github/workflows/pr-policy.yml
+  .github/workflows/release-follow-up-policy.yml
   .github/workflows/release-please.yml
   .github/workflows/spec-to-issue.yml
   .github/workflows/zizmor.yml
@@ -41,6 +42,7 @@ paired_files=(
   scripts/check-governance-drift
   scripts/ci_tier.py
   scripts/delivery_sync.py
+  scripts/pr_lifecycle.py
   scripts/promotion_gate.py
   scripts/check-update-conflicts
   scripts/cleanup-worktrees
@@ -51,11 +53,13 @@ paired_files=(
   scripts/sync_milestone_state.py
   scripts/test-issue-triage
   scripts/test-pr-policy
+  scripts/test-release-follow-up-gates
   scripts/test-worktree-cleanup
   scripts/validate-issue-title
   tests/test_ci_tier.py
   tests/test_spec_to_issue.py
   tests/test_delivery_sync.py
+  tests/test_pr_lifecycle.py
   tests/test_promotion_gate.py
   tests/test_milestone_lifecycle.py
   tests/test_release_policy.py

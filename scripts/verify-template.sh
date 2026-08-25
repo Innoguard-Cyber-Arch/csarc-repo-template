@@ -19,12 +19,19 @@ fi
 grep -q 'uv sync --locked --python 3.14' AGENTS.md
 grep -q 'uv run pytest <test-path>' AGENTS.md
 grep -q 'scripts/render_site.py --check' AGENTS.md
+grep -q 'scripts/pr_lifecycle.py' AGENTS.md
+grep -q 'scripts/pr_lifecycle.py' template/AGENTS.md.jinja
+grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md
+grep -q '\[P0\].*\[P1\].*\[merge-blocker\]' docs/ci-policy.md
+grep -q 'release pull request (human-only)' docs/ci-policy.md
 grep -q 'Actions quota fallback attestation' docs/ci-policy.md
 grep -q 'finalize-quota-fallback' docs/ci-policy.md
 grep -q 'verify-quota-main' docs/ci-policy.md
 grep -q 'release_eligible.*false' docs/ci-policy.md
 cmp -s scripts/promotion_gate.py template/scripts/promotion_gate.py
 cmp -s tests/test_promotion_gate.py template/tests/test_promotion_gate.py
+cmp -s scripts/pr_lifecycle.py template/scripts/pr_lifecycle.py
+cmp -s tests/test_pr_lifecycle.py template/tests/test_pr_lifecycle.py
 test -f .github/workflows/delivery-maintenance.yml
 test -f .github/workflows/dev-next-close.yml
 test -f .github/workflows/promotion-post-merge.yml
@@ -58,6 +65,7 @@ assert_agent_guidance() {
     "$project_root/README.md"
   grep -q 'docs/ci-policy.md#actions-額度-fallback' \
     "$project_root/AGENTS.md"
+  grep -q 'scripts/pr_lifecycle.py' "$project_root/AGENTS.md"
   grep -q 'scripts/render_site.py --check' "$project_root/AGENTS.md"
   grep -q 'propose semantic story groups and exclusions' \
     "$project_root/AGENTS.md"
@@ -82,6 +90,7 @@ uv run ruff format --check \
   tests/test_cli.py \
   tests/test_milestone_lifecycle.py \
   tests/test_ci_tier.py \
+  tests/test_pr_lifecycle.py \
   tests/test_promotion_gate.py \
   tests/test_delivery_sync.py \
   tests/test_release_policy.py \
@@ -91,6 +100,7 @@ uv run ruff format --check \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/pr_lifecycle.py \
   scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -105,6 +115,7 @@ uv run ruff check \
   tests/test_cli.py \
   tests/test_milestone_lifecycle.py \
   tests/test_ci_tier.py \
+  tests/test_pr_lifecycle.py \
   tests/test_promotion_gate.py \
   tests/test_delivery_sync.py \
   tests/test_release_policy.py \
@@ -114,6 +125,7 @@ uv run ruff check \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/pr_lifecycle.py \
   scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -128,6 +140,7 @@ uv run mypy \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/pr_lifecycle.py \
   scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -192,6 +205,8 @@ grep -q '額度 fallback.*human' template/site/index.html.jinja
 bash -n scripts/run-live-workflow-probe
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
+bash -n scripts/test-release-follow-up-gates
+./scripts/test-release-follow-up-gates
 bash -n scripts/test-issue-triage
 bash -n scripts/validate-issue-title
 bash -n template/scripts/validate-issue-title
@@ -921,8 +936,8 @@ grep -q '^## Working loop$' AGENTS.md
 grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
 grep -q "pull request chain ends there" AGENTS.md
-grep -q "against its delivery branch or immediate parent in the stack" AGENTS.md
-grep -q 'complete every task in the pull request and referenced Issue' AGENTS.md
+grep -q "Target the delivery branch or immediate stack parent" AGENTS.md
+grep -q 'Use `Closes`, `Fixes`, or `Resolves` only after every PR and referenced-Issue item has evidence' AGENTS.md
 grep -q 'one branch and one Git worktree per task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
 grep -q 'search open and closed Issues' AGENTS.md
@@ -1071,9 +1086,25 @@ if grep -q '^  pull_request:$' .github/workflows/osv.yml; then
   echo "Standalone OSV must not duplicate change-aware CI scans."
   exit 1
 fi
-grep -q 'gh pr edit "$pr_url" --add-label enhancement' \
+test "$(grep -c 'scripts/pr_lifecycle.py acquire' \
+  .github/workflows/python-version-policy.yml)" -eq 1
+test "$(grep -c 'scripts/pr_lifecycle.py edit' \
+  .github/workflows/python-version-policy.yml)" -eq 1
+test "$(grep -c 'scripts/pr_lifecycle.py release' \
+  .github/workflows/python-version-policy.yml)" -eq 1
+grep -q 'steps.app-token.outputs.app-slug' \
   .github/workflows/python-version-policy.yml
-if grep -Eq -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
+test "$(grep -c -- '--actor "\$lease_actor"' \
+  .github/workflows/python-version-policy.yml)" -eq 3
+if grep -q 'api", "installation' scripts/pr_lifecycle.py; then
+  echo "GitHub App identity must come from trusted action output."
+  exit 1
+fi
+uv run --no-project python scripts/pr_lifecycle.py scan-writers --root .
+grep -q 'trap release_lease EXIT' .github/workflows/python-version-policy.yml
+grep -q 'pr_lifecycle.py edit' scripts/delivery_sync.py
+grep -q 'gh auth setup-git' .github/workflows/delivery-maintenance.yml
+if grep -Eq -- '--admin|CSARC_VERSION_BOT_APP_ID' \
   .github/workflows/python-version-policy.yml \
   scripts/apply-repository-settings.sh \
   template/scripts/apply-repository-settings.sh; then
@@ -1658,9 +1689,9 @@ grep -q '^## Code Review Rules$' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'pull request chain ends there' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'against its delivery branch or immediate parent in the stack' \
+grep -q 'Target the delivery branch or immediate stack parent' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'complete every task in the pull request and referenced Issue' \
+grep -q 'Use `Closes`, `Fixes`, or `Resolves` only after every PR and referenced-Issue item has evidence' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'one branch and one Git worktree per task' \
   "$fixture_root/default-project/AGENTS.md"
@@ -1726,6 +1757,8 @@ grep -q '"context": "delivery-sync"' \
   "$fixture_root/default-project/policies/rulesets.json"
 grep -q '"context": "promotion"' \
   "$fixture_root/default-project/policies/rulesets.json"
+test -f \
+  "$fixture_root/default-project/.github/workflows/release-follow-up-policy.yml"
 grep -q '"refs/heads/dev/\*"' \
   "$fixture_root/default-project/policies/rulesets.json"
 test -x "$fixture_root/default-project/scripts/apply-repository-settings.sh"
@@ -1734,6 +1767,7 @@ test -x "$fixture_root/default-project/scripts/install-gitleaks"
 test -x "$fixture_root/default-project/scripts/verify-fast"
 test -f "$fixture_root/default-project/scripts/ci_tier.py"
 test -x "$fixture_root/default-project/scripts/promotion_gate.py"
+test -x "$fixture_root/default-project/scripts/pr_lifecycle.py"
 test ! -f "$fixture_root/default-project/.pre-commit-config.yaml"
 test ! -f "$fixture_root/default-project/package.json"
 test ! -f "$fixture_root/default-project/pnpm-workspace.yaml"
@@ -1744,6 +1778,10 @@ grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/README.md"
 grep -q '^## Actions quota fallback$' \
   "$fixture_root/default-project/AGENTS.md"
+grep -q 'scripts/pr_lifecycle.py' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -q '^## PR lifecycle single-writer$' \
+  "$fixture_root/default-project/docs/ci-policy.md"
 grep -q 'Actions quota fallback attestation' \
   "$fixture_root/default-project/docs/ci-policy.md"
 grep -q 'finalize-quota-fallback' \
@@ -1859,16 +1897,31 @@ grep -q '^    needs: governance$' \
   "$fixture_root/default-project/.github/workflows/release.yml"
 grep -q '^    needs: source$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-grep -q 'googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7' \
+grep -q 'release pull request (human-only)' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-grep -q 'config-file: release-please-config.json' \
+grep -q 'verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/pr-policy.yml"
+grep -q 'verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/promotion.yml"
+grep -q 'verify-release-follow-up' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-# Release automation must adapt with the default token, not wait on a GitHub App.
-grep -q 'token: \${{ secrets.GITHUB_TOKEN }}' \
+grep -q 'git diff --no-renames --name-only' \
+  "$fixture_root/default-project/.github/workflows/promotion.yml"
+grep -Fq 'pulls/$pr_number/files?per_page=100' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-grep -q '^      release_created: \${{ steps.release.outputs.release_created }}$' \
+grep -Fq '.merge_commit_sha == $sha' \
+  "$fixture_root/default-project/.github/workflows/promotion-post-merge.yml"
+grep -Fq '.merge_commit_sha == $sha' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-grep -q '^      tag_name: \${{ steps.release.outputs.tag_name }}$' \
+grep -Fq '"$trusted_root/scripts/release_policy.py" verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/promotion-post-merge.yml"
+grep -Fq '"$trusted_root/scripts/release_policy.py" verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q 'cannot atomically bind its pre-PR Draft' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q '^      release_created: \${{ steps.guard.outputs.release_created }}$' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q '^      tag_name: \${{ steps.guard.outputs.tag_name }}$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q "needs.release-pr.outputs.release_created == 'true'" \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
@@ -2110,7 +2163,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
 assert_agent_guidance "$fixture_root/main-branch-project"
 grep -q 'pull request chain ends at `main`' \
   "$fixture_root/main-branch-project/AGENTS.md"
-grep -q 'against `main` or its immediate parent in the stack' \
+grep -q 'Target `main` or the immediate stack parent' \
   "$fixture_root/main-branch-project/AGENTS.md"
 
 # A release version bump must not make the generated smoke test stale.
@@ -2181,7 +2234,7 @@ grep -q '"branch_strategy": "dev"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
 grep -q 'pull request chain ends at `dev`' \
   "$fixture_root/typescript-project/AGENTS.md"
-grep -q 'against `dev` or its immediate parent in the stack' \
+grep -q 'Target `dev` or the immediate stack parent' \
   "$fixture_root/typescript-project/AGENTS.md"
 grep -q '^  merge_group:$' \
   "$fixture_root/typescript-project/.github/workflows/ci.yml"
