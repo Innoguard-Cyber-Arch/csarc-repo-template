@@ -842,13 +842,17 @@ def require_zero_step_run(  # noqa: C901
     head_ref: str,
     head_sha: str,
     token: str,
+    *,
+    getter: Callable[[str, str, str], object] | None = None,
 ) -> str:
     """Prove one PR run was stopped by GitHub's zero-step billing gate."""
+    get = getter or github_get
     run_id = urllib.parse.urlparse(url).path.rsplit("/", 1)[-1]
-    run = github_get(repo, f"actions/runs/{run_id}", token)
+    run = get(repo, f"actions/runs/{run_id}", token)
     if (
         not isinstance(run, dict)
-        or run.get("id") != int(run_id)
+        or type(run.get("id")) is not int
+        or run["id"] != int(run_id)
         or run.get("head_sha") != head_sha
         or run.get("head_branch") != head_ref
         or run.get("event") != "pull_request"
@@ -861,16 +865,23 @@ def require_zero_step_run(  # noqa: C901
     ):
         raise RuntimeError("Blocked run does not match the failed PR head")
     pull_requests = run.get("pull_requests")
-    if not isinstance(pull_requests, list) or not any(
-        isinstance(item, dict) and item.get("number") == pr_number
-        for item in pull_requests
+    if (
+        not isinstance(pull_requests, list)
+        or not pull_requests
+        or not all(
+            isinstance(item, dict)
+            and type(item.get("number")) is int
+            and item["number"] > 0
+            for item in pull_requests
+        )
+        or not any(item["number"] == pr_number for item in pull_requests)
     ):
         raise RuntimeError("Blocked run belongs to another pull request")
     jobs: list[dict[str, Any]] = []
     total: int | None = None
     page = 1
     while total is None or len(jobs) < total:
-        payload = github_get(
+        payload = get(
             repo,
             f"actions/runs/{run_id}/jobs?per_page=100&page={page}",
             token,
@@ -879,21 +890,37 @@ def require_zero_step_run(  # noqa: C901
         count = (
             payload.get("total_count") if isinstance(payload, dict) else None
         )
-        if not isinstance(items, list) or not isinstance(count, int):
+        if (
+            not isinstance(items, list)
+            or not all(isinstance(item, dict) for item in items)
+            or type(count) is not int
+            or count < 0
+        ):
             raise RuntimeError("Blocked run jobs are incomplete")
         if total is not None and count != total:
             raise RuntimeError(
                 "Blocked run job count changed during pagination"
             )
         total = count
-        jobs.extend(item for item in items if isinstance(item, dict))
+        jobs.extend(items)
         if not items and len(jobs) < total:
             raise RuntimeError("Blocked run jobs are incomplete")
         page += 1
     if not jobs or len(jobs) != total:
         raise RuntimeError("Blocked run jobs are incomplete")
     if any(
-        job.get("runner_id") not in (None, 0) or bool(job.get("steps"))
+        type(job.get("id")) is not int
+        or job["id"] <= 0
+        or not (
+            job.get("runner_id") is None
+            or (
+                type(job.get("runner_id")) is int
+                and job["runner_id"] == 0
+            )
+        )
+        or not isinstance(job.get("steps"), list)
+        or bool(job["steps"])
+        or job.get("conclusion") not in {"failure", "skipped"}
         for job in jobs
     ):
         raise RuntimeError("Quota fallback requires zero-step hosted jobs")
@@ -904,16 +931,16 @@ def require_zero_step_run(  # noqa: C901
         annotations: list[dict[str, Any]] = []
         page = 1
         while True:
-            payload = github_get(
+            payload = get(
                 repo,
                 f"check-runs/{job.get('id')}/annotations?per_page=100&page={page}",
                 token,
             )
             if not isinstance(payload, list):
                 raise RuntimeError("Blocked job annotations are incomplete")
-            annotations.extend(
-                item for item in payload if isinstance(item, dict)
-            )
+            if not all(isinstance(item, dict) for item in payload):
+                raise RuntimeError("Blocked job annotations are incomplete")
+            annotations.extend(payload)
             if len(payload) < 100:
                 break
             page += 1
@@ -1506,7 +1533,7 @@ def note_quota_fallback(args: argparse.Namespace) -> None:
         require_zero_step_run(
             url, args.repo, args.pr, head_ref, head_sha, token
         )
-    print(  # noqa: T201
+    sys.stdout.write(
         quota_fallback_note(
             args.repo, args.pr, head_sha, sorted(args.blocked_run_url)
         )

@@ -20,6 +20,7 @@ import pytest
 MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "pr_lifecycle.py")
 )
+ALPHA_SELF_MERGE_MARKER = MODULE["ALPHA_SELF_MERGE_MARKER"]
 acquire = MODULE["acquire"]
 audit_message = MODULE["audit_message"]
 authorization = MODULE["authorization"]
@@ -39,6 +40,7 @@ merge_snapshot = MODULE["merge_snapshot"]
 read_lease = MODULE["read_lease"]
 require_lease = MODULE["require_lease"]
 require_successful_checks = MODULE["require_successful_checks"]
+promotion_gate = MODULE["promotion_gate"]
 release_refs = MODULE["release_refs"]
 remote_repository = MODULE["remote_repository"]
 scan_writers = MODULE["scan_writers"]
@@ -55,6 +57,7 @@ class FakeGitHub:
 
     def __init__(self, head: str) -> None:
         self.head = head
+        self.head_ref = "dev/next"
         self.draft = False
         self.authorization_created_at = "2026-08-25T01:01:00Z"
         self.authorization_actor = "maintainer"
@@ -73,6 +76,9 @@ class FakeGitHub:
         ]
         self.audit_comments: list[str] = []
         self.protected = True
+        self.required_review_count = 1
+        self.additional_pull_rules: list[dict[str, object]] = []
+        self.additional_check_rules: list[dict[str, object]] = []
         self.authorization_type = "User"
         self.authorization_body: str | None = None
         self.permission = "maintain"
@@ -86,7 +92,19 @@ class FakeGitHub:
         self.commit_payloads: dict[str, dict[str, Any]] = {}
         self.labels = {"bug"}
         self.milestone: str | None = None
+        self.issue_state = "open"
+        self.issue_milestone_number: int | None = None
         self.body = "Ready for review."
+        self.check_conclusion = "success"
+        self.additional_check_runs: list[dict[str, Any]] = []
+        self.statuses: list[dict[str, Any]] = []
+        self.check_details_url = (
+            "https://github.com/owner/repo/actions/runs/200/job/7"
+        )
+        self.quota_note_body: str | None = None
+        self.quota_runner_id = 0
+        self.quota_steps: list[dict[str, Any]] = []
+        self.compare_status = "ahead"
 
     def viewer(self, explicit_actor: str = "") -> str:
         """Return the task's authenticated actor."""
@@ -111,7 +129,7 @@ class FakeGitHub:
             ),
             "base": {"ref": self.base_ref, "sha": self.base_sha},
             "head": {
-                "ref": "dev/next",
+                "ref": self.head_ref,
                 "sha": self.head,
                 "repo": {"full_name": "owner/repo"},
             },
@@ -149,12 +167,68 @@ class FakeGitHub:
                 "body": self.authorization_body
                 or authorization_statement("owner/repo", 42, self.head),
             }
+        if path == "issues/comments/98" and self.quota_note_body:
+            return {
+                "html_url": (
+                    "https://github.com/owner/repo/pull/42#issuecomment-98"
+                ),
+                "issue_url": "https://api.github.com/repos/owner/repo/issues/42",
+                "created_at": "2026-08-25T01:00:45Z",
+                "body": self.quota_note_body,
+            }
+        if path == "issues/42":
+            return {
+                "number": 42,
+                "pull_request": None,
+                "state": self.issue_state,
+                "milestone": (
+                    {"number": self.issue_milestone_number}
+                    if self.issue_milestone_number is not None
+                    else None
+                ),
+                "body": "- [x] Acceptance verified",
+            }
+        run_match = re.fullmatch(r"actions/runs/(199|200)", path)
+        if run_match:
+            run_id = int(run_match.group(1))
+            return {
+                "id": run_id,
+                "head_sha": self.head,
+                "head_branch": self.head_ref,
+                "event": "pull_request",
+                "status": "completed",
+                "conclusion": "failure",
+                "repository": {"full_name": "owner/repo"},
+                "head_repository": {"full_name": "owner/repo"},
+                "pull_requests": [{"number": 42}],
+                "path": ".github/workflows/ci.yml",
+            }
+        jobs_match = re.fullmatch(
+            r"actions/runs/(199|200)/jobs\?per_page=100&page=1", path
+        )
+        if jobs_match:
+            run_id = int(jobs_match.group(1))
+            return {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "id": 7 if run_id == 200 else 8,
+                        "runner_id": self.quota_runner_id,
+                        "steps": self.quota_steps,
+                        "conclusion": "failure",
+                    }
+                ],
+            }
+        if re.fullmatch(
+            r"check-runs/[78]/annotations\?per_page=100&page=1", path
+        ):
+            return [{"message": promotion_gate.BILLING_GATE_ANNOTATION_MESSAGE}]
         if path == f"collaborators/{self.authorization_actor}/permission":
             return {
                 "permission": self.permission,
                 "user": {"login": self.authorization_actor},
             }
-        if path == "rules/branches/main":
+        if path == f"rules/branches/{self.base_ref.replace('/', '%2F')}":
             if not self.protected:
                 raise RuntimeError("Upgrade to GitHub Pro")
             return [
@@ -162,13 +236,16 @@ class FakeGitHub:
                     "type": "pull_request",
                     "ruleset_id": 7,
                     "parameters": {
-                        "required_approving_review_count": 1,
+                        "required_approving_review_count": (
+                            self.required_review_count
+                        ),
                         "dismiss_stale_reviews_on_push": True,
                         "require_code_owner_review": True,
                         "require_last_push_approval": True,
                         "required_review_thread_resolution": True,
                     },
                 },
+                *self.additional_pull_rules,
                 {
                     "type": "required_status_checks",
                     "ruleset_id": 7,
@@ -176,9 +253,12 @@ class FakeGitHub:
                         "required_status_checks": [{"context": "verify"}]
                     },
                 },
+                *self.additional_check_rules,
             ]
         if path == "rulesets/7":
             return {"enforcement": "active", "bypass_actors": []}
+        if path == (f"compare/{self.destination_sha}...{self.head}"):
+            return {"status": self.compare_status}
         if path == f"git/commits/{'a' * 40}":
             return {"sha": "a" * 40, "tree": {"sha": "e" * 40}}
         if path == f"git/commits/{'c' * 40}" and self.canonical_lease:
@@ -221,11 +301,13 @@ class FakeGitHub:
                     "name": "verify",
                     "head_sha": self.head,
                     "status": "completed",
-                    "conclusion": "success",
-                }
+                    "conclusion": self.check_conclusion,
+                    "details_url": self.check_details_url,
+                },
+                *self.additional_check_runs,
             ]
         if key == "statuses" and path.startswith(f"commits/{self.head}/"):
-            return []
+            return self.statuses
         raise AssertionError(path)
 
     def pages(self, _repo: str, path: str) -> list[dict[str, Any]]:
@@ -1092,6 +1174,79 @@ def test_required_check_must_match_its_pinned_github_app() -> None:
         )
 
 
+@pytest.mark.parametrize("app_id", [True, 1.0, "1", 0, -1, None])
+def test_pinned_check_rejects_malformed_github_app_id(app_id: object) -> None:
+    """Only an exact positive integer App ID satisfies a pinned context."""
+    github = FakeGitHub("a" * 40)
+
+    def malformed_collection(
+        _repo: str,
+        path: str,
+        key: str,
+        _response_sha: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if key == "check_runs" and path.startswith(f"commits/{github.head}/"):
+            return [
+                {
+                    "name": "verify",
+                    "head_sha": github.head,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "app": {"id": app_id},
+                }
+            ]
+        if key == "statuses":
+            return []
+        raise AssertionError(path)
+
+    github.collection = malformed_collection  # type: ignore[assignment]
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github, "owner/repo", github.head, {("verify", 1)}
+        )
+
+
+@pytest.mark.parametrize("app_id", [True, 1.0, "1", 0, -1, None])
+def test_quota_fallback_rejects_malformed_github_app_id(
+    app_id: object,
+) -> None:
+    """Quota evidence cannot satisfy a differently pinned App context."""
+    github = FakeGitHub("a" * 40)
+    github.check_conclusion = "failure"
+    github.additional_check_runs = []
+
+    def malformed_collection(
+        _repo: str,
+        path: str,
+        key: str,
+        _response_sha: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if key == "check_runs" and path.startswith(f"commits/{github.head}/"):
+            return [
+                {
+                    "name": "verify",
+                    "head_sha": github.head,
+                    "status": "completed",
+                    "conclusion": "failure",
+                    "details_url": github.check_details_url,
+                    "app": {"id": app_id},
+                }
+            ]
+        if key == "statuses":
+            return []
+        raise AssertionError(path)
+
+    github.collection = malformed_collection  # type: ignore[assignment]
+    with pytest.raises(RuntimeError, match="exact head: verify"):
+        require_successful_checks(
+            github,
+            "owner/repo",
+            github.head,
+            {("verify", 1)},
+            {"https://github.com/owner/repo/actions/runs/200"},
+        )
+
+
 def test_236_newer_draft_event_invalidates_authorization(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1185,6 +1340,663 @@ def test_merge_snapshot_allows_agent_only_with_enforced_no_bypass_rules(
         "https://github.com/owner/repo/pull/42#issuecomment-99",
     )
     assert snapshot["merge_mode"] == "human-only"
+
+
+def quota_snapshot_fixture() -> tuple[FakeGitHub, dict[str, object], str]:
+    """Return a routine PR whose only required-check failure is quota."""
+    github = FakeGitHub("a" * 40)
+    github.base_ref = "dev/next"
+    github.head_ref = "fix/42-quota-fallback"
+    github.body += "\n\nCloses #42"
+    github.check_conclusion = "failure"
+    lease = lease_fixture()
+    lease["base_ref"] = "dev/next"
+    lease["refs"] = [
+        "refs/heads/csarc/leases/pr-42",
+        base_lane_ref("dev/next"),
+    ]
+    run_url = "https://github.com/owner/repo/actions/runs/200"
+    github.quota_note_body = promotion_gate.quota_fallback_note(
+        "owner/repo", 42, "a" * 40, [run_url]
+    )
+    return (
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-98",
+    )
+
+
+def alpha_quota_snapshot_fixture(
+    *, sync: bool = False
+) -> tuple[FakeGitHub, dict[str, object], str]:
+    """Return an exact-marker Alpha candidate with no reviewer."""
+    github, lease, note_url = quota_snapshot_fixture()
+    github.authorization_actor = "agent"
+    github.reviews = []
+    github.body += f"\n\n{ALPHA_SELF_MERGE_MARKER}"
+    if sync:
+        base_ref = "dev/m10-release-backed-adoption"
+        github.destination_sha = "f" * 40
+        github.commit_payloads[f"git/commits/{github.head}"] = {
+            "sha": github.head,
+            "tree": {"sha": "e" * 40},
+            "parents": [
+                {"sha": github.base_sha},
+                {"sha": github.destination_sha},
+            ],
+        }
+        github.base_ref = base_ref
+        github.head_ref = promotion_gate.delivery_sync.sync_branch_name(
+            base_ref, github.destination_sha
+        )
+        lease["base_ref"] = base_ref
+        lease["refs"] = [
+            "refs/heads/csarc/leases/pr-42",
+            base_lane_ref(base_ref),
+        ]
+    return github, lease, note_url
+
+
+def test_alpha_sync_never_uses_the_no_review_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A deterministic sync name cannot replace independent review."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture(sync=True)
+    github.protected = False
+    with pytest.raises(RuntimeError, match="only available for routine Issue"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+@pytest.mark.parametrize("invalid_sync", ["missing-main", "wrong-parents"])
+def test_alpha_sync_rejects_a_forged_deterministic_branch(
+    invalid_sync: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A deterministic name cannot substitute for real sync topology."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture(sync=True)
+    if invalid_sync == "missing-main":
+        github.compare_status = "behind"
+        message = "does not contain current main"
+    else:
+        github.commit_payloads[f"git/commits/{github.head}"]["parents"] = [
+            {"sha": github.base_sha},
+            {"sha": "9" * 40},
+        ]
+        message = "merge current main into the exact base"
+    with pytest.raises(RuntimeError, match=message):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+def test_alpha_same_actor_needs_future_zero_review_server_rules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only a future explicit zero-review policy permits an agent merge."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    github.required_review_count = 0
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+        quota_fallback_note_url=note_url,
+    )
+    assert snapshot["authorization_actor"] == "agent"
+    assert snapshot["merge_mode"] == "agent"
+
+
+def test_non_alpha_candidate_still_requires_an_independent_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No marker means the ordinary independent-review contract applies."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = quota_snapshot_fixture()
+    github.reviews = []
+    with pytest.raises(RuntimeError, match="independent approving review"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+def test_alpha_marker_must_be_an_exact_body_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prose that merely resembles the marker does not opt in."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = quota_snapshot_fixture()
+    github.reviews = []
+    github.body += f"\n\n{ALPHA_SELF_MERGE_MARKER}."
+    with pytest.raises(RuntimeError, match="independent approving review"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+@pytest.mark.parametrize("invalid_route", ["default", "branch", "fork"])
+def test_alpha_marker_rejects_non_routine_routes(
+    invalid_route: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The marker cannot weaken main, arbitrary branch, or fork controls."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    if invalid_route == "default":
+        github.base_ref = "main"
+        lease = lease_fixture()
+    elif invalid_route == "branch":
+        github.head_ref = "promote/m10-release-backed-adoption"
+    else:
+        github.pull = lambda _number=42: {  # type: ignore[method-assign]
+            **FakeGitHub.pull(github),
+            "head": {
+                "ref": github.head_ref,
+                "sha": github.head,
+                "repo": None,
+            },
+        }
+    with pytest.raises(RuntimeError, match=r"default-branch|Routine fallback"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+def test_alpha_work_branch_must_close_its_matching_issue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A numbered branch alone cannot claim the no-review exception."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    github.body = f"Ready for review.\n\n{ALPHA_SELF_MERGE_MARKER}"
+    with pytest.raises(RuntimeError, match="close its matching Issue"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "NotCloses #42",
+        "Discloses #42",
+        "Closes #42junk",
+        "Closes #4\u0662",
+        "F\u0130XES #42",
+        "Clo\u017fes #42",
+    ],
+)
+def test_alpha_work_branch_rejects_false_closing_tokens(
+    body: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Text that GitHub would not link cannot establish the Issue route."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    github.body = f"{body}\n\n{ALPHA_SELF_MERGE_MARKER}"
+    with pytest.raises(RuntimeError, match="close its matching Issue"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+def test_alpha_work_branch_rejects_non_integer_issue_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A JSON float cannot masquerade as the exact live Issue number."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    original_get = github.get
+
+    def malformed_issue(repo: str, path: str) -> object:
+        if path == "issues/42":
+            return {
+                "number": 42.0,
+                "pull_request": None,
+                "state": "open",
+                "milestone": None,
+            }
+        return original_get(repo, path)
+
+    monkeypatch.setattr(github, "get", malformed_issue)
+    with pytest.raises(RuntimeError, match="Issue is not open"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+@pytest.mark.parametrize("invalid_route", ["multiple", "closed", "milestone"])
+def test_alpha_work_branch_requires_one_live_matching_issue(
+    invalid_route: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Routine fallback rechecks the Issue route without hosted policy."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    if invalid_route == "multiple":
+        github.body += "\n\nCloses #99"
+        message = "close its matching Issue exactly"
+    elif invalid_route == "closed":
+        github.issue_state = "closed"
+        message = "Issue is not open"
+    else:
+        github.base_ref = "dev/m10-release-backed-adoption"
+        github.issue_milestone_number = 9
+        lease["base_ref"] = github.base_ref
+        lease["refs"] = [
+            "refs/heads/csarc/leases/pr-42",
+            base_lane_ref(github.base_ref),
+        ]
+        message = "Milestone does not match"
+    with pytest.raises(RuntimeError, match=message):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+def test_alpha_work_branch_accepts_matching_delivery_milestone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A live Milestone Issue may use its matching delivery branch."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    github.base_ref = "dev/m10-release-backed-adoption"
+    github.issue_milestone_number = 10
+    github.required_review_count = 0
+    lease["base_ref"] = github.base_ref
+    lease["refs"] = [
+        "refs/heads/csarc/leases/pr-42",
+        base_lane_ref(github.base_ref),
+    ]
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+        quota_fallback_note_url=note_url,
+    )
+    assert snapshot["alpha_self_merge"] is True
+    assert snapshot["merge_mode"] == "agent"
+
+
+@pytest.mark.parametrize(
+    ("base_ref", "milestone"),
+    [
+        ("dev/next", {}),
+        ("dev/m10-release-backed-adoption", {"number": "10"}),
+        ("dev/m1-delivery", {"number": True}),
+    ],
+)
+def test_alpha_work_branch_rejects_malformed_issue_milestone(
+    base_ref: str,
+    milestone: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Malformed live metadata cannot masquerade as a standalone Issue."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    github.base_ref = base_ref
+    lease["base_ref"] = base_ref
+    lease["refs"] = [
+        "refs/heads/csarc/leases/pr-42",
+        base_lane_ref(base_ref),
+    ]
+    original_get = github.get
+
+    def malformed_issue(repo: str, path: str) -> object:
+        if path == "issues/42":
+            return {
+                "number": 42,
+                "pull_request": None,
+                "state": "open",
+                "milestone": milestone,
+                "body": "- [x] Acceptance verified",
+            }
+        return original_get(repo, path)
+
+    monkeypatch.setattr(github, "get", malformed_issue)
+    with pytest.raises(RuntimeError, match="Issue Milestone is invalid"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+def test_alpha_mixed_review_rules_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One zero-review rule cannot hide another rule requiring approval."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    github.required_review_count = 0
+    github.additional_pull_rules = [
+        {
+            "type": "pull_request",
+            "ruleset_id": 8,
+            "parameters": {
+                "required_approving_review_count": 1,
+                "dismiss_stale_reviews_on_push": True,
+                "require_code_owner_review": True,
+                "require_last_push_approval": True,
+                "required_review_thread_resolution": True,
+            },
+        }
+    ]
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+        quota_fallback_note_url=note_url,
+    )
+    assert snapshot["protection"] == "blocked"
+    assert snapshot["merge_mode"] == "human-only"
+
+
+@pytest.mark.parametrize("review_count", [False, 0.0, "0", None])
+def test_alpha_malformed_zero_review_rule_fails_closed(
+    review_count: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only an integer zero can prove the Alpha review policy."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    github.required_review_count = review_count
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+        quota_fallback_note_url=note_url,
+    )
+    assert snapshot["protection"] == "unknown"
+    assert snapshot["merge_mode"] == "human-only"
+
+
+@pytest.mark.parametrize("review_count", [True, 1.0, "1", None, -1])
+def test_non_alpha_malformed_review_count_fails_closed(
+    review_count: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Malformed approval counts cannot prove ordinary branch protection."""
+    bind_remote_lease(monkeypatch)
+    github = FakeGitHub("a" * 40)
+    github.required_review_count = review_count
+    snapshot = merge_snapshot(
+        github,
+        lease_fixture(),
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+    )
+    assert snapshot["protection"] == "unknown"
+    assert snapshot["merge_mode"] == "human-only"
+
+
+@pytest.mark.parametrize(
+    "parameters",
+    [
+        "malformed",
+        {"required_status_checks": "verify"},
+        {
+            "required_status_checks": [
+                {"context": "verify", "integration_id": True}
+            ]
+        },
+        {
+            "required_status_checks": [
+                {"context": "verify", "integration_id": 0}
+            ]
+        },
+        {
+            "required_status_checks": [
+                {"context": "verify", "integration_id": -1}
+            ]
+        },
+    ],
+)
+def test_alpha_malformed_check_rule_fails_closed(
+    parameters: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One valid check rule cannot hide malformed effective parameters."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    github.required_review_count = 0
+    github.additional_check_rules = [
+        {
+            "type": "required_status_checks",
+            "ruleset_id": 8,
+            "parameters": parameters,
+        }
+    ]
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+        quota_fallback_note_url=note_url,
+    )
+    assert snapshot["protection"] == "unknown"
+    assert snapshot["merge_mode"] == "human-only"
+
+
+def test_alpha_rule_without_ruleset_identity_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every effective rule must expose an auditable Ruleset identity."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    github.required_review_count = 0
+    github.additional_pull_rules = [
+        {
+            "type": "pull_request",
+            "parameters": {
+                "required_approving_review_count": 0,
+                "dismiss_stale_reviews_on_push": True,
+                "require_code_owner_review": True,
+                "require_last_push_approval": True,
+                "required_review_thread_resolution": True,
+            },
+        }
+    ]
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+        quota_fallback_note_url=note_url,
+    )
+    assert snapshot["protection"] == "unknown"
+    assert snapshot["merge_mode"] == "human-only"
+
+
+def test_alpha_changes_requested_remains_a_blocker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Alpha removes reviewer quorum, never an explicit change request."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    github.reviews = [
+        {
+            "user": {"login": "reviewer"},
+            "state": "CHANGES_REQUESTED",
+            "submitted_at": "2026-08-25T01:00:30Z",
+        }
+    ]
+    with pytest.raises(RuntimeError, match="Changes are still requested"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+def test_routine_quota_note_satisfies_failed_required_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A mechanically verified zero-step run can satisfy a routine PR gate."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = quota_snapshot_fixture()
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+        quota_fallback_note_url=note_url,
+    )
+    assert snapshot["merge_mode"] == "agent"
+    assert snapshot["required_check_evidence"] == "quota-fallback"
+
+
+def test_routine_quota_note_rejects_an_arbitrary_non_default_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Quota evidence cannot turn an unrelated branch into a routine PR."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = quota_snapshot_fixture()
+    github.head_ref = "misc/not-a-routine-route"
+    with pytest.raises(RuntimeError, match="Routine fallback"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+def test_routine_quota_note_accepts_earlier_same_head_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Latest check filtering does not erase older canonical run evidence."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = quota_snapshot_fixture()
+    github.quota_note_body = promotion_gate.quota_fallback_note(
+        "owner/repo",
+        42,
+        "a" * 40,
+        [
+            "https://github.com/owner/repo/actions/runs/199",
+            "https://github.com/owner/repo/actions/runs/200",
+        ],
+    )
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+        quota_fallback_note_url=note_url,
+    )
+    assert snapshot["required_check_evidence"] == "quota-fallback"
+
+
+@pytest.mark.parametrize(
+    ("extra_check_runs", "statuses", "failure_name"),
+    [
+        (
+            [
+                {
+                    "name": "optional scan",
+                    "head_sha": "a" * 40,
+                    "status": "completed",
+                    "conclusion": "failure",
+                    "details_url": (
+                        "https://github.com/owner/repo/actions/runs/201/job/8"
+                    ),
+                }
+            ],
+            [],
+            "optional scan",
+        ),
+        (
+            [],
+            [{"context": "external audit", "state": "failure"}],
+            "external audit",
+        ),
+    ],
+)
+def test_routine_quota_note_rejects_every_uncovered_failure(
+    extra_check_runs: list[dict[str, Any]],
+    statuses: list[dict[str, Any]],
+    failure_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Optional checks and legacy statuses cannot hide real failures."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = quota_snapshot_fixture()
+    github.additional_check_runs = extra_check_runs
+    github.statuses = statuses
+    with pytest.raises(RuntimeError, match=failure_name):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+def test_routine_quota_note_cannot_authorize_default_branch_merge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Promotion, hotfix, and release routes keep their stricter gates."""
+    bind_remote_lease(monkeypatch)
+    github, _lease, note_url = quota_snapshot_fixture()
+    github.base_ref = "main"
+    lease = lease_fixture()
+    with pytest.raises(RuntimeError, match="default-branch routes"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+def test_routine_quota_note_rejects_a_started_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A real required-check execution remains blocked by lifecycle."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = quota_snapshot_fixture()
+    github.quota_runner_id = 12
+    github.quota_steps = [
+        {
+            "name": "Run tests",
+            "status": "completed",
+            "conclusion": "failure",
+        }
+    ]
+    with pytest.raises(RuntimeError, match="zero-step hosted jobs"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
 
 
 def test_commented_review_does_not_clear_requested_changes(
