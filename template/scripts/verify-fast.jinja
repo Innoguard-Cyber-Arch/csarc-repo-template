@@ -34,7 +34,7 @@ uv sync --locked --python "$python_version"
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy
-uv run pytest
+uv run pytest -m "not large"
 {% endif -%}
 {% if has_typescript -%}
 pnpm install --frozen-lockfile --ignore-scripts
