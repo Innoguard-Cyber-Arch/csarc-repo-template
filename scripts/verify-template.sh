@@ -194,7 +194,8 @@ grep -q '^## Actions quota fallback$' template/AGENTS.md.jinja
 grep -q 'structurally runs over its included Actions minutes' AGENTS.md
 grep -q 'runs over included Actions minutes' template/AGENTS.md.jinja
 grep -q 'Actions quota fallback note' AGENTS.md
-grep -q 'zero-step billing block' docs/ci-policy.md
+grep -q 'runner 尚未分配、steps 為空且 billing annotation 可驗證' \
+  docs/ci-policy.md
 grep -q 'exact PR/head' docs/ci-policy.md
 grep -q 'exact-head merge authorization' docs/ci-policy.md
 grep -q 'release_eligible.*false' docs/ci-policy.md
