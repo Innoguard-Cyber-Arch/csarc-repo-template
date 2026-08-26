@@ -18,8 +18,8 @@ Refs #N
 
 <!-- Drafts may keep unchecked work; closing keywords and Ready require completion here and in the Issue. -->
 
-- [ ] Relevant targeted checks pass; PR assignee/label/Milestone match the linked Issue; work branch appears in Issue Development; stays within the Issue
-- [ ] `./scripts/verify` passes before Ready
+- [ ] The CI plan's scoped checks pass with commands and results recorded; PR assignee/label/Milestone match the linked Issue; work branch appears in Issue Development; exactly one change label (`fix`→`bug`, `docs`→`documentation`, other types→`enhancement`); stays within the Issue
+- [ ] If this PR is the final integration candidate, the integrator ran `./scripts/verify` exactly once on the unchanged tree; otherwise marked N/A
 - [ ] New-project generation tested and existing-project updates considered; lockfile changes reviewed; third-party Actions pinned to full commit SHAs
 
 ## 補充

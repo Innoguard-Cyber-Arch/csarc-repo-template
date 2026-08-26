@@ -20,9 +20,9 @@ agent 執行工作需要知道的最短路徑。
    時不使用 `Closes`、`Fixes` 或 `Resolves`。
 4. **跑最短 TDD loop。** 非 trivial 行為先以最窄 regression 看到失敗，再實作到通過並
    refactor。文件或純資料變更不為文字順序造假測試；security 與資料損失邊界不能省。
-5. **只在 Ready gate 收斂。** acceptance 完成、targeted checks 與一次 exact-head
-   `./scripts/verify-template.sh` 通過、branch 跟上 live base、沒有較新的 blocker，才標
-   Ready 並請求正式 review。
+5. **只在 Ready gate 收斂。** acceptance 完成、CI plan 選定的 scoped checks
+   通過、branch 跟上 live base、沒有較新的 blocker，才標 Ready 並請求正式
+   review。完整驗證只由 integrator 對不再變動的最終候選執行一次。
 6. **依風險合併 delivery。** Routine PR 跑 policy／fast／stable aggregate；elevated PR
    升 full 並要求 human review。只有持有 #240 lifecycle lease 的 writer，或 degraded
    模式下的 human maintainer，可以執行 Ready／Draft／metadata／merge 寫入。
@@ -52,14 +52,14 @@ agent 執行工作需要知道的最短路徑。
 | Targeted／full test 失敗 | 保留 Draft，修正 production code 或測試；不把 check 改成無條件成功 | 同一 head 的必要 checks 全部通過。 |
 | Final promotion 的 `main` 或 PR head 漂移 | 使舊 promotion verification／authorization 失效；只為該 Milestone 重新 sync、解 conflict、重跑受影響 checks | 新 source、destination、tree 重新綁定 evidence。ordinary delivery PR 不因無關 main movement 失效。 |
 | 新 Draft event、blocking review、未完成 checklist | lease holder 中止 merge，不自動轉回 Ready | blocker 由有權者明確解除，重新完成 Ready gate。 |
-| Actions zero-step billing block | Routine 依下節；elevated／promotion 走 human fallback | exact SHA、完整本機驗證與未重現 controls 都有記錄。 |
+| Actions zero-step billing block | Routine 依下節；elevated／promotion 走 human fallback | exact SHA、CI plan 的 scoped 本機驗證與未重現 controls 都有記錄。 |
 | Canary `blocked`／`unknown`（包含只設定一半） | 保存 artifact-only，不宣稱 external canary | full gate 仍成功；若產品要求 canary，維持 blocked。 |
 | Post-merge tree／release evidence 不符 | 停止 release，開修正 Issue，使用 revert／fix flow | 不重寫 history；新 candidate 重新通過邊界。 |
 
 ## Quota fallback
 
 - **Routine、非 elevated Issue PR：**現行 #254 流程會確認所有失敗 jobs 都是相同 exact
-  head 的 zero-step billing block，由 canonical tool 重跑完整本機驗證並留一則
+  head 的 zero-step billing block，由 canonical tool 重跑 CI plan 選定的 scoped 本機驗證並留一則
   `Actions quota fallback note`；在 Alpha self-merge 政策下不要求每張 PR 另等 human
   authorization。#240 合入本 delivery 且本提案 Accepted 後，lease／live destination
   guard 會再序列化同一路徑，但不撤回或延後已生效的 #254 fallback。
@@ -77,8 +77,8 @@ agent 執行工作需要知道的最短路徑。
 ### 1. 一般 Milestone Issue
 
 - **Given** 一張 open Milestone Issue、對應 `dev/m*` 存在且沒有 Draft／branch owner。
-- **When** agent 建 Issue branch、targeted check 後開 Draft、完成 acceptance 與 full local
-  verify、標 Ready 並通過 policy／fast／review。
+- **When** agent 建 Issue branch、targeted check 後開 Draft、完成 acceptance 與 CI plan 的
+  scoped checks、標 Ready 並通過 policy／fast／review。
 - **Then** exact candidate 只合併到該 `dev/m*`；不跑 release、不要求 contributor 選
   promotion 路徑，也不因較新的 `main` 被擋；非 default base 未自動關 Issue 時由 lifecycle
   可稽核地補正。
@@ -106,7 +106,7 @@ agent 執行工作需要知道的最短路徑。
 ### 5. Routine PR 遇到 quota block
 
 - **Given** 所有 required Actions jobs 都在 exact head 以相同 billing annotation zero-step，
-  內容屬 routine，完整本機驗證成功。
+  內容屬 routine，CI plan 的 scoped 本機驗證成功。
 - **When** 現行 #254 canonical tool 證明完整 failed-run set 與本機驗證，並產生綁定
   SHA、run URLs、命令、結果與未重現 checks 的 note。
 - **Then** Alpha self-merge 可在 live head/base 未變時以非 admin squash merge，不需逐 PR
@@ -133,7 +133,7 @@ agent 執行工作需要知道的最短路徑。
 | 邊界 | 必留 evidence |
 | --- | --- |
 | Draft | owner、scope、base、依賴、targeted checks 與未完成項目。 |
-| Ready | acceptance、exact head、targeted results、`verify-template.sh`、risk tier、blocker 狀態。 |
+| Ready | acceptance、exact head、CI plan 與 scoped results、risk tier、blocker 狀態。 |
 | Delivery merge | PR、exact source/live destination、review、required checks、lease／human actor。 |
 | Promotion | base/head/tree、納入 Issues／PRs、current-main、full、canary state、quota 限制。 |
 | Post-merge／release | main tree identity、source evidence URL、release eligibility、artifact／SBOM／provenance 結果。 |

@@ -1369,6 +1369,70 @@ metadata_sync_line="$(grep -n 'name: Synchronize pull request metadata' \
 live_metadata_line="$(grep -nF 'repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER' \
   .github/workflows/pr-policy.yml | cut -d: -f1)"
 test "$metadata_sync_line" -lt "$live_metadata_line"
+
+assert_pr_verification_contract() {
+  python3 - "$1" "$2" <<'PY'
+from pathlib import Path
+import sys
+
+template_path = Path(sys.argv[1])
+full_command = sys.argv[2]
+checkboxes = [
+    line.strip()
+    for line in template_path.read_text(encoding="utf-8").splitlines()
+    if line.startswith("- [ ] ")
+]
+scoped = [
+    line
+    for line in checkboxes
+    if "CI plan" in line and "scoped checks" in line
+]
+final = [
+    line
+    for line in checkboxes
+    if "integrator" in line
+    and full_command in line
+    and ("unchanged" in line or "不再變動" in line)
+    and ("exactly once" in line or "只執行一次" in line)
+]
+legacy = [
+    line
+    for line in checkboxes
+    if full_command in line
+    and ("before Ready" in line or "轉 Ready 前" in line)
+]
+if len(scoped) != 1 or len(final) != 1 or legacy:
+    raise SystemExit(
+        f"{template_path}: expected one scoped plan, one integrator-only final "
+        "check, and no per-PR Ready full check"
+    )
+PY
+}
+
+assert_pr_verification_contract \
+  .github/pull_request_template.md './scripts/verify-template.sh'
+assert_pr_verification_contract \
+  template/.github/pull_request_template.md './scripts/verify'
+legacy_pr_template="$fixture_root/legacy-pull-request-template.md"
+cp template/.github/pull_request_template.md "$legacy_pr_template"
+python3 - "$legacy_pr_template" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+lines = [
+    "- [ ] `./scripts/verify` passes before Ready"
+    if line.startswith("- [ ] If this PR is the final integration candidate")
+    else line
+    for line in text.splitlines()
+]
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+if assert_pr_verification_contract "$legacy_pr_template" './scripts/verify'; then
+  echo "PR verification contract accepted a per-PR Ready full check."
+  exit 1
+fi
 grep -q '^  pull_request:$' .github/workflows/governance-comment.yml
 grep -q 'types: \[opened, reopened, ready_for_review\]' \
   .github/workflows/governance-comment.yml
@@ -2373,6 +2437,9 @@ grep -q 'feature.*task.*bug.*documentation.*duplicate' \
   "$fixture_root/default-project/README.md"
 grep -q 'linked Issue.*assignee.*Milestone' \
   "$fixture_root/default-project/README.md"
+assert_pr_verification_contract \
+  "$fixture_root/default-project/.github/pull_request_template.md" \
+  './scripts/verify'
 grep -q 'referenced Issue checklist' \
   "$fixture_root/default-project/docs/index.html"
 test -f "$fixture_root/default-project/.github/workflows/issue-triage.yml"
