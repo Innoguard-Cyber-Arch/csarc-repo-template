@@ -501,22 +501,24 @@ matrix:
   language: ["python", "javascript-typescript"]`
         },
         {
-          title: 'tag 發布時建立交付成品、SHA-256 與 CycloneDX SBOM',
-          goal: 'anchore/sbom-action 以 Syft 盤點內容；來源證明依專案可見度決定預設值。',
-          summary: '依 profile 打包並計算 SHA-256；先把真正成品解壓到隔離目錄，再由 Syft 產生 CycloneDX。`components` 為空就讓 workflow 失敗；tag、commit 與 workflow run metadata 連同成品附加到 GitHub Release。Copier 的 `project_visibility` 選 public 時，`enable_release_attestations` 預設開啟，`publish-evidence` job 自動取得 `id-token: write`／`attestations: write` 並執行兩次 `actions/attest`；private／internal 維持現行明確 opt-in、預設關閉。',
+          title: 'exact tag 發布時建立交付成品、SHA-256 與 SPDX SBOM',
+          goal: 'anchore/sbom-action 以固定 Syft 版本盤點內容；manifest 將成品、SBOM 與來源身分綁定。',
+          summary: '依 profile 打包並計算 SHA-256；Python／TypeScript 先建立不含開發工具的隔離 runtime，CI-only 則使用 exact-tag source，再由 Syft v1.50.0 產生 SPDX JSON。成品先上傳 mutable draft、下載至全新空目錄驗證，發布後再從 immutable Release 全新下載驗證；再現性依 digest／manifest，不要求 Syft JSON byte-identical。Copier 的 `project_visibility` 選 public 時，`enable_release_attestations` 預設開啟，並使用專用的 build provenance 與 SBOM attestation actions；private／internal 維持明確 opt-in、預設關閉。',
           file: '.github/workflows/release.yml',
           code: `- run: uv build               # Python
 - run: pnpm run build && pnpm pack --pack-destination dist # TypeScript
 - run: shasum -a 256 dist/* > SHA256SUMS
-- name: Extract release artifacts
+- name: Materialize production runtime
   run: |
     mkdir -p "\${RUNNER_TEMP}/sbom-root"
-    # Extract each archive into the isolated SBOM input directory.
+    UV_PROJECT_ENVIRONMENT="\${RUNNER_TEMP}/sbom-root/python-runtime" \\
+      uv sync --locked --no-dev --no-editable
 - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
   with:
     path: \${{ runner.temp }}/sbom-root
-    format: cyclonedx-json
-    output-file: sbom.cdx.json`
+    format: spdx-json
+    output-file: release-bundle/sbom.spdx.json
+    syft-version: v1.50.0`
         },
         {
           title: '有 Containerfile 才啟用容器驗證與 GHCR 交付',

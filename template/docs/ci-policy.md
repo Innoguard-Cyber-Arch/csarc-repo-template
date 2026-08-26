@@ -247,9 +247,18 @@ artifact 和 workflow summary。無關聯 PR、非 promotion／hotfix 或證據�
 
 Artifact workflow 不監聽任意 `v*` push，只接受 Release Please workflow 帶入
 source run ID 的明確 dispatch。它先驗證 tag commit 與 release-source evidence，
-再建置 distributions、digest、SBOM、attestation 與 registry／immutable Release
-驗證；不重跑已由 promotion 通過的完整 runtime／template 測試矩陣。相同 source
-的重跑會沿用既有 tag、draft Release 或成功 artifact run，不重複發布。
+再從 exact tag 建置 distributions／來源封存檔，將 production-only runtime 隔離後
+以固定 Syft 版本產生 SPDX JSON SBOM；runtime inventory 由套件管理器獨立列舉，
+不反向信任 SBOM 自己宣告的 dependency graph。workflow 只接受已完成成功、repository
+與 workflow identity 都相符的 source run，並以 terminal manifest 綁定明列成品的
+digest、source metadata 與 provenance；不使用 wildcard、也不要求不同執行間
+的 Syft JSON byte-identical。所有本機建置與 evidence 驗證成功後才建立 mutable draft，
+成品上傳後會下載到全新空目錄驗證，
+發布後再從 immutable Release 全新下載並驗證；不重跑已由 promotion 通過的完整
+runtime／template 測試矩陣。相同 source 的重跑只會沿用已驗證 immutable Release
+或尚可修復的 mutable draft；未知狀態 fail closed，失敗復原也只會把 mutable
+Release 留在 draft。既有 repo 的 Python／npm product identity 一律從 exact-tag
+`pyproject.toml`／`package.json` 讀取，不從 Copier project slug 推測。
 
 ## Maintainer walkthrough
 

@@ -3,11 +3,28 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"
 fixture_root="$(mktemp -d)"
 trap 'rm -rf "$fixture_root"' EXIT
 cd "$repo_root"
 fixture_security_args=(
   --data "security_reporting_channel=Use the synthetic fixture's private reporting channel."
+)
+
+for verifier in scripts/verify-template.sh scripts/verify-fast \
+  template/scripts/verify-fast.jinja; do
+  grep -Fqx 'export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"' \
+    "$verifier"
+done
+(
+  unset UV_CACHE_DIR
+  export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"
+  test "$UV_CACHE_DIR" = "$repo_root/.cache/uv"
+)
+(
+  UV_CACHE_DIR="$fixture_root/explicit-uv-cache"
+  export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"
+  test "$UV_CACHE_DIR" = "$fixture_root/explicit-uv-cache"
 )
 
 test "$(wc -c < AGENTS.md)" -le 13000
@@ -943,13 +960,94 @@ grep -q '"force-tag-creation": true' release-please-config.json
 # shellcheck disable=SC2016
 grep -q 'gh release verify "$RELEASE_TAG"' \
   .github/workflows/release-template.yml
-grep -q '^      attestations: read$' .github/workflows/release-template.yml
-grep -q 'isImmutable,isDraft,isPrerelease' \
-  .github/workflows/release-template.yml
-grep -q 'Release is already published and immutable' \
-  .github/workflows/release-template.yml
-grep -q 'for attempt in {1..24}; do' \
-  .github/workflows/release-template.yml
+uv run --no-project python - .github/workflows/release-template.yml <<'PY'
+import re
+import sys
+from pathlib import Path
+
+workflow = Path(sys.argv[1]).read_text(encoding="utf-8")
+required = (
+    "cancel-in-progress: false",
+    "ref: ${{ github.ref }}",
+    'test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$GITHUB_SHA"',
+    "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610",
+    "syft-version: v1.50.0",
+    "SYFT_SOURCE_NAME: csarc-repo-cli",
+    "upload-release-assets: false",
+    "dependency-snapshot: false",
+    "uv sync --locked --no-dev --no-editable",
+    "format: spdx-json",
+    "scripts/release_assets.py build",
+    "--runtime-kind package",
+    '--root-name "$ROOT_NAME"',
+    '--root-purl "$ROOT_PURL"',
+    '--repository-id "$GITHUB_REPOSITORY_ID"',
+    '--source-run "$SOURCE_RUN_ID"',
+    '--release-run "$GITHUB_RUN_ID"',
+    '--inventory-file "$ASSET_ROOT/inventory.purls"',
+    '--artifact "${wheels[0]}"',
+    '2>"$errors"',
+    '.status == "completed"',
+    '.path == ".github/workflows/release-please.yml"',
+    '--repo "$GITHUB_REPOSITORY"',
+    "actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a",
+    "actions/attest-sbom@4651f806c01d8637787e274ac3b56de9a85cc6a3",
+    'gh release edit "$RELEASE_TAG"',
+    "--draft=false",
+    "isImmutable,isDraft,isPrerelease",
+    "draft-release-assets.XXXXXX",
+    "release-verify.XXXXXX",
+)
+missing = [value for value in required if value not in workflow]
+if missing:
+    raise SystemExit(f"Root release workflow is missing: {missing}")
+if "actions/attest@" in workflow or "cyclonedx" in workflow.lower():
+    raise SystemExit("Root release workflow must use dedicated SPDX attestations")
+if 'gh release upload "$RELEASE_TAG" release-' in workflow or "release-*/*" in workflow:
+    raise SystemExit("Root release upload must enumerate the validated asset set")
+upload_files = workflow[
+    workflow.index("release_files=(") : workflow.index('gh release upload "$RELEASE_TAG"')
+]
+if '"$ASSET_ROOT/inventory.purls"' not in upload_files:
+    raise SystemExit("Root Release must carry the bound runtime inventory")
+inspect = workflow.index("Inspect exact-tag release state without mutation")
+build = workflow.index("Build CLI and prepare release assets", inspect)
+bind = workflow.index("scripts/release_assets.py build", build)
+create = workflow.index("Create or require the mutable draft", bind)
+upload = workflow.index('gh release upload "$RELEASE_TAG"')
+create_block = workflow[create:upload]
+
+
+def require_create(block: str) -> None:
+    required_create = (
+        'gh release create "$RELEASE_TAG"',
+        "--verify-tag",
+        '--notes-file "$RELEASE_NOTES"',
+    )
+    missing_create = [value for value in required_create if value not in block]
+    if missing_create or re.search(r"(?<!\S)--draft(?=\s|$)", block) is None:
+        raise ValueError(f"root release create is missing: {missing_create or ['--draft']}")
+
+
+require_create(create_block)
+for removed, mutated in (
+    ("--draft", re.sub(r"(?<!\S)--draft(?=\s|$)", "", create_block, count=1)),
+    (
+        '--notes-file "$RELEASE_NOTES"',
+        create_block.replace('--notes-file "$RELEASE_NOTES"', "", 1),
+    ),
+):
+    try:
+        require_create(mutated)
+    except ValueError:
+        continue
+    raise SystemExit(f"Root release create accepted missing {removed}")
+draft_download = workflow.index('gh release download "$RELEASE_TAG"', upload)
+publish = workflow.index('gh release edit "$RELEASE_TAG"', draft_download)
+final_download = workflow.index('gh release download "$RELEASE_TAG"', publish)
+if not inspect < build < bind < create < upload < draft_download < publish < final_download:
+    raise SystemExit("Root Release validation order is not fail closed")
+PY
 # The GitHub expression is literal workflow content.
 # shellcheck disable=SC2016
 if grep -q 'repos/${GITHUB_REPOSITORY}/immutable-releases' \
@@ -967,10 +1065,6 @@ if grep -q 'tags: \["v\*"\]' .github/workflows/release-template.yml; then
   echo "Release artifacts must require an explicit verified-source dispatch."
   exit 1
 fi
-# Shell variables are literal workflow content.
-# shellcheck disable=SC2016
-grep -q 'gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes' \
-  .github/workflows/release-template.yml
 if grep -Eq 'publish-pypi|CSARC_ENABLE_PYPI_PUBLISHING' \
   .github/workflows/release-template.yml; then
   echo "The root CLI must not publish to PyPI." >&2
@@ -1695,13 +1789,143 @@ test -f "$fixture_root/default-project/CHANGELOG.md"
 test -f "$fixture_root/default-project/.github/workflows/release-please.yml"
 # Shell variables are literal workflow content.
 # shellcheck disable=SC2016
-grep -q 'gh release upload "$GITHUB_REF_NAME"' \
+grep -q 'gh release upload "$RELEASE_TAG"' \
   "$fixture_root/default-project/.github/workflows/release.yml"
 grep -q 'release-metadata.json' \
   "$fixture_root/default-project/.github/workflows/release.yml"
-grep -q 'No release distribution was created' \
+grep -q 'format: spdx-json' \
   "$fixture_root/default-project/.github/workflows/release.yml"
-if grep -q 'actions/attest@' \
+grep -q 'syft-version: v1.50.0' \
+  "$fixture_root/default-project/.github/workflows/release.yml"
+grep -q 'scripts/release_assets.py build' \
+  "$fixture_root/default-project/.github/workflows/release.yml"
+uv run --no-project python - \
+  "$fixture_root/default-project/.github/workflows/release.yml" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+import yaml
+
+workflow_path = Path(sys.argv[1])
+workflow = workflow_path.read_text(encoding="utf-8")
+workflow_document = yaml.safe_load(workflow)
+required = (
+    "cancel-in-progress: false",
+    "ref: ${{ github.ref }}",
+    'test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$GITHUB_SHA"',
+    'git archive --format=tar --output="$asset_root/source.tar"',
+    "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610",
+    "syft-version: v1.50.0",
+    "SYFT_SOURCE_NAME: ${{ steps.prepare.outputs.root_name }}",
+    "upload-release-assets: false",
+    "dependency-snapshot: false",
+    "uv sync --locked --no-dev --no-editable",
+    "format: spdx-json",
+    "scripts/release_assets.py build",
+    "--runtime-kind package",
+    '--root-name "$(jq -r .root_name "$IDENTITY_FILE")"',
+    '--repository-id "$GITHUB_REPOSITORY_ID"',
+    '--source-run "$SOURCE_RUN_ID"',
+    '--release-run "$GITHUB_RUN_ID"',
+    '--inventory-file "$ASSET_ROOT/inventory.purls"',
+    '--artifact "$ASSET_ROOT/source.tar"',
+    '2>"$errors"',
+    '.status == "completed"',
+    '.path == ".github/workflows/release-please.yml"',
+    '--repo "$GITHUB_REPOSITORY"',
+    "scripts/release_assets.py verify",
+    "draft-release-assets.XXXXXX",
+    "release-verify.XXXXXX",
+    "isImmutable,isDraft,isPrerelease",
+    "--draft=false",
+)
+missing = [value for value in required if value not in workflow]
+if missing:
+    raise SystemExit(f"Generated release workflow is missing: {missing}")
+
+build_job = workflow_document.get("jobs", {}).get("build", {})
+prepare_steps = [
+    step
+    for step in build_job.get("steps", [])
+    if step.get("name") == "Prepare the exact-tag release bundle"
+]
+if len(prepare_steps) != 1 or not isinstance(prepare_steps[0].get("run"), str):
+    raise SystemExit(
+        f"{workflow_path}: expected one executable exact-tag bundle preparation step"
+    )
+prepare_lines = [line.strip() for line in prepare_steps[0]["run"].splitlines()]
+distribution_gate = (
+    '[[ "${#wheels[@]}" -eq 1 && "${#sdists[@]}" -eq 1 ]] || {'
+)
+gate_indices = [
+    index for index, line in enumerate(prepare_lines) if line == distribution_gate
+]
+if len(gate_indices) != 1:
+    raise SystemExit(
+        f"{workflow_path}: expected one executable Python distribution gate"
+    )
+gate_index = gate_indices[0]
+try:
+    gate_end = prepare_lines.index("}", gate_index + 1)
+except ValueError as error:
+    raise SystemExit(f"{workflow_path}: distribution gate is not closed") from error
+if prepare_lines[gate_index + 1 : gate_end].count("exit 1") != 1:
+    raise SystemExit(f"{workflow_path}: distribution gate must exit once on failure")
+copy_distributions = 'cp "${wheels[0]}" "${sdists[0]}" "$asset_root/"'
+copy_indices = [
+    index for index, line in enumerate(prepare_lines) if line == copy_distributions
+]
+if len(copy_indices) != 1 or copy_indices[0] <= gate_end:
+    raise SystemExit(
+        f"{workflow_path}: validated Python distributions must be copied once"
+    )
+if "actions/attest@" in workflow or "cyclonedx" in workflow.lower():
+    raise SystemExit("Generated release workflow must use SPDX evidence")
+if 'gh release upload "$RELEASE_TAG" release-' in workflow or "release-*/*" in workflow:
+    raise SystemExit("Generated release upload must enumerate the validated asset set")
+upload_files = workflow[
+    workflow.index("release_files=(") : workflow.index('gh release upload "$RELEASE_TAG"')
+]
+if "release-evidence/inventory.purls" not in upload_files:
+    raise SystemExit("Generated Release must carry the bound runtime inventory")
+bind = workflow.index("scripts/release_assets.py build")
+inspect = workflow.index("Inspect exact-tag release state without mutation", bind)
+create = workflow.index("Create or require the mutable draft", inspect)
+upload = workflow.index('gh release upload "$RELEASE_TAG"')
+create_block = workflow[create:upload]
+
+
+def require_create(block: str) -> None:
+    required_create = (
+        'gh release create "$RELEASE_TAG"',
+        "--verify-tag",
+        "--generate-notes",
+    )
+    missing_create = [value for value in required_create if value not in block]
+    if missing_create or re.search(r"(?<!\S)--draft(?=\s|$)", block) is None:
+        raise ValueError(
+            f"generated release create is missing: {missing_create or ['--draft']}"
+        )
+
+
+require_create(create_block)
+for removed, mutated in (
+    ("--draft", re.sub(r"(?<!\S)--draft(?=\s|$)", "", create_block, count=1)),
+    ("--generate-notes", create_block.replace("--generate-notes", "", 1)),
+):
+    try:
+        require_create(mutated)
+    except ValueError:
+        continue
+    raise SystemExit(f"Generated release create accepted missing {removed}")
+draft_download = workflow.index('gh release download "$RELEASE_TAG"', upload)
+publish = workflow.index('gh release edit "$RELEASE_TAG"', draft_download)
+final_download = workflow.index('gh release download "$RELEASE_TAG"', publish)
+if not bind < inspect < create < upload < draft_download < publish < final_download:
+    raise SystemExit("Generated Release validation order is not fail closed")
+PY
+if grep -Eq 'actions/attest(@|-build-provenance@|-sbom@)' \
   "$fixture_root/default-project/.github/workflows/release.yml"; then
   echo "Release attestations must remain opt-in."
   exit 1
@@ -1737,8 +1961,10 @@ test "$(sed '/^#/d; /^$/d' "$fixture_root/public-visibility-project/.github/REVI
   $'@alice\n@bob'
 grep -q 'github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827' \
   "$fixture_root/public-visibility-project/.github/workflows/codeql.yml"
-test "$(grep -c 'actions/attest@' \
-  "$fixture_root/public-visibility-project/.github/workflows/release.yml")" -eq 2
+grep -q 'actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a' \
+  "$fixture_root/public-visibility-project/.github/workflows/release.yml"
+grep -q 'actions/attest-sbom@4651f806c01d8637787e274ac3b56de9a85cc6a3' \
+  "$fixture_root/public-visibility-project/.github/workflows/release.yml"
 grep -q 'attestations: write' \
   "$fixture_root/public-visibility-project/.github/workflows/release.yml"
 grep -q 'id-token: write' \
@@ -1762,7 +1988,7 @@ test ! -f "$fixture_root/internal-visibility-project/.github/workflows/codeql.ym
 grep -q 'id="fleet-governance-thresholds"' docs/index.html
 grep -q '10 個活躍 consuming repo' docs/index.html
 grep -q '30 天內同類漂移' docs/index.html
-if grep -q 'actions/attest@' \
+if grep -Eq 'actions/attest(@|-build-provenance@|-sbom@)' \
   "$fixture_root/internal-visibility-project/.github/workflows/release.yml"; then
   echo "Internal projects must keep release attestations opt-in by default."
   exit 1
@@ -2380,9 +2606,28 @@ if grep -Eq 'Python setup:|TypeScript setup:' \
   echo "CI-only AGENTS.md must not include language setup commands."
   exit 1
 fi
-if grep -q 'publish-evidence\|release-evidence' \
+grep -q '^  publish-evidence:$' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"
+grep -q 'git archive --format=tar --output="$asset_root/source.tar"' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"
+grep -q 'tar -xf "$asset_root/source.tar" -C "$sbom_root/source"' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"
+grep -q 'output-file: \${{ steps.prepare.outputs.asset_root }}/sbom.spdx.json' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"
+grep -q -- '--runtime-kind source' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"
+grep -q -- '--inventory-file "$ASSET_ROOT/inventory.purls"' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"
+grep -q -- '--artifact "$ASSET_ROOT/source.tar"' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"
+if grep -q -- '--root-purl' \
   "$fixture_root/ci-only-project/.github/workflows/release.yml"; then
-  echo "CI/CD-only releases must not require package evidence."
+  echo "CI/CD-only source SBOMs must not invent a package purl."
+  exit 1
+fi
+if grep -q 'uv sync --locked --no-dev --no-editable\|pnpm --filter . deploy' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"; then
+  echo "CI/CD-only SBOMs must scan exact-tag source without a runtime."
   exit 1
 fi
 if grep -q '^  publish-python:\|^  publish-npm:' \
@@ -2390,9 +2635,9 @@ if grep -q '^  publish-python:\|^  publish-npm:' \
   echo "CI/CD-only releases must not publish packages."
   exit 1
 fi
-if grep -q 'gh attestation verify' \
+if grep -Eq 'actions/attest(@|-build-provenance@|-sbom@)|gh attestation verify' \
   "$fixture_root/ci-only-project/.github/workflows/release.yml"; then
-  echo "CI-only release workflow must not contain artifact verification."
+  echo "Private CI-only releases must keep attestations disabled."
   exit 1
 fi
 if grep -q '^\.venv\*/\|^node_modules/$' \
@@ -2685,37 +2930,153 @@ grep -q '\["3.14.0"\]' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
 grep -q 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
-test "$(grep -c \
-  'actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6' \
-  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
+grep -q \
+  'actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q \
+  'actions/attest-sbom@4651f806c01d8637787e274ac3b56de9a85cc6a3' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q 'attestations: write' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q 'id-token: write' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
-grep -q 'subject-checksums: release-evidence/SHA256SUMS' \
+grep -q 'subject-path: |' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
-grep -q 'sbom-path: release-evidence/sbom.cdx.json' \
+grep -q 'sbom-path: release-evidence/sbom.spdx.json' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q 'uv sync --locked --no-dev --no-editable' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q 'pnpm --filter . deploy --legacy --prod' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+uv run python - \
+  "$fixture_root/all-features-project/.github/workflows/release.yml" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+import yaml
+
+workflow_path = Path(sys.argv[1])
+workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+jobs = workflow.get("jobs", {})
+
+
+def named_step(job_name: str, step_name: str) -> str:
+    job = jobs.get(job_name)
+    if not isinstance(job, dict):
+        raise SystemExit(f"{workflow_path}: missing job {job_name!r}")
+    steps = job.get("steps", [])
+    matches = [step for step in steps if step.get("name") == step_name]
+    if len(matches) != 1:
+        raise SystemExit(
+            f"{workflow_path}: expected one {job_name}/{step_name} step, "
+            f"found {len(matches)}"
+        )
+    run = matches[0].get("run")
+    if not isinstance(run, str):
+        raise SystemExit(f"{workflow_path}: {job_name}/{step_name} must run a script")
+    return run
+
+
+def command_blocks(run: str, pattern: re.Pattern[str]) -> list[str]:
+    lines = run.splitlines()
+    blocks = []
+    for start, line in enumerate(lines):
+        if not pattern.match(line):
+            continue
+        block = [line]
+        index = start
+        while block[-1].rstrip().endswith("\\"):
+            index += 1
+            if index >= len(lines):
+                raise SystemExit(f"{workflow_path}: unterminated shell command")
+            block.append(lines[index])
+        blocks.append("\n".join(block))
+    return blocks
+
+
+def require_root_purls(job_name: str, step_name: str, expected_commands: int) -> None:
+    run = named_step(job_name, step_name)
+    append = 'root_purls+=(--root-purl "$purl")'
+    if sum(line.strip() == append for line in run.splitlines()) != 1:
+        raise SystemExit(
+            f"{workflow_path}: {job_name}/{step_name} must append each root PURL once"
+        )
+    blocks = command_blocks(
+        run,
+        re.compile(r"^[ \t]*python3 scripts/release_assets\.py (?:build|verify)(?:[ \t]|$)"),
+    )
+    if len(blocks) != expected_commands:
+        raise SystemExit(
+            f"{workflow_path}: expected {expected_commands} release-assets commands in "
+            f"{job_name}/{step_name}, found {len(blocks)}"
+        )
+    expansion = '"${root_purls[@]}" \\'
+    if any(
+        [line.strip() for line in block.splitlines()].count(expansion) != 1
+        for block in blocks
+    ):
+        raise SystemExit(
+            f"{workflow_path}: every release-assets command in {job_name}/{step_name} "
+            "must receive the root PURL array once"
+        )
+
+
+def require_attestation(job_name: str, step_name: str) -> None:
+    blocks = command_blocks(
+        named_step(job_name, step_name),
+        re.compile(r"^[ \t]*gh attestation verify(?:[ \t]|$)"),
+    )
+    if len(blocks) != 1:
+        raise SystemExit(
+            f"{workflow_path}: expected one executable attestation command in "
+            f"{job_name}/{step_name}, found {len(blocks)}"
+        )
+    lines = [line.strip() for line in blocks[0].splitlines()]
+    for option in (
+        "--signer-workflow \\",
+        '--source-digest "$GITHUB_SHA" \\',
+        '--source-ref "$GITHUB_REF"',
+    ):
+        count = lines.count(option)
+        if count != 1:
+            raise SystemExit(
+                f"{workflow_path}: expected one executable {option!r} in the "
+                "attestation command "
+                f"for {job_name}/{step_name}, found {count}"
+            )
+
+
+# Package root count is runtime data; every release-assets command expands it once.
+for job_name, step_name, expected_commands in (
+    ("build", "Bind and verify release evidence", 2),
+    ("publish-evidence", "Validate release evidence", 1),
+    ("publish-evidence", "Upload and verify the mutable draft", 1),
+    ("publish-evidence", "Verify published release trust chain", 1),
+):
+    require_root_purls(job_name, step_name, expected_commands)
+
+# One immutable Release verification plus the PyPI and npm publication gates.
+for job_name, step_name in (
+    ("publish-evidence", "Verify published release trust chain"),
+    ("publish-python", "Verify Python build provenance before publishing"),
+    ("publish-npm", "Verify npm build provenance before publishing"),
+):
+    require_attestation(job_name, step_name)
+
+for job_name in ("publish-python", "publish-npm"):
+    permissions = jobs.get(job_name, {}).get("permissions", {})
+    if permissions.get("attestations") != "read":
+        raise SystemExit(
+            f"{workflow_path}: {job_name} must grant attestations: read"
+        )
+PY
 # Backticks are literal documentation content.
 # shellcheck disable=SC2016
 grep -q '外部 registry 發布會先以 `gh attestation verify` 強制比對' \
   "$fixture_root/all-features-project/README.md"
 grep -q '^  publish-python:$' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
-test "$(grep -c '^      attestations: read$' \
-  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
-test "$(grep -c 'gh attestation verify' \
-  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
-test "$(grep -c -- '--signer-workflow' \
-  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
-# The shell variable is literal workflow content.
-# shellcheck disable=SC2016
-test "$(grep -c -- '--source-ref \"\$GITHUB_REF\"' \
-  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
-# The shell variable is literal workflow content.
-# shellcheck disable=SC2016
-test "$(grep -c -- '--source-digest \"\$GITHUB_SHA\"' \
-  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
 grep -q '^      name: "pypi-release"$' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q 'pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26' \
@@ -2831,7 +3192,7 @@ adoption_project="$fixture_root/adoption-project"
 mkdir -p "$adoption_project"
 cat > "$adoption_project/pyproject.toml" <<'TOML'
 [project]
-name = "legacy-product"
+name = "legacy-python-engine"
 version = "0.4.2"
 dependencies = ["httpx>=0.28"]
 
@@ -2841,7 +3202,7 @@ build-backend = "setuptools.build_meta"
 TOML
 cat > "$adoption_project/package.json" <<'JSON'
 {
-  "name": "legacy-product-ui",
+  "name": "@legacy/product-ui",
   "version": "0.4.2",
   "dependencies": {"typescript": "5.9.3"}
 }
@@ -2859,12 +3220,37 @@ uv run copier copy --trust --defaults --overwrite --vcs-ref HEAD \
   --data language=python-typescript \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   --data coverage_mode=diff \
+  --data enable_release_attestations=true \
+  --data enable_pypi_publishing=true \
+  --data pypi_environment=pypi-release \
+  --data enable_npm_publishing=true \
+  --data npm_environment=npm-release \
   "$repo_root" "$adoption_project"
 grep -q '^version = "0.4.2"$' "$adoption_project/pyproject.toml"
 grep -q 'httpx>=0.28' "$adoption_project/pyproject.toml"
 grep -q 'setuptools.build_meta' "$adoption_project/pyproject.toml"
 grep -q '"version": "0.4.2"' "$adoption_project/package.json"
 grep -q '"typescript": "5.9.3"' "$adoption_project/package.json"
+grep -q 'project = tomllib.loads' \
+  "$adoption_project/.github/workflows/csarc-release.yml"
+grep -q 'package = json.loads' \
+  "$adoption_project/.github/workflows/csarc-release.yml"
+grep -q 'quote(namespace, safe=' \
+  "$adoption_project/.github/workflows/csarc-release.yml"
+if grep -q 'pkg:pypi/legacy-product@\|pkg:npm/legacy-product@' \
+  "$adoption_project/.github/workflows/csarc-release.yml"; then
+  echo "Existing-project release identity must come from tagged manifests."
+  exit 1
+fi
+test "$(grep -c -- '--signer-workflow' \
+  "$adoption_project/.github/workflows/csarc-release.yml")" -eq 3
+test "$(grep -c '/.github/workflows/csarc-release.yml' \
+  "$adoption_project/.github/workflows/csarc-release.yml")" -eq 3
+if grep -q '/.github/workflows/release.yml' \
+  "$adoption_project/.github/workflows/csarc-release.yml"; then
+  echo "Existing-project registry verification must use csarc-release.yml."
+  exit 1
+fi
 grep -q '^PRODUCT_README_MARKER$' "$adoption_project/README.md"
 grep -q '^PRODUCT_SECURITY_MARKER$' "$adoption_project/SECURITY.md"
 grep -q 'project_mode: existing' "$adoption_project/.copier-answers.yml"
@@ -2944,6 +3330,9 @@ grep -q 'actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2
   "$container_project/.github/workflows/csarc-release.yml"
 grep -q 'actions/attest-sbom@4651f806c01d8637787e274ac3b56de9a85cc6a3' \
   "$container_project/.github/workflows/csarc-release.yml"
+sed -n '/name: Generate the container SBOM/,/name: Preserve the verified container bytes/p' \
+  "$container_project/.github/workflows/csarc-release.yml" | \
+  grep -q 'syft-version: v1.50.0'
 grep -q 'docker pull "$IMAGE"' \
   "$container_project/.github/workflows/csarc-release.yml"
 if grep -q '^  push:$\|workflow_run:\|PAT\|personal.access.token' \
