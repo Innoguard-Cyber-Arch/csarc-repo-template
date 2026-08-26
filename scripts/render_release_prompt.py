@@ -34,11 +34,11 @@ def prompt(mode: str, tag: str, sha: str) -> str:
         if mode == "adopt"
         else "摘要將新增、覆寫、保留及需要人工合併的檔案"
     )
-    apply = (
-        "確認後只用 `--apply-plan` 套用 dry-run 產生且未漂移的 plan"
-        if mode == "adopt"
-        else "確認後使用相同 tag 與 full SHA 正式執行"
-    )
+    apply_command = {
+        "init": f"{command} <target-path> --apply-plan PATH",
+        "adopt": f"{command} --apply-plan PATH",
+        "update": f"{command} --apply-plan PATH",
+    }[mode]
     return "\n".join(
         (
             f"請{actions[mode]}；{target_instruction}",
@@ -52,7 +52,8 @@ def prompt(mode: str, tag: str, sha: str) -> str:
             "請先讀取該固定 commit 的安裝指南，以 "
             f"`{command}` 為基礎（init 另帶自行確認的 path），加上 "
             f"`--to {tag} --expected-sha {sha} --dry-run` 執行；"
-            f"{review}。等我確認後才{apply}並驗證；不要自行 stash、"
+            f"{review}。確認後只用 `{apply_command} --yes --non-interactive` "
+            "套用 dry-run 產生且未漂移的 plan 並驗證；不要自行 stash、"
             "commit、apply GitHub settings、push 或建立 PR。",
         )
     )

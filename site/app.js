@@ -630,15 +630,17 @@ scripts/apply-repository-settings.sh`
         {
           title: '每次修改都測新案、既有案導入與後續更新',
           goal: '可導入的條件是三條生命週期都通過，不是只看檔案存在。',
-          summary: '測試會真的執行 CLI init、adopt dry-run／machine plan／隔離驗證／apply，以及人工合併後的 finalize dry-run／apply-plan；update 也涵蓋 check／dry-run／apply 與衝突 fail-closed。兩次 dry-run 都不修改 target repo，正式套用拒絕任何 HEAD、working tree、release、answers、人工結果或輸出漂移。CLI 內部仍以 Copier 產生與 smart update。root-only 測試資產若混入生成 repo 也會失敗。',
+          summary: '測試會真的執行 CLI init、adopt 與 update 的 dry-run／machine plan／隔離驗證／apply-plan，並涵蓋人工合併後的 finalize dry-run／apply-plan。所有 dry-run 都不修改 target repo，正式套用拒絕任何 HEAD、working tree、release、answers、人工結果或 rendered output 漂移；衝突或驗證失敗的 plan 不可套用。CLI 內部仍以 Copier 產生與 smart update。root-only 測試資產若混入生成 repo 也會失敗。',
           file: 'src/csarc_cli/＋tests/test_cli.py＋scripts/verify-template.sh',
           code: `csarc init ./my-project
+csarc init ./my-project --apply-plan ./my-project-csarc-init-plan.json
 csarc adopt --dry-run
 csarc adopt --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
 csarc adopt --finalize --dry-run
 csarc adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
 csarc update --check --json
-csarc update`
+csarc update
+csarc update --apply-plan ../<repo>-csarc-update-plan.json`
         }
       ],
       'template-release': [
@@ -717,13 +719,12 @@ python_typescript: {stage: alpha}`
     const setupExamples = {
       new: {
         title: '建立新 repo',
-        goal: 'CLI 會選取核准 release、解析完整 commit SHA、顯示計畫，確認後才以 Copier 建立與驗證。',
+        goal: 'CLI 會選取核准 release、解析完整 commit SHA，在暫存目錄建立並驗證候選；確認後才套用未漂移的外部 plan。',
         location: 'Terminal',
         code: `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project
 
-# CI or an explicitly authorized agent:
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project \\
-  --yes --non-interactive`
+  --apply-plan ./my-project-csarc-init-plan.json --yes --non-interactive`
       },
       existing: {
         title: '把公版導入既有 repo',
@@ -740,11 +741,13 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
       },
       update: {
         title: '更新已使用公版的 repo',
-        goal: 'CLI 讀取 .copier-answers.yml，解析核准 release，以 Copier smart update 顯示新版差異；衝突時保留差異並 fail closed。',
+        goal: 'CLI 讀取 .copier-answers.yml，解析核准 release，在暫存 clone 完成 Copier smart update 與驗證；衝突、驗證失敗或 plan 漂移都零寫入 fail closed。',
         location: '專案 repo 根目錄',
         code: `git switch -c chore/<issue-number>-update-repo-template
 uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update --check --json
-uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update`
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update \\
+  --apply-plan ../<repo>-csarc-update-plan.json --yes --non-interactive`
       },
       mac: {
         title: 'macOS 本機需求',

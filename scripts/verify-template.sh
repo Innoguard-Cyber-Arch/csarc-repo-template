@@ -752,9 +752,7 @@ test -f docs/robots.txt
 grep -q '^Disallow: /$' docs/robots.txt
 test -f docs/agent-install.md
 grep -q 'Run the CLI from the verified release commit:' docs/agent-install.md
-# Backticks are literal documentation content.
-# shellcheck disable=SC2016
-grep -q '`adopt` and `adopt --finalize` default' docs/agent-install.md
+grep -q 'every lifecycle write defaults to dry-run' docs/agent-install.md
 grep -q 'docs/index.html' README.md
 grep -q '內部限閱' README.md
 grep -q '線上整合證據' README.md
@@ -2202,6 +2200,8 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
 prime_validation_cache "$fixture_root/all-features-project"
 assert_agent_guidance "$fixture_root/all-features-project"
 grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<reviewed-full-commit-sha>' csarc update" \
+  "$fixture_root/all-features-project/README.md"
+grep -q -- '--apply-plan ../<repo>-csarc-update-plan.json --yes --non-interactive' \
   "$fixture_root/all-features-project/README.md"
 
 test -f "$fixture_root/all-features-project/.pre-commit-config.yaml"
