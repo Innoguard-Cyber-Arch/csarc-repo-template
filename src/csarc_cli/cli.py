@@ -1073,8 +1073,16 @@ def compare_stage(
     )
 
 
-def plan_status(plan: Plan) -> tuple[str, str]:
+def plan_status(
+    plan: Plan, adoption: Mapping[str, object] | None = None
+) -> tuple[str, str]:
     """Return the strongest adoption decision and its limitation."""
+    if adoption is not None and adoption.get("applicable") is not True:
+        return (
+            "Not ready to adopt",
+            "The machine plan is not applicable; candidate verification is "
+            f"{adoption.get('verification', 'unknown')}.",
+        )
     if plan.unknown:
         return (
             "Unable to determine",
@@ -1153,7 +1161,7 @@ def adoption_report_markdown(
     adoption: dict[str, object] | None = None,
 ) -> str:
     """Render the complete, shareable adoption decision report."""
-    status, reason = plan_status(plan)
+    status, reason = plan_status(plan, adoption)
     counts = (
         ("Add", len(plan.add)),
         ("Overwrite", len(plan.overwrite)),
@@ -1200,10 +1208,18 @@ def adoption_report_markdown(
         raw_hook = adoption.get("project_verification_hook")
         hook = raw_hook if isinstance(raw_hook, dict) else {}
         hook_path = hook.get("path") or "(none)"
+        working_tree = (
+            "clean"
+            if adoption.get("clean")
+            else (
+                "dirty; exact preserved state"
+                if adoption.get("applicable") is True
+                else "dirty; review only"
+            )
+        )
         lines[12:12] = [
             f"- Target HEAD: `{markdown_code(adoption.get('target_head'))}`",
-            "- Working tree: "
-            + ("clean" if adoption.get("clean") else "dirty; review only"),
+            f"- Working tree: {working_tree}",
             f"- CODEOWNER verification: `{markdown_code(owner_state)}`",
             f"- Project verification hook: `{markdown_code(hook_path)}`",
             "- Project verification hook configured: `"
@@ -1257,19 +1273,32 @@ def adoption_report_markdown(
                 ),
             )
         )
-    lines.extend(
-        (
-            "",
-            "## If you approve",
-            "",
-            "Apply only this machine plan with `csarc adopt --apply-plan`. "
-            "The CLI rebuilds and verifies the candidate before changing the "
-            "target. It does not apply settings, push, or open a pull request.",
-            "",
-            "Review this report and the terminal plan before applying it.",
-            "",
+    if adoption is not None and adoption.get("applicable") is not True:
+        lines.extend(
+            (
+                "",
+                "## Next step",
+                "",
+                "Do not apply this plan. Resolve the reported gate and create "
+                "a new dry-run plan.",
+                "",
+            )
         )
-    )
+    else:
+        lines.extend(
+            (
+                "",
+                "## If you approve",
+                "",
+                "Apply only this machine plan with `csarc adopt --apply-plan`. "
+                "The CLI rebuilds and verifies the candidate before changing "
+                "the target. It does not apply settings, push, or open a pull "
+                "request.",
+                "",
+                "Review this report and the terminal plan before applying it.",
+                "",
+            )
+        )
     return "\n".join(lines)
 
 
@@ -1292,11 +1321,12 @@ def draw_adoption_pdf(
     """Draw a concise, selectable-text adoption decision PDF."""
     page_width, page_height = A4
     document = Canvas(output, pagesize=A4, pageCompression=1)
-    status, reason = plan_status(plan)
+    status, reason = plan_status(plan, adoption)
     status_color = {
         "Ready to adopt": colors.HexColor("#DDEFE2"),
         "Review required": colors.HexColor("#F7E9B5"),
         "Unable to determine": colors.HexColor("#F4D7D5"),
+        "Not ready to adopt": colors.HexColor("#F4D7D5"),
     }[status]
 
     document.setTitle("CSARC adoption dry-run")
@@ -1422,17 +1452,24 @@ def draw_adoption_pdf(
     document.roundRect(48, 84, page_width - 96, 68, 7, fill=1, stroke=0)
     document.setFillColor(colors.HexColor("#17212B"))
     document.setFont("Helvetica-Bold", 10)
-    document.drawString(62, 132, "If approved")
+    applicable = adoption is None or adoption.get("applicable") is True
+    document.drawString(62, 132, "If approved" if applicable else "Next step")
     document.setFont("Helvetica", 8)
-    document.drawString(
-        62,
-        116,
-        "Adoption adds planned files, runs ./scripts/verify, and previews "
-        "settings.",
-    )
-    document.drawString(
-        62, 101, "It does not apply settings, push, or open a pull request."
-    )
+    if applicable:
+        document.drawString(
+            62,
+            116,
+            "Adoption adds planned files, runs ./scripts/verify, and previews "
+            "settings.",
+        )
+        document.drawString(
+            62, 101, "It does not apply settings, push, or open a pull request."
+        )
+    else:
+        document.drawString(
+            62, 116, "Do not apply this plan. Resolve the reported gate and"
+        )
+        document.drawString(62, 101, "create a new dry-run plan.")
     document.setStrokeColor(colors.HexColor("#D5DCE1"))
     document.line(48, 65, page_width - 48, 65)
     document.setFillColor(colors.HexColor("#52606D"))
@@ -2126,11 +2163,27 @@ def clone_working_tree(target: Path, candidate: Path) -> None:
     """Clone HEAD and overlay the current tracked and untracked worktree."""
     clone_target(target, candidate)
     patch = candidate.parent / "working-tree.patch"
-    difference = run(
-        ["git", "-C", str(target), "diff", "--binary", "HEAD"],
-        capture=True,
+    difference = subprocess.run(  # noqa: S603
+        [  # noqa: S607
+            "git",
+            "-C",
+            str(target),
+            "diff",
+            "--binary",
+            "--full-index",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--no-renames",
+            "HEAD",
+            "--",
+        ],
+        capture_output=True,
+        check=False,
     )
-    patch.write_text(difference.stdout, encoding="utf-8")
+    if difference.returncode != 0:
+        detail = difference.stderr.decode(errors="replace").strip()
+        raise CliError(detail or "Cannot stage tracked adoption work.")
+    patch.write_bytes(difference.stdout)
     if difference.stdout:
         result = run(
             ["git", "-C", str(candidate), "apply", str(patch)],
@@ -2184,9 +2237,13 @@ def prepare_adoption_candidate(
     planned: Plan,
     generated_at: str,
     candidate: Path,
+    preserved_dirty_paths: tuple[str, ...] = (),
 ) -> tuple[Plan, dict[str, str], str, dict[str, object]]:
     """Build and verify the exact adoption result outside the target repo."""
-    clone_target(target, candidate)
+    if preserved_dirty_paths:
+        clone_working_tree(target, candidate)
+    else:
+        clone_target(target, candidate)
     copy_candidate_files(stage, candidate, (*planned.add, *planned.merge))
     hook_configuration = project_verification_configuration(candidate, answers)
     try:
@@ -2232,6 +2289,21 @@ def prepare_adoption_candidate(
                 )
             else:
                 verification = "passed"
+    candidate_files = project_files(candidate)
+    target_files = project_files(target)
+    dirty_drift = tuple(
+        name
+        for name in preserved_dirty_paths
+        if name not in candidate_files
+        or name not in target_files
+        or file_fingerprint(candidate_files[name])
+        != file_fingerprint(target_files[name])
+    )
+    if dirty_drift:
+        verification = (
+            "failed: Candidate verification changed preserved dirty files: "
+            + ", ".join(dirty_drift)
+        )
     effects, artifacts = candidate_effects(candidate, target, planned)
     return effects, artifacts, verification, hook
 
@@ -3300,12 +3372,21 @@ def build_adoption_plan(
     generated_at: str,
 ) -> ResolvedPlan:
     """Build one locked adoption plan and its isolated candidate."""
-    merged = apply_adoption_policies(stage, target)
-    planned = compare_stage(stage, target, adopt=True, merged_paths=merged)
     head, changes, status_sha256 = target_state(target)
     target_files = target_file_snapshot(target)
+    dirty_paths = tuple(sorted(git_changed_paths(target))) if changes else ()
+    merged = apply_adoption_policies(stage, target)
+    planned = compare_stage(stage, target, adopt=True, merged_paths=merged)
+    preserved_dirty_paths = (
+        dirty_paths
+        if dirty_paths
+        and all(change[:2] == " M" for change in changes)
+        and set(dirty_paths).issubset(planned.preserve)
+        else ()
+    )
+    candidate_allowed = not changes or bool(preserved_dirty_paths)
     artifacts: dict[str, str] = {}
-    if changes:
+    if not candidate_allowed:
         files = predicted_adoption_effects(target, planned)
         verification = "not-run-dirty"
     else:
@@ -3318,15 +3399,19 @@ def build_adoption_plan(
             planned,
             generated_at,
             candidate,
+            preserved_dirty_paths,
         )
     owner = code_owner_verification(repository, answers.get("code_owner"))
-    if changes:
+    if not candidate_allowed:
         hook = project_verification_configuration(target, answers)
         hook = project_verification_evidence(
-            hook, "not-run", "Working tree must be clean before verification."
+            hook,
+            "not-run",
+            "Dirty paths must be unstaged tracked modifications preserved by "
+            "the adoption plan.",
         )
     adoption: dict[str, object] = {
-        "applicable": not changes
+        "applicable": candidate_allowed
         and verification in {"passed", "deferred-manual-merge"}
         and owner["state"] != "blocked",
         "artifacts": artifacts,
@@ -3336,6 +3421,7 @@ def build_adoption_plan(
         "phase": (
             "pending" if planned.manual or planned.unknown else "complete"
         ),
+        "preserved_dirty_paths": list(preserved_dirty_paths),
         "project_verification_hook": hook,
         "target_changes": list(changes),
         "target_files": target_files,
@@ -3343,6 +3429,7 @@ def build_adoption_plan(
         "target_status_sha256": status_sha256,
         "verification": verification,
     }
+    validate_target_snapshot(target, adoption)
     return ResolvedPlan(
         mode="adopt",
         target=target,
@@ -3416,7 +3503,10 @@ def command_apply_adoption_plan(  # noqa: C901
         or verification not in {"verified", "unverified"}
     ):
         raise CliError("Adoption plan has invalid template identity.")
-    require_clean_repository(target)
+    if raw_adoption.get("clean") is True:
+        require_clean_repository(target)
+    else:
+        validate_target_snapshot(target, raw_adoption)
     revision = resolve_revision(
         source,
         release,
