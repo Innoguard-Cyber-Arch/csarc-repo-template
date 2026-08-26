@@ -1074,7 +1074,6 @@ def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
         ("typescript", "package.json", "pnpm-lock.yaml"),
     ],
 )
-@pytest.mark.large
 def test_real_template_adoption_resumes_after_manifest_merge(
     tmp_path: Path,
     language: str,

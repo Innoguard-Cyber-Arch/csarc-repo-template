@@ -84,6 +84,9 @@ if [[ "$mode" == "python-compatibility" ]]; then
   export UV_PYTHON="$python_version"
   uv sync --locked --python "$python_version"
   uv run pytest -m "runtime and not large"
+  uv build --clear
+  uv run --isolated --no-project --with ./dist/*.whl \
+    python -c "import {{ package_name }}"
   exit 0
 fi
 

@@ -612,6 +612,25 @@ def test_reusable_ci_routes_the_runtime_matrix_explicitly() -> None:
     assert '"$RUN_RUNTIME_MATRIX" == true' in aggregate["run"]
 
 
+def test_runtime_lane_installs_and_imports_the_built_package() -> None:
+    """Catch runtime packaging failures without repeating the full suite."""
+    generated_verifier = ROOT / "scripts" / "verify"
+    if generated_verifier.exists():
+        command = generated_verifier.read_text(encoding="utf-8")
+    else:
+        workflow = yaml.safe_load(
+            (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+        )
+        command = next(
+            step["run"]
+            for step in workflow["jobs"]["python-compatibility"]["steps"]
+            if step.get("name") == "Run runtime-sensitive tests"
+        )
+    assert "uv build --clear" in command
+    assert "--with ./dist/*.whl" in command
+    assert 'python -c "import ' in command
+
+
 def test_changed_path_discovery_exposes_both_sides_of_a_rename(
     tmp_path: Path,
 ) -> None:
