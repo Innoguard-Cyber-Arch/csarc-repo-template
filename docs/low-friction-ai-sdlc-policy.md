@@ -22,7 +22,8 @@ agent 執行工作需要知道的最短路徑。
    refactor。文件或純資料變更不為文字順序造假測試；security 與資料損失邊界不能省。
 5. **只在 Ready gate 收斂。** acceptance 完成、CI plan 選定的 scoped checks
    通過、branch 跟上 live base、沒有較新的 blocker，才標 Ready 並請求正式
-   review。完整驗證只由 integrator 對不再變動的最終候選執行一次。
+   review。Final candidate Ready 後由 hosted workflow 執行唯一完整驗證；只有文件明定的
+   fallback 改由 integrator 本機執行，不在 Ready 前重跑同一 tree。
 6. **依風險合併 delivery。** Routine PR 跑 policy／fast／stable aggregate；elevated PR
    升 full 並要求 human review。只有持有 #240 lifecycle lease 的 writer，或 degraded
    模式下的 human maintainer，可以執行 Ready／Draft／metadata／merge 寫入。

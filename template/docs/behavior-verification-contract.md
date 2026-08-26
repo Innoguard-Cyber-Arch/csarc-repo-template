@@ -11,7 +11,7 @@ integrator 只對 tree identity 不再變動的最終候選跑一次完整 gate�
 | 層級 | 唯一責任 | 不負責 |
 | --- | --- | --- |
 | Unit／policy test | 純函式、CLI 寫入邊界、路由與 fail-closed 決策；一般 Issue gate 排除 `large`，但不因 flaky 標記忽略失敗 | 文件逐字內容、GitHub runner 是否真的啟動 |
-| Generated fixture | Copier 各 profile 能產生、更新並執行宣告的命令；root／template 配對檔案一致；耗時 adoption 情境標為 `large` | 在每個 runtime 或每張 Issue PR 重跑完整 generated-project 歷史 |
+| Generated fixture | Copier 各 profile 能產生且保留其結構／專屬行為；一個代表性全功能 profile 執行完整 `verify`，更新案例跑受影響 policy tests；root／template 配對檔案一致 | 對每個 profile、runtime 或每張 Issue PR 重跑相同完整 generated-project 歷史 |
 | Workflow lint／static contract | YAML 語法、固定 action SHA、權限、job wiring 與 aggregate fail-closed | 模擬 hosted runner、Ruleset 或 environment approval |
 | Cross-runtime | 只跑明確標為 `runtime` 的相容性案例；Python 支援範圍各跑一次，TypeScript 不因 Python matrix 重複 | policy、profile 或 generated-project 全套重跑 |
 | Promotion E2E | 候選 archive、SHA／tree identity、一次完整 `verify`、canary 三態與 main handoff | 合併後再跑相同矩陣，或把 artifact-only 宣稱成 live success |
@@ -48,8 +48,9 @@ render 後才存在的行為，cross-runtime 只驗證 runtime 差異。
 
 ## 重複、脆弱檢查與缺口
 
-- **已消除的重複：**一般 Issue PR 只跑非 `large` 的 scoped fast；integrator 對
-  immutable candidate 跑一次含 `large` 的 canonical full。Python compatibility 只跑
+- **已消除的重複：**一般 Issue PR 只跑非 `large` 的 scoped fast；final Ready candidate
+  由 hosted workflow 跑一次含 `large` 的 canonical full，只有 fallback 改由 integrator
+  本機跑同一入口。Python compatibility 只跑
   `runtime`，TypeScript 只跑一次，macOS adoption 只留給 scheduled／release deep
   matrix；OSV／Zizmor 依風險或週期執行。
 - **本次移除的脆弱檢查：**`scripts/verify-template.sh` 不再逐字比對

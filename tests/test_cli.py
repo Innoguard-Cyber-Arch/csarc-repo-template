@@ -3990,3 +3990,18 @@ def test_template_verification_runs_one_generated_full_gate() -> None:
         "tests/test_release_policy.py",
     ):
         assert command in source
+
+
+def test_pr_templates_do_not_repeat_full_before_ready() -> None:
+    """Use hosted full by default and local full only as its fallback."""
+    for path, command in (
+        (ROOT / ".github/pull_request_template.md", "verify-template.sh"),
+        (ROOT / "template/.github/pull_request_template.md", "scripts/verify"),
+    ):
+        source = path.read_text(encoding="utf-8")
+        assert "hosted" in source
+        assert "fallback" in source
+        assert source.count(command) == 1
+        full_line = next(line for line in source.splitlines() if command in line)
+        assert "before Ready" not in full_line
+        assert "轉 Ready 前" not in full_line

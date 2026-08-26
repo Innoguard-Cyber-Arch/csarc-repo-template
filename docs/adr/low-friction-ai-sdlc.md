@@ -92,7 +92,7 @@ curl -fsSL '<engineering-practice-url>'
 | [#238](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/238)／[#320](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/320) | 長期整合 branch 曾在 promotion 後被平台 auto-delete，促成 repository-wide temporary setting mutation 與 recovery machinery。 | 改以 `main` 為唯一永久 branch，Milestone delivery 一律短命；事故成因因此消失，不再修改全域 auto-delete 設定。 |
 | [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240)／[PR #260](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/260) | #236 的 merge call 比另一 task 轉 Draft 早約 1.7 秒；#253 又證明只比 source head 不能防 destination base race。 | 所有 PR lifecycle writes 以跨 process lease 序列化，merge 前重讀 live source、destination、Draft、blocker 與 authorization。 |
 | [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254) | Teams private plan 的 quota block 是日常條件；#254 已讓 routine PR 以 exact-head canonical note 配合 Alpha self-merge，不再逐張等第二則 human authorization。 | 保留已生效的 single-note routine fallback；#240 日後只補 writer 互斥，promotion 仍不簡化。 |
-| [#261](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/261) | #261 已允許 targeted checks 後先開 Draft，讓遠端可見 owner、scope、依賴與待完成驗證。 | 保留現行 early Draft ownership；Ready 前完成 acceptance 與 scoped checks，完整驗證留給 integrator 的最終候選。 |
+| [#261](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/261) | #261 已允許 targeted checks 後先開 Draft，讓遠端可見 owner、scope、依賴與待完成驗證。 | 保留現行 early Draft ownership；Ready 前完成 acceptance 與 scoped checks，完整驗證由 final Ready candidate 的 hosted gate 執行一次，只有 fallback 改由 integrator 本機執行。 |
 
 ## 決定
 

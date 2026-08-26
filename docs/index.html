@@ -1668,7 +1668,7 @@
     <section class="slide decision-slide" data-track="contract" aria-label="步驟三本機驗證與持續整合">
       <header>
         <h2>步驟 3｜<span class="accent">本機與 CI 用同一把尺</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>Issue owner 跑 scoped fast checks；integrator 只對不再變動的最終候選跑一次 full gate。Cross-runtime 只重跑標為 runtime 的案例，large 留給完整候選。</p>
+        <p class="subtitle"><strong>基本導入。</strong>Issue owner 跑 scoped fast checks；final Ready candidate 只跑一次 hosted full，fallback 才改由 integrator 本機執行。Cross-runtime 只重跑標為 runtime 的案例，large 留給完整候選。</p>
       </header>
       <p class="context-line"><strong>問題與目的｜</strong>若每個人和 AI 都用不同指令，結果就無法重現；統一成一個驗證入口，問題可在送出 PR 前發現。</p>
       <div class="decision-strip">

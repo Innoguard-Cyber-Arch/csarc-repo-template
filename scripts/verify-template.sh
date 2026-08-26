@@ -39,8 +39,8 @@ grep -q 'uv run pytest <test-path>' AGENTS.md
 grep -q 'scripts/render_site.py --check' AGENTS.md
 grep -q 'open Draft PRs, remote branches, and existing worktrees' AGENTS.md
 grep -q 'open Draft PRs, remote branches, and worktrees' template/AGENTS.md.jinja
-grep -q 'before marking Ready or updating a Ready PR' AGENTS.md
-grep -q 'before marking Ready or updating a Ready PR' template/AGENTS.md.jinja
+grep -q 'Ready starts the hosted' AGENTS.md
+grep -q 'Ready starts the hosted' template/AGENTS.md.jinja
 grep -q 'scripts/pr_lifecycle.py' AGENTS.md
 grep -q 'scripts/pr_lifecycle.py' template/AGENTS.md.jinja
 grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md

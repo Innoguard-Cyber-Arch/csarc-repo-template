@@ -31,7 +31,7 @@ Draft PR 可用 `Refs #N`，但必須列出 scope、已完成／待完成驗證�
 
 ### Draft ownership 與 Ready 邊界
 
-Issue owner 負責 ordinary PR 的 scoped checks；integrator 只在 final promotion 的 exact integrated candidate 跑一次 full gate。Draft 階段可疊加同一 Milestone 的後續工作，但每張 PR 仍要清楚列出 owner、依賴與未完成項目。只有 acceptance、metadata、closing Issue 關聯與最窄必要驗證都完成後才轉 Ready；push 新 head 會使舊 review、authorization 與 evidence 失效。
+Issue owner 負責 ordinary PR 的 scoped checks，完成後即可轉 Ready；不在 Ready 前先跑本機 full。Final promotion 轉 Ready 後，由 hosted workflow 對 exact integrated candidate 跑唯一一次 full gate；只有 hosted job 未執行且文件明定的 fallback 適用時，integrator 才改跑一次相同本機入口，不能兩邊重複。Draft 階段可疊加同一 Milestone 的後續工作，但每張 PR 仍要清楚列出 owner、依賴與未完成項目。只有 acceptance、metadata、closing Issue 關聯與最窄必要驗證都完成後才轉 Ready；push 新 head 會使舊 review、authorization 與 evidence 失效。
 
 Agent 不得把 Draft、未處理 review thread、真實測試失敗或 scope 漂移當成平台限制。Alpha reviewer 例外只適用政策明列的 routine Issue route，且不改變 Issue owner、integrator、required checks 或 exact SHA/tree 責任。
 
@@ -84,7 +84,8 @@ Workflow、governance、generator、CLI adoption/update、release、安全、pro
 `container_mode=none` 不生成容器 job、Docker Dependabot 或 registry 權限。公版不代替產品設計 Dockerfile、Kubernetes、雲端部署或 multi-arch matrix。
 
 Issue owner 只執行 plan 宣告的 scoped checks；`verify-fast` 跳過 `large`，但不跳過
-`quarantine`。只有 integrator 對 tree identity 不再變動的最終候選執行一次完整 gate。
+`quarantine`。Hosted full 是 final unchanged tree 的預設唯一完整 gate；integrator 只在
+文件明定的 fallback 改跑一次本機入口，不會在 Ready 前與 hosted full 重複。
 `runtime` 是 cross-runtime job 唯一重跑的集合；scheduled／release 才承擔最深矩陣與
 長時間檢查。Changed-file discovery 使用 rename-safe 的 old/new path 語意，不能把
 workflow、security 或 verifier rename 到 docs path 來降級。
