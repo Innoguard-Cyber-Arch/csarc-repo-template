@@ -1894,7 +1894,7 @@ grep -q '"context": "promotion"' \
   "$fixture_root/default-project/policies/rulesets.json"
 test -f \
   "$fixture_root/default-project/.github/workflows/release-follow-up-policy.yml"
-grep -q '"refs/heads/dev/\*"' \
+grep -q '"refs/heads/dev/m\*"' \
   "$fixture_root/default-project/policies/rulesets.json"
 test -x "$fixture_root/default-project/scripts/apply-repository-settings.sh"
 test -x "$fixture_root/default-project/scripts/check-update-conflicts"
