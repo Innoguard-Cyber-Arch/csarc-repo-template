@@ -52,6 +52,8 @@ git push -u origin dev
 ```
 <!-- csarc-project-run-command:end -->
 
+`project_run_command` 只描述產品啟動方式，不會被當成驗證 hook。hook 不得解析成或重新進入 canonical `scripts/verify`；update 會先在暫存 clone 驗證再寫入。{% if project_verification_hook | default('', true) %}完整驗證會另外且只執行一次 `{{ project_verification_hook }}`。{% elif project_mode == "existing" %}未指定顯式 hook；若 project-owned `scripts/verify-product` 存在且可執行，會作為相容 fallback 執行一次。{% endif %}
+
 {% if project_mode == "existing" %}> 既有案導入：Copier 已保留原本的 manifest。先人工合併 dev 相依、版本與工具設定，再重建 lockfile；`coverage_mode=diff` 預設比較 `origin/main`。{% endif %}
 {% if branch_strategy == "delivery" %}> 本案選用 delivery 模式：Milestone 使用 `dev/m<編號>-<簡稱>`，一般孤立 Issue 使用 `dev/next`，確實需要獨立 soak／canary 的孤立 Issue 才使用一次性的 `dev/i<Issue 編號>-<簡稱>`；它們都以 promotion PR 進入 `main`。{% elif branch_strategy == "dev" %}> 本案選用 `dev` 模式，因為有長期共用測試環境。維護者首次啟用時須從 `main` 建立並推送 `dev`。{% else %}> 本案使用 main 模式，短分支通過 PR 後直接合併到 `main`。{% endif %}
 {% if branch_strategy == "delivery" %}

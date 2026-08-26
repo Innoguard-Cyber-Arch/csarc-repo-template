@@ -26,7 +26,10 @@ def prompt(mode: str, tag: str, sha: str) -> str:
     target_instruction = (
         "自行依工作脈絡判斷名稱與位置，無法唯一判斷時先詢問；"
         if mode == "init"
-        else "自行判斷 repo root；"
+        else (
+            "自行判斷 repo root；分開確認產品啟動指令與可選的 "
+            "repo-relative executable project_verification_hook；"
+        )
     )
     review = (
         "檢視 repo 外的 Markdown、PDF 與 machine plan，摘要新增、"
