@@ -216,7 +216,7 @@ test -x scripts/detect-language-profile
 test -x scripts/pr_lifecycle.py
 grep -q 'scripts/pr_lifecycle.py' AGENTS.md
 grep -q '^## Concurrency 與外部 mutation$' docs/ci-policy.md
-grep -Fq '| Release follow-up | `main` |' docs/ci-policy.md
+grep -Fq "| Release follow-up | \`main\` |" docs/ci-policy.md
 "${platform_python[@]}" scripts/pr_lifecycle.py scan-writers --root .
 
 test -f AGENTS.md
