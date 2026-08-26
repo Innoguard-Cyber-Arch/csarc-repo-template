@@ -35,6 +35,7 @@ jobs:
       run_osv: ${{ steps.plan.outputs.run_osv }}
       run_zizmor: ${{ steps.plan.outputs.run_zizmor }}
       run_deep: ${{ steps.plan.outputs.run_deep }}
+      run_adoption_macos: ${{ steps.plan.outputs.run_adoption_macos }}
     steps:
       - name: Start timing
         id: started
@@ -194,7 +195,7 @@ jobs:
   adoption-macos:
     name: adoption e2e macOS
     needs: fast
-    if: ${{ needs.fast.outputs.run_deep == 'true' }}
+    if: ${{ needs.fast.outputs.run_adoption_macos == 'true' }}
     runs-on: macos-latest
     timeout-minutes: 10
     steps:
@@ -277,6 +278,7 @@ jobs:
           FAST_RESULT: ${{ needs.fast.result }}
           TIER: ${{ needs.fast.outputs.tier }}
           RUN_DEEP: ${{ needs.fast.outputs.run_deep }}
+          RUN_ADOPTION_MACOS: ${{ needs.fast.outputs.run_adoption_macos }}
           RUN_GOVERNANCE: ${{ needs.fast.outputs.run_governance }}
           RUN_OSV: ${{ needs.fast.outputs.run_osv }}
           RUN_ZIZMOR: ${{ needs.fast.outputs.run_zizmor }}
@@ -317,6 +319,7 @@ jobs:
             fi
           }
           require_boolean "$RUN_DEEP" run_deep
+          require_boolean "$RUN_ADOPTION_MACOS" run_adoption_macos
           require_boolean "$RUN_GOVERNANCE" run_governance
           require_boolean "$RUN_OSV" run_osv
           require_boolean "$RUN_ZIZMOR" run_zizmor
@@ -340,7 +343,7 @@ jobs:
               ;;
           esac
           require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility
-          require_routed "$RUN_DEEP" "$ADOPTION_MACOS_RESULT" adoption-macos
+          require_routed "$RUN_ADOPTION_MACOS" "$ADOPTION_MACOS_RESULT" adoption-macos
           require_routed "$RUN_GOVERNANCE" "$GOVERNANCE_RESULT" governance
           require_routed "$RUN_OSV" "$OSV_RESULT" osv
           require_routed "$RUN_ZIZMOR" "$ZIZMOR_RESULT" zizmor

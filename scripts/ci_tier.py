@@ -9,7 +9,14 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-DEEP_RISKS = {"cli-adoption-update", "generator", "release", "security"}
+RUNTIME_RISKS = {
+    "cli-adoption-update",
+    "generator",
+    "release",
+    "test-harness",
+    "verifier",
+}
+ADOPTION_RISKS = {"cli-adoption-update", "generator"}
 
 
 @dataclass(frozen=True)
@@ -26,6 +33,7 @@ class Plan:
     run_osv: bool
     run_zizmor: bool
     run_deep: bool
+    run_adoption_macos: bool
     upload_site: bool
 
 
@@ -280,7 +288,9 @@ def classify(
         run_osv=scheduled or "dependency" in scopes,
         run_zizmor=scheduled or "workflow" in scopes,
         run_deep=review_state != "draft"
-        and (event == "schedule" or bool(DEEP_RISKS.intersection(risks))),
+        and (event == "schedule" or bool(RUNTIME_RISKS.intersection(risks))),
+        run_adoption_macos=review_state != "draft"
+        and (event == "schedule" or bool(ADOPTION_RISKS.intersection(risks))),
         upload_site=(
             force_full
             or promotion
@@ -311,6 +321,7 @@ def write_outputs(path: Path, plan: Plan) -> None:
         "run_osv": str(plan.run_osv).lower(),
         "run_zizmor": str(plan.run_zizmor).lower(),
         "run_deep": str(plan.run_deep).lower(),
+        "run_adoption_macos": str(plan.run_adoption_macos).lower(),
         "upload_site": str(plan.upload_site).lower(),
     }
     with path.open("a", encoding="utf-8") as output:
@@ -332,7 +343,8 @@ def render_summary(plan: Plan) -> str:
         f"- Remote governance: `{plan.run_governance}`\n"
         f"- OSV: `{plan.run_osv}`\n"
         f"- Zizmor: `{plan.run_zizmor}`\n"
-        f"- Deep matrix: `{plan.run_deep}`\n"
+        f"- Runtime matrix: `{plan.run_deep}`\n"
+        f"- Adoption macOS: `{plan.run_adoption_macos}`\n"
         f"- Decision site artifact: `{plan.upload_site}`\n"
     )
 

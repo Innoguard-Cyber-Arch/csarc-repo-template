@@ -38,6 +38,7 @@ def run_required_aggregate(
         "FAST_RESULT": "success",
         "TIER": "fast",
         "RUN_DEEP": "false",
+        "RUN_ADOPTION_MACOS": "false",
         "RUN_GOVERNANCE": "false",
         "RUN_OSV": "false",
         "RUN_ZIZMOR": "false",
@@ -397,23 +398,26 @@ def test_issue_and_integrated_stages_apply_risk_differently() -> None:
 
 
 @pytest.mark.parametrize(
-    "path",
+    ("path", "runtime", "adoption"),
     [
-        "src/csarc_cli/cli.py",
-        "copier.yml",
-        ".github/workflows/release-template.yml",
-        "uv.lock",
+        ("src/csarc_cli/cli.py", True, True),
+        ("copier.yml", True, True),
+        (".github/workflows/release-template.yml", True, False),
+        ("uv.lock", False, False),
+        ("scripts/ci_tier.py", True, False),
+        ("scripts/promotion_gate.py", True, False),
     ],
 )
 @pytest.mark.parametrize("base", ["dev/m9-staged-ci", "main"])
 def test_ready_high_risk_work_runs_related_deep_checks(
-    path: str, base: str
+    path: str, runtime: bool, adoption: bool, base: str
 ) -> None:
-    """Run runtime and large checks for the risks they can expose."""
+    """Route only the runtime or adoption lane that can expose each risk."""
     plan = classify(
         "pull_request", base, "type/317-staged-verification", set(), [path]
     )
-    assert plan.run_deep
+    assert plan.run_deep is runtime
+    assert plan.run_adoption_macos is adoption
 
 
 def test_unrelated_issue_risks_do_not_start_the_deep_matrix() -> None:
@@ -427,6 +431,28 @@ def test_unrelated_issue_risks_do_not_start_the_deep_matrix() -> None:
             [path],
         )
         assert not plan.run_deep
+        assert not plan.run_adoption_macos
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ".github/workflows/ci.yml",
+        ".github/dependabot.yml",
+        "SECURITY.md",
+        "scripts/promotion_gate.py",
+    ],
+)
+def test_router_security_and_promotion_do_not_start_macos(path: str) -> None:
+    """Keep adoption E2E exclusive to generator and CLI adoption risks."""
+    plan = classify(
+        "pull_request",
+        "dev/m9-staged-ci",
+        "type/317-staged-verification",
+        set(),
+        [path],
+    )
+    assert not plan.run_adoption_macos
 
 
 @pytest.mark.parametrize(
@@ -466,7 +492,8 @@ def test_schedule_and_release_run_the_deep_matrix() -> None:
         [".release-please-manifest.json"],
     )
     assert scheduled.tier == release.tier == "full"
-    assert scheduled.run_deep and release.run_deep
+    assert scheduled.run_deep and scheduled.run_adoption_macos
+    assert release.run_deep and not release.run_adoption_macos
     assert all(
         (
             scheduled.run_governance,
@@ -528,7 +555,14 @@ def test_required_aggregate_is_unconditional_and_routing_is_job_level() -> None:
     assert aggregate["run"].count("require_routed") >= 4
     if "adoption-macos" in jobs:
         assert jobs["adoption-macos"]["if"] == (
-            "${{ needs.fast.outputs.run_deep == 'true' }}"
+            "${{ needs.fast.outputs.run_adoption_macos == 'true' }}"
+        )
+        assert aggregate["env"]["RUN_ADOPTION_MACOS"] == (
+            "${{ needs.fast.outputs.run_adoption_macos }}"
+        )
+        assert (
+            'require_routed "$RUN_ADOPTION_MACOS" '
+            '"$ADOPTION_MACOS_RESULT"' in aggregate["run"]
         )
     if "python-compatibility" in jobs:
         assert jobs["python-compatibility"]["if"] == (
@@ -541,18 +575,6 @@ def test_required_aggregate_is_unconditional_and_routing_is_job_level() -> None:
             'require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT"'
             in aggregate["run"]
         )
-
-
-def test_body_edits_validate_policy_without_restarting_product_ci() -> None:
-    """Keep checklist validation separate from exact-tree verification."""
-    ci_source = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
-    policy_source = (
-        ROOT / ".github" / "workflows" / "pr-policy.yml"
-    ).read_text()
-    ci_types = ci_source.split("types: [", 1)[1].split("]", 1)[0]
-    policy_types = policy_source.split("types: [", 1)[1].split("]", 1)[0]
-    assert "edited" not in ci_types.split(", ")
-    assert "edited" in policy_types.split(", ")
 
 
 def test_required_aggregate_accepts_explicit_routing() -> None:
@@ -569,6 +591,8 @@ def test_required_aggregate_accepts_explicit_routing() -> None:
         ("REVIEW_STATE", "unknown"),
         ("RUN_DEEP", ""),
         ("RUN_DEEP", "tru"),
+        ("RUN_ADOPTION_MACOS", ""),
+        ("RUN_ADOPTION_MACOS", "tru"),
         ("RUN_GOVERNANCE", ""),
         ("RUN_OSV", "tru"),
         ("RUN_ZIZMOR", "0"),
@@ -585,13 +609,18 @@ def test_required_aggregate_rejects_unknown_routing_outputs(
     )
 
 
-def test_pr_metadata_edits_recompute_routing() -> None:
-    """Re-run routing when a pull request is retargeted or edited."""
-    workflow = yaml.safe_load(
+def test_pr_metadata_edits_validate_without_restarting_product_ci() -> None:
+    """Keep metadata validation separate from exact-tree verification."""
+    ci_workflow = yaml.safe_load(
         (ROOT / ".github" / "workflows" / "ci.yml").read_text()
     )
-    triggers = workflow.get("on", workflow.get(True))
-    assert "edited" in triggers["pull_request"]["types"]
+    policy_workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "pr-policy.yml").read_text()
+    )
+    ci_triggers = ci_workflow.get("on", ci_workflow.get(True))
+    policy_triggers = policy_workflow.get("on", policy_workflow.get(True))
+    assert "edited" not in ci_triggers["pull_request"]["types"]
+    assert "edited" in policy_triggers["pull_request"]["types"]
 
 
 def test_governance_checks_the_candidate_revision() -> None:

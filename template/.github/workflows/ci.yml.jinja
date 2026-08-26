@@ -44,6 +44,7 @@ jobs:
       run_osv: {% raw %}${{ steps.plan.outputs.run_osv }}{% endraw %}
       run_zizmor: {% raw %}${{ steps.plan.outputs.run_zizmor }}{% endraw %}
       run_deep: {% raw %}${{ steps.plan.outputs.run_deep }}{% endraw %}
+      run_adoption_macos: {% raw %}${{ steps.plan.outputs.run_adoption_macos }}{% endraw %}
     steps:
       - name: Start timing
         id: started
@@ -404,6 +405,7 @@ jobs:
           RUN_OSV: {% raw %}${{ needs.fast.outputs.run_osv }}{% endraw %}
           RUN_ZIZMOR: {% raw %}${{ needs.fast.outputs.run_zizmor }}{% endraw %}
           RUN_DEEP: {% raw %}${{ needs.fast.outputs.run_deep }}{% endraw %}
+          RUN_ADOPTION_MACOS: {% raw %}${{ needs.fast.outputs.run_adoption_macos }}{% endraw %}
           REVIEW_STATE: {% raw %}${{ needs.fast.outputs.review_state }}{% endraw %}
 {%- if use_reusable_workflow %}
           FULL_RESULT: {% raw %}${{ needs.full.result }}{% endraw %}
@@ -453,6 +455,7 @@ jobs:
             fi
           }
           require_boolean "$RUN_DEEP" run_deep
+          require_boolean "$RUN_ADOPTION_MACOS" run_adoption_macos
           require_boolean "$RUN_GOVERNANCE" run_governance
           require_boolean "$RUN_OSV" run_osv
           require_boolean "$RUN_ZIZMOR" run_zizmor
