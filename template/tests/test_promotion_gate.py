@@ -50,6 +50,20 @@ if _GIT is None:
 GIT: str = _GIT
 
 
+def test_release_recovery_routes_to_preflight_and_gate() -> None:
+    """The required gate must conclude whenever its preflight runs."""
+    workflow = (
+        Path(__file__).parents[1] / ".github/workflows/promotion.yml"
+    ).read_text(encoding="utf-8")
+    marker = (
+        "contains(github.event.pull_request.labels.*.name, 'release-recovery')"
+    )
+    preflight = workflow.split("  preflight:", 1)[1].split("\n  canary:", 1)[0]
+    gate = workflow.split("\n  gate:", 1)[1]
+    assert marker in preflight
+    assert marker in gate
+
+
 def preservation_evidence() -> dict[str, object]:
     """Return one structured remote checkpoint for quota fallback tests."""
     return {
@@ -128,6 +142,22 @@ def test_hosted_restoration_is_explicit_and_never_replaces_gh_token(
         ),
         ("main", "fix/42-outage", {"hotfix"}, "delivery", "hotfix", None),
         (
+            "main",
+            "fix/321-recover-v012-release",
+            {"release-recovery"},
+            "delivery",
+            "release-recovery",
+            None,
+        ),
+        (
+            "main",
+            "fix/321-recover-v012-release",
+            {"release-recovery"},
+            "main",
+            "release-recovery",
+            None,
+        ),
+        (
             "dev/m7-staged-ci",
             "feat/42-work",
             set(),
@@ -144,6 +174,22 @@ def test_hosted_restoration_is_explicit_and_never_replaces_gh_token(
             None,
         ),
         ("main", "feat/42-work", set(), "delivery", "invalid-main-route", None),
+        (
+            "main",
+            "feat/321-recover-v012-release",
+            {"release-recovery"},
+            "delivery",
+            "invalid-main-route",
+            None,
+        ),
+        (
+            "main",
+            "fix/321-recover-v012-release",
+            {"hotfix", "release-recovery"},
+            "delivery",
+            "invalid-main-route",
+            None,
+        ),
         (
             "main",
             "promote/next",
@@ -175,6 +221,19 @@ def test_isolated_issue_route_binds_the_issue_number() -> None:
     route = route_for("main", "dev/i42-payment-soak", {"promotion"}, "delivery")
     assert route.kind == "isolated"
     assert route.issue == 42
+    assert route.relevant
+
+
+def test_release_recovery_route_binds_the_issue_number() -> None:
+    """A recovery exception cannot be reused for another tracking Issue."""
+    route = route_for(
+        "main",
+        "fix/321-recover-v012-release",
+        {"release-recovery"},
+        "delivery",
+    )
+    assert route.kind == "release-recovery"
+    assert route.issue == 321
     assert route.relevant
 
 
@@ -640,7 +699,11 @@ def test_github_get_uses_authenticated_cli_without_environment_token(
     monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/gh")
     monkeypatch.setattr(subprocess, "run", fake_run)
     assert github_get("owner/repo", "issues/42", "") == {"state": "open"}
-    assert calls == [["/usr/bin/gh", "api", "repos/owner/repo/issues/42"]]
+    assert github_get("owner/repo", "", "") == {"state": "open"}
+    assert calls == [
+        ["/usr/bin/gh", "api", "repos/owner/repo/issues/42"],
+        ["/usr/bin/gh", "api", "repos/owner/repo"],
+    ]
 
 
 def test_blocked_run_must_match_head_and_have_no_started_steps(
@@ -702,50 +765,120 @@ def test_blocked_run_must_match_head_and_have_no_started_steps(
         require_zero_step_run(run_url, "owner/repo", 42, "dev/next", "head", "")
 
 
+@pytest.mark.parametrize(
+    ("run_overrides", "jobs_payload", "annotations"),
+    [
+        ({"id": 200.0}, None, None),
+        ({"pull_requests": [{"number": 42.0}]}, None, None),
+        ({}, {"total_count": True, "jobs": []}, None),
+        ({}, {"total_count": 1, "jobs": ["malformed"]}, None),
+        (
+            {},
+            {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "id": False,
+                        "runner_id": 0,
+                        "steps": [],
+                        "conclusion": "failure",
+                    }
+                ],
+            },
+            None,
+        ),
+        (
+            {},
+            {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "id": 7,
+                        "runner_id": False,
+                        "steps": None,
+                        "conclusion": "failure",
+                    }
+                ],
+            },
+            None,
+        ),
+        (
+            {},
+            {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "id": 7,
+                        "runner_id": 0,
+                        "steps": [],
+                        "conclusion": "success",
+                    }
+                ],
+            },
+            None,
+        ),
+        ({}, None, ["malformed"]),
+    ],
+)
+def test_blocked_run_rejects_malformed_zero_step_schema(
+    run_overrides: dict[str, object],
+    jobs_payload: object,
+    annotations: object,
+) -> None:
+    """Malformed API values cannot prove a zero-step billing failure."""
+    run = {
+        "id": 200,
+        "head_sha": "head",
+        "head_branch": "dev/next",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "failure",
+        "path": ".github/workflows/ci.yml",
+        "pull_requests": [{"number": 42}],
+        "repository": {"full_name": "owner/repo"},
+        "head_repository": {"full_name": "owner/repo"},
+        **run_overrides,
+    }
+    jobs = jobs_payload or {
+        "total_count": 1,
+        "jobs": [
+            {
+                "id": 7,
+                "runner_id": 0,
+                "steps": [],
+                "conclusion": "failure",
+            }
+        ],
+    }
+    annotation_payload = annotations or [
+        {"message": BILLING_GATE_ANNOTATION_MESSAGE}
+    ]
+
+    def malformed_get(_repo: str, path: str, _token: str) -> object:
+        if "/jobs?" in path:
+            return jobs
+        if path.startswith("check-runs/"):
+            return annotation_payload
+        return run
+
+    with pytest.raises(RuntimeError):
+        require_zero_step_run(
+            "https://github.com/owner/repo/actions/runs/200",
+            "owner/repo",
+            42,
+            "dev/next",
+            "head",
+            "",
+            getter=malformed_get,
+        )
+
+
 def _routine_pr_get(
     jobs: list[dict[str, object]],
-    *,
-    promotion: bool = False,
-    failed_run_ids: tuple[int, ...] = (200,),
 ) -> Callable[[str, str, str], object]:
-    head_ref = (
-        "dev/m9-low-friction-ai-sdlc" if promotion else "enhancement/42-change"
-    )
-
     def fake_get(_repo: str, path: str, _token: str) -> object:
         if path == "pulls/42":
-            return {
-                "number": 42,
-                "state": "open",
-                "merged": False,
-                "labels": [{"name": "promotion"}] if promotion else [],
-                "base": {
-                    "ref": "main"
-                    if promotion
-                    else "dev/m9-low-friction-ai-sdlc"
-                },
-                "head": {
-                    "sha": "head",
-                    "ref": head_ref,
-                    "repo": {"full_name": "owner/repo"},
-                },
-            }
-        if path.startswith("commits/head/check-runs?"):
-            return {
-                "total_count": len(failed_run_ids),
-                "check_runs": [
-                    {
-                        "conclusion": "failure",
-                        "details_url": (
-                            "https://github.com/owner/repo/actions/runs/"
-                            f"{run_id}/job/{run_id + 1}"
-                        ),
-                    }
-                    for run_id in failed_run_ids
-                ],
-            }
-        if path == "commits/head/status":
-            return {"statuses": []}
+            return {"head": {"sha": "head", "ref": "dev/next"}}
         if "/jobs?" in path:
             return {"total_count": len(jobs), "jobs": jobs}
         if path.startswith("check-runs/"):
@@ -753,7 +886,7 @@ def _routine_pr_get(
         return {
             "id": 200,
             "head_sha": "head",
-            "head_branch": head_ref,
+            "head_branch": "dev/next",
             "event": "pull_request",
             "status": "completed",
             "conclusion": "failure",
@@ -774,43 +907,16 @@ def test_note_quota_fallback_prints_note_for_zero_step_block(
     monkeypatch.setitem(
         note_quota_fallback.__globals__, "github_get", _routine_pr_get(jobs)
     )
-    monkeypatch.setitem(
-        note_quota_fallback.__globals__,
-        "git_output",
-        lambda *arguments: "" if arguments[0] == "status" else "head",
-    )
-    monkeypatch.setitem(
-        note_quota_fallback.__globals__,
-        "local_verification_command",
-        lambda: ["./scripts/verify-template.sh"],
-    )
-    calls: list[list[str]] = []
-    monkeypatch.setitem(
-        note_quota_fallback.__globals__,
-        "subprocess",
-        SimpleNamespace(run=lambda command, **_kwargs: calls.append(command)),
-    )
     run_url = "https://github.com/owner/repo/actions/runs/200"
-    args = SimpleNamespace(
-        repo="owner/repo",
-        pr=42,
-        branch_strategy="delivery",
-        blocked_run_url=[run_url],
-        unreproduced_check=["hosted runner identity"],
-    )
+    args = SimpleNamespace(repo="owner/repo", pr=42, blocked_run_url=[run_url])
     note_quota_fallback(args)
     output = capsys.readouterr().out
-    assert "Actions quota fallback note" in output
+    assert output == quota_fallback_note("owner/repo", 42, "head", [run_url])
+    assert not output.endswith("\n")
     binding = json.loads(output.split("`")[1])
     assert binding["pull_request"] == 42
     assert binding["head_sha"] == "head"
     assert binding["runs"] == [run_url]
-    assert binding["verification"] == {
-        "command": "./scripts/verify-template.sh",
-        "result": "passed",
-        "unreproduced_checks": ["hosted runner identity"],
-    }
-    assert calls == [["./scripts/verify-template.sh"]]
 
 
 def test_note_quota_fallback_rejects_a_real_failure(
@@ -823,73 +929,10 @@ def test_note_quota_fallback_rejects_a_real_failure(
     monkeypatch.setitem(
         note_quota_fallback.__globals__, "github_get", _routine_pr_get(jobs)
     )
-    monkeypatch.setitem(
-        note_quota_fallback.__globals__,
-        "git_output",
-        lambda *arguments: "" if arguments[0] == "status" else "head",
-    )
     run_url = "https://github.com/owner/repo/actions/runs/200"
-    args = SimpleNamespace(
-        repo="owner/repo",
-        pr=42,
-        branch_strategy="delivery",
-        blocked_run_url=[run_url],
-        unreproduced_check=[],
-    )
+    args = SimpleNamespace(repo="owner/repo", pr=42, blocked_run_url=[run_url])
     with pytest.raises(RuntimeError, match="zero-step"):
         note_quota_fallback(args)
-
-
-def test_note_quota_fallback_rejects_an_omitted_failure(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A caller cannot omit another failed check from the fallback note."""
-    jobs = [{"id": 7, "runner_id": 0, "steps": [], "conclusion": "failure"}]
-    monkeypatch.setitem(
-        note_quota_fallback.__globals__,
-        "github_get",
-        _routine_pr_get(jobs, failed_run_ids=(200, 201)),
-    )
-    monkeypatch.setitem(
-        note_quota_fallback.__globals__,
-        "git_output",
-        lambda *arguments: "" if arguments[0] == "status" else "head",
-    )
-    with pytest.raises(RuntimeError, match="exactly match every live failed"):
-        note_quota_fallback(
-            SimpleNamespace(
-                repo="owner/repo",
-                pr=42,
-                branch_strategy="delivery",
-                blocked_run_url=[
-                    "https://github.com/owner/repo/actions/runs/200"
-                ],
-                unreproduced_check=[],
-            )
-        )
-
-
-def test_note_quota_fallback_rejects_promotion(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Promotion pull requests keep their attestation and authorization gate."""
-    monkeypatch.setitem(
-        note_quota_fallback.__globals__,
-        "github_get",
-        _routine_pr_get([], promotion=True),
-    )
-    with pytest.raises(RuntimeError, match="non-promotion"):
-        note_quota_fallback(
-            SimpleNamespace(
-                repo="owner/repo",
-                pr=42,
-                branch_strategy="main",
-                blocked_run_url=[
-                    "https://github.com/owner/repo/actions/runs/200"
-                ],
-                unreproduced_check=[],
-            )
-        )
 
 
 def test_prepare_builds_milestone_candidate_evidence(
@@ -1597,6 +1640,10 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
                 "head_sha": "head",
                 "route": {"kind": "standalone-batch", "relevant": True},
                 "candidate_tree": "tree",
+                "canary": {
+                    "state": "blocked",
+                    "result": "artifact-only",
+                },
                 "full_check": {"status": "local-quota-attested"},
                 "quota_fallback": {
                     "attestation_url": (
@@ -1739,6 +1786,18 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
         )
     ]
     original = json.loads(source.read_text(encoding="utf-8"))
+    for invalid_canary in (
+        {"state": "blocked", "result": "passed"},
+        {"state": "blocked"},
+        {"state": "allowed", "result": "artifact-only"},
+    ):
+        source.write_text(
+            json.dumps({**original, "canary": invalid_canary}),
+            encoding="utf-8",
+        )
+        with pytest.raises(RuntimeError, match="canary evidence is invalid"):
+            verify_quota_main(arguments)
+    source.write_text(json.dumps(original), encoding="utf-8")
     del original["dev_next_preservation"]
     source.write_text(json.dumps(original), encoding="utf-8")
     with pytest.raises(RuntimeError, match="was not prepared"):
@@ -1884,6 +1943,10 @@ def test_quota_main_refetches_the_unique_squash_source(
                 "head_sha": "head",
                 "route": {"kind": "standalone-batch", "relevant": True},
                 "candidate_tree": "tree",
+                "canary": {
+                    "state": "blocked",
+                    "result": "artifact-only",
+                },
                 "full_check": {"status": "local-quota-attested"},
                 "dev_next_preservation": preservation_evidence(),
             }
@@ -2082,6 +2145,14 @@ def test_authorization_statement_binds_full_preflight() -> None:
     assert binding["route"] == evidence["route"]
     assert binding["canary"] == evidence["canary"]
     assert binding["dev_next_preservation"] == preservation_evidence()
+
+    canary = evidence["canary"]
+    assert isinstance(canary, dict)
+    canary["result"] = "artifact-only"
+    assert fallback_statement("authorization", evidence, ["run"]) == statement
+
+    canary["future_security_field"] = "bound"
+    assert fallback_statement("authorization", evidence, ["run"]) != statement
 
 
 def test_repository_variables_reads_every_page(

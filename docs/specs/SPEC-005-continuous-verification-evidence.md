@@ -27,7 +27,7 @@ tracking: none
 - [x] Python 驗證涵蓋精確最低 patch 與宣告範圍內每個 feature release；TypeScript、CI-only 與 mixed profiles 各自驗證真實輸出。
 - [x] Coverage 作為未測程式碼訊號，不被描述成品質分數；門檻依風險與缺陷證據調整。
 - [x] Workflow、permission、GitHub API 與 release 行為以 live probe 或 consuming-repo pilot 補足靜態 fixture，且清楚標示未驗證部分。
-- [x] Actions quota fallback 只接受機械式確認的 zero-step billing block 與精確 SHA；一般 Issue PR 在已確認 included minutes 耗盡的 standing Alpha 政策下不需逐張 human 授權，promotion 才另要求 human attestation／authorization、綁定 candidate/main tree 並保持不可發布，且不能取代 release、deployment、secret 或 provenance 控制。
+- [x] Actions quota fallback 只接受 human 確認的免費額度耗盡、零 step 啟動與精確 SHA；promotion 另綁定 candidate/main tree 並保持不可發布，不能取代 release、deployment、secret 或 provenance 控制。
 - [x] Runner-minute 降幅保留為明確的規劃估算；hosted duration 與 `ci-plan` 是 runner 可用時的 optional telemetry。Hosted telemetry 不可用不阻塞產品交付，zero-step 也不記成成功。
 - [x] 修 bug 時新增會在修正前失敗的最小 regression；不要求保存每一次 red／green 暫態。
 

@@ -52,6 +52,12 @@ _tasks:
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language in ['typescript', 'python-typescript'] }}"
   - command: "uv run --no-project python scripts/render_site.py"
 _migrations:
+  - command:
+      - "{{ _copier_python }}"
+      - "-c"
+      - "import hashlib, pathlib, shutil, sys; target = pathlib.Path('tests/test_spec_to_issue.py'); expected = 'cb936cab1f2e239b28c1f9d59edb714a7c8758633f95cbb98989571fa3b2a5fa'; current = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else ''; shutil.copy2(sys.argv[1], target) if current == expected else None"
+      - "{{ _copier_conf.src_path }}/template/tests/test_spec_to_issue.py"
+    when: "{{ _stage == 'after' }}"
   - command: "uv run --no-project python scripts/render_site.py"
     when: "{{ _stage == 'after' }}"
 _message_after_copy: |
@@ -144,6 +150,13 @@ project_run_command:
   help: Shortest command that successfully starts or invokes the product
   default: "{% if language == 'python' %}uv run python -c 'import {{ package_name }}'{% elif language == 'typescript' %}pnpm run build{% elif language == 'python-typescript' %}uv run python -c 'import {{ package_name }}' && pnpm run build{% else %}./scripts/verify{% endif %}"
   validator: "{% if not project_run_command | default('', true) | trim or project_run_command | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in project_run_command %}Enter a working product command without placeholder text.{% endif %}"
+
+project_verification_hook:
+  type: str
+  help: Optional repository-relative executable run after the CSARC verification
+  default: ""
+  when: "{{ project_mode == 'existing' }}"
+  validator: "{% set hook = project_verification_hook | default('', true) | trim %}{% if hook and (hook != project_verification_hook or hook.startswith('/') or '..' in hook.split('/') or not (hook | regex_search('^[A-Za-z0-9._/-]+$'))) %}Use a safe repository-relative executable path without spaces, shell syntax, or parent traversal.{% endif %}"
 
 repository_url:
   type: str

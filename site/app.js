@@ -266,7 +266,7 @@ description: 英文標題摘要重點，內文用中文定義改動
 body:
   - id: kind
     type: dropdown
-    options: [bug, enhancement, documentation, duplicate]
+    options: [feature, task, bug, documentation, duplicate]
   - id: problem
     type: textarea
   - id: acceptance
@@ -284,16 +284,16 @@ contact_links: []
 # issue-triage.yml assigns the author and work label.`
         },
         {
-          title: '只有可端到端驗收的 story 才建立 Milestone',
-          goal: 'Milestone 是可選的 1..N Issues 成果層，不靠工作數量決定，也不重複掛 PR。',
-          summary: 'description 以 Problem、Outcome、Acceptance criteria、Plan、Out of scope、Verification 與 References 寫清楚 story；spec 預設同步 Issue，只有 `tracking: story` 同步 Milestone。',
+          title: 'Feature 管 story，Milestone 管有期限的 delivery',
+          goal: 'Feature parent 連接可獨立交付的 Task／Bug subissues；Milestone 只在有真實 due date 時建立。',
+          summary: '`tracking: story` 同步 Feature parent；Milestone 掛 leaf Issues 與其 PR，不掛 parent。dependency 只表達真實阻塞，Projects 預設關閉。',
           file: 'docs/milestone-description.md＋scripts/spec_to_issue.py',
           code: `---
 id: SPEC-001
 priority: P1
 estimate: 1-3 days
 status: proposed
-# Optional: create or update one Milestone instead of one Issue.
+# Optional: create or update one Feature parent instead of one Task.
 tracking: story
 ---
 
@@ -310,7 +310,7 @@ tracking: story
         {
           title: '工作合併後才以最小權限同步追蹤與生命週期',
           goal: 'PR 內容不直接取得寫入權限；同一 spec ID 不重複開單，並依最新遠端狀態收尾 story。',
-          summary: '`spec-to-issue.yml` 在整合分支同步 Issue 或 Milestone；`milestone-lifecycle.yml` 只在 Issues 全關且 acceptance criteria 全勾選時關閉 Milestone，有 open work 或未完成 criterion 時重開。',
+          summary: '`spec-to-issue.yml` 在整合分支同步 Task 或 Feature Issue；`milestone-policy.yml` 要求 due date，`milestone-lifecycle.yml` 只在 leaf Issues 全關且 acceptance criteria 全勾選時關閉 Milestone。',
           file: 'spec-to-issue.yml＋milestone-lifecycle.yml',
           code: `on:
   push:
@@ -501,22 +501,33 @@ matrix:
   language: ["python", "javascript-typescript"]`
         },
         {
-          title: 'tag 發布時建立交付成品、SHA-256 與 CycloneDX SBOM',
-          goal: 'anchore/sbom-action 以 Syft 盤點內容；來源證明依專案可見度決定預設值。',
-          summary: '依 profile 打包並計算 SHA-256；先把真正成品解壓到隔離目錄，再由 Syft 產生 CycloneDX。`components` 為空就讓 workflow 失敗；tag、commit 與 workflow run metadata 連同成品附加到 GitHub Release。Copier 的 `project_visibility` 選 public 時，`enable_release_attestations` 預設開啟，`publish-evidence` job 自動取得 `id-token: write`／`attestations: write` 並執行兩次 `actions/attest`；private／internal 維持現行明確 opt-in、預設關閉。',
+          title: '缺失版本用受審查的 release recovery 補齊',
+          goal: '已合併但沒有 Release 的版本不繞過主線門禁，也不重跑或偽造舊證據。',
+          summary: '同號 `fix/*`、`fix` title 與 `release-recovery` label 才能直接進 main；候選仍跑 full 與 promotion。Root 發布先產生精確綁定 tag、commit、artifact digest 的 SPDX 2.3 SBOM、manifest 與 provenance，下載重驗成功後才解除 draft，發布後再驗 immutable state 與 attestation。',
+          file: '.github/workflows/release-template.yml＋scripts/release_assets.py',
+          code: `release-recovery -> full verify + promotion
+draft assets -> SPDX + manifest + provenance
+download + verify -> publish immutable -> verify again`
+        },
+        {
+          title: 'exact tag 發布時建立交付成品、SHA-256 與 SPDX SBOM',
+          goal: 'anchore/sbom-action 以固定 Syft 版本盤點內容；manifest 將成品、SBOM 與來源身分綁定。',
+          summary: '依 profile 打包並計算 SHA-256；Python／TypeScript 先建立不含開發工具的隔離 runtime，CI-only 則使用 exact-tag source，再由 Syft v1.50.0 產生 SPDX JSON。成品先上傳 mutable draft、下載至全新空目錄驗證，發布後再從 immutable Release 全新下載驗證；再現性依 digest／manifest，不要求 Syft JSON byte-identical。Copier 的 `project_visibility` 選 public 時，`enable_release_attestations` 預設開啟，並使用專用的 build provenance 與 SBOM attestation actions；private／internal 維持明確 opt-in、預設關閉。',
           file: '.github/workflows/release.yml',
           code: `- run: uv build               # Python
 - run: pnpm run build && pnpm pack --pack-destination dist # TypeScript
 - run: shasum -a 256 dist/* > SHA256SUMS
-- name: Extract release artifacts
+- name: Materialize production runtime
   run: |
     mkdir -p "\${RUNNER_TEMP}/sbom-root"
-    # Extract each archive into the isolated SBOM input directory.
+    UV_PROJECT_ENVIRONMENT="\${RUNNER_TEMP}/sbom-root/python-runtime" \\
+      uv sync --locked --no-dev --no-editable
 - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
   with:
     path: \${{ runner.temp }}/sbom-root
-    format: cyclonedx-json
-    output-file: sbom.cdx.json`
+    format: spdx-json
+    output-file: release-bundle/sbom.spdx.json
+    syft-version: v1.50.0`
         },
         {
           title: '有 Containerfile 才啟用容器驗證與 GHCR 交付',

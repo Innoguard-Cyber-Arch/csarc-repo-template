@@ -113,6 +113,11 @@ def classify(
         and (head.startswith("dev/") or "promotion" in labels)
     )
     hotfix = event == "pull_request" and base == "main" and "hotfix" in labels
+    recovery = (
+        event == "pull_request"
+        and base == "main"
+        and "release-recovery" in labels
+    )
     review_state = (
         ("draft" if event == "pull_request" and draft else "ready")
         if event == "pull_request"
@@ -127,8 +132,9 @@ def classify(
         )
     elif promotion:
         tier, reason = "full", "delivery promotion"
-    elif hotfix:
-        tier, reason = "full", "hotfix to main"
+    elif hotfix or recovery:
+        tier = "full"
+        reason = "hotfix to main" if hotfix else "release recovery to main"
     elif event == "merge_group":
         tier, reason = "full", "merge queue candidate"
     elif event == "push":

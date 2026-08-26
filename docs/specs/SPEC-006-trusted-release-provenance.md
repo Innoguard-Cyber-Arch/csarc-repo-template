@@ -25,7 +25,7 @@ tracking: none
 - [x] PR 只宣告 SemVer intent；精確版本由已合併 default-branch history 與 promotion boundary 決定。
 - [x] Tagged source、版本欄位、CHANGELOG、prompt 與 provenance 指向同一版本與 commit。
 - [x] Root GitHub Release 從已驗證 tagged source 建置 wheel／sdist；沒有實際 root registry 消費者時不維護跨 registry 發布路徑。
-- [x] Release 保存 distributions、SHA-256、非空 CycloneDX SBOM 與 source metadata；啟用時加上 GitHub artifact attestations。
+- [x] Release 保存 distributions／來源封存檔、SHA-256、固定 Syft 版本產生的 SPDX JSON SBOM 與 source metadata；manifest 以 digest 綁定 exact tag，不要求不同執行間的 Syft JSON byte-identical；啟用時加上 GitHub artifact attestations。
 - [x] Consumer 或 registry publishing 在使用成品前驗 repository、tag、source／artifact digest 與 signer workflow identity。
 - [x] PyPI／npm 只供生成專案 opt-in OIDC trusted publishing；root CLI 不發布到 PyPI，baseline 不要求長效 token。
 - [x] Dependency 與 source safety 由 lockfile、Dependabot、等待政策、publisher trust、OSV、Gitleaks 與 plan-aware CodeQL 分工，不用一項工具冒充全部供應鏈控制。

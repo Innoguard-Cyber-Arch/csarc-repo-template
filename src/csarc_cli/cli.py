@@ -61,6 +61,15 @@ class CliError(RuntimeError):
     """An expected command error with an actionable message."""
 
 
+class ProjectVerificationError(CliError):
+    """A verification failure with precise project-hook evidence."""
+
+    def __init__(self, message: str, hook: dict[str, object]) -> None:
+        """Preserve the failure message and structured hook result."""
+        super().__init__(message)
+        self.hook = hook
+
+
 @dataclass(frozen=True)
 class Revision:
     """A reviewed template revision resolved to an immutable commit."""
@@ -651,6 +660,95 @@ def read_copier_answers(path: Path) -> dict[str, object]:
     }
 
 
+def project_verification_configuration(
+    target: Path, answers: Mapping[str, object] | None = None
+) -> dict[str, object]:
+    """Describe the explicit project hook or the legacy fallback."""
+    if answers is None:
+        answers_path = target / ".copier-answers.yml"
+        answers = (
+            read_copier_answers(answers_path) if answers_path.is_file() else {}
+        )
+    configured = answers.get("project_verification_hook", "")
+    if configured is not None and configured != "":
+        return {
+            "configured": True,
+            "path": configured,
+            "source": "explicit",
+        }
+    fallback = target / "scripts" / "verify-product"
+    if fallback.is_file() and os.access(fallback, os.X_OK):
+        return {
+            "configured": True,
+            "path": "scripts/verify-product",
+            "source": "fallback",
+        }
+    return {"configured": False, "path": None, "source": "none"}
+
+
+def project_verification_evidence(
+    configuration: Mapping[str, object], result: str, reason: str
+) -> dict[str, object]:
+    """Return stable, precise evidence for one configured project hook."""
+    if result not in {"passed", "failed", "not-run"}:
+        raise ValueError(f"Unsupported project verification result: {result}")
+    return {**configuration, "reason": reason, "result": result}
+
+
+def validated_project_verification_hook(
+    target: Path, configuration: Mapping[str, object]
+) -> Path | None:
+    """Resolve one executable hook without allowing repository escape."""
+    raw_path = configuration.get("path")
+    if raw_path is None:
+        return None
+    if not isinstance(raw_path, str):
+        raise CliError("Project verification hook must be a path string.")
+    relative = Path(raw_path)
+    if (
+        not raw_path
+        or raw_path != raw_path.strip()
+        or relative.is_absolute()
+        or ".." in relative.parts
+        or re.fullmatch(r"[A-Za-z0-9._/-]+", raw_path) is None
+    ):
+        raise CliError(
+            "Project verification hook must be a safe repository-relative "
+            "executable path without shell syntax or parent traversal."
+        )
+    try:
+        root = target.resolve(strict=True)
+        hook = (target / relative).resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise CliError(
+            f"Project verification hook does not exist: {raw_path}"
+        ) from error
+    if hook != root and root not in hook.parents:
+        raise CliError(
+            f"Project verification hook escapes the repository: {raw_path}"
+        )
+    if not hook.is_file():
+        raise CliError(
+            f"Project verification hook is not a regular file: {raw_path}"
+        )
+    if not os.access(hook, os.X_OK):
+        raise CliError(
+            f"Project verification hook is not executable: {raw_path}"
+        )
+    canonical = target / "scripts" / "verify"
+    try:
+        if canonical.exists() and os.path.samefile(hook, canonical):
+            raise CliError(
+                "Project verification hook must not resolve to the canonical "
+                f"scripts/verify command: {raw_path}"
+            )
+    except OSError as error:
+        raise CliError(
+            f"Cannot compare project verification hook identity: {raw_path}"
+        ) from error
+    return hook
+
+
 def file_fingerprint(path: Path) -> str:
     """Hash managed content and the file traits Copier can reproduce."""
     digest = hashlib.sha256()
@@ -1029,6 +1127,7 @@ def report_settings(data: dict[str, object]) -> str:
         "project_mode",
         "project_name",
         "project_slug",
+        "project_verification_hook",
         "project_visibility",
         "pypi_environment",
         "python_min_version",
@@ -1098,13 +1197,21 @@ def adoption_report_markdown(
             if isinstance(owner, dict)
             else "unknown"
         )
+        raw_hook = adoption.get("project_verification_hook")
+        hook = raw_hook if isinstance(raw_hook, dict) else {}
+        hook_path = hook.get("path") or "(none)"
         lines[12:12] = [
             f"- Target HEAD: `{markdown_code(adoption.get('target_head'))}`",
             "- Working tree: "
             + ("clean" if adoption.get("clean") else "dirty; review only"),
             f"- CODEOWNER verification: `{markdown_code(owner_state)}`",
-            "- Project verification hook: `"
-            f"{markdown_code(adoption.get('project_verification_hook'))}`",
+            f"- Project verification hook: `{markdown_code(hook_path)}`",
+            "- Project verification hook configured: `"
+            f"{str(hook.get('configured') is True).lower()}`",
+            "- Project verification result: `"
+            f"{markdown_code(hook.get('result'))}`",
+            "- Project verification reason: `"
+            f"{markdown_code(hook.get('reason'))}`",
             "- Candidate verification: `"
             f"{markdown_code(adoption.get('verification'))}`",
         ]
@@ -1180,6 +1287,7 @@ def draw_adoption_pdf(
     data: dict[str, object],
     plan: Plan,
     generated_at: str,
+    adoption: Mapping[str, object] | None = None,
 ) -> None:
     """Draw a concise, selectable-text adoption decision PDF."""
     page_width, page_height = A4
@@ -1214,6 +1322,14 @@ def draw_adoption_pdf(
     document.setFont("Helvetica", 8)
     document.drawString(62, page_height - 135, pdf_text(reason))
 
+    raw_hook = (
+        adoption.get("project_verification_hook")
+        if adoption is not None
+        else None
+    )
+    hook = raw_hook if isinstance(raw_hook, dict) else {}
+    hook_path = hook.get("path") or "(none)"
+    hook_result = hook.get("result") or "not-run"
     metadata = (
         ("Target", target),
         ("Repository", repository.repository or "(none)"),
@@ -1228,6 +1344,10 @@ def draw_adoption_pdf(
             "verified immutable release" if revision.verified else "UNVERIFIED",
         ),
         ("Profile", data.get("language", "unknown")),
+        ("Project hook", hook_path),
+        ("Hook configured", str(hook.get("configured") is True).lower()),
+        ("Hook result", hook_result),
+        ("Hook reason", hook.get("reason") or "(none)"),
     )
     y = page_height - 178
     for label, value in metadata:
@@ -1563,6 +1683,7 @@ def write_adoption_reports(
                 plan.answers,
                 plan.files,
                 generated_at,
+                plan.adoption,
             )
             pdf.flush()
         pdf_temporary.replace(pdf_path)
@@ -1659,6 +1780,21 @@ def print_plan(plan: ResolvedPlan) -> None:
                 "CODEOWNER verification: "
                 f"{owner.get('state', 'unknown')} - "
                 f"{owner.get('reason', 'No details available.')}"
+            )
+        raw_hook = plan.adoption.get("project_verification_hook")
+        if isinstance(raw_hook, dict):
+            print(
+                "Project verification hook: "
+                f"{raw_hook.get('path') or '(none)'} "
+                f"({raw_hook.get('source', 'none')})"
+            )
+            print(
+                "Project verification result: "
+                f"{raw_hook.get('result', 'not-run')}"
+            )
+            print(
+                "Project verification reason: "
+                f"{raw_hook.get('reason', 'No details available.')}"
             )
     print_capabilities(plan.capabilities)
     if plan.files is not None:
@@ -1938,6 +2074,34 @@ def candidate_effects(
     )
 
 
+def candidate_patch_effects(
+    candidate: Path, *, include_paths: tuple[str, ...] = ()
+) -> tuple[dict[str, str], tuple[str, ...]]:
+    """Return exact staged artifacts and deletions for transactional apply."""
+    candidate_files = project_files(candidate)
+    missing = sorted(set(include_paths) - set(candidate_files))
+    if missing:
+        raise CliError(
+            "Candidate includes missing explicit paths: " + ", ".join(missing)
+        )
+    changed = git_changed_paths(candidate) | set(include_paths)
+    artifacts = {
+        name: file_fingerprint(candidate_files[name])
+        for name in sorted(changed)
+        if name in candidate_files
+    }
+    deletions = tuple(
+        sorted(
+            name
+            for name in changed
+            if name not in candidate_files
+            and not (candidate / name).exists()
+            and not (candidate / name).is_symlink()
+        )
+    )
+    return artifacts, deletions
+
+
 def clone_target(target: Path, candidate: Path) -> None:
     """Clone the committed target without mutating its Git metadata."""
     result = run(
@@ -2020,34 +2184,56 @@ def prepare_adoption_candidate(
     planned: Plan,
     generated_at: str,
     candidate: Path,
-) -> tuple[Plan, dict[str, str], str]:
+) -> tuple[Plan, dict[str, str], str, dict[str, object]]:
     """Build and verify the exact adoption result outside the target repo."""
     clone_target(target, candidate)
     copy_candidate_files(stage, candidate, (*planned.add, *planned.merge))
-    if planned.manual or planned.unknown:
-        write_pending_adoption(
-            candidate,
-            pending_adoption_data(
-                candidate,
-                revision,
-                repository,
-                candidate / ".copier-answers.yml",
-                pending_managed_paths(stage, planned),
-                (*planned.manual, *planned.unknown),
-            ),
+    hook_configuration = project_verification_configuration(candidate, answers)
+    try:
+        validated_project_verification_hook(candidate, hook_configuration)
+    except CliError as error:
+        verification = f"failed: {error}"
+        hook = project_verification_evidence(
+            hook_configuration, "failed", str(error)
         )
-        verification = "deferred-manual-merge"
     else:
-        create_adoption_lockfiles(candidate, answers)
-        write_provenance(candidate, revision, applied_at=generated_at)
-        try:
-            verify_project(candidate)
-        except CliError as error:
-            verification = f"failed: {error}"
+        if planned.manual or planned.unknown:
+            write_pending_adoption(
+                candidate,
+                pending_adoption_data(
+                    candidate,
+                    revision,
+                    repository,
+                    candidate / ".copier-answers.yml",
+                    pending_managed_paths(stage, planned),
+                    (*planned.manual, *planned.unknown),
+                ),
+            )
+            verification = "deferred-manual-merge"
+            hook = project_verification_evidence(
+                hook_configuration,
+                "not-run",
+                "Manual file decisions must be completed first.",
+            )
         else:
-            verification = "passed"
+            create_adoption_lockfiles(candidate, answers)
+            write_provenance(candidate, revision, applied_at=generated_at)
+            try:
+                hook = verify_project(candidate)
+            except ProjectVerificationError as error:
+                verification = f"failed: {error}"
+                hook = error.hook
+            except CliError as error:
+                verification = f"failed: {error}"
+                hook = project_verification_evidence(
+                    hook_configuration,
+                    "not-run",
+                    "Candidate preparation failed before the hook ran.",
+                )
+            else:
+                verification = "passed"
     effects, artifacts = candidate_effects(candidate, target, planned)
-    return effects, artifacts, verification
+    return effects, artifacts, verification, hook
 
 
 def write_candidate_patch(
@@ -2058,13 +2244,13 @@ def write_candidate_patch(
     artifacts: Mapping[str, object],
     target_snapshot: Mapping[str, object],
     delete_paths: tuple[str, ...] = (),
+    include_paths: tuple[str, ...] = (),
 ) -> None:
     """Apply an already verified candidate as one checked byte-level patch."""
     before = patch.parent / "before"
     after = patch.parent / "after"
     before.mkdir()
     after.mkdir()
-    candidate_files = project_files(candidate)
     target_files = project_files(target)
     expected_artifacts = {
         name: value
@@ -2073,18 +2259,21 @@ def write_candidate_patch(
     }
     if len(expected_artifacts) != len(artifacts):
         raise CliError("Adoption plan contains invalid artifact fingerprints.")
-    actual_artifacts = {
-        name: file_fingerprint(candidate_files[name])
-        for name in sorted(git_changed_paths(candidate))
-        if name in candidate_files
-    }
-    if actual_artifacts != expected_artifacts:
+    actual_artifacts, actual_deletions = candidate_patch_effects(
+        candidate, include_paths=include_paths
+    )
+    canonical_deletions = tuple(sorted(set(delete_paths)))
+    if (
+        tuple(delete_paths) != canonical_deletions
+        or actual_artifacts != expected_artifacts
+        or actual_deletions != canonical_deletions
+    ):
         raise CliError(
             "Candidate effects differ from the verified plan; create a new "
             "plan."
         )
     changed = tuple(sorted(expected_artifacts))
-    for relative_name in (*changed, *delete_paths):
+    for relative_name in (*changed, *canonical_deletions):
         checked_destination(target, relative_name)
     validate_target_snapshot(target, target_snapshot)
     existing = tuple(name for name in changed if name in target_files)
@@ -2093,7 +2282,7 @@ def write_candidate_patch(
     copy_candidate_files(
         target,
         before,
-        tuple(name for name in delete_paths if name in target_files),
+        tuple(name for name in canonical_deletions if name in target_files),
     )
     patch_result = subprocess.run(  # noqa: S603
         [  # noqa: S607
@@ -2183,17 +2372,93 @@ def create_adoption_lockfiles(target: Path, answers: dict[str, object]) -> None:
             )
 
 
-def verify_project(target: Path) -> None:
-    """Run the generated project's canonical verification command."""
+def verify_project(target: Path) -> dict[str, object]:
+    """Run canonical verification and one validated project hook."""
+    configuration = project_verification_configuration(target)
     verify = target / "scripts" / "verify"
     if not verify.is_file():
-        raise CliError("Generated project is missing ./scripts/verify.")
-    result = run([str(verify)], cwd=target, check=False)
-    if result.returncode != 0:
-        raise CliError(
-            "Project verification failed; generated differences were preserved "
-            "for review."
+        hook = project_verification_evidence(
+            configuration,
+            "not-run",
+            "Canonical project verification is unavailable.",
         )
+        raise ProjectVerificationError(
+            "Generated project is missing ./scripts/verify.", hook
+        )
+    try:
+        project_hook = validated_project_verification_hook(
+            target, configuration
+        )
+    except CliError as error:
+        hook = project_verification_evidence(
+            configuration, "failed", str(error)
+        )
+        raise ProjectVerificationError(str(error), hook) from error
+    with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as status_file:
+        environment = dict(os.environ)
+        environment.pop("_CSARC_PROJECT_VERIFICATION_STATUS_FILE", None)
+        status_fd = status_file.fileno()
+        environment["_CSARC_PROJECT_VERIFICATION_STATUS_FD"] = str(status_fd)
+        result = subprocess.run(  # noqa: S603
+            [str(verify)],
+            cwd=target,
+            check=False,
+            env=environment,
+            pass_fds=(status_fd,),
+        )
+        status_file.seek(0)
+        hook_statuses = tuple(status_file.read().splitlines())
+    expected_statuses = (
+        ("not-run", "started", "passed")
+        if project_hook is not None and result.returncode == 0
+        else (
+            ("not-run",)
+            if project_hook is None or hook_statuses == ("not-run",)
+            else ("not-run", "started", "failed")
+        )
+    )
+    if hook_statuses != expected_statuses:
+        hook = project_verification_evidence(
+            configuration,
+            "failed" if project_hook is not None else "not-run",
+            "Canonical verification returned an invalid hook status.",
+        )
+        raise ProjectVerificationError(
+            "Project verification hook status is invalid.", hook
+        )
+    if result.returncode != 0:
+        if hook_statuses == ("not-run", "started", "failed"):
+            hook = project_verification_evidence(
+                configuration,
+                "failed",
+                "Project verification hook exited non-zero: "
+                f"{configuration['path']}",
+            )
+            raise ProjectVerificationError(
+                f"Project verification hook failed: {configuration['path']}",
+                hook,
+            )
+        hook = project_verification_evidence(
+            configuration,
+            "not-run",
+            "Canonical project verification failed before the hook ran.",
+        )
+        raise ProjectVerificationError(
+            "Project verification failed; generated differences were "
+            "preserved for review.",
+            hook,
+        )
+    if project_hook is not None:
+        return project_verification_evidence(
+            configuration,
+            "passed",
+            "Project verification hook completed successfully.",
+        )
+    return project_verification_evidence(
+        configuration,
+        "not-run",
+        "No project verification hook is configured.",
+    )
 
 
 def settings_plan(target: Path) -> None:
@@ -2913,7 +3178,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             candidate, PENDING_ADOPTION_FILE.as_posix()
         ).unlink()
         try:
-            verify_project(candidate)
+            hook = verify_project(candidate)
         except CliError as error:
             raise CliError(
                 "Project verification failed; fix the reported failures, "
@@ -2943,11 +3208,7 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "generated_at": generated_at,
             "manual_results": manual_results,
             "phase": "complete",
-            "project_verification_hook": (
-                "configured"
-                if os.access(target / "scripts" / "verify-product", os.X_OK)
-                else "not-configured"
-            ),
+            "project_verification_hook": hook,
             "target_changes": list(changes),
             "target_files": target_files,
             "target_head": head,
@@ -3048,7 +3309,7 @@ def build_adoption_plan(
         files = predicted_adoption_effects(target, planned)
         verification = "not-run-dirty"
     else:
-        files, artifacts, verification = prepare_adoption_candidate(
+        files, artifacts, verification, hook = prepare_adoption_candidate(
             stage,
             target,
             revision,
@@ -3059,6 +3320,11 @@ def build_adoption_plan(
             candidate,
         )
     owner = code_owner_verification(repository, answers.get("code_owner"))
+    if changes:
+        hook = project_verification_configuration(target, answers)
+        hook = project_verification_evidence(
+            hook, "not-run", "Working tree must be clean before verification."
+        )
     adoption: dict[str, object] = {
         "applicable": not changes
         and verification in {"passed", "deferred-manual-merge"}
@@ -3070,11 +3336,7 @@ def build_adoption_plan(
         "phase": (
             "pending" if planned.manual or planned.unknown else "complete"
         ),
-        "project_verification_hook": (
-            "configured"
-            if os.access(target / "scripts" / "verify-product", os.X_OK)
-            else "not-configured"
-        ),
+        "project_verification_hook": hook,
         "target_changes": list(changes),
         "target_files": target_files,
         "target_head": head,
@@ -3538,7 +3800,7 @@ def update_plan_answers(  # noqa: C901
     return result, update_data
 
 
-def command_update(args: argparse.Namespace) -> int:
+def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     """Check or apply a Copier smart update."""
     target = resolve_repository_target(args.path)
     if (target / PENDING_ADOPTION_FILE).is_file():
@@ -3594,6 +3856,13 @@ def command_update(args: argparse.Namespace) -> int:
             target,
             emit=False,
         )
+    hook_configuration = project_verification_configuration(target, answers)
+    validated_project_verification_hook(target, hook_configuration)
+    hook = project_verification_evidence(
+        hook_configuration,
+        "not-run",
+        "Configuration validated; the hook runs before an update is applied.",
+    )
     current_capabilities = dict(current_capabilities)
     target_capabilities = dict(preflight)
     current_capabilities.pop("observed_at", None)
@@ -3609,6 +3878,7 @@ def command_update(args: argparse.Namespace) -> int:
             "capabilities_changed": capabilities_changed,
             "status": "outdated" if update_available else "current",
             "update_available": update_available,
+            "project_verification_hook": hook,
         }
     )
     target_snapshot: dict[str, object] = {}
@@ -3684,33 +3954,61 @@ def command_update(args: argparse.Namespace) -> int:
         ),
     )
     validate_target_snapshot(target, target_snapshot)
-    result = run(
-        [
-            sys.executable,
-            "-m",
-            "copier",
-            "update",
-            "--trust",
-            "--defaults",
-            "--conflict",
-            "inline",
-            "--vcs-ref",
-            str(status["target_sha"]),
-            *copier_data,
-            str(target),
-        ],
-        check=False,
-    )
-    conflicts = find_conflicts(target)
-    if result.returncode != 0 or conflicts:
-        detail = ", ".join(conflicts) if conflicts else "Copier exited non-zero"
-        raise CliError(
-            f"Update needs manual conflict resolution ({detail}); "
-            "differences were preserved."
+    with tempfile.TemporaryDirectory(prefix="csarc-update-") as temporary:
+        temporary_root = Path(temporary).resolve()
+        candidate = temporary_root / "candidate"
+        clone_target(target, candidate)
+        result = run(
+            [
+                sys.executable,
+                "-m",
+                "copier",
+                "update",
+                "--trust",
+                "--defaults",
+                "--conflict",
+                "inline",
+                "--vcs-ref",
+                str(status["target_sha"]),
+                *copier_data,
+                str(candidate),
+            ],
+            check=False,
         )
-    pin_answer_commit(target, str(status["target_sha"]))
-    verify_project(target)
-    write_provenance(target, target_revision, previous)
+        conflicts = find_conflicts(candidate)
+        if result.returncode != 0 or conflicts:
+            artifacts, delete_paths = candidate_patch_effects(
+                candidate, include_paths=conflicts
+            )
+            if artifacts or delete_paths:
+                write_candidate_patch(
+                    candidate,
+                    target,
+                    temporary_root / "conflict.patch",
+                    artifacts=artifacts,
+                    target_snapshot=target_snapshot,
+                    delete_paths=delete_paths,
+                    include_paths=conflicts,
+                )
+            detail = (
+                ", ".join(conflicts) if conflicts else "Copier exited non-zero"
+            )
+            raise CliError(
+                f"Update needs manual conflict resolution ({detail}); "
+                "differences were preserved."
+            )
+        pin_answer_commit(candidate, str(status["target_sha"]))
+        verify_project(candidate)
+        write_provenance(candidate, target_revision, previous)
+        artifacts, delete_paths = candidate_patch_effects(candidate)
+        write_candidate_patch(
+            candidate,
+            target,
+            temporary_root / "update.patch",
+            artifacts=artifacts,
+            target_snapshot=target_snapshot,
+            delete_paths=delete_paths,
+        )
     settings_plan(target)
     apply_milestone_description_plan(milestone_plan)
     return 0

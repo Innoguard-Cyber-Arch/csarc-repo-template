@@ -1,6 +1,6 @@
 [project]
 name = "csarc-repo-cli"
-version = "0.11.0"
+version = "0.12.1"
 description = "Prompt-ready lifecycle CLI for the CSARC repository template"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
@@ -69,6 +69,9 @@ exclude = [".*\\.jinja$"]
 addopts = "-q"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+markers = [
+  "large: long-running generated-project or adoption coverage reserved for the full gate",
+]
 
 [tool.coverage.run]
 branch = true

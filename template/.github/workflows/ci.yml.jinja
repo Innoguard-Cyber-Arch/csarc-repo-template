@@ -11,14 +11,14 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, labeled, unlabeled]
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft]
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
 
 concurrency:
   group: {% raw %}${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}{% endraw %}
-  cancel-in-progress: {% raw %}${{ github.event_name == 'pull_request' && !startsWith(github.event.pull_request.head.ref, 'dev') && !startsWith(github.event.pull_request.head.ref, 'release-please--') && !contains(github.event.pull_request.labels.*.name, 'promotion') && !contains(github.event.pull_request.labels.*.name, 'hotfix') }}{% endraw %}
+  cancel-in-progress: {% raw %}${{ github.event_name == 'pull_request' && !startsWith(github.event.pull_request.head.ref, 'dev') && !startsWith(github.event.pull_request.head.ref, 'release-please--') && !contains(github.event.pull_request.labels.*.name, 'promotion') && !contains(github.event.pull_request.labels.*.name, 'hotfix') && !contains(github.event.pull_request.labels.*.name, 'release-recovery') }}{% endraw %}
 
 permissions:
   actions: read
@@ -393,6 +393,7 @@ jobs:
         env:
           FAST_RESULT: {% raw %}${{ needs.fast.result }}{% endraw %}
           TIER: {% raw %}${{ needs.fast.outputs.tier }}{% endraw %}
+          REVIEW_STATE: {% raw %}${{ needs.fast.outputs.review_state }}{% endraw %}
 {%- if use_reusable_workflow %}
           FULL_RESULT: {% raw %}${{ needs.full.result }}{% endraw %}
 {%- else %}
@@ -407,7 +408,6 @@ jobs:
           GOVERNANCE_RESULT: {% raw %}${{ needs.governance.result }}{% endraw %}
           OSV_RESULT: {% raw %}${{ needs.osv.result }}{% endraw %}
           ZIZMOR_RESULT: {% raw %}${{ needs.zizmor.result }}{% endraw %}
-          REVIEW_STATE: {% raw %}${{ needs.fast.outputs.review_state }}{% endraw %}
 {%- if has_container %}
           CONTAINER_RESULT: {% raw %}${{ needs.container.result }}{% endraw %}
 {%- endif %}

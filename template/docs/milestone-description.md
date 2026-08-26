@@ -1,8 +1,9 @@
-# Story Milestone description
+# Delivery Milestone description
 
 下列內文以繁體中文示範；實際 description 請使用專案團隊慣用的語言。
-保留英文 H2 標題，讓人與自動化都能辨識結構。Milestone 只保留足以理解、
-規劃與驗收 story 的內容；完整設計細節請連回 spec、Issue 或決策紀錄。
+保留英文 H2 標題，讓人與自動化都能辨識結構。Feature parent Issue 保存 SDD
+story；Milestone 只保留足以理解、排程與驗收一次 delivery／release 的內容，
+完整設計細節請連回 Feature、spec 或決策紀錄。建立時必須填入真實 due date。
 
 Milestone title 使用專案慣用語言的 3–80 字元 outcome phrase，不要求英文或
 三個單字；不得以 `Milestone`（含全形拉丁等價字）或狀態標記開頭，也不得只寫
@@ -19,12 +20,12 @@ uv run --no-project python scripts/spec_to_issue.py audit-milestones \
 ```markdown
 ## Problem
 
-用一小段話交代受影響角色、目前情境、端到端缺口，以及為何現在值得處理；
-先描述問題，不先指定解法。
+用一小段話交代這次 delivery 要收斂的問題與為何現在值得處理；先描述問題，
+不先指定解法。
 
 ## Outcome
 
-用 user story 說明：完成後，哪個角色可以做到什麼，並得到哪個可觀察的價值。
+說明這次 delivery 完成後可觀察的價值，並連回對應 Feature parent。
 
 ## Acceptance criteria
 
@@ -32,8 +33,8 @@ uv run --no-project python scripts/spec_to_issue.py audit-milestones \
 
 ## Plan
 
-1. #<issue> — 第一個可獨立交付的工作與目的。
-2. #<issue> — 後續工作、順序或依賴；實作發現新資訊時同步調整。
+1. #<leaf-issue> — 第一個可獨立交付的 Task／Bug 與目的。
+2. #<leaf-issue> — 後續工作；只有真實順序限制才另設 native dependency。
 
 ## Out of scope
 
@@ -49,8 +50,9 @@ uv run --no-project python scripts/spec_to_issue.py audit-milestones \
 - 連結來源 spec、使用者研究或導入盤點；若沒有候選，記錄 bounded search 範圍。
 ```
 
-只掛入直接推進 acceptance criteria 的 Issues，不要再掛其 pull requests
-造成進度重複計算。只有真正期限才填 due date，不要把它當 release label。
+只掛入直接推進 acceptance criteria 的 leaf Issues 與其 pull requests；Feature parent
+不掛 Milestone，避免 parent、subissue、PR 三重計算。Milestone 必須代表有真實期限
+的 delivery／release；沒有排程就不要建立 Milestone，也不要把它當 release label。
 關閉最後一張 Issue 前，須勾選所有已驗證的 acceptance items；否則 lifecycle
 workflow 會讓未完成的 story 保持開啟。
 建立前須閱讀相關 open／closed Issues 的內文、comments 與 linked pull requests；

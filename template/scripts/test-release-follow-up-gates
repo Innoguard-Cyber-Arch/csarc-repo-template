@@ -103,8 +103,13 @@ if grep -Eq 'ref:.*pull_request.*head|checkout.*pull_request.*head' \
   echo "Trusted release policy must not check out the pull-request head." >&2
   exit 1
 fi
-if rg -l '^    name: release-follow-up$' "$repo_root/.github/workflows" | \
-  grep -Fvx "$trusted_workflow" >/dev/null; then
+matching_workflows="$(
+  grep -RFlx '    name: release-follow-up' "$repo_root/.github/workflows"
+)" || {
+  echo "Cannot inspect release-follow-up workflow ownership." >&2
+  exit 1
+}
+if grep -Fvx "$trusted_workflow" <<<"$matching_workflows" | grep -q .; then
   echo "An untrusted workflow can spoof the release-follow-up context." >&2
   exit 1
 fi

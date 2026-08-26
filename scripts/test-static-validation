@@ -5,6 +5,14 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 actionlint_bin="$("$repo_root/scripts/install-actionlint")"
 shellcheck_bin="$("$repo_root/scripts/install-shellcheck")"
 
+grep -Fq -- '-shellcheck=' \
+  "$repo_root/scripts/lint-workflows-shell"
+if grep -Eq '(^|[[:space:]])rg([[:space:]]|$)' \
+  "$repo_root/scripts/test-release-follow-up-gates"; then
+  echo "Release follow-up checks must not require ripgrep on hosted runners." >&2
+  exit 1
+fi
+
 if "$actionlint_bin" \
   "$repo_root/tests/fixtures/static-validation/invalid-workflow.yml" \
   >/dev/null 2>&1; then

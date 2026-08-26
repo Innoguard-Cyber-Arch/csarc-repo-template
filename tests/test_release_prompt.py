@@ -33,6 +33,7 @@ def test_render_uses_one_release_identity_everywhere() -> None:
     assert "csarc init" in prompts
     assert "csarc adopt" in prompts
     assert "--apply-plan" in prompts
+    assert "repo-relative executable project_verification_hook" in prompts
     assert "檢視 repo 外的 Markdown、PDF 與 machine plan" in prompts
     assert "csarc update" in prompts
     assert provenance["commit_sha"] == sha

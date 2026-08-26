@@ -15,6 +15,8 @@ CI 是沒有獨立測試環境時的可攜式 integration layer；外部環境�
 - `dev/* → main` 的 promotion、下述一次性 `promote/m*`／`promote/next → main`
   bridge，以及標示
   `hotfix` 的緊急修正，必須跑 full tier。
+- 已合併版本卻缺少 Release 時，只有同號 `fix/<Issue>-*`、`release-recovery`
+  label、`fix` title 的受審查 PR 可直接進 `main`；不得同時標示 `hotfix`。
 - `main` 更新後，尚在進行的 delivery branch 先透過受審查的 `sync/main-to-*` PR
   納入新結果，再接受新的 Issue PR 或 promotion。
 
@@ -44,7 +46,7 @@ tier、保留 promotion evidence 並立即形成 release 邊界。
 | --- | --- | --- | --- | --- |
 | Policy | 每張 PR | 同一個 runner 檢查 PR 標題／Issue 關聯、branch route、delivery sync 與 review policy | `title`、`promotion` 與 `verify` 都會產生；新 commit 可取消舊的一般 PR run | 先用便宜、確定性的規則拒絕錯誤流程 |
 | Docs／fast | 純文件或一般 Issue／sync PR | secret scan、格式、lint、型別、單元與 policy tests；workflow／shell scope 加跑 actionlint／ShellCheck，模板範圍另做單一預設 profile smoke | 由穩定的 `verify` aggregate 彙總；同 PR 新 commit 取消舊 run | 每次整合保留快速回饋，不支付完整矩陣 |
-| Full | promotion、hotfix、merge queue、手動 dispatch、未知高風險路徑 | 所有支援 runtime、profiles、Copier update、release policy、安全與整合回歸 | `verify` 與 `promotion` 必須成功；候選 run 不取消 | 只在交付邊界支付一次完整信心成本 |
+| Full | promotion、hotfix、release recovery、merge queue、手動 dispatch、未知高風險路徑 | 所有支援 runtime、profiles、Copier update、release policy、安全與整合回歸 | `verify` 與 `promotion` 必須成功；候選 run 不取消 | 只在交付邊界支付一次完整信心成本 |
 | Periodic／release | daily／weekly schedule 或已驗證的發布邊界 | OSV、Zizmor、governance drift、artifact、digest、SBOM、provenance | 排程不阻塞普通 PR；發布只接受 release-source evidence，重跑採 idempotent | 把時間性風險與成品工作移出每個 commit |
 
 Full tier 將 runtime 無關的 lint、文件、治理、profile、Copier create／adopt／update、
@@ -64,6 +66,19 @@ OSV，治理宣告或 checker 加跑 remote governance。release／version 等�
 check 在 fast job 內固定執行；只有 site 來源、相關 project docs、手動驗證或 promotion
 才上傳 artifact。
 
+### 選配容器交付
+
+只有既有 repo 明確設定 `container_mode` 並提供產品自己的 Dockerfile／Containerfile
+與 `$IMAGE` smoke command，才生成容器工作。`verify` 與 `ghcr` 都在非 docs PR 使用
+Buildx GHA cache 建置但不 push，接著執行啟動測試與 Trivy HIGH／CRITICAL 掃描；
+PR job 只有唯讀權限。`ghcr` 另在已驗證 release-source 邊界建置一次，保存 image
+bytes、checksum 與 SPDX SBOM；發布 job 才取得 `packages`／`id-token`／`attestations`
+write，將相同 bytes 推到版本與 commit SHA tag、附加 OCI attestation，再以 digest
+pull、驗證與 smoke test。`none` 不生成 job、Docker Dependabot 或 registry 權限。
+
+這是成品交付，不是 runtime deployment。公版不產生通用 Dockerfile、Kubernetes、
+雲端部署或 multi-arch matrix；部署環境、健康檢查與回復仍由產品 repo 定義。
+
 ## Draft ownership 與 Ready 邊界
 
 開始實作前先查 open Draft PR、remote branch 與既有 worktree。沒有既有 owner 時，
@@ -80,18 +95,6 @@ OSV、Zizmor、remote governance。Draft 的 `verify` 成功只表示這些 WIP 
 轉 Ready 或更新 Ready PR 前，必須在目前內容上通過完整本機 verifier，將 `Refs`
 改成 closing keyword，並完成 PR 與 Issue checklist。任一條件缺少就 fail closed；
 轉回 Draft 後可再次以 targeted checks 協作，但下一次 Ready 前仍須重新確認完整驗證。
-### 選配容器交付
-
-只有既有 repo 明確設定 `container_mode` 並提供產品自己的 Dockerfile／Containerfile
-與 `$IMAGE` smoke command，才生成容器工作。`verify` 與 `ghcr` 都在非 docs PR 使用
-Buildx GHA cache 建置但不 push，接著執行啟動測試與 Trivy HIGH／CRITICAL 掃描；
-PR job 只有唯讀權限。`ghcr` 另在已驗證 release-source 邊界建置一次，保存 image
-bytes、checksum 與 SPDX SBOM；發布 job 才取得 `packages`／`id-token`／`attestations`
-write，將相同 bytes 推到版本與 commit SHA tag、附加 OCI attestation，再以 digest
-pull、驗證與 smoke test。`none` 不生成 job、Docker Dependabot 或 registry 權限。
-
-這是成品交付，不是 runtime deployment。公版不產生通用 Dockerfile、Kubernetes、
-雲端部署或 multi-arch matrix；部署環境、健康檢查與回復仍由產品 repo 定義。
 
 ## `main` 回同步到進行中的 delivery branch
 
@@ -144,8 +147,8 @@ source tree 跑第二次完整 suite；`main` push 留給同步與 release 邊�
 ## Promotion 與 canary 證據
 
 Ruleset 另固定要求 `promotion` context。一般 Issue／sync PR 會得到明確的
-not-applicable 成功結果；`dev/m* → main`、`dev/next → main`、`dev/i* → main` 與
-hotfix 則必須先確認 branch 包含最新 `main`。Milestone promotion 還會檢查同一
+not-applicable 成功結果；`dev/m* → main`、`dev/next → main`、`dev/i* → main`、
+hotfix 與 release recovery 則必須先確認 branch 包含最新 `main`。Milestone promotion 還會檢查同一
 Milestone 中，除 promotion Issue 外的工作均已關閉且沒有未勾選的 acceptance
 criterion。`dev/i<編號>-*` 則核對同號、無 Milestone 且標示 `promotion` 的 open
 Issue，不能借用別張 Issue 或偽裝 Milestone。
@@ -263,9 +266,18 @@ artifact 和 workflow summary。無關聯 PR、非 promotion／hotfix 或證據�
 
 Artifact workflow 不監聽任意 `v*` push，只接受 Release Please workflow 帶入
 source run ID 的明確 dispatch。它先驗證 tag commit 與 release-source evidence，
-再建置 distributions、digest、SBOM、attestation 與 registry／immutable Release
-驗證；不重跑已由 promotion 通過的完整 runtime／template 測試矩陣。相同 source
-的重跑會沿用既有 tag、draft Release 或成功 artifact run，不重複發布。
+再從 exact tag 建置 distributions／來源封存檔，將 production-only runtime 隔離後
+以固定 Syft 版本產生 SPDX JSON SBOM；runtime inventory 由套件管理器獨立列舉，
+不反向信任 SBOM 自己宣告的 dependency graph。workflow 只接受已完成成功、repository
+與 workflow identity 都相符的 source run，並以 terminal manifest 綁定明列成品的
+digest、source metadata 與 provenance；不使用 wildcard、也不要求不同執行間
+的 Syft JSON byte-identical。所有本機建置與 evidence 驗證成功後才建立 mutable draft，
+成品上傳後會下載到全新空目錄驗證，
+發布後再從 immutable Release 全新下載並驗證；不重跑已由 promotion 通過的完整
+runtime／template 測試矩陣。相同 source 的重跑只會沿用已驗證 immutable Release
+或尚可修復的 mutable draft；未知狀態 fail closed，失敗復原也只會把 mutable
+Release 留在 draft。既有 repo 的 Python／npm product identity 一律從 exact-tag
+`pyproject.toml`／`package.json` 讀取，不從 Copier project slug 推測。
 
 ## Maintainer walkthrough
 
@@ -292,6 +304,16 @@ branch 工作；full/canary 通過並 promotion 到 `main` 後刪除它。不能
 PR。它仍需 tracking Issue、人工審查、full `verify`、promotion evidence 和 tree
 identity；合併後立即形成 patch release 邊界。接著由每條進行中的 `dev/m*`、
 `dev/next` 與 `dev/i*` owner 各自建立 reviewed sync PR，把 hotfix 帶回去。
+
+### 缺失 Release recovery
+
+若已合併版本缺少對應 GitHub Release，使用同號 `fix/<Issue>-*`、`fix` title 與
+`release-recovery` label 對 `main` 開一張最小修復 PR。它可以保留原 Milestone，
+但不可同時標示 `hotfix`；必須通過 full `verify`、promotion evidence 與 merge 後
+tree identity。Release workflow 先把 distributions、精確 tag/commit 的 SPDX 2.3
+SBOM、artifact manifest 與 provenance 上傳到 draft，再下載並重驗 digest；全部吻合後
+才發布 immutable Release，發布後再驗 hosted assets 與 attestation。Actions 額度 fallback
+只產生 release-ineligible 證據，不得用來宣稱 recovery 完成。
 
 ## 導入、回復與降級
 
@@ -374,6 +396,7 @@ human-maintained release branch。
 本 repo 是 GitHub Teams private plan，結構性地會超出每月 included Actions
 minutes；這是這個 repo 從一開始就會遇到的常態限制，不是需要升級方案或等待
 「恢復」才能解決的一次性事故。
+
 這個流程適用於 GitHub Actions job 出現 zero-step billing block：GitHub 的
 runner 未啟動訊息提及 failed payments 或 spending limit，工具以其精確、泛用的
 billing 註記文字機械式辨識，不判讀實際帳務子原因——GitHub 帳務方案的內部差異
@@ -390,38 +413,32 @@ approval、secrets、provenance、CODEOWNER review 或任何無法本機重現�
 
 ### 一般 Issue PR
 
-用 `scripts/promotion_gate.py note-quota-fallback` 對每個受阻
+通過本機驗證後，用 `scripts/promotion_gate.py note-quota-fallback` 對每個受阻
 run URL 機械式確認 zero-step billing block（拒絕任何已執行 step 的 job），在 PR
 留下標題為 `Actions quota fallback note` 的留言，記錄 head SHA、受阻 run URL、
-驗證命令與結果、未重現 checks。留言產生後即可合併，不需要 human maintainer 另外
-即時確認或留言授權；新 commit 使既有 note 失效並須重新驗證、重新產生。只有 repo
-現行政策已允許 author self-merge 時（見下方 Alpha 例外），agent 才可合併。
-子命令只接受依 repository branch strategy 判定為非 promotion 的 PR，會要求乾淨
-worktree 與精確 PR head、完整分頁讀取該 head 的 latest Check Runs，並要求所有
-`--blocked-run-url` 精確等於自動發現的失敗 Actions run 集合；漏列失敗、非 Actions
-失敗、未完成／不支援的 check 或非成功 commit status 都會 fail closed。工具執行 repo
-內建完整 verifier 後會再次確認 live head 與 check 集合未變，並將固定的 `passed` 結果
-與每個 `--unreproduced-check` 寫入 note；verification 失敗時不會輸出可用 note。
+驗證命令與結果、未重現 checks。`pr_lifecycle.py check` 與 `merge` 必須收到該留言的
+`--quota-fallback-note-url`，並仍須通過通用 exact-head merge authorization；fallback
+本身不另要求第二則 quota authorization。此路徑只適用於非 default branch 的一般
+Issue PR，不能取代 promotion、hotfix 或 release gate。新 commit 使既有 note 失效並須
+重新驗證、重新產生。只有 repo 現行政策已允許 author self-merge 時（見下方 Alpha
+例外），agent 才可合併。work branch 還必須只有一個 closing reference，綁定仍為
+open 且 Milestone 與目標 delivery branch 相符的同號 Issue；缺漏或多餘關聯都 fail
+closed。
 
-例如 delivery strategy 的一般 PR 可執行：
-
-```bash
-./scripts/promotion_gate.py note-quota-fallback \
-  --repo owner/repo \
-  --pr 42 \
-  --branch-strategy delivery \
-  --blocked-run-url https://github.com/owner/repo/actions/runs/123 \
-  --unreproduced-check "GitHub-hosted runner identity"
-```
-
-stdout 會以單一留言格式輸出標題與 JSON binding；生成專案的 canonical verifier 是
-`./scripts/verify`（公版來源 repo 則是 `./scripts/verify-template.sh`）：
-
-```text
-Actions quota fallback note
-
-`{"head_sha":"<PR head SHA>","pull_request":42,"repository":"owner/repo","runs":["https://github.com/owner/repo/actions/runs/123"],"verification":{"command":"./scripts/verify","result":"passed","unreproduced_checks":["GitHub-hosted runner identity"]}}`
-```
+Alpha opt-in 必須在 PR body 以獨立一行精確寫入 `Alpha 自行合併 / self-merged`。
+此時不要求 reviewer，執行者也可以是 exact-head maintainer authorization 的留言者；
+但 lifecycle lease、human authorization、完整本機證據、quota note、未解 blocker／
+changes-requested 檢查，以及 base/head/tree CAS 都不變。這個例外只接受關閉 branch
+同號 Issue 的一般 work PR，且 base 只能是 `dev/next` 或 `dev/m*`。Reviewed sync
+仍須 independent review，因為 deterministic branch 與 commit parents 無法單獨證明
+conflict resolution 的 tree 內容。sync、default-branch promotion、hotfix、release 與
+任意其他 route 一律拒絕。若 effective rules 因 403 或其他原因無法驗證，
+`check` 只能產生 `human-only` snapshot，`merge` 仍拒絕 agent merge；marker 不得推定
+server-side enforcement。
+目前 checked-in desired rules 仍要求一份 approving review；當 private repository 的
+live capability probe 又只能回 403 時，Alpha no-review 在本政策下只可
+`human-only`。只有未來明確採用且可驗證的 server-enforced zero-review/no-bypass
+policy 才可能得到 agent merge mode。
 
 ### `dev/next` promotion preservation
 

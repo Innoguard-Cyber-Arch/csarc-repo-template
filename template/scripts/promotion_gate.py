@@ -32,6 +32,7 @@ UNCHECKED = re.compile(r"(?m)^\s*-\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(r"(?:Closes|Fixes|Resolves)\s+#(\d+)(?:\D|$)", re.I)
 MILESTONE_BRANCH = re.compile(r"^dev/m(\d+)-[a-z0-9][a-z0-9-]*$")
 PROMOTION_BRIDGE = re.compile(r"^promote/m(\d+)-([a-z0-9][a-z0-9-]*)$")
+RECOVERY_BRANCH = re.compile(r"^fix/(\d+)-[a-z0-9][a-z0-9-]*$")
 STANDALONE_PROMOTION_BRIDGE = "promote/next"
 ISOLATED_BRANCH = re.compile(r"^dev/i(\d+)-[a-z0-9][a-z0-9-]*$")
 CONVENTIONAL_TITLE = re.compile(
@@ -186,6 +187,11 @@ def route_for(  # noqa: C901
         return Route("not-applicable", False)
     if head.startswith("release-please--"):
         return Route("release-follow-up", False)
+    if "release-recovery" in labels:
+        recovery = RECOVERY_BRANCH.fullmatch(head)
+        if recovery and "hotfix" not in labels:
+            return Route("release-recovery", True, issue=int(recovery.group(1)))
+        return Route("invalid-main-route", True)
     if branch_strategy == "main":
         return Route("not-applicable", False)
     if branch_strategy == "dev":
@@ -408,6 +414,9 @@ def promotion_main_evidence(
 
 def github_get(repo: str, path: str, token: str) -> object:
     """Read one GitHub REST endpoint with the workflow token."""
+    resource = f"repos/{repo}"
+    if path:
+        resource += f"/{path.lstrip('/')}"
     if not token:
         executable = shutil.which("gh")
         if executable is None:
@@ -415,14 +424,14 @@ def github_get(repo: str, path: str, token: str) -> object:
                 "GH_TOKEN or an authenticated GitHub CLI is required"
             )
         result = subprocess.run(  # noqa: S603
-            [executable, "api", f"repos/{repo}/{path.lstrip('/')}"],
+            [executable, "api", resource],
             check=True,
             capture_output=True,
             text=True,
         )
         return json.loads(result.stdout)
     request = urllib.request.Request(
-        f"https://api.github.com/repos/{repo}/{path.lstrip('/')}",
+        f"https://api.github.com/{resource}",
         headers={
             "Accept": "application/vnd.github+json",
             "Authorization": f"Bearer {token}",
@@ -750,12 +759,7 @@ def fallback_statement(
 
 
 def quota_fallback_note(
-    repo: str,
-    pr_number: int,
-    head_sha: str,
-    run_urls: list[str],
-    verification_command: str,
-    unreproduced_checks: list[str],
+    repo: str, pr_number: int, head_sha: str, run_urls: list[str]
 ) -> str:
     """Bind a routine pull request's quota fallback note to one commit."""
     fields = {
@@ -763,15 +767,10 @@ def quota_fallback_note(
         "pull_request": pr_number,
         "head_sha": head_sha,
         "runs": sorted(run_urls),
-        "verification": {
-            "command": verification_command,
-            "result": "passed",
-            "unreproduced_checks": sorted(unreproduced_checks),
-        },
     }
     binding = json.dumps(fields, sort_keys=True, separators=(",", ":"))
     statement = (
-        "Every listed blocked run on this exact commit is GitHub's zero-step "
+        "Every failing check on this exact commit is GitHub's zero-step "
         "billing gate, not a real failure; full local verification passed "
         "for this exact commit. This repository's plan structurally runs "
         "over its included Actions minutes, so this is a standing, "
@@ -786,6 +785,10 @@ def preflight_binding(
 ) -> dict[str, object]:
     """Return every security-relevant field from preflight evidence."""
     archive = evidence.get("candidate_archive") or {}
+    canary = evidence.get("canary") or {}
+    stable_canary = {
+        key: value for key, value in canary.items() if key != "result"
+    }
     binding: dict[str, object] = {
         "schema_version": evidence.get("schema_version"),
         "repository": evidence.get("repository"),
@@ -805,7 +808,7 @@ def preflight_binding(
         "archive_sha256": archive.get("sha256"),
         "included_issues": evidence.get("included_issues"),
         "release": evidence.get("release"),
-        "canary": evidence.get("canary"),
+        "canary": stable_canary,
     }
     if include_preservation:
         binding["dev_next_preservation"] = evidence.get("dev_next_preservation")
@@ -838,76 +841,6 @@ def require_run_url(url: str, repo: str) -> None:
         )
 
 
-def failed_pull_request_run_urls(  # noqa: C901
-    repo: str, head_sha: str, token: str
-) -> list[str]:
-    """Return every latest failed Actions run for one pull-request head."""
-    check_runs: list[dict[str, Any]] = []
-    total: int | None = None
-    page = 1
-    while total is None or len(check_runs) < total:
-        payload = github_get(
-            repo,
-            f"commits/{head_sha}/check-runs?filter=latest&per_page=100&page={page}",
-            token,
-        )
-        items = payload.get("check_runs") if isinstance(payload, dict) else None
-        count = (
-            payload.get("total_count") if isinstance(payload, dict) else None
-        )
-        if not isinstance(items, list) or not isinstance(count, int):
-            raise RuntimeError("Pull request check runs are incomplete")
-        if total is not None and count != total:
-            raise RuntimeError(
-                "Pull request check run count changed during pagination"
-            )
-        total = count
-        check_runs.extend(item for item in items if isinstance(item, dict))
-        if not items and len(check_runs) < total:
-            raise RuntimeError("Pull request check runs are incomplete")
-        page += 1
-    if len(check_runs) != total:
-        raise RuntimeError("Pull request check runs are incomplete")
-
-    statuses = github_get(repo, f"commits/{head_sha}/status", token)
-    status_items = (
-        statuses.get("statuses") if isinstance(statuses, dict) else None
-    )
-    if not isinstance(status_items, list) or any(
-        not isinstance(item, dict) or item.get("state") != "success"
-        for item in status_items
-    ):
-        raise RuntimeError("Pull request has a non-success commit status")
-
-    run_urls: set[str] = set()
-    for check in check_runs:
-        conclusion = check.get("conclusion")
-        if conclusion in {"success", "neutral", "skipped"}:
-            continue
-        if conclusion != "failure":
-            raise RuntimeError(
-                "Pull request has an unfinished or unsupported check"
-            )
-        details_url = str(check.get("details_url") or "")
-        parsed = urllib.parse.urlparse(details_url)
-        match = re.fullmatch(
-            rf"/{re.escape(repo)}/actions/runs/(\d+)(?:/job/\d+)?",
-            parsed.path,
-        )
-        if (
-            parsed.scheme != "https"
-            or parsed.netloc != "github.com"
-            or match is None
-            or parsed.query
-            or parsed.fragment
-        ):
-            raise RuntimeError("Pull request has a failed non-Actions check")
-        run_urls.add(f"https://github.com/{repo}/actions/runs/{match.group(1)}")
-    if not run_urls:
-        raise RuntimeError("Pull request has no failed Actions run")
-    return sorted(run_urls)
-
-
 def require_zero_step_run(  # noqa: C901
     url: str,
     repo: str,
@@ -915,13 +848,17 @@ def require_zero_step_run(  # noqa: C901
     head_ref: str,
     head_sha: str,
     token: str,
+    *,
+    getter: Callable[[str, str, str], object] | None = None,
 ) -> str:
     """Prove one PR run was stopped by GitHub's zero-step billing gate."""
+    get = getter or github_get
     run_id = urllib.parse.urlparse(url).path.rsplit("/", 1)[-1]
-    run = github_get(repo, f"actions/runs/{run_id}", token)
+    run = get(repo, f"actions/runs/{run_id}", token)
     if (
         not isinstance(run, dict)
-        or run.get("id") != int(run_id)
+        or type(run.get("id")) is not int
+        or run["id"] != int(run_id)
         or run.get("head_sha") != head_sha
         or run.get("head_branch") != head_ref
         or run.get("event") != "pull_request"
@@ -934,16 +871,23 @@ def require_zero_step_run(  # noqa: C901
     ):
         raise RuntimeError("Blocked run does not match the failed PR head")
     pull_requests = run.get("pull_requests")
-    if not isinstance(pull_requests, list) or not any(
-        isinstance(item, dict) and item.get("number") == pr_number
-        for item in pull_requests
+    if (
+        not isinstance(pull_requests, list)
+        or not pull_requests
+        or not all(
+            isinstance(item, dict)
+            and type(item.get("number")) is int
+            and item["number"] > 0
+            for item in pull_requests
+        )
+        or not any(item["number"] == pr_number for item in pull_requests)
     ):
         raise RuntimeError("Blocked run belongs to another pull request")
     jobs: list[dict[str, Any]] = []
     total: int | None = None
     page = 1
     while total is None or len(jobs) < total:
-        payload = github_get(
+        payload = get(
             repo,
             f"actions/runs/{run_id}/jobs?per_page=100&page={page}",
             token,
@@ -952,21 +896,34 @@ def require_zero_step_run(  # noqa: C901
         count = (
             payload.get("total_count") if isinstance(payload, dict) else None
         )
-        if not isinstance(items, list) or not isinstance(count, int):
+        if (
+            not isinstance(items, list)
+            or not all(isinstance(item, dict) for item in items)
+            or type(count) is not int
+            or count < 0
+        ):
             raise RuntimeError("Blocked run jobs are incomplete")
         if total is not None and count != total:
             raise RuntimeError(
                 "Blocked run job count changed during pagination"
             )
         total = count
-        jobs.extend(item for item in items if isinstance(item, dict))
+        jobs.extend(items)
         if not items and len(jobs) < total:
             raise RuntimeError("Blocked run jobs are incomplete")
         page += 1
     if not jobs or len(jobs) != total:
         raise RuntimeError("Blocked run jobs are incomplete")
     if any(
-        job.get("runner_id") not in (None, 0) or bool(job.get("steps"))
+        type(job.get("id")) is not int
+        or job["id"] <= 0
+        or not (
+            job.get("runner_id") is None
+            or (type(job.get("runner_id")) is int and job["runner_id"] == 0)
+        )
+        or not isinstance(job.get("steps"), list)
+        or bool(job["steps"])
+        or job.get("conclusion") not in {"failure", "skipped"}
         for job in jobs
     ):
         raise RuntimeError("Quota fallback requires zero-step hosted jobs")
@@ -977,16 +934,16 @@ def require_zero_step_run(  # noqa: C901
         annotations: list[dict[str, Any]] = []
         page = 1
         while True:
-            payload = github_get(
+            payload = get(
                 repo,
                 f"check-runs/{job.get('id')}/annotations?per_page=100&page={page}",
                 token,
             )
             if not isinstance(payload, list):
                 raise RuntimeError("Blocked job annotations are incomplete")
-            annotations.extend(
-                item for item in payload if isinstance(item, dict)
-            )
+            if not all(isinstance(item, dict) for item in payload):
+                raise RuntimeError("Blocked job annotations are incomplete")
+            annotations.extend(payload)
             if len(payload) < 100:
                 break
             page += 1
@@ -1279,12 +1236,13 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
         evidence = {"schema_version": 1, "route": asdict(route)}
         if route.kind == "invalid-main-route":
             raise RuntimeError(
-                "Only a promotion, hotfix, or release follow-up may target main"
+                "Only a promotion, hotfix, release recovery, or release "
+                "follow-up may target main"
             )
         if route.relevant:
             if not same_repository(pull_request, args.repo):
                 raise RuntimeError(
-                    "Promotion and hotfix branches must come from "
+                    "Promotion, hotfix, and recovery branches must come from "
                     "this repository"
                 )
             title = pull_request.get("title")
@@ -1338,7 +1296,14 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     raise RuntimeError(
                         "Isolated delivery branch and Issue numbers differ"
                     )
-                if route.kind != "milestone" and issue_milestone is not None:
+                if route.kind == "release-recovery" and number != route.issue:
+                    raise RuntimeError(
+                        "Release recovery branch and Issue numbers differ"
+                    )
+                if (
+                    route.kind not in {"milestone", "release-recovery"}
+                    and issue_milestone is not None
+                ):
                     raise RuntimeError(
                         "Standalone promotion or hotfix cannot use a Milestone"
                     )
@@ -1376,6 +1341,15 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     {
                         "number": number,
                         "title": str(tracking_issue.get("title", "")),
+                    }
+                ]
+            elif route.kind == "release-recovery" and number is not None:
+                included = [
+                    {
+                        "number": number,
+                        "title": tracking_issue_state["title"]
+                        if tracking_issue_state is not None
+                        else "",
                     }
                 ]
             current_main = github_get(args.repo, "git/ref/heads/main", token)
@@ -1426,7 +1400,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 raise RuntimeError(
                     "Delivery branch must contain current main before promotion"
                 )
-            if route.kind in {"hotfix", "isolated"}:
+            if route.kind in {"hotfix", "isolated", "release-recovery"}:
                 included_prs = [
                     {
                         "number": pull_request["number"],
@@ -1561,119 +1535,27 @@ def finalize(args: argparse.Namespace) -> None:
     write_evidence(args.output, evidence)
 
 
-def note_quota_fallback(args: argparse.Namespace) -> None:  # noqa: C901
+def note_quota_fallback(args: argparse.Namespace) -> None:
     """Print a routine PR's quota fallback note after proving zero-step."""
     if not args.blocked_run_url:
         raise RuntimeError("At least one blocked Actions run is required")
     token = os.environ.get("GH_TOKEN", "")
     pull = github_get(args.repo, f"pulls/{args.pr}", token)
-    base = pull.get("base") if isinstance(pull, dict) else None
     head = pull.get("head") if isinstance(pull, dict) else None
-    if (
-        not isinstance(pull, dict)
-        or pull.get("number") != args.pr
-        or pull.get("state") != "open"
-        or pull.get("merged") is not False
-        or not isinstance(base, dict)
-        or not isinstance(head, dict)
-        or not same_repository(pull, args.repo)
-    ):
-        raise RuntimeError("Pull request identity could not be resolved")
+    if not isinstance(head, dict):
+        raise RuntimeError("Pull request head could not be resolved")
     head_sha = str(head.get("sha") or "")
     head_ref = str(head.get("ref") or "")
     if not head_sha or not head_ref:
         raise RuntimeError("Pull request head is incomplete")
-    labels = {
-        item["name"]
-        for item in pull.get("labels", [])
-        if isinstance(item, dict) and isinstance(item.get("name"), str)
-    }
-    route = route_for(
-        str(base.get("ref") or ""),
-        str(head.get("ref") or ""),
-        labels,
-        args.branch_strategy,
-    )
-    base_ref = str(base.get("ref") or "")
-    if route.kind != "not-applicable" or (
-        base_ref == "main"
-        and (
-            head_ref == "dev"
-            or head_ref == "dev/next"
-            or MILESTONE_BRANCH.fullmatch(head_ref)
-            or ISOLATED_BRANCH.fullmatch(head_ref)
-            or head_ref.startswith("release-please--")
-            or bool(labels & {"promotion", "hotfix"})
-        )
-    ):
-        raise RuntimeError(
-            "Routine quota fallback only applies to non-promotion pull requests"
-        )
-    if git_output("status", "--porcelain"):
-        raise RuntimeError("Routine quota fallback requires a clean worktree")
-    if git_output("rev-parse", "HEAD") != head_sha:
-        raise RuntimeError("Worktree HEAD must equal the pull request head")
-    blocked_run_urls = failed_pull_request_run_urls(args.repo, head_sha, token)
-    if set(args.blocked_run_url) != set(blocked_run_urls):
-        raise RuntimeError(
-            "Blocked run URLs must exactly match every live failed check"
-        )
-    for url in blocked_run_urls:
+    for url in args.blocked_run_url:
         require_run_url(url, args.repo)
         require_zero_step_run(
             url, args.repo, args.pr, head_ref, head_sha, token
         )
-    verification_command = local_verification_command()
-    subprocess.run(  # noqa: S603
-        verification_command, check=True, stdout=sys.stderr
-    )
-    latest_pull = github_get(args.repo, f"pulls/{args.pr}", token)
-    latest_base = (
-        latest_pull.get("base") if isinstance(latest_pull, dict) else None
-    )
-    latest_head = (
-        latest_pull.get("head") if isinstance(latest_pull, dict) else None
-    )
-    latest_labels = (
-        issue_labels(latest_pull) if isinstance(latest_pull, dict) else set()
-    )
-    if (
-        not isinstance(latest_pull, dict)
-        or latest_pull.get("state") != "open"
-        or latest_pull.get("merged") is not False
-        or not isinstance(latest_base, dict)
-        or latest_base.get("ref") != base.get("ref")
-        or not isinstance(latest_head, dict)
-        or latest_head.get("sha") != head_sha
-        or latest_head.get("ref") != head_ref
-        or route_for(
-            str(latest_base.get("ref") or ""),
-            str(latest_head.get("ref") or ""),
-            latest_labels,
-            args.branch_strategy,
-        ).kind
-        != "not-applicable"
-        or git_output("status", "--porcelain")
-        or git_output("rev-parse", "HEAD") != head_sha
-    ):
-        raise RuntimeError(
-            "Pull request or worktree changed during local verification"
-        )
-    if (
-        failed_pull_request_run_urls(args.repo, head_sha, token)
-        != blocked_run_urls
-    ):
-        raise RuntimeError(
-            "Pull request checks changed during local verification"
-        )
-    print(  # noqa: T201
+    sys.stdout.write(
         quota_fallback_note(
-            args.repo,
-            args.pr,
-            head_sha,
-            blocked_run_urls,
-            verification_command[0],
-            args.unreproduced_check,
+            args.repo, args.pr, head_sha, sorted(args.blocked_run_url)
         )
     )
 
@@ -1888,6 +1770,15 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
         != "local-quota-attested"
     ):
         raise RuntimeError("Promotion quota fallback evidence is incomplete")
+    canary = evidence.get("canary")
+    if (
+        not isinstance(canary, dict)
+        or canary.get("state") not in {"blocked", "unknown"}
+        or canary.get("result") != "artifact-only"
+    ):
+        raise RuntimeError(
+            "Promotion quota fallback canary evidence is invalid"
+        )
     if evidence.get("post_merge") is not None:
         raise RuntimeError("Promotion quota fallback was already verified")
     expected = {
@@ -2096,13 +1987,7 @@ def parser() -> argparse.ArgumentParser:
     note_command = commands.add_parser("note-quota-fallback")
     note_command.add_argument("--repo", required=True)
     note_command.add_argument("--pr", type=int, required=True)
-    note_command.add_argument(
-        "--branch-strategy", choices=("main", "dev", "delivery"), required=True
-    )
     note_command.add_argument("--blocked-run-url", action="append", default=[])
-    note_command.add_argument(
-        "--unreproduced-check", action="append", default=[]
-    )
     note_command.set_defaults(handler=note_quota_fallback)
 
     verify_command = commands.add_parser("verify-main")

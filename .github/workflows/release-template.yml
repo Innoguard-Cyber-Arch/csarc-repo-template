@@ -9,7 +9,7 @@ on:
         type: string
 
 concurrency:
-  group: release-template-${{ github.ref }}
+  group: release-template-${{ github.repository }}-${{ github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -22,11 +22,20 @@ jobs:
   source:
     name: verify release source
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
+          ref: ${{ github.ref }}
+      - name: Require the exact release tag checkout
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_TYPE" = tag
+          [[ "$GITHUB_REF_NAME" == v* ]]
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-list -n 1 "$GITHUB_REF_NAME")" = "$GITHUB_SHA"
       - name: Download and verify the promotion boundary
         env:
           GH_TOKEN: ${{ github.token }}
@@ -37,11 +46,37 @@ jobs:
             echo "Release artifacts require a Release Please source run." >&2
             exit 1
           }
-          source_run="$(gh run view "$SOURCE_RUN_ID" --json headSha,workflowName,status)"
-          test "$(jq -r .workflowName <<<"$source_run")" = "Release please"
-          test "$(jq -r .headSha <<<"$source_run")" = "$GITHUB_SHA"
+          source_run=""
+          for _ in {1..60}; do
+            source_run="$(
+              gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}"
+            )"
+            case "$(jq -r .status <<<"$source_run")" in
+              completed) break ;;
+              queued|in_progress|pending|waiting|requested) sleep 5 ;;
+              *) echo "Release source run returned an invalid status." >&2; exit 1 ;;
+            esac
+          done
+          workflow="$(
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-please.yml"
+          )"
+          jq -e \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg repository_id "$GITHUB_REPOSITORY_ID" \
+            --arg sha "$GITHUB_SHA" \
+            --arg workflow_id "$(jq -r .id <<<"$workflow")" '
+              .status == "completed" and
+              .conclusion == "success" and
+              .head_sha == $sha and
+              .path == ".github/workflows/release-please.yml" and
+              (.workflow_id | tostring) == $workflow_id and
+              .repository.full_name == $repository and
+              (.repository.id | tostring) == $repository_id and
+              (.event == "push" or .event == "workflow_dispatch")
+            ' <<<"$source_run" >/dev/null
           mkdir release-source
           gh run download "$SOURCE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
             --name "main-release-source-${SOURCE_RUN_ID}" \
             --dir release-source
           python3 scripts/release_policy.py verify-boundary \
@@ -70,7 +105,9 @@ jobs:
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
+          ref: ${{ github.ref }}
       - name: Require protected default branch
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,8 +117,9 @@ jobs:
     name: publish immutable release
     needs: governance
     permissions:
-      attestations: read
+      attestations: write
       contents: write
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -89,6 +127,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+          ref: ${{ github.ref }}
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
@@ -102,54 +141,424 @@ jobs:
         run: >-
           uv run --no-project python scripts/release_policy.py prepare
           --tag "$RELEASE_TAG"
-      - name: Build CLI and prepare release assets
+      - name: Inspect exact-tag release state without mutation
+        id: state
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes
-          fi
-          release_state="$(
-            gh release view "$RELEASE_TAG" --json isDraft,isImmutable \
-              --jq '[.isImmutable, .isDraft] | @tsv'
+          test "$GITHUB_REF_TYPE" = tag
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$GITHUB_SHA"
+          body="$RUNNER_TEMP/release-state.json"
+          errors="$RUNNER_TEMP/release-state.stderr"
+          set +e
+          status="$(
+            curl --location --silent --show-error \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --output "$body" \
+              --write-out '%{http_code}' \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+              2>"$errors"
           )"
-          if [[ "$release_state" == $'true\tfalse' ]]; then
-            echo "Release is already published and immutable; keeping its assets unchanged."
-            exit 0
-          fi
-          test "$release_state" = $'false\ttrue'
+          curl_status=$?
+          set -e
+          test "$curl_status" -eq 0 || { cat "$errors" >&2; exit 1; }
+          case "$status" in
+            200)
+              release_state="$(
+                jq -r '[.immutable, .draft] | @tsv' "$body"
+              )"
+              case "$release_state" in
+                $'true\tfalse') state=immutable ;;
+                $'false\ttrue') state=draft ;;
+                *)
+                  echo "Release state is neither an immutable publication nor a mutable draft." >&2
+                  exit 1
+                  ;;
+              esac
+              ;;
+            404) state=missing ;;
+            *)
+              cat "$errors" >&2
+              cat "$body" >&2
+              echo "Release lookup failed with HTTP $status." >&2
+              exit 1
+              ;;
+          esac
+          {
+            echo "state=$state"
+            echo "reuse=$([[ "$state" == immutable ]] && echo true || echo false)"
+            echo "root_name=csarc-repo-cli"
+            echo "root_purl=pkg:pypi/csarc-repo-cli@${RELEASE_TAG#v}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Build CLI and prepare release assets
+        id: prepare
+        if: steps.state.outputs.reuse != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INITIAL_STATE: ${{ steps.state.outputs.state }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
           commit_sha="$(git rev-parse HEAD)"
           test "$commit_sha" = "$(git rev-list -n 1 "$RELEASE_TAG")"
-          gh release view "$RELEASE_TAG" --json body --jq .body >release-body.md
-          uv build
+          build_root="$(mktemp -d "$RUNNER_TEMP/release-build.XXXXXX")"
+          prompt_root="$(mktemp -d "$RUNNER_TEMP/release-prompt.XXXXXX")"
+          asset_root="$(mktemp -d "$RUNNER_TEMP/release-assets.XXXXXX")"
+          release_body="$RUNNER_TEMP/release-body.md"
+          if [[ "$INITIAL_STATE" == draft ]]; then
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --json body --jq .body >"$release_body"
+          else
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+              -f tag_name="$RELEASE_TAG" \
+              -f target_commitish="$commit_sha" \
+              --jq .body >"$release_body"
+          fi
+          uv build --out-dir "$build_root"
+          mapfile -t wheels < <(find "$build_root" -maxdepth 1 -type f -name '*.whl' -print)
+          mapfile -t sdists < <(find "$build_root" -maxdepth 1 -type f -name '*.tar.gz' -print)
+          [[ "${#wheels[@]}" -eq 1 && "${#sdists[@]}" -eq 1 ]] || {
+            echo "Expected exactly one wheel and one source distribution." >&2
+            exit 1
+          }
           uv run python scripts/render_release_prompt.py \
             --tag "$RELEASE_TAG" \
             --sha "$commit_sha" \
-            --body-file release-body.md \
-            --output-dir release-assets
-          cp release-source/release-source.json release-assets/release-source.json
-          gh release upload "$RELEASE_TAG" \
-            dist/*.whl \
-            dist/*.tar.gz \
-            release-assets/release-prompt.txt \
-            release-assets/csarc-release-provenance.json \
-            release-assets/release-source.json
+            --body-file "$release_body" \
+            --output-dir "$prompt_root"
+          cp "${wheels[0]}" "${sdists[0]}" \
+            "$prompt_root/release-prompt.txt" \
+            "$prompt_root/csarc-release-provenance.json" \
+            "$asset_root/"
+          cp release-source/release-source.json "$asset_root/release-source.json"
+          runtime_root="$RUNNER_TEMP/release-runtime"
+          test ! -e "$runtime_root"
+          UV_PROJECT_ENVIRONMENT="$runtime_root" \
+            uv sync --locked --no-dev --no-editable
+          "$runtime_root/bin/python" - "$asset_root/inventory.purls" <<'PY'
+          import importlib.metadata
+          import re
+          import sys
+          from pathlib import Path
+          from urllib.parse import quote
+
+          purls = {
+              "pkg:pypi/"
+              + quote(re.sub(r"[-_.]+", "-", dist.metadata["Name"]).lower(), safe="")
+              + "@"
+              + quote(dist.version, safe="")
+              for dist in importlib.metadata.distributions()
+              if dist.metadata.get("Name") and dist.version
+          }
+          Path(sys.argv[1]).write_text("\n".join(sorted(purls)) + "\n", encoding="utf-8")
+          PY
+          root_name="$(
+            python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["name"])'
+          )"
+          normalized_name="$(
+            ROOT_NAME="$root_name" python3 -c 'import os,re; print(re.sub(r"[-_.]+", "-", os.environ["ROOT_NAME"]).lower())'
+          )"
+          root_purl="pkg:pypi/${normalized_name}@${RELEASE_TAG#v}"
+          grep -Fx "$root_purl" "$asset_root/inventory.purls" >/dev/null
+          {
+            echo "root=$runtime_root"
+            echo "asset_root=$asset_root"
+            echo "notes=$prompt_root/release-notes.md"
+            echo "root_name=$root_name"
+            echo "root_purl=$root_purl"
+            echo "wheel=$asset_root/$(basename "${wheels[0]}")"
+            echo "sdist=$asset_root/$(basename "${sdists[0]}")"
+            echo "version=${RELEASE_TAG#v}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Generate exact Syft SPDX SBOM
+        if: steps.state.outputs.reuse != 'true'
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        env:
+          SYFT_SOURCE_NAME: csarc-repo-cli
+          SYFT_SOURCE_VERSION: ${{ steps.prepare.outputs.version }}
+        with:
+          path: ${{ steps.prepare.outputs.root }}
+          format: spdx-json
+          output-file: ${{ steps.prepare.outputs.asset_root }}/sbom.spdx.json
+          syft-version: v1.50.0
+          upload-artifact: false
+          upload-release-assets: false
+          dependency-snapshot: false
+      - name: Bind and verify release evidence
+        if: steps.state.outputs.reuse != 'true'
+        env:
+          ASSET_ROOT: ${{ steps.prepare.outputs.asset_root }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          ROOT_NAME: ${{ steps.state.outputs.root_name }}
+          ROOT_PURL: ${{ steps.state.outputs.root_purl }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          set -euo pipefail
+          mapfile -t wheels < <(find "$ASSET_ROOT" -maxdepth 1 -type f -name '*.whl' -print)
+          mapfile -t sdists < <(find "$ASSET_ROOT" -maxdepth 1 -type f -name '*.tar.gz' -print)
+          [[ "${#wheels[@]}" -eq 1 && "${#sdists[@]}" -eq 1 ]]
+          artifacts=(
+            --artifact "${wheels[0]}"
+            --artifact "${sdists[0]}"
+            --artifact "$ASSET_ROOT/release-prompt.txt"
+            --artifact "$ASSET_ROOT/release-source.json"
+          )
+          python3 scripts/release_assets.py build \
+            --tag "$RELEASE_TAG" \
+            --commit "$GITHUB_SHA" \
+            --version-file version.txt \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$GITHUB_REPOSITORY_ID" \
+            --source-run "$SOURCE_RUN_ID" \
+            --release-run "$GITHUB_RUN_ID" \
+            --runtime-kind package \
+            --root-name "$ROOT_NAME" \
+            --root-purl "$ROOT_PURL" \
+            --inventory-file "$ASSET_ROOT/inventory.purls" \
+            "${artifacts[@]}" \
+            --asset-root "$ASSET_ROOT" \
+            --sbom "$ASSET_ROOT/sbom.spdx.json" \
+            --manifest "$ASSET_ROOT/release-manifest.json" \
+            --provenance "$ASSET_ROOT/csarc-release-provenance.json"
+          python3 scripts/release_assets.py verify \
+            --tag "$RELEASE_TAG" \
+            --commit "$GITHUB_SHA" \
+            --version-file version.txt \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$GITHUB_REPOSITORY_ID" \
+            --source-run "$SOURCE_RUN_ID" \
+            --release-run "$GITHUB_RUN_ID" \
+            --runtime-kind package \
+            --root-name "$ROOT_NAME" \
+            --root-purl "$ROOT_PURL" \
+            --inventory-file "$ASSET_ROOT/inventory.purls" \
+            "${artifacts[@]}" \
+            --asset-root "$ASSET_ROOT" \
+            --sbom "$ASSET_ROOT/sbom.spdx.json" \
+            --manifest "$ASSET_ROOT/release-manifest.json" \
+            --provenance "$ASSET_ROOT/csarc-release-provenance.json"
+      - name: Create or require the mutable draft
+        if: steps.state.outputs.reuse != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INITIAL_STATE: ${{ steps.state.outputs.state }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_NOTES: ${{ steps.prepare.outputs.notes }}
+        run: |
+          set -euo pipefail
+          if [[ "$INITIAL_STATE" == missing ]]; then
+            body="$RUNNER_TEMP/release-create-state.json"
+            errors="$RUNNER_TEMP/release-create-state.stderr"
+            set +e
+            status="$(
+              curl --location --silent --show-error \
+                --header "Accept: application/vnd.github+json" \
+                --header "Authorization: Bearer $GH_TOKEN" \
+                --header "X-GitHub-Api-Version: 2022-11-28" \
+                --output "$body" \
+                --write-out '%{http_code}' \
+                "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+                2>"$errors"
+            )"
+            curl_status=$?
+            set -e
+            test "$curl_status" -eq 0 || { cat "$errors" >&2; exit 1; }
+            if [[ "$status" != 404 ]]; then
+              cat "$body" >&2
+              echo "Release state changed before draft creation (HTTP $status)." >&2
+              exit 1
+            fi
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --draft \
+              --notes-file "$RELEASE_NOTES"
+          elif [[ "$INITIAL_STATE" != draft ]]; then
+            echo "Only an absent Release or a mutable draft may be published." >&2
+            exit 1
+          fi
+          test "$(
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --json isDraft,isImmutable \
+              --jq '[.isImmutable, .isDraft] | @tsv'
+          )" = $'false\ttrue'
+      - name: Upload and verify the mutable draft
+        if: steps.state.outputs.reuse != 'true'
+        env:
+          ASSET_ROOT: ${{ steps.prepare.outputs.asset_root }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          ROOT_NAME: ${{ steps.state.outputs.root_name }}
+          ROOT_PURL: ${{ steps.state.outputs.root_purl }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+        run: |
+          set -euo pipefail
+          mapfile -t wheels < <(find "$ASSET_ROOT" -maxdepth 1 -type f -name '*.whl' -print)
+          mapfile -t sdists < <(find "$ASSET_ROOT" -maxdepth 1 -type f -name '*.tar.gz' -print)
+          [[ "${#wheels[@]}" -eq 1 && "${#sdists[@]}" -eq 1 ]]
+          release_files=(
+            "${wheels[0]}"
+            "${sdists[0]}"
+            "$ASSET_ROOT/release-prompt.txt"
+            "$ASSET_ROOT/release-source.json"
+            "$ASSET_ROOT/inventory.purls"
+            "$ASSET_ROOT/sbom.spdx.json"
+            "$ASSET_ROOT/release-manifest.json"
+            "$ASSET_ROOT/csarc-release-provenance.json"
+          )
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isImmutable --jq '[.isImmutable, .isDraft] | @tsv')" = $'false\ttrue'
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            "${release_files[@]}" --clobber
+          draft_assets="$(mktemp -d "$RUNNER_TEMP/draft-release-assets.XXXXXX")"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --dir "$draft_assets"
+          mapfile -t draft_wheels < <(find "$draft_assets" -maxdepth 1 -type f -name '*.whl' -print)
+          mapfile -t draft_sdists < <(find "$draft_assets" -maxdepth 1 -type f -name '*.tar.gz' -print)
+          [[ "${#draft_wheels[@]}" -eq 1 && "${#draft_sdists[@]}" -eq 1 ]]
+          draft_artifacts=(
+            --artifact "${draft_wheels[0]}"
+            --artifact "${draft_sdists[0]}"
+            --artifact "$draft_assets/release-prompt.txt"
+            --artifact "$draft_assets/release-source.json"
+          )
+          python3 scripts/release_assets.py verify \
+            --tag "$RELEASE_TAG" \
+            --commit "$GITHUB_SHA" \
+            --version-file version.txt \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$GITHUB_REPOSITORY_ID" \
+            --source-run "$SOURCE_RUN_ID" \
+            --release-run "$(jq -r '.release_run // empty' "$draft_assets/csarc-release-provenance.json")" \
+            --runtime-kind package \
+            --root-name "$ROOT_NAME" \
+            --root-purl "$ROOT_PURL" \
+            --inventory-file "$draft_assets/inventory.purls" \
+            "${draft_artifacts[@]}" \
+            --asset-root "$draft_assets" \
+            --sbom "$draft_assets/sbom.spdx.json" \
+            --manifest "$draft_assets/release-manifest.json" \
+            --provenance "$draft_assets/csarc-release-provenance.json"
+      - name: Attest build provenance
+        if: steps.state.outputs.reuse != 'true'
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: |
+            ${{ steps.prepare.outputs.wheel }}
+            ${{ steps.prepare.outputs.sdist }}
+            ${{ steps.prepare.outputs.asset_root }}/release-prompt.txt
+            ${{ steps.prepare.outputs.asset_root }}/release-source.json
+            ${{ steps.prepare.outputs.asset_root }}/inventory.purls
+            ${{ steps.prepare.outputs.asset_root }}/sbom.spdx.json
+            ${{ steps.prepare.outputs.asset_root }}/release-manifest.json
+            ${{ steps.prepare.outputs.asset_root }}/csarc-release-provenance.json
+      - name: Attest software bill of materials
+        if: steps.state.outputs.reuse != 'true'
+        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3.0.0
+        with:
+          subject-path: |
+            ${{ steps.prepare.outputs.wheel }}
+            ${{ steps.prepare.outputs.sdist }}
+            ${{ steps.prepare.outputs.asset_root }}/release-prompt.txt
+            ${{ steps.prepare.outputs.asset_root }}/release-source.json
+            ${{ steps.prepare.outputs.asset_root }}/inventory.purls
+            ${{ steps.prepare.outputs.asset_root }}/release-manifest.json
+            ${{ steps.prepare.outputs.asset_root }}/csarc-release-provenance.json
+          sbom-path: ${{ steps.prepare.outputs.asset_root }}/sbom.spdx.json
+      - name: Publish the verified draft
+        if: steps.state.outputs.reuse != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_NOTES: ${{ steps.prepare.outputs.notes }}
+        run: |
           gh release edit "$RELEASE_TAG" \
-            --notes-file release-assets/release-notes.md \
+            --repo "$GITHUB_REPOSITORY" \
+            --notes-file "$RELEASE_NOTES" \
             --draft=false
       - name: Verify published release trust chain
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
+          ROOT_NAME: ${{ steps.state.outputs.root_name }}
+          ROOT_PURL: ${{ steps.state.outputs.root_purl }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
         run: |
           set -euo pipefail
-          test "$(gh release view "$RELEASE_TAG" --json isImmutable,isDraft,isPrerelease --jq '[.isImmutable, .isDraft, .isPrerelease] | @tsv')" = $'true\tfalse\tfalse'
-          for attempt in {1..24}; do
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isImmutable,isDraft,isPrerelease --jq '[.isImmutable, .isDraft, .isPrerelease] | @tsv')" = $'true\tfalse\tfalse'
+          verified="$(mktemp -d "$RUNNER_TEMP/release-verify.XXXXXX")"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --dir "$verified"
+          mapfile -t wheels < <(find "$verified" -maxdepth 1 -type f -name '*.whl' -print)
+          mapfile -t sdists < <(find "$verified" -maxdepth 1 -type f -name '*.tar.gz' -print)
+          [[ "${#wheels[@]}" -eq 1 && "${#sdists[@]}" -eq 1 ]]
+          release_run="$(
+            jq -r '.release_run // empty' \
+              "$verified/csarc-release-provenance.json"
+          )"
+          [[ "$release_run" =~ ^[0-9]+$ ]]
+          artifacts=(
+            --artifact "${wheels[0]}"
+            --artifact "${sdists[0]}"
+            --artifact "$verified/release-prompt.txt"
+            --artifact "$verified/release-source.json"
+          )
+          python3 scripts/release_assets.py verify \
+            --tag "$RELEASE_TAG" \
+            --commit "$GITHUB_SHA" \
+            --version-file version.txt \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$GITHUB_REPOSITORY_ID" \
+            --source-run "$SOURCE_RUN_ID" \
+            --release-run "$release_run" \
+            --runtime-kind package \
+            --root-name "$ROOT_NAME" \
+            --root-purl "$ROOT_PURL" \
+            --inventory-file "$verified/inventory.purls" \
+            "${artifacts[@]}" \
+            --asset-root "$verified" \
+            --sbom "$verified/sbom.spdx.json" \
+            --manifest "$verified/release-manifest.json" \
+            --provenance "$verified/csarc-release-provenance.json"
+          while IFS= read -r -d '' asset; do
+            gh attestation verify "$asset" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow \
+                "$GITHUB_REPOSITORY/.github/workflows/release-template.yml" \
+              --source-digest "$GITHUB_SHA" \
+              --source-ref "$GITHUB_REF"
+          done < <(find "$verified" -maxdepth 1 -type f -print0)
+          for _ in {1..24}; do
             if gh release verify "$RELEASE_TAG" -R "$GITHUB_REPOSITORY"; then
               exit 0
             fi
             sleep 5
           done
           exit 1
+      - name: Keep a failed mutable release pending
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          is_immutable="$(
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --json isImmutable --jq .isImmutable
+          )"
+          case "$is_immutable" in
+            false)
+              gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft
+              test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+              ;;
+            true) ;;
+            *)
+              echo "GitHub returned an invalid immutable release state." >&2
+              exit 1
+              ;;
+          esac
