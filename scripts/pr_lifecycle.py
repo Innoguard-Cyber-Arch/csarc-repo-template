@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import ast
 import hashlib
+import importlib
 import json
 import os
 import re
@@ -18,6 +19,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    promotion_gate = importlib.import_module("promotion_gate")
+else:
+    promotion_gate = importlib.import_module(f"{__package__}.promotion_gate")
+
+
 LEASE_SCHEMA = 2
 MAX_TTL_SECONDS = 7200
 MIN_OPERATION_SECONDS = 30
@@ -27,8 +35,16 @@ SHA256 = re.compile(r"[0-9a-f]{64}")
 OWNER = re.compile(r"[A-Za-z0-9._/@:-]{1,200}")
 ACTOR = re.compile(r"[A-Za-z0-9_.-]+(?:\[bot\])?")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+DELIVERY_BRANCH = re.compile(r"^dev/m([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
+ISSUE_WORK_BRANCH = re.compile(
+    r"^(?:build|chore|ci|docs|feat|fix|refactor|revert|test)/"
+    r"([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$"
+)
+ALPHA_SELF_MERGE_MARKER = "Alpha 自行合併 / self-merged"
 UNCHECKED = re.compile(r"(?m)^\s*[-*+]\s+\[\s*\]")
-CLOSING_ISSUE = re.compile(r"(?:Closes|Fixes|Resolves)\s+#(\d+)(?:\D|$)", re.I)
+CLOSING_ISSUE = re.compile(
+    r"(?<!\w)(?:Closes|Fixes|Resolves)[ \t]+#([1-9][0-9]*)(?!\w)"
+)
 BLOCKER = re.compile(
     r"(?i)^(?:blocked|blocker)\s*:|^\[merge-blocker\]|^\[P[01]\]"
 )
@@ -853,6 +869,143 @@ def authorization_statement(repo: str, pr_number: int, head_sha: str) -> str:
     )
 
 
+def require_routine_route(  # noqa: C901
+    github: GitHub,
+    repo: str,
+    lease: dict[str, Any],
+    pull: dict[str, Any],
+) -> str:
+    """Require a same-repository Issue or exact current-main sync route."""
+    base_ref = (pull.get("base") or {}).get("ref")
+    head = pull.get("head")
+    if not isinstance(head, dict):
+        raise RuntimeError("Routine pull request head is invalid")
+    head_ref = head.get("ref")
+    head_repo_payload = head.get("repo")
+    head_repo = (
+        head_repo_payload.get("full_name")
+        if isinstance(head_repo_payload, dict)
+        else None
+    )
+    if base_ref == lease["default_branch"]:
+        raise RuntimeError(
+            "Routine fallback is forbidden for default-branch routes"
+        )
+    if (
+        not isinstance(base_ref, str)
+        or (
+            base_ref != "dev/next"
+            and DELIVERY_BRANCH.fullmatch(base_ref) is None
+        )
+        or not isinstance(head_ref, str)
+        or not isinstance(head_repo, str)
+        or head_repo.casefold() != repo.casefold()
+    ):
+        raise RuntimeError(
+            "Routine fallback requires a same-repository delivery route"
+        )
+    work = ISSUE_WORK_BRANCH.fullmatch(head_ref)
+    if work:
+        issue_number = int(work.group(1))
+        closing_issues = [
+            int(value)
+            for value in CLOSING_ISSUE.findall(str(pull.get("body") or ""))
+        ]
+        if closing_issues != [issue_number]:
+            raise RuntimeError(
+                "Routine work branch must close its matching Issue exactly"
+            )
+        issue = github.get(repo, f"issues/{issue_number}")
+        if (
+            not isinstance(issue, dict)
+            or type(issue.get("number")) is not int
+            or issue["number"] != issue_number
+            or issue.get("pull_request") is not None
+            or issue.get("state") != "open"
+        ):
+            raise RuntimeError("Routine work branch Issue is not open")
+        delivery = DELIVERY_BRANCH.fullmatch(base_ref)
+        expected_milestone = int(delivery.group(1)) if delivery else None
+        milestone = issue.get("milestone")
+        if milestone is None:
+            actual_milestone = None
+        elif (
+            isinstance(milestone, dict) and type(milestone.get("number")) is int
+        ):
+            actual_milestone = milestone["number"]
+        else:
+            raise RuntimeError("Routine work branch Issue Milestone is invalid")
+        if actual_milestone != expected_milestone:
+            raise RuntimeError(
+                "Routine work branch Issue Milestone does not match its base"
+            )
+        return "issue"
+    main_sha = branch_sha(github, repo, str(lease["default_branch"]))
+    expected_sync = promotion_gate.delivery_sync.sync_branch_name(
+        base_ref, main_sha
+    )
+    if head_ref != expected_sync:
+        raise RuntimeError(
+            "Routine fallback requires a work branch or the exact "
+            "current-main sync branch"
+        )
+    head_sha = head.get("sha")
+    base_sha = (pull.get("base") or {}).get("sha")
+    if (
+        not isinstance(head_sha, str)
+        or SHA.fullmatch(head_sha) is None
+        or not isinstance(base_sha, str)
+        or SHA.fullmatch(base_sha) is None
+    ):
+        raise RuntimeError("Routine sync commit identity is invalid")
+    comparison = github.get(
+        repo,
+        f"compare/{urllib.parse.quote(main_sha, safe='')}..."
+        f"{urllib.parse.quote(head_sha, safe='')}",
+    )
+    compare_status = (
+        comparison.get("status") if isinstance(comparison, dict) else None
+    )
+    if not isinstance(compare_status, str):
+        raise RuntimeError("Routine sync comparison is invalid")
+    if not promotion_gate.delivery_sync.includes_main(compare_status):
+        raise RuntimeError("Routine sync head does not contain current main")
+    commit = github.get(repo, f"git/commits/{head_sha}")
+    parents = commit.get("parents") if isinstance(commit, dict) else None
+    parent_shas = (
+        [item.get("sha") for item in parents if isinstance(item, dict)]
+        if isinstance(parents, list)
+        else []
+    )
+    if parent_shas != [base_sha, main_sha]:
+        raise RuntimeError(
+            "Routine sync head must merge current main into the exact base"
+        )
+    return "sync"
+
+
+def alpha_self_merge_opt_in(
+    github: GitHub,
+    repo: str,
+    lease: dict[str, Any],
+    pull: dict[str, Any],
+) -> bool:
+    """Validate the exact Alpha marker and its non-default routine route."""
+    marker_count = (
+        str(pull.get("body") or "").splitlines().count(ALPHA_SELF_MERGE_MARKER)
+    )
+    if marker_count == 0:
+        return False
+    if marker_count != 1:
+        raise RuntimeError("Alpha self-merge marker must appear exactly once")
+    route = require_routine_route(github, repo, lease, pull)
+    if route != "issue":
+        raise RuntimeError(
+            "Alpha self-merge is only available for routine Issue routes"
+        )
+    return True
+
+
 def unresolved_blocker(comments: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Return the latest unresolved merge-blocker marker."""
     latest_blocker: tuple[datetime, dict[str, Any]] | None = None
@@ -900,36 +1053,65 @@ def current_reviews(reviews: list[dict[str, Any]]) -> dict[str, str]:
     return current
 
 
-def effective_protection(
-    github: GitHub, repo: str, branch: str
+def effective_protection(  # noqa: C901
+    github: GitHub,
+    repo: str,
+    branch: str,
+    alpha_self_merge: bool = False,
 ) -> tuple[str, str, set[tuple[str, int | None]]]:
-    """Prove review, last-push, thread, checks, and no-bypass enforcement."""
+    """Prove the route's review, check, and no-bypass enforcement."""
     try:
         rules = github.get(
             repo, f"rules/branches/{urllib.parse.quote(branch, safe='')}"
         )
     except RuntimeError as error:
         return "unknown", str(error), set()
-    if not isinstance(rules, list):
+    if not isinstance(rules, list) or not all(
+        isinstance(item, dict) for item in rules
+    ):
         return "unknown", "effective branch rules are unavailable", set()
     pull_rules = [item for item in rules if item.get("type") == "pull_request"]
     check_rules = [
         item for item in rules if item.get("type") == "required_status_checks"
     ]
-    pull = [item.get("parameters") or {} for item in pull_rules]
-    checks = [item.get("parameters") or {} for item in check_rules]
-    required_items = [
-        item
-        for parameters in checks
-        for item in parameters.get("required_status_checks", [])
+    if any(
+        not isinstance(item.get("parameters"), dict)
+        for item in pull_rules + check_rules
+    ):
+        return "unknown", "effective rule parameters are malformed", set()
+    pull = [item["parameters"] for item in pull_rules]
+    checks = [item["parameters"] for item in check_rules]
+    review_flags = (
+        "dismiss_stale_reviews_on_push",
+        "require_code_owner_review",
+        "require_last_push_approval",
+        "required_review_thread_resolution",
+    )
+    if any(
+        type(parameters.get("required_approving_review_count")) is not int
+        or parameters["required_approving_review_count"] < 0
+        or any(
+            type(parameters.get(field)) is not bool for field in review_flags
+        )
+        for parameters in pull
+    ):
+        return "unknown", "pull request rules are malformed", set()
+    required_groups = [
+        parameters.get("required_status_checks") for parameters in checks
     ]
+    if any(not isinstance(items, list) for items in required_groups):
+        return "unknown", "required check rules are malformed", set()
+    required_items = [item for items in required_groups for item in items]
     if any(
         not isinstance(item, dict)
         or not isinstance(item.get("context"), str)
         or not item["context"]
         or (
             item.get("integration_id") is not None
-            and not isinstance(item.get("integration_id"), int)
+            and (
+                type(item.get("integration_id")) is not int
+                or item["integration_id"] <= 0
+            )
         )
         for item in required_items
     ):
@@ -939,39 +1121,60 @@ def effective_protection(
         for item in required_items
         if isinstance(item, dict)
     }
-    protected = (
-        any(
-            item.get("required_approving_review_count", 0) >= 1 for item in pull
-        )
-        and any(
-            item.get("dismiss_stale_reviews_on_push") is True for item in pull
-        )
-        and any(item.get("require_code_owner_review") is True for item in pull)
-        and any(item.get("require_last_push_approval") is True for item in pull)
-        and any(
-            item.get("required_review_thread_resolution") is True
+    if alpha_self_merge:
+        review_controls = bool(pull) and all(
+            type(item.get("required_approving_review_count")) is int
+            and item["required_approving_review_count"] == 0
+            and item.get("required_review_thread_resolution") is True
             for item in pull
         )
-        and bool(required_contexts)
-    )
-    if not protected:
+        missing_reason = (
+            "explicit zero-review Alpha policy, thread, or check rules are "
+            "missing"
+        )
+    else:
+        review_controls = (
+            any(
+                item.get("required_approving_review_count", 0) >= 1
+                for item in pull
+            )
+            and any(
+                item.get("dismiss_stale_reviews_on_push") is True
+                for item in pull
+            )
+            and any(
+                item.get("require_code_owner_review") is True for item in pull
+            )
+            and any(
+                item.get("require_last_push_approval") is True for item in pull
+            )
+            and any(
+                item.get("required_review_thread_resolution") is True
+                for item in pull
+            )
+        )
+        missing_reason = (
+            "required approval, stale-review dismissal, CODEOWNER, last-push, "
+            "thread, or check rules are missing"
+        )
+    if not review_controls or not required_contexts:
         return (
             "blocked",
-            "required approval, stale-review dismissal, CODEOWNER, last-push, "
-            "thread, or check rules are missing",
+            missing_reason,
             set(),
         )
-    ruleset_ids = {
-        item.get("ruleset_id")
-        for item in pull_rules + check_rules
-        if item.get("ruleset_id")
-    }
-    if not ruleset_ids:
+    ruleset_id_values = [
+        item.get("ruleset_id") for item in pull_rules + check_rules
+    ]
+    if not ruleset_id_values or any(
+        type(value) is not int or value <= 0 for value in ruleset_id_values
+    ):
         return (
             "unknown",
             "effective rules do not expose their Ruleset identity",
             set(),
         )
+    ruleset_ids = set(ruleset_id_values)
     for ruleset_id in ruleset_ids:
         try:
             ruleset = github.get(repo, f"rulesets/{ruleset_id}")
@@ -994,18 +1197,72 @@ def effective_protection(
     )
 
 
-def require_successful_checks(
+def check_run_matches_context(
+    item: dict[str, Any], context: str, integration_id: int | None
+) -> bool:
+    """Match a check only when its pinned GitHub App identity is exact."""
+    if item.get("name") != context:
+        return False
+    if integration_id is None:
+        return True
+    app = item.get("app")
+    return (
+        isinstance(app, dict)
+        and type(app.get("id")) is int
+        and app["id"] > 0
+        and app["id"] == integration_id
+    )
+
+
+def authoritative_check_runs(
+    check_runs: list[dict[str, Any]], head_sha: str
+) -> list[dict[str, Any]]:
+    """Keep the newest check for each strict GitHub App identity."""
+    candidate_runs = [
+        item for item in check_runs if item.get("head_sha") == head_sha
+    ]
+    identities: list[tuple[str, int, int]] = []
+    latest_ids: dict[tuple[str, int], int] = {}
+    for item in candidate_runs:
+        name = item.get("name")
+        check_id = item.get("id")
+        app = item.get("app")
+        app_id = app.get("id") if isinstance(app, dict) else None
+        if (
+            not isinstance(name, str)
+            or not name
+            or type(check_id) is not int
+            or check_id <= 0
+            or type(app_id) is not int
+            or app_id <= 0
+        ):
+            raise RuntimeError("Check run identity is malformed")
+        identity = (name, app_id)
+        identities.append((name, app_id, check_id))
+        latest_ids[identity] = max(latest_ids.get(identity, 0), check_id)
+    return [
+        item
+        for item, (name, app_id, check_id) in zip(
+            candidate_runs, identities, strict=True
+        )
+        if latest_ids[(name, app_id)] == check_id
+    ]
+
+
+def require_successful_checks(  # noqa: C901
     github: GitHub,
     repo: str,
     head_sha: str,
     contexts: set[tuple[str, int | None]],
-) -> None:
-    """Require every protected context to succeed on the exact PR head."""
+    quota_run_urls: set[str] | None = None,
+) -> str:
+    """Require protected contexts to pass or have exact quota evidence."""
     check_runs = github.collection(
         repo,
         f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
         "check_runs",
     )
+    authoritative_runs = authoritative_check_runs(check_runs, head_sha)
     statuses = github.collection(
         repo,
         f"commits/{head_sha}/status?per_page=100",
@@ -1014,7 +1271,7 @@ def require_successful_checks(
     )
     passing_runs = [
         item
-        for item in check_runs
+        for item in authoritative_runs
         if item.get("head_sha") == head_sha
         and item.get("status") == "completed"
         and item.get("conclusion") in SUCCESSFUL_CHECK_CONCLUSIONS
@@ -1024,24 +1281,171 @@ def require_successful_checks(
         for item in statuses
         if item.get("state") == "success"
     }
-    missing = sorted(
-        context
+    missing = [
+        (context, integration_id)
         for context, integration_id in contexts
         if not any(
-            item.get("name") == context
-            and (
-                integration_id is None
-                or (item.get("app") or {}).get("id") == integration_id
-            )
+            check_run_matches_context(item, context, integration_id)
             for item in passing_runs
         )
         and not (integration_id is None and context in passing_statuses)
-    )
-    if missing:
-        raise RuntimeError(
-            "Required checks have not succeeded on the exact head: "
-            + ", ".join(missing)
+    ]
+    missing.sort(key=lambda item: (item[0], -1 if item[1] is None else item[1]))
+    if quota_run_urls:
+        non_quota_failures: set[str] = set()
+        for item in authoritative_runs:
+            name = str(item.get("name") or "unnamed check")
+            if item.get("status") != "completed":
+                non_quota_failures.add(name)
+                continue
+            if item.get("conclusion") in SUCCESSFUL_CHECK_CONCLUSIONS:
+                continue
+            if item.get("conclusion") != "failure":
+                non_quota_failures.add(name)
+                continue
+            try:
+                run_url = actions_run_url(
+                    str(item.get("details_url") or ""), repo
+                )
+            except RuntimeError:
+                non_quota_failures.add(name)
+                continue
+            if run_url not in quota_run_urls:
+                non_quota_failures.add(name)
+        non_quota_failures.update(
+            str(item.get("context") or "unnamed status")
+            for item in statuses
+            if item.get("state") in {"error", "failure"}
         )
+        if non_quota_failures:
+            raise RuntimeError(
+                "Non-quota check failures remain on the exact head: "
+                + ", ".join(sorted(non_quota_failures))
+            )
+    if not missing:
+        return "quota-fallback" if quota_run_urls else "success"
+    if quota_run_urls:
+        for context, integration_id in missing:
+            failed_runs = [
+                item
+                for item in authoritative_runs
+                if item.get("name") == context
+                and item.get("head_sha") == head_sha
+                and item.get("status") == "completed"
+                and item.get("conclusion") == "failure"
+                and check_run_matches_context(item, context, integration_id)
+            ]
+            if len(failed_runs) != 1:
+                break
+            run_url = actions_run_url(
+                str(failed_runs[0].get("details_url") or ""), repo
+            )
+            if run_url not in quota_run_urls:
+                break
+        else:
+            return "quota-fallback"
+    raise RuntimeError(
+        "Required checks have not succeeded on the exact head: "
+        + ", ".join(context for context, _integration_id in missing)
+    )
+
+
+def actions_run_url(details_url: str, repo: str) -> str:
+    """Normalize an exact-repository Actions check URL to its run URL."""
+    parsed = urllib.parse.urlparse(details_url)
+    match = re.fullmatch(
+        rf"/{re.escape(repo)}/actions/runs/(\d+)(?:/job/\d+)?",
+        parsed.path,
+    )
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc.casefold() != "github.com"
+        or match is None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise RuntimeError(
+            "Failed check has no exact-repository Actions run URL"
+        )
+    return f"https://github.com/{repo}/actions/runs/{match.group(1)}"
+
+
+def require_routine_quota_fallback(
+    github: GitHub,
+    lease: dict[str, Any],
+    pull: dict[str, Any],
+    authorization_payload: dict[str, Any],
+    note_url: str,
+) -> set[str]:
+    """Validate a canonical routine-PR quota note and every bound run."""
+    repo = str(lease["repository"])
+    pr_number = int(lease["pull_request"])
+    head_sha = str(lease["head_sha"])
+    require_routine_route(github, repo, lease, pull)
+    parsed = urllib.parse.urlparse(note_url)
+    expected_path = f"/{repo}/pull/{pr_number}"
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc.casefold() != "github.com"
+        or parsed.path.casefold() != expected_path.casefold()
+        or re.fullmatch(r"issuecomment-(\d+)", parsed.fragment) is None
+    ):
+        raise RuntimeError(
+            "Quota fallback URL must be a comment on this pull request"
+        )
+    comment_id = parsed.fragment.removeprefix("issuecomment-")
+    payload = github.get(repo, f"issues/comments/{comment_id}")
+    if (
+        not isinstance(payload, dict)
+        or payload.get("html_url") != note_url
+        or not str(payload.get("issue_url", "")).endswith(
+            f"/issues/{pr_number}"
+        )
+    ):
+        raise RuntimeError("Quota fallback comment response is invalid")
+    body = payload.get("body")
+    prefix = "Actions quota fallback note\n\n`"
+    if not isinstance(body, str) or not body.startswith(prefix):
+        raise RuntimeError("Quota fallback note is not canonical")
+    binding_end = body.find("`\n\n", len(prefix))
+    if binding_end < 0:
+        raise RuntimeError("Quota fallback note is not canonical")
+    binding = json.loads(body[len(prefix) : binding_end])
+    runs = binding.get("runs") if isinstance(binding, dict) else None
+    if (
+        not isinstance(runs, list)
+        or not runs
+        or not all(isinstance(item, str) for item in runs)
+        or len(set(runs)) != len(runs)
+        or body
+        != promotion_gate.quota_fallback_note(repo, pr_number, head_sha, runs)
+    ):
+        raise RuntimeError("Quota fallback note is not canonical")
+    note_created_at = parse_time(payload.get("created_at"), "Quota fallback")
+    authorized_at = parse_time(
+        authorization_payload.get("created_at"), "Authorization"
+    )
+    if note_created_at > authorized_at:
+        raise RuntimeError("Quota fallback note postdates merge authorization")
+    head_ref = (pull.get("head") or {}).get("ref")
+    if not isinstance(head_ref, str) or not head_ref:
+        raise RuntimeError("Pull request head branch is unavailable")
+
+    def get(request_repo: str, path: str, _token: str) -> object:
+        return github.get(request_repo, path)
+
+    for run_url in runs:
+        promotion_gate.require_run_url(run_url, repo)
+        promotion_gate.require_zero_step_run(
+            run_url,
+            repo,
+            pr_number,
+            head_ref,
+            head_sha,
+            "",
+            getter=get,
+        )
+    return set(runs)
 
 
 def merge_snapshot(  # noqa: C901
@@ -1049,6 +1453,7 @@ def merge_snapshot(  # noqa: C901
     lease: dict[str, Any],
     authorization_url: str,
     explicit_actor: str = "",
+    quota_fallback_note_url: str = "",
 ) -> dict[str, object]:
     """Re-read every mutable merge input while the lease is held."""
     repo = lease["repository"]
@@ -1066,6 +1471,7 @@ def merge_snapshot(  # noqa: C901
     if authorized_at < acquired_at:
         raise RuntimeError("Authorization predates the active lifecycle lease")
 
+    alpha_self_merge = alpha_self_merge_opt_in(github, repo, lease, pull)
     timeline = github.pages(repo, f"issues/{pr_number}/timeline?per_page=100")
     if any(
         item.get("event") in DRAFT_EVENTS
@@ -1116,7 +1522,7 @@ def merge_snapshot(  # noqa: C901
         for login, state in review_states.items()
         if state == "APPROVED" and login != actor
     )
-    if not approvers:
+    if not approvers and not alpha_self_merge:
         raise RuntimeError("An independent approving review is required")
     for issue_number in sorted(
         {
@@ -1142,15 +1548,33 @@ def merge_snapshot(  # noqa: C901
     if not isinstance(title, str) or not title.strip():
         raise RuntimeError("Pull request title is unavailable")
     protection, reason, required_contexts = effective_protection(
-        github, repo, base_ref
+        github, repo, base_ref, alpha_self_merge
     )
     authorization_actor = str((auth.get("user") or {}).get("login", ""))
     independently_authorized = authorization_actor.casefold() != actor
-    if protection == "enforced" and not independently_authorized:
+    if (
+        protection == "enforced"
+        and not independently_authorized
+        and not alpha_self_merge
+    ):
         protection = "blocked"
         reason = "merge authorization uses the executing GitHub actor"
-    if protection == "enforced":
-        require_successful_checks(github, repo, head_sha, required_contexts)
+    quota_run_urls = (
+        require_routine_quota_fallback(
+            github, lease, pull, auth, quota_fallback_note_url
+        )
+        if quota_fallback_note_url
+        else set()
+    )
+    check_evidence = "not-enforced"
+    if protection == "enforced" or quota_run_urls:
+        check_evidence = require_successful_checks(
+            github,
+            repo,
+            head_sha,
+            required_contexts,
+            quota_run_urls,
+        )
     require_lease(github, lease, repo, pr_number, head_sha)
     return {
         "repository": repo,
@@ -1165,6 +1589,8 @@ def merge_snapshot(  # noqa: C901
         "protection": protection,
         "merge_mode": "agent" if protection == "enforced" else "human-only",
         "protection_reason": reason,
+        "required_check_evidence": check_evidence,
+        "alpha_self_merge": alpha_self_merge,
     }
 
 
@@ -1273,7 +1699,11 @@ def check(args: argparse.Namespace, github: GitHub) -> None:
     lease = read_lease(args.lease)
     require_caller(lease, args.owner, getattr(args, "actor", ""), github)
     snapshot = merge_snapshot(
-        github, lease, args.authorization_url, getattr(args, "actor", "")
+        github,
+        lease,
+        args.authorization_url,
+        getattr(args, "actor", ""),
+        getattr(args, "quota_fallback_note_url", ""),
     )
     sys.stdout.write(json.dumps(snapshot, indent=2, sort_keys=True) + "\n")
 
@@ -1283,7 +1713,11 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
     lease = read_lease(args.lease)
     require_caller(lease, args.owner, getattr(args, "actor", ""), github)
     snapshot = merge_snapshot(
-        github, lease, args.authorization_url, getattr(args, "actor", "")
+        github,
+        lease,
+        args.authorization_url,
+        getattr(args, "actor", ""),
+        getattr(args, "quota_fallback_note_url", ""),
     )
     if snapshot["merge_mode"] != "agent":
         raise RuntimeError(
@@ -1291,7 +1725,11 @@ def merge(args: argparse.Namespace, github: GitHub) -> None:
             "incomplete; a human maintainer must merge manually"
         )
     snapshot = merge_snapshot(
-        github, lease, args.authorization_url, getattr(args, "actor", "")
+        github,
+        lease,
+        args.authorization_url,
+        getattr(args, "actor", ""),
+        getattr(args, "quota_fallback_note_url", ""),
     )
     title = str(snapshot["title"])
     confirm_refs(lease)
@@ -1834,6 +2272,7 @@ def parser() -> argparse.ArgumentParser:
             command.add_argument("--head-sha", required=True)
         if name in {"check", "merge"}:
             command.add_argument("--authorization-url", required=True)
+            command.add_argument("--quota-fallback-note-url", default="")
         if name == "state":
             command.add_argument(
                 "--state", choices=("ready", "draft"), required=True

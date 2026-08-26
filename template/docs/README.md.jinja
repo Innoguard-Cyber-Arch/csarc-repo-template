@@ -14,7 +14,7 @@ Spec-Driven Development（SDD）以 `docs/specs/` 的 living specifications 保�
 
 從舊版模板更新的專案可能仍有 project-owned `docs/decisions/`。搜尋與驗證時同時讀取該目錄；新紀錄使用 `docs/adr/`，模板不會自動移動或覆寫舊內容。
 
-`tracking: issue` 或預設值讓 approved／proposed spec 同步 Issue；`tracking: story` 同步 Story Milestone；`tracking: none` 保存已建立能力的 current spec，不建立新 work item。
+`tracking: issue` 或預設值讓 approved／proposed spec 同步 Task Issue；`tracking: story` 同步可容納 native subissues 的 Feature parent；`tracking: none` 保存已建立能力的 current spec，不建立新 work item。Milestone 另作有 due date 的 delivery／release bucket。
 
 ## Other documentation
 
@@ -24,8 +24,7 @@ Spec-Driven Development（SDD）以 `docs/specs/` 的 living specifications 保�
 | 專案網站內容 | `docs/site-content.js` | 專案維護；Copier update 不覆寫 |
 | 專案網站主題 | `docs/site-theme.css` | 專案維護；只覆寫必要的 design tokens 或窄範圍 selector |
 | 網站版型 | `site/` | 公版維護；Copier update 提供可審查的版型、樣式與互動更新 |
-| Story 格式 | `docs/milestone-description.md` | 公版維護 |
-| 驗證契約 | [`docs/behavior-verification-contract.md`](behavior-verification-contract.md) | 公版維護；依行為風險選擇最窄 regression 與必要 live 證據 |
+| Delivery Milestone 格式 | `docs/milestone-description.md` | 公版維護 |
 
 ## 新決策如何進來
 

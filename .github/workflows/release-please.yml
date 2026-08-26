@@ -164,12 +164,12 @@ jobs:
             exit 0
           fi
 
-          if [[ "$head_ref" != release-please--* && "$head_ref" != "dev" && "$head_ref" != dev/* && "$head_ref" != "promote/next" && ! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$labels," != *,hotfix,* ]]; then
+          if [[ "$head_ref" != release-please--* && "$head_ref" != "dev" && "$head_ref" != dev/* && "$head_ref" != "promote/next" && ! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$labels," != *,hotfix,* && ",$labels," != *,release-recovery,* ]]; then
             python3 scripts/release_policy.py boundary \
               --kind unexpected \
               --main-sha "$GITHUB_SHA" \
               --pull-request "$pr_number" \
-              --reason "Main commit lacks promotion or hotfix evidence" \
+              --reason "Main commit lacks promotion, hotfix, or release recovery evidence" \
               --output main-release-source.json \
               --github-output "$GITHUB_OUTPUT"
             exit 0
@@ -205,8 +205,8 @@ jobs:
             )"
             boundary_head="$(jq -r .head.ref <<<"$boundary_pr")"
             boundary_labels="$(jq -r '[.labels[].name] | join(",")' <<<"$boundary_pr")"
-            if [[ "$boundary_head" != "dev" && "$boundary_head" != dev/* && "$boundary_head" != "promote/next" && ! "$boundary_head" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$boundary_labels," != *,hotfix,* ]]; then
-              echo "Commit $main_sha predates the promotion boundary."
+            if [[ "$boundary_head" != "dev" && "$boundary_head" != dev/* && "$boundary_head" != "promote/next" && ! "$boundary_head" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$boundary_labels," != *,hotfix,* && ",$boundary_labels," != *,release-recovery,* ]]; then
+              echo "Commit $main_sha predates the promotion or release recovery boundary."
               return 2
             fi
             pr_number="$(jq -r .number <<<"$boundary_pr")"

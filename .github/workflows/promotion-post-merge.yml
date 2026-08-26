@@ -139,12 +139,12 @@ jobs:
           elif [[ -f .csarc/profile.json ]]; then
             branch_strategy="$(jq -r '.branch_strategy // "main"' .csarc/profile.json)"
           fi
-          if [[ "$branch_strategy" == "main" ]]; then
+          if [[ "$branch_strategy" == "main" && ",$labels," != *,release-recovery,* ]]; then
             echo "skip_verification=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [[ "$head_ref" != "dev" && "$head_ref" != dev/* && "$head_ref" != "promote/next" && ! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$labels," != *,hotfix,* ]]; then
-            echo "Main commit did not come from a promotion or hotfix." >&2
+          if [[ "$head_ref" != "dev" && "$head_ref" != dev/* && "$head_ref" != "promote/next" && ! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$labels," != *,hotfix,* && ",$labels," != *,release-recovery,* ]]; then
+            echo "Main commit did not come from a promotion, hotfix, or release recovery." >&2
             exit 1
           fi
           pr_number="$(jq -r .number <<<"$pull_request")"

@@ -18,10 +18,10 @@ Refs #N
 
 <!-- Drafts may keep unchecked work; closing keywords and Ready require completion here and in the Issue. -->
 
-- [ ] Relevant targeted checks pass; exactly one change label (`fix`→`bug`, `docs`→`documentation`, other types→`enhancement`); stays within the Issue
+- [ ] Relevant targeted checks pass; PR assignee/label/Milestone match the linked Issue; work branch appears in Issue Development; stays within the Issue
 - [ ] `./scripts/verify` passes before Ready
 - [ ] New-project generation tested and existing-project updates considered; lockfile changes reviewed; third-party Actions pinned to full commit SHAs
 
 ## 補充
 
-<!-- Optional: risk, rollback, review size, or reviewer-specific requirements. -->
+<!-- Optional: risks, rollback, or extra effects on other projects. -->

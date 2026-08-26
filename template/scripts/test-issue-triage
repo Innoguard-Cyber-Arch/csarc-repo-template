@@ -72,11 +72,18 @@ export ISSUE_NUMBER="42"
 export ISSUE_STATE_REASON=""
 export ISSUE_TITLE="Add dependency policy checks"
 
-ISSUE_BODY=$'### 類型\n\nenhancement\n\n### 問題\n\nExample' \
+ISSUE_BODY=$'### 類型\n\nfeature\n\n### 問題\n\nExample' \
 ISSUE_LABELS="" "$validator"
 grep -q -- '--add-assignee contributor' "$GH_LOG"
 grep -q -- '--add-label enhancement' "$GH_LOG"
 grep -q -- '--type Feature' "$GH_LOG"
+
+: > "$GH_LOG"
+ISSUE_BODY=$'### 類型\n\ntask\n\n### 問題\n\nExample' \
+ISSUE_LABELS="" "$validator"
+grep -q -- '--add-assignee contributor' "$GH_LOG"
+grep -q -- '--add-label enhancement' "$GH_LOG"
+grep -q -- '--type Task' "$GH_LOG"
 
 : > "$GH_LOG"
 ISSUE_BODY="" ISSUE_LABELS="bug" "$validator"
@@ -118,4 +125,4 @@ if ISSUE_BODY="" ISSUE_LABELS="" "$validator" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Issue title cases passed: 10; triage cases passed: 7"
+echo "Issue title cases passed: 10; triage cases passed: 8"

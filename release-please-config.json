@@ -26,6 +26,10 @@
         },
         {
           "type": "generic",
+          "path": "site/index.html"
+        },
+        {
+          "type": "generic",
           "path": "docs/index.html"
         }
       ]

@@ -10,20 +10,14 @@ SPEC_MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "spec_to_issue.py")
 )
 SpecError = SPEC_MODULE["SpecError"]
-audit_milestone_titles = SPEC_MODULE["audit_milestone_titles"]
 build_issue_body = SPEC_MODULE["build_issue_body"]
-build_milestone_description = SPEC_MODULE["build_milestone_description"]
 discover_adrs = SPEC_MODULE["discover_adrs"]
 discover_specs = SPEC_MODULE["discover_specs"]
 find_issue = SPEC_MODULE["find_issue"]
-find_milestone = SPEC_MODULE["find_milestone"]
 load_labels = SPEC_MODULE["load_labels"]
 main = SPEC_MODULE["main"]
-milestone_title_violations = SPEC_MODULE["milestone_title_violations"]
-open_milestone_titles = SPEC_MODULE["open_milestone_titles"]
 parse_spec_text = SPEC_MODULE["parse_spec_text"]
 sync_spec = SPEC_MODULE["sync_spec"]
-sync_milestone = SPEC_MODULE["sync_milestone"]
 validate_unique_ids = SPEC_MODULE["validate_unique_ids"]
 validate_adr = SPEC_MODULE["validate_adr"]
 validate_local_links = SPEC_MODULE["validate_local_links"]
@@ -90,51 +84,6 @@ def test_story_tracking_is_explicit() -> None:
         )
 
 
-@pytest.mark.parametrize(
-    ("title", "reason"),
-    [
-        ("Milestone 12 delivery", "Milestone prefix"),
-        (
-            "\uff2d\uff49\uff4c\uff45\uff53\uff54\uff4f\uff4e\uff45 "
-            "\uff11\uff12 delivery",
-            "Milestone prefix",
-        ),
-        ("#12", "sequence number"),
-        ("12.", "sequence number"),
-        ("\uff11\uff12\u3002", "sequence number"),
-        ("Draft Better delivery", "status prefix"),
-        ("WIP Outcome", "status prefix"),
-        ("Done Outcome", "status prefix"),
-        ("WIP: Repeatable delivery", "status prefix"),
-        ("A" * 81, "3-80 characters"),
-    ],
-)
-def test_milestone_title_rejects_mechanical_anti_patterns(
-    title: str, reason: str
-) -> None:
-    assert any(reason in item for item in milestone_title_violations(title))
-
-
-@pytest.mark.parametrize(
-    "title",
-    ["Repeatable release delivery", "降低導入失敗風險"],
-)
-def test_milestone_title_accepts_outcomes_in_project_language(
-    title: str,
-) -> None:
-    assert milestone_title_violations(title) == ()
-
-
-def test_story_spec_rejects_invalid_milestone_title() -> None:
-    story = VALID_SPEC.replace(
-        "title: Add a health endpoint",
-        "title: Milestone 12",
-    ).replace("status: proposed", "status: approved\ntracking: story")
-
-    with pytest.raises(SpecError, match="Milestone prefix"):
-        parse_spec_text(Path("docs/specs/SPEC-001-health.md"), story)
-
-
 def test_current_spec_can_explicitly_skip_work_item_sync(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -149,7 +98,7 @@ def test_current_spec_can_explicitly_skip_work_item_sync(
         "run_gh",
         lambda arguments: calls.append(arguments),
     )
-    sync_spec(spec, "owner/repo", "main", "https://github.com")
+    sync_spec(spec, "owner/repo", "main", "https://github.com", "maintainer")
 
     assert spec.tracking == "none"
     assert calls == []
@@ -325,21 +274,6 @@ def test_issue_body_links_source_and_identity() -> None:
     assert "## Outcome" not in body
 
 
-def test_milestone_description_has_story_contract() -> None:
-    story = VALID_SPEC.replace(
-        "status: proposed", "status: approved\ntracking: story"
-    )
-    spec = parse_spec_text(Path("docs/specs/SPEC-001-health.md"), story)
-    description = build_milestone_description(
-        spec, "https://github.example/spec"
-    )
-    assert "csarc-story-id: SPEC-001" in description
-    assert "## Acceptance criteria" in description
-    assert "## Plan" in description
-    assert "## Verification" in description
-    assert "## References" in description
-
-
 def test_find_issue_deduplicates_by_spec_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -363,63 +297,6 @@ def test_find_issue_deduplicates_by_spec_id(
     assert "number,body" in calls[0]
 
 
-def test_find_milestone_is_paginated_and_idempotent(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[list[str]] = []
-
-    def fake_run_gh(arguments: list[str]) -> str:
-        calls.append(arguments)
-        return json.dumps(
-            [
-                [],
-                [
-                    {
-                        "number": 7,
-                        "description": "<!-- csarc-story-id: SPEC-001 -->\n",
-                    }
-                ],
-            ]
-        )
-
-    monkeypatch.setitem(find_milestone.__globals__, "run_gh", fake_run_gh)
-    assert find_milestone("owner/repo", "SPEC-001") == 7
-    assert "--paginate" in calls[0]
-    assert "--slurp" in calls[0]
-
-
-def test_milestone_title_audit_is_paginated_and_read_only(
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    calls: list[list[str]] = []
-
-    def fake_run_gh(arguments: list[str]) -> str:
-        calls.append(arguments)
-        return json.dumps(
-            [
-                [{"number": 7, "title": "Repeatable release delivery"}],
-                [{"number": 8, "title": "Draft: Better adoption"}],
-            ]
-        )
-
-    monkeypatch.setitem(
-        open_milestone_titles.__globals__, "run_gh", fake_run_gh
-    )
-
-    assert not audit_milestone_titles("owner/repo", ["改善交付流程", "42"])
-    assert calls == [
-        [
-            "api",
-            "--paginate",
-            "--slurp",
-            "repos/owner/repo/milestones?state=open&per_page=100",
-        ]
-    ]
-    assert "status prefix" in caplog.text
-    assert "sequence number" in caplog.text
-
-
 def test_sync_keeps_spec_id_out_of_issue_title(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -433,13 +310,15 @@ def test_sync_keeps_spec_id_out_of_issue_title(
     monkeypatch.setitem(sync_spec.__globals__, "find_issue", lambda *_: None)
     monkeypatch.setitem(sync_spec.__globals__, "run_gh", fake_run_gh)
 
-    sync_spec(spec, "owner/repo", "main", "https://github.com")
+    sync_spec(spec, "owner/repo", "main", "https://github.com", "maintainer")
 
     create = next(call for call in calls if call[:2] == ["issue", "create"])
     assert create[create.index("--title") + 1] == "Add a health endpoint"
+    assert create[create.index("--assignee") + 1] == "maintainer"
+    assert create[create.index("--type") + 1] == "Task"
 
 
-def test_story_spec_syncs_milestone_without_creating_issue(
+def test_story_spec_syncs_feature_issue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     story = VALID_SPEC.replace(
@@ -447,22 +326,26 @@ def test_story_spec_syncs_milestone_without_creating_issue(
     )
     spec = parse_spec_text(Path("docs/specs/SPEC-001-health.md"), story)
     calls: list[list[str]] = []
+    bodies: list[str] = []
 
     def fake_run_gh(arguments: list[str]) -> str:
         calls.append(arguments)
-        if "--paginate" in arguments:
-            return "[[]]"
-        return '{"number":7}'
+        if "--body-file" in arguments:
+            body_path = Path(arguments[arguments.index("--body-file") + 1])
+            bodies.append(body_path.read_text(encoding="utf-8"))
+        return "created"
 
+    monkeypatch.setitem(sync_spec.__globals__, "find_issue", lambda *_: None)
     monkeypatch.setitem(sync_spec.__globals__, "run_gh", fake_run_gh)
-    sync_spec(spec, "owner/repo", "main", "https://github.com")
+    sync_spec(spec, "owner/repo", "main", "https://github.com", "maintainer")
 
-    create = next(call for call in calls if "POST" in call)
-    assert "repos/owner/repo/milestones" in create
-    assert not any(call[:2] == ["issue", "create"] for call in calls)
+    create = next(call for call in calls if call[:2] == ["issue", "create"])
+    assert create[create.index("--assignee") + 1] == "maintainer"
+    assert create[create.index("--type") + 1] == "Feature"
+    assert bodies and "### 類型\n\nfeature" in bodies[0]
 
 
-def test_story_sync_updates_existing_milestone(
+def test_story_sync_updates_existing_feature_issue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     story = VALID_SPEC.replace(
@@ -470,24 +353,24 @@ def test_story_sync_updates_existing_milestone(
     )
     spec = parse_spec_text(Path("docs/specs/SPEC-001-health.md"), story)
     calls: list[list[str]] = []
+    bodies: list[str] = []
 
     def fake_run_gh(arguments: list[str]) -> str:
         calls.append(arguments)
+        if "--body-file" in arguments:
+            body_path = Path(arguments[arguments.index("--body-file") + 1])
+            bodies.append(body_path.read_text(encoding="utf-8"))
         return "{}"
 
-    monkeypatch.setitem(
-        sync_milestone.__globals__, "find_milestone", lambda *_: 7
-    )
-    monkeypatch.setitem(sync_milestone.__globals__, "run_gh", fake_run_gh)
-    sync_milestone(spec, "owner/repo", "https://github.example/spec")
+    monkeypatch.setitem(sync_spec.__globals__, "find_issue", lambda *_: 7)
+    monkeypatch.setitem(sync_spec.__globals__, "run_gh", fake_run_gh)
+    sync_spec(spec, "owner/repo", "main", "https://github.com", "maintainer")
 
-    assert calls[0][:5] == [
-        "api",
-        "--method",
-        "PATCH",
-        "repos/owner/repo/milestones/7",
-        "--raw-field",
-    ]
+    edit = next(call for call in calls if call[:2] == ["issue", "edit"])
+    assert edit[2] == "7"
+    assert edit[edit.index("--add-assignee") + 1] == "maintainer"
+    assert edit[edit.index("--type") + 1] == "Feature"
+    assert bodies and "### 類型\n\nfeature" in bodies[0]
 
 
 def test_load_labels_uses_policy_file(tmp_path: Path) -> None:

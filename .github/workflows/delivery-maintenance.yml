@@ -74,9 +74,11 @@ jobs:
             (.head.ref == "dev/next" or .head.ref == "promote/next") and
             .head.repo.full_name == $repo
           ' <<<"$pull_request" >/dev/null
-          echo "relevant=true" >> "$GITHUB_OUTPUT"
-          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
-          echo "head_sha=$(jq -r .head.sha <<<"$pull_request")" >> "$GITHUB_OUTPUT"
+          {
+            echo "relevant=true"
+            echo "pr_number=$pr_number"
+            echo "head_sha=$(jq -r .head.sha <<<"$pull_request")"
+          } >> "$GITHUB_OUTPUT"
       - name: Abort the exact preservation transaction
         if: ${{ steps.resolve.outputs.relevant == 'true' }}
         env:

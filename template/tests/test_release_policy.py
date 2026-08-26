@@ -29,6 +29,44 @@ verify_release_version = MODULE["verify_release_version"]
 optional_integration_preflight = MODULE["optional_integration_preflight"]
 
 
+def test_root_release_config_updates_site_source_and_rendered_bundle() -> None:
+    """Release bumps keep the source site and checked-in bundle aligned."""
+    config = json.loads(
+        (Path(__file__).parents[1] / "release-please-config.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    if config["packages"]["."]["component"] != "csarc-repo-template":
+        return
+    extra_files = config["packages"]["."]["extra-files"]
+    paths = {
+        item if isinstance(item, str) else item["path"] for item in extra_files
+    }
+    assert {"site/index.html", "docs/index.html"} <= paths
+
+
+def test_release_version_checks_configured_site_source(tmp_path: Path) -> None:
+    """A stale source site blocks release even when the bundle was edited."""
+    write_release_surfaces(tmp_path, "1.2.3")
+    (tmp_path / "site").mkdir()
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "site/index.html").write_text(
+        "v1.2.2 <!-- x-release-please-version -->\n", encoding="utf-8"
+    )
+    (tmp_path / "docs/index.html").write_text(
+        "v1.2.3 <!-- x-release-please-version -->\n", encoding="utf-8"
+    )
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {"packages": {".": {"extra-files": [{"path": "site/index.html"}]}}}
+        ),
+        encoding="utf-8",
+    )
+    assert "site/index.html is 1.2.2, expected 1.2.3" in release_version_errors(
+        tmp_path, "1.2.3"
+    )
+
+
 def test_release_follow_up_accepts_only_automation_owned_changes(
     tmp_path: Path,
 ) -> None:
@@ -427,7 +465,8 @@ def promotion_evidence(
 
 
 @pytest.mark.parametrize(
-    "kind", ["milestone", "standalone-batch", "isolated", "hotfix"]
+    "kind",
+    ["milestone", "standalone-batch", "isolated", "hotfix", "release-recovery"],
 )
 def test_release_boundary_traces_each_delivery_route(kind: str) -> None:
     """Milestone, standalone, and hotfix batches retain promotion provenance."""
@@ -542,6 +581,29 @@ def test_release_plan_uses_reachable_tags_and_commit_order(
     git(tmp_path, "commit", "-am", "fix: follow-up")
     second = git(tmp_path, "rev-parse", "HEAD")
     assert release_plan(tmp_path, second) == ("v0.2.1", "0.2.1")
+
+
+def test_release_plan_parses_every_git_log_record(tmp_path: Path) -> None:
+    """A leading newline after a record separator cannot hide older intent."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    (tmp_path / ".release-please-manifest.json").write_text(
+        '{".": "0.1.0"}\n', encoding="utf-8"
+    )
+    (tmp_path / "file").write_text("baseline\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    git(tmp_path, "tag", "v0.1.0")
+    (tmp_path / "file").write_text("feature\n", encoding="utf-8")
+    git(tmp_path, "commit", "-am", "feat: add release capability")
+    (tmp_path / "file").write_text("docs\n", encoding="utf-8")
+    git(tmp_path, "commit", "-am", "docs: explain release")
+
+    assert release_plan(tmp_path, git(tmp_path, "rev-parse", "HEAD")) == (
+        "v0.2.0",
+        "0.2.0",
+    )
 
 
 class FakeAPI:

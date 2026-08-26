@@ -2,14 +2,14 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, labeled, unlabeled]
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft]
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' && !startsWith(github.event.pull_request.head.ref, 'dev') && !startsWith(github.event.pull_request.head.ref, 'release-please--') && !contains(github.event.pull_request.labels.*.name, 'promotion') && !contains(github.event.pull_request.labels.*.name, 'hotfix') }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && !startsWith(github.event.pull_request.head.ref, 'dev') && !startsWith(github.event.pull_request.head.ref, 'release-please--') && !contains(github.event.pull_request.labels.*.name, 'promotion') && !contains(github.event.pull_request.labels.*.name, 'hotfix') && !contains(github.event.pull_request.labels.*.name, 'release-recovery') }}
 
 permissions:
   actions: read
@@ -173,7 +173,7 @@ jobs:
           UV_PYTHON: "3.14.0"
         run: |
           uv sync --locked --python "$UV_PYTHON"
-          uv run pytest
+          uv run pytest -m "not large"
       - name: Record Python compatibility evidence
         if: ${{ always() }}
         env:
@@ -265,13 +265,13 @@ jobs:
         env:
           FAST_RESULT: ${{ needs.fast.result }}
           TIER: ${{ needs.fast.outputs.tier }}
+          REVIEW_STATE: ${{ needs.fast.outputs.review_state }}
           CANONICAL_RESULT: ${{ needs.canonical-full.result }}
           ADOPTION_MACOS_RESULT: ${{ needs.adoption-macos.result }}
           GOVERNANCE_RESULT: ${{ needs.governance.result }}
           OSV_RESULT: ${{ needs.osv.result }}
           PYTHON_COMPATIBILITY_RESULT: ${{ needs.python-compatibility.result }}
           ZIZMOR_RESULT: ${{ needs.zizmor.result }}
-          REVIEW_STATE: ${{ needs.fast.outputs.review_state }}
         run: |
           if [[ "$REVIEW_STATE" == "draft" ]]; then
             echo "::notice::Draft WIP targeted checks passed; full verification remains pending until Ready."

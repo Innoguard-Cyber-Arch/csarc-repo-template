@@ -4,6 +4,23 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+if [[ -n "${_CSARC_PROJECT_VERIFICATION_ACTIVE:-}" ]]; then
+  echo "Project verification hook must not invoke canonical scripts/verify." >&2
+  exit 1
+fi
+
+record_project_verification_status() {
+  local status_fd="${_CSARC_PROJECT_VERIFICATION_STATUS_FD:-}"
+  if [[ -n "$status_fd" ]]; then
+    if [[ ! "$status_fd" =~ ^[0-9]+$ ]] ||
+      ! printf '%s\n' "$1" >&"$status_fd"; then
+      echo "Internal project verification status descriptor is invalid." >&2
+      exit 1
+    fi
+  fi
+}
+record_project_verification_status not-run
+
 mode="${1:-full}"
 if [[ "$mode" != "full" && "$mode" != "python-compatibility" &&
   "$mode" != "typescript" ]]; then
@@ -66,7 +83,7 @@ if [[ "$mode" == "python-compatibility" ]]; then
   python_version="${CSARC_PYTHON_VERSION:-3.14}"
   export UV_PYTHON="$python_version"
   uv sync --locked --python "$python_version"
-  uv run pytest
+  uv run pytest -m "not large"
   exit 0
 fi
 
@@ -303,6 +320,62 @@ if $verify_python; then
 {% endif %}
 fi
 
-if [[ -x scripts/verify-product ]]; then
-  ./scripts/verify-product
+project_verification_hook='{{ project_verification_hook | default("", true) }}'
+if [[ -z "$project_verification_hook" && -x scripts/verify-product ]]; then
+  project_verification_hook="scripts/verify-product"
+fi
+if [[ -n "$project_verification_hook" ]]; then
+  verified_hook="$("${platform_python[@]}" - "$project_verification_hook" <<'PY'
+import os
+import re
+import sys
+from pathlib import Path
+
+raw = sys.argv[1]
+relative = Path(raw)
+if (
+    not raw
+    or raw != raw.strip()
+    or relative.is_absolute()
+    or ".." in relative.parts
+    or re.fullmatch(r"[A-Za-z0-9._/-]+", raw) is None
+):
+    raise SystemExit("Project verification hook is not a safe relative path")
+root = Path.cwd().resolve(strict=True)
+try:
+    hook = (root / relative).resolve(strict=True)
+except OSError as error:
+    raise SystemExit(f"Project verification hook does not exist: {raw}") from error
+if hook != root and root not in hook.parents:
+    raise SystemExit(f"Project verification hook escapes the repository: {raw}")
+if not hook.is_file() or not os.access(hook, os.X_OK):
+    raise SystemExit(f"Project verification hook is not executable: {raw}")
+canonical = root / "scripts" / "verify"
+try:
+    if canonical.exists() and os.path.samefile(hook, canonical):
+        raise SystemExit(
+            "Project verification hook must not resolve to canonical scripts/verify"
+        )
+except OSError as error:
+    raise SystemExit(f"Cannot compare project verification hook: {raw}") from error
+print(hook)
+PY
+)"
+  record_project_verification_status started
+  status_fd="${_CSARC_PROJECT_VERIFICATION_STATUS_FD:-}"
+  if (
+    if [[ -n "$status_fd" ]]; then
+      [[ "$status_fd" =~ ^[0-9]+$ ]]
+      eval "exec ${status_fd}>&-"
+    fi
+    unset _CSARC_PROJECT_VERIFICATION_STATUS_FD
+    export _CSARC_PROJECT_VERIFICATION_ACTIVE=1
+    exec "$verified_hook"
+  ); then
+    record_project_verification_status passed
+  else
+    hook_status=$?
+    record_project_verification_status failed
+    exit "$hook_status"
+  fi
 fi

@@ -18,7 +18,7 @@ Refs #N
 
 <!-- Draft 可保留未勾項目；closing keyword 與 Ready 要求此處及 Issue 全數完成。 -->
 
-- [ ] 相關 targeted checks 已通過；恰選一個 change label（`fix`→`bug`、`docs`→`documentation`、其餘 type→`enhancement`）；未超出原 Issue 範圍
+- [ ] 相關 targeted checks 已通過；PR assignee／label／Milestone 與 linked Issue 一致；work branch 已顯示於 Issue Development；未超出原 Issue 範圍
 - [ ] 轉 Ready 前 `./scripts/verify-template.sh` 已通過
 - [ ] 已測試新專案產生並評估既有專案更新影響；第三方 Actions 固定完整 commit SHA
 

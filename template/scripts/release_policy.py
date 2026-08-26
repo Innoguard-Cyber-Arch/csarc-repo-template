@@ -298,6 +298,7 @@ def aggregate_release_boundaries(  # noqa: C901
         "isolated",
         "dev-promotion",
         "hotfix",
+        "release-recovery",
     }
     for evidence in boundaries:
         route = evidence.get("route")
@@ -831,9 +832,9 @@ def release_plan(root: Path, sha: str) -> tuple[str, str] | None:
         revision_range = sha
     raw = git_output(["log", "--format=%s%x1f%b%x1e", revision_range], root)
     messages = [
-        message.replace("\x1f", "\n")
+        message.strip("\n").replace("\x1f", "\n")
         for message in raw.split("\x1e")
-        if message
+        if message.strip("\n")
     ]
     version = bump_version(base, messages)
     return None if version is None else (f"v{version}", version)
@@ -888,11 +889,30 @@ def release_version_errors(  # noqa: C901
         if isinstance(package.get("version"), str):
             versions["package.json"] = package["version"]
 
-    for path in [
+    marker_paths = [
         root / "README.md",
         root / "docs" / "index.html",
         *root.glob("src/*/__init__.py"),
-    ]:
+    ]
+    release_config = root / "release-please-config.json"
+    if release_config.is_file():
+        config = json.loads(release_config.read_text(encoding="utf-8"))
+        extra_files = (
+            config.get("packages", {}).get(".", {}).get("extra-files", [])
+        )
+        extra_paths = {
+            item if isinstance(item, str) else item.get("path")
+            for item in extra_files
+            if isinstance(item, (str, dict))
+        }
+        if "site/index.html" in extra_paths:
+            marker_paths.append(root / "site" / "index.html")
+    required_markers = {
+        root / "README.md",
+        root / "docs" / "index.html",
+        root / "site" / "index.html",
+    }
+    for path in marker_paths:
         if not path.is_file():
             continue
         marker_found = False
@@ -904,10 +924,7 @@ def release_version_errors(  # noqa: C901
             versions[str(path.relative_to(root))] = (
                 match.group(1) if match else ""
             )
-        if (
-            path in {root / "README.md", root / "docs" / "index.html"}
-            and not marker_found
-        ):
+        if path in required_markers and not marker_found:
             errors.append(
                 f"{path.relative_to(root)} has no "
                 "x-release-please-version marker"
