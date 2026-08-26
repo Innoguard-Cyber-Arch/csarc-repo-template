@@ -706,6 +706,114 @@ def test_blocked_run_must_match_head_and_have_no_started_steps(
         require_zero_step_run(run_url, "owner/repo", 42, "dev/next", "head", "")
 
 
+@pytest.mark.parametrize(
+    ("run_overrides", "jobs_payload", "annotations"),
+    [
+        ({"id": 200.0}, None, None),
+        ({"pull_requests": [{"number": 42.0}]}, None, None),
+        ({}, {"total_count": True, "jobs": []}, None),
+        ({}, {"total_count": 1, "jobs": ["malformed"]}, None),
+        (
+            {},
+            {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "id": False,
+                        "runner_id": 0,
+                        "steps": [],
+                        "conclusion": "failure",
+                    }
+                ],
+            },
+            None,
+        ),
+        (
+            {},
+            {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "id": 7,
+                        "runner_id": False,
+                        "steps": None,
+                        "conclusion": "failure",
+                    }
+                ],
+            },
+            None,
+        ),
+        (
+            {},
+            {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "id": 7,
+                        "runner_id": 0,
+                        "steps": [],
+                        "conclusion": "success",
+                    }
+                ],
+            },
+            None,
+        ),
+        ({}, None, ["malformed"]),
+    ],
+)
+def test_blocked_run_rejects_malformed_zero_step_schema(
+    run_overrides: dict[str, object],
+    jobs_payload: object,
+    annotations: object,
+) -> None:
+    """Malformed API values cannot prove a zero-step billing failure."""
+    run = {
+        "id": 200,
+        "head_sha": "head",
+        "head_branch": "dev/next",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "failure",
+        "path": ".github/workflows/ci.yml",
+        "pull_requests": [{"number": 42}],
+        "repository": {"full_name": "owner/repo"},
+        "head_repository": {"full_name": "owner/repo"},
+        **run_overrides,
+    }
+    jobs = jobs_payload or {
+        "total_count": 1,
+        "jobs": [
+            {
+                "id": 7,
+                "runner_id": 0,
+                "steps": [],
+                "conclusion": "failure",
+            }
+        ],
+    }
+    annotation_payload = annotations or [
+        {"message": BILLING_GATE_ANNOTATION_MESSAGE}
+    ]
+
+    def malformed_get(_repo: str, path: str, _token: str) -> object:
+        if "/jobs?" in path:
+            return jobs
+        if path.startswith("check-runs/"):
+            return annotation_payload
+        return run
+
+    with pytest.raises(RuntimeError):
+        require_zero_step_run(
+            "https://github.com/owner/repo/actions/runs/200",
+            "owner/repo",
+            42,
+            "dev/next",
+            "head",
+            "",
+            getter=malformed_get,
+        )
+
+
 def _routine_pr_get(
     jobs: list[dict[str, object]],
 ) -> Callable[[str, str, str], object]:
@@ -744,7 +852,8 @@ def test_note_quota_fallback_prints_note_for_zero_step_block(
     args = SimpleNamespace(repo="owner/repo", pr=42, blocked_run_url=[run_url])
     note_quota_fallback(args)
     output = capsys.readouterr().out
-    assert "Actions quota fallback note" in output
+    assert output == quota_fallback_note("owner/repo", 42, "head", [run_url])
+    assert not output.endswith("\n")
     binding = json.loads(output.split("`")[1])
     assert binding["pull_request"] == 42
     assert binding["head_sha"] == "head"

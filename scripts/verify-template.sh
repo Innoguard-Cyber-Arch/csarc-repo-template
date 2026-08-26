@@ -1131,6 +1131,29 @@ for pr_policy_workflow in .github/workflows/pr-policy.yml \
     "$pr_policy_workflow")" -eq 1
   grep -q 'Live pull request metadata is incomplete or malformed.' \
     "$pr_policy_workflow"
+  grep -Fq 'pullRequest(number:$number){number closingIssuesReferences(first:100)' \
+    "$pr_policy_workflow"
+  grep -Fq 'closingIssuesReferences.pageInfo.hasNextPage == false' \
+    "$pr_policy_workflow"
+  grep -Fq 'must have exactly one authoritative closing Issue relationship' \
+    "$pr_policy_workflow"
+  grep -Fq 'has("body") and (.body == null or (.body | type) == "string")' \
+    "$pr_policy_workflow"
+  # Shell variables are literal workflow content.
+  # shellcheck disable=SC2016
+  grep -Fq 'PR_BODY="$(jq -r '\''.body // ""'\'' <<<"$pr_payload")"' \
+    "$pr_policy_workflow"
+  grep -Fq 'A non-default routine pull request must have exactly one live closing keyword' \
+    "$pr_policy_workflow"
+  if grep -Fq 'PR_BODY: ${{ github.event.pull_request.body }}' \
+    "$pr_policy_workflow"; then
+    echo "PR policy must validate the live REST body instead of event payload metadata."
+    exit 1
+  fi
+  if grep -q 'linkedBranches' "$pr_policy_workflow"; then
+    echo "PR policy must not use the empty Issue linkedBranches connection."
+    exit 1
+  fi
 done
 metadata_sync_line="$(grep -n 'name: Synchronize pull request metadata' \
   .github/workflows/pr-policy.yml | cut -d: -f1)"

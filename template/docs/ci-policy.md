@@ -378,9 +378,29 @@ approval、secrets、provenance、CODEOWNER review 或任何無法本機重現�
 通過本機驗證後，用 `scripts/promotion_gate.py note-quota-fallback` 對每個受阻
 run URL 機械式確認 zero-step billing block（拒絕任何已執行 step 的 job），在 PR
 留下標題為 `Actions quota fallback note` 的留言，記錄 head SHA、受阻 run URL、
-驗證命令與結果、未重現 checks。留言產生後即可合併，不需要 human maintainer 另外
-即時確認或留言授權；新 commit 使既有 note 失效並須重新驗證、重新產生。只有 repo
-現行政策已允許 author self-merge 時（見下方 Alpha 例外），agent 才可合併。
+驗證命令與結果、未重現 checks。`pr_lifecycle.py check` 與 `merge` 必須收到該留言的
+`--quota-fallback-note-url`，並仍須通過通用 exact-head merge authorization；fallback
+本身不另要求第二則 quota authorization。此路徑只適用於非 default branch 的一般
+Issue PR，不能取代 promotion、hotfix 或 release gate。新 commit 使既有 note 失效並須
+重新驗證、重新產生。只有 repo 現行政策已允許 author self-merge 時（見下方 Alpha
+例外），agent 才可合併。work branch 還必須只有一個 closing reference，綁定仍為
+open 且 Milestone 與目標 delivery branch 相符的同號 Issue；缺漏或多餘關聯都 fail
+closed。
+
+Alpha opt-in 必須在 PR body 以獨立一行精確寫入 `Alpha 自行合併 / self-merged`。
+此時不要求 reviewer，執行者也可以是 exact-head maintainer authorization 的留言者；
+但 lifecycle lease、human authorization、完整本機證據、quota note、未解 blocker／
+changes-requested 檢查，以及 base/head/tree CAS 都不變。這個例外只接受關閉 branch
+同號 Issue 的一般 work PR，且 base 只能是 `dev/next` 或 `dev/m*`。Reviewed sync
+仍須 independent review，因為 deterministic branch 與 commit parents 無法單獨證明
+conflict resolution 的 tree 內容。sync、default-branch promotion、hotfix、release 與
+任意其他 route 一律拒絕。若 effective rules 因 403 或其他原因無法驗證，
+`check` 只能產生 `human-only` snapshot，`merge` 仍拒絕 agent merge；marker 不得推定
+server-side enforcement。
+目前 checked-in desired rules 仍要求一份 approving review；當 private repository 的
+live capability probe 又只能回 403 時，Alpha no-review 在本政策下只可
+`human-only`。只有未來明確採用且可驗證的 server-enforced zero-review/no-bypass
+policy 才可能得到 agent merge mode。
 
 ### `dev/next` promotion preservation
 

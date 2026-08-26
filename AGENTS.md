@@ -76,7 +76,7 @@ Duplicate triage may close an Issue without code changes when it links the canon
 - Never commit secrets, tokens, private keys, or populated `.env` files.
 - Review the plan output before applying repository settings; do not operate production or external infrastructure without explicit authorization.
 - Do not bypass required checks, human approval, CODEOWNER review, or supply-chain verification except for the exact quota-only, SHA-bound local verification fallback defined above; that exception does not waive human authorization or any non-local control.
-- Alpha 階段允許作者自行合併，但只能持有 lifecycle lease、通過工具 gate 並在 PR 內文加註 `Alpha 自行合併 / self-merged`。
+- Alpha self-merge only covers a non-default routine Issue PR with a lease, exact authorization, all gates, and the exact body marker `Alpha 自行合併 / self-merged`; sync, main, hotfix, and release routes remain reviewed.
 
 ## Code Review Rules
 
