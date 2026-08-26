@@ -12,7 +12,11 @@
    `adopt` and `adopt --finalize` default to dry-run when no `--apply-plan` is
    supplied. For a release-specific request, pass both `--to` and
    `--expected-sha`. Before `init` or `adopt`, confirm the project description,
-   shortest working product command, and security reporting channel. The
+   shortest working product command, and security reporting channel. For an
+   existing repository, separately confirm an optional repository-relative
+   executable `project_verification_hook`; the product run command is never a
+   verification hook. The hook must not resolve to or re-enter canonical
+   `scripts/verify`; update checks validate it before any target write. The
    default channel is the repository's public GitHub Issues page; warn users
    never to post secrets, credentials, personal data, or other sensitive
    details there. Never invent an email address, acknowledgement window, or
@@ -21,7 +25,9 @@
    preflight, settings, conflict risk, and every file classified as add,
    overwrite, preserve, automatic merge, manual merge, or unable to determine.
    Review the generated Markdown and machine plan, plus the PDF when available,
-   then report the terminal's separate Milestone
+   including the exact project verification hook path, result, and reason,
+   then report
+   the terminal's separate Milestone
    description classifications: upgrade, current, or manual review. Neither
    source guarantees the absence of semantic or runtime conflicts. Unknown
    capabilities are resolved by the runtime workflow and never treated as

@@ -151,6 +151,13 @@ project_run_command:
   default: "{% if language == 'python' %}uv run python -c 'import {{ package_name }}'{% elif language == 'typescript' %}pnpm run build{% elif language == 'python-typescript' %}uv run python -c 'import {{ package_name }}' && pnpm run build{% else %}./scripts/verify{% endif %}"
   validator: "{% if not project_run_command | default('', true) | trim or project_run_command | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in project_run_command %}Enter a working product command without placeholder text.{% endif %}"
 
+project_verification_hook:
+  type: str
+  help: Optional repository-relative executable run after the CSARC verification
+  default: ""
+  when: "{{ project_mode == 'existing' }}"
+  validator: "{% set hook = project_verification_hook | default('', true) | trim %}{% if hook and (hook != project_verification_hook or hook.startswith('/') or '..' in hook.split('/') or not (hook | regex_search('^[A-Za-z0-9._/-]+$'))) %}Use a safe repository-relative executable path without spaces, shell syntax, or parent traversal.{% endif %}"
+
 repository_url:
   type: str
   help: Canonical GitHub repository URL used by badges and package metadata
