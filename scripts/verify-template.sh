@@ -3037,6 +3037,10 @@ if grep -q 'active_delivery_branches = MODULE' \
   echo "Copier update preserved the retired delivery fan-out regression."
   exit 1
 fi
+grep -q 'test_promotion_main_evidence_fails_closed' \
+  "$update_project/tests/test_promotion_gate.py"
+grep -q 'test_release_boundary_aggregates_direct_main_and_promotion_history' \
+  "$update_project/tests/test_release_policy.py"
 grep -q '"branch_strategy": "main"' \
   "$update_project/.csarc/profile.json"
 grep -q 'target-branch: main' \

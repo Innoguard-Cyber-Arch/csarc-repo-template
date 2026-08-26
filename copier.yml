@@ -72,16 +72,22 @@ _migrations:
         if count == 1:
             path.write_text(migrated, encoding="utf-8")
 
-        legacy_test = Path("tests/test_delivery_sync.py")
-        legacy_test_sha256 = (
-            "50fc918666723264272a9268ebaf5c0b120341e588e1e1f5841686f8448abc99"
-        )
-        if (
-            legacy_test.is_file()
-            and hashlib.sha256(legacy_test.read_bytes()).hexdigest()
-            == legacy_test_sha256
-        ):
-            legacy_test.unlink()
+        legacy_template_tests = {
+            Path("tests/test_delivery_sync.py"):
+                "50fc918666723264272a9268ebaf5c0b120341e588e1e1f5841686f8448abc99",
+            Path("tests/test_promotion_gate.py"):
+                "c09481ea74c15f679e8eea5c39516a1a77e7d941b91bc716fb225a1ac2b3b0ad",
+            Path("tests/test_release_policy.py"):
+                "89d35a7eafdf5ec17f607e59ea192b2676989bf2e0ec94dd76961baacdd41bf5",
+        }
+        for legacy_test, legacy_sha256 in legacy_template_tests.items():
+            if (
+                legacy_test.is_file()
+                and not legacy_test.is_symlink()
+                and hashlib.sha256(legacy_test.read_bytes()).hexdigest()
+                == legacy_sha256
+            ):
+                legacy_test.unlink()
     when: "{{ _stage == 'before' }}"
   - command: "uv run --no-project python scripts/render_site.py"
     when: "{{ _stage == 'after' }}"

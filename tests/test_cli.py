@@ -2,18 +2,57 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import stat
 import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 from pypdf import PdfReader
 
 import csarc_cli.cli as cli
 from csarc_cli.cli import CliError, main
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_copier_migration_preserves_project_owned_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Do not replace a project-owned test symlink during migration."""
+    migration = yaml.safe_load((ROOT / "copier.yml").read_text())[
+        "_migrations"
+    ][0]["command"]
+    assert migration[:2] == ["python3", "-c"]
+
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    target = tmp_path / "project-owned.py"
+    target.write_text("project owned\n", encoding="utf-8")
+    legacy_test = tests / "test_delivery_sync.py"
+    legacy_test.symlink_to(target)
+    (tmp_path / ".copier-answers.yml").write_text(
+        "branch_strategy: dev\n", encoding="utf-8"
+    )
+
+    class LegacyDigest:
+        def hexdigest(self) -> str:
+            return (
+                "50fc918666723264272a9268ebaf5c0b120341e58"
+                "8e1e1f5841686f8448abc99"
+            )
+
+    monkeypatch.setattr(hashlib, "sha256", lambda _content: LegacyDigest())
+    monkeypatch.chdir(tmp_path)
+    exec(compile(migration[2], "copier.yml migration", "exec"), {})  # noqa: S102
+
+    assert legacy_test.is_symlink()
+    assert legacy_test.read_text(encoding="utf-8") == "project owned\n"
+    assert "branch_strategy: main" in (
+        tmp_path / ".copier-answers.yml"
+    ).read_text(encoding="utf-8")
 
 
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
