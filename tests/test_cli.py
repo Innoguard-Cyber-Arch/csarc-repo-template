@@ -4007,3 +4007,5 @@ def test_pr_templates_do_not_repeat_full_before_ready() -> None:
         )
         assert "before Ready" not in full_line
         assert "轉 Ready 前" not in full_line
+        assert "required" in source
+        assert "edit" in source or "編輯" in source

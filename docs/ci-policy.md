@@ -31,7 +31,7 @@ Draft PR 可用 `Refs #N`，但必須列出 scope、已完成／待完成驗證�
 
 ### Draft ownership 與 Ready 邊界
 
-Issue owner 負責 ordinary PR 的 scoped checks，完成後即可轉 Ready；不在 Ready 前先跑本機 full。Final promotion 轉 Ready 後，由 hosted workflow 對 exact integrated candidate 跑唯一一次 full gate；只有 hosted job 未執行且文件明定的 fallback 適用時，integrator 才改跑一次相同本機入口，不能兩邊重複。Draft 階段可疊加同一 Milestone 的後續工作，但每張 PR 仍要清楚列出 owner、依賴與未完成項目。只有 acceptance、metadata、closing Issue 關聯與最窄必要驗證都完成後才轉 Ready；push 新 head 會使舊 review、authorization 與 evidence 失效。
+Issue owner 負責 ordinary PR 的 scoped checks，完成後即可轉 Ready；不在 Ready 前先跑本機 full。Final promotion 的 tree 先固定，PR checklist 在轉 Ready 前聲明「Ready 將啟動 hosted full」，再由 hosted workflow 對 exact integrated candidate 跑唯一一次 full gate；成功只由 required `verify` check 記錄，不需事後編輯 PR body 並觸發同一 tree 重跑。只有 hosted job 未執行且文件明定的 fallback 適用時，integrator 才改跑一次相同本機入口，不能兩邊重複。Draft 階段可疊加同一 Milestone 的後續工作，但每張 PR 仍要清楚列出 owner、依賴與未完成項目。只有 acceptance、metadata、closing Issue 關聯與最窄必要驗證都完成後才轉 Ready；push 新 head 會使舊 review、authorization 與 evidence 失效。
 
 Agent 不得把 Draft、未處理 review thread、真實測試失敗或 scope 漂移當成平台限制。Alpha reviewer 例外只適用政策明列的 routine Issue route，且不改變 Issue owner、integrator、required checks 或 exact SHA/tree 責任。
 

@@ -543,6 +543,18 @@ def test_required_aggregate_is_unconditional_and_routing_is_job_level() -> None:
         )
 
 
+def test_body_edits_validate_policy_without_restarting_product_ci() -> None:
+    """Keep checklist validation separate from exact-tree verification."""
+    ci_source = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    policy_source = (
+        ROOT / ".github" / "workflows" / "pr-policy.yml"
+    ).read_text()
+    ci_types = ci_source.split("types: [", 1)[1].split("]", 1)[0]
+    policy_types = policy_source.split("types: [", 1)[1].split("]", 1)[0]
+    assert "edited" not in ci_types.split(", ")
+    assert "edited" in policy_types.split(", ")
+
+
 def test_required_aggregate_accepts_explicit_routing() -> None:
     """Accept only a complete, explicit fast-route result."""
     assert run_required_aggregate().returncode == 0
