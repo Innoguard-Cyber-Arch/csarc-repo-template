@@ -27,6 +27,49 @@ def git(root: Path, *arguments: str, capture: bool = False) -> str:
     ).stdout
 
 
+def run_required_aggregate(
+    **overrides: str,
+) -> subprocess.CompletedProcess[str]:
+    """Execute the rendered aggregate gate with controlled routing outputs."""
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    )
+    environment = {
+        "FAST_RESULT": "success",
+        "TIER": "fast",
+        "RUN_DEEP": "false",
+        "RUN_GOVERNANCE": "false",
+        "RUN_OSV": "false",
+        "RUN_ZIZMOR": "false",
+        "REVIEW_STATE": "ready",
+        "CANONICAL_RESULT": "skipped",
+        "FULL_RESULT": "skipped",
+        "ADOPTION_MACOS_RESULT": "skipped",
+        "GOVERNANCE_RESULT": "skipped",
+        "OSV_RESULT": "skipped",
+        "PYTHON_COMPATIBILITY_RESULT": "skipped",
+        "TYPESCRIPT_RESULT": "skipped",
+        "ZIZMOR_RESULT": "skipped",
+        "RUN_CONTAINER": "false",
+        "CONTAINER_RESULT": "skipped",
+    }
+    environment.update(overrides)
+    return subprocess.run(  # noqa: S603
+        [
+            "/bin/bash",
+            "-eu",
+            "-o",
+            "pipefail",
+            "-c",
+            workflow["jobs"]["verify"]["steps"][0]["run"],
+        ],
+        check=False,
+        capture_output=True,
+        env=environment,
+        text=True,
+    )
+
+
 @pytest.mark.parametrize(
     ("path", "scope"),
     [
@@ -465,6 +508,36 @@ def test_required_aggregate_is_unconditional_and_routing_is_job_level() -> None:
             'require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT"'
             in aggregate["run"]
         )
+
+
+def test_required_aggregate_accepts_explicit_routing() -> None:
+    """Accept only a complete, explicit fast-route result."""
+    assert run_required_aggregate().returncode == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("TIER", ""),
+        ("TIER", "fas"),
+        ("REVIEW_STATE", ""),
+        ("REVIEW_STATE", "unknown"),
+        ("RUN_DEEP", ""),
+        ("RUN_DEEP", "tru"),
+        ("RUN_GOVERNANCE", ""),
+        ("RUN_OSV", "tru"),
+        ("RUN_ZIZMOR", "0"),
+    ],
+)
+def test_required_aggregate_rejects_unknown_routing_outputs(
+    field: str, value: str
+) -> None:
+    """Fail closed when a routing output is empty or malformed."""
+    result = run_required_aggregate(**{field: value})
+    assert result.returncode != 0
+    assert (
+        "invalid" in result.stderr or "must be true or false" in result.stderr
+    )
 
 
 def test_pr_metadata_edits_recompute_routing() -> None:

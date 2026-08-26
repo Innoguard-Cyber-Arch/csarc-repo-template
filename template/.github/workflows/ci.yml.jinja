@@ -427,31 +427,52 @@ jobs:
             expected="$1"
             actual="$2"
             name="$3"
-            if [[ "$expected" == true ]]; then
-              [[ "$actual" == success ]] || {
-                echo "$name must succeed when routed; got $actual" >&2
+            case "$expected" in
+              true)
+                [[ "$actual" == success ]] || {
+                  echo "$name must succeed when routed; got $actual" >&2
+                  return 1
+                }
+                ;;
+              false)
+                [[ "$actual" == skipped ]] || {
+                  echo "$name must be skipped when not routed; got $actual" >&2
+                  return 1
+                }
+                ;;
+              *)
+                echo "$name route must be true or false; got ${expected:-<empty>}" >&2
                 return 1
-              }
-            else
-              [[ "$actual" == skipped ]] || {
-                echo "$name must be skipped when not routed; got $actual" >&2
-                return 1
-              }
-            fi
+                ;;
+            esac
           }
+          case "$REVIEW_STATE" in
+            draft|ready|not-applicable) ;;
+            *)
+              echo "review state is invalid: ${REVIEW_STATE:-<empty>}" >&2
+              exit 1
+              ;;
+          esac
           if [[ "$REVIEW_STATE" == "draft" ]]; then
             echo "::notice::Draft WIP targeted checks passed; full verification remains pending until Ready."
           fi
           test "$FAST_RESULT" = success
-          if [[ "$TIER" == full ]]; then
+          case "$TIER" in
+            full)
 {% if use_reusable_workflow %}            test "$FULL_RESULT" = success
 {% else %}            test "$CANONICAL_RESULT" = success
 {% if language == "python-typescript" %}            test "$TYPESCRIPT_RESULT" = success
-{% endif %}{% endif %}          else
+{% endif %}{% endif %}              ;;
+            docs|fast|post-merge)
 {% if use_reusable_workflow %}            test "$FULL_RESULT" = skipped
 {% else %}            test "$CANONICAL_RESULT" = skipped
 {% if language == "python-typescript" %}            test "$TYPESCRIPT_RESULT" = skipped
-{% endif %}{% endif %}          fi
+{% endif %}{% endif %}              ;;
+            *)
+              echo "verification tier is invalid: ${TIER:-<empty>}" >&2
+              exit 1
+              ;;
+          esac
 {% if not use_reusable_workflow and has_python %}          require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility
 {% endif %}
           require_routed "$RUN_GOVERNANCE" "$GOVERNANCE_RESULT" governance

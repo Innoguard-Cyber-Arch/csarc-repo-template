@@ -286,27 +286,44 @@ jobs:
             expected="$1"
             actual="$2"
             name="$3"
-            if [[ "$expected" == true ]]; then
-              [[ "$actual" == success ]] || {
-                echo "$name must succeed when routed; got $actual" >&2
+            case "$expected" in
+              true)
+                [[ "$actual" == success ]] || {
+                  echo "$name must succeed when routed; got $actual" >&2
+                  return 1
+                }
+                ;;
+              false)
+                [[ "$actual" == skipped ]] || {
+                  echo "$name must be skipped when not routed; got $actual" >&2
+                  return 1
+                }
+                ;;
+              *)
+                echo "$name route must be true or false; got ${expected:-<empty>}" >&2
                 return 1
-              }
-            else
-              [[ "$actual" == skipped ]] || {
-                echo "$name must be skipped when not routed; got $actual" >&2
-                return 1
-              }
-            fi
+                ;;
+            esac
           }
+          case "$REVIEW_STATE" in
+            draft|ready|not-applicable) ;;
+            *)
+              echo "review state is invalid: ${REVIEW_STATE:-<empty>}" >&2
+              exit 1
+              ;;
+          esac
           if [[ "$REVIEW_STATE" == "draft" ]]; then
             echo "::notice::Draft WIP targeted checks passed; full verification remains pending until Ready."
           fi
           test "$FAST_RESULT" = success
-          if [[ "$TIER" == full ]]; then
-            test "$CANONICAL_RESULT" = success
-          else
-            test "$CANONICAL_RESULT" = skipped
-          fi
+          case "$TIER" in
+            full) test "$CANONICAL_RESULT" = success ;;
+            docs|fast|post-merge) test "$CANONICAL_RESULT" = skipped ;;
+            *)
+              echo "verification tier is invalid: ${TIER:-<empty>}" >&2
+              exit 1
+              ;;
+          esac
           require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility
           require_routed "$RUN_DEEP" "$ADOPTION_MACOS_RESULT" adoption-macos
           require_routed "$RUN_GOVERNANCE" "$GOVERNANCE_RESULT" governance
