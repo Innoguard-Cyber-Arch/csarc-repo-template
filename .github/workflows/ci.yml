@@ -183,6 +183,8 @@ jobs:
           uv build --clear
           uv run --isolated --no-project --with ./dist/*.whl \
             python -c "import csarc_cli"
+          uvx --from "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)" \
+            csarc --help >/dev/null
       - name: Record Python compatibility evidence
         if: ${{ always() }}
         env:

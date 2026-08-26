@@ -629,6 +629,10 @@ def test_runtime_lane_installs_and_imports_the_built_package() -> None:
     assert "uv build --clear" in command
     assert "--with ./dist/*.whl" in command
     assert 'python -c "import ' in command
+    if generated_verifier.exists():
+        assert "twine check dist/*" in command
+    else:
+        assert "csarc --help" in command
 
 
 def test_changed_path_discovery_exposes_both_sides_of_a_rename(

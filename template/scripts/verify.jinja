@@ -87,6 +87,7 @@ if [[ "$mode" == "python-compatibility" ]]; then
   uv build --clear
   uv run --isolated --no-project --with ./dist/*.whl \
     python -c "import {{ package_name }}"
+  uv run --isolated --no-project --with twine twine check dist/*
   exit 0
 fi
 
