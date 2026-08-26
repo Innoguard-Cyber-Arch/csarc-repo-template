@@ -334,7 +334,7 @@ jobs:
           Path(sys.argv[1]).write_text("", encoding="utf-8")
           PY
 {% else %}
-          cat {% if has_python %}"$sbom_root/python.purls"{% endif %}{% if has_python and has_typescript %} {% endif %}{% if has_typescript %}"$sbom_root/node.purls"{% endif %} | sort -u > "$asset_root/inventory.purls"
+          sort -u {% if has_python %}"$sbom_root/python.purls"{% endif %}{% if has_python and has_typescript %} {% endif %}{% if has_typescript %}"$sbom_root/node.purls"{% endif %} > "$asset_root/inventory.purls"
           while IFS= read -r root_purl; do
             grep -Fx "$root_purl" "$asset_root/inventory.purls" >/dev/null
           done < <(jq -r '.root_purls[]' "$identity_file")
@@ -659,7 +659,7 @@ jobs:
             release-evidence/release-metadata.json
       - name: Attest software bill of materials
         if: steps.state.outputs.reuse != 'true'
-        uses: actions/attest-sbom@4651f806c01d8637787e274ac3b56de9a85cc6a3 # v3.0.0
+        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3.0.0
         with:
           subject-path: |
             release-evidence/source.tar
@@ -1107,7 +1107,7 @@ jobs:
           subject-digest: {% raw %}${{ steps.publish.outputs.digest }}{% endraw %}
           push-to-registry: true
       - name: Attest container software bill of materials
-        uses: actions/attest-sbom@4651f806c01d8637787e274ac3b56de9a85cc6a3 # v3.0.0
+        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3.0.0
         with:
           subject-name: {% raw %}${{ steps.publish.outputs.image }}{% endraw %}
           subject-digest: {% raw %}${{ steps.publish.outputs.digest }}{% endraw %}

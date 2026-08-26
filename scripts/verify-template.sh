@@ -128,6 +128,12 @@ assert_release_assets_contract() {
       fi
     else
       grep -Fq -- '--root-purl' "$release_workflow"
+      grep -Eq '^[[:space:]]+sort -u .*purls.*inventory[.]purls"$' \
+        "$release_workflow"
+      if grep -Eq '[|][[:space:]]*sort -u' "$release_workflow"; then
+        echo "Generated release workflows must pass inventory files directly to sort." >&2
+        exit 1
+      fi
     fi
   fi
 }
@@ -944,7 +950,7 @@ grep -q '^    name: canonical full (Python 3.14 + Node 24)$' \
 grep -q '^  python-compatibility:$' .github/workflows/ci.yml
 grep -q '^    name: Python compatibility (3.14.0)$' \
   .github/workflows/ci.yml
-grep -q 'uv run pytest' .github/workflows/ci.yml
+grep -q 'uv run pytest -m "not large"' .github/workflows/ci.yml
 test "$(grep -c 'run: ./scripts/verify-template.sh' .github/workflows/ci.yml)" -eq 1
 if grep -q '^  python-runtime:$' .github/workflows/ci.yml; then
   echo "Root full verification must not repeat for every runtime."
@@ -1033,7 +1039,7 @@ required = (
     '.path == ".github/workflows/release-please.yml"',
     '--repo "$GITHUB_REPOSITORY"',
     "actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a",
-    "actions/attest-sbom@4651f806c01d8637787e274ac3b56de9a85cc6a3",
+    "actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34",
     'gh release edit "$RELEASE_TAG"',
     "--draft=false",
     "isImmutable,isDraft,isPrerelease",
@@ -2006,7 +2012,7 @@ grep -q 'github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827' \
   "$fixture_root/public-visibility-project/.github/workflows/codeql.yml"
 grep -q 'actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a' \
   "$fixture_root/public-visibility-project/.github/workflows/release.yml"
-grep -q 'actions/attest-sbom@4651f806c01d8637787e274ac3b56de9a85cc6a3' \
+grep -q 'actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34' \
   "$fixture_root/public-visibility-project/.github/workflows/release.yml"
 grep -q 'attestations: write' \
   "$fixture_root/public-visibility-project/.github/workflows/release.yml"
@@ -2223,6 +2229,8 @@ test -x "$fixture_root/default-project/scripts/install-gitleaks"
 test -x "$fixture_root/default-project/scripts/install-shellcheck"
 test -x "$fixture_root/default-project/scripts/lint-workflows-shell"
 test -x "$fixture_root/default-project/scripts/verify-fast"
+grep -Fq 'uv run pytest -m "not large"' \
+  "$fixture_root/default-project/scripts/verify"
 test -f "$fixture_root/default-project/scripts/ci_tier.py"
 test -x "$fixture_root/default-project/scripts/promotion_gate.py"
 test -x "$fixture_root/default-project/scripts/pr_lifecycle.py"
@@ -2980,7 +2988,7 @@ grep -q \
   'actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q \
-  'actions/attest-sbom@4651f806c01d8637787e274ac3b56de9a85cc6a3' \
+  'actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q 'attestations: write' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
@@ -3374,7 +3382,7 @@ grep -q '^      packages: write$' \
   "$container_project/.github/workflows/csarc-release.yml"
 grep -q 'actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a' \
   "$container_project/.github/workflows/csarc-release.yml"
-grep -q 'actions/attest-sbom@4651f806c01d8637787e274ac3b56de9a85cc6a3' \
+grep -q 'actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34' \
   "$container_project/.github/workflows/csarc-release.yml"
 sed -n '/name: Generate the container SBOM/,/name: Preserve the verified container bytes/p' \
   "$container_project/.github/workflows/csarc-release.yml" | \

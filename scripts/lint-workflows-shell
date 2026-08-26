@@ -13,7 +13,7 @@ done < <(
     \( -name '*.yml' -o -name '*.yaml' \) -print0 2>/dev/null || true
 )
 if ((${#workflow_files[@]})); then
-  "$actionlint_bin" "${workflow_files[@]}"
+  "$actionlint_bin" -shellcheck="$shellcheck_bin" "${workflow_files[@]}"
 fi
 
 shell_files=()

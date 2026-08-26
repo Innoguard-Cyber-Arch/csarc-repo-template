@@ -362,6 +362,7 @@ jobs:
                 repo_owner="${GITHUB_REPOSITORY%%/*}"
                 repo_name="${GITHUB_REPOSITORY#*/}"
                 if ! closing_issues="$(
+                  # shellcheck disable=SC2016 # GraphQL variables must remain literal.
                   gh api graphql \
                     -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){number closingIssuesReferences(first:100){nodes{number repository{nameWithOwner}} pageInfo{hasNextPage}}}}}' \
                     -f owner="$repo_owner" -f name="$repo_name" -F number="$PR_NUMBER"
