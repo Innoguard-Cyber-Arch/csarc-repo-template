@@ -659,6 +659,56 @@ def test_generated_fast_gate_excludes_large_tests() -> None:
 
 
 @pytest.mark.parametrize(
+    ("variable", "value"),
+    [
+        ("CSARC_CI_TIER", "quick"),
+        ("CSARC_CI_SCOPES", "source,unknown"),
+        ("CSARC_CI_RISKS", "generator,mystery"),
+    ],
+)
+def test_fast_gate_rejects_unknown_plan_values(
+    variable: str, value: str
+) -> None:
+    """Do not broaden malformed CI plans into an all-tests fallback."""
+    environment = {
+        "CSARC_CI_TIER": "fast",
+        "CSARC_CI_SCOPES": "source",
+        "CSARC_CI_RISKS": "",
+        variable: value,
+    }
+    result = subprocess.run(  # noqa: S603
+        ["/bin/bash", str(ROOT / "scripts" / "verify-fast")],
+        check=False,
+        capture_output=True,
+        cwd=ROOT,
+        env=environment,
+        text=True,
+    )
+    assert result.returncode == 2
+    assert "Unsupported CI" in result.stderr
+
+
+def test_fast_gate_selects_tests_from_scopes_and_risks() -> None:
+    """Keep the routine gate bounded while unioning every affected group."""
+    source = (ROOT / "scripts" / "verify-fast").read_text(encoding="utf-8")
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    )
+    fast_step = next(
+        step
+        for step in workflow["jobs"]["fast"]["steps"]
+        if step.get("name") == "Run change-aware checks"
+    )
+    assert fast_step["env"]["CSARC_CI_RISKS"] == (
+        "${{ steps.plan.outputs.risks }}"
+    )
+    assert 'uv run pytest -m "not large" "${test_paths[@]}"' in source
+    assert "source) add_tests tests ;;" in source
+    for scope in ("docs", "template", "workflow", "governance", "dependency"):
+        assert f"    {scope})" in source
+
+
+@pytest.mark.parametrize(
     "path",
     [
         "scripts/check-update-conflicts",

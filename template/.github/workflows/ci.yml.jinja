@@ -109,6 +109,7 @@ jobs:
       - name: Run change-aware checks
         if: {% raw %}${{ steps.plan.outputs.tier == 'docs' || steps.plan.outputs.tier == 'fast' }}{% endraw %}
         env:
+          CSARC_CI_RISKS: {% raw %}${{ steps.plan.outputs.risks }}{% endraw %}
           CSARC_CI_SCOPES: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
           CSARC_CI_TIER: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
 {%- if has_python %}

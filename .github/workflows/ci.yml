@@ -86,6 +86,7 @@ jobs:
       - name: Run change-aware checks
         if: ${{ steps.plan.outputs.tier == 'docs' || steps.plan.outputs.tier == 'fast' }}
         env:
+          CSARC_CI_RISKS: ${{ steps.plan.outputs.risks }}
           CSARC_CI_SCOPES: ${{ steps.plan.outputs.scopes }}
           CSARC_CI_TIER: ${{ steps.plan.outputs.tier }}
           CSARC_PYTHON_VERSION: "3.14"

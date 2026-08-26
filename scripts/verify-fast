@@ -6,8 +6,107 @@ export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"
 cd "$repo_root"
 
 tier="${CSARC_CI_TIER:-fast}"
-scopes=",${CSARC_CI_SCOPES:-source},"
+scope_value="${CSARC_CI_SCOPES:-source}"
+risk_value="${CSARC_CI_RISKS:-}"
 export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
+
+case "$tier" in
+  docs|fast) ;;
+  *)
+    echo "Unsupported CI tier: ${tier:-<empty>}" >&2
+    exit 2
+    ;;
+esac
+
+test_paths=()
+run_pr_policy=false
+run_release_policy=false
+run_issue_policy=false
+run_worktree_policy=false
+add_tests() {
+  local candidate existing
+  for candidate in "$@"; do
+    if [[ "$candidate" == tests ]]; then
+      test_paths=(tests)
+      continue
+    fi
+    for existing in "${test_paths[@]:-}"; do
+      [[ "$existing" == tests || "$existing" == "$candidate" ]] && continue 2
+    done
+    test_paths+=("$candidate")
+  done
+}
+
+IFS=, read -r -a requested_scopes <<< "$scope_value"
+for scope in "${requested_scopes[@]}"; do
+  case "$scope" in
+    docs) add_tests tests/test_render_site.py tests/test_spec_to_issue.py ;;
+    source) add_tests tests ;;
+    template)
+      add_tests tests/test_ci_tier.py tests/test_cli.py tests/test_pytest_policy.py
+      run_pr_policy=true
+      run_release_policy=true
+      run_issue_policy=true
+      run_worktree_policy=true
+      ;;
+    workflow)
+      add_tests tests/test_ci_tier.py tests/test_release_policy.py
+      run_pr_policy=true
+      run_release_policy=true
+      run_issue_policy=true
+      ;;
+    governance)
+      add_tests tests/test_delivery_sync.py tests/test_history_audit.py \
+        tests/test_milestone_lifecycle.py tests/test_pr_lifecycle.py \
+        tests/test_promotion_gate.py tests/test_work_item_metadata.py
+      run_pr_policy=true
+      run_release_policy=true
+      run_issue_policy=true
+      run_worktree_policy=true
+      ;;
+    dependency)
+      add_tests tests/test_release_assets.py tests/test_release_consumption.py \
+        tests/test_release_policy.py
+      run_release_policy=true
+      ;;
+    shell)
+      add_tests tests/test_ci_tier.py tests/test_pytest_policy.py
+      run_pr_policy=true
+      run_release_policy=true
+      run_issue_policy=true
+      run_worktree_policy=true
+      ;;
+    *)
+      echo "Unsupported CI scope: ${scope:-<empty>}" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -n "$risk_value" ]]; then
+  IFS=, read -r -a requested_risks <<< "$risk_value"
+  for risk in "${requested_risks[@]}"; do
+    case "$risk" in
+    cli-adoption-update|generator) add_tests tests/test_cli.py ;;
+    release|security|provenance)
+      add_tests tests/test_release_assets.py tests/test_release_consumption.py \
+        tests/test_release_policy.py tests/test_release_prompt.py
+      run_release_policy=true
+      ;;
+    governance|promotion)
+      add_tests tests/test_delivery_sync.py tests/test_milestone_lifecycle.py \
+        tests/test_pr_lifecycle.py tests/test_promotion_gate.py
+      ;;
+    ci-router) add_tests tests/test_ci_tier.py ;;
+    test-harness) add_tests tests ;;
+    verifier|workflow) add_tests tests/test_ci_tier.py ;;
+      *)
+        echo "Unsupported CI risk: $risk" >&2
+        exit 2
+        ;;
+    esac
+  done
+fi
 
 git diff --check
 ./scripts/check-update-conflicts
@@ -19,7 +118,7 @@ if [[ "$tier" == "docs" ]]; then
 fi
 
 run_static_checks=false
-if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
+if [[ ",$scope_value," == *,workflow,* || ",$scope_value," == *,shell,* ]]; then
   run_static_checks=true
   ./scripts/lint-workflows-shell
 fi
@@ -28,15 +127,16 @@ uv sync --locked --python "$UV_PYTHON"
 uv run ruff format --check src scripts tests
 uv run ruff check src scripts tests
 uv run mypy
-uv run pytest -m "not large"
-./scripts/test-pr-policy
-./scripts/test-release-follow-up-gates
-./scripts/test-issue-triage
-./scripts/test-worktree-cleanup
+uv run pytest -m "not large" "${test_paths[@]}"
+$run_pr_policy && ./scripts/test-pr-policy
+$run_release_policy && ./scripts/test-release-follow-up-gates
+$run_issue_policy && ./scripts/test-issue-triage
+$run_worktree_policy && ./scripts/test-worktree-cleanup
 
-if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
-  "$scopes" == *,shell,* ||
-  "$scopes" == *,dependency,* || "$scopes" == *,governance,* ]]; then
+if [[ ",$scope_value," == *,template,* || ",$scope_value," == *,workflow,* ||
+  ",$scope_value," == *,shell,* ||
+  ",$scope_value," == *,dependency,* ||
+  ",$scope_value," == *,governance,* ]]; then
   smoke_root="$(mktemp -d)"
   trap 'rm -rf "$smoke_root"' EXIT
   uv run copier copy --trust --defaults --vcs-ref HEAD \
