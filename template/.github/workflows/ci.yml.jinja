@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: {% raw %}${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}{% endraw %}
+  group: {% raw %}${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}-${{ github.event.action == 'edited' && github.event.changes.base.ref.from == '' && 'metadata' || 'product' }}{% endraw %}
   cancel-in-progress: {% raw %}${{ github.event_name == 'pull_request' && !startsWith(github.event.pull_request.head.ref, 'dev') && !startsWith(github.event.pull_request.head.ref, 'release-please--') && !contains(github.event.pull_request.labels.*.name, 'promotion') && !contains(github.event.pull_request.labels.*.name, 'hotfix') && !contains(github.event.pull_request.labels.*.name, 'release-recovery') }}{% endraw %}
 
 permissions:
@@ -374,7 +374,7 @@ jobs:
 {%- endif %}
 
   verify:
-    name: verify
+    name: {% raw %}${{ github.event.action == 'edited' && github.event.changes.base.ref.from == '' && 'metadata edit' || 'verify' }}{% endraw %}
     if: {% raw %}${{ always() && (github.event.action != 'edited' || github.event.changes.base.ref.from != '') }}{% endraw %}
     needs:
       - fast

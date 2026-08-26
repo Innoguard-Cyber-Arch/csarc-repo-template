@@ -631,6 +631,34 @@ def test_only_base_edits_restart_exact_tree_verification() -> None:
     )
 
 
+def test_metadata_edits_cannot_replace_or_cancel_required_verify() -> None:
+    """Give metadata-only runs a separate identity from product CI."""
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    )
+    discriminator = (
+        "github.event.action == 'edited' && "
+        "github.event.changes.base.ref.from == ''"
+    )
+    group = workflow["concurrency"]["group"]
+    verify_name = workflow["jobs"]["verify"]["name"]
+    assert "${{ " + discriminator + " && 'metadata' || 'product' }}" in group
+    assert verify_name == (
+        "${{ " + discriminator + " && 'metadata edit' || 'verify' }}"
+    )
+
+    def identity(action: str, previous_base: str) -> tuple[str, str]:
+        metadata_only = action == "edited" and not previous_base
+        return (
+            "metadata" if metadata_only else "product",
+            "metadata edit" if metadata_only else "verify",
+        )
+
+    assert identity("edited", "") == ("metadata", "metadata edit")
+    assert identity("edited", "dev/m9-old") == ("product", "verify")
+    assert identity("synchronize", "") == ("product", "verify")
+
+
 def test_governance_checks_the_candidate_revision() -> None:
     """Never validate governance policy from the pull request base revision."""
     workflow = yaml.safe_load(
