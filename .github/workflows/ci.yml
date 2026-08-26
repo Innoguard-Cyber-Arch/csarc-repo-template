@@ -178,7 +178,7 @@ jobs:
           UV_PYTHON: "3.14.0"
         run: |
           uv sync --locked --python "$UV_PYTHON"
-          uv run pytest -m runtime
+          uv run pytest -m "runtime and not large"
       - name: Record Python compatibility evidence
         if: ${{ always() }}
         env:

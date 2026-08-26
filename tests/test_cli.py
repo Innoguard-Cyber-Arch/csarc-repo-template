@@ -3910,7 +3910,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
 
     def excludes_large(command: list[str]) -> bool:
         return any(
-            command[index : index + 2] == ["-m", "not large"]
+            command[index] == "-m" and "not large" in command[index + 1]
             for index in range(len(command) - 1)
         )
 
