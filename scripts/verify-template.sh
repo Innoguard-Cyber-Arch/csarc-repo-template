@@ -11,6 +11,13 @@ fixture_security_args=(
   --data "security_reporting_channel=Use the synthetic fixture's private reporting channel."
 )
 
+assert_pr_ready_guidance() {
+  local guidance="$1"
+  grep -Fq 'Drafts use `Refs #N`' "$guidance"
+  grep -Eq 'Ready starts .*hosted' "$guidance"
+  grep -Eq 'closing keyword|`Closes`' "$guidance"
+}
+
 for verifier in scripts/verify-template.sh scripts/verify-fast \
   template/scripts/verify-fast.jinja; do
   grep -Fqx 'export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"' \
@@ -39,8 +46,8 @@ grep -q 'uv run pytest <test-path>' AGENTS.md
 grep -q 'scripts/render_site.py --check' AGENTS.md
 grep -q 'open Draft PRs, remote branches, and existing worktrees' AGENTS.md
 grep -q 'open Draft PRs, remote branches, and worktrees' template/AGENTS.md.jinja
-grep -q 'Ready starts the hosted' AGENTS.md
-grep -q 'Ready starts the hosted' template/AGENTS.md.jinja
+assert_pr_ready_guidance AGENTS.md
+assert_pr_ready_guidance template/AGENTS.md.jinja
 grep -q 'scripts/pr_lifecycle.py' AGENTS.md
 grep -q 'scripts/pr_lifecycle.py' template/AGENTS.md.jinja
 grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md
@@ -92,6 +99,7 @@ assert_agent_guidance() {
     "$project_root/AGENTS.md"
   grep -q 'scripts/pr_lifecycle.py' "$project_root/AGENTS.md"
   grep -q 'scripts/render_site.py --check' "$project_root/AGENTS.md"
+  assert_pr_ready_guidance "$project_root/AGENTS.md"
   grep -q 'propose semantic story groups and exclusions' \
     "$project_root/AGENTS.md"
   grep -q 'reopen completed Issues' "$project_root/AGENTS.md"
@@ -1208,7 +1216,6 @@ grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
 grep -Fq 'Use short-lived `dev/m<milestone-number>-<slug>` for Milestones' AGENTS.md
 grep -Fq 'Sync `main` at final promotion; early sync needs an owner-recorded dependency' AGENTS.md
-grep -Fq 'mark Ready only after every PR and referenced-Issue item has evidence' AGENTS.md
 grep -q 'one branch and worktree per independent task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
 grep -q 'gh issue develop' AGENTS.md
@@ -2326,8 +2333,6 @@ grep -q '^## Code Review Rules$' \
 grep -Fq 'Use short-lived `dev/m<milestone-number>-<slug>` for Milestones' \
   "$fixture_root/default-project/AGENTS.md"
 grep -Fq 'Sync `main` at final promotion; early sync needs an owner-recorded dependency' \
-  "$fixture_root/default-project/AGENTS.md"
-grep -Fq 'mark Ready only after every PR and referenced-Issue item has evidence' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'one branch and worktree per independent task' \
   "$fixture_root/default-project/AGENTS.md"
