@@ -103,6 +103,29 @@ assert_agent_guidance() {
   grep -q 'propose semantic story groups and exclusions' \
     "$project_root/AGENTS.md"
   grep -q 'reopen completed Issues' "$project_root/AGENTS.md"
+  grep -q 'Dependabot targets `main`' "$project_root/AGENTS.md"
+  grep -q 'Dependabot 對 main.*一般版本等待三天.*安全更新不等待.*每個更新預設獨立' \
+    "$project_root/docs/site-content.js"
+}
+
+assert_dependabot_policy() {
+  uv run python - "$1" <<'PY'
+import sys
+
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as dependabot_file:
+    updates = yaml.safe_load(dependabot_file)["updates"]
+
+assert updates
+for update in updates:
+    assert update["target-branch"] == "main"
+    # GitHub applies cooldown only to version updates, never security updates.
+    assert update["cooldown"] == {"default-days": 3}
+    # Default to one independently reviewable PR per update. A future group
+    # needs an explicit, security-reviewed allowlist rather than a catch-all.
+    assert "groups" not in update
+PY
 }
 
 assert_release_assets_contract() {
@@ -863,7 +886,7 @@ test -f docs/adr/README.md
 test -f docs/adr/portable-decision-site.md
 test -f docs/adr/transactional-repository-adoption.md
 test -f docs/adr/selective-ci-automation-adoption.md
-grep -q 'groups.official-actions' \
+grep -q '預設是每個更新一張獨立審查的 PR' \
   docs/adr/selective-ci-automation-adoption.md
 grep -q 'none.*verify.*ghcr' \
   docs/adr/selective-ci-automation-adoption.md
@@ -1653,25 +1676,51 @@ if grep -q '^  pull_request:$' .github/workflows/zizmor.yml; then
   echo "Standalone Zizmor must not duplicate change-aware CI audits."
   exit 1
 fi
-grep -q 'target-branch: main' .github/dependabot.yml
-uv run python - .github/dependabot.yml <<'PY'
+assert_dependabot_policy .github/dependabot.yml
+dependabot_mutation_root="$fixture_root/dependabot-policy-mutations"
+mkdir -p "$dependabot_mutation_root"
+uv run python - .github/dependabot.yml "$dependabot_mutation_root" <<'PY'
+import copy
 import sys
+from pathlib import Path
 
 import yaml
 
-with open(sys.argv[1], encoding="utf-8") as dependabot_file:
-    updates = yaml.safe_load(dependabot_file)["updates"]
-actions = next(
-    update for update in updates
-    if update["package-ecosystem"] == "github-actions"
-)
-assert actions["groups"] == {
-    "official-actions": {
-        "patterns": ["actions/*"],
-        "update-types": ["minor", "patch"],
-    }
+source = yaml.safe_load(Path(sys.argv[1]).read_text(encoding="utf-8"))
+destination = Path(sys.argv[2])
+
+wrong_target = copy.deepcopy(source)
+wrong_target["updates"][0]["target-branch"] = "dev/m9-example"
+
+missing_cooldown = copy.deepcopy(source)
+missing_cooldown["updates"][0]["cooldown"].pop("default-days")
+
+unexpected_groups = copy.deepcopy(source)
+unexpected_groups["updates"][0]["groups"] = {
+    "catch-all": {"patterns": ["*"]}
 }
+
+for name, document in (
+    ("wrong-target", wrong_target),
+    ("missing-cooldown", missing_cooldown),
+    ("unexpected-groups", unexpected_groups),
+):
+    (destination / f"{name}.yml").write_text(
+        yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
+    )
 PY
+for mutation in wrong-target missing-cooldown unexpected-groups; do
+  if assert_dependabot_policy \
+    "$dependabot_mutation_root/$mutation.yml" >/dev/null 2>&1; then
+    echo "Dependabot policy accepted invalid mutation: $mutation"
+    exit 1
+  fi
+done
+grep -q 'Dependabot targets `main`' AGENTS.md
+grep -q 'Dependabot 一律對永久 `main`' README.md
+grep -q '^## Dependency update timing$' docs/ci-policy.md
+grep -q 'security update 不等待' \
+  docs/adr/release-security-and-dependencies.md
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
 test ! -e policies/dev-next-ruleset.json
 
@@ -1681,6 +1730,21 @@ test ! -e policies/dev-next-ruleset.json
 grep -q 'consolidation_status: native_tools_retained' profiles/catalog.yaml
 grep -q 'automation: github_dependabot' profiles/catalog.yaml
 grep -q 'stays_independent_of_renovate: true' profiles/catalog.yaml
+uv run python - profiles/catalog.yaml <<'PY'
+import sys
+
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as catalog_file:
+    catalog = yaml.safe_load(catalog_file)
+
+assert (
+    catalog["dependency_version_policy"]["shipped_artifact_inventory"][
+        "mechanism"
+    ]
+    == "pinned_syft_spdx_2_3"
+)
+PY
 grep -q '決定｜保留 Dependabot 與 pnpm 的原生門禁' \
   docs/index.html
 grep -q 'Optional integration capability matrix' docs/index.html
@@ -2602,7 +2666,7 @@ test -x "$fixture_root/default-project/scripts/test-issue-triage"
 test -x "$fixture_root/default-project/scripts/validate-issue-title"
 grep -q 'branches: \[main, "dev/m\*"\]' \
   "$fixture_root/default-project/.github/workflows/spec-to-issue.yml"
-grep -q 'target-branch: main' \
+assert_dependabot_policy \
   "$fixture_root/default-project/.github/dependabot.yml"
 grep -q '^requires-python = ">=3.14,<3.15"$' \
   "$fixture_root/default-project/pyproject.toml"
@@ -2894,6 +2958,8 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   "$repo_root" "$fixture_root/ci-only-project"
 prime_validation_cache "$fixture_root/ci-only-project"
 assert_agent_guidance "$fixture_root/ci-only-project"
+assert_dependabot_policy \
+  "$fixture_root/ci-only-project/.github/dependabot.yml"
 assert_release_assets_contract "$fixture_root/ci-only-project" source
 
 git -C "$fixture_root/ci-only-project" init -q -b main
@@ -2979,6 +3045,8 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/main-branch-project"
 assert_agent_guidance "$fixture_root/main-branch-project"
+assert_dependabot_policy \
+  "$fixture_root/main-branch-project/.github/dependabot.yml"
 # Backticks are literal documentation content.
 # shellcheck disable=SC2016
 grep -q 'pull request chain ends at `main`' \
@@ -3066,7 +3134,7 @@ if grep -q '^  push:$' \
   echo "Generated CI must not repeat a verified tree after merge."
   exit 1
 fi
-grep -q 'target-branch: main' \
+assert_dependabot_policy \
   "$fixture_root/typescript-project/.github/dependabot.yml"
 test "$("$fixture_root/typescript-project/scripts/detect-language-profile" --suggest)" = \
   "typescript"
@@ -3165,6 +3233,8 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   "$repo_root" "$fixture_root/all-features-project"
 prime_validation_cache "$fixture_root/all-features-project"
 assert_agent_guidance "$fixture_root/all-features-project"
+assert_dependabot_policy \
+  "$fixture_root/all-features-project/.github/dependabot.yml"
 assert_release_assets_contract "$fixture_root/all-features-project" package
 grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<reviewed-full-commit-sha>' csarc update" \
   "$fixture_root/all-features-project/README.md"
@@ -3625,6 +3695,7 @@ grep -q '^  - package-ecosystem: docker$' \
   "$container_project/.github/dependabot.yml"
 grep -q '^    directory: /evaluation$' \
   "$container_project/.github/dependabot.yml"
+assert_dependabot_policy "$container_project/.github/dependabot.yml"
 grep -q '^  container:$' "$container_project/.github/workflows/ci.yml"
 grep -q 'cache-to: type=gha,mode=max' \
   "$container_project/.github/workflows/ci.yml"
@@ -3832,7 +3903,7 @@ grep -q 'test_release_boundary_aggregates_direct_main_and_promotion_history' \
   "$update_project/tests/test_release_policy.py"
 grep -q '"branch_strategy": "main"' \
   "$update_project/.csarc/profile.json"
-grep -q 'target-branch: main' \
+assert_dependabot_policy \
   "$update_project/.github/dependabot.yml"
 prime_validation_cache "$update_project"
 (

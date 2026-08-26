@@ -49,7 +49,7 @@ window.CSARC_SITE_CONTENT = {
 {% if language != "ci" %}
     "Coverage 是未測程式碼的訊號，不等於品質；新案看全域、既有案先看 changed lines，門檻依缺陷與模組風險調整。",
 {% endif %}
-    "一般相依新版等待三天；pnpm 另拒絕 publisher trust 降級，OSV 在相依變更、promotion 與每週排程掃描已知漏洞。",
+    "Dependabot 對 main 提出更新；一般版本等待三天，安全更新不等待，每個更新預設獨立，只有明列且通過安全審查的 allowlist 才能分組。pnpm 另拒絕 publisher trust 降級，OSV 在相依變更、promotion 與每週排程掃描已知漏洞。",
     "lockfile 保存下載內容雜湊；第三方 Actions 固定完整 commit SHA。",
     "PR 政策包含合法／不合法回歸測資，避免門禁只會顯示綠燈。",
 {% if language in ["python", "python-typescript"] %}

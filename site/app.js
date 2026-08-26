@@ -425,26 +425,28 @@ jobs:
         {
           title: '決定｜CI/CD 只按已證明需求與 repository 能力選擇性採用',
           goal: '避免整批搬入不相關的 job、權限與維護負擔，讓每項自動化都有可驗證的啟用條件。',
-          summary: '近期只合併官方 `actions/*` 的 minor／patch 更新；major 與第三方 Actions 維持獨立。容器交付預設為 `none`，只有既有 Containerfile 與 smoke command 才啟用 `verify`，通過 release boundary 且具 registry 寫入能力才啟用 `ghcr`。通用 Containerfile、雲端部署、Kubernetes、多架構 placeholder、長效 token 與第二套更新身分均延後到真實需求出現再評估。',
+          summary: '每個 dependency update 預設維持獨立 PR；只有未來明列且通過安全審查的 allowlist 才能分組。容器交付預設為 `none`，只有既有 Containerfile 與 smoke command 才啟用 `verify`，通過 release boundary 且具 registry 寫入能力才啟用 `ghcr`。通用 Containerfile、雲端部署、Kubernetes、多架構 placeholder、長效 token 與第二套更新身分均延後到真實需求出現再評估。',
           file: 'docs/adr/selective-ci-automation-adoption.md',
-          code: `adopt now: actions/* minor + patch grouping
+          code: `adopt now: one independently reviewed PR per update
 capability-gated: container none | verify | ghcr
 defer: speculative build, publish, and deployment paths`
         },
         {
           title: '一般套件新版觀察三天，再由測試與人員決定是否合併',
           goal: '安全更新不等待；三天規則主要降低剛發布惡意版本的早期風險。',
-          summary: 'Dependabot 同時管理 GitHub Actions、`uv` 與 `npm` 生態；`cooldown.default-days=3` 延後一般升版，安全更新仍立即提出。只有官方 `actions/*` 的 minor／patch 會合併成一張 PR；major 與第三方 Actions 保持獨立，方便審查與回退。',
+          summary: 'Dependabot 對永久 `main` 管理 GitHub Actions、`uv` 與 `npm` 生態；`cooldown.default-days=3` 只延後一般 version update，安全更新仍立即提出。每個更新預設維持獨立 PR；只有明列且通過安全審查的 allowlist 才能分組。',
           file: '.github/dependabot.yml',
           code: `updates:
   - package-ecosystem: uv
     directory: /
+    target-branch: main
     schedule:
       interval: weekly
     cooldown:
       default-days: 3
   - package-ecosystem: npm
     directory: /
+    target-branch: main
     cooldown:
       default-days: 3`
         },

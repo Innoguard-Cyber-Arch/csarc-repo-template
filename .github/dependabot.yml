@@ -6,22 +6,15 @@ updates:
     schedule:
       interval: weekly
     cooldown:
+      # Dependabot exempts security updates; only version updates wait.
       default-days: 3
     labels: [enhancement]
-    groups:
-      # Keep third-party and major Action upgrades isolated for review.
-      official-actions:
-        patterns: ["actions/*"]
-        update-types: [minor, patch]
   - package-ecosystem: uv
     directory: /
     target-branch: main
     schedule:
       interval: weekly
     cooldown:
+      # Dependabot exempts security updates; only version updates wait.
       default-days: 3
     labels: [enhancement]
-    groups:
-      routine-updates:
-        patterns: ["*"]
-        update-types: [minor, patch]

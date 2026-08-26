@@ -18,6 +18,7 @@ Release automation 會跨越 Git history、GitHub workflow permissions、immutab
 - 容器交付只為已有產品 Containerfile 的既有 repo 選配。`verify` 模式僅在 PR build、啟動與掃描；`ghcr` 模式才從已驗證 release source 建置一次、保存相同 image bytes，發布 GHCR 後附加 provenance／SBOM 並以 digest 重跑 smoke test。非容器 repo 不產生 job 或 registry write permission。
 - 已合併版本缺少 Release 時，只允許 `fix/<Issue>-*`、`fix` title 與 `release-recovery` label 的受審查 direct-main 修復；它仍需完整 promotion gate 與 merge 後 identity，不能使用 release-ineligible 的 Actions 額度 fallback。
 - Dependabot 保留為能觸發既有 checks 的 native update identity；pnpm 等待與 publisher trust、OSV、Gitleaks、CodeQL 各負責不同風險。
+- Dependabot 固定對 `main` 提案；routine version update cooldown 三天，security update 不等待。所有更新預設維持獨立 PR；未來只有明列且通過安全審查的 allowlist 才能分組（[#322](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/322)）。
 
 ## 歷史 disposition
 

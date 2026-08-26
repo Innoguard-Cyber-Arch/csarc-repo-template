@@ -4009,3 +4009,48 @@ def test_pr_templates_do_not_repeat_full_before_ready() -> None:
         assert "轉 Ready 前" not in full_line
         assert "required" in source
         assert "edit" in source or "編輯" in source
+
+
+def test_dependabot_policy_keeps_routine_updates_bounded() -> None:
+    """Target main, delay routine updates, and keep each update isolated."""
+    updates = yaml.safe_load(
+        (ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8")
+    )["updates"]
+    assert {update["package-ecosystem"] for update in updates} == {
+        "github-actions",
+        "uv",
+    }
+    for update in updates:
+        assert update["target-branch"] == "main"
+        assert update["cooldown"] == {"default-days": 3}
+        assert "groups" not in update
+
+    template = (ROOT / "template/.github/dependabot.yml.jinja").read_text(
+        encoding="utf-8"
+    )
+    assert template.count("target-branch: main") == 4
+    assert template.count("default-days: 3") == 4
+    assert "groups:" not in template
+    assert "update-types:" not in template
+
+    catalog = yaml.safe_load(
+        (ROOT / "profiles/catalog.yaml").read_text(encoding="utf-8")
+    )
+    assert (
+        catalog["dependency_version_policy"]["shipped_artifact_inventory"][
+            "mechanism"
+        ]
+        == "pinned_syft_spdx_2_3"
+    )
+
+    verifier = (ROOT / "scripts/verify-template.sh").read_text(encoding="utf-8")
+    assert "assert_dependabot_policy()" in verifier
+    assert verifier.count("assert_dependabot_policy ") >= 8
+    for mutation in (
+        "wrong-target",
+        "missing-cooldown",
+        "unexpected-groups",
+    ):
+        assert mutation in verifier
+    assert "Dependabot policy accepted invalid mutation" in verifier
+    assert "pinned_syft_spdx_2_3" in verifier

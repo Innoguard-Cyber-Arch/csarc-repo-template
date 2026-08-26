@@ -6,13 +6,9 @@ updates:
     schedule:
       interval: weekly
     cooldown:
+      # Dependabot exempts security updates; only version updates wait.
       default-days: 3
     labels: [enhancement]
-    groups:
-      # Keep third-party and major Action upgrades isolated for review.
-      official-actions:
-        patterns: ["actions/*"]
-        update-types: [minor, patch]
 {%- if language in ["python", "python-typescript"] %}
   - package-ecosystem: uv
     directory: /
@@ -20,12 +16,9 @@ updates:
     schedule:
       interval: weekly
     cooldown:
+      # Dependabot exempts security updates; only version updates wait.
       default-days: 3
     labels: [enhancement]
-    groups:
-      routine-updates:
-        patterns: ["*"]
-        update-types: [minor, patch]
 {%- endif %}
 {%- if language in ["typescript", "python-typescript"] %}
   - package-ecosystem: npm
@@ -34,12 +27,9 @@ updates:
     schedule:
       interval: weekly
     cooldown:
+      # Dependabot exempts security updates; only version updates wait.
       default-days: 3
     labels: [enhancement]
-    groups:
-      routine-updates:
-        patterns: ["*"]
-        update-types: [minor, patch]
 {%- endif %}
 {%- if (container_mode | default("none")) != "none" %}
   - package-ecosystem: docker
@@ -48,6 +38,7 @@ updates:
     schedule:
       interval: weekly
     cooldown:
+      # Dependabot exempts security updates; only version updates wait.
       default-days: 3
     labels: [enhancement]
 {%- endif %}

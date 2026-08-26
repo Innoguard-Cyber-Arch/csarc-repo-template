@@ -90,6 +90,15 @@ Issue owner 只執行 plan 宣告的 scoped checks；`verify-fast` 跳過 `large
 長時間檢查。Changed-file discovery 使用 rename-safe 的 old/new path 語意，不能把
 workflow、security 或 verifier rename 到 docs path 來降級。
 
+## Dependency update timing
+
+Dependabot 對唯一永久 branch `main` 提案。`cooldown.default-days: 3` 只延後
+routine version updates；security updates 依 GitHub 原生語意保持即時。預設不設定
+`groups`，每個 update（包含 build、release 與 security toolchain）各自保留 PR 與 review；
+未來只有明列且通過安全審查的 allowlist 才能分組。Copier 建立與更新都必須產生
+相同政策；target、cooldown 或 isolation semantics 缺失時
+fail closed。
+
 ## Actions 額度 fallback
 
 一般情況必須等 required checks 成功。若 GitHub 明確因 included Actions minutes 耗盡，在 runner 尚未分配、steps 為空且 billing annotation 可驗證時擋住工作，可使用 quota fallback；真實測試失敗、取消、逾時或證據不完整都不可套用。
