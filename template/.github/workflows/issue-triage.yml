@@ -34,6 +34,7 @@ jobs:
           set -euo pipefail
 
           if ! title_error="$(./scripts/validate-issue-title "$ISSUE_TITLE" 2>&1)"; then
+            # shellcheck disable=SC2016 # Markdown fences must remain literal.
             gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
               --body "$(printf '請先修正 Issue 標題後再開始工作。\n\n```text\n%s\n```' "$title_error")"
             printf '%s\n' "$title_error" >&2

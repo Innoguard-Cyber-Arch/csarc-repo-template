@@ -3081,8 +3081,8 @@ def test_guardrails_for_invalid_targets(tmp_path: Path) -> None:
     assert main(["update", str(nonempty), "--json"]) == 2
 
 
-def test_large_adoption_tests_are_excluded_only_from_fast_gates() -> None:
-    """Keep fast gates narrow without weakening full gates."""
+def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
+    """Keep fast and compatibility gates narrow without weakening full gates."""
 
     def pytest_commands(path: Path) -> list[list[str]]:
         source = path.read_text(encoding="utf-8").replace("\\\n", " ")
@@ -3112,21 +3112,34 @@ def test_large_adoption_tests_are_excluded_only_from_fast_gates() -> None:
             for line in pytest_section.splitlines()
         )
 
-    for fast_gate in (
+    for bounded_gate in (
         ROOT / "scripts/verify-fast",
         ROOT / "template/scripts/verify-fast.jinja",
     ):
-        commands = pytest_commands(fast_gate)
+        commands = pytest_commands(bounded_gate)
         assert commands
         assert all(excludes_large(command) for command in commands)
 
-    for full_gate in (
-        ROOT / "scripts/verify-template.sh",
-        ROOT / "template/scripts/verify.jinja",
-    ):
-        commands = pytest_commands(full_gate)
-        assert commands
-        assert not any(excludes_large(command) for command in commands)
+    root_ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    compatibility_job = root_ci.split("  python-compatibility:\n", 1)[1].split(
+        "\n  adoption-macos:\n", 1
+    )[0]
+    compatibility_commands = [
+        shlex.split(line.strip())
+        for line in compatibility_job.splitlines()
+        if line.strip().startswith("uv run pytest")
+    ]
+    assert compatibility_commands
+    assert all(excludes_large(command) for command in compatibility_commands)
+
+    root_full_commands = pytest_commands(ROOT / "scripts/verify-template.sh")
+    assert root_full_commands
+    assert not any(excludes_large(command) for command in root_full_commands)
+
+    template_commands = pytest_commands(ROOT / "template/scripts/verify.jinja")
+    assert len(template_commands) > 1
+    assert excludes_large(template_commands[0])
+    assert not any(excludes_large(command) for command in template_commands[1:])
 
     marked_large = {
         name
