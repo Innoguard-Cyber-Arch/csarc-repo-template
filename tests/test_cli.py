@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import stat
 import subprocess
 from pathlib import Path
@@ -649,6 +650,7 @@ def test_milestone_description_plan_degrades_without_api_access(
     assert "review them manually" in output
 
 
+@pytest.mark.large
 def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1009,6 +1011,7 @@ def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
         ("typescript", "package.json", "pnpm-lock.yaml"),
     ],
 )
+@pytest.mark.large
 def test_real_template_adoption_resumes_after_manifest_merge(
     tmp_path: Path,
     language: str,
@@ -1139,6 +1142,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
     assert not (project / cli.PENDING_ADOPTION_FILE).exists()
 
 
+@pytest.mark.large
 def test_real_existing_adoption_uses_fixed_ownership_policies(
     tmp_path: Path,
 ) -> None:
@@ -3075,3 +3079,66 @@ def test_guardrails_for_invalid_targets(tmp_path: Path) -> None:
     assert main(["adopt", str(tmp_path / "missing"), "--dry-run"]) == 2
     assert main(["update", str(nonempty), "--check", "--json"]) == 2
     assert main(["update", str(nonempty), "--json"]) == 2
+
+
+def test_large_adoption_tests_are_excluded_only_from_fast_gates() -> None:
+    """Keep fast gates narrow without weakening full gates."""
+
+    def pytest_commands(path: Path) -> list[list[str]]:
+        source = path.read_text(encoding="utf-8").replace("\\\n", " ")
+        return [
+            shlex.split(line.strip())
+            for line in source.splitlines()
+            if line.strip().startswith("uv run pytest")
+        ]
+
+    def excludes_large(command: list[str]) -> bool:
+        return any(
+            command[index : index + 2] == ["-m", "not large"]
+            for index in range(len(command) - 1)
+        )
+
+    for config in (
+        ROOT / "pyproject.toml",
+        ROOT / "template/pyproject.toml.jinja",
+    ):
+        pytest_section = (
+            config.read_text(encoding="utf-8")
+            .split("[tool.pytest.ini_options]", 1)[1]
+            .split("\n[", 1)[0]
+        )
+        assert any(
+            line.strip().startswith('"large:')
+            for line in pytest_section.splitlines()
+        )
+
+    for fast_gate in (
+        ROOT / "scripts/verify-fast",
+        ROOT / "template/scripts/verify-fast.jinja",
+    ):
+        commands = pytest_commands(fast_gate)
+        assert commands
+        assert all(excludes_large(command) for command in commands)
+
+    for full_gate in (
+        ROOT / "scripts/verify-template.sh",
+        ROOT / "template/scripts/verify.jinja",
+    ):
+        commands = pytest_commands(full_gate)
+        assert commands
+        assert not any(excludes_large(command) for command in commands)
+
+    marked_large = {
+        name
+        for name, value in globals().items()
+        if name.startswith("test_")
+        and any(
+            marker.name == "large"
+            for marker in getattr(value, "pytestmark", ())
+        )
+    }
+    assert marked_large == {
+        "test_adopt_defaults_to_dry_run_and_preserves_product_files",
+        "test_real_existing_adoption_uses_fixed_ownership_policies",
+        "test_real_template_adoption_resumes_after_manifest_merge",
+    }
