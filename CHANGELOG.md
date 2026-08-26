@@ -7,6 +7,14 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.12.1](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.12.0...v0.12.1) (2026-08-26)
+
+
+### Bug Fixes
+
+* **ci:** make hosted verification self-contained ([#356](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/356)) ([d46ddc8](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/d46ddc8f4ceb1ced8669900477470e8c1b72808c))
+* **cli:** run configured project verification hooks ([#358](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/358)) ([94e2a9c](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/94e2a9c51413e75f198d0e85865268c694c9b21d))
+
 ## [0.12.0](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.11.0...v0.12.0) (2026-08-26)
 
 
