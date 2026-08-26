@@ -90,6 +90,48 @@ assert_agent_guidance() {
   grep -q 'reopen completed Issues' "$project_root/AGENTS.md"
 }
 
+assert_release_assets_contract() {
+  local project_root="$1"
+  local runtime_kind="$2"
+  local release_script="$project_root/scripts/release_assets.py"
+  local release_workflow="$project_root/.github/workflows/release.yml"
+  local help_text
+
+  test -f "$release_script"
+  cmp -s template/scripts/release_assets.py "$release_script"
+  help_text="$(python3 "$release_script" --help)"
+  for option in --artifact --inventory-file --release-run --repository-id \
+    --root-name --root-purl --runtime-kind; do
+    grep -Fq -- "$option" <<<"$help_text"
+  done
+  CSARC_RELEASE_ASSETS_SCRIPT="$release_script" uv run pytest -q \
+    tests/test_release_assets.py \
+    -k 'binds_explicit_artifacts_and_finalized_provenance or accepts_genuine_source_runtime_without_inventing_a_root_purl or rejects_artifact_and_sbom_tampering'
+
+  # The core validator can be developed before its workflow consumer. Once the
+  # canonical workflow enables it, every rendered profile must keep the same
+  # pinned Syft and fail-closed CLI contract.
+  if grep -Fq 'scripts/release_assets.py build' \
+    .github/workflows/release-template.yml; then
+    test -f "$release_workflow"
+    for contract in 'scripts/release_assets.py build' \
+      'scripts/release_assets.py verify' 'syft-version: v1.50.0' \
+      'format: spdx-json' '--artifact' '--inventory-file' '--release-run' \
+      '--repository-id' '--root-name'; do
+      grep -Fq -- "$contract" "$release_workflow"
+    done
+    grep -Fq -- "--runtime-kind $runtime_kind" "$release_workflow"
+    if [[ "$runtime_kind" == source ]]; then
+      if grep -Fq -- '--root-purl' "$release_workflow"; then
+        echo "Source-only release workflow invented a package root." >&2
+        exit 1
+      fi
+    else
+      grep -Fq -- '--root-purl' "$release_workflow"
+    fi
+  fi
+}
+
 ./scripts/check-update-conflicts
 python3 scripts/render_site.py --check
 ./scripts/lint-workflows-shell
@@ -1635,6 +1677,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   "$repo_root" "$fixture_root/default-project"
 prime_validation_cache "$fixture_root/default-project"
 assert_agent_guidance "$fixture_root/default-project"
+assert_release_assets_contract "$fixture_root/default-project" package
 
 git -C "$fixture_root/default-project" init -q -b main
 git -C "$fixture_root/default-project" add .
@@ -2580,6 +2623,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   "$repo_root" "$fixture_root/ci-only-project"
 prime_validation_cache "$fixture_root/ci-only-project"
 assert_agent_guidance "$fixture_root/ci-only-project"
+assert_release_assets_contract "$fixture_root/ci-only-project" source
 
 git -C "$fixture_root/ci-only-project" init -q -b main
 git -C "$fixture_root/ci-only-project" add .
@@ -2712,6 +2756,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   "$repo_root" "$fixture_root/typescript-project"
 prime_validation_cache "$fixture_root/typescript-project"
 assert_agent_guidance "$fixture_root/typescript-project"
+assert_release_assets_contract "$fixture_root/typescript-project" package
 
 git -C "$fixture_root/typescript-project" init -q -b main
 git -C "$fixture_root/typescript-project" add .
@@ -2848,6 +2893,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   "$repo_root" "$fixture_root/all-features-project"
 prime_validation_cache "$fixture_root/all-features-project"
 assert_agent_guidance "$fixture_root/all-features-project"
+assert_release_assets_contract "$fixture_root/all-features-project" package
 grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<reviewed-full-commit-sha>' csarc update" \
   "$fixture_root/all-features-project/README.md"
 
