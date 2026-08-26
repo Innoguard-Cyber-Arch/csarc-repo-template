@@ -3030,6 +3030,13 @@ if grep -q 'branch_strategy: dev' "$update_project/.copier-answers.yml"; then
   echo "Copier update did not migrate the legacy dev branch strategy."
   exit 1
 fi
+grep -q 'test_gate_skips_ordinary_work_and_checks_final_promotion' \
+  "$update_project/tests/test_delivery_sync.py"
+if grep -q 'active_delivery_branches = MODULE' \
+  "$update_project/tests/test_delivery_sync.py"; then
+  echo "Copier update preserved the retired delivery fan-out regression."
+  exit 1
+fi
 grep -q '"branch_strategy": "main"' \
   "$update_project/.csarc/profile.json"
 grep -q 'target-branch: main' \
