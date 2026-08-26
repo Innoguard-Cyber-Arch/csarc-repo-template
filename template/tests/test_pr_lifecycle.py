@@ -298,11 +298,13 @@ class FakeGitHub:
         if key == "check_runs" and path.startswith(f"commits/{self.head}/"):
             return [
                 {
+                    "id": 200,
                     "name": "verify",
                     "head_sha": self.head,
                     "status": "completed",
                     "conclusion": self.check_conclusion,
                     "details_url": self.check_details_url,
+                    "app": {"id": 15368},
                 },
                 *self.additional_check_runs,
             ]
@@ -1200,7 +1202,7 @@ def test_pinned_check_rejects_malformed_github_app_id(app_id: object) -> None:
         raise AssertionError(path)
 
     github.collection = malformed_collection  # type: ignore[assignment]
-    with pytest.raises(RuntimeError, match="exact head: verify"):
+    with pytest.raises(RuntimeError, match="Check run identity is malformed"):
         require_successful_checks(
             github, "owner/repo", github.head, {("verify", 1)}
         )
@@ -1237,7 +1239,7 @@ def test_quota_fallback_rejects_malformed_github_app_id(
         raise AssertionError(path)
 
     github.collection = malformed_collection  # type: ignore[assignment]
-    with pytest.raises(RuntimeError, match="exact head: verify"):
+    with pytest.raises(RuntimeError, match="Check run identity is malformed"):
         require_successful_checks(
             github,
             "owner/repo",
@@ -1916,12 +1918,239 @@ def test_routine_quota_note_accepts_earlier_same_head_run(
     assert snapshot["required_check_evidence"] == "quota-fallback"
 
 
+def test_routine_quota_uses_newest_strict_check_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Superseded workflow generations do not block the latest result."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = quota_snapshot_fixture()
+    github.additional_check_runs = [
+        {
+            "id": 198,
+            "name": "verify",
+            "head_sha": "a" * 40,
+            "status": "completed",
+            "conclusion": "failure",
+            "details_url": (
+                "https://github.com/owner/repo/actions/runs/199/job/8"
+            ),
+            "app": {"id": 15368},
+        },
+        {
+            "id": 197,
+            "name": "workflow audit",
+            "head_sha": "a" * 40,
+            "status": "completed",
+            "conclusion": "cancelled",
+            "details_url": (
+                "https://github.com/owner/repo/actions/runs/199/job/9"
+            ),
+            "app": {"id": 15368},
+        },
+        {
+            "id": 201,
+            "name": "workflow audit",
+            "head_sha": "a" * 40,
+            "status": "completed",
+            "conclusion": "skipped",
+            "details_url": (
+                "https://github.com/owner/repo/actions/runs/200/job/10"
+            ),
+            "app": {"id": 15368},
+        },
+    ]
+    snapshot = merge_snapshot(
+        github,
+        lease,
+        "https://github.com/owner/repo/pull/42#issuecomment-99",
+        quota_fallback_note_url=note_url,
+    )
+    assert snapshot["required_check_evidence"] == "quota-fallback"
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        {
+            "id": 200,
+            "name": "verify",
+            "app": {"id": 15368},
+            "status": "completed",
+            "conclusion": "cancelled",
+        },
+        {
+            "id": 201,
+            "name": "verify",
+            "app": {"id": 15368},
+            "status": "completed",
+            "conclusion": "cancelled",
+        },
+        {
+            "id": 199,
+            "name": "verify",
+            "app": {"id": 7},
+            "status": "completed",
+            "conclusion": "cancelled",
+        },
+        {
+            "id": 199,
+            "name": "other check",
+            "app": {"id": 15368},
+            "status": "completed",
+            "conclusion": "cancelled",
+        },
+        {
+            "id": 199,
+            "name": "verify",
+            "app": {"id": True},
+            "status": "completed",
+            "conclusion": "cancelled",
+        },
+        {
+            "id": 201,
+            "name": "verify",
+            "app": {"id": 15368},
+            "status": "in_progress",
+            "conclusion": None,
+        },
+        {
+            "id": 201,
+            "name": "verify",
+            "app": {"id": 15368},
+            "status": "completed",
+            "conclusion": "failure",
+        },
+    ],
+)
+def test_routine_quota_rejects_non_authoritative_replacements(
+    replacement: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Latest, unmatched, malformed, pending, or unlisted checks block."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = quota_snapshot_fixture()
+    replacement = {
+        **replacement,
+        "head_sha": "a" * 40,
+        "details_url": ("https://github.com/owner/repo/actions/runs/201/job/8"),
+    }
+    github.additional_check_runs = [replacement]
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            r"Non-quota check failures|Required checks have not succeeded|"
+            r"Check run identity is malformed"
+        ),
+    ):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        {"id": True, "app": {"id": 15368}, "conclusion": "success"},
+        {"id": 201, "app": {"id": True}, "conclusion": "skipped"},
+        {"id": 201, "app": None, "conclusion": "success"},
+    ],
+)
+def test_routine_quota_rejects_malformed_successful_identity(
+    malformed: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Malformed successful checks cannot satisfy a required context."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = quota_snapshot_fixture()
+    github.additional_check_runs = [
+        {
+            **malformed,
+            "name": "verify",
+            "head_sha": "a" * 40,
+            "status": "completed",
+            "details_url": (
+                "https://github.com/owner/repo/actions/runs/201/job/8"
+            ),
+        }
+    ]
+    with pytest.raises(RuntimeError, match="Check run identity is malformed"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+def test_routine_quota_rejects_wrong_head_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A newer check from another commit cannot replace this candidate."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = quota_snapshot_fixture()
+    github.check_details_url = (
+        "https://github.com/owner/repo/actions/runs/201/job/7"
+    )
+    github.additional_check_runs = [
+        {
+            "id": 201,
+            "name": "verify",
+            "head_sha": "b" * 40,
+            "status": "completed",
+            "conclusion": "success",
+            "details_url": (
+                "https://github.com/owner/repo/actions/runs/201/job/8"
+            ),
+            "app": {"id": 15368},
+        }
+    ]
+    with pytest.raises(RuntimeError, match="verify"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+def test_routine_quota_rejects_optional_pending_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An authoritative pending check blocks even when it is not required."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = quota_snapshot_fixture()
+    github.additional_check_runs = [
+        {
+            "id": 201,
+            "name": "optional scan",
+            "head_sha": "a" * 40,
+            "status": "in_progress",
+            "conclusion": None,
+            "details_url": (
+                "https://github.com/owner/repo/actions/runs/201/job/8"
+            ),
+            "app": {"id": 15368},
+        }
+    ]
+    with pytest.raises(RuntimeError, match="optional scan"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
 @pytest.mark.parametrize(
     ("extra_check_runs", "statuses", "failure_name"),
     [
         (
             [
                 {
+                    "id": 201,
                     "name": "optional scan",
                     "head_sha": "a" * 40,
                     "status": "completed",
@@ -1929,6 +2158,7 @@ def test_routine_quota_note_accepts_earlier_same_head_run(
                     "details_url": (
                         "https://github.com/owner/repo/actions/runs/201/job/8"
                     ),
+                    "app": {"id": 15368},
                 }
             ],
             [],
