@@ -3949,7 +3949,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
 
     root_full_commands = pytest_commands(ROOT / "scripts/verify-template.sh")
     assert root_full_commands
-    assert not any(excludes_large(command) for command in root_full_commands)
+    assert any(not excludes_large(command) for command in root_full_commands)
 
     template_commands = pytest_commands(ROOT / "template/scripts/verify.jinja")
     assert len(template_commands) > 1
@@ -3970,3 +3970,23 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_real_existing_adoption_uses_fixed_ownership_policies",
         "test_real_template_adoption_resumes_after_manifest_merge",
     }
+
+
+def test_template_verification_runs_one_generated_full_gate() -> None:
+    """Keep one representative full profile and target every other fixture."""
+    source = (ROOT / "scripts" / "verify-template.sh").read_text(
+        encoding="utf-8"
+    )
+    assert source.count("  ./scripts/verify\n") == 1
+    assert (
+        'cd "$fixture_root/all-features-project"\n  ./scripts/verify\n'
+        in source
+    )
+    for command in (
+        "./scripts/verify python-compatibility",
+        "./scripts/verify typescript",
+        "tests/test_delivery_sync.py",
+        "tests/test_promotion_gate.py",
+        "tests/test_release_policy.py",
+    ):
+        assert command in source

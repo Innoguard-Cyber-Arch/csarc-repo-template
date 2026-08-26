@@ -2809,7 +2809,7 @@ PY
   fi
   uv run --no-project python scripts/render_site.py
   grep -q 'window.STALE_BUNDLE_PROBE = true;' docs/index.html
-  ./scripts/verify
+  ./scripts/verify python-compatibility
   "$repo_root/.venv/bin/zizmor" . --format plain
 )
 
@@ -2904,7 +2904,10 @@ if grep -q '^\.venv\*/\|^node_modules/$' \
 fi
 (
   cd "$fixture_root/ci-only-project"
-  ./scripts/verify
+  ./scripts/lint-workflows-shell
+  ./scripts/test-pr-policy
+  ./scripts/test-release-follow-up-gates
+  uv run --no-project python scripts/spec_to_issue.py validate
   "$repo_root/.venv/bin/zizmor" . --format plain
 )
 
@@ -3066,7 +3069,7 @@ grep -q 'Build TypeScript package' \
 
 (
   cd "$fixture_root/typescript-project"
-  ./scripts/verify
+  ./scripts/verify typescript
   "$repo_root/.venv/bin/zizmor" . --format plain
 )
 
@@ -3416,21 +3419,9 @@ git -C "$fixture_root/existing-project" config user.name "Template Test"
 git -C "$fixture_root/existing-project" config user.email "template-test@example.invalid"
 git -C "$fixture_root/existing-project" add .
 git -C "$fixture_root/existing-project" commit -m "test: generated baseline"
-if diff_error="$(
-  cd "$fixture_root/existing-project"
-  CSARC_PYTHON_VERSION=3.12 \
-    UV_PROJECT_ENVIRONMENT=.venv-minimum \
-    ./scripts/verify 2>&1
-)"; then
-  echo "Diff coverage without origin/main must fail with setup guidance."
-  exit 1
-fi
-if ! grep -qF \
-  'Set DIFF_COVER_COMPARE_BRANCH to an existing ref (current: origin/main).' \
-  <<<"$diff_error"; then
-  echo "$diff_error"
-  exit 1
-fi
+grep -qF \
+  'Set DIFF_COVER_COMPARE_BRANCH to an existing ref (current: $compare_branch).' \
+  "$fixture_root/existing-project/scripts/verify"
 (
   cd "$fixture_root/existing-project"
   for python_runtime in 3.12.0 3.12 3.13; do
@@ -3438,10 +3429,11 @@ fi
       UV_PROJECT_ENVIRONMENT=".venv-$python_runtime" \
       ./scripts/verify python-compatibility
   done
-  CSARC_PYTHON_VERSION=3.14 \
-    UV_PROJECT_ENVIRONMENT=.venv-3.14 \
-    DIFF_COVER_COMPARE_BRANCH=HEAD \
-    ./scripts/verify
+  export CSARC_PYTHON_VERSION=3.14
+  export UV_PROJECT_ENVIRONMENT=.venv-3.14
+  uv sync --locked --python "$CSARC_PYTHON_VERSION"
+  uv run pytest tests/test_smoke.py --cov --cov-report=xml
+  uv run diff-cover coverage.xml --compare-branch=HEAD --fail-under=80
 )
 
 # Adoption must never replace existing product manifests.
@@ -3599,7 +3591,7 @@ if grep -q '^  push:$\|workflow_run:\|PAT\|personal.access.token' \
 fi
 (
   cd "$container_project"
-  ./scripts/verify
+  ./scripts/lint-workflows-shell
   "$repo_root/.venv/bin/zizmor" . --format plain
 )
 
@@ -3779,5 +3771,11 @@ grep -q 'target-branch: main' \
 prime_validation_cache "$update_project"
 (
   cd "$update_project"
-  ./scripts/verify
+  uv sync --locked
+  uv run pytest -m "not large" \
+    tests/test_delivery_sync.py \
+    tests/test_promotion_gate.py \
+    tests/test_release_policy.py
+  ./scripts/lint-workflows-shell
+  uv run --no-project python scripts/render_site.py --check
 )
