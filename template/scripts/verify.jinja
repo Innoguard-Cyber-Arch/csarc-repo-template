@@ -202,7 +202,6 @@ PY
 "${platform_python[@]}" -m json.tool policies/actions.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/labels.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/rulesets.json >/dev/null
-"${platform_python[@]}" -m json.tool policies/dev-next-ruleset.json >/dev/null
 "${platform_python[@]}" -m json.tool release-please-config.json >/dev/null
 "${platform_python[@]}" -m json.tool .release-please-manifest.json >/dev/null
 "${platform_python[@]}" - <<'PY'
@@ -234,7 +233,11 @@ test -x scripts/detect-language-profile
 test -x scripts/pr_lifecycle.py
 grep -q 'scripts/pr_lifecycle.py' AGENTS.md
 grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md
+grep -q '\[P0\].*\[P1\].*\[merge-blocker\]' docs/ci-policy.md
 grep -q 'release pull request (human-only)' docs/ci-policy.md
+grep -q 'Actions quota fallback attestation' docs/ci-policy.md
+grep -q '^## Concurrency 與外部 mutation$' docs/ci-policy.md
+grep -Fq "| Release follow-up | \`main\` |" docs/ci-policy.md
 "${platform_python[@]}" scripts/pr_lifecycle.py scan-writers --root .
 
 test -f AGENTS.md

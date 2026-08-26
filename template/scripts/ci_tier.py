@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -110,7 +111,11 @@ def classify(
     promotion = (
         event in {"pull_request", "merge_group"}
         and base == "main"
-        and (head.startswith("dev/") or "promotion" in labels)
+        and (
+            re.fullmatch(r"dev/m[1-9][0-9]*-[a-z0-9][a-z0-9-]*", head)
+            is not None
+            or "promotion" in labels
+        )
     )
     hotfix = event == "pull_request" and base == "main" and "hotfix" in labels
     recovery = (

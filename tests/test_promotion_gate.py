@@ -36,10 +36,10 @@ RejectRedirects = MODULE["RejectRedirects"]
 repository_variables = MODULE["repository_variables"]
 require_same_preflight = MODULE["require_same_preflight"]
 promotion_bridge_source = MODULE["promotion_bridge_source"]
+promotion_freshness_sha = MODULE["promotion_freshness_sha"]
 promotion_main_evidence = MODULE["promotion_main_evidence"]
 require_zero_step_run = MODULE["require_zero_step_run"]
 route_for = MODULE["route_for"]
-run_dev_next_preservation = MODULE["run_dev_next_preservation"]
 same_repository = MODULE["same_repository"]
 unfinished_milestone_issues = MODULE["unfinished_milestone_issues"]
 verify_main = MODULE["verify_main"]
@@ -48,76 +48,6 @@ _GIT = shutil.which("git")
 if _GIT is None:
     raise RuntimeError("Git is required for promotion tests")
 GIT: str = _GIT
-
-
-def test_release_recovery_routes_to_preflight_and_gate() -> None:
-    """The required gate must conclude whenever its preflight runs."""
-    workflow = (
-        Path(__file__).parents[1] / ".github/workflows/promotion.yml"
-    ).read_text(encoding="utf-8")
-    marker = (
-        "contains(github.event.pull_request.labels.*.name, 'release-recovery')"
-    )
-    preflight = workflow.split("  preflight:", 1)[1].split("\n  canary:", 1)[0]
-    gate = workflow.split("\n  gate:", 1)[1]
-    assert marker in preflight
-    assert marker in gate
-
-
-def preservation_evidence() -> dict[str, object]:
-    """Return one structured remote checkpoint for quota fallback tests."""
-    return {
-        "ledger_ref": "refs/heads/csarc/dev-next-preservation-ledger",
-        "ledger_commit": "d" * 40,
-        "transaction": {
-            "schema_version": 1,
-            "repository": "owner/repo",
-            "pull_request": 42,
-            "base_ref": "main",
-            "base_sha": "base",
-            "head_ref": "dev/next",
-            "head_sha": "head",
-            "operation_id": "e" * 64,
-            "mode": "temporary-auto-delete",
-            "prior_auto_delete": True,
-            "state": "prepared",
-        },
-    }
-
-
-def test_hosted_restoration_is_explicit_and_never_replaces_gh_token(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Pass the separate admin secret through the hosted environment."""
-    captured: dict[str, object] = {}
-    github_value = "github-value"
-    admin_value = "admin-value"
-
-    def run(command: list[str], **kwargs: object) -> SimpleNamespace:
-        captured["command"] = command
-        captured["env"] = kwargs["env"]
-        return SimpleNamespace(stdout=json.dumps(preservation_evidence()))
-
-    monkeypatch.setenv("GITHUB_ACTIONS", "true")
-    monkeypatch.setenv("GH_TOKEN", github_value)
-    monkeypatch.setenv("CSARC_SYNC_TOKEN", admin_value)
-    monkeypatch.setattr(subprocess, "run", run)
-    run_dev_next_preservation(
-        "complete-dev-next",
-        "owner/repo",
-        42,
-        "a" * 40,
-        "b" * 40,
-        "c" * 64,
-        "d" * 40,
-    )
-    command = captured["command"]
-    assert isinstance(command, list)
-    assert "--hosted" in command
-    environment = captured["env"]
-    assert isinstance(environment, dict)
-    assert environment["GH_TOKEN"] == github_value
-    assert environment["CSARC_SYNC_TOKEN"] == admin_value
 
 
 @pytest.mark.parametrize(
@@ -131,14 +61,6 @@ def test_hosted_restoration_is_explicit_and_never_replaces_gh_token(
             "delivery",
             "milestone",
             7,
-        ),
-        (
-            "main",
-            "dev/next",
-            {"promotion"},
-            "delivery",
-            "standalone-batch",
-            None,
         ),
         ("main", "fix/42-outage", {"hotfix"}, "delivery", "hotfix", None),
         (
@@ -173,32 +95,23 @@ def test_hosted_restoration_is_explicit_and_never_replaces_gh_token(
             "release-follow-up",
             None,
         ),
-        ("main", "feat/42-work", set(), "delivery", "invalid-main-route", None),
+        ("main", "feat/42-work", set(), "delivery", "not-applicable", None),
         (
             "main",
-            "feat/321-recover-v012-release",
-            {"release-recovery"},
+            "dependabot/pip/ruff-1.0",
+            set(),
             "delivery",
-            "invalid-main-route",
+            "not-applicable",
             None,
         ),
         (
             "main",
-            "fix/321-recover-v012-release",
-            {"hotfix", "release-recovery"},
-            "delivery",
-            "invalid-main-route",
-            None,
-        ),
-        (
-            "main",
-            "promote/next",
+            "unexpected-branch",
             {"promotion"},
             "delivery",
-            "standalone-batch",
+            "invalid-main-route",
             None,
         ),
-        ("main", "dev", set(), "dev", "dev-promotion", None),
         ("main", "feat/42-work", set(), "main", "not-applicable", None),
     ],
 )
@@ -214,27 +127,6 @@ def test_route_for(
     route = route_for(base, head, labels, strategy)
     assert route.kind == kind
     assert route.milestone == milestone
-
-
-def test_isolated_issue_route_binds_the_issue_number() -> None:
-    """A temporary isolated delivery branch belongs to exactly one Issue."""
-    route = route_for("main", "dev/i42-payment-soak", {"promotion"}, "delivery")
-    assert route.kind == "isolated"
-    assert route.issue == 42
-    assert route.relevant
-
-
-def test_release_recovery_route_binds_the_issue_number() -> None:
-    """A recovery exception cannot be reused for another tracking Issue."""
-    route = route_for(
-        "main",
-        "fix/321-recover-v012-release",
-        {"release-recovery"},
-        "delivery",
-    )
-    assert route.kind == "release-recovery"
-    assert route.issue == 321
-    assert route.relevant
 
 
 @pytest.mark.parametrize(
@@ -291,7 +183,7 @@ def test_included_pull_requests_are_deduplicated_and_scoped(
                 "number": 11,
                 "title": "feat: unrelated",
                 "merged_at": "2026-01-01T00:00:00Z",
-                "base": {"ref": "dev/next"},
+                "base": {"ref": "main"},
             },
         ]
 
@@ -305,10 +197,7 @@ def test_included_pull_requests_are_deduplicated_and_scoped(
 
 @pytest.mark.parametrize(
     ("delivery_branch", "milestone", "expected_number"),
-    [
-        ("dev/m7-staged-ci", 7, 10),
-        ("dev/next", None, 12),
-    ],
+    [("dev/m7-staged-ci", 7, 10)],
 )
 def test_bridge_provenance_accepts_only_eligible_pull_requests(
     monkeypatch: pytest.MonkeyPatch,
@@ -344,7 +233,7 @@ def test_bridge_provenance_accepts_only_eligible_pull_requests(
                 "number": 12,
                 "title": "feat: standalone",
                 "merged_at": "2026-01-01T00:00:00Z",
-                "base": {"ref": "dev/next"},
+                "base": {"ref": "main"},
             },
         ]
 
@@ -432,10 +321,7 @@ def test_latest_main_requires_matching_base_and_ancestry() -> None:
 
 @pytest.mark.parametrize(
     ("bridge_branch", "source_branch", "milestone"),
-    [
-        ("promote/m7-staged-ci", "dev/m7-staged-ci", 7),
-        ("promote/next", "dev/next", None),
-    ],
+    [("promote/m7-staged-ci", "dev/m7-staged-ci", 7)],
 )
 def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
     tmp_path: Path,
@@ -502,7 +388,7 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
         promotion_bridge_source.__globals__, "github_get", fake_get
     )
     monkeypatch.chdir(tmp_path)
-    assert promotion_bridge_source(
+    bridge = promotion_bridge_source(
         "owner/repo",
         bridge_branch,
         base_sha,
@@ -510,22 +396,51 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
         bridge_sha,
         milestone,
         "token",
-    ) == {
+    )
+    assert bridge == {
         "source_ref": source_branch,
         "source_sha": source_sha,
         "source_tree": source_tree,
     }
+    assert promotion_freshness_sha(bridge_sha, bridge) == source_sha
+    assert (
+        run_git(
+            "merge-base", "--is-ancestor", base_sha, bridge_sha, check=False
+        ).returncode
+        == 0
+    )
+    assert (
+        run_git(
+            "merge-base", "--is-ancestor", base_sha, source_sha, check=False
+        ).returncode
+        != 0
+    )
+    monkeypatch.setattr(
+        MODULE["delivery_sync"], "merged_sync_pr_number", lambda *_: None
+    )
+    assert (
+        promotion_main_evidence(
+            object(),
+            "owner/repo",
+            base_sha,
+            base_sha,
+            source_branch,
+            promotion_freshness_sha(bridge_sha, bridge),
+            False,
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(
     ("branch", "milestone", "parents", "candidate_tree", "message"),
     [
         (
-            "promote/next",
-            7,
+            "promote/m7-staged-ci",
+            None,
             "bridge source main",
             "source-tree",
-            "cannot use a Milestone",
+            "Milestones differ",
         ),
         (
             "promote/m8-other",
@@ -653,14 +568,14 @@ def test_promotion_main_evidence_fails_closed(
     )
     assert (
         promotion_main_evidence(
-            api, "owner/repo", "new", "old", "dev/next", "head", False
+            api, "owner/repo", "new", "old", "dev/m7-staged-ci", "head", False
         )
         is None
     )
     assert calls == 0
     assert (
         promotion_main_evidence(
-            api, "owner/repo", "main", "main", "dev/next", "head", False
+            api, "owner/repo", "main", "main", "dev/m7-staged-ci", "head", False
         )
         is None
     )
@@ -674,7 +589,7 @@ def test_promotion_main_evidence_fails_closed(
     )
     with pytest.raises(RuntimeError, match="HTTP 500"):
         promotion_main_evidence(
-            api, "owner/repo", "main", "main", "dev/next", "head", False
+            api, "owner/repo", "main", "main", "dev/m7-staged-ci", "head", False
         )
 
 
@@ -729,7 +644,7 @@ def test_blocked_run_must_match_head_and_have_no_started_steps(
         return {
             "id": 200,
             "head_sha": "head",
-            "head_branch": "dev/next",
+            "head_branch": "dev/m7-staged-ci",
             "event": "pull_request",
             "status": "completed",
             "conclusion": "failure",
@@ -743,7 +658,9 @@ def test_blocked_run_must_match_head_and_have_no_started_steps(
         require_zero_step_run.__globals__, "github_get", zero_step_get
     )
     run_url = "https://github.com/owner/repo/actions/runs/200"
-    require_zero_step_run(run_url, "owner/repo", 42, "dev/next", "head", "")
+    require_zero_step_run(
+        run_url, "owner/repo", 42, "dev/m7-staged-ci", "head", ""
+    )
 
     def started_get(_repo: str, path: str, _token: str) -> object:
         if "/jobs?" in path:
@@ -762,7 +679,9 @@ def test_blocked_run_must_match_head_and_have_no_started_steps(
         require_zero_step_run.__globals__, "github_get", started_get
     )
     with pytest.raises(RuntimeError, match="zero-step"):
-        require_zero_step_run(run_url, "owner/repo", 42, "dev/next", "head", "")
+        require_zero_step_run(
+            run_url, "owner/repo", 42, "dev/m7-staged-ci", "head", ""
+        )
 
 
 @pytest.mark.parametrize(
@@ -829,7 +748,7 @@ def test_blocked_run_rejects_malformed_zero_step_schema(
     run = {
         "id": 200,
         "head_sha": "head",
-        "head_branch": "dev/next",
+        "head_branch": "dev/m7-staged-ci",
         "event": "pull_request",
         "status": "completed",
         "conclusion": "failure",
@@ -866,7 +785,7 @@ def test_blocked_run_rejects_malformed_zero_step_schema(
             "https://github.com/owner/repo/actions/runs/200",
             "owner/repo",
             42,
-            "dev/next",
+            "dev/m7-staged-ci",
             "head",
             "",
             getter=malformed_get,
@@ -878,7 +797,32 @@ def _routine_pr_get(
 ) -> Callable[[str, str, str], object]:
     def fake_get(_repo: str, path: str, _token: str) -> object:
         if path == "pulls/42":
-            return {"head": {"sha": "head", "ref": "dev/next"}}
+            return {
+                "number": 42,
+                "state": "open",
+                "merged": False,
+                "labels": [],
+                "base": {"ref": "dev/m9-low-friction-ai-sdlc"},
+                "head": {
+                    "sha": "head",
+                    "ref": "enhancement/42-change",
+                    "repo": {"full_name": "owner/repo"},
+                },
+            }
+        if path.startswith("commits/head/check-runs?"):
+            return {
+                "total_count": 1,
+                "check_runs": [
+                    {
+                        "conclusion": "failure",
+                        "details_url": (
+                            "https://github.com/owner/repo/actions/runs/200/job/7"
+                        ),
+                    }
+                ],
+            }
+        if path == "commits/head/status":
+            return {"statuses": []}
         if "/jobs?" in path:
             return {"total_count": len(jobs), "jobs": jobs}
         if path.startswith("check-runs/"):
@@ -886,7 +830,7 @@ def _routine_pr_get(
         return {
             "id": 200,
             "head_sha": "head",
-            "head_branch": "dev/next",
+            "head_branch": "enhancement/42-change",
             "event": "pull_request",
             "status": "completed",
             "conclusion": "failure",
@@ -907,8 +851,18 @@ def test_note_quota_fallback_prints_note_for_zero_step_block(
     monkeypatch.setitem(
         note_quota_fallback.__globals__, "github_get", _routine_pr_get(jobs)
     )
+    monkeypatch.setitem(
+        note_quota_fallback.__globals__,
+        "git_output",
+        lambda *arguments: "" if arguments[0] == "status" else "head",
+    )
     run_url = "https://github.com/owner/repo/actions/runs/200"
-    args = SimpleNamespace(repo="owner/repo", pr=42, blocked_run_url=[run_url])
+    args = SimpleNamespace(
+        repo="owner/repo",
+        pr=42,
+        branch_strategy="delivery",
+        blocked_run_url=[run_url],
+    )
     note_quota_fallback(args)
     output = capsys.readouterr().out
     assert output == quota_fallback_note("owner/repo", 42, "head", [run_url])
@@ -929,8 +883,18 @@ def test_note_quota_fallback_rejects_a_real_failure(
     monkeypatch.setitem(
         note_quota_fallback.__globals__, "github_get", _routine_pr_get(jobs)
     )
+    monkeypatch.setitem(
+        note_quota_fallback.__globals__,
+        "git_output",
+        lambda *arguments: "" if arguments[0] == "status" else "head",
+    )
     run_url = "https://github.com/owner/repo/actions/runs/200"
-    args = SimpleNamespace(repo="owner/repo", pr=42, blocked_run_url=[run_url])
+    args = SimpleNamespace(
+        repo="owner/repo",
+        pr=42,
+        branch_strategy="delivery",
+        blocked_run_url=[run_url],
+    )
     with pytest.raises(RuntimeError, match="zero-step"):
         note_quota_fallback(args)
 
@@ -1087,6 +1051,60 @@ def test_prepare_builds_milestone_candidate_evidence(
         prepare(arguments)
     assert output_victim.read_bytes() == b"untouched"
 
+    output.unlink()
+    event["number"] = 321
+    pull_request = event["pull_request"]
+    assert isinstance(pull_request, dict)
+    pull_request.update(
+        {
+            "number": 321,
+            "title": "fix: recover v0.12 release",
+            "body": "Closes #321",
+            "labels": [{"name": "release-recovery"}],
+            "head": {
+                "ref": "fix/321-recover-v012-release",
+                "sha": head_sha,
+                "repo": {"full_name": "owner/repo"},
+            },
+        }
+    )
+    event_path.write_text(json.dumps(event), encoding="utf-8")
+
+    def fake_recovery_get(_repo: str, path: str, _token: str) -> object:
+        if path == "issues/321":
+            return {
+                "number": 321,
+                "title": "Recover v0.12 release",
+                "state": "open",
+                "body": "- [x] Ready",
+                "labels": [{"name": "release-recovery"}],
+                "milestone": {"number": 9},
+            }
+        return {"object": {"sha": base_sha}}
+
+    monkeypatch.setitem(prepare.__globals__, "github_get", fake_recovery_get)
+    monkeypatch.setitem(
+        prepare.__globals__,
+        "included_pull_requests",
+        lambda *_: pytest.fail(
+            "release recovery must use its own pull request"
+        ),
+    )
+    prepare(arguments)
+    evidence = json.loads(output.read_text(encoding="utf-8"))
+    assert evidence["route"]["kind"] == "release-recovery"
+    assert evidence["tracking_issue_state"]["milestone"] == 9
+    assert evidence["included_issues"] == [
+        {"number": 321, "title": "Recover v0.12 release"}
+    ]
+    assert evidence["release"]["included_pull_requests"] == [
+        {
+            "number": 321,
+            "title": "fix: recover v0.12 release",
+            "intent": "patch",
+        }
+    ]
+
 
 def test_finalize_accepts_artifact_only_blocked_canary(tmp_path: Path) -> None:
     """Blocked capability remains evidence without faking a canary pass."""
@@ -1134,13 +1152,13 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
                 "repository": "owner/repo",
                 "pull_request": 42,
                 "route": {
-                    "kind": "standalone-batch",
+                    "kind": "milestone",
                     "relevant": True,
-                    "milestone": None,
+                    "milestone": 7,
                     "issue": None,
                 },
                 "base_sha": "base",
-                "head_ref": "dev/next",
+                "head_ref": "dev/m7-staged-ci",
                 "head_sha": "head",
                 "candidate_sha": "head",
                 "candidate_tree": "tree",
@@ -1150,7 +1168,6 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
                 },
                 "main_sync": "squash-sync-pr-283",
                 "canary": {"state": "blocked"},
-                "dev_next_preservation": preservation_evidence(),
             }
         ),
         encoding="utf-8",
@@ -1171,7 +1188,7 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
                 "labels": [{"name": "promotion"}],
                 "base": {"ref": "main", "sha": "base"},
                 "head": {
-                    "ref": "dev/next",
+                    "ref": "dev/m7-staged-ci",
                     "sha": "head",
                     "repo": {"full_name": "owner/repo"},
                 },
@@ -1243,35 +1260,6 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
         "rebuild_quota_preflight",
         lambda evidence, *_: evidence,
     )
-    preservation_calls: list[tuple[str, str, int, str, str, str, str]] = []
-
-    def fake_preservation(
-        action: str,
-        repo: str,
-        pr_number: int,
-        head_sha: str,
-        main_sha: str = "",
-        operation_id: str = "",
-        prepared_ledger_commit: str = "",
-    ) -> dict[str, object]:
-        preservation_calls.append(
-            (
-                action,
-                repo,
-                pr_number,
-                head_sha,
-                main_sha,
-                operation_id,
-                prepared_ledger_commit,
-            )
-        )
-        return preservation_evidence()
-
-    monkeypatch.setitem(
-        finalize_quota_fallback.__globals__,
-        "run_dev_next_preservation",
-        fake_preservation,
-    )
     monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: None)
     arguments = SimpleNamespace(
         input=source,
@@ -1292,10 +1280,6 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
     evidence = json.loads(target.read_text(encoding="utf-8"))
     assert evidence["gate"] == "quota-fallback"
     assert evidence["release_eligible"] is False
-    assert evidence["dev_next_preservation"] == preservation_evidence()
-    assert preservation_calls == [
-        ("inspect-dev-next", "owner/repo", 42, "head", "", "", "")
-    ]
     assert evidence["full_check"] == {
         "context": "verify",
         "status": "local-quota-attested",
@@ -1389,8 +1373,8 @@ def test_finalize_quota_fallback_rejects_bridge_source_drift(
         "message",
     ),
     [
-        ("standalone-batch", "merge", "blocked", "valid", "must equal"),
-        ("standalone-batch", "head", "allowed", "valid", "configured canary"),
+        ("milestone", "merge", "blocked", "valid", "must equal"),
+        ("milestone", "head", "allowed", "valid", "configured canary"),
         ("hotfix", "head", "blocked", "valid", "promotion gate"),
     ],
 )
@@ -1553,75 +1537,6 @@ def test_verify_main_requires_successful_full_check(
         )
 
 
-def test_verify_main_completes_standard_dev_next_preservation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The standard post-main path closes the exact prepared transaction."""
-    source = tmp_path / "evidence.json"
-    checks = tmp_path / "checks.json"
-    target = tmp_path / "verified.json"
-    source.write_text(
-        json.dumps(
-            {
-                "gate": "passed",
-                "repository": "owner/repo",
-                "pull_request": 42,
-                "head_ref": "dev/next",
-                "head_sha": "head",
-                "candidate_tree": "tree",
-                "dev_next_preservation": preservation_evidence(),
-            }
-        ),
-        encoding="utf-8",
-    )
-    checks.write_text(
-        json.dumps(
-            {"check_runs": [{"name": "verify", "conclusion": "success"}]}
-        ),
-        encoding="utf-8",
-    )
-    calls: list[tuple[object, ...]] = []
-
-    def complete(*arguments: object) -> dict[str, object]:
-        calls.append(arguments)
-        return {"ledger_commit": "f" * 40, "transaction": {}}
-
-    monkeypatch.setitem(
-        verify_main.__globals__, "git_output", lambda *_: "tree"
-    )
-    monkeypatch.setitem(
-        verify_main.__globals__, "run_dev_next_preservation", complete
-    )
-    verify_main(
-        SimpleNamespace(
-            evidence=source,
-            checks=checks,
-            repo="owner/repo",
-            pr_number=42,
-            head_sha="head",
-            main_sha="main",
-            output=target,
-        )
-    )
-    assert calls == [
-        (
-            "complete-dev-next",
-            "owner/repo",
-            42,
-            "head",
-            "main",
-            "e" * 64,
-            "d" * 40,
-        )
-    ]
-    assert (
-        json.loads(target.read_text())["dev_next_preservation"]["completion"][
-            "ledger_commit"
-        ]
-        == "f" * 40
-    )
-
-
 def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1636,9 +1551,13 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
                 "repository": "owner/repo",
                 "pull_request": 42,
                 "base_sha": "base",
-                "head_ref": "dev/next",
+                "head_ref": "dev/m7-staged-ci",
                 "head_sha": "head",
-                "route": {"kind": "standalone-batch", "relevant": True},
+                "route": {
+                    "kind": "milestone",
+                    "relevant": True,
+                    "milestone": 7,
+                },
                 "candidate_tree": "tree",
                 "canary": {
                     "state": "blocked",
@@ -1656,7 +1575,6 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
                         "https://github.com/owner/repo/actions/runs/200"
                     ],
                 },
-                "dev_next_preservation": preservation_evidence(),
             }
         ),
         encoding="utf-8",
@@ -1691,7 +1609,7 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
                 "merge_commit_sha": "main",
                 "base": {"ref": "main", "sha": "base"},
                 "head": {
-                    "ref": "dev/next",
+                    "ref": "dev/m7-staged-ci",
                     "sha": "head",
                     "repo": {"full_name": "owner/repo"},
                 },
@@ -1724,37 +1642,6 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
     monkeypatch.setitem(
         verify_quota_main.__globals__, "require_comment_url", lambda *_: {}
     )
-    preservation_calls: list[tuple[str, str, int, str, str, str, str]] = []
-
-    def fake_preservation(
-        action: str,
-        repo: str,
-        pr_number: int,
-        head_sha: str,
-        main_sha: str = "",
-        operation_id: str = "",
-        prepared_ledger_commit: str = "",
-    ) -> dict[str, object]:
-        preservation_calls.append(
-            (
-                action,
-                repo,
-                pr_number,
-                head_sha,
-                main_sha,
-                operation_id,
-                prepared_ledger_commit,
-            )
-        )
-        completed = preservation_evidence()
-        completed["ledger_commit"] = "f" * 40
-        return completed
-
-    monkeypatch.setitem(
-        verify_quota_main.__globals__,
-        "run_dev_next_preservation",
-        fake_preservation,
-    )
     monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: None)
     arguments = SimpleNamespace(
         evidence=source,
@@ -1770,40 +1657,6 @@ def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
         "verified-local-quota-fallback"
     )
     assert evidence["release_eligible"] is False
-    assert (
-        evidence["dev_next_preservation"]["completion"]["ledger_commit"]
-        == "f" * 40
-    )
-    assert preservation_calls == [
-        (
-            "complete-dev-next",
-            "owner/repo",
-            42,
-            "head",
-            "main",
-            "e" * 64,
-            "d" * 40,
-        )
-    ]
-    original = json.loads(source.read_text(encoding="utf-8"))
-    for invalid_canary in (
-        {"state": "blocked", "result": "passed"},
-        {"state": "blocked"},
-        {"state": "allowed", "result": "artifact-only"},
-    ):
-        source.write_text(
-            json.dumps({**original, "canary": invalid_canary}),
-            encoding="utf-8",
-        )
-        with pytest.raises(RuntimeError, match="canary evidence is invalid"):
-            verify_quota_main(arguments)
-    source.write_text(json.dumps(original), encoding="utf-8")
-    del original["dev_next_preservation"]
-    source.write_text(json.dumps(original), encoding="utf-8")
-    with pytest.raises(RuntimeError, match="was not prepared"):
-        verify_quota_main(arguments)
-    original["dev_next_preservation"] = preservation_evidence()
-    source.write_text(json.dumps(original), encoding="utf-8")
     scenario["value"] = "ambiguous"
     with pytest.raises(RuntimeError, match="unique promotion source"):
         verify_quota_main(arguments)
@@ -1832,10 +1685,14 @@ def test_quota_finalize_refetches_live_pull_request(
             {
                 "repository": "owner/repo",
                 "pull_request": 42,
-                "route": {"kind": "standalone-batch", "relevant": True},
+                "route": {
+                    "kind": "milestone",
+                    "relevant": True,
+                    "milestone": 7,
+                },
                 "base_ref": "main",
                 "base_sha": "base",
-                "head_ref": "dev/next",
+                "head_ref": "dev/m7-staged-ci",
                 "head_sha": "head",
                 "candidate_sha": "head",
                 "candidate_tree": "tree",
@@ -1872,7 +1729,7 @@ def test_quota_finalize_refetches_live_pull_request(
                 "labels": [{"name": "promotion"}],
                 "base": {"ref": "main", "sha": "base"},
                 "head": {
-                    "ref": "dev/next",
+                    "ref": "dev/m7-staged-ci",
                     "sha": "changed",
                     "repo": {"full_name": "owner/repo"},
                 },
@@ -1885,11 +1742,6 @@ def test_quota_finalize_refetches_live_pull_request(
 
     monkeypatch.setitem(
         finalize_quota_fallback.__globals__, "github_get", fake_get
-    )
-    monkeypatch.setitem(
-        finalize_quota_fallback.__globals__,
-        "run_dev_next_preservation",
-        lambda *_args, **_kwargs: preservation_evidence(),
     )
     with pytest.raises(RuntimeError, match="Live promotion"):
         finalize_quota_fallback(
@@ -1939,16 +1791,19 @@ def test_quota_main_refetches_the_unique_squash_source(
                 "repository": "owner/repo",
                 "pull_request": 42,
                 "base_sha": "base",
-                "head_ref": "dev/next",
+                "head_ref": "dev/m7-staged-ci",
                 "head_sha": "head",
-                "route": {"kind": "standalone-batch", "relevant": True},
+                "route": {
+                    "kind": "milestone",
+                    "relevant": True,
+                    "milestone": 7,
+                },
                 "candidate_tree": "tree",
                 "canary": {
                     "state": "blocked",
                     "result": "artifact-only",
                 },
                 "full_check": {"status": "local-quota-attested"},
-                "dev_next_preservation": preservation_evidence(),
             }
         ),
         encoding="utf-8",
@@ -1996,7 +1851,7 @@ def test_zero_step_run_reads_all_jobs_and_rejects_changed_billing_marker(
             return {
                 "id": 200,
                 "head_sha": "head",
-                "head_branch": "dev/next",
+                "head_branch": "dev/m7-staged-ci",
                 "event": "pull_request",
                 "status": "completed",
                 "conclusion": "failure",
@@ -2050,7 +1905,7 @@ def test_zero_step_run_reads_all_jobs_and_rejects_changed_billing_marker(
             "https://github.com/owner/repo/actions/runs/200",
             "owner/repo",
             42,
-            "dev/next",
+            "dev/m7-staged-ci",
             "head",
             "",
         )
@@ -2076,7 +1931,7 @@ def test_zero_step_run_requires_exact_run_and_pull_request(
             return {
                 **run_identity,
                 "head_sha": "head",
-                "head_branch": "dev/next",
+                "head_branch": "dev/m7-staged-ci",
                 "event": "pull_request",
                 "status": "completed",
                 "conclusion": "failure",
@@ -2096,7 +1951,7 @@ def test_zero_step_run_requires_exact_run_and_pull_request(
             "https://github.com/owner/repo/actions/runs/200",
             "owner/repo",
             42,
-            "dev/next",
+            "dev/m7-staged-ci",
             "head",
             "",
         )
@@ -2135,16 +1990,14 @@ def test_authorization_statement_binds_full_preflight() -> None:
     evidence = {
         "schema_version": 1,
         "repository": "owner/repo",
-        "route": {"kind": "standalone-batch", "relevant": True},
+        "route": {"kind": "milestone", "relevant": True, "milestone": 7},
         "canary": {"state": "blocked", "environment": None},
-        "dev_next_preservation": preservation_evidence(),
     }
     statement = fallback_statement("authorization", evidence, ["run"])
     binding = json.loads(statement.split("`")[1])
     assert binding["schema_version"] == 1
     assert binding["route"] == evidence["route"]
     assert binding["canary"] == evidence["canary"]
-    assert binding["dev_next_preservation"] == preservation_evidence()
 
     canary = evidence["canary"]
     assert isinstance(canary, dict)

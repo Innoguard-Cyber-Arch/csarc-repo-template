@@ -11,8 +11,8 @@
 
 ## 決定
 
-- Milestone work 進 `dev/m*`，standalone work 預設進 `dev/next`；有獨立 soak／canary 需求才用暫時 `dev/i*`，hotfix 才直接 main。每條 work branch 都由 `gh issue develop` 建立，保留 GitHub Development 關係。
-- Main advance 透過 reviewed sync PR 回灌 active delivery branches；promotion 前必須證明包含 current main。
+- `main` 是唯一永久 branch。Milestone work 進短命 `dev/m*`；standalone、hotfix 與 bot work 由短分支直接進 `main`，soak／canary 是風險 gate，不再建立專用整合 branch。
+- Main advance 不會批次回灌或使 ordinary delivery PR stale；各 Milestone 到 final promotion 才用一張 reviewed sync PR 納入 current main。只有 owner 已在 PR 明列 dependency 時可提前同步。
 - CI 分 policy、fast、full、scheduled／release 四層，以 stable aggregate context 收斂結果。
 - Promotion 綁定 base／head SHA、candidate tree、full verification 與 canary 三態；artifact-only 不冒充 external canary。
 - Human-confirmed quota-only、zero-step failure 可讓 promotion 以相同 full verification 與 SHA/tree evidence 合併 main；本機 evidence 固定不可發布，待 hosted checks 補跑。

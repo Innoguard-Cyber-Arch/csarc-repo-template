@@ -149,13 +149,9 @@ jobs:
           elif [[ -f .csarc/profile.json ]]; then
             branch_strategy="$(jq -r '.branch_strategy // "main"' .csarc/profile.json)"
           fi
-          if [[ "$branch_strategy" == "main" ]]; then
-            kind=main-strategy
-            if [[ "$head_ref" == release-please--* ]]; then
-              kind=main-release-follow-up
-            fi
+          if [[ "$branch_strategy" == "main" && "$head_ref" != release-please--* && ",$labels," != *,release-recovery,* ]]; then
             python3 scripts/release_policy.py boundary \
-              --kind "$kind" \
+              --kind main-strategy \
               --main-sha "$GITHUB_SHA" \
               --title "$pr_title" \
               --pull-request "$pr_number" \
@@ -163,13 +159,22 @@ jobs:
               --github-output "$GITHUB_OUTPUT"
             exit 0
           fi
-
-          if [[ "$head_ref" != release-please--* && "$head_ref" != "dev" && "$head_ref" != dev/* && "$head_ref" != "promote/next" && ! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$labels," != *,hotfix,* && ",$labels," != *,release-recovery,* ]]; then
+          if [[ "$head_ref" != release-please--* && ",$labels," != *,hotfix,* && ",$labels," != *,release-recovery,* && ( "$head_ref" =~ ^(feat|fix|docs|refactor|test|build|ci|chore|revert)/[0-9]+-[a-z0-9][a-z0-9-]*$ || "$head_ref" == dependabot/* || "$head_ref" == automation/* ) ]]; then
+            python3 scripts/release_policy.py boundary \
+              --kind main-strategy \
+              --main-sha "$GITHUB_SHA" \
+              --title "$pr_title" \
+              --pull-request "$pr_number" \
+              --output main-release-source.json \
+              --github-output "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$head_ref" != release-please--* && ! "$head_ref" =~ ^dev/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$labels," != *,hotfix,* && ",$labels," != *,release-recovery,* ]]; then
             python3 scripts/release_policy.py boundary \
               --kind unexpected \
               --main-sha "$GITHUB_SHA" \
               --pull-request "$pr_number" \
-              --reason "Main commit lacks promotion, hotfix, or release recovery evidence" \
+              --reason "Main commit lacks a supported direct-main, promotion, hotfix, or release recovery source" \
               --output main-release-source.json \
               --github-output "$GITHUB_OUTPUT"
             exit 0
@@ -180,7 +185,7 @@ jobs:
             local main_sha="$1"
             local index="$2"
             local boundary_pr boundary_pr_count boundary_pull_requests
-            local pr_number head_sha boundary_head boundary_labels run_id candidate_sha proof
+            local pr_number head_sha boundary_head boundary_labels boundary_title run_id proof
             boundary_pull_requests="$(
               gh api --paginate --slurp \
                 "repos/$GITHUB_REPOSITORY/commits/$main_sha/pulls?per_page=100"
@@ -205,37 +210,59 @@ jobs:
             )"
             boundary_head="$(jq -r .head.ref <<<"$boundary_pr")"
             boundary_labels="$(jq -r '[.labels[].name] | join(",")' <<<"$boundary_pr")"
-            if [[ "$boundary_head" != "dev" && "$boundary_head" != dev/* && "$boundary_head" != "promote/next" && ! "$boundary_head" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$boundary_labels," != *,hotfix,* && ",$boundary_labels," != *,release-recovery,* ]]; then
-              echo "Commit $main_sha predates the promotion or release recovery boundary."
-              return 2
+            if [[ ! "$boundary_head" =~ ^dev/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ! "$boundary_head" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$boundary_labels," != *,hotfix,* && ",$boundary_labels," != *,release-recovery,* ]]; then
+              if [[ ! "$boundary_head" =~ ^(feat|fix|docs|refactor|test|build|ci|chore|revert)/[0-9]+-[a-z0-9][a-z0-9-]*$ && "$boundary_head" != dependabot/* && "$boundary_head" != automation/* && "$boundary_head" != release-please--* ]]; then
+                echo "Commit $main_sha has an unsupported direct-main source." >&2
+                return 1
+              fi
+              pr_number="$(jq -r .number <<<"$boundary_pr")"
+              boundary_title="$(jq -r .title <<<"$boundary_pr")"
+              python3 scripts/release_policy.py boundary \
+                --kind main-strategy \
+                --main-sha "$main_sha" \
+                --title "$boundary_title" \
+                --pull-request "$pr_number" \
+                --output "verified-boundaries/$index.json"
+              return 0
             fi
             pr_number="$(jq -r .number <<<"$boundary_pr")"
             head_sha="$(jq -r .head.sha <<<"$boundary_pr")"
-            run_id="$(
-              gh run list --workflow promotion.yml --event pull_request \
-                --commit "$head_sha" --status success --limit 20 \
-                --json databaseId --jq '.[0].databaseId // empty'
-            )"
+            local attempt poll_attempts poll_seconds
+            poll_attempts="${CSARC_POST_MERGE_POLL_ATTEMPTS:-30}"
+            poll_seconds="${CSARC_POST_MERGE_POLL_SECONDS:-10}"
+            [[ "$poll_attempts" =~ ^[1-9][0-9]*$ && "$poll_seconds" =~ ^[0-9]+$ ]] || {
+              echo "Post-merge polling settings are invalid." >&2
+              return 1
+            }
+            run_id=""
+            for ((attempt = 1; attempt <= poll_attempts; attempt++)); do
+              run_id="$(
+                gh run list --workflow promotion-post-merge.yml --event push \
+                  --commit "$main_sha" --status success --limit 20 \
+                  --json databaseId --jq '.[0].databaseId // empty'
+              )"
+              [[ -z "$run_id" && "$attempt" -lt "$poll_attempts" ]] || break
+              sleep "$poll_seconds"
+            done
             [[ -n "$run_id" ]] || {
-              echo "No successful promotion run found for PR #$pr_number." >&2
+              echo "No successful post-merge identity run found for PR #$pr_number." >&2
               return 1
             }
             proof="promotion-boundaries/$index"
             mkdir "$proof"
             gh run download "$run_id" \
-              --name "promotion-evidence-${pr_number}-${head_sha}" \
+              --name "main-promotion-evidence-${main_sha}" \
               --dir "$proof"
-            candidate_sha="$(jq -r .candidate_sha "$proof/promotion-evidence.json")"
-            gh api "repos/$GITHUB_REPOSITORY/commits/$candidate_sha/check-runs" \
-              > "$proof/candidate-checks.json"
-            python3 scripts/promotion_gate.py verify-main \
-              --repo "$GITHUB_REPOSITORY" \
-              --pr-number "$pr_number" \
-              --head-sha "$head_sha" \
-              --main-sha "$main_sha" \
-              --evidence "$proof/promotion-evidence.json" \
-              --checks "$proof/candidate-checks.json" \
-              --output "verified-boundaries/$index.json"
+            jq -e \
+              --arg repo "$GITHUB_REPOSITORY" \
+              --argjson pr "$pr_number" \
+              --arg head "$head_sha" \
+              --arg main "$main_sha" \
+              '.repository == $repo and .pull_request == $pr and
+               .head_sha == $head and .post_merge.main_sha == $main' \
+              "$proof/main-promotion-evidence.json" >/dev/null
+            cp "$proof/main-promotion-evidence.json" \
+              "verified-boundaries/$index.json"
           }
 
           source_kind=promotion

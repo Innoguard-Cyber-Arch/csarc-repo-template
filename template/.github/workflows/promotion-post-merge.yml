@@ -143,9 +143,9 @@ jobs:
             echo "skip_verification=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [[ "$head_ref" != "dev" && "$head_ref" != dev/* && "$head_ref" != "promote/next" && ! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$labels," != *,hotfix,* && ",$labels," != *,release-recovery,* ]]; then
-            echo "Main commit did not come from a promotion, hotfix, or release recovery." >&2
-            exit 1
+          if [[ ! "$head_ref" =~ ^dev/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$labels," != *,hotfix,* && ",$labels," != *,release-recovery,* ]]; then
+            echo "skip_verification=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           pr_number="$(jq -r .number <<<"$pull_request")"
           head_sha="$(jq -r .head.sha <<<"$pull_request")"
@@ -170,7 +170,6 @@ jobs:
       - name: Verify main tree identity and full CI result
         if: ${{ steps.resolve.outputs.skip_verification != 'true' }}
         env:
-          CSARC_SYNC_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN }}
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
           PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
@@ -191,6 +190,55 @@ jobs:
           path: main-promotion-evidence.json
           if-no-files-found: error
           retention-days: 90
+      - name: Retire the exact Milestone delivery branch
+        if: ${{ steps.resolve.outputs.skip_verification != 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN || github.token }}
+        run: |
+          route_kind="$(jq -r '.route.kind // empty' main-promotion-evidence.json)"
+          [[ "$route_kind" == "milestone" ]] || exit 0
+
+          source_ref="$(jq -r '.promotion_bridge.source_ref // .head_ref // empty' main-promotion-evidence.json)"
+          source_sha="$(jq -r '.promotion_bridge.source_sha // .head_sha // empty' main-promotion-evidence.json)"
+          source_tree="$(jq -r '.promotion_bridge.source_tree // .candidate_tree // empty' main-promotion-evidence.json)"
+          candidate_tree="$(jq -r '.candidate_tree // empty' main-promotion-evidence.json)"
+          head_ref="$(jq -r '.head_ref // empty' main-promotion-evidence.json)"
+          [[ "$source_ref" =~ ^dev/m[1-9][0-9]*-[a-z0-9][a-z0-9-]*$ \
+            && "$source_sha" =~ ^[0-9a-f]{40}$ \
+            && "$source_tree" == "$candidate_tree" ]] || {
+            echo "Verified promotion evidence has no safe delivery cleanup identity." >&2
+            exit 1
+          }
+          if [[ "$head_ref" == promote/* ]]; then
+            [[ "$head_ref" == "promote/${source_ref#dev/}" ]] || {
+              echo "Promotion bridge does not match its delivery source." >&2
+              exit 1
+            }
+          else
+            [[ "$head_ref" == "$source_ref" ]] || {
+              echo "Direct promotion does not match its delivery source." >&2
+              exit 1
+            }
+          fi
+
+          gh auth setup-git
+          remote_line="$(git ls-remote --heads origin "refs/heads/$source_ref")"
+          if [[ -z "$remote_line" ]]; then
+            echo "$source_ref was already retired."
+            exit 0
+          fi
+          remote_sha="${remote_line%%[[:space:]]*}"
+          [[ "$remote_sha" == "$source_sha" ]] || {
+            echo "$source_ref moved after promotion; refusing to delete it." >&2
+            exit 1
+          }
+          git push \
+            --force-with-lease="refs/heads/$source_ref:$source_sha" \
+            origin ":refs/heads/$source_ref"
+          [[ -z "$(git ls-remote --heads origin "refs/heads/$source_ref")" ]] || {
+            echo "$source_ref still exists after cleanup." >&2
+            exit 1
+          }
       - name: Record non-promotion main strategy or release follow-up
         if: ${{ steps.resolve.outputs.skip_verification == 'true' }}
         run: echo "This main commit does not require delivery promotion evidence."

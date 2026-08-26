@@ -290,7 +290,7 @@ while IFS='|' read -r name head base; do
     "$validator" >/dev/null
 done <<'CASES'
 sync|sync/main-to-m7-staged-ci-abcdef0|dev/m7-staged-ci
-bot|dependabot/pip/pytest-9|dev/next
+bot|dependabot/pip/pytest-9|main
 CASES
 
 for relationship_state in \
@@ -418,20 +418,15 @@ done <<'CASES'
 pass|main work|main|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
 pass|main stack|main|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=main
 pass|main deep stack|main|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=feat/40-root;feat/40-root=main
-pass|dev work|dev|fix(api): handle timeout|bug|dev|fix/42-timeout|Fixes #42|open|-
-pass|dev stack|dev|fix(api): handle timeout|bug|fix/41-parent|fix/42-timeout|Fixes #42|open|fix/41-parent=dev
 pass|documentation|main|docs(api): explain reports|documentation|main|docs/42-reports|Closes #42|open|-
-pass|dev promotion|dev|feat!: promote tested changes|enhancement|main|dev|-|-|-
 pass|release please|main|chore(main): release 0.2.0|enhancement|main|@release-please|-|-|-
 pass|dependabot|main|build(deps): bump pytest|enhancement|main|dependabot/pip/pytest-9|-|-|-
 pass|version automation|main|build(python): adopt Python 3.15|enhancement|main|automation/python-3.15|-|-|-
-pass|delivery standalone|delivery|feat(api): add report|enhancement|dev/next|feat/42-report|Closes #42|open|-
-pass|delivery standalone stack|delivery|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=dev/next
+pass|delivery standalone|delivery|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
+pass|delivery standalone stack|delivery|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=main
 pass|delivery hotfix|delivery|fix(api): stop outage|bug,hotfix|main|fix/42-outage|Fixes #42|open|-
-pass|delivery release recovery|delivery|fix(release): recover missing release|bug,release-recovery|main|fix/42-recover-release|Fixes #42|open|-
-pass|delivery automation|delivery|build(deps): bump pytest|enhancement|dev/next|dependabot/pip/pytest-9|-|-|-
+pass|delivery automation|delivery|build(deps): bump pytest|enhancement|main|dependabot/pip/pytest-9|-|-|-
 pass|delivery sync|delivery|chore(sync): merge main into milestone|enhancement|dev/m7-staged-ci|sync/main-to-m7-staged-ci-abcdef0|-|-|-
-pass|delivery isolated sync|delivery|chore(sync): merge main into isolated|enhancement|dev/i42-payment-soak|sync/main-to-i42-payment-soak-abcdef0|-|-|-
 fail|version automation missing label|main|build(python): adopt Python 3.15|-|main|automation/python-3.15|-|-|-
 fail|missing PR label|main|feat(api): add report|-|main|feat/42-report|Closes #42|open|-
 fail|multiple PR labels|main|feat(api): add report|enhancement,documentation|main|feat/42-report|Closes #42|open|-
@@ -450,13 +445,11 @@ fail|orphan stack base|main|feat(api): add report|enhancement|feat/41-parent|fea
 fail|ambiguous stack base|main|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=main,dev
 fail|cyclic stack base|main|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=feat/40-root;feat/40-root=feat/41-parent
 fail|main mode targets dev|main|feat(api): add report|enhancement|dev|feat/42-report|Closes #42|open|-
-fail|dev work targets main|dev|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
-fail|delivery work targets main|delivery|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
 fail|delivery non-fix hotfix|delivery|feat(api): rush report|enhancement,hotfix|main|feat/42-report|Closes #42|open|-
-fail|delivery recovery on non-fix branch|delivery|feat(release): recover missing release|enhancement,release-recovery|main|feat/42-recover-release|Closes #42|open|-
-fail|delivery recovery with hotfix|delivery|fix(release): recover missing release|bug,hotfix,release-recovery|main|fix/42-recover-release|Fixes #42|open|-
-fail|delivery automation targets main|delivery|build(deps): bump pytest|enhancement|main|dependabot/pip/pytest-9|-|-|-
+fail|delivery automation targets milestone|delivery|build(deps): bump pytest|enhancement|dev/m7-staged-ci|dependabot/pip/pytest-9|-|-|-
 fail|delivery sync mismatch|delivery|chore(sync): merge main into milestone|enhancement|dev/m8-other|sync/main-to-m7-staged-ci-abcdef0|-|-|-
+fail|delivery rejects legacy dev next parent|delivery|feat(api): add report|enhancement|dev/next|feat/42-report|Closes #42|open|dev/next=main
+fail|delivery rejects legacy dev next stack|delivery|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=dev/next;dev/next=main
 fail|unknown branch strategy|staging|feat(api): add report|enhancement|staging|feat/42-report|Closes #42|open|-
 CASES
 
@@ -687,7 +680,6 @@ workflow source|github-actions[bot]|acme/project|.github/workflows/ci.yml|@relea
 CASES
 
 case_count=$((case_count + 1))
-policy_output="$fixture/policy-output"
 PR_BRANCH_STRATEGY="delivery" \
 PR_TITLE="feat(api): add stacked report" \
 PR_LABELS="enhancement" \
@@ -698,10 +690,8 @@ PR_ISSUE_STATE="open" \
 PR_ISSUE_MILESTONE_NUMBER="7" \
 PR_BASE_GRAPH="feat/41-parent=dev/m7-staged-ci" \
 GITHUB_REPOSITORY="acme/project" \
-GITHUB_OUTPUT="$policy_output" \
 PATH="$fixture:$PATH" \
   "$validator" >/dev/null
-grep -qx 'delivery_base=dev/m7-staged-ci' "$policy_output"
 
 case_count=$((case_count + 1))
 PR_BRANCH_STRATEGY="delivery" \
@@ -739,29 +729,17 @@ PR_ISSUE_LABELS="enhancement,promotion" \
   "$validator" >/dev/null
 
 case_count=$((case_count + 1))
-PR_BRANCH_STRATEGY="delivery" \
-PR_TITLE="feat!: promote standalone bridge" \
-PR_LABELS="enhancement,promotion" \
-PR_BASE="main" \
-PR_HEAD="promote/next" \
-PR_BODY="Closes #42" \
-PR_ISSUE_STATE="open" \
-PR_ISSUE_MILESTONE_NUMBER="0" \
-PR_ISSUE_LABELS="enhancement,promotion" \
-  "$validator" >/dev/null
-
-case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
-  PR_TITLE="feat!: promote milestone as standalone" \
-  PR_LABELS="enhancement,promotion" \
+  PR_TITLE="feat!: promote unlabeled milestone" \
+  PR_LABELS="enhancement" \
   PR_BASE="main" \
-  PR_HEAD="promote/next" \
+  PR_HEAD="dev/m7-staged-ci" \
   PR_BODY="Closes #42" \
   PR_ISSUE_STATE="open" \
   PR_ISSUE_MILESTONE_NUMBER="7" \
   PR_ISSUE_LABELS="enhancement,promotion" \
     "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted a standalone bridge with a Milestone."
+  echo "PR policy accepted an unlabeled direct promotion."
   exit 1
 fi
 
@@ -773,6 +751,7 @@ PR_BASE="main" \
 PR_HEAD="fix/42-recover-release" \
 PR_BODY="Fixes #42" \
 PR_ISSUE_STATE="open" \
+PR_MILESTONE_NUMBER="9" \
 PR_ISSUE_MILESTONE_NUMBER="9" \
   "$validator" >/dev/null
 
@@ -807,33 +786,6 @@ if PR_BRANCH_STRATEGY="delivery" \
 fi
 
 case_count=$((case_count + 1))
-PR_BRANCH_STRATEGY="delivery" \
-PR_TITLE="feat(api): promote isolated payment soak" \
-PR_LABELS="enhancement,promotion" \
-PR_BASE="main" \
-PR_HEAD="dev/i42-payment-soak" \
-PR_BODY="Closes #42" \
-PR_ISSUE_STATE="open" \
-PR_ISSUE_MILESTONE_NUMBER="0" \
-PR_ISSUE_LABELS="enhancement,promotion" \
-  "$validator" >/dev/null
-
-case_count=$((case_count + 1))
-if PR_BRANCH_STRATEGY="delivery" \
-  PR_TITLE="feat(api): promote wrong isolated issue" \
-  PR_LABELS="enhancement,promotion" \
-  PR_BASE="main" \
-  PR_HEAD="dev/i41-payment-soak" \
-  PR_BODY="Closes #42" \
-  PR_ISSUE_STATE="open" \
-  PR_ISSUE_MILESTONE_NUMBER="0" \
-  PR_ISSUE_LABELS="enhancement,promotion" \
-    "$validator" >/dev/null 2>&1; then
-  echo "PR policy accepted an isolated branch for another Issue."
-  exit 1
-fi
-
-case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
   PR_TITLE="feat!: promote wrong milestone" \
   PR_LABELS="enhancement,promotion" \
@@ -861,18 +813,6 @@ if PR_BRANCH_STRATEGY="delivery" \
   echo "PR policy accepted a Milestone Issue as a direct hotfix."
   exit 1
 fi
-
-case_count=$((case_count + 1))
-PR_BRANCH_STRATEGY="delivery" \
-PR_DELIVERY_CUTOVER_ISSUE="185" \
-PR_TITLE="feat(api): finish pre-cutover work" \
-PR_LABELS="enhancement" \
-PR_BASE="main" \
-PR_HEAD="feat/184-finish-work" \
-PR_BODY="Closes #184" \
-PR_ISSUE_STATE="open" \
-PR_ISSUE_MILESTONE_NUMBER="7" \
-  "$validator" >/dev/null
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="main" \

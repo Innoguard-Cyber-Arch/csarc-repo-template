@@ -2,7 +2,7 @@
 
 - **狀態：**Proposed
 - **日期：**2026-08-25
-- **來源 Issues：**[#264](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/264), [#179](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/179), [#181](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/181), [#182](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/182), [#184](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/184), [#201](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/201), [#202](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/202)
+- **來源 Issues：**[#264](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/264), [#317](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/317), [#320](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/320)
 - **實作 PRs：**[#186](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/186), [#190](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/190), [#191](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/191), [#193](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/193), [#216](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/216), [#220](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/220), [#280](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/280)
 - **政策草案：**[`../low-friction-ai-sdlc-policy.md`](../low-friction-ai-sdlc-policy.md)
 
@@ -74,23 +74,23 @@ curl -fsSL '<engineering-practice-url>'
 | 現況狀態 | 人工動作與等待 | 驗證 | 失敗恢復與摩擦 |
 | --- | --- | --- | --- |
 | 選 Issue | 清理 dry-run、限量搜尋歷史、讀 Issue／PR／ADR、判定 Milestone 或 standalone | Issue scope、label、Milestone、既有 branch／worktree／PR | 資訊散在多處；找不到 route 時應停止，不能猜。 |
-| 建 branch／worktree | 從 `dev/m*` 或 `dev/next` 建 `type/*`；特殊情況另判斷 `dev/i*` 或 hotfix | parent branch、乾淨 worktree、單一 Issue scope | 選錯 base 要 retarget／重建；太多 branch 名詞使一般貢獻者先做政策選擇。 |
+| 建 branch／worktree | Milestone 從 `dev/m*` 建 `type/*`；standalone、hotfix、bot 從 `main` 建短分支 | parent branch、乾淨 worktree、單一 Issue scope | route 只由 Milestone 與工作類型決定，不再選永久中間 trunk。 |
 | 實作中 | TDD、targeted checks、更新文件／root-template pair | 最窄 regression、lint/type/test | #261 已讓 targeted checks 後即可開 Draft；尚未自動化的摩擦是使用者仍要自行組合 route、risk 與下一步。 |
 | 開 PR／Draft／Ready | targeted 後開 Draft 揭露 owner／scope／依賴，Ready 前完成 acceptance 與 full verify | closing keyword、`verify-template.sh`、head SHA | #261 已移除開 Draft 前的 full gate；狀態仍分散在 Issue、PR、checks 與 branch，沒有單一 status 入口。 |
 | Issue PR checks | 等 policy、fast、stable `verify`；高風險路徑升 full | route、title、Issue linkage、secret、targeted tests、條件式 security | #201 已把一般路徑收斂為最多三個 runner jobs；unknown 仍應 full，而不是猜低風險。 |
 | Actions quota fallback | Routine 以 canonical tool 確認完整 zero-step run set、重跑 full 並留單一 note；promotion 才使用 attestation 與 human authorization | exact head、commands、未重現 checks | #254 已移除 routine PR 的逐張 human 等待；promotion 仍合理需要雙重授權。 |
 | Merge 到 delivery | review／授權後合併；非 default base 可能需手動關 Issue | live PR head/base、無 blocker、checks | #240：worktree 不隔離 GitHub；#236/#237 發生 Ready／Draft／merge race，#253 顯示 `baseRefOid` 不是 live destination CAS。 |
-| 等待批次／Milestone | standalone 等 release window；Milestone 等其他 Issues 與 promotion Issue | acceptance、所有非 promotion Issues 完成 | 等待是 delivery 決策，不應讓已完成 issue branch 持續漂移；目前 owner／時機需跨文件理解。 |
-| `main → dev/*` sync | 每條 active delivery 由 owner 開 reviewed sync PR、等 checks／review、解 conflict | 必須包含 current `main` | main 每前進一次都可能新增人工 PR；missing branch 不可當作已同步。 |
+| 等待 Milestone | Milestone 等其他 Issues 與 promotion Issue；standalone 直接進 main | acceptance、所有非 promotion Issues 完成 | 等待只存在於需要共同驗收的 Milestone。 |
+| `main → dev/m*` sync | ordinary work 不追逐 main；各 Milestone 到 final promotion 才由 owner 開一張 reviewed sync PR | final candidate 必須包含當時 current `main` | stale preflight 只建立該 Milestone 的一個 action；明列 dependency 的 PR owner 才能提前 sync。 |
 | Promotion | 建 PR、pin base/head/tree、等 full matrix、canary／artifact、review；quota 時再做完整雙留言流程 | `verify`、promotion gate、candidate tree、Milestone、canary 三態 | 安全必要但接觸點多；任何 base drift 都使舊 evidence 失效。 |
-| 進 `main` 後 | 核對 tree identity、release-source、Issue／Milestone lifecycle、cleanup | main tree 必須等於 candidate；release 只接受 hosted evidence | 失配要停 release 並另開修正；不能補寫假成功。`dev/i*` 刪除，長期 `dev/next` 必須保留。 |
+| 進 `main` 後 | 核對 tree identity、release-source、Issue／Milestone lifecycle、cleanup | main tree 必須等於 candidate；release 只接受 hosted evidence | 失配要停 release 並另開修正；Milestone delivery 與 bridge 完成後刪除。 |
 
 ### Live friction evidence
 
 | 證據 | 已觀察摩擦 | 對本提案的要求 |
 | --- | --- | --- |
-| [#238](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/238)／[PR #263](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/263) | PR #237 promotion 後 `delete_branch_on_merge` 刪掉長期 `dev/next`；post-merge workflow 又 zero-step，曾需人工重建。PR #263 已合併 `dev/next`，但本 ADR 不把尚未進本 branch 的行為宣稱為現況。 | 必要 branch 不存在必須 fail closed；保留／恢復需綁定 merged PR 與 current-main identity，`dev/i*` 仍可刪。 |
-| [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240)／[PR #260](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/260) | #236 的 merge call 比另一 task 轉 Draft 早約 1.7 秒；#253 又證明只比 source head 不能防 destination base race。PR #260 已進 `dev/next`，尚未進本 delivery branch。 | 合入後，所有 PR lifecycle writes 以跨 process lease 序列化，merge 前重讀 live source、destination、Draft、blocker 與 authorization；這是 future automation，不是現行 #254 routine fallback 的前置條件。 |
+| [#238](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/238)／[#320](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/320) | 長期整合 branch 曾在 promotion 後被平台 auto-delete，促成 repository-wide temporary setting mutation 與 recovery machinery。 | 改以 `main` 為唯一永久 branch，Milestone delivery 一律短命；事故成因因此消失，不再修改全域 auto-delete 設定。 |
+| [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240)／[PR #260](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/260) | #236 的 merge call 比另一 task 轉 Draft 早約 1.7 秒；#253 又證明只比 source head 不能防 destination base race。 | 所有 PR lifecycle writes 以跨 process lease 序列化，merge 前重讀 live source、destination、Draft、blocker 與 authorization。 |
 | [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254) | Teams private plan 的 quota block 是日常條件；#254 已讓 routine PR 以 exact-head canonical note 配合 Alpha self-merge，不再逐張等第二則 human authorization。 | 保留已生效的 single-note routine fallback；#240 日後只補 writer 互斥，promotion 仍不簡化。 |
 | [#261](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/261) | #261 已允許 targeted checks 後先開 Draft，讓遠端可見 owner、scope、依賴與待完成驗證。 | 保留現行 early Draft ownership；Ready 前才完成 acceptance 與完整驗證。 |
 
@@ -98,8 +98,8 @@ curl -fsSL '<engineering-practice-url>'
 
 ### 設計原則
 
-1. **預設只有一條路。** Issue 有 Milestone 就由工具導向其 `dev/m*`；否則導向
-   `dev/next`。`dev/i*`、hotfix 與 risk escalation 只由明確條件開啟。
+1. **預設只有一條路。** Issue 有 Milestone 就由工具導向其短命 `dev/m*`；否則由短分支
+   直接導向 `main`。Hotfix 與 risk escalation 只由明確條件開啟。
 2. **Draft 是 ownership，不是品質聲明。** 先暴露 work、scope 與依賴；Ready 才承諾
    acceptance、完整驗證與可審查性。
 3. **TDD 驗證行為，不驗證文字排列。** 非 trivial 變更先留下會失敗的最窄 behavior
@@ -112,6 +112,9 @@ curl -fsSL '<engineering-practice-url>'
    evidence 時 fail closed；不把 shared credential 當獨立 reviewer。
 7. **發布邊界不降級。** `main`、release、provenance、external canary 的既有安全契約
    保留；artifact-only 仍誠實標示限制。
+8. **同步只在需要時發生。** `main` movement 不使 ordinary delivery PR 失效；hotfix、
+   standalone 與 bot 結果等每個 Milestone final promotion 才回流。只有 live PR owner 明列
+   dependency 時可以提前同步，而且一次只處理一條 delivery。
 
 ### 最小 state model
 
@@ -124,7 +127,7 @@ stateDiagram-v2
     Open --> Draft: claim + branch + visible PR
     Draft --> Ready: acceptance + targeted + full local verify
     Ready --> Integrated: review + required issue-PR gates
-    Integrated --> Candidate: batch complete + current-main sync
+    Integrated --> Candidate: batch complete + one final current-main sync
     Candidate --> Delivered: promotion full gate + tree identity
     Delivered --> [*]
 ```
@@ -140,16 +143,20 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-    I[Issue branch] -->|policy + fast PR| D[dev/m* or dev/next]
-    M[main] -->|reviewed sync PR| D
+    I[Milestone Issue branch] -->|policy + fast PR| D[dev/m*]
+    S[Standalone / bot branch] -->|policy + scoped PR| M
+    M[main] -->|final reviewed sync| D
     D -->|full promotion + evidence| M
     H[explicit hotfix] -->|full gate + human authority| M
 ```
 
-- `Issue → dev`：只承載一張 Issue 的可審查變更；route 由 Issue metadata 推導。
-- `main → dev`：只有 reviewed sync；不直接 push，不讓一條 delivery merge 另一條。
-- `dev → main`：只有 promotion；在 immutable candidate 上付完整驗證與發布證據成本。
-- `hotfix → main`：只處理正式環境緊急缺陷，合併後仍須回同步所有 active delivery。
+- `Issue → dev/m*`：只承載同一 Milestone 的可審查變更；route 由 Issue metadata 推導。
+- `main → dev/m*`：只在 final promotion 做一次 reviewed sync；明列 dependency 才可提前，
+  不直接 push、不 fan-out、不讓一條 delivery merge 另一條。
+- `dev/m* → main`：只有 promotion；在 immutable candidate 上付完整驗證與發布證據成本。
+- `Issue → main`：standalone 與 bot 維持短 branch，通過 scoped／risk gate 後直接合併。
+- `hotfix → main`：只處理正式環境緊急缺陷；不立即回同步所有 active delivery，各自於
+  final promotion 納入。
 
 ### 風險與 authority
 
@@ -164,7 +171,7 @@ flowchart LR
 | --- | --- | --- |
 | Issue owner／agent | 認領、Draft 更新、完成驗證後標 Ready | 自己消除 blocker、把 unknown 降成 routine、把 Draft 當 merge authorization。 |
 | Reviewer | 對內容提出／解除 review blocker | 代表 billing owner、release owner 或另一個 credential 身分。 |
-| Delivery owner | sync、判定 batch scope、建立 promotion candidate | 改寫 history、跳過 current-main 或挪用另一 candidate 的 evidence。 |
+| Delivery owner | 在 final promotion sync、判定 batch scope、建立 promotion candidate；有明列 dependency 時提前同步自己的 delivery | 改寫 history、批次同步其他 Milestone、跳過 current-main 或挪用另一 candidate 的 evidence。 |
 | Human maintainer | hotfix、risk downgrade、quota promotion、degraded capability 下的 merge | 把失敗或未執行的 check 宣稱成功。 |
 | Automation lease holder | 在 policy 明確允許且 live state 未漂移時執行單次 metadata／merge mutation | 在 lease、source、destination、Draft、blocker、authorization 任一 unknown 時寫入。 |
 
@@ -177,7 +184,7 @@ source 或 live destination 漂移、新 Draft／blocking review／未完成 che
 
 | Issue | 結論 | 理由 |
 | --- | --- | --- |
-| [#179](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/179)／[PR #186](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/186) | **簡化** | 保留 `issue → delivery → main` 與 Milestone／standalone 分流，但一般使用者只回答「有無 Milestone」；工具推導 branch，`dev/i*`／hotfix 移到例外表。這保留多 agent 隔離與批次 release，不照搬 main-only。 |
+| [#179](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/179)／[PR #186](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/186) | **取代** | #320 收斂為 main-only permanent trunk：Milestone 保留短命 delivery，standalone／hotfix／bot 直接 main，風險由 gate 而非額外 branch 表達。 |
 | [#181](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/181)／[PR #190](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/190) | **保留** | 四層 CI 與 stable aggregate 已符合外部 change-aware 實務；只把 tier 選擇自動化，不刪 secret、security 或 unknown→full。 |
 | [#182](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/182)／[PR #191](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/191) | **保留** | current-main、full gate、candidate tree、canary 三態與 post-merge identity 是 release boundary，不是一般 PR 儀式。 |
 | [#184](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/184)／[PR #193](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/193) | **簡化** | 詳細 runbook 留作例外參考；預設入口改成一條 happy path、風險表與六個 states，不要求使用者先讀完所有分支。 |
