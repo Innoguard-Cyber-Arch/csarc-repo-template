@@ -7,6 +7,35 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.12.0](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.11.0...v0.12.0) (2026-08-26)
+
+
+### Features
+
+* build portable decision site bundle ([#187](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/187)) ([e7c08d1](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/e7c08d13ba386f172eb21a729d5ba85dcd6bc974))
+* **ci:** accept quota-only local attestations ([#173](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/173)) ([620683b](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/620683b36cb2b74e07a7cb0c900ef6f632bd0e7e))
+* **ci:** document isolated delivery operations ([#193](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/193)) ([2c08abc](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/2c08abc7fb05d5833da6bcf6d5112f2b5a47c010))
+* **ci:** enforce delivery branch synchronization ([#188](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/188)) ([9ce13d4](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/9ce13d468ef6dbb3664a4588bf67f89d1314f607))
+* **ci:** gate promotions with canary evidence ([#191](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/191)) ([5028891](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/50288913dbcefc011b86ce97ba0aebaeb3f8f8aa))
+* **ci:** promote staged CI delivery train ([#298](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/298)) ([3ea6134](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/3ea6134e82916f24d37b5c7fa988f9ca9a6beaa7))
+* **governance:** add delivery branch routing ([#186](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/186)) ([b07ea19](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/b07ea19467b310c3c8d2a396d023e0150755e0b1))
+* **governance:** complete native hierarchy delivery ([#336](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/336)) ([4e73e22](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/4e73e22ed17d6a061438068be07bd2f1fc8e89af))
+* **governance:** promote native issue hierarchy ([#331](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/331)) ([2a42d79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/2a42d7960e2d5a110b2457b102ae33314a6fb390))
+* promote completed standalone fixes ([#316](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/316)) ([932b0cb](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/932b0cbf9a3b26fb688197bb15ba846486b73167))
+* promote standalone delivery batch ([#237](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/237)) ([a0f537c](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/a0f537cfccfa63935a42f13d534397a70f1a8a04)), refs [#232](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/232)
+* **release:** batch releases at promotion boundaries ([#192](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/192)) ([6139e36](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/6139e36b643ae33dff5341ea499a12ad17658321))
+
+
+### Bug Fixes
+
+* **ci:** exclude large tests from routine verification ([#345](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/345)) ([6870570](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/6870570bb1e32f3d9db06b4cf03b1d43735bf69b)), refs [#343](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/343)
+* **ci:** honor routine quota lifecycle ([#339](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/339)) ([147e80c](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/147e80c3c010cd00d7f641be0597b57c84ccd2ec))
+* **ci:** ignore superseded check runs ([#344](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/344)) ([5f0c7f0](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/5f0c7f047047085da277722fc3024fdb4db5e04e))
+* **ci:** validate live pull request metadata ([#338](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/338)) ([f9ad223](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/f9ad223857a6e5e6c5635cdd73e12ecf5d207a56))
+* **governance:** request configured pull request reviewers ([#165](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/165)) ([e2a3baf](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/e2a3baf6a55982caae62e8618351de41d7492bf9))
+* **release:** generate SPDX SBOMs with pinned Syft ([#347](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/347)) ([aa2396d](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/aa2396dcd67b9058bb9b0f243e5b034731552ec4))
+* **release:** recover missing v0.12.0 ([#348](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/348)) ([0064297](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/0064297d46c13af3c11ee02d3a6c61d265e797c3))
+
 ## [0.11.0] - 2026-08-24
 
 ### Added
