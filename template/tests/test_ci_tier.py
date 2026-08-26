@@ -399,6 +399,39 @@ def test_issue_and_integrated_stages_apply_risk_differently() -> None:
 @pytest.mark.parametrize(
     "path",
     [
+        "src/csarc_cli/cli.py",
+        "copier.yml",
+        ".github/workflows/release-template.yml",
+        "uv.lock",
+    ],
+)
+@pytest.mark.parametrize("base", ["dev/m9-staged-ci", "main"])
+def test_ready_high_risk_work_runs_related_deep_checks(
+    path: str, base: str
+) -> None:
+    """Run runtime and large checks for the risks they can expose."""
+    plan = classify(
+        "pull_request", base, "type/317-staged-verification", set(), [path]
+    )
+    assert plan.run_deep
+
+
+def test_unrelated_issue_risks_do_not_start_the_deep_matrix() -> None:
+    """Keep workflow and governance checks in their dedicated lanes."""
+    for path in (".github/workflows/ci.yml", "policies/rulesets.json"):
+        plan = classify(
+            "pull_request",
+            "dev/m9-staged-ci",
+            "type/317-staged-verification",
+            set(),
+            [path],
+        )
+        assert not plan.run_deep
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
         "scripts/ci_tier.py",
         ".github/workflows/governance-comment.yml",
         ".github/actions/setup/action.yml",

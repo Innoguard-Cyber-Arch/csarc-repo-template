@@ -9,6 +9,8 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+DEEP_RISKS = {"cli-adoption-update", "generator", "release", "security"}
+
 
 @dataclass(frozen=True)
 class Plan:
@@ -278,10 +280,7 @@ def classify(
         run_osv=scheduled or "dependency" in scopes,
         run_zizmor=scheduled or "workflow" in scopes,
         run_deep=review_state != "draft"
-        and (
-            event == "schedule"
-            or (stage == "integrated" and "release" in risks)
-        ),
+        and (event == "schedule" or bool(DEEP_RISKS.intersection(risks))),
         upload_site=(
             force_full
             or promotion
