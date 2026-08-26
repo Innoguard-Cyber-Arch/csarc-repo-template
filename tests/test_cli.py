@@ -4002,6 +4002,8 @@ def test_pr_templates_do_not_repeat_full_before_ready() -> None:
         assert "hosted" in source
         assert "fallback" in source
         assert source.count(command) == 1
-        full_line = next(line for line in source.splitlines() if command in line)
+        full_line = next(
+            line for line in source.splitlines() if command in line
+        )
         assert "before Ready" not in full_line
         assert "轉 Ready 前" not in full_line
