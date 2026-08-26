@@ -36,7 +36,9 @@ body:
     id: acceptance
     attributes:
       label: 完成條件
-      description: 完成後可觀察到的結果；超出範圍另開 Issue。
+      description: >-
+        完成後可觀察到的結果；超出範圍另開 Issue。Promotion Issue 只列合併前可驗證
+        的 checkbox；合併後關閉與清理步驟寫在補充，不列為 acceptance checkbox。
       placeholder: "- [ ] ..."
     validations:
       required: true

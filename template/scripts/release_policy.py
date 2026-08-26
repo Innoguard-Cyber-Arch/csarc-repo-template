@@ -283,6 +283,66 @@ def bump_version(version: str, messages: list[str]) -> str | None:
     return f"{major}.{minor}.{patch + 1}"
 
 
+def milestone_boundary(  # noqa: C901
+    evidence: dict[str, Any],
+    included_pull_requests: list[dict[str, Any]],
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    """Validate one milestone promotion's canonical Issue scope."""
+    promotion = evidence.get("milestone_promotion")
+    issues = evidence.get("included_issues")
+    if (
+        not isinstance(promotion, dict)
+        or set(promotion) != {"mode", "declared_issues"}
+        or not isinstance(issues, list)
+    ):
+        raise ValueError("milestone release boundary schema is invalid")
+    issue_numbers: list[int] = []
+    normalized_issues: list[dict[str, object]] = []
+    for issue in issues:
+        if (
+            not isinstance(issue, dict)
+            or set(issue) != {"number", "title"}
+            or type(issue.get("number")) is not int
+            or int(issue["number"]) < 1
+            or not isinstance(issue.get("title"), str)
+        ):
+            raise ValueError("milestone included Issue is invalid")
+        issue_numbers.append(int(issue["number"]))
+        normalized_issues.append(
+            {"number": int(issue["number"]), "title": issue["title"]}
+        )
+    if issue_numbers != sorted(set(issue_numbers)):
+        raise ValueError("milestone included Issues are not canonical")
+    pull_request_issues: set[int] = set()
+    for pull_request in included_pull_requests:
+        if "issue" not in pull_request:
+            raise ValueError("milestone pull request has no Issue binding")
+        number = pull_request["issue"]
+        if number is not None and (type(number) is not int or number < 1):
+            raise ValueError("milestone pull-request Issue binding is invalid")
+        if isinstance(number, int):
+            pull_request_issues.add(number)
+    if issue_numbers != sorted(pull_request_issues):
+        raise ValueError("milestone Issue evidence does not match its PRs")
+    mode = promotion.get("mode")
+    declared = promotion.get("declared_issues")
+    if mode == "final":
+        if declared is not None:
+            raise ValueError("final milestone promotion declares Issues")
+    elif mode == "checkpoint":
+        if (
+            not isinstance(declared, list)
+            or not declared
+            or any(type(number) is not int or number < 1 for number in declared)
+            or declared != sorted(set(declared))
+            or declared != issue_numbers
+        ):
+            raise ValueError("checkpoint Issue evidence is invalid")
+    else:
+        raise ValueError("milestone promotion mode is invalid")
+    return promotion, normalized_issues
+
+
 def aggregate_release_boundaries(  # noqa: C901
     boundaries: list[dict[str, Any]], main_sha: str, source_kind: str
 ) -> dict[str, object]:
@@ -340,19 +400,33 @@ def aggregate_release_boundaries(  # noqa: C901
             pull_requests[number] = pull_request
         if intent != boundary_highest:
             raise ValueError("release boundary batch intent is invalid")
-        summaries.append(
-            {
-                "kind": route["kind"],
-                "milestone": route.get("milestone"),
-                "delivery_branch": evidence.get("head_ref"),
-                "promotion_pr": evidence.get("pull_request"),
-                "promotion_main_sha": post_merge.get("main_sha"),
-                "promotion_run": evidence.get("workflow_run"),
-                "included_issues": evidence.get("included_issues", []),
-                "canary": evidence.get("canary"),
-                "full_check": evidence.get("full_check"),
-            }
-        )
+        route_kind = str(route["kind"])
+        if route_kind == "milestone":
+            milestone = route.get("milestone")
+            if type(milestone) is not int or milestone < 1:
+                raise ValueError("milestone release boundary is incomplete")
+            promotion, included_issues = milestone_boundary(evidence, included)
+        else:
+            if "milestone_promotion" in evidence:
+                raise ValueError(
+                    "non-milestone boundary has milestone promotion data"
+                )
+            promotion = None
+            included_issues = evidence.get("included_issues", [])
+        summary: dict[str, object] = {
+            "kind": route_kind,
+            "milestone": route.get("milestone"),
+            "delivery_branch": evidence.get("head_ref"),
+            "promotion_pr": evidence.get("pull_request"),
+            "promotion_main_sha": post_merge.get("main_sha"),
+            "promotion_run": evidence.get("workflow_run"),
+            "included_issues": included_issues,
+            "canary": evidence.get("canary"),
+            "full_check": evidence.get("full_check"),
+        }
+        if promotion is not None:
+            summary["milestone_promotion"] = promotion
+        summaries.append(summary)
     summaries.sort(key=lambda item: str(item["promotion_main_sha"]))
     return {
         "schema_version": 1,

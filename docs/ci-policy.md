@@ -136,6 +136,14 @@ Milestone 中，除 promotion Issue 外的工作均已關閉且沒有未勾選�
 criterion。`dev/i<編號>-*` 則核對同號、無 Milestone 且標示 `promotion` 的 open
 Issue，不能借用別張 Issue 或偽裝 Milestone。
 
+若同一 Milestone 的後續工作明確依賴本 Milestone 先產生 immutable Release，可建立
+額外的 checkpoint promotion Issue。其 body 必須用唯一且依數字排序的 canonical marker
+明列本次候選，例如 `<!-- csarc-promotion-checkpoint: #12, #34 -->`。列出的每張
+work Issue 都必須已關閉、完成所有 acceptance criteria，且其工作 PR 確實存在於目前
+delivery range；main sync PR 不算 work Issue。未列出的下游 Issue 可保持 open，evidence
+只記錄本次實際 work Issues。沒有 marker 的 Milestone promotion 一律視為 final，仍要求
+其他所有非 promotion Issues 已關閉且完成。
+
 Promotion 的 squash fallback 使用與 PR policy 相同的 REST 證據鏈，並綁定 promotion
 PR 的 base SHA 等於當前 `main`、head ref 等於正確 delivery branch，以及該 branch
 包含已驗證的 sync squash commit；採用的 `direct-ancestry` 或 `squash-sync-pr-N` 會寫入
@@ -212,7 +220,8 @@ criterion 取消勾選則重新開啟。
 Promotion owner 在請求合併前逐項確認：
 
 - tracking Issue 仍 open，PR 以 closing keyword 指向它，所有 acceptance checkbox
-  已完成；Milestone route 的其他工作 Issue 全部關閉。
+  已完成；checkpoint 的 marker 與 delivery range 完全一致，final Milestone route 的
+  其他工作 Issue 則全部關閉。
 - delivery head 包含目前 `main`；候選 source、base/head SHA 與 Git tree 已封存。
 - full `verify` 與 `promotion` context 成功；或符合下方 quota-only promotion fallback，
   且其精確 SHA/tree 證據與人工授權完整。納入 PR 清單與最高 SemVer intent 必須相符。
@@ -230,8 +239,9 @@ branch。
 
 ## 批次發版邊界
 
-發版以 promotion 為單位，而不是以每張 Issue PR 為單位：Milestone 僅在完成時
-promotion 一次；`dev/next` 建議由團隊固定每週一個 release window 批次 promotion，
+發版以 promotion 為單位，而不是以每張 Issue PR 為單位：Milestone 原則上僅在完成時
+promotion 一次；只有 downstream acceptance 明確依賴同一 Milestone 的 immutable Release
+時，才使用上述 checkpoint promotion。`dev/next` 建議由團隊固定每週一個 release window 批次 promotion，
 沒有 release-worthy 變更時直接略過；`dev/i*` 在其獨立 canary 完成後單獨
 promotion；hotfix 才是立即 promotion／release。若下一個 release PR 合併前又有
 promotion，Release Please 更新同一張 PR，最後仍只建立一個 tag 與 GitHub Release。
@@ -504,6 +514,7 @@ quota-only 例外；一般 main PR、release follow-up 與 hotfix 不因此新�
 authorization 不屬於同一 PR，都會使 fallback 失效。這份本機 evidence 只允許合併，
 不會被 hosted `release-source` 接受；在原 promotion 與 main post-merge checks 真正補跑
 成功前，不建立、移動或宣稱 tag、Release、package、provenance 或外部 canary 成功。
+checkpoint promotion 亦不例外。
 
 ## 外部基準
 

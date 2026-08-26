@@ -1170,6 +1170,9 @@ grep -Fq 'without routine user confirmation' template/AGENTS.md.jinja
 grep -Fq 'once per final candidate tree' AGENTS.md
 grep -Fq 'once per final candidate tree' template/AGENTS.md.jinja
 grep -q '^## References$' docs/milestone-description.md
+grep -q 'Promotion Issue 的 checkbox 只能描述合併前可驗證' \
+  docs/milestone-description.md
+grep -q 'csarc-promotion-checkpoint: #12, #34' docs/ci-policy.md
 grep -q 'bounded' docs/agent-install.md
 grep -q '沿用、取代或駁回' docs/index.html
 required_readme_headings=(
@@ -1249,6 +1252,8 @@ grep -q '^    id: supplement$' .github/ISSUE_TEMPLATE/work-item.yml
 test "$(grep -Ec '^      label: (類型|問題|完成條件|補充)$' \
   .github/ISSUE_TEMPLATE/work-item.yml)" -eq 4
 grep -q '搜尋相關 open／closed Issues' .github/ISSUE_TEMPLATE/work-item.yml
+grep -q 'Promotion Issue 只列合併前可驗證' \
+  .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^        - duplicate$' .github/ISSUE_TEMPLATE/work-item.yml
 test "$(grep -c '^## ' .github/pull_request_template.md)" -eq 3
 grep -q '^## Purpose$' .github/pull_request_template.md
@@ -2295,6 +2300,8 @@ test "$(grep -c '^    id:' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 4
 grep -q '^    id: supplement$' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml"
+grep -q 'Promotion Issue 只列合併前可驗證' \
+  "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml"
 test "$(grep -Ec '^      label: (類型|問題|完成條件|補充)$' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 4
 test "$(grep -c '^## ' \
@@ -2329,6 +2336,10 @@ grep -q '^## Plan$' \
   "$fixture_root/default-project/docs/milestone-description.md"
 grep -q '^## References$' \
   "$fixture_root/default-project/docs/milestone-description.md"
+grep -q 'Promotion Issue 的 checkbox 只能描述合併前可驗證' \
+  "$fixture_root/default-project/docs/milestone-description.md"
+grep -q 'csarc-promotion-checkpoint: #12, #34' \
+  "$fixture_root/default-project/docs/ci-policy.md"
 grep -q '專案團隊慣用的語言' \
   "$fixture_root/default-project/docs/milestone-description.md"
 grep -q 'types: \[closed, reopened, milestoned\]' \

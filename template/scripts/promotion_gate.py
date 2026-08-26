@@ -29,12 +29,23 @@ else:
     delivery_sync = importlib.import_module(f"{__package__}.delivery_sync")
 
 UNCHECKED = re.compile(r"(?m)^\s*-\s+\[\s*\]")
-CLOSING_ISSUE = re.compile(r"(?:Closes|Fixes|Resolves)\s+#(\d+)(?:\D|$)", re.I)
-MILESTONE_BRANCH = re.compile(r"^dev/m(\d+)-[a-z0-9][a-z0-9-]*$")
-PROMOTION_BRIDGE = re.compile(r"^promote/m(\d+)-([a-z0-9][a-z0-9-]*)$")
-RECOVERY_BRANCH = re.compile(r"^fix/(\d+)-[a-z0-9][a-z0-9-]*$")
+CLOSING_ISSUE = re.compile(
+    r"(?<!\w)(?a:Closes|Fixes|Resolves)[ \t]+#([1-9][0-9]*)(?!\w)",
+    re.IGNORECASE,
+)
+CHECKPOINT_ISSUES = re.compile(
+    r"(?m)^<!-- csarc-promotion-checkpoint: "
+    r"(#[1-9][0-9]*(?:, #[1-9][0-9]*)*) -->$"
+)
+MILESTONE_BRANCH = re.compile(r"^dev/m([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
+PROMOTION_BRIDGE = re.compile(r"^promote/m([1-9][0-9]*)-([a-z0-9][a-z0-9-]*)$")
+RECOVERY_BRANCH = re.compile(r"^fix/([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
 STANDALONE_PROMOTION_BRIDGE = "promote/next"
-ISOLATED_BRANCH = re.compile(r"^dev/i(\d+)-[a-z0-9][a-z0-9-]*$")
+ISOLATED_BRANCH = re.compile(r"^dev/i([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$")
+WORK_BRANCH = re.compile(
+    r"^(?:feat|fix|docs|refactor|test|build|ci|chore|revert)/"
+    r"([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$"
+)
 CONVENTIONAL_TITLE = re.compile(
     r"^(feat|fix|docs|refactor|test|build|ci|chore|revert)"
     r"(?:\([a-z0-9._/-]+\))?(!)?: "
@@ -239,6 +250,51 @@ def issue_number(body: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def checkpoint_issue_numbers(body: str) -> list[int] | None:
+    """Return the canonical work-Issue list for a checkpoint promotion."""
+    occurrences = len(
+        re.findall(
+            "csarc-promotion-checkpoint:", body, re.IGNORECASE | re.ASCII
+        )
+    )
+    matches = CHECKPOINT_ISSUES.findall(body)
+    if occurrences == 0:
+        return None
+    if occurrences != 1 or len(matches) != 1:
+        raise RuntimeError(
+            "Checkpoint Issue marker must appear exactly once and be valid"
+        )
+    numbers = [int(item[1:]) for item in matches[0].split(", ")]
+    if numbers != sorted(set(numbers)):
+        raise RuntimeError(
+            "Checkpoint Issues must be unique and sorted numerically"
+        )
+    return numbers
+
+
+def pull_request_issue_number(pull_request: dict[str, Any]) -> int:
+    """Bind a reviewed delivery commit to its work Issue."""
+    head = pull_request.get("head")
+    head_ref = head.get("ref") if isinstance(head, dict) else None
+    if not isinstance(head_ref, str):
+        raise RuntimeError("Included pull request head is incomplete")
+    match = WORK_BRANCH.fullmatch(head_ref)
+    if match is None:
+        raise RuntimeError("Included pull request is not a work Issue")
+    branch_issue = int(match.group(1))
+    body = pull_request.get("body")
+    if not isinstance(body, str):
+        raise RuntimeError(
+            "Included pull request does not close its branch Issue"
+        )
+    closing_issues = {int(number) for number in CLOSING_ISSUE.findall(body)}
+    if branch_issue not in closing_issues:
+        raise RuntimeError(
+            "Included pull request does not close its branch Issue"
+        )
+    return branch_issue
+
+
 def issue_labels(issue: dict[str, Any]) -> set[str]:
     """Normalize REST Issue labels."""
     labels = issue.get("labels", [])
@@ -254,6 +310,158 @@ def same_repository(pull_request: dict[str, Any], repo: str) -> bool:
     head = pull_request.get("head")
     head_repo = head.get("repo") if isinstance(head, dict) else None
     return isinstance(head_repo, dict) and head_repo.get("full_name") == repo
+
+
+def sync_pull_request_main_sha(
+    pull_request: dict[str, Any],
+    repo: str,
+    delivery_branch: str,
+    current_main_sha: str,
+    token: str,
+    api: DeliveryAPI,
+) -> str:
+    """Return the exact historical main merged by a reviewed sync PR."""
+    base = pull_request.get("base")
+    head = pull_request.get("head")
+    head_ref = head.get("ref") if isinstance(head, dict) else None
+    head_sha = head.get("sha") if isinstance(head, dict) else None
+    if (
+        not isinstance(base, dict)
+        or base.get("ref") != delivery_branch
+        or not isinstance(head_ref, str)
+        or not head_ref.startswith("sync/")
+        or not isinstance(head_sha, str)
+        or not same_repository(pull_request, repo)
+    ):
+        raise RuntimeError("Included sync pull request has invalid provenance")
+    sync_commit = github_get(repo, f"git/commits/{head_sha}", token)
+    if not isinstance(sync_commit, dict):
+        raise RuntimeError(
+            "Included sync pull request has invalid commit shape"
+        )
+    parents = sync_commit.get("parents")
+    if not isinstance(parents, list) or len(parents) != 2:
+        raise RuntimeError(
+            "Included sync pull request has invalid commit shape"
+        )
+    main_parent = parents[1]
+    delivery_parent = parents[0]
+    synced_main_sha = (
+        main_parent.get("sha") if isinstance(main_parent, dict) else None
+    )
+    if not isinstance(synced_main_sha, str):
+        raise RuntimeError("Included sync pull request has invalid provenance")
+    expected_ref = delivery_sync.sync_branch_name(
+        delivery_branch, synced_main_sha
+    )
+    legacy_ref = f"{expected_ref.rsplit('-', 1)[0]}-{synced_main_sha[:7]}"
+    if head_ref not in {
+        expected_ref,
+        legacy_ref,
+    } or not delivery_sync.includes_main(
+        delivery_sync.compare(api, repo, synced_main_sha, current_main_sha)
+    ):
+        raise RuntimeError("Included sync pull request has invalid provenance")
+    if head_ref == legacy_ref:
+        base_sha = base.get("sha")
+        delivery_parent_sha = (
+            delivery_parent.get("sha")
+            if isinstance(delivery_parent, dict)
+            else None
+        )
+        sync_tree = sync_commit.get("tree")
+        sync_tree_sha = (
+            sync_tree.get("sha") if isinstance(sync_tree, dict) else None
+        )
+        main_commit = github_get(repo, f"git/commits/{synced_main_sha}", token)
+        main_tree = (
+            main_commit.get("tree") if isinstance(main_commit, dict) else None
+        )
+        main_tree_sha = (
+            main_tree.get("sha") if isinstance(main_tree, dict) else None
+        )
+        if (
+            not isinstance(base_sha, str)
+            or delivery_parent_sha != base_sha
+            or not isinstance(sync_tree_sha, str)
+            or sync_tree_sha != main_tree_sha
+        ):
+            raise RuntimeError(
+                "Included legacy sync pull request has invalid provenance"
+            )
+    return synced_main_sha
+
+
+def legacy_sync_reaffirmed(
+    legacy_pull: dict[str, Any],
+    canonical_pull: dict[str, Any],
+    repo: str,
+    delivery_branch: str,
+    synced_main_sha: str,
+    token: str,
+) -> bool:
+    """Accept one pure legacy sync only with its empty canonical successor."""
+    legacy_head = legacy_pull.get("head")
+    canonical_head = canonical_pull.get("head")
+    canonical_base = canonical_pull.get("base")
+    legacy_ref = (
+        legacy_head.get("ref") if isinstance(legacy_head, dict) else None
+    )
+    canonical_ref = (
+        canonical_head.get("ref") if isinstance(canonical_head, dict) else None
+    )
+    canonical_sha = (
+        canonical_head.get("sha") if isinstance(canonical_head, dict) else None
+    )
+    expected_ref = delivery_sync.sync_branch_name(
+        delivery_branch, synced_main_sha
+    )
+    expected_legacy_ref = (
+        f"{expected_ref.rsplit('-', 1)[0]}-{synced_main_sha[:7]}"
+    )
+    legacy_merge_sha = legacy_pull.get("merge_commit_sha")
+    canonical_base_sha = (
+        canonical_base.get("sha") if isinstance(canonical_base, dict) else None
+    )
+    if (
+        legacy_ref != expected_legacy_ref
+        or canonical_ref != expected_ref
+        or canonical_base_sha != legacy_merge_sha
+        or not isinstance(canonical_sha, str)
+        or not isinstance(legacy_merge_sha, str)
+        or not same_repository(legacy_pull, repo)
+        or not same_repository(canonical_pull, repo)
+    ):
+        return False
+    canonical_commit = github_get(repo, f"git/commits/{canonical_sha}", token)
+    legacy_merge = github_get(repo, f"git/commits/{legacy_merge_sha}", token)
+    main_commit = github_get(repo, f"git/commits/{synced_main_sha}", token)
+    if (
+        not isinstance(canonical_commit, dict)
+        or not isinstance(legacy_merge, dict)
+        or not isinstance(main_commit, dict)
+    ):
+        return False
+    parents = canonical_commit.get("parents")
+    if not isinstance(parents, list) or len(parents) != 2:
+        return False
+    parent_shas = [
+        parent.get("sha") if isinstance(parent, dict) else None
+        for parent in parents
+    ]
+
+    def tree_sha(commit: dict[str, Any]) -> str | None:
+        tree = commit.get("tree")
+        return tree.get("sha") if isinstance(tree, dict) else None
+
+    trees = {
+        tree_sha(canonical_commit),
+        tree_sha(legacy_merge),
+        tree_sha(main_commit),
+    }
+    return parent_shas == [legacy_merge_sha, synced_main_sha] and (
+        len(trees) == 1 and None not in trees
+    )
 
 
 def release_intent(title: str) -> str:
@@ -287,9 +495,14 @@ def included_pull_requests(  # noqa: C901
     token: str,
     milestone: int | None = None,
     bridge_head_sha: str | None = None,
+    *,
+    track_work_issues: bool = False,
 ) -> list[dict[str, object]]:
     """Find merged pull requests represented by the exact delivery range."""
     included: dict[int, dict[str, object]] = {}
+    sync_pull_requests: dict[int, str] = {}
+    sync_pull_request_details: dict[int, dict[str, Any]] = {}
+    sync_api = promotion_api(repo, token) if track_work_issues else None
     saw_bridge_head = bridge_head_sha is None
     page = 1
     while True:
@@ -347,12 +560,41 @@ def included_pull_requests(  # noqa: C901
                 ):
                     continue
                 matched = True
-                included[number] = {
+                evidence: dict[str, object] = {
                     "number": number,
                     "title": title,
                     "intent": release_intent(title),
                 }
-            if bridge_head_sha is not None and not matched:
+                if track_work_issues:
+                    pull_head = pull_request.get("head")
+                    pull_head_ref = (
+                        pull_head.get("ref")
+                        if isinstance(pull_head, dict)
+                        else None
+                    )
+                    if (
+                        isinstance(pull_head_ref, str)
+                        and pull_head_ref.startswith("sync/")
+                        and sync_api is not None
+                    ):
+                        evidence["issue"] = None
+                        sync_pull_requests[number] = sync_pull_request_main_sha(
+                            pull_request,
+                            repo,
+                            delivery_branch,
+                            base_sha,
+                            token,
+                            sync_api,
+                        )
+                        sync_pull_request_details[number] = pull_request
+                    else:
+                        evidence["issue"] = pull_request_issue_number(
+                            pull_request
+                        )
+                included[number] = evidence
+            if (
+                bridge_head_sha is not None or track_work_issues
+            ) and not matched:
                 scope = (
                     "same-Milestone" if milestone is not None else "eligible"
                 )
@@ -364,6 +606,33 @@ def included_pull_requests(  # noqa: C901
         page += 1
     if not saw_bridge_head:
         raise RuntimeError("GitHub comparison omitted the promotion bridge")
+    for number, synced_main_sha in sync_pull_requests.items():
+        verified_sync = (
+            delivery_sync.merged_sync_pr_number(
+                sync_api,
+                repo,
+                delivery_branch,
+                synced_main_sha,
+                head_sha,
+            )
+            if sync_api is not None
+            else None
+        )
+        if verified_sync != number and (
+            verified_sync is None
+            or sync_pull_requests.get(verified_sync) != synced_main_sha
+            or not legacy_sync_reaffirmed(
+                sync_pull_request_details[number],
+                sync_pull_request_details[verified_sync],
+                repo,
+                delivery_branch,
+                synced_main_sha,
+                token,
+            )
+        ):
+            raise RuntimeError(
+                "Included sync pull request lacks reviewed merge provenance"
+            )
     return [included[number] for number in sorted(included)]
 
 
@@ -383,6 +652,55 @@ def unfinished_milestone_issues(
             if isinstance(number, int):
                 unfinished.append(number)
     return sorted(unfinished)
+
+
+def milestone_included_issues(
+    issues: list[dict[str, Any]],
+    promotion_number: int,
+    included_pull_requests: list[dict[str, object]],
+    checkpoint: list[int] | None,
+) -> list[dict[str, object]]:
+    """Validate and return work Issues represented by this candidate."""
+    issue_by_number = {
+        issue["number"]: issue
+        for issue in issues
+        if "pull_request" not in issue
+        and issue.get("number") != promotion_number
+        and "promotion" not in issue_labels(issue)
+        and isinstance(issue.get("number"), int)
+    }
+    actual = sorted(
+        {
+            number
+            for pull_request in included_pull_requests
+            if isinstance((number := pull_request.get("issue")), int)
+        }
+    )
+    if checkpoint is None:
+        unfinished = unfinished_milestone_issues(issues, promotion_number)
+        if unfinished:
+            rendered = ", ".join(f"#{item}" for item in unfinished)
+            raise RuntimeError(f"Milestone work is not complete: {rendered}")
+    elif checkpoint != actual:
+        raise RuntimeError(
+            "Checkpoint Issues do not match the candidate work Issues"
+        )
+    invalid = [
+        number
+        for number in actual
+        if number not in issue_by_number
+        or issue_by_number[number].get("state") != "closed"
+        or UNCHECKED.search(str(issue_by_number[number].get("body") or ""))
+    ]
+    if invalid:
+        rendered = ", ".join(f"#{item}" for item in invalid)
+        raise RuntimeError(
+            f"Included Milestone work is not closed and complete: {rendered}"
+        )
+    return [
+        {"number": number, "title": issue_by_number[number].get("title", "")}
+        for number in actual
+    ]
 
 
 def main_is_current(
@@ -797,6 +1115,7 @@ def preflight_binding(
         "promotion_pull_request": evidence.get("promotion_pull_request"),
         "tracking_issue": evidence.get("tracking_issue"),
         "tracking_issue_state": evidence.get("tracking_issue_state"),
+        "milestone_promotion": evidence.get("milestone_promotion"),
         "base_ref": evidence.get("base_ref"),
         "base_sha": evidence.get("base_sha"),
         "head_ref": evidence.get("head_ref"),
@@ -1259,6 +1578,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
             token = os.environ.get("GH_TOKEN", "")
             tracking_issue: dict[str, Any] = {}
             tracking_issue_state: dict[str, object] | None = None
+            checkpoint: list[int] | None = None
             if number is not None:
                 issue = github_get(args.repo, f"issues/{number}", token)
                 if not isinstance(issue, dict) or issue.get("state") != "open":
@@ -1307,6 +1627,11 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     raise RuntimeError(
                         "Standalone promotion or hotfix cannot use a Milestone"
                     )
+                checkpoint = checkpoint_issue_numbers(issue_body)
+                if checkpoint is not None and route.kind != "milestone":
+                    raise RuntimeError(
+                        "Checkpoint promotion requires a Milestone route"
+                    )
                 tracking_issue_state = {
                     "number": number,
                     "state": "open",
@@ -1318,40 +1643,15 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     "milestone": issue_milestone,
                 }
             included: list[dict[str, object]] = []
+            milestone_issue_snapshot: list[dict[str, Any]] = []
             if route.milestone is not None:
                 if number is None:
                     raise RuntimeError(
                         "Milestone promotion requires a tracking Issue"
                     )
-                issues = milestone_issues(args.repo, route.milestone, token)
-                unfinished = unfinished_milestone_issues(issues, number)
-                if unfinished:
-                    rendered = ", ".join(f"#{item}" for item in unfinished)
-                    raise RuntimeError(
-                        f"Milestone work is not complete: {rendered}"
-                    )
-                included = [
-                    {"number": item["number"], "title": item.get("title", "")}
-                    for item in issues
-                    if "pull_request" not in item
-                    and item.get("number") != number
-                ]
-            elif route.kind == "isolated" and number is not None:
-                included = [
-                    {
-                        "number": number,
-                        "title": str(tracking_issue.get("title", "")),
-                    }
-                ]
-            elif route.kind == "release-recovery" and number is not None:
-                included = [
-                    {
-                        "number": number,
-                        "title": tracking_issue_state["title"]
-                        if tracking_issue_state is not None
-                        else "",
-                    }
-                ]
+                milestone_issue_snapshot = milestone_issues(
+                    args.repo, route.milestone, token
+                )
             current_main = github_get(args.repo, "git/ref/heads/main", token)
             if not isinstance(current_main, dict):
                 raise RuntimeError("GitHub returned an invalid main reference")
@@ -1406,6 +1706,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                         "number": pull_request["number"],
                         "title": title,
                         "intent": release_intent(title),
+                        "issue": number,
                     }
                 ]
             else:
@@ -1417,11 +1718,35 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     token,
                     route.milestone if bridge is not None else None,
                     head_sha if bridge is not None else None,
+                    track_work_issues=route.milestone is not None,
                 )
                 if not included_prs:
                     raise RuntimeError(
                         "Delivery promotion contains no merged pull requests"
                     )
+            if route.milestone is not None and number is not None:
+                included = milestone_included_issues(
+                    milestone_issue_snapshot,
+                    number,
+                    included_prs,
+                    checkpoint,
+                )
+            elif route.kind == "isolated" and number is not None:
+                included = [
+                    {
+                        "number": number,
+                        "title": str(tracking_issue.get("title", "")),
+                    }
+                ]
+            elif route.kind == "release-recovery" and number is not None:
+                included = [
+                    {
+                        "number": number,
+                        "title": tracking_issue_state["title"]
+                        if tracking_issue_state is not None
+                        else "",
+                    }
+                ]
             intent = highest_release_intent(
                 [str(item["title"]) for item in included_prs]
             )
@@ -1448,6 +1773,13 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     stdout=stream,
                 ),
             )
+            milestone_promotion = None
+            if route.milestone is not None:
+                mode = "checkpoint" if checkpoint is not None else "final"
+                milestone_promotion = {
+                    "mode": mode,
+                    "declared_issues": checkpoint,
+                }
             evidence = {
                 "schema_version": 1,
                 "repository": args.repo,
@@ -1484,6 +1816,8 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 "workflow_run": args.workflow_run,
                 "created_at": datetime.now(UTC).isoformat(),
             }
+            if milestone_promotion is not None:
+                evidence["milestone_promotion"] = milestone_promotion
             if route.kind == "standalone-batch":
                 evidence["dev_next_preservation"] = run_dev_next_preservation(
                     "inspect-dev-next",

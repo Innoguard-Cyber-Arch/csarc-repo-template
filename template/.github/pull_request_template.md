@@ -5,6 +5,7 @@
 Closes #N
 
 <!-- Work PRs use type/N-short-slug and target the configured integration branch. -->
+<!-- A checkpoint promotion lists its canonical Issue marker in the tracking Issue, not here. -->
 
 ## 完成清單
 
