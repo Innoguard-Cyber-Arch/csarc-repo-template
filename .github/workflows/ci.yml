@@ -282,29 +282,38 @@ jobs:
           PYTHON_COMPATIBILITY_RESULT: ${{ needs.python-compatibility.result }}
           ZIZMOR_RESULT: ${{ needs.zizmor.result }}
         run: |
-          require_routed() {
-            expected="$1"
-            actual="$2"
-            name="$3"
-            case "$expected" in
-              true)
-                [[ "$actual" == success ]] || {
-                  echo "$name must succeed when routed; got $actual" >&2
-                  return 1
-                }
-                ;;
-              false)
-                [[ "$actual" == skipped ]] || {
-                  echo "$name must be skipped when not routed; got $actual" >&2
-                  return 1
-                }
-                ;;
+          require_boolean() {
+            value="$1"
+            name="$2"
+            case "$value" in
+              true|false) ;;
               *)
-                echo "$name route must be true or false; got ${expected:-<empty>}" >&2
+                echo "$name must be true or false; got ${value:-<empty>}" >&2
                 return 1
                 ;;
             esac
           }
+          require_routed() {
+            expected="$1"
+            actual="$2"
+            name="$3"
+            require_boolean "$expected" "$name route"
+            if [[ "$expected" == true ]]; then
+              [[ "$actual" == success ]] || {
+                echo "$name must succeed when routed; got $actual" >&2
+                return 1
+              }
+            else
+              [[ "$actual" == skipped ]] || {
+                echo "$name must be skipped when not routed; got $actual" >&2
+                return 1
+              }
+            fi
+          }
+          require_boolean "$RUN_DEEP" run_deep
+          require_boolean "$RUN_GOVERNANCE" run_governance
+          require_boolean "$RUN_OSV" run_osv
+          require_boolean "$RUN_ZIZMOR" run_zizmor
           case "$REVIEW_STATE" in
             draft|ready|not-applicable) ;;
             *)
