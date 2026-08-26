@@ -1214,6 +1214,41 @@ def check_run_matches_context(
     )
 
 
+def authoritative_check_runs(
+    check_runs: list[dict[str, Any]], head_sha: str
+) -> list[dict[str, Any]]:
+    """Keep the newest check for each strict GitHub App identity."""
+    candidate_runs = [
+        item for item in check_runs if item.get("head_sha") == head_sha
+    ]
+    identities: list[tuple[str, int, int]] = []
+    latest_ids: dict[tuple[str, int], int] = {}
+    for item in candidate_runs:
+        name = item.get("name")
+        check_id = item.get("id")
+        app = item.get("app")
+        app_id = app.get("id") if isinstance(app, dict) else None
+        if (
+            not isinstance(name, str)
+            or not name
+            or type(check_id) is not int
+            or check_id <= 0
+            or type(app_id) is not int
+            or app_id <= 0
+        ):
+            raise RuntimeError("Check run identity is malformed")
+        identity = (name, app_id)
+        identities.append((name, app_id, check_id))
+        latest_ids[identity] = max(latest_ids.get(identity, 0), check_id)
+    return [
+        item
+        for item, (name, app_id, check_id) in zip(
+            candidate_runs, identities, strict=True
+        )
+        if latest_ids[(name, app_id)] == check_id
+    ]
+
+
 def require_successful_checks(  # noqa: C901
     github: GitHub,
     repo: str,
@@ -1227,6 +1262,7 @@ def require_successful_checks(  # noqa: C901
         f"commits/{head_sha}/check-runs?filter=latest&per_page=100",
         "check_runs",
     )
+    authoritative_runs = authoritative_check_runs(check_runs, head_sha)
     statuses = github.collection(
         repo,
         f"commits/{head_sha}/status?per_page=100",
@@ -1235,7 +1271,7 @@ def require_successful_checks(  # noqa: C901
     )
     passing_runs = [
         item
-        for item in check_runs
+        for item in authoritative_runs
         if item.get("head_sha") == head_sha
         and item.get("status") == "completed"
         and item.get("conclusion") in SUCCESSFUL_CHECK_CONCLUSIONS
@@ -1257,14 +1293,13 @@ def require_successful_checks(  # noqa: C901
     missing.sort(key=lambda item: (item[0], -1 if item[1] is None else item[1]))
     if quota_run_urls:
         non_quota_failures: set[str] = set()
-        for item in check_runs:
-            if (
-                item.get("head_sha") != head_sha
-                or item.get("status") != "completed"
-                or item.get("conclusion") in SUCCESSFUL_CHECK_CONCLUSIONS
-            ):
-                continue
+        for item in authoritative_runs:
             name = str(item.get("name") or "unnamed check")
+            if item.get("status") != "completed":
+                non_quota_failures.add(name)
+                continue
+            if item.get("conclusion") in SUCCESSFUL_CHECK_CONCLUSIONS:
+                continue
             if item.get("conclusion") != "failure":
                 non_quota_failures.add(name)
                 continue
@@ -1293,7 +1328,7 @@ def require_successful_checks(  # noqa: C901
         for context, integration_id in missing:
             failed_runs = [
                 item
-                for item in check_runs
+                for item in authoritative_runs
                 if item.get("name") == context
                 and item.get("head_sha") == head_sha
                 and item.get("status") == "completed"
