@@ -20,7 +20,7 @@ Refs #N
 
 - [ ] 已依 CI plan 完成 scoped checks 並記錄指令與結果；PR assignee／label／Milestone 與 linked Issue 一致；work branch 已顯示於 Issue Development；恰選一個 change label（`fix`→`bug`、`docs`→`documentation`、其餘 type→`enhancement`）；未超出原 Issue 範圍
 - [ ] 若本 PR 是最終整合候選，integrator 已在不再變動的 tree 只執行一次 `./scripts/verify-template.sh`；否則標記 N/A
-- [ ] 已測試新專案產生並評估既有專案更新影響；第三方 Actions 固定完整 commit SHA
+- [ ] 若 CI plan 包含 generator/template scope，已測試新專案產生並評估既有專案更新影響；否則標記 N/A；任何變更的第三方 Actions 固定完整 commit SHA
 
 ## 補充
 

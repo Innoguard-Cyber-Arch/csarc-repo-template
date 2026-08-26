@@ -1395,16 +1395,36 @@ final = [
     and ("unchanged" in line or "不再變動" in line)
     and ("exactly once" in line or "只執行一次" in line)
 ]
+generation = [
+    line
+    for line in checkboxes
+    if ("new-project generation" in line or "新專案產生" in line)
+    and "CI plan" in line
+    and "generator/template" in line
+    and "N/A" in line
+]
+unconditional_generation = [
+    line
+    for line in checkboxes
+    if ("new-project generation" in line or "新專案產生" in line)
+    and line not in generation
+]
 legacy = [
     line
     for line in checkboxes
     if full_command in line
     and ("before Ready" in line or "轉 Ready 前" in line)
 ]
-if len(scoped) != 1 or len(final) != 1 or legacy:
+if (
+    len(scoped) != 1
+    or len(final) != 1
+    or len(generation) != 1
+    or unconditional_generation
+    or legacy
+):
     raise SystemExit(
         f"{template_path}: expected one scoped plan, one integrator-only final "
-        "check, and no per-PR Ready full check"
+        "check, one scope-conditional generation check, and no legacy check"
     )
 PY
 }
@@ -1431,6 +1451,65 @@ path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 if assert_pr_verification_contract "$legacy_pr_template" './scripts/verify'; then
   echo "PR verification contract accepted a per-PR Ready full check."
+  exit 1
+fi
+unconditional_generation_template="$fixture_root/unconditional-generation-template.md"
+cp template/.github/pull_request_template.md \
+  "$unconditional_generation_template"
+python3 - "$unconditional_generation_template" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+lines = [
+    "- [ ] New-project generation tested and existing-project updates considered"
+    if line.startswith("- [ ] If the CI plan includes generator/template scope")
+    else line
+    for line in text.splitlines()
+]
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+if assert_pr_verification_contract \
+  "$unconditional_generation_template" './scripts/verify'; then
+  echo "PR verification contract accepted unconditional generation testing."
+  exit 1
+fi
+
+assert_readme_verification_contract() {
+  python3 - "$1" <<'PY'
+from pathlib import Path
+import sys
+
+readme_path = Path(sys.argv[1])
+text = readme_path.read_text(encoding="utf-8")
+required = (
+    "CI plan 選出的 scoped checks",
+    "合併後只核對",
+    "SHA",
+    "tree",
+    "provenance identity",
+)
+forbidden = (
+    "執行 `./scripts/verify`；AI",
+    "合併後完整驗證",
+)
+if any(token not in text for token in required) or any(
+    token in text for token in forbidden
+):
+    raise SystemExit(
+        f"{readme_path}: expected scoped Issue checks and post-merge identity only"
+    )
+PY
+}
+
+assert_readme_verification_contract README.md
+assert_readme_verification_contract template/README.md.jinja
+legacy_readme="$fixture_root/legacy-post-merge-readme.md"
+cp template/README.md.jinja "$legacy_readme"
+printf '\n合併後完整驗證\n' >> "$legacy_readme"
+if assert_readme_verification_contract "$legacy_readme"; then
+  echo "README verification contract accepted a post-merge full rerun."
   exit 1
 fi
 grep -q '^  pull_request:$' .github/workflows/governance-comment.yml
@@ -2440,6 +2519,8 @@ grep -q 'linked Issue.*assignee.*Milestone' \
 assert_pr_verification_contract \
   "$fixture_root/default-project/.github/pull_request_template.md" \
   './scripts/verify'
+assert_readme_verification_contract \
+  "$fixture_root/default-project/README.md"
 grep -q 'referenced Issue checklist' \
   "$fixture_root/default-project/docs/index.html"
 test -f "$fixture_root/default-project/.github/workflows/issue-triage.yml"

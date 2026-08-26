@@ -83,7 +83,7 @@ flowchart LR
 
 公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。兩個入口都會用固定版本與已驗證 checksum 的 actionlint／ShellCheck 檢查 workflows 與 shell scripts；公版驗證另執行 Issue／PR 政策正反例，並注入不合法的 workflow、shell、Python／TypeScript 內容，確認各門禁真的會拒絕。Issue owner 跑 CI plan 選出的 scoped checks，其中 `verify-fast` 排除 `large`；integrator 只對不再變動的最終候選執行一次完整驗證。Cross-runtime job 只重跑 `runtime`，flaky 不自動 retry，`quarantine` 必須具備 owner、Issue、到期日與移除條件且仍會執行。Required `verify` aggregate 每次都結論，昂貴 routing 留在 job 層。觸發條件、風險升級、成本估算與實測方式見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
-Promotion 另由穩定的 `promotion` context 封裝候選 source 與 SHA/tree 證據；合併後只核對 `main` tree 與已成功的 `verify`，不重跑完整矩陣。未設定外部環境時明確保留 artifact-only 證據；要啟用 canary，須同時設定 repository variables `CSARC_CANARY_COMMAND`、`CSARC_CANARY_ENVIRONMENT`，敏感值則放在該 environment 的 `CSARC_CANARY_TOKEN` secret。完整三態與失敗邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
+Promotion 另由穩定的 `promotion` context 封裝候選 source 與 SHA/tree 證據；合併後只核對 `main` SHA、tree 與 provenance identity，不重跑完整矩陣。未設定外部環境時明確保留 artifact-only 證據；要啟用 canary，須同時設定 repository variables `CSARC_CANARY_COMMAND`、`CSARC_CANARY_ENVIRONMENT`，敏感值則放在該 environment 的 `CSARC_CANARY_TOKEN` secret。完整三態與失敗邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
 ### Actions 額度耗盡的一次性驗證
 

@@ -20,7 +20,7 @@ Refs #N
 
 - [ ] The CI plan's scoped checks pass with commands and results recorded; PR assignee/label/Milestone match the linked Issue; work branch appears in Issue Development; exactly one change label (`fix`→`bug`, `docs`→`documentation`, other types→`enhancement`); stays within the Issue
 - [ ] If this PR is the final integration candidate, the integrator ran `./scripts/verify` exactly once on the unchanged tree; otherwise marked N/A
-- [ ] New-project generation tested and existing-project updates considered; lockfile changes reviewed; third-party Actions pinned to full commit SHAs
+- [ ] If the CI plan includes generator/template scope, new-project generation is tested and existing-project updates are considered; otherwise marked N/A; changed lockfiles are reviewed and third-party Actions are pinned to full commit SHAs
 
 ## 補充
 
