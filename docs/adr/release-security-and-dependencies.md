@@ -12,10 +12,11 @@ Release automation 會跨越 Git history、GitHub workflow permissions、immutab
 ## 決定
 
 - 精確版本只在 merge／promotion 後由 default-branch history 配置；tag 必須指到已包含該版本與 CHANGELOG 的 source commit。
-- GitHub Release 是 portable durable evidence：保存 distribution、checksum、非空 SBOM、source metadata，並在能力允許時加 attestation。
+- GitHub Release 是 portable durable evidence：保存 distribution、checksum、精確綁定 tag、commit 與 artifact digest 的非空 SPDX 2.3 SBOM、source metadata，並在能力允許時加 attestation。發布前後都要下載並重驗同一組成品；缺一項就維持 draft。
 - Release consumer 與 registry publisher 驗 repository、tag、source digest、artifact digest 與 signer workflow identity。
 - PyPI／npm publishing 只供生成專案按語言 opt-in；沒有 package owner、license 或 trusted publisher 時不宣稱已啟用。Root CLI 沒有 PyPI 發布需求，只隨 GitHub Release 交付，release prompt 以 exact commit 從 canonical repository 執行。
 - 容器交付只為已有產品 Containerfile 的既有 repo 選配。`verify` 模式僅在 PR build、啟動與掃描；`ghcr` 模式才從已驗證 release source 建置一次、保存相同 image bytes，發布 GHCR 後附加 provenance／SBOM 並以 digest 重跑 smoke test。非容器 repo 不產生 job 或 registry write permission。
+- 已合併版本缺少 Release 時，只允許 `fix/<Issue>-*`、`fix` title 與 `release-recovery` label 的受審查 direct-main 修復；它仍需完整 promotion gate 與 merge 後 identity，不能使用 release-ineligible 的 Actions 額度 fallback。
 - Dependabot 保留為能觸發既有 checks 的 native update identity；pnpm 等待與 publisher trust、OSV、Gitleaks、CodeQL 各負責不同風險。
 
 ## 歷史 disposition

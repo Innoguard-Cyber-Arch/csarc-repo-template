@@ -18,7 +18,7 @@ on:
 
 concurrency:
   group: {% raw %}${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}{% endraw %}
-  cancel-in-progress: {% raw %}${{ github.event_name == 'pull_request' && !startsWith(github.event.pull_request.head.ref, 'dev') && !startsWith(github.event.pull_request.head.ref, 'release-please--') && !contains(github.event.pull_request.labels.*.name, 'promotion') && !contains(github.event.pull_request.labels.*.name, 'hotfix') }}{% endraw %}
+  cancel-in-progress: {% raw %}${{ github.event_name == 'pull_request' && !startsWith(github.event.pull_request.head.ref, 'dev') && !startsWith(github.event.pull_request.head.ref, 'release-please--') && !contains(github.event.pull_request.labels.*.name, 'promotion') && !contains(github.event.pull_request.labels.*.name, 'hotfix') && !contains(github.event.pull_request.labels.*.name, 'release-recovery') }}{% endraw %}
 
 permissions:
   actions: read

@@ -501,6 +501,15 @@ matrix:
   language: ["python", "javascript-typescript"]`
         },
         {
+          title: '缺失版本用受審查的 release recovery 補齊',
+          goal: '已合併但沒有 Release 的版本不繞過主線門禁，也不重跑或偽造舊證據。',
+          summary: '同號 `fix/*`、`fix` title 與 `release-recovery` label 才能直接進 main；候選仍跑 full 與 promotion。Root 發布先產生精確綁定 tag、commit、artifact digest 的 SPDX 2.3 SBOM、manifest 與 provenance，下載重驗成功後才解除 draft，發布後再驗 immutable state 與 attestation。',
+          file: '.github/workflows/release-template.yml＋scripts/release_assets.py',
+          code: `release-recovery -> full verify + promotion
+draft assets -> SPDX + manifest + provenance
+download + verify -> publish immutable -> verify again`
+        },
+        {
           title: 'exact tag 發布時建立交付成品、SHA-256 與 SPDX SBOM',
           goal: 'anchore/sbom-action 以固定 Syft 版本盤點內容；manifest 將成品、SBOM 與來源身分綁定。',
           summary: '依 profile 打包並計算 SHA-256；Python／TypeScript 先建立不含開發工具的隔離 runtime，CI-only 則使用 exact-tag source，再由 Syft v1.50.0 產生 SPDX JSON。成品先上傳 mutable draft、下載至全新空目錄驗證，發布後再從 immutable Release 全新下載驗證；再現性依 digest／manifest，不要求 Syft JSON byte-identical。Copier 的 `project_visibility` 選 public 時，`enable_release_attestations` 預設開啟，並使用專用的 build provenance 與 SBOM attestation actions；private／internal 維持明確 opt-in、預設關閉。',

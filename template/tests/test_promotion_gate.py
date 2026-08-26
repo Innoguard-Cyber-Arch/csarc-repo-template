@@ -50,6 +50,20 @@ if _GIT is None:
 GIT: str = _GIT
 
 
+def test_release_recovery_routes_to_preflight_and_gate() -> None:
+    """The required gate must conclude whenever its preflight runs."""
+    workflow = (
+        Path(__file__).parents[1] / ".github/workflows/promotion.yml"
+    ).read_text(encoding="utf-8")
+    marker = (
+        "contains(github.event.pull_request.labels.*.name, 'release-recovery')"
+    )
+    preflight = workflow.split("  preflight:", 1)[1].split("\n  canary:", 1)[0]
+    gate = workflow.split("\n  gate:", 1)[1]
+    assert marker in preflight
+    assert marker in gate
+
+
 def preservation_evidence() -> dict[str, object]:
     """Return one structured remote checkpoint for quota fallback tests."""
     return {
@@ -128,6 +142,22 @@ def test_hosted_restoration_is_explicit_and_never_replaces_gh_token(
         ),
         ("main", "fix/42-outage", {"hotfix"}, "delivery", "hotfix", None),
         (
+            "main",
+            "fix/321-recover-v012-release",
+            {"release-recovery"},
+            "delivery",
+            "release-recovery",
+            None,
+        ),
+        (
+            "main",
+            "fix/321-recover-v012-release",
+            {"release-recovery"},
+            "main",
+            "release-recovery",
+            None,
+        ),
+        (
             "dev/m7-staged-ci",
             "feat/42-work",
             set(),
@@ -144,6 +174,22 @@ def test_hosted_restoration_is_explicit_and_never_replaces_gh_token(
             None,
         ),
         ("main", "feat/42-work", set(), "delivery", "invalid-main-route", None),
+        (
+            "main",
+            "feat/321-recover-v012-release",
+            {"release-recovery"},
+            "delivery",
+            "invalid-main-route",
+            None,
+        ),
+        (
+            "main",
+            "fix/321-recover-v012-release",
+            {"hotfix", "release-recovery"},
+            "delivery",
+            "invalid-main-route",
+            None,
+        ),
         (
             "main",
             "promote/next",
@@ -175,6 +221,19 @@ def test_isolated_issue_route_binds_the_issue_number() -> None:
     route = route_for("main", "dev/i42-payment-soak", {"promotion"}, "delivery")
     assert route.kind == "isolated"
     assert route.issue == 42
+    assert route.relevant
+
+
+def test_release_recovery_route_binds_the_issue_number() -> None:
+    """A recovery exception cannot be reused for another tracking Issue."""
+    route = route_for(
+        "main",
+        "fix/321-recover-v012-release",
+        {"release-recovery"},
+        "delivery",
+    )
+    assert route.kind == "release-recovery"
+    assert route.issue == 321
     assert route.relevant
 
 
