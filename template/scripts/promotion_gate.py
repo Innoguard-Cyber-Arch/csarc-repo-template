@@ -32,6 +32,7 @@ UNCHECKED = re.compile(r"(?m)^\s*-\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(r"(?:Closes|Fixes|Resolves)\s+#(\d+)(?:\D|$)", re.I)
 MILESTONE_BRANCH = re.compile(r"^dev/m(\d+)-[a-z0-9][a-z0-9-]*$")
 PROMOTION_BRIDGE = re.compile(r"^promote/m(\d+)-([a-z0-9][a-z0-9-]*)$")
+STANDALONE_PROMOTION_BRIDGE = "promote/next"
 ISOLATED_BRANCH = re.compile(r"^dev/i(\d+)-[a-z0-9][a-z0-9-]*$")
 CONVENTIONAL_TITLE = re.compile(
     r"^(feat|fix|docs|refactor|test|build|ci|chore|revert)"
@@ -49,6 +50,64 @@ BILLING_GATE_ANNOTATION_MESSAGE = (
     "plans' section in your settings"
 )
 PREFLIGHT_REFETCH = "promotion preflight live refetch"
+
+
+def run_dev_next_preservation(
+    action: str,
+    repo: str,
+    pr_number: int,
+    head_sha: str,
+    main_sha: str = "",
+    operation_id: str = "",
+    prepared_ledger_commit: str = "",
+) -> dict[str, Any]:
+    """Run the shared dev/next lifecycle guard with fixed arguments."""
+    command = [
+        sys.executable,
+        str(Path(__file__).with_name("delivery_sync.py")),
+        action,
+        "--repo",
+        repo,
+        "--pr-number",
+        str(pr_number),
+        "--head-sha",
+        head_sha,
+    ]
+    if main_sha:
+        command.extend(("--main-sha", main_sha))
+    if operation_id:
+        command.extend(("--operation-id", operation_id))
+    if prepared_ledger_commit:
+        command.extend(("--prepared-ledger-commit", prepared_ledger_commit))
+    environment = os.environ.copy()
+    if (
+        action in {"complete-dev-next", "abort-dev-next"}
+        and environment.get("GITHUB_ACTIONS") == "true"
+    ):
+        command.append("--hosted")
+    completed = subprocess.run(  # noqa: S603
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    result = completed.stdout.strip()
+    if not result:
+        raise RuntimeError("dev/next preservation returned no evidence")
+    try:
+        evidence = json.loads(result)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(
+            "dev/next preservation returned invalid evidence"
+        ) from error
+    if (
+        not isinstance(evidence, dict)
+        or not isinstance(evidence.get("ledger_commit"), str)
+        or not isinstance(evidence.get("transaction"), dict)
+    ):
+        raise RuntimeError("dev/next preservation returned invalid evidence")
+    return evidence
 
 
 class RejectRedirects(urllib.request.HTTPRedirectHandler):
@@ -119,7 +178,7 @@ class GitHubCLIAPI:
         return 200, github_get(self.repo, path.removeprefix(prefix), "")
 
 
-def route_for(
+def route_for(  # noqa: C901
     base: str, head: str, labels: set[str], branch_strategy: str = "delivery"
 ) -> Route:
     """Classify a pull request without accepting arbitrary main PRs."""
@@ -141,6 +200,8 @@ def route_for(
     bridge = PROMOTION_BRIDGE.fullmatch(head)
     if bridge and "promotion" in labels:
         return Route("milestone", True, int(bridge.group(1)))
+    if head == STANDALONE_PROMOTION_BRIDGE and "promotion" in labels:
+        return Route("standalone-batch", True)
     isolated = ISOLATED_BRANCH.fullmatch(head)
     if isolated and "promotion" in labels:
         return Route("isolated", True, issue=int(isolated.group(1)))
@@ -286,8 +347,11 @@ def included_pull_requests(  # noqa: C901
                     "intent": release_intent(title),
                 }
             if bridge_head_sha is not None and not matched:
+                scope = (
+                    "same-Milestone" if milestone is not None else "eligible"
+                )
                 raise RuntimeError(
-                    f"Bridge commit {sha} has no same-Milestone merged PR"
+                    f"Bridge commit {sha} has no {scope} merged PR"
                 )
         if len(commits) < 100:
             break
@@ -462,11 +526,22 @@ def promotion_bridge_source(
 ) -> dict[str, str] | None:
     """Verify a temporary bridge made only from source delivery and main."""
     match = PROMOTION_BRIDGE.fullmatch(branch)
-    if match is None:
+    if match is None and branch != STANDALONE_PROMOTION_BRIDGE:
         return None
-    if milestone is None or int(match.group(1)) != milestone:
-        raise RuntimeError("Promotion bridge and Issue Milestones differ")
-    source_ref = f"dev/m{match.group(1)}-{match.group(2)}"
+    if branch == STANDALONE_PROMOTION_BRIDGE:
+        if milestone is not None:
+            raise RuntimeError(
+                "Standalone promotion bridge cannot use a Milestone"
+            )
+        source_ref = "dev/next"
+    else:
+        if (
+            match is None
+            or milestone is None
+            or int(match.group(1)) != milestone
+        ):
+            raise RuntimeError("Promotion bridge and Issue Milestones differ")
+        source_ref = f"dev/m{match.group(1)}-{match.group(2)}"
     source = github_get(
         repo,
         f"git/ref/heads/{urllib.parse.quote(source_ref, safe='')}",
@@ -508,62 +583,6 @@ def contains_commit(ancestor: str, descendant: str) -> bool:
         ).returncode
         == 0
     )
-
-
-def require_current_main_evidence(evidence: dict[str, Any], token: str) -> None:
-    """Revalidate direct, reviewed-sync, and bridge evidence against main."""
-    repo = str(evidence["repository"])
-    current_main = github_get(repo, "git/ref/heads/main", token)
-    main_object = (
-        current_main.get("object") if isinstance(current_main, dict) else None
-    )
-    current_main_sha = (
-        main_object.get("sha") if isinstance(main_object, dict) else None
-    )
-    route = evidence.get("route") or {}
-    head_ref = evidence.get("head_ref")
-    bridge = (
-        promotion_bridge_source(
-            repo,
-            head_ref,
-            str(evidence["base_sha"]),
-            str(evidence["head_sha"]),
-            str(evidence["candidate_sha"]),
-            route.get("milestone")
-            if isinstance(route.get("milestone"), int)
-            else None,
-            token,
-        )
-        if isinstance(head_ref, str)
-        else None
-    )
-    if evidence.get("promotion_bridge") != bridge:
-        raise RuntimeError("Promotion bridge evidence changed after preflight")
-    delivery_branch = (
-        str(bridge["source_ref"])
-        if bridge is not None
-        else head_ref
-        if isinstance(head_ref, str)
-        and route.get("kind")
-        in {"milestone", "standalone-batch", "isolated", "dev-promotion"}
-        else None
-    )
-    if (
-        not isinstance(current_main_sha, str)
-        or promotion_main_evidence(
-            promotion_api(repo, token),
-            repo,
-            current_main_sha,
-            str(evidence["base_sha"]),
-            delivery_branch,
-            str(evidence["head_sha"]),
-            contains_commit(
-                str(evidence["base_sha"]), str(evidence["head_sha"])
-            ),
-        )
-        is None
-    ):
-        raise RuntimeError("Promotion base or ancestry changed after preflight")
 
 
 def sha256(path: Path) -> str:
@@ -709,7 +728,7 @@ def fallback_statement(
     kind: str, evidence: dict[str, Any], run_urls: list[str]
 ) -> str:
     """Bind a human statement to one exact promotion candidate."""
-    fields = preflight_binding(evidence)
+    fields = preflight_binding(evidence, include_preservation=True)
     fields["runs"] = sorted(run_urls)
     binding = json.dumps(
         fields,
@@ -762,10 +781,12 @@ def quota_fallback_note(
     return f"Actions quota fallback note\n\n`{binding}`\n\n{statement}"
 
 
-def preflight_binding(evidence: dict[str, Any]) -> dict[str, object]:
+def preflight_binding(
+    evidence: dict[str, Any], *, include_preservation: bool = False
+) -> dict[str, object]:
     """Return every security-relevant field from preflight evidence."""
     archive = evidence.get("candidate_archive") or {}
-    return {
+    binding: dict[str, object] = {
         "schema_version": evidence.get("schema_version"),
         "repository": evidence.get("repository"),
         "route": evidence.get("route"),
@@ -777,6 +798,8 @@ def preflight_binding(evidence: dict[str, Any]) -> dict[str, object]:
         "base_sha": evidence.get("base_sha"),
         "head_ref": evidence.get("head_ref"),
         "head_sha": evidence.get("head_sha"),
+        "main_sync": evidence.get("main_sync"),
+        "promotion_bridge": evidence.get("promotion_bridge"),
         "candidate_sha": evidence.get("candidate_sha"),
         "candidate_tree": evidence.get("candidate_tree"),
         "archive_sha256": archive.get("sha256"),
@@ -784,6 +807,9 @@ def preflight_binding(evidence: dict[str, Any]) -> dict[str, object]:
         "release": evidence.get("release"),
         "canary": evidence.get("canary"),
     }
+    if include_preservation:
+        binding["dev_next_preservation"] = evidence.get("dev_next_preservation")
+    return binding
 
 
 def require_same_preflight(
@@ -1020,12 +1046,15 @@ def rebuild_quota_preflight(
 
 
 def validate_quota_preflight(  # noqa: C901
-    evidence: dict[str, Any], args: argparse.Namespace, token: str
+    evidence: dict[str, Any],
+    args: argparse.Namespace,
+    token: str,
+    *,
+    validate_comments: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Refetch every mutable input for one exact quota fallback."""
     repo = str(evidence["repository"])
     pr_number = int(evidence["pull_request"])
-    require_current_main_evidence(evidence, token)
     repository = github_get(repo, "", token)
     pull = github_get(repo, f"pulls/{pr_number}", token)
     base = pull.get("base") if isinstance(pull, dict) else None
@@ -1061,13 +1090,40 @@ def validate_quota_preflight(  # noqa: C901
     main_object = (
         current_main.get("object") if isinstance(current_main, dict) else None
     )
+    current_main_sha = (
+        main_object.get("sha") if isinstance(main_object, dict) else None
+    )
     commit = github_get(repo, f"git/commits/{head['sha']}", token)
     tree = commit.get("tree") if isinstance(commit, dict) else None
+    stored_bridge = evidence.get("promotion_bridge")
+    delivery_branch = (
+        str(stored_bridge["source_ref"])
+        if isinstance(stored_bridge, dict)
+        and isinstance(stored_bridge.get("source_ref"), str)
+        else str(head["ref"])
+        if route.get("kind")
+        in {"milestone", "standalone-batch", "isolated", "dev-promotion"}
+        else None
+    )
+    main_evidence = (
+        promotion_main_evidence(
+            promotion_api(repo, token),
+            repo,
+            current_main_sha,
+            str(base["sha"]),
+            delivery_branch,
+            str(head["sha"]),
+            contains_commit(str(base["sha"]), str(head["sha"])),
+        )
+        if isinstance(current_main_sha, str)
+        else None
+    )
     if (
-        not isinstance(main_object, dict)
-        or main_object.get("sha") != evidence.get("base_sha")
+        current_main_sha != evidence.get("base_sha")
         or not isinstance(tree, dict)
         or tree.get("sha") != evidence.get("candidate_tree")
+        or main_evidence is None
+        or evidence.get("main_sync") != main_evidence
         or git_output("status", "--porcelain")
         or git_output("rev-parse", "HEAD") != head["sha"]
         or git_output("rev-parse", "HEAD^{tree}")
@@ -1182,6 +1238,8 @@ def validate_quota_preflight(  # noqa: C901
         raise RuntimeError(
             "Required CI and promotion runs are not both blocked"
         )
+    if not validate_comments:
+        return {}, {}
     attestation = require_comment_url(
         args.attestation_url,
         repo,
@@ -1381,7 +1439,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     args.repo,
                     base_sha,
                     head_sha,
-                    head,
+                    str(bridge["source_ref"]) if bridge is not None else head,
                     token,
                     route.milestone if bridge is not None else None,
                     head_sha if bridge is not None else None,
@@ -1452,6 +1510,13 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 "workflow_run": args.workflow_run,
                 "created_at": datetime.now(UTC).isoformat(),
             }
+            if route.kind == "standalone-batch":
+                evidence["dev_next_preservation"] = run_dev_next_preservation(
+                    "inspect-dev-next",
+                    args.repo,
+                    int(pull_request["number"]),
+                    str(head_sha),
+                )
     write_evidence(args.output, evidence)
     write_outputs(
         args.github_output,
@@ -1613,7 +1678,7 @@ def note_quota_fallback(args: argparse.Namespace) -> None:  # noqa: C901
     )
 
 
-def finalize_quota_fallback(args: argparse.Namespace) -> None:
+def finalize_quota_fallback(args: argparse.Namespace) -> None:  # noqa: C901
     """Record a non-release promotion gate from exact local evidence."""
     require_distinct_paths(args.input, args.output, args.archive)
     evidence = json.loads(args.input.read_text(encoding="utf-8"))
@@ -1646,7 +1711,59 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:
     if git_output("rev-parse", "HEAD") != evidence["head_sha"]:
         raise RuntimeError("Worktree HEAD must equal the pull request head")
 
-    require_current_main_evidence(evidence, os.environ.get("GH_TOKEN", ""))
+    repo = str(evidence["repository"])
+    token = os.environ.get("GH_TOKEN", "")
+    current_main = github_get(repo, "git/ref/heads/main", token)
+    main_object = (
+        current_main.get("object") if isinstance(current_main, dict) else None
+    )
+    current_main_sha = (
+        main_object.get("sha") if isinstance(main_object, dict) else None
+    )
+    route_kind = (evidence.get("route") or {}).get("kind")
+    route_milestone = (evidence.get("route") or {}).get("milestone")
+    head_ref = evidence.get("head_ref")
+    bridge = (
+        promotion_bridge_source(
+            repo,
+            head_ref,
+            str(evidence["base_sha"]),
+            str(evidence["head_sha"]),
+            str(evidence["candidate_sha"]),
+            route_milestone if isinstance(route_milestone, int) else None,
+            token,
+        )
+        if isinstance(head_ref, str)
+        else None
+    )
+    if evidence.get("promotion_bridge") != bridge:
+        raise RuntimeError("Promotion bridge evidence changed after preflight")
+    delivery_branch = (
+        str(bridge["source_ref"])
+        if bridge is not None
+        else head_ref
+        if isinstance(head_ref, str)
+        and route_kind
+        in {"milestone", "standalone-batch", "isolated", "dev-promotion"}
+        else None
+    )
+    live_main_evidence = (
+        promotion_main_evidence(
+            promotion_api(repo, token),
+            repo,
+            current_main_sha,
+            str(evidence["base_sha"]),
+            delivery_branch,
+            str(evidence["head_sha"]),
+            contains_commit(
+                str(evidence["base_sha"]), str(evidence["head_sha"])
+            ),
+        )
+        if isinstance(current_main_sha, str)
+        else None
+    )
+    if live_main_evidence is None:
+        raise RuntimeError("Promotion base or ancestry changed after preflight")
     if args.attestation_url == args.authorization_url:
         raise RuntimeError(
             "Attestation and authorization must be separate comments"
@@ -1654,6 +1771,19 @@ def finalize_quota_fallback(args: argparse.Namespace) -> None:
     if not args.blocked_run_url:
         raise RuntimeError("At least one blocked Actions run is required")
     token = os.environ.get("GH_TOKEN", "")
+    validate_quota_preflight(evidence, args, token, validate_comments=False)
+    preservation: dict[str, Any] | None = None
+    if (evidence.get("route") or {}).get("kind") == "standalone-batch":
+        preservation = evidence.get("dev_next_preservation")
+        live_preservation = run_dev_next_preservation(
+            "inspect-dev-next",
+            str(evidence["repository"]),
+            int(evidence["pull_request"]),
+            str(evidence["head_sha"]),
+        )
+        if preservation != live_preservation:
+            raise RuntimeError("dev/next preservation evidence changed")
+
     attestation, authorization = validate_quota_preflight(evidence, args, token)
     verification_command = local_verification_command()
     subprocess.run(verification_command, check=True)  # noqa: S603
@@ -1708,6 +1838,37 @@ def verify_main(args: argparse.Namespace) -> None:
         if isinstance(item, dict)
     ):
         raise RuntimeError("Candidate has no successful verify check")
+    if (
+        evidence.get("head_ref")
+        in {
+            "dev/next",
+            STANDALONE_PROMOTION_BRIDGE,
+        }
+        or (evidence.get("route") or {}).get("kind") == "standalone-batch"
+    ):
+        preservation = evidence.get("dev_next_preservation")
+        if not isinstance(preservation, dict):
+            raise RuntimeError("dev/next preservation evidence is missing")
+        transaction = preservation.get("transaction")
+        prepared_commit = preservation.get("ledger_commit")
+        operation_id = (
+            transaction.get("operation_id")
+            if isinstance(transaction, dict)
+            else None
+        )
+        if not isinstance(operation_id, str) or not isinstance(
+            prepared_commit, str
+        ):
+            raise RuntimeError("dev/next preservation evidence is invalid")
+        preservation["completion"] = run_dev_next_preservation(
+            "complete-dev-next",
+            args.repo,
+            args.pr_number,
+            args.head_sha,
+            args.main_sha,
+            operation_id,
+            prepared_commit,
+        )
     evidence["post_merge"] = {
         "main_sha": args.main_sha,
         "main_tree": current_tree,
@@ -1737,6 +1898,22 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
     for field, value in expected.items():
         if evidence.get(field) != value:
             raise RuntimeError(f"Fallback evidence {field} does not match main")
+    needs_preservation = (
+        evidence.get("head_ref")
+        in {
+            "dev/next",
+            STANDALONE_PROMOTION_BRIDGE,
+        }
+        or (evidence.get("route") or {}).get("kind") == "standalone-batch"
+    )
+    preservation = evidence.get("dev_next_preservation")
+    if needs_preservation and (
+        (evidence.get("route") or {}).get("kind") != "standalone-batch"
+        or not isinstance(preservation, dict)
+        or not isinstance(preservation.get("ledger_commit"), str)
+        or not isinstance(preservation.get("transaction"), dict)
+    ):
+        raise RuntimeError("dev/next was not prepared for quota fallback")
     token = os.environ.get("GH_TOKEN", "")
     repository = github_get(args.repo, "", token)
     current_main = github_get(args.repo, "git/ref/heads/main", token)
@@ -1849,6 +2026,25 @@ def verify_quota_main(args: argparse.Namespace) -> None:  # noqa: C901
     if current_tree != evidence.get("candidate_tree"):
         raise RuntimeError(
             "Merged main tree differs from the verified candidate tree"
+        )
+    if needs_preservation and isinstance(preservation, dict):
+        transaction = preservation.get("transaction")
+        if not isinstance(transaction, dict):
+            raise RuntimeError("dev/next preservation transaction is invalid")
+        operation_id = transaction.get("operation_id")
+        prepared_commit = preservation.get("ledger_commit")
+        if not isinstance(operation_id, str) or not isinstance(
+            prepared_commit, str
+        ):
+            raise RuntimeError("dev/next preservation transaction is invalid")
+        preservation["completion"] = run_dev_next_preservation(
+            "complete-dev-next",
+            args.repo,
+            args.pr_number,
+            args.head_sha,
+            main_sha,
+            operation_id,
+            prepared_commit,
         )
     evidence["post_merge"] = {
         "main_sha": main_sha,
