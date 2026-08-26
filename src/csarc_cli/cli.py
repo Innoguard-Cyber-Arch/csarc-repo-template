@@ -37,6 +37,9 @@ PENDING_ADOPTION_FILE = Path(".csarc/adoption-pending.json")
 ADOPTION_REPORT_BASENAME = "csarc-adoption-dry-run"
 ADOPTION_PLAN_BASENAME = "csarc-adoption-plan.json"
 LIFECYCLE_PLAN_BASENAME = "csarc-{mode}-plan.json"
+UPDATE_CURRENT_MESSAGE = (
+    "Update status: current (update_available=false); no changes to apply."
+)
 AGENTS_BLOCK_START = "<!-- BEGIN CSARC MANAGED BLOCK -->"
 AGENTS_BLOCK_END = "<!-- END CSARC MANAGED BLOCK -->"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
@@ -1579,6 +1582,7 @@ def transaction_binding(payload: dict[str, object]) -> dict[str, object]:
                     "current_sha",
                     "current_verification",
                     "current_version",
+                    "rendered_changed",
                     "source",
                     "status",
                     "target_sha",
@@ -2354,23 +2358,24 @@ def clone_working_tree(target: Path, candidate: Path) -> None:
     copy_candidate_files(
         target, candidate, tuple(path for path in untracked if path)
     )
-    run(["git", "-C", str(candidate), "add", "--all"])
-    run(
-        [
-            "git",
-            "-C",
-            str(candidate),
-            "-c",
-            "user.name=CSARC",
-            "-c",
-            "user.email=csarc@example.invalid",
-            "commit",
-            "--quiet",
-            "--no-gpg-sign",
-            "-m",
-            "chore: stage pending adoption",
-        ]
-    )
+    if difference.stdout or any(untracked):
+        run(["git", "-C", str(candidate), "add", "--all"])
+        run(
+            [
+                "git",
+                "-C",
+                str(candidate),
+                "-c",
+                "user.name=CSARC",
+                "-c",
+                "user.email=csarc@example.invalid",
+                "commit",
+                "--quiet",
+                "--no-gpg-sign",
+                "-m",
+                "chore: stage pending adoption",
+            ]
+        )
 
 
 def prepare_adoption_candidate(
@@ -2616,15 +2621,23 @@ def create_adoption_lockfiles(target: Path, answers: dict[str, object]) -> None:
 
 def verify_project(target: Path) -> None:
     """Run the generated project's canonical verification command."""
-    verify = target / "scripts" / "verify"
-    if not verify.is_file():
-        raise CliError("Generated project is missing ./scripts/verify.")
+    verify = validate_project_verification(target)
     result = run([str(verify)], cwd=target, check=False)
     if result.returncode != 0:
         raise CliError(
             "Project verification failed; generated differences were preserved "
             "for review."
         )
+
+
+def validate_project_verification(target: Path) -> Path:
+    """Validate the project verification hook without executing it."""
+    verify = target / "scripts" / "verify"
+    if not verify.is_file():
+        raise CliError("Generated project is missing ./scripts/verify.")
+    if not os.access(verify, os.X_OK):
+        raise CliError("Generated project ./scripts/verify is not executable.")
+    return verify
 
 
 def settings_plan(target: Path) -> None:
@@ -4115,9 +4128,16 @@ def prepare_update_candidate(
     previous: dict[str, object] | None,
     update_data: Mapping[str, str],
     generated_at: str,
+    *,
+    execute_verification: bool,
+    include_working_tree: bool,
+    verification_required: bool,
 ) -> tuple[Plan, dict[str, str], tuple[str, ...], str]:
     """Run and verify a complete Copier update outside the target repo."""
-    clone_target(target, candidate)
+    if include_working_tree:
+        clone_working_tree(target, candidate)
+    else:
+        clone_target(target, candidate)
     candidate = candidate.resolve()
     copier_data = [
         part
@@ -4154,18 +4174,45 @@ def prepare_update_candidate(
         verification = f"failed: update conflict ({detail})"
     else:
         pin_answer_commit(candidate, target_revision.sha)
-        write_provenance(
-            candidate,
-            target_revision,
-            previous,
-            applied_at=generated_at,
+        initial_deleted = deleted_candidate_paths(candidate)
+        initial_plan = compare_stage(candidate, target, adopt=False)
+        initial_plan = Plan(
+            initial_plan.add,
+            initial_plan.overwrite,
+            tuple(
+                path
+                for path in initial_plan.preserve
+                if path not in initial_deleted
+            ),
+            initial_plan.merge,
+            initial_plan.manual,
+            initial_plan.unknown,
+            initial_deleted,
         )
+        initial_effects, initial_artifacts = candidate_effects(
+            candidate, target, initial_plan
+        )
+        has_effects = bool(initial_artifacts or initial_effects.delete)
+        if has_effects:
+            write_provenance(
+                candidate,
+                target_revision,
+                previous,
+                applied_at=generated_at,
+            )
         try:
-            verify_project(candidate)
+            if execute_verification and (verification_required or has_effects):
+                verify_project(candidate)
+                verification = "passed"
+            else:
+                validate_project_verification(candidate)
+                verification = (
+                    "configured"
+                    if not execute_verification
+                    else "not-run-current"
+                )
         except CliError as error:
             verification = f"failed: {error}"
-        else:
-            verification = "passed"
     deleted = deleted_candidate_paths(candidate)
     planned = compare_stage(candidate, target, adopt=False)
     planned = Plan(
@@ -4177,7 +4224,7 @@ def prepare_update_candidate(
         planned.unknown,
         deleted,
     )
-    if verification == "passed":
+    if not verification.startswith("failed:"):
         effects, artifacts = candidate_effects(candidate, target, planned)
     else:
         effects, artifacts = planned, {}
@@ -4198,7 +4245,10 @@ def build_update_transaction_plan(
     generated_at: str,
     *,
     accept_legacy: bool,
+    execute_verification: bool,
     from_release: str | None,
+    include_working_tree: bool,
+    verification_required: bool,
 ) -> ResolvedPlan:
     """Build one verified update plan without changing the target repo."""
     snapshot = repository_snapshot(target)
@@ -4209,10 +4259,13 @@ def build_update_transaction_plan(
         previous,
         update_data,
         generated_at,
+        execute_verification=execute_verification,
+        include_working_tree=include_working_tree,
+        verification_required=verification_required,
     )
     transaction = {
         "accept_legacy": accept_legacy,
-        "applicable": verification == "passed",
+        "applicable": verification == "passed" and bool(artifacts or deleted),
         "artifacts": artifacts,
         "deleted_paths": list(deleted),
         "from_release": from_release,
@@ -4231,6 +4284,36 @@ def build_update_transaction_plan(
         files=files,
         update=status,
         transaction=transaction,
+    )
+
+
+def finalize_update_status(
+    status: dict[str, object],
+    files: Plan,
+    *,
+    answers_changed: bool,
+    capabilities_changed: bool,
+) -> None:
+    """Bind update availability to the exact external candidate effects."""
+    rendered_changed = bool(
+        files.add
+        or files.overwrite
+        or files.merge
+        or files.manual
+        or files.unknown
+        or files.delete
+    )
+    update_available = bool(status["update_available"]) or any(
+        (answers_changed, capabilities_changed, rendered_changed)
+    )
+    status.update(
+        {
+            "answers_changed": answers_changed,
+            "capabilities_changed": capabilities_changed,
+            "rendered_changed": rendered_changed,
+            "status": "outdated" if update_available else "current",
+            "update_available": update_available,
+        }
     )
 
 
@@ -4335,16 +4418,8 @@ def command_apply_update_plan(  # noqa: C901
         target_capabilities.pop("observed_at", None)
         answers_changed = answers != saved_answers
         capabilities_changed = target_capabilities != current_capabilities
-        update_available = bool(status["update_available"]) or any(
+        verification_required = bool(status["update_available"]) or any(
             (answers_changed, capabilities_changed)
-        )
-        status.update(
-            {
-                "answers_changed": answers_changed,
-                "capabilities_changed": capabilities_changed,
-                "status": "outdated" if update_available else "current",
-                "update_available": update_available,
-            }
         )
         candidate = temporary_root / "candidate"
         fresh = build_update_transaction_plan(
@@ -4360,7 +4435,18 @@ def command_apply_update_plan(  # noqa: C901
             requested_data,
             generated_at,
             accept_legacy=accept_legacy,
+            execute_verification=True,
             from_release=from_release,
+            include_working_tree=False,
+            verification_required=verification_required,
+        )
+        if fresh.files is None:
+            raise CliError("Update plan has no candidate file effects.")
+        finalize_update_status(
+            status,
+            fresh.files,
+            answers_changed=answers_changed,
+            capabilities_changed=capabilities_changed,
         )
         saved_binding = transaction_binding(saved)
         fresh_binding = transaction_binding(machine_plan_payload(fresh))
@@ -4404,7 +4490,7 @@ def command_apply_update_plan(  # noqa: C901
     return 0
 
 
-def command_update(args: argparse.Namespace) -> int:
+def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     """Check or plan a Copier smart update."""
     target = resolve_repository_target(args.path)
     if (target / PENDING_ADOPTION_FILE).is_file():
@@ -4468,38 +4554,11 @@ def command_update(args: argparse.Namespace) -> int:
     target_capabilities.pop("observed_at", None)
     answers_changed = answers != saved_answers
     capabilities_changed = target_capabilities != current_capabilities
-    update_available = bool(status["update_available"]) or any(
+    verification_required = bool(status["update_available"]) or any(
         (answers_changed, capabilities_changed)
     )
-    status.update(
-        {
-            "answers_changed": answers_changed,
-            "capabilities_changed": capabilities_changed,
-            "status": "outdated" if update_available else "current",
-            "update_available": update_available,
-        }
-    )
-    plan = ResolvedPlan(
-        mode="update",
-        target=target,
-        revision=target_revision,
-        repository=repository,
-        answers=answers,
-        capabilities=preflight,
-        update=status,
-    )
-    if args.check:
-        if args.json:
-            print(
-                json.dumps(
-                    plan.as_dict(), sort_keys=True, separators=(",", ":")
-                )
-            )
-        else:
-            print_plan(plan)
-        return 1 if status["update_available"] else 0
-
-    require_clean_repository(target)
+    if not args.check:
+        require_clean_repository(target)
     generated_at = datetime.now(UTC).replace(microsecond=0).isoformat()
     with tempfile.TemporaryDirectory(prefix="csarc-update-plan-") as temporary:
         plan = build_update_transaction_plan(
@@ -4515,12 +4574,43 @@ def command_update(args: argparse.Namespace) -> int:
             explicit_data,
             generated_at,
             accept_legacy=args.accept_legacy,
+            execute_verification=not args.check,
             from_release=args.from_release,
+            include_working_tree=args.check,
+            verification_required=verification_required,
         )
-    print_plan(plan)
+    if plan.files is None:
+        raise CliError("Update plan has no candidate file effects.")
     transaction = plan.transaction
-    if transaction is not None:
-        print(f"Candidate verification: {transaction['verification']}")
+    if transaction is None:
+        raise CliError("Update plan has no transaction state.")
+    finalize_update_status(
+        status,
+        plan.files,
+        answers_changed=answers_changed,
+        capabilities_changed=capabilities_changed,
+    )
+    if args.check:
+        if args.json:
+            print(
+                json.dumps(
+                    plan.as_dict(), sort_keys=True, separators=(",", ":")
+                )
+            )
+        elif status["update_available"]:
+            print_plan(plan)
+            print(f"Candidate verification: {transaction['verification']}")
+        else:
+            print(UPDATE_CURRENT_MESSAGE)
+        return 1 if status["update_available"] else 0
+
+    if not status["update_available"]:
+        print(UPDATE_CURRENT_MESSAGE)
+        if args.plan_file is not None:
+            write_lifecycle_plan(plan, args.plan_file)
+        return 0
+    print_plan(plan)
+    print(f"Candidate verification: {transaction['verification']}")
     write_lifecycle_plan(
         plan,
         args.plan_file,

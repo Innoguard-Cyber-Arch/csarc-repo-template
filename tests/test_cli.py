@@ -1830,6 +1830,7 @@ def test_real_init_and_adoption_update_through_verified_releases(
     assert initialized_provenance["commit_sha"] == second_sha
     assert initialized_provenance["previous"]["release_tag"] == "v1.0.0"
     assert initialized_provenance["previous"]["commit_sha"] == first_sha
+    commit(initialized, "test: update initialized project to v2")
 
     update_plan = update_to_v2(project)
     assert set(update_plan["transaction"]["artifacts"]) == (
@@ -1854,6 +1855,35 @@ def test_real_init_and_adoption_update_through_verified_releases(
     assert provenance["commit_sha"] == second_sha
     assert provenance["previous"]["release_tag"] == "v1.0.0"
     assert provenance["previous"]["commit_sha"] == first_sha
+    commit(project, "test: update adopted project to v2")
+
+    for target in (initialized, project):
+        before = cli.target_file_snapshot(target)
+        provenance_before = (target / cli.PROVENANCE_FILE).read_bytes()
+        no_op_plan = tmp_path / f"{target.name}-same-release-plan.json"
+        assert (
+            main(
+                [
+                    "update",
+                    str(target),
+                    "--to",
+                    "v2.0.0",
+                    "--expected-sha",
+                    second_sha,
+                    "--dry-run",
+                    "--plan-file",
+                    str(no_op_plan),
+                ]
+            )
+            == 0
+        )
+        no_op = cli.read_machine_plan(no_op_plan)
+        assert no_op["status"] == "current"
+        assert no_op["update_available"] is False
+        assert no_op["transaction"]["applicable"] is False
+        assert no_op["transaction"]["artifacts"] == {}
+        assert cli.target_file_snapshot(target) == before
+        assert (target / cli.PROVENANCE_FILE).read_bytes() == provenance_before
 
 
 def test_adoption_report_classifies_unknown_content(
@@ -3136,11 +3166,122 @@ def test_update_check_dry_run_apply_and_conflict(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Exercise status, dry-run, smart update, and conflict handling."""
-    source, project, _ = initialize_project(tmp_path)
+    source, _ = make_template(tmp_path)
+    (source / "template" / "reviewer.txt.jinja").write_text(
+        "{{ reviewers }}\n", encoding="utf-8"
+    )
+    first_sha = commit(source, "test: render reviewer answer")
+    project = tmp_path / "new-project"
+    apply_init(
+        [
+            "init",
+            str(project),
+            "--source",
+            str(source),
+            "--to",
+            first_sha,
+            "--allow-unreleased",
+            "--data",
+            "language=ci",
+        ],
+        project,
+    )
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
+    verification_log = tmp_path / "verification.log"
+    write_executable(
+        project / "scripts" / "verify-product",
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        f"printf 'run\\n' >> '{verification_log}'\n",
+    )
     commit(project, "test: generated project")
+    capsys.readouterr()
+
+    current_arguments = [
+        "update",
+        str(project),
+        "--to",
+        first_sha,
+        "--allow-unreleased",
+    ]
+    before_current = cli.target_file_snapshot(project)
+    provenance_before = (project / cli.PROVENANCE_FILE).read_bytes()
+    plan_path = lifecycle_plan_path(project, "update")
+    assert main([*current_arguments, "--check"]) == 0
+    assert capsys.readouterr().out.strip() == cli.UPDATE_CURRENT_MESSAGE
+    assert not verification_log.exists()
+    assert main([*current_arguments, "--check", "--json"]) == 0
+    current = json.loads(capsys.readouterr().out)
+    assert current["status"] == "current"
+    assert current["update_available"] is False
+    assert current["rendered_changed"] is False
+    assert current["transaction"]["verification"] == "configured"
+    assert current["transaction"]["artifacts"] == {}
+    assert all(
+        not current["files"][effect]
+        for effect in (
+            "add",
+            "overwrite",
+            "automatic_merge",
+            "manual_merge",
+            "unknown",
+            "delete",
+        )
+    )
+    assert main([*current_arguments, "--dry-run"]) == 0
+    assert capsys.readouterr().out.strip() == cli.UPDATE_CURRENT_MESSAGE
+    assert not plan_path.exists()
+    assert not verification_log.exists()
+    assert cli.target_file_snapshot(project) == before_current
+    assert (project / cli.PROVENANCE_FILE).read_bytes() == provenance_before
+    requested_no_op_plan = tmp_path / "requested-no-op-plan.json"
+    assert (
+        main(
+            [
+                *current_arguments,
+                "--dry-run",
+                "--plan-file",
+                str(requested_no_op_plan),
+            ]
+        )
+        == 0
+    )
+    requested_no_op = cli.read_machine_plan(requested_no_op_plan)
+    assert requested_no_op["status"] == "current"
+    assert requested_no_op["update_available"] is False
+    assert requested_no_op["transaction"]["applicable"] is False
+    assert requested_no_op["transaction"]["artifacts"] == {}
+    assert cli.target_file_snapshot(project) == before_current
+    assert (project / cli.PROVENANCE_FILE).read_bytes() == provenance_before
+    capsys.readouterr()
+
+    drift_arguments = [
+        *current_arguments,
+        "--data",
+        "reviewers=@same-release-reviewer",
+    ]
+    assert main([*drift_arguments, "--check", "--json"]) == 1
+    drift_check = json.loads(capsys.readouterr().out)
+    assert drift_check["status"] == "outdated"
+    assert drift_check["update_available"] is True
+    assert drift_check["answers_changed"] is True
+    assert drift_check["rendered_changed"] is True
+    assert drift_check["transaction"]["verification"] == "configured"
+    assert ".copier-answers.yml" in drift_check["files"]["overwrite"]
+    assert "reviewer.txt" in drift_check["files"]["overwrite"]
+    assert not verification_log.exists()
+    assert main([*drift_arguments, "--dry-run"]) == 0
+    drift_plan = cli.read_machine_plan(plan_path)
+    assert drift_plan["status"] == "outdated"
+    assert drift_plan["update_available"] is True
+    assert drift_plan["transaction"]["verification"] == "passed"
+    assert drift_plan["files"] == drift_check["files"]
+    assert verification_log.read_text(encoding="utf-8") == "run\n"
+    assert cli.target_file_snapshot(project) == before_current
+    assert (project / cli.PROVENANCE_FILE).read_bytes() == provenance_before
+    verification_log.unlink()
+    capsys.readouterr()
 
     managed = source / "template" / "managed.txt"
     managed.write_text("template version two\n", encoding="utf-8")
@@ -3164,6 +3305,11 @@ def test_update_check_dry_run_apply_and_conflict(
     status = json.loads(output)
     assert status["target_sha"] == second_sha
     assert status["status"] == "outdated"
+    assert status["update_available"] is True
+    assert status["rendered_changed"] is True
+    assert status["transaction"]["verification"] == "configured"
+    assert "managed.txt" in status["files"]["overwrite"]
+    assert not verification_log.exists()
 
     before = git(project, "status", "--porcelain")
     assert (
@@ -3181,9 +3327,9 @@ def test_update_check_dry_run_apply_and_conflict(
     )
     assert git(project, "status", "--porcelain") == before
     assert managed.read_text(encoding="utf-8") == "template version two\n"
-    plan_path = lifecycle_plan_path(project, "update")
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
     assert plan["transaction"]["verification"] == "passed"
+    assert verification_log.read_text(encoding="utf-8") == "run\n"
     capsys.readouterr()
 
     before_apply = cli.target_file_snapshot(project)
@@ -3531,6 +3677,10 @@ def test_update_replay_rejects_source_answers_and_rendered_output_drift(
         previous: dict[str, object] | None,
         update_data: Mapping[str, str],
         generated_at: str,
+        *,
+        execute_verification: bool,
+        include_working_tree: bool,
+        verification_required: bool,
     ) -> tuple[cli.Plan, dict[str, str], tuple[str, ...], str]:
         result = original_prepare(
             target,
@@ -3539,6 +3689,9 @@ def test_update_replay_rejects_source_answers_and_rendered_output_drift(
             previous,
             update_data,
             generated_at,
+            execute_verification=execute_verification,
+            include_working_tree=include_working_tree,
+            verification_required=verification_required,
         )
         effects, artifacts, deleted, verification = result
         managed = candidate / "managed.txt"
@@ -3712,6 +3865,12 @@ def test_update_check_reports_capability_drift_at_same_revision(
         "import json\n"
         "print(json.dumps({'mode': 'installed', 'capabilities': {}}))\n",
     )
+    verification_log = tmp_path / "capability-verification.log"
+    write_executable(
+        project / "scripts" / "verify-product",
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        f"printf 'run\\n' >> '{verification_log}'\n",
+    )
     commit(project, "test: customize installed capability policy")
     monkeypatch.setattr(
         cli,
@@ -3743,7 +3902,38 @@ def test_update_check_reports_capability_drift_at_same_revision(
     payload = json.loads(capsys.readouterr().out)
     assert payload["answers_changed"] is False
     assert payload["capabilities_changed"] is True
+    assert payload["rendered_changed"] is False
     assert payload["update_available"] is True
+    assert payload["status"] == "outdated"
+    assert payload["transaction"]["verification"] == "configured"
+    assert payload["transaction"]["artifacts"] == {}
+    assert not verification_log.exists()
+
+    before = cli.target_file_snapshot(project)
+    provenance_before = (project / cli.PROVENANCE_FILE).read_bytes()
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    dry_run = cli.read_machine_plan(lifecycle_plan_path(project, "update"))
+    assert dry_run["status"] == "outdated"
+    assert dry_run["update_available"] is True
+    assert dry_run["rendered_changed"] is False
+    assert dry_run["transaction"]["verification"] == "passed"
+    assert dry_run["transaction"]["applicable"] is False
+    assert dry_run["transaction"]["artifacts"] == {}
+    assert verification_log.read_text(encoding="utf-8") == "run\n"
+    assert cli.target_file_snapshot(project) == before
+    assert (project / cli.PROVENANCE_FILE).read_bytes() == provenance_before
 
 
 def test_non_interactive_writes_require_yes(tmp_path: Path) -> None:
