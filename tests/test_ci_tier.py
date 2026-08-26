@@ -538,7 +538,7 @@ def test_required_aggregate_is_unconditional_and_routing_is_job_level() -> None:
     workflow_source = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
     assert "git diff --no-renames --name-only -z" in workflow_source
     jobs = workflow["jobs"]
-    assert jobs["verify"]["if"] == "${{ always() }}"
+    assert jobs["verify"]["if"].startswith("${{ always()")
     assert "fast" in jobs["verify"]["needs"]
     full_job = next(
         name for name in ("canonical-full", "canonical", "full") if name in jobs
@@ -609,8 +609,8 @@ def test_required_aggregate_rejects_unknown_routing_outputs(
     )
 
 
-def test_pr_metadata_edits_validate_without_restarting_product_ci() -> None:
-    """Keep metadata validation separate from exact-tree verification."""
+def test_only_base_edits_restart_exact_tree_verification() -> None:
+    """Re-route a retargeted PR without rerunning for body or title edits."""
     ci_workflow = yaml.safe_load(
         (ROOT / ".github" / "workflows" / "ci.yml").read_text()
     )
@@ -619,8 +619,16 @@ def test_pr_metadata_edits_validate_without_restarting_product_ci() -> None:
     )
     ci_triggers = ci_workflow.get("on", ci_workflow.get(True))
     policy_triggers = policy_workflow.get("on", policy_workflow.get(True))
-    assert "edited" not in ci_triggers["pull_request"]["types"]
+    assert "edited" in ci_triggers["pull_request"]["types"]
     assert "edited" in policy_triggers["pull_request"]["types"]
+    base_edit = (
+        "github.event.action != 'edited' || "
+        "github.event.changes.base.ref.from != ''"
+    )
+    assert ci_workflow["jobs"]["fast"]["if"] == "${{ " + base_edit + " }}"
+    assert ci_workflow["jobs"]["verify"]["if"] == (
+        "${{ always() && (" + base_edit + ") }}"
+    )
 
 
 def test_governance_checks_the_candidate_revision() -> None:

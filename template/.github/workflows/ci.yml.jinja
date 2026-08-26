@@ -11,7 +11,7 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, labeled, unlabeled]
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
   schedule:
@@ -31,6 +31,7 @@ permissions:
 jobs:
   fast:
     name: route and fast checks
+    if: {% raw %}${{ github.event.action != 'edited' || github.event.changes.base.ref.from != '' }}{% endraw %}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -374,7 +375,7 @@ jobs:
 
   verify:
     name: verify
-    if: {% raw %}${{ always() }}{% endraw %}
+    if: {% raw %}${{ always() && (github.event.action != 'edited' || github.event.changes.base.ref.from != '') }}{% endraw %}
     needs:
       - fast
 {%- if use_reusable_workflow %}
