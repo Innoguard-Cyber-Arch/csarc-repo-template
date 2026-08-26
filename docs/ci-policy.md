@@ -15,6 +15,8 @@ CI 是沒有獨立測試環境時的可攜式 integration layer；外部環境�
 - `dev/* → main` 的 promotion、下述一次性 `promote/m*`／`promote/next → main`
   bridge，以及標示
   `hotfix` 的緊急修正，必須跑 full tier。
+- 已合併版本卻缺少 Release 時，只有同號 `fix/<Issue>-*`、`release-recovery`
+  label、`fix` title 的受審查 PR 可直接進 `main`；不得同時標示 `hotfix`。
 - `main` 更新後，尚在進行的 delivery branch 先透過受審查的 `sync/main-to-*` PR
   納入新結果，再接受新的 Issue PR 或 promotion。
 
@@ -44,7 +46,7 @@ tier、保留 promotion evidence 並立即形成 release 邊界。
 | --- | --- | --- | --- | --- |
 | Policy | 每張 PR | 同一個 runner 檢查 PR 標題／Issue 關聯、branch route、delivery sync 與 review policy | `title`、`promotion` 與 `verify` 都會產生；新 commit 可取消舊的一般 PR run | 先用便宜、確定性的規則拒絕錯誤流程 |
 | Docs／fast | 純文件或一般 Issue／sync PR | secret scan、格式、lint、型別、單元與 policy tests；workflow／shell scope 加跑 actionlint／ShellCheck，模板範圍另做單一預設 profile smoke | 由穩定的 `verify` aggregate 彙總；同 PR 新 commit 取消舊 run | 每次整合保留快速回饋，不支付完整矩陣 |
-| Full | promotion、hotfix、merge queue、手動 dispatch、未知高風險路徑 | 所有支援 runtime、profiles、Copier update、release policy、安全與整合回歸 | `verify` 與 `promotion` 必須成功；候選 run 不取消 | 只在交付邊界支付一次完整信心成本 |
+| Full | promotion、hotfix、release recovery、merge queue、手動 dispatch、未知高風險路徑 | 所有支援 runtime、profiles、Copier update、release policy、安全與整合回歸 | `verify` 與 `promotion` 必須成功；候選 run 不取消 | 只在交付邊界支付一次完整信心成本 |
 | Periodic／release | daily／weekly schedule 或已驗證的發布邊界 | OSV、Zizmor、governance drift、artifact、digest、SBOM、provenance | 排程不阻塞普通 PR；發布只接受 release-source evidence，重跑採 idempotent | 把時間性風險與成品工作移出每個 commit |
 
 Full tier 將 runtime 無關的 lint、文件、治理、profile、Copier create／adopt／update、
@@ -128,8 +130,8 @@ source tree 跑第二次完整 suite；`main` push 留給同步與 release 邊�
 ## Promotion 與 canary 證據
 
 Ruleset 另固定要求 `promotion` context。一般 Issue／sync PR 會得到明確的
-not-applicable 成功結果；`dev/m* → main`、`dev/next → main`、`dev/i* → main` 與
-hotfix 則必須先確認 branch 包含最新 `main`。Milestone promotion 還會檢查同一
+not-applicable 成功結果；`dev/m* → main`、`dev/next → main`、`dev/i* → main`、
+hotfix 與 release recovery 則必須先確認 branch 包含最新 `main`。Milestone promotion 還會檢查同一
 Milestone 中，除 promotion Issue 外的工作均已關閉且沒有未勾選的 acceptance
 criterion。`dev/i<編號>-*` 則核對同號、無 Milestone 且標示 `promotion` 的 open
 Issue，不能借用別張 Issue 或偽裝 Milestone。
@@ -285,6 +287,16 @@ branch 工作；full/canary 通過並 promotion 到 `main` 後刪除它。不能
 PR。它仍需 tracking Issue、人工審查、full `verify`、promotion evidence 和 tree
 identity；合併後立即形成 patch release 邊界。接著由每條進行中的 `dev/m*`、
 `dev/next` 與 `dev/i*` owner 各自建立 reviewed sync PR，把 hotfix 帶回去。
+
+### 缺失 Release recovery
+
+若已合併版本缺少對應 GitHub Release，使用同號 `fix/<Issue>-*`、`fix` title 與
+`release-recovery` label 對 `main` 開一張最小修復 PR。它可以保留原 Milestone，
+但不可同時標示 `hotfix`；必須通過 full `verify`、promotion evidence 與 merge 後
+tree identity。Release workflow 先把 distributions、精確 tag/commit 的 SPDX 2.3
+SBOM、artifact manifest 與 provenance 上傳到 draft，再下載並重驗 digest；全部吻合後
+才發布 immutable Release，發布後再驗 hosted assets 與 attestation。Actions 額度 fallback
+只產生 release-ineligible 證據，不得用來宣稱 recovery 完成。
 
 ## 導入、回復與降級
 

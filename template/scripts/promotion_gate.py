@@ -32,6 +32,7 @@ UNCHECKED = re.compile(r"(?m)^\s*-\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(r"(?:Closes|Fixes|Resolves)\s+#(\d+)(?:\D|$)", re.I)
 MILESTONE_BRANCH = re.compile(r"^dev/m(\d+)-[a-z0-9][a-z0-9-]*$")
 PROMOTION_BRIDGE = re.compile(r"^promote/m(\d+)-([a-z0-9][a-z0-9-]*)$")
+RECOVERY_BRANCH = re.compile(r"^fix/(\d+)-[a-z0-9][a-z0-9-]*$")
 STANDALONE_PROMOTION_BRIDGE = "promote/next"
 ISOLATED_BRANCH = re.compile(r"^dev/i(\d+)-[a-z0-9][a-z0-9-]*$")
 CONVENTIONAL_TITLE = re.compile(
@@ -186,6 +187,11 @@ def route_for(  # noqa: C901
         return Route("not-applicable", False)
     if head.startswith("release-please--"):
         return Route("release-follow-up", False)
+    if "release-recovery" in labels:
+        recovery = RECOVERY_BRANCH.fullmatch(head)
+        if recovery and "hotfix" not in labels:
+            return Route("release-recovery", True, issue=int(recovery.group(1)))
+        return Route("invalid-main-route", True)
     if branch_strategy == "main":
         return Route("not-applicable", False)
     if branch_strategy == "dev":
@@ -1230,12 +1236,13 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
         evidence = {"schema_version": 1, "route": asdict(route)}
         if route.kind == "invalid-main-route":
             raise RuntimeError(
-                "Only a promotion, hotfix, or release follow-up may target main"
+                "Only a promotion, hotfix, release recovery, or release "
+                "follow-up may target main"
             )
         if route.relevant:
             if not same_repository(pull_request, args.repo):
                 raise RuntimeError(
-                    "Promotion and hotfix branches must come from "
+                    "Promotion, hotfix, and recovery branches must come from "
                     "this repository"
                 )
             title = pull_request.get("title")
@@ -1289,7 +1296,14 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     raise RuntimeError(
                         "Isolated delivery branch and Issue numbers differ"
                     )
-                if route.kind != "milestone" and issue_milestone is not None:
+                if route.kind == "release-recovery" and number != route.issue:
+                    raise RuntimeError(
+                        "Release recovery branch and Issue numbers differ"
+                    )
+                if (
+                    route.kind not in {"milestone", "release-recovery"}
+                    and issue_milestone is not None
+                ):
                     raise RuntimeError(
                         "Standalone promotion or hotfix cannot use a Milestone"
                     )
@@ -1327,6 +1341,15 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                     {
                         "number": number,
                         "title": str(tracking_issue.get("title", "")),
+                    }
+                ]
+            elif route.kind == "release-recovery" and number is not None:
+                included = [
+                    {
+                        "number": number,
+                        "title": tracking_issue_state["title"]
+                        if tracking_issue_state is not None
+                        else "",
                     }
                 ]
             current_main = github_get(args.repo, "git/ref/heads/main", token)
@@ -1377,7 +1400,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
                 raise RuntimeError(
                     "Delivery branch must contain current main before promotion"
                 )
-            if route.kind in {"hotfix", "isolated"}:
+            if route.kind in {"hotfix", "isolated", "release-recovery"}:
                 included_prs = [
                     {
                         "number": pull_request["number"],
