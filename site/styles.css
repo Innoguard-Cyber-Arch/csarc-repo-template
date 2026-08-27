@@ -407,7 +407,6 @@
     .similar-tools-matrix td strong { color: #174f8b; }
     .similar-tools-matrix td a { color: #174f8b; text-underline-offset: 2px; }
     .similar-tools-primary-matrix { min-height: 0; font-size: 15px; line-height: 1.28; }
-    .similar-tools-primary-wrap { flex: 0 0 auto; min-height: auto; overflow: visible; }
     .similar-tools-primary-matrix thead th:first-child { width: 13%; }
     .similar-tools-primary-matrix thead th:nth-child(2) { width: 14%; }
     .similar-tools-primary-matrix thead th:nth-child(3) { width: 13%; }

@@ -152,11 +152,9 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
         "const primaryBody", 1
     )[0]
     assert comparison_data.count("url: 'https://github.com/") == 12
-    assert comparison_data.count("group: 'primary'") == 2
-    assert comparison_data.count("group: 'reference'") == 10
-    assert comparison_data.count("coverage:") == 2
-    assert comparison_data.count("selfPosition:") == 2
-    assert comparison_data.count("difference:") == 2
+    assert comparison_data.count("coverage:") == 12
+    assert comparison_data.count("selfPosition:") == 7
+    assert comparison_data.count("difference:") == 7
     for key in (
         "repositoryTruth",
         "declarativeState",
@@ -172,6 +170,8 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     assert "tool.difference.forEach" in app
     assert "differenceList.append" in app
     assert "coverage-tag" in app
+    assert "const mainSimilarityThreshold = 4" in app
+    assert "similarTools.filter(isPrimaryTool)" in app
     assert "primaryBody.append" in app
     assert "renderPanel();" in app
     assert "tab.setAttribute('aria-selected'" in app

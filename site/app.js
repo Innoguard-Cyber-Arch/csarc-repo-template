@@ -845,7 +845,6 @@ gh auth status`
           version: 'harness-v0.1.10',
           released: '2026-08-13',
           stars: '1,198',
-          group: 'primary',
           coverage: {
             full: ['01', '02', '08'],
             partial: ['03', '04', '07', '10']
@@ -868,7 +867,6 @@ gh auth status`
           version: 'v0.103.5',
           released: '2026-08-26',
           stars: '2,948',
-          group: 'primary',
           coverage: {
             full: ['03', '06', '08'],
             partial: ['01', '04', '05', '07', '10']
@@ -891,7 +889,10 @@ gh auth status`
           version: 'v9.17.2',
           released: '2026-08-19',
           stars: '3,545',
-          group: 'reference',
+          coverage: {
+            full: ['08'],
+            partial: ['04', '10']
+          },
           philosophies: {
             declarativeState: 'answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。',
             templateLifecycle: '記住模板來源與 answers，讓既有 repo 接收新版模板。',
@@ -904,7 +905,10 @@ gh auth status`
           version: '2.16.0',
           released: '2024-12-25',
           stars: '1,585',
-          group: 'reference',
+          coverage: {
+            full: ['08'],
+            partial: ['03', '04']
+          },
           philosophies: {
             templateLifecycle: '追蹤 Cookiecutter 來源，用 check／diff／update 管模板漂移。',
             proposalLifecycle: '上游差異先成為 diff 或 PR，專案接受後才更新追蹤狀態。'
@@ -916,7 +920,15 @@ gh auth status`
           version: 'v1.54.5',
           released: '2026-08-25',
           stars: '34,270',
-          group: 'reference',
+          coverage: {
+            full: ['09', '10'],
+            partial: ['07', '08']
+          },
+          selfPosition: 'Developer portal framework：以 Software Catalog、Software Templates 與 TechDocs 統一軟體生態系入口。',
+          difference: [
+            'Backstage 是需要持續維運的中央 portal，強項是服務探索、owner 與 scaffolding。',
+            'CSARC 是可攜的 repo-local 公版，直接把治理、驗證與交付基線放進每個 repo。'
+          ],
           philosophies: {
             repositoryTruth: 'Catalog entity 保存服務、owner 與關係的中央真相。',
             declarativeState: 'YAML entity 與 Software Template 宣告 portal 中的元件和建立流程。',
@@ -929,7 +941,15 @@ gh auth status`
           version: 'v0.3.1',
           released: '2026-08-10',
           stars: '417',
-          group: 'reference',
+          coverage: {
+            full: ['05', '07'],
+            partial: ['03', '10']
+          },
+          selfPosition: 'Software supply chain security platform：集中評估 repository 與 artifact，並依 policy 告警或修正。',
+          difference: [
+            'Minder 專注中央安全姿態與持續 policy enforcement，需要常駐服務。',
+            'CSARC 涵蓋完整 repo 開發生命週期，目前以可攜政策與本機驗證為基線。'
+          ],
           philosophies: {
             declarativeState: 'Profile 宣告安全期望，服務持續評估並可自動修正。'
           }
@@ -940,7 +960,10 @@ gh auth status`
           version: 'v4.5',
           released: '2025-10-01',
           stars: '1,444',
-          group: 'reference',
+          coverage: {
+            full: ['05', '07'],
+            partial: ['10']
+          },
           philosophies: {
             declarativeState: 'GitHub App 持續讀取組織政策，檢查或處置 repo 不合規狀態。'
           }
@@ -951,7 +974,10 @@ gh auth status`
           version: '2.1.21',
           released: '2026-05-12',
           stars: '913',
-          group: 'reference',
+          coverage: {
+            full: ['07'],
+            partial: ['04', '10']
+          },
           philosophies: {
             declarativeState: '用 org／suborg／repo YAML 階層計算並下發 GitHub 設定。'
           }
@@ -962,7 +988,15 @@ gh auth status`
           version: 'v1.0.1',
           released: '2026-08-21',
           stars: '131,843',
-          group: 'reference',
+          coverage: {
+            full: ['01', '02'],
+            partial: ['03', '04']
+          },
+          selfPosition: 'Spec-driven development toolkit：讓任何 AI coding agent 依 spec、plan 與 tasks 交付軟體。',
+          difference: [
+            'Spec Kit 集中在需求澄清、規格拆解與 agent 實作流程。',
+            'CSARC 另外涵蓋 repo profile、治理、供應鏈、版本交付與模板更新。'
+          ],
           philosophies: {
             repositoryTruth: 'spec、plan、tasks 與 constitution 在 repo 形成 feature 脈絡。',
             proposalLifecycle: 'artifacts 在 feature branch 演進，最後仍交給 Git／PR 接受。',
@@ -975,7 +1009,15 @@ gh auth status`
           version: 'v1.11.0',
           released: '2026-08-26',
           stars: '66,427',
-          group: 'reference',
+          coverage: {
+            full: ['01', '02'],
+            partial: ['03', '04']
+          },
+          selfPosition: 'Spec framework：用 current specs 與 change proposals 管理 AI 輔助開發中的需求變更。',
+          difference: [
+            'OpenSpec 專注規格從 propose、apply 到 archive 的生命週期。',
+            'CSARC 把同類工作邊界接到 Issue、PR、治理、交付與可更新 repo 公版。'
+          ],
           philosophies: {
             repositoryTruth: 'specs 保存 current truth，changes 保存尚未接受的 delta。',
             proposalLifecycle: 'propose → apply → archive 後，才把內容併回正式規格。',
@@ -988,7 +1030,15 @@ gh auth status`
           version: 'v6.11.0',
           released: '2026-08-10',
           stars: '52,377',
-          group: 'reference',
+          coverage: {
+            full: ['01', '02'],
+            partial: ['03', '04']
+          },
+          selfPosition: 'AI-driven agile delivery method：以多角色工作流程與依複雜度調整的規劃推進產品。',
+          difference: [
+            'BMAD 提供完整方法、agent 角色與分級規劃流程。',
+            'CSARC 不綁 agent persona，重點是可執行、可更新的 repository 基線。'
+          ],
           philosophies: {
             repositoryTruth: 'brief、spec、architecture 依複雜度累積成持久工作脈絡。',
             proposalLifecycle: 'artifacts 在 clarify → plan → build／verify 之間逐步成熟。',
@@ -1001,15 +1051,20 @@ gh auth status`
           version: 'v8.91.0',
           released: '2026-08-26',
           stars: '3,679',
-          group: 'reference',
+          coverage: {
+            full: ['08'],
+            partial: ['03', '05']
+          },
           philosophies: {
             declarativeState: 'Recipe 宣告 semantic transformation，再由 parser／visitor 套用。',
             templateLifecycle: '不用文字模板覆蓋檔案，而是直接執行跨版本語意遷移。'
           }
         }
       ];
+      const mainSimilarityThreshold = 4;
+      const isPrimaryTool = tool => tool.coverage.full.length + tool.coverage.partial.length >= mainSimilarityThreshold;
       const primaryBody = similarToolsSlide.querySelector('[data-similar-tools-primary-body]');
-      similarTools.filter(tool => tool.group === 'primary').forEach(tool => {
+      similarTools.filter(isPrimaryTool).forEach(tool => {
         const row = document.createElement('tr');
         const nameCell = document.createElement('th');
         nameCell.scope = 'row';
@@ -1058,7 +1113,7 @@ gh auth status`
         for (const group of ['primary', 'reference']) {
           const cell = document.createElement('td');
           const list = document.createElement('ul');
-          similarTools.filter(tool => tool.group === group && tool.philosophies[key]).forEach(tool => {
+          similarTools.filter(tool => isPrimaryTool(tool) === (group === 'primary') && tool.philosophies[key]).forEach(tool => {
             const entry = document.createElement('li');
             const name = document.createElement('strong');
             name.textContent = `${tool.name}：`;
