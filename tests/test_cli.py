@@ -1553,19 +1553,206 @@ def test_adopt_help_describes_report_directory(
     assert "plan without writing (the default for adopt)" in help_text
 
 
-def test_adopt_reports_dirty_tree_without_mutating_it(tmp_path: Path) -> None:
-    """Dirty adoption plans remain useful but cannot be applied."""
+def test_adopt_applies_exact_plan_over_preserved_dirty_file(
+    tmp_path: Path,
+) -> None:
+    """Verify and apply while preserving one authorized dirty product file."""
     source, first_sha = make_template(tmp_path)
     project = tmp_path / "dirty-product"
     project.mkdir()
+    hook_runs = tmp_path / "hook-runs.txt"
+    (project / "components.yaml").write_text("clean: true\n", encoding="utf-8")
+    write_executable(
+        project / "scripts" / "verify-skills",
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        "grep -q '^authorized: dirty$' components.yaml\n"
+        f"printf 'run\\n' >> {shlex.quote(str(hook_runs))}\n",
+    )
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
-    (project / "tracked.txt").write_text("clean\n", encoding="utf-8")
     commit(project, "test: baseline")
-    (project / "untracked.txt").write_text("dirty\n", encoding="utf-8")
+    components = project / "components.yaml"
+    components.write_text("authorized: dirty\n", encoding="utf-8")
 
-    before = git(project, "status", "--porcelain")
+    before = cli.git_target_state(project)[1]
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--dry-run",
+                "--data",
+                "project_verification_hook=scripts/verify-skills",
+            ]
+        )
+        == 0
+    )
+    plan = (
+        tmp_path
+        / "dirty-product-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    payload = json.loads(plan.read_text(encoding="utf-8"))
+    assert payload["adoption"]["applicable"] is True
+    assert payload["adoption"]["clean"] is False
+    assert payload["adoption"]["target_changes"] == [" M components.yaml"]
+    assert payload["adoption"]["preserved_dirty_paths"] == ["components.yaml"]
+    assert payload["adoption"]["verification"] == "passed"
+    assert payload["adoption"]["project_verification_hook"]["result"] == (
+        "passed"
+    )
+    assert "components.yaml" in payload["files"]["preserve"]
+    assert hook_runs.read_text(encoding="utf-8").splitlines() == ["run"]
+    markdown = plan.with_name("csarc-adoption-dry-run.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Decision: Ready to adopt" in markdown
+    assert "Working tree: dirty; exact preserved state" in markdown
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan),
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    assert components.read_text(encoding="utf-8") == "authorized: dirty\n"
+    assert before == (" M components.yaml",)
+    assert " M components.yaml" in cli.git_target_state(project)[1]
+    assert hook_runs.read_text(encoding="utf-8").splitlines() == [
+        "run",
+        "run",
+    ]
+    assert (project / ".copier-answers.yml").is_file()
+
+
+def test_adopt_rejects_dirty_path_not_classified_as_preserve(
+    tmp_path: Path,
+) -> None:
+    """Keep collisions and other unapproved dirty paths review-only."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / "dirty-collision"
+    project.mkdir()
+    (project / "managed.txt").write_text(
+        "template version one\n", encoding="utf-8"
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    (project / "managed.txt").write_text("dirty collision\n", encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    report_dir = tmp_path / "dirty-collision-csarc-adoption-report"
+    plan = report_dir / cli.ADOPTION_PLAN_BASENAME
+    payload = json.loads(plan.read_text(encoding="utf-8"))
+    assert payload["adoption"]["applicable"] is False
+    assert payload["adoption"]["verification"] == "not-run-dirty"
+    assert payload["adoption"]["preserved_dirty_paths"] == []
+    assert "managed.txt" in payload["files"]["manual_merge"]
+    markdown = (report_dir / "csarc-adoption-dry-run.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Decision: Not ready to adopt" in markdown
+    assert "Do not apply this plan" in markdown
+    pdf = PdfReader(report_dir / "csarc-adoption-dry-run.pdf")
+    assert "Not ready to adopt" in pdf.pages[0].extract_text()
+    assert main(["adopt", str(project), "--apply-plan", str(plan)]) == 2
+    assert not (project / ".copier-answers.yml").exists()
+
+
+def test_adopt_blocks_hook_mutation_of_preserved_dirty_file(
+    tmp_path: Path,
+) -> None:
+    """Keep preserved dirty bytes out of the candidate artifact set."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / "dirty-hook-mutation"
+    project.mkdir()
+    components = project / "components.yaml"
+    components.write_text("clean: true\n", encoding="utf-8")
+    write_executable(
+        project / "scripts" / "verify-skills",
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        "printf 'hook mutation\\n' > components.yaml\n",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    components.write_text("authorized: dirty\n", encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--dry-run",
+                "--data",
+                "project_verification_hook=scripts/verify-skills",
+            ]
+        )
+        == 0
+    )
+    plan = (
+        tmp_path
+        / "dirty-hook-mutation-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    payload = json.loads(plan.read_text(encoding="utf-8"))
+    assert payload["adoption"]["applicable"] is False
+    assert payload["adoption"]["project_verification_hook"]["result"] == (
+        "passed"
+    )
+    assert str(payload["adoption"]["verification"]).startswith(
+        "failed: Candidate verification changed preserved dirty files:"
+    )
+    assert components.read_text(encoding="utf-8") == "authorized: dirty\n"
+
+
+def test_adopt_rejects_staged_preserved_file(tmp_path: Path) -> None:
+    """Do not authorize staged state through the dirty-preserve exception."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / "staged-product"
+    project.mkdir()
+    product = project / "product.txt"
+    product.write_text("clean\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    product.write_text("staged\n", encoding="utf-8")
+    git(project, "add", "product.txt")
+
     assert (
         main(
             [
@@ -1583,27 +1770,183 @@ def test_adopt_reports_dirty_tree_without_mutating_it(tmp_path: Path) -> None:
     )
     plan = (
         tmp_path
-        / "dirty-product-csarc-adoption-report"
+        / "staged-product-csarc-adoption-report"
         / cli.ADOPTION_PLAN_BASENAME
     )
     payload = json.loads(plan.read_text(encoding="utf-8"))
     assert payload["adoption"]["applicable"] is False
-    assert payload["adoption"]["clean"] is False
-    assert payload["adoption"]["target_changes"] == ["?? untracked.txt"]
+    assert payload["adoption"]["verification"] == "not-run-dirty"
+    assert payload["adoption"]["preserved_dirty_paths"] == []
+    assert "product.txt" in payload["files"]["preserve"]
+
+
+@pytest.mark.parametrize(
+    ("dirty_state", "expected_status"),
+    [
+        ("untracked", "?? extra.txt"),
+        ("deleted", " D product.txt"),
+        ("type", " T product.txt"),
+    ],
+)
+def test_adopt_rejects_non_modified_dirty_states_without_running_hook(
+    tmp_path: Path, dirty_state: str, expected_status: str
+) -> None:
+    """Only tracked unstaged modifications may use the preserve exception."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / f"dirty-{dirty_state}"
+    project.mkdir()
+    product = project / "product.txt"
+    product.write_text("product\n", encoding="utf-8")
+    hook_runs = tmp_path / f"{dirty_state}-hook-runs"
+    write_executable(
+        project / "scripts" / "verify-skills",
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        f"printf 'run\\n' >> {shlex.quote(str(hook_runs))}\n",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    if dirty_state == "untracked":
+        (project / "extra.txt").write_text("extra\n", encoding="utf-8")
+    else:
+        product.unlink()
+        if dirty_state == "type":
+            product.symlink_to("other.txt")
+
     assert (
         main(
             [
                 "adopt",
                 str(project),
-                "--apply-plan",
-                str(plan),
-                "--yes",
+                "--source",
+                str(source),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--dry-run",
+                "--data",
+                "project_verification_hook=scripts/verify-skills",
+            ]
+        )
+        == 0
+    )
+    plan = (
+        tmp_path
+        / f"dirty-{dirty_state}-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    payload = json.loads(plan.read_text(encoding="utf-8"))
+    assert payload["adoption"]["target_changes"] == [expected_status]
+    assert payload["adoption"]["applicable"] is False
+    assert payload["adoption"]["verification"] == "not-run-dirty"
+    assert payload["adoption"]["project_verification_hook"]["result"] == (
+        "not-run"
+    )
+    assert not hook_runs.exists()
+
+
+@pytest.mark.parametrize("drift", ["content", "mode", "path"])
+def test_adopt_rejects_preserved_dirty_file_drift(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], drift: str
+) -> None:
+    """Bind authorized dirty content, mode, and path state to the plan."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / f"dirty-{drift}-drift"
+    project.mkdir()
+    product = project / "product.txt"
+    product.write_text("clean\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    product.write_text("reviewed dirty bytes\n", encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    plan = (
+        tmp_path
+        / f"dirty-{drift}-drift-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    if drift == "content":
+        product.write_text("drifted after review\n", encoding="utf-8")
+    elif drift == "mode":
+        product.chmod(product.stat().st_mode | stat.S_IXUSR)
+    else:
+        (project / "extra.txt").write_text("unexpected\n", encoding="utf-8")
+
+    assert main(["adopt", str(project), "--apply-plan", str(plan)]) == 2
+    assert "changed after the plan was created" in capsys.readouterr().err
+    assert not (project / ".copier-answers.yml").exists()
+
+
+def test_adopt_rejects_race_between_comparison_and_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Do not legitimize target changes made after file classification."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / "comparison-race"
+    project.mkdir()
+    managed = project / "managed.txt"
+    managed.write_text("template version one\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    compare_stage = cli.compare_stage
+
+    def race_after_comparison(
+        stage: Path,
+        target: Path,
+        *,
+        adopt: bool,
+        merged_paths: tuple[str, ...] = (),
+    ) -> cli.Plan:
+        planned = compare_stage(
+            stage, target, adopt=adopt, merged_paths=merged_paths
+        )
+        managed.write_text("raced dirty bytes\n", encoding="utf-8")
+        return planned
+
+    monkeypatch.setattr(cli, "compare_stage", race_after_comparison)
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--dry-run",
             ]
         )
         == 2
     )
-    assert git(project, "status", "--porcelain") == before
-    assert not (project / ".copier-answers.yml").exists()
+    assert "changed after the plan was created" in capsys.readouterr().err
+    assert not (
+        tmp_path
+        / "comparison-race-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    ).exists()
 
 
 def test_adopt_infers_unicode_repository_and_applies_exact_plan(
@@ -2053,6 +2396,12 @@ def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
         "source": "explicit",
     }
     assert str(payload["adoption"]["verification"]).startswith("failed:")
+    markdown = plan_path.with_name("csarc-adoption-dry-run.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Decision: Not ready to adopt" in markdown
+    pdf = PdfReader(plan_path.with_name("csarc-adoption-dry-run.pdf"))
+    assert "Not ready to adopt" in pdf.pages[0].extract_text()
     assert main(["adopt", str(project), "--apply-plan", str(plan_path)]) == 2
     assert git(project, "status", "--porcelain") == before
     assert not (project / "managed.txt").exists()
