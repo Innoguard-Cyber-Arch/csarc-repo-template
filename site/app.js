@@ -1055,15 +1055,19 @@ gh auth status`
       const philosophySections = [...similarToolsSlide.querySelectorAll('[data-comparison-key]')];
       philosophySections.forEach(section => {
         const key = section.dataset.comparisonKey;
-        const list = section.querySelector('ul');
-        similarTools.filter(tool => tool.philosophies[key]).forEach(tool => {
-          const entry = document.createElement('li');
-          if (tool.group === 'primary') entry.classList.add('primary');
-          const name = document.createElement('strong');
-          name.textContent = `${tool.name}：`;
-          entry.append(name, tool.philosophies[key]);
-          list.append(entry);
-        });
+        for (const group of ['primary', 'reference']) {
+          const cell = document.createElement('td');
+          const list = document.createElement('ul');
+          similarTools.filter(tool => tool.group === group && tool.philosophies[key]).forEach(tool => {
+            const entry = document.createElement('li');
+            const name = document.createElement('strong');
+            name.textContent = `${tool.name}：`;
+            entry.append(name, tool.philosophies[key]);
+            list.append(entry);
+          });
+          cell.append(list);
+          section.append(cell);
+        }
       });
 
       const panels = [...similarToolsSlide.querySelectorAll('[data-similar-tools-panel]')];

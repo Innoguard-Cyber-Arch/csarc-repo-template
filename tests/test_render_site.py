@@ -122,8 +122,9 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
 
     assert 'class="slide similar-tools-slide" data-audience="maintainer"' in source
     assert source.count('data-comparison-key="') == 5
-    assert source.count("<article data-comparison-key=") == 5
-    assert source.count("<ul></ul>") == 5
+    assert "similar-tools-philosophy-matrix" in source
+    assert "工作定義哲學" in source
+    assert "其他生態圈主流工具" in source
     assert source.count("data-similar-tools-panel") == 2
     assert source.count("data-similar-tools-tab") == 2
     assert 'role="tablist"' in source
@@ -167,6 +168,7 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     assert "similarToolsHeader" not in app
     assert "document.createElement('br')" in app
     assert "document.createElement('li')" in app
+    assert "for (const group of ['primary', 'reference'])" in app
     assert "tool.difference.forEach" in app
     assert "differenceList.append" in app
     assert "coverage-tag" in app
