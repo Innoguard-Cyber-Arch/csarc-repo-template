@@ -836,6 +836,316 @@ gh auth status`
       ...(similarToolsSlide ? [similarToolsSlide] : []),
       ...reviewNotesSlides
     );
+    if (similarToolsSlide) {
+      const similarToolGroups = [
+        {
+          name: 'Repo 與模板基礎',
+          tools: [
+            {
+              name: 'Repository Harness',
+              url: 'https://github.com/hoangnb24/repository-harness',
+              version: 'harness-v0.1.10（2026-08-13）',
+              stars: '1,198（截取 2026-08-27）',
+              comparisons: {
+                '01': ['repo 文件與 active plan 就是工作真相。', 'Issue 劃定變更範圍，spec／ADR 才保存核准契約。'],
+                '02': ['用 AGENTS 指令與 active plan 維持 agent context。', '除 agent 指令外，還把模板、政策與 GitHub metadata 納入產品。'],
+                '03': ['只要求與本次修改相稱的 relevant proof。', '目前也採本機窄檢查，但另保存可恢復的完整驗證腳本。'],
+                '04': ['不管理 task database 或 PR 流程，交回既有 Git。', '明定 Issue → branch → PR 的範圍與人工審查契約。'],
+                '05': ['不提供依賴或供應鏈政策。', '保留 Dependabot、OSV、SBOM 等設定，但自動執行目前停用。'],
+                '06': ['不擁有版本與發布流程。', '定義模板與生成專案的版本／交付契約，目前不自動發布。'],
+                '07': ['遇到重大歧義即停止，治理主要靠人的判斷。', '另有 policy JSON、CODEOWNERS 與設定腳本，目前靠人工套用。'],
+                '08': ['以上游 base、local、upstream 做交易式三方合併。', '以 Copier 更新並保護專案自有檔案，衝突處理較偏模板生命週期。'],
+                '09': ['用 active／completed plan 與 repo 文件保存脈絡。', '另產生可離線單檔決策網站，連回 spec／ADR。'],
+                '10': ['主打 brownfield init／update，不規定產品技術棧。', '同時支援新舊 repo，並帶入明確語言組合與治理預設。'],
+                position: ['Agent-ready repository harness，補強任何 repo 的工作記憶。', 'Opinionated repo distribution；範圍更廣，但可借用它的 active plan 與三方合併。']
+              }
+            },
+            {
+              name: 'projen',
+              url: 'https://github.com/projen/projen',
+              version: 'v0.103.5（2026-08-26）',
+              stars: '2,948（截取 2026-08-27）',
+              comparisons: {
+                '01': ['以 .projenrc typed config 作唯一來源，其他檔案是產物。', 'spec／ADR／policy／template 分別有責任，不壓成單一程式設定。'],
+                '02': ['開發者修改 project model，再執行 synth。', '人與 agent 直接修改模板、政策與腳本，並受 Issue 範圍約束。'],
+                '03': ['用 synth、測試與 generated-file anti-tamper CI 驗證。', '驗證真實模板輸出與政策行為；遠端 CI 目前停用。'],
+                '04': ['PR 審查 config 與重建結果，禁止手改 generated files。', 'PR 可直接審查產品來源；生成檔只在有明確來源時重建。'],
+                '05': ['可生成 dependency upgrade 與更新機器人設定。', '保存 Dependabot、OSV 與供應鏈契約，但目前不排程執行。'],
+                '06': ['可生成 release tasks／workflows。', '另外定義 Python、npm、CI-only 產物與 provenance，現在不自動交付。'],
+                '07': ['治理由 typed abstraction 生成 GitHub 設定。', '用可讀 JSON／YAML 與 shell／Python 腳本表達，較少框架綁定。'],
+                '08': ['升級 projen 後重新 synth 全部受管檔。', '以 Copier 合併模板差異，刻意保留 consuming repo 的產品來源。'],
+                '09': ['可生成文件設定，但不是內部 portal。', '直接交付可離線、單檔的決策網站。'],
+                '10': ['以 project types 與 components 組出專案。', '只提供經驗證的少數語言組合，避免先建抽象再找使用者。'],
+                position: ['Project generator／configuration-as-code framework。', '較小且較 opinionated；不要求所有 repo 設定都由一個物件模型生成。']
+              }
+            },
+            {
+              name: 'Copier',
+              url: 'https://github.com/copier-org/copier',
+              version: 'v9.17.2（2026-08-19）',
+              stars: '3,545（截取 2026-08-27）',
+              comparisons: {
+                '01': ['copier.yml、template 與 answers 定義生成輸入。', '把 Copier 當生成核心；工作定義仍由 Issue、spec 與 ADR 負責。'],
+                '02': ['執行 Jinja 問卷與檔案渲染，不定義 agent 工作法。', '在 Copier 外加 AGENTS、Issue Form 與人機協作規則。'],
+                '03': ['能重現 render／update diff，不提供完整產品驗證。', '針對每個組合驗證生成 repo、政策與腳本；遠端自動化暫停。'],
+                '04': ['更新結果交給使用者以 Git diff／merge 審查。', '再要求 Issue 邊界、PR 連結、人工核准與適用的 metadata。'],
+                '05': ['不負責依賴掃描或供應鏈安全。', '模板內提供依賴更新、弱點掃描與 SBOM 契約。'],
+                '06': ['只版本化模板來源，不定義生成專案如何發布。', '同時定義公版與生成專案的版本／交付模式。'],
+                '07': ['不套 GitHub repository policy。', '隨模板保存 settings／rulesets policy 與套用腳本。'],
+                '08': ['核心能力就是以 answers 追蹤並更新既有輸出。', '直接採用這項能力，再加產品檔保護與驗證邊界。'],
+                '09': ['不提供決策網站。', '公版產出 self-contained 決策附錄。'],
+                '10': ['可建立與更新各式模板，但不限定成熟度。', '只曝光已有真實 consuming repo 證據的 composition。'],
+                position: ['通用模板引擎，是 CSARC 的底層 primitive。', 'CSARC 是其上的 opinionated distribution，不重做 Copier。']
+              }
+            }
+          ]
+        },
+        {
+          name: '模板追蹤、入口與政策',
+          tools: [
+            {
+              name: 'Cruft',
+              url: 'https://github.com/cruft/cruft',
+              version: '2.16.0（2024-12-25）',
+              stars: '1,585（截取 2026-08-27）',
+              comparisons: {
+                '01': ['以 Cookiecutter template link 與 cruft metadata 定義來源。', '除了模板來源，也分開定義 Issue、spec、ADR 與 policy。'],
+                '02': ['只協助檢查／套用模板更新，不定義 agent 契約。', 'AGENTS 與 Issue scope 明確限制 agent 可以做什麼。'],
+                '03': ['cruft check／diff 驗證模板是否落後。', '除模板漂移外，還驗證生成專案的行為與安全設定。'],
+                '04': ['把 template update 產生成 diff／PR。', '在更新 PR 外再要求工作單、審查與產品來源保護。'],
+                '05': ['不管理依賴更新與掃描。', '模板保存 Dependabot、OSV、SBOM 等契約。'],
+                '06': ['追蹤模板版本，不負責產品 release。', '公版版本與生成專案 release 分開定義。'],
+                '07': ['只偵測模板漂移，不執行組織治理。', '另保存 GitHub settings／rulesets 的 desired state。'],
+                '08': ['核心是 Cookiecutter 專案的 diff／update。', '選 Copier 作更新核心，並支援更完整的答案與合併行為。'],
+                '09': ['不提供文件入口。', '提供可離線決策網站與 durable docs。'],
+                '10': ['適合把既有 Cookiecutter 專案重新接回模板。', '提供新建、既有導入與持續更新三條明確路徑。'],
+                position: ['Template linkage／drift checker，範圍窄。', 'CSARC 已由 Copier 涵蓋更新需求，另承擔治理與交付契約。']
+              }
+            },
+            {
+              name: 'Backstage',
+              url: 'https://github.com/backstage/backstage',
+              version: 'v1.54.5（2026-08-25）',
+              stars: '34,270（截取 2026-08-27）',
+              comparisons: {
+                '01': ['以 Software Template parameters 與 Catalog entity 描述服務。', '以單次變更 Issue／spec 定義工作，不把 catalog 當需求系統。'],
+                '02': ['Scaffolder actions 建立元件，不管理日常 coding agent。', 'AGENTS 與 repo 規則約束每次 agent 修改。'],
+                '03': ['驗證 scaffolder task；產品 CI 仍由外部系統提供。', '把 repo 驗證腳本一起下發，遠端執行目前停用。'],
+                '04': ['透過 SCM action 建 repo／PR，但不決定團隊合併政策。', '明定 Issue、branch、PR 與人工審查關係。'],
+                '05': ['依賴安全需選外掛或外部服務。', '在模板基線直接保存更新、掃描與 SBOM 設定。'],
+                '06': ['能啟動部署整合，但 release 系統仍由各團隊選擇。', '提供可移植的版本與交付基線，不先要求平台。'],
+                '07': ['強項是 catalog、owner 與組織可見性。', '強項是 repo-local policy；跨 repo catalog 尚未達導入門檻。'],
+                '08': ['更新 template 主要影響未來 scaffolding，既有 repo 要另做遷移。', 'Copier 可持續更新既有 consuming repo。'],
+                '09': ['提供集中式入口、Catalog 與 TechDocs。', '目前只交付無伺服器的 self-contained 單檔網站。'],
+                '10': ['需部署平台、整合身分與逐步納入 catalog。', '逐 repo 導入即可，不要求中央服務或 SSO。'],
+                position: ['組織級 developer portal／catalog。', 'Repo distribution；現階段互補，尚不值得用 Backstage 取代。']
+              }
+            },
+            {
+              name: 'Minder',
+              url: 'https://github.com/mindersec/minder',
+              version: 'v0.3.1（2026-08-10）',
+              stars: '417（截取 2026-08-27）',
+              comparisons: {
+                '01': ['以 security profile／rule 定義期望狀態，不描述產品工作。', 'Issue／spec 定義產品工作，policy 只負責治理。'],
+                '02': ['Rule engine 評估並修正 repository，不是 coding agent。', 'Agent 直接修改 repo，但受 AGENTS 與人工審查約束。'],
+                '03': ['持續評估 repository posture 並回報狀態。', '驗證模板產品行為；遠端持續檢查目前停用。'],
+                '04': ['可做 remediation，但不定義一般功能 PR 生命週期。', '所有一般變更都有 Issue → branch → PR 契約。'],
+                '05': ['核心就是 repository／供應鏈安全政策。', '只帶入可攜式最低基線，不架設中央安全控制面。'],
+                '06': ['不管理應用版本與發布。', '另定義公版與生成專案的 release 契約。'],
+                '07': ['集中式 profile enforcement 與 remediation。', 'desired policy 隨 repo 保存，目前由人執行與檢查。'],
+                '08': ['更新 profile 即改變受管 repo 的安全評估。', '模板更新會產生可審查 diff，不直接改寫產品 repo。'],
+                '09': ['提供集中狀態與服務介面，不是決策文件站。', '網站說明決策與導入，不做 fleet 即時 dashboard。'],
+                '10': ['需部署／連線服務並註冊 repositories。', '無中央服務即可逐 repo 使用；規模到門檻才評估 Minder。'],
+                position: ['集中式 security posture／policy enforcement。', 'CSARC 是可攜式 repo 基線；Minder 是未來可能疊加的控制面。']
+              }
+            }
+          ]
+        },
+        {
+          name: '組織治理與規格流程',
+          tools: [
+            {
+              name: 'Allstar',
+              url: 'https://github.com/ossf/allstar',
+              version: 'v4.5（2025-10-01）',
+              stars: '1,444（截取 2026-08-27）',
+              comparisons: {
+                '01': ['Policy repo 定義安全設定，不定義 feature／task。', 'Issue 與 spec 定義工作；policy 是另一層。'],
+                '02': ['GitHub App 自動檢查／處置，不是實作 agent。', 'Agent 產生程式變更，人決定是否接受。'],
+                '03': ['持續檢查 repository security policy。', '檢查產品與模板行為；現在只跑本機窄驗證。'],
+                '04': ['回報或處置政策違規，不管理一般合併流程。', 'PR 生命週期是產品工作契約的一部分。'],
+                '05': ['專注 branch protection、security 等組織政策。', '除 repo policy 外還含依賴、弱點與 release evidence。'],
+                '06': ['不發布應用或套件。', '定義 release 產物與 provenance，現在不自動執行。'],
+                '07': ['以 GitHub App 在組織範圍持續 enforce。', 'policy 先隨 repo 攜帶，中央 enforcement 尚未啟用。'],
+                '08': ['更新中央 policy 後套用到受管 repos。', 'Copier update 讓每個 repo 以 PR 審查差異。'],
+                '09': ['以 GitHub findings／issues 呈現結果，沒有文件 portal。', '以單檔網站解釋決策，不提供即時 fleet 狀態。'],
+                '10': ['安裝 GitHub App 後依 org／repo 範圍啟用。', '不要求 App 或高權限 token，先採每 repo 基線。'],
+                position: ['組織級安全政策 enforcement。', 'CSARC 涵蓋整個 repo lifecycle；規模變大後才可能加 Allstar。']
+              }
+            },
+            {
+              name: 'Safe Settings',
+              url: 'https://github.com/github-community-projects/safe-settings',
+              version: '2.1.21（2026-05-12）',
+              stars: '913（截取 2026-08-27）',
+              comparisons: {
+                '01': ['YAML hierarchy 定義 GitHub repository desired settings。', '工作由 Issue／spec 定義；settings 只是可套用政策。'],
+                '02': ['Controller 同步管理設定，不寫產品程式。', 'Agent 修改產品與模板內容，但沒有組織管理權。'],
+                '03': ['驗證並調整遠端 GitHub settings drift。', '驗證 repo 內檔案與生成結果；遠端套用需明確授權。'],
+                '04': ['設定 repo 的變更可經 PR，套用則是管理操作。', '每項產品變更本身走 Issue → branch → PR。'],
+                '05': ['可統一 security／Dependabot 等 repository settings。', '同時下發掃描腳本與依賴政策，不只設定開關。'],
+                '06': ['不處理版本與 artifact delivery。', '另定義 SemVer、套件與 provenance。'],
+                '07': ['核心是 org／suborg／repo 階層設定繼承。', '目前以 repo-local JSON 保存 desired state，人工套用。'],
+                '08': ['改中央設定即可 fan-out 到受管 repos。', '更新以每 repo PR 顯示差異，速度慢但產品 owner 可審。'],
+                '09': ['不提供開發者 portal。', '提供決策網站，但不是設定即時儀表板。'],
+                '10': ['適合已有中央平台 owner 的多 repo 組織。', '先在少量 repo 分散導入，達 fleet 門檻才考慮集中化。'],
+                position: ['GitHub repository settings controller。', 'CSARC 保存設定來源並兼顧模板內容；Safe Settings 可作未來下發層。']
+              }
+            },
+            {
+              name: 'Spec Kit',
+              url: 'https://github.com/github/spec-kit',
+              version: 'v1.0.1（2026-08-21）',
+              stars: '131,843（截取 2026-08-27）',
+              comparisons: {
+                '01': ['從自然語言建立 feature spec 與 user stories。', 'Issue 先劃定變更；只有複雜工作才需要正式 spec。'],
+                '02': ['用 specify → plan → tasks → implement 驅動 agent。', '不綁單一 agent command，沿用 AGENTS 與 repo 工具。'],
+                '03': ['以 tasks、tests 與 converge 找出剩餘落差。', '以可執行 repo 檢查驗證行為；CI 目前停用。'],
+                '04': ['可把 tasks 轉 Issues，Git／PR 規則仍由外部決定。', 'Issue／branch／PR 關係直接寫進 repo 工作契約。'],
+                '05': ['不內建依賴或供應鏈安全基線。', '模板直接提供相關政策與工具設定。'],
+                '06': ['完成 implement 不等於版本或發布。', '另處理 SemVer、artifact 與 provenance。'],
+                '07': ['constitution 管原則，但不 enforce GitHub settings。', '原則、policy 檔與套用腳本並存。'],
+                '08': ['更新的是 CLI／prompt templates，不是整個 repo 公版。', 'Copier 會更新 repo 基礎設施與政策檔。'],
+                '09': ['輸出 spec／plan／tasks，可讀但不是 portal。', '把決策摘要發布成單檔網站。'],
+                '10': ['在專案中 init，依 agent 支援選 command。', 'Copier 問卷同時決定語言組合與 repo 基線。'],
+                position: ['Specification-driven development workflow。', 'CSARC 是 repo distribution；可借用其規格階段，但不整套綁入。']
+              }
+            }
+          ]
+        },
+        {
+          name: '規格生命週期與大量遷移',
+          tools: [
+            {
+              name: 'OpenSpec',
+              url: 'https://github.com/Fission-AI/OpenSpec',
+              version: 'v1.11.0（2026-08-26）',
+              stars: '66,427（截取 2026-08-27）',
+              comparisons: {
+                '01': ['openspec/specs 是 current truth；changes 是待核准 delta。', '目前 spec 與工作樹提案尚未如此清楚分層，正透過 #376 校正。'],
+                '02': ['propose → apply → archive 讓 agent 按變更資料夾工作。', '以 Issue scope＋AGENTS 執行，尚未採 change folder lifecycle。'],
+                '03': ['requirements／scenarios／tasks 可檢查完成度，CI 另接。', '已有 repo 驗證腳本，但遠端 CI 暫停。'],
+                '04': ['Git／PR 仍由團隊流程負責。', '明確要求 Issue、短分支、PR 與人工審查。'],
+                '05': ['不提供依賴或供應鏈控制。', '模板內含安全與 dependency policy。'],
+                '06': ['archive 表示規格變更完成，不是 software release。', '規格完成與套件版本／交付是兩條不同生命週期。'],
+                '07': ['先核准 proposal 再實作，但不 enforce 平台設定。', '另保存 GitHub policy desired state 與人工套用流程。'],
+                '08': ['更新方法／schema，不更新整套 repo 基礎設施。', 'Copier 更新模板、政策、腳本與網站。'],
+                '09': ['規格與 changes 都是 repo 文件，沒有 portal。', '將確認後的決策另外渲染成可離線網站。'],
+                '10': ['輕量 init 到既有專案，重點是規格流程。', '導入同時處理既有檔案衝突、語言與治理設定。'],
+                position: ['最接近我們需要的 current／proposed spec 分層。', 'CSARC 範圍更廣；應學它的 changes 模型，不必取代整個模板。']
+              }
+            },
+            {
+              name: 'BMAD',
+              url: 'https://github.com/bmad-code-org/BMAD-METHOD',
+              version: 'v6.11.0（2026-08-10）',
+              stars: '52,377（截取 2026-08-27）',
+              comparisons: {
+                '01': ['依複雜度選 brief、spec 或完整 planning。', '也應小改只用 Issue、大改才升級 spec，但格式較 repo-specific。'],
+                '02': ['用多角色 agents 與 workflows 推進分析到實作。', '不內建 agent 組織；只定義任何 agent 都要遵守的邊界。'],
+                '03': ['Build and verify 後可回到 Plan 反覆修正。', '用窄回歸與 repo 驗證；規格變更需回 Issue／ADR。'],
+                '04': ['沿用使用者既有 Git／PR delivery workflow。', '直接附帶一套 Issue／branch／PR 預設。'],
+                '05': ['沒有固定 dependency security baseline。', '模板提供 Dependabot、OSV、SBOM 等政策來源。'],
+                '06': ['不負責 release engine。', '另定義版本、套件與 provenance。'],
+                '07': ['靠明確 decisions 與 durable context，不強制平台設定。', '除決策文件外，還有可套用的 GitHub policy。'],
+                '08': ['升級方法、agents 與 workflow pack。', '升級整份 repo 基礎設施並保護產品自有來源。'],
+                '09': ['產出豐富 planning artifacts，但不是文件 portal。', '只把確認後的摘要放進決策網站，避免保存逐字稿。'],
+                '10': ['Quick Flow 到完整方法依工作複雜度選級。', '以 composition／能力條件分級，對單次工作仍維持最小流程。'],
+                position: ['AI delivery methodology／agent workflow 套件。', 'CSARC 是可執行 repo 基線；可借用 right-sized planning，不引入整套角色。']
+              }
+            },
+            {
+              name: 'OpenRewrite',
+              url: 'https://github.com/openrewrite/rewrite',
+              version: 'v8.91.0（2026-08-26）',
+              stars: '3,679（截取 2026-08-27）',
+              comparisons: {
+                '01': ['Recipe 定義可重複的程式碼轉換，不定義產品需求。', 'Issue／spec 定義意圖，再決定是否需要遷移工具。'],
+                '02': ['Parser＋recipe 自動執行語意修改。', 'Agent／人直接修改 repo；目前沒有語意轉換引擎。'],
+                '03': ['Recipe tests 與 data tables 驗證轉換。', '測試整個模板輸出與治理行為。'],
+                '04': ['產生 deterministic diff，平台整合可批次開 PR。', '每張 PR 綁單一 Issue，重視人可讀的範圍。'],
+                '05': ['強項是大規模 dependency／framework 安全升級。', '目前只生成更新設定與檢查，不做語意級 mass migration。'],
+                '06': ['交付遷移結果，不擁有產品 release。', '另定義版本、artifact 與 provenance。'],
+                '07': ['Recipe 約束轉換內容，不管理 CODEOWNERS／Ruleset。', '治理同時涵蓋 repo policy 與變更審查。'],
+                '08': ['以 recipe 升級既有程式與設定。', '以 Copier 同步模板檔；複雜語意遷移能力較弱。'],
+                '09': ['輸出 reports／data tables，不是內部決策站。', '網站解釋政策與採用理由。'],
+                '10': ['適合跨大量 repo 做確定性的相同遷移。', '適合先把少量 repo 導入共同基線，再逐次更新。'],
+                position: ['Semantic code migration engine。', 'CSARC 是模板與治理 distribution；規模化升級時可互補。']
+              }
+            }
+          ]
+        }
+      ];
+      const similarToolLinks = [...similarToolsSlide.querySelectorAll('[data-similar-tool-link]')];
+      const similarToolRows = [...similarToolsSlide.querySelectorAll('[data-comparison-key]')];
+      const similarToolsGroupName = similarToolsSlide.querySelector('#similar-tools-group-name');
+      const similarToolsCounter = similarToolsSlide.querySelector('#similar-tools-counter');
+      const similarToolsPrevious = similarToolsSlide.querySelector('#similar-tools-previous');
+      const similarToolsNext = similarToolsSlide.querySelector('#similar-tools-next');
+      const similarToolsTable = similarToolsSlide.querySelector('.similar-tools-table-wrap');
+      const csarcComparisonBaseline = {
+        version: 'v0.12.2（2026-08-27）',
+        stars: '1（截取 2026-08-27）'
+      };
+      let similarToolGroupIndex = 0;
+
+      function renderSimilarToolGroup() {
+        const group = similarToolGroups[similarToolGroupIndex];
+        similarToolsGroupName.textContent = group.name;
+        similarToolsCounter.textContent = `${similarToolGroupIndex + 1} / ${similarToolGroups.length}`;
+        similarToolsPrevious.disabled = similarToolGroupIndex === 0;
+        similarToolsNext.disabled = similarToolGroupIndex === similarToolGroups.length - 1;
+        group.tools.forEach((tool, toolIndex) => {
+          const link = similarToolLinks[toolIndex];
+          link.textContent = tool.name;
+          link.href = tool.url;
+        });
+        similarToolRows.forEach(row => {
+          const key = row.dataset.comparisonKey;
+          const cells = [...row.querySelectorAll('[data-similar-tool-cell]')];
+          group.tools.forEach((tool, toolIndex) => {
+            const cell = cells[toolIndex];
+            if (key === 'version' || key === 'stars') {
+              const toolLabel = document.createElement('strong');
+              toolLabel.textContent = `${tool.name}｜`;
+              const csarcLabel = document.createElement('strong');
+              csarcLabel.textContent = 'CSARC｜';
+              cell.replaceChildren(toolLabel, tool[key], document.createElement('br'), csarcLabel, csarcComparisonBaseline[key]);
+              return;
+            }
+            const [toolValue, csarcValue] = tool.comparisons[key];
+            const toolLabel = document.createElement('strong');
+            toolLabel.textContent = `${tool.name}｜`;
+            const csarcLabel = document.createElement('strong');
+            csarcLabel.textContent = 'CSARC｜';
+            cell.replaceChildren(toolLabel, toolValue, document.createElement('br'), csarcLabel, csarcValue);
+          });
+        });
+        similarToolsTable.scrollTop = 0;
+      }
+      similarToolsPrevious.addEventListener('click', () => {
+        if (similarToolGroupIndex === 0) return;
+        similarToolGroupIndex -= 1;
+        renderSimilarToolGroup();
+      });
+      similarToolsNext.addEventListener('click', () => {
+        if (similarToolGroupIndex === similarToolGroups.length - 1) return;
+        similarToolGroupIndex += 1;
+        renderSimilarToolGroup();
+      });
+      renderSimilarToolGroup();
+    }
     const slideCount = document.querySelectorAll('.slide').length;
     document.querySelectorAll('.slide').forEach((slide, index) => {
       slide.dataset.page = `${String(index + 1).padStart(2, '0')} / ${slideCount}`;

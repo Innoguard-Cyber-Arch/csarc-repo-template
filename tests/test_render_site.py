@@ -122,6 +122,12 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
 
     assert 'class="slide similar-tools-slide" data-audience="maintainer"' in source
     assert source.count('data-work-step="') == 10
+    assert source.count("data-similar-tool-cell") == 39
     assert "get('audience') === 'maintainer'" in app
     assert "element.remove()" in app
     assert "similarToolsSlide ?" in app
+    comparison_data = app.split("const similarToolGroups = [", 1)[1].split(
+        "const similarToolLinks", 1
+    )[0]
+    assert comparison_data.count("url: 'https://github.com/") == 12
+    assert "renderSimilarToolGroup" in app
