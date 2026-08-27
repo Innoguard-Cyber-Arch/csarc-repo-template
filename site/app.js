@@ -846,6 +846,8 @@ gh auth status`
           released: '2026-08-13',
           stars: '1,198',
           group: 'primary',
+          selfPosition: 'Agent-ready repository framework：把 AI 工作規則、持久計畫、驗證與安全更新放進 repo。',
+          difference: 'Repository Harness 偏向替既有 repo 加上 agent 工作框架；CSARC 另外提供可生成的技術 profile、GitHub 治理、交付與版本政策。',
           philosophies: {
             repositoryTruth: 'repo 同時保存產品文件、決策、plan、程式與驗證證據。',
             templateLifecycle: 'updater 保留 upstream base，用三方合併安全更新既有 repo。',
@@ -860,6 +862,8 @@ gh auth status`
           released: '2026-08-26',
           stars: '2,948',
           group: 'primary',
+          selfPosition: 'Project generator：用一般程式語言宣告專案，持續 synth 出受管設定與工作流程。',
+          difference: 'projen 把大量檔案視為不可手改的生成結果；CSARC 用 Copier 發布可更新基線，並保留產品檔案與政策檔案的責任邊界。',
           philosophies: {
             repositoryTruth: '.projenrc 是唯一手寫真相，其他專案檔由 synth 產生。',
             declarativeState: '用 typed components 宣告期望專案，再由 synth 收斂檔案。',
@@ -990,6 +994,30 @@ gh auth status`
           }
         }
       ];
+      const primaryBody = similarToolsSlide.querySelector('[data-similar-tools-primary-body]');
+      similarTools.filter(tool => tool.group === 'primary').forEach(tool => {
+        const row = document.createElement('tr');
+        const nameCell = document.createElement('th');
+        nameCell.scope = 'row';
+        const link = document.createElement('a');
+        link.href = tool.url;
+        link.target = '_blank';
+        link.rel = 'noreferrer';
+        link.textContent = tool.name;
+        nameCell.append(link);
+
+        const versionCell = document.createElement('td');
+        versionCell.append(tool.version, document.createElement('br'), `（${tool.released}）`);
+        const starsCell = document.createElement('td');
+        starsCell.append(tool.stars, document.createElement('br'), `（${comparisonDate}）`);
+        const positionCell = document.createElement('td');
+        positionCell.textContent = tool.selfPosition;
+        const differenceCell = document.createElement('td');
+        differenceCell.textContent = tool.difference;
+        row.append(nameCell, versionCell, starsCell, positionCell, differenceCell);
+        primaryBody.append(row);
+      });
+
       const groups = ['primary', 'reference'];
       const similarToolRows = [...similarToolsSlide.querySelectorAll('[data-comparison-key]')];
       groups.forEach(group => {
@@ -999,43 +1027,38 @@ gh auth status`
           const cell = document.createElement('td');
           const list = document.createElement('div');
           list.className = 'similar-tool-list';
-
-          if (key === 'version' || key === 'stars') {
-            list.classList.add('fact-list');
-            tools.forEach(tool => {
-              const entry = document.createElement('p');
-              entry.className = 'similar-tool-entry';
-              const name = document.createElement('strong');
-              if (key === 'version') {
-                const link = document.createElement('a');
-                link.href = tool.url;
-                link.target = '_blank';
-                link.rel = 'noreferrer';
-                link.textContent = tool.name;
-                name.append(link);
-              } else {
-                name.textContent = tool.name;
-              }
-              const value = key === 'version' ? tool.version : tool.stars;
-              const date = key === 'version' ? tool.released : comparisonDate;
-              entry.append(name, `：${value}`, document.createElement('br'), `（${date}）`);
-              list.append(entry);
-            });
-          } else {
-            tools.filter(tool => tool.philosophies[key]).forEach(tool => {
-              const entry = document.createElement('p');
-              entry.className = 'similar-tool-entry';
-              const name = document.createElement('strong');
-              name.textContent = `${tool.name}：`;
-              entry.append(name, tool.philosophies[key]);
-              list.append(entry);
-            });
-          }
-
+          tools.filter(tool => tool.philosophies[key]).forEach(tool => {
+            const entry = document.createElement('p');
+            entry.className = 'similar-tool-entry';
+            const name = document.createElement('strong');
+            name.textContent = `${tool.name}：`;
+            entry.append(name, tool.philosophies[key]);
+            list.append(entry);
+          });
           cell.append(list);
           row.append(cell);
         });
       });
+
+      const panels = [...similarToolsSlide.querySelectorAll('[data-similar-tools-panel]')];
+      const panelButtons = [...similarToolsSlide.querySelectorAll('[data-similar-tools-direction]')];
+      const panelLabel = similarToolsSlide.querySelector('[data-similar-tools-page-label]');
+      const panelCount = similarToolsSlide.querySelector('[data-similar-tools-page-count]');
+      let panelIndex = 0;
+      const renderPanel = () => {
+        panels.forEach((panel, index) => { panel.hidden = index !== panelIndex; });
+        panelLabel.textContent = panels[panelIndex].dataset.label;
+        panelCount.textContent = `${panelIndex + 1} / ${panels.length}`;
+        panelButtons[0].disabled = panelIndex === 0;
+        panelButtons[1].disabled = panelIndex === panels.length - 1;
+      };
+      panelButtons.forEach(button => {
+        button.addEventListener('click', () => {
+          panelIndex += Number(button.dataset.similarToolsDirection);
+          renderPanel();
+        });
+      });
+      renderPanel();
     }
     const slideCount = document.querySelectorAll('.slide').length;
     document.querySelectorAll('.slide').forEach((slide, index) => {

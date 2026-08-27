@@ -339,6 +339,29 @@
 
     .similar-tools-slide header { margin-bottom: 8px; }
     .similar-tools-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
+    .similar-tools-pager {
+      display: grid;
+      grid-template-columns: 38px minmax(220px, auto) 38px;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 7px;
+    }
+    .similar-tools-pager button {
+      width: 38px;
+      height: 30px;
+      border: 1px solid var(--ink);
+      background: white;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 20px;
+      font-weight: 900;
+    }
+    .similar-tools-pager button:disabled { border-color: #c8c8c2; color: #aaa; cursor: default; }
+    .similar-tools-pager span { display: flex; justify-content: center; gap: 8px; font-size: 16px; }
+    .similar-tools-pager small { color: var(--muted); font-size: inherit; font-weight: 800; }
+    .similar-tools-panel { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+    .similar-tools-panel[hidden] { display: none; }
     .similar-tools-legend {
       display: flex;
       gap: 7px;
@@ -386,11 +409,15 @@
     .similar-tools-matrix tbody tr:nth-child(even) td { background: #fafaf8; }
     .similar-tools-matrix td strong { color: #174f8b; }
     .similar-tools-matrix td a { color: #174f8b; text-underline-offset: 2px; }
+    .similar-tools-primary-matrix { font-size: 16px; line-height: 1.3; }
+    .similar-tools-primary-matrix thead th:first-child { width: 17%; }
+    .similar-tools-primary-matrix thead th:nth-child(2) { width: 17%; }
+    .similar-tools-primary-matrix thead th:nth-child(3) { width: 15%; }
+    .similar-tools-primary-matrix thead th:nth-child(4) { width: 23%; }
+    .similar-tools-primary-matrix thead th:nth-child(5) { width: 28%; }
+    .similar-tools-primary-matrix tbody th { width: 17%; font-size: 16px; }
     .similar-tool-entry { margin: 0; }
     .similar-tool-entry + .similar-tool-entry { margin-top: 5px; padding-top: 5px; border-top: 1px dotted #b9b9b3; }
-    .similar-tool-list.fact-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 12px; }
-    .similar-tool-list.fact-list .similar-tool-entry + .similar-tool-entry { margin-top: 0; padding-top: 0; border-top: 0; }
-    .similar-tools-matrix .similar-tools-fact td { background: var(--soft); font-size: 14px; line-height: 1.15; }
     .similar-tools-note {
       margin-top: 7px;
       padding: 6px 9px;

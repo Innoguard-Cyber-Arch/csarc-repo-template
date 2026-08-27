@@ -121,10 +121,14 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     app = (root / "site" / "app.js").read_text(encoding="utf-8")
 
     assert 'class="slide similar-tools-slide" data-audience="maintainer"' in source
-    assert source.count('data-comparison-key="') == 7
+    assert source.count('data-comparison-key="') == 5
+    assert source.count("data-similar-tools-panel") == 2
+    assert source.count("data-similar-tools-direction") == 2
     assert "01 工作定義" in source
     assert "主要相似工具" in source
     assert "該哲學熱門／代表工具" in source
+    assert "自我定位" in source
+    assert "與本套件的差異" in source
     for philosophy in (
         "Repo 即真相",
         "宣告式設定",
@@ -142,6 +146,8 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     assert comparison_data.count("url: 'https://github.com/") == 12
     assert comparison_data.count("group: 'primary'") == 2
     assert comparison_data.count("group: 'reference'") == 10
+    assert comparison_data.count("selfPosition:") == 2
+    assert comparison_data.count("difference:") == 2
     for key in (
         "repositoryTruth",
         "declarativeState",
@@ -150,7 +156,8 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
         "rightSizedWork",
     ):
         assert f"{key}:" in comparison_data
-    assert "similar-tools-next" not in source
     assert "similarToolsHeader" not in app
     assert "document.createElement('br')" in app
+    assert "primaryBody.append" in app
+    assert "renderPanel();" in app
     assert "截取 " not in comparison_data
