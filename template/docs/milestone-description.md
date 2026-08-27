@@ -43,5 +43,10 @@ story；Milestone 只保留足以理解、排程與驗收一次 delivery／relea
 的 delivery／release；沒有排程就不要建立 Milestone，也不要把它當 release label。
 關閉最後一張 Issue 前，須勾選所有已驗證的 acceptance items；否則 lifecycle
 workflow 會讓未完成的 story 保持開啟。
+Promotion Issue 的 checkbox 只能描述合併前可驗證的條件；由 merge 觸發的 Issue／
+Milestone 關閉與 branch／worktree 清理由 `## 補充` 的 post-merge runbook 記錄，不得
+寫成必須在 merge 前勾選的 acceptance item。若後續工作必須先消費同一 Milestone 的
+immutable Release，依 `docs/ci-policy.md` 建立獨立 checkpoint promotion Issue，明列
+本次 included work Issues；final promotion Issue 保持無 checkpoint marker。
 建立前須閱讀相關 open／closed Issues 的內文、comments 與 linked pull requests；
 不能只依 titles 或 labels 推翻既有決策。
