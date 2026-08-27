@@ -2489,9 +2489,8 @@ grep -q 'test "$TYPESCRIPT_RESULT" = success' \
 update_source="$fixture_root/update-source"
 update_project="$fixture_root/update-project"
 mkdir -p "$update_source"
-legacy_memory_base=f1ecc6e4fa2bb03e7c322e5d8dd69265a7c34513
-git cat-file -e "$legacy_memory_base^{commit}"
-git archive "$legacy_memory_base" | tar -x -C "$update_source"
+# Keep the update fixture self-contained in the checked-out candidate history.
+git archive HEAD | tar -x -C "$update_source"
 
 git -C "$update_source" init -b main
 git -C "$update_source" config user.name "Template Test"
@@ -2518,6 +2517,7 @@ printf '%s\n' 'window.PROJECT_OWNED_SITE = true;' \
   >> "$update_project/docs/site-content.js"
 printf '%s\n' '/* PROJECT_OWNED_THEME */' \
   >> "$update_project/docs/site-theme.css"
+mkdir -p "$update_project/docs/decisions"
 cp "$repo_root/docs/adr/agent-collaboration.md" \
   "$update_project/docs/decisions/project-owned.md"
 printf '%s\n' '' 'PROJECT_OWNED_MEMORY' \
