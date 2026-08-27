@@ -20,7 +20,9 @@ dev = [
 {% endif %}
   "pytest>=8.4,<10",
   "pytest-cov>=6.2,<8",
+  "pyyaml>=6.0.3,<7",
   "ruff>=0.12,<1",
+  "types-pyyaml>=6.0.12,<7",
 ]
 
 [build-system]
@@ -49,10 +51,12 @@ strict = true
 files = ["src", "scripts", "tests"]
 
 [tool.pytest.ini_options]
-addopts = "-q"
+addopts = "-q --strict-markers"
 testpaths = ["tests"]
 markers = [
-  "large: long-running generated-project or adoption coverage reserved for the full gate",
+  "large: long-running end-to-end coverage reserved for the integrated full gate",
+  "runtime: minimal behavior that must pass on every supported Python runtime",
+  "quarantine: tracked flaky coverage with an owner, issue, and expiry; never a required-gate bypass",
 ]
 
 [tool.coverage.run]

@@ -76,9 +76,9 @@ curl -fsSL '<engineering-practice-url>'
 | 選 Issue | 清理 dry-run、限量搜尋歷史、讀 Issue／PR／ADR、判定 Milestone 或 standalone | Issue scope、label、Milestone、既有 branch／worktree／PR | 資訊散在多處；找不到 route 時應停止，不能猜。 |
 | 建 branch／worktree | Milestone 從 `dev/m*` 建 `type/*`；standalone、hotfix、bot 從 `main` 建短分支 | parent branch、乾淨 worktree、單一 Issue scope | route 只由 Milestone 與工作類型決定，不再選永久中間 trunk。 |
 | 實作中 | TDD、targeted checks、更新文件／root-template pair | 最窄 regression、lint/type/test | #261 已讓 targeted checks 後即可開 Draft；尚未自動化的摩擦是使用者仍要自行組合 route、risk 與下一步。 |
-| 開 PR／Draft／Ready | targeted 後開 Draft 揭露 owner／scope／依賴，Ready 前完成 acceptance 與 full verify | closing keyword、`verify-template.sh`、head SHA | #261 已移除開 Draft 前的 full gate；狀態仍分散在 Issue、PR、checks 與 branch，沒有單一 status 入口。 |
+| 開 PR／Draft／Ready | targeted 後開 Draft 揭露 owner／scope／依賴，Ready 前完成 acceptance 與 CI plan 的 scoped checks | closing keyword、scoped results、head SHA | #261 已移除開 Draft 前的 full gate；#317 進一步把 full 收斂到 integrator 的最終候選。 |
 | Issue PR checks | 等 policy、fast、stable `verify`；高風險路徑升 full | route、title、Issue linkage、secret、targeted tests、條件式 security | #201 已把一般路徑收斂為最多三個 runner jobs；unknown 仍應 full，而不是猜低風險。 |
-| Actions quota fallback | Routine 以 canonical tool 確認完整 zero-step run set、重跑 full 並留單一 note；promotion 才使用 attestation 與 human authorization | exact head、commands、未重現 checks | #254 已移除 routine PR 的逐張 human 等待；promotion 仍合理需要雙重授權。 |
+| Actions quota fallback | Routine 以 canonical tool 確認完整 zero-step run set、重跑 scoped plan 並留單一 note；promotion 才使用 attestation 與 human authorization | exact head、commands、未重現 checks | #254 已移除 routine PR 的逐張 human 等待；promotion 仍合理需要雙重授權。 |
 | Merge 到 delivery | review／授權後合併；非 default base 可能需手動關 Issue | live PR head/base、無 blocker、checks | #240：worktree 不隔離 GitHub；#236/#237 發生 Ready／Draft／merge race，#253 顯示 `baseRefOid` 不是 live destination CAS。 |
 | 等待 Milestone | Milestone 等其他 Issues 與 promotion Issue；standalone 直接進 main | acceptance、所有非 promotion Issues 完成 | 等待只存在於需要共同驗收的 Milestone。 |
 | `main → dev/m*` sync | ordinary work 不追逐 main；各 Milestone 到 final promotion 才由 owner 開一張 reviewed sync PR | final candidate 必須包含當時 current `main` | stale preflight 只建立該 Milestone 的一個 action；明列 dependency 的 PR owner 才能提前 sync。 |
@@ -92,7 +92,7 @@ curl -fsSL '<engineering-practice-url>'
 | [#238](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/238)／[#320](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/320) | 長期整合 branch 曾在 promotion 後被平台 auto-delete，促成 repository-wide temporary setting mutation 與 recovery machinery。 | 改以 `main` 為唯一永久 branch，Milestone delivery 一律短命；事故成因因此消失，不再修改全域 auto-delete 設定。 |
 | [#240](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/240)／[PR #260](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/260) | #236 的 merge call 比另一 task 轉 Draft 早約 1.7 秒；#253 又證明只比 source head 不能防 destination base race。 | 所有 PR lifecycle writes 以跨 process lease 序列化，merge 前重讀 live source、destination、Draft、blocker 與 authorization。 |
 | [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254) | Teams private plan 的 quota block 是日常條件；#254 已讓 routine PR 以 exact-head canonical note 配合 Alpha self-merge，不再逐張等第二則 human authorization。 | 保留已生效的 single-note routine fallback；#240 日後只補 writer 互斥，promotion 仍不簡化。 |
-| [#261](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/261) | #261 已允許 targeted checks 後先開 Draft，讓遠端可見 owner、scope、依賴與待完成驗證。 | 保留現行 early Draft ownership；Ready 前才完成 acceptance 與完整驗證。 |
+| [#261](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/261) | #261 已允許 targeted checks 後先開 Draft，讓遠端可見 owner、scope、依賴與待完成驗證。 | 保留現行 early Draft ownership；Ready 前完成 acceptance 與 scoped checks，完整驗證由 final Ready candidate 的 hosted gate 執行一次，只有 fallback 改由 integrator 本機執行。 |
 
 ## 決定
 
@@ -101,7 +101,7 @@ curl -fsSL '<engineering-practice-url>'
 1. **預設只有一條路。** Issue 有 Milestone 就由工具導向其短命 `dev/m*`；否則由短分支
    直接導向 `main`。Hotfix 與 risk escalation 只由明確條件開啟。
 2. **Draft 是 ownership，不是品質聲明。** 先暴露 work、scope 與依賴；Ready 才承諾
-   acceptance、完整驗證與可審查性。
+   acceptance、CI plan 選定的 scoped checks 與可審查性。
 3. **TDD 驗證行為，不驗證文字排列。** 非 trivial 變更先留下會失敗的最窄 behavior
    check，再完成實作與 refactor；security 與資料損失邊界不因「最小」被省略。
 4. **檢查成本跟著風險與 delivery stage。** Routine PR 先 policy／fast；未知或高風險
@@ -125,7 +125,7 @@ curl -fsSL '<engineering-practice-url>'
 stateDiagram-v2
     [*] --> Open
     Open --> Draft: claim + branch + visible PR
-    Draft --> Ready: acceptance + targeted + full local verify
+    Draft --> Ready: acceptance + scoped plan
     Ready --> Integrated: review + required issue-PR gates
     Integrated --> Candidate: batch complete + one final current-main sync
     Candidate --> Delivered: promotion full gate + tree identity
@@ -135,8 +135,8 @@ stateDiagram-v2
 | State | 唯一必要事實 | 可執行者 | 不能推論 |
 | --- | --- | --- | --- |
 | `Open` | Issue 尚未有有效 owner／Draft | 團隊使用者或 agent 可認領 | branch 存在不等於已認領，仍要查 PR／worktree。 |
-| `Draft` | 一張對正確 base 的 Draft 公開 scope、owner、依賴與待辦 | Issue owner 可更新；其他人 review-only | 不可 merge、不可用 closing keyword 宣稱完成、不可視為已通過 full verify。 |
-| `Ready` | acceptance 完成、targeted 與完整本機驗證通過、無較新的 blocker | Issue owner可請 review；reviewer 決定 approval | Ready 不等於有 merge authority，且新 commit／base drift 會退回待驗證。 |
+| `Draft` | 一張對正確 base 的 Draft 公開 scope、owner、依賴與待辦 | Issue owner 可更新；其他人 review-only | 不可 merge、不可用 closing keyword 宣稱完成、不可視為已完成 scoped plan。 |
+| `Ready` | acceptance 完成、CI plan 的 scoped checks 通過、無較新的 blocker | Issue owner可請 review；reviewer 決定 approval | Ready 不等於有 merge authority，也不代表已執行最終 full gate。 |
 | `Integrated` | exact Issue candidate 已受審查合併到正確 delivery branch | lease holder 或 human maintainer | 非 default base 的 closing keyword 不保證 Issue 已關；必要時由 lifecycle 補正。 |
 | `Candidate` | delivery scope 完成、包含 current `main`，promotion evidence 綁定 live base/head/tree | delivery owner 建立；human／platform核准例外 | artifact-only 不等於 external canary，local fallback 不等於 release evidence。 |
 | `Delivered` | verified candidate 已進 `main` 且 post-merge tree identity 成立 | human 或受保護 automation | merge timestamp 本身不證明 release／provenance 成功。 |
@@ -162,7 +162,7 @@ flowchart LR
 
 | 類別 | 判定 | 必要 gate | 例外授權 |
 | --- | --- | --- | --- |
-| Routine Issue | docs、局部行為或已知低風險路徑，route classifier 能完整解釋 | targeted behavior checks、policy、fast、stable aggregate；Ready 前一次完整本機驗證 | 現行 #254 已允許 zero-step quota 的 canonical note／Alpha self-merge；#240 日後只增加 writer serialization。 |
+| Routine Issue | docs、局部行為或已知低風險路徑，route classifier 能完整解釋 | targeted behavior checks、policy、fast、stable aggregate；Issue owner 只完成 scoped plan | 現行 #254 已允許 zero-step quota 的 canonical note／Alpha self-merge；#240 日後只增加 writer serialization。 |
 | Elevated Issue | workflow、權限、security、dependency／lock、governance、release、跨 profile 或 unknown path | full tier、獨立 human review、exact source/destination 再確認 | 只有 human maintainer 可接受風險或改分類；不能用 quota note 自動降級。 |
 | Promotion／hotfix | 任何進 `main` 的 delivery candidate 或正式環境緊急修正 | current-main、full、candidate tree、review、canary 三態、post-merge identity | quota fallback 仍需 human attestation／authorization；release-only controls 不可本機取代。 |
 | Periodic／release | drift、OSV、Zizmor、artifact、SBOM、provenance | 排程或 verified main source；idempotent evidence | 不阻塞 routine PR，但失敗會阻止受影響 promotion／release。 |
@@ -209,7 +209,8 @@ control plane、供應鏈與 promotion／release boundary 解釋。
 本 ADR 維持 `Proposed`。已落地的 #254 routine quota、#261 early Draft ownership 與 #265
 behavior-oriented tests 是現行基線，必須持續保留；#240 single-writer／live destination
 guard 與 #266 path automation 進入本 delivery branch，每張實作 Issue 各自完成 root／
-template、targeted regression 與 `./scripts/verify-template.sh`，並經維護者審查後，才能把
+template 與 scoped regression，integrator 只對最終不再變動的 candidate 執行一次
+`./scripts/verify-template.sh`，並經維護者審查後，才能把
 本提案改為 `Accepted`。本 PR 不預先修改 workflow，也不把 future automation 宣稱為 active。
 
 Milestone #9 應以政策草案的 scenarios 執行 fixture／live dry-run，記錄人工接觸點、等待、

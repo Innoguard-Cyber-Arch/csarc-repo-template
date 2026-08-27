@@ -11,13 +11,15 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft]
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
+  schedule:
+    - cron: "17 3 * * 1"
   workflow_dispatch:
 
 concurrency:
-  group: {% raw %}${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}{% endraw %}
+  group: {% raw %}${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}-${{ github.event.action == 'edited' && github.event.changes.base.ref.from == '' && 'metadata' || 'product' }}{% endraw %}
   cancel-in-progress: {% raw %}${{ github.event_name == 'pull_request' && !startsWith(github.event.pull_request.head.ref, 'dev') && !startsWith(github.event.pull_request.head.ref, 'release-please--') && !contains(github.event.pull_request.labels.*.name, 'promotion') && !contains(github.event.pull_request.labels.*.name, 'hotfix') && !contains(github.event.pull_request.labels.*.name, 'release-recovery') }}{% endraw %}
 
 permissions:
@@ -29,16 +31,21 @@ permissions:
 jobs:
   fast:
     name: route and fast checks
+    if: {% raw %}${{ github.event.action != 'edited' || github.event.changes.base.ref.from != '' }}{% endraw %}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
       tier: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
+      stage: {% raw %}${{ steps.plan.outputs.stage }}{% endraw %}
       reason: {% raw %}${{ steps.plan.outputs.reason }}{% endraw %}
       review_state: {% raw %}${{ steps.plan.outputs.review_state }}{% endraw %}
       scopes: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
+      risks: {% raw %}${{ steps.plan.outputs.risks }}{% endraw %}
       run_governance: {% raw %}${{ steps.plan.outputs.run_governance }}{% endraw %}
       run_osv: {% raw %}${{ steps.plan.outputs.run_osv }}{% endraw %}
       run_zizmor: {% raw %}${{ steps.plan.outputs.run_zizmor }}{% endraw %}
+      run_deep: {% raw %}${{ steps.plan.outputs.run_deep }}{% endraw %}
+      run_adoption_macos: {% raw %}${{ steps.plan.outputs.run_adoption_macos }}{% endraw %}
     steps:
       - name: Start timing
         id: started
@@ -60,7 +67,7 @@ jobs:
         run: |
           files="$RUNNER_TEMP/changed-files"
           if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]]; then
-            git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$files"
+            git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$files"
           else
             git ls-files -z > "$files"
           fi
@@ -104,6 +111,7 @@ jobs:
       - name: Run change-aware checks
         if: {% raw %}${{ steps.plan.outputs.tier == 'docs' || steps.plan.outputs.tier == 'fast' }}{% endraw %}
         env:
+          CSARC_CI_RISKS: {% raw %}${{ steps.plan.outputs.risks }}{% endraw %}
           CSARC_CI_SCOPES: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
           CSARC_CI_TIER: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
 {%- if has_python %}
@@ -156,6 +164,7 @@ jobs:
     uses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@{{ workflow_ref }}
     with:
       language-profile: "{{ language }}"
+      run-runtime-matrix: {% raw %}${{ needs.fast.outputs.run_deep == 'true' }}{% endraw %}
 {%- if has_python %}
       canonical-python-version: "{{ python_latest }}"
       python-versions: >-
@@ -214,7 +223,7 @@ jobs:
   python-compatibility:
     name: Python compatibility ({% raw %}${{ matrix.runtime }}{% endraw %})
     needs: fast
-    if: {% raw %}${{ needs.fast.outputs.tier == 'full' }}{% endraw %}
+    if: {% raw %}${{ needs.fast.outputs.run_deep == 'true' }}{% endraw %}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -285,7 +294,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: {% raw %}${{ github.event.pull_request.base.sha || github.sha }}{% endraw %}
+          ref: {% raw %}${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}{% endraw %}
       - name: Check effective repository governance
         env:
           GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
@@ -365,8 +374,8 @@ jobs:
 {%- endif %}
 
   verify:
-    name: verify
-    if: {% raw %}${{ always() }}{% endraw %}
+    name: {% raw %}${{ github.event.action == 'edited' && github.event.changes.base.ref.from == '' && 'metadata edit' || 'verify' }}{% endraw %}
+    if: {% raw %}${{ always() && (github.event.action != 'edited' || github.event.changes.base.ref.from != '') }}{% endraw %}
     needs:
       - fast
 {%- if use_reusable_workflow %}
@@ -393,6 +402,11 @@ jobs:
         env:
           FAST_RESULT: {% raw %}${{ needs.fast.result }}{% endraw %}
           TIER: {% raw %}${{ needs.fast.outputs.tier }}{% endraw %}
+          RUN_GOVERNANCE: {% raw %}${{ needs.fast.outputs.run_governance }}{% endraw %}
+          RUN_OSV: {% raw %}${{ needs.fast.outputs.run_osv }}{% endraw %}
+          RUN_ZIZMOR: {% raw %}${{ needs.fast.outputs.run_zizmor }}{% endraw %}
+          RUN_DEEP: {% raw %}${{ needs.fast.outputs.run_deep }}{% endraw %}
+          RUN_ADOPTION_MACOS: {% raw %}${{ needs.fast.outputs.run_adoption_macos }}{% endraw %}
           REVIEW_STATE: {% raw %}${{ needs.fast.outputs.review_state }}{% endraw %}
 {%- if use_reusable_workflow %}
           FULL_RESULT: {% raw %}${{ needs.full.result }}{% endraw %}
@@ -410,23 +424,75 @@ jobs:
           ZIZMOR_RESULT: {% raw %}${{ needs.zizmor.result }}{% endraw %}
 {%- if has_container %}
           CONTAINER_RESULT: {% raw %}${{ needs.container.result }}{% endraw %}
+          RUN_CONTAINER: {% raw %}${{ needs.fast.outputs.tier != 'docs' }}{% endraw %}
 {%- endif %}
         run: |
+          require_boolean() {
+            value="$1"
+            name="$2"
+            case "$value" in
+              true|false) ;;
+              *)
+                echo "$name must be true or false; got ${value:-<empty>}" >&2
+                return 1
+                ;;
+            esac
+          }
+          require_routed() {
+            expected="$1"
+            actual="$2"
+            name="$3"
+            require_boolean "$expected" "$name route"
+            if [[ "$expected" == true ]]; then
+              [[ "$actual" == success ]] || {
+                echo "$name must succeed when routed; got $actual" >&2
+                return 1
+              }
+            else
+              [[ "$actual" == skipped ]] || {
+                echo "$name must be skipped when not routed; got $actual" >&2
+                return 1
+              }
+            fi
+          }
+          require_boolean "$RUN_DEEP" run_deep
+          require_boolean "$RUN_ADOPTION_MACOS" run_adoption_macos
+          require_boolean "$RUN_GOVERNANCE" run_governance
+          require_boolean "$RUN_OSV" run_osv
+          require_boolean "$RUN_ZIZMOR" run_zizmor
+{% if has_container %}          require_boolean "$RUN_CONTAINER" run_container
+{% endif %}
+          case "$REVIEW_STATE" in
+            draft|ready|not-applicable) ;;
+            *)
+              echo "review state is invalid: ${REVIEW_STATE:-<empty>}" >&2
+              exit 1
+              ;;
+          esac
           if [[ "$REVIEW_STATE" == "draft" ]]; then
             echo "::notice::Draft WIP targeted checks passed; full verification remains pending until Ready."
           fi
           test "$FAST_RESULT" = success
-          if [[ "$TIER" == full ]]; then
+          case "$TIER" in
+            full)
 {% if use_reusable_workflow %}            test "$FULL_RESULT" = success
 {% else %}            test "$CANONICAL_RESULT" = success
-{% if has_python %}            test "$PYTHON_COMPATIBILITY_RESULT" = success
-{% endif %}{% if language == "python-typescript" %}            test "$TYPESCRIPT_RESULT" = success
-{% endif %}{% endif %}          else
+{% if language == "python-typescript" %}            test "$TYPESCRIPT_RESULT" = success
+{% endif %}{% endif %}              ;;
+            docs|fast|post-merge)
 {% if use_reusable_workflow %}            test "$FULL_RESULT" = skipped
 {% else %}            test "$CANONICAL_RESULT" = skipped
-{% if has_python %}            test "$PYTHON_COMPATIBILITY_RESULT" = skipped
-{% endif %}{% if language == "python-typescript" %}            test "$TYPESCRIPT_RESULT" = skipped
-{% endif %}{% endif %}          fi
-          for result in "$GOVERNANCE_RESULT" "$OSV_RESULT" "$ZIZMOR_RESULT"{% if has_container %} "$CONTAINER_RESULT"{% endif %}; do
-            [[ "$result" == success || "$result" == skipped ]]
-          done
+{% if language == "python-typescript" %}            test "$TYPESCRIPT_RESULT" = skipped
+{% endif %}{% endif %}              ;;
+            *)
+              echo "verification tier is invalid: ${TIER:-<empty>}" >&2
+              exit 1
+              ;;
+          esac
+{% if not use_reusable_workflow and has_python %}          require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility
+{% endif %}
+          require_routed "$RUN_GOVERNANCE" "$GOVERNANCE_RESULT" governance
+          require_routed "$RUN_OSV" "$OSV_RESULT" osv
+          require_routed "$RUN_ZIZMOR" "$ZIZMOR_RESULT" zizmor
+{% if has_container %}          require_routed "$RUN_CONTAINER" "$CONTAINER_RESULT" container
+{% endif -%}

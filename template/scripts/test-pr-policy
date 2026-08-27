@@ -453,7 +453,7 @@ fail|delivery rejects legacy dev next stack|delivery|feat(api): add report|enhan
 fail|unknown branch strategy|staging|feat(api): add report|enhancement|staging|feat/42-report|Closes #42|open|-
 CASES
 
-draft_body=$'Refs #42\n\n- Scope: Add report output\n- Completed verification: Unit tests pass\n- Pending verification: Full suite before Ready\n- Known risks: None\n- Dependencies / non-parallel work: None\n\n- [x] Run targeted tests\n- [ ] Run full verification'
+draft_body=$'Refs #42\n\n- Scope: Add report output\n- Completed verification: Unit tests pass\n- Pending verification: Scoped checks before Ready\n- Known risks: None\n- Dependencies / non-parallel work: None\n\n- [x] Run targeted tests\n- [ ] Run scoped verification'
 
 case_count=$((case_count + 1))
 PR_DRAFT="true" \
@@ -495,7 +495,7 @@ if PR_DRAFT="true" \
   exit 1
 fi
 
-complete_draft_body=$'Closes #42\n\n- Scope: Add report output\n- Completed verification: Full suite passes\n- Pending verification: None\n- Known risks: None\n- Dependencies / non-parallel work: None\n\n- [x] Run targeted tests\n- [x] Run full verification'
+complete_draft_body=$'Closes #42\n\n- Scope: Add report output\n- Completed verification: Scoped checks pass\n- Pending verification: None\n- Known risks: None\n- Dependencies / non-parallel work: None\n\n- [x] Run targeted tests\n- [x] Run scoped verification'
 
 case_count=$((case_count + 1))
 if PR_DRAFT="true" \

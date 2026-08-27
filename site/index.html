@@ -244,7 +244,7 @@
     <section class="slide decision-slide" data-track="contract" aria-label="步驟三本機驗證與持續整合">
       <header>
         <h2>步驟 3｜<span class="accent">本機與 CI 用同一把尺</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>本機保留完整驗證入口；一般 Issue PR 跑單一 runtime 的 change-aware checks，promotion／hotfix 才跑完整矩陣。Full tier 只做一次 canonical 完整驗證，Python 相容性與混合 TypeScript 各自留下不重複的 runtime 證據。</p>
+        <p class="subtitle"><strong>基本導入。</strong>Issue owner 跑 scoped fast checks；final Ready candidate 只跑一次 hosted full，fallback 才改由 integrator 本機執行。Cross-runtime 只重跑標為 runtime 的案例，large 留給完整候選。</p>
       </header>
       <p class="context-line"><strong>問題與目的｜</strong>若每個人和 AI 都用不同指令，結果就無法重現；統一成一個驗證入口，問題可在送出 PR 前發現。</p>
       <div class="decision-strip">
@@ -252,7 +252,7 @@
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
           <details class="package-disclosure"><summary><span><span class="tech-name">Python：uv／Ruff／mypy／pytest　TS：pnpm／Biome／Vitest</span></span></summary><div class="package-health"><p><a href="https://github.com/astral-sh/uv" target="_blank" rel="noreferrer">uv／Ruff</a>、<a href="https://github.com/biomejs/biome" target="_blank" rel="noreferrer">Biome</a>、<a href="https://github.com/vitest-dev/vitest" target="_blank" rel="noreferrer">Vitest</a> 與 <a href="https://github.com/gitleaks/gitleaks" target="_blank" rel="noreferrer">Gitleaks</a> 都是公開且持續維護的主流工具。</p><p><strong>選型：</strong>各語言用自己的格式、型別、測試與打包工具；安全與治理入口仍共用。</p></div></details>
-          <p class="recommendation-copy"><strong>Fast：</strong>每張一般 PR 跑 secret scan、格式、lint、型別、單元測試與必要 template smoke；docs-only 不啟動語言或生成矩陣。<br><strong>Full：</strong><code>dev/* → main</code> promotion、hotfix、merge queue 與手動 dispatch 才執行全部 runtime、profiles、Copier update、release 與安全回歸。<br><strong>條件式供應鏈：</strong>workflow 變更加跑 Zizmor，相依變更加跑 OSV，治理宣告變更加跑 remote governance；三者另有週期排程。未知路徑 fail closed 到 full。<br><strong>穩定門禁：</strong><code>verify</code> aggregate 每次都回報，不適用的重型 job 明確視為 skipped，避免 required check 永久 Pending；summary／artifact 記錄 tier、原因、scope 與 duration。完整契約見 <code>docs/ci-policy.md</code>。</p>
+          <p class="recommendation-copy"><strong>Fast：</strong>一般 Issue PR 跑 secret scan、格式、lint、型別、非 <code>large</code> 測試與必要 template smoke；docs-only 不啟動語言或生成矩陣。<br><strong>Full：</strong><code>dev/m* → main</code> promotion、hotfix、merge queue 與高風險 direct-to-main 變更才執行完整 profiles、Copier update、release 與安全回歸。<br><strong>最深矩陣：</strong>cross-runtime 只重跑 <code>runtime</code>；scheduled／release 才承擔長時間平台矩陣。Flaky 不自動 retry；<code>quarantine</code> 必須有 owner、Issue、期限與移除條件，而且仍會執行。<br><strong>穩定門禁：</strong><code>verify</code> aggregate 每次都依 routing 嚴格要求 success 或 skipped；summary／artifact 記錄 stage、risk、tier 與 duration。完整契約見 <code>docs/ci-policy.md</code>。</p>
         </article>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>分層規則：</strong><code>scripts/ci_tier.py</code>＋<code>scripts/verify-fast</code>＋<code>docs/ci-policy.md</code></li><li><strong>完整入口：</strong><code>scripts/verify</code>；公版為 <code>scripts/verify-template.sh</code></li><li><strong>常駐門禁：</strong><code>title</code>＋<code>verify</code>＋<code>promotion</code>；delivery sync 併入 <code>title</code> policy，一般 PR 的核心流程最多啟動 policy、fast、aggregate 三個 runner，OSV、Zizmor、remote governance 與選配容器驗證由 job-level 條件或週期排程執行</li><li><strong>額度耗盡：</strong>zero-step billing block 被機械式確認、且 job 未執行任何 step 時，一般 PR 只需本機驗證通過即可留言合併；promotion 另綁定 candidate/main tree、維持雙方確認，且不可發布</li></ul></aside>

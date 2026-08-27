@@ -312,6 +312,7 @@ class FakeReleaseClient:
             raise self.commit_error
 
 
+@pytest.mark.runtime
 def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
     """Init previews without writes, then creates and verifies the project."""
     source, first_sha = make_template(tmp_path)
@@ -1065,6 +1066,7 @@ def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 @pytest.mark.parametrize(
     ("language", "manifest_name", "lock_name"),
     [
@@ -1072,7 +1074,6 @@ def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
         ("typescript", "package.json", "pnpm-lock.yaml"),
     ],
 )
-@pytest.mark.large
 def test_real_template_adoption_resumes_after_manifest_merge(
     tmp_path: Path,
     language: str,
@@ -3908,7 +3909,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
 
     def excludes_large(command: list[str]) -> bool:
         return any(
-            command[index : index + 2] == ["-m", "not large"]
+            command[index] == "-m" and "not large" in command[index + 1]
             for index in range(len(command) - 1)
         )
 
@@ -3948,7 +3949,7 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
 
     root_full_commands = pytest_commands(ROOT / "scripts/verify-template.sh")
     assert root_full_commands
-    assert not any(excludes_large(command) for command in root_full_commands)
+    assert any(not excludes_large(command) for command in root_full_commands)
 
     template_commands = pytest_commands(ROOT / "template/scripts/verify.jinja")
     assert len(template_commands) > 1
@@ -3969,3 +3970,42 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_real_existing_adoption_uses_fixed_ownership_policies",
         "test_real_template_adoption_resumes_after_manifest_merge",
     }
+
+
+def test_template_verification_runs_one_generated_full_gate() -> None:
+    """Keep one representative full profile and target every other fixture."""
+    source = (ROOT / "scripts" / "verify-template.sh").read_text(
+        encoding="utf-8"
+    )
+    assert source.count("  ./scripts/verify\n") == 1
+    assert (
+        'cd "$fixture_root/all-features-project"\n  ./scripts/verify\n'
+        in source
+    )
+    for command in (
+        "./scripts/verify python-compatibility",
+        "./scripts/verify typescript",
+        "tests/test_delivery_sync.py",
+        "tests/test_promotion_gate.py",
+        "tests/test_release_policy.py",
+    ):
+        assert command in source
+
+
+def test_pr_templates_do_not_repeat_full_before_ready() -> None:
+    """Use hosted full by default and local full only as its fallback."""
+    for path, command in (
+        (ROOT / ".github/pull_request_template.md", "verify-template.sh"),
+        (ROOT / "template/.github/pull_request_template.md", "scripts/verify"),
+    ):
+        source = path.read_text(encoding="utf-8")
+        assert "hosted" in source
+        assert "fallback" in source
+        assert source.count(command) == 1
+        full_line = next(
+            line for line in source.splitlines() if command in line
+        )
+        assert "before Ready" not in full_line
+        assert "轉 Ready 前" not in full_line
+        assert "required" in source
+        assert "edit" in source or "編輯" in source

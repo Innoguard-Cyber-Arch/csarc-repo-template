@@ -12,6 +12,9 @@ on:
       python-versions:
         type: string
         default: '["3.14.0"]'
+      run-runtime-matrix:
+        type: boolean
+        default: false
       node-version:
         type: string
         default: "24"
@@ -56,7 +59,7 @@ jobs:
 
   python-compatibility:
     name: Python compatibility (${{ matrix.runtime }})
-    if: contains(inputs.language-profile, 'python')
+    if: contains(inputs.language-profile, 'python') && inputs.run-runtime-matrix
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -121,10 +124,11 @@ jobs:
           CANONICAL_RESULT: ${{ needs.canonical.result }}
           LANGUAGE_PROFILE: ${{ inputs.language-profile }}
           PYTHON_COMPATIBILITY_RESULT: ${{ needs.python-compatibility.result }}
+          RUN_RUNTIME_MATRIX: ${{ inputs.run-runtime-matrix }}
           TYPESCRIPT_RESULT: ${{ needs.typescript.result }}
         run: |
           test "$CANONICAL_RESULT" = success
-          if [[ "$LANGUAGE_PROFILE" == *python* ]]; then
+          if [[ "$LANGUAGE_PROFILE" == *python* && "$RUN_RUNTIME_MATRIX" == true ]]; then
             test "$PYTHON_COMPATIBILITY_RESULT" = success
           else
             test "$PYTHON_COMPATIBILITY_RESULT" = skipped

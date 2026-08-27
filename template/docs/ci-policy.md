@@ -31,7 +31,7 @@ Draft PR 可用 `Refs #N`，但必須列出 scope、已完成／待完成驗證�
 
 ### Draft ownership 與 Ready 邊界
 
-Issue owner 負責 ordinary PR 的 scoped checks；integrator 只在 final promotion 的 exact integrated candidate 跑一次 full gate。Draft 階段可疊加同一 Milestone 的後續工作，但每張 PR 仍要清楚列出 owner、依賴與未完成項目。只有 acceptance、metadata、closing Issue 關聯與最窄必要驗證都完成後才轉 Ready；push 新 head 會使舊 review、authorization 與 evidence 失效。
+Issue owner 負責 ordinary PR 的 scoped checks，完成後即可轉 Ready；不在 Ready 前先跑本機 full。Final promotion 的 tree 先固定，PR checklist 在轉 Ready 前聲明「Ready 將啟動 hosted full」，再由 hosted workflow 對 exact integrated candidate 跑唯一一次 full gate；成功只由 required `verify` check 記錄，不需事後編輯 PR body 並觸發同一 tree 重跑。單純 body／title edit只重跑 PR policy；base retarget 仍以 `pull_request.edited` 重新執行 exact-tree CI，不能沿用舊 base 的成功結果。只有 hosted job 未執行且文件明定的 fallback 適用時，integrator 才改跑一次相同本機入口，不能兩邊重複。Draft 階段可疊加同一 Milestone 的後續工作，但每張 PR 仍要清楚列出 owner、依賴與未完成項目。只有 acceptance、metadata、closing Issue 關聯與最窄必要驗證都完成後才轉 Ready；push 新 head 會使舊 review、authorization 與 evidence 失效。
 
 Agent 不得把 Draft、未處理 review thread、真實測試失敗或 scope 漂移當成平台限制。Alpha reviewer 例外只適用政策明列的 routine Issue route，且不改變 Issue owner、integrator、required checks 或 exact SHA/tree 責任。
 
@@ -71,17 +71,24 @@ Promotion 可使用 merge queue，但 queue ref、base SHA、source PR 與 candi
 
 - docs：結構與文件驗證；網站來源變更才產生 preview artifact。
 - fast：lint、型別與受影響測試。
-- full：完整支援矩陣、template rendering、治理、安全與 runtime checks。
+- full：完整 canonical verification 與 template rendering；runtime matrix、remote governance、OSV 與 Zizmor 仍由 stage／changed scope 個別路由，scheduled 才全部執行。
 - post-merge：SHA／tree／provenance identity，不重跑已通過的 full matrix。
 - scheduled／release：全歷史、最深矩陣與長時間供應鏈檢查。
 
-Workflow、governance、generator、CLI adoption/update、release、安全、promotion、provenance、unknown path、hotfix 與 merge_group 都屬 fail-closed 升級範圍。完整測試責任與 flaky／quarantine 規則另見 behavior verification contract。
+Workflow、governance、generator、CLI adoption/update、release、安全、promotion、provenance、unknown path、hotfix 與 merge_group 都屬 fail-closed 風險範圍；直接進 main 時升級 full，ordinary Issue PR 則保留 scoped fast 與對應 auxiliary job。Generator 與 CLI adoption/update 才啟動 macOS adoption E2E；verifier、test harness、release、generator 與 CLI 風險啟動 runtime lane；workflow／CI router、security、promotion 與 provenance 由各自的 focused tests、Zizmor、OSV、governance 或 release policy lane承接，不會因「高風險」三字一律 fan-out 所有昂貴 job。完整測試責任與 flaky／quarantine 規則另見 behavior verification contract。
 
 ### 選配容器交付
 
 只有既有 repo 明確設定 `container_mode` 並提供產品自己的 Dockerfile／Containerfile 與 `$IMAGE` smoke command，才建立容器工作。PR 只建置、不 push，並執行 smoke 與 Trivy HIGH／CRITICAL 掃描；已驗證 release-source 才能保存 image bytes、checksum、SPDX SBOM，發布 job 才取得 registry、OIDC 與 attestation 寫入權限。發布後必須以 digest pull 同一份 bytes 再驗證與 smoke test。
 
 `container_mode=none` 不生成容器 job、Docker Dependabot 或 registry 權限。公版不代替產品設計 Dockerfile、Kubernetes、雲端部署或 multi-arch matrix。
+
+Issue owner 只執行 plan 宣告的 scoped checks；`verify-fast` 跳過 `large`，但不跳過
+`quarantine`。Hosted full 是 final unchanged tree 的預設唯一完整 gate；integrator 只在
+文件明定的 fallback 改跑一次本機入口，不會在 Ready 前與 hosted full 重複。
+`runtime` 是 cross-runtime job 唯一重跑的集合；scheduled／release 才承擔最深矩陣與
+長時間檢查。Changed-file discovery 使用 rename-safe 的 old/new path 語意，不能把
+workflow、security 或 verifier rename 到 docs path 來降級。
 
 ## Actions 額度 fallback
 

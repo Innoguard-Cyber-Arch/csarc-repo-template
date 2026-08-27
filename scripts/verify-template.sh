@@ -11,6 +11,13 @@ fixture_security_args=(
   --data "security_reporting_channel=Use the synthetic fixture's private reporting channel."
 )
 
+assert_pr_ready_guidance() {
+  local guidance="$1"
+  grep -Fq 'Drafts use `Refs #N`' "$guidance"
+  grep -Eq 'Ready starts .*hosted' "$guidance"
+  grep -Eq 'closing keyword|`Closes`' "$guidance"
+}
+
 for verifier in scripts/verify-template.sh scripts/verify-fast \
   template/scripts/verify-fast.jinja; do
   grep -Fqx 'export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"' \
@@ -39,8 +46,8 @@ grep -q 'uv run pytest <test-path>' AGENTS.md
 grep -q 'scripts/render_site.py --check' AGENTS.md
 grep -q 'open Draft PRs, remote branches, and existing worktrees' AGENTS.md
 grep -q 'open Draft PRs, remote branches, and worktrees' template/AGENTS.md.jinja
-grep -q 'before marking Ready or updating a Ready PR' AGENTS.md
-grep -q 'before marking Ready or updating a Ready PR' template/AGENTS.md.jinja
+assert_pr_ready_guidance AGENTS.md
+assert_pr_ready_guidance template/AGENTS.md.jinja
 grep -q 'scripts/pr_lifecycle.py' AGENTS.md
 grep -q 'scripts/pr_lifecycle.py' template/AGENTS.md.jinja
 grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md
@@ -92,6 +99,7 @@ assert_agent_guidance() {
     "$project_root/AGENTS.md"
   grep -q 'scripts/pr_lifecycle.py' "$project_root/AGENTS.md"
   grep -q 'scripts/render_site.py --check' "$project_root/AGENTS.md"
+  assert_pr_ready_guidance "$project_root/AGENTS.md"
   grep -q 'propose semantic story groups and exclusions' \
     "$project_root/AGENTS.md"
   grep -q 'reopen completed Issues' "$project_root/AGENTS.md"
@@ -992,8 +1000,20 @@ if grep -q '^  decision-site:$' .github/workflows/ci.yml; then
   echo "Decision site validation must share the fast runner."
   exit 1
 fi
-grep -q 'types: \[opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft\]' \
-  .github/workflows/ci.yml
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+expected = {
+    "opened", "reopened", "synchronize", "edited", "ready_for_review",
+    "converted_to_draft", "labeled", "unlabeled",
+}
+for path in (".github/workflows/ci.yml", "template/.github/workflows/ci.yml.jinja"):
+    match = re.search(r"(?m)^    types: \[([^]]+)]$", Path(path).read_text())
+    actual = {item.strip() for item in match.group(1).split(",")} if match else set()
+    if actual != expected:
+        raise SystemExit(f"{path} pull_request types mismatch: {sorted(actual)}")
+PY
 grep -q 'name: portable-decision-site' .github/workflows/ci.yml
 grep -q "steps.plan.outputs.upload_site == 'true'" .github/workflows/ci.yml
 grep -q 'python3 scripts/render_site.py --check' .github/workflows/ci.yml
@@ -1003,7 +1023,9 @@ grep -q '^    name: canonical full (Python 3.14 + Node 24)$' \
 grep -q '^  python-compatibility:$' .github/workflows/ci.yml
 grep -q '^    name: Python compatibility (3.14.0)$' \
   .github/workflows/ci.yml
-grep -q 'uv run pytest -m "not large"' .github/workflows/ci.yml
+grep -Fq "if: \${{ needs.fast.outputs.run_deep == 'true' }}" \
+  .github/workflows/ci.yml
+grep -q 'uv run pytest' .github/workflows/ci.yml
 test "$(grep -c 'run: ./scripts/verify-template.sh' .github/workflows/ci.yml)" -eq 1
 if grep -q '^  python-runtime:$' .github/workflows/ci.yml; then
   echo "Root full verification must not repeat for every runtime."
@@ -1016,6 +1038,8 @@ grep -q '^  python-compatibility:$' .github/workflows/reusable-ci.yml
 grep -q '^  typescript:$' .github/workflows/reusable-ci.yml
 grep -q './scripts/verify python-compatibility' \
   .github/workflows/reusable-ci.yml
+grep -q '^      run-runtime-matrix:$' .github/workflows/reusable-ci.yml
+grep -q 'inputs.run-runtime-matrix' .github/workflows/reusable-ci.yml
 grep -q './scripts/verify typescript' .github/workflows/reusable-ci.yml
 # shellcheck disable=SC2016 # Match the literal workflow variable.
 grep -q 'test "$PYTHON_COMPATIBILITY_RESULT" = success' \
@@ -1204,7 +1228,6 @@ grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
 grep -Fq 'Use short-lived `dev/m<milestone-number>-<slug>` for Milestones' AGENTS.md
 grep -Fq 'Sync `main` at final promotion; early sync needs an owner-recorded dependency' AGENTS.md
-grep -Fq 'mark Ready only after every PR and referenced-Issue item has evidence' AGENTS.md
 grep -q 'one branch and worktree per independent task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
 grep -q 'gh issue develop' AGENTS.md
@@ -1365,6 +1388,165 @@ metadata_sync_line="$(grep -n 'name: Synchronize pull request metadata' \
 live_metadata_line="$(grep -nF 'repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER' \
   .github/workflows/pr-policy.yml | cut -d: -f1)"
 test "$metadata_sync_line" -lt "$live_metadata_line"
+
+assert_pr_verification_contract() {
+  python3 - "$1" "$2" <<'PY'
+from pathlib import Path
+import sys
+
+template_path = Path(sys.argv[1])
+full_command = sys.argv[2]
+checkboxes = [
+    line.strip()
+    for line in template_path.read_text(encoding="utf-8").splitlines()
+    if line.startswith("- [ ] ")
+]
+scoped = [
+    line
+    for line in checkboxes
+    if "CI plan" in line and "scoped checks" in line
+]
+final = [
+    line
+    for line in checkboxes
+    if "integrator" in line
+    and full_command in line
+    and any(
+        phrase in line
+        for phrase in (
+            "tree is unchanged",
+            "tree is frozen",
+            "final tree 不再變動",
+            "final tree 已固定",
+        )
+    )
+    and ("locally exactly once" in line or "本機只執行一次" in line)
+]
+generation = [
+    line
+    for line in checkboxes
+    if ("new-project generation" in line or "新專案產生" in line)
+    and "CI plan" in line
+    and "generator/template" in line
+    and "N/A" in line
+]
+unconditional_generation = [
+    line
+    for line in checkboxes
+    if ("new-project generation" in line or "新專案產生" in line)
+    and line not in generation
+]
+legacy = [
+    line
+    for line in checkboxes
+    if full_command in line
+    and ("before Ready" in line or "轉 Ready 前" in line)
+]
+if (
+    len(scoped) != 1
+    or len(final) != 1
+    or len(generation) != 1
+    or unconditional_generation
+    or legacy
+):
+    raise SystemExit(
+        f"{template_path}: expected one scoped plan, one integrator-only final "
+        "check, one scope-conditional generation check, and no legacy check"
+    )
+PY
+}
+
+assert_pr_verification_contract \
+  .github/pull_request_template.md './scripts/verify-template.sh'
+assert_pr_verification_contract \
+  template/.github/pull_request_template.md './scripts/verify'
+legacy_pr_template="$fixture_root/legacy-pull-request-template.md"
+cp template/.github/pull_request_template.md "$legacy_pr_template"
+python3 - "$legacy_pr_template" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+lines = [
+    "- [ ] `./scripts/verify` passes before Ready"
+    if line.startswith("- [ ] If this is the final integration candidate")
+    else line
+    for line in text.splitlines()
+]
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+if assert_pr_verification_contract "$legacy_pr_template" './scripts/verify'; then
+  echo "PR verification contract accepted a per-PR Ready full check."
+  exit 1
+fi
+negated_pr_template="$fixture_root/negated-pull-request-template.md"
+sed -e 's/tree is frozen/tree is unfrozen/' \
+  -e 's/locally exactly once/locally not exactly once/' \
+  template/.github/pull_request_template.md > "$negated_pr_template"
+if assert_pr_verification_contract "$negated_pr_template" './scripts/verify'; then
+  echo "PR verification contract accepted negated final-check guarantees."
+  exit 1
+fi
+unconditional_generation_template="$fixture_root/unconditional-generation-template.md"
+cp template/.github/pull_request_template.md \
+  "$unconditional_generation_template"
+python3 - "$unconditional_generation_template" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+lines = [
+    "- [ ] New-project generation tested and existing-project updates considered"
+    if line.startswith("- [ ] If the CI plan includes generator/template scope")
+    else line
+    for line in text.splitlines()
+]
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+if assert_pr_verification_contract \
+  "$unconditional_generation_template" './scripts/verify'; then
+  echo "PR verification contract accepted unconditional generation testing."
+  exit 1
+fi
+
+assert_readme_verification_contract() {
+  python3 - "$1" <<'PY'
+from pathlib import Path
+import sys
+
+readme_path = Path(sys.argv[1])
+text = readme_path.read_text(encoding="utf-8")
+required = (
+    "CI plan 選出的 scoped checks",
+    "合併後只核對",
+    "SHA",
+    "tree",
+    "provenance identity",
+)
+forbidden = (
+    "執行 `./scripts/verify`；AI",
+    "合併後完整驗證",
+)
+if any(token not in text for token in required) or any(
+    token in text for token in forbidden
+):
+    raise SystemExit(
+        f"{readme_path}: expected scoped Issue checks and post-merge identity only"
+    )
+PY
+}
+
+assert_readme_verification_contract README.md
+assert_readme_verification_contract template/README.md.jinja
+legacy_readme="$fixture_root/legacy-post-merge-readme.md"
+cp template/README.md.jinja "$legacy_readme"
+printf '\n合併後完整驗證\n' >> "$legacy_readme"
+if assert_readme_verification_contract "$legacy_readme"; then
+  echo "README verification contract accepted a post-merge full rerun."
+  exit 1
+fi
 grep -q '^  pull_request:$' .github/workflows/governance-comment.yml
 grep -q 'types: \[opened, reopened, ready_for_review\]' \
   .github/workflows/governance-comment.yml
@@ -1693,6 +1875,8 @@ if reusable_text == "true":
     if match is None:
         raise SystemExit("Reusable workflow compatibility input is missing")
     actual = json.loads(match.group(1))
+    if "run-runtime-matrix: ${{ needs.fast.outputs.run_deep == 'true' }}" not in workflow:
+        raise SystemExit("Reusable workflow runtime routing is missing")
 else:
     match = re.search(
         r"  python-compatibility:\n.*?"
@@ -1707,6 +1891,8 @@ else:
         raise SystemExit("Inline workflow canonical runtime is missing")
     if "./scripts/verify python-compatibility" not in workflow:
         raise SystemExit("Inline compatibility command is missing")
+    if "if: ${{ needs.fast.outputs.run_deep == 'true' }}" not in workflow:
+        raise SystemExit("Inline runtime routing is missing")
 if actual != expected_compatibility:
     raise SystemExit(
         f"Unexpected compatibility matrix: {actual!r} != "
@@ -2176,8 +2362,6 @@ grep -Fq 'Use short-lived `dev/m<milestone-number>-<slug>` for Milestones' \
   "$fixture_root/default-project/AGENTS.md"
 grep -Fq 'Sync `main` at final promotion; early sync needs an owner-recorded dependency' \
   "$fixture_root/default-project/AGENTS.md"
-grep -Fq 'mark Ready only after every PR and referenced-Issue item has evidence' \
-  "$fixture_root/default-project/AGENTS.md"
 grep -q 'one branch and worktree per independent task' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'search open and closed Issues' \
@@ -2274,8 +2458,15 @@ test -x "$fixture_root/default-project/scripts/install-gitleaks"
 test -x "$fixture_root/default-project/scripts/install-shellcheck"
 test -x "$fixture_root/default-project/scripts/lint-workflows-shell"
 test -x "$fixture_root/default-project/scripts/verify-fast"
-grep -Fq 'uv run pytest -m "not large"' \
+grep -Fxq '  uv run pytest -m "runtime and not large"' \
   "$fixture_root/default-project/scripts/verify"
+runtime_gate_probe="$fixture_root/runtime-gate-bypass-verify"
+sed 's/  uv run pytest -m "runtime and not large"/  uv run pytest -m "runtime and not large" || true/' \
+  "$fixture_root/default-project/scripts/verify" > "$runtime_gate_probe"
+if grep -Fxq '  uv run pytest -m "runtime and not large"' "$runtime_gate_probe"; then
+  echo "Runtime compatibility verification accepted an error-swallowing command."
+  exit 1
+fi
 test -f "$fixture_root/default-project/scripts/ci_tier.py"
 test -x "$fixture_root/default-project/scripts/promotion_gate.py"
 test -x "$fixture_root/default-project/scripts/pr_lifecycle.py"
@@ -2303,8 +2494,14 @@ grep -q 'SHA/tree-bound.*non-release promotion path' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q '錯誤 budget.*平台事故.*權限.*原因不明.*測試失敗' \
   "$fixture_root/default-project/docs/index.html"
-grep -q '一般 Issue PR 跑 change-aware fast checks' \
-  "$fixture_root/default-project/docs/site-content.js"
+for scoped_verification_token in \
+  'Issue owner 跑 change-aware scoped checks' \
+  'fast 排除 large' \
+  'cross-runtime 只重跑 runtime' \
+  'final Ready candidate 只跑一次 hosted'; do
+  grep -Fq "$scoped_verification_token" \
+    "$fixture_root/default-project/docs/site-content.js"
+done
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/docs/index.html"
 grep -q 'Administration read' \
@@ -2365,6 +2562,11 @@ grep -q 'feature.*task.*bug.*documentation.*duplicate' \
   "$fixture_root/default-project/README.md"
 grep -q 'linked Issue.*assignee.*Milestone' \
   "$fixture_root/default-project/README.md"
+assert_pr_verification_contract \
+  "$fixture_root/default-project/.github/pull_request_template.md" \
+  './scripts/verify'
+assert_readme_verification_contract \
+  "$fixture_root/default-project/README.md"
 grep -q 'referenced Issue checklist' \
   "$fixture_root/default-project/docs/index.html"
 test -f "$fixture_root/default-project/.github/workflows/issue-triage.yml"
@@ -2414,6 +2616,8 @@ grep -q '^    name: canonical full (Python 3.14)$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q '^  python-compatibility:$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -Fq "if: \${{ needs.fast.outputs.run_deep == 'true' }}" \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
 if grep -q '^  typescript:$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"; then
   echo "Python-only CI must not create a TypeScript job."
@@ -2437,8 +2641,20 @@ if grep -q '^  decision-site:$' \
   echo "Generated decision site validation must share the fast runner."
   exit 1
 fi
-grep -q 'types: \[opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft\]' \
-  "$fixture_root/default-project/.github/workflows/ci.yml"
+uv run python - "$fixture_root/default-project/.github/workflows/ci.yml" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+expected = {
+    "opened", "reopened", "synchronize", "edited", "ready_for_review",
+    "converted_to_draft", "labeled", "unlabeled",
+}
+match = re.search(r"(?m)^    types: \[([^]]+)]$", Path(sys.argv[1]).read_text())
+actual = {item.strip() for item in match.group(1).split(",")} if match else set()
+if actual != expected:
+    raise SystemExit(f"Generated CI pull_request types mismatch: {sorted(actual)}")
+PY
 grep -q 'name: portable-decision-site' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q "steps.plan.outputs.upload_site == 'true'" \
@@ -2651,7 +2867,7 @@ PY
   fi
   uv run --no-project python scripts/render_site.py
   grep -q 'window.STALE_BUNDLE_PROBE = true;' docs/index.html
-  ./scripts/verify
+  ./scripts/verify python-compatibility
   "$repo_root/.venv/bin/zizmor" . --format plain
 )
 
@@ -2746,7 +2962,10 @@ if grep -q '^\.venv\*/\|^node_modules/$' \
 fi
 (
   cd "$fixture_root/ci-only-project"
-  ./scripts/verify
+  ./scripts/lint-workflows-shell
+  ./scripts/test-pr-policy
+  ./scripts/test-release-follow-up-gates
+  uv run --no-project python scripts/spec_to_issue.py validate
   "$repo_root/.venv/bin/zizmor" . --format plain
 )
 
@@ -2908,7 +3127,7 @@ grep -q 'Build TypeScript package' \
 
 (
   cd "$fixture_root/typescript-project"
-  ./scripts/verify
+  ./scripts/verify typescript
   "$repo_root/.venv/bin/zizmor" . --format plain
 )
 
@@ -3258,21 +3477,9 @@ git -C "$fixture_root/existing-project" config user.name "Template Test"
 git -C "$fixture_root/existing-project" config user.email "template-test@example.invalid"
 git -C "$fixture_root/existing-project" add .
 git -C "$fixture_root/existing-project" commit -m "test: generated baseline"
-if diff_error="$(
-  cd "$fixture_root/existing-project"
-  CSARC_PYTHON_VERSION=3.12 \
-    UV_PROJECT_ENVIRONMENT=.venv-minimum \
-    ./scripts/verify 2>&1
-)"; then
-  echo "Diff coverage without origin/main must fail with setup guidance."
-  exit 1
-fi
-if ! grep -qF \
-  'Set DIFF_COVER_COMPARE_BRANCH to an existing ref (current: origin/main).' \
-  <<<"$diff_error"; then
-  echo "$diff_error"
-  exit 1
-fi
+grep -qF \
+  'Set DIFF_COVER_COMPARE_BRANCH to an existing ref (current: $compare_branch).' \
+  "$fixture_root/existing-project/scripts/verify"
 (
   cd "$fixture_root/existing-project"
   for python_runtime in 3.12.0 3.12 3.13; do
@@ -3280,10 +3487,11 @@ fi
       UV_PROJECT_ENVIRONMENT=".venv-$python_runtime" \
       ./scripts/verify python-compatibility
   done
-  CSARC_PYTHON_VERSION=3.14 \
-    UV_PROJECT_ENVIRONMENT=.venv-3.14 \
-    DIFF_COVER_COMPARE_BRANCH=HEAD \
-    ./scripts/verify
+  export CSARC_PYTHON_VERSION=3.14
+  export UV_PROJECT_ENVIRONMENT=.venv-3.14
+  uv sync --locked --python "$CSARC_PYTHON_VERSION"
+  uv run pytest tests/test_smoke.py --cov --cov-report=xml
+  uv run diff-cover coverage.xml --compare-branch=HEAD --fail-under=80
 )
 
 # Adoption must never replace existing product manifests.
@@ -3373,9 +3581,17 @@ test "$(
 # shellcheck disable=SC2016 # Match the literal workflow variable.
 grep -q 'test "$CANONICAL_RESULT" = success' \
   "$adoption_project/.github/workflows/ci.yml"
-# shellcheck disable=SC2016 # Match the literal workflow variable.
-grep -q 'test "$PYTHON_COMPATIBILITY_RESULT" = success' \
+# shellcheck disable=SC2016 # Match literal workflow variables.
+grep -Fxq '          require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility' \
   "$adoption_project/.github/workflows/ci.yml"
+routed_runtime_probe="$fixture_root/routed-runtime-bypass.yml"
+sed 's/          require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility/          require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility || true/' \
+  "$adoption_project/.github/workflows/ci.yml" > "$routed_runtime_probe"
+if grep -Fxq '          require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility' \
+  "$routed_runtime_probe"; then
+  echo "Generated aggregate accepted an error-swallowing runtime route."
+  exit 1
+fi
 # shellcheck disable=SC2016 # Match the literal workflow variable.
 grep -q 'test "$TYPESCRIPT_RESULT" = success' \
   "$adoption_project/.github/workflows/ci.yml"
@@ -3441,7 +3657,7 @@ if grep -q '^  push:$\|workflow_run:\|PAT\|personal.access.token' \
 fi
 (
   cd "$container_project"
-  ./scripts/verify
+  ./scripts/lint-workflows-shell
   "$repo_root/.venv/bin/zizmor" . --format plain
 )
 
@@ -3621,5 +3837,11 @@ grep -q 'target-branch: main' \
 prime_validation_cache "$update_project"
 (
   cd "$update_project"
-  ./scripts/verify
+  uv sync --locked
+  uv run pytest -m "not large" \
+    tests/test_delivery_sync.py \
+    tests/test_promotion_gate.py \
+    tests/test_release_policy.py
+  ./scripts/lint-workflows-shell
+  uv run --no-project python scripts/render_site.py --check
 )

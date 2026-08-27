@@ -2,13 +2,15 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft]
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
+  schedule:
+    - cron: "17 3 * * 1"
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}-${{ github.event.action == 'edited' && github.event.changes.base.ref.from == '' && 'metadata' || 'product' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' && !startsWith(github.event.pull_request.head.ref, 'dev') && !startsWith(github.event.pull_request.head.ref, 'release-please--') && !contains(github.event.pull_request.labels.*.name, 'promotion') && !contains(github.event.pull_request.labels.*.name, 'hotfix') && !contains(github.event.pull_request.labels.*.name, 'release-recovery') }}
 
 permissions:
@@ -20,16 +22,21 @@ permissions:
 jobs:
   fast:
     name: route and fast checks
+    if: ${{ github.event.action != 'edited' || github.event.changes.base.ref.from != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
       tier: ${{ steps.plan.outputs.tier }}
+      stage: ${{ steps.plan.outputs.stage }}
       reason: ${{ steps.plan.outputs.reason }}
       review_state: ${{ steps.plan.outputs.review_state }}
       scopes: ${{ steps.plan.outputs.scopes }}
+      risks: ${{ steps.plan.outputs.risks }}
       run_governance: ${{ steps.plan.outputs.run_governance }}
       run_osv: ${{ steps.plan.outputs.run_osv }}
       run_zizmor: ${{ steps.plan.outputs.run_zizmor }}
+      run_deep: ${{ steps.plan.outputs.run_deep }}
+      run_adoption_macos: ${{ steps.plan.outputs.run_adoption_macos }}
     steps:
       - name: Start timing
         id: started
@@ -51,7 +58,7 @@ jobs:
         run: |
           files="$RUNNER_TEMP/changed-files"
           if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]]; then
-            git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$files"
+            git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$files"
           else
             git ls-files -z > "$files"
           fi
@@ -81,6 +88,7 @@ jobs:
       - name: Run change-aware checks
         if: ${{ steps.plan.outputs.tier == 'docs' || steps.plan.outputs.tier == 'fast' }}
         env:
+          CSARC_CI_RISKS: ${{ steps.plan.outputs.risks }}
           CSARC_CI_SCOPES: ${{ steps.plan.outputs.scopes }}
           CSARC_CI_TIER: ${{ steps.plan.outputs.tier }}
           CSARC_PYTHON_VERSION: "3.14"
@@ -156,7 +164,7 @@ jobs:
   python-compatibility:
     name: Python compatibility (3.14.0)
     needs: fast
-    if: ${{ needs.fast.outputs.tier == 'full' }}
+    if: ${{ needs.fast.outputs.run_deep == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -173,7 +181,12 @@ jobs:
           UV_PYTHON: "3.14.0"
         run: |
           uv sync --locked --python "$UV_PYTHON"
-          uv run pytest -m "not large"
+          uv run pytest -m "runtime and not large"
+          uv build --clear
+          uv run --isolated --no-project --with ./dist/*.whl \
+            python -c "import csarc_cli"
+          uvx --from "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)" \
+            csarc --help >/dev/null
       - name: Record Python compatibility evidence
         if: ${{ always() }}
         env:
@@ -183,7 +196,7 @@ jobs:
   adoption-macos:
     name: adoption e2e macOS
     needs: fast
-    if: ${{ needs.fast.outputs.tier == 'full' }}
+    if: ${{ needs.fast.outputs.run_adoption_macos == 'true' }}
     runs-on: macos-latest
     timeout-minutes: 10
     steps:
@@ -196,7 +209,7 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - run: uv sync --locked --python 3.14
       - run: >-
-          uv run pytest -q
+          uv run pytest -q -m large
           tests/test_cli.py::test_real_existing_adoption_uses_fixed_ownership_policies
 
   governance:
@@ -209,7 +222,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
       - name: Check effective repository governance
         env:
           GH_TOKEN: ${{ github.token }}
@@ -255,8 +268,8 @@ jobs:
           fi
 
   verify:
-    name: verify
-    if: ${{ always() }}
+    name: ${{ github.event.action == 'edited' && github.event.changes.base.ref.from == '' && 'metadata edit' || 'verify' }}
+    if: ${{ always() && (github.event.action != 'edited' || github.event.changes.base.ref.from != '') }}
     needs: [fast, canonical-full, python-compatibility, adoption-macos, governance, osv, zizmor]
     runs-on: ubuntu-latest
     timeout-minutes: 1
@@ -265,6 +278,11 @@ jobs:
         env:
           FAST_RESULT: ${{ needs.fast.result }}
           TIER: ${{ needs.fast.outputs.tier }}
+          RUN_DEEP: ${{ needs.fast.outputs.run_deep }}
+          RUN_ADOPTION_MACOS: ${{ needs.fast.outputs.run_adoption_macos }}
+          RUN_GOVERNANCE: ${{ needs.fast.outputs.run_governance }}
+          RUN_OSV: ${{ needs.fast.outputs.run_osv }}
+          RUN_ZIZMOR: ${{ needs.fast.outputs.run_zizmor }}
           REVIEW_STATE: ${{ needs.fast.outputs.review_state }}
           CANONICAL_RESULT: ${{ needs.canonical-full.result }}
           ADOPTION_MACOS_RESULT: ${{ needs.adoption-macos.result }}
@@ -273,19 +291,60 @@ jobs:
           PYTHON_COMPATIBILITY_RESULT: ${{ needs.python-compatibility.result }}
           ZIZMOR_RESULT: ${{ needs.zizmor.result }}
         run: |
+          require_boolean() {
+            value="$1"
+            name="$2"
+            case "$value" in
+              true|false) ;;
+              *)
+                echo "$name must be true or false; got ${value:-<empty>}" >&2
+                return 1
+                ;;
+            esac
+          }
+          require_routed() {
+            expected="$1"
+            actual="$2"
+            name="$3"
+            require_boolean "$expected" "$name route"
+            if [[ "$expected" == true ]]; then
+              [[ "$actual" == success ]] || {
+                echo "$name must succeed when routed; got $actual" >&2
+                return 1
+              }
+            else
+              [[ "$actual" == skipped ]] || {
+                echo "$name must be skipped when not routed; got $actual" >&2
+                return 1
+              }
+            fi
+          }
+          require_boolean "$RUN_DEEP" run_deep
+          require_boolean "$RUN_ADOPTION_MACOS" run_adoption_macos
+          require_boolean "$RUN_GOVERNANCE" run_governance
+          require_boolean "$RUN_OSV" run_osv
+          require_boolean "$RUN_ZIZMOR" run_zizmor
+          case "$REVIEW_STATE" in
+            draft|ready|not-applicable) ;;
+            *)
+              echo "review state is invalid: ${REVIEW_STATE:-<empty>}" >&2
+              exit 1
+              ;;
+          esac
           if [[ "$REVIEW_STATE" == "draft" ]]; then
             echo "::notice::Draft WIP targeted checks passed; full verification remains pending until Ready."
           fi
           test "$FAST_RESULT" = success
-          if [[ "$TIER" == full ]]; then
-            test "$CANONICAL_RESULT" = success
-            test "$PYTHON_COMPATIBILITY_RESULT" = success
-            test "$ADOPTION_MACOS_RESULT" = success
-          else
-            test "$CANONICAL_RESULT" = skipped
-            test "$PYTHON_COMPATIBILITY_RESULT" = skipped
-            test "$ADOPTION_MACOS_RESULT" = skipped
-          fi
-          for result in "$GOVERNANCE_RESULT" "$OSV_RESULT" "$ZIZMOR_RESULT"; do
-            [[ "$result" == success || "$result" == skipped ]]
-          done
+          case "$TIER" in
+            full) test "$CANONICAL_RESULT" = success ;;
+            docs|fast|post-merge) test "$CANONICAL_RESULT" = skipped ;;
+            *)
+              echo "verification tier is invalid: ${TIER:-<empty>}" >&2
+              exit 1
+              ;;
+          esac
+          require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility
+          require_routed "$RUN_ADOPTION_MACOS" "$ADOPTION_MACOS_RESULT" adoption-macos
+          require_routed "$RUN_GOVERNANCE" "$GOVERNANCE_RESULT" governance
+          require_routed "$RUN_OSV" "$OSV_RESULT" osv
+          require_routed "$RUN_ZIZMOR" "$ZIZMOR_RESULT" zizmor

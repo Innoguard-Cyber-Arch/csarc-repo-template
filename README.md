@@ -81,9 +81,9 @@ flowchart LR
 
 `main` 前進不會讓進行中的 ordinary Milestone PR 失效，也不會 fan-out 建立多張 sync PR。Standalone、bot 與 hotfix 的結果預設留在 `main`，等各 Milestone 自己進入 final promotion 才以一次 reviewed `sync/main-to-*` PR 納入；只有某張 Issue PR 的 owner 在 Draft contract 明列真實 dependency 時，才可提前 dispatch 同一個單 branch workflow。Final `dev/m* → main`／`promote/m* → main` preflight 仍綁定最新 main、exact SHA/tree、review 與 provenance；stale 時只指向這一個 reviewed sync action，不直接 push 或改寫 delivery。
 
-公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。兩個入口都會用固定版本與已驗證 checksum 的 actionlint／ShellCheck 檢查 workflows 與 shell scripts；公版驗證另執行 Issue／PR 政策正反例，並注入不合法的 workflow、shell、Python／TypeScript 內容，確認各門禁真的會拒絕。PR CI 依 docs／fast／full 與週期性供應鏈四層執行；一般 PR 除首次 reviewer 操作外最多啟動 policy、fast、verify aggregate 三個 runner，完整矩陣只留給 promotion、hotfix、merge queue 或手動驗證。Full tier 的 runtime 無關完整驗證只在最新 Python canonical job 執行一次；其餘 Python job 僅驗證安裝與 runtime-sensitive tests，混合 TypeScript 則只使用一個獨立 Node job。觸發條件、穩定 required checks、成本估算與實測方式見 [`docs/ci-policy.md`](docs/ci-policy.md)。
+公版執行 `./scripts/verify-template.sh`；生成專案執行 `./scripts/verify`。兩個入口都會用固定版本與已驗證 checksum 的 actionlint／ShellCheck 檢查 workflows 與 shell scripts；公版驗證另執行 Issue／PR 政策正反例，並注入不合法的 workflow、shell、Python／TypeScript 內容，確認各門禁真的會拒絕。Issue owner 跑 CI plan 選出的 scoped checks，其中 `verify-fast` 排除 `large`；final Ready candidate 預設只跑一次 hosted full，僅在文件明定的 fallback 改由 integrator 本機執行。Cross-runtime job 只重跑 `runtime`，flaky 不自動 retry，`quarantine` 必須具備 owner、Issue、到期日與移除條件且仍會執行。Required `verify` aggregate 每次都結論，昂貴 routing 留在 job 層。觸發條件、風險升級、成本估算與實測方式見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
-Promotion 另由穩定的 `promotion` context 封裝候選 source 與 SHA/tree 證據；合併後只核對 `main` tree 與已成功的 `verify`，不重跑完整矩陣。未設定外部環境時明確保留 artifact-only 證據；要啟用 canary，須同時設定 repository variables `CSARC_CANARY_COMMAND`、`CSARC_CANARY_ENVIRONMENT`，敏感值則放在該 environment 的 `CSARC_CANARY_TOKEN` secret。完整三態與失敗邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
+Promotion 另由穩定的 `promotion` context 封裝候選 source 與 SHA/tree 證據；合併後只核對 `main` SHA、tree 與 provenance identity，不重跑完整矩陣。未設定外部環境時明確保留 artifact-only 證據；要啟用 canary，須同時設定 repository variables `CSARC_CANARY_COMMAND`、`CSARC_CANARY_ENVIRONMENT`，敏感值則放在該 environment 的 `CSARC_CANARY_TOKEN` secret。完整三態與失敗邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
 ### Actions 額度耗盡的一次性驗證
 
