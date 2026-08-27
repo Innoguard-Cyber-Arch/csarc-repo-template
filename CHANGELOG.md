@@ -7,6 +7,13 @@
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
 CHANGELOG 的 tag。
 
+## [0.12.2](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.12.1...v0.12.2) (2026-08-27)
+
+
+### Bug Fixes
+
+* allow exact preserved dirty adoption ([#362](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/362)) ([d6d8042](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/commit/d6d8042d0da4bafdf1d222b44b47b0d4b105d5b2))
+
 ## [0.12.1](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/compare/v0.12.0...v0.12.1) (2026-08-26)
 
 
