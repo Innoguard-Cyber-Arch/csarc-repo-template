@@ -1000,8 +1000,20 @@ if grep -q '^  decision-site:$' .github/workflows/ci.yml; then
   echo "Decision site validation must share the fast runner."
   exit 1
 fi
-grep -q 'types: \[opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft\]' \
-  .github/workflows/ci.yml
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+expected = {
+    "opened", "reopened", "synchronize", "edited", "ready_for_review",
+    "converted_to_draft", "labeled", "unlabeled",
+}
+for path in (".github/workflows/ci.yml", "template/.github/workflows/ci.yml.jinja"):
+    match = re.search(r"(?m)^    types: \[([^]]+)]$", Path(path).read_text())
+    actual = {item.strip() for item in match.group(1).split(",")} if match else set()
+    if actual != expected:
+        raise SystemExit(f"{path} pull_request types mismatch: {sorted(actual)}")
+PY
 grep -q 'name: portable-decision-site' .github/workflows/ci.yml
 grep -q "steps.plan.outputs.upload_site == 'true'" .github/workflows/ci.yml
 grep -q 'python3 scripts/render_site.py --check' .github/workflows/ci.yml
