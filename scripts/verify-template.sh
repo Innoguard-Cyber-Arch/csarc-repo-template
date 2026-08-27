@@ -2458,8 +2458,15 @@ test -x "$fixture_root/default-project/scripts/install-gitleaks"
 test -x "$fixture_root/default-project/scripts/install-shellcheck"
 test -x "$fixture_root/default-project/scripts/lint-workflows-shell"
 test -x "$fixture_root/default-project/scripts/verify-fast"
-grep -Fq 'uv run pytest -m "runtime and not large"' \
+grep -Fxq '  uv run pytest -m "runtime and not large"' \
   "$fixture_root/default-project/scripts/verify"
+runtime_gate_probe="$fixture_root/runtime-gate-bypass-verify"
+sed 's/  uv run pytest -m "runtime and not large"/  uv run pytest -m "runtime and not large" || true/' \
+  "$fixture_root/default-project/scripts/verify" > "$runtime_gate_probe"
+if grep -Fxq '  uv run pytest -m "runtime and not large"' "$runtime_gate_probe"; then
+  echo "Runtime compatibility verification accepted an error-swallowing command."
+  exit 1
+fi
 test -f "$fixture_root/default-project/scripts/ci_tier.py"
 test -x "$fixture_root/default-project/scripts/promotion_gate.py"
 test -x "$fixture_root/default-project/scripts/pr_lifecycle.py"
