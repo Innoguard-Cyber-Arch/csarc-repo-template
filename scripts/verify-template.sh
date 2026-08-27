@@ -1411,8 +1411,16 @@ final = [
     for line in checkboxes
     if "integrator" in line
     and full_command in line
-    and any(token in line for token in ("unchanged", "frozen", "不再變動", "已固定"))
-    and ("exactly once" in line or "只執行一次" in line)
+    and any(
+        phrase in line
+        for phrase in (
+            "tree is unchanged",
+            "tree is frozen",
+            "final tree 不再變動",
+            "final tree 已固定",
+        )
+    )
+    and ("locally exactly once" in line or "本機只執行一次" in line)
 ]
 generation = [
     line
@@ -1470,6 +1478,14 @@ path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 PY
 if assert_pr_verification_contract "$legacy_pr_template" './scripts/verify'; then
   echo "PR verification contract accepted a per-PR Ready full check."
+  exit 1
+fi
+negated_pr_template="$fixture_root/negated-pull-request-template.md"
+sed -e 's/tree is frozen/tree is unfrozen/' \
+  -e 's/locally exactly once/locally not exactly once/' \
+  template/.github/pull_request_template.md > "$negated_pr_template"
+if assert_pr_verification_contract "$negated_pr_template" './scripts/verify'; then
+  echo "PR verification contract accepted negated final-check guarantees."
   exit 1
 fi
 unconditional_generation_template="$fixture_root/unconditional-generation-template.md"
