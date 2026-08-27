@@ -58,48 +58,32 @@
       <p class="ecosystem-reference reference">Ref. Official project repositories linked above; logo assets from each project's brand kit.</p>
     </section>
 
-    <section class="slide similar-tools-slide" data-audience="maintainer" aria-label="相似開源工具與工作旅程對照">
+    <section class="slide similar-tools-slide" data-audience="maintainer" aria-label="工作定義與相似開源工具對照">
       <header>
         <span class="selection-sequence">維運附錄｜相似工具</span>
-        <h2>一次比較 <span class="accent">3 個 repo</span></h2>
-        <p class="subtitle">每格都直接寫出該工具與 CSARC 的責任差異；版本與 Stars 取自 GitHub，時間統一以 UTC 記錄。</p>
+        <h2><span class="accent">01 工作定義</span>｜誰是競品，誰只值得局部參考</h2>
+        <p class="subtitle">主要競品後續比較完整 01–10；基礎元件與局部參考只出現在真正相關的旅程。此頁先釐清各 repo 如何定義工作、提案與執行邊界。</p>
       </header>
-      <div class="similar-tools-toolbar">
-        <p><strong>比較組：</strong><span id="similar-tools-group-name" aria-live="polite"></span></p>
-        <div class="similar-tools-pager" aria-label="切換相似工具比較組">
-          <button id="similar-tools-previous" type="button">← 上一組</button>
-          <span id="similar-tools-counter" aria-live="polite">1 / 4</span>
-          <button id="similar-tools-next" type="button">下一組 →</button>
-        </div>
+      <div class="similar-tools-legend" aria-label="比較角色圖例">
+        <span class="competitor">主要競品｜後續比較 01–10</span>
+        <span class="foundation">基礎元件｜只比較承擔的能力</span>
+        <span class="reference">局部參考｜高採用或設計值得學習</span>
       </div>
-      <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="相似工具比較表，可垂直捲動">
+      <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="工作定義相似工具比較表，可水平捲動">
         <table class="similar-tools-matrix">
-          <thead>
-            <tr>
-              <th scope="col">工作旅程</th>
-              <th scope="col"><a data-similar-tool-link target="_blank" rel="noreferrer"></a></th>
-              <th scope="col"><a data-similar-tool-link target="_blank" rel="noreferrer"></a></th>
-              <th scope="col"><a data-similar-tool-link target="_blank" rel="noreferrer"></a></th>
-            </tr>
-          </thead>
+          <thead><tr><th scope="col">01 比較面向</th></tr></thead>
           <tbody>
-            <tr class="similar-tools-fact" data-comparison-key="version"><th scope="row">比較版本<br>（發行日）</th><td data-similar-tool-cell></td><td data-similar-tool-cell></td><td data-similar-tool-cell></td></tr>
-            <tr class="similar-tools-fact" data-comparison-key="stars"><th scope="row">GitHub Stars<br>（截取日）</th><td data-similar-tool-cell></td><td data-similar-tool-cell></td><td data-similar-tool-cell></td></tr>
-            <tr data-work-step="01" data-comparison-key="01"><th scope="row"><span>01</span>工作定義</th><td data-similar-tool-cell></td><td data-similar-tool-cell></td><td data-similar-tool-cell></td></tr>
-            <tr data-work-step="02" data-comparison-key="02"><th scope="row"><span>02</span>AI 契約／實作</th><td data-similar-tool-cell></td><td data-similar-tool-cell></td><td data-similar-tool-cell></td></tr>
-            <tr data-work-step="03" data-comparison-key="03"><th scope="row"><span>03</span>驗證＋CI</th><td data-similar-tool-cell></td><td data-similar-tool-cell></td><td data-similar-tool-cell></td></tr>
-            <tr data-work-step="04" data-comparison-key="04"><th scope="row"><span>04</span>PR／合併</th><td data-similar-tool-cell></td><td data-similar-tool-cell></td><td data-similar-tool-cell></td></tr>
-            <tr data-work-step="05" data-comparison-key="05"><th scope="row"><span>05</span>依賴安全</th><td data-similar-tool-cell></td><td data-similar-tool-cell></td><td data-similar-tool-cell></td></tr>
-            <tr data-work-step="06" data-comparison-key="06"><th scope="row"><span>06</span>版本／交付</th><td data-similar-tool-cell></td><td data-similar-tool-cell></td><td data-similar-tool-cell></td></tr>
-            <tr data-work-step="07" data-comparison-key="07"><th scope="row"><span>07</span>規則治理</th><td data-similar-tool-cell></td><td data-similar-tool-cell></td><td data-similar-tool-cell></td></tr>
-            <tr data-work-step="08" data-comparison-key="08"><th scope="row"><span>08</span>模板升級</th><td data-similar-tool-cell></td><td data-similar-tool-cell></td><td data-similar-tool-cell></td></tr>
-            <tr data-work-step="09" data-comparison-key="09"><th scope="row"><span>09</span>內部網站</th><td data-similar-tool-cell></td><td data-similar-tool-cell></td><td data-similar-tool-cell></td></tr>
-            <tr data-work-step="10" data-comparison-key="10"><th scope="row"><span>10</span>導入層級</th><td data-similar-tool-cell></td><td data-similar-tool-cell></td><td data-similar-tool-cell></td></tr>
-            <tr class="similar-tools-position" data-comparison-key="position"><th scope="row">相對 CSARC<br>定位差異</th><td data-similar-tool-cell></td><td data-similar-tool-cell></td><td data-similar-tool-cell></td></tr>
+            <tr class="similar-tools-fact" data-comparison-key="version"><th scope="row">比較版本<br>（發行日）</th></tr>
+            <tr class="similar-tools-fact" data-comparison-key="stars"><th scope="row">GitHub Stars<br>（截取日）</th></tr>
+            <tr data-comparison-key="role"><th scope="row">比較角色<br>／後續範圍</th></tr>
+            <tr data-comparison-key="truth"><th scope="row">工作真相<br>放在哪裡</th></tr>
+            <tr data-comparison-key="proposal"><th scope="row">提案如何<br>成為正式</th></tr>
+            <tr data-comparison-key="execution"><th scope="row">如何連到<br>執行工作</th></tr>
+            <tr class="similar-tools-position" data-comparison-key="position"><th scope="row">相對 CSARC<br>定位差異</th></tr>
           </tbody>
         </table>
       </div>
-      <p class="similar-tools-note"><strong>資料來源：</strong>GitHub repository／latest release API，截取 2026-08-27。CSARC 目前 CI/CD 已停用，因此格內一律區分「有設計／檔案」與「正在自動執行」。</p>
+      <p class="similar-tools-note"><strong>資料來源：</strong>GitHub repository／latest release API，截取 2026-08-27。主要競品是產品範圍大致重疊；Stars 高但只解一小段問題者仍列為局部參考，不假裝能取代整套 CSARC。</p>
     </section>
 
     <section class="slide active capability-slide" data-track="capability" aria-label="CSARC 公版能力與導入方式">

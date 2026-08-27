@@ -121,13 +121,16 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     app = (root / "site" / "app.js").read_text(encoding="utf-8")
 
     assert 'class="slide similar-tools-slide" data-audience="maintainer"' in source
-    assert source.count('data-work-step="') == 10
-    assert source.count("data-similar-tool-cell") == 39
+    assert source.count('data-comparison-key="') == 7
+    assert "01 工作定義" in source
     assert "get('audience') === 'maintainer'" in app
     assert "element.remove()" in app
     assert "similarToolsSlide ?" in app
-    comparison_data = app.split("const similarToolGroups = [", 1)[1].split(
-        "const similarToolLinks", 1
+    comparison_data = app.split("const similarTools = [", 1)[1].split(
+        "const similarToolsHeader", 1
     )[0]
     assert comparison_data.count("url: 'https://github.com/") == 12
-    assert "renderSimilarToolGroup" in app
+    for key in ("role", "truth", "proposal", "execution", "position"):
+        assert comparison_data.count(f"{key}:") == 12
+    assert "similar-tools-next" not in source
+    assert "similarToolsHeader.append" in app
