@@ -3196,10 +3196,6 @@ gh auth status`
       const similarToolsPrevious = similarToolsSlide.querySelector('#similar-tools-previous');
       const similarToolsNext = similarToolsSlide.querySelector('#similar-tools-next');
       const similarToolsTable = similarToolsSlide.querySelector('.similar-tools-table-wrap');
-      const csarcComparisonBaseline = {
-        version: 'v0.12.2（2026-08-27）',
-        stars: '1（截取 2026-08-27）'
-      };
       let similarToolGroupIndex = 0;
 
       function renderSimilarToolGroup() {
@@ -3219,16 +3215,12 @@ gh auth status`
           group.tools.forEach((tool, toolIndex) => {
             const cell = cells[toolIndex];
             if (key === 'version' || key === 'stars') {
-              const toolLabel = document.createElement('strong');
-              toolLabel.textContent = `${tool.name}｜`;
-              const csarcLabel = document.createElement('strong');
-              csarcLabel.textContent = 'CSARC｜';
-              cell.replaceChildren(toolLabel, tool[key], document.createElement('br'), csarcLabel, csarcComparisonBaseline[key]);
+              cell.textContent = tool[key];
               return;
             }
             const [toolValue, csarcValue] = tool.comparisons[key];
             const toolLabel = document.createElement('strong');
-            toolLabel.textContent = `${tool.name}｜`;
+            toolLabel.textContent = '工具｜';
             const csarcLabel = document.createElement('strong');
             csarcLabel.textContent = 'CSARC｜';
             cell.replaceChildren(toolLabel, toolValue, document.createElement('br'), csarcLabel, csarcValue);
