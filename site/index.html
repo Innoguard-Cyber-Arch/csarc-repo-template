@@ -66,7 +66,7 @@
       </header>
       <div class="similar-tools-tabs" role="tablist" aria-label="相似工具內頁">
         <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>整體接近</small>主要相似工具</button>
-        <button id="similar-tools-tab-philosophy" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-philosophy" data-similar-tools-tab="1"><small>局部能力</small>工作哲學參考</button>
+        <button id="similar-tools-tab-philosophy" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-philosophy" data-similar-tools-tab="1"><small>功能比較</small>工作定義做法</button>
       </div>
       <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
         <div class="similar-tools-legend" aria-label="主要相似工具定義">
@@ -91,24 +91,24 @@
         <p class="similar-tools-note"><strong>判斷標準：</strong>完整與部分 tag 合計達 4 個以上，即列為主要相似工具；兩種符合程度不加權，未涵蓋的旅程不顯示。</p>
       </div>
       <div id="similar-tools-panel-philosophy" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-philosophy" data-similar-tools-panel hidden>
-        <div class="similar-tools-legend" aria-label="工作哲學參考定義">
-          <span class="reference">每列先解釋哲學；兩個工具欄各自在同一格內條列</span>
+        <div class="similar-tools-legend" aria-label="工作定義功能比較說明">
+          <span class="reference">每列回答一個具體做法；主要相似工具優先，其他工具只補充局部設計</span>
         </div>
-        <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="工作定義哲學比較表">
+        <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="工作定義功能比較表">
           <table class="similar-tools-matrix similar-tools-philosophy-matrix">
             <thead>
               <tr>
-                <th scope="col">工作定義哲學</th>
+                <th scope="col">功能分野／具體做法</th>
                 <th scope="col">主要相似工具</th>
-                <th scope="col">其他生態圈主流工具</th>
+                <th scope="col">其他生態圈工具</th>
               </tr>
             </thead>
             <tbody>
-              <tr data-comparison-key="repositoryTruth"><th scope="row"><strong>哲學 A｜Repo 即真相</strong><span>規格、決策、計畫與驗證證據都跟程式碼一起版本化，換人或換 agent 仍能從 repo 還原脈絡。</span></th></tr>
-              <tr data-comparison-key="declarativeState"><th scope="row"><strong>哲學 B｜宣告式設定</strong><span>先描述想要的狀態，再由工具產生檔案或持續把實際狀態拉回目標。</span></th></tr>
-              <tr data-comparison-key="templateLifecycle"><th scope="row"><strong>哲學 C｜模板生命週期</strong><span>模板不是只建立一次；上游版本更新後，既有 repo 仍能安全接收變更並處理衝突。</span></th></tr>
-              <tr data-comparison-key="proposalLifecycle"><th scope="row"><strong>哲學 D｜提案到正式</strong><span>把進行中的提案與已接受基線分開，明確定義何時審查、合併與歸檔。</span></th></tr>
-              <tr data-comparison-key="rightSizedWork"><th scope="row"><strong>哲學 E｜依複雜度調整</strong><span>小修改走短流程；範圍大、風險高或跨 session 的工作才增加規格、計畫與架構文件。</span></th></tr>
+              <tr data-comparison-key="repositoryTruth"><th scope="row"><strong>工作依據放在哪裡</strong><span>比較需求、決策、設定與驗證證據存在哪裡，以及哪一份資料算正式。</span></th></tr>
+              <tr data-comparison-key="declarativeState"><th scope="row"><strong>定義如何變成 repo 狀態</strong><span>比較人直接改檔、由設定產生檔案，或由服務持續修正遠端狀態。</span></th></tr>
+              <tr data-comparison-key="templateLifecycle"><th scope="row"><strong>既有 repo 如何接收新版</strong><span>比較新版模板、規則或 recipe 如何進入既有 repo，以及衝突由誰處理。</span></th></tr>
+              <tr data-comparison-key="proposalLifecycle"><th scope="row"><strong>進行中變更如何成為正式</strong><span>比較 branch、change 或設定 PR 在何時完成審查、合併與歸檔。</span></th></tr>
+              <tr data-comparison-key="rightSizedWork"><th scope="row"><strong>小改與大型工作如何分流</strong><span>比較何時可以直接修改，何時必須增加 spec、plan、tasks 或架構文件。</span></th></tr>
             </tbody>
           </table>
         </div>

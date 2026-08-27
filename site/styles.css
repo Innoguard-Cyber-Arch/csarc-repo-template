@@ -434,12 +434,14 @@
     .coverage-tag.full { background: var(--best); }
     .coverage-tag.partial { background: var(--optional); }
     .similar-tools-philosophy-matrix { min-height: 0; font-size: 14px; line-height: 1.22; }
-    .similar-tools-philosophy-matrix thead th:first-child { width: 28%; }
-    .similar-tools-philosophy-matrix thead th:nth-child(2) { width: 30%; }
-    .similar-tools-philosophy-matrix thead th:nth-child(3) { width: 42%; }
-    .similar-tools-philosophy-matrix tbody th { width: 28%; }
+    .similar-tools-philosophy-matrix thead th:first-child { width: 32%; }
+    .similar-tools-philosophy-matrix thead th:nth-child(2) { width: 45%; }
+    .similar-tools-philosophy-matrix thead th:nth-child(3) { width: 23%; }
+    .similar-tools-philosophy-matrix tbody th { width: 32%; }
     .similar-tools-philosophy-matrix tbody th strong { display: block; font-size: 15px; }
     .similar-tools-philosophy-matrix tbody th span { display: block; margin-top: 3px; color: var(--muted); font-weight: 500; }
+    .similar-tools-philosophy-matrix tbody td:first-of-type { background: #fffdf0; box-shadow: inset 4px 0 #b9a700; }
+    .similar-tools-philosophy-matrix tbody td:last-child { font-size: 13px; }
     .similar-tools-philosophy-matrix td ul { margin: 0; padding-left: 18px; }
     .similar-tools-philosophy-matrix td li + li { margin-top: 4px; }
     .similar-tools-note {

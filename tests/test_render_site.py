@@ -123,28 +123,29 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     assert 'class="slide similar-tools-slide" data-audience="maintainer"' in source
     assert source.count('data-comparison-key="') == 5
     assert "similar-tools-philosophy-matrix" in source
-    assert "工作定義哲學" in source
-    assert "其他生態圈主流工具" in source
+    assert "功能分野／具體做法" in source
+    assert "其他生態圈工具" in source
     assert source.count("data-similar-tools-panel") == 2
     assert source.count("data-similar-tools-tab") == 2
     assert 'role="tablist"' in source
     assert source.count('role="tab"') == 2
     assert "主要相似工具" in source
-    assert "工作哲學參考" in source
+    assert "工作定義做法" in source
     assert "涵蓋旅程" in source
     assert "相似工具 01" not in app
     assert "01A" not in source
     assert "01B" not in source
     assert "自我定位" in source
     assert "與本套件的差異" in source
-    for philosophy in (
-        "Repo 即真相",
-        "宣告式設定",
-        "模板生命週期",
-        "提案到正式",
-        "依複雜度調整",
+    for feature in (
+        "工作依據放在哪裡",
+        "定義如何變成 repo 狀態",
+        "既有 repo 如何接收新版",
+        "進行中變更如何成為正式",
+        "小改與大型工作如何分流",
     ):
-        assert philosophy in source
+        assert feature in source
+    assert "哲學 A" not in source
     assert "get('audience') === 'maintainer'" in app
     assert "element.remove()" in app
     assert "similarToolsSlide ?" in app
