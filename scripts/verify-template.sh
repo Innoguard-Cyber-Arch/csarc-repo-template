@@ -3581,8 +3581,8 @@ test "$(
 # shellcheck disable=SC2016 # Match the literal workflow variable.
 grep -q 'test "$CANONICAL_RESULT" = success' \
   "$adoption_project/.github/workflows/ci.yml"
-# shellcheck disable=SC2016 # Match the literal workflow variable.
-grep -q 'test "$PYTHON_COMPATIBILITY_RESULT" = success' \
+# shellcheck disable=SC2016 # Match literal workflow variables.
+grep -Fq 'require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility' \
   "$adoption_project/.github/workflows/ci.yml"
 # shellcheck disable=SC2016 # Match the literal workflow variable.
 grep -q 'test "$TYPESCRIPT_RESULT" = success' \
