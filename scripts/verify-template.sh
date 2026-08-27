@@ -2494,8 +2494,14 @@ grep -q 'SHA/tree-bound.*non-release promotion path' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q '錯誤 budget.*平台事故.*權限.*原因不明.*測試失敗' \
   "$fixture_root/default-project/docs/index.html"
-grep -q '一般 Issue PR 跑 change-aware fast checks' \
-  "$fixture_root/default-project/docs/site-content.js"
+for scoped_verification_token in \
+  'Issue owner 跑 change-aware scoped checks' \
+  'fast 排除 large' \
+  'cross-runtime 只重跑 runtime' \
+  'final Ready candidate 只跑一次 hosted'; do
+  grep -Fq "$scoped_verification_token" \
+    "$fixture_root/default-project/docs/site-content.js"
+done
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/docs/index.html"
 grep -q 'Administration read' \
@@ -2635,8 +2641,20 @@ if grep -q '^  decision-site:$' \
   echo "Generated decision site validation must share the fast runner."
   exit 1
 fi
-grep -q 'types: \[opened, reopened, synchronize, labeled, unlabeled, ready_for_review, converted_to_draft\]' \
-  "$fixture_root/default-project/.github/workflows/ci.yml"
+uv run python - "$fixture_root/default-project/.github/workflows/ci.yml" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+expected = {
+    "opened", "reopened", "synchronize", "edited", "ready_for_review",
+    "converted_to_draft", "labeled", "unlabeled",
+}
+match = re.search(r"(?m)^    types: \[([^]]+)]$", Path(sys.argv[1]).read_text())
+actual = {item.strip() for item in match.group(1).split(",")} if match else set()
+if actual != expected:
+    raise SystemExit(f"Generated CI pull_request types mismatch: {sorted(actual)}")
+PY
 grep -q 'name: portable-decision-site' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q "steps.plan.outputs.upload_site == 'true'" \
