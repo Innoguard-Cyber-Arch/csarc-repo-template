@@ -4,12 +4,38 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+if [[ -n "${_CSARC_PROJECT_VERIFICATION_ACTIVE:-}" ]]; then
+  echo "Project verification hook must not invoke canonical scripts/verify." >&2
+  exit 1
+fi
+
+record_project_verification_status() {
+  local status_fd="${_CSARC_PROJECT_VERIFICATION_STATUS_FD:-}"
+  if [[ -n "$status_fd" ]]; then
+    if [[ ! "$status_fd" =~ ^[0-9]+$ ]] ||
+      ! printf '%s\n' "$1" >&"$status_fd"; then
+      echo "Internal project verification status descriptor is invalid." >&2
+      exit 1
+    fi
+  fi
+}
+record_project_verification_status not-run
+
 mode="${1:-full}"
 if [[ "$mode" != "full" && "$mode" != "python-compatibility" &&
   "$mode" != "typescript" ]]; then
   echo "Usage: $0 [full|python-compatibility|typescript]" >&2
   exit 2
 fi
+
+for workflow in .github/workflows/{pr-policy,promotion}.yml; do
+  if grep -Eq 'secrets\.(CSARC_SYNC_TOKEN|CSARC_ADMIN_TOKEN|GH_ADMIN_TOKEN|ADMIN_TOKEN)' \
+    "$workflow"; then
+    echo "$workflow exposes an administration token to an untrusted event."
+    exit 1
+  fi
+done
+grep -q 'gh auth setup-git' .github/workflows/delivery-maintenance.yml
 
 verify_python={{ "true" if language in ["python", "python-typescript"] else "false" }}
 verify_typescript="${CSARC_VERIFY_TYPESCRIPT:-{{ "true" if language in ["typescript", "python-typescript"] else "false" }}}"
@@ -57,7 +83,7 @@ if [[ "$mode" == "python-compatibility" ]]; then
   python_version="${CSARC_PYTHON_VERSION:-3.14}"
   export UV_PYTHON="$python_version"
   uv sync --locked --python "$python_version"
-  uv run pytest
+  uv run pytest -m "not large"
   exit 0
 fi
 
@@ -71,10 +97,12 @@ if [[ "$mode" == "typescript" ]]; then
 fi
 
 ./scripts/check-update-conflicts
+./scripts/check-project-metadata
 uv run --no-project python scripts/render_site.py --check
 ./scripts/test-worktree-cleanup
 ./scripts/detect-language-profile
 ./scripts/test-pr-policy
+./scripts/test-release-follow-up-gates
 ./scripts/test-issue-triage
 ./scripts/lint-workflows-shell
 
@@ -141,10 +169,40 @@ grep -q 'Test-Driven Development' docs/README.md
 grep -q 'Behavior-Driven Development' docs/README.md
 grep -q 'docs/decisions/' docs/README.md
 "${platform_python[@]}" -m json.tool .csarc/profile.json >/dev/null
+"${platform_python[@]}" - <<'PY'
+import json
+from pathlib import Path, PurePosixPath
+
+profile = json.loads(Path(".csarc/profile.json").read_text(encoding="utf-8"))
+container = profile.get("container", {})
+mode = container.get("mode")
+if mode not in {"none", "verify", "ghcr"}:
+    raise SystemExit(f"Invalid container mode: {mode!r}")
+enabled = mode != "none"
+if profile.get("modules", {}).get("container") is not enabled:
+    raise SystemExit("Container module does not match container mode")
+if enabled:
+    containerfile = container.get("file", "")
+    if not isinstance(containerfile, str):
+        raise SystemExit("Container file must be a string")
+    path = PurePosixPath(containerfile)
+    if not containerfile or path.is_absolute() or ".." in path.parts:
+        raise SystemExit("Container file must be a safe repository-relative path")
+    if not Path(containerfile).is_file():
+        raise SystemExit(f"Container file does not exist: {containerfile}")
+    smoke = container.get("smoke_command", "")
+    if (
+        not isinstance(smoke, str)
+        or "$IMAGE" not in smoke
+        or len(smoke.splitlines()) != 1
+    ):
+        raise SystemExit("Container smoke command must be one line using $IMAGE")
+PY
 "${platform_python[@]}" -m json.tool policies/repository.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/actions.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/labels.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/rulesets.json >/dev/null
+"${platform_python[@]}" -m json.tool policies/dev-next-ruleset.json >/dev/null
 "${platform_python[@]}" -m json.tool release-please-config.json >/dev/null
 "${platform_python[@]}" -m json.tool .release-please-manifest.json >/dev/null
 "${platform_python[@]}" - <<'PY'
@@ -173,6 +231,11 @@ print(f"release version: {next(iter(versions.values()))}")
 PY
 test -x scripts/apply-repository-settings.sh
 test -x scripts/detect-language-profile
+test -x scripts/pr_lifecycle.py
+grep -q 'scripts/pr_lifecycle.py' AGENTS.md
+grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md
+grep -q 'release pull request (human-only)' docs/ci-policy.md
+"${platform_python[@]}" scripts/pr_lifecycle.py scan-writers --root .
 
 test -f AGENTS.md
 test "$(cat CLAUDE.md)" = "@AGENTS.md"
@@ -257,6 +320,62 @@ if $verify_python; then
 {% endif %}
 fi
 
-if [[ -x scripts/verify-product ]]; then
-  ./scripts/verify-product
+project_verification_hook='{{ project_verification_hook | default("", true) }}'
+if [[ -z "$project_verification_hook" && -x scripts/verify-product ]]; then
+  project_verification_hook="scripts/verify-product"
+fi
+if [[ -n "$project_verification_hook" ]]; then
+  verified_hook="$("${platform_python[@]}" - "$project_verification_hook" <<'PY'
+import os
+import re
+import sys
+from pathlib import Path
+
+raw = sys.argv[1]
+relative = Path(raw)
+if (
+    not raw
+    or raw != raw.strip()
+    or relative.is_absolute()
+    or ".." in relative.parts
+    or re.fullmatch(r"[A-Za-z0-9._/-]+", raw) is None
+):
+    raise SystemExit("Project verification hook is not a safe relative path")
+root = Path.cwd().resolve(strict=True)
+try:
+    hook = (root / relative).resolve(strict=True)
+except OSError as error:
+    raise SystemExit(f"Project verification hook does not exist: {raw}") from error
+if hook != root and root not in hook.parents:
+    raise SystemExit(f"Project verification hook escapes the repository: {raw}")
+if not hook.is_file() or not os.access(hook, os.X_OK):
+    raise SystemExit(f"Project verification hook is not executable: {raw}")
+canonical = root / "scripts" / "verify"
+try:
+    if canonical.exists() and os.path.samefile(hook, canonical):
+        raise SystemExit(
+            "Project verification hook must not resolve to canonical scripts/verify"
+        )
+except OSError as error:
+    raise SystemExit(f"Cannot compare project verification hook: {raw}") from error
+print(hook)
+PY
+)"
+  record_project_verification_status started
+  status_fd="${_CSARC_PROJECT_VERIFICATION_STATUS_FD:-}"
+  if (
+    if [[ -n "$status_fd" ]]; then
+      [[ "$status_fd" =~ ^[0-9]+$ ]]
+      eval "exec ${status_fd}>&-"
+    fi
+    unset _CSARC_PROJECT_VERIFICATION_STATUS_FD
+    export _CSARC_PROJECT_VERIFICATION_ACTIVE=1
+    exec "$verified_hook"
+  ); then
+    record_project_verification_status passed
+  else
+    hook_status=$?
+    record_project_verification_status failed
+    exit "$hook_status"
+  fi
 fi

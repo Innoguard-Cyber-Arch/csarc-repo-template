@@ -5,12 +5,13 @@
 Closes #N
 
 <!-- Work PRs use type/N-short-slug and target the configured integration branch. -->
+<!-- A checkpoint promotion lists its canonical Issue marker in the tracking Issue, not here. -->
 
 ## 完成清單
 
 <!-- Closing keywords require every task here and in the linked Issue to be checked. -->
 
-- [ ] `./scripts/verify-template.sh` 已通過；恰選一個 change label（`fix`→`bug`、`docs`→`documentation`、其餘 type→`enhancement`）；未超出原 Issue 範圍
+- [ ] `./scripts/verify-template.sh` 已通過；PR assignee／label／Milestone 與 linked Issue 一致；work branch 已顯示於 Issue Development；未超出原 Issue 範圍
 - [ ] 已測試新專案產生並評估既有專案更新影響；第三方 Actions 固定完整 commit SHA
 
 ## 補充

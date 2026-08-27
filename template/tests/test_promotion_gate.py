@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import runpy
 import shutil
 import subprocess
+import urllib.parse
+import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -14,18 +18,33 @@ import pytest
 MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "promotion_gate.py")
 )
+checkpoint_issue_numbers = MODULE["checkpoint_issue_numbers"]
 classify_canary = MODULE["classify_canary"]
 finalize = MODULE["finalize"]
 finalize_quota_fallback = MODULE["finalize_quota_fallback"]
+fallback_statement = MODULE["fallback_statement"]
 github_get = MODULE["github_get"]
 highest_release_intent = MODULE["highest_release_intent"]
 included_pull_requests = MODULE["included_pull_requests"]
+issue_number = MODULE["issue_number"]
+local_verification_command = MODULE["local_verification_command"]
 main_is_current = MODULE["main_is_current"]
+milestone_included_issues = MODULE["milestone_included_issues"]
+note_quota_fallback = MODULE["note_quota_fallback"]
 prepare = MODULE["prepare"]
+parser = MODULE["parser"]
+quota_fallback_note = MODULE["quota_fallback_note"]
+BILLING_GATE_ANNOTATION_MESSAGE = MODULE["BILLING_GATE_ANNOTATION_MESSAGE"]
+RejectRedirects = MODULE["RejectRedirects"]
+repository_variables = MODULE["repository_variables"]
+require_same_preflight = MODULE["require_same_preflight"]
 promotion_bridge_source = MODULE["promotion_bridge_source"]
 promotion_main_evidence = MODULE["promotion_main_evidence"]
+pull_request_issue_number = MODULE["pull_request_issue_number"]
 require_zero_step_run = MODULE["require_zero_step_run"]
 route_for = MODULE["route_for"]
+run_dev_next_preservation = MODULE["run_dev_next_preservation"]
+sync_pull_request_main_sha = MODULE["sync_pull_request_main_sha"]
 same_repository = MODULE["same_repository"]
 unfinished_milestone_issues = MODULE["unfinished_milestone_issues"]
 verify_main = MODULE["verify_main"]
@@ -34,6 +53,76 @@ _GIT = shutil.which("git")
 if _GIT is None:
     raise RuntimeError("Git is required for promotion tests")
 GIT: str = _GIT
+
+
+def test_release_recovery_routes_to_preflight_and_gate() -> None:
+    """The required gate must conclude whenever its preflight runs."""
+    workflow = (
+        Path(__file__).parents[1] / ".github/workflows/promotion.yml"
+    ).read_text(encoding="utf-8")
+    marker = (
+        "contains(github.event.pull_request.labels.*.name, 'release-recovery')"
+    )
+    preflight = workflow.split("  preflight:", 1)[1].split("\n  canary:", 1)[0]
+    gate = workflow.split("\n  gate:", 1)[1]
+    assert marker in preflight
+    assert marker in gate
+
+
+def preservation_evidence() -> dict[str, object]:
+    """Return one structured remote checkpoint for quota fallback tests."""
+    return {
+        "ledger_ref": "refs/heads/csarc/dev-next-preservation-ledger",
+        "ledger_commit": "d" * 40,
+        "transaction": {
+            "schema_version": 1,
+            "repository": "owner/repo",
+            "pull_request": 42,
+            "base_ref": "main",
+            "base_sha": "base",
+            "head_ref": "dev/next",
+            "head_sha": "head",
+            "operation_id": "e" * 64,
+            "mode": "temporary-auto-delete",
+            "prior_auto_delete": True,
+            "state": "prepared",
+        },
+    }
+
+
+def test_hosted_restoration_is_explicit_and_never_replaces_gh_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pass the separate admin secret through the hosted environment."""
+    captured: dict[str, object] = {}
+    github_value = "github-value"
+    admin_value = "admin-value"
+
+    def run(command: list[str], **kwargs: object) -> SimpleNamespace:
+        captured["command"] = command
+        captured["env"] = kwargs["env"]
+        return SimpleNamespace(stdout=json.dumps(preservation_evidence()))
+
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GH_TOKEN", github_value)
+    monkeypatch.setenv("CSARC_SYNC_TOKEN", admin_value)
+    monkeypatch.setattr(subprocess, "run", run)
+    run_dev_next_preservation(
+        "complete-dev-next",
+        "owner/repo",
+        42,
+        "a" * 40,
+        "b" * 40,
+        "c" * 64,
+        "d" * 40,
+    )
+    command = captured["command"]
+    assert isinstance(command, list)
+    assert "--hosted" in command
+    environment = captured["env"]
+    assert isinstance(environment, dict)
+    assert environment["GH_TOKEN"] == github_value
+    assert environment["CSARC_SYNC_TOKEN"] == admin_value
 
 
 @pytest.mark.parametrize(
@@ -58,6 +147,22 @@ GIT: str = _GIT
         ),
         ("main", "fix/42-outage", {"hotfix"}, "delivery", "hotfix", None),
         (
+            "main",
+            "fix/321-recover-v012-release",
+            {"release-recovery"},
+            "delivery",
+            "release-recovery",
+            None,
+        ),
+        (
+            "main",
+            "fix/321-recover-v012-release",
+            {"release-recovery"},
+            "main",
+            "release-recovery",
+            None,
+        ),
+        (
             "dev/m7-staged-ci",
             "feat/42-work",
             set(),
@@ -76,10 +181,26 @@ GIT: str = _GIT
         ("main", "feat/42-work", set(), "delivery", "invalid-main-route", None),
         (
             "main",
+            "feat/321-recover-v012-release",
+            {"release-recovery"},
+            "delivery",
+            "invalid-main-route",
+            None,
+        ),
+        (
+            "main",
+            "fix/321-recover-v012-release",
+            {"hotfix", "release-recovery"},
+            "delivery",
+            "invalid-main-route",
+            None,
+        ),
+        (
+            "main",
             "promote/next",
             {"promotion"},
             "delivery",
-            "invalid-main-route",
+            "standalone-batch",
             None,
         ),
         ("main", "dev", set(), "dev", "dev-promotion", None),
@@ -105,6 +226,19 @@ def test_isolated_issue_route_binds_the_issue_number() -> None:
     route = route_for("main", "dev/i42-payment-soak", {"promotion"}, "delivery")
     assert route.kind == "isolated"
     assert route.issue == 42
+    assert route.relevant
+
+
+def test_release_recovery_route_binds_the_issue_number() -> None:
+    """A recovery exception cannot be reused for another tracking Issue."""
+    route = route_for(
+        "main",
+        "fix/321-recover-v012-release",
+        {"release-recovery"},
+        "delivery",
+    )
+    assert route.kind == "release-recovery"
+    assert route.issue == 321
     assert route.relevant
 
 
@@ -147,22 +281,28 @@ def test_included_pull_requests_are_deduplicated_and_scoped(
                 {
                     "number": 10,
                     "title": "fix: timeout",
+                    "body": "Closes #10",
                     "merged_at": "2026-01-01T00:00:00Z",
                     "base": {"ref": "dev/m7-staged-ci"},
+                    "head": {"ref": "fix/10-timeout"},
                 }
             ]
         return [
             {
                 "number": 10,
                 "title": "fix: timeout",
+                "body": "Closes #10",
                 "merged_at": "2026-01-01T00:00:00Z",
                 "base": {"ref": "dev/m7-staged-ci"},
+                "head": {"ref": "fix/10-timeout"},
             },
             {
                 "number": 11,
                 "title": "feat: unrelated",
+                "body": "Closes #11",
                 "merged_at": "2026-01-01T00:00:00Z",
                 "base": {"ref": "dev/next"},
+                "head": {"ref": "feat/11-unrelated"},
             },
         ]
 
@@ -172,10 +312,300 @@ def test_included_pull_requests_are_deduplicated_and_scoped(
     assert included_pull_requests(
         "owner/repo", "base", "head", "dev/m7-staged-ci", "token"
     ) == [{"number": 10, "title": "fix: timeout", "intent": "patch"}]
+    assert (
+        included_pull_requests(
+            "owner/repo",
+            "base",
+            "head",
+            "dev/m7-staged-ci",
+            "token",
+            track_work_issues=True,
+        )[0]["issue"]
+        == 10
+    )
 
 
-def test_bridge_provenance_accepts_only_same_milestone_pull_requests(
+def test_repeated_syncs_require_per_sync_reviewed_provenance(
     monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Accept historical and current syncs only with their own evidence."""
+    old_main = "a" * 40
+    current_main = "b" * 40
+
+    def sync_pull_request(
+        number: int, name: str, main_sha: str
+    ) -> dict[str, object]:
+        return {
+            "number": number,
+            "title": "chore(sync): merge reviewed main",
+            "body": "Reviewed sync evidence.",
+            "merged_at": "2026-01-01T00:00:00Z",
+            "base": {"ref": "dev/m10-adoption"},
+            "head": {
+                "ref": f"sync/main-to-m10-adoption-{main_sha[:12]}",
+                "sha": f"{name}-head",
+                "repo": {"full_name": "owner/repo"},
+            },
+        }
+
+    old_sync = sync_pull_request(12, "old", old_main)
+    current_sync = sync_pull_request(13, "current", current_main)
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path.startswith("compare/"):
+            return {"commits": [{"sha": "old-merge"}, {"sha": "current-merge"}]}
+        if path == "commits/old-merge/pulls":
+            return [old_sync]
+        if path == "commits/current-merge/pulls":
+            return [current_sync]
+        if path == "git/commits/old-head":
+            return {"parents": [{"sha": "old-delivery"}, {"sha": old_main}]}
+        if path == "git/commits/current-head":
+            return {
+                "parents": [
+                    {"sha": "current-delivery"},
+                    {"sha": current_main},
+                ]
+            }
+        raise AssertionError(path)
+
+    monkeypatch.setitem(
+        included_pull_requests.__globals__, "github_get", fake_get
+    )
+    monkeypatch.setattr(MODULE["delivery_sync"], "compare", lambda *_: "ahead")
+    calls: list[tuple[str, str]] = []
+
+    def merged_sync(
+        _api: object,
+        _repo: str,
+        _delivery_branch: str,
+        main_sha: str,
+        head_sha: str,
+    ) -> int:
+        calls.append((main_sha, head_sha))
+        return 12 if main_sha == old_main else 13
+
+    monkeypatch.setattr(
+        MODULE["delivery_sync"],
+        "merged_sync_pr_number",
+        merged_sync,
+    )
+    assert included_pull_requests(
+        "owner/repo",
+        current_main,
+        "candidate",
+        "dev/m10-adoption",
+        "token",
+        track_work_issues=True,
+    ) == [
+        {
+            "number": 12,
+            "title": "chore(sync): merge reviewed main",
+            "intent": "no-release",
+            "issue": None,
+        },
+        {
+            "number": 13,
+            "title": "chore(sync): merge reviewed main",
+            "intent": "no-release",
+            "issue": None,
+        },
+    ]
+    assert calls == [(old_main, "candidate"), (current_main, "candidate")]
+    monkeypatch.setattr(
+        MODULE["delivery_sync"],
+        "merged_sync_pr_number",
+        lambda _api, _repo, _branch, main_sha, _head: (
+            12 if main_sha == old_main else None
+        ),
+    )
+    with pytest.raises(RuntimeError, match="reviewed merge provenance"):
+        included_pull_requests(
+            "owner/repo",
+            current_main,
+            "candidate",
+            "dev/m10-adoption",
+            "token",
+            track_work_issues=True,
+        )
+
+
+def test_legacy_short_sync_requires_empty_canonical_reaffirmation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Accept #309 only when the included #313 lineage is tree-identical."""
+    main_sha = "3ea6134e82916f24d37b5c7fa988f9ca9a6beaa7"
+    legacy_base = "a0f537cfccfa63935a42f13d534397a70f1a8a04"
+    legacy_head = "f60165e99872a6b631e169722eb6c5fc6b4b0a42"
+    legacy_merge = "e2d2a6cc6bbf7b5696c51aa42f6a0971fc13920e"
+    canonical_head = "8319635905d7c36d161ea694792bc9de6c964978"
+    canonical_merge = "36670426a656717d2d0fa92fc3ee31615939ad44"
+    main_tree = "fc38cd5a03d38bff5431ac1cef775f1a28f67d08"
+    canonical_tree = {"sha": main_tree}
+
+    def sync_pull(
+        number: int,
+        head_ref: str,
+        head_sha: str,
+        base_sha: str,
+        merge_sha: str,
+    ) -> dict[str, object]:
+        return {
+            "number": number,
+            "title": "chore(sync): merge main into delivery",
+            "body": "Reviewed sync evidence.",
+            "merged_at": "2026-08-25T00:00:00Z",
+            "merge_commit_sha": merge_sha,
+            "base": {
+                "ref": "dev/m10-release-backed-adoption",
+                "sha": base_sha,
+            },
+            "head": {
+                "ref": head_ref,
+                "sha": head_sha,
+                "repo": {"full_name": "owner/repo"},
+            },
+        }
+
+    legacy = sync_pull(
+        309,
+        "sync/main-to-m10-release-backed-adoption-3ea6134",
+        legacy_head,
+        legacy_base,
+        legacy_merge,
+    )
+    canonical = sync_pull(
+        313,
+        "sync/main-to-m10-release-backed-adoption-3ea6134e8291",
+        canonical_head,
+        legacy_merge,
+        canonical_merge,
+    )
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path.startswith("compare/"):
+            return {
+                "commits": [
+                    {"sha": legacy_merge},
+                    {"sha": canonical_merge},
+                ]
+            }
+        if path == f"commits/{legacy_merge}/pulls":
+            return [legacy]
+        if path == f"commits/{canonical_merge}/pulls":
+            return [canonical]
+        if path == f"git/commits/{legacy_head}":
+            return {
+                "parents": [{"sha": legacy_base}, {"sha": main_sha}],
+                "tree": {"sha": main_tree},
+            }
+        if path == f"git/commits/{canonical_head}":
+            return {
+                "parents": [{"sha": legacy_merge}, {"sha": main_sha}],
+                "tree": canonical_tree,
+            }
+        if path in {
+            f"git/commits/{legacy_merge}",
+            f"git/commits/{main_sha}",
+        }:
+            return {"tree": {"sha": main_tree}}
+        raise AssertionError(path)
+
+    monkeypatch.setitem(
+        included_pull_requests.__globals__, "github_get", fake_get
+    )
+    monkeypatch.setattr(MODULE["delivery_sync"], "compare", lambda *_: "ahead")
+    monkeypatch.setattr(
+        MODULE["delivery_sync"],
+        "merged_sync_pr_number",
+        lambda *_: 313,
+    )
+    expected = [
+        {
+            "number": 309,
+            "title": "chore(sync): merge main into delivery",
+            "intent": "no-release",
+            "issue": None,
+        },
+        {
+            "number": 313,
+            "title": "chore(sync): merge main into delivery",
+            "intent": "no-release",
+            "issue": None,
+        },
+    ]
+    assert (
+        included_pull_requests(
+            "owner/repo",
+            main_sha,
+            "candidate",
+            "dev/m10-release-backed-adoption",
+            "token",
+            track_work_issues=True,
+        )
+        == expected
+    )
+    canonical_tree["sha"] = "drift"
+    with pytest.raises(RuntimeError, match="reviewed merge provenance"):
+        included_pull_requests(
+            "owner/repo",
+            main_sha,
+            "candidate",
+            "dev/m10-release-backed-adoption",
+            "token",
+            track_work_issues=True,
+        )
+    canonical_tree["sha"] = main_tree
+    canonical_base_data = canonical["base"]
+    assert isinstance(canonical_base_data, dict)
+    canonical_base_data["sha"] = "drift"
+    with pytest.raises(RuntimeError, match="reviewed merge provenance"):
+        included_pull_requests(
+            "owner/repo",
+            main_sha,
+            "candidate",
+            "dev/m10-release-backed-adoption",
+            "token",
+            track_work_issues=True,
+        )
+
+
+def test_milestone_range_rejects_unreviewed_commits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Do not omit hidden direct commits from milestone evidence."""
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path.startswith("compare/"):
+            return {"commits": [{"sha": "hidden"}]}
+        return []
+
+    monkeypatch.setitem(
+        included_pull_requests.__globals__, "github_get", fake_get
+    )
+    with pytest.raises(RuntimeError, match="no eligible merged PR"):
+        included_pull_requests(
+            "owner/repo",
+            "base",
+            "head",
+            "dev/m10-adoption",
+            "token",
+            track_work_issues=True,
+        )
+
+
+@pytest.mark.parametrize(
+    ("delivery_branch", "milestone", "expected_number"),
+    [
+        ("dev/m7-staged-ci", 7, 10),
+        ("dev/next", None, 12),
+    ],
+)
+def test_bridge_provenance_accepts_only_eligible_pull_requests(
+    monkeypatch: pytest.MonkeyPatch,
+    delivery_branch: str,
+    milestone: int | None,
+    expected_number: int,
 ) -> None:
     """Accept reviewed sibling work without crossing a delivery boundary."""
 
@@ -192,20 +622,26 @@ def test_bridge_provenance_accepts_only_same_milestone_pull_requests(
             {
                 "number": 10,
                 "title": "fix: accepted sibling",
+                "body": "Closes #10",
                 "merged_at": "2026-01-01T00:00:00Z",
                 "base": {"ref": "dev/m7-staged-ci"},
+                "head": {"ref": "fix/10-accepted-sibling"},
             },
             {
                 "number": 11,
                 "title": "feat: wrong milestone",
+                "body": "Closes #11",
                 "merged_at": "2026-01-01T00:00:00Z",
                 "base": {"ref": "dev/m8-other"},
+                "head": {"ref": "feat/11-wrong-milestone"},
             },
             {
                 "number": 12,
                 "title": "feat: standalone",
+                "body": "Closes #12",
                 "merged_at": "2026-01-01T00:00:00Z",
                 "base": {"ref": "dev/next"},
+                "head": {"ref": "feat/12-standalone"},
             },
         ]
 
@@ -216,11 +652,19 @@ def test_bridge_provenance_accepts_only_same_milestone_pull_requests(
         "owner/repo",
         "main",
         "bridge",
-        "promote/m7-staged-ci",
+        delivery_branch,
         "token",
-        milestone=7,
+        milestone=milestone,
         bridge_head_sha="bridge",
-    ) == [{"number": 10, "title": "fix: accepted sibling", "intent": "patch"}]
+    ) == [
+        {
+            "number": expected_number,
+            "title": "fix: accepted sibling"
+            if expected_number == 10
+            else "feat: standalone",
+            "intent": "patch" if expected_number == 10 else "minor",
+        }
+    ]
 
 
 def test_bridge_provenance_rejects_an_unreviewed_commit(
@@ -276,6 +720,211 @@ def test_milestone_requires_closed_checked_non_promotion_work() -> None:
     assert unfinished_milestone_issues(issues, 4) == [2, 3]
 
 
+def test_checkpoint_marker_is_explicit_unique_and_sorted() -> None:
+    """A checkpoint cannot obtain an ambiguous work-Issue scope."""
+    assert checkpoint_issue_numbers(
+        "Ready\n\n<!-- csarc-promotion-checkpoint: #1, #27 -->"
+    ) == [1, 27]
+    assert checkpoint_issue_numbers("Final promotion") is None
+    for body in (
+        "<!-- csarc-promotion-checkpoint: #27, #1 -->",
+        "<!-- csarc-promotion-checkpoint: #1, #1 -->",
+        "<!-- csarc-promotion-checkpoint: 1, 27 -->",
+        "<!-- csarc-promotion-checkpoint: #0 -->",
+        "<!-- csarc-promotion-checkpoint: #01 -->",
+        "<!-- csarc-promotion-checkpoint: #\uff12 -->",
+        "<!-- CSARC-PROMOTION-CHECKPOINT: #1 -->",
+        (
+            "<!-- csarc-promotion-checkpoint: #1 -->\n"
+            "csarc-promotion-checkpoint: invalid"
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="Checkpoint Issue"):
+            checkpoint_issue_numbers(body)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "PrefixCloses #27",
+        "_Resolves #27",
+        "Closes #0",
+        "Closes #027",
+        "Closes #\uff12\uff17",
+        "Closes #27abc",
+        "Closes #27_extra",
+        "Clo\u017fes #27",
+    ],
+)
+def test_closing_issue_grammar_is_ascii_and_token_bounded(body: str) -> None:
+    """Reject ambiguous or non-ASCII Issue references."""
+    assert issue_number(body) is None
+
+
+def test_closing_issue_grammar_accepts_ascii_case() -> None:
+    """Accept canonical keywords with ordinary ASCII case variation."""
+    assert issue_number("cLoSeS #27.") == 27
+
+
+def test_checkpoint_allows_only_declared_completed_work() -> None:
+    """Leave later work open while binding evidence to the current range."""
+    issues = [
+        {
+            "number": 1,
+            "title": "Completed work",
+            "state": "closed",
+            "body": "- [x] Done",
+            "labels": [],
+        },
+        {
+            "number": 2,
+            "title": "Later work",
+            "state": "open",
+            "body": "- [ ] Later",
+            "labels": [],
+        },
+        {
+            "number": 4,
+            "title": "Checkpoint",
+            "state": "open",
+            "body": "- [x] Ready",
+            "labels": [{"name": "promotion"}],
+        },
+    ]
+    included_prs = [
+        {"number": 10, "title": "feat: work", "issue": 1},
+        {"number": 11, "title": "chore: sync", "issue": None},
+    ]
+    assert milestone_included_issues(issues, 4, included_prs, [1]) == [
+        {"number": 1, "title": "Completed work"}
+    ]
+    with pytest.raises(RuntimeError, match="do not match"):
+        milestone_included_issues(issues, 4, included_prs, [1, 2])
+
+
+def test_final_milestone_still_requires_all_work_complete() -> None:
+    """Final requires all work but reports only its current delivery range."""
+    issues = [
+        {
+            "number": 1,
+            "title": "Earlier checkpoint work",
+            "state": "closed",
+            "body": "- [x] Done",
+            "labels": [],
+        },
+        {
+            "number": 2,
+            "title": "Later work",
+            "state": "open",
+            "body": "- [ ] Later",
+            "labels": [],
+        },
+    ]
+    included_prs = [{"number": 10, "title": "feat: current work", "issue": 2}]
+    with pytest.raises(RuntimeError, match="not complete: #2"):
+        milestone_included_issues(issues, 4, included_prs, None)
+    issues[1].update(state="closed", body="- [x] Later")
+    assert milestone_included_issues(issues, 4, included_prs, None) == [
+        {"number": 2, "title": "Later work"}
+    ]
+
+
+def test_checkpoint_rejects_incomplete_or_unscoped_work() -> None:
+    """Every declared candidate Issue must be completed in this Milestone."""
+    incomplete = [
+        {
+            "number": 1,
+            "title": "Incomplete work",
+            "state": "closed",
+            "body": "- [ ] Verify",
+            "labels": [],
+        }
+    ]
+    included_prs = [{"number": 10, "title": "fix: work", "issue": 1}]
+    with pytest.raises(RuntimeError, match="not closed and complete"):
+        milestone_included_issues(incomplete, 4, included_prs, [1])
+    with pytest.raises(RuntimeError, match="not closed and complete"):
+        milestone_included_issues([], 4, included_prs, [1])
+
+
+def test_included_pull_request_requires_issue_provenance() -> None:
+    """A governed work branch must close its own Issue."""
+    assert (
+        pull_request_issue_number(
+            {
+                "body": "Closes #3\nCloses #27",
+                "head": {"ref": "feat/27-checkpoint"},
+            }
+        )
+        == 27
+    )
+    with pytest.raises(RuntimeError, match="does not close"):
+        pull_request_issue_number(
+            {
+                "body": "Closes #28",
+                "head": {"ref": "feat/27-checkpoint"},
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    "pull_request",
+    [
+        {
+            "title": "chore(sync): merge main into dev/m10-adoption",
+            "body": (
+                "Synchronize `abcdef1234567890abcdef1234567890abcdef12` "
+                "into `dev/m10-adoption`."
+            ),
+            "base": {"ref": "dev/m10-adoption"},
+            "head": {
+                "ref": "sync/main-to-m10-adoption-deadbeef0000",
+                "sha": "sync-head",
+                "repo": {"full_name": "owner/repo"},
+            },
+        },
+        {
+            "title": "chore(sync): merge main into dev/m10-adoption",
+            "body": (
+                "Synchronize `abcdef1234567890abcdef1234567890abcdef12` "
+                "into `dev/m10-adoption`."
+            ),
+            "base": {"ref": "dev/m10-adoption"},
+            "head": {
+                "ref": "sync/main-to-m10-adoption-abcdef123456",
+                "sha": "sync-head",
+                "repo": {"full_name": "fork/repo"},
+            },
+        },
+    ],
+)
+def test_sync_pull_request_requires_exact_provenance(
+    pull_request: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sync-looking branch cannot hide work or come from another repo."""
+    monkeypatch.setitem(
+        sync_pull_request_main_sha.__globals__,
+        "github_get",
+        lambda *_: {
+            "parents": [
+                {"sha": "delivery-base"},
+                {"sha": "abcdef1234567890abcdef1234567890abcdef12"},
+            ]
+        },
+    )
+    monkeypatch.setattr(MODULE["delivery_sync"], "compare", lambda *_: "ahead")
+    with pytest.raises(RuntimeError, match="invalid provenance"):
+        sync_pull_request_main_sha(
+            pull_request,
+            "owner/repo",
+            "dev/m10-adoption",
+            "current-main",
+            "token",
+            object(),
+        )
+
+
 def test_latest_main_requires_matching_base_and_ancestry() -> None:
     """Fail closed when main advanced or the delivery branch omitted it."""
     assert main_is_current("abc", "abc", True)
@@ -283,9 +932,19 @@ def test_latest_main_requires_matching_base_and_ancestry() -> None:
     assert not main_is_current("abc", "abc", False)
 
 
+@pytest.mark.parametrize(
+    ("bridge_branch", "source_branch", "milestone"),
+    [
+        ("promote/m7-staged-ci", "dev/m7-staged-ci", 7),
+        ("promote/next", "dev/next", None),
+    ],
+)
 def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    bridge_branch: str,
+    source_branch: str,
+    milestone: int | None,
 ) -> None:
     """Bridge a real conflict while preserving the source candidate tree."""
 
@@ -308,7 +967,7 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
     run_git("add", ".")
     run_git("commit", "-m", "base")
 
-    run_git("checkout", "-b", "dev/m7-staged-ci")
+    run_git("checkout", "-b", source_branch)
     tracked.write_text("source\n", encoding="utf-8")
     run_git("commit", "-am", "source")
     source_sha = run_git("rev-parse", "HEAD").stdout.strip()
@@ -337,7 +996,8 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
     ).stdout.strip()
 
     def fake_get(_repo: str, path: str, _token: str) -> object:
-        assert path == "git/ref/heads/dev%2Fm7-staged-ci"
+        encoded = urllib.parse.quote(source_branch, safe="")
+        assert path == f"git/ref/heads/{encoded}"
         return {"object": {"sha": source_sha}}
 
     monkeypatch.setitem(
@@ -346,14 +1006,14 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
     monkeypatch.chdir(tmp_path)
     assert promotion_bridge_source(
         "owner/repo",
-        "promote/m7-staged-ci",
+        bridge_branch,
         base_sha,
         bridge_sha,
         bridge_sha,
-        7,
+        milestone,
         "token",
     ) == {
-        "source_ref": "dev/m7-staged-ci",
+        "source_ref": source_branch,
         "source_sha": source_sha,
         "source_tree": source_tree,
     }
@@ -362,6 +1022,13 @@ def test_promotion_bridge_resolves_conflict_without_changing_source_tree(
 @pytest.mark.parametrize(
     ("branch", "milestone", "parents", "candidate_tree", "message"),
     [
+        (
+            "promote/next",
+            7,
+            "bridge source main",
+            "source-tree",
+            "cannot use a Milestone",
+        ),
         (
             "promote/m8-other",
             7,
@@ -534,7 +1201,11 @@ def test_github_get_uses_authenticated_cli_without_environment_token(
     monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/gh")
     monkeypatch.setattr(subprocess, "run", fake_run)
     assert github_get("owner/repo", "issues/42", "") == {"state": "open"}
-    assert calls == [["/usr/bin/gh", "api", "repos/owner/repo/issues/42"]]
+    assert github_get("owner/repo", "", "") == {"state": "open"}
+    assert calls == [
+        ["/usr/bin/gh", "api", "repos/owner/repo/issues/42"],
+        ["/usr/bin/gh", "api", "repos/owner/repo"],
+    ]
 
 
 def test_blocked_run_must_match_head_and_have_no_started_steps(
@@ -543,32 +1214,233 @@ def test_blocked_run_must_match_head_and_have_no_started_steps(
     """A real hosted test failure cannot be relabeled as quota exhaustion."""
 
     def zero_step_get(_repo: str, path: str, _token: str) -> object:
-        if path.endswith("/jobs"):
-            return {"jobs": [{"runner_id": 0, "steps": []}]}
-        return {"head_sha": "head", "conclusion": "failure"}
+        if "/jobs?" in path:
+            return {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "id": 7,
+                        "runner_id": 0,
+                        "steps": [],
+                        "conclusion": "failure",
+                    }
+                ],
+            }
+        if path.startswith("check-runs/7/annotations"):
+            return [{"message": BILLING_GATE_ANNOTATION_MESSAGE}]
+        return {
+            "id": 200,
+            "head_sha": "head",
+            "head_branch": "dev/next",
+            "event": "pull_request",
+            "status": "completed",
+            "conclusion": "failure",
+            "path": ".github/workflows/ci.yml",
+            "pull_requests": [{"number": 42}],
+            "repository": {"full_name": "owner/repo"},
+            "head_repository": {"full_name": "owner/repo"},
+        }
 
     monkeypatch.setitem(
         require_zero_step_run.__globals__, "github_get", zero_step_get
     )
     run_url = "https://github.com/owner/repo/actions/runs/200"
-    require_zero_step_run(run_url, "owner/repo", "head", "")
+    require_zero_step_run(run_url, "owner/repo", 42, "dev/next", "head", "")
 
     def started_get(_repo: str, path: str, _token: str) -> object:
-        if path.endswith("/jobs"):
-            return {"jobs": [{"runner_id": 7, "steps": [{"name": "tests"}]}]}
-        return {"head_sha": "head", "conclusion": "failure"}
+        if "/jobs?" in path:
+            return {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "runner_id": 7,
+                        "steps": [{"name": "tests"}],
+                    }
+                ],
+            }
+        return zero_step_get(_repo, path, _token)
 
     monkeypatch.setitem(
         require_zero_step_run.__globals__, "github_get", started_get
     )
     with pytest.raises(RuntimeError, match="zero-step"):
-        require_zero_step_run(run_url, "owner/repo", "head", "")
+        require_zero_step_run(run_url, "owner/repo", 42, "dev/next", "head", "")
 
 
-def test_prepare_builds_milestone_candidate_evidence(
+@pytest.mark.parametrize(
+    ("run_overrides", "jobs_payload", "annotations"),
+    [
+        ({"id": 200.0}, None, None),
+        ({"pull_requests": [{"number": 42.0}]}, None, None),
+        ({}, {"total_count": True, "jobs": []}, None),
+        ({}, {"total_count": 1, "jobs": ["malformed"]}, None),
+        (
+            {},
+            {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "id": False,
+                        "runner_id": 0,
+                        "steps": [],
+                        "conclusion": "failure",
+                    }
+                ],
+            },
+            None,
+        ),
+        (
+            {},
+            {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "id": 7,
+                        "runner_id": False,
+                        "steps": None,
+                        "conclusion": "failure",
+                    }
+                ],
+            },
+            None,
+        ),
+        (
+            {},
+            {
+                "total_count": 1,
+                "jobs": [
+                    {
+                        "id": 7,
+                        "runner_id": 0,
+                        "steps": [],
+                        "conclusion": "success",
+                    }
+                ],
+            },
+            None,
+        ),
+        ({}, None, ["malformed"]),
+    ],
+)
+def test_blocked_run_rejects_malformed_zero_step_schema(
+    run_overrides: dict[str, object],
+    jobs_payload: object,
+    annotations: object,
+) -> None:
+    """Malformed API values cannot prove a zero-step billing failure."""
+    run = {
+        "id": 200,
+        "head_sha": "head",
+        "head_branch": "dev/next",
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "failure",
+        "path": ".github/workflows/ci.yml",
+        "pull_requests": [{"number": 42}],
+        "repository": {"full_name": "owner/repo"},
+        "head_repository": {"full_name": "owner/repo"},
+        **run_overrides,
+    }
+    jobs = jobs_payload or {
+        "total_count": 1,
+        "jobs": [
+            {
+                "id": 7,
+                "runner_id": 0,
+                "steps": [],
+                "conclusion": "failure",
+            }
+        ],
+    }
+    annotation_payload = annotations or [
+        {"message": BILLING_GATE_ANNOTATION_MESSAGE}
+    ]
+
+    def malformed_get(_repo: str, path: str, _token: str) -> object:
+        if "/jobs?" in path:
+            return jobs
+        if path.startswith("check-runs/"):
+            return annotation_payload
+        return run
+
+    with pytest.raises(RuntimeError):
+        require_zero_step_run(
+            "https://github.com/owner/repo/actions/runs/200",
+            "owner/repo",
+            42,
+            "dev/next",
+            "head",
+            "",
+            getter=malformed_get,
+        )
+
+
+def _routine_pr_get(
+    jobs: list[dict[str, object]],
+) -> Callable[[str, str, str], object]:
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path == "pulls/42":
+            return {"head": {"sha": "head", "ref": "dev/next"}}
+        if "/jobs?" in path:
+            return {"total_count": len(jobs), "jobs": jobs}
+        if path.startswith("check-runs/"):
+            return [{"message": BILLING_GATE_ANNOTATION_MESSAGE}]
+        return {
+            "id": 200,
+            "head_sha": "head",
+            "head_branch": "dev/next",
+            "event": "pull_request",
+            "status": "completed",
+            "conclusion": "failure",
+            "path": ".github/workflows/ci.yml",
+            "pull_requests": [{"number": 42}],
+            "repository": {"full_name": "owner/repo"},
+            "head_repository": {"full_name": "owner/repo"},
+        }
+
+    return fake_get
+
+
+def test_note_quota_fallback_prints_note_for_zero_step_block(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A routine PR gets an automatic note once every failure is zero-step."""
+    jobs = [{"id": 7, "runner_id": 0, "steps": [], "conclusion": "failure"}]
+    monkeypatch.setitem(
+        note_quota_fallback.__globals__, "github_get", _routine_pr_get(jobs)
+    )
+    run_url = "https://github.com/owner/repo/actions/runs/200"
+    args = SimpleNamespace(repo="owner/repo", pr=42, blocked_run_url=[run_url])
+    note_quota_fallback(args)
+    output = capsys.readouterr().out
+    assert output == quota_fallback_note("owner/repo", 42, "head", [run_url])
+    assert not output.endswith("\n")
+    binding = json.loads(output.split("`")[1])
+    assert binding["pull_request"] == 42
+    assert binding["head_sha"] == "head"
+    assert binding["runs"] == [run_url]
+
+
+def test_note_quota_fallback_rejects_a_real_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A job that actually ran a step cannot be waved through as quota."""
+    jobs = [
+        {"runner_id": 7, "steps": [{"name": "tests"}], "conclusion": "failure"}
+    ]
+    monkeypatch.setitem(
+        note_quota_fallback.__globals__, "github_get", _routine_pr_get(jobs)
+    )
+    run_url = "https://github.com/owner/repo/actions/runs/200"
+    args = SimpleNamespace(repo="owner/repo", pr=42, blocked_run_url=[run_url])
+    with pytest.raises(RuntimeError, match="zero-step"):
+        note_quota_fallback(args)
+
+
+def test_prepare_builds_checkpoint_and_recovery_issue_evidence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Bind a completed Milestone promotion to its exact candidate tree."""
+    """Bind a checkpoint and only its completed work to the candidate."""
 
     def run_git(*arguments: str) -> str:
         result = subprocess.run(  # noqa: S603
@@ -608,13 +1480,15 @@ def test_prepare_builds_milestone_candidate_evidence(
     }
     event_path = tmp_path / "event.json"
     event_path.write_text(json.dumps(event), encoding="utf-8")
+    tracking_body = "- [x] Ready\n\n<!-- csarc-promotion-checkpoint: #1 -->"
 
     def fake_get(_repo: str, path: str, _token: str) -> object:
         if path == "issues/99":
             return {
                 "number": 99,
+                "title": "Promotion",
                 "state": "open",
-                "body": "- [x] Ready",
+                "body": tracking_body,
                 "labels": [{"name": "promotion"}],
                 "milestone": {"number": 7},
             }
@@ -626,12 +1500,19 @@ def test_prepare_builds_milestone_candidate_evidence(
     monkeypatch.setitem(
         prepare.__globals__,
         "milestone_issues",
-        lambda *_: [
+        lambda *_, **__: [
             {
                 "number": 1,
                 "title": "Completed work",
                 "state": "closed",
                 "body": "- [x] Done",
+                "labels": [],
+            },
+            {
+                "number": 2,
+                "title": "Later work",
+                "state": "open",
+                "body": "- [ ] Later",
                 "labels": [],
             },
             {
@@ -646,30 +1527,53 @@ def test_prepare_builds_milestone_candidate_evidence(
     monkeypatch.setitem(
         prepare.__globals__,
         "included_pull_requests",
-        lambda *_: [
-            {"number": 1, "title": "feat: completed work", "intent": "minor"}
+        lambda *_, **__: [
+            {
+                "number": 1,
+                "title": "feat: completed work",
+                "intent": "minor",
+                "issue": 1,
+            }
         ],
     )
     output = tmp_path / "promotion.json"
-    prepare(
-        SimpleNamespace(
-            event="pull_request",
-            event_path=event_path,
-            repo="owner/repo",
-            branch_strategy="delivery",
-            candidate_sha=head_sha,
-            workflow_run="https://example.test/run/1",
-            canary_command="",
-            canary_environment="",
-            archive=tmp_path / "candidate.tar.gz",
-            output=output,
-            github_output=None,
-            summary=None,
-        )
+    arguments = SimpleNamespace(
+        event="pull_request",
+        event_path=event_path,
+        repo="owner/repo",
+        branch_strategy="delivery",
+        candidate_sha=head_sha,
+        workflow_run="https://example.test/run/1",
+        canary_command="",
+        canary_environment="",
+        archive=tmp_path / "candidate.tar.gz",
+        output=output,
+        github_output=None,
+        summary=None,
     )
+    prepare(arguments)
     evidence = json.loads(output.read_text(encoding="utf-8"))
     assert evidence["route"]["kind"] == "milestone"
     assert evidence["candidate_tree"]
+    assert evidence["promotion_pull_request"] == {
+        "number": 99,
+        "title": "feat: promote staged CI",
+        "body_sha256": hashlib.sha256(b"Closes #99").hexdigest(),
+        "closing_issue": 99,
+        "labels": ["promotion"],
+    }
+    assert evidence["tracking_issue_state"] == {
+        "number": 99,
+        "state": "open",
+        "title": "Promotion",
+        "body_sha256": hashlib.sha256(tracking_body.encode()).hexdigest(),
+        "labels": ["promotion"],
+        "milestone": 7,
+    }
+    assert evidence["milestone_promotion"] == {
+        "mode": "checkpoint",
+        "declared_issues": [1],
+    }
     assert evidence["included_issues"] == [
         {"number": 1, "title": "Completed work"}
     ]
@@ -681,10 +1585,69 @@ def test_prepare_builds_milestone_candidate_evidence(
                 "number": 1,
                 "title": "feat: completed work",
                 "intent": "minor",
+                "issue": 1,
             }
         ],
     }
     assert evidence["main_sync"] == "direct-ancestry"
+
+    recovery_body = "- [x] Recovery complete"
+    event_path.write_text(
+        json.dumps(
+            {
+                "number": 321,
+                "pull_request": {
+                    "number": 321,
+                    "title": "fix: recover missing release",
+                    "body": "Closes #321",
+                    "labels": [{"name": "release-recovery"}],
+                    "base": {"ref": "main", "sha": base_sha},
+                    "head": {
+                        "ref": "fix/321-recover-missing-release",
+                        "sha": head_sha,
+                        "repo": {"full_name": "owner/repo"},
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def recovery_get(_repo: str, path: str, _token: str) -> object:
+        if path == "issues/321":
+            return {
+                "number": 321,
+                "title": "Recover missing release",
+                "state": "open",
+                "body": recovery_body,
+                "labels": [{"name": "bug"}],
+                "milestone": {"number": 9},
+            }
+        return {"object": {"sha": base_sha}}
+
+    monkeypatch.setitem(prepare.__globals__, "github_get", recovery_get)
+    prepare(arguments)
+    recovery_evidence = json.loads(output.read_text(encoding="utf-8"))
+    assert recovery_evidence["route"]["kind"] == "release-recovery"
+    assert recovery_evidence["included_issues"] == [
+        {"number": 321, "title": "Recover missing release"}
+    ]
+    archive_victim = tmp_path / "archive-victim"
+    archive_victim.write_bytes(b"untouched")
+    arguments.archive.unlink()
+    arguments.archive.symlink_to(archive_victim)
+    with pytest.raises(RuntimeError, match="regular file"):
+        prepare(arguments)
+    assert archive_victim.read_bytes() == b"untouched"
+    arguments.archive.unlink()
+    prepare(arguments)
+    output_victim = tmp_path / "output-victim"
+    output_victim.write_bytes(b"untouched")
+    output.unlink()
+    output.symlink_to(output_victim)
+    with pytest.raises(RuntimeError, match="regular file"):
+        prepare(arguments)
+    assert output_victim.read_bytes() == b"untouched"
 
 
 def test_finalize_accepts_artifact_only_blocked_canary(tmp_path: Path) -> None:
@@ -725,27 +1688,98 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
     """Local promotion evidence stays tied to one clean pull-request head."""
     source = tmp_path / "source.json"
     target = tmp_path / "target.json"
+    archive = tmp_path / "candidate.tar.gz"
+    archive.write_bytes(b"archive")
     source.write_text(
         json.dumps(
             {
                 "repository": "owner/repo",
                 "pull_request": 42,
-                "route": {"kind": "standalone-batch", "relevant": True},
+                "route": {
+                    "kind": "standalone-batch",
+                    "relevant": True,
+                    "milestone": None,
+                    "issue": None,
+                },
                 "base_sha": "base",
                 "head_ref": "dev/next",
                 "head_sha": "head",
                 "candidate_sha": "head",
                 "candidate_tree": "tree",
-                "candidate_archive": {"sha256": "digest"},
+                "candidate_archive": {
+                    "name": archive.name,
+                    "sha256": "digest",
+                },
+                "main_sync": "squash-sync-pr-283",
                 "canary": {"state": "blocked"},
+                "dev_next_preservation": preservation_evidence(),
             }
         ),
         encoding="utf-8",
     )
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path == "":
+            return {
+                "full_name": "owner/repo",
+                "archived": False,
+                "default_branch": "main",
+            }
+        if path == "pulls/42":
+            return {
+                "number": 42,
+                "state": "open",
+                "merged": False,
+                "labels": [{"name": "promotion"}],
+                "base": {"ref": "main", "sha": "base"},
+                "head": {
+                    "ref": "dev/next",
+                    "sha": "head",
+                    "repo": {"full_name": "owner/repo"},
+                },
+            }
+        if path == "git/ref/heads/main":
+            return {"object": {"sha": "base"}}
+        if path == "git/commits/head":
+            return {"tree": {"sha": "tree"}}
+        if path.startswith("actions/runs?"):
+            return {
+                "total_count": 2,
+                "workflow_runs": [
+                    {"id": 200, "conclusion": "failure", "status": "completed"},
+                    {"id": 201, "conclusion": "failure", "status": "completed"},
+                ],
+            }
+        raise AssertionError(path)
+
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__, "github_get", fake_get
+    )
     monkeypatch.setitem(
         finalize_quota_fallback.__globals__,
         "git_output",
-        lambda *arguments: "" if arguments[0] == "status" else "head",
+        lambda *arguments: (
+            ""
+            if arguments[0] == "status"
+            else "tree"
+            if "tree" in arguments[-1]
+            else "head"
+        ),
+    )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__, "contains_commit", lambda *_: True
+    )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__, "sha256", lambda *_: "digest"
+    )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "require_zero_step_run",
+        lambda url, *_: (
+            ".github/workflows/ci.yml"
+            if url.endswith("/200")
+            else ".github/workflows/promotion.yml"
+        ),
     )
     monkeypatch.setitem(
         finalize_quota_fallback.__globals__,
@@ -757,39 +1791,91 @@ def test_finalize_quota_fallback_is_non_release_and_sha_bound(
         "merged_sync_pr_number",
         lambda *_: 283,
     )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "require_comment_url",
+        lambda _url, _repo, _pr, body, _token: {
+            "user": {
+                "login": "attestor" if "attestation" in body else "authorizer"
+            }
+        },
+    )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "rebuild_quota_preflight",
+        lambda evidence, *_: evidence,
+    )
+    preservation_calls: list[tuple[str, str, int, str, str, str, str]] = []
 
-    def fallback_get(_repo: str, path: str, _token: str) -> object:
-        if path == "git/ref/heads/main":
-            return {"object": {"sha": "base"}}
-        if path.endswith("/jobs"):
-            return {"jobs": [{"runner_id": 0, "steps": []}]}
-        return {"head_sha": "head", "conclusion": "failure"}
+    def fake_preservation(
+        action: str,
+        repo: str,
+        pr_number: int,
+        head_sha: str,
+        main_sha: str = "",
+        operation_id: str = "",
+        prepared_ledger_commit: str = "",
+    ) -> dict[str, object]:
+        preservation_calls.append(
+            (
+                action,
+                repo,
+                pr_number,
+                head_sha,
+                main_sha,
+                operation_id,
+                prepared_ledger_commit,
+            )
+        )
+        return preservation_evidence()
 
     monkeypatch.setitem(
-        finalize_quota_fallback.__globals__, "github_get", fallback_get
+        finalize_quota_fallback.__globals__,
+        "run_dev_next_preservation",
+        fake_preservation,
     )
-    finalize_quota_fallback(
-        SimpleNamespace(
-            input=source,
-            output=target,
-            attestation_url=(
-                "https://github.com/owner/repo/pull/42#issuecomment-100"
-            ),
-            authorization_url=(
-                "https://github.com/owner/repo/pull/42#issuecomment-101"
-            ),
-            blocked_run_url=["https://github.com/owner/repo/actions/runs/200"],
-            verification_command=["./scripts/verify-template.sh"],
-        )
+    monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: None)
+    arguments = SimpleNamespace(
+        input=source,
+        output=target,
+        attestation_url=(
+            "https://github.com/owner/repo/pull/42#issuecomment-100"
+        ),
+        authorization_url=(
+            "https://github.com/owner/repo/pull/42#issuecomment-101"
+        ),
+        blocked_run_url=[
+            "https://github.com/owner/repo/actions/runs/200",
+            "https://github.com/owner/repo/actions/runs/201",
+        ],
+        archive=archive,
     )
+    finalize_quota_fallback(arguments)
     evidence = json.loads(target.read_text(encoding="utf-8"))
     assert evidence["gate"] == "quota-fallback"
     assert evidence["release_eligible"] is False
+    assert evidence["dev_next_preservation"] == preservation_evidence()
+    assert preservation_calls == [
+        ("inspect-dev-next", "owner/repo", 42, "head", "", "", "")
+    ]
     assert evidence["full_check"] == {
         "context": "verify",
         "status": "local-quota-attested",
-        "commands": ["./scripts/verify-template.sh"],
+        "commands": [
+            local_verification_command()[0],
+            "promotion preflight live refetch",
+        ],
     }
+    victim = tmp_path / "victim.json"
+    victim.write_text("untouched\n", encoding="utf-8")
+    target.unlink()
+    target.symlink_to(victim)
+    with pytest.raises(RuntimeError, match="regular file"):
+        finalize_quota_fallback(arguments)
+    assert victim.read_text(encoding="utf-8") == "untouched\n"
+    arguments.output = archive
+    with pytest.raises(RuntimeError, match="must be distinct"):
+        finalize_quota_fallback(arguments)
 
 
 def test_finalize_quota_fallback_rejects_bridge_source_drift(
@@ -847,6 +1933,7 @@ def test_finalize_quota_fallback_rejects_bridge_source_drift(
             SimpleNamespace(
                 input=source,
                 output=tmp_path / "target.json",
+                archive=tmp_path / "candidate.tar.gz",
                 attestation_url="unused",
                 authorization_url="unused",
                 blocked_run_url=[],
@@ -866,13 +1953,6 @@ def test_finalize_quota_fallback_rejects_bridge_source_drift(
     [
         ("standalone-batch", "merge", "blocked", "valid", "must equal"),
         ("standalone-batch", "head", "allowed", "valid", "configured canary"),
-        (
-            "standalone-batch",
-            "head",
-            "blocked",
-            "wrong",
-            "comments on the promotion PR",
-        ),
         ("hotfix", "head", "blocked", "valid", "promotion gate"),
     ],
 )
@@ -941,8 +2021,20 @@ def test_finalize_quota_fallback_rejects_unsafe_evidence(
                 blocked_run_url=[
                     "https://github.com/owner/repo/actions/runs/200"
                 ],
-                verification_command=["./scripts/verify-template.sh"],
+                archive=tmp_path / "candidate.tar.gz",
             )
+        )
+
+
+def test_quota_comment_url_must_reference_the_same_pull_request() -> None:
+    """A human statement from a different pull request is never reusable."""
+    with pytest.raises(RuntimeError, match="comments on the promotion PR"):
+        MODULE["require_comment_url"](
+            "https://github.com/owner/repo/pull/41#issuecomment-101",
+            "owner/repo",
+            42,
+            "expected",
+            "token",
         )
 
 
@@ -1023,7 +2115,76 @@ def test_verify_main_requires_successful_full_check(
         )
 
 
-def test_verify_quota_main_preserves_non_release_evidence(
+def test_verify_main_completes_standard_dev_next_preservation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The standard post-main path closes the exact prepared transaction."""
+    source = tmp_path / "evidence.json"
+    checks = tmp_path / "checks.json"
+    target = tmp_path / "verified.json"
+    source.write_text(
+        json.dumps(
+            {
+                "gate": "passed",
+                "repository": "owner/repo",
+                "pull_request": 42,
+                "head_ref": "dev/next",
+                "head_sha": "head",
+                "candidate_tree": "tree",
+                "dev_next_preservation": preservation_evidence(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    checks.write_text(
+        json.dumps(
+            {"check_runs": [{"name": "verify", "conclusion": "success"}]}
+        ),
+        encoding="utf-8",
+    )
+    calls: list[tuple[object, ...]] = []
+
+    def complete(*arguments: object) -> dict[str, object]:
+        calls.append(arguments)
+        return {"ledger_commit": "f" * 40, "transaction": {}}
+
+    monkeypatch.setitem(
+        verify_main.__globals__, "git_output", lambda *_: "tree"
+    )
+    monkeypatch.setitem(
+        verify_main.__globals__, "run_dev_next_preservation", complete
+    )
+    verify_main(
+        SimpleNamespace(
+            evidence=source,
+            checks=checks,
+            repo="owner/repo",
+            pr_number=42,
+            head_sha="head",
+            main_sha="main",
+            output=target,
+        )
+    )
+    assert calls == [
+        (
+            "complete-dev-next",
+            "owner/repo",
+            42,
+            "head",
+            "main",
+            "e" * 64,
+            "d" * 40,
+        )
+    ]
+    assert (
+        json.loads(target.read_text())["dev_next_preservation"]["completion"][
+            "ledger_commit"
+        ]
+        == "f" * 40
+    )
+
+
+def test_verify_quota_main_preserves_non_release_evidence(  # noqa: C901
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A locally verified main tree must remain ineligible for release."""
@@ -1036,9 +2197,28 @@ def test_verify_quota_main_preserves_non_release_evidence(
                 "release_eligible": False,
                 "repository": "owner/repo",
                 "pull_request": 42,
+                "base_sha": "base",
+                "head_ref": "dev/next",
                 "head_sha": "head",
+                "route": {"kind": "standalone-batch", "relevant": True},
                 "candidate_tree": "tree",
+                "canary": {
+                    "state": "blocked",
+                    "result": "artifact-only",
+                },
                 "full_check": {"status": "local-quota-attested"},
+                "quota_fallback": {
+                    "attestation_url": (
+                        "https://github.com/owner/repo/pull/42#issuecomment-100"
+                    ),
+                    "authorization_url": (
+                        "https://github.com/owner/repo/pull/42#issuecomment-101"
+                    ),
+                    "blocked_run_urls": [
+                        "https://github.com/owner/repo/actions/runs/200"
+                    ],
+                },
+                "dev_next_preservation": preservation_evidence(),
             }
         ),
         encoding="utf-8",
@@ -1047,23 +2227,594 @@ def test_verify_quota_main_preserves_non_release_evidence(
     def fake_git(*arguments: str) -> str:
         if arguments[0] == "status":
             return ""
-        if arguments[-1] == "HEAD":
+        if arguments[-1] in {"HEAD", "refs/remotes/origin/main"}:
             return "main"
         return "tree"
 
     monkeypatch.setitem(verify_quota_main.__globals__, "git_output", fake_git)
-    verify_quota_main(
-        SimpleNamespace(
-            evidence=source,
-            repo="owner/repo",
-            pr_number=42,
-            head_sha="head",
-            main_sha="main",
-            output=target,
-        )
+
+    scenario = {"value": "happy"}
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path == "":
+            return {
+                "full_name": "owner/repo",
+                "archived": False,
+                "default_branch": "main",
+            }
+        if path == "git/ref/heads/main":
+            return {"object": {"sha": "main"}}
+        if path == "pulls/42":
+            return {
+                "number": 42,
+                "state": "closed",
+                "merged": True,
+                "merged_at": "2026-08-25T00:00:00Z",
+                "merge_commit_sha": "main",
+                "base": {"ref": "main", "sha": "base"},
+                "head": {
+                    "ref": "dev/next",
+                    "sha": "head",
+                    "repo": {"full_name": "owner/repo"},
+                },
+            }
+        if path == "git/commits/main":
+            parent = "other" if scenario["value"] == "rebase" else "base"
+            return {"tree": {"sha": "tree"}, "parents": [{"sha": parent}]}
+        if path.startswith("commits/main/pulls?"):
+            sources = [
+                {
+                    "number": 42,
+                    "merged_at": "2026-08-25T00:00:00Z",
+                    "merge_commit_sha": "main",
+                    "base": {"ref": "main"},
+                }
+            ]
+            if scenario["value"] == "ambiguous":
+                sources.append(
+                    {
+                        "number": 43,
+                        "merged_at": "2026-08-25T00:00:00Z",
+                        "merge_commit_sha": "main",
+                        "base": {"ref": "main"},
+                    }
+                )
+            return sources
+        return {}
+
+    monkeypatch.setitem(verify_quota_main.__globals__, "github_get", fake_get)
+    monkeypatch.setitem(
+        verify_quota_main.__globals__, "require_comment_url", lambda *_: {}
     )
+    preservation_calls: list[tuple[str, str, int, str, str, str, str]] = []
+
+    def fake_preservation(
+        action: str,
+        repo: str,
+        pr_number: int,
+        head_sha: str,
+        main_sha: str = "",
+        operation_id: str = "",
+        prepared_ledger_commit: str = "",
+    ) -> dict[str, object]:
+        preservation_calls.append(
+            (
+                action,
+                repo,
+                pr_number,
+                head_sha,
+                main_sha,
+                operation_id,
+                prepared_ledger_commit,
+            )
+        )
+        completed = preservation_evidence()
+        completed["ledger_commit"] = "f" * 40
+        return completed
+
+    monkeypatch.setitem(
+        verify_quota_main.__globals__,
+        "run_dev_next_preservation",
+        fake_preservation,
+    )
+    monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: None)
+    arguments = SimpleNamespace(
+        evidence=source,
+        repo="owner/repo",
+        pr_number=42,
+        head_sha="head",
+        main_sha="main",
+        output=target,
+    )
+    verify_quota_main(arguments)
     evidence = json.loads(target.read_text(encoding="utf-8"))
     assert evidence["post_merge"]["tree_identity"] == (
         "verified-local-quota-fallback"
     )
     assert evidence["release_eligible"] is False
+    assert (
+        evidence["dev_next_preservation"]["completion"]["ledger_commit"]
+        == "f" * 40
+    )
+    assert preservation_calls == [
+        (
+            "complete-dev-next",
+            "owner/repo",
+            42,
+            "head",
+            "main",
+            "e" * 64,
+            "d" * 40,
+        )
+    ]
+    original = json.loads(source.read_text(encoding="utf-8"))
+    for invalid_canary in (
+        {"state": "blocked", "result": "passed"},
+        {"state": "blocked"},
+        {"state": "allowed", "result": "artifact-only"},
+    ):
+        source.write_text(
+            json.dumps({**original, "canary": invalid_canary}),
+            encoding="utf-8",
+        )
+        with pytest.raises(RuntimeError, match="canary evidence is invalid"):
+            verify_quota_main(arguments)
+    source.write_text(json.dumps(original), encoding="utf-8")
+    del original["dev_next_preservation"]
+    source.write_text(json.dumps(original), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="was not prepared"):
+        verify_quota_main(arguments)
+    original["dev_next_preservation"] = preservation_evidence()
+    source.write_text(json.dumps(original), encoding="utf-8")
+    scenario["value"] = "ambiguous"
+    with pytest.raises(RuntimeError, match="unique promotion source"):
+        verify_quota_main(arguments)
+    scenario["value"] = "rebase"
+    with pytest.raises(RuntimeError, match="squash-merged"):
+        verify_quota_main(arguments)
+    scenario["value"] = "happy"
+    victim = tmp_path / "post-main-victim.json"
+    victim.write_text("untouched\n", encoding="utf-8")
+    target.unlink()
+    target.symlink_to(victim)
+    with pytest.raises(RuntimeError, match="regular file"):
+        verify_quota_main(arguments)
+    assert victim.read_text(encoding="utf-8") == "untouched\n"
+
+
+def test_quota_finalize_refetches_live_pull_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mutable local evidence cannot replace the live promotion identity."""
+    source = tmp_path / "source.json"
+    archive = tmp_path / "candidate.tar.gz"
+    archive.write_bytes(b"archive")
+    source.write_text(
+        json.dumps(
+            {
+                "repository": "owner/repo",
+                "pull_request": 42,
+                "route": {"kind": "standalone-batch", "relevant": True},
+                "base_ref": "main",
+                "base_sha": "base",
+                "head_ref": "dev/next",
+                "head_sha": "head",
+                "candidate_sha": "head",
+                "candidate_tree": "tree",
+                "candidate_archive": {
+                    "name": archive.name,
+                    "sha256": MODULE["sha256"](archive),
+                },
+                "canary": {"state": "blocked"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "git_output",
+        lambda *arguments: "" if arguments[0] == "status" else "head",
+    )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__, "contains_commit", lambda *_: True
+    )
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path == "":
+            return {
+                "full_name": "owner/repo",
+                "archived": False,
+                "default_branch": "main",
+            }
+        if path == "pulls/42":
+            return {
+                "number": 42,
+                "state": "open",
+                "merged": False,
+                "labels": [{"name": "promotion"}],
+                "base": {"ref": "main", "sha": "base"},
+                "head": {
+                    "ref": "dev/next",
+                    "sha": "changed",
+                    "repo": {"full_name": "owner/repo"},
+                },
+            }
+        if path == "git/ref/heads/main":
+            return {"object": {"sha": "base"}}
+        if path.endswith("/jobs"):
+            return {"jobs": [{"runner_id": 0, "steps": []}]}
+        return {"head_sha": "head", "conclusion": "failure"}
+
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__, "github_get", fake_get
+    )
+    monkeypatch.setitem(
+        finalize_quota_fallback.__globals__,
+        "run_dev_next_preservation",
+        lambda *_args, **_kwargs: preservation_evidence(),
+    )
+    with pytest.raises(RuntimeError, match="Live promotion"):
+        finalize_quota_fallback(
+            SimpleNamespace(
+                input=source,
+                output=tmp_path / "output.json",
+                archive=archive,
+                attestation_url=(
+                    "https://github.com/owner/repo/pull/42#issuecomment-100"
+                ),
+                authorization_url=(
+                    "https://github.com/owner/repo/pull/42#issuecomment-101"
+                ),
+                blocked_run_url=[
+                    "https://github.com/owner/repo/actions/runs/200"
+                ],
+            )
+        )
+
+
+def test_quota_finalize_rejects_arbitrary_verification_commands() -> None:
+    """The fallback runs its fixed checks instead of accepting shell text."""
+    with pytest.raises(SystemExit):
+        parser().parse_args(
+            [
+                "finalize-quota-fallback",
+                "--input=in.json",
+                "--output=out.json",
+                "--archive=candidate.tar.gz",
+                "--attestation-url=https://example.test/a",
+                "--authorization-url=https://example.test/b",
+                "--verification-command=false",
+            ]
+        )
+
+
+def test_quota_main_refetches_the_unique_squash_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Local HEAD cannot stand in for the live merged-main source PR."""
+    source = tmp_path / "fallback.json"
+    source.write_text(
+        json.dumps(
+            {
+                "gate": "quota-fallback",
+                "release_eligible": False,
+                "repository": "owner/repo",
+                "pull_request": 42,
+                "base_sha": "base",
+                "head_ref": "dev/next",
+                "head_sha": "head",
+                "route": {"kind": "standalone-batch", "relevant": True},
+                "candidate_tree": "tree",
+                "canary": {
+                    "state": "blocked",
+                    "result": "artifact-only",
+                },
+                "full_check": {"status": "local-quota-attested"},
+                "dev_next_preservation": preservation_evidence(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setitem(
+        verify_quota_main.__globals__,
+        "git_output",
+        lambda *arguments: "" if arguments[0] == "status" else "main",
+    )
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path == "":
+            return {
+                "full_name": "owner/repo",
+                "archived": False,
+                "default_branch": "main",
+            }
+        if path == "git/ref/heads/main":
+            return {"object": {"sha": "different-main"}}
+        return {}
+
+    monkeypatch.setitem(verify_quota_main.__globals__, "github_get", fake_get)
+    with pytest.raises(RuntimeError, match="merged promotion"):
+        verify_quota_main(
+            SimpleNamespace(
+                evidence=source,
+                repo="owner/repo",
+                pr_number=42,
+                head_sha="head",
+                main_sha="main",
+                output=tmp_path / "verified.json",
+            )
+        )
+
+
+def test_zero_step_run_reads_all_jobs_and_rejects_changed_billing_marker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hidden job or ambiguous billing annotation must fail closed."""
+    paths: list[str] = []
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        paths.append(path)
+        if path == "actions/runs/200":
+            return {
+                "id": 200,
+                "head_sha": "head",
+                "head_branch": "dev/next",
+                "event": "pull_request",
+                "status": "completed",
+                "conclusion": "failure",
+                "path": ".github/workflows/ci.yml",
+                "pull_requests": [{"number": 42}],
+                "repository": {"full_name": "owner/repo"},
+                "head_repository": {"full_name": "owner/repo"},
+            }
+        if "jobs?" in path and path.endswith("page=1"):
+            return {
+                "total_count": 101,
+                "jobs": [
+                    {
+                        "id": number,
+                        "runner_id": 0,
+                        "steps": [],
+                        "conclusion": "skipped",
+                    }
+                    for number in range(1, 101)
+                ],
+            }
+        if "jobs?" in path and path.endswith("page=2"):
+            return {
+                "total_count": 101,
+                "jobs": [
+                    {
+                        "id": 101,
+                        "runner_id": 0,
+                        "steps": [],
+                        "conclusion": "failure",
+                    }
+                ],
+            }
+        if path.startswith("check-runs/101/annotations"):
+            return [
+                {
+                    "annotation_level": "failure",
+                    "message": (
+                        "The job was not started because of an unknown "
+                        "billing problem."
+                    ),
+                }
+            ]
+        return []
+
+    monkeypatch.setitem(
+        require_zero_step_run.__globals__, "github_get", fake_get
+    )
+    with pytest.raises(RuntimeError, match="zero-step billing gate"):
+        require_zero_step_run(
+            "https://github.com/owner/repo/actions/runs/200",
+            "owner/repo",
+            42,
+            "dev/next",
+            "head",
+            "",
+        )
+    assert any(path.endswith("page=2") for path in paths)
+
+
+@pytest.mark.parametrize(
+    "run_identity",
+    [
+        {"pull_requests": [{"number": 42}]},
+        {"id": 200},
+        {"id": 200, "pull_requests": []},
+        {"id": 200, "pull_requests": [{"number": 41}]},
+    ],
+)
+def test_zero_step_run_requires_exact_run_and_pull_request(
+    monkeypatch: pytest.MonkeyPatch, run_identity: dict[str, object]
+) -> None:
+    """A same-SHA run without exact API identity is not reusable."""
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path == "actions/runs/200":
+            return {
+                **run_identity,
+                "head_sha": "head",
+                "head_branch": "dev/next",
+                "event": "pull_request",
+                "status": "completed",
+                "conclusion": "failure",
+                "path": ".github/workflows/ci.yml",
+                "repository": {"full_name": "owner/repo"},
+                "head_repository": {"full_name": "owner/repo"},
+            }
+        raise AssertionError(path)
+
+    monkeypatch.setitem(
+        require_zero_step_run.__globals__, "github_get", fake_get
+    )
+    with pytest.raises(
+        RuntimeError, match=r"failed PR head|another pull request"
+    ):
+        require_zero_step_run(
+            "https://github.com/owner/repo/actions/runs/200",
+            "owner/repo",
+            42,
+            "dev/next",
+            "head",
+            "",
+        )
+
+
+def test_preflight_binding_rejects_tampered_canary() -> None:
+    """Local JSON cannot hide a configured live canary."""
+    evidence = {
+        "repository": "owner/repo",
+        "canary": {"state": "blocked", "environment": None},
+    }
+    rebuilt = {
+        "repository": "owner/repo",
+        "canary": {"state": "allowed", "environment": "canary"},
+    }
+    with pytest.raises(RuntimeError, match="live reconstruction"):
+        require_same_preflight(evidence, rebuilt)
+
+
+def test_preflight_binding_rejects_changed_pull_request_body() -> None:
+    """A changed promotion body invalidates the prepared evidence."""
+    evidence = {
+        "promotion_pull_request": {"body_sha256": "original"},
+        "tracking_issue_state": {"body_sha256": "issue"},
+    }
+    rebuilt = {
+        "promotion_pull_request": {"body_sha256": "changed"},
+        "tracking_issue_state": {"body_sha256": "issue"},
+    }
+    with pytest.raises(RuntimeError, match="live reconstruction"):
+        require_same_preflight(evidence, rebuilt)
+
+
+def test_preflight_binding_rejects_changed_checkpoint_scope() -> None:
+    """Quota authorization cannot be reused after checkpoint scope drift."""
+    evidence = {
+        "milestone_promotion": {
+            "mode": "checkpoint",
+            "declared_issues": [1],
+        }
+    }
+    rebuilt = {
+        "milestone_promotion": {
+            "mode": "checkpoint",
+            "declared_issues": [1, 2],
+        }
+    }
+    with pytest.raises(RuntimeError, match="live reconstruction"):
+        require_same_preflight(evidence, rebuilt)
+
+
+def test_authorization_statement_binds_full_preflight() -> None:
+    """Human authorization covers the route, canary, and evidence schema."""
+    evidence = {
+        "schema_version": 1,
+        "repository": "owner/repo",
+        "route": {"kind": "standalone-batch", "relevant": True},
+        "canary": {"state": "blocked", "environment": None},
+        "dev_next_preservation": preservation_evidence(),
+    }
+    statement = fallback_statement("authorization", evidence, ["run"])
+    binding = json.loads(statement.split("`")[1])
+    assert binding["schema_version"] == 1
+    assert binding["route"] == evidence["route"]
+    assert binding["canary"] == evidence["canary"]
+    assert binding["dev_next_preservation"] == preservation_evidence()
+
+    canary = evidence["canary"]
+    assert isinstance(canary, dict)
+    canary["result"] = "artifact-only"
+    assert fallback_statement("authorization", evidence, ["run"]) == statement
+
+    canary["future_security_field"] = "bound"
+    assert fallback_statement("authorization", evidence, ["run"]) != statement
+
+
+def test_repository_variables_reads_every_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Canary configuration cannot hide beyond the first API page."""
+
+    def fake_get(_repo: str, path: str, _token: str) -> object:
+        if path.endswith("page=1"):
+            return {
+                "total_count": 101,
+                "variables": [
+                    {"name": f"VARIABLE_{number}", "value": "value"}
+                    for number in range(100)
+                ],
+            }
+        return {
+            "total_count": 101,
+            "variables": [{"name": "CSARC_CANARY_COMMAND", "value": "./smoke"}],
+        }
+
+    monkeypatch.setitem(
+        repository_variables.__globals__, "github_get", fake_get
+    )
+    assert (
+        repository_variables("owner/repo", "token")["CSARC_CANARY_COMMAND"]
+        == "./smoke"
+    )
+
+
+def test_generated_repository_uses_its_verifier(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Generated repositories run scripts/verify, not a root-only command."""
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "verify").write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    assert local_verification_command() == ["./scripts/verify"]
+
+
+def test_token_request_rejects_cross_origin_redirect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A GitHub bearer token must never follow an attacker redirect."""
+    captured: list[object] = []
+
+    class Response:
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"ok": true}'
+
+    class Opener:
+        def open(
+            self, request: urllib.request.Request, *, timeout: int
+        ) -> Response:
+            assert timeout == 20
+            assert request.full_url.startswith("https://api.github.com/")
+            assert request.get_header("Authorization") == "Bearer secret"
+            return Response()
+
+    def fake_build_opener(*handlers: object) -> Opener:
+        captured.extend(handlers)
+        return Opener()
+
+    monkeypatch.setattr(urllib.request, "build_opener", fake_build_opener)
+    assert github_get("owner/repo", "issues/42", "secret") == {"ok": True}
+    handler = captured[0]
+    assert isinstance(handler, RejectRedirects)
+    assert (
+        handler.redirect_request(
+            urllib.request.Request("https://api.github.com/repos/owner/repo"),
+            None,
+            302,
+            "Found",
+            {},
+            "https://attacker.invalid/steal",
+        )
+        is None
+    )

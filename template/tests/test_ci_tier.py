@@ -35,7 +35,9 @@ scope_for = MODULE["scope_for"]
         ("uv.lock", "dependency"),
         ("template/pyproject.toml.jinja", "dependency"),
         ("policies/rulesets.json", "governance"),
+        ("policies/dev-next-ruleset.json", "governance"),
         ("template/policies/rulesets.json.jinja", "governance"),
+        ("template/policies/dev-next-ruleset.json", "governance"),
         ("unexpected.bin", "unknown"),
     ],
 )
@@ -113,6 +115,7 @@ def test_source_uses_fast_canonical_runtime() -> None:
         (".github/workflows/ci.yml", "run_zizmor"),
         ("uv.lock", "run_osv"),
         ("policies/rulesets.json", "run_governance"),
+        ("policies/dev-next-ruleset.json", "run_governance"),
     ],
 )
 def test_risk_scopes_enable_only_their_expensive_check(
@@ -147,6 +150,12 @@ def test_governance_checkers_run_only_remote_governance(path: str) -> None:
         ("main", "dev/m7-ci", set(), "delivery promotion"),
         ("main", "dev/i42-soak", {"promotion"}, "delivery promotion"),
         ("main", "fix/9-outage", {"hotfix"}, "hotfix to main"),
+        (
+            "main",
+            "fix/321-recover-v012-release",
+            {"release-recovery"},
+            "release recovery to main",
+        ),
     ],
 )
 def test_promotion_and_hotfix_use_full_tier(

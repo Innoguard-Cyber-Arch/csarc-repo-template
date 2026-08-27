@@ -7,6 +7,9 @@ readme = "README.md"
 requires-python = "{% if python_support_mode == 'latest' %}>=3.14,<3.15{% else %}>={{ python_min_version }}{% endif %}"
 dependencies = []
 
+[project.urls]
+Repository = {{ repository_url | tojson }}
+
 [dependency-groups]
 dev = [
   "coverage[toml]>=7.10,<8",
@@ -48,6 +51,9 @@ files = ["src", "scripts", "tests"]
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+markers = [
+  "large: long-running generated-project or adoption coverage reserved for the full gate",
+]
 
 [tool.coverage.run]
 branch = true

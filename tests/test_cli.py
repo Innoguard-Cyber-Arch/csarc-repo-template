@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -74,6 +76,9 @@ code_owner:
 reviewers:
   type: str
   default: '@default-reviewer'
+project_verification_hook:
+  type: str
+  default: ''
 coverage_mode:
   type: str
   default: global
@@ -107,9 +112,26 @@ enable_release_attestations:
     )
     write_executable(
         source / "template" / "scripts" / "verify",
-        "#!/usr/bin/env bash\nset -euo pipefail\ntest -f managed.txt\n"
-        "if [[ -x scripts/verify-product ]]; then\n"
-        "  ./scripts/verify-product\n"
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        'test -z "${_CSARC_PROJECT_VERIFICATION_ACTIVE:-}"\n'
+        'record() { local fd="${_CSARC_PROJECT_VERIFICATION_STATUS_FD:-}"; '
+        'if [[ -n "$fd" ]]; then printf \'%s\\n\' "$1" >&"$fd"; fi; }\n'
+        "record not-run\n"
+        "test -f managed.txt\n"
+        "hook=$(sed -n 's/^project_verification_hook: *//p' "
+        '.copier-answers.yml | tr -d "\'\\"")\n'
+        'if [[ -z "$hook" && -x scripts/verify-product ]]; then '
+        "hook=scripts/verify-product; fi\n"
+        'if [[ -n "$hook" ]]; then\n'
+        "  record started\n"
+        '  status_fd="${_CSARC_PROJECT_VERIFICATION_STATUS_FD:-}"\n'
+        '  if ( eval "exec ${status_fd}>&-"; '
+        "unset _CSARC_PROJECT_VERIFICATION_STATUS_FD; "
+        '_CSARC_PROJECT_VERIFICATION_ACTIVE=direct "$hook" ); then\n'
+        "    record passed\n"
+        "  else\n"
+        '    status=$?; record failed; exit "$status"\n'
+        "  fi\n"
         "fi\n",
     )
     write_executable(
@@ -993,6 +1015,7 @@ def test_milestone_description_plan_degrades_without_api_access(
     assert "review them manually" in output
 
 
+@pytest.mark.large
 def test_adopt_defaults_to_dry_run_and_preserves_product_files(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1372,6 +1395,7 @@ def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
         ("typescript", "package.json", "pnpm-lock.yaml"),
     ],
 )
+@pytest.mark.large
 def test_real_template_adoption_resumes_after_manifest_merge(
     tmp_path: Path,
     language: str,
@@ -1387,7 +1411,13 @@ def test_real_template_adoption_resumes_after_manifest_merge(
     data = cli.base_data(
         project,
         "adopt",
-        {"coverage_mode": "global", "language": language},
+        {
+            "coverage_mode": "global",
+            "language": language,
+            "security_reporting_channel": (
+                "Use the synthetic fixture's private reporting channel."
+            ),
+        },
     )
     data["project_visibility"] = "private"
     cli.copier_copy(
@@ -1434,6 +1464,9 @@ def test_real_template_adoption_resumes_after_manifest_merge(
         f"language={language}",
         "--data",
         "coverage_mode=global",
+        "--data",
+        "security_reporting_channel=Use the synthetic fixture's "
+        "private reporting channel.",
     ]
     assert main([*arguments, "--dry-run"]) == 0
     plan_path = (
@@ -1497,6 +1530,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
     assert not (project / cli.PENDING_ADOPTION_FILE).exists()
 
 
+@pytest.mark.large
 def test_real_init_and_adoption_update_through_verified_releases(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1665,6 +1699,9 @@ def test_real_init_and_adoption_update_through_verified_releases(
         "--data",
         "language=python",
         "--data",
+        "security_reporting_channel=Use the synthetic fixture's "
+        "private reporting channel.",
+        "--data",
         "project_name=Product Identity",
         "--data",
         "project_slug=product-identity",
@@ -1688,8 +1725,15 @@ def test_real_init_and_adoption_update_through_verified_releases(
     assert "CHANGELOG.md" in payload["files"]["preserve"]
     assert ".github/workflows/release.yml" in payload["files"]["preserve"]
     assert ".github/workflows/csarc-release.yml" in payload["files"]["add"]
-    assert payload["adoption"]["project_verification_hook"] == "configured"
+    assert payload["adoption"]["project_verification_hook"] == {
+        "configured": True,
+        "path": "scripts/verify-product",
+        "reason": "Manual file decisions must be completed first.",
+        "result": "not-run",
+        "source": "fallback",
+    }
     assert payload["adoption"]["verification"] == "deferred-manual-merge"
+    assert payload["answers"]["package_name"] == "product_identity"
 
     assert (
         main(
@@ -2127,19 +2171,218 @@ def test_adopt_help_describes_report_directory(
     assert "plan without writing (the default for lifecycle" in help_text
 
 
-def test_adopt_reports_dirty_tree_without_mutating_it(tmp_path: Path) -> None:
-    """Dirty adoption plans remain useful but cannot be applied."""
+def test_adopt_applies_exact_plan_over_preserved_dirty_file(
+    tmp_path: Path,
+) -> None:
+    """Verify and apply while preserving one authorized dirty product file."""
     source, first_sha = make_template(tmp_path)
     project = tmp_path / "dirty-product"
     project.mkdir()
+    hook_runs = tmp_path / "hook-runs.txt"
+    (project / "components.yaml").write_text("clean: true\n", encoding="utf-8")
+    write_executable(
+        project / "scripts" / "verify-skills",
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        "grep -q '^authorized: dirty$' components.yaml\n"
+        f"printf 'run\\n' >> {shlex.quote(str(hook_runs))}\n",
+    )
     git(project, "init", "-b", "main")
     git(project, "config", "user.name", "CLI Test")
     git(project, "config", "user.email", "cli-test@example.invalid")
-    (project / "tracked.txt").write_text("clean\n", encoding="utf-8")
     commit(project, "test: baseline")
-    (project / "untracked.txt").write_text("dirty\n", encoding="utf-8")
+    components = project / "components.yaml"
+    components.write_text("authorized: dirty\n", encoding="utf-8")
 
-    before = git(project, "status", "--porcelain")
+    before = cli.git_target_state(project)[1]
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--dry-run",
+                "--data",
+                "project_verification_hook=scripts/verify-skills",
+            ]
+        )
+        == 0
+    )
+    plan = (
+        tmp_path
+        / "dirty-product-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    payload = json.loads(plan.read_text(encoding="utf-8"))
+    assert payload["adoption"]["applicable"] is True
+    assert payload["adoption"]["clean"] is False
+    assert payload["adoption"]["target_changes"] == [" M components.yaml"]
+    assert payload["adoption"]["preserved_dirty_paths"] == ["components.yaml"]
+    assert payload["adoption"]["verification"] == "passed"
+    assert payload["adoption"]["project_verification_hook"]["result"] == (
+        "passed"
+    )
+    assert "components.yaml" in payload["files"]["preserve"]
+    assert hook_runs.read_text(encoding="utf-8").splitlines() == ["run"]
+    markdown = plan.with_name("csarc-adoption-dry-run.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Decision: Ready to adopt" in markdown
+    assert "Working tree: dirty; exact preserved state" in markdown
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan),
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    assert components.read_text(encoding="utf-8") == "authorized: dirty\n"
+    assert before == (" M components.yaml",)
+    assert " M components.yaml" in cli.git_target_state(project)[1]
+    assert hook_runs.read_text(encoding="utf-8").splitlines() == [
+        "run",
+        "run",
+    ]
+    assert (project / ".copier-answers.yml").is_file()
+
+
+def test_adopt_rejects_dirty_path_not_classified_as_preserve(
+    tmp_path: Path,
+) -> None:
+    """Keep collisions and other unapproved dirty paths review-only."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / "dirty-collision"
+    project.mkdir()
+    (project / "managed.txt").write_text(
+        "template version one\n", encoding="utf-8"
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    (project / "managed.txt").write_text("dirty collision\n", encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    report_dir = tmp_path / "dirty-collision-csarc-adoption-report"
+    plan = report_dir / cli.ADOPTION_PLAN_BASENAME
+    payload = json.loads(plan.read_text(encoding="utf-8"))
+    assert payload["adoption"]["applicable"] is False
+    assert payload["adoption"]["verification"] == "not-run-dirty"
+    assert payload["adoption"]["preserved_dirty_paths"] == []
+    assert "managed.txt" in payload["files"]["manual_merge"]
+    markdown = (report_dir / "csarc-adoption-dry-run.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Decision: Not ready to adopt" in markdown
+    assert "Do not apply this plan" in markdown
+    pdf = PdfReader(report_dir / "csarc-adoption-dry-run.pdf")
+    assert "Not ready to adopt" in pdf.pages[0].extract_text()
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan),
+                "--allow-unreleased",
+            ]
+        )
+        == 2
+    )
+    assert not (project / ".copier-answers.yml").exists()
+
+
+def test_adopt_blocks_hook_mutation_of_preserved_dirty_file(
+    tmp_path: Path,
+) -> None:
+    """Keep preserved dirty bytes out of the candidate artifact set."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / "dirty-hook-mutation"
+    project.mkdir()
+    components = project / "components.yaml"
+    components.write_text("clean: true\n", encoding="utf-8")
+    write_executable(
+        project / "scripts" / "verify-skills",
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        "printf 'hook mutation\\n' > components.yaml\n",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    components.write_text("authorized: dirty\n", encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--dry-run",
+                "--data",
+                "project_verification_hook=scripts/verify-skills",
+            ]
+        )
+        == 0
+    )
+    plan = (
+        tmp_path
+        / "dirty-hook-mutation-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    payload = json.loads(plan.read_text(encoding="utf-8"))
+    assert payload["adoption"]["applicable"] is False
+    assert payload["adoption"]["project_verification_hook"]["result"] == (
+        "passed"
+    )
+    assert str(payload["adoption"]["verification"]).startswith(
+        "failed: Candidate verification changed preserved dirty files:"
+    )
+    assert components.read_text(encoding="utf-8") == "authorized: dirty\n"
+
+
+def test_adopt_rejects_staged_preserved_file(tmp_path: Path) -> None:
+    """Do not authorize staged state through the dirty-preserve exception."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / "staged-product"
+    project.mkdir()
+    product = project / "product.txt"
+    product.write_text("clean\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    product.write_text("staged\n", encoding="utf-8")
+    git(project, "add", "product.txt")
+
     assert (
         main(
             [
@@ -2157,13 +2400,125 @@ def test_adopt_reports_dirty_tree_without_mutating_it(tmp_path: Path) -> None:
     )
     plan = (
         tmp_path
-        / "dirty-product-csarc-adoption-report"
+        / "staged-product-csarc-adoption-report"
         / cli.ADOPTION_PLAN_BASENAME
     )
     payload = json.loads(plan.read_text(encoding="utf-8"))
     assert payload["adoption"]["applicable"] is False
-    assert payload["adoption"]["clean"] is False
-    assert payload["adoption"]["target_changes"] == ["?? untracked.txt"]
+    assert payload["adoption"]["verification"] == "not-run-dirty"
+    assert payload["adoption"]["preserved_dirty_paths"] == []
+    assert "product.txt" in payload["files"]["preserve"]
+
+
+@pytest.mark.parametrize(
+    ("dirty_state", "expected_status"),
+    [
+        ("untracked", "?? extra.txt"),
+        ("deleted", " D product.txt"),
+        ("type", " T product.txt"),
+    ],
+)
+def test_adopt_rejects_non_modified_dirty_states_without_running_hook(
+    tmp_path: Path, dirty_state: str, expected_status: str
+) -> None:
+    """Only tracked unstaged modifications may use the preserve exception."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / f"dirty-{dirty_state}"
+    project.mkdir()
+    product = project / "product.txt"
+    product.write_text("product\n", encoding="utf-8")
+    hook_runs = tmp_path / f"{dirty_state}-hook-runs"
+    write_executable(
+        project / "scripts" / "verify-skills",
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        f"printf 'run\\n' >> {shlex.quote(str(hook_runs))}\n",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    if dirty_state == "untracked":
+        (project / "extra.txt").write_text("extra\n", encoding="utf-8")
+    else:
+        product.unlink()
+        if dirty_state == "type":
+            product.symlink_to("other.txt")
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--dry-run",
+                "--data",
+                "project_verification_hook=scripts/verify-skills",
+            ]
+        )
+        == 0
+    )
+    plan = (
+        tmp_path
+        / f"dirty-{dirty_state}-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    payload = json.loads(plan.read_text(encoding="utf-8"))
+    assert payload["adoption"]["target_changes"] == [expected_status]
+    assert payload["adoption"]["applicable"] is False
+    assert payload["adoption"]["verification"] == "not-run-dirty"
+    assert payload["adoption"]["project_verification_hook"]["result"] == (
+        "not-run"
+    )
+    assert not hook_runs.exists()
+
+
+@pytest.mark.parametrize("drift", ["content", "mode", "path"])
+def test_adopt_rejects_preserved_dirty_file_drift(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], drift: str
+) -> None:
+    """Bind authorized dirty content, mode, and path state to the plan."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / f"dirty-{drift}-drift"
+    project.mkdir()
+    product = project / "product.txt"
+    product.write_text("clean\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    product.write_text("reviewed dirty bytes\n", encoding="utf-8")
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+    plan = (
+        tmp_path
+        / f"dirty-{drift}-drift-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    if drift == "content":
+        product.write_text("drifted after review\n", encoding="utf-8")
+    elif drift == "mode":
+        product.chmod(product.stat().st_mode | stat.S_IXUSR)
+    else:
+        (project / "extra.txt").write_text("unexpected\n", encoding="utf-8")
+
     assert (
         main(
             [
@@ -2172,13 +2527,67 @@ def test_adopt_reports_dirty_tree_without_mutating_it(tmp_path: Path) -> None:
                 "--apply-plan",
                 str(plan),
                 "--allow-unreleased",
-                "--yes",
             ]
         )
         == 2
     )
-    assert git(project, "status", "--porcelain") == before
+    assert "changed after the plan was created" in capsys.readouterr().err
     assert not (project / ".copier-answers.yml").exists()
+
+
+def test_adopt_rejects_race_between_comparison_and_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Do not legitimize target changes made after file classification."""
+    source, first_sha = make_template(tmp_path)
+    project = tmp_path / "comparison-race"
+    project.mkdir()
+    managed = project / "managed.txt"
+    managed.write_text("template version one\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: baseline")
+    compare_stage = cli.compare_stage
+
+    def race_after_comparison(
+        stage: Path,
+        target: Path,
+        *,
+        adopt: bool,
+        merged_paths: tuple[str, ...] = (),
+    ) -> cli.Plan:
+        planned = compare_stage(
+            stage, target, adopt=adopt, merged_paths=merged_paths
+        )
+        managed.write_text("raced dirty bytes\n", encoding="utf-8")
+        return planned
+
+    monkeypatch.setattr(cli, "compare_stage", race_after_comparison)
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--dry-run",
+            ]
+        )
+        == 2
+    )
+    assert "changed after the plan was created" in capsys.readouterr().err
+    assert not (
+        tmp_path
+        / "comparison-race-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    ).exists()
 
 
 def test_adopt_infers_unicode_repository_and_applies_exact_plan(
@@ -2472,6 +2881,149 @@ def test_candidate_patch_rejects_unplanned_effects(tmp_path: Path) -> None:
     assert not (project / "unexpected.txt").exists()
 
 
+def test_candidate_patch_ignores_transients_without_hiding_deletions(
+    tmp_path: Path,
+) -> None:
+    """Ignore verifier caches while retaining genuine candidate deletions."""
+    project = tmp_path / "transient-patch-target"
+    project.mkdir()
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    (project / "obsolete.txt").write_text("obsolete\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: transient patch baseline")
+    candidate = tmp_path / "transient-patch-candidate"
+    cli.clone_target(project, candidate)
+    planned = candidate / "planned.txt"
+    planned.write_text("planned\n", encoding="utf-8")
+    (candidate / "obsolete.txt").unlink()
+    transient = candidate / "scripts" / "__pycache__" / "helper.pyc"
+    transient.parent.mkdir(parents=True)
+    transient.write_bytes(b"transient")
+    assert transient.relative_to(candidate).as_posix() in cli.git_changed_paths(
+        candidate
+    )
+    artifacts, deletions = cli.candidate_patch_effects(candidate)
+    head, changes, _ = cli.target_state(project)
+
+    assert artifacts == {"planned.txt": cli.file_fingerprint(planned)}
+    assert deletions == ("obsolete.txt",)
+    assert cli.deleted_candidate_paths(candidate) == ("obsolete.txt",)
+    cli.write_candidate_patch(
+        candidate,
+        project,
+        tmp_path / "transient.patch",
+        artifacts=artifacts,
+        target_snapshot={
+            "target_head": head,
+            "target_changes": list(changes),
+            "target_files": cli.target_file_snapshot(project),
+        },
+        delete_paths=deletions,
+    )
+
+    assert (project / "planned.txt").read_text(encoding="utf-8") == "planned\n"
+    assert not (project / "obsolete.txt").exists()
+    assert not (project / "scripts" / "__pycache__").exists()
+
+
+def test_candidate_patch_preserves_ignored_rejection_file(
+    tmp_path: Path,
+) -> None:
+    """Include an ignored Copier rejection in the explicit conflict patch."""
+    project = tmp_path / "ignored-conflict-target"
+    project.mkdir()
+    (project / ".gitignore").write_text("*.rej\n", encoding="utf-8")
+    (project / "managed.txt").write_text("current\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: ignored conflict baseline")
+    candidate = tmp_path / "ignored-conflict-candidate"
+    cli.clone_target(project, candidate)
+    rejection = candidate / "managed.txt.rej"
+    rejection.write_text("rejected update\n", encoding="utf-8")
+    conflicts = cli.find_conflicts(candidate)
+    assert conflicts == ("managed.txt.rej",)
+    assert "managed.txt.rej" not in cli.git_changed_paths(candidate)
+    artifacts, deletions = cli.candidate_patch_effects(
+        candidate, include_paths=conflicts
+    )
+    head, changes, _ = cli.target_state(project)
+
+    cli.write_candidate_patch(
+        candidate,
+        project,
+        tmp_path / "ignored-conflict.patch",
+        artifacts=artifacts,
+        target_snapshot={
+            "target_head": head,
+            "target_changes": list(changes),
+            "target_files": cli.target_file_snapshot(project),
+        },
+        delete_paths=deletions,
+        include_paths=conflicts,
+    )
+
+    assert (project / "managed.txt.rej").read_text(encoding="utf-8") == (
+        "rejected update\n"
+    )
+
+
+def test_candidate_patch_rejects_stale_or_unplanned_deletions(
+    tmp_path: Path,
+) -> None:
+    """Bind the exact deletion set before applying a candidate patch."""
+    project = tmp_path / "deletion-target"
+    project.mkdir()
+    (project / "obsolete.txt").write_text(
+        "keep until verified\n", encoding="utf-8"
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: deletion baseline")
+    head, changes, _ = cli.target_state(project)
+    snapshot = {
+        "target_head": head,
+        "target_changes": list(changes),
+        "target_files": cli.target_file_snapshot(project),
+    }
+
+    deleted = tmp_path / "unplanned-deletion-candidate"
+    cli.clone_target(project, deleted)
+    (deleted / "obsolete.txt").unlink()
+    unplanned_root = tmp_path / "unplanned-deletion"
+    unplanned_root.mkdir()
+    with pytest.raises(CliError, match="effects differ"):
+        cli.write_candidate_patch(
+            deleted,
+            project,
+            unplanned_root / "candidate.patch",
+            artifacts={},
+            target_snapshot=snapshot,
+        )
+
+    stale = tmp_path / "stale-deletion-candidate"
+    cli.clone_target(project, stale)
+    stale_root = tmp_path / "stale-deletion"
+    stale_root.mkdir()
+    with pytest.raises(CliError, match="effects differ"):
+        cli.write_candidate_patch(
+            stale,
+            project,
+            stale_root / "candidate.patch",
+            artifacts={},
+            target_snapshot=snapshot,
+            delete_paths=("obsolete.txt",),
+        )
+
+    assert (project / "obsolete.txt").read_text(encoding="utf-8") == (
+        "keep until verified\n"
+    )
+
+
 def test_candidate_patch_rolls_back_after_late_external_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2752,6 +3304,8 @@ def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
                 revision,
                 "--allow-unreleased",
                 "--dry-run",
+                "--data",
+                "project_verification_hook=scripts/verify-product",
             ]
         )
         == 0
@@ -2763,8 +3317,21 @@ def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
     )
     payload = json.loads(plan_path.read_text(encoding="utf-8"))
     assert payload["adoption"]["applicable"] is False
-    assert payload["adoption"]["project_verification_hook"] == "configured"
+    assert payload["adoption"]["project_verification_hook"] == {
+        "configured": True,
+        "path": "scripts/verify-product",
+        "reason": "Project verification hook exited non-zero: "
+        "scripts/verify-product",
+        "result": "failed",
+        "source": "explicit",
+    }
     assert str(payload["adoption"]["verification"]).startswith("failed:")
+    markdown = plan_path.with_name("csarc-adoption-dry-run.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Decision: Not ready to adopt" in markdown
+    pdf = PdfReader(plan_path.with_name("csarc-adoption-dry-run.pdf"))
+    assert "Not ready to adopt" in pdf.pages[0].extract_text()
     assert (
         main(
             [
@@ -2779,6 +3346,451 @@ def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
     )
     assert git(project, "status", "--porcelain") == before
     assert not (project / "managed.txt").exists()
+
+
+def test_invalid_project_hook_blocks_pending_adoption_without_writes(
+    tmp_path: Path,
+) -> None:
+    """Reject a known bad hook before creating a resumable checkpoint."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "invalid-pending-hook"
+    project.mkdir()
+    (project / "pyproject.toml").write_text(
+        '[project]\nname = "existing"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: invalid pending hook")
+    before = git(project, "status", "--porcelain")
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--source",
+                str(source),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--data",
+                "language=python",
+                "--data",
+                "project_verification_hook=scripts/missing",
+            ]
+        )
+        == 0
+    )
+    plan_path = (
+        tmp_path
+        / "invalid-pending-hook-csarc-adoption-report"
+        / cli.ADOPTION_PLAN_BASENAME
+    )
+    payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert payload["adoption"]["applicable"] is False
+    assert payload["adoption"]["project_verification_hook"] == {
+        "configured": True,
+        "path": "scripts/missing",
+        "reason": "Project verification hook does not exist: scripts/missing",
+        "result": "failed",
+        "source": "explicit",
+    }
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--allow-unreleased",
+            ]
+        )
+        == 2
+    )
+    assert git(project, "status", "--porcelain") == before
+    assert not (project / cli.PENDING_ADOPTION_FILE).exists()
+    assert not (project / "managed.txt").exists()
+
+
+def test_adoption_records_and_replays_explicit_project_hook(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Bind the explicit hook path and result into every adoption report."""
+    source, revision = make_template(tmp_path)
+    project = tmp_path / "explicit-hook-product"
+    project.mkdir()
+    (project / "product.txt").write_text("product\n", encoding="utf-8")
+    write_executable(
+        project / "scripts" / "verify-skills",
+        "#!/usr/bin/env bash\nset -euo pipefail\ntest -f product.txt\n",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: explicit project hook")
+    arguments = [
+        "adopt",
+        str(project),
+        "--source",
+        str(source),
+        "--to",
+        revision,
+        "--allow-unreleased",
+        "--data",
+        "language=ci",
+        "--data",
+        "project_verification_hook=scripts/verify-skills",
+    ]
+
+    assert main(arguments) == 0
+    report_dir = tmp_path / "explicit-hook-product-csarc-adoption-report"
+    plan_path = report_dir / cli.ADOPTION_PLAN_BASENAME
+    payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert payload["adoption"]["project_verification_hook"] == {
+        "configured": True,
+        "path": "scripts/verify-skills",
+        "reason": "Project verification hook completed successfully.",
+        "result": "passed",
+        "source": "explicit",
+    }
+    markdown = (report_dir / "csarc-adoption-dry-run.md").read_text(
+        encoding="utf-8"
+    )
+    assert "Project verification hook: `scripts/verify-skills`" in markdown
+    assert "Project verification hook configured: `true`" in markdown
+    assert "Project verification result: `passed`" in markdown
+    assert (
+        "Project verification reason: `Project verification hook completed "
+        "successfully.`" in markdown
+    )
+    pdf = "\n".join(
+        page.extract_text()
+        for page in PdfReader(report_dir / "csarc-adoption-dry-run.pdf").pages
+    )
+    assert "Project hook" in pdf and "scripts/verify-skills" in pdf
+    assert "Hook configured" in pdf and "true" in pdf
+    assert "Hook result" in pdf and "passed" in pdf
+    assert "Hook reason" in pdf
+    assert "Project verification hook completed successfully." in pdf
+
+    assert (
+        main(
+            [
+                "adopt",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    assert (project / cli.PROVENANCE_FILE).is_file()
+
+    capsys.readouterr()
+    write_executable(
+        project / "scripts" / "verify-other",
+        "#!/usr/bin/env bash\nset -euo pipefail\nexit 0\n",
+    )
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--check",
+                "--json",
+                "--data",
+                "project_verification_hook=scripts/verify-other",
+            ]
+        )
+        == 1
+    )
+    update = json.loads(capsys.readouterr().out)
+    assert update["answers_changed"] is True
+    assert update["answers"]["project_verification_hook"] == (
+        "scripts/verify-other"
+    )
+
+
+def test_explicit_project_hook_runs_once_without_using_run_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run one checked executable path without treating product launch as it."""
+    project = tmp_path / "hook-project"
+    project.mkdir()
+    (project / ".copier-answers.yml").write_text(
+        "project_run_command: scripts/run-product\n"
+        "project_verification_hook: scripts/verify-product\n",
+        encoding="utf-8",
+    )
+    write_executable(
+        project / "scripts" / "verify",
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        'test -z "${_CSARC_PROJECT_VERIFICATION_ACTIVE:-}"\n'
+        'status_fd="${_CSARC_PROJECT_VERIFICATION_STATUS_FD:-}"\n'
+        'test -n "$status_fd"\n'
+        "printf 'not-run\\n' >&\"$status_fd\"\n"
+        "printf 'started\\n' >&\"$status_fd\"\n"
+        "printf '%s\\n' \"$status_fd\" > .known-status-fd\n"
+        'if ( eval "exec ${status_fd}>&-"; '
+        "unset _CSARC_PROJECT_VERIFICATION_STATUS_FD; "
+        "_CSARC_PROJECT_VERIFICATION_ACTIVE=direct "
+        "./scripts/verify-product ); then\n"
+        "  printf 'passed\\n' >&\"$status_fd\"\n"
+        "else\n"
+        "  status=$?; printf 'failed\\n' >&\"$status_fd\"; "
+        'exit "$status"\n'
+        "fi\n",
+    )
+    write_executable(
+        project / "scripts" / "verify-product",
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        'test -z "${_CSARC_PROJECT_VERIFICATION_STATUS_FD:-}"\n'
+        "try_fd() {\n"
+        '  local candidate_fd="$1"\n'
+        '  [[ "$candidate_fd" =~ ^[0-9]+$ ]] || return 0\n'
+        "  (( candidate_fd > 2 )) || return 0\n"
+        "  eval \"printf 'forged\\n' >&${candidate_fd}\" 2>/dev/null || true\n"
+        "}\n"
+        'try_fd "$(cat .known-status-fd)"\n'
+        'for candidate_fd in {3..32}; do try_fd "$candidate_fd"; done\n'
+        "for descriptor_root in /dev/fd /proc/self/fd; do\n"
+        '  [[ -d "$descriptor_root" ]] || continue\n'
+        '  for descriptor in "$descriptor_root"/*; do\n'
+        '    candidate_fd="${descriptor##*/}"\n'
+        '    [[ "$candidate_fd" =~ ^[0-9]+$ ]] || continue\n'
+        "    (( candidate_fd <= 32 )) || continue\n"
+        '    try_fd "$candidate_fd"\n'
+        "  done\n"
+        "done\n"
+        "test ! -e .project-hook-ran\n"
+        "printf 'once\\n' > .project-hook-ran\n",
+    )
+    write_executable(
+        project / "scripts" / "run-product",
+        "#!/usr/bin/env bash\nexit 99\n",
+    )
+    monkeypatch.setenv("CSARC_SKIP_PROJECT_VERIFICATION_HOOK", "true")
+    old_status = project / "preserve-me"
+    old_status.write_text("preserve me\n", encoding="utf-8")
+    monkeypatch.setenv(
+        "_CSARC_PROJECT_VERIFICATION_STATUS_FILE", str(old_status)
+    )
+
+    assert cli.verify_project(project) == {
+        "configured": True,
+        "path": "scripts/verify-product",
+        "reason": "Project verification hook completed successfully.",
+        "result": "passed",
+        "source": "explicit",
+    }
+    assert (project / ".project-hook-ran").read_text(encoding="utf-8") == (
+        "once\n"
+    )
+    assert old_status.read_text(encoding="utf-8") == "preserve me\n"
+
+
+def test_configured_hook_requires_canonical_status(tmp_path: Path) -> None:
+    """Fail closed when canonical verification omits hook completion status."""
+    project = tmp_path / "missing-hook-status"
+    project.mkdir()
+    (project / ".copier-answers.yml").write_text(
+        "project_verification_hook: scripts/verify-product\n",
+        encoding="utf-8",
+    )
+    write_executable(
+        project / "scripts" / "verify",
+        "#!/usr/bin/env bash\nset -euo pipefail\nexit 0\n",
+    )
+    write_executable(
+        project / "scripts" / "verify-product",
+        "#!/usr/bin/env bash\nset -euo pipefail\ntouch should-not-run\n",
+    )
+
+    with pytest.raises(cli.ProjectVerificationError) as raised:
+        cli.verify_project(project)
+    assert raised.value.hook == {
+        "configured": True,
+        "path": "scripts/verify-product",
+        "reason": "Canonical verification returned an invalid hook status.",
+        "result": "failed",
+        "source": "explicit",
+    }
+    assert not (project / "should-not-run").exists()
+
+
+@pytest.mark.parametrize("alias", ["direct", "symlink", "hardlink"])
+def test_project_hook_rejects_canonical_verify_identity(
+    tmp_path: Path, alias: str
+) -> None:
+    """Reject direct and aliased recursion into canonical verification."""
+    project = tmp_path / f"canonical-hook-{alias}"
+    project.mkdir()
+    verify = project / "scripts" / "verify"
+    write_executable(verify, "#!/usr/bin/env bash\nexit 0\n")
+    hook = project / "scripts" / "hook"
+    if alias == "direct":
+        hook_path = "scripts/verify"
+    elif alias == "symlink":
+        hook.symlink_to("verify")
+        hook_path = "scripts/hook"
+    else:
+        hook.hardlink_to(verify)
+        hook_path = "scripts/hook"
+    (project / ".copier-answers.yml").write_text(
+        f"project_verification_hook: {hook_path}\n", encoding="utf-8"
+    )
+
+    with pytest.raises(cli.ProjectVerificationError, match="must not resolve"):
+        cli.verify_project(project)
+
+
+def test_project_hook_cannot_reenter_canonical_verify(tmp_path: Path) -> None:
+    """Fail an indirect hook recursion before canonical work runs twice."""
+    project = tmp_path / "recursive-hook"
+    project.mkdir()
+    (project / ".copier-answers.yml").write_text(
+        "project_verification_hook: scripts/verify-product\n",
+        encoding="utf-8",
+    )
+    write_executable(
+        project / "scripts" / "verify",
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        'if [[ -n "${_CSARC_PROJECT_VERIFICATION_ACTIVE:-}" ]]; then\n'
+        "  exit 42\n"
+        "fi\n"
+        'status_fd="${_CSARC_PROJECT_VERIFICATION_STATUS_FD:-}"\n'
+        "printf 'not-run\\n' >&\"$status_fd\"\n"
+        "printf 'started\\n' >&\"$status_fd\"\n"
+        'if ( eval "exec ${status_fd}>&-"; '
+        "unset _CSARC_PROJECT_VERIFICATION_STATUS_FD; "
+        "_CSARC_PROJECT_VERIFICATION_ACTIVE=direct "
+        "./scripts/verify-product ); then\n"
+        "  printf 'passed\\n' >&\"$status_fd\"\n"
+        "else\n"
+        "  status=$?; printf 'failed\\n' >&\"$status_fd\"; "
+        'exit "$status"\n'
+        "fi\n",
+    )
+    write_executable(
+        project / "scripts" / "verify-product",
+        "#!/usr/bin/env bash\nset -euo pipefail\n./scripts/verify\n",
+    )
+
+    with pytest.raises(cli.ProjectVerificationError) as raised:
+        cli.verify_project(project)
+    assert raised.value.hook["result"] == "failed"
+    assert raised.value.hook["reason"] == (
+        "Project verification hook exited non-zero: scripts/verify-product"
+    )
+
+
+def test_generated_verifier_has_private_hook_handoff() -> None:
+    """Keep generated hook status separate from execution control."""
+    verifier = (ROOT / "template/scripts/verify.jinja").read_text(
+        encoding="utf-8"
+    )
+    assert "CSARC_SKIP_PROJECT_VERIFICATION_HOOK" not in verifier
+    assert "skip_project_verification_hook" not in verifier
+    assert "_CSARC_PROJECT_VERIFICATION_NONCE" not in verifier
+    assert "_CSARC_PROJECT_VERIFICATION_STATUS_FILE" not in verifier
+    assert "_CSARC_PROJECT_VERIFICATION_STATUS_FD" in verifier
+    assert "_CSARC_PROJECT_VERIFICATION_ACTIVE" in verifier
+    assert "os.path.samefile(hook, canonical)" in verifier
+
+
+def test_generated_verifier_status_descriptor_cannot_open_caller_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ignore the retired path variable and fail closed on an invalid FD."""
+    preserved = tmp_path / "preserve-me"
+    preserved.write_text("preserve me\n", encoding="utf-8")
+    monkeypatch.setenv(
+        "_CSARC_PROJECT_VERIFICATION_STATUS_FILE", str(preserved)
+    )
+    verifier = ROOT / "template/scripts/verify.jinja"
+
+    old_path = subprocess.run(  # noqa: S603
+        ["/bin/bash", str(verifier), "invalid"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert old_path.returncode == 2
+    assert preserved.read_text(encoding="utf-8") == "preserve me\n"
+
+    monkeypatch.setenv("_CSARC_PROJECT_VERIFICATION_STATUS_FD", "not-a-fd")
+    invalid_fd = subprocess.run(  # noqa: S603
+        ["/bin/bash", str(verifier), "invalid"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert invalid_fd.returncode == 1
+    assert "status descriptor is invalid" in invalid_fd.stderr
+    assert preserved.read_text(encoding="utf-8") == "preserve me\n"
+
+
+@pytest.mark.parametrize(
+    ("path", "error"),
+    [
+        ("../verify", "safe repository-relative"),
+        ("scripts/verify && true", "safe repository-relative"),
+        ("scripts/missing", "does not exist"),
+        ("scripts", "not a regular file"),
+        ("scripts/not-executable", "not executable"),
+    ],
+)
+def test_project_hook_rejects_unsafe_or_unusable_paths(
+    tmp_path: Path, path: str, error: str
+) -> None:
+    """Fail closed before canonical verification for an unsafe hook."""
+    project = tmp_path / "unsafe-hook-project"
+    project.mkdir()
+    (project / "scripts").mkdir()
+    (project / "scripts" / "not-executable").write_text(
+        "#!/usr/bin/env bash\nexit 0\n", encoding="utf-8"
+    )
+    (project / ".copier-answers.yml").write_text(
+        f"project_verification_hook: {path!r}\n", encoding="utf-8"
+    )
+    write_executable(
+        project / "scripts" / "verify",
+        "#!/usr/bin/env bash\nexit 0\n",
+    )
+
+    with pytest.raises(CliError, match=error):
+        cli.verify_project(project)
+
+
+def test_project_hook_rejects_symlink_escape(tmp_path: Path) -> None:
+    """Do not execute a configured path that resolves outside the repo."""
+    project = tmp_path / "symlink-hook-project"
+    project.mkdir()
+    (project / "scripts").mkdir()
+    outside = tmp_path / "outside-hook"
+    write_executable(outside, "#!/usr/bin/env bash\nexit 0\n")
+    (project / "scripts" / "verify-outside").symlink_to(outside)
+    (project / ".copier-answers.yml").write_text(
+        "project_verification_hook: scripts/verify-outside\n",
+        encoding="utf-8",
+    )
+    write_executable(
+        project / "scripts" / "verify",
+        "#!/usr/bin/env bash\nexit 0\n",
+    )
+
+    with pytest.raises(CliError, match="escapes the repository"):
+        cli.verify_project(project)
 
 
 def test_adopt_dry_run_rejects_csarc_symlink_without_external_writes(
@@ -3271,6 +4283,193 @@ def test_update_check_dry_run_apply_and_conflict(
     ) == before_content
 
 
+def test_update_check_validates_hook_without_running_it(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Validate the configured update hook while keeping check read-only."""
+    source, project, _ = initialize_project(tmp_path)
+    capsys.readouterr()
+    answers = project / ".copier-answers.yml"
+    answers.write_text(
+        re.sub(
+            r"^project_verification_hook:.*$",
+            "project_verification_hook: scripts/verify-product",
+            answers.read_text(encoding="utf-8"),
+            flags=re.M,
+        ),
+        encoding="utf-8",
+    )
+    write_executable(
+        project / "scripts" / "verify-product",
+        "#!/usr/bin/env bash\nset -euo pipefail\ntouch hook-ran\n",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: configured update hook")
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    revision = commit(source, "test: template version two")
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--check",
+                "--json",
+            ]
+        )
+        == 1
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["project_verification_hook"] == {
+        "configured": True,
+        "path": "scripts/verify-product",
+        "reason": (
+            "Configuration validated; the hook runs before an update is "
+            "applied."
+        ),
+        "result": "not-run",
+        "source": "explicit",
+    }
+    assert not (project / "hook-ran").exists()
+    assert git(project, "status", "--porcelain") == ""
+
+
+@pytest.mark.parametrize(
+    ("hook_path", "error"),
+    [
+        ("scripts/missing", "does not exist"),
+        ("../verify", "safe repository-relative"),
+    ],
+)
+def test_update_check_rejects_invalid_hook_without_writes(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    hook_path: str,
+    error: str,
+) -> None:
+    """Reject missing or unsafe hooks during the read-only update check."""
+    source, project, _ = initialize_project(tmp_path)
+    capsys.readouterr()
+    answers = project / ".copier-answers.yml"
+    answers.write_text(
+        re.sub(
+            r"^project_verification_hook:.*$",
+            f"project_verification_hook: {hook_path}",
+            answers.read_text(encoding="utf-8"),
+            flags=re.M,
+        ),
+        encoding="utf-8",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    base = commit(project, "test: invalid update hook")
+    before_files = cli.target_file_snapshot(project)
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    revision = commit(source, "test: template version two")
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+                "--check",
+                "--json",
+            ]
+        )
+        == 2
+    )
+    captured = capsys.readouterr()
+    assert error in captured.out + captured.err
+    assert git(project, "rev-parse", "HEAD") == base
+    assert git(project, "status", "--porcelain") == ""
+    assert cli.target_file_snapshot(project) == before_files
+
+
+def test_update_hook_failure_leaves_target_unchanged(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Verify a staged update before applying any candidate bytes."""
+    source, project, _ = initialize_project(tmp_path)
+    capsys.readouterr()
+    answers = project / ".copier-answers.yml"
+    answers.write_text(
+        re.sub(
+            r"^project_verification_hook:.*$",
+            "project_verification_hook: scripts/verify-product",
+            answers.read_text(encoding="utf-8"),
+            flags=re.M,
+        ),
+        encoding="utf-8",
+    )
+    write_executable(
+        project / "scripts" / "verify-product",
+        "#!/usr/bin/env bash\nset -euo pipefail\n"
+        "printf staged > hook-ran\nexit 23\n",
+    )
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    base = commit(project, "test: failing update hook")
+    before_files = cli.target_file_snapshot(project)
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    revision = commit(source, "test: template version two")
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                revision,
+                "--allow-unreleased",
+            ]
+        )
+        == 0
+    )
+    plan_path = lifecycle_plan_path(project, "update")
+    payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert payload["transaction"]["applicable"] is False
+    assert payload["transaction"]["project_verification_hook"] == {
+        "configured": True,
+        "path": "scripts/verify-product",
+        "reason": "Project verification hook exited non-zero: "
+        "scripts/verify-product",
+        "result": "failed",
+        "source": "explicit",
+    }
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--apply-plan",
+                str(plan_path),
+                "--allow-unreleased",
+            ]
+        )
+        == 2
+    )
+    assert git(project, "rev-parse", "HEAD") == base
+    assert git(project, "status", "--porcelain") == ""
+    assert cli.target_file_snapshot(project) == before_files
+    assert not (project / "hook-ran").exists()
+
+
 def test_update_rechecks_committed_head_after_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3394,6 +4593,65 @@ def test_update_rechecks_repository_context_after_confirmation(
     assert (project / "managed.txt").read_text(encoding="utf-8") == (
         "template version one\n"
     )
+
+
+@pytest.mark.parametrize(
+    ("saved_channel", "explicit_channel", "expected_channel"),
+    [
+        (
+            "Open a GitHub Issue at https://github.com/old/repository/"
+            "issues/new; maintainers receive notifications for new Issues.",
+            None,
+            "Open a GitHub Issue at https://github.com/new/repository/"
+            "issues/new; maintainers receive notifications for new Issues.",
+        ),
+        (
+            "Use the approved private reporting channel.",
+            None,
+            "Use the approved private reporting channel.",
+        ),
+        (
+            "Open a GitHub Issue at https://github.com/old/repository/"
+            "issues/new; maintainers receive notifications for new Issues.",
+            "Use the newly approved reporting channel.",
+            "Use the newly approved reporting channel.",
+        ),
+    ],
+)
+def test_update_repository_rename_preserves_custom_security_channel(
+    saved_channel: str,
+    explicit_channel: str | None,
+    expected_channel: str,
+) -> None:
+    """Only move a repository-derived reporting channel to the new URL."""
+    answers: dict[str, object] = {
+        "language": "python",
+        "project_visibility": "private",
+        "repository_url": "https://github.com/old/repository",
+        "security_reporting_channel": saved_channel,
+    }
+    explicit_data = (
+        {"security_reporting_channel": explicit_channel}
+        if explicit_channel is not None
+        else {}
+    )
+    repository = cli.RepositoryContext(
+        "new/repository",
+        "new",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+
+    result, update_data = cli.update_plan_answers(
+        answers, explicit_data, repository
+    )
+
+    assert result["repository_url"] == "https://github.com/new/repository"
+    assert result["security_reporting_channel"] == expected_channel
+    if saved_channel == expected_channel and explicit_channel is None:
+        assert "security_reporting_channel" not in update_data
 
 
 def test_update_rechecks_snapshot_after_repository_context(
@@ -3531,7 +4789,9 @@ def test_update_replay_rejects_source_answers_and_rendered_output_drift(
         previous: dict[str, object] | None,
         update_data: Mapping[str, str],
         generated_at: str,
-    ) -> tuple[cli.Plan, dict[str, str], tuple[str, ...], str]:
+    ) -> tuple[
+        cli.Plan, dict[str, str], tuple[str, ...], str, dict[str, object]
+    ]:
         result = original_prepare(
             target,
             candidate,
@@ -3540,12 +4800,12 @@ def test_update_replay_rejects_source_answers_and_rendered_output_drift(
             update_data,
             generated_at,
         )
-        effects, artifacts, deleted, verification = result
+        effects, artifacts, deleted, verification, hook = result
         managed = candidate / "managed.txt"
         managed.write_text("rendered drift\n", encoding="utf-8")
         artifacts = dict(artifacts)
         artifacts["managed.txt"] = cli.file_fingerprint(managed)
-        return effects, artifacts, deleted, verification
+        return effects, artifacts, deleted, verification, hook
 
     capsys.readouterr()
     with monkeypatch.context() as context:
@@ -4285,3 +5545,79 @@ def test_guardrails_for_invalid_targets(tmp_path: Path) -> None:
     assert main(["adopt", str(tmp_path / "missing"), "--dry-run"]) == 2
     assert main(["update", str(nonempty), "--check", "--json"]) == 2
     assert main(["update", str(nonempty), "--json"]) == 2
+
+
+def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
+    """Keep fast and compatibility gates narrow without weakening full gates."""
+
+    def pytest_commands(path: Path) -> list[list[str]]:
+        source = path.read_text(encoding="utf-8").replace("\\\n", " ")
+        return [
+            shlex.split(line.strip())
+            for line in source.splitlines()
+            if line.strip().startswith("uv run pytest")
+        ]
+
+    def excludes_large(command: list[str]) -> bool:
+        return any(
+            command[index : index + 2] == ["-m", "not large"]
+            for index in range(len(command) - 1)
+        )
+
+    for config in (
+        ROOT / "pyproject.toml",
+        ROOT / "template/pyproject.toml.jinja",
+    ):
+        pytest_section = (
+            config.read_text(encoding="utf-8")
+            .split("[tool.pytest.ini_options]", 1)[1]
+            .split("\n[", 1)[0]
+        )
+        assert any(
+            line.strip().startswith('"large:')
+            for line in pytest_section.splitlines()
+        )
+
+    for bounded_gate in (
+        ROOT / "scripts/verify-fast",
+        ROOT / "template/scripts/verify-fast.jinja",
+    ):
+        commands = pytest_commands(bounded_gate)
+        assert commands
+        assert all(excludes_large(command) for command in commands)
+
+    root_ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    compatibility_job = root_ci.split("  python-compatibility:\n", 1)[1].split(
+        "\n  adoption-macos:\n", 1
+    )[0]
+    compatibility_commands = [
+        shlex.split(line.strip())
+        for line in compatibility_job.splitlines()
+        if line.strip().startswith("uv run pytest")
+    ]
+    assert compatibility_commands
+    assert all(excludes_large(command) for command in compatibility_commands)
+
+    root_full_commands = pytest_commands(ROOT / "scripts/verify-template.sh")
+    assert root_full_commands
+    assert not any(excludes_large(command) for command in root_full_commands)
+
+    template_commands = pytest_commands(ROOT / "template/scripts/verify.jinja")
+    assert len(template_commands) > 1
+    assert excludes_large(template_commands[0])
+    assert not any(excludes_large(command) for command in template_commands[1:])
+
+    marked_large = {
+        name
+        for name, value in globals().items()
+        if name.startswith("test_")
+        and any(
+            marker.name == "large"
+            for marker in getattr(value, "pytestmark", ())
+        )
+    }
+    assert marked_large == {
+        "test_adopt_defaults_to_dry_run_and_preserves_product_files",
+        "test_real_init_and_adoption_update_through_verified_releases",
+        "test_real_template_adoption_resumes_after_manifest_merge",
+    }

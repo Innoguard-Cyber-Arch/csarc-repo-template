@@ -6,8 +6,6 @@ on:
     types: [opened, reopened, synchronize, ready_for_review, labeled, unlabeled]
   merge_group:
     types: [checks_requested]
-  push:
-    branches: [main]
 
 concurrency:
   group: promotion-${{ github.repository }}-${{ github.event.pull_request.number || github.sha }}
@@ -27,8 +25,10 @@ jobs:
       ${{ github.event_name == 'merge_group' ||
       (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' &&
       (github.event.pull_request.head.ref == 'dev' || startsWith(github.event.pull_request.head.ref, 'dev/') ||
+      startsWith(github.event.pull_request.head.ref, 'release-please--') ||
       contains(github.event.pull_request.labels.*.name, 'promotion') ||
-      contains(github.event.pull_request.labels.*.name, 'hotfix'))) }}
+      contains(github.event.pull_request.labels.*.name, 'hotfix') ||
+      contains(github.event.pull_request.labels.*.name, 'release-recovery'))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -52,6 +52,12 @@ jobs:
           CANARY_ENVIRONMENT: ${{ vars.CSARC_CANARY_ENVIRONMENT }}
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           GH_TOKEN: ${{ github.token }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           branch_strategy=main
@@ -62,6 +68,35 @@ jobs:
             if [[ -n "$profile" ]]; then
               branch_strategy="$(jq -r '.branch_strategy // "main"' <<<"$profile")"
             fi
+          fi
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" && "$PR_HEAD" == release-please--* ]]; then
+            trusted_root="$(mktemp -d "$RUNNER_TEMP/release-follow-up-policy.XXXXXX")"
+            git archive "$PR_BASE_SHA" | tar -x -C "$trusted_root"
+            git diff --no-renames --name-only \
+              "$PR_BASE_SHA" \
+              "$PR_HEAD_SHA" \
+              > "$RUNNER_TEMP/release-follow-up-files"
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/commits?per_page=100" \
+              > "$RUNNER_TEMP/release-follow-up-commits.json"
+            actor_permission=""
+            if [[ "$PR_AUTHOR" != "github-actions[bot]" ]]; then
+              encoded_actor="$(jq -rn --arg value "$PR_AUTHOR" '$value | @uri')"
+              actor_permission="$(
+                gh api "repos/$GITHUB_REPOSITORY/collaborators/$encoded_actor/permission" \
+                  --jq '.permission // empty'
+              )"
+            fi
+            python3 "$trusted_root/scripts/release_policy.py" verify-release-follow-up \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$PR_HEAD" \
+              --head-repo "$PR_HEAD_REPOSITORY" \
+              --head-sha "$PR_HEAD_SHA" \
+              --actor "$PR_AUTHOR" \
+              --actor-permission "$actor_permission" \
+              --changed-files "$RUNNER_TEMP/release-follow-up-files" \
+              --commits "$RUNNER_TEMP/release-follow-up-commits.json" \
+              --root "$trusted_root"
           fi
           python3 scripts/promotion_gate.py prepare \
             --event "$GITHUB_EVENT_NAME" \
@@ -114,8 +149,10 @@ jobs:
       ${{ always() && (github.event_name == 'merge_group' ||
       (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' &&
       (github.event.pull_request.head.ref == 'dev' || startsWith(github.event.pull_request.head.ref, 'dev/') ||
+      startsWith(github.event.pull_request.head.ref, 'release-please--') ||
       contains(github.event.pull_request.labels.*.name, 'promotion') ||
-      contains(github.event.pull_request.labels.*.name, 'hotfix')))) }}
+      contains(github.event.pull_request.labels.*.name, 'hotfix') ||
+      contains(github.event.pull_request.labels.*.name, 'release-recovery')))) }}
     needs: [preflight, canary]
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -153,92 +190,3 @@ jobs:
       - name: Report non-applicable route
         if: ${{ needs.preflight.outputs.relevant != 'true' }}
         run: echo "Promotion gate is not applicable to this pull request."
-
-  post-merge:
-    name: verify promoted main
-    if: ${{ github.event_name == 'push' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Resolve the merged pull request and its evidence
-        id: resolve
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          pull_request="$(
-            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
-              --jq '[.[] | select(.merged_at != null and .base.ref == "main")] | last // empty'
-          )"
-          [[ -n "$pull_request" ]] || {
-            echo "Main commit is not associated with a merged pull request." >&2
-            exit 1
-          }
-          head_ref="$(jq -r .head.ref <<<"$pull_request")"
-          if [[ "$head_ref" == release-please--* ]]; then
-            echo "skip_verification=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          labels="$(jq -r '[.labels[].name] | join(",")' <<<"$pull_request")"
-          branch_strategy=main
-          if [[ "$GITHUB_REPOSITORY" == "Innoguard-Cyber-Arch/csarc-repo-template" ]]; then
-            branch_strategy=delivery
-          elif [[ -f .csarc/profile.json ]]; then
-            branch_strategy="$(jq -r '.branch_strategy // "main"' .csarc/profile.json)"
-          fi
-          if [[ "$branch_strategy" == "main" ]]; then
-            echo "skip_verification=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [[ "$head_ref" != "dev" && "$head_ref" != dev/* && ! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$labels," != *,hotfix,* ]]; then
-            echo "Main commit did not come from a promotion or hotfix." >&2
-            exit 1
-          fi
-          pr_number="$(jq -r .number <<<"$pull_request")"
-          head_sha="$(jq -r .head.sha <<<"$pull_request")"
-          run_id="$(
-            gh run list --workflow promotion.yml --event pull_request \
-              --commit "$head_sha" --status success --limit 20 \
-              --json databaseId --jq '.[0].databaseId // empty'
-          )"
-          [[ -n "$run_id" ]] || {
-            echo "No successful promotion workflow was found for the merged head." >&2
-            exit 1
-          }
-          mkdir promotion-proof
-          gh run download "$run_id" \
-            --name "promotion-evidence-${pr_number}-${head_sha}" \
-            --dir promotion-proof
-          candidate_sha="$(jq -r .candidate_sha promotion-proof/promotion-evidence.json)"
-          gh api "repos/$GITHUB_REPOSITORY/commits/$candidate_sha/check-runs" \
-            > candidate-checks.json
-          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
-          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
-      - name: Verify main tree identity and full CI result
-        if: ${{ steps.resolve.outputs.skip_verification != 'true' }}
-        env:
-          HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
-          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
-        run: >-
-          python3 scripts/promotion_gate.py verify-main
-          --repo "$GITHUB_REPOSITORY"
-          --pr-number "$PR_NUMBER"
-          --head-sha "$HEAD_SHA"
-          --main-sha "$GITHUB_SHA"
-          --evidence promotion-proof/promotion-evidence.json
-          --checks candidate-checks.json
-          --output main-promotion-evidence.json
-      - name: Upload verified main evidence
-        if: ${{ steps.resolve.outputs.skip_verification != 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: main-promotion-evidence-${{ github.sha }}
-          path: main-promotion-evidence.json
-          if-no-files-found: error
-          retention-days: 90
-      - name: Record non-promotion main strategy or release follow-up
-        if: ${{ steps.resolve.outputs.skip_verification == 'true' }}
-        run: echo "This main commit does not require delivery promotion evidence."

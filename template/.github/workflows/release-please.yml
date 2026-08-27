@@ -35,25 +35,114 @@ jobs:
         env:
           CANONICAL_REPOSITORY: Innoguard-Cyber-Arch/csarc-repo-template
           GH_TOKEN: ${{ github.token }}
+          PUSH_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
-          pull_request="$(
-            gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
-              --jq '[.[] | select(.merged_at != null and .base.ref == "main")] | last // empty'
+          pull_requests="$(
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls?per_page=100"
           )"
-          [[ -n "$pull_request" ]] || {
-            python3 scripts/release_policy.py boundary \
-              --kind unexpected \
-              --main-sha "$GITHUB_SHA" \
-              --reason "Main commit is not associated with a reviewed pull request" \
-              --output main-release-source.json \
-              --github-output "$GITHUB_OUTPUT"
-            exit 0
-          }
+          pull_request_count="$(
+            jq --arg sha "$GITHUB_SHA" \
+              '[.[][] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)] | length' \
+              <<<"$pull_requests"
+          )"
+          if [[ "$pull_request_count" != "1" ]]; then
+            echo "Main commit must have exactly one reviewed pull request with the same merge SHA; found $pull_request_count." >&2
+            exit 1
+          fi
+          pull_request="$(
+            jq -c --arg sha "$GITHUB_SHA" \
+              '[.[][] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)][0]' \
+              <<<"$pull_requests"
+          )"
           head_ref="$(jq -r .head.ref <<<"$pull_request")"
           pr_number="$(jq -r .number <<<"$pull_request")"
           pr_title="$(jq -r .title <<<"$pull_request")"
           labels="$(jq -r '[.labels[].name] | join(",")' <<<"$pull_request")"
+          if [[ "$head_ref" == release-please--* ]]; then
+            head_sha="$(jq -r '.head.sha // empty' <<<"$pull_request")"
+            expected_base="$PUSH_BEFORE"
+            if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+              expected_base="$(git rev-parse "$GITHUB_SHA^")"
+            fi
+            read -r merge_sha base_sha extra_parent \
+              < <(git rev-list --parents -n 1 "$GITHUB_SHA")
+            [[ "$merge_sha" == "$GITHUB_SHA" \
+              && "$base_sha" =~ ^[0-9a-f]{40}$ \
+              && -z "${extra_parent:-}" \
+              && "$base_sha" == "$expected_base" ]] || {
+              echo "Release follow-up must have the push before SHA as its only parent." >&2
+              exit 1
+            }
+            repository_id="$(gh api "repos/$GITHUB_REPOSITORY" --jq .id)"
+            [[ "$repository_id" =~ ^[0-9]+$ ]] || {
+              echo "Repository identity is unavailable." >&2
+              exit 1
+            }
+            rules="$(gh api "repos/$GITHUB_REPOSITORY/rules/branches/main")" || {
+              echo "Cannot verify the required release-follow-up workflow." >&2
+              exit 1
+            }
+            jq -e --argjson repository_id "$repository_id" '
+              any(
+                .[];
+                .type == "workflows" and
+                any(
+                  .parameters.workflows[]?;
+                  .path == ".github/workflows/release-follow-up-policy.yml" and
+                  .ref == "refs/heads/main" and
+                  .repository_id == $repository_id
+                )
+              )
+            ' <<<"$rules" >/dev/null || {
+              echo "Release follow-up was not protected by the exact trusted workflow." >&2
+              exit 1
+            }
+            expected_file_count="$(
+              gh api "repos/$GITHUB_REPOSITORY/pulls/$pr_number" --jq .changed_files
+            )"
+            [[ "$expected_file_count" =~ ^[0-9]+$ ]] || {
+              echo "Release follow-up changed-file count is unavailable." >&2
+              exit 1
+            }
+            files_json="$RUNNER_TEMP/release-follow-up-files.json"
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/pulls/$pr_number/files?per_page=100" \
+              > "$files_json"
+            actual_file_count="$(jq '[.[][]] | length' "$files_json")"
+            [[ "$actual_file_count" == "$expected_file_count" ]] || {
+              echo "Release follow-up file list is incomplete: expected $expected_file_count, received $actual_file_count." >&2
+              exit 1
+            }
+            jq -r '.[][] | .filename, (.previous_filename // empty)' \
+              "$files_json" > "$RUNNER_TEMP/release-follow-up-files"
+            commits_json="$RUNNER_TEMP/release-follow-up-commits.json"
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/pulls/$pr_number/commits?per_page=100" \
+              > "$commits_json"
+            trusted_root="$(mktemp -d "$RUNNER_TEMP/release-follow-up-policy.XXXXXX")"
+            git archive "$base_sha" | tar -x -C "$trusted_root"
+            actor="$(jq -r '.user.login // empty' <<<"$pull_request")"
+            actor_permission=""
+            if [[ "$actor" != "github-actions[bot]" ]]; then
+              encoded_actor="$(jq -rn --arg value "$actor" '$value | @uri')"
+              actor_permission="$(
+                gh api "repos/$GITHUB_REPOSITORY/collaborators/$encoded_actor/permission" \
+                  --jq '.permission // empty'
+              )"
+            fi
+            python3 "$trusted_root/scripts/release_policy.py" verify-release-follow-up \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$head_ref" \
+              --head-repo "$(jq -r '.head.repo.full_name // empty' <<<"$pull_request")" \
+              --head-sha "$head_sha" \
+              --actor "$actor" \
+              --actor-permission "$actor_permission" \
+              --changed-files "$RUNNER_TEMP/release-follow-up-files" \
+              --commits "$commits_json" \
+              --root "$trusted_root"
+          fi
           branch_strategy=main
           if [[ "$GITHUB_REPOSITORY" == "$CANONICAL_REPOSITORY" ]]; then
             branch_strategy=delivery
@@ -75,12 +164,12 @@ jobs:
             exit 0
           fi
 
-          if [[ "$head_ref" != release-please--* && "$head_ref" != "dev" && "$head_ref" != dev/* && ! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$labels," != *,hotfix,* ]]; then
+          if [[ "$head_ref" != release-please--* && "$head_ref" != "dev" && "$head_ref" != dev/* && "$head_ref" != "promote/next" && ! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$labels," != *,hotfix,* && ",$labels," != *,release-recovery,* ]]; then
             python3 scripts/release_policy.py boundary \
               --kind unexpected \
               --main-sha "$GITHUB_SHA" \
               --pull-request "$pr_number" \
-              --reason "Main commit lacks promotion or hotfix evidence" \
+              --reason "Main commit lacks promotion, hotfix, or release recovery evidence" \
               --output main-release-source.json \
               --github-output "$GITHUB_OUTPUT"
             exit 0
@@ -90,19 +179,34 @@ jobs:
           collect_boundary() {
             local main_sha="$1"
             local index="$2"
-            local boundary_pr pr_number head_sha boundary_head boundary_labels run_id candidate_sha proof
-            boundary_pr="$(
-              gh api "repos/$GITHUB_REPOSITORY/commits/$main_sha/pulls" \
-                --jq '[.[] | select(.merged_at != null and .base.ref == "main")] | last // empty'
+            local boundary_pr boundary_pr_count boundary_pull_requests
+            local pr_number head_sha boundary_head boundary_labels run_id candidate_sha proof
+            boundary_pull_requests="$(
+              gh api --paginate --slurp \
+                "repos/$GITHUB_REPOSITORY/commits/$main_sha/pulls?per_page=100"
             )"
-            [[ -n "$boundary_pr" ]] || {
+            boundary_pr_count="$(
+              jq --arg sha "$main_sha" \
+                '[.[][] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)] | length' \
+                <<<"$boundary_pull_requests"
+            )"
+            [[ "$boundary_pr_count" != "0" ]] || {
               echo "No reviewed pull request found for $main_sha."
               return 2
             }
+            [[ "$boundary_pr_count" == "1" ]] || {
+              echo "Commit $main_sha must have exactly one merged pull request with the same merge SHA; found $boundary_pr_count." >&2
+              return 1
+            }
+            boundary_pr="$(
+              jq -c --arg sha "$main_sha" \
+                '[.[][] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)][0]' \
+                <<<"$boundary_pull_requests"
+            )"
             boundary_head="$(jq -r .head.ref <<<"$boundary_pr")"
             boundary_labels="$(jq -r '[.labels[].name] | join(",")' <<<"$boundary_pr")"
-            if [[ "$boundary_head" != "dev" && "$boundary_head" != dev/* && ! "$boundary_head" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$boundary_labels," != *,hotfix,* ]]; then
-              echo "Commit $main_sha predates the promotion boundary."
+            if [[ "$boundary_head" != "dev" && "$boundary_head" != dev/* && "$boundary_head" != "promote/next" && ! "$boundary_head" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$boundary_labels," != *,hotfix,* && ",$boundary_labels," != *,release-recovery,* ]]; then
+              echo "Commit $main_sha predates the promotion or release recovery boundary."
               return 2
             fi
             pr_number="$(jq -r .number <<<"$boundary_pr")"
@@ -258,27 +362,26 @@ jobs:
           echo "$RELEASE_REASON" >> "$GITHUB_STEP_SUMMARY"
 
   release-pr:
-    name: release pull request
+    name: release pull request (human-only)
     needs: [source, capabilities]
     if: >-
       ${{ needs.capabilities.outputs.mode == 'release-pr' &&
       github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
+      release_created: ${{ steps.guard.outputs.release_created }}
+      tag_name: ${{ steps.guard.outputs.tag_name }}
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Open or update the release pull request
-        id: release
-        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+      - name: Fail closed before an opaque release pull request write
+        id: guard
+        run: |
+          echo "release_created=false" >> "$GITHUB_OUTPUT"
+          echo "tag_name=" >> "$GITHUB_OUTPUT"
+          echo "::error::Private Free degraded mode: Release Please cannot atomically bind its pre-PR Draft, label, and branch writes to an exact lifecycle lease. Automated release PR creation and updates are disabled. A human maintainer must create or update the release PR; later PR metadata and state changes must use scripts/pr_lifecycle.py."
+          exit 1
 
   dispatch-release-pr:
     name: dispatch release pull request artifacts

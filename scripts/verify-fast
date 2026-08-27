@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"
 cd "$repo_root"
 
 tier="${CSARC_CI_TIER:-fast}"
@@ -27,8 +28,9 @@ uv sync --locked --python "$UV_PYTHON"
 uv run ruff format --check src scripts tests
 uv run ruff check src scripts tests
 uv run mypy
-uv run pytest
+uv run pytest -m "not large"
 ./scripts/test-pr-policy
+./scripts/test-release-follow-up-gates
 ./scripts/test-issue-triage
 ./scripts/test-worktree-cleanup
 
@@ -48,5 +50,6 @@ if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
     "$smoke_root/project/scripts/lint-workflows-shell"
   fi
   "$smoke_root/project/scripts/test-pr-policy"
+  "$smoke_root/project/scripts/test-release-follow-up-gates"
   python3 -m json.tool "$smoke_root/project/.csarc/profile.json" >/dev/null
 fi

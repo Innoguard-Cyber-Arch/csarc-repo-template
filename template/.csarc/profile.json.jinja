@@ -5,7 +5,13 @@
   "language_profile": "{{ language }}",
   "modules": {
     "ci_cd": true,
+    "container": {{ "true" if (container_mode | default("none")) != "none" else "false" }},
     "python": {{ "true" if language in ["python", "python-typescript"] else "false" }},
     "typescript": {{ "true" if language in ["typescript", "python-typescript"] else "false" }}
+  },
+  "container": {
+    "mode": {{ (container_mode | default("none")) | tojson }},
+    "file": {{ (containerfile_path | default("")) | tojson }},
+    "smoke_command": {{ (container_smoke_command | default("")) | tojson }}
   }
 }
