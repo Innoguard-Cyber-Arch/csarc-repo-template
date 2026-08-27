@@ -3582,8 +3582,16 @@ test "$(
 grep -q 'test "$CANONICAL_RESULT" = success' \
   "$adoption_project/.github/workflows/ci.yml"
 # shellcheck disable=SC2016 # Match literal workflow variables.
-grep -Fq 'require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility' \
+grep -Fxq '          require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility' \
   "$adoption_project/.github/workflows/ci.yml"
+routed_runtime_probe="$fixture_root/routed-runtime-bypass.yml"
+sed 's/          require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility/          require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility || true/' \
+  "$adoption_project/.github/workflows/ci.yml" > "$routed_runtime_probe"
+if grep -Fxq '          require_routed "$RUN_DEEP" "$PYTHON_COMPATIBILITY_RESULT" python-compatibility' \
+  "$routed_runtime_probe"; then
+  echo "Generated aggregate accepted an error-swallowing runtime route."
+  exit 1
+fi
 # shellcheck disable=SC2016 # Match the literal workflow variable.
 grep -q 'test "$TYPESCRIPT_RESULT" = success' \
   "$adoption_project/.github/workflows/ci.yml"
