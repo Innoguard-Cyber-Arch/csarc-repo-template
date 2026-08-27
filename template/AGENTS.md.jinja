@@ -1,6 +1,11 @@
 <!-- BEGIN CSARC MANAGED BLOCK -->
 # {{ project_name }} agent instructions
 
+## Milestone 8 temporary operating mode
+
+- This template does not currently install CI/CD or dependency-update workflows. Do not add workflow files under `.github/workflows`, enable GitHub Actions, apply required status checks, or make CI a merge condition.
+- Use the smallest relevant local check for the approved change. Automated workflows return only after their purpose, trigger, required status, and cost ceiling are explicitly accepted.
+
 ## Scope and sources of truth
 
 - This file applies repository-wide. A nearer `AGENTS.md` may add subtree-specific guidance.
@@ -42,10 +47,10 @@ Existing-repository history changes start read-only: propose semantic story grou
 {% endif %}{% if language in ["typescript", "python-typescript"] %}- TypeScript setup: `corepack enable && pnpm install --frozen-lockfile`.
 {% endif %}{% if language == "ci" %}- Environment setup: no language toolchain install is required.
 {% endif %}- Site source check: `uv run --no-project python scripts/render_site.py --check`.
-- Required final check: `./scripts/verify`.
+- During the temporary suspension, `./scripts/verify` is a local check only and is not a merge requirement.
 {% if language in ["python", "python-typescript"] %}- Python iteration: `uv run ruff check <paths>`, `uv run mypy`, and `uv run pytest <test-path>`.
 {% endif %}{% if language in ["typescript", "python-typescript"] %}- TypeScript iteration: `pnpm exec biome check <paths>`, `pnpm exec tsc --noEmit`, and `pnpm exec vitest run <test-path>`.
-{% endif %}- Targeted commands speed up iteration but never replace the required final check.
+{% endif %}- Prefer the narrowest relevant local check while automation is suspended.
 
 ## Actions quota fallback
 
