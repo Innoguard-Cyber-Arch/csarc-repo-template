@@ -286,17 +286,14 @@ def bump_version(version: str, messages: list[str]) -> str | None:
 def aggregate_release_boundaries(  # noqa: C901
     boundaries: list[dict[str, Any]], main_sha: str, source_kind: str
 ) -> dict[str, object]:
-    """Combine verified promotions into one deterministic release boundary."""
+    """Combine verified main boundaries into one deterministic release batch."""
     if not boundaries:
-        raise ValueError("release boundary contains no promotion evidence")
+        raise ValueError("release boundary contains no source evidence")
     summaries: list[dict[str, object]] = []
     pull_requests: dict[int, dict[str, object]] = {}
     highest = "no-release"
     valid_routes = {
         "milestone",
-        "standalone-batch",
-        "isolated",
-        "dev-promotion",
         "hotfix",
         "release-recovery",
     }
@@ -304,18 +301,53 @@ def aggregate_release_boundaries(  # noqa: C901
         route = evidence.get("route")
         post_merge = evidence.get("post_merge")
         release = evidence.get("release")
-        if (
-            evidence.get("gate") != "passed"
-            or not isinstance(route, dict)
-            or route.get("kind") not in valid_routes
-            or not isinstance(post_merge, dict)
-            or post_merge.get("tree_identity") != "verified"
-            or not isinstance(release, dict)
-        ):
-            raise ValueError("release boundary has invalid promotion evidence")
+        if evidence.get("kind") == "main-strategy":
+            direct_pr = evidence.get("pull_request")
+            direct_main = evidence.get("main_sha")
+            if (
+                not isinstance(direct_pr, int)
+                or not isinstance(direct_main, str)
+                or not isinstance(release, dict)
+            ):
+                raise ValueError(
+                    "release boundary has invalid direct-main evidence"
+                )
+            route_kind = "main-strategy"
+            milestone = None
+            delivery_branch = None
+            promotion_run = None
+            included_issues: object = []
+            boundary_main = direct_main
+        else:
+            if (
+                evidence.get("gate") != "passed"
+                or evidence.get("release_eligible") is False
+                or not isinstance(route, dict)
+                or route.get("kind") not in valid_routes
+                or not isinstance(post_merge, dict)
+                or post_merge.get("tree_identity") != "verified"
+                or not isinstance(post_merge.get("main_sha"), str)
+                or not isinstance(release, dict)
+            ):
+                raise ValueError(
+                    "release boundary has invalid promotion evidence"
+                )
+            route_kind = str(route["kind"])
+            milestone = route.get("milestone")
+            delivery_branch = evidence.get("head_ref")
+            direct_pr = evidence.get("pull_request")
+            promotion_run = evidence.get("workflow_run")
+            included_issues = evidence.get("included_issues", [])
+            boundary_main = str(post_merge["main_sha"])
         intent = release.get("intent")
         if not isinstance(intent, str) or intent not in INTENT_RANK:
             raise ValueError("release boundary has invalid SemVer intent")
+        if evidence.get("kind") == "main-strategy" and evidence.get(
+            "eligible"
+        ) is not (intent != "no-release"):
+            raise ValueError(
+                "release boundary has invalid direct-main evidence"
+            )
         if INTENT_RANK[intent] > INTENT_RANK[highest]:
             highest = intent
         included = release.get("included_pull_requests")
@@ -342,13 +374,13 @@ def aggregate_release_boundaries(  # noqa: C901
             raise ValueError("release boundary batch intent is invalid")
         summaries.append(
             {
-                "kind": route["kind"],
-                "milestone": route.get("milestone"),
-                "delivery_branch": evidence.get("head_ref"),
-                "promotion_pr": evidence.get("pull_request"),
-                "promotion_main_sha": post_merge.get("main_sha"),
-                "promotion_run": evidence.get("workflow_run"),
-                "included_issues": evidence.get("included_issues", []),
+                "kind": route_kind,
+                "milestone": milestone,
+                "delivery_branch": delivery_branch,
+                "promotion_pr": direct_pr,
+                "promotion_main_sha": boundary_main,
+                "promotion_run": promotion_run,
+                "included_issues": included_issues,
                 "canary": evidence.get("canary"),
                 "full_check": evidence.get("full_check"),
             }
@@ -360,7 +392,7 @@ def aggregate_release_boundaries(  # noqa: C901
         "main_sha": main_sha,
         "eligible": highest != "no-release",
         "reason": (
-            f"verified promotion batch declares {highest} release intent"
+            f"verified release batch declares {highest} release intent"
             if highest != "no-release"
             else "all included pull requests are no-release changes"
         ),
@@ -412,7 +444,20 @@ def simple_release_boundary(
         "pull_request": pull_request,
         "eligible": eligible,
         "reason": explanation,
-        "release": {"intent": intent},
+        "release": {
+            "intent": intent,
+            "included_pull_requests": (
+                [
+                    {
+                        "number": pull_request,
+                        "title": title,
+                        "intent": intent,
+                    }
+                ]
+                if kind == "main-strategy" and pull_request is not None
+                else []
+            ),
+        },
     }
 
 

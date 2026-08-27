@@ -14,8 +14,7 @@ agent 執行工作需要知道的最短路徑。
 1. **選一張 Issue。** 先查 open／closed Issue、open Draft PR、remote branch 與既有
    worktree；若已有 owner 就 review 或協調接手，不再建立第二條 branch。
 2. **讓 route 可推導。** 有 Milestone 的 Issue 從對應 `dev/m*` 開 `type/<issue>-*`；
-   沒有 Milestone就從 `dev/next` 開。除非 Issue 已記錄獨立 soak／canary 或正式環境
-   hotfix，不要求使用者再選 branch 類型。
+   沒有 Milestone、hotfix 與 bot 更新都從 `main` 開短分支。不要求使用者再選 branch 類型。
 3. **及早開 Draft。** 有可說明的最小解法且 targeted check 通過後即可 push／開 Draft；
    body 寫 scope、已完成／待完成驗證、風險、依賴與不可平行合併項目。acceptance 未完成
    時不使用 `Closes`、`Fixes` 或 `Resolves`。
@@ -27,12 +26,14 @@ agent 執行工作需要知道的最短路徑。
 6. **依風險合併 delivery。** Routine PR 跑 policy／fast／stable aggregate；elevated PR
    升 full 並要求 human review。只有持有 #240 lifecycle lease 的 writer，或 degraded
    模式下的 human maintainer，可以執行 Ready／Draft／metadata／merge 寫入。
-7. **在 delivery boundary 才 promotion。** delivery owner 等 batch／Milestone scope
-   完成，先以 reviewed PR 同步 current `main`，再以 immutable base/head/tree 跑 full、
-   canary 三態與 promotion evidence。合併 `main` 後核對 tree identity，才進 release。
+7. **在 Milestone delivery boundary 才 promotion。** delivery owner 等 Milestone scope
+   完成，才以一張 reviewed PR 同步 current `main`，再以 immutable base/head/tree 跑 full、
+   canary 三態與 promotion evidence。ordinary PR 不因中途 main 前進而重複 sync；只有 owner
+   已明列的 dependency 可以提前同步。合併 `main` 後核對 tree identity，才進 release。
 
-`main → dev/*` 只走 reviewed sync，`Issue → dev/*` 只走 Issue PR，`dev/* → main` 只走
-promotion。不同 delivery branches 不互相 merge，也不直接 push。
+`main → dev/m*` 只走 reviewed sync，Milestone `Issue → dev/m*` 只走 Issue PR，
+`dev/m* → main` 只走 promotion。Standalone、hotfix 與 bot 都以短分支直接進 main；
+不同 delivery branches 不互相 merge，也不直接 push。
 
 ## 例外只看四類
 
@@ -47,9 +48,9 @@ promotion。不同 delivery branches 不互相 merge，也不直接 push。
 
 | 觀察 | 動作 | 恢復條件 |
 | --- | --- | --- |
-| 找不到正確 base、risk 不明或必要 `dev/next` 不存在 | 停止建立／合併；讓 owner 或 automation 修正 metadata／branch lifecycle | route 可由 live Issue 與 refs 唯一推導。 |
+| 找不到正確 base 或 risk 不明 | 停止建立／合併；讓 owner 或 automation 修正 metadata／branch lifecycle | route 可由 live Issue 與 refs 唯一推導。 |
 | Targeted／full test 失敗 | 保留 Draft，修正 production code 或測試；不把 check 改成無條件成功 | 同一 head 的必要 checks 全部通過。 |
-| `main` 或 PR head 漂移 | 使舊 verification／authorization 失效；重新 sync、解 conflict、重跑受影響 checks | 新 source、destination、tree 重新綁定 evidence。 |
+| Final promotion 的 `main` 或 PR head 漂移 | 使舊 promotion verification／authorization 失效；只為該 Milestone 重新 sync、解 conflict、重跑受影響 checks | 新 source、destination、tree 重新綁定 evidence。ordinary delivery PR 不因無關 main movement 失效。 |
 | 新 Draft event、blocking review、未完成 checklist | lease holder 中止 merge，不自動轉回 Ready | blocker 由有權者明確解除，重新完成 Ready gate。 |
 | Actions zero-step billing block | Routine 依下節；elevated／promotion 走 human fallback | exact SHA、完整本機驗證與未重現 controls 都有記錄。 |
 | Canary `blocked`／`unknown`（包含只設定一半） | 保存 artifact-only，不宣稱 external canary | full gate 仍成功；若產品要求 canary，維持 blocked。 |
@@ -79,21 +80,21 @@ promotion。不同 delivery branches 不互相 merge，也不直接 push。
 - **When** agent 建 Issue branch、targeted check 後開 Draft、完成 acceptance 與 full local
   verify、標 Ready 並通過 policy／fast／review。
 - **Then** exact candidate 只合併到該 `dev/m*`；不跑 release、不要求 contributor 選
-  promotion 路徑，非 default base 未自動關 Issue 時由 lifecycle 可稽核地補正。
+  promotion 路徑，也不因較新的 `main` 被擋；非 default base 未自動關 Issue 時由 lifecycle
+  可稽核地補正。
 
 ### 2. Standalone Issue
 
 - **Given** open Issue 沒有 Milestone、沒有獨立 soak／canary 理由且不是 hotfix。
 - **When** 開始工作並建立 PR。
-- **Then** base 自動選 `dev/next`；流程與 routine 相同，工作整合後等待批次 window，
-  不建立假 Milestone、永久 per-Issue dev branch 或直接送 `main`。
+- **Then** base 自動選 `main`；流程與 routine 相同，不建立假 Milestone或永久中間 branch。
 
 ### 3. Hotfix
 
 - **Given** Issue 記錄正式環境緊急缺陷、human maintainer 接受 hotfix 分類。
 - **When** standalone `fix/*` PR 對 `main` 建立。
 - **Then** 即使變更很小也跑 full、review、promotion evidence 與 tree identity；合併後
-  active delivery owners 各自以 reviewed sync 回灌，不直接 push。
+  不 fan-out 回灌 active delivery，各 Milestone 在自己的 final promotion 才納入。
 
 ### 4. 平行 agents
 
@@ -120,12 +121,12 @@ promotion。不同 delivery branches 不互相 merge，也不直接 push。
   promotion evidence 與 post-merge tree identity 都成立才交給 release-source。quota
   fallback 仍要 human 雙重證據，且不能發布。
 
-### 7. `dev/next` promotion 後被平台刪除
+### 7. Milestone delivery 完成後清理
 
-- **Given** repository 開啟 `delete_branch_on_merge`，`dev/next → main` promotion 完成。
-- **When** GitHub 嘗試刪 head branch或 hosted workflow 無法啟動。
-- **Then**平台 protection 應保留 branch；degraded fallback 只能依 exact merged PR／main
-  identity 冪等恢復。`delivery-sync` 遇到 missing `dev/next` 必須失敗，不能把空集合當成功。
+- **Given** `dev/m* → main` promotion 已完成，post-merge identity 通過。
+- **When** owner 清理 delivery 與必要的 `promote/m*` bridge。
+- **Then** 只刪除 exact 已驗證 refs；`main` 保持唯一永久 branch，不修改 repository-wide
+  branch auto-delete 設定，也不建立 replacement trunk。
 
 ## Ready 與 promotion 的最小 evidence
 

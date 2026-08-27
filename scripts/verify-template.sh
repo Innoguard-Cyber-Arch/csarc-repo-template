@@ -47,6 +47,9 @@ grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md
 grep -q '\[P0\].*\[P1\].*\[merge-blocker\]' docs/ci-policy.md
 grep -q 'release pull request (human-only)' docs/ci-policy.md
 grep -q 'Actions quota fallback attestation' docs/ci-policy.md
+grep -q '^## Concurrency 與外部 mutation$' docs/ci-policy.md
+grep -q 'repository-scoped lease' docs/ci-policy.md
+grep -q 'human maintainer 的 exact-head merge authorization' docs/ci-policy.md
 grep -q 'finalize-quota-fallback' docs/ci-policy.md
 grep -q 'verify-quota-main' docs/ci-policy.md
 grep -q 'release_eligible.*false' docs/ci-policy.md
@@ -55,10 +58,10 @@ cmp -s tests/test_promotion_gate.py template/tests/test_promotion_gate.py
 cmp -s scripts/pr_lifecycle.py template/scripts/pr_lifecycle.py
 cmp -s tests/test_pr_lifecycle.py template/tests/test_pr_lifecycle.py
 test -f .github/workflows/delivery-maintenance.yml
-test -f .github/workflows/dev-next-close.yml
+test ! -e .github/workflows/dev-next-close.yml
 test -f .github/workflows/promotion-post-merge.yml
 test -f template/.github/workflows/delivery-maintenance.yml
-test -f template/.github/workflows/dev-next-close.yml
+test ! -e template/.github/workflows/dev-next-close.yml
 test -f template/.github/workflows/promotion-post-merge.yml
 for workflow in .github/workflows/{pr-policy,promotion}.yml \
   template/.github/workflows/{pr-policy,promotion}.yml; do
@@ -262,10 +265,15 @@ grep -q '^## Actions quota fallback$' template/AGENTS.md.jinja
 grep -q 'structurally runs over its included Actions minutes' AGENTS.md
 grep -q 'runs over included Actions minutes' template/AGENTS.md.jinja
 grep -q 'Actions quota fallback note' AGENTS.md
+grep -q 'runner 尚未分配、steps 為空且 billing annotation 可驗證' \
+  docs/ci-policy.md
 grep -q 'failed payments.*spending limit' docs/ci-policy.md
 grep -q 'HEAD.*PR head SHA' docs/ci-policy.md
 grep -q 'Actions quota fallback attestation' docs/ci-policy.md
 grep -q 'Actions quota fallback note' docs/ci-policy.md
+grep -q 'exact PR/head' docs/ci-policy.md
+grep -q 'exact-head merge authorization' docs/ci-policy.md
+grep -q 'release_eligible.*false' docs/ci-policy.md
 grep -q 'runner 註記本身不構成證據' README.md
 grep -q 'runner 註記本身不構成證據' template/README.md.jinja
 if grep -R -F \
@@ -385,6 +393,8 @@ case "$2" in
   graphql)
     if [[ "${MOCK_STAGED_RULESET:-present}" == "absent" ]]; then
       printf '%s\n' '{"data":{"repository":{"id":"R_test","rulesets":{"nodes":[]}}}}'
+    elif [[ "${MOCK_STAGED_RULESET:-present}" == "legacy" ]]; then
+      printf '%s\n' '{"data":{"repository":{"id":"R_test","rulesets":{"nodes":[{"id":"RRS_legacy","name":"CSARC preserve dev next","enforcement":"ACTIVE","target":"BRANCH"}]}}}}'
     elif [[ "${MOCK_STAGED_RULESET:-present}" == "stale" ]]; then
       printf '%s\n' '{"data":{"repository":{"id":"R_test","rulesets":{"nodes":[{"id":"RRS_test","name":"CSARC protected branches","enforcement":"DISABLED","target":"BRANCH"}]}}}}'
     else
@@ -442,7 +452,12 @@ case "$2" in
       echo "Upgrade to GitHub Pro or make this repository public to enable this feature" >&2
       exit 1
     fi
-    printf '[]\n'
+    if [[ "${MOCK_STAGED_RULESET:-present}" == "legacy" ]] && \
+      ! grep -q 'api --method DELETE repos/acme/project/rulesets/77' "$MOCK_GH_LOG"; then
+      printf '%s\n' '[{"id":77,"name":"CSARC preserve dev next"}]'
+    else
+      printf '[]\n'
+    fi
     ;;
   repos/acme/project/rules/branches/main)
     if [[ "${MOCK_GOVERNANCE:-protected}" == "error" ]]; then
@@ -454,26 +469,6 @@ case "$2" in
       exit 0
     fi
     printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_review_thread_resolution":true,"required_approving_review_count":1}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"promotion"},{"context":"verify"},{"context":"title"}]}}]'
-    ;;
-  repos/acme/project/rules/branches/dev%2Fnext)
-    if [[ "${MOCK_GOVERNANCE:-protected}" == "error" ]]; then
-      echo "403 cannot inspect effective rules" >&2
-      exit 1
-    elif [[ "${MOCK_GOVERNANCE:-protected}" == "dev-next-incomplete" ]]; then
-      printf '[]\n'
-    else
-      printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"}]'
-    fi
-    ;;
-  repos/acme/project/rules/branches/csarc%2Fdev-next-preservation-ledger)
-    if [[ "${MOCK_GOVERNANCE:-protected}" == "error" ]]; then
-      echo "403 cannot inspect effective rules" >&2
-      exit 1
-    elif [[ "${MOCK_GOVERNANCE:-protected}" == "ledger-incomplete" ]]; then
-      printf '[]\n'
-    else
-      printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"}]'
-    fi
     ;;
   *)
     echo "Unexpected gh API path: $2" >&2
@@ -592,6 +587,8 @@ done
 team_plan="$(run_settings_fixture team)"
 grep -q 'Account plan: GitHub Team' <<<"$team_plan"
 grep -q 'APPLY policies/rulesets.json' <<<"$team_plan"
+legacy_plan="$(run_settings_fixture team plan "" false false protected legacy)"
+grep -q 'DELETE stale Ruleset: CSARC preserve dev next (77)' <<<"$legacy_plan"
 enterprise_plan="$(run_settings_fixture business_plus)"
 grep -q 'Account plan: GitHub Enterprise' <<<"$enterprise_plan"
 grep -q 'Enterprise-wide identity, audit, network' <<<"$enterprise_plan"
@@ -604,6 +601,12 @@ grep -q 'MISSING remote Ruleset' <<<"$free_missing_check"
 team_check="$(run_settings_fixture team check)"
 grep -q 'Repository governance ready' <<<"$team_check"
 grep -q 'All observable repository settings match policy' <<<"$team_check"
+if legacy_check="$(run_settings_fixture team check "" false false protected legacy 2>&1)"; then
+  echo "The retired dev/next Ruleset must fail repository checks."
+  exit 1
+fi
+grep -q 'Stale Ruleset must be removed: CSARC preserve dev next (77)' \
+  <<<"$legacy_check"
 if repository_mismatch="$(run_settings_fixture team check "" false false protected present "" mismatch 2>&1)"; then
   echo "Repository setting mismatches must fail checks."
   exit 1
@@ -644,16 +647,6 @@ if incomplete_check="$(run_settings_fixture team check "" false false incomplete
   exit 1
 fi
 grep -q 'missing non_fast_forward rule' <<<"$incomplete_check"
-if dev_next_incomplete="$(run_settings_fixture team check "" false false dev-next-incomplete 2>&1)"; then
-  echo "Missing dev/next preservation rules must fail governance checks."
-  exit 1
-fi
-grep -q 'dev/next is missing rules:' <<<"$dev_next_incomplete"
-if ledger_incomplete="$(run_settings_fixture team check "" false false ledger-incomplete 2>&1)"; then
-  echo "Missing ledger preservation rules must fail governance checks."
-  exit 1
-fi
-grep -q 'preservation ledger is missing rules:' <<<"$ledger_incomplete"
 if unavailable_check="$(run_settings_fixture team check "" false false error 2>&1)"; then
   echo "Unreadable effective branch rules must fail governance checks."
   exit 1
@@ -747,6 +740,9 @@ fi
 run_settings_fixture team apply >/dev/null
 grep -q 'api --method POST repos/acme/project/rulesets' \
   "$github_plan_fixture/team-apply.log"
+run_settings_fixture team apply "" false false protected legacy >/dev/null
+grep -q 'api --method DELETE repos/acme/project/rulesets/77' \
+  "$github_plan_fixture/team-apply-legacy.log"
 
 secret_scan_fixture="$fixture_root/secret-scan"
 clean_secret_fixture="$secret_scan_fixture/clean"
@@ -917,23 +913,76 @@ grep -q '內部限閱' README.md
 grep -q '線上整合證據' README.md
 test -f docs/live-integration.md
 test -f docs/ci-policy.md
-grep -q '模板 repo 的導入前基線是一般 PR update 約 14' docs/ci-policy.md
-grep -q '14→3／4 job-minute 規劃模型' docs/ci-policy.md
-grep -q '明確標示的 job-minute 規劃估算，不是 hosted 實測' docs/ci-policy.md
-# Backticks are literal documentation content.
-# shellcheck disable=SC2016
-grep -q 'Hosted duration 與 `ci-plan` artifact 僅作' docs/ci-policy.md
-grep -q '^optional telemetry' docs/ci-policy.md
-grep -q 'zero-step job 都不算 hosted success' docs/ci-policy.md
 cmp -s docs/ci-policy.md template/docs/ci-policy.md
-grep -q 'M7／交付必須等待成功 hosted runner' \
+python3 - <<'PY'
+from pathlib import Path
+
+
+def markdown_sections(path: str) -> dict[str, str]:
+    sections: dict[str, list[str]] = {}
+    current = ""
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            current = line[3:]
+            sections[current] = []
+        elif current:
+            sections[current].append(line)
+    return {heading: "\n".join(lines) for heading, lines in sections.items()}
+
+
+policy = markdown_sections("docs/ci-policy.md")
+topology = policy["Branch topology"]
+routing = policy["PR routing"]
+sync = policy["Main 同步與 Milestone promotion"]
+security = policy["安全掃描與治理頻率"]
+migration = policy["Migration"]
+if not all(token in topology for token in ("`main`", "`dev/m", "`fix/*`", "`automation/*`")):
+    raise SystemExit("CI policy does not define the main-only branch topology.")
+if not all(token in routing for token in ("Milestone Issue", "Standalone Issue", "Dependabot", "Hotfix")):
+    raise SystemExit("CI policy does not cover every direct and Milestone route.")
+if not all(
+    token in sync
+    for token in (
+        "type/* → dev/m*",
+        "reason=promotion",
+        "reason=explicit-dependency",
+        "sync/main-to-m",
+        "M7",
+        "M8",
+    )
+):
+    raise SystemExit("CI policy does not document lazy final-promotion sync.")
+if not all(
+    token in policy["CI 分層"]
+    for token in ("### 選配容器交付", "SPDX SBOM", "container_mode=none")
+):
+    raise SystemExit("CI policy does not preserve the optional container boundary.")
+if not all(token in security for token in ("OSV", "Zizmor", "fail closed")):
+    raise SystemExit("CI policy does not preserve security escalation rules.")
+if not all(
+    token in migration
+    for token in ("CSARC preserve dev next", "exact Ruleset name", "fail closed")
+):
+    raise SystemExit("CI policy does not retire the legacy Ruleset safely.")
+
+agents = Path("AGENTS.md").read_text(encoding="utf-8")
+template_agents = Path("template/AGENTS.md.jinja").read_text(encoding="utf-8")
+for content in (agents, template_agents):
+    if not all(
+        token in content
+        for token in (
+            "dev/m<milestone-number>-<slug>",
+            "Sync `main` at final promotion",
+            "early sync needs an owner-recorded dependency",
+            "standalone, hotfix, bot, release-please, and promotion work may target `main`",
+        )
+    ):
+        raise SystemExit("Agent guidance does not match the lazy-sync topology.")
+PY
+grep -q 'Main advance 不會批次回灌' \
   docs/adr/staged-delivery-and-verification.md
 grep -q 'Hosted telemetry 不可用不阻塞產品交付' \
   docs/specs/SPEC-005-continuous-verification-evidence.md
-grep -q '孤立 Issue 決策樹' docs/ci-policy.md
-grep -q 'dev/i<Issue 編號>-<簡稱>' docs/ci-policy.md
-grep -q 'Maintainer walkthrough' docs/ci-policy.md
-grep -q 'Home Assistant core CI' docs/ci-policy.md
 grep -q 'promotion 批次建立 SemVer' docs/index.html
 grep -q '只代表靜態與合成驗證通過' docs/live-integration.md
 test -x scripts/run-live-workflow-probe
@@ -1153,9 +1202,9 @@ PY
 grep -q '^## Working loop$' AGENTS.md
 grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
-grep -q "pull request chain ends there" AGENTS.md
-grep -q "Target the delivery branch or immediate stack parent" AGENTS.md
-grep -q 'Use closing keywords or mark Ready only after every PR and referenced-Issue item has evidence' AGENTS.md
+grep -Fq 'Use short-lived `dev/m<milestone-number>-<slug>` for Milestones' AGENTS.md
+grep -Fq 'Sync `main` at final promotion; early sync needs an owner-recorded dependency' AGENTS.md
+grep -Fq 'mark Ready only after every PR and referenced-Issue item has evidence' AGENTS.md
 grep -q 'one branch and worktree per independent task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
 grep -q 'gh issue develop' AGENTS.md
@@ -1171,8 +1220,8 @@ grep -Fq 'cloud-synced File Provider path' AGENTS.md
 grep -Fq 'cloud-synced File Provider path' template/AGENTS.md.jinja
 grep -Fq 'without routine user confirmation' AGENTS.md
 grep -Fq 'without routine user confirmation' template/AGENTS.md.jinja
-grep -Fq 'once per final tree' AGENTS.md
-grep -Fq 'once per final tree' template/AGENTS.md.jinja
+grep -Fq 'once per final candidate tree' AGENTS.md
+grep -Fq 'once per final candidate tree' template/AGENTS.md.jinja
 grep -q '^## References$' docs/milestone-description.md
 grep -q 'bounded' docs/agent-install.md
 grep -q '沿用、取代或駁回' docs/index.html
@@ -1364,8 +1413,21 @@ grep -q 'Complete every pull request checklist item' \
   .github/workflows/pr-policy.yml
 grep -q 'still has unchecked acceptance tasks' \
   .github/workflows/pr-policy.yml
-grep -q 'Only dev promotion or release-please may target main in dev mode.' \
+grep -q 'ready_for_review, converted_to_draft' .github/workflows/pr-policy.yml
+grep -q 'PR_DRAFT:' .github/workflows/pr-policy.yml
+grep -q 'A delivery promotion must use the promotion label.' \
   .github/workflows/pr-policy.yml
+grep -Fq 'branches: [main, "dev/m*"]' .github/workflows/promotion.yml
+grep -q 'Report non-applicable route' .github/workflows/promotion.yml
+grep -Fq -- '--force-with-lease="refs/heads/$source_ref:$source_sha"' \
+  .github/workflows/promotion-post-merge.yml
+grep -q 'source_tree.*candidate_tree' \
+  .github/workflows/promotion-post-merge.yml
+if grep -q 'select(. == "main" or . == "dev"' \
+  .github/workflows/delivery-maintenance.yml; then
+  echo "Delivery maintenance must reject an unmigrated legacy dev strategy."
+  exit 1
+fi
 grep -q '^  merge_group:$' .github/workflows/ci.yml
 grep -q '^  workflow_dispatch:$' .github/workflows/ci.yml
 if grep -q '^  push:$' .github/workflows/ci.yml; then
@@ -1409,7 +1471,7 @@ if grep -q '^  pull_request:$' .github/workflows/zizmor.yml; then
   echo "Standalone Zizmor must not duplicate change-aware CI audits."
   exit 1
 fi
-grep -q 'target-branch: dev/next' .github/dependabot.yml
+grep -q 'target-branch: main' .github/dependabot.yml
 uv run python - .github/dependabot.yml <<'PY'
 import sys
 
@@ -1429,7 +1491,7 @@ assert actions["groups"] == {
 }
 PY
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
-grep -q '"name": "CSARC preserve dev next"' policies/dev-next-ruleset.json
+test ! -e policies/dev-next-ruleset.json
 
 # Issues #74 and #110: keep the native dependency updater so its PRs trigger
 # required checks without another privileged identity. pnpm also enforces the
@@ -1453,9 +1515,6 @@ import json
 from pathlib import Path
 
 ruleset = json.loads(Path("policies/rulesets.json").read_text(encoding="utf-8"))
-dev_next_ruleset = json.loads(
-    Path("policies/dev-next-ruleset.json").read_text(encoding="utf-8")
-)
 rules = {rule["type"]: rule.get("parameters", {}) for rule in ruleset["rules"]}
 pull_request = rules["pull_request"]
 checks = {
@@ -1466,17 +1525,6 @@ if ruleset["enforcement"] != "active":
     raise SystemExit("The repository Ruleset must be active.")
 if "deletion" in rules:
     raise SystemExit("General dev/* governance must allow short-branch cleanup.")
-if dev_next_ruleset["conditions"]["ref_name"] != {
-    "include": [
-        "refs/heads/dev/next",
-        "refs/heads/csarc/dev-next-preservation-ledger",
-    ],
-    "exclude": [],
-} or {rule["type"] for rule in dev_next_ruleset["rules"]} != {
-    "deletion",
-    "non_fast_forward",
-}:
-    raise SystemExit("Preservation rules must target only the two durable refs.")
 if pull_request["required_approving_review_count"] < 1:
     raise SystemExit("The repository Ruleset must require approval.")
 if not pull_request["require_code_owner_review"]:
@@ -1486,10 +1534,7 @@ if not {"promotion", "verify", "title"} <= checks:
 if "delivery-sync" in checks:
     raise SystemExit("The retired delivery-sync context would stay pending.")
 PY
-grep -q '"refs/heads/dev/\*"' policies/rulesets.json
-grep -q '"refs/heads/dev/next"' policies/dev-next-ruleset.json
-grep -q '"refs/heads/csarc/dev-next-preservation-ledger"' \
-  policies/dev-next-ruleset.json
+grep -q '"refs/heads/dev/m\*"' policies/rulesets.json
 
 pr_title_pattern='^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+'
 valid_pr_title() {
@@ -2127,11 +2172,11 @@ grep -q '^## Scope and sources of truth$' \
 grep -q '^## Commands$' "$fixture_root/default-project/AGENTS.md"
 grep -q '^## Code Review Rules$' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'work branch whose pull request chain ends there' \
+grep -Fq 'Use short-lived `dev/m<milestone-number>-<slug>` for Milestones' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'Target the delivery branch or immediate stack parent' \
+grep -Fq 'Sync `main` at final promotion; early sync needs an owner-recorded dependency' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'Use closing keywords or mark Ready only after every PR and referenced-Issue item has evidence' \
+grep -Fq 'mark Ready only after every PR and referenced-Issue item has evidence' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'one branch and worktree per independent task' \
   "$fixture_root/default-project/AGENTS.md"
@@ -2147,7 +2192,7 @@ grep -Fq 'cloud-synced File Provider path' \
   "$fixture_root/default-project/AGENTS.md"
 grep -Fq 'without routine user confirmation' \
   "$fixture_root/default-project/AGENTS.md"
-grep -Fq 'once per final tree' \
+grep -Fq 'once per final candidate tree' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'uv run pytest <test-path>' \
   "$fixture_root/default-project/AGENTS.md"
@@ -2165,12 +2210,12 @@ if grep -q 'pnpm exec vitest' "$fixture_root/default-project/AGENTS.md"; then
 fi
 test "$(cat "$fixture_root/default-project/CLAUDE.md")" = "@AGENTS.md"
 test -f "$fixture_root/default-project/policies/rulesets.json"
-test -f "$fixture_root/default-project/policies/dev-next-ruleset.json"
+test ! -e "$fixture_root/default-project/policies/dev-next-ruleset.json"
 test -f "$fixture_root/default-project/.github/workflows/governance-comment.yml"
 test -f "$fixture_root/default-project/.github/workflows/promotion.yml"
 test -f "$fixture_root/default-project/.github/workflows/promotion-post-merge.yml"
 test -f "$fixture_root/default-project/.github/workflows/delivery-maintenance.yml"
-test -f "$fixture_root/default-project/.github/workflows/dev-next-close.yml"
+test ! -e "$fixture_root/default-project/.github/workflows/dev-next-close.yml"
 # The GitHub expression is literal workflow content.
 # shellcheck disable=SC2016
 grep -Fq 'CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}' \
@@ -2182,27 +2227,15 @@ grep -Fq -- '--candidate-sha "$CANDIDATE_SHA"' \
 test -f "$fixture_root/default-project/docs/ci-policy.md"
 # Backticks are literal documentation content.
 # shellcheck disable=SC2016
-grep -q '穩定的 `verify` aggregate context' \
+grep -q '穩定 required aggregate' \
   "$fixture_root/default-project/docs/ci-policy.md"
-grep -q '明確標示的 job-minute 規劃估算，不是 hosted 實測' \
+grep -q 'runner 尚未分配、steps 為空' \
   "$fixture_root/default-project/docs/ci-policy.md"
-grep -q '14→3／4 job-minute 規劃模型' \
-  "$fixture_root/default-project/docs/ci-policy.md"
-# Backticks are literal documentation content.
-# shellcheck disable=SC2016
-grep -q 'Hosted duration 與 `ci-plan` artifact 僅作' \
-  "$fixture_root/default-project/docs/ci-policy.md"
-grep -q '^optional telemetry' \
-  "$fixture_root/default-project/docs/ci-policy.md"
-grep -q 'zero-step job 都不算 hosted success' \
-  "$fixture_root/default-project/docs/ci-policy.md"
-grep -q '孤立 Issue 決策樹' \
-  "$fixture_root/default-project/docs/ci-policy.md"
-grep -q 'dev/i<Issue 編號>-<簡稱>' \
+grep -q '`main` 是唯一永久整合 branch' \
   "$fixture_root/default-project/docs/ci-policy.md"
 grep -q 'Delivery route' \
   "$fixture_root/default-project/docs/index.html"
-grep -q 'dev/i<Issue 編號>-<簡稱>' \
+grep -q '只有 `main` 是永久 branch' \
   "$fixture_root/default-project/README.md"
 grep -Fqx '@jachline28' "$fixture_root/default-project/.github/REVIEWERS"
 grep -q '^  pull_request:$' \
@@ -2232,7 +2265,7 @@ grep -q '"context": "promotion"' \
   "$fixture_root/default-project/policies/rulesets.json"
 test -f \
   "$fixture_root/default-project/.github/workflows/release-follow-up-policy.yml"
-grep -q '"refs/heads/dev/\*"' \
+grep -q '"refs/heads/dev/m\*"' \
   "$fixture_root/default-project/policies/rulesets.json"
 test -x "$fixture_root/default-project/scripts/apply-repository-settings.sh"
 test -x "$fixture_root/default-project/scripts/check-update-conflicts"
@@ -2258,9 +2291,9 @@ grep -q '^## Actions quota fallback$' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'scripts/pr_lifecycle.py' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q '^## PR lifecycle single-writer$' \
+grep -q '^## Concurrency 與外部 mutation$' \
   "$fixture_root/default-project/docs/ci-policy.md"
-grep -q 'Actions quota fallback attestation' \
+grep -q 'human maintainer 的 exact-head merge authorization' \
   "$fixture_root/default-project/docs/ci-policy.md"
 grep -q 'finalize-quota-fallback' \
   "$fixture_root/default-project/docs/ci-policy.md"
@@ -2365,9 +2398,9 @@ grep -q '^# tracking: story$' \
   "$fixture_root/default-project/docs/specs/SPEC-001-example.md"
 test -x "$fixture_root/default-project/scripts/test-issue-triage"
 test -x "$fixture_root/default-project/scripts/validate-issue-title"
-grep -q 'branches: \[main, dev, "dev/\*\*"\]' \
+grep -q 'branches: \[main, "dev/m\*"\]' \
   "$fixture_root/default-project/.github/workflows/spec-to-issue.yml"
-grep -q 'target-branch: dev/next' \
+grep -q 'target-branch: main' \
   "$fixture_root/default-project/.github/dependabot.yml"
 grep -q '^requires-python = ">=3.14,<3.15"$' \
   "$fixture_root/default-project/pyproject.toml"
@@ -2773,7 +2806,7 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data project_slug="typescript-test" \
   --data $'project_description=A "quoted" project\n第二行' \
   --data language=typescript \
-  --data branch_strategy=dev \
+  --data branch_strategy=main \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/typescript-project"
 prime_validation_cache "$fixture_root/typescript-project"
@@ -2799,13 +2832,13 @@ assert package["repository"]["url"] == (
 PY
 grep -q '"language_profile": "typescript"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
-grep -q '"branch_strategy": "dev"' \
+grep -q '"branch_strategy": "main"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
 # Backticks are literal documentation content.
 # shellcheck disable=SC2016
-grep -q 'pull request chain ends at `dev`' \
+grep -q 'pull request chain ends at `main`' \
   "$fixture_root/typescript-project/AGENTS.md"
-grep -q 'Target `dev` or the immediate stack parent' \
+grep -q 'Target `main` or the immediate stack parent' \
   "$fixture_root/typescript-project/AGENTS.md"
 grep -q '^  merge_group:$' \
   "$fixture_root/typescript-project/.github/workflows/ci.yml"
@@ -2814,10 +2847,8 @@ if grep -q '^  push:$' \
   echo "Generated CI must not repeat a verified tree after merge."
   exit 1
 fi
-grep -q 'target-branch: dev' \
+grep -q 'target-branch: main' \
   "$fixture_root/typescript-project/.github/dependabot.yml"
-grep -q '"refs/heads/dev"' \
-  "$fixture_root/typescript-project/policies/rulesets.json"
 test "$("$fixture_root/typescript-project/scripts/detect-language-profile" --suggest)" = \
   "typescript"
 test -f "$fixture_root/typescript-project/package.json"
@@ -3443,6 +3474,28 @@ update_project="$fixture_root/update-project"
 mkdir -p "$update_source"
 git -C "$repo_root" archive HEAD | tar -x -C "$update_source"
 
+# Model the retired template schema so Copier can reconstruct the old copy
+# before the new template's pre-migration normalizes the saved answer.
+python3 - "$update_source/copier.yml" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+source = path.read_text(encoding="utf-8")
+needle = """  choices:
+    Main with short-lived Milestone delivery branches: delivery
+    Short branch → pull request → main: main
+"""
+replacement = """  choices:
+    Main with short-lived Milestone delivery branches: delivery
+    Legacy permanent dev branch: dev
+    Short branch → pull request → main: main
+"""
+if source.count(needle) != 1:
+    raise SystemExit("Could not prepare the legacy branch strategy fixture")
+path.write_text(source.replace(needle, replacement), encoding="utf-8")
+PY
+
 git -C "$update_source" init -b main
 git -C "$update_source" config user.name "Template Test"
 git -C "$update_source" config user.email "template-test@example.invalid"
@@ -3480,9 +3533,11 @@ uv run copier copy --trust --defaults --overwrite --vcs-ref v0.1.0 \
   "${fixture_security_args[@]}" \
   --data project_mode=existing \
   --data language=python-typescript \
+  --data branch_strategy=dev \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$update_source" "$update_project"
 grep -q 'project_mode: existing' "$update_project/.copier-answers.yml"
+grep -q 'branch_strategy: dev' "$update_project/.copier-answers.yml"
 grep -q '"template_mode": "existing"' \
   "$update_project/.csarc/profile.json"
 grep -q '^owner = "legacy"$' "$update_project/pyproject.toml"
@@ -3543,6 +3598,26 @@ grep -q 'docs/decisions/' "$update_project/docs/README.md"
 grep -q 'Never store a raw conversation transcript' \
   "$update_project/AGENTS.md"
 grep -q '_commit: v0.1.1' "$update_project/.copier-answers.yml"
+grep -q 'branch_strategy: main' "$update_project/.copier-answers.yml"
+if grep -q 'branch_strategy: dev' "$update_project/.copier-answers.yml"; then
+  echo "Copier update did not migrate the legacy dev branch strategy."
+  exit 1
+fi
+grep -q 'test_gate_skips_ordinary_work_and_checks_final_promotion' \
+  "$update_project/tests/test_delivery_sync.py"
+if grep -q 'active_delivery_branches = MODULE' \
+  "$update_project/tests/test_delivery_sync.py"; then
+  echo "Copier update preserved the retired delivery fan-out regression."
+  exit 1
+fi
+grep -q 'test_promotion_main_evidence_fails_closed' \
+  "$update_project/tests/test_promotion_gate.py"
+grep -q 'test_release_boundary_aggregates_direct_main_and_promotion_history' \
+  "$update_project/tests/test_release_policy.py"
+grep -q '"branch_strategy": "main"' \
+  "$update_project/.csarc/profile.json"
+grep -q 'target-branch: main' \
+  "$update_project/.github/dependabot.yml"
 prime_validation_cache "$update_project"
 (
   cd "$update_project"

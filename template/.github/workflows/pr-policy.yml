@@ -60,15 +60,12 @@ jobs:
             echo "::notice::Metadata synchronization starts after the rollout PR reaches its base branch."
           fi
       - name: Validate pull request policy
-        id: policy
         if: ${{ github.event_name == 'pull_request' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_BASE: ${{ github.event.pull_request.base.ref }}
           PR_BRANCH_STRATEGY: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && 'delivery' || '' }}
-          PR_DELIVERY_CUTOVER_ISSUE: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && '185' || '0' }}
-          PR_DEVELOPMENT_CUTOVER_PR: ${{ github.repository == 'Innoguard-Cyber-Arch/csarc-repo-template' && '306' || '1' }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_DRAFT: ${{ github.event.pull_request.draft }}
           PR_HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
@@ -171,13 +168,13 @@ jobs:
             fi
           fi
 
-          if [[ "$branch_strategy" != "main" && "$branch_strategy" != "dev" && "$branch_strategy" != "delivery" ]]; then
-            echo "branch_strategy must be main, dev, or delivery."
+          if [[ "$branch_strategy" != "main" && "$branch_strategy" != "delivery" ]]; then
+            echo "branch_strategy must be main or delivery."
             exit 1
           fi
-          delivery_cutover_issue="${PR_DELIVERY_CUTOVER_ISSUE:-0}"
-          if [[ ! "$delivery_cutover_issue" =~ ^[0-9]+$ ]]; then
-            echo "PR_DELIVERY_CUTOVER_ISSUE must be a non-negative integer."
+
+          if [[ ",${PR_LABELS:-}," == *,hotfix,* && ( "$pr_title_type" != "fix" || "$PR_HEAD" != fix/* || "$PR_BASE" != "main" ) ]]; then
+            echo "A hotfix must be a fix/* branch targeting main with a fix title."
             exit 1
           fi
 
@@ -220,16 +217,8 @@ jobs:
             rm "$release_files" "$release_commits"
             exit 0
           fi
-          if [[ "$branch_strategy" == "dev" && "$PR_BASE" == "main" ]]; then
-            if [[ "$PR_HEAD" == "dev" ]]; then
-              exit 0
-            fi
-            echo "Only dev promotion or release-please may target main in dev mode."
-            exit 1
-          fi
-
           if [[ "$branch_strategy" == "delivery" ]]; then
-            if [[ "$PR_HEAD" =~ ^sync/main-to-(m[0-9]+-[a-z0-9][a-z0-9-]*|i[0-9]+-[a-z0-9][a-z0-9-]*|next)-[0-9a-f]{7,40}$ ]]; then
+            if [[ "$PR_HEAD" =~ ^sync/main-to-(m[0-9]+-[a-z0-9][a-z0-9-]*)-[0-9a-f]{7,40}$ ]]; then
               if [[ "$PR_BASE" == "dev/${BASH_REMATCH[1]}" ]]; then
                 exit 0
               fi
@@ -238,13 +227,10 @@ jobs:
             fi
 
             if [[ "$PR_HEAD" == dependabot/* || "$PR_HEAD" == automation/* ]]; then
-              if [[ "$PR_BASE" == "dev/next" ]]; then
-                if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-                  echo "delivery_base=$PR_BASE" >> "$GITHUB_OUTPUT"
-                fi
+              if [[ "$PR_BASE" == "main" ]]; then
                 exit 0
               fi
-              echo "Automated maintenance must target dev/next in delivery mode."
+              echo "Automated maintenance must target main."
               exit 1
             fi
 
@@ -254,23 +240,12 @@ jobs:
               promotion=true
               promotion_milestone="${BASH_REMATCH[1]}"
             elif [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^promote/m([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
-              if [[ ",${PR_LABELS:-}," != *,promotion,* ]]; then
-                echo "A promotion bridge must use the promotion label."
-                exit 1
-              fi
               promotion=true
               promotion_milestone="${BASH_REMATCH[1]}"
-            elif [[ "$PR_BASE" == "main" && "$PR_HEAD" == "promote/next" ]]; then
-              if [[ ",${PR_LABELS:-}," != *,promotion,* ]]; then
-                echo "A promotion bridge must use the promotion label."
-                exit 1
-              fi
-              promotion=true
-            elif [[ "$PR_BASE" == "main" && "$PR_HEAD" =~ ^dev/i([0-9]+)-[a-z0-9][a-z0-9-]*$ ]]; then
-              promotion=true
-              promotion_issue="${BASH_REMATCH[1]}"
-            elif [[ "$PR_BASE" == "main" && "$PR_HEAD" == "dev/next" ]]; then
-              promotion=true
+            fi
+            if [[ "$promotion" == "true" && ",${PR_LABELS:-}," != *,promotion,* ]]; then
+              echo "A delivery promotion must use the promotion label."
+              exit 1
             fi
           elif [[ "$PR_HEAD" == dependabot/* || "$PR_HEAD" == automation/* ]]; then
             exit 0
@@ -466,32 +441,16 @@ jobs:
                 echo "The promotion Issue Milestone must match the delivery branch number."
                 exit 1
               fi
-              if [[ -n "${promotion_issue:-}" && "$issue_number" != "$promotion_issue" ]]; then
-                echo "An isolated delivery branch must match its promotion Issue number."
-                exit 1
-              fi
-              if [[ -z "${promotion_milestone:-}" && "$issue_milestone_number" != "0" ]]; then
-                echo "A standalone promotion Issue must not belong to a Milestone."
-                exit 1
-              fi
               exit 0
             fi
 
-            if (( delivery_cutover_issue > 0 && issue_number < delivery_cutover_issue )); then
+            if [[ "$release_recovery" == "true" ]]; then
+              exit 0
+            fi
+
+            if [[ "$issue_milestone_number" == "0" ]]; then
               expected_base_kind="exact"
               expected_base="main"
-            elif [[ "$PR_BASE" == "main" ]]; then
-              if [[ "$release_recovery" == "true" ]]; then
-                exit 0
-              fi
-              if [[ "$PR_HEAD" != fix/* || ",${PR_LABELS:-}," != *,hotfix,* || "$issue_milestone_number" != "0" ]]; then
-                echo "Only a release recovery or standalone fix labeled hotfix may target main directly in delivery mode."
-                exit 1
-              fi
-              exit 0
-            elif [[ "$issue_milestone_number" == "0" ]]; then
-              expected_base_kind="exact"
-              expected_base="dev/next"
             else
               expected_base_kind="milestone"
               expected_base="dev/m${issue_milestone_number}-"
@@ -504,6 +463,10 @@ jobs:
           base_branch="$PR_BASE"
           seen_bases="|"
           while true; do
+            if [[ "$base_branch" == "dev/next" ]]; then
+              echo "Legacy dev/next cannot be used as a pull request base or stack route."
+              exit 1
+            fi
             if [[ "$expected_base_kind" == "exact" && "$base_branch" == "$expected_base" ]]; then
               break
             fi
@@ -535,15 +498,13 @@ jobs:
             fi
             base_branch="${parent_bases[0]}"
           done
-          if [[ "$branch_strategy" == "delivery" && -n "${GITHUB_OUTPUT:-}" ]]; then
-            echo "delivery_base=$base_branch" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Require the proposed head to contain current main
-        if: ${{ github.event_name == 'pull_request' }}
+      - name: Require final promotion to contain current main
+        if: >-
+          ${{ github.event_name == 'pull_request' &&
+          github.event.pull_request.base.ref == 'main' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BASE: ${{ github.event.pull_request.base.ref }}
-          PR_DELIVERY_BASE: ${{ steps.policy.outputs.delivery_base }}
           PR_HEAD: ${{ github.event.pull_request.head.ref }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -551,7 +512,6 @@ jobs:
           python3 scripts/delivery_sync.py gate
           --repo "$GITHUB_REPOSITORY"
           --base "$PR_BASE"
-          --delivery-base "$PR_DELIVERY_BASE"
           --head-ref "$PR_HEAD"
           --head-sha "$PR_HEAD_SHA"
           --pr-number "$PR_NUMBER"
