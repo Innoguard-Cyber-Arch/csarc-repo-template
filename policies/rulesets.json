@@ -20,18 +20,6 @@
         "required_approving_review_count": 1,
         "required_review_thread_resolution": true
       }
-    },
-    {
-      "type": "required_status_checks",
-      "parameters": {
-        "do_not_enforce_on_create": true,
-        "strict_required_status_checks_policy": true,
-        "required_status_checks": [
-          {"context": "promotion"},
-          {"context": "verify"},
-          {"context": "title"}
-        ]
-      }
     }
   ]
 }

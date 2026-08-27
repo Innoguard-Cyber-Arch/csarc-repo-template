@@ -1,5 +1,12 @@
 # Repository instructions
 
+## Milestone 8 temporary operating mode
+
+- CI/CD and dependency-update automation are suspended. Do not add workflow files under `.github/workflows`, enable GitHub Actions, dispatch workflows, apply required status checks, or make CI a merge condition.
+- Review and implement one documentation page or section at a time. Maintainer-approved wording is the specification for that page; do not infer adjacent product work.
+- Use the smallest relevant local check for the page being changed. The legacy full verification and release procedures below are historical guidance until their replacement is explicitly approved.
+- Resume an automated workflow only through a separate Issue that states its purpose, trigger, required status, and cost ceiling.
+
 ## Scope and sources of truth
 
 - This file applies to the whole repository. Read a nearer `AGENTS.md` only if a future subtree genuinely needs different commands or safety rules.
@@ -40,8 +47,8 @@ Duplicate triage may close an Issue without code changes when it links the canon
 - Environment setup: `uv sync --locked --python 3.14`.
 - Python iteration: `uv run ruff check <paths>`, `uv run mypy <paths>`, and `uv run pytest <test-path>`.
 - Site source check: `python3 scripts/render_site.py --check`.
-- Required final check: `./scripts/verify-template.sh`.
-- Use the narrowest relevant check while iterating, but never replace the required final check with a partial result.
+- During Milestone 8, use the narrowest relevant local check for the approved page or section.
+- `./scripts/verify-template.sh` belongs to the suspended CI/CD design and is not a merge requirement while this temporary mode is active.
 
 ## Actions quota fallback
 

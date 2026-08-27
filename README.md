@@ -1,10 +1,11 @@
 # CSARC Repo Template
 
-[![CI](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/workflows/ci.yml/badge.svg)](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/workflows/ci.yml)
-
 Cyber-Arch 的可更新 repo 公版，支援 CI/CD-only、Python、TypeScript 或兩者並用。新案、既有案與後續政策更新都經 Copier 形成可審查差異。
 
 目前公版：v0.12.2 <!-- x-release-please-version -->
+
+> [!IMPORTANT]
+> Milestone 8 正在逐頁重定義產品規格。CI/CD 與自動相依更新目前全部停用並移出可執行路徑；以下既有自動化說明暫作歷史參考，不代表目前啟用能力。
 
 [開啟內部網站與完整決策說明](docs/index.html)（內部限閱，請勿公開分享此連結；`noindex`／`robots.txt` 只是臨時防護，不是存取控制，詳見網站內「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)）
 
