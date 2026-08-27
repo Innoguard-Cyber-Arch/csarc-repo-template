@@ -846,6 +846,10 @@ gh auth status`
           released: '2026-08-13',
           stars: '1,198',
           group: 'primary',
+          coverage: {
+            full: ['01', '02', '08'],
+            partial: ['03', '04', '07', '10']
+          },
           selfPosition: 'Agent-ready repository framework：把 AI 工作規則、持久計畫、驗證與安全更新放進 repo。',
           difference: [
             'Repository Harness 偏向替既有 repo 加上 agent 工作框架與安全更新機制。',
@@ -865,6 +869,10 @@ gh auth status`
           released: '2026-08-26',
           stars: '2,948',
           group: 'primary',
+          coverage: {
+            full: ['03', '06', '08'],
+            partial: ['01', '04', '05', '07', '10']
+          },
           selfPosition: 'Project generator：用一般程式語言宣告專案，持續 synth 出受管設定與工作流程。',
           difference: [
             'projen 把 .projenrc 當唯一來源，大量生成檔不允許直接修改。',
@@ -1026,7 +1034,21 @@ gh auth status`
           differenceList.append(item);
         });
         differenceCell.append(differenceList);
-        row.append(nameCell, versionCell, starsCell, positionCell, differenceCell);
+        const coverageCell = document.createElement('td');
+        const coverageList = document.createElement('div');
+        coverageList.className = 'coverage-tags';
+        for (const level of ['full', 'partial']) {
+          tool.coverage[level].forEach(code => {
+            const tag = document.createElement('span');
+            tag.className = `coverage-tag ${level}`;
+            tag.textContent = code;
+            tag.title = `${code}：${level === 'full' ? '完全符合' : '部分符合'}`;
+            tag.setAttribute('aria-label', tag.title);
+            coverageList.append(tag);
+          });
+        }
+        coverageCell.append(coverageList);
+        row.append(nameCell, versionCell, starsCell, positionCell, differenceCell, coverageCell);
         primaryBody.append(row);
       });
 
@@ -1109,7 +1131,7 @@ gh auth status`
       const similarToolsCurrent = onSimilarTools ? ' active-selection" aria-current="page' : '';
       const bridgeCurrent = onBridge ? ' active-bridge" aria-current="page' : '';
       const reviewNotesCurrent = onReviewNotes ? ' active-overview" aria-current="page' : '';
-      const similarToolsLink = similarToolsSlide ? `<a class="journey-bookend appendix${similarToolsCurrent}" href="#${similarToolsPage}">相似工具 01</a>` : '';
+      const similarToolsLink = similarToolsSlide ? `<a class="journey-bookend appendix${similarToolsCurrent}" href="#${similarToolsPage}">相似工具</a>` : '';
       slide.insertAdjacentHTML('afterbegin', `<aside class="journey-rail" aria-label="簡報目錄"><h3>使用公版</h3><ol class="journey-use">${useItems}</ol><h3>開發與維護</h3><ol class="journey-main">${mainItems}</ol><h3>公版管理</h3><ol class="journey-support">${supportItems}</ol><a class="journey-bookend appendix${bridgeCurrent}" href="#${bridgePage}">五月盤點</a><a class="journey-bookend appendix${selectionCurrent}" href="#${ecosystemPage}">工具附錄</a>${similarToolsLink}<a class="journey-bookend appendix${reviewNotesCurrent}" href="#${reviewNotesPage}">決策附錄</a></aside>`);
       const activeJourney = journey.find(item => item.id === activeTrack);
       const contextLine = slide.querySelector('.context-line');

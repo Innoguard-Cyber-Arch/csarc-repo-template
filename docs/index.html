@@ -377,6 +377,7 @@
     .similar-tools-legend span { padding: 5px 8px; border-left: 6px solid; }
     .similar-tools-legend .competitor { border-color: #b9a700; background: #fffbea; }
     .similar-tools-legend .reference { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
+    .similar-tools-legend .coverage-key { border-color: #999; background: var(--soft); }
     .similar-tools-table-wrap {
       flex: 1;
       min-height: 0;
@@ -414,16 +415,34 @@
     .similar-tools-matrix tbody tr:nth-child(even) td { background: #fafaf8; }
     .similar-tools-matrix td strong { color: #174f8b; }
     .similar-tools-matrix td a { color: #174f8b; text-underline-offset: 2px; }
-    .similar-tools-primary-matrix { min-height: 0; font-size: 16px; line-height: 1.3; }
+    .similar-tools-primary-matrix { min-height: 0; font-size: 15px; line-height: 1.28; }
     .similar-tools-primary-wrap { flex: 0 0 auto; min-height: auto; overflow: visible; }
-    .similar-tools-primary-matrix thead th:first-child { width: 17%; }
-    .similar-tools-primary-matrix thead th:nth-child(2) { width: 17%; }
-    .similar-tools-primary-matrix thead th:nth-child(3) { width: 15%; }
-    .similar-tools-primary-matrix thead th:nth-child(4) { width: 23%; }
-    .similar-tools-primary-matrix thead th:nth-child(5) { width: 28%; }
-    .similar-tools-primary-matrix tbody th { width: 17%; font-size: 16px; }
+    .similar-tools-primary-matrix thead th:first-child { width: 13%; }
+    .similar-tools-primary-matrix thead th:nth-child(2) { width: 14%; }
+    .similar-tools-primary-matrix thead th:nth-child(3) { width: 13%; }
+    .similar-tools-primary-matrix thead th:nth-child(4) { width: 21%; }
+    .similar-tools-primary-matrix thead th:nth-child(5) { width: 25%; }
+    .similar-tools-primary-matrix thead th:nth-child(6) { width: 14%; }
+    .similar-tools-primary-matrix tbody th { width: 13%; font-size: 15px; }
     .similar-tools-primary-matrix td ul { margin: 0; padding-left: 18px; }
     .similar-tools-primary-matrix td li + li { margin-top: 4px; }
+    .coverage-tags { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px; }
+    .coverage-tag {
+      display: inline-flex;
+      min-width: 29px;
+      min-height: 23px;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 6px;
+      border-radius: 999px;
+      color: white;
+      font-size: 12px;
+      font-style: normal;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .coverage-tag.full { background: var(--best); }
+    .coverage-tag.partial { background: var(--optional); }
     .similar-tools-philosophies { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); background: white; }
     .similar-tools-philosophies article { padding: 9px 12px; border-bottom: 1px solid var(--line); }
     .similar-tools-philosophies article:nth-child(even) { background: #fafaf8; }
@@ -1579,19 +1598,20 @@
       <p class="ecosystem-reference reference">Ref. Official project repositories linked above; logo assets from each project's brand kit.</p>
     </section>
 
-    <section class="slide similar-tools-slide" data-audience="maintainer" aria-label="工作定義與相似開源工具對照">
+    <section class="slide similar-tools-slide" data-audience="maintainer" aria-label="相似開源工具對照">
       <header>
         <span class="selection-sequence">維運附錄｜相似工具</span>
-        <h2><span class="accent">01 工作定義</span>｜相似工具</h2>
-        <p class="subtitle">先看整體設計目的真正接近的套件，再向右切換到各種工作哲學的局部參考。</p>
+        <h2><span class="accent">相似工具</span>｜整體競品與局部參考</h2>
+        <p class="subtitle">所有相似工具集中在這裡：先看整體目的接近的套件，再切換到各種工作哲學的局部參考。</p>
       </header>
       <div class="similar-tools-tabs" role="tablist" aria-label="相似工具內頁">
-        <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>01A｜整體接近</small>主要相似工具</button>
-        <button id="similar-tools-tab-philosophy" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-philosophy" data-similar-tools-tab="1"><small>01B｜局部能力</small>工作哲學參考</button>
+        <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>整體接近</small>主要相似工具</button>
+        <button id="similar-tools-tab-philosophy" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-philosophy" data-similar-tools-tab="1"><small>局部能力</small>工作哲學參考</button>
       </div>
       <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
         <div class="similar-tools-legend" aria-label="主要相似工具定義">
           <span class="competitor">整體目的接近｜後續逐一比較 01–10</span>
+          <span class="coverage-key"><i class="coverage-tag full">完整</i> 完全符合　<i class="coverage-tag partial">部分</i> 部分符合</span>
         </div>
         <div class="similar-tools-table-wrap similar-tools-primary-wrap" tabindex="0" role="region" aria-label="主要相似工具比較表">
           <table class="similar-tools-matrix similar-tools-primary-matrix">
@@ -1602,6 +1622,7 @@
                 <th scope="col">GitHub Stars<br>（擷取日）</th>
                 <th scope="col">自我定位</th>
                 <th scope="col">與本套件的差異</th>
+                <th scope="col">涵蓋旅程<br>（01–10）</th>
               </tr>
             </thead>
             <tbody data-similar-tools-primary-body></tbody>
@@ -2989,6 +3010,10 @@ gh auth status`
           released: '2026-08-13',
           stars: '1,198',
           group: 'primary',
+          coverage: {
+            full: ['01', '02', '08'],
+            partial: ['03', '04', '07', '10']
+          },
           selfPosition: 'Agent-ready repository framework：把 AI 工作規則、持久計畫、驗證與安全更新放進 repo。',
           difference: [
             'Repository Harness 偏向替既有 repo 加上 agent 工作框架與安全更新機制。',
@@ -3008,6 +3033,10 @@ gh auth status`
           released: '2026-08-26',
           stars: '2,948',
           group: 'primary',
+          coverage: {
+            full: ['03', '06', '08'],
+            partial: ['01', '04', '05', '07', '10']
+          },
           selfPosition: 'Project generator：用一般程式語言宣告專案，持續 synth 出受管設定與工作流程。',
           difference: [
             'projen 把 .projenrc 當唯一來源，大量生成檔不允許直接修改。',
@@ -3169,7 +3198,21 @@ gh auth status`
           differenceList.append(item);
         });
         differenceCell.append(differenceList);
-        row.append(nameCell, versionCell, starsCell, positionCell, differenceCell);
+        const coverageCell = document.createElement('td');
+        const coverageList = document.createElement('div');
+        coverageList.className = 'coverage-tags';
+        for (const level of ['full', 'partial']) {
+          tool.coverage[level].forEach(code => {
+            const tag = document.createElement('span');
+            tag.className = `coverage-tag ${level}`;
+            tag.textContent = code;
+            tag.title = `${code}：${level === 'full' ? '完全符合' : '部分符合'}`;
+            tag.setAttribute('aria-label', tag.title);
+            coverageList.append(tag);
+          });
+        }
+        coverageCell.append(coverageList);
+        row.append(nameCell, versionCell, starsCell, positionCell, differenceCell, coverageCell);
         primaryBody.append(row);
       });
 
@@ -3252,7 +3295,7 @@ gh auth status`
       const similarToolsCurrent = onSimilarTools ? ' active-selection" aria-current="page' : '';
       const bridgeCurrent = onBridge ? ' active-bridge" aria-current="page' : '';
       const reviewNotesCurrent = onReviewNotes ? ' active-overview" aria-current="page' : '';
-      const similarToolsLink = similarToolsSlide ? `<a class="journey-bookend appendix${similarToolsCurrent}" href="#${similarToolsPage}">相似工具 01</a>` : '';
+      const similarToolsLink = similarToolsSlide ? `<a class="journey-bookend appendix${similarToolsCurrent}" href="#${similarToolsPage}">相似工具</a>` : '';
       slide.insertAdjacentHTML('afterbegin', `<aside class="journey-rail" aria-label="簡報目錄"><h3>使用公版</h3><ol class="journey-use">${useItems}</ol><h3>開發與維護</h3><ol class="journey-main">${mainItems}</ol><h3>公版管理</h3><ol class="journey-support">${supportItems}</ol><a class="journey-bookend appendix${bridgeCurrent}" href="#${bridgePage}">五月盤點</a><a class="journey-bookend appendix${selectionCurrent}" href="#${ecosystemPage}">工具附錄</a>${similarToolsLink}<a class="journey-bookend appendix${reviewNotesCurrent}" href="#${reviewNotesPage}">決策附錄</a></aside>`);
       const activeJourney = journey.find(item => item.id === activeTrack);
       const contextLine = slide.querySelector('.context-line');

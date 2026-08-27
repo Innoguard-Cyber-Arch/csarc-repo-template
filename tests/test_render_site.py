@@ -128,9 +128,12 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     assert source.count("data-similar-tools-tab") == 2
     assert 'role="tablist"' in source
     assert source.count('role="tab"') == 2
-    assert "01 工作定義" in source
     assert "主要相似工具" in source
     assert "工作哲學參考" in source
+    assert "涵蓋旅程" in source
+    assert "相似工具 01" not in app
+    assert "01A" not in source
+    assert "01B" not in source
     assert "自我定位" in source
     assert "與本套件的差異" in source
     for philosophy in (
@@ -150,6 +153,7 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     assert comparison_data.count("url: 'https://github.com/") == 12
     assert comparison_data.count("group: 'primary'") == 2
     assert comparison_data.count("group: 'reference'") == 10
+    assert comparison_data.count("coverage:") == 2
     assert comparison_data.count("selfPosition:") == 2
     assert comparison_data.count("difference:") == 2
     for key in (
@@ -165,6 +169,7 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     assert "document.createElement('li')" in app
     assert "tool.difference.forEach" in app
     assert "differenceList.append" in app
+    assert "coverage-tag" in app
     assert "primaryBody.append" in app
     assert "renderPanel();" in app
     assert "tab.setAttribute('aria-selected'" in app
