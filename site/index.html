@@ -58,6 +58,48 @@
       <p class="ecosystem-reference reference">Ref. Official project repositories linked above; logo assets from each project's brand kit.</p>
     </section>
 
+    <section class="slide similar-tools-slide" data-audience="maintainer" aria-label="相似開源工具與工作旅程對照">
+      <header>
+        <span class="selection-sequence">維運附錄｜相似工具</span>
+        <h2>沒有單一工具涵蓋<span class="accent">全部 01–10</span></h2>
+        <p class="subtitle">各工具欄只描述它真正負責的部分；「不涵蓋」表示應交給既有 Git／平台／團隊流程，不代表能力缺陷。</p>
+      </header>
+      <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="相似工具比較表，可水平捲動">
+        <table class="similar-tools-matrix">
+          <thead>
+            <tr>
+              <th scope="col">工作旅程</th>
+              <th scope="col"><a href="https://github.com/hoangnb24/repository-harness" target="_blank" rel="noreferrer">Repository<br>Harness</a></th>
+              <th scope="col"><a href="https://github.com/projen/projen" target="_blank" rel="noreferrer">projen</a></th>
+              <th scope="col"><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">Copier</a></th>
+              <th scope="col"><a href="https://github.com/cruft/cruft" target="_blank" rel="noreferrer">Cruft</a></th>
+              <th scope="col"><a href="https://github.com/backstage/backstage" target="_blank" rel="noreferrer">Backstage</a></th>
+              <th scope="col"><a href="https://github.com/mindersec/minder" target="_blank" rel="noreferrer">Minder</a></th>
+              <th scope="col"><a href="https://github.com/ossf/allstar" target="_blank" rel="noreferrer">Allstar</a></th>
+              <th scope="col"><a href="https://github.com/github-community-projects/safe-settings" target="_blank" rel="noreferrer">Safe<br>Settings</a></th>
+              <th scope="col"><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a></th>
+              <th scope="col"><a href="https://github.com/Fission-AI/OpenSpec" target="_blank" rel="noreferrer">OpenSpec</a></th>
+              <th scope="col"><a href="https://github.com/bmad-code-org/BMAD-METHOD" target="_blank" rel="noreferrer">BMAD</a></th>
+              <th scope="col"><a href="https://github.com/openrewrite/rewrite" target="_blank" rel="noreferrer">OpenRewrite</a></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr data-work-step="01"><th scope="row"><span>01</span>工作定義</th><td>repo 真相＋active plan</td><td><code>.projenrc</code></td><td>template＋answers</td><td>template link＋diff</td><td>template parameters</td><td>profile</td><td>security policy</td><td>settings YAML</td><td><code>spec.md</code></td><td>specs＋changes</td><td>brief／spec</td><td>recipe</td></tr>
+            <tr data-work-step="02"><th scope="row"><span>02</span>AI 契約／實作</th><td>AGENTS＋active plan</td><td>synth task</td><td>只負責渲染</td><td>只負責更新</td><td>scaffolder steps</td><td>rule engine</td><td>policy controller</td><td>settings sync</td><td>agent commands</td><td>apply tasks</td><td>agent workflows</td><td>recipe run</td></tr>
+            <tr data-work-step="03"><th scope="row"><span>03</span>驗證＋CI</th><td>relevant proof</td><td>synth／test／CI</td><td>render／diff</td><td>check／diff</td><td>template actions</td><td>evaluate／status</td><td>policy checks</td><td>validate／apply</td><td>test／converge</td><td>scenarios／tasks</td><td>build＋verify</td><td>recipe tests</td></tr>
+            <tr data-work-step="04"><th scope="row"><span>04</span>PR／合併</th><td>交給 Git／PR</td><td>PR＋防竄改</td><td>審查生成 diff</td><td>update PR</td><td>透過 SCM 發布</td><td class="coverage-none">不定義合併</td><td>回報政策結果</td><td>管理設定套用</td><td>交給 Git／PR</td><td>交給 Git／PR</td><td>沿用交付流程</td><td>產生 diff／PR</td></tr>
+            <tr data-work-step="05"><th scope="row"><span>05</span>依賴安全</th><td class="coverage-none">不涵蓋</td><td>依賴更新任務</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">外掛自選</td><td>安全政策</td><td>安全檢查</td><td>repo 安全設定</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">不涵蓋</td><td>依賴遷移 recipe</td></tr>
+            <tr data-work-step="06"><th scope="row"><span>06</span>版本／交付</th><td>交給 repo 流程</td><td>release tasks</td><td>版本化模板</td><td>模板更新</td><td>建立／發布元件</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">不涵蓋</td><td>archive change</td><td>沿用交付流程</td><td>交付遷移結果</td></tr>
+            <tr data-work-step="07"><th scope="row"><span>07</span>規則治理</th><td>人工邊界</td><td>生成式政策</td><td class="coverage-none">有限</td><td>模板漂移</td><td>catalog＋owner</td><td>profile enforcement</td><td>組織安全政策</td><td>階層 repo 設定</td><td>constitution</td><td>proposal review</td><td>明確決策</td><td>recipe constraints</td></tr>
+            <tr data-work-step="08"><th scope="row"><span>08</span>模板升級</th><td>交易式三方合併</td><td>重新 synth</td><td>update＋merge</td><td>diff＋update</td><td>更新 template</td><td>更新 profile</td><td>更新 policy</td><td>下發設定</td><td>更新 CLI／模板</td><td class="coverage-none">非核心</td><td>更新 method</td><td>更新 recipe</td></tr>
+            <tr data-work-step="09"><th scope="row"><span>09</span>內部網站</th><td>repo durable docs</td><td class="coverage-none">無入口網站</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">不涵蓋</td><td>Catalog＋TechDocs</td><td>狀態與結果</td><td>GitHub findings</td><td class="coverage-none">無入口網站</td><td>repo artifacts</td><td>repo artifacts</td><td>規劃 artifacts</td><td>遷移報告</td></tr>
+            <tr data-work-step="10"><th scope="row"><span>10</span>導入層級</th><td>brownfield init／update</td><td>建立／既有專案</td><td>新建＋持續更新</td><td>既有案接回模板</td><td>漸進納入 catalog</td><td>註冊 repositories</td><td>組織安裝</td><td>階層繼承</td><td>project init</td><td>project init</td><td>right-sized tracks</td><td>大量語意遷移</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="similar-tools-note"><strong>維運判讀：</strong>OpenSpec 最清楚區分 current specs 與 in-flight changes；Repository Harness 最適合 durable repo context；其餘工具只補一段能力，不能直接取代整套 CSARC 工作旅程。</p>
+    </section>
+
     <section class="slide active capability-slide" data-track="capability" aria-label="CSARC 公版能力與導入方式">
       <header class="package-hero">
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>

@@ -333,9 +333,59 @@
     .explorer-caption { margin-top: 5px; color: var(--muted); font-size: 18px; line-height: 1.18; }
     .explorer-caption strong { color: var(--ink); }
 
-    .ecosystem-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
+    .ecosystem-slide, .similar-tools-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
     .ecosystem-slide header { position: relative; margin-bottom: 1%; padding-right: 150px; }
     .ecosystem-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
+
+    .similar-tools-slide header { margin-bottom: 8px; }
+    .similar-tools-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
+    .similar-tools-table-wrap {
+      flex: 1;
+      min-height: 0;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      background: white;
+    }
+    .similar-tools-table-wrap:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+    .similar-tools-matrix {
+      width: 100%;
+      height: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+      font-size: 13px;
+      line-height: 1.13;
+    }
+    .similar-tools-matrix th, .similar-tools-matrix td {
+      padding: 4px 5px;
+      border: 1px solid var(--line);
+      overflow-wrap: anywhere;
+      vertical-align: middle;
+    }
+    .similar-tools-matrix thead th { text-align: center; }
+    .similar-tools-matrix thead th:first-child { width: 126px; }
+    .similar-tools-matrix thead a { color: white; text-decoration-color: var(--yellow); text-underline-offset: 2px; }
+    .similar-tools-matrix tbody th { background: #fffbea; color: var(--ink); font-size: 14px; text-align: left; }
+    .similar-tools-matrix tbody th span {
+      display: inline-grid;
+      min-width: 25px;
+      margin-right: 4px;
+      padding: 2px 3px;
+      place-items: center;
+      border: 1px solid #8a7a00;
+      border-radius: 999px;
+      background: var(--yellow);
+      font-weight: 900;
+    }
+    .similar-tools-matrix tbody tr:nth-child(even) td { background: #fafaf8; }
+    .similar-tools-matrix .coverage-none { color: #777; }
+    .similar-tools-note {
+      margin-top: 7px;
+      padding: 6px 9px;
+      border-left: 6px solid var(--optional);
+      background: var(--optional-soft);
+      font-size: 16px;
+      line-height: 1.22;
+    }
     .selection-sequence {
       position: absolute;
       top: 0;
@@ -1016,7 +1066,7 @@
 
     /* The opening behaves like product documentation: what the template does, how to adopt it, and what it maintains. */
     .capability-slide, .adoption-slide, .pipeline-slide, .managed-files-slide,
-    .decision-slide, .ecosystem-slide, .bridge-slide, .review-notes-slide { padding-left: 11.9%; }
+    .decision-slide, .ecosystem-slide, .similar-tools-slide, .bridge-slide, .review-notes-slide { padding-left: 11.9%; }
     .capability-slide, .adoption-slide, .pipeline-slide, .managed-files-slide { padding-top: 3%; padding-right: 3.6%; padding-bottom: 3%; }
     .capability-slide h1, .adoption-slide h2, .pipeline-slide h2, .managed-files-slide h2 { font-size: clamp(30px, 2.2vw, 37px); }
     .capability-slide .package-hero { margin-bottom: 8px; padding-bottom: 9px; }

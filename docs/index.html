@@ -342,9 +342,59 @@
     .explorer-caption { margin-top: 5px; color: var(--muted); font-size: 18px; line-height: 1.18; }
     .explorer-caption strong { color: var(--ink); }
 
-    .ecosystem-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
+    .ecosystem-slide, .similar-tools-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
     .ecosystem-slide header { position: relative; margin-bottom: 1%; padding-right: 150px; }
     .ecosystem-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
+
+    .similar-tools-slide header { margin-bottom: 8px; }
+    .similar-tools-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
+    .similar-tools-table-wrap {
+      flex: 1;
+      min-height: 0;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      background: white;
+    }
+    .similar-tools-table-wrap:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+    .similar-tools-matrix {
+      width: 100%;
+      height: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+      font-size: 13px;
+      line-height: 1.13;
+    }
+    .similar-tools-matrix th, .similar-tools-matrix td {
+      padding: 4px 5px;
+      border: 1px solid var(--line);
+      overflow-wrap: anywhere;
+      vertical-align: middle;
+    }
+    .similar-tools-matrix thead th { text-align: center; }
+    .similar-tools-matrix thead th:first-child { width: 126px; }
+    .similar-tools-matrix thead a { color: white; text-decoration-color: var(--yellow); text-underline-offset: 2px; }
+    .similar-tools-matrix tbody th { background: #fffbea; color: var(--ink); font-size: 14px; text-align: left; }
+    .similar-tools-matrix tbody th span {
+      display: inline-grid;
+      min-width: 25px;
+      margin-right: 4px;
+      padding: 2px 3px;
+      place-items: center;
+      border: 1px solid #8a7a00;
+      border-radius: 999px;
+      background: var(--yellow);
+      font-weight: 900;
+    }
+    .similar-tools-matrix tbody tr:nth-child(even) td { background: #fafaf8; }
+    .similar-tools-matrix .coverage-none { color: #777; }
+    .similar-tools-note {
+      margin-top: 7px;
+      padding: 6px 9px;
+      border-left: 6px solid var(--optional);
+      background: var(--optional-soft);
+      font-size: 16px;
+      line-height: 1.22;
+    }
     .selection-sequence {
       position: absolute;
       top: 0;
@@ -1025,7 +1075,7 @@
 
     /* The opening behaves like product documentation: what the template does, how to adopt it, and what it maintains. */
     .capability-slide, .adoption-slide, .pipeline-slide, .managed-files-slide,
-    .decision-slide, .ecosystem-slide, .bridge-slide, .review-notes-slide { padding-left: 11.9%; }
+    .decision-slide, .ecosystem-slide, .similar-tools-slide, .bridge-slide, .review-notes-slide { padding-left: 11.9%; }
     .capability-slide, .adoption-slide, .pipeline-slide, .managed-files-slide { padding-top: 3%; padding-right: 3.6%; padding-bottom: 3%; }
     .capability-slide h1, .adoption-slide h2, .pipeline-slide h2, .managed-files-slide h2 { font-size: clamp(30px, 2.2vw, 37px); }
     .capability-slide .package-hero { margin-bottom: 8px; padding-bottom: 9px; }
@@ -1480,6 +1530,48 @@
         <p><strong>尚未啟用：</strong>Go／Rust profile、Scorecard、Harden-Runner、網站託管／登入（<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">#79</a>）、Hugo、RAG、通用部署與監控；repo 內部網站與生成內容模板已可用。</p>
       </aside>
       <p class="ecosystem-reference reference">Ref. Official project repositories linked above; logo assets from each project's brand kit.</p>
+    </section>
+
+    <section class="slide similar-tools-slide" data-audience="maintainer" aria-label="相似開源工具與工作旅程對照">
+      <header>
+        <span class="selection-sequence">維運附錄｜相似工具</span>
+        <h2>沒有單一工具涵蓋<span class="accent">全部 01–10</span></h2>
+        <p class="subtitle">各工具欄只描述它真正負責的部分；「不涵蓋」表示應交給既有 Git／平台／團隊流程，不代表能力缺陷。</p>
+      </header>
+      <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="相似工具比較表，可水平捲動">
+        <table class="similar-tools-matrix">
+          <thead>
+            <tr>
+              <th scope="col">工作旅程</th>
+              <th scope="col"><a href="https://github.com/hoangnb24/repository-harness" target="_blank" rel="noreferrer">Repository<br>Harness</a></th>
+              <th scope="col"><a href="https://github.com/projen/projen" target="_blank" rel="noreferrer">projen</a></th>
+              <th scope="col"><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">Copier</a></th>
+              <th scope="col"><a href="https://github.com/cruft/cruft" target="_blank" rel="noreferrer">Cruft</a></th>
+              <th scope="col"><a href="https://github.com/backstage/backstage" target="_blank" rel="noreferrer">Backstage</a></th>
+              <th scope="col"><a href="https://github.com/mindersec/minder" target="_blank" rel="noreferrer">Minder</a></th>
+              <th scope="col"><a href="https://github.com/ossf/allstar" target="_blank" rel="noreferrer">Allstar</a></th>
+              <th scope="col"><a href="https://github.com/github-community-projects/safe-settings" target="_blank" rel="noreferrer">Safe<br>Settings</a></th>
+              <th scope="col"><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a></th>
+              <th scope="col"><a href="https://github.com/Fission-AI/OpenSpec" target="_blank" rel="noreferrer">OpenSpec</a></th>
+              <th scope="col"><a href="https://github.com/bmad-code-org/BMAD-METHOD" target="_blank" rel="noreferrer">BMAD</a></th>
+              <th scope="col"><a href="https://github.com/openrewrite/rewrite" target="_blank" rel="noreferrer">OpenRewrite</a></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr data-work-step="01"><th scope="row"><span>01</span>工作定義</th><td>repo 真相＋active plan</td><td><code>.projenrc</code></td><td>template＋answers</td><td>template link＋diff</td><td>template parameters</td><td>profile</td><td>security policy</td><td>settings YAML</td><td><code>spec.md</code></td><td>specs＋changes</td><td>brief／spec</td><td>recipe</td></tr>
+            <tr data-work-step="02"><th scope="row"><span>02</span>AI 契約／實作</th><td>AGENTS＋active plan</td><td>synth task</td><td>只負責渲染</td><td>只負責更新</td><td>scaffolder steps</td><td>rule engine</td><td>policy controller</td><td>settings sync</td><td>agent commands</td><td>apply tasks</td><td>agent workflows</td><td>recipe run</td></tr>
+            <tr data-work-step="03"><th scope="row"><span>03</span>驗證＋CI</th><td>relevant proof</td><td>synth／test／CI</td><td>render／diff</td><td>check／diff</td><td>template actions</td><td>evaluate／status</td><td>policy checks</td><td>validate／apply</td><td>test／converge</td><td>scenarios／tasks</td><td>build＋verify</td><td>recipe tests</td></tr>
+            <tr data-work-step="04"><th scope="row"><span>04</span>PR／合併</th><td>交給 Git／PR</td><td>PR＋防竄改</td><td>審查生成 diff</td><td>update PR</td><td>透過 SCM 發布</td><td class="coverage-none">不定義合併</td><td>回報政策結果</td><td>管理設定套用</td><td>交給 Git／PR</td><td>交給 Git／PR</td><td>沿用交付流程</td><td>產生 diff／PR</td></tr>
+            <tr data-work-step="05"><th scope="row"><span>05</span>依賴安全</th><td class="coverage-none">不涵蓋</td><td>依賴更新任務</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">外掛自選</td><td>安全政策</td><td>安全檢查</td><td>repo 安全設定</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">不涵蓋</td><td>依賴遷移 recipe</td></tr>
+            <tr data-work-step="06"><th scope="row"><span>06</span>版本／交付</th><td>交給 repo 流程</td><td>release tasks</td><td>版本化模板</td><td>模板更新</td><td>建立／發布元件</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">不涵蓋</td><td>archive change</td><td>沿用交付流程</td><td>交付遷移結果</td></tr>
+            <tr data-work-step="07"><th scope="row"><span>07</span>規則治理</th><td>人工邊界</td><td>生成式政策</td><td class="coverage-none">有限</td><td>模板漂移</td><td>catalog＋owner</td><td>profile enforcement</td><td>組織安全政策</td><td>階層 repo 設定</td><td>constitution</td><td>proposal review</td><td>明確決策</td><td>recipe constraints</td></tr>
+            <tr data-work-step="08"><th scope="row"><span>08</span>模板升級</th><td>交易式三方合併</td><td>重新 synth</td><td>update＋merge</td><td>diff＋update</td><td>更新 template</td><td>更新 profile</td><td>更新 policy</td><td>下發設定</td><td>更新 CLI／模板</td><td class="coverage-none">非核心</td><td>更新 method</td><td>更新 recipe</td></tr>
+            <tr data-work-step="09"><th scope="row"><span>09</span>內部網站</th><td>repo durable docs</td><td class="coverage-none">無入口網站</td><td class="coverage-none">不涵蓋</td><td class="coverage-none">不涵蓋</td><td>Catalog＋TechDocs</td><td>狀態與結果</td><td>GitHub findings</td><td class="coverage-none">無入口網站</td><td>repo artifacts</td><td>repo artifacts</td><td>規劃 artifacts</td><td>遷移報告</td></tr>
+            <tr data-work-step="10"><th scope="row"><span>10</span>導入層級</th><td>brownfield init／update</td><td>建立／既有專案</td><td>新建＋持續更新</td><td>既有案接回模板</td><td>漸進納入 catalog</td><td>註冊 repositories</td><td>組織安裝</td><td>階層繼承</td><td>project init</td><td>project init</td><td>right-sized tracks</td><td>大量語意遷移</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="similar-tools-note"><strong>維運判讀：</strong>OpenSpec 最清楚區分 current specs 與 in-flight changes；Repository Harness 最適合 durable repo context；其餘工具只補一段能力，不能直接取代整套 CSARC 工作旅程。</p>
     </section>
 
     <section class="slide active capability-slide" data-track="capability" aria-label="CSARC 公版能力與導入方式">
@@ -2792,6 +2884,11 @@ gh auth status`
       }
     };
 
+    const maintainerMode = new URLSearchParams(location.search).get('audience') === 'maintainer';
+    if (!maintainerMode) {
+      document.querySelectorAll('[data-audience="maintainer"]').forEach(element => element.remove());
+    }
+
     const lifecycleOrder = ['method', 'agents', 'contract', 'pr', 'supply', 'deploy', 'governance'];
     const platformOrder = ['template-release', 'docs-site', 'rollout'];
     const deckRoot = document.querySelector('.deck');
@@ -2801,6 +2898,7 @@ gh auth status`
     const bridgeSlide = document.querySelector('.bridge-slide');
     const reviewNotesSlides = [...document.querySelectorAll('.review-notes-slide')];
     const ecosystemSlide = document.querySelector('.ecosystem-slide');
+    const similarToolsSlide = document.querySelector('.similar-tools-slide');
     deckRoot.replaceChildren(
       capabilitySlide,
       flowSlide,
@@ -2809,6 +2907,7 @@ gh auth status`
       ...platformOrder.map(track => document.querySelector(`[data-track="${track}"]`)),
       bridgeSlide,
       ecosystemSlide,
+      ...(similarToolsSlide ? [similarToolsSlide] : []),
       ...reviewNotesSlides
     );
     const slideCount = document.querySelectorAll('.slide').length;
@@ -2818,6 +2917,7 @@ gh auth status`
     const allSlidesInOrder = [...document.querySelectorAll('.slide')];
     const pageByTrack = Object.fromEntries(allSlidesInOrder.filter(slide => slide.dataset.track).map(slide => [slide.dataset.track, allSlidesInOrder.indexOf(slide) + 1]));
     const ecosystemPage = allSlidesInOrder.indexOf(document.querySelector('.ecosystem-slide')) + 1;
+    const similarToolsPage = similarToolsSlide ? allSlidesInOrder.indexOf(similarToolsSlide) + 1 : null;
     const bridgePage = allSlidesInOrder.indexOf(document.querySelector('.bridge-slide')) + 1;
     const reviewNotesPage = allSlidesInOrder.indexOf(reviewNotesSlides[0]) + 1;
     const journey = [
@@ -2842,12 +2942,15 @@ gh auth status`
       const mainItems = renderJourneyItems(journey.filter(item => item.group === 'main'), activeTrack);
       const supportItems = renderJourneyItems(journey.filter(item => item.group === 'support'), activeTrack);
       const onEcosystem = slide.classList.contains('ecosystem-slide');
+      const onSimilarTools = slide.classList.contains('similar-tools-slide');
       const onBridge = slide.classList.contains('bridge-slide');
       const onReviewNotes = slide.classList.contains('review-notes-slide');
       const selectionCurrent = onEcosystem ? ' active-selection" aria-current="page' : '';
+      const similarToolsCurrent = onSimilarTools ? ' active-selection" aria-current="page' : '';
       const bridgeCurrent = onBridge ? ' active-bridge" aria-current="page' : '';
       const reviewNotesCurrent = onReviewNotes ? ' active-overview" aria-current="page' : '';
-      slide.insertAdjacentHTML('afterbegin', `<aside class="journey-rail" aria-label="簡報目錄"><h3>使用公版</h3><ol class="journey-use">${useItems}</ol><h3>開發與維護</h3><ol class="journey-main">${mainItems}</ol><h3>公版管理</h3><ol class="journey-support">${supportItems}</ol><a class="journey-bookend appendix${bridgeCurrent}" href="#${bridgePage}">五月盤點</a><a class="journey-bookend appendix${selectionCurrent}" href="#${ecosystemPage}">工具附錄</a><a class="journey-bookend appendix${reviewNotesCurrent}" href="#${reviewNotesPage}">決策附錄</a></aside>`);
+      const similarToolsLink = similarToolsSlide ? `<a class="journey-bookend appendix${similarToolsCurrent}" href="#${similarToolsPage}">相似工具</a>` : '';
+      slide.insertAdjacentHTML('afterbegin', `<aside class="journey-rail" aria-label="簡報目錄"><h3>使用公版</h3><ol class="journey-use">${useItems}</ol><h3>開發與維護</h3><ol class="journey-main">${mainItems}</ol><h3>公版管理</h3><ol class="journey-support">${supportItems}</ol><a class="journey-bookend appendix${bridgeCurrent}" href="#${bridgePage}">五月盤點</a><a class="journey-bookend appendix${selectionCurrent}" href="#${ecosystemPage}">工具附錄</a>${similarToolsLink}<a class="journey-bookend appendix${reviewNotesCurrent}" href="#${reviewNotesPage}">決策附錄</a></aside>`);
       const activeJourney = journey.find(item => item.id === activeTrack);
       const contextLine = slide.querySelector('.context-line');
       if (activeJourney && contextLine) {

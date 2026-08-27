@@ -113,3 +113,15 @@ def test_render_accepts_legacy_content_as_schema_one(tmp_path: Path) -> None:
     )
 
     assert "window.CONTENT = {};" in render(source, root=tmp_path)
+
+
+def test_similar_tools_appendix_is_maintainer_only() -> None:
+    root = Path(__file__).parents[1]
+    source = (root / "site" / "index.html").read_text(encoding="utf-8")
+    app = (root / "site" / "app.js").read_text(encoding="utf-8")
+
+    assert 'class="slide similar-tools-slide" data-audience="maintainer"' in source
+    assert source.count('data-work-step="') == 10
+    assert "get('audience') === 'maintainer'" in app
+    assert "element.remove()" in app
+    assert "similarToolsSlide ?" in app

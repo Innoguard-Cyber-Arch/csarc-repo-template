@@ -810,6 +810,11 @@ gh auth status`
       }
     };
 
+    const maintainerMode = new URLSearchParams(location.search).get('audience') === 'maintainer';
+    if (!maintainerMode) {
+      document.querySelectorAll('[data-audience="maintainer"]').forEach(element => element.remove());
+    }
+
     const lifecycleOrder = ['method', 'agents', 'contract', 'pr', 'supply', 'deploy', 'governance'];
     const platformOrder = ['template-release', 'docs-site', 'rollout'];
     const deckRoot = document.querySelector('.deck');
@@ -819,6 +824,7 @@ gh auth status`
     const bridgeSlide = document.querySelector('.bridge-slide');
     const reviewNotesSlides = [...document.querySelectorAll('.review-notes-slide')];
     const ecosystemSlide = document.querySelector('.ecosystem-slide');
+    const similarToolsSlide = document.querySelector('.similar-tools-slide');
     deckRoot.replaceChildren(
       capabilitySlide,
       flowSlide,
@@ -827,6 +833,7 @@ gh auth status`
       ...platformOrder.map(track => document.querySelector(`[data-track="${track}"]`)),
       bridgeSlide,
       ecosystemSlide,
+      ...(similarToolsSlide ? [similarToolsSlide] : []),
       ...reviewNotesSlides
     );
     const slideCount = document.querySelectorAll('.slide').length;
@@ -836,6 +843,7 @@ gh auth status`
     const allSlidesInOrder = [...document.querySelectorAll('.slide')];
     const pageByTrack = Object.fromEntries(allSlidesInOrder.filter(slide => slide.dataset.track).map(slide => [slide.dataset.track, allSlidesInOrder.indexOf(slide) + 1]));
     const ecosystemPage = allSlidesInOrder.indexOf(document.querySelector('.ecosystem-slide')) + 1;
+    const similarToolsPage = similarToolsSlide ? allSlidesInOrder.indexOf(similarToolsSlide) + 1 : null;
     const bridgePage = allSlidesInOrder.indexOf(document.querySelector('.bridge-slide')) + 1;
     const reviewNotesPage = allSlidesInOrder.indexOf(reviewNotesSlides[0]) + 1;
     const journey = [
@@ -860,12 +868,15 @@ gh auth status`
       const mainItems = renderJourneyItems(journey.filter(item => item.group === 'main'), activeTrack);
       const supportItems = renderJourneyItems(journey.filter(item => item.group === 'support'), activeTrack);
       const onEcosystem = slide.classList.contains('ecosystem-slide');
+      const onSimilarTools = slide.classList.contains('similar-tools-slide');
       const onBridge = slide.classList.contains('bridge-slide');
       const onReviewNotes = slide.classList.contains('review-notes-slide');
       const selectionCurrent = onEcosystem ? ' active-selection" aria-current="page' : '';
+      const similarToolsCurrent = onSimilarTools ? ' active-selection" aria-current="page' : '';
       const bridgeCurrent = onBridge ? ' active-bridge" aria-current="page' : '';
       const reviewNotesCurrent = onReviewNotes ? ' active-overview" aria-current="page' : '';
-      slide.insertAdjacentHTML('afterbegin', `<aside class="journey-rail" aria-label="簡報目錄"><h3>使用公版</h3><ol class="journey-use">${useItems}</ol><h3>開發與維護</h3><ol class="journey-main">${mainItems}</ol><h3>公版管理</h3><ol class="journey-support">${supportItems}</ol><a class="journey-bookend appendix${bridgeCurrent}" href="#${bridgePage}">五月盤點</a><a class="journey-bookend appendix${selectionCurrent}" href="#${ecosystemPage}">工具附錄</a><a class="journey-bookend appendix${reviewNotesCurrent}" href="#${reviewNotesPage}">決策附錄</a></aside>`);
+      const similarToolsLink = similarToolsSlide ? `<a class="journey-bookend appendix${similarToolsCurrent}" href="#${similarToolsPage}">相似工具</a>` : '';
+      slide.insertAdjacentHTML('afterbegin', `<aside class="journey-rail" aria-label="簡報目錄"><h3>使用公版</h3><ol class="journey-use">${useItems}</ol><h3>開發與維護</h3><ol class="journey-main">${mainItems}</ol><h3>公版管理</h3><ol class="journey-support">${supportItems}</ol><a class="journey-bookend appendix${bridgeCurrent}" href="#${bridgePage}">五月盤點</a><a class="journey-bookend appendix${selectionCurrent}" href="#${ecosystemPage}">工具附錄</a>${similarToolsLink}<a class="journey-bookend appendix${reviewNotesCurrent}" href="#${reviewNotesPage}">決策附錄</a></aside>`);
       const activeJourney = journey.find(item => item.id === activeTrack);
       const contextLine = slide.querySelector('.context-line');
       if (activeJourney && contextLine) {
