@@ -2458,7 +2458,7 @@ test -x "$fixture_root/default-project/scripts/install-gitleaks"
 test -x "$fixture_root/default-project/scripts/install-shellcheck"
 test -x "$fixture_root/default-project/scripts/lint-workflows-shell"
 test -x "$fixture_root/default-project/scripts/verify-fast"
-grep -Fq 'uv run pytest -m "not large"' \
+grep -Fq 'uv run pytest -m "runtime and not large"' \
   "$fixture_root/default-project/scripts/verify"
 test -f "$fixture_root/default-project/scripts/ci_tier.py"
 test -x "$fixture_root/default-project/scripts/promotion_gate.py"
