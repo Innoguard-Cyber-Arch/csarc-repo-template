@@ -61,31 +61,34 @@
     <section class="slide similar-tools-slide" data-audience="maintainer" aria-label="工作定義與相似開源工具對照">
       <header>
         <span class="selection-sequence">維運附錄｜相似工具</span>
-        <h2><span class="accent">01 工作定義</span>｜誰是競品，誰只值得局部參考</h2>
-        <p class="subtitle">主要競品後續比較完整 01–10；此頁只看五種「工作如何被定義」的哲學，不用 CSARC 在每一格陪跑。</p>
+        <h2><span class="accent">01 工作定義</span>｜相似產品與功能參考</h2>
+        <p class="subtitle">先判斷誰的整體設計目的真的接近 CSARC，再把只擅長某種工作哲學的熱門工具放回對應列。</p>
       </header>
       <div class="similar-tools-legend" aria-label="比較角色圖例">
-        <span class="competitor">主要競品｜後續比較 01–10</span>
-        <span class="foundation">基礎元件｜只比較承擔的能力</span>
-        <span class="reference">局部參考｜高採用或設計值得學習</span>
+        <span class="competitor">主要相似工具｜整體目的接近，後續比較 01–10</span>
+        <span class="reference">該哲學熱門／代表工具｜只學它真正擅長的部分</span>
       </div>
-      <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="工作定義相似工具比較表，可水平捲動">
+      <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="工作定義相似工具比較表">
         <table class="similar-tools-matrix">
-          <thead><tr><th scope="col">01 比較面向</th></tr></thead>
+          <thead>
+            <tr>
+              <th scope="col">01 工作哲學</th>
+              <th scope="col">主要相似工具</th>
+              <th scope="col">該哲學熱門／代表工具</th>
+            </tr>
+          </thead>
           <tbody>
             <tr class="similar-tools-fact" data-comparison-key="version"><th scope="row">比較版本<br>（發行日）</th></tr>
             <tr class="similar-tools-fact" data-comparison-key="stars"><th scope="row">GitHub Stars<br>（截取日）</th></tr>
-            <tr data-comparison-key="role"><th scope="row">比較角色<br>／後續範圍</th></tr>
             <tr data-comparison-key="repositoryTruth"><th scope="row">哲學 A<br>Repo 即真相</th></tr>
             <tr data-comparison-key="declarativeState"><th scope="row">哲學 B<br>宣告式設定</th></tr>
             <tr data-comparison-key="templateLifecycle"><th scope="row">哲學 C<br>模板生命週期</th></tr>
             <tr data-comparison-key="proposalLifecycle"><th scope="row">哲學 D<br>提案到正式</th></tr>
             <tr data-comparison-key="rightSizedWork"><th scope="row">哲學 E<br>依複雜度調整</th></tr>
-            <tr class="similar-tools-position" data-comparison-key="position"><th scope="row">相對 CSARC<br>定位差異</th></tr>
           </tbody>
         </table>
       </div>
-      <p class="similar-tools-note"><strong>資料來源：</strong>GitHub repository／latest release API，截取 2026-08-27。主要競品是產品範圍大致重疊；Stars 高但只解一小段問題者仍列為局部參考，不假裝能取代整套 CSARC。</p>
+      <p class="similar-tools-note"><strong>判斷：</strong>目前只有 Repository Harness 與 projen 的整體目的足以列為主要相似工具；其他 repo 依真正擅長的哲學出現，不視為整套 CSARC 的替代品。資料取自 GitHub repository／latest release API（2026-08-27）。</p>
     </section>
 
     <section class="slide active capability-slide" data-track="capability" aria-label="CSARC 公版能力與導入方式">

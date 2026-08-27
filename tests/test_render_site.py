@@ -121,8 +121,10 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     app = (root / "site" / "app.js").read_text(encoding="utf-8")
 
     assert 'class="slide similar-tools-slide" data-audience="maintainer"' in source
-    assert source.count('data-comparison-key="') == 9
+    assert source.count('data-comparison-key="') == 7
     assert "01 工作定義" in source
+    assert "主要相似工具" in source
+    assert "該哲學熱門／代表工具" in source
     for philosophy in (
         "Repo 即真相",
         "宣告式設定",
@@ -135,20 +137,20 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     assert "element.remove()" in app
     assert "similarToolsSlide ?" in app
     comparison_data = app.split("const similarTools = [", 1)[1].split(
-        "const similarToolsHeader", 1
+        "const groups", 1
     )[0]
     assert comparison_data.count("url: 'https://github.com/") == 12
+    assert comparison_data.count("group: 'primary'") == 2
+    assert comparison_data.count("group: 'reference'") == 10
     for key in (
-        "role",
         "repositoryTruth",
         "declarativeState",
         "templateLifecycle",
         "proposalLifecycle",
         "rightSizedWork",
-        "position",
     ):
-        assert comparison_data.count(f"{key}:") == 12
+        assert f"{key}:" in comparison_data
     assert "similar-tools-next" not in source
-    assert "similarToolsHeader.append" in app
-    assert "cell.textContent = tool[key]" in app
-    assert "toolLabel" not in app
+    assert "similarToolsHeader" not in app
+    assert "document.createElement('br')" in app
+    assert "截取 " not in comparison_data
