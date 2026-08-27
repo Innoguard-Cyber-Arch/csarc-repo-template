@@ -843,132 +843,156 @@ gh auth status`
           url: 'https://github.com/hoangnb24/repository-harness',
           version: 'harness-v0.1.10（2026-08-13）',
           stars: '1,198（截取 2026-08-27）',
-          role: ['主要競品；後續完整比較 01–10，最接近 agent-ready repository。', '同樣 repo-first，但還把治理、驗證與交付基線包成可更新公版。'],
-          truth: ['repo 內的產品文件、決策、plan、程式與證據共同構成真相。', 'Issue 劃定變更範圍；核准 spec／ADR 保存長期契約，實作檔證明現況。'],
-          proposal: ['跨 session 工作放 active plan；驗證後移到 completed，重大歧義先停。', 'main 是已接受狀態；分支或未提交內容只是提案，#376 正在定義正式分層。'],
-          execution: ['不建 task database，沿用 repo 原有 Issue／PR 工具。', 'Issue 是執行邊界；超出範圍另開 Issue，Feature／Milestone 角色由 #376 定案。'],
-          position: ['偏可移植的 agent 工作記憶與安全更新框架。', '範圍更廣；應直接學它的 active plan 與交易式三方合併。']
+          role: '主要競品｜後續完整比較 01–10；最接近 agent-ready repository。',
+          repositoryTruth: '核心哲學。產品文件、決策、plan、程式、測試與證據共同留在 repo，repo 本身就是 system of record。',
+          declarativeState: '只有少量 harness 設定與工作規則；不把整個專案壓成單一設定模型，也不持續 reconcile 遠端平台。',
+          templateLifecycle: '內建 updater 保存 upstream base，以 BASE／LOCAL／UPSTREAM 做交易式三方合併，衝突時停止。',
+          proposalLifecycle: '跨 session 工作進 active plan；驗證完成移到 completed。重大歧義先停，不讓半套更新生效。',
+          rightSizedWork: '明說 typo 不需要 plan，跨 session migration 才需要；形式成本跟著風險與持續時間增加。',
+          position: '與 CSARC 整體最接近；CSARC 範圍更廣，應直接學它的 active plan 與交易式更新。'
         },
         {
           name: 'projen',
           url: 'https://github.com/projen/projen',
           version: 'v0.103.5（2026-08-26）',
           stars: '2,948（截取 2026-08-27）',
-          role: ['主要競品；後續完整比較 01–10，以 config-as-code 管專案生命週期。', '產品範圍接近，但不把整個 repo 壓成單一物件模型。'],
-          truth: ['.projenrc 是來源；其他專案檔案由 synth 產生。', 'spec、ADR、policy、template 各有責任，只有明確生成檔才視為衍生物。'],
-          proposal: ['修改 .projenrc 並在 PR 重建；合併後的 config 才是正式設定。', '分支 PR 是提案；合併 main 後才接受，且文件 claim 必須符合 live implementation。'],
-          execution: ['project model 生成 tasks／workflows，但不取代產品 Issue。', 'Issue 直接描述問題、完成條件與驗證；repo 工具只協助執行。'],
-          position: ['通用 project generator 與 typed configuration framework。', '較 opinionated、支援組合較少，換取直接可讀與較低框架綁定。']
+          role: '主要競品｜後續完整比較 01–10；以 config-as-code 管專案生命週期。',
+          repositoryTruth: '.projenrc 是唯一手寫來源；大量專案檔是 synth 產物，repo 真相集中在 typed project model。',
+          declarativeState: '核心哲學。使用型別化 components 宣告期望專案，執行 synth 讓檔案回到該狀態。',
+          templateLifecycle: '升級 projen library 後重新 synth；受管檔可被覆寫，人工修改會被 anti-tamper 檢查抓出。',
+          proposalLifecycle: 'PR 修改 .projenrc 並附重建結果；合併後的 config 才成為下一次 synth 的正式來源。',
+          rightSizedWork: '主要依 project type／component 組合功能，不依單次工作的大小決定文件深度。',
+          position: '產品範圍接近 CSARC；差別是 CSARC 不把所有 repo 設定收斂成一個物件模型。'
         },
         {
           name: 'Copier',
           url: 'https://github.com/copier-org/copier',
           version: 'v9.17.2（2026-08-19）',
           stars: '3,545（截取 2026-08-27）',
-          role: ['基礎元件；主要比較 08，01 只確認它不負責需求定義。', '直接採用 Copier 作生成／更新引擎，在其上增加工作與治理契約。'],
-          truth: ['copier.yml、template 與 answers 是生成輸入，不是產品需求。', '工作真相仍在 Issue／spec／ADR；Copier 只負責把核准公版送進 repo。'],
-          proposal: ['模板版本或 answers 變更產生 diff，再由 Git merge 接受。', '同樣以 PR 接受模板差異，但另要求產品來源不得被更新覆寫。'],
-          execution: ['不建立 Issue 或 task；只渲染與更新檔案。', 'Issue 先決定要做什麼，Copier 只在 08 模板升級執行。'],
-          position: ['通用模板 primitive，不是 CSARC 的競爭產品。', 'CSARC 是建立在 Copier 上的 opinionated distribution。']
+          role: '基礎元件｜主要比較 08；01 只確認它刻意不負責需求定義。',
+          repositoryTruth: 'copier.yml、template 與 answers 是生成真相；它不判斷產品需求、決策或 Issue 是否成立。',
+          declarativeState: '問卷答案宣告輸入，Jinja 將輸入轉成檔案；不持續監控生成 repo 是否符合遠端狀態。',
+          templateLifecycle: '核心哲學。記住模板來源與 answers，之後以新模板版本更新既有輸出並處理 diff。',
+          proposalLifecycle: '模板版本或 answers 改變後先產生 Git diff；由使用者解衝突並透過既有 Git 流程接受。',
+          rightSizedWork: '不定義工作粒度；同一套 render／update 機制可服務一個檔案或整個專案。',
+          position: '不是競品，而是 CSARC 已採用的底層模板引擎；CSARC 在它上面加工作、治理與交付契約。'
         },
         {
           name: 'Cruft',
           url: 'https://github.com/cruft/cruft',
           version: '2.16.0（2024-12-25）',
           stars: '1,585（截取 2026-08-27）',
-          role: ['局部參考；主比 08，另參考 04 的 template update PR。', '已選 Copier，不需要再維護第二套模板追蹤工具。'],
-          truth: ['Cookiecutter template link 與 cruft metadata 定義模板來源。', '模板來源只是產品真相的一部分；需求與決策仍分屬 Issue／spec／ADR。'],
-          proposal: ['cruft diff 顯示上游變更，update／PR 接受後才生效。', '同樣以 diff／PR 接受更新，但保留更明確的產品自有檔案邊界。'],
-          execution: ['不拆產品工作，只執行模板差異檢查與更新。', 'Issue 定義執行工作，模板更新只是其中一種工作類型。'],
-          position: ['Cookiecutter template linkage／drift checker。', '能力較窄；CSARC 已以 Copier 加治理規則涵蓋所需部分。']
+          role: '局部參考｜主比 08，另參考 04 的 template update PR。',
+          repositoryTruth: 'Cookiecutter template link 與 cruft metadata 定義模板來源；不處理產品需求真相。',
+          declarativeState: '沿用 Cookiecutter context 描述生成輸入；重點是比對模板漂移，不是持續 desired-state controller。',
+          templateLifecycle: '核心哲學。cruft check 顯示落後，cruft diff／update 把上游變更帶回既有專案。',
+          proposalLifecycle: '上游差異先成為 diff 或 PR；專案接受後才更新追蹤狀態。',
+          rightSizedWork: '不依需求複雜度分級；只要是模板漂移，就走相同 check／update 模式。',
+          position: '比 CSARC 窄；Copier 已涵蓋主要需求，因此保留作模板漂移與 update PR 的設計參考。'
         },
         {
           name: 'Backstage',
           url: 'https://github.com/backstage/backstage',
           version: 'v1.54.5（2026-08-25）',
           stars: '34,270（截取 2026-08-27）',
-          role: ['主要競品（平台型）；後續完整比較 01–10，因為它也提供 golden path。', '目標同樣是標準化開發，但先採 repo-local distribution，不先架中央平台。'],
-          truth: ['Catalog entity 描述服務；Software Template parameters 描述建立輸入。', 'Issue／spec 描述變更工作；repo metadata 不取代需求真相。'],
-          proposal: ['template／catalog 變更經平台 repo PR；合併後影響 catalog 或未來 scaffolding。', '公版 PR 合併後可更新既有 repo，不只影響新建服務。'],
-          execution: ['Scaffolder task 建立元件；日常 backlog 與 PR 仍接外部工具。', '日常工作直接以 GitHub Issue 為範圍，不需要 portal task。'],
-          position: ['組織級 developer portal、catalog 與 golden path。', '輕量 repo 公版；達到多 repo／owner 查找門檻後才可能疊加 Backstage。']
+          role: '主要競品（平台型）｜後續完整比較 01–10；同樣提供 golden path。',
+          repositoryTruth: 'Catalog entity 是服務與 owner 真相；Software Template parameters 是建立入口，不是日常 backlog。',
+          declarativeState: 'YAML entity 與 template 宣告平台可見的元件、關係與 scaffolder steps，由中央 portal 解讀。',
+          templateLifecycle: '強在建立新元件；template 更新主要影響未來 scaffolding，既有 repo 遷移要另接工具。',
+          proposalLifecycle: 'template／catalog 變更經平台 repo PR；合併後更新 catalog 或後續建立流程。',
+          rightSizedWork: '依服務類型選 template／workflow，不依單次 change 的大小調整規格深度。',
+          position: '是中央 developer portal；CSARC 是 repo-local distribution，規模達門檻後兩者可互補。'
         },
         {
           name: 'Minder',
           url: 'https://github.com/mindersec/minder',
           version: 'v0.3.1（2026-08-10）',
           stars: '417（截取 2026-08-27）',
-          role: ['局部參考；只比較 05、07、10 的中央安全治理。', '目前保留 repo-local policy，不導入常駐控制面。'],
-          truth: ['security profile／rule 是 repository 期望狀態，不是產品工作。', 'policy 與產品需求分層；Issue／spec 才定義要交付的變更。'],
-          proposal: ['profile 變更經審查並部署後，才改變受管 repos 的評估。', 'policy 變更也需 PR，但遠端套用目前停用並由人決定。'],
-          execution: ['違規觸發評估／remediation，不建立一般 feature task。', '一般工作仍以 Issue 執行；policy drift 只是可能產生 Issue 的證據。'],
-          position: ['集中式 security posture 與 policy enforcement。', '是可攜式基線；規模與漂移證據達門檻後才評估 Minder。']
+          role: '局部參考｜只比較 05、07、10 的中央安全治理。',
+          repositoryTruth: 'security profile／rule 是 repository posture 的真相；產品功能工作不在它的模型內。',
+          declarativeState: '核心哲學。Profile 宣告安全期望，服務持續 evaluate，必要時 remediation。',
+          templateLifecycle: '不更新產品模板；它更新的是規則與 profile，然後重新評估已註冊 repos。',
+          proposalLifecycle: 'profile 先經版本控制與部署；服務載入後才改變受管 repo 的評估與修正。',
+          rightSizedWork: '規則可按 repo 情境套用，但不替產品工作決定要不要寫 spec 或拆 task。',
+          position: '是 CSARC 未來可能疊加的中央 security control plane，不是目前 repo 公版的替代品。'
         },
         {
           name: 'Allstar',
           url: 'https://github.com/ossf/allstar',
           version: 'v4.5（2025-10-01）',
           stars: '1,444（截取 2026-08-27）',
-          role: ['局部參考；只比較 05、07、10 的組織安全政策。', '不要求 GitHub App；先把最低政策隨 repo 保存。'],
-          truth: ['central policy 定義安全期望，不描述 feature／task。', 'Issue／spec 管工作；policy 檔只管可強制的 repository 邊界。'],
-          proposal: ['policy repo 合併並由 App 載入後，才改變檢查／處置。', 'policy PR 合併才接受，但 Actions 停用期間不宣稱自動 enforcement。'],
-          execution: ['政策違規產生回報或處置，不管理一般開發工作。', '一般改動每項都有 Issue；安全發現再另開 Bug／Task。'],
-          position: ['組織級 GitHub security policy enforcement。', '涵蓋完整 repo lifecycle；多 repo 需要中央執行時才疊加 Allstar。']
+          role: '局部參考｜只比較 05、07、10 的組織安全政策。',
+          repositoryTruth: 'Policy repo／org config 定義安全期望；不保存 feature、spec 或一般 task。',
+          declarativeState: '核心哲學。GitHub App 持續讀取政策，檢查或處置 repository 的不合規狀態。',
+          templateLifecycle: '不管理專案模板；中央 policy 更新後重新作用於安裝範圍。',
+          proposalLifecycle: 'Policy PR 合併並被 App 讀取後才生效；個別 repo 可依政策設計 opt-out／例外。',
+          rightSizedWork: '依 policy 與例外決定處置強度，不依開發工作的複雜度調整流程。',
+          position: '只補 CSARC 的組織級 security enforcement；不涵蓋工作定義與完整 repo lifecycle。'
         },
         {
           name: 'Safe Settings',
           url: 'https://github.com/github-community-projects/safe-settings',
           version: '2.1.21（2026-05-12）',
           stars: '913（截取 2026-08-27）',
-          role: ['局部參考；只比較 07、10 的 repository settings 下發。', '目前以 JSON policy＋人工 apply 保持可攜，不先架 controller。'],
-          truth: ['org／suborg／repo YAML hierarchy 是 GitHub settings desired state。', 'settings 只是治理真相；產品工作仍由 Issue／spec 定義。'],
-          proposal: ['設定 repo PR 合併後由 controller 套用到繼承範圍。', 'policy PR 合併後仍需明確人工套用，避免未授權遠端變更。'],
-          execution: ['controller 做 reconcile，不建立產品開發 task。', 'Issue 定義工作；設定漂移只作為開單或人工處理依據。'],
-          position: ['GitHub repository settings controller。', '保存相同類型的 desired state，但暫不承擔中央 fan-out。']
+          role: '局部參考｜只比較 07、10 的 repository settings 下發。',
+          repositoryTruth: 'Org／suborg／repo YAML hierarchy 是 GitHub settings 的 desired state，不是產品需求。',
+          declarativeState: '核心哲學。Controller 依階層繼承計算有效設定，再把遠端 repository 拉回期望狀態。',
+          templateLifecycle: '不處理產品檔案模板；它只版本化並 fan-out GitHub 管理設定。',
+          proposalLifecycle: 'Config repo PR 合併後由 controller 套用；變更的 blast radius 取決於階層位置。',
+          rightSizedWork: '粒度依 org／suborg／repo scope，而非需求複雜度；越上層影響越廣。',
+          position: '可成為 CSARC policy JSON 的未來中央下發層；目前沒有足夠 fleet 規模支持導入。'
         },
         {
           name: 'Spec Kit',
           url: 'https://github.com/github/spec-kit',
           version: 'v1.0.1（2026-08-21）',
           stars: '131,843（截取 2026-08-27）',
-          role: ['局部高採用參考；重點比較 01–04，不延伸到治理與交付。', '可借用規格階段，但不綁定單一 CLI／agent command。'],
-          truth: ['feature 的 spec.md、plan.md、tasks.md 形成工作脈絡。', 'Issue 是執行邊界；核准 spec／ADR 才是長期契約，避免三份文件都成真相。'],
-          proposal: ['artifact 在 feature branch 演進，透過既有 Git／PR 接受。', '同樣以 PR 接受；未提交工作樹不算產品規格。'],
-          execution: ['tasks 可選擇轉成 GitHub Issues，再由 implement 執行。', 'Issue 先存在；是否需要 spec 取決於複雜度，不從 tasks 自動大量開單。'],
-          position: ['高人氣 specification-driven development workflow。', '只借用 01–04 的規格拆解觀念，不把它當完整 repo 公版。']
+          role: '局部高採用參考｜重點比較 01–04，不延伸到治理與交付。',
+          repositoryTruth: '每個 feature 的 spec.md、plan.md、tasks.md 形成實作脈絡，constitution 提供跨 feature 原則。',
+          declarativeState: '不是平台 desired state；Markdown artifacts 宣告需求與計畫，交給 agent command 消化。',
+          templateLifecycle: 'CLI／prompt templates 可升級，但不負責同步整套 repository infrastructure。',
+          proposalLifecycle: 'Artifacts 在 feature branch 演進；是否正式仍交給既有 Git／PR 流程。',
+          rightSizedWork: '主流程偏完整分階段；另有 bugfix／extension 路徑，但大型 feature 最能發揮價值。',
+          position: 'Stars 最高但只覆蓋 CSARC 的規格與實作前半段；值得學習，不是整體競品。'
         },
         {
           name: 'OpenSpec',
           url: 'https://github.com/Fission-AI/OpenSpec',
           version: 'v1.11.0（2026-08-26）',
           stars: '66,427（截取 2026-08-27）',
-          role: ['局部高採用參考；重點比較 01–04，尤其 current／proposed 分層。', '最值得直接學習 changes 模型，但不需要它取代模板與治理。'],
-          truth: ['openspec/specs 是 current truth；openspec/changes 是 in-flight delta。', '目前 main spec 是已接受基線；#376 正在補上同等清楚的 proposal 分層。'],
-          proposal: ['propose 建 change；apply 實作；archive 後更新 current specs。', '提案可在分支提交，但合併前不得宣稱 active；完成後要回寫正式規格。'],
-          execution: ['每個 change 有 tasks.md，實作圍繞該 change。', '每個 coherent change 有 Issue；未來可讓 Issue 連到 change，而不互相取代。'],
-          position: ['最貼近本次 01 工作定義問題的規格生命週期。', '範圍較廣；應採其分層語意，不整包導入工具。']
+          role: '局部高採用參考｜重點比較 01–04，尤其 current／proposed 分層。',
+          repositoryTruth: 'openspec/specs 是 current truth；openspec/changes 每個資料夾是一項 in-flight delta。',
+          declarativeState: 'Markdown requirements、scenarios、design 與 tasks 是可檢查 artifacts，不控制遠端平台。',
+          templateLifecycle: '不更新 repo 公版；它維護的是規格目錄與 change lifecycle。',
+          proposalLifecycle: 'propose 建 change、apply 實作、archive 後把核准內容併回 current specs。',
+          rightSizedWork: '小修可直接走 PR；較大變更先 proposal。是否建完整 artifacts 取決於風險與範圍。',
+          position: '最值得 CSARC 在 #376 直接借用的哲學：正式規格與進行中提案必須分開。'
         },
         {
           name: 'BMAD',
           url: 'https://github.com/bmad-code-org/BMAD-METHOD',
           version: 'v6.11.0（2026-08-10）',
           stars: '52,377（截取 2026-08-27）',
-          role: ['局部高採用參考；重點比較 01–04 的 right-sized planning。', '採相同「小改少寫、大改才加規格」原則，不引入完整 agent 角色群。'],
-          truth: ['依複雜度建立 brief、spec、architecture 與 planning artifacts。', '最小真相先是 Issue；只有跨 session／高風險工作再增加 durable 文件。'],
-          proposal: ['artifacts 在 clarify／plan／build 循環演進，交由既有 delivery 接受。', '提案經 Issue 討論與 PR 合併才正式，ADR 只保存 durable decision。'],
-          execution: ['story／tasks 交給專門 agents 與 workflows 執行。', '不規定 agent persona；所有 agent 共享同一份 repo 工作規則。'],
-          position: ['高人氣 AI delivery methodology。', '只借用 right-sized planning；CSARC 重點仍是可執行的 repo 基線。']
+          role: '局部高採用參考｜重點比較 01–04 的 right-sized planning。',
+          repositoryTruth: 'Brief、spec、architecture 與 planning artifacts 隨複雜度形成 durable context。',
+          declarativeState: '不是 config-as-code；重點是方法、角色與決策 artifacts，平台 enforcement 交給外部。',
+          templateLifecycle: '可升級 method、agents 與 workflow pack，但不負責產品 repo 的模板同步。',
+          proposalLifecycle: 'Artifacts 在 clarify → plan → build／verify 循環演進，最後交由既有 delivery 接受。',
+          rightSizedWork: '核心哲學。Quick Flow 處理小改，複雜產品才增加完整 planning 與 architecture。',
+          position: '高人氣 AI delivery 方法；CSARC 應借用分級哲學，不需要引入整套 agent persona。'
         },
         {
           name: 'OpenRewrite',
           url: 'https://github.com/openrewrite/rewrite',
           version: 'v8.91.0（2026-08-26）',
           stars: '3,679（截取 2026-08-27）',
-          role: ['局部參考；只比較 05、08、10 的大量語意遷移。', '目前用模板 diff 更新；規模化複雜升級時才需要 recipe engine。'],
-          truth: ['recipe 定義可重複轉換，並不描述產品需求。', 'Issue／spec 定義為何要改；轉換工具只可能是實作手段。'],
-          proposal: ['recipe 與執行結果各自經版本控制；生成 diff／PR 才供接受。', '同樣審查 diff，但每個 PR 必須連回具完成條件的 Issue。'],
-          execution: ['執行 recipe 產生 deterministic code changes，可批次開 PR。', '一次先處理一個 bounded Issue，不預設跨 fleet 大量改寫。'],
-          position: ['Semantic code migration engine。', '是模板與治理 distribution；未來可用 OpenRewrite 補 Copier 不擅長的語意遷移。']
+          role: '局部參考｜只比較 05、08、10 的大量語意遷移。',
+          repositoryTruth: 'Recipe 是可重複轉換的真相；它回答怎麼改程式，不回答產品為什麼要改。',
+          declarativeState: 'Recipe 以宣告方式描述 semantic transformation，由 parser／visitor 套用。',
+          templateLifecycle: '不是檔案模板同步；它直接理解語法樹，適合跨版本與框架做語意遷移。',
+          proposalLifecycle: 'Recipe 與執行結果分開版本控制；生成 diff／PR 供專案接受。',
+          rightSizedWork: '只有大量、重複且可機械化的修改值得寫 recipe；單一小改直接人工處理較便宜。',
+          position: '補 Copier 不擅長的 semantic migration；它是 CSARC 的未來工具，不是工作定義系統。'
         }
       ];
       const similarToolsHeader = similarToolsSlide.querySelector('.similar-tools-matrix thead tr');
@@ -987,16 +1011,7 @@ gh auth status`
         similarToolRows.forEach(row => {
           const key = row.dataset.comparisonKey;
           const cell = document.createElement('td');
-          if (key === 'version' || key === 'stars') {
-            cell.textContent = tool[key];
-          } else {
-            const [toolValue, csarcValue] = tool[key];
-            const toolLabel = document.createElement('strong');
-            toolLabel.textContent = '工具｜';
-            const csarcLabel = document.createElement('strong');
-            csarcLabel.textContent = 'CSARC｜';
-            cell.replaceChildren(toolLabel, toolValue, document.createElement('br'), csarcLabel, csarcValue);
-          }
+          cell.textContent = tool[key];
           row.append(cell);
         });
       });
