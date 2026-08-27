@@ -1411,7 +1411,7 @@ final = [
     for line in checkboxes
     if "integrator" in line
     and full_command in line
-    and ("unchanged" in line or "不再變動" in line)
+    and any(token in line for token in ("unchanged", "frozen", "不再變動", "已固定"))
     and ("exactly once" in line or "只執行一次" in line)
 ]
 generation = [
@@ -1462,7 +1462,7 @@ path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 lines = [
     "- [ ] `./scripts/verify` passes before Ready"
-    if line.startswith("- [ ] If this PR is the final integration candidate")
+    if line.startswith("- [ ] If this is the final integration candidate")
     else line
     for line in text.splitlines()
 ]
