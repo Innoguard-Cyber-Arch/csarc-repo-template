@@ -122,13 +122,15 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
 
     assert 'class="slide similar-tools-slide" data-audience="maintainer"' in source
     assert source.count('data-comparison-key="') == 5
+    assert source.count("<article data-comparison-key=") == 5
+    assert source.count("<ul></ul>") == 5
     assert source.count("data-similar-tools-panel") == 2
     assert source.count("data-similar-tools-tab") == 2
     assert 'role="tablist"' in source
     assert source.count('role="tab"') == 2
     assert "01 工作定義" in source
     assert "主要相似工具" in source
-    assert "該哲學熱門／代表工具" in source
+    assert "工作哲學參考" in source
     assert "自我定位" in source
     assert "與本套件的差異" in source
     for philosophy in (
@@ -143,7 +145,7 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     assert "element.remove()" in app
     assert "similarToolsSlide ?" in app
     comparison_data = app.split("const similarTools = [", 1)[1].split(
-        "const groups", 1
+        "const primaryBody", 1
     )[0]
     assert comparison_data.count("url: 'https://github.com/") == 12
     assert comparison_data.count("group: 'primary'") == 2
@@ -160,6 +162,7 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
         assert f"{key}:" in comparison_data
     assert "similarToolsHeader" not in app
     assert "document.createElement('br')" in app
+    assert "document.createElement('li')" in app
     assert "primaryBody.append" in app
     assert "renderPanel();" in app
     assert "tab.setAttribute('aria-selected'" in app

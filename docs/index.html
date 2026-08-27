@@ -422,8 +422,16 @@
     .similar-tools-primary-matrix thead th:nth-child(4) { width: 23%; }
     .similar-tools-primary-matrix thead th:nth-child(5) { width: 28%; }
     .similar-tools-primary-matrix tbody th { width: 17%; font-size: 16px; }
-    .similar-tool-entry { margin: 0; }
-    .similar-tool-entry + .similar-tool-entry { margin-top: 5px; padding-top: 5px; border-top: 1px dotted #b9b9b3; }
+    .similar-tools-philosophies { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); background: white; }
+    .similar-tools-philosophies article { padding: 9px 12px; border-bottom: 1px solid var(--line); }
+    .similar-tools-philosophies article:nth-child(even) { background: #fafaf8; }
+    .similar-tools-philosophies article:last-child { border-bottom: 0; }
+    .similar-tools-philosophies h3 { font-size: 17px; }
+    .similar-tools-philosophies article > p { margin-top: 2px; color: var(--muted); font-size: 14px; line-height: 1.22; }
+    .similar-tools-philosophies ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 24px; margin: 6px 0 0; padding-left: 19px; }
+    .similar-tools-philosophies li { font-size: 14px; line-height: 1.24; }
+    .similar-tools-philosophies li strong { color: #174f8b; }
+    .similar-tools-philosophies li.primary::marker { color: #b9a700; }
     .similar-tools-note {
       margin-top: 7px;
       padding: 6px 9px;
@@ -1601,27 +1609,35 @@
       </div>
       <div id="similar-tools-panel-philosophy" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-philosophy" data-similar-tools-panel hidden>
         <div class="similar-tools-legend" aria-label="工作哲學參考定義">
-          <span class="reference">熱門／代表工具｜只學它真正擅長的部分</span>
+          <span class="reference">每格先解釋哲學，再列出採用這種做法的工具</span>
         </div>
-        <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="工作哲學參考工具比較表">
-          <table class="similar-tools-matrix similar-tools-philosophy-matrix">
-          <thead>
-            <tr>
-              <th scope="col">01 工作哲學</th>
-              <th scope="col">主要相似工具</th>
-              <th scope="col">該哲學熱門／代表工具</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr data-comparison-key="repositoryTruth"><th scope="row">哲學 A<br>Repo 即真相</th></tr>
-            <tr data-comparison-key="declarativeState"><th scope="row">哲學 B<br>宣告式設定</th></tr>
-            <tr data-comparison-key="templateLifecycle"><th scope="row">哲學 C<br>模板生命週期</th></tr>
-            <tr data-comparison-key="proposalLifecycle"><th scope="row">哲學 D<br>提案到正式</th></tr>
-            <tr data-comparison-key="rightSizedWork"><th scope="row">哲學 E<br>依複雜度調整</th></tr>
-          </tbody>
-          </table>
+        <div class="similar-tools-philosophies" tabindex="0" role="region" aria-label="工作哲學參考工具">
+          <article data-comparison-key="repositoryTruth">
+            <h3>哲學 A｜Repo 即真相</h3>
+            <p>規格、決策、計畫與驗證證據都跟程式碼一起版本化，換人或換 agent 仍能從 repo 還原脈絡。</p>
+            <ul></ul>
+          </article>
+          <article data-comparison-key="declarativeState">
+            <h3>哲學 B｜宣告式設定</h3>
+            <p>先描述想要的狀態，再由工具產生檔案或持續把實際狀態拉回目標。</p>
+            <ul></ul>
+          </article>
+          <article data-comparison-key="templateLifecycle">
+            <h3>哲學 C｜模板生命週期</h3>
+            <p>模板不是只建立一次；上游版本更新後，既有 repo 仍能安全接收變更並處理衝突。</p>
+            <ul></ul>
+          </article>
+          <article data-comparison-key="proposalLifecycle">
+            <h3>哲學 D｜提案到正式</h3>
+            <p>把進行中的提案與已接受基線分開，明確定義何時審查、合併與歸檔。</p>
+            <ul></ul>
+          </article>
+          <article data-comparison-key="rightSizedWork">
+            <h3>哲學 E｜依複雜度調整</h3>
+            <p>小修改走短流程；範圍大、風險高或跨 session 的工作才增加規格、計畫與架構文件。</p>
+            <ul></ul>
+          </article>
         </div>
-        <p class="similar-tools-note"><strong>分類原則：</strong>同一工具可出現在多種哲學；此處只表示該做法值得參考，不表示它是整套 CSARC 的替代品。</p>
       </div>
     </section>
 
@@ -3143,25 +3159,17 @@ gh auth status`
         primaryBody.append(row);
       });
 
-      const groups = ['primary', 'reference'];
-      const similarToolRows = [...similarToolsSlide.querySelectorAll('[data-comparison-key]')];
-      groups.forEach(group => {
-        const tools = similarTools.filter(tool => tool.group === group);
-        similarToolRows.forEach(row => {
-          const key = row.dataset.comparisonKey;
-          const cell = document.createElement('td');
-          const list = document.createElement('div');
-          list.className = 'similar-tool-list';
-          tools.filter(tool => tool.philosophies[key]).forEach(tool => {
-            const entry = document.createElement('p');
-            entry.className = 'similar-tool-entry';
-            const name = document.createElement('strong');
-            name.textContent = `${tool.name}：`;
-            entry.append(name, tool.philosophies[key]);
-            list.append(entry);
-          });
-          cell.append(list);
-          row.append(cell);
+      const philosophySections = [...similarToolsSlide.querySelectorAll('[data-comparison-key]')];
+      philosophySections.forEach(section => {
+        const key = section.dataset.comparisonKey;
+        const list = section.querySelector('ul');
+        similarTools.filter(tool => tool.philosophies[key]).forEach(tool => {
+          const entry = document.createElement('li');
+          if (tool.group === 'primary') entry.classList.add('primary');
+          const name = document.createElement('strong');
+          name.textContent = `${tool.name}：`;
+          entry.append(name, tool.philosophies[key]);
+          list.append(entry);
         });
       });
 

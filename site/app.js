@@ -1018,25 +1018,17 @@ gh auth status`
         primaryBody.append(row);
       });
 
-      const groups = ['primary', 'reference'];
-      const similarToolRows = [...similarToolsSlide.querySelectorAll('[data-comparison-key]')];
-      groups.forEach(group => {
-        const tools = similarTools.filter(tool => tool.group === group);
-        similarToolRows.forEach(row => {
-          const key = row.dataset.comparisonKey;
-          const cell = document.createElement('td');
-          const list = document.createElement('div');
-          list.className = 'similar-tool-list';
-          tools.filter(tool => tool.philosophies[key]).forEach(tool => {
-            const entry = document.createElement('p');
-            entry.className = 'similar-tool-entry';
-            const name = document.createElement('strong');
-            name.textContent = `${tool.name}：`;
-            entry.append(name, tool.philosophies[key]);
-            list.append(entry);
-          });
-          cell.append(list);
-          row.append(cell);
+      const philosophySections = [...similarToolsSlide.querySelectorAll('[data-comparison-key]')];
+      philosophySections.forEach(section => {
+        const key = section.dataset.comparisonKey;
+        const list = section.querySelector('ul');
+        similarTools.filter(tool => tool.philosophies[key]).forEach(tool => {
+          const entry = document.createElement('li');
+          if (tool.group === 'primary') entry.classList.add('primary');
+          const name = document.createElement('strong');
+          name.textContent = `${tool.name}：`;
+          entry.append(name, tool.philosophies[key]);
+          list.append(entry);
         });
       });
 

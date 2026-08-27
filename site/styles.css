@@ -413,8 +413,16 @@
     .similar-tools-primary-matrix thead th:nth-child(4) { width: 23%; }
     .similar-tools-primary-matrix thead th:nth-child(5) { width: 28%; }
     .similar-tools-primary-matrix tbody th { width: 17%; font-size: 16px; }
-    .similar-tool-entry { margin: 0; }
-    .similar-tool-entry + .similar-tool-entry { margin-top: 5px; padding-top: 5px; border-top: 1px dotted #b9b9b3; }
+    .similar-tools-philosophies { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); background: white; }
+    .similar-tools-philosophies article { padding: 9px 12px; border-bottom: 1px solid var(--line); }
+    .similar-tools-philosophies article:nth-child(even) { background: #fafaf8; }
+    .similar-tools-philosophies article:last-child { border-bottom: 0; }
+    .similar-tools-philosophies h3 { font-size: 17px; }
+    .similar-tools-philosophies article > p { margin-top: 2px; color: var(--muted); font-size: 14px; line-height: 1.22; }
+    .similar-tools-philosophies ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 24px; margin: 6px 0 0; padding-left: 19px; }
+    .similar-tools-philosophies li { font-size: 14px; line-height: 1.24; }
+    .similar-tools-philosophies li strong { color: #174f8b; }
+    .similar-tools-philosophies li.primary::marker { color: #b9a700; }
     .similar-tools-note {
       margin-top: 7px;
       padding: 6px 9px;
