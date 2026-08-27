@@ -847,7 +847,10 @@ gh auth status`
           stars: '1,198',
           group: 'primary',
           selfPosition: 'Agent-ready repository framework：把 AI 工作規則、持久計畫、驗證與安全更新放進 repo。',
-          difference: 'Repository Harness 偏向替既有 repo 加上 agent 工作框架；CSARC 另外提供可生成的技術 profile、GitHub 治理、交付與版本政策。',
+          difference: [
+            'Repository Harness 偏向替既有 repo 加上 agent 工作框架與安全更新機制。',
+            'CSARC 另外提供可生成的技術 profile、GitHub 治理、交付與版本政策。'
+          ],
           philosophies: {
             repositoryTruth: 'repo 同時保存產品文件、決策、plan、程式與驗證證據。',
             templateLifecycle: 'updater 保留 upstream base，用三方合併安全更新既有 repo。',
@@ -863,7 +866,10 @@ gh auth status`
           stars: '2,948',
           group: 'primary',
           selfPosition: 'Project generator：用一般程式語言宣告專案，持續 synth 出受管設定與工作流程。',
-          difference: 'projen 把大量檔案視為不可手改的生成結果；CSARC 用 Copier 發布可更新基線，並保留產品檔案與政策檔案的責任邊界。',
+          difference: [
+            'projen 把 .projenrc 當唯一來源，大量生成檔不允許直接修改。',
+            'CSARC 用 Copier 發布可更新基線，並保留產品檔案與政策檔案的責任邊界。'
+          ],
           philosophies: {
             repositoryTruth: '.projenrc 是唯一手寫真相，其他專案檔由 synth 產生。',
             declarativeState: '用 typed components 宣告期望專案，再由 synth 收斂檔案。',
@@ -1013,7 +1019,13 @@ gh auth status`
         const positionCell = document.createElement('td');
         positionCell.textContent = tool.selfPosition;
         const differenceCell = document.createElement('td');
-        differenceCell.textContent = tool.difference;
+        const differenceList = document.createElement('ul');
+        tool.difference.forEach(point => {
+          const item = document.createElement('li');
+          item.textContent = point;
+          differenceList.append(item);
+        });
+        differenceCell.append(differenceList);
         row.append(nameCell, versionCell, starsCell, positionCell, differenceCell);
         primaryBody.append(row);
       });

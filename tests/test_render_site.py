@@ -163,6 +163,8 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     assert "similarToolsHeader" not in app
     assert "document.createElement('br')" in app
     assert "document.createElement('li')" in app
+    assert "tool.difference.forEach" in app
+    assert "differenceList.append" in app
     assert "primaryBody.append" in app
     assert "renderPanel();" in app
     assert "tab.setAttribute('aria-selected'" in app
