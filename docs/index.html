@@ -348,27 +348,23 @@
 
     .similar-tools-slide header { margin-bottom: 8px; }
     .similar-tools-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
-    .similar-tools-pager {
-      display: grid;
-      grid-template-columns: 38px minmax(220px, auto) 38px;
-      justify-content: center;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 7px;
-    }
-    .similar-tools-pager button {
-      width: 38px;
-      height: 30px;
-      border: 1px solid var(--ink);
-      background: white;
-      color: var(--ink);
+    .similar-tools-tabs { display: flex; align-items: end; gap: 4px; margin-bottom: -1px; padding-left: 10px; z-index: 2; }
+    .similar-tools-tabs button {
+      min-width: 210px;
+      padding: 7px 16px 8px;
+      border: 1px solid #a9a99f;
+      border-bottom-color: var(--line);
+      border-radius: 8px 8px 0 0;
+      background: #e9e9e4;
+      color: #4b4b47;
       cursor: pointer;
-      font-size: 20px;
+      font-size: 16px;
       font-weight: 900;
+      text-align: left;
     }
-    .similar-tools-pager button:disabled { border-color: #c8c8c2; color: #aaa; cursor: default; }
-    .similar-tools-pager span { display: flex; justify-content: center; gap: 8px; font-size: 16px; }
-    .similar-tools-pager small { color: var(--muted); font-size: inherit; font-weight: 800; }
+    .similar-tools-tabs button small { display: block; margin-bottom: 2px; font-size: 12px; letter-spacing: .03em; }
+    .similar-tools-tabs button[aria-selected="true"] { border-top: 5px solid var(--yellow); border-bottom-color: white; background: white; color: var(--ink); }
+    .similar-tools-tabs button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
     .similar-tools-panel { display: flex; flex: 1; min-height: 0; flex-direction: column; }
     .similar-tools-panel[hidden] { display: none; }
     .similar-tools-legend {
@@ -418,7 +414,8 @@
     .similar-tools-matrix tbody tr:nth-child(even) td { background: #fafaf8; }
     .similar-tools-matrix td strong { color: #174f8b; }
     .similar-tools-matrix td a { color: #174f8b; text-underline-offset: 2px; }
-    .similar-tools-primary-matrix { font-size: 16px; line-height: 1.3; }
+    .similar-tools-primary-matrix { min-height: 0; font-size: 16px; line-height: 1.3; }
+    .similar-tools-primary-wrap { flex: 0 0 auto; min-height: auto; overflow: visible; }
     .similar-tools-primary-matrix thead th:first-child { width: 17%; }
     .similar-tools-primary-matrix thead th:nth-child(2) { width: 17%; }
     .similar-tools-primary-matrix thead th:nth-child(3) { width: 15%; }
@@ -1578,16 +1575,15 @@
         <h2><span class="accent">01 工作定義</span>｜相似工具</h2>
         <p class="subtitle">先看整體設計目的真正接近的套件，再向右切換到各種工作哲學的局部參考。</p>
       </header>
-      <div class="similar-tools-pager" aria-label="相似工具內頁切換">
-        <button type="button" data-similar-tools-direction="-1" aria-label="上一個相似工具內頁">←</button>
-        <span><strong data-similar-tools-page-label>主要相似工具</strong><small data-similar-tools-page-count>1 / 2</small></span>
-        <button type="button" data-similar-tools-direction="1" aria-label="下一個相似工具內頁">→</button>
+      <div class="similar-tools-tabs" role="tablist" aria-label="相似工具內頁">
+        <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>01A｜整體接近</small>主要相似工具</button>
+        <button id="similar-tools-tab-philosophy" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-philosophy" data-similar-tools-tab="1"><small>01B｜局部能力</small>工作哲學參考</button>
       </div>
-      <div class="similar-tools-panel" data-similar-tools-panel data-label="主要相似工具">
+      <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
         <div class="similar-tools-legend" aria-label="主要相似工具定義">
           <span class="competitor">整體目的接近｜後續逐一比較 01–10</span>
         </div>
-        <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="主要相似工具比較表">
+        <div class="similar-tools-table-wrap similar-tools-primary-wrap" tabindex="0" role="region" aria-label="主要相似工具比較表">
           <table class="similar-tools-matrix similar-tools-primary-matrix">
             <thead>
               <tr>
@@ -1603,7 +1599,7 @@
         </div>
         <p class="similar-tools-note"><strong>目前判斷：</strong>只有 Repository Harness 與 projen 的整體目的足以列入；其他 repo 先不混在這張表。</p>
       </div>
-      <div class="similar-tools-panel" data-similar-tools-panel data-label="工作哲學參考" hidden>
+      <div id="similar-tools-panel-philosophy" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-philosophy" data-similar-tools-panel hidden>
         <div class="similar-tools-legend" aria-label="工作哲學參考定義">
           <span class="reference">熱門／代表工具｜只學它真正擅長的部分</span>
         </div>
@@ -3170,21 +3166,27 @@ gh auth status`
       });
 
       const panels = [...similarToolsSlide.querySelectorAll('[data-similar-tools-panel]')];
-      const panelButtons = [...similarToolsSlide.querySelectorAll('[data-similar-tools-direction]')];
-      const panelLabel = similarToolsSlide.querySelector('[data-similar-tools-page-label]');
-      const panelCount = similarToolsSlide.querySelector('[data-similar-tools-page-count]');
+      const panelTabs = [...similarToolsSlide.querySelectorAll('[data-similar-tools-tab]')];
       let panelIndex = 0;
       const renderPanel = () => {
         panels.forEach((panel, index) => { panel.hidden = index !== panelIndex; });
-        panelLabel.textContent = panels[panelIndex].dataset.label;
-        panelCount.textContent = `${panelIndex + 1} / ${panels.length}`;
-        panelButtons[0].disabled = panelIndex === 0;
-        panelButtons[1].disabled = panelIndex === panels.length - 1;
+        panelTabs.forEach((tab, index) => {
+          tab.setAttribute('aria-selected', String(index === panelIndex));
+          tab.tabIndex = index === panelIndex ? 0 : -1;
+        });
       };
-      panelButtons.forEach(button => {
-        button.addEventListener('click', () => {
-          panelIndex += Number(button.dataset.similarToolsDirection);
+      panelTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          panelIndex = Number(tab.dataset.similarToolsTab);
           renderPanel();
+        });
+        tab.addEventListener('keydown', event => {
+          if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          panelIndex = (panelIndex + (event.key === 'ArrowRight' ? 1 : -1) + panels.length) % panels.length;
+          renderPanel();
+          panelTabs[panelIndex].focus();
         });
       });
       renderPanel();

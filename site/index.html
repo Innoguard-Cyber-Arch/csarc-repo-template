@@ -64,16 +64,15 @@
         <h2><span class="accent">01 工作定義</span>｜相似工具</h2>
         <p class="subtitle">先看整體設計目的真正接近的套件，再向右切換到各種工作哲學的局部參考。</p>
       </header>
-      <div class="similar-tools-pager" aria-label="相似工具內頁切換">
-        <button type="button" data-similar-tools-direction="-1" aria-label="上一個相似工具內頁">←</button>
-        <span><strong data-similar-tools-page-label>主要相似工具</strong><small data-similar-tools-page-count>1 / 2</small></span>
-        <button type="button" data-similar-tools-direction="1" aria-label="下一個相似工具內頁">→</button>
+      <div class="similar-tools-tabs" role="tablist" aria-label="相似工具內頁">
+        <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>01A｜整體接近</small>主要相似工具</button>
+        <button id="similar-tools-tab-philosophy" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-philosophy" data-similar-tools-tab="1"><small>01B｜局部能力</small>工作哲學參考</button>
       </div>
-      <div class="similar-tools-panel" data-similar-tools-panel data-label="主要相似工具">
+      <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
         <div class="similar-tools-legend" aria-label="主要相似工具定義">
           <span class="competitor">整體目的接近｜後續逐一比較 01–10</span>
         </div>
-        <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="主要相似工具比較表">
+        <div class="similar-tools-table-wrap similar-tools-primary-wrap" tabindex="0" role="region" aria-label="主要相似工具比較表">
           <table class="similar-tools-matrix similar-tools-primary-matrix">
             <thead>
               <tr>
@@ -89,7 +88,7 @@
         </div>
         <p class="similar-tools-note"><strong>目前判斷：</strong>只有 Repository Harness 與 projen 的整體目的足以列入；其他 repo 先不混在這張表。</p>
       </div>
-      <div class="similar-tools-panel" data-similar-tools-panel data-label="工作哲學參考" hidden>
+      <div id="similar-tools-panel-philosophy" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-philosophy" data-similar-tools-panel hidden>
         <div class="similar-tools-legend" aria-label="工作哲學參考定義">
           <span class="reference">熱門／代表工具｜只學它真正擅長的部分</span>
         </div>

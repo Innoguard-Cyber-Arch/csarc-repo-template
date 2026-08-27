@@ -1041,21 +1041,27 @@ gh auth status`
       });
 
       const panels = [...similarToolsSlide.querySelectorAll('[data-similar-tools-panel]')];
-      const panelButtons = [...similarToolsSlide.querySelectorAll('[data-similar-tools-direction]')];
-      const panelLabel = similarToolsSlide.querySelector('[data-similar-tools-page-label]');
-      const panelCount = similarToolsSlide.querySelector('[data-similar-tools-page-count]');
+      const panelTabs = [...similarToolsSlide.querySelectorAll('[data-similar-tools-tab]')];
       let panelIndex = 0;
       const renderPanel = () => {
         panels.forEach((panel, index) => { panel.hidden = index !== panelIndex; });
-        panelLabel.textContent = panels[panelIndex].dataset.label;
-        panelCount.textContent = `${panelIndex + 1} / ${panels.length}`;
-        panelButtons[0].disabled = panelIndex === 0;
-        panelButtons[1].disabled = panelIndex === panels.length - 1;
+        panelTabs.forEach((tab, index) => {
+          tab.setAttribute('aria-selected', String(index === panelIndex));
+          tab.tabIndex = index === panelIndex ? 0 : -1;
+        });
       };
-      panelButtons.forEach(button => {
-        button.addEventListener('click', () => {
-          panelIndex += Number(button.dataset.similarToolsDirection);
+      panelTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          panelIndex = Number(tab.dataset.similarToolsTab);
           renderPanel();
+        });
+        tab.addEventListener('keydown', event => {
+          if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          panelIndex = (panelIndex + (event.key === 'ArrowRight' ? 1 : -1) + panels.length) % panels.length;
+          renderPanel();
+          panelTabs[panelIndex].focus();
         });
       });
       renderPanel();
