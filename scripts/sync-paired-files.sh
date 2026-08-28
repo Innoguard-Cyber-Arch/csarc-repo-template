@@ -18,6 +18,10 @@ paired_files=(
   .github/ISSUE_TEMPLATE/documentation.yml
   .github/ISSUE_TEMPLATE/feature.yml
   .github/ISSUE_TEMPLATE/task.yml
+  .github/workflows/issue-triage.yml
+  .github/workflows/milestone-lifecycle.yml
+  .github/workflows/pr-policy.yml
+  .github/workflows/spec-to-issue.yml
   policies/actions.json
   policies/dev-next-ruleset.json
   policies/labels.json
