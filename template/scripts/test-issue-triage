@@ -71,6 +71,7 @@ export ISSUE_AUTHOR="contributor"
 export ISSUE_NUMBER="42"
 export ISSUE_STATE_REASON=""
 export ISSUE_TITLE="Add dependency policy checks"
+export ISSUE_TYPE=""
 
 ISSUE_BODY=$'### 類型\n\nfeature\n\n### 問題\n\nExample' \
 ISSUE_LABELS="" "$validator"
@@ -86,7 +87,22 @@ grep -q -- '--add-label enhancement' "$GH_LOG"
 grep -q -- '--type Task' "$GH_LOG"
 
 : > "$GH_LOG"
-ISSUE_BODY="" ISSUE_LABELS="bug" "$validator"
+ISSUE_TYPE="Task" ISSUE_BODY="" ISSUE_LABELS="enhancement" "$validator"
+grep -q -- '--add-assignee contributor' "$GH_LOG"
+grep -q -- '--add-label enhancement' "$GH_LOG"
+grep -q -- '--type Task' "$GH_LOG"
+if grep -q -- '--type Feature' "$GH_LOG"; then
+  echo "Issue triage replaced a native Task with Feature."
+  exit 1
+fi
+
+: > "$GH_LOG"
+ISSUE_TYPE="Feature" ISSUE_BODY="" ISSUE_LABELS="enhancement" "$validator"
+grep -q -- '--add-label enhancement' "$GH_LOG"
+grep -q -- '--type Feature' "$GH_LOG"
+
+: > "$GH_LOG"
+ISSUE_TYPE="Bug" ISSUE_BODY="" ISSUE_LABELS="bug" "$validator"
 grep -q -- '--add-assignee contributor' "$GH_LOG"
 grep -q -- '--add-label bug' "$GH_LOG"
 grep -q -- '--type Bug' "$GH_LOG"
@@ -114,8 +130,8 @@ grep -q -- '--add-assignee contributor' "$GH_LOG"
 grep -q -- '--add-label duplicate' "$GH_LOG"
 
 : > "$GH_LOG"
-MOCK_ISSUE_TYPES_AVAILABLE="false" ISSUE_BODY=$'### 類型\n\ndocumentation' \
-ISSUE_LABELS="" "$validator"
+MOCK_ISSUE_TYPES_AVAILABLE="false" ISSUE_TYPE="Task" ISSUE_BODY="" \
+ISSUE_LABELS="documentation" "$validator"
 grep -q -- '--add-assignee contributor' "$GH_LOG"
 grep -q -- '--add-label documentation' "$GH_LOG"
 grep -q -- '--type Task' "$GH_LOG"
@@ -125,4 +141,4 @@ if ISSUE_BODY="" ISSUE_LABELS="" "$validator" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Issue title cases passed: 10; triage cases passed: 8"
+echo "Issue title cases passed: 10; triage cases passed: 10"

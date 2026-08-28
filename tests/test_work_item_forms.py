@@ -84,8 +84,8 @@ def test_pr_templates_keep_repository_specific_checks_separate() -> None:
     assert "已測試新專案產生" not in generated_template
 
 
-def test_paired_files_check_accepts_archived_actions() -> None:
-    """Archived workflows must not remain required template pairs."""
+def test_paired_files_check_accepts_selected_actions() -> None:
+    """Only the selected active workflows may remain template pairs."""
     completed = subprocess.run(  # noqa: S603
         [REPO_ROOT / "scripts" / "sync-paired-files.sh", "--check"],
         cwd=REPO_ROOT,
