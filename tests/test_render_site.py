@@ -129,10 +129,14 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     data = json.loads(
         (root / "site/data/similar_tools.json").read_text(encoding="utf-8")
     )
+    shortcode = (root / "site/layouts/shortcodes/similar-tools.html").read_text(
+        encoding="utf-8"
+    )
 
     for source in (chinese, english):
-        assert 'key="similar-tools" audience="maintainer"' in source
+        assert 'key="similar-tools" parity="supplemental"' in source
         assert "{{< similar-tools >}}" in source
+    assert shortcode.count('data-audience="maintainer"') == 1
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
@@ -168,7 +172,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
             assert set(comparison["description"]) == {"zh-tw", "en"}
 
 
-def test_parity_ignores_explicit_maintainer_only_slides(tmp_path: Path) -> None:
+def test_parity_ignores_explicit_supplemental_slides(tmp_path: Path) -> None:
     legacy = tmp_path / "legacy.html"
     candidate = tmp_path / "candidate.html"
     legacy.write_text(
@@ -181,6 +185,9 @@ def test_parity_ignores_explicit_maintainer_only_slides(tmp_path: Path) -> None:
 </section>
 <section class="slide" id="similar-tools" data-audience="maintainer">
 <div class="legacy-content">Supplemental maintainer copy</div>
+</section>
+<section class="slide" id="public-supplement" data-parity="supplemental">
+<div class="legacy-content">Supplemental public copy</div>
 </section>
 """,
         encoding="utf-8",

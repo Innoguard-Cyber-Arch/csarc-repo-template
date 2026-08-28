@@ -43,6 +43,6 @@
   </ol>
   <a class="journey-bookend appendix{{ if eq .Key "bridge" }} active-bridge{{ end }}" href="#bridge"{{ if eq .Key "bridge" }} aria-current="page"{{ end }}>{{ cond $english "Review" "五月盤點" }}</a>
   <a class="journey-bookend appendix{{ if eq .Key "ecosystem" }} active-selection{{ end }}" href="#ecosystem"{{ if eq .Key "ecosystem" }} aria-current="page"{{ end }}>{{ cond $english "Tools" "工具附錄" }}</a>
-  <a class="journey-bookend appendix{{ if eq .Key "similar-tools" }} active-selection{{ end }}" data-audience="maintainer" href="#similar-tools"{{ if eq .Key "similar-tools" }} aria-current="page"{{ end }}>{{ cond $english "Similar" "相似工具" }}</a>
+  <a class="journey-bookend appendix{{ if eq .Key "similar-tools" }} active-selection{{ end }}" href="#similar-tools"{{ if eq .Key "similar-tools" }} aria-current="page"{{ end }}>{{ cond $english "Similar" "相似工具" }}</a>
   <a class="journey-bookend appendix{{ if or (in $reviewKeys .Key) (hasPrefix .Key "glossary") }} active-overview{{ end }}" href="#access-control"{{ if or (in $reviewKeys .Key) (hasPrefix .Key "glossary") }} aria-current="page"{{ end }}>{{ cond $english "Decisions" "決策附錄" }}</a>
 </aside>

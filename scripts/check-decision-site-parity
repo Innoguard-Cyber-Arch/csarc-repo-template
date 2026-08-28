@@ -63,6 +63,7 @@ class ContentParser(HTMLParser):
                 self.key = (
                     None
                     if attrs.get("data-audience") == "maintainer"
+                    or attrs.get("data-parity") == "supplemental"
                     else attrs.get("id")
                 )
             else:
@@ -114,7 +115,9 @@ class ContentParser(HTMLParser):
         )
 
 
-def parse(path: Path, *, candidate: bool) -> dict[str, tuple[str, tuple[tuple[str, str], ...]]]:
+def parse(
+    path: Path, *, candidate: bool
+) -> dict[str, tuple[str, tuple[tuple[str, str], ...]]]:
     parser = ContentParser(candidate=candidate)
     parser.feed(path.read_text(encoding="utf-8"))
     return parser.slides
@@ -122,7 +125,9 @@ def parse(path: Path, *, candidate: bool) -> dict[str, tuple[str, tuple[tuple[st
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--legacy", type=Path, default=Path("site/legacy/index.html"))
+    parser.add_argument(
+        "--legacy", type=Path, default=Path("site/legacy/index.html")
+    )
     parser.add_argument(
         "--candidate", type=Path, default=Path("dist/hugo-site/index.html")
     )

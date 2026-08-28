@@ -61,6 +61,12 @@
         renderTab();
       });
     });
+    addEventListener('csarc:detail-level', event => {
+      if (event.detail === 'simple' && selectedIndex !== 0) {
+        selectedIndex = 0;
+        renderTab();
+      }
+    });
     renderTab();
   });
 

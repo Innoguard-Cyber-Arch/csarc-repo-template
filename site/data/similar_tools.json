@@ -3,9 +3,9 @@
   "threshold": 4,
   "labels": {
     "zh-tw": {
-      "eyebrow": "維運附錄｜相似工具",
+      "eyebrow": "工具附錄｜相似工具",
       "title": "相似工具｜整體競品與局部參考",
-      "subtitle": "所有相似工具集中在這裡：先看整體目的接近的套件，再按旅程切換各項具體做法。",
+      "subtitle": "標準模式先看整體目的接近的套件；維運模式可再按旅程檢查各項具體做法。",
       "primaryTabOverline": "整體接近",
       "primaryTab": "主要相似工具",
       "primaryLegend": "整體目的相近｜完整與部分符合的旅程合計至少 4 個",
@@ -26,9 +26,9 @@
       "csarc": "CSARC："
     },
     "en": {
-      "eyebrow": "Maintenance appendix | Similar tools",
+      "eyebrow": "Tools appendix | Similar tools",
       "title": "Similar tools | Direct alternatives and focused references",
-      "subtitle": "Review projects with a similar overall purpose first, then compare concrete approaches by journey.",
+      "subtitle": "Standard mode shows projects with a similar overall purpose; Maintenance mode adds concrete comparisons by journey.",
       "primaryTabOverline": "Overall match",
       "primaryTab": "Primary similar tools",
       "primaryLegend": "Similar overall purpose | at least four full or partial journey matches",
