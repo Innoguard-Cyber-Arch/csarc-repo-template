@@ -1458,21 +1458,6 @@
     .journey-bookend.appendix { margin-top: 3px; border-left: 6px solid var(--optional); }
     .journey-rail > .journey-bookend:first-of-type { margin-top: 8px; }
 
-    .internal-notice {
-      position: fixed;
-      left: 0;
-      right: 0;
-      top: 0;
-      z-index: 7;
-      padding: 3px 12px;
-      background: var(--ink);
-      color: var(--yellow);
-      font-size: 14px;
-      font-weight: 800;
-      letter-spacing: .02em;
-      text-align: center;
-    }
-
     .controls, .view-controls { opacity: .24; transition: opacity .15s ease; }
     .controls:hover, .controls:focus-within, .view-controls:hover, .view-controls:focus-within { opacity: .92; }
     .controls { position: fixed; right: 18px; bottom: 12px; display: flex; align-items: center; gap: 6px; z-index: 5; }
@@ -1496,7 +1481,7 @@
       html, body { overflow: visible; background: white; }
       .deck { position: static; display: block; width: auto; height: auto; padding: 0; transform: none; }
       .slide, .slide.active { position: relative; display: flex; width: 16in; height: 9in; box-shadow: none; page-break-after: always; animation: none; transform: none; }
-      .controls, .view-controls, .progress, .internal-notice { display: none; }
+      .controls, .view-controls, .progress { display: none; }
     }
     @media (prefers-reduced-motion: reduce) { .slide.active { animation: none; } }
 </style>
@@ -1966,7 +1951,6 @@ html[data-detail-level="simple"] .detail-panel {
 </style>
 </head>
 <body>
-  <p class="internal-notice">Internal use only — do not share this link publicly</p>
   <div class="reading-controls">
     <nav class="language-control" aria-label="Reading language">
       <a href="index.html"
@@ -3124,7 +3108,7 @@ html[data-detail-level="simple"] .detail-panel {
 </details>
 <aside class="technical-detail" data-content-key="docs-site-access">
   <h3>Access and maintenance boundaries</h3>
-  <code>noindex</code>, <code>robots.txt</code>, and the page notice reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
+  <code>noindex</code> and <code>robots.txt</code> reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
 </aside>
 </div>
 </section>
@@ -3786,7 +3770,7 @@ html[data-detail-level="simple"] .detail-panel {
 </table>
 <aside class="technical-detail" data-content-key="access-control-limit">
   <h3>What exists and what it cannot do</h3>
-  <code>docs/index.html</code> contains <code>noindex,nofollow</code> and a visible internal-use notice, while <code>docs/robots.txt</code> asks crawlers to stay away. None authenticates a reader, and anyone with the offline file can forward it. Maintainers must separately approve a host, identity provider, data policy, and audit policy. Issue #79 tracks that decision.
+  <code>docs/index.html</code> contains <code>noindex,nofollow</code>, while <code>docs/robots.txt</code> asks crawlers to stay away. Neither authenticates a reader, and anyone with the offline file can forward it. Maintainers must separately approve a host, identity provider, data policy, and audit policy. Issue #79 tracks that decision.
 </aside>
 </div>
 </section>

@@ -1,6 +1,5 @@
 +++
 title = "CSARC Repo Template | AI-assisted SDLC foundation"
-notice = "Internal use only — do not share this link publicly"
 
 [controls]
 language = "Reading language"
@@ -221,7 +220,7 @@ Scheduled checks are snapshots. A setting changed and restored between runs stil
 {{< /disclosure >}}
 
 {{< detail key="docs-site-access" title="Access and maintenance boundaries" >}}
-`noindex`, `robots.txt`, and the page notice reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
+`noindex` and `robots.txt` reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
 {{< /detail >}}
 {{< /slide >}}
 
@@ -287,7 +286,7 @@ Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, gene
 | Backstage, Confluence, or another internal portal | Can govern several internal documents together | One site does not justify an IT/platform-operated service today |
 
 {{< detail key="access-control-limit" title="What exists and what it cannot do" >}}
-`docs/index.html` contains `noindex,nofollow` and a visible internal-use notice, while `docs/robots.txt` asks crawlers to stay away. None authenticates a reader, and anyone with the offline file can forward it. Maintainers must separately approve a host, identity provider, data policy, and audit policy. Issue #79 tracks that decision.
+`docs/index.html` contains `noindex,nofollow`, while `docs/robots.txt` asks crawlers to stay away. Neither authenticates a reader, and anyone with the offline file can forward it. Maintainers must separately approve a host, identity provider, data policy, and audit policy. Issue #79 tracks that decision.
 {{< /detail >}}
 {{< /slide >}}
 

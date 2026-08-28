@@ -1,6 +1,5 @@
 +++
 title = "CSARC Repo Template｜AI 輔助 SDLC 團隊公版"
-notice = "內部限閱・請勿公開分享此連結（Internal use only — do not share this link publicly）"
 
 [controls]
 language = "閱讀語言"
@@ -555,7 +554,7 @@ GitHub Release 是所有 profile 的共同基線。PyPI／npm 分開選配、預
 {{< /disclosure >}}
 
 {{< detail key="docs-site-access" title="存取與維護邊界" >}}
-`noindex`、`robots.txt` 與頁首提示只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。
+`noindex` 與 `robots.txt` 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
@@ -711,15 +710,15 @@ Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、�
 <header>
         <span class="selection-sequence">決策附錄</span>
         <h2>存取控制決策｜<span class="accent">託管方案未定前的臨時防護</span></h2>
-        <p class="subtitle">評估三種存取控制方案的成本與限制；正式方案定案前，先以 <code>noindex</code>／<code>robots.txt</code> 與明顯提示做臨時防護，這不是存取控制。</p>
+        <p class="subtitle">評估三種存取控制方案的成本與限制；正式方案定案前，先以 <code>noindex</code>／<code>robots.txt</code> 降低意外曝光，這不是存取控制。</p>
       </header>
       <div class="plan-grid">
         <article class="plan-card team"><h3>Cloudflare Pages＋Access <span class="plan-state">候選</span></h3><p><strong>成本：</strong>免費額度可覆蓋小團隊登入牆；設定 Zero Trust 政策、網域與 DNS。<strong>限制：</strong>需要另建 Cloudflare 帳號與組織身分整合（Google／GitHub SSO 或 email OTP），資料與稽核政策需先確認。<strong>持有者：</strong>需組織 owner 建立並持有 Cloudflare 帳號權限，本 Issue 不建立或設定。</p></article>
         <article class="plan-card enterprise"><h3>GitHub Pages＋IP 限制 <span class="plan-state">受限</span></h3><p><strong>成本：</strong>沿用既有 GitHub 組織，不需另一個外部帳號。<strong>限制：</strong>私有 Pages 網站限定 GitHub Enterprise Cloud；IP allow list 對遠端／混合團隊不易維護，且組織目前是 Free plan，尚未具備此能力。<strong>持有者：</strong>需組織 owner 先升級方案，才能設定 Enterprise 網路政策。</p></article>
         <article class="plan-card current"><h3>內部登入平台（Backstage／Confluence 等） <span class="plan-state">未來</span></h3><p><strong>成本：</strong>可與既有身分系統（SSO）整合，統一管理多份內部文件，不只這一頁。<strong>限制：</strong>需要另外導入與維運一套平台，目前只有一份內部網站，導入成本大於效益。<strong>持有者：</strong>需 IT／平台團隊建立與維運，屬於未來、服務變多才評估的選項。</p></article>
       </div>
-      <aside class="selection-note"><strong>目前決定</strong><span>三個方案都需要外部帳號或組織升級，本 Issue 範圍不包含實際申請或設定；候選以 Cloudflare Pages＋Access 為優先評估對象，決定前先維持本頁「內部限閱」提示與 <code>noindex</code>／<code>robots.txt</code> 臨時防護。任何一個方案定案後，需另開實作用 Issue 並由組織 owner 核准與持有帳號。</span></aside>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>臨時防護：</strong><code>docs/index.html</code>（<code>&lt;meta name="robots"&gt;</code>＋頁首提示）＋<code>docs/robots.txt</code></li><li><strong>決策追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">Issue #79</a></li></ul></aside>
+      <aside class="selection-note"><strong>目前決定</strong><span>三個方案都需要外部帳號或組織升級，本 Issue 範圍不包含實際申請或設定；候選以 Cloudflare Pages＋Access 為優先評估對象，決定前只維持 <code>noindex</code>／<code>robots.txt</code> 以降低意外曝光。任何一個方案定案後，需另開實作用 Issue 並由組織 owner 核准與持有帳號。</span></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>臨時措施：</strong><code>docs/index.html</code> 的 <code>&lt;meta name="robots"&gt;</code>＋<code>docs/robots.txt</code></li><li><strong>決策追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">Issue #79</a></li></ul></aside>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -730,7 +729,7 @@ Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、�
 | Backstage／Confluence 等登入平台 | 可統一管理多份內部文件 | 現在只有一份網站，需 IT／平台團隊導入維運，成本高於效益 |
 
 {{< detail key="access-control-limit" title="目前已做與仍然做不到的事" >}}
-`docs/index.html` 內有 `noindex,nofollow` 與頁首「內部限閱」提示，`docs/robots.txt` 也拒絕 crawler。這些都不是 authentication；擁有離線 HTML 的人仍可轉寄。正式 host、身分提供者、資料與稽核政策需由維護者另行核准，追蹤於 Issue #79。
+`docs/index.html` 內有 `noindex,nofollow`，`docs/robots.txt` 也拒絕 crawler。這些都不是 authentication；擁有離線 HTML 的人仍可轉寄。正式 host、身分提供者、資料與稽核政策需由維護者另行核准，追蹤於 Issue #79。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}

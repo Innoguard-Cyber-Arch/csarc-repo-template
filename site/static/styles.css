@@ -1443,21 +1443,6 @@
     .journey-bookend.appendix { margin-top: 3px; border-left: 6px solid var(--optional); }
     .journey-rail > .journey-bookend:first-of-type { margin-top: 8px; }
 
-    .internal-notice {
-      position: fixed;
-      left: 0;
-      right: 0;
-      top: 0;
-      z-index: 7;
-      padding: 3px 12px;
-      background: var(--ink);
-      color: var(--yellow);
-      font-size: 14px;
-      font-weight: 800;
-      letter-spacing: .02em;
-      text-align: center;
-    }
-
     .controls, .view-controls { opacity: .24; transition: opacity .15s ease; }
     .controls:hover, .controls:focus-within, .view-controls:hover, .view-controls:focus-within { opacity: .92; }
     .controls { position: fixed; right: 18px; bottom: 12px; display: flex; align-items: center; gap: 6px; z-index: 5; }
@@ -1481,6 +1466,6 @@
       html, body { overflow: visible; background: white; }
       .deck { position: static; display: block; width: auto; height: auto; padding: 0; transform: none; }
       .slide, .slide.active { position: relative; display: flex; width: 16in; height: 9in; box-shadow: none; page-break-after: always; animation: none; transform: none; }
-      .controls, .view-controls, .progress, .internal-notice { display: none; }
+      .controls, .view-controls, .progress { display: none; }
     }
     @media (prefers-reduced-motion: reduce) { .slide.active { animation: none; } }
