@@ -132,11 +132,21 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     shortcode = (root / "site/layouts/shortcodes/similar-tools.html").read_text(
         encoding="utf-8"
     )
+    testing_shortcode = (
+        root / "site/layouts/shortcodes/testing.html"
+    ).read_text(encoding="utf-8")
 
     for source in (chinese, english):
         assert 'key="similar-tools" parity="supplemental"' in source
         assert "{{< similar-tools >}}" in source
-    assert shortcode.count('data-audience="maintainer"') == 2
+        assert (
+            'key="testing" audience="maintainer" parity="supplemental"'
+            in source
+        )
+        assert "{{< testing >}}" in source
+    assert shortcode.count('data-audience="maintainer"') == 1
+    assert "data-similar-tools-tab-testing" not in shortcode
+    assert "similar-tools-testing-matrix" in testing_shortcode
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english

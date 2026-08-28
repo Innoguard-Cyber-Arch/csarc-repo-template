@@ -705,6 +705,10 @@ Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、�
 {{< similar-tools >}}
 {{< /slide >}}
 
+{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜測試" title="測試｜Journey 01 工作定義" subtitle="列出工作定義要驗證的行為、本機命令，以及停用前分散在哪個 GitHub Action／job。" class="similar-tools-slide testing-slide" legacy="true" >}}
+{{< testing >}}
+{{< /slide >}}
+
 {{< slide key="access-control" eyebrow="存取決策" title="託管方案未定前的臨時防護" subtitle="目前只有降低誤分享的措施，沒有把提示語宣稱成安全控制。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
 <header>

@@ -97,7 +97,10 @@
     const activeSlide = document.querySelector('.slide.active');
     refreshSlides();
     const activeIndex = slides.indexOf(activeSlide);
-    const fallbackIndex = slides.indexOf(document.querySelector('#ecosystem'));
+    const fallbackSlide = activeSlide?.id === 'testing'
+      ? document.querySelector('#similar-tools')
+      : document.querySelector('#ecosystem');
+    const fallbackIndex = slides.indexOf(fallbackSlide);
     show(activeIndex >= 0 ? activeIndex : Math.max(0, fallbackIndex));
   });
   addEventListener('keydown', event => {

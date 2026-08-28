@@ -199,7 +199,7 @@ test "$(grep -o 'class="detail-level-control"' docs/index.html | wc -l | tr -d '
 grep -q 'class="detail-level-control" role="group" aria-label="閱讀模式" hidden' \
   docs/index.html
 grep -q '<html lang="zh-Hant-TW" data-detail-level="simple">' docs/index.html
-grep -q '>概覽</button>' docs/index.html
+grep -q '>標準</button>' docs/index.html
 grep -q '>維運</button>' docs/index.html
 grep -q '\.detail-level-control\[hidden\] { display: none; }' \
   docs/index.html
@@ -823,8 +823,8 @@ grep -q 'issues/79' docs/index.html
 grep -q 'Spec 格式決策｜' docs/index.html
 grep -q '預設 Issue，明確 Story 才建 Milestone' docs/index.html
 grep -q '<meta name="robots" content="noindex,nofollow">' docs/index.html
-grep -q 'internal-notice' docs/index.html
-grep -q '請勿公開分享此連結' docs/index.html
+! grep -q 'internal-notice' docs/index.html
+! grep -q '請勿公開分享此連結' docs/index.html
 grep -q '存取控制決策｜' docs/index.html
 grep -q '可維護來源 → self-contained HTML' docs/index.html
 grep -q 'docs/decisions/portable-decision-site.md' docs/index.html

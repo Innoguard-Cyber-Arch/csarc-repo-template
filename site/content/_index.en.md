@@ -278,6 +278,10 @@ Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, gene
 {{< similar-tools >}}
 {{< /slide >}}
 
+{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | Tests" title="Tests | Journey 01 work definition" subtitle="Lists the work-definition behaviors to verify, the local commands, and the GitHub Action/job that owned each check before suspension." class="similar-tools-slide testing-slide" legacy="true" >}}
+{{< testing >}}
+{{< /slide >}}
+
 {{< slide key="access-control" class="dense" eyebrow="Access decision" title="Temporary protection before a hosting choice" subtitle="Current measures reduce accidental sharing; none is described as access control." legacy="false" >}}
 | Option | Cost and benefit | Current limitation or owner |
 | --- | --- | --- |

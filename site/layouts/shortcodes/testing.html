@@ -1,0 +1,24 @@
+{{- $data := site.Data.similar_tools -}}
+{{- $lang := .Page.Lang -}}
+{{- $labels := index $data.testing.labels $lang -}}
+<div class="legacy-content similar-tools-content testing-content">
+  <div class="similar-tools-testing-intro">
+    <strong>{{ $labels.heading }}</strong><span>{{ $labels.scope }}</span>
+    <p><b>{{ $labels.statusLabel }}</b>{{ $labels.status }}</p>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="{{ $labels.heading }}">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">{{ $labels.target }}</th><th scope="col">{{ $labels.commands }}</th><th scope="col">{{ $labels.workflows }}</th><th scope="col">{{ $labels.localStatus }}</th></tr></thead>
+      <tbody>
+        {{- range $test := $data.testing.rows }}
+        <tr>
+          <th scope="row"><strong>{{ index $test.target $lang }}</strong><span>{{ index $test.checks $lang }}</span></th>
+          <td><ul>{{ range $test.commands }}<li><code>{{ . }}</code></li>{{ end }}</ul></td>
+          <td><ul>{{ range $test.workflows }}<li><a href="{{ $data.workflowArchiveUrl }}/{{ .file }}" target="_blank" rel="noreferrer"><strong>{{ .name }}</strong><code>{{ .file }}</code></a><span>{{ index .role $lang }}</span></li>{{ end }}</ul></td>
+          <td>{{ index $test.localStatus $lang }}</td>
+        </tr>
+        {{- end }}
+      </tbody>
+    </table>
+  </div>
+</div>
