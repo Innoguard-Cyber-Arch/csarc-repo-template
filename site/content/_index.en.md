@@ -23,10 +23,10 @@ The template puts work definition, AI instructions, verification, merging, depen
 | --- | --- |
 | Project composition | CI/CD-only, Python 3.14, TypeScript with Node 24 and pnpm 11, or Python plus TypeScript |
 | Branch strategy | Milestone delivery branches, `main`-only, or one long-lived `dev` |
-| Shared baseline | Issues and specs, tiered CI, promotion evidence, security checks, one SemVer, and Copier updates |
+| Shared baseline | SDD Features with Task/Bug subissues, dated delivery Milestones, tiered CI, promotion evidence, security checks, one SemVer, and Copier updates |
 
 {{< detail key="capability-boundary" title="Real entry points and capability boundaries" >}}
-- **New repository:** choose a profile and branch strategy; create a Milestone for an end-to-end story, then deliver its 1..N Issues through separate PRs.
+- **New repository:** choose a profile and branch strategy; keep the story in an SDD Feature, deliver Task/Bug subissues through separate PRs, and use a Milestone only for dated delivery.
 - **Existing repository:** preview adoption on a branch, preserve product content and legacy-debt boundaries, then resolve conflicts and gates explicitly.
 - **Repository already using the template:** update from a reviewed template SHA and review only that revision's diff.
 - **Prerequisites:** Git, GitHub CLI, and uv; TypeScript or mixed projects also need Node 24+ and pnpm 11. Local verification needs no token.
@@ -216,7 +216,7 @@ Scheduled checks are snapshots. A setting changed and restored between runs stil
 - `scripts/render_site.py` embeds CSS, JavaScript, fonts, and images and rejects external runtime assets.
 
 {{< disclosure key="portable-bundle" title="Markdown + Hugo → self-contained HTML" >}}
-`docs/decisions/` preserves canonical choices. Hugo owns content and HTML; the unchanged renderer only embeds assets and enforces safety checks. The final `docs/index.html` opens offline through `file://` without Pages, a CDN, or a JavaScript package runtime.
+`docs/adr/` preserves canonical choices. Hugo owns content and HTML; the unchanged renderer only embeds assets and enforces safety checks. The final `docs/index.html` opens offline through `file://` without Pages, a CDN, or a JavaScript package runtime.
 {{< /disclosure >}}
 
 {{< detail key="docs-site-access" title="Access and maintenance boundaries" >}}

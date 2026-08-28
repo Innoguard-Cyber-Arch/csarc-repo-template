@@ -1,6 +1,7 @@
 import json
 import re
 import runpy
+import sys
 from pathlib import Path
 
 import pytest
@@ -10,13 +11,17 @@ SPEC_MODULE = runpy.run_path(
 )
 SpecError = SPEC_MODULE["SpecError"]
 build_issue_body = SPEC_MODULE["build_issue_body"]
-build_milestone_description = SPEC_MODULE["build_milestone_description"]
+discover_adrs = SPEC_MODULE["discover_adrs"]
+discover_specs = SPEC_MODULE["discover_specs"]
 find_issue = SPEC_MODULE["find_issue"]
-find_milestone = SPEC_MODULE["find_milestone"]
 load_labels = SPEC_MODULE["load_labels"]
+main = SPEC_MODULE["main"]
 parse_spec_text = SPEC_MODULE["parse_spec_text"]
 sync_spec = SPEC_MODULE["sync_spec"]
-sync_milestone = SPEC_MODULE["sync_milestone"]
+validate_unique_ids = SPEC_MODULE["validate_unique_ids"]
+validate_adr = SPEC_MODULE["validate_adr"]
+validate_local_links = SPEC_MODULE["validate_local_links"]
+FULLWIDTH_COLON = "\N{FULLWIDTH COLON}"
 
 VALID_SPEC = """---
 id: SPEC-001
@@ -79,10 +84,173 @@ def test_story_tracking_is_explicit() -> None:
         )
 
 
+def test_current_spec_can_explicitly_skip_work_item_sync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current = VALID_SPEC.replace(
+        "status: proposed", "status: approved\ntracking: none"
+    )
+    spec = parse_spec_text(Path("docs/specs/SPEC-001-health.md"), current)
+    calls: list[list[str]] = []
+
+    monkeypatch.setitem(
+        sync_spec.__globals__,
+        "run_gh",
+        lambda arguments: calls.append(arguments),
+    )
+    sync_spec(spec, "owner/repo", "main", "https://github.com", "maintainer")
+
+    assert spec.tracking == "none"
+    assert calls == []
+
+
+def test_rejects_duplicate_spec_ids() -> None:
+    first = parse_spec_text(Path("docs/specs/first.md"), VALID_SPEC)
+    second = parse_spec_text(Path("docs/specs/second.md"), VALID_SPEC)
+
+    with pytest.raises(SpecError, match="duplicate id SPEC-001"):
+        validate_unique_ids([first, second])
+
+
+VALID_DECISION = f"""# Keep the portable baseline
+
+- **狀態{FULLWIDTH_COLON}**Accepted
+- **日期{FULLWIDTH_COLON}**2026-08-24
+- **來源 Issue{FULLWIDTH_COLON}**[Issue #1](https://github.com/owner/repo/issues/1)
+- **實作 PR{FULLWIDTH_COLON}**[PR #2](https://github.com/owner/repo/pull/2)
+
+## 問題與限制
+
+The baseline must remain portable.
+
+## 決定
+
+Use repository files.
+
+## 評估過的替代方案
+
+Do not require an external database.
+
+## 重新評估條件
+
+Revisit when repository files no longer scale.
+"""
+
+
+def test_validates_adr_metadata_and_sources(tmp_path: Path) -> None:
+    decision = tmp_path / "portable-baseline.md"
+    decision.write_text(VALID_DECISION, encoding="utf-8")
+    validate_adr(decision)
+
+    decision.write_text(
+        VALID_DECISION.replace(
+            f"**狀態{FULLWIDTH_COLON}**Accepted",
+            f"**狀態{FULLWIDTH_COLON}**Unknown",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(SpecError, match="ADR status"):
+        validate_adr(decision)
+
+
+def test_rejects_adr_without_pull_request_source(tmp_path: Path) -> None:
+    decision = tmp_path / "portable-baseline.md"
+    decision.write_text(
+        VALID_DECISION.replace(
+            f"- **實作 PR{FULLWIDTH_COLON}**"
+            "[PR #2](https://github.com/owner/repo/pull/2)\n",
+            "",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(SpecError, match="implementation PR URL"):
+        validate_adr(decision)
+
+
+@pytest.mark.parametrize(
+    ("metadata", "url", "message"),
+    [
+        (
+            f"- **來源 Issue{FULLWIDTH_COLON}**"
+            "[Issue #1](https://github.com/owner/repo/issues/1)\n",
+            "https://github.com/owner/repo/issues/1",
+            "source Issue URL",
+        ),
+        (
+            f"- **實作 PR{FULLWIDTH_COLON}**"
+            "[PR #2](https://github.com/owner/repo/pull/2)\n",
+            "https://github.com/owner/repo/pull/2",
+            "implementation PR URL",
+        ),
+    ],
+)
+def test_adr_sources_must_be_metadata(
+    tmp_path: Path, metadata: str, url: str, message: str
+) -> None:
+    decision = tmp_path / "portable-baseline.md"
+    decision.write_text(
+        VALID_DECISION.replace(metadata, "").replace(
+            "The baseline must remain portable.",
+            f"The baseline must remain portable. See {url}.",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SpecError, match=message):
+        validate_adr(decision)
+
+
+def test_explicit_missing_spec_fails_closed(tmp_path: Path) -> None:
+    with pytest.raises(SpecError, match="spec file does not exist"):
+        discover_specs([str(tmp_path / "missing.md")])
+
+
+def test_default_validation_requires_specs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["spec_to_issue.py", "validate"])
+
+    with pytest.raises(SpecError, match="no spec files found"):
+        main()
+
+
+def test_discovers_current_and_legacy_adrs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = tmp_path / "docs" / "adr" / "current.md"
+    legacy = tmp_path / "docs" / "decisions" / "legacy.md"
+    current.parent.mkdir(parents=True)
+    legacy.parent.mkdir(parents=True)
+    current.write_text(VALID_DECISION, encoding="utf-8")
+    legacy.write_text(VALID_DECISION, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    assert discover_adrs() == [
+        Path("docs/adr/current.md"),
+        Path("docs/decisions/legacy.md"),
+    ]
+
+
+def test_rejects_broken_local_memory_link(tmp_path: Path) -> None:
+    spec = tmp_path / "docs" / "specs" / "SPEC-001-example.md"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("See [missing](../adr/missing.md).", encoding="utf-8")
+
+    with pytest.raises(SpecError, match="linked file does not exist"):
+        validate_local_links([spec], tmp_path)
+
+
 def test_rejects_missing_acceptance_criteria() -> None:
     invalid = VALID_SPEC.replace("## Acceptance criteria", "## Checks")
     with pytest.raises(SpecError, match="Acceptance criteria"):
         parse_spec_text(Path("invalid.md"), invalid)
+
+
+def test_accepts_completed_acceptance_criterion() -> None:
+    completed = VALID_SPEC.replace("- [ ] The endpoint", "- [x] The endpoint")
+    spec = parse_spec_text(Path("docs/specs/SPEC-001-health.md"), completed)
+    assert spec.spec_id == "SPEC-001"
 
 
 def test_rejects_missing_required_section() -> None:
@@ -104,21 +272,6 @@ def test_issue_body_links_source_and_identity() -> None:
     ]
     assert "**Outcome**" in body
     assert "## Outcome" not in body
-
-
-def test_milestone_description_has_story_contract() -> None:
-    story = VALID_SPEC.replace(
-        "status: proposed", "status: approved\ntracking: story"
-    )
-    spec = parse_spec_text(Path("docs/specs/SPEC-001-health.md"), story)
-    description = build_milestone_description(
-        spec, "https://github.example/spec"
-    )
-    assert "csarc-story-id: SPEC-001" in description
-    assert "## Acceptance criteria" in description
-    assert "## Plan" in description
-    assert "## Verification" in description
-    assert "## References" in description
 
 
 def test_find_issue_deduplicates_by_spec_id(
@@ -144,31 +297,6 @@ def test_find_issue_deduplicates_by_spec_id(
     assert "number,body" in calls[0]
 
 
-def test_find_milestone_is_paginated_and_idempotent(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[list[str]] = []
-
-    def fake_run_gh(arguments: list[str]) -> str:
-        calls.append(arguments)
-        return json.dumps(
-            [
-                [],
-                [
-                    {
-                        "number": 7,
-                        "description": "<!-- csarc-story-id: SPEC-001 -->\n",
-                    }
-                ],
-            ]
-        )
-
-    monkeypatch.setitem(find_milestone.__globals__, "run_gh", fake_run_gh)
-    assert find_milestone("owner/repo", "SPEC-001") == 7
-    assert "--paginate" in calls[0]
-    assert "--slurp" in calls[0]
-
-
 def test_sync_keeps_spec_id_out_of_issue_title(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -182,13 +310,15 @@ def test_sync_keeps_spec_id_out_of_issue_title(
     monkeypatch.setitem(sync_spec.__globals__, "find_issue", lambda *_: None)
     monkeypatch.setitem(sync_spec.__globals__, "run_gh", fake_run_gh)
 
-    sync_spec(spec, "owner/repo", "main", "https://github.com")
+    sync_spec(spec, "owner/repo", "main", "https://github.com", "maintainer")
 
     create = next(call for call in calls if call[:2] == ["issue", "create"])
     assert create[create.index("--title") + 1] == "Add a health endpoint"
+    assert create[create.index("--assignee") + 1] == "maintainer"
+    assert create[create.index("--type") + 1] == "Task"
 
 
-def test_story_spec_syncs_milestone_without_creating_issue(
+def test_story_spec_syncs_feature_issue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     story = VALID_SPEC.replace(
@@ -196,22 +326,26 @@ def test_story_spec_syncs_milestone_without_creating_issue(
     )
     spec = parse_spec_text(Path("docs/specs/SPEC-001-health.md"), story)
     calls: list[list[str]] = []
+    bodies: list[str] = []
 
     def fake_run_gh(arguments: list[str]) -> str:
         calls.append(arguments)
-        if "--paginate" in arguments:
-            return "[[]]"
-        return '{"number":7}'
+        if "--body-file" in arguments:
+            body_path = Path(arguments[arguments.index("--body-file") + 1])
+            bodies.append(body_path.read_text(encoding="utf-8"))
+        return "created"
 
+    monkeypatch.setitem(sync_spec.__globals__, "find_issue", lambda *_: None)
     monkeypatch.setitem(sync_spec.__globals__, "run_gh", fake_run_gh)
-    sync_spec(spec, "owner/repo", "main", "https://github.com")
+    sync_spec(spec, "owner/repo", "main", "https://github.com", "maintainer")
 
-    create = next(call for call in calls if "POST" in call)
-    assert "repos/owner/repo/milestones" in create
-    assert not any(call[:2] == ["issue", "create"] for call in calls)
+    create = next(call for call in calls if call[:2] == ["issue", "create"])
+    assert create[create.index("--assignee") + 1] == "maintainer"
+    assert create[create.index("--type") + 1] == "Feature"
+    assert bodies and "### 類型\n\nfeature" in bodies[0]
 
 
-def test_story_sync_updates_existing_milestone(
+def test_story_sync_updates_existing_feature_issue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     story = VALID_SPEC.replace(
@@ -219,24 +353,24 @@ def test_story_sync_updates_existing_milestone(
     )
     spec = parse_spec_text(Path("docs/specs/SPEC-001-health.md"), story)
     calls: list[list[str]] = []
+    bodies: list[str] = []
 
     def fake_run_gh(arguments: list[str]) -> str:
         calls.append(arguments)
+        if "--body-file" in arguments:
+            body_path = Path(arguments[arguments.index("--body-file") + 1])
+            bodies.append(body_path.read_text(encoding="utf-8"))
         return "{}"
 
-    monkeypatch.setitem(
-        sync_milestone.__globals__, "find_milestone", lambda *_: 7
-    )
-    monkeypatch.setitem(sync_milestone.__globals__, "run_gh", fake_run_gh)
-    sync_milestone(spec, "owner/repo", "https://github.example/spec")
+    monkeypatch.setitem(sync_spec.__globals__, "find_issue", lambda *_: 7)
+    monkeypatch.setitem(sync_spec.__globals__, "run_gh", fake_run_gh)
+    sync_spec(spec, "owner/repo", "main", "https://github.com", "maintainer")
 
-    assert calls[0][:5] == [
-        "api",
-        "--method",
-        "PATCH",
-        "repos/owner/repo/milestones/7",
-        "--raw-field",
-    ]
+    edit = next(call for call in calls if call[:2] == ["issue", "edit"])
+    assert edit[2] == "7"
+    assert edit[edit.index("--add-assignee") + 1] == "maintainer"
+    assert edit[edit.index("--type") + 1] == "Feature"
+    assert bodies and "### 類型\n\nfeature" in bodies[0]
 
 
 def test_load_labels_uses_policy_file(tmp_path: Path) -> None:

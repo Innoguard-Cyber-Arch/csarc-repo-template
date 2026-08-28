@@ -11,6 +11,8 @@ _exclude:
   - ".git"
   - ".DS_Store"
   - ".svn"
+  - "{% if project_mode == 'existing' %}/README.md{% else %}__keep_project_readme__{% endif %}"
+  - "{% if project_mode == 'existing' %}/CHANGELOG.md{% else %}__keep_project_changelog__{% endif %}"
   - "{% if enable_precommit %}__keep_precommit__{% else %}.pre-commit-config.yaml{% endif %}"
   - "{% if enable_template_update_notifications %}__keep_template_update_workflow__{% else %}.github/workflows/template-update.yml{% endif %}"
   - "{% if enable_template_update_notifications %}__keep_template_update_script__{% else %}scripts/check-template-update{% endif %}"
@@ -36,8 +38,11 @@ _skip_if_exists:
   - "typescript/src/**/*.ts"
   - "typescript/tests/**/*.ts"
   - "docs/specs/**/*.md"
+  - "docs/adr/**/*.md"
   - "docs/site-content.js"
   - "docs/site-theme.css"
+  - "{% if project_mode == 'existing' %}/README.md{% else %}__overwrite_readme__{% endif %}"
+  - "{% if project_mode == 'existing' %}/SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"
   - "{% if project_mode == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"
   - "{% if project_mode == 'existing' %}package.json{% else %}__overwrite_node_manifest__{% endif %}"
 _tasks:
@@ -46,6 +51,15 @@ _tasks:
   - command: "pnpm install --lockfile-only --ignore-scripts"
     when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language in ['typescript', 'python-typescript'] }}"
   - command: "uv run --no-project python scripts/render_site.py"
+_migrations:
+  - command:
+      - "{{ _copier_python }}"
+      - "-c"
+      - "import hashlib, pathlib, shutil, sys; target = pathlib.Path('tests/test_spec_to_issue.py'); expected = 'cb936cab1f2e239b28c1f9d59edb714a7c8758633f95cbb98989571fa3b2a5fa'; current = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else ''; shutil.copy2(sys.argv[1], target) if current == expected else None"
+      - "{{ _copier_conf.src_path }}/template/tests/test_spec_to_issue.py"
+    when: "{{ _stage == 'after' }}"
+  - command: "uv run --no-project python scripts/render_site.py"
+    when: "{{ _stage == 'after' }}"
 _message_after_copy: |
   {% if project_mode == 'existing' %}Existing pyproject.toml/package.json files were preserved. Merge the required tool settings and version markers described in README.md, run ./scripts/verify, then link the pull request to its Issue.{% else %}Project created. Confirm .csarc/profile.json, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request.{% endif %} GitHub template creation and Copier do not copy repository settings. Runtime workflows detect release capabilities automatically. Administrators may optionally run ./scripts/apply-repository-settings.sh plan, apply, and check to enable stronger repository controls; unsupported organization policy remains explicit and does not require adopters to change it. See README.md for the capability and visibility matrices.
 
@@ -71,7 +85,9 @@ project_slug:
 
 project_description:
   type: str
-  default: A Cyber-Arch project
+  help: Organization-approved one-sentence purpose for README and package metadata
+  default: "Source code and delivery automation for {{ project_name }}."
+  validator: "{% if not project_description | default('', true) | trim or project_description | trim | lower in ['a cyber-arch project', 'todo', 'tbd', 'placeholder'] or '<' in project_description %}Enter the approved project purpose without placeholder text.{% endif %}"
 
 language:
   type: str
@@ -82,6 +98,30 @@ language:
     TypeScript only: typescript
     Python and TypeScript: python-typescript
   default: python
+
+container_mode:
+  type: str
+  help: Verify an existing container image in CI, and optionally publish it to GHCR from verified releases
+  choices:
+    Disabled: none
+    Build, smoke-test, and scan only: verify
+    Build, verify, and publish to GHCR: ghcr
+  default: none
+  when: "{{ project_mode == 'existing' }}"
+
+containerfile_path:
+  type: str
+  help: Repository-relative Dockerfile or Containerfile used with the repository root as build context
+  default: Dockerfile
+  when: "{{ (container_mode | default('none')) != 'none' }}"
+  validator: "{% if containerfile_path.startswith('/') or '..' in containerfile_path.split('/') or not (containerfile_path | regex_search('^[A-Za-z0-9._/-]+$')) %}Use a safe repository-relative path without spaces or parent traversal.{% endif %}"
+
+container_smoke_command:
+  type: str
+  help: One-line shell command that smoke-tests the built image through the IMAGE environment variable
+  default: ""
+  when: "{{ (container_mode | default('none')) != 'none' }}"
+  validator: "{% if not container_smoke_command.strip() or '$IMAGE' not in container_smoke_command or '\n' in container_smoke_command %}Use one non-empty line that references $IMAGE, for example docker run --rm \"$IMAGE\" --help.{% endif %}"
 
 branch_strategy:
   type: str
@@ -104,6 +144,31 @@ code_owner:
   help: Existing GitHub team used by CODEOWNERS, for example @Innoguard-Cyber-Arch/platform
   default: "@Innoguard-Cyber-Arch/arch"
   validator: "{% if not code_owner.startswith('@Innoguard-Cyber-Arch/') %}Use an existing @Innoguard-Cyber-Arch/<team> owner.{% endif %}"
+
+project_run_command:
+  type: str
+  help: Shortest command that successfully starts or invokes the product
+  default: "{% if language == 'python' %}uv run python -c 'import {{ package_name }}'{% elif language == 'typescript' %}pnpm run build{% elif language == 'python-typescript' %}uv run python -c 'import {{ package_name }}' && pnpm run build{% else %}./scripts/verify{% endif %}"
+  validator: "{% if not project_run_command | default('', true) | trim or project_run_command | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in project_run_command %}Enter a working product command without placeholder text.{% endif %}"
+
+project_verification_hook:
+  type: str
+  help: Optional repository-relative executable run after the CSARC verification
+  default: ""
+  when: "{{ project_mode == 'existing' }}"
+  validator: "{% set hook = project_verification_hook | default('', true) | trim %}{% if hook and (hook != project_verification_hook or hook.startswith('/') or '..' in hook.split('/') or not (hook | regex_search('^[A-Za-z0-9._/-]+$'))) %}Use a safe repository-relative executable path without spaces, shell syntax, or parent traversal.{% endif %}"
+
+repository_url:
+  type: str
+  help: Canonical GitHub repository URL used by badges and package metadata
+  default: "https://github.com/{{ code_owner.split('/')[0] | replace('@', '') }}/{{ project_slug }}"
+  validator: "{% if not repository_url | default('', true) | regex_search('^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') %}Use https://github.com/owner/repository without a trailing slash or .git suffix.{% endif %}"
+
+security_reporting_channel:
+  type: str
+  help: Organization-approved vulnerability reporting instructions
+  default: "Open a GitHub Issue at {{ repository_url }}/issues/new; maintainers receive notifications for new Issues."
+  validator: "{% if not security_reporting_channel | default('', true) | trim or security_reporting_channel | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in security_reporting_channel %}Enter the approved reporting channel without placeholder text; do not invent an email address or SLA.{% endif %}"
 
 reviewers:
   type: str

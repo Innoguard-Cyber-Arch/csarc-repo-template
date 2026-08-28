@@ -19,6 +19,7 @@ bump_version = MODULE["bump_version"]
 classify_probe = MODULE["classify_probe"]
 direct_release = MODULE["direct_release"]
 release_intent = MODULE["release_intent"]
+release_follow_up_errors = MODULE["release_follow_up_errors"]
 release_boundary_errors = MODULE["release_boundary_errors"]
 release_plan = MODULE["release_plan"]
 release_version_errors = MODULE["release_version_errors"]
@@ -26,6 +27,230 @@ select_release_mode = MODULE["select_release_mode"]
 simple_release_boundary = MODULE["simple_release_boundary"]
 verify_release_version = MODULE["verify_release_version"]
 optional_integration_preflight = MODULE["optional_integration_preflight"]
+
+
+def test_root_release_config_updates_site_source_and_rendered_bundle() -> None:
+    """Release bumps keep the source site and checked-in bundle aligned."""
+    config = json.loads(
+        (Path(__file__).parents[1] / "release-please-config.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    if config["packages"]["."]["component"] != "csarc-repo-template":
+        return
+    extra_files = config["packages"]["."]["extra-files"]
+    paths = {
+        item if isinstance(item, str) else item["path"] for item in extra_files
+    }
+    assert {"site/index.html", "docs/index.html"} <= paths
+
+
+def test_release_version_checks_configured_site_source(tmp_path: Path) -> None:
+    """A stale source site blocks release even when the bundle was edited."""
+    write_release_surfaces(tmp_path, "1.2.3")
+    (tmp_path / "site").mkdir()
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "site/index.html").write_text(
+        "v1.2.2 <!-- x-release-please-version -->\n", encoding="utf-8"
+    )
+    (tmp_path / "docs/index.html").write_text(
+        "v1.2.3 <!-- x-release-please-version -->\n", encoding="utf-8"
+    )
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {"packages": {".": {"extra-files": [{"path": "site/index.html"}]}}}
+        ),
+        encoding="utf-8",
+    )
+    assert "site/index.html is 1.2.2, expected 1.2.3" in release_version_errors(
+        tmp_path, "1.2.3"
+    )
+
+
+def test_release_follow_up_accepts_only_automation_owned_changes(
+    tmp_path: Path,
+) -> None:
+    """Bind release follow-ups to the canonical bot branch and file set."""
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "python",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": [
+                            {"path": "src/demo/__init__.py"},
+                            "README.md",
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "uv.lock").touch()
+    valid_head = "release-please--branches--main--components--demo"
+    valid_sha = "a" * 40
+    valid_commits = [
+        {
+            "sha": valid_sha,
+            "author": {"login": "github-actions[bot]"},
+            "committer": {"login": "web-flow"},
+            "commit": {"verification": {"verified": True, "reason": "valid"}},
+        }
+    ]
+    valid = {
+        "root": tmp_path,
+        "repo": "owner/repo",
+        "head": valid_head,
+        "head_repo": "owner/repo",
+        "head_sha": valid_sha,
+        "actor": "github-actions[bot]",
+        "changed_files": [
+            ".release-please-manifest.json",
+            "CHANGELOG.md",
+            "pyproject.toml",
+            "uv.lock",
+            "src/demo/__init__.py",
+            "README.md",
+        ],
+        "commits": valid_commits,
+    }
+    assert release_follow_up_errors(**valid) == []
+
+    maintainer = dict(valid)
+    maintainer.update(
+        actor="maintainer",
+        actor_permission="maintain",
+        commits=[
+            {
+                "sha": valid_sha,
+                "author": {"login": "maintainer"},
+                "committer": {"login": "web-flow"},
+                "commit": {
+                    "verification": {"verified": True, "reason": "valid"}
+                },
+            }
+        ],
+    )
+    assert release_follow_up_errors(**maintainer) == []
+    maintainer["actor_permission"] = "write"
+    assert release_follow_up_errors(**maintainer)
+    wrong_author = dict(maintainer)
+    wrong_author.update(
+        actor_permission="admin",
+        commits=[
+            {
+                "sha": valid_sha,
+                "author": {"login": "attacker"},
+                "committer": {"login": "web-flow"},
+                "commit": {
+                    "verification": {"verified": True, "reason": "valid"}
+                },
+            }
+        ],
+    )
+    assert release_follow_up_errors(**wrong_author)
+
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        "release-please--forged",
+        "owner/repo",
+        valid_sha,
+        "github-actions[bot]",
+        ["CHANGELOG.md"],
+        valid_commits,
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "fork/repo",
+        valid_sha,
+        "github-actions[bot]",
+        ["CHANGELOG.md"],
+        valid_commits,
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        valid_sha,
+        "attacker",
+        ["CHANGELOG.md"],
+        valid_commits,
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        valid_sha,
+        "github-actions[bot]",
+        ["src/product.py"],
+        valid_commits,
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        valid_sha,
+        "github-actions[bot]",
+        [".github/workflows/ci.yml"],
+        valid_commits,
+    )
+
+    human_commit = [
+        {
+            "sha": valid_sha,
+            "author": {"login": "github-actions[bot]"},
+            "committer": {"login": "maintainer"},
+            "commit": {"verification": {"verified": True, "reason": "valid"}},
+        }
+    ]
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        valid_sha,
+        "github-actions[bot]",
+        ["pyproject.toml"],
+        human_commit,
+    )
+    unsigned_spoof = [
+        {
+            "sha": valid_sha,
+            "author": {"login": "github-actions[bot]"},
+            "committer": {"login": "web-flow"},
+            "commit": {
+                "verification": {"verified": False, "reason": "unsigned"}
+            },
+        }
+    ]
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        valid_sha,
+        "github-actions[bot]",
+        ["pyproject.toml"],
+        unsigned_spoof,
+    )
+    assert release_follow_up_errors(
+        tmp_path,
+        "owner/repo",
+        valid_head,
+        "owner/repo",
+        "b" * 40,
+        "github-actions[bot]",
+        ["CHANGELOG.md"],
+        valid_commits,
+    )
 
 
 def capabilities(
@@ -210,7 +435,7 @@ def promotion_evidence(
         "minor": "feat: work",
         "major": "feat!: work",
     }[intent]
-    return {
+    evidence: dict[str, object] = {
         "gate": "passed",
         "route": {
             "kind": kind,
@@ -227,6 +452,7 @@ def promotion_evidence(
                     "number": number,
                     "title": title,
                     "intent": intent,
+                    **({"issue": number} if kind == "milestone" else {}),
                 }
             ],
         },
@@ -237,10 +463,17 @@ def promotion_evidence(
             "tree_identity": "verified",
         },
     }
+    if kind == "milestone":
+        evidence["milestone_promotion"] = {
+            "mode": "checkpoint",
+            "declared_issues": [number],
+        }
+    return evidence
 
 
 @pytest.mark.parametrize(
-    "kind", ["milestone", "standalone-batch", "isolated", "hotfix"]
+    "kind",
+    ["milestone", "standalone-batch", "isolated", "hotfix", "release-recovery"],
 )
 def test_release_boundary_traces_each_delivery_route(kind: str) -> None:
     """Milestone, standalone, and hotfix batches retain promotion provenance."""
@@ -253,6 +486,76 @@ def test_release_boundary_traces_each_delivery_route(kind: str) -> None:
     assert result["boundaries"][0]["included_issues"] == [
         {"number": 10, "title": "Work"}
     ]
+    if kind == "milestone":
+        assert result["boundaries"][0]["milestone_promotion"] == {
+            "mode": "checkpoint",
+            "declared_issues": [10],
+        }
+    else:
+        assert "milestone_promotion" not in result["boundaries"][0]
+
+
+@pytest.mark.parametrize(
+    "promotion",
+    [
+        None,
+        {"mode": "unknown", "declared_issues": [10]},
+        {"mode": "checkpoint", "declared_issues": None},
+        {"mode": "checkpoint", "declared_issues": [10, 10]},
+        {"mode": "checkpoint", "declared_issues": [11]},
+        {"mode": "final", "declared_issues": []},
+    ],
+)
+def test_milestone_release_boundary_rejects_invalid_scope(
+    promotion: object,
+) -> None:
+    """Release eligibility requires canonical milestone Issue evidence."""
+    evidence = promotion_evidence("milestone", "patch", 10)
+    if promotion is None:
+        evidence.pop("milestone_promotion")
+    else:
+        evidence["milestone_promotion"] = promotion
+    with pytest.raises(ValueError, match=r"milestone|checkpoint"):
+        aggregate_release_boundaries([evidence], "main", "promotion")
+
+
+def test_milestone_release_boundary_binds_issues_to_pull_requests() -> None:
+    """Included Issue evidence cannot omit or invent reviewed PR scope."""
+    evidence = promotion_evidence("milestone", "patch", 10)
+    release = evidence["release"]
+    assert isinstance(release, dict)
+    pull_requests = release["included_pull_requests"]
+    assert isinstance(pull_requests, list)
+    assert isinstance(pull_requests[0], dict)
+    pull_requests[0].pop("issue")
+    with pytest.raises(ValueError, match="no Issue binding"):
+        aggregate_release_boundaries([evidence], "main", "promotion")
+    evidence = promotion_evidence("milestone", "patch", 10)
+    evidence["included_issues"] = [{"number": 11, "title": "Invented"}]
+    with pytest.raises(ValueError, match="does not match its PRs"):
+        aggregate_release_boundaries([evidence], "main", "promotion")
+
+
+def test_final_milestone_release_boundary_keeps_canonical_scope() -> None:
+    """Final mode uses the same PR-to-Issue binding without a declaration."""
+    evidence = promotion_evidence("milestone", "patch", 10)
+    evidence["milestone_promotion"] = {
+        "mode": "final",
+        "declared_issues": None,
+    }
+    result = aggregate_release_boundaries([evidence], "main", "promotion")
+    assert result["boundaries"][0]["milestone_promotion"] == {
+        "mode": "final",
+        "declared_issues": None,
+    }
+
+
+def test_non_milestone_boundary_rejects_milestone_scope() -> None:
+    """Standalone evidence cannot smuggle a milestone checkpoint."""
+    evidence = promotion_evidence("standalone-batch", "patch", 10)
+    evidence["milestone_promotion"] = None
+    with pytest.raises(ValueError, match="non-milestone"):
+        aggregate_release_boundaries([evidence], "main", "promotion")
 
 
 def test_release_boundary_uses_highest_intent_and_is_idempotent() -> None:
@@ -355,6 +658,29 @@ def test_release_plan_uses_reachable_tags_and_commit_order(
     git(tmp_path, "commit", "-am", "fix: follow-up")
     second = git(tmp_path, "rev-parse", "HEAD")
     assert release_plan(tmp_path, second) == ("v0.2.1", "0.2.1")
+
+
+def test_release_plan_parses_every_git_log_record(tmp_path: Path) -> None:
+    """A leading newline after a record separator cannot hide older intent."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    (tmp_path / ".release-please-manifest.json").write_text(
+        '{".": "0.1.0"}\n', encoding="utf-8"
+    )
+    (tmp_path / "file").write_text("baseline\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    git(tmp_path, "tag", "v0.1.0")
+    (tmp_path / "file").write_text("feature\n", encoding="utf-8")
+    git(tmp_path, "commit", "-am", "feat: add release capability")
+    (tmp_path / "file").write_text("docs\n", encoding="utf-8")
+    git(tmp_path, "commit", "-am", "docs: explain release")
+
+    assert release_plan(tmp_path, git(tmp_path, "rev-parse", "HEAD")) == (
+        "v0.2.0",
+        "0.2.0",
+    )
 
 
 class FakeAPI:

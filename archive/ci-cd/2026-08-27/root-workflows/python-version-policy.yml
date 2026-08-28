@@ -1,0 +1,143 @@
+name: Python version policy
+
+on:
+  schedule:
+    - cron: "23 2 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    name: update-after-observation-period
+    if: ${{ vars.CSARC_VERSION_BOT_CLIENT_ID != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Create version bot token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.CSARC_VERSION_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.CSARC_VERSION_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: read
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: "11.22.0"
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Report direct dependency ceilings
+        run: |
+          uv run python scripts/report_dependency_ceiling.py \
+            >> "$GITHUB_STEP_SUMMARY"
+      - name: Apply an eligible Python feature release
+        id: update
+        run: |
+          python3 scripts/update_python_version.py
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.update.outputs.changed == 'true'
+        name: Refresh the lock file
+        run: uv lock --python "$(cat .python-version)"
+      - if: steps.update.outputs.changed == 'true'
+        name: Verify the complete template
+        run: ./scripts/verify-template.sh
+      - if: steps.update.outputs.changed == 'true'
+        name: Create or refresh the audited pull request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          LEASE_APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          version="$(cat .python-version)"
+          branch="automation/python-${version}"
+          git config user.name "csarc-version-bot[bot]"
+          git config user.email "csarc-version-bot[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add .
+          git commit -m "build(python): adopt Python ${version}"
+          gh auth setup-git
+          git fetch origin "$branch:refs/remotes/origin/$branch" || true
+          git push --force-with-lease origin "HEAD:$branch"
+
+          pr_url="$(
+            gh pr list --head "$branch" --state open --json url --jq '.[0].url'
+          )"
+          if [[ -z "$pr_url" ]]; then
+            pr_body="$(printf '%s\n' \
+              '## Purpose' \
+              '' \
+              'Automated after the 30-day stable-release observation period.' \
+              '' \
+              '## 完成清單' \
+              '' \
+              '- [x] Full template verification passed before this PR was opened' \
+              '- [x] The stable-release observation period completed' \
+              '' \
+              '## 補充' \
+              '' \
+              "Target Python: ${version}. This automated version-policy PR does not require a work Issue.")"
+            pr_url="$(
+              gh pr create \
+                --base dev/next \
+                --head "$branch" \
+                --title "build(python): adopt Python ${version}" \
+                --body "$pr_body"
+            )"
+          fi
+          pr_number="$(gh pr view "$pr_url" --json number --jq .number)"
+          head_sha="$(git rev-parse HEAD)"
+          lease="$RUNNER_TEMP/python-version-pr-lease.json"
+          lease_owner="github-actions/${GITHUB_RUN_ID}/${GITHUB_RUN_ATTEMPT}"
+          lease_actor="${LEASE_APP_SLUG}[bot]"
+          [[ "$lease_actor" != "[bot]" ]]
+          lease_acquired=false
+          release_lease() {
+            status=$?
+            trap - EXIT
+            if [[ "$lease_acquired" == true ]]; then
+              if ! uv run --no-project python scripts/pr_lifecycle.py release \
+                --repo "$GITHUB_REPOSITORY" \
+                --pr-number "$pr_number" \
+                --owner "$lease_owner" \
+                --actor "$lease_actor" \
+                --lease "$lease"; then
+                if [[ "$status" -eq 0 ]]; then
+                  status=1
+                fi
+              fi
+            fi
+            exit "$status"
+          }
+          trap release_lease EXIT
+          uv run --no-project python scripts/pr_lifecycle.py acquire \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-number "$pr_number" \
+            --head-sha "$head_sha" \
+            --owner "$lease_owner" \
+            --actor "$lease_actor" \
+            --output "$lease"
+          lease_acquired=true
+          uv run --no-project python scripts/pr_lifecycle.py edit \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr-number "$pr_number" \
+            --head-sha "$head_sha" \
+            --owner "$lease_owner" \
+            --actor "$lease_actor" \
+            --lease "$lease" \
+            --add-label enhancement

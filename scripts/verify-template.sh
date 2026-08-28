@@ -1,18 +1,154 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016 # This regression script intentionally matches literal shell expressions.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"
 fixture_root="$(mktemp -d)"
 trap 'rm -rf "$fixture_root"' EXIT
 cd "$repo_root"
+fixture_security_args=(
+  --data "security_reporting_channel=Use the synthetic fixture's private reporting channel."
+)
+
+for verifier in scripts/verify-template.sh scripts/verify-fast \
+  template/scripts/verify-fast.jinja; do
+  grep -Fqx 'export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"' \
+    "$verifier"
+done
+(
+  unset UV_CACHE_DIR
+  export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"
+  test "$UV_CACHE_DIR" = "$repo_root/.cache/uv"
+)
+(
+  UV_CACHE_DIR="$fixture_root/explicit-uv-cache"
+  export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"
+  test "$UV_CACHE_DIR" = "$fixture_root/explicit-uv-cache"
+)
+
+test "$(wc -c < AGENTS.md)" -le 13000
+test "$(wc -c < template/AGENTS.md.jinja)" -le 14000
+if grep -Eq 'step [0-9]+|第 [0-9]+ 點|第 [0-9]+點' \
+  AGENTS.md template/AGENTS.md.jinja; then
+  echo "Agent guidance must not use numeric step cross-references."
+  exit 1
+fi
+grep -q 'uv sync --locked --python 3.14' AGENTS.md
+grep -q 'uv run pytest <test-path>' AGENTS.md
+grep -q 'scripts/render_site.py --check' AGENTS.md
+grep -q 'scripts/pr_lifecycle.py' AGENTS.md
+grep -q 'scripts/pr_lifecycle.py' template/AGENTS.md.jinja
+grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md
+grep -q '\[P0\].*\[P1\].*\[merge-blocker\]' docs/ci-policy.md
+grep -q 'release pull request (human-only)' docs/ci-policy.md
+grep -q 'Actions quota fallback attestation' docs/ci-policy.md
+grep -q 'finalize-quota-fallback' docs/ci-policy.md
+grep -q 'verify-quota-main' docs/ci-policy.md
+grep -q 'release_eligible.*false' docs/ci-policy.md
+cmp -s scripts/promotion_gate.py template/scripts/promotion_gate.py
+cmp -s tests/test_promotion_gate.py template/tests/test_promotion_gate.py
+cmp -s scripts/pr_lifecycle.py template/scripts/pr_lifecycle.py
+cmp -s tests/test_pr_lifecycle.py template/tests/test_pr_lifecycle.py
+test -f .github/workflows/delivery-maintenance.yml
+test -f .github/workflows/dev-next-close.yml
+test -f .github/workflows/promotion-post-merge.yml
+test -f template/.github/workflows/delivery-maintenance.yml
+test -f template/.github/workflows/dev-next-close.yml
+test -f template/.github/workflows/promotion-post-merge.yml
+for workflow in .github/workflows/{pr-policy,promotion}.yml \
+  template/.github/workflows/{pr-policy,promotion}.yml; do
+  if grep -Eq 'secrets\.(CSARC_SYNC_TOKEN|CSARC_ADMIN_TOKEN|GH_ADMIN_TOKEN|ADMIN_TOKEN)' \
+    "$workflow"; then
+    echo "$workflow exposes an administration token to an untrusted event."
+    exit 1
+  fi
+done
+for summary_file in AGENTS.md README.md template/AGENTS.md.jinja \
+  template/README.md.jinja; do
+  grep -q 'docs/ci-policy.md#actions-額度-fallback' "$summary_file"
+  if grep -q 'Actions quota fallback attestation' "$summary_file"; then
+    echo "$summary_file duplicates the canonical quota fallback procedure."
+    exit 1
+  fi
+done
+
+assert_agent_guidance() {
+  local project_root="$1"
+  test "$(wc -c < "$project_root/AGENTS.md")" -le 14000
+  test "$(cat "$project_root/CLAUDE.md")" = "@AGENTS.md"
+  grep -q 'git rev-parse --show-toplevel' "$project_root/README.md"
+  grep -q 'pwd -P' "$project_root/README.md"
+  grep -q 'docs/ci-policy.md#actions-額度-fallback' \
+    "$project_root/README.md"
+  grep -q 'docs/ci-policy.md#actions-額度-fallback' \
+    "$project_root/AGENTS.md"
+  grep -q 'scripts/pr_lifecycle.py' "$project_root/AGENTS.md"
+  grep -q 'scripts/render_site.py --check' "$project_root/AGENTS.md"
+  grep -q 'propose semantic story groups and exclusions' \
+    "$project_root/AGENTS.md"
+  grep -q 'reopen completed Issues' "$project_root/AGENTS.md"
+}
+
+assert_release_assets_contract() {
+  local project_root="$1"
+  local runtime_kind="$2"
+  local release_script="$project_root/scripts/release_assets.py"
+  local release_workflow="$project_root/.github/workflows/release.yml"
+  local help_text
+
+  test -f "$release_script"
+  cmp -s template/scripts/release_assets.py "$release_script"
+  help_text="$(python3 "$release_script" --help)"
+  for option in --artifact --inventory-file --release-run --repository-id \
+    --root-name --root-purl --runtime-kind; do
+    grep -Fq -- "$option" <<<"$help_text"
+  done
+  CSARC_RELEASE_ASSETS_SCRIPT="$release_script" uv run pytest -q \
+    tests/test_release_assets.py \
+    -k 'binds_explicit_artifacts_and_finalized_provenance or accepts_genuine_source_runtime_without_inventing_a_root_purl or rejects_artifact_and_sbom_tampering'
+
+  # The core validator can be developed before its workflow consumer. Once the
+  # canonical workflow enables it, every rendered profile must keep the same
+  # pinned Syft and fail-closed CLI contract.
+  if grep -Fq 'scripts/release_assets.py build' \
+    .github/workflows/release-template.yml; then
+    test -f "$release_workflow"
+    for contract in 'scripts/release_assets.py build' \
+      'scripts/release_assets.py verify' 'syft-version: v1.50.0' \
+      'format: spdx-json' '--artifact' '--inventory-file' '--release-run' \
+      '--repository-id' '--root-name'; do
+      grep -Fq -- "$contract" "$release_workflow"
+    done
+    grep -Fq -- "--runtime-kind $runtime_kind" "$release_workflow"
+    if [[ "$runtime_kind" == source ]]; then
+      if grep -Fq -- '--root-purl' "$release_workflow"; then
+        echo "Source-only release workflow invented a package root." >&2
+        exit 1
+      fi
+    else
+      grep -Fq -- '--root-purl' "$release_workflow"
+      grep -Eq '^[[:space:]]+sort -u .*purls.*inventory[.]purls"$' \
+        "$release_workflow"
+      if grep -Eq '[|][[:space:]]*sort -u' "$release_workflow"; then
+        echo "Generated release workflows must pass inventory files directly to sort." >&2
+        exit 1
+      fi
+    fi
+  fi
+}
 
 ./scripts/check-update-conflicts
 ./scripts/build-decision-site --check
+./scripts/lint-workflows-shell
+./scripts/test-static-validation
 
-prime_gitleaks_cache() {
+prime_validation_cache() {
   local project_root="$1"
   mkdir -p "$project_root/.cache"
-  cp -R "$repo_root/.cache/gitleaks" "$project_root/.cache/gitleaks"
+  for tool in actionlint gitleaks shellcheck; do
+    cp -R "$repo_root/.cache/$tool" "$project_root/.cache/$tool"
+  done
 }
 
 unset VIRTUAL_ENV
@@ -24,6 +160,7 @@ uv run ruff format --check \
   tests/test_cli.py \
   tests/test_milestone_lifecycle.py \
   tests/test_ci_tier.py \
+  tests/test_pr_lifecycle.py \
   tests/test_promotion_gate.py \
   tests/test_delivery_sync.py \
   tests/test_release_policy.py \
@@ -33,6 +170,7 @@ uv run ruff format --check \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/pr_lifecycle.py \
   scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -47,6 +185,7 @@ uv run ruff check \
   tests/test_cli.py \
   tests/test_milestone_lifecycle.py \
   tests/test_ci_tier.py \
+  tests/test_pr_lifecycle.py \
   tests/test_promotion_gate.py \
   tests/test_delivery_sync.py \
   tests/test_release_policy.py \
@@ -56,6 +195,7 @@ uv run ruff check \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/pr_lifecycle.py \
   scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -70,6 +210,7 @@ uv run mypy \
   scripts/report_dependency_ceiling.py \
   scripts/ci_tier.py \
   scripts/delivery_sync.py \
+  scripts/pr_lifecycle.py \
   scripts/promotion_gate.py \
   scripts/render_release_prompt.py \
   scripts/render_site.py \
@@ -84,39 +225,69 @@ uv run pytest \
 uv build
 uvx --from "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)" \
   csarc --help >/dev/null
-uv run python scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md
+uv run python scripts/spec_to_issue.py validate
 bash -n scripts/apply-repository-settings.sh
 bash -n template/scripts/apply-repository-settings.sh
+python3 -m py_compile scripts/sync_work_item_metadata.py
+python3 -m py_compile template/scripts/sync_work_item_metadata.py
 bash -n scripts/check-update-conflicts
 bash -n template/scripts/check-update-conflicts
+bash -n template/scripts/check-project-metadata
 bash -n scripts/cleanup-worktrees
 bash -n template/scripts/cleanup-worktrees
 bash -n scripts/install-hugo
 bash -n scripts/build-decision-site
 bash -n scripts/check-governance-drift
 bash -n template/scripts/check-governance-drift
+bash -n scripts/install-actionlint
+bash -n template/scripts/install-actionlint
+bash -n scripts/install-shellcheck
+bash -n template/scripts/install-shellcheck
+bash -n scripts/lint-workflows-shell
+bash -n template/scripts/lint-workflows-shell
+bash -n scripts/test-static-validation
 bash -n scripts/verify-fast
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' README.md
 grep -q 'policy labels, and effective Rulesets' docs/agent-install.md
 grep -q 'Administration read access' docs/agent-install.md
+grep -q 'Existing-repository history changes start read-only' \
+  docs/agent-install.md
+grep -q 'Never infer groups' docs/agent-install.md
+grep -q 'from titles or labels alone' docs/agent-install.md
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' docs/index.html
 grep -q '^## Actions quota fallback$' AGENTS.md
 grep -q '^## Actions quota fallback$' template/AGENTS.md.jinja
-grep -q 'included GitHub Actions minutes are exhausted' AGENTS.md
-grep -q 'included GitHub Actions minutes are exhausted' template/AGENTS.md.jinja
-grep -q 'failed payment, a zero or incorrect spending budget, a platform outage' \
-  AGENTS.md
-grep -q 'failed payment, a zero or incorrect spending budget, a platform outage' \
-  template/AGENTS.md.jinja
-grep -q 'HEAD.*pull request head SHA' AGENTS.md
-grep -q 'HEAD.*pull request head SHA' template/AGENTS.md.jinja
-grep -q 'Actions quota fallback attestation' README.md
-grep -q 'Actions quota fallback attestation' template/README.md.jinja
-grep -q '額度耗盡.*human' docs/index.html
+grep -q 'structurally runs over its included Actions minutes' AGENTS.md
+grep -q 'runs over included Actions minutes' template/AGENTS.md.jinja
+grep -q 'Actions quota fallback note' AGENTS.md
+grep -q 'failed payments.*spending limit' docs/ci-policy.md
+grep -q 'HEAD.*PR head SHA' docs/ci-policy.md
+grep -q 'Actions quota fallback attestation' docs/ci-policy.md
+grep -q 'Actions quota fallback note' docs/ci-policy.md
+grep -q 'runner 註記本身不構成證據' README.md
+grep -q 'runner 註記本身不構成證據' template/README.md.jinja
+if rg -F \
+  -e 'Project owner: replace' \
+  -e 'A Cyber-Arch project' \
+  -e '請在這裡補上主要使用者' \
+  -e '請在這裡補上產品最短' \
+  README.md SECURITY.md site docs/index.html; then
+  echo "Root documentation contains unfinished project metadata."
+  exit 1
+fi
+grep -qF \
+  'https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/new' \
+  SECURITY.md
+grep -qF 'Maintainers receive notifications for new Issues.' SECURITY.md
+grep -qF 'GitHub Issues are public.' SECURITY.md
+grep -qF 'secrets, credentials, personal data' SECURITY.md
+grep -q '額度耗盡.*機械式確認' docs/index.html
 grep -q '額度 fallback.*human' template/site/index.html.jinja
 bash -n scripts/run-live-workflow-probe
 bash -n scripts/test-pr-policy
 ./scripts/test-pr-policy
+bash -n scripts/test-release-follow-up-gates
+./scripts/test-release-follow-up-gates
 bash -n scripts/test-issue-triage
 bash -n scripts/validate-issue-title
 bash -n template/scripts/validate-issue-title
@@ -320,12 +491,12 @@ fi
 if [[ "$1" == "label" && "$2" == "list" ]]; then
   if [[ "$*" == *"name,color,description"* ]]; then
     if [[ "${MOCK_LABELS_STATE:-match}" == "mismatch" ]]; then
-      printf '%s\n' '[{"name":"bug","color":"ffffff","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"hotfix","color":"B60205","description":"Urgent standalone change promoted directly to main"},{"name":"promotion","color":"5319E7","description":"Final delivery branch promotion to main"},{"name":"task","color":"000000","description":"Custom"}]'
+      printf '%s\n' '[{"name":"bug","color":"ffffff","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"hotfix","color":"B60205","description":"Urgent standalone change promoted directly to main"},{"name":"release-recovery","color":"FBCA04","description":"Audited direct-main recovery of a missing release"},{"name":"promotion","color":"5319E7","description":"Final delivery branch promotion to main"},{"name":"task","color":"000000","description":"Custom"}]'
     else
-      printf '%s\n' '[{"name":"bug","color":"D73A4A","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"hotfix","color":"B60205","description":"Urgent standalone change promoted directly to main"},{"name":"promotion","color":"5319E7","description":"Final delivery branch promotion to main"},{"name":"task","color":"000000","description":"Custom"}]'
+      printf '%s\n' '[{"name":"bug","color":"D73A4A","description":"Something is not working"},{"name":"enhancement","color":"A2EEEF","description":"New feature or improvement"},{"name":"documentation","color":"0075CA","description":"Documentation improvement"},{"name":"duplicate","color":"CFD3D7","description":"This issue already exists"},{"name":"hotfix","color":"B60205","description":"Urgent standalone change promoted directly to main"},{"name":"release-recovery","color":"FBCA04","description":"Audited direct-main recovery of a missing release"},{"name":"promotion","color":"5319E7","description":"Final delivery branch promotion to main"},{"name":"task","color":"000000","description":"Custom"}]'
     fi
   else
-    printf 'bug\nduplicate\nhotfix\npromotion\ntask\n'
+    printf 'bug\nduplicate\nhotfix\nrelease-recovery\npromotion\ntask\n'
   fi
   exit 0
 fi
@@ -421,7 +592,27 @@ case "$2" in
       printf '[]\n'
       exit 0
     fi
-    printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_review_thread_resolution":true,"required_approving_review_count":1}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"delivery-sync"},{"context":"promotion"},{"context":"verify"},{"context":"title"}]}}]'
+    printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"dismiss_stale_reviews_on_push":true,"require_code_owner_review":true,"require_last_push_approval":true,"required_review_thread_resolution":true,"required_approving_review_count":1}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"required_status_checks":[{"context":"promotion"},{"context":"verify"},{"context":"title"}]}}]'
+    ;;
+  repos/acme/project/rules/branches/dev%2Fnext)
+    if [[ "${MOCK_GOVERNANCE:-protected}" == "error" ]]; then
+      echo "403 cannot inspect effective rules" >&2
+      exit 1
+    elif [[ "${MOCK_GOVERNANCE:-protected}" == "dev-next-incomplete" ]]; then
+      printf '[]\n'
+    else
+      printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"}]'
+    fi
+    ;;
+  repos/acme/project/rules/branches/csarc%2Fdev-next-preservation-ledger)
+    if [[ "${MOCK_GOVERNANCE:-protected}" == "error" ]]; then
+      echo "403 cannot inspect effective rules" >&2
+      exit 1
+    elif [[ "${MOCK_GOVERNANCE:-protected}" == "ledger-incomplete" ]]; then
+      printf '[]\n'
+    else
+      printf '%s\n' '[{"type":"deletion"},{"type":"non_fast_forward"}]'
+    fi
     ;;
   *)
     echo "Unexpected gh API path: $2" >&2
@@ -531,7 +722,7 @@ if grep -q 'DELETE label: duplicate' <<<"$free_prune_plan"; then
   echo "The duplicate policy label must not be pruned."
   exit 1
 fi
-for delivery_label in hotfix promotion; do
+for delivery_label in hotfix release-recovery promotion; do
   if grep -q "DELETE label: $delivery_label" <<<"$free_prune_plan"; then
     echo "The $delivery_label policy label must not be pruned."
     exit 1
@@ -591,7 +782,17 @@ if incomplete_check="$(run_settings_fixture team check "" false false incomplete
   echo "Incomplete effective branch rules must fail governance checks."
   exit 1
 fi
-grep -q 'missing deletion rule' <<<"$incomplete_check"
+grep -q 'missing non_fast_forward rule' <<<"$incomplete_check"
+if dev_next_incomplete="$(run_settings_fixture team check "" false false dev-next-incomplete 2>&1)"; then
+  echo "Missing dev/next preservation rules must fail governance checks."
+  exit 1
+fi
+grep -q 'dev/next is missing rules:' <<<"$dev_next_incomplete"
+if ledger_incomplete="$(run_settings_fixture team check "" false false ledger-incomplete 2>&1)"; then
+  echo "Missing ledger preservation rules must fail governance checks."
+  exit 1
+fi
+grep -q 'preservation ledger is missing rules:' <<<"$ledger_incomplete"
 if unavailable_check="$(run_settings_fixture team check "" false false error 2>&1)"; then
   echo "Unreadable effective branch rules must fail governance checks."
   exit 1
@@ -796,12 +997,24 @@ test -f site/static/app.js
 test -f site/legacy/index.html
 test -f scripts/render_site.py
 test -f docs/README.md
-test -f docs/decisions/README.md
-test -f docs/decisions/portable-decision-site.md
+test -f docs/adr/README.md
+test -f docs/adr/portable-decision-site.md
+test -f docs/adr/transactional-repository-adoption.md
+test -f docs/adr/selective-ci-automation-adoption.md
+grep -q 'groups.official-actions' \
+  docs/adr/selective-ci-automation-adoption.md
+grep -q 'none.*verify.*ghcr' \
+  docs/adr/selective-ci-automation-adoption.md
+grep -q 'docs/adr/selective-ci-automation-adoption.md' site/app.js
 grep -q '可重現的 self-contained HTML' \
-  docs/decisions/portable-decision-site.md
+  docs/adr/portable-decision-site.md
 grep -q '不自動保存聊天逐字稿' \
-  docs/decisions/portable-decision-site.md
+  docs/adr/portable-decision-site.md
+grep -q 'Durable Project Memory' docs/README.md
+grep -q 'Spec-Driven Development' docs/README.md
+grep -q 'Architecture Decision Records' docs/README.md
+grep -q 'Test-Driven Development' docs/README.md
+grep -q 'Behavior-Driven Development' docs/README.md
 test -f docs/pilot-adoption.md
 test -f docs/artifact-consumption.md
 grep -q '產生 attestation 只證明' docs/artifact-consumption.md
@@ -810,7 +1023,7 @@ grep -q 'ai-guardrail' docs/pilot-adoption.md
 grep -q 'run 32664445831' docs/pilot-adoption.md
 grep -q 'docs/pilot-adoption.md' README.md
 test "$(grep -c '^[[:space:]]*stage: beta$' profiles/catalog.yaml)" -eq 2
-test "$(grep -c '^[[:space:]]*stage: alpha$' profiles/catalog.yaml)" -eq 5
+test "$(grep -c '^[[:space:]]*stage: alpha$' profiles/catalog.yaml)" -eq 6
 grep -q '<title>CSARC Repo Template｜AI 輔助 SDLC 團隊公版</title>' \
   docs/index.html
 grep -q '先辨識 GitHub 方案' docs/index.html
@@ -821,26 +1034,44 @@ grep -q '真實 consuming repo 與採用證據' docs/index.html
 grep -q 'issues/74' docs/index.html
 grep -q 'issues/79' docs/index.html
 grep -q 'Spec 格式決策｜' docs/index.html
-grep -q '預設 Issue，明確 Story 才建 Milestone' docs/index.html
+grep -q '預設 Task，明確 Story 才建 Feature' docs/index.html
 grep -q '<meta name="robots" content="noindex,nofollow">' docs/index.html
 ! grep -q 'internal-notice' docs/index.html
 ! grep -q '請勿公開分享此連結' docs/index.html
 grep -q '存取控制決策｜' docs/index.html
 grep -q '可維護來源 → self-contained HTML' docs/index.html
-grep -q 'docs/decisions/portable-decision-site.md' docs/index.html
+grep -q 'docs/adr/portable-decision-site.md' docs/index.html
+grep -q 'docs/adr/selective-ci-automation-adoption.md' docs/index.html
+grep -q 'durable project memory' docs/index.html
+grep -q 'Spec-Driven Development' docs/index.html
+grep -q 'Architecture Decision Records' docs/index.html
+grep -q 'Test-Driven Development' docs/index.html
+grep -q 'Behavior-Driven Development' docs/index.html
 grep -q 'actions/runs/32662029395' docs/index.html
 grep -q 'Live integration smoke' docs/index.html
 test -f docs/robots.txt
 grep -q '^Disallow: /$' docs/robots.txt
 test -f docs/agent-install.md
-grep -q 'Run the requested `csarc init`, `adopt`, or `update` command with' \
-  docs/agent-install.md
+grep -q 'Run the CLI from the verified release commit:' docs/agent-install.md
+grep -q '`adopt` and `adopt --finalize` default' docs/agent-install.md
 grep -q 'docs/index.html' README.md
 grep -q '內部限閱' README.md
 grep -q '線上整合證據' README.md
 test -f docs/live-integration.md
 test -f docs/ci-policy.md
 grep -q '模板 repo 的導入前基線是一般 PR update 約 14' docs/ci-policy.md
+grep -q '14→3／4 job-minute 規劃模型' docs/ci-policy.md
+grep -q '明確標示的 job-minute 規劃估算，不是 hosted 實測' docs/ci-policy.md
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
+grep -q 'Hosted duration 與 `ci-plan` artifact 僅作' docs/ci-policy.md
+grep -q '^optional telemetry' docs/ci-policy.md
+grep -q 'zero-step job 都不算 hosted success' docs/ci-policy.md
+cmp -s docs/ci-policy.md template/docs/ci-policy.md
+grep -q 'M7／交付必須等待成功 hosted runner' \
+  docs/adr/staged-delivery-and-verification.md
+grep -q 'Hosted telemetry 不可用不阻塞產品交付' \
+  docs/specs/SPEC-005-continuous-verification-evidence.md
 grep -q '孤立 Issue 決策樹' docs/ci-policy.md
 grep -q 'dev/i<Issue 編號>-<簡稱>' docs/ci-policy.md
 grep -q 'Maintainer walkthrough' docs/ci-policy.md
@@ -850,8 +1081,44 @@ grep -q '只代表靜態與合成驗證通過' docs/live-integration.md
 test -x scripts/run-live-workflow-probe
 test -f .github/workflows/live-integration.yml
 test -f .github/workflows/release-consumption.yml
-grep -q '^  decision-site:$' .github/workflows/ci.yml
+if grep -q '^  decision-site:$' .github/workflows/ci.yml; then
+  echo "Decision site validation must share the fast runner."
+  exit 1
+fi
+grep -q 'types: \[opened, reopened, synchronize, labeled, unlabeled\]' \
+  .github/workflows/ci.yml
 grep -q 'name: portable-decision-site' .github/workflows/ci.yml
+grep -q "steps.plan.outputs.upload_site == 'true'" .github/workflows/ci.yml
+grep -q 'python3 scripts/render_site.py --check' .github/workflows/ci.yml
+grep -q '^  canonical-full:$' .github/workflows/ci.yml
+grep -q '^    name: canonical full (Python 3.14 + Node 24)$' \
+  .github/workflows/ci.yml
+grep -q '^  python-compatibility:$' .github/workflows/ci.yml
+grep -q '^    name: Python compatibility (3.14.0)$' \
+  .github/workflows/ci.yml
+grep -q 'uv run pytest -m "not large"' .github/workflows/ci.yml
+test "$(grep -c 'run: ./scripts/verify-template.sh' .github/workflows/ci.yml)" -eq 1
+if grep -q '^  python-runtime:$' .github/workflows/ci.yml; then
+  echo "Root full verification must not repeat for every runtime."
+  exit 1
+fi
+grep -q '^    needs: \[fast, canonical-full, python-compatibility, adoption-macos, governance, osv, zizmor\]$' \
+  .github/workflows/ci.yml
+grep -q '^  canonical:$' .github/workflows/reusable-ci.yml
+grep -q '^  python-compatibility:$' .github/workflows/reusable-ci.yml
+grep -q '^  typescript:$' .github/workflows/reusable-ci.yml
+grep -q './scripts/verify python-compatibility' \
+  .github/workflows/reusable-ci.yml
+grep -q './scripts/verify typescript' .github/workflows/reusable-ci.yml
+# shellcheck disable=SC2016 # Match the literal workflow variable.
+grep -q 'test "$PYTHON_COMPATIBILITY_RESULT" = success' \
+  .github/workflows/reusable-ci.yml
+# shellcheck disable=SC2016 # Match the literal workflow variable.
+grep -q 'test "$TYPESCRIPT_RESULT" = success' \
+  .github/workflows/reusable-ci.yml
+grep -q 'python3 scripts/delivery_sync.py gate' .github/workflows/pr-policy.yml
+test ! -e .github/workflows/delivery-sync.yml
+test ! -e template/.github/workflows/delivery-sync.yml
 test ! -e template/.github/workflows/live-integration.yml
 test ! -e template/.github/workflows/release-consumption.yml
 test ! -e template/scripts/run-live-workflow-probe
@@ -863,29 +1130,120 @@ grep -q '^            capability: Release handoff$' .github/workflows/live-integ
 grep -q '^            capability: Governance drift$' .github/workflows/live-integration.yml
 grep -q '^  workflow_dispatch:$' .github/workflows/osv.yml
 grep -q '^  workflow_dispatch:$' template/.github/workflows/osv.yml
-grep -q 'uvx --from csarc-repo-cli csarc init' README.md
-grep -q 'uvx --from csarc-repo-cli csarc adopt' README.md
-grep -q 'uvx --from csarc-repo-cli csarc update' README.md
-grep -q -- '--report-dir ../csarc-adoption-report' README.md
-grep -q 'generated Markdown and PDF' docs/agent-install.md
+grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init" README.md
+grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt" README.md
+grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update" README.md
+grep -q -- '--apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json' README.md
+grep -q 'generated Markdown and machine plan' docs/agent-install.md
 grep -q 'csarc-adoption-report' docs/index.html
-grep -q 'repo 外路徑' docs/pilot-adoption.md
-test "$(grep -c '^目標路徑：' README.md)" -eq 3
-test "$(grep -c '^來源 repository：https://github.com/Innoguard-Cyber-Arch/csarc-repo-template$' README.md)" -eq 3
-test "$(grep -c '^核准版本：最新穩定版$' README.md)" -eq 3
-test "$(grep -c '^核准 commit：<resolved-full-commit-sha>$' README.md)" -eq 3
-test "$(grep -c '^安裝指南：https://raw.githubusercontent.com/Innoguard-Cyber-Arch/csarc-repo-template/<resolved-full-commit-sha>/docs/agent-install.md$' README.md)" -eq 3
+grep -q 'repo 外的 Markdown、machine plan' docs/pilot-adoption.md
+grep -q '^### 建立新 repo$' README.md
+grep -q '^### 導入既有 repo$' README.md
+grep -q '^### 更新已導入的 repo$' README.md
+test "$(grep -c '^請使用 uv 從 canonical GitHub repository' README.md)" -eq 3
+if grep -q '^目標路徑：' README.md; then
+  exit 1
+fi
+if grep -q '<resolved-full-commit-sha>' README.md; then
+  exit 1
+fi
+grep -q 'CLI 會從 canonical immutable Release 解析並驗證 full SHA' README.md
 grep -q '"draft": true' release-please-config.json
 grep -q '"force-tag-creation": true' release-please-config.json
+# Shell variables are literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'gh release verify "$RELEASE_TAG"' \
   .github/workflows/release-template.yml
-grep -q '^      attestations: read$' .github/workflows/release-template.yml
-grep -q 'isImmutable,isDraft,isPrerelease' \
-  .github/workflows/release-template.yml
-grep -q 'Release is already published and immutable' \
-  .github/workflows/release-template.yml
-grep -q 'for attempt in {1..24}; do' \
-  .github/workflows/release-template.yml
+uv run --no-project python - .github/workflows/release-template.yml <<'PY'
+import re
+import sys
+from pathlib import Path
+
+workflow = Path(sys.argv[1]).read_text(encoding="utf-8")
+required = (
+    "cancel-in-progress: false",
+    "ref: ${{ github.ref }}",
+    'test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$GITHUB_SHA"',
+    "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610",
+    "syft-version: v1.50.0",
+    "SYFT_SOURCE_NAME: csarc-repo-cli",
+    "upload-release-assets: false",
+    "dependency-snapshot: false",
+    "uv sync --locked --no-dev --no-editable",
+    "format: spdx-json",
+    "scripts/release_assets.py build",
+    "--runtime-kind package",
+    '--root-name "$ROOT_NAME"',
+    '--root-purl "$ROOT_PURL"',
+    '--repository-id "$GITHUB_REPOSITORY_ID"',
+    '--source-run "$SOURCE_RUN_ID"',
+    '--release-run "$GITHUB_RUN_ID"',
+    '--inventory-file "$ASSET_ROOT/inventory.purls"',
+    '--artifact "${wheels[0]}"',
+    '2>"$errors"',
+    '.status == "completed"',
+    '.path == ".github/workflows/release-please.yml"',
+    '--repo "$GITHUB_REPOSITORY"',
+    "actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a",
+    "actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34",
+    'gh release edit "$RELEASE_TAG"',
+    "--draft=false",
+    "isImmutable,isDraft,isPrerelease",
+    "draft-release-assets.XXXXXX",
+    "release-verify.XXXXXX",
+)
+missing = [value for value in required if value not in workflow]
+if missing:
+    raise SystemExit(f"Root release workflow is missing: {missing}")
+if "actions/attest@" in workflow or "cyclonedx" in workflow.lower():
+    raise SystemExit("Root release workflow must use dedicated SPDX attestations")
+if 'gh release upload "$RELEASE_TAG" release-' in workflow or "release-*/*" in workflow:
+    raise SystemExit("Root release upload must enumerate the validated asset set")
+upload_files = workflow[
+    workflow.index("release_files=(") : workflow.index('gh release upload "$RELEASE_TAG"')
+]
+if '"$ASSET_ROOT/inventory.purls"' not in upload_files:
+    raise SystemExit("Root Release must carry the bound runtime inventory")
+inspect = workflow.index("Inspect exact-tag release state without mutation")
+build = workflow.index("Build CLI and prepare release assets", inspect)
+bind = workflow.index("scripts/release_assets.py build", build)
+create = workflow.index("Create or require the mutable draft", bind)
+upload = workflow.index('gh release upload "$RELEASE_TAG"')
+create_block = workflow[create:upload]
+
+
+def require_create(block: str) -> None:
+    required_create = (
+        'gh release create "$RELEASE_TAG"',
+        "--verify-tag",
+        '--notes-file "$RELEASE_NOTES"',
+    )
+    missing_create = [value for value in required_create if value not in block]
+    if missing_create or re.search(r"(?<!\S)--draft(?=\s|$)", block) is None:
+        raise ValueError(f"root release create is missing: {missing_create or ['--draft']}")
+
+
+require_create(create_block)
+for removed, mutated in (
+    ("--draft", re.sub(r"(?<!\S)--draft(?=\s|$)", "", create_block, count=1)),
+    (
+        '--notes-file "$RELEASE_NOTES"',
+        create_block.replace('--notes-file "$RELEASE_NOTES"', "", 1),
+    ),
+):
+    try:
+        require_create(mutated)
+    except ValueError:
+        continue
+    raise SystemExit(f"Root release create accepted missing {removed}")
+draft_download = workflow.index('gh release download "$RELEASE_TAG"', upload)
+publish = workflow.index('gh release edit "$RELEASE_TAG"', draft_download)
+final_download = workflow.index('gh release download "$RELEASE_TAG"', publish)
+if not inspect < build < bind < create < upload < draft_download < publish < final_download:
+    raise SystemExit("Root Release validation order is not fail closed")
+PY
+# The GitHub expression is literal workflow content.
+# shellcheck disable=SC2016
 if grep -q 'repos/${GITHUB_REPOSITORY}/immutable-releases' \
   .github/workflows/release-template.yml; then
   echo "Release jobs must not require the admin-only immutable-releases endpoint." >&2
@@ -893,7 +1251,7 @@ if grep -q 'repos/${GITHUB_REPOSITORY}/immutable-releases' \
 fi
 grep -q 'render_release_prompt.py' .github/workflows/release-template.yml
 test "$(grep -c 'release_policy.py prepare' \
-  .github/workflows/release-template.yml)" = 2
+  .github/workflows/release-template.yml)" = 1
 grep -q 'source_run_id:' .github/workflows/release-template.yml
 grep -q 'release_policy.py verify-boundary' \
   .github/workflows/release-template.yml
@@ -901,10 +1259,11 @@ if grep -q 'tags: \["v\*"\]' .github/workflows/release-template.yml; then
   echo "Release artifacts must require an explicit verified-source dispatch."
   exit 1
 fi
-grep -q 'gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes' \
-  .github/workflows/release-template.yml
-grep -q "CSARC_ENABLE_PYPI_PUBLISHING == 'true'" \
-  .github/workflows/release-template.yml
+if grep -Eq 'publish-pypi|CSARC_ENABLE_PYPI_PUBLISHING' \
+  .github/workflows/release-template.yml; then
+  echo "The root CLI must not publish to PyPI." >&2
+  exit 1
+fi
 test -f scripts/release_policy.py
 test -f version.txt
 release_tag="$(git tag --points-at HEAD --list 'v[0-9]*' --sort=-version:refname | head -1)"
@@ -937,15 +1296,29 @@ grep -q '^## Working loop$' AGENTS.md
 grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
 grep -q "pull request chain ends there" AGENTS.md
-grep -q "against its delivery branch or immediate parent in the stack" AGENTS.md
-grep -q 'complete every task in the pull request and referenced Issue' AGENTS.md
-grep -q 'one branch and one Git worktree per task' AGENTS.md
+grep -q "Target the delivery branch or immediate stack parent" AGENTS.md
+grep -q 'Use `Closes`, `Fixes`, or `Resolves` only after every PR and referenced-Issue item has evidence' AGENTS.md
+grep -q 'one branch and worktree per independent task' AGENTS.md
 grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
+grep -q 'gh issue develop' AGENTS.md
+grep -q 'Projects stay disabled' AGENTS.md
 grep -q 'search open and closed Issues' AGENTS.md
 grep -q 'Never silently reverse an earlier decision' AGENTS.md
 grep -q 'whether creating through the UI, CLI, or API' AGENTS.md
 grep -q 'create and link a follow-up Issue first' AGENTS.md
+grep -Fq 'reserve unscoped cleanup for explicit maintenance' AGENTS.md
+grep -Fq 'reserve unscoped cleanup for explicit maintenance' \
+  template/AGENTS.md.jinja
+grep -Fq 'cloud-synced File Provider path' AGENTS.md
+grep -Fq 'cloud-synced File Provider path' template/AGENTS.md.jinja
+grep -Fq 'without routine user confirmation' AGENTS.md
+grep -Fq 'without routine user confirmation' template/AGENTS.md.jinja
+grep -Fq 'once per final candidate tree' AGENTS.md
+grep -Fq 'once per final candidate tree' template/AGENTS.md.jinja
 grep -q '^## References$' docs/milestone-description.md
+grep -q 'Promotion Issue 的 checkbox 只能描述合併前可驗證' \
+  docs/milestone-description.md
+grep -q 'csarc-promotion-checkpoint: #12, #34' docs/ci-policy.md
 grep -q 'bounded' docs/agent-install.md
 grep -q '沿用、取代或駁回' docs/index.html
 required_readme_headings=(
@@ -1025,11 +1398,63 @@ grep -q '^    id: supplement$' .github/ISSUE_TEMPLATE/work-item.yml
 test "$(grep -Ec '^      label: (類型|問題|完成條件|補充)$' \
   .github/ISSUE_TEMPLATE/work-item.yml)" -eq 4
 grep -q '搜尋相關 open／closed Issues' .github/ISSUE_TEMPLATE/work-item.yml
+grep -q 'Promotion Issue 只列合併前可驗證' \
+  .github/ISSUE_TEMPLATE/work-item.yml
 grep -q '^        - duplicate$' .github/ISSUE_TEMPLATE/work-item.yml
 test "$(grep -c '^## ' .github/pull_request_template.md)" -eq 3
 grep -q '^## Purpose$' .github/pull_request_template.md
 grep -q '^## 完成清單$' .github/pull_request_template.md
 grep -q '^## 補充$' .github/pull_request_template.md
+grep -q './scripts/verify-template.sh' .github/pull_request_template.md
+grep -q 'types: \[opened, edited, synchronize, reopened, ready_for_review, assigned, unassigned, labeled, unlabeled, milestoned, demilestoned\]' \
+  .github/workflows/pr-policy.yml
+grep -Fq 'if [[ -f scripts/sync_work_item_metadata.py ]]' \
+  .github/workflows/pr-policy.yml
+cmp -s .github/workflows/pr-policy.yml template/.github/workflows/pr-policy.yml
+cmp -s scripts/test-pr-policy template/scripts/test-pr-policy
+for pr_policy_workflow in .github/workflows/pr-policy.yml \
+  template/.github/workflows/pr-policy.yml; do
+  # Shell variables are literal workflow content.
+  # shellcheck disable=SC2016
+  grep -Fq 'if [[ "${PR_POLICY_FIXTURE:-false}" == "true" ]]' \
+    "$pr_policy_workflow"
+  # Shell variables are literal workflow content.
+  # shellcheck disable=SC2016
+  test "$(grep -Fc 'repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER' \
+    "$pr_policy_workflow")" -eq 1
+  grep -q 'Live pull request metadata is incomplete or malformed.' \
+    "$pr_policy_workflow"
+  grep -Fq 'pullRequest(number:$number){number closingIssuesReferences(first:100)' \
+    "$pr_policy_workflow"
+  grep -Fq 'closingIssuesReferences.pageInfo.hasNextPage == false' \
+    "$pr_policy_workflow"
+  grep -Fq 'must have exactly one authoritative closing Issue relationship' \
+    "$pr_policy_workflow"
+  grep -Fq 'has("body") and (.body == null or (.body | type) == "string")' \
+    "$pr_policy_workflow"
+  # Shell variables are literal workflow content.
+  # shellcheck disable=SC2016
+  grep -Fq 'PR_BODY="$(jq -r '\''.body // ""'\'' <<<"$pr_payload")"' \
+    "$pr_policy_workflow"
+  grep -Fq 'A non-default routine pull request must have exactly one live closing keyword' \
+    "$pr_policy_workflow"
+  if grep -Fq 'PR_BODY: ${{ github.event.pull_request.body }}' \
+    "$pr_policy_workflow"; then
+    echo "PR policy must validate the live REST body instead of event payload metadata."
+    exit 1
+  fi
+  if grep -q 'linkedBranches' "$pr_policy_workflow"; then
+    echo "PR policy must not use the empty Issue linkedBranches connection."
+    exit 1
+  fi
+done
+metadata_sync_line="$(grep -n 'name: Synchronize pull request metadata' \
+  .github/workflows/pr-policy.yml | cut -d: -f1)"
+# Shell variables are literal workflow content.
+# shellcheck disable=SC2016
+live_metadata_line="$(grep -nF 'repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER' \
+  .github/workflows/pr-policy.yml | cut -d: -f1)"
+test "$metadata_sync_line" -lt "$live_metadata_line"
 grep -q '^  pull_request:$' .github/workflows/governance-comment.yml
 grep -q 'types: \[opened, reopened, ready_for_review\]' \
   .github/workflows/governance-comment.yml
@@ -1044,13 +1469,21 @@ if grep -q 'synchronize' .github/workflows/governance-comment.yml; then
 fi
 grep -q '!github.event.pull_request.draft' \
   .github/workflows/governance-comment.yml
+# The GitHub expression is literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'ref: \${{ github.event.pull_request.base.sha }}' \
   .github/workflows/governance-comment.yml
 grep -q 'configured_reviewers.*\.github/REVIEWERS' \
   .github/workflows/governance-comment.yml
+# The shell variable is literal workflow content.
+# shellcheck disable=SC2016
 grep -Fq '== "$PR_AUTHOR"' .github/workflows/governance-comment.yml
+# Shell variables are literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'repos/\$GITHUB_REPOSITORY/pulls/\$PR_NUMBER/requested_reviewers' \
   .github/workflows/governance-comment.yml
+# The shell variable is literal workflow content.
+# shellcheck disable=SC2016
 grep -Fq -- '-f "reviewers[]=$reviewer"' \
   .github/workflows/governance-comment.yml
 grep -q 'DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"' src/csarc_cli/cli.py
@@ -1083,9 +1516,25 @@ if grep -q '^  pull_request:$' .github/workflows/osv.yml; then
   echo "Standalone OSV must not duplicate change-aware CI scans."
   exit 1
 fi
-grep -q 'gh pr edit "$pr_url" --add-label enhancement' \
+test "$(grep -c 'scripts/pr_lifecycle.py acquire' \
+  .github/workflows/python-version-policy.yml)" -eq 1
+test "$(grep -c 'scripts/pr_lifecycle.py edit' \
+  .github/workflows/python-version-policy.yml)" -eq 1
+test "$(grep -c 'scripts/pr_lifecycle.py release' \
+  .github/workflows/python-version-policy.yml)" -eq 1
+grep -q 'steps.app-token.outputs.app-slug' \
   .github/workflows/python-version-policy.yml
-if grep -Eq -- '--admin|gh pr merge|CSARC_VERSION_BOT_APP_ID' \
+test "$(grep -c -- '--actor "\$lease_actor"' \
+  .github/workflows/python-version-policy.yml)" -eq 3
+if grep -q 'api", "installation' scripts/pr_lifecycle.py; then
+  echo "GitHub App identity must come from trusted action output."
+  exit 1
+fi
+uv run --no-project python scripts/pr_lifecycle.py scan-writers --root .
+grep -q 'trap release_lease EXIT' .github/workflows/python-version-policy.yml
+grep -q 'pr_lifecycle.py edit' scripts/delivery_sync.py
+grep -q 'gh auth setup-git' .github/workflows/delivery-maintenance.yml
+if grep -Eq -- '--admin|CSARC_VERSION_BOT_APP_ID' \
   .github/workflows/python-version-policy.yml \
   scripts/apply-repository-settings.sh \
   template/scripts/apply-repository-settings.sh; then
@@ -1100,7 +1549,26 @@ if grep -q '^  pull_request:$' .github/workflows/zizmor.yml; then
   exit 1
 fi
 grep -q 'target-branch: dev/next' .github/dependabot.yml
+uv run python - .github/dependabot.yml <<'PY'
+import sys
+
+import yaml
+
+with open(sys.argv[1], encoding="utf-8") as dependabot_file:
+    updates = yaml.safe_load(dependabot_file)["updates"]
+actions = next(
+    update for update in updates
+    if update["package-ecosystem"] == "github-actions"
+)
+assert actions["groups"] == {
+    "official-actions": {
+        "patterns": ["actions/*"],
+        "update-types": ["minor", "patch"],
+    }
+}
+PY
 grep -q '"name": "CSARC protected branches"' policies/rulesets.json
+grep -q '"name": "CSARC preserve dev next"' policies/dev-next-ruleset.json
 
 # Issues #74 and #110: keep the native dependency updater so its PRs trigger
 # required checks without another privileged identity. pnpm also enforces the
@@ -1124,6 +1592,9 @@ import json
 from pathlib import Path
 
 ruleset = json.loads(Path("policies/rulesets.json").read_text(encoding="utf-8"))
+dev_next_ruleset = json.loads(
+    Path("policies/dev-next-ruleset.json").read_text(encoding="utf-8")
+)
 rules = {rule["type"]: rule.get("parameters", {}) for rule in ruleset["rules"]}
 pull_request = rules["pull_request"]
 checks = {
@@ -1132,19 +1603,32 @@ checks = {
 }
 if ruleset["enforcement"] != "active":
     raise SystemExit("The repository Ruleset must be active.")
+if "deletion" in rules:
+    raise SystemExit("General dev/* governance must allow short-branch cleanup.")
+if dev_next_ruleset["conditions"]["ref_name"] != {
+    "include": [
+        "refs/heads/dev/next",
+        "refs/heads/csarc/dev-next-preservation-ledger",
+    ],
+    "exclude": [],
+} or {rule["type"] for rule in dev_next_ruleset["rules"]} != {
+    "deletion",
+    "non_fast_forward",
+}:
+    raise SystemExit("Preservation rules must target only the two durable refs.")
 if pull_request["required_approving_review_count"] < 1:
     raise SystemExit("The repository Ruleset must require approval.")
 if not pull_request["require_code_owner_review"]:
     raise SystemExit("The repository Ruleset must require CODEOWNER review.")
-if not {
-    "delivery-sync",
-    "promotion",
-    "verify",
-    "title",
-} <= checks:
+if not {"promotion", "verify", "title"} <= checks:
     raise SystemExit("The repository Ruleset is missing required checks.")
+if "delivery-sync" in checks:
+    raise SystemExit("The retired delivery-sync context would stay pending.")
 PY
 grep -q '"refs/heads/dev/\*"' policies/rulesets.json
+grep -q '"refs/heads/dev/next"' policies/dev-next-ruleset.json
+grep -q '"refs/heads/csarc/dev-next-preservation-ledger"' \
+  policies/dev-next-ruleset.json
 
 pr_title_pattern='^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+'
 valid_pr_title() {
@@ -1160,8 +1644,43 @@ if valid_pr_title "feat: 新增報表功能"; then
   exit 1
 fi
 
+# The approved default must resolve to this repository's public Issue form.
+default_security_project="$fixture_root/default-security"
+uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_slug="default-security" \
+  --data language=ci \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$default_security_project" >/dev/null
+grep -qF \
+  'Open a GitHub Issue at https://github.com/Innoguard-Cyber-Arch/default-security/issues/new; maintainers receive notifications for new Issues.' \
+  "$default_security_project/SECURITY.md"
+grep -qF 'GitHub Issues are public.' "$default_security_project/SECURITY.md"
+grep -qF \
+  'secrets, credentials, personal data' \
+  "$default_security_project/SECURITY.md"
+
 # Invalid trust-boundary values must fail before producing a usable project.
+for invalid_metadata in \
+  'project_description= ToDo ' \
+  'project_run_command= tbD ' \
+  'security_reporting_channel= TODO ' \
+  'project_description= PlAcEhOlDeR ' \
+  'project_run_command= pLaCeHoLdEr ' \
+  'security_reporting_channel= PLACEholder '; do
+  metadata_field="${invalid_metadata%%=*}"
+  if uv run copier copy --trust --defaults --vcs-ref HEAD \
+    "${fixture_security_args[@]}" \
+    --data project_slug="invalid-$metadata_field" \
+    --data language=ci \
+    --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+    --data "$invalid_metadata" \
+    "$repo_root" "$fixture_root/invalid-$metadata_field" >/dev/null 2>&1; then
+    echo "Copier accepted placeholder metadata for $metadata_field."
+    exit 1
+  fi
+done
 if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_slug="Invalid/Slug" \
   --data language=ci \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
@@ -1170,6 +1689,7 @@ if uv run copier copy --trust --defaults --vcs-ref HEAD \
   exit 1
 fi
 if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_slug="valid-project" \
   --data package_name="9invalid" \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
@@ -1178,6 +1698,7 @@ if uv run copier copy --trust --defaults --vcs-ref HEAD \
   exit 1
 fi
 if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_slug="valid-project" \
   --data language=ci \
   --data use_reusable_workflow=true \
@@ -1187,17 +1708,41 @@ if uv run copier copy --trust --defaults --vcs-ref HEAD \
   echo "Copier accepted a non-hexadecimal workflow commit SHA."
   exit 1
 fi
+if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_mode=existing \
+  --data project_slug="invalid-container-path" \
+  --data language=ci \
+  --data container_mode=verify \
+  --data containerfile_path="../Dockerfile" \
+  --data 'container_smoke_command=docker run --rm "$IMAGE"' \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$fixture_root/invalid-container-path" >/dev/null 2>&1; then
+  echo "Copier accepted an unsafe container file path."
+  exit 1
+fi
+if uv run copier copy --trust --defaults --vcs-ref HEAD \
+  --data project_mode=existing \
+  --data project_slug="invalid-container-smoke" \
+  --data language=ci \
+  --data container_mode=verify \
+  --data containerfile_path="Dockerfile" \
+  --data container_smoke_command="docker ps" \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$fixture_root/invalid-container-smoke" >/dev/null 2>&1; then
+  echo "Copier accepted a container smoke command without IMAGE."
+  exit 1
+fi
 
-# Issue #140: every selectable minimum must generate the exact .0 lower bound
-# plus the latest patch of each supported feature release. Inline and reusable
-# workflows must describe the same runtime set while keeping one required
-# aggregate check.
+# Issues #140 and #202: every selectable minimum must keep the exact .0 lower
+# bound plus every supported feature release. The canonical latest runtime runs
+# the full suite once; the remaining runtimes run compatibility tests only.
 for python_minimum in 3.12 3.13 3.14; do
   for reusable in false true; do
     fixture_name="python-matrix-${python_minimum//./-}-${reusable}"
     matrix_fixture="$fixture_root/$fixture_name"
     copier_args=(
       --trust --defaults --vcs-ref HEAD
+      "${fixture_security_args[@]}"
       --data "project_slug=$fixture_name"
       --data "package_name=${fixture_name//-/_}"
       --data code_owner="@Innoguard-Cyber-Arch/template-maintainers"
@@ -1231,24 +1776,41 @@ from pathlib import Path
 workflow_path, ruleset_path, minimum, reusable_text = sys.argv[1:]
 latest_minor = 14
 minimum_minor = int(minimum.split(".")[1])
-expected = [f"{minimum}.0"] + [
-    f"3.{minor}" for minor in range(minimum_minor, latest_minor + 1)
+expected_compatibility = [f"{minimum}.0"] + [
+    f"3.{minor}" for minor in range(minimum_minor, latest_minor)
 ]
 workflow = Path(workflow_path).read_text(encoding="utf-8")
 if reusable_text == "true":
+    if 'canonical-python-version: "3.14"' not in workflow:
+        raise SystemExit("Reusable workflow canonical runtime is missing")
     match = re.search(r"python-versions: >-\n\s+(\[[^\n]+\])", workflow)
     if match is None:
-        raise SystemExit("Reusable workflow runtime input is missing")
+        raise SystemExit("Reusable workflow compatibility input is missing")
     actual = json.loads(match.group(1))
 else:
     match = re.search(
-        r"runtime:\n((?:\s+- \"[^\"]+\"\n)+)", workflow
+        r"  python-compatibility:\n.*?"
+        r"runtime:\n((?:\s+- \"[^\"]+\"\n)+)",
+        workflow,
+        re.DOTALL,
     )
     if match is None:
-        raise SystemExit("Inline workflow runtime matrix is missing")
+        raise SystemExit("Inline compatibility matrix is missing")
     actual = re.findall(r'- "([^\"]+)"', match.group(1))
-if actual != expected:
-    raise SystemExit(f"Unexpected Python matrix: {actual!r} != {expected!r}")
+    if 'name: canonical full (Python 3.14)' not in workflow:
+        raise SystemExit("Inline workflow canonical runtime is missing")
+    if "./scripts/verify python-compatibility" not in workflow:
+        raise SystemExit("Inline compatibility command is missing")
+if actual != expected_compatibility:
+    raise SystemExit(
+        f"Unexpected compatibility matrix: {actual!r} != "
+        f"{expected_compatibility!r}"
+    )
+expected_supported = [f"{minimum}.0"] + [
+    f"3.{minor}" for minor in range(minimum_minor, latest_minor + 1)
+]
+if actual + ["3.14"] != expected_supported:
+    raise SystemExit("Canonical and compatibility runtimes reduced support")
 ruleset = json.loads(Path(ruleset_path).read_text(encoding="utf-8"))
 checks = next(
     rule["parameters"]["required_status_checks"]
@@ -1263,13 +1825,16 @@ done
 
 # Default project: strict global coverage and optional features disabled.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_name='Template "Smoke" Test' \
   --data project_slug="template-smoke-test" \
   --data $'project_description=A "quoted" project\n第二行' \
   --data package_name="template_smoke_test" \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/default-project"
-prime_gitleaks_cache "$fixture_root/default-project"
+prime_validation_cache "$fixture_root/default-project"
+assert_agent_guidance "$fixture_root/default-project"
+assert_release_assets_contract "$fixture_root/default-project" package
 
 git -C "$fixture_root/default-project" init -q -b main
 git -C "$fixture_root/default-project" add .
@@ -1278,6 +1843,7 @@ git -C "$fixture_root/default-project" diff --cached --check
 test -f "$fixture_root/default-project/.copier-answers.yml"
 root_only_paths=(
   scripts/verify-template.sh
+  scripts/test-static-validation
   scripts/sync-paired-files.sh
   scripts/update_python_version.py
   scripts/report_dependency_ceiling.py
@@ -1302,22 +1868,264 @@ grep -q 'project_visibility: private' \
   "$fixture_root/default-project/.copier-answers.yml"
 grep -q 'enable_codeql: false' \
   "$fixture_root/default-project/.copier-answers.yml"
+grep -qF \
+  'https://github.com/Innoguard-Cyber-Arch/template-smoke-test/actions/workflows/ci.yml/badge.svg' \
+  "$fixture_root/default-project/README.md"
+grep -qF \
+  "uv run python -c 'import template_smoke_test'" \
+  "$fixture_root/default-project/README.md"
+grep -qF \
+  "Use the synthetic fixture's private reporting channel." \
+  "$fixture_root/default-project/SECURITY.md"
+grep -qF \
+  'Repository = "https://github.com/Innoguard-Cyber-Arch/template-smoke-test"' \
+  "$fixture_root/default-project/pyproject.toml"
+test -x "$fixture_root/default-project/scripts/check-project-metadata"
+"$fixture_root/default-project/scripts/check-project-metadata"
+metadata_probe="$fixture_root/metadata-placeholder"
+mkdir -p "$metadata_probe/scripts"
+cp "$fixture_root/default-project/scripts/check-project-metadata" \
+  "$metadata_probe/scripts/check-project-metadata"
+cp "$fixture_root/default-project/README.md" "$metadata_probe/README.md"
+cp "$fixture_root/default-project/SECURITY.md" "$metadata_probe/SECURITY.md"
+printf '%s\n' '請在這裡補上產品最短執行指令。' >> "$metadata_probe/README.md"
+if metadata_error="$(
+  cd "$metadata_probe"
+  ./scripts/check-project-metadata 2>&1
+)"; then
+  echo "Generated verification must reject unfinished metadata."
+  exit 1
+fi
+grep -q 'README.md has unfinished run command metadata' \
+  <<<"$metadata_error"
+cp "$fixture_root/default-project/README.md" "$metadata_probe/README.md"
+cp "$fixture_root/default-project/SECURITY.md" "$metadata_probe/SECURITY.md"
+sed 's/A "quoted" project/ ToDo /' "$metadata_probe/README.md" \
+  > "$metadata_probe/README.md.tmp"
+mv "$metadata_probe/README.md.tmp" "$metadata_probe/README.md"
+sed "s/Use the synthetic fixture's private reporting channel\./ PLACEholder /" \
+  "$metadata_probe/SECURITY.md" > "$metadata_probe/SECURITY.md.tmp"
+mv "$metadata_probe/SECURITY.md.tmp" "$metadata_probe/SECURITY.md"
+for metadata_file in README.md SECURITY.md; do
+  awk '{ printf "%s\r\n", $0 }' "$metadata_probe/$metadata_file" \
+    > "$metadata_probe/$metadata_file.tmp"
+  mv "$metadata_probe/$metadata_file.tmp" "$metadata_probe/$metadata_file"
+done
+if metadata_error="$(
+  cd "$metadata_probe"
+  ./scripts/check-project-metadata 2>&1
+)"; then
+  echo "Generated verification must reject controlled placeholder metadata."
+  exit 1
+fi
+grep -q 'README.md has unfinished project description metadata' \
+  <<<"$metadata_error"
+grep -q 'SECURITY.md has unfinished security reporting channel metadata' \
+  <<<"$metadata_error"
+cp "$fixture_root/default-project/README.md" "$metadata_probe/README.md"
+cp "$fixture_root/default-project/SECURITY.md" "$metadata_probe/SECURITY.md"
+for metadata_file in README.md SECURITY.md; do
+  awk '{ printf "%s\r\n", $0 }' "$metadata_probe/$metadata_file" \
+    > "$metadata_probe/$metadata_file.tmp"
+  mv "$metadata_probe/$metadata_file.tmp" "$metadata_probe/$metadata_file"
+done
+(
+  cd "$metadata_probe"
+  ./scripts/check-project-metadata
+)
+printf '%s\n' '' '## Product roadmap' ' ToDo ' ' PLACEholder ' \
+  >> "$metadata_probe/README.md"
+printf '%s\n' '' '## Internal notes' ' tBd ' \
+  >> "$metadata_probe/SECURITY.md"
+(
+  cd "$metadata_probe"
+  ./scripts/check-project-metadata
+)
+rm "$metadata_probe/README.md"
+if metadata_error="$(
+  cd "$metadata_probe"
+  ./scripts/check-project-metadata 2>&1
+)"; then
+  echo "Generated verification must require README.md."
+  exit 1
+fi
+grep -q 'README.md is required for project metadata verification' \
+  <<<"$metadata_error"
+cp "$fixture_root/default-project/README.md" "$metadata_probe/README.md"
+rm "$metadata_probe/SECURITY.md"
+if metadata_error="$(
+  cd "$metadata_probe"
+  ./scripts/check-project-metadata 2>&1
+)"; then
+  echo "Generated verification must require SECURITY.md."
+  exit 1
+fi
+grep -q 'SECURITY.md is required for project metadata verification' \
+  <<<"$metadata_error"
 test ! -f "$fixture_root/default-project/.github/workflows/codeql.yml"
 grep -q '"language_profile": "python"' \
   "$fixture_root/default-project/.csarc/profile.json"
 grep -q '"branch_strategy": "delivery"' \
   "$fixture_root/default-project/.csarc/profile.json"
+grep -q '"container": false' \
+  "$fixture_root/default-project/.csarc/profile.json"
+grep -q '"mode": "none"' \
+  "$fixture_root/default-project/.csarc/profile.json"
+test ! -f "$fixture_root/default-project/Dockerfile"
+test ! -f "$fixture_root/default-project/Containerfile"
+if grep -q '^  container:$\|docker/setup-buildx-action@\|aquasecurity/trivy-action@' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"; then
+  echo "Container CI must not exist when the module is disabled."
+  exit 1
+fi
+if grep -q '^  publish-container:$\|^      packages: write$' \
+  "$fixture_root/default-project/.github/workflows/release.yml"; then
+  echo "Container publishing permissions must not exist when disabled."
+  exit 1
+fi
 test "$("$fixture_root/default-project/scripts/detect-language-profile" --suggest)" = \
   "python"
 test -f "$fixture_root/default-project/CHANGELOG.md"
 test -f "$fixture_root/default-project/.github/workflows/release-please.yml"
-grep -q 'gh release upload "$GITHUB_REF_NAME"' \
+# Shell variables are literal workflow content.
+# shellcheck disable=SC2016
+grep -q 'gh release upload "$RELEASE_TAG"' \
   "$fixture_root/default-project/.github/workflows/release.yml"
 grep -q 'release-metadata.json' \
   "$fixture_root/default-project/.github/workflows/release.yml"
-grep -q 'No release distribution was created' \
+grep -q 'format: spdx-json' \
   "$fixture_root/default-project/.github/workflows/release.yml"
-if grep -q 'actions/attest@' \
+grep -q 'syft-version: v1.50.0' \
+  "$fixture_root/default-project/.github/workflows/release.yml"
+grep -q 'scripts/release_assets.py build' \
+  "$fixture_root/default-project/.github/workflows/release.yml"
+uv run --no-project python - \
+  "$fixture_root/default-project/.github/workflows/release.yml" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+import yaml
+
+workflow_path = Path(sys.argv[1])
+workflow = workflow_path.read_text(encoding="utf-8")
+workflow_document = yaml.safe_load(workflow)
+required = (
+    "cancel-in-progress: false",
+    "ref: ${{ github.ref }}",
+    'test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$GITHUB_SHA"',
+    'git archive --format=tar --output="$asset_root/source.tar"',
+    "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610",
+    "syft-version: v1.50.0",
+    "SYFT_SOURCE_NAME: ${{ steps.prepare.outputs.root_name }}",
+    "upload-release-assets: false",
+    "dependency-snapshot: false",
+    "uv sync --locked --no-dev --no-editable",
+    "format: spdx-json",
+    "scripts/release_assets.py build",
+    "--runtime-kind package",
+    '--root-name "$(jq -r .root_name "$IDENTITY_FILE")"',
+    '--repository-id "$GITHUB_REPOSITORY_ID"',
+    '--source-run "$SOURCE_RUN_ID"',
+    '--release-run "$GITHUB_RUN_ID"',
+    '--inventory-file "$ASSET_ROOT/inventory.purls"',
+    '--artifact "$ASSET_ROOT/source.tar"',
+    '2>"$errors"',
+    '.status == "completed"',
+    '.path == ".github/workflows/release-please.yml"',
+    '--repo "$GITHUB_REPOSITORY"',
+    "scripts/release_assets.py verify",
+    "draft-release-assets.XXXXXX",
+    "release-verify.XXXXXX",
+    "isImmutable,isDraft,isPrerelease",
+    "--draft=false",
+)
+missing = [value for value in required if value not in workflow]
+if missing:
+    raise SystemExit(f"Generated release workflow is missing: {missing}")
+
+build_job = workflow_document.get("jobs", {}).get("build", {})
+prepare_steps = [
+    step
+    for step in build_job.get("steps", [])
+    if step.get("name") == "Prepare the exact-tag release bundle"
+]
+if len(prepare_steps) != 1 or not isinstance(prepare_steps[0].get("run"), str):
+    raise SystemExit(
+        f"{workflow_path}: expected one executable exact-tag bundle preparation step"
+    )
+prepare_lines = [line.strip() for line in prepare_steps[0]["run"].splitlines()]
+distribution_gate = (
+    '[[ "${#wheels[@]}" -eq 1 && "${#sdists[@]}" -eq 1 ]] || {'
+)
+gate_indices = [
+    index for index, line in enumerate(prepare_lines) if line == distribution_gate
+]
+if len(gate_indices) != 1:
+    raise SystemExit(
+        f"{workflow_path}: expected one executable Python distribution gate"
+    )
+gate_index = gate_indices[0]
+try:
+    gate_end = prepare_lines.index("}", gate_index + 1)
+except ValueError as error:
+    raise SystemExit(f"{workflow_path}: distribution gate is not closed") from error
+if prepare_lines[gate_index + 1 : gate_end].count("exit 1") != 1:
+    raise SystemExit(f"{workflow_path}: distribution gate must exit once on failure")
+copy_distributions = 'cp "${wheels[0]}" "${sdists[0]}" "$asset_root/"'
+copy_indices = [
+    index for index, line in enumerate(prepare_lines) if line == copy_distributions
+]
+if len(copy_indices) != 1 or copy_indices[0] <= gate_end:
+    raise SystemExit(
+        f"{workflow_path}: validated Python distributions must be copied once"
+    )
+if "actions/attest@" in workflow or "cyclonedx" in workflow.lower():
+    raise SystemExit("Generated release workflow must use SPDX evidence")
+if 'gh release upload "$RELEASE_TAG" release-' in workflow or "release-*/*" in workflow:
+    raise SystemExit("Generated release upload must enumerate the validated asset set")
+upload_files = workflow[
+    workflow.index("release_files=(") : workflow.index('gh release upload "$RELEASE_TAG"')
+]
+if "release-evidence/inventory.purls" not in upload_files:
+    raise SystemExit("Generated Release must carry the bound runtime inventory")
+bind = workflow.index("scripts/release_assets.py build")
+inspect = workflow.index("Inspect exact-tag release state without mutation", bind)
+create = workflow.index("Create or require the mutable draft", inspect)
+upload = workflow.index('gh release upload "$RELEASE_TAG"')
+create_block = workflow[create:upload]
+
+
+def require_create(block: str) -> None:
+    required_create = (
+        'gh release create "$RELEASE_TAG"',
+        "--verify-tag",
+        "--generate-notes",
+    )
+    missing_create = [value for value in required_create if value not in block]
+    if missing_create or re.search(r"(?<!\S)--draft(?=\s|$)", block) is None:
+        raise ValueError(
+            f"generated release create is missing: {missing_create or ['--draft']}"
+        )
+
+
+require_create(create_block)
+for removed, mutated in (
+    ("--draft", re.sub(r"(?<!\S)--draft(?=\s|$)", "", create_block, count=1)),
+    ("--generate-notes", create_block.replace("--generate-notes", "", 1)),
+):
+    try:
+        require_create(mutated)
+    except ValueError:
+        continue
+    raise SystemExit(f"Generated release create accepted missing {removed}")
+draft_download = workflow.index('gh release download "$RELEASE_TAG"', upload)
+publish = workflow.index('gh release edit "$RELEASE_TAG"', draft_download)
+final_download = workflow.index('gh release download "$RELEASE_TAG"', publish)
+if not bind < inspect < create < upload < draft_download < publish < final_download:
+    raise SystemExit("Generated Release validation order is not fail closed")
+PY
+if grep -Eq 'actions/attest(@|-build-provenance@|-sbom@)' \
   "$fixture_root/default-project/.github/workflows/release.yml"; then
   echo "Release attestations must remain opt-in."
   exit 1
@@ -1330,13 +2138,14 @@ fi
 
 # Public projects default release attestations on; private/internal stay explicit opt-in.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_slug="public-visibility-test" \
   --data package_name="public_visibility_test" \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   --data reviewers="@alice,@bob" \
   --data project_visibility=public \
   "$repo_root" "$fixture_root/public-visibility-project"
-prime_gitleaks_cache "$fixture_root/public-visibility-project"
+prime_validation_cache "$fixture_root/public-visibility-project"
 grep -q 'project_visibility: public' \
   "$fixture_root/public-visibility-project/.copier-answers.yml"
 grep -q 'enable_release_attestations: true' \
@@ -1352,20 +2161,23 @@ test "$(sed '/^#/d; /^$/d' "$fixture_root/public-visibility-project/.github/REVI
   $'@alice\n@bob'
 grep -q 'github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827' \
   "$fixture_root/public-visibility-project/.github/workflows/codeql.yml"
-test "$(grep -c 'actions/attest@' \
-  "$fixture_root/public-visibility-project/.github/workflows/release.yml")" -eq 2
+grep -q 'actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a' \
+  "$fixture_root/public-visibility-project/.github/workflows/release.yml"
+grep -q 'actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34' \
+  "$fixture_root/public-visibility-project/.github/workflows/release.yml"
 grep -q 'attestations: write' \
   "$fixture_root/public-visibility-project/.github/workflows/release.yml"
 grep -q 'id-token: write' \
   "$fixture_root/public-visibility-project/.github/workflows/release.yml"
 
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_slug="internal-visibility-test" \
   --data package_name="internal_visibility_test" \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   --data project_visibility=internal \
   "$repo_root" "$fixture_root/internal-visibility-project"
-prime_gitleaks_cache "$fixture_root/internal-visibility-project"
+prime_validation_cache "$fixture_root/internal-visibility-project"
 grep -q 'project_visibility: internal' \
   "$fixture_root/internal-visibility-project/.copier-answers.yml"
 grep -q 'enable_release_attestations: false' \
@@ -1376,7 +2188,7 @@ test ! -f "$fixture_root/internal-visibility-project/.github/workflows/codeql.ym
 grep -q 'id="fleet-governance-thresholds"' docs/index.html
 grep -q '10 個活躍 consuming repo' docs/index.html
 grep -q '30 天內同類漂移' docs/index.html
-if grep -q 'actions/attest@' \
+if grep -Eq 'actions/attest(@|-build-provenance@|-sbom@)' \
   "$fixture_root/internal-visibility-project/.github/workflows/release.yml"; then
   echo "Internal projects must keep release attestations opt-in by default."
   exit 1
@@ -1389,7 +2201,6 @@ test -f "$fixture_root/default-project/release-please-config.json"
 test -f "$fixture_root/default-project/.release-please-manifest.json"
 test "$(cat "$fixture_root/default-project/.python-version")" = "3.14"
 test -f "$fixture_root/default-project/AGENTS.md"
-test "$(wc -l < "$fixture_root/default-project/AGENTS.md")" -le 200
 test -f "$fixture_root/default-project/docs/index.html"
 test -f "$fixture_root/default-project/docs/site-content.js"
 test -f "$fixture_root/default-project/docs/site-theme.css"
@@ -1398,8 +2209,20 @@ test -f "$fixture_root/default-project/site/styles.css"
 test -f "$fixture_root/default-project/site/app.js"
 test -f "$fixture_root/default-project/scripts/render_site.py"
 test -f "$fixture_root/default-project/docs/README.md"
-test -f "$fixture_root/default-project/docs/decisions/README.md"
+test -f "$fixture_root/default-project/docs/adr/README.md"
 grep -q '不得保存完整聊天逐字稿' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Durable Project Memory' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Spec-Driven Development' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Architecture Decision Records' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Test-Driven Development' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'Behavior-Driven Development' \
+  "$fixture_root/default-project/docs/README.md"
+grep -q 'docs/decisions/' \
   "$fixture_root/default-project/docs/README.md"
 grep -q 'Never store a raw conversation transcript' \
   "$fixture_root/default-project/AGENTS.md"
@@ -1443,13 +2266,13 @@ grep -q '^## Scope and sources of truth$' \
 grep -q '^## Commands$' "$fixture_root/default-project/AGENTS.md"
 grep -q '^## Code Review Rules$' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'pull request chain ends there' \
+grep -q 'work branch whose pull request chain ends there' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'against its delivery branch or immediate parent in the stack' \
+grep -q 'Target the delivery branch or immediate stack parent' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'complete every task in the pull request and referenced Issue' \
+grep -q 'Use `Closes`, `Fixes`, or `Resolves` only after every PR and referenced-Issue item has evidence' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'one branch and one Git worktree per task' \
+grep -q 'one branch and worktree per independent task' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'search open and closed Issues' \
   "$fixture_root/default-project/AGENTS.md"
@@ -1457,18 +2280,60 @@ grep -q 'whether creating through the UI, CLI, or API' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'create and link a follow-up Issue first' \
   "$fixture_root/default-project/AGENTS.md"
+grep -Fq 'reserve unscoped cleanup for explicit maintenance' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -Fq 'cloud-synced File Provider path' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -Fq 'without routine user confirmation' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -Fq 'once per final candidate tree' \
+  "$fixture_root/default-project/AGENTS.md"
 grep -q 'uv run pytest <test-path>' \
   "$fixture_root/default-project/AGENTS.md"
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
+grep -q 'Python setup: `uv sync --locked`' \
+  "$fixture_root/default-project/AGENTS.md"
+if grep -q 'TypeScript setup:' "$fixture_root/default-project/AGENTS.md"; then
+  echo "Python-only AGENTS.md must not include TypeScript setup."
+  exit 1
+fi
 if grep -q 'pnpm exec vitest' "$fixture_root/default-project/AGENTS.md"; then
   echo "Python-only AGENTS.md must not include TypeScript commands."
   exit 1
 fi
 test "$(cat "$fixture_root/default-project/CLAUDE.md")" = "@AGENTS.md"
 test -f "$fixture_root/default-project/policies/rulesets.json"
+test -f "$fixture_root/default-project/policies/dev-next-ruleset.json"
 test -f "$fixture_root/default-project/.github/workflows/governance-comment.yml"
 test -f "$fixture_root/default-project/.github/workflows/promotion.yml"
+test -f "$fixture_root/default-project/.github/workflows/promotion-post-merge.yml"
+test -f "$fixture_root/default-project/.github/workflows/delivery-maintenance.yml"
+test -f "$fixture_root/default-project/.github/workflows/dev-next-close.yml"
+# The GitHub expression is literal workflow content.
+# shellcheck disable=SC2016
+grep -Fq 'CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}' \
+  "$fixture_root/default-project/.github/workflows/promotion.yml"
+# The shell variable is literal workflow content.
+# shellcheck disable=SC2016
+grep -Fq -- '--candidate-sha "$CANDIDATE_SHA"' \
+  "$fixture_root/default-project/.github/workflows/promotion.yml"
 test -f "$fixture_root/default-project/docs/ci-policy.md"
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
 grep -q '穩定的 `verify` aggregate context' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q '明確標示的 job-minute 規劃估算，不是 hosted 實測' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q '14→3／4 job-minute 規劃模型' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
+grep -q 'Hosted duration 與 `ci-plan` artifact 僅作' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q '^optional telemetry' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q 'zero-step job 都不算 hosted success' \
   "$fixture_root/default-project/docs/ci-policy.md"
 grep -q '孤立 Issue 決策樹' \
   "$fixture_root/default-project/docs/ci-policy.md"
@@ -1497,18 +2362,29 @@ grep -q 'DEGRADED' \
   "$fixture_root/default-project/README.md"
 grep -q '"context": "verify"' \
   "$fixture_root/default-project/policies/rulesets.json"
-grep -q '"context": "delivery-sync"' \
-  "$fixture_root/default-project/policies/rulesets.json"
+if grep -q '"context": "delivery-sync"' \
+  "$fixture_root/default-project/policies/rulesets.json"; then
+  echo "Generated Ruleset must not require the retired delivery-sync context."
+  exit 1
+fi
 grep -q '"context": "promotion"' \
   "$fixture_root/default-project/policies/rulesets.json"
+test -f \
+  "$fixture_root/default-project/.github/workflows/release-follow-up-policy.yml"
 grep -q '"refs/heads/dev/\*"' \
   "$fixture_root/default-project/policies/rulesets.json"
 test -x "$fixture_root/default-project/scripts/apply-repository-settings.sh"
 test -x "$fixture_root/default-project/scripts/check-update-conflicts"
+test -x "$fixture_root/default-project/scripts/install-actionlint"
 test -x "$fixture_root/default-project/scripts/install-gitleaks"
+test -x "$fixture_root/default-project/scripts/install-shellcheck"
+test -x "$fixture_root/default-project/scripts/lint-workflows-shell"
 test -x "$fixture_root/default-project/scripts/verify-fast"
+grep -Fq 'uv run pytest -m "not large"' \
+  "$fixture_root/default-project/scripts/verify"
 test -f "$fixture_root/default-project/scripts/ci_tier.py"
 test -x "$fixture_root/default-project/scripts/promotion_gate.py"
+test -x "$fixture_root/default-project/scripts/pr_lifecycle.py"
 test ! -f "$fixture_root/default-project/.pre-commit-config.yaml"
 test ! -f "$fixture_root/default-project/package.json"
 test ! -f "$fixture_root/default-project/pnpm-workspace.yaml"
@@ -1519,13 +2395,21 @@ grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/README.md"
 grep -q '^## Actions quota fallback$' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'included GitHub Actions minutes are exhausted' \
+grep -q 'scripts/pr_lifecycle.py' \
   "$fixture_root/default-project/AGENTS.md"
+grep -q '^## PR lifecycle single-writer$' \
+  "$fixture_root/default-project/docs/ci-policy.md"
 grep -q 'Actions quota fallback attestation' \
-  "$fixture_root/default-project/README.md"
-grep -q '付款失敗、budget.*平台.*設定.*權限.*未知原因.*測試失敗' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q 'finalize-quota-fallback' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q 'verify-quota-main' \
+  "$fixture_root/default-project/docs/ci-policy.md"
+grep -q 'SHA/tree-bound.*non-release promotion path' \
+  "$fixture_root/default-project/AGENTS.md"
+grep -q '錯誤 budget.*平台事故.*權限.*原因不明.*測試失敗' \
   "$fixture_root/default-project/docs/index.html"
-grep -q '一般 Issue PR 跑單一 runtime' \
+grep -q '一般 Issue PR 跑 change-aware fast checks' \
   "$fixture_root/default-project/docs/site-content.js"
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/docs/index.html"
@@ -1562,6 +2446,8 @@ test "$(grep -c '^    id:' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 4
 grep -q '^    id: supplement$' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml"
+grep -q 'Promotion Issue 只列合併前可驗證' \
+  "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml"
 test "$(grep -Ec '^      label: (類型|問題|完成條件|補充)$' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 4
 test "$(grep -c '^## ' \
@@ -1574,20 +2460,40 @@ grep -q '^## 補充$' \
   "$fixture_root/default-project/.github/pull_request_template.md"
 grep -q 'Closing keywords require every task' \
   "$fixture_root/default-project/.github/pull_request_template.md"
+grep -q './scripts/verify' \
+  "$fixture_root/default-project/.github/pull_request_template.md"
+if grep -q './scripts/verify-template.sh' \
+  "$fixture_root/default-project/.github/pull_request_template.md"; then
+  echo "Generated PR template references the template-repository verifier."
+  exit 1
+fi
+grep -q 'feature.*task.*bug.*documentation.*duplicate' \
+  "$fixture_root/default-project/README.md"
+grep -q 'linked Issue.*assignee.*Milestone' \
+  "$fixture_root/default-project/README.md"
 grep -q 'referenced Issue checklist' \
   "$fixture_root/default-project/docs/index.html"
 test -f "$fixture_root/default-project/.github/workflows/issue-triage.yml"
 test -f "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
+test -f "$fixture_root/default-project/.github/workflows/milestone-policy.yml"
 test -f "$fixture_root/default-project/docs/milestone-description.md"
 test -f "$fixture_root/default-project/scripts/sync_milestone_state.py"
 grep -q '^## Plan$' \
   "$fixture_root/default-project/docs/milestone-description.md"
 grep -q '^## References$' \
   "$fixture_root/default-project/docs/milestone-description.md"
+grep -q 'Promotion Issue 的 checkbox 只能描述合併前可驗證' \
+  "$fixture_root/default-project/docs/milestone-description.md"
+grep -q 'csarc-promotion-checkpoint: #12, #34' \
+  "$fixture_root/default-project/docs/ci-policy.md"
 grep -q '專案團隊慣用的語言' \
   "$fixture_root/default-project/docs/milestone-description.md"
 grep -q 'types: \[closed, reopened, milestoned\]' \
   "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
+grep -q 'types: \[created, edited, opened\]' \
+  "$fixture_root/default-project/.github/workflows/milestone-policy.yml"
+grep -q 'must have a real due date' \
+  "$fixture_root/default-project/.github/workflows/milestone-policy.yml"
 grep -q 'github.event.issue.milestone.number' \
   "$fixture_root/default-project/.github/workflows/milestone-lifecycle.yml"
 grep -q 'docs/milestone-description.md' \
@@ -1614,37 +2520,98 @@ grep -q 'python-version:.*$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q -- '- "3.14.0"' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
-grep -q -- '- "3.14"' \
+grep -q '^    name: canonical full (Python 3.14)$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
-grep -q '^    needs: \[fast, full, governance, osv, zizmor\]$' \
+grep -q '^  python-compatibility:$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+if grep -q '^  typescript:$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"; then
+  echo "Python-only CI must not create a TypeScript job."
+  exit 1
+fi
+if grep -q 'actions/setup-node@' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"; then
+  echo "Python-only CI must not set up Node."
+  exit 1
+fi
+grep -q '^      - canonical$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q '^      - python-compatibility$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q '^  governance:$' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q 'apply-repository-settings.sh check' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
-grep -q '^  decision-site:$' \
+if grep -q '^  decision-site:$' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"; then
+  echo "Generated decision site validation must share the fast runner."
+  exit 1
+fi
+grep -q 'types: \[opened, reopened, synchronize, labeled, unlabeled\]' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
 grep -q 'name: portable-decision-site' \
   "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q "steps.plan.outputs.upload_site == 'true'" \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+grep -q 'python3 scripts/render_site.py --check' \
+  "$fixture_root/default-project/.github/workflows/ci.yml"
+uv run python - \
+  .github/workflows/ci.yml \
+  "$fixture_root/default-project/.github/workflows/ci.yml" <<'PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+for workflow_path in map(Path, sys.argv[1:]):
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    step = next(
+        step
+        for step in workflow["jobs"]["fast"]["steps"]
+        if step.get("name") == "Publish CI routing evidence"
+    )
+    if step["with"]["retention-days"] != 90:
+        raise SystemExit(f"{workflow_path}: CI plan retention must be 90 days")
+PY
+grep -q 'python3 scripts/delivery_sync.py gate' \
+  "$fixture_root/default-project/.github/workflows/pr-policy.yml"
+test ! -e "$fixture_root/default-project/.github/workflows/delivery-sync.yml"
 grep -q '^    needs: governance$' \
   "$fixture_root/default-project/.github/workflows/release.yml"
 grep -q '^    needs: source$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-grep -q 'googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7' \
+grep -q 'release pull request (human-only)' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-grep -q 'config-file: release-please-config.json' \
+grep -q 'verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/pr-policy.yml"
+grep -q 'verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/promotion.yml"
+grep -q 'verify-release-follow-up' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-# Release automation must adapt with the default token, not wait on a GitHub App.
-grep -q 'token: \${{ secrets.GITHUB_TOKEN }}' \
+grep -q 'git diff --no-renames --name-only' \
+  "$fixture_root/default-project/.github/workflows/promotion.yml"
+grep -Fq 'pulls/$pr_number/files?per_page=100' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-grep -q '^      release_created: \${{ steps.release.outputs.release_created }}$' \
+grep -Fq '.merge_commit_sha == $sha' \
+  "$fixture_root/default-project/.github/workflows/promotion-post-merge.yml"
+grep -Fq '.merge_commit_sha == $sha' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
-grep -q '^      tag_name: \${{ steps.release.outputs.tag_name }}$' \
+grep -Fq '"$trusted_root/scripts/release_policy.py" verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/promotion-post-merge.yml"
+grep -Fq '"$trusted_root/scripts/release_policy.py" verify-release-follow-up' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q 'cannot atomically bind its pre-PR Draft' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q '^      release_created: \${{ steps.guard.outputs.release_created }}$' \
+  "$fixture_root/default-project/.github/workflows/release-please.yml"
+grep -q '^      tag_name: \${{ steps.guard.outputs.tag_name }}$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q "needs.release-pr.outputs.release_created == 'true'" \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q '^      actions: write$' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
+# Shell variables are literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'gh workflow run "$workflow" --ref "$RELEASE_TAG"' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'release_policy.py detect' \
@@ -1655,6 +2622,8 @@ grep -q 'Non-default branch run is diagnostic-only' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q "mode == 'verification-only'" \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
+# The GitHub expression is literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'release-capabilities-\${{ github.run_id }}' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 grep -q 'release_policy.py prepare' \
@@ -1665,6 +2634,8 @@ grep -q 'source_run_id:' \
   "$fixture_root/default-project/.github/workflows/release.yml"
 grep -q 'aggregate-boundary' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
+# The shell variable is literal workflow content.
+# shellcheck disable=SC2016
 grep -q -- '-f source_run_id="$GITHUB_RUN_ID"' \
   "$fixture_root/default-project/.github/workflows/release-please.yml"
 if grep -q 'run: ./scripts/verify$' \
@@ -1809,12 +2780,15 @@ rm "$fixture_root/default-project/src/template_smoke_test/invalid_policy_probe.p
 # CI/CD-only project: shared governance and release versioning without a
 # language package or language-specific toolchain.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_name="CI Only Test" \
   --data project_slug="ci-only-test" \
   --data language=ci \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/ci-only-project"
-prime_gitleaks_cache "$fixture_root/ci-only-project"
+prime_validation_cache "$fixture_root/ci-only-project"
+assert_agent_guidance "$fixture_root/ci-only-project"
+assert_release_assets_contract "$fixture_root/ci-only-project" source
 
 git -C "$fixture_root/ci-only-project" init -q -b main
 git -C "$fixture_root/ci-only-project" add .
@@ -1834,9 +2808,35 @@ test ! -f "$fixture_root/ci-only-project/package.json"
 test ! -d "$fixture_root/ci-only-project/src"
 test ! -d "$fixture_root/ci-only-project/tests"
 test ! -d "$fixture_root/ci-only-project/typescript"
-if grep -q 'publish-evidence\|release-evidence' \
+grep -q 'no language toolchain install is required' \
+  "$fixture_root/ci-only-project/AGENTS.md"
+if grep -Eq 'Python setup:|TypeScript setup:' \
+  "$fixture_root/ci-only-project/AGENTS.md"; then
+  echo "CI-only AGENTS.md must not include language setup commands."
+  exit 1
+fi
+grep -q '^  publish-evidence:$' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"
+grep -q 'git archive --format=tar --output="$asset_root/source.tar"' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"
+grep -q 'tar -xf "$asset_root/source.tar" -C "$sbom_root/source"' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"
+grep -q 'output-file: \${{ steps.prepare.outputs.asset_root }}/sbom.spdx.json' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"
+grep -q -- '--runtime-kind source' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"
+grep -q -- '--inventory-file "$ASSET_ROOT/inventory.purls"' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"
+grep -q -- '--artifact "$ASSET_ROOT/source.tar"' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"
+if grep -q -- '--root-purl' \
   "$fixture_root/ci-only-project/.github/workflows/release.yml"; then
-  echo "CI/CD-only releases must not require package evidence."
+  echo "CI/CD-only source SBOMs must not invent a package purl."
+  exit 1
+fi
+if grep -q 'uv sync --locked --no-dev --no-editable\|pnpm --filter . deploy' \
+  "$fixture_root/ci-only-project/.github/workflows/release.yml"; then
+  echo "CI/CD-only SBOMs must scan exact-tag source without a runtime."
   exit 1
 fi
 if grep -q '^  publish-python:\|^  publish-npm:' \
@@ -1844,9 +2844,9 @@ if grep -q '^  publish-python:\|^  publish-npm:' \
   echo "CI/CD-only releases must not publish packages."
   exit 1
 fi
-if grep -q 'gh attestation verify' \
+if grep -Eq 'actions/attest(@|-build-provenance@|-sbom@)|gh attestation verify' \
   "$fixture_root/ci-only-project/.github/workflows/release.yml"; then
-  echo "CI-only release workflow must not contain artifact verification."
+  echo "Private CI-only releases must keep attestations disabled."
   exit 1
 fi
 if grep -q '^\.venv\*/\|^node_modules/$' \
@@ -1859,6 +2859,23 @@ fi
   ./scripts/verify
   "$repo_root/.venv/bin/zizmor" . --format plain
 )
+
+# Main-only projects keep the same guidance contract without delivery wording.
+uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
+  --data project_name="Main Branch Test" \
+  --data project_slug="main-branch-test" \
+  --data language=ci \
+  --data branch_strategy=main \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$fixture_root/main-branch-project"
+assert_agent_guidance "$fixture_root/main-branch-project"
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
+grep -q 'pull request chain ends at `main`' \
+  "$fixture_root/main-branch-project/AGENTS.md"
+grep -q 'Target `main` or the immediate stack parent' \
+  "$fixture_root/main-branch-project/AGENTS.md"
 
 # A release version bump must not make the generated smoke test stale.
 release_bump_project="$fixture_root/release-bump-project"
@@ -1894,6 +2911,7 @@ PY
 
 # TypeScript-only project: the same quality, packaging, and release gates apply.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_name="TypeScript Test" \
   --data project_slug="typescript-test" \
   --data $'project_description=A "quoted" project\n第二行' \
@@ -1901,7 +2919,9 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data branch_strategy=dev \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$repo_root" "$fixture_root/typescript-project"
-prime_gitleaks_cache "$fixture_root/typescript-project"
+prime_validation_cache "$fixture_root/typescript-project"
+assert_agent_guidance "$fixture_root/typescript-project"
+assert_release_assets_contract "$fixture_root/typescript-project" package
 
 git -C "$fixture_root/typescript-project" init -q -b main
 git -C "$fixture_root/typescript-project" add .
@@ -1917,16 +2937,18 @@ with open(sys.argv[1], encoding="utf-8") as package_json:
     package = json.load(package_json)
 assert package["description"] == 'A "quoted" project\n第二行'
 assert package["repository"]["url"] == (
-    "https://github.com/Innoguard-Cyber-Arch/typescript-test.git"
+    "https://github.com/Innoguard-Cyber-Arch/typescript-test"
 )
 PY
 grep -q '"language_profile": "typescript"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
 grep -q '"branch_strategy": "dev"' \
   "$fixture_root/typescript-project/.csarc/profile.json"
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
 grep -q 'pull request chain ends at `dev`' \
   "$fixture_root/typescript-project/AGENTS.md"
-grep -q 'against `dev` or its immediate parent in the stack' \
+grep -q 'Target `dev` or the immediate stack parent' \
   "$fixture_root/typescript-project/AGENTS.md"
 grep -q '^  merge_group:$' \
   "$fixture_root/typescript-project/.github/workflows/ci.yml"
@@ -1949,6 +2971,10 @@ test -f "$fixture_root/typescript-project/typescript/tests/index.test.ts"
 test ! -f "$fixture_root/typescript-project/pyproject.toml"
 test ! -f "$fixture_root/typescript-project/.python-version"
 grep -q 'pnpm exec vitest run <test-path>' \
+  "$fixture_root/typescript-project/AGENTS.md"
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
+grep -q 'TypeScript setup: `corepack enable && pnpm install --frozen-lockfile`' \
   "$fixture_root/typescript-project/AGENTS.md"
 if grep -q 'uv run pytest' "$fixture_root/typescript-project/AGENTS.md"; then
   echo "TypeScript-only AGENTS.md must not include Python commands."
@@ -1973,6 +2999,18 @@ grep -q '^trustPolicy: no-downgrade$' \
 grep -q 'integrity:' "$fixture_root/typescript-project/pnpm-lock.yaml"
 grep -q 'node-version: "24"' \
   "$fixture_root/typescript-project/.github/workflows/ci.yml"
+grep -q '^    name: canonical full and TypeScript (Node 24)$' \
+  "$fixture_root/typescript-project/.github/workflows/ci.yml"
+if grep -q '^  python-compatibility:$' \
+  "$fixture_root/typescript-project/.github/workflows/ci.yml"; then
+  echo "TypeScript-only CI must not create a Python compatibility job."
+  exit 1
+fi
+if grep -q '^  typescript:$' \
+  "$fixture_root/typescript-project/.github/workflows/ci.yml"; then
+  echo "TypeScript-only CI must keep one runtime job."
+  exit 1
+fi
 grep -q 'package-ecosystem: npm' \
   "$fixture_root/typescript-project/.github/dependabot.yml"
 grep -q '"release-type": "node"' \
@@ -2000,6 +3038,7 @@ rm "$fixture_root/typescript-project/typescript/src/invalid-policy-probe.ts"
 
 # Combined project: reusable CI and local pre-commit support.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_name="All Features Test" \
   --data project_slug="all-features-test" \
   --data package_name="all_features_test" \
@@ -2017,7 +3056,11 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data enable_npm_publishing=true \
   --data npm_environment=npm-release \
   "$repo_root" "$fixture_root/all-features-project"
-prime_gitleaks_cache "$fixture_root/all-features-project"
+prime_validation_cache "$fixture_root/all-features-project"
+assert_agent_guidance "$fixture_root/all-features-project"
+assert_release_assets_contract "$fixture_root/all-features-project" package
+grep -q "git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<reviewed-full-commit-sha>' csarc update" \
+  "$fixture_root/all-features-project/README.md"
 
 test -f "$fixture_root/all-features-project/.pre-commit-config.yaml"
 test -f "$fixture_root/all-features-project/.github/workflows/template-update.yml"
@@ -2092,35 +3135,159 @@ grep -q 'reusable-ci.yml@1111111111111111111111111111111111111111' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
 grep -q 'language-profile: "python-typescript"' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
-grep -q '\["3.14.0", "3.14"\]' \
+grep -q 'canonical-python-version: "3.14"' \
+  "$fixture_root/all-features-project/.github/workflows/ci.yml"
+grep -q '\["3.14.0"\]' \
   "$fixture_root/all-features-project/.github/workflows/ci.yml"
 grep -q 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
-test "$(grep -c \
-  'actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6' \
-  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
+grep -q \
+  'actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q \
+  'actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q 'attestations: write' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q 'id-token: write' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
-grep -q 'subject-checksums: release-evidence/SHA256SUMS' \
+grep -q 'subject-path: |' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
-grep -q 'sbom-path: release-evidence/sbom.cdx.json' \
+grep -q 'sbom-path: release-evidence/sbom.spdx.json' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q 'uv sync --locked --no-dev --no-editable' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+grep -q 'pnpm --filter . deploy --legacy --prod' \
+  "$fixture_root/all-features-project/.github/workflows/release.yml"
+uv run python - \
+  "$fixture_root/all-features-project/.github/workflows/release.yml" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+import yaml
+
+workflow_path = Path(sys.argv[1])
+workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+jobs = workflow.get("jobs", {})
+
+
+def named_step(job_name: str, step_name: str) -> str:
+    job = jobs.get(job_name)
+    if not isinstance(job, dict):
+        raise SystemExit(f"{workflow_path}: missing job {job_name!r}")
+    steps = job.get("steps", [])
+    matches = [step for step in steps if step.get("name") == step_name]
+    if len(matches) != 1:
+        raise SystemExit(
+            f"{workflow_path}: expected one {job_name}/{step_name} step, "
+            f"found {len(matches)}"
+        )
+    run = matches[0].get("run")
+    if not isinstance(run, str):
+        raise SystemExit(f"{workflow_path}: {job_name}/{step_name} must run a script")
+    return run
+
+
+def command_blocks(run: str, pattern: re.Pattern[str]) -> list[str]:
+    lines = run.splitlines()
+    blocks = []
+    for start, line in enumerate(lines):
+        if not pattern.match(line):
+            continue
+        block = [line]
+        index = start
+        while block[-1].rstrip().endswith("\\"):
+            index += 1
+            if index >= len(lines):
+                raise SystemExit(f"{workflow_path}: unterminated shell command")
+            block.append(lines[index])
+        blocks.append("\n".join(block))
+    return blocks
+
+
+def require_root_purls(job_name: str, step_name: str, expected_commands: int) -> None:
+    run = named_step(job_name, step_name)
+    append = 'root_purls+=(--root-purl "$purl")'
+    if sum(line.strip() == append for line in run.splitlines()) != 1:
+        raise SystemExit(
+            f"{workflow_path}: {job_name}/{step_name} must append each root PURL once"
+        )
+    blocks = command_blocks(
+        run,
+        re.compile(r"^[ \t]*python3 scripts/release_assets\.py (?:build|verify)(?:[ \t]|$)"),
+    )
+    if len(blocks) != expected_commands:
+        raise SystemExit(
+            f"{workflow_path}: expected {expected_commands} release-assets commands in "
+            f"{job_name}/{step_name}, found {len(blocks)}"
+        )
+    expansion = '"${root_purls[@]}" \\'
+    if any(
+        [line.strip() for line in block.splitlines()].count(expansion) != 1
+        for block in blocks
+    ):
+        raise SystemExit(
+            f"{workflow_path}: every release-assets command in {job_name}/{step_name} "
+            "must receive the root PURL array once"
+        )
+
+
+def require_attestation(job_name: str, step_name: str) -> None:
+    blocks = command_blocks(
+        named_step(job_name, step_name),
+        re.compile(r"^[ \t]*gh attestation verify(?:[ \t]|$)"),
+    )
+    if len(blocks) != 1:
+        raise SystemExit(
+            f"{workflow_path}: expected one executable attestation command in "
+            f"{job_name}/{step_name}, found {len(blocks)}"
+        )
+    lines = [line.strip() for line in blocks[0].splitlines()]
+    for option in (
+        "--signer-workflow \\",
+        '--source-digest "$GITHUB_SHA" \\',
+        '--source-ref "$GITHUB_REF"',
+    ):
+        count = lines.count(option)
+        if count != 1:
+            raise SystemExit(
+                f"{workflow_path}: expected one executable {option!r} in the "
+                "attestation command "
+                f"for {job_name}/{step_name}, found {count}"
+            )
+
+
+# Package root count is runtime data; every release-assets command expands it once.
+for job_name, step_name, expected_commands in (
+    ("build", "Bind and verify release evidence", 2),
+    ("publish-evidence", "Validate release evidence", 1),
+    ("publish-evidence", "Upload and verify the mutable draft", 1),
+    ("publish-evidence", "Verify published release trust chain", 1),
+):
+    require_root_purls(job_name, step_name, expected_commands)
+
+# One immutable Release verification plus the PyPI and npm publication gates.
+for job_name, step_name in (
+    ("publish-evidence", "Verify published release trust chain"),
+    ("publish-python", "Verify Python build provenance before publishing"),
+    ("publish-npm", "Verify npm build provenance before publishing"),
+):
+    require_attestation(job_name, step_name)
+
+for job_name in ("publish-python", "publish-npm"):
+    permissions = jobs.get(job_name, {}).get("permissions", {})
+    if permissions.get("attestations") != "read":
+        raise SystemExit(
+            f"{workflow_path}: {job_name} must grant attestations: read"
+        )
+PY
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
 grep -q '外部 registry 發布會先以 `gh attestation verify` 強制比對' \
   "$fixture_root/all-features-project/README.md"
 grep -q '^  publish-python:$' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
-test "$(grep -c '^      attestations: read$' \
-  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
-test "$(grep -c 'gh attestation verify' \
-  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
-test "$(grep -c -- '--signer-workflow' \
-  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
-test "$(grep -c -- '--source-ref \"\$GITHUB_REF\"' \
-  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
-test "$(grep -c -- '--source-digest \"\$GITHUB_SHA\"' \
-  "$fixture_root/all-features-project/.github/workflows/release.yml")" -eq 2
 grep -q '^      name: "pypi-release"$' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q 'pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26' \
@@ -2129,6 +3296,8 @@ grep -q '^  publish-npm:$' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 grep -q '^      name: "npm-release"$' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
+# Shell variables are literal workflow content.
+# shellcheck disable=SC2016
 grep -q 'npm publish "${packages\[0\]}" --provenance --access public' \
   "$fixture_root/all-features-project/.github/workflows/release.yml"
 if grep -Eq 'PYPI_API_TOKEN|NPM_TOKEN|NODE_AUTH_TOKEN' \
@@ -2149,6 +3318,14 @@ grep -q 'uv run pytest <test-path>' \
   "$fixture_root/all-features-project/AGENTS.md"
 grep -q 'pnpm exec vitest run <test-path>' \
   "$fixture_root/all-features-project/AGENTS.md"
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
+grep -q 'Python setup: `uv sync --locked`' \
+  "$fixture_root/all-features-project/AGENTS.md"
+# Backticks are literal documentation content.
+# shellcheck disable=SC2016
+grep -q 'TypeScript setup: `corepack enable && pnpm install --frozen-lockfile`' \
+  "$fixture_root/all-features-project/AGENTS.md"
 diff -B -w "$repo_root/.gitignore" \
   "$fixture_root/all-features-project/.gitignore"
 test "$("$fixture_root/all-features-project/scripts/detect-language-profile" --suggest)" = \
@@ -2166,6 +3343,7 @@ git -C "$fixture_root/all-features-project" diff --cached --check
 
 # Changed-line coverage keeps the same 80% threshold across the runtime matrix.
 uv run copier copy --trust --defaults --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_name="Existing Project Test" \
   --data project_slug="existing-project-test" \
   --data package_name="existing_project_test" \
@@ -2174,16 +3352,18 @@ uv run copier copy --trust --defaults --vcs-ref HEAD \
   --data python_min_version=3.12 \
   --data coverage_mode=diff \
   "$repo_root" "$fixture_root/existing-project"
-prime_gitleaks_cache "$fixture_root/existing-project"
+prime_validation_cache "$fixture_root/existing-project"
 
 grep -q '^requires-python = ">=3.12"$' \
   "$fixture_root/existing-project/pyproject.toml"
 grep -q '^target-version = "py312"$' \
   "$fixture_root/existing-project/pyproject.toml"
-for expected_python in 3.12.0 3.12 3.13 3.14; do
+for expected_python in 3.12.0 3.12 3.13; do
   grep -q -- "- \"$expected_python\"" \
     "$fixture_root/existing-project/.github/workflows/ci.yml"
 done
+grep -q '^    name: canonical full (Python 3.14)$' \
+  "$fixture_root/existing-project/.github/workflows/ci.yml"
 
 git -C "$fixture_root/existing-project" init -b main
 git -C "$fixture_root/existing-project" config user.name "Template Test"
@@ -2207,12 +3387,15 @@ if ! grep -qF \
 fi
 (
   cd "$fixture_root/existing-project"
-  for python_runtime in 3.12.0 3.12 3.13 3.14; do
+  for python_runtime in 3.12.0 3.12 3.13; do
     CSARC_PYTHON_VERSION="$python_runtime" \
       UV_PROJECT_ENVIRONMENT=".venv-$python_runtime" \
-      DIFF_COVER_COMPARE_BRANCH=HEAD \
-      ./scripts/verify
+      ./scripts/verify python-compatibility
   done
+  CSARC_PYTHON_VERSION=3.14 \
+    UV_PROJECT_ENVIRONMENT=.venv-3.14 \
+    DIFF_COVER_COMPARE_BRANCH=HEAD \
+    ./scripts/verify
 )
 
 # Adoption must never replace existing product manifests.
@@ -2220,7 +3403,7 @@ adoption_project="$fixture_root/adoption-project"
 mkdir -p "$adoption_project"
 cat > "$adoption_project/pyproject.toml" <<'TOML'
 [project]
-name = "legacy-product"
+name = "legacy-python-engine"
 version = "0.4.2"
 dependencies = ["httpx>=0.28"]
 
@@ -2230,12 +3413,17 @@ build-backend = "setuptools.build_meta"
 TOML
 cat > "$adoption_project/package.json" <<'JSON'
 {
-  "name": "legacy-product-ui",
+  "name": "@legacy/product-ui",
   "version": "0.4.2",
   "dependencies": {"typescript": "5.9.3"}
 }
 JSON
+printf '%s\n' '# Legacy product' 'PRODUCT_README_MARKER' \
+  > "$adoption_project/README.md"
+printf '%s\n' '# Legacy security policy' 'PRODUCT_SECURITY_MARKER' \
+  > "$adoption_project/SECURITY.md"
 uv run copier copy --trust --defaults --overwrite --vcs-ref HEAD \
+  "${fixture_security_args[@]}" \
   --data project_mode=existing \
   --data project_name="Legacy Product" \
   --data project_slug="legacy-product" \
@@ -2243,22 +3431,160 @@ uv run copier copy --trust --defaults --overwrite --vcs-ref HEAD \
   --data language=python-typescript \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   --data coverage_mode=diff \
+  --data enable_release_attestations=true \
+  --data enable_pypi_publishing=true \
+  --data pypi_environment=pypi-release \
+  --data enable_npm_publishing=true \
+  --data npm_environment=npm-release \
   "$repo_root" "$adoption_project"
 grep -q '^version = "0.4.2"$' "$adoption_project/pyproject.toml"
 grep -q 'httpx>=0.28' "$adoption_project/pyproject.toml"
 grep -q 'setuptools.build_meta' "$adoption_project/pyproject.toml"
 grep -q '"version": "0.4.2"' "$adoption_project/package.json"
 grep -q '"typescript": "5.9.3"' "$adoption_project/package.json"
+grep -q 'project = tomllib.loads' \
+  "$adoption_project/.github/workflows/csarc-release.yml"
+grep -q 'package = json.loads' \
+  "$adoption_project/.github/workflows/csarc-release.yml"
+grep -q 'quote(namespace, safe=' \
+  "$adoption_project/.github/workflows/csarc-release.yml"
+if grep -q 'pkg:pypi/legacy-product@\|pkg:npm/legacy-product@' \
+  "$adoption_project/.github/workflows/csarc-release.yml"; then
+  echo "Existing-project release identity must come from tagged manifests."
+  exit 1
+fi
+test "$(grep -c -- '--signer-workflow' \
+  "$adoption_project/.github/workflows/csarc-release.yml")" -eq 3
+test "$(grep -c '/.github/workflows/csarc-release.yml' \
+  "$adoption_project/.github/workflows/csarc-release.yml")" -eq 3
+if grep -q '/.github/workflows/release.yml' \
+  "$adoption_project/.github/workflows/csarc-release.yml"; then
+  echo "Existing-project registry verification must use csarc-release.yml."
+  exit 1
+fi
+grep -q '^PRODUCT_README_MARKER$' "$adoption_project/README.md"
+grep -q '^PRODUCT_SECURITY_MARKER$' "$adoption_project/SECURITY.md"
 grep -q 'project_mode: existing' "$adoption_project/.copier-answers.yml"
 grep -q '"template_mode": "existing"' \
   "$adoption_project/.csarc/profile.json"
+grep -q '^    name: canonical full (Python 3.14)$' \
+  "$adoption_project/.github/workflows/ci.yml"
+grep -q '^  python-compatibility:$' \
+  "$adoption_project/.github/workflows/ci.yml"
+grep -q '^  typescript:$' \
+  "$adoption_project/.github/workflows/ci.yml"
+grep -q 'CSARC_VERIFY_TYPESCRIPT: "false"' \
+  "$adoption_project/.github/workflows/ci.yml"
+grep -q './scripts/verify typescript' \
+  "$adoption_project/.github/workflows/ci.yml"
+test "$(
+  sed -n '/^  canonical:$/,/^  governance:$/p' \
+    "$adoption_project/.github/workflows/ci.yml" |
+    grep -c 'actions/setup-node@'
+)" -eq 1
+# shellcheck disable=SC2016 # Match the literal workflow variable.
+grep -q 'test "$CANONICAL_RESULT" = success' \
+  "$adoption_project/.github/workflows/ci.yml"
+# shellcheck disable=SC2016 # Match the literal workflow variable.
+grep -q 'test "$PYTHON_COMPATIBILITY_RESULT" = success' \
+  "$adoption_project/.github/workflows/ci.yml"
+# shellcheck disable=SC2016 # Match the literal workflow variable.
+grep -q 'test "$TYPESCRIPT_RESULT" = success' \
+  "$adoption_project/.github/workflows/ci.yml"
+
+# Optional containers use a product-owned Containerfile. The ai-guardrail
+# pilot uses the same nested evaluation/Dockerfile shape.
+container_project="$fixture_root/container-project"
+mkdir -p "$container_project/evaluation"
+printf '%s\n' '# Container product' > "$container_project/README.md"
+cat > "$container_project/evaluation/Dockerfile" <<'DOCKERFILE'
+FROM alpine:3.22
+CMD ["/bin/true"]
+DOCKERFILE
+uv run copier copy --trust --defaults --overwrite --vcs-ref HEAD \
+  --data project_mode=existing \
+  --data project_name="Container Project" \
+  --data project_slug="container-project" \
+  --data language=ci \
+  --data container_mode=ghcr \
+  --data containerfile_path=evaluation/Dockerfile \
+  --data 'container_smoke_command=docker run --rm "$IMAGE"' \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$container_project"
+prime_validation_cache "$container_project"
+grep -q '"container": true' "$container_project/.csarc/profile.json"
+grep -q '"mode": "ghcr"' "$container_project/.csarc/profile.json"
+grep -q '"file": "evaluation/Dockerfile"' \
+  "$container_project/.csarc/profile.json"
+grep -q '容器模式 ghcr' "$container_project/docs/site-content.js"
+grep -q '^  - package-ecosystem: docker$' \
+  "$container_project/.github/dependabot.yml"
+grep -q '^    directory: /evaluation$' \
+  "$container_project/.github/dependabot.yml"
+grep -q '^  container:$' "$container_project/.github/workflows/ci.yml"
+grep -q 'cache-to: type=gha,mode=max' \
+  "$container_project/.github/workflows/ci.yml"
+grep -q 'aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25' \
+  "$container_project/.github/workflows/ci.yml"
+if grep -q '^      packages: write$' \
+  "$container_project/.github/workflows/ci.yml"; then
+  echo "Pull request container verification must not write packages."
+  exit 1
+fi
+grep -q '^  container-build:$' \
+  "$container_project/.github/workflows/csarc-release.yml"
+grep -q '^  publish-container:$' \
+  "$container_project/.github/workflows/csarc-release.yml"
+grep -q '^      packages: write$' \
+  "$container_project/.github/workflows/csarc-release.yml"
+grep -q 'actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a' \
+  "$container_project/.github/workflows/csarc-release.yml"
+grep -q 'actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34' \
+  "$container_project/.github/workflows/csarc-release.yml"
+sed -n '/name: Generate the container SBOM/,/name: Preserve the verified container bytes/p' \
+  "$container_project/.github/workflows/csarc-release.yml" | \
+  grep -q 'syft-version: v1.50.0'
+grep -q 'docker pull "$IMAGE"' \
+  "$container_project/.github/workflows/csarc-release.yml"
+if grep -q '^  push:$\|workflow_run:\|PAT\|personal.access.token' \
+  "$container_project/.github/workflows/csarc-release.yml"; then
+  echo "Container publishing must retain the verified release boundary."
+  exit 1
+fi
+(
+  cd "$container_project"
+  ./scripts/verify
+  "$repo_root/.venv/bin/zizmor" . --format plain
+)
+
+container_verify_project="$fixture_root/container-verify-project"
+mkdir -p "$container_verify_project"
+cat > "$container_verify_project/Containerfile" <<'CONTAINERFILE'
+FROM alpine:3.22
+CMD ["/bin/true"]
+CONTAINERFILE
+uv run copier copy --trust --defaults --overwrite --vcs-ref HEAD \
+  --data project_mode=existing \
+  --data project_slug="container-verify-project" \
+  --data language=ci \
+  --data container_mode=verify \
+  --data containerfile_path=Containerfile \
+  --data 'container_smoke_command=docker run --rm "$IMAGE"' \
+  --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
+  "$repo_root" "$container_verify_project"
+grep -q '^  container:$' \
+  "$container_verify_project/.github/workflows/ci.yml"
+if grep -q '^  container-build:$\|^  publish-container:$\|^      packages: write$' \
+  "$container_verify_project/.github/workflows/csarc-release.yml"; then
+  echo "Verify-only containers must not publish to a registry."
+  exit 1
+fi
 
 # Verify that an adopted repository can receive a later template version.
 update_source="$fixture_root/update-source"
 update_project="$fixture_root/update-project"
 mkdir -p "$update_source"
-rsync -a --exclude=.git --exclude=.venv --exclude=.cache --exclude=.ruff_cache \
-  "$repo_root/" "$update_source/"
+git -C "$repo_root" archive HEAD | tar -x -C "$update_source"
 
 git -C "$update_source" init -b main
 git -C "$update_source" config user.name "Template Test"
@@ -2268,6 +3594,7 @@ git -C "$update_source" commit -m "test: template v0.1.0"
 git -C "$update_source" tag v0.1.0
 
 uv run copier copy --trust --defaults --vcs-ref v0.1.0 \
+  "${fixture_security_args[@]}" \
   --data language=python-typescript \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
   "$update_source" "$update_project"
@@ -2285,7 +3612,15 @@ printf '%s\n' 'window.PROJECT_OWNED_SITE = true;' \
   >> "$update_project/docs/site-content.js"
 printf '%s\n' '/* PROJECT_OWNED_THEME */' \
   >> "$update_project/docs/site-theme.css"
+mkdir -p "$update_project/docs/decisions"
+cp "$repo_root/docs/adr/agent-collaboration.md" \
+  "$update_project/docs/decisions/project-owned.md"
+printf '%s\n' '' 'PROJECT_OWNED_MEMORY' \
+  >> "$update_project/docs/decisions/project-owned.md"
+printf '%s\n' '' 'PROJECT_OWNED_SPEC' \
+  >> "$update_project/docs/specs/SPEC-001-example.md"
 uv run copier copy --trust --defaults --overwrite --vcs-ref v0.1.0 \
+  "${fixture_security_args[@]}" \
   --data project_mode=existing \
   --data language=python-typescript \
   --data code_owner="@Innoguard-Cyber-Arch/template-maintainers" \
@@ -2294,6 +3629,10 @@ grep -q 'project_mode: existing' "$update_project/.copier-answers.yml"
 grep -q '"template_mode": "existing"' \
   "$update_project/.csarc/profile.json"
 grep -q '^owner = "legacy"$' "$update_project/pyproject.toml"
+printf '%s\n' '# Existing product' 'PROJECT_OWNED_README' \
+  > "$update_project/README.md"
+printf '%s\n' '# Existing security policy' 'PROJECT_OWNED_SECURITY' \
+  > "$update_project/SECURITY.md"
 
 git -C "$update_project" init -b main
 git -C "$update_project" config user.name "Template Test"
@@ -2301,17 +3640,20 @@ git -C "$update_project" config user.email "template-test@example.invalid"
 git -C "$update_project" add .
 git -C "$update_project" commit -m "test: adopted project"
 
+rsync -a --delete --exclude=.git --exclude=.venv --exclude=.cache \
+  --exclude=.ruff_cache "$repo_root/" "$update_source/"
 cp "$update_source/template/.gitignore.jinja" \
   "$update_source/template/update-marker"
 printf '%s\n' 'window.TEMPLATE_SITE_V2 = true;' \
   >> "$update_source/template/site/app.js"
-git -C "$update_source" add template/update-marker template/site/app.js
+git -C "$update_source" add -A
 git -C "$update_source" commit -m "test: template v0.1.1"
 git -C "$update_source" tag v0.1.1
 
 (
   cd "$update_project"
-  "$repo_root/.venv/bin/copier" update --trust --defaults --vcs-ref v0.1.1
+  "$repo_root/.venv/bin/copier" update --trust --defaults --vcs-ref v0.1.1 \
+    "${fixture_security_args[@]}"
 )
 
 test -f "$update_project/update-marker"
@@ -2324,19 +3666,27 @@ grep -q '^window.PROJECT_OWNED_SITE = true;$' \
   "$update_project/docs/site-content.js"
 grep -q '^/\* PROJECT_OWNED_THEME \*/$' \
   "$update_project/docs/site-theme.css"
+grep -q '^PROJECT_OWNED_README$' "$update_project/README.md"
+grep -q '^PROJECT_OWNED_SECURITY$' "$update_project/SECURITY.md"
 grep -q 'window.PROJECT_OWNED_SITE = true;' \
   "$update_project/docs/index.html"
 grep -q 'PROJECT_OWNED_THEME' \
   "$update_project/docs/index.html"
+grep -q '^PROJECT_OWNED_MEMORY$' \
+  "$update_project/docs/decisions/project-owned.md"
+grep -q '^PROJECT_OWNED_SPEC$' \
+  "$update_project/docs/specs/SPEC-001-example.md"
 grep -q 'window.TEMPLATE_SITE_V2 = true;' \
   "$update_project/site/app.js"
 grep -q 'window.TEMPLATE_SITE_V2 = true;' \
   "$update_project/docs/index.html"
-test -f "$update_project/docs/decisions/README.md"
+test -f "$update_project/docs/adr/README.md"
+grep -q 'docs/decisions/' "$update_project/AGENTS.md"
+grep -q 'docs/decisions/' "$update_project/docs/README.md"
 grep -q 'Never store a raw conversation transcript' \
   "$update_project/AGENTS.md"
 grep -q '_commit: v0.1.1' "$update_project/.copier-answers.yml"
-prime_gitleaks_cache "$update_project"
+prime_validation_cache "$update_project"
 (
   cd "$update_project"
   ./scripts/verify

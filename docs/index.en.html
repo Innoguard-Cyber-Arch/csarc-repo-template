@@ -2059,14 +2059,14 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>Shared baseline</td>
-					<td>Issues and specs, tiered CI, promotion evidence, security checks, one SemVer, and Copier updates</td>
+					<td>SDD Features with Task/Bug subissues, dated delivery Milestones, tiered CI, promotion evidence, security checks, one SemVer, and Copier updates</td>
 			</tr>
 	</tbody>
 </table>
 <aside class="technical-detail" data-content-key="capability-boundary">
   <h3>Real entry points and capability boundaries</h3>
   <ul>
-<li><strong>New repository:</strong> choose a profile and branch strategy; create a Milestone for an end-to-end story, then deliver its 1..N Issues through separate PRs.</li>
+<li><strong>New repository:</strong> choose a profile and branch strategy; keep the story in an SDD Feature, deliver Task/Bug subissues through separate PRs, and use a Milestone only for dated delivery.</li>
 <li><strong>Existing repository:</strong> preview adoption on a branch, preserve product content and legacy-debt boundaries, then resolve conflicts and gates explicitly.</li>
 <li><strong>Repository already using the template:</strong> update from a reviewed template SHA and review only that revision&rsquo;s diff.</li>
 <li><strong>Prerequisites:</strong> Git, GitHub CLI, and uv; TypeScript or mixed projects also need Node 24+ and pnpm 11. Local verification needs no token.</li>
@@ -3131,7 +3131,7 @@ html[data-detail-level="simple"] .detail-panel {
 </ul>
 <details class="package-disclosure" data-content-key="portable-bundle">
   <summary><span class="tech-name">Markdown &#43; Hugo → self-contained HTML</span></summary>
-  <div class="package-health"><code>docs/decisions/</code> preserves canonical choices. Hugo owns content and HTML; the unchanged renderer only embeds assets and enforces safety checks. The final <code>docs/index.html</code> opens offline through <code>file://</code> without Pages, a CDN, or a JavaScript package runtime.</div>
+  <div class="package-health"><code>docs/adr/</code> preserves canonical choices. Hugo owns content and HTML; the unchanged renderer only embeds assets and enforces safety checks. The final <code>docs/index.html</code> opens offline through <code>file://</code> without Pages, a CDN, or a JavaScript package runtime.</div>
 </details>
 <aside class="technical-detail" data-content-key="docs-site-access">
   <h3>Access and maintenance boundaries</h3>
@@ -4622,7 +4622,7 @@ html[data-detail-level="simple"] .detail-panel {
     <article class="glossary-term" id="glossary-decision-record">
       <h3>Decision record</h3>
       <p>The durable record of confirmed architecture, tooling, security, and compatibility trade-offs.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/decisions/README.md">Read more →</a>
+      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/README.md">Read more →</a>
     </article>
   </div>
 </section>
@@ -4698,12 +4698,12 @@ html[data-detail-level="simple"] .detail-panel {
     <article class="glossary-term" id="glossary-capability-state">
       <h3>Platform capability state</h3>
       <p>Observed capability recorded as allowed, blocked, or unknown instead of inferred from plan names.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/decisions/portable-decision-site.md">Read more →</a>
+      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">Read more →</a>
     </article>
     <article class="glossary-term" id="glossary-portable-artifact">
       <h3>Portable artifact</h3>
       <p>A single-file deliverable with no external runtime assets that remains usable through file://.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/decisions/portable-decision-site.md">Read more →</a>
+      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">Read more →</a>
     </article>
   </div>
 </section>

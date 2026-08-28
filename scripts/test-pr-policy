@@ -3,16 +3,120 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
+cd "$repo_root"
 fixture="$(mktemp -d)"
 validator="$fixture/validator"
 trap 'rm -rf "$fixture"' EXIT
 case_count=0
 export PR_ISSUE_TITLE="Add verified report workflow"
 export PR_ISSUE_BODY="All acceptance tasks are complete."
+export PR_DEVELOPMENT_CUTOVER_PR="42"
+export PR_ASSIGNEES="contributor,github-actions[bot]"
+export PR_AUTHOR="github-actions[bot]"
+export PR_CHANGED_FILES="CHANGELOG.md"
+export PR_HEAD_REPOSITORY="acme/project"
+export PR_HEAD_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+export PR_NUMBER="41"
+export PR_POLICY_FIXTURE=true
+
+release_component="$(
+  python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["packages"]["."]["component"])' \
+    "$repo_root/release-please-config.json"
+)"
+release_branch="release-please--branches--main--components--$release_component"
 
 cat > "$fixture/gh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+
+if [[ "$*" == "api --method GET repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER" ]]; then
+  case "${PR_LIVE_METADATA_STATE:-valid}" in
+    valid)
+      live_body="${PR_BODY:-}"
+      [[ "${PR_LIVE_BODY+x}" == "x" ]] && live_body="$PR_LIVE_BODY"
+      jq -cn \
+        --arg labels "${PR_LIVE_LABELS:-enhancement}" \
+        --arg assignees "${PR_LIVE_ASSIGNEES-github-actions[bot]}" \
+        --arg milestone "${PR_LIVE_MILESTONE:-null}" \
+        --arg body "$live_body" \
+        '{labels: ($labels | split(",") | map({name: .})), assignees: ($assignees | if . == "" then [] else split(",") | map({login: .}) end), milestone: (if $milestone == "null" then null else {number: ($milestone | tonumber)} end), body: $body}'
+      ;;
+    api-error) exit 1 ;;
+    empty) ;;
+    partial) printf '%s\n' '{"labels":[{"name":"enhancement"}]}' ;;
+    malformed) printf '%s\n' '{' ;;
+    *) exit 2 ;;
+  esac
+  exit 0
+fi
+
+if [[ "$*" == *"closingIssuesReferences"* ]]; then
+  case "${PR_CLOSING_RELATIONSHIP_STATE:-valid}" in
+    valid)
+      jq -cn \
+        --arg repo "$GITHUB_REPOSITORY" \
+        --argjson pr "$PR_NUMBER" \
+        --argjson issue "${PR_CLOSING_ISSUE_NUMBER:-42}" \
+        '{data: {repository: {pullRequest: {number: $pr, closingIssuesReferences: {nodes: [{number: $issue, repository: {nameWithOwner: $repo}}], pageInfo: {hasNextPage: false}}}}}}'
+      ;;
+    empty)
+      jq -cn \
+        --argjson pr "$PR_NUMBER" \
+        '{data: {repository: {pullRequest: {number: $pr, closingIssuesReferences: {nodes: [], pageInfo: {hasNextPage: false}}}}}}'
+      ;;
+    wrong-repo)
+      jq -cn \
+        --argjson pr "$PR_NUMBER" \
+        '{data: {repository: {pullRequest: {number: $pr, closingIssuesReferences: {nodes: [{number: 42, repository: {nameWithOwner: "attacker/project"}}], pageInfo: {hasNextPage: false}}}}}}'
+      ;;
+    wrong-issue)
+      jq -cn \
+        --arg repo "$GITHUB_REPOSITORY" \
+        --argjson pr "$PR_NUMBER" \
+        '{data: {repository: {pullRequest: {number: $pr, closingIssuesReferences: {nodes: [{number: 43, repository: {nameWithOwner: $repo}}], pageInfo: {hasNextPage: false}}}}}}'
+      ;;
+    wrong-pr-number)
+      jq -cn \
+        --arg repo "$GITHUB_REPOSITORY" \
+        '{data: {repository: {pullRequest: {number: 41, closingIssuesReferences: {nodes: [{number: 42, repository: {nameWithOwner: $repo}}], pageInfo: {hasNextPage: false}}}}}}'
+      ;;
+    duplicate)
+      jq -cn \
+        --arg repo "$GITHUB_REPOSITORY" \
+        --argjson pr "$PR_NUMBER" \
+        '{data: {repository: {pullRequest: {number: $pr, closingIssuesReferences: {nodes: [{number: 42, repository: {nameWithOwner: $repo}}, {number: 42, repository: {nameWithOwner: $repo}}], pageInfo: {hasNextPage: false}}}}}}'
+      ;;
+    paginated)
+      jq -cn \
+        --arg repo "$GITHUB_REPOSITORY" \
+        --argjson pr "$PR_NUMBER" \
+        '{data: {repository: {pullRequest: {number: $pr, closingIssuesReferences: {nodes: [{number: 42, repository: {nameWithOwner: $repo}}], pageInfo: {hasNextPage: true}}}}}}'
+      ;;
+    api-error) exit 1 ;;
+    malformed) printf '%s\n' '{' ;;
+    *) exit 2 ;;
+  esac
+  exit 0
+fi
+
+case "$*" in
+  *"/pulls/"*"/commits?per_page=100"*)
+    jq -cn \
+      --arg sha "$PR_HEAD_SHA" \
+      --arg author "${PR_COMMIT_AUTHOR:-github-actions[bot]}" \
+      --arg committer "${PR_COMMITTER:-web-flow}" \
+      '[[{sha: $sha, author: {login: $author}, committer: {login: $committer}, commit: {verification: {verified: true, reason: "valid"}}}]]'
+    exit 0
+    ;;
+  *"/pulls/"*"/files?per_page=100"*)
+    printf '%s\n' "${PR_CHANGED_FILES:-CHANGELOG.md}"
+    exit 0
+    ;;
+  *"/collaborators/"*"/permission"*)
+    printf '%s\n' "${PR_ACTOR_PERMISSION:-write}"
+    exit 0
+    ;;
+esac
 
 head_branch=""
 while (( $# > 0 )); do
@@ -24,14 +128,18 @@ while (( $# > 0 )); do
   fi
 done
 
-IFS=';' read -ra edges <<<"${PR_BASE_GRAPH:-}"
-for edge in "${edges[@]}"; do
-  if [[ "${edge%%=*}" == "$head_branch" ]]; then
-    tr ',' '\n' <<<"${edge#*=}"
-  fi
-done
+if [[ -n "${PR_BASE_GRAPH:-}" ]]; then
+  IFS=';' read -ra edges <<<"$PR_BASE_GRAPH"
+  for edge in "${edges[@]}"; do
+    if [[ "${edge%%=*}" == "$head_branch" ]]; then
+      tr ',' '\n' <<<"${edge#*=}"
+    fi
+  done
+fi
 SH
 chmod +x "$fixture/gh"
+export GITHUB_REPOSITORY="acme/project"
+export PATH="$fixture:$PATH"
 
 {
   printf '#!/usr/bin/env bash\n'
@@ -50,11 +158,236 @@ if ! grep -q 'branch_pattern=' "$validator"; then
   exit 1
 fi
 
+case_count=$((case_count + 1))
+PR_POLICY_FIXTURE=false \
+PR_NUMBER="42" \
+PR_LIVE_LABELS="enhancement" \
+PR_LIVE_ASSIGNEES="github-actions[bot]" \
+PR_LIVE_MILESTONE="7" \
+PR_LIVE_BODY="Closes #42" \
+PR_CLOSING_RELATIONSHIP_STATE="api-error" \
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="feat(api): use live metadata" \
+PR_LABELS="bug" \
+PR_ASSIGNEES="stale-user" \
+PR_MILESTONE_NUMBER="8" \
+PR_BASE="dev/m7-staged-ci" \
+PR_HEAD="feat/42-live-metadata" \
+PR_BODY="Closes #999" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_LABELS="enhancement" \
+PR_ISSUE_MILESTONE_NUMBER="7" \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+PR_POLICY_FIXTURE=false \
+PR_NUMBER="42" \
+PR_LIVE_MILESTONE="7" \
+PR_LIVE_BODY="Fixes #42" \
+PR_CLOSING_RELATIONSHIP_STATE="api-error" \
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="fix(api): use live stacked body" \
+PR_BASE="fix/41-parent" \
+PR_HEAD="fix/42-live-body" \
+PR_BODY="Fixes #999" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_LABELS="enhancement" \
+PR_ISSUE_MILESTONE_NUMBER="7" \
+PR_BASE_GRAPH="fix/41-parent=dev/m7-staged-ci" \
+  "$validator" >/dev/null
+
+while IFS='|' read -r name live_body; do
+  case_count=$((case_count + 1))
+  if PR_POLICY_FIXTURE=false \
+    PR_NUMBER="42" \
+    PR_LIVE_MILESTONE="7" \
+    PR_LIVE_BODY="$live_body" \
+    PR_CLOSING_RELATIONSHIP_STATE="api-error" \
+    PR_BRANCH_STRATEGY="delivery" \
+    PR_TITLE="feat(api): reject invalid live body" \
+    PR_BASE="dev/m7-staged-ci" \
+    PR_HEAD="feat/42-invalid-live-body" \
+    PR_BODY="Closes #42" \
+    PR_ISSUE_STATE="open" \
+    PR_ISSUE_MILESTONE_NUMBER="7" \
+      "$validator" >/dev/null 2>&1; then
+    echo "PR policy accepted $name live closing keywords."
+    exit 1
+  fi
+done <<'CASES'
+wrong Issue|Fixes #43
+multiple|Closes #42 and Resolves #42
+missing|No closing relationship
+embedded keyword|UnFixes #42
+word-prefixed keyword|PrefixCloses #42
+identifier-prefixed keyword|_Resolves #42
+alpha suffix|Fixes #42abc
+underscore suffix|Fixes #42_extra
+adjacent multiple|Closes #42;Fixes #42
+CASES
+
+for closing_keyword in Closes Fixes Resolves; do
+  case_count=$((case_count + 1))
+  PR_POLICY_FIXTURE=false \
+  PR_NUMBER="42" \
+  PR_LIVE_MILESTONE="7" \
+  PR_LIVE_BODY=$'Context before the relationship.\n\n- '"$closing_keyword #42"$'\n\nContext after it.' \
+  PR_CLOSING_RELATIONSHIP_STATE="api-error" \
+  PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="feat(api): accept multiline live body" \
+  PR_BASE="dev/m7-staged-ci" \
+  PR_HEAD="feat/42-multiline-live-body" \
+  PR_BODY="Closes #999" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+    "$validator" >/dev/null
+done
+
+case_count=$((case_count + 1))
+if PR_POLICY_FIXTURE=false \
+  PR_NUMBER="42" \
+  PR_LIVE_BODY="Closes #43" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): reject stale event body" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-stale-event-body" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted the event body instead of live metadata."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+PR_POLICY_FIXTURE=false \
+PR_NUMBER="42" \
+PR_LIVE_LABELS="enhancement,promotion" \
+PR_LIVE_MILESTONE="7" \
+PR_LIVE_BODY=$'Closes #42\nResolves #43' \
+PR_CLOSING_RELATIONSHIP_STATE="api-error" \
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="feat!: promote without routine fallback" \
+PR_BASE="main" \
+PR_HEAD="dev/m7-staged-ci" \
+PR_BODY="Closes #999" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_LABELS="enhancement,promotion" \
+PR_ISSUE_MILESTONE_NUMBER="7" \
+  "$validator" >/dev/null
+
+while IFS='|' read -r name head base; do
+  case_count=$((case_count + 1))
+  PR_POLICY_FIXTURE=false \
+  PR_NUMBER="42" \
+  PR_LIVE_BODY="" \
+  PR_CLOSING_RELATIONSHIP_STATE="api-error" \
+  PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="chore(ci): verify non-routine route" \
+  PR_BASE="$base" \
+  PR_HEAD="$head" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="" \
+    "$validator" >/dev/null
+done <<'CASES'
+sync|sync/main-to-m7-staged-ci-abcdef0|dev/m7-staged-ci
+bot|dependabot/pip/pytest-9|dev/next
+CASES
+
+for relationship_state in \
+  api-error empty wrong-repo wrong-issue wrong-pr-number duplicate paginated malformed; do
+  case_count=$((case_count + 1))
+  if PR_POLICY_FIXTURE=false \
+    PR_NUMBER="42" \
+    PR_LIVE_METADATA_STATE="valid" \
+    PR_CLOSING_RELATIONSHIP_STATE="$relationship_state" \
+    PR_BRANCH_STRATEGY="main" \
+    PR_TITLE="feat(api): reject bad closing relationship" \
+    PR_BASE="main" \
+    PR_HEAD="feat/42-bad-relationship" \
+    PR_BODY="Closes #42" \
+    PR_ISSUE_STATE="open" \
+      "$validator" >/dev/null 2>&1; then
+    echo "PR policy accepted $relationship_state closing Issue metadata."
+    exit 1
+  fi
+done
+
+for metadata_state in api-error empty partial malformed; do
+  case_count=$((case_count + 1))
+  if PR_POLICY_FIXTURE=false \
+    PR_LIVE_METADATA_STATE="$metadata_state" \
+    PR_BRANCH_STRATEGY="main" \
+    PR_TITLE="feat(api): reject bad metadata" \
+    PR_LABELS="enhancement" \
+    PR_BASE="main" \
+    PR_HEAD="feat/42-bad-metadata" \
+    PR_BODY="Closes #42" \
+    PR_ISSUE_STATE="open" \
+      "$validator" >/dev/null 2>&1; then
+    echo "PR policy accepted $metadata_state live pull request metadata."
+    exit 1
+  fi
+done
+
+case_count=$((case_count + 1))
+if PR_POLICY_FIXTURE=1 \
+  PR_LIVE_METADATA_STATE="api-error" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): require explicit fixture mode" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-explicit-fixture" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted an implicit fixture-mode value."
+  exit 1
+fi
+
+while IFS='|' read -r name title head; do
+  case_count=$((case_count + 1))
+  [[ "$head" == "@release-please" ]] && head="$release_branch"
+  PR_POLICY_FIXTURE=false \
+  PR_LIVE_LABELS="enhancement" \
+  PR_LIVE_ASSIGNEES="" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="$title" \
+  PR_LABELS="bug" \
+  PR_ASSIGNEES="stale-user" \
+  PR_BASE="main" \
+  PR_HEAD="$head" \
+  PR_BODY="" \
+  PR_ISSUE_STATE="" \
+    "$validator" >/dev/null
+done <<'CASES'
+Dependabot|build(deps): bump pytest|dependabot/pip/pytest-9
+automation|build(python): adopt Python 3.15|automation/python-3.15
+release please|chore(main): release 0.2.0|@release-please
+CASES
+
+case_count=$((case_count + 1))
+if PR_POLICY_FIXTURE=false \
+  PR_LIVE_LABELS="enhancement" \
+  PR_LIVE_ASSIGNEES="" \
+  PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): require an assignee" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-require-assignee" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_LABELS="enhancement" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted ordinary Issue work without an assignee."
+  exit 1
+fi
+
 while IFS='|' read -r expected name strategy title labels base head body issue_state base_graph; do
   [[ -z "$expected" || "$expected" == \#* ]] && continue
   [[ "$body" == "-" ]] && body=""
   [[ "$issue_state" == "-" ]] && issue_state=""
   [[ "$base_graph" == "-" ]] && base_graph=""
+  [[ "$head" == "@release-please" ]] && head="$release_branch"
   case_count=$((case_count + 1))
 
   if output="$(
@@ -89,12 +422,13 @@ pass|dev work|dev|fix(api): handle timeout|bug|dev|fix/42-timeout|Fixes #42|open
 pass|dev stack|dev|fix(api): handle timeout|bug|fix/41-parent|fix/42-timeout|Fixes #42|open|fix/41-parent=dev
 pass|documentation|main|docs(api): explain reports|documentation|main|docs/42-reports|Closes #42|open|-
 pass|dev promotion|dev|feat!: promote tested changes|enhancement|main|dev|-|-|-
-pass|release please|main|chore(main): release 0.2.0|enhancement|main|release-please--branches--main--components--repo|-|-|-
+pass|release please|main|chore(main): release 0.2.0|enhancement|main|@release-please|-|-|-
 pass|dependabot|main|build(deps): bump pytest|enhancement|main|dependabot/pip/pytest-9|-|-|-
 pass|version automation|main|build(python): adopt Python 3.15|enhancement|main|automation/python-3.15|-|-|-
 pass|delivery standalone|delivery|feat(api): add report|enhancement|dev/next|feat/42-report|Closes #42|open|-
 pass|delivery standalone stack|delivery|feat(api): add report|enhancement|feat/41-parent|feat/42-report|Closes #42|open|feat/41-parent=dev/next
 pass|delivery hotfix|delivery|fix(api): stop outage|bug,hotfix|main|fix/42-outage|Fixes #42|open|-
+pass|delivery release recovery|delivery|fix(release): recover missing release|bug,release-recovery|main|fix/42-recover-release|Fixes #42|open|-
 pass|delivery automation|delivery|build(deps): bump pytest|enhancement|dev/next|dependabot/pip/pytest-9|-|-|-
 pass|delivery sync|delivery|chore(sync): merge main into milestone|enhancement|dev/m7-staged-ci|sync/main-to-m7-staged-ci-abcdef0|-|-|-
 pass|delivery isolated sync|delivery|chore(sync): merge main into isolated|enhancement|dev/i42-payment-soak|sync/main-to-i42-payment-soak-abcdef0|-|-|-
@@ -102,7 +436,7 @@ fail|version automation missing label|main|build(python): adopt Python 3.15|-|ma
 fail|missing PR label|main|feat(api): add report|-|main|feat/42-report|Closes #42|open|-
 fail|multiple PR labels|main|feat(api): add report|enhancement,documentation|main|feat/42-report|Closes #42|open|-
 fail|duplicate PR label|main|feat(api): add report|enhancement,duplicate|main|feat/42-report|Closes #42|open|-
-fail|mismatched PR label|main|fix(api): handle timeout|enhancement|main|fix/42-timeout|Closes #42|open|-
+pass|title intent differs from work label|main|fix(api): handle timeout|enhancement|main|fix/42-timeout|Closes #42|open|-
 fail|unsupported title type|main|feature(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
 fail|non ASCII title|main|feat(api): 新增報表|enhancement|main|feat/42-report|Closes #42|open|-
 fail|uppercase scope|main|feat(API): add report|enhancement|main|feat/42-report|Closes #42|open|-
@@ -119,10 +453,152 @@ fail|main mode targets dev|main|feat(api): add report|enhancement|dev|feat/42-re
 fail|dev work targets main|dev|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
 fail|delivery work targets main|delivery|feat(api): add report|enhancement|main|feat/42-report|Closes #42|open|-
 fail|delivery non-fix hotfix|delivery|feat(api): rush report|enhancement,hotfix|main|feat/42-report|Closes #42|open|-
+fail|delivery recovery on non-fix branch|delivery|feat(release): recover missing release|enhancement,release-recovery|main|feat/42-recover-release|Closes #42|open|-
+fail|delivery recovery with hotfix|delivery|fix(release): recover missing release|bug,hotfix,release-recovery|main|fix/42-recover-release|Fixes #42|open|-
 fail|delivery automation targets main|delivery|build(deps): bump pytest|enhancement|main|dependabot/pip/pytest-9|-|-|-
 fail|delivery sync mismatch|delivery|chore(sync): merge main into milestone|enhancement|dev/m8-other|sync/main-to-m7-staged-ci-abcdef0|-|-|-
 fail|unknown branch strategy|staging|feat(api): add report|enhancement|staging|feat/42-report|Closes #42|open|-
 CASES
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="main" \
+PR_NUMBER="42" \
+PR_TITLE="feat(api): add linked report" \
+PR_LABELS="enhancement" \
+PR_BASE="main" \
+PR_HEAD="feat/301-linked-report" \
+PR_BODY="Closes #301" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_TITLE="Add verified report workflow" \
+PR_CLOSING_ISSUES_JSON='{"data":{"repository":{"pullRequest":{"number":42,"closingIssuesReferences":{"nodes":[{"number":301,"repository":{"nameWithOwner":"acme/project"}}],"pageInfo":{"hasNextPage":false}}}}}}' \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="main" \
+  PR_NUMBER="42" \
+  PR_TITLE="feat(api): add unlinked report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/301-unlinked-report" \
+  PR_BODY="Closes #301" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_TITLE="Add verified report workflow" \
+  PR_CLOSING_ISSUES_JSON="" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a missing closing Issue relationship."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="main" \
+PR_NUMBER="41" \
+PR_TITLE="feat(api): finish active work" \
+PR_LABELS="enhancement" \
+PR_BASE="main" \
+PR_HEAD="feat/301-active-work" \
+PR_BODY="Closes #301" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_TITLE="Add verified report workflow" \
+PR_CLOSING_ISSUES_JSON="" \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add mismatched report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_LABELS="bug" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a label that differs from the linked Issue."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="main" \
+  PR_TITLE="feat(api): add wrong milestone report" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="feat/42-report" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+  PR_MILESTONE_NUMBER="8" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a Milestone that differs from the linked Issue."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="chore(main): release 0.2.0" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="$release_branch" \
+  PR_COMMITTER="maintainer" \
+  PR_BODY="" \
+  PR_ISSUE_STATE="" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a human commit on the automation PR."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="chore(main): release 0.2.0" \
+PR_LABELS="enhancement" \
+PR_BASE="main" \
+PR_HEAD="$release_branch" \
+PR_AUTHOR="maintainer" \
+PR_COMMIT_AUTHOR="maintainer" \
+PR_ACTOR_PERMISSION="maintain" \
+PR_BODY="" \
+PR_ISSUE_STATE="" \
+  "$validator" >/dev/null
+
+while IFS='|' read -r name actor head_repo changed_files head; do
+  case_count=$((case_count + 1))
+  [[ "$head" == "@release-please" ]] && head="$release_branch"
+  if PR_BRANCH_STRATEGY="delivery" \
+    PR_TITLE="chore(main): release 0.2.0" \
+    PR_LABELS="enhancement" \
+    PR_BASE="main" \
+    PR_HEAD="$head" \
+    PR_AUTHOR="$actor" \
+    PR_HEAD_REPOSITORY="$head_repo" \
+    PR_CHANGED_FILES="$changed_files" \
+    PR_BODY="" \
+    PR_ISSUE_STATE="" \
+      "$validator" >/dev/null 2>&1; then
+    echo "PR policy accepted invalid release follow-up '$name'."
+    exit 1
+  fi
+done <<'CASES'
+forged branch|github-actions[bot]|acme/project|CHANGELOG.md|release-please--forged
+untrusted actor|attacker|acme/project|CHANGELOG.md|@release-please
+fork source|github-actions[bot]|fork/project|CHANGELOG.md|@release-please
+product source|github-actions[bot]|acme/project|src/product.py|@release-please
+workflow source|github-actions[bot]|acme/project|.github/workflows/ci.yml|@release-please
+CASES
+
+case_count=$((case_count + 1))
+policy_output="$fixture/policy-output"
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="feat(api): add stacked report" \
+PR_LABELS="enhancement" \
+PR_BASE="feat/41-parent" \
+PR_HEAD="feat/42-report" \
+PR_BODY="Closes #42" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_MILESTONE_NUMBER="7" \
+PR_BASE_GRAPH="feat/41-parent=dev/m7-staged-ci" \
+GITHUB_REPOSITORY="acme/project" \
+GITHUB_OUTPUT="$policy_output" \
+PATH="$fixture:$PATH" \
+  "$validator" >/dev/null
+grep -qx 'delivery_base=dev/m7-staged-ci' "$policy_output"
 
 case_count=$((case_count + 1))
 PR_BRANCH_STRATEGY="delivery" \
@@ -146,6 +622,86 @@ PR_ISSUE_STATE="open" \
 PR_ISSUE_MILESTONE_NUMBER="7" \
 PR_ISSUE_LABELS="enhancement,promotion" \
   "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="feat!: promote milestone seven bridge" \
+PR_LABELS="enhancement,promotion" \
+PR_BASE="main" \
+PR_HEAD="promote/m7-staged-ci" \
+PR_BODY="Closes #42" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_MILESTONE_NUMBER="7" \
+PR_ISSUE_LABELS="enhancement,promotion" \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="feat!: promote standalone bridge" \
+PR_LABELS="enhancement,promotion" \
+PR_BASE="main" \
+PR_HEAD="promote/next" \
+PR_BODY="Closes #42" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_MILESTONE_NUMBER="0" \
+PR_ISSUE_LABELS="enhancement,promotion" \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="feat!: promote milestone as standalone" \
+  PR_LABELS="enhancement,promotion" \
+  PR_BASE="main" \
+  PR_HEAD="promote/next" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+  PR_ISSUE_LABELS="enhancement,promotion" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a standalone bridge with a Milestone."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+PR_BRANCH_STRATEGY="delivery" \
+PR_TITLE="fix(release): recover missing release" \
+PR_LABELS="bug,release-recovery" \
+PR_BASE="main" \
+PR_HEAD="fix/42-recover-release" \
+PR_BODY="Fixes #42" \
+PR_ISSUE_STATE="open" \
+PR_ISSUE_MILESTONE_NUMBER="9" \
+  "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="feat!: promote unlabeled bridge" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="promote/m7-staged-ci" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+  PR_ISSUE_LABELS="enhancement,promotion" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted an unlabeled promotion bridge."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="feat!: promote wrong milestone bridge" \
+  PR_LABELS="enhancement,promotion" \
+  PR_BASE="main" \
+  PR_HEAD="promote/m7-staged-ci" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="8" \
+  PR_ISSUE_LABELS="enhancement,promotion" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a bridge for another Milestone."
+  exit 1
+fi
 
 case_count=$((case_count + 1))
 PR_BRANCH_STRATEGY="delivery" \

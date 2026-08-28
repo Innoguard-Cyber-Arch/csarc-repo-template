@@ -15,7 +15,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 STATES = {"allowed", "blocked", "unknown"}
@@ -27,6 +27,8 @@ DEPENDABOT_FALLBACK = (
     "Keep GitHub Dependabot via .github/dependabot.yml and the existing "
     "required CI/CD checks."
 )
+RELEASE_PLEASE_ACTOR = "github-actions[bot]"
+RELEASE_PLEASE_COMMITTER = "web-flow"
 
 
 @dataclass(frozen=True)
@@ -143,6 +145,121 @@ def release_intent(title: str) -> str:
     return "no-release"
 
 
+def release_follow_up_errors(  # noqa: C901
+    root: Path,
+    repo: str,
+    head: str,
+    head_repo: str,
+    head_sha: str,
+    actor: str,
+    changed_files: list[str],
+    commits: list[dict[str, Any]],
+    actor_permission: str = "",
+) -> list[str]:
+    """Reject release follow-ups outside the automation-owned boundary."""
+    errors: list[str] = []
+    if head_repo != repo:
+        errors.append("release follow-up must come from this repository")
+    automation_actor = actor == RELEASE_PLEASE_ACTOR
+    maintainer_actor = bool(actor) and actor_permission in {"admin", "maintain"}
+    if not automation_actor and not maintainer_actor:
+        errors.append(
+            "release follow-up must be authored by github-actions[bot] "
+            "or a live repository maintainer"
+        )
+    if not re.fullmatch(r"[0-9a-f]{40}", head_sha):
+        errors.append("release follow-up head is not a full commit SHA")
+    elif not commits or commits[-1].get("sha") != head_sha:
+        errors.append("release follow-up commits do not end at the PR head")
+    for commit in commits:
+        author = commit.get("author")
+        committer = commit.get("committer")
+        commit_data = commit.get("commit")
+        verification = (
+            commit_data.get("verification")
+            if isinstance(commit_data, dict)
+            else None
+        )
+        expected_author = RELEASE_PLEASE_ACTOR if automation_actor else actor
+        allowed_committers = (
+            {RELEASE_PLEASE_COMMITTER}
+            if automation_actor
+            else {actor, RELEASE_PLEASE_COMMITTER}
+        )
+        if (
+            not isinstance(author, dict)
+            or author.get("login") != expected_author
+            or not isinstance(committer, dict)
+            or committer.get("login") not in allowed_committers
+            or not isinstance(verification, dict)
+            or verification.get("verified") is not True
+            or verification.get("reason") != "valid"
+        ):
+            errors.append(
+                "release follow-up commits must be verified GitHub commits "
+                "owned by the trusted release actor"
+            )
+            break
+
+    try:
+        config = json.loads(
+            (root / "release-please-config.json").read_text(encoding="utf-8")
+        )
+        packages = config["packages"]
+        package = packages["."]
+        component = package["component"]
+        release_type = package.get("release-type", config.get("release-type"))
+        if not isinstance(component, str) or not component:
+            raise ValueError("release component is missing")
+        if release_type not in {"simple", "python", "node"}:
+            raise ValueError("release type is unsupported")
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+        errors.append(f"release-please configuration is invalid: {error}")
+        return errors
+
+    expected_head = f"release-please--branches--main--components--{component}"
+    if head != expected_head:
+        errors.append(f"release follow-up branch must be {expected_head}")
+
+    allowed = {".release-please-manifest.json", "CHANGELOG.md"}
+    release_file = {
+        "simple": "version.txt",
+        "python": "pyproject.toml",
+        "node": "package.json",
+    }[release_type]
+    allowed.add(release_file)
+    for item in package.get("extra-files", []):
+        value = (
+            item
+            if isinstance(item, str)
+            else item.get("path")
+            if isinstance(item, dict)
+            else None
+        )
+        if not isinstance(value, str):
+            errors.append("release-please extra-files entry is invalid")
+            continue
+        path = PurePosixPath(value)
+        if path.is_absolute() or ".." in path.parts:
+            errors.append(f"release-please extra-files path is unsafe: {value}")
+            continue
+        allowed.add(path.as_posix())
+    for lockfile in ("uv.lock", "pnpm-lock.yaml"):
+        if (root / lockfile).is_file():
+            allowed.add(lockfile)
+
+    changed = {path for path in changed_files if path}
+    if not changed:
+        errors.append("release follow-up has no changed files")
+    unexpected = sorted(changed - allowed)
+    if unexpected:
+        errors.append(
+            "release follow-up changes non-release files: "
+            + ", ".join(unexpected)
+        )
+    return errors
+
+
 def bump_version(version: str, messages: list[str]) -> str | None:
     """Calculate the next version from merged Conventional Commits."""
     match = SEMVER.fullmatch(version)
@@ -166,6 +283,66 @@ def bump_version(version: str, messages: list[str]) -> str | None:
     return f"{major}.{minor}.{patch + 1}"
 
 
+def milestone_boundary(  # noqa: C901
+    evidence: dict[str, Any],
+    included_pull_requests: list[dict[str, Any]],
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    """Validate one milestone promotion's canonical Issue scope."""
+    promotion = evidence.get("milestone_promotion")
+    issues = evidence.get("included_issues")
+    if (
+        not isinstance(promotion, dict)
+        or set(promotion) != {"mode", "declared_issues"}
+        or not isinstance(issues, list)
+    ):
+        raise ValueError("milestone release boundary schema is invalid")
+    issue_numbers: list[int] = []
+    normalized_issues: list[dict[str, object]] = []
+    for issue in issues:
+        if (
+            not isinstance(issue, dict)
+            or set(issue) != {"number", "title"}
+            or type(issue.get("number")) is not int
+            or int(issue["number"]) < 1
+            or not isinstance(issue.get("title"), str)
+        ):
+            raise ValueError("milestone included Issue is invalid")
+        issue_numbers.append(int(issue["number"]))
+        normalized_issues.append(
+            {"number": int(issue["number"]), "title": issue["title"]}
+        )
+    if issue_numbers != sorted(set(issue_numbers)):
+        raise ValueError("milestone included Issues are not canonical")
+    pull_request_issues: set[int] = set()
+    for pull_request in included_pull_requests:
+        if "issue" not in pull_request:
+            raise ValueError("milestone pull request has no Issue binding")
+        number = pull_request["issue"]
+        if number is not None and (type(number) is not int or number < 1):
+            raise ValueError("milestone pull-request Issue binding is invalid")
+        if isinstance(number, int):
+            pull_request_issues.add(number)
+    if issue_numbers != sorted(pull_request_issues):
+        raise ValueError("milestone Issue evidence does not match its PRs")
+    mode = promotion.get("mode")
+    declared = promotion.get("declared_issues")
+    if mode == "final":
+        if declared is not None:
+            raise ValueError("final milestone promotion declares Issues")
+    elif mode == "checkpoint":
+        if (
+            not isinstance(declared, list)
+            or not declared
+            or any(type(number) is not int or number < 1 for number in declared)
+            or declared != sorted(set(declared))
+            or declared != issue_numbers
+        ):
+            raise ValueError("checkpoint Issue evidence is invalid")
+    else:
+        raise ValueError("milestone promotion mode is invalid")
+    return promotion, normalized_issues
+
+
 def aggregate_release_boundaries(  # noqa: C901
     boundaries: list[dict[str, Any]], main_sha: str, source_kind: str
 ) -> dict[str, object]:
@@ -181,6 +358,7 @@ def aggregate_release_boundaries(  # noqa: C901
         "isolated",
         "dev-promotion",
         "hotfix",
+        "release-recovery",
     }
     for evidence in boundaries:
         route = evidence.get("route")
@@ -222,19 +400,33 @@ def aggregate_release_boundaries(  # noqa: C901
             pull_requests[number] = pull_request
         if intent != boundary_highest:
             raise ValueError("release boundary batch intent is invalid")
-        summaries.append(
-            {
-                "kind": route["kind"],
-                "milestone": route.get("milestone"),
-                "delivery_branch": evidence.get("head_ref"),
-                "promotion_pr": evidence.get("pull_request"),
-                "promotion_main_sha": post_merge.get("main_sha"),
-                "promotion_run": evidence.get("workflow_run"),
-                "included_issues": evidence.get("included_issues", []),
-                "canary": evidence.get("canary"),
-                "full_check": evidence.get("full_check"),
-            }
-        )
+        route_kind = str(route["kind"])
+        if route_kind == "milestone":
+            milestone = route.get("milestone")
+            if type(milestone) is not int or milestone < 1:
+                raise ValueError("milestone release boundary is incomplete")
+            promotion, included_issues = milestone_boundary(evidence, included)
+        else:
+            if "milestone_promotion" in evidence:
+                raise ValueError(
+                    "non-milestone boundary has milestone promotion data"
+                )
+            promotion = None
+            included_issues = evidence.get("included_issues", [])
+        summary: dict[str, object] = {
+            "kind": route_kind,
+            "milestone": route.get("milestone"),
+            "delivery_branch": evidence.get("head_ref"),
+            "promotion_pr": evidence.get("pull_request"),
+            "promotion_main_sha": post_merge.get("main_sha"),
+            "promotion_run": evidence.get("workflow_run"),
+            "included_issues": included_issues,
+            "canary": evidence.get("canary"),
+            "full_check": evidence.get("full_check"),
+        }
+        if promotion is not None:
+            summary["milestone_promotion"] = promotion
+        summaries.append(summary)
     summaries.sort(key=lambda item: str(item["promotion_main_sha"]))
     return {
         "schema_version": 1,
@@ -714,9 +906,9 @@ def release_plan(root: Path, sha: str) -> tuple[str, str] | None:
         revision_range = sha
     raw = git_output(["log", "--format=%s%x1f%b%x1e", revision_range], root)
     messages = [
-        message.replace("\x1f", "\n")
+        message.strip("\n").replace("\x1f", "\n")
         for message in raw.split("\x1e")
-        if message
+        if message.strip("\n")
     ]
     version = bump_version(base, messages)
     return None if version is None else (f"v{version}", version)
@@ -771,11 +963,30 @@ def release_version_errors(  # noqa: C901
         if isinstance(package.get("version"), str):
             versions["package.json"] = package["version"]
 
-    for path in [
+    marker_paths = [
         root / "README.md",
         root / "docs" / "index.html",
         *root.glob("src/*/__init__.py"),
-    ]:
+    ]
+    release_config = root / "release-please-config.json"
+    if release_config.is_file():
+        config = json.loads(release_config.read_text(encoding="utf-8"))
+        extra_files = (
+            config.get("packages", {}).get(".", {}).get("extra-files", [])
+        )
+        extra_paths = {
+            item if isinstance(item, str) else item.get("path")
+            for item in extra_files
+            if isinstance(item, (str, dict))
+        }
+        if "site/index.html" in extra_paths:
+            marker_paths.append(root / "site" / "index.html")
+    required_markers = {
+        root / "README.md",
+        root / "docs" / "index.html",
+        root / "site" / "index.html",
+    }
+    for path in marker_paths:
         if not path.is_file():
             continue
         marker_found = False
@@ -787,10 +998,7 @@ def release_version_errors(  # noqa: C901
             versions[str(path.relative_to(root))] = (
                 match.group(1) if match else ""
             )
-        if (
-            path in {root / "README.md", root / "docs" / "index.html"}
-            and not marker_found
-        ):
+        if path in required_markers and not marker_found:
             errors.append(
                 f"{path.relative_to(root)} has no "
                 "x-release-please-version marker"
@@ -1053,12 +1261,46 @@ def parser() -> argparse.ArgumentParser:
     verify = subparsers.add_parser("verify-version")
     verify.add_argument("--tag")
     verify.add_argument("--root", type=Path, default=Path.cwd())
+    verify_follow_up = subparsers.add_parser("verify-release-follow-up")
+    verify_follow_up.add_argument("--repo", required=True)
+    verify_follow_up.add_argument("--head", required=True)
+    verify_follow_up.add_argument("--head-repo", required=True)
+    verify_follow_up.add_argument("--head-sha", required=True)
+    verify_follow_up.add_argument("--actor", required=True)
+    verify_follow_up.add_argument("--actor-permission", default="")
+    verify_follow_up.add_argument("--changed-files", type=Path, required=True)
+    verify_follow_up.add_argument("--commits", type=Path, required=True)
+    verify_follow_up.add_argument("--root", type=Path, default=Path.cwd())
     return result
 
 
 def main(arguments: list[str] | None = None) -> int:  # noqa: C901
     """Run capability detection, direct release, or build preparation."""
     args = parser().parse_args(arguments)
+    if args.command == "verify-release-follow-up":
+        commit_pages = json.loads(args.commits.read_text(encoding="utf-8"))
+        if not isinstance(commit_pages, list) or any(
+            not isinstance(page, list)
+            or any(not isinstance(commit, dict) for commit in page)
+            for page in commit_pages
+        ):
+            raise SystemExit("release follow-up commit response is invalid")
+        commits = [commit for page in commit_pages for commit in page]
+        errors = release_follow_up_errors(
+            args.root.resolve(),
+            args.repo,
+            args.head,
+            args.head_repo,
+            args.head_sha,
+            args.actor,
+            args.changed_files.read_text(encoding="utf-8").splitlines(),
+            commits,
+            args.actor_permission,
+        )
+        if errors:
+            raise SystemExit("; ".join(errors))
+        print("Release follow-up source is verified.")  # noqa: T201
+        return 0
     if args.command == "boundary":
         write_boundary(
             simple_release_boundary(

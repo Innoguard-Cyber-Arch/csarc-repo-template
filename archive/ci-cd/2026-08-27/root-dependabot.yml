@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev/next
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    labels: [enhancement]
+    groups:
+      # Keep third-party and major Action upgrades isolated for review.
+      official-actions:
+        patterns: ["actions/*"]
+        update-types: [minor, patch]
+  - package-ecosystem: uv
+    directory: /
+    target-branch: dev/next
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    labels: [enhancement]
+    groups:
+      routine-updates:
+        patterns: ["*"]
+        update-types: [minor, patch]

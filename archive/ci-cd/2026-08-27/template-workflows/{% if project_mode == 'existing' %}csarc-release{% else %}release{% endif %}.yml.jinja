@@ -1,0 +1,1132 @@
+{% set python_mode = python_support_mode | default("latest") -%}
+{% set python_min = python_min_version | default("3.12") -%}
+{% set python_target = "3.14" if python_mode == "latest" else python_min -%}
+{% set has_python = language in ["python", "python-typescript"] -%}
+{% set has_typescript = language in ["typescript", "python-typescript"] -%}
+{% set enable_attestations = enable_release_attestations | default(false) -%}
+{% set publish_python = enable_pypi_publishing | default(false) -%}
+{% set publish_npm = enable_npm_publishing | default(false) -%}
+{% set publish_container = (container_mode | default("none")) == "ghcr" -%}
+{% set release_workflow = "csarc-release.yml" if project_mode == "existing" else "release.yml" -%}
+name: Release artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Release Please workflow run containing source evidence
+        required: true
+        type: string
+
+concurrency:
+  group: release-artifact-{% raw %}${{ github.repository }}-${{ github.ref_name }}{% endraw %}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  source:
+    name: verify release source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: {% raw %}${{ github.ref }}{% endraw %}
+      - name: Require the exact release tag checkout
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_TYPE" = tag
+          [[ "$GITHUB_REF_NAME" == v* ]]
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-list -n 1 "$GITHUB_REF_NAME")" = "$GITHUB_SHA"
+      - name: Download and verify the promotion boundary
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+          SOURCE_RUN_ID: {% raw %}${{ inputs.source_run_id }}{% endraw %}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && -n "$SOURCE_RUN_ID" ]] || {
+            echo "Release artifacts require a Release Please source run." >&2
+            exit 1
+          }
+          source_run=""
+          for _ in {1..60}; do
+            source_run="$(
+              gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}"
+            )"
+            case "$(jq -r .status <<<"$source_run")" in
+              completed) break ;;
+              queued|in_progress|pending|waiting|requested) sleep 5 ;;
+              *) echo "Release source run returned an invalid status." >&2; exit 1 ;;
+            esac
+          done
+          workflow="$(
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-please.yml"
+          )"
+          jq -e \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg repository_id "$GITHUB_REPOSITORY_ID" \
+            --arg sha "$GITHUB_SHA" \
+            --arg workflow_id "$(jq -r .id <<<"$workflow")" '
+              .status == "completed" and
+              .conclusion == "success" and
+              .head_sha == $sha and
+              .path == ".github/workflows/release-please.yml" and
+              (.workflow_id | tostring) == $workflow_id and
+              .repository.full_name == $repository and
+              (.repository.id | tostring) == $repository_id and
+              (.event == "push" or .event == "workflow_dispatch")
+            ' <<<"$source_run" >/dev/null
+          mkdir release-source
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name "main-release-source-${SOURCE_RUN_ID}" \
+            --dir release-source
+          python3 scripts/release_policy.py verify-boundary \
+            --evidence release-source/main-release-source.json \
+            --sha "$GITHUB_SHA"
+          mv release-source/main-release-source.json release-source/release-source.json
+      - name: Preserve release-source evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-source
+          path: release-source/release-source.json
+          if-no-files-found: error
+          retention-days: 90
+
+  governance:
+    name: governance
+    needs: source
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: {% raw %}${{ github.ref }}{% endraw %}
+      - name: Require protected default branch
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+        run: ./scripts/apply-repository-settings.sh check
+
+  build:
+    name: {% if language == "ci" %}verify-release{% else %}build-and-sbom{% endif %}
+    needs: governance
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: {% raw %}${{ github.ref }}{% endraw %}
+{% if has_python %}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "{{ python_target }}"
+{% endif %}
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-source
+          path: release-source
+      - name: Verify the immutable tag version
+        env:
+          RELEASE_TAG: {% raw %}${{ github.ref_name }}{% endraw %}
+        run: >-
+          uv run --no-project python scripts/release_policy.py prepare
+          --tag "$RELEASE_TAG"
+{% if has_typescript %}
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: "11.22.0"
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+{% endif %}
+{% if has_python %}
+      - name: Build Python distributions
+        run: |
+          mkdir "$RUNNER_TEMP/release-dist"
+          uv build --out-dir "$RUNNER_TEMP/release-dist"
+{% endif %}
+{% if has_typescript %}
+      - name: Build TypeScript package
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+          find dist -maxdepth 1 -type f -name '.gitignore' -delete
+          find dist -maxdepth 1 -type f -name '*.tgz' -delete
+          mkdir -p "$RUNNER_TEMP/release-dist"
+          pnpm pack --pack-destination "$RUNNER_TEMP/release-dist"
+{% endif %}
+      - name: Prepare the exact-tag release bundle
+        id: prepare
+        env:
+          RELEASE_TAG: {% raw %}${{ github.ref_name }}{% endraw %}
+          RELEASE_COMMIT: {% raw %}${{ github.sha }}{% endraw %}
+          RELEASE_RUN_URL: {% raw %}${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}{% endraw %}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$RELEASE_COMMIT"
+          asset_root="$RUNNER_TEMP/release-bundle"
+          test ! -e "$asset_root"
+          mkdir "$asset_root"
+          export ASSET_ROOT="$asset_root"
+          git archive --format=tar --output="$asset_root/source.tar" "$RELEASE_COMMIT"
+{% if has_python %}
+          mapfile -t wheels < <(find "$RUNNER_TEMP/release-dist" -maxdepth 1 -type f -name '*.whl' -print)
+          mapfile -t sdists < <(find "$RUNNER_TEMP/release-dist" -maxdepth 1 -type f -name '*.tar.gz' -print)
+          [[ "{% raw %}${#wheels[@]}{% endraw %}" -eq 1 && "{% raw %}${#sdists[@]}{% endraw %}" -eq 1 ]] || {
+            echo "Expected exactly one wheel and one Python source distribution." >&2
+            exit 1
+          }
+          cp "${wheels[0]}" "${sdists[0]}" "$asset_root/"
+          python_wheel="$asset_root/$(basename "${wheels[0]}")"
+          python_sdist="$asset_root/$(basename "${sdists[0]}")"
+{% endif %}
+{% if has_typescript %}
+          mapfile -t npm_packages < <(find "$RUNNER_TEMP/release-dist" -maxdepth 1 -type f -name '*.tgz' -print)
+          [[ "{% raw %}${#npm_packages[@]}{% endraw %}" -eq 1 ]] || {
+            echo "Expected exactly one npm package tarball." >&2
+            exit 1
+          }
+          cp "${npm_packages[0]}" "$asset_root/"
+          npm_package="$asset_root/$(basename "${npm_packages[0]}")"
+{% endif %}
+{% if language != "ci" %}
+          expected_dist_count={% if language == "python-typescript" %}3{% elif has_python %}2{% else %}1{% endif %}
+          actual_dist_count="$(find "$RUNNER_TEMP/release-dist" -maxdepth 1 -type f | wc -l | tr -d ' ')"
+          test "$actual_dist_count" = "$expected_dist_count"
+{% endif %}
+          cp release-source/release-source.json "$asset_root/release-source.json"
+          printf '%s\n' "${RELEASE_TAG#v}" > "$asset_root/version.txt"
+          sbom_root="$(mktemp -d "$RUNNER_TEMP/sbom-root.XXXXXX")"
+{% if language == "ci" %}
+          mkdir "$sbom_root/source"
+          tar -xf "$asset_root/source.tar" -C "$sbom_root/source"
+{% endif %}
+{% if has_python %}
+          UV_PROJECT_ENVIRONMENT="$sbom_root/python-runtime" \
+            uv sync --locked --no-dev --no-editable
+          "$sbom_root/python-runtime/bin/python" - "$sbom_root/python.purls" <<'PY'
+          import importlib.metadata
+          import re
+          import sys
+          from pathlib import Path
+          from urllib.parse import quote
+
+          purls = {
+              "pkg:pypi/"
+              + quote(re.sub(r"[-_.]+", "-", dist.metadata["Name"]).lower(), safe="")
+              + "@"
+              + quote(dist.version, safe="")
+              for dist in importlib.metadata.distributions()
+              if dist.metadata.get("Name") and dist.version
+          }
+          Path(sys.argv[1]).write_text("\n".join(sorted(purls)) + "\n", encoding="utf-8")
+          PY
+{% endif %}
+{% if has_typescript %}
+          pnpm --filter . deploy --legacy --prod "$sbom_root/typescript-runtime"
+          pnpm --dir "$sbom_root/typescript-runtime" list \
+            --prod --depth Infinity --json > "$sbom_root/node-packages.json"
+          python3 - "$sbom_root/node-packages.json" "$sbom_root/node.purls" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          from urllib.parse import quote
+
+          def purl(name: str, version: str) -> str:
+              if name.startswith("@") and "/" in name:
+                  namespace, package = name.split("/", 1)
+                  encoded = f"{quote(namespace, safe='')}/{quote(package, safe='')}"
+              else:
+                  encoded = quote(name, safe="")
+              return f"pkg:npm/{encoded}@{quote(version, safe='')}"
+
+          found: set[str] = set()
+
+          def visit(node: object, fallback_name: str | None = None) -> None:
+              if isinstance(node, list):
+                  for item in node:
+                      visit(item)
+                  return
+              if not isinstance(node, dict):
+                  return
+              name = node.get("name", fallback_name)
+              version = node.get("version")
+              if isinstance(name, str) and isinstance(version, str):
+                  found.add(purl(name, version))
+              for field in ("dependencies", "optionalDependencies"):
+                  children = node.get(field, {})
+                  if isinstance(children, dict):
+                      for child_name, child in children.items():
+                          visit(child, child_name)
+
+          visit(json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")))
+          Path(sys.argv[2]).write_text("\n".join(sorted(found)) + "\n", encoding="utf-8")
+          PY
+{% endif %}
+          identity_file="$RUNNER_TEMP/release-identity.json"
+          RELEASE_VERSION="${RELEASE_TAG#v}" \
+            python3 - "$identity_file" <<'PY'
+          import json
+          import os
+          import re
+          import tomllib
+          from pathlib import Path
+          from urllib.parse import quote
+
+          version = os.environ["RELEASE_VERSION"]
+          packages: list[tuple[str, str]] = []
+          if Path("pyproject.toml").exists():
+              project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]
+              name = project["name"]
+              actual = project["version"]
+              if actual != version:
+                  raise SystemExit("pyproject.toml version does not match the release tag")
+              normalized = re.sub(r"[-_.]+", "-", name).lower()
+              packages.append((name, f"pkg:pypi/{quote(normalized, safe='')}@{quote(actual, safe='')}"))
+          if Path("package.json").exists():
+              package = json.loads(Path("package.json").read_text(encoding="utf-8"))
+              name = package["name"]
+              actual = package["version"]
+              if actual != version:
+                  raise SystemExit("package.json version does not match the release tag")
+              if name.startswith("@") and "/" in name:
+                  namespace, simple = name.split("/", 1)
+                  encoded = f"{quote(namespace, safe='')}/{quote(simple, safe='')}"
+              else:
+                  encoded = quote(name, safe="")
+              packages.append((name, f"pkg:npm/{encoded}@{quote(actual, safe='')}"))
+{% if language == "ci" %}          root_name = os.environ["GITHUB_REPOSITORY"].split("/", 1)[1]
+{% else %}          if not packages:
+              raise SystemExit("release package identity is unavailable")
+          root_name = packages[0][0]
+{% endif %}          Path(sys.argv[1]).write_text(
+              json.dumps(
+                  {"root_name": root_name, "root_purls": sorted(purl for _, purl in packages)},
+                  indent=2,
+                  sort_keys=True,
+              ) + "\n",
+              encoding="utf-8",
+          )
+          PY
+{% if language == "ci" %}
+          python3 - "$asset_root/inventory.purls" <<'PY'
+          import sys
+          from pathlib import Path
+
+          Path(sys.argv[1]).write_text("", encoding="utf-8")
+          PY
+{% else %}
+          sort -u {% if has_python %}"$sbom_root/python.purls"{% endif %}{% if has_python and has_typescript %} {% endif %}{% if has_typescript %}"$sbom_root/node.purls"{% endif %} > "$asset_root/inventory.purls"
+          while IFS= read -r root_purl; do
+            grep -Fx "$root_purl" "$asset_root/inventory.purls" >/dev/null
+          done < <(jq -r '.root_purls[]' "$identity_file")
+{% endif %}
+          uv run --no-project python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          evidence = {
+              "tag": os.environ["RELEASE_TAG"],
+              "commit": os.environ["RELEASE_COMMIT"],
+              "release_run": int(os.environ["GITHUB_RUN_ID"]),
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "repository_id": int(os.environ["GITHUB_REPOSITORY_ID"]),
+              "workflow_run": os.environ["RELEASE_RUN_URL"],
+              "release_source": json.loads(
+                  Path(os.environ["ASSET_ROOT"], "release-source.json").read_text(
+                      encoding="utf-8"
+                  )
+              ),
+          }
+          Path(os.environ["ASSET_ROOT"], "release-metadata.json").write_text(
+              json.dumps(evidence, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          (
+            cd "$asset_root"
+            checksum_files=(source.tar version.txt release-source.json)
+{% if has_python %}            checksum_files+=("$(basename "${wheels[0]}")" "$(basename "${sdists[0]}")")
+{% endif %}{% if has_typescript %}            checksum_files+=("$(basename "${npm_packages[0]}")")
+{% endif %}            shasum -a 256 "${checksum_files[@]}" > SHA256SUMS
+          )
+          {
+            echo "asset_root=$asset_root"
+{% if language == "ci" %}            echo "root=$sbom_root/source"
+{% else %}            echo "root=$sbom_root"
+{% endif %}            echo "identity_file=$identity_file"
+            echo "root_name=$(jq -r .root_name "$identity_file")"
+            echo "version=${RELEASE_TAG#v}"
+{% if has_python %}            echo "python_wheel=$python_wheel"
+            echo "python_sdist=$python_sdist"
+{% endif %}{% if has_typescript %}            echo "npm_package=$npm_package"
+{% endif %}          } >> "$GITHUB_OUTPUT"
+      - name: Generate exact Syft SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        env:
+          SYFT_SOURCE_NAME: {% raw %}${{ steps.prepare.outputs.root_name }}{% endraw %}
+          SYFT_SOURCE_VERSION: {% raw %}${{ steps.prepare.outputs.version }}{% endraw %}
+        with:
+          path: {% raw %}${{ steps.prepare.outputs.root }}{% endraw %}
+          format: spdx-json
+          output-file: {% raw %}${{ steps.prepare.outputs.asset_root }}{% endraw %}/sbom.spdx.json
+          syft-version: v1.50.0
+          upload-artifact: false
+          upload-release-assets: false
+          dependency-snapshot: false
+      - name: Bind and verify release evidence
+        env:
+          ASSET_ROOT: {% raw %}${{ steps.prepare.outputs.asset_root }}{% endraw %}
+          IDENTITY_FILE: {% raw %}${{ steps.prepare.outputs.identity_file }}{% endraw %}
+          RELEASE_TAG: {% raw %}${{ github.ref_name }}{% endraw %}
+          SOURCE_RUN_ID: {% raw %}${{ inputs.source_run_id }}{% endraw %}
+{% if has_python %}          PYTHON_WHEEL: {% raw %}${{ steps.prepare.outputs.python_wheel }}{% endraw %}
+          PYTHON_SDIST: {% raw %}${{ steps.prepare.outputs.python_sdist }}{% endraw %}
+{% endif %}{% if has_typescript %}          NPM_PACKAGE: {% raw %}${{ steps.prepare.outputs.npm_package }}{% endraw %}
+{% endif %}
+        run: |
+          set -euo pipefail
+{% if language != "ci" %}          root_purls=()
+          while IFS= read -r purl; do
+            root_purls+=(--root-purl "$purl")
+          done < <(jq -r '.root_purls[]' "$IDENTITY_FILE")
+{% endif %}
+          artifacts=(
+            --artifact "$ASSET_ROOT/source.tar"
+            --artifact "$ASSET_ROOT/version.txt"
+            --artifact "$ASSET_ROOT/release-source.json"
+            --artifact "$ASSET_ROOT/SHA256SUMS"
+{% if has_python %}            --artifact "$PYTHON_WHEEL"
+            --artifact "$PYTHON_SDIST"
+{% endif %}{% if has_typescript %}            --artifact "$NPM_PACKAGE"
+{% endif %}          )
+          python3 scripts/release_assets.py build \
+            --tag "$RELEASE_TAG" \
+            --commit "$GITHUB_SHA" \
+            --version-file "$ASSET_ROOT/version.txt" \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$GITHUB_REPOSITORY_ID" \
+            --source-run "$SOURCE_RUN_ID" \
+            --release-run "$GITHUB_RUN_ID" \
+            --runtime-kind {% if language == "ci" %}source{% else %}package{% endif %} \
+            --root-name "$(jq -r .root_name "$IDENTITY_FILE")" \
+{% if language != "ci" %}            "${root_purls[@]}" \
+{% endif %}            --inventory-file "$ASSET_ROOT/inventory.purls" \
+            "${artifacts[@]}" \
+            --asset-root "$ASSET_ROOT" \
+            --sbom "$ASSET_ROOT/sbom.spdx.json" \
+            --manifest "$ASSET_ROOT/release-manifest.json" \
+            --provenance "$ASSET_ROOT/release-metadata.json"
+          python3 scripts/release_assets.py verify \
+            --tag "$RELEASE_TAG" \
+            --commit "$GITHUB_SHA" \
+            --version-file "$ASSET_ROOT/version.txt" \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$GITHUB_REPOSITORY_ID" \
+            --source-run "$SOURCE_RUN_ID" \
+            --release-run "$GITHUB_RUN_ID" \
+            --runtime-kind {% if language == "ci" %}source{% else %}package{% endif %} \
+            --root-name "$(jq -r .root_name "$IDENTITY_FILE")" \
+{% if language != "ci" %}            "${root_purls[@]}" \
+{% endif %}            --inventory-file "$ASSET_ROOT/inventory.purls" \
+            "${artifacts[@]}" \
+            --asset-root "$ASSET_ROOT" \
+            --sbom "$ASSET_ROOT/sbom.spdx.json" \
+            --manifest "$ASSET_ROOT/release-manifest.json" \
+            --provenance "$ASSET_ROOT/release-metadata.json"
+      - name: Upload release evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-evidence
+          path: |
+            {% raw %}${{ steps.prepare.outputs.asset_root }}{% endraw %}/source.tar
+            {% raw %}${{ steps.prepare.outputs.asset_root }}{% endraw %}/version.txt
+            {% raw %}${{ steps.prepare.outputs.asset_root }}{% endraw %}/release-source.json
+            {% raw %}${{ steps.prepare.outputs.asset_root }}{% endraw %}/SHA256SUMS
+{% if has_python %}            {% raw %}${{ steps.prepare.outputs.python_wheel }}{% endraw %}
+            {% raw %}${{ steps.prepare.outputs.python_sdist }}{% endraw %}
+{% endif %}{% if has_typescript %}            {% raw %}${{ steps.prepare.outputs.npm_package }}{% endraw %}
+{% endif %}            {% raw %}${{ steps.prepare.outputs.asset_root }}{% endraw %}/inventory.purls
+            {% raw %}${{ steps.prepare.outputs.asset_root }}{% endraw %}/sbom.spdx.json
+            {% raw %}${{ steps.prepare.outputs.asset_root }}{% endraw %}/release-manifest.json
+            {% raw %}${{ steps.prepare.outputs.asset_root }}{% endraw %}/release-metadata.json
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-evidence:
+    name: publish-evidence
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+{% if enable_attestations %}
+      id-token: write
+      attestations: write
+{% endif %}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: {% raw %}${{ github.ref }}{% endraw %}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-evidence
+          path: release-evidence
+      - name: Inspect exact-tag release state without mutation
+        id: state
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+          RELEASE_TAG: {% raw %}${{ github.ref_name }}{% endraw %}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_TYPE" = tag
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$GITHUB_SHA"
+          body="$RUNNER_TEMP/release-state.json"
+          errors="$RUNNER_TEMP/release-state.stderr"
+          set +e
+          status="$(
+            curl --location --silent --show-error \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              --output "$body" \
+              --write-out '%{http_code}' \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+              2>"$errors"
+          )"
+          curl_status=$?
+          set -e
+          test "$curl_status" -eq 0 || { cat "$errors" >&2; exit 1; }
+          case "$status" in
+            200)
+              release_state="$(jq -r '[.immutable, .draft] | @tsv' "$body")"
+              case "$release_state" in
+                $'true\tfalse') state=immutable ;;
+                $'false\ttrue') state=draft ;;
+                *) echo "Release state is neither an immutable publication nor a mutable draft." >&2; exit 1 ;;
+              esac
+              ;;
+            404) state=missing ;;
+            *)
+              cat "$errors" >&2
+              cat "$body" >&2
+              echo "Release lookup failed with HTTP $status." >&2
+              exit 1
+              ;;
+          esac
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          echo "reuse=$([[ "$state" == immutable ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Resolve exact package identity
+        id: identity
+        env:
+          RELEASE_VERSION: {% raw %}${{ github.ref_name }}{% endraw %}
+        run: |
+          set -euo pipefail
+          RELEASE_VERSION="${RELEASE_VERSION#v}" python3 - "$RUNNER_TEMP/release-identity.json" <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          import tomllib
+          from pathlib import Path
+          from urllib.parse import quote
+
+          version = os.environ["RELEASE_VERSION"]
+          packages: list[tuple[str, str]] = []
+          if Path("pyproject.toml").exists():
+              project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]
+              name = project["name"]
+              actual = project["version"]
+              if actual != version:
+                  raise SystemExit("pyproject.toml version does not match the release tag")
+              normalized = re.sub(r"[-_.]+", "-", name).lower()
+              packages.append((name, f"pkg:pypi/{quote(normalized, safe='')}@{quote(actual, safe='')}"))
+          if Path("package.json").exists():
+              package = json.loads(Path("package.json").read_text(encoding="utf-8"))
+              name = package["name"]
+              actual = package["version"]
+              if actual != version:
+                  raise SystemExit("package.json version does not match the release tag")
+              if name.startswith("@") and "/" in name:
+                  namespace, simple = name.split("/", 1)
+                  encoded = f"{quote(namespace, safe='')}/{quote(simple, safe='')}"
+              else:
+                  encoded = quote(name, safe="")
+              packages.append((name, f"pkg:npm/{encoded}@{quote(actual, safe='')}"))
+{% if language == "ci" %}          root_name = os.environ["GITHUB_REPOSITORY"].split("/", 1)[1]
+{% else %}          if not packages:
+              raise SystemExit("release package identity is unavailable")
+          root_name = packages[0][0]
+{% endif %}          Path(sys.argv[1]).write_text(
+              json.dumps(
+                  {"root_name": root_name, "root_purls": sorted(purl for _, purl in packages)},
+                  indent=2,
+                  sort_keys=True,
+              ) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          echo "file=$RUNNER_TEMP/release-identity.json" >> "$GITHUB_OUTPUT"
+      - name: Validate release evidence
+        id: evidence
+        env:
+          IDENTITY_FILE: {% raw %}${{ steps.identity.outputs.file }}{% endraw %}
+          RELEASE_TAG: {% raw %}${{ github.ref_name }}{% endraw %}
+          SOURCE_RUN_ID: {% raw %}${{ inputs.source_run_id }}{% endraw %}
+        run: |
+          set -euo pipefail
+{% if language != "ci" %}          root_purls=()
+          while IFS= read -r purl; do
+            root_purls+=(--root-purl "$purl")
+          done < <(jq -r '.root_purls[]' "$IDENTITY_FILE")
+{% endif %}
+          mapfile -t wheels < <(find release-evidence -maxdepth 1 -type f -name '*.whl' -print)
+          mapfile -t sdists < <(find release-evidence -maxdepth 1 -type f -name '*.tar.gz' -print)
+          mapfile -t npm_packages < <(find release-evidence -maxdepth 1 -type f -name '*.tgz' -print)
+          [[ "{% raw %}${#wheels[@]}{% endraw %}" -eq {% if has_python %}1{% else %}0{% endif %} ]]
+          [[ "{% raw %}${#sdists[@]}{% endraw %}" -eq {% if has_python %}1{% else %}0{% endif %} ]]
+          [[ "{% raw %}${#npm_packages[@]}{% endraw %}" -eq {% if has_typescript %}1{% else %}0{% endif %} ]]
+{% if has_python or has_typescript %}          {
+{% if has_python %}            echo "python_wheel=${wheels[0]}"
+            echo "python_sdist=${sdists[0]}"
+{% endif %}{% if has_typescript %}            echo "npm_package=${npm_packages[0]}"
+{% endif %}          } >> "$GITHUB_OUTPUT"
+{% endif %}          artifacts=(
+            --artifact release-evidence/source.tar
+            --artifact release-evidence/version.txt
+            --artifact release-evidence/release-source.json
+            --artifact release-evidence/SHA256SUMS
+          )
+{% if has_python %}          artifacts+=(--artifact "${wheels[0]}" --artifact "${sdists[0]}")
+{% endif %}{% if has_typescript %}          artifacts+=(--artifact "${npm_packages[0]}")
+{% endif %}          test "$(jq -r .release_run release-evidence/release-metadata.json)" = "$GITHUB_RUN_ID"
+          python3 scripts/release_assets.py verify \
+            --tag "$RELEASE_TAG" \
+            --commit "$GITHUB_SHA" \
+            --version-file release-evidence/version.txt \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$GITHUB_REPOSITORY_ID" \
+            --source-run "$SOURCE_RUN_ID" \
+            --release-run "$GITHUB_RUN_ID" \
+            --runtime-kind {% if language == "ci" %}source{% else %}package{% endif %} \
+            --root-name "$(jq -r .root_name "$IDENTITY_FILE")" \
+{% if language != "ci" %}            "${root_purls[@]}" \
+{% endif %}            --inventory-file release-evidence/inventory.purls \
+            "${artifacts[@]}" \
+            --asset-root release-evidence \
+            --sbom release-evidence/sbom.spdx.json \
+            --manifest release-evidence/release-manifest.json \
+            --provenance release-evidence/release-metadata.json
+{% if enable_attestations %}
+      - name: Attest build provenance
+        if: steps.state.outputs.reuse != 'true'
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: |
+            release-evidence/source.tar
+            release-evidence/version.txt
+            release-evidence/release-source.json
+            release-evidence/SHA256SUMS
+{% if has_python %}            {% raw %}${{ steps.evidence.outputs.python_wheel }}{% endraw %}
+            {% raw %}${{ steps.evidence.outputs.python_sdist }}{% endraw %}
+{% endif %}{% if has_typescript %}            {% raw %}${{ steps.evidence.outputs.npm_package }}{% endraw %}
+{% endif %}            release-evidence/inventory.purls
+            release-evidence/sbom.spdx.json
+            release-evidence/release-manifest.json
+            release-evidence/release-metadata.json
+      - name: Attest software bill of materials
+        if: steps.state.outputs.reuse != 'true'
+        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3.0.0
+        with:
+          subject-path: |
+            release-evidence/source.tar
+            release-evidence/version.txt
+            release-evidence/release-source.json
+            release-evidence/SHA256SUMS
+{% if has_python %}            {% raw %}${{ steps.evidence.outputs.python_wheel }}{% endraw %}
+            {% raw %}${{ steps.evidence.outputs.python_sdist }}{% endraw %}
+{% endif %}{% if has_typescript %}            {% raw %}${{ steps.evidence.outputs.npm_package }}{% endraw %}
+{% endif %}            release-evidence/inventory.purls
+            release-evidence/release-manifest.json
+            release-evidence/release-metadata.json
+          sbom-path: release-evidence/sbom.spdx.json
+{% endif %}
+      - name: Create or require the mutable draft
+        if: steps.state.outputs.reuse != 'true'
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+          INITIAL_STATE: {% raw %}${{ steps.state.outputs.state }}{% endraw %}
+          RELEASE_TAG: {% raw %}${{ github.ref_name }}{% endraw %}
+        run: |
+          set -euo pipefail
+          if [[ "$INITIAL_STATE" == missing ]]; then
+            body="$RUNNER_TEMP/release-create-state.json"
+            errors="$RUNNER_TEMP/release-create-state.stderr"
+            set +e
+            status="$(
+              curl --location --silent --show-error \
+                --header "Accept: application/vnd.github+json" \
+                --header "Authorization: Bearer $GH_TOKEN" \
+                --header "X-GitHub-Api-Version: 2022-11-28" \
+                --output "$body" \
+                --write-out '%{http_code}' \
+                "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+                2>"$errors"
+            )"
+            curl_status=$?
+            set -e
+            test "$curl_status" -eq 0 || { cat "$errors" >&2; exit 1; }
+            if [[ "$status" != 404 ]]; then
+              cat "$body" >&2
+              echo "Release state changed before draft creation (HTTP $status)." >&2
+              exit 1
+            fi
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag --draft --generate-notes
+          elif [[ "$INITIAL_STATE" != draft ]]; then
+            echo "Only an absent Release or a mutable draft may be published." >&2
+            exit 1
+          fi
+          test "$(
+            gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --json isDraft,isImmutable \
+              --jq '[.isImmutable, .isDraft] | @tsv'
+          )" = $'false\ttrue'
+      - name: Upload and verify the mutable draft
+        if: steps.state.outputs.reuse != 'true'
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+          IDENTITY_FILE: {% raw %}${{ steps.identity.outputs.file }}{% endraw %}
+          RELEASE_TAG: {% raw %}${{ github.ref_name }}{% endraw %}
+          SOURCE_RUN_ID: {% raw %}${{ inputs.source_run_id }}{% endraw %}
+        run: |
+          set -euo pipefail
+{% if language != "ci" %}          root_purls=()
+          while IFS= read -r purl; do
+            root_purls+=(--root-purl "$purl")
+          done < <(jq -r '.root_purls[]' "$IDENTITY_FILE")
+{% endif %}
+          mapfile -t wheels < <(find release-evidence -maxdepth 1 -type f -name '*.whl' -print)
+          mapfile -t sdists < <(find release-evidence -maxdepth 1 -type f -name '*.tar.gz' -print)
+          mapfile -t npm_packages < <(find release-evidence -maxdepth 1 -type f -name '*.tgz' -print)
+          [[ "{% raw %}${#wheels[@]}{% endraw %}" -eq {% if has_python %}1{% else %}0{% endif %} ]]
+          [[ "{% raw %}${#sdists[@]}{% endraw %}" -eq {% if has_python %}1{% else %}0{% endif %} ]]
+          [[ "{% raw %}${#npm_packages[@]}{% endraw %}" -eq {% if has_typescript %}1{% else %}0{% endif %} ]]
+          release_files=(
+            release-evidence/source.tar
+            release-evidence/version.txt
+            release-evidence/release-source.json
+            release-evidence/SHA256SUMS
+          )
+{% if has_python %}          release_files+=("${wheels[0]}" "${sdists[0]}")
+{% endif %}{% if has_typescript %}          release_files+=("${npm_packages[0]}")
+{% endif %}          release_files+=(
+            release-evidence/inventory.purls
+            release-evidence/sbom.spdx.json
+            release-evidence/release-manifest.json
+            release-evidence/release-metadata.json
+          )
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isImmutable --jq '[.isImmutable, .isDraft] | @tsv')" = $'false\ttrue'
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            "${release_files[@]}" --clobber
+          draft_assets="$(mktemp -d "$RUNNER_TEMP/draft-release-assets.XXXXXX")"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --dir "$draft_assets"
+          mapfile -t draft_wheels < <(find "$draft_assets" -maxdepth 1 -type f -name '*.whl' -print)
+          mapfile -t draft_sdists < <(find "$draft_assets" -maxdepth 1 -type f -name '*.tar.gz' -print)
+          mapfile -t draft_npm < <(find "$draft_assets" -maxdepth 1 -type f -name '*.tgz' -print)
+          [[ "{% raw %}${#draft_wheels[@]}{% endraw %}" -eq {% if has_python %}1{% else %}0{% endif %} ]]
+          [[ "{% raw %}${#draft_sdists[@]}{% endraw %}" -eq {% if has_python %}1{% else %}0{% endif %} ]]
+          [[ "{% raw %}${#draft_npm[@]}{% endraw %}" -eq {% if has_typescript %}1{% else %}0{% endif %} ]]
+          draft_artifacts=(
+            --artifact "$draft_assets/source.tar"
+            --artifact "$draft_assets/version.txt"
+            --artifact "$draft_assets/release-source.json"
+            --artifact "$draft_assets/SHA256SUMS"
+          )
+{% if has_python %}          draft_artifacts+=(--artifact "${draft_wheels[0]}" --artifact "${draft_sdists[0]}")
+{% endif %}{% if has_typescript %}          draft_artifacts+=(--artifact "${draft_npm[0]}")
+{% endif %}          release_run="$(jq -r '.release_run // empty' "$draft_assets/release-metadata.json")"
+          [[ "$release_run" =~ ^[0-9]+$ ]]
+          python3 scripts/release_assets.py verify \
+            --tag "$RELEASE_TAG" \
+            --commit "$GITHUB_SHA" \
+            --version-file "$draft_assets/version.txt" \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$GITHUB_REPOSITORY_ID" \
+            --source-run "$SOURCE_RUN_ID" \
+            --release-run "$release_run" \
+            --runtime-kind {% if language == "ci" %}source{% else %}package{% endif %} \
+            --root-name "$(jq -r .root_name "$IDENTITY_FILE")" \
+{% if language != "ci" %}            "${root_purls[@]}" \
+{% endif %}            --inventory-file "$draft_assets/inventory.purls" \
+            "${draft_artifacts[@]}" \
+            --asset-root "$draft_assets" \
+            --sbom "$draft_assets/sbom.spdx.json" \
+            --manifest "$draft_assets/release-manifest.json" \
+            --provenance "$draft_assets/release-metadata.json"
+      - name: Publish the verified draft
+        if: steps.state.outputs.reuse != 'true'
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+          RELEASE_TAG: {% raw %}${{ github.ref_name }}{% endraw %}
+        run: gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+      - name: Verify published release trust chain
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+          IDENTITY_FILE: {% raw %}${{ steps.identity.outputs.file }}{% endraw %}
+          RELEASE_TAG: {% raw %}${{ github.ref_name }}{% endraw %}
+          SOURCE_RUN_ID: {% raw %}${{ inputs.source_run_id }}{% endraw %}
+        run: |
+          set -euo pipefail
+{% if language != "ci" %}          root_purls=()
+          while IFS= read -r purl; do
+            root_purls+=(--root-purl "$purl")
+          done < <(jq -r '.root_purls[]' "$IDENTITY_FILE")
+{% endif %}
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isImmutable,isDraft,isPrerelease --jq '[.isImmutable, .isDraft, .isPrerelease] | @tsv')" = $'true\tfalse\tfalse'
+          verified="$(mktemp -d "$RUNNER_TEMP/release-verify.XXXXXX")"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --dir "$verified"
+          mapfile -t wheels < <(find "$verified" -maxdepth 1 -type f -name '*.whl' -print)
+          mapfile -t sdists < <(find "$verified" -maxdepth 1 -type f -name '*.tar.gz' -print)
+          mapfile -t npm_packages < <(find "$verified" -maxdepth 1 -type f -name '*.tgz' -print)
+          [[ "{% raw %}${#wheels[@]}{% endraw %}" -eq {% if has_python %}1{% else %}0{% endif %} ]]
+          [[ "{% raw %}${#sdists[@]}{% endraw %}" -eq {% if has_python %}1{% else %}0{% endif %} ]]
+          [[ "{% raw %}${#npm_packages[@]}{% endraw %}" -eq {% if has_typescript %}1{% else %}0{% endif %} ]]
+          artifacts=(
+            --artifact "$verified/source.tar"
+            --artifact "$verified/version.txt"
+            --artifact "$verified/release-source.json"
+            --artifact "$verified/SHA256SUMS"
+          )
+{% if has_python %}          artifacts+=(--artifact "${wheels[0]}" --artifact "${sdists[0]}")
+{% endif %}{% if has_typescript %}          artifacts+=(--artifact "${npm_packages[0]}")
+{% endif %}          release_run="$(jq -r '.release_run // empty' "$verified/release-metadata.json")"
+          [[ "$release_run" =~ ^[0-9]+$ ]]
+          python3 scripts/release_assets.py verify \
+            --tag "$RELEASE_TAG" \
+            --commit "$GITHUB_SHA" \
+            --version-file "$verified/version.txt" \
+            --repository "$GITHUB_REPOSITORY" \
+            --repository-id "$GITHUB_REPOSITORY_ID" \
+            --source-run "$SOURCE_RUN_ID" \
+            --release-run "$release_run" \
+            --runtime-kind {% if language == "ci" %}source{% else %}package{% endif %} \
+            --root-name "$(jq -r .root_name "$IDENTITY_FILE")" \
+{% if language != "ci" %}            "${root_purls[@]}" \
+{% endif %}            --inventory-file "$verified/inventory.purls" \
+            "${artifacts[@]}" \
+            --asset-root "$verified" \
+            --sbom "$verified/sbom.spdx.json" \
+            --manifest "$verified/release-manifest.json" \
+            --provenance "$verified/release-metadata.json"
+{% if enable_attestations %}          while IFS= read -r -d '' asset; do
+            gh attestation verify "$asset" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow \
+                "$GITHUB_REPOSITORY/.github/workflows/{{ release_workflow }}" \
+              --source-digest "$GITHUB_SHA" \
+              --source-ref "$GITHUB_REF"
+          done < <(find "$verified" -maxdepth 1 -type f -print0)
+{% endif %}          gh release verify "$RELEASE_TAG" -R "$GITHUB_REPOSITORY"
+      - name: Keep a failed mutable release pending
+        if: {% raw %}${{ failure() }}{% endraw %}
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+          RELEASE_TAG: {% raw %}${{ github.ref_name }}{% endraw %}
+        run: |
+          set -euo pipefail
+          is_immutable="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isImmutable --jq .isImmutable)"
+          case "$is_immutable" in
+            false)
+              gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft
+              test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = true
+              ;;
+            true) ;;
+            *) echo "GitHub returned an invalid immutable release state." >&2; exit 1 ;;
+          esac
+{% if publish_container %}
+  container-build:
+    name: build and verify container
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: {% raw %}${{ github.ref }}{% endraw %}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - name: Build the release container once
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.18.0
+        with:
+          context: .
+          file: {{ containerfile_path }}
+          load: true
+          push: false
+          tags: csarc-release:{% raw %}${{ github.sha }}{% endraw %}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke-test the release container
+        env:
+          IMAGE: csarc-release:{% raw %}${{ github.sha }}{% endraw %}
+        run: |
+{{ container_smoke_command | indent(10, true) }}
+      - name: Scan the release container
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: csarc-release:{% raw %}${{ github.sha }}{% endraw %}
+          scan-type: image
+          scanners: vuln
+          vuln-type: os,library
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          exit-code: 1
+      - name: Prepare the container evidence directory
+        run: mkdir -p container-evidence
+      - name: Generate the container SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: csarc-release:{% raw %}${{ github.sha }}{% endraw %}
+          format: spdx-json
+          output-file: container-evidence/sbom.spdx.json
+          syft-version: v1.50.0
+          upload-artifact: false
+          upload-release-assets: false
+          dependency-snapshot: false
+      - name: Preserve the verified container bytes
+        run: |
+          docker save csarc-release:"$GITHUB_SHA" --output container-evidence/image.tar
+          (
+            cd container-evidence
+            shasum -a 256 image.tar sbom.spdx.json > SHA256SUMS
+          )
+      - name: Upload verified container evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: container-evidence
+          path: container-evidence/
+          if-no-files-found: error
+          retention-days: 30
+{% endif %}
+{% if has_python and publish_python %}
+  publish-python:
+    name: publish-python
+    if: github.ref_type == 'tag'
+    needs: publish-evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: {{ pypi_environment | tojson }}
+      url: https://pypi.org/p/{{ project_slug }}
+    permissions:
+      contents: read
+      id-token: write
+{% if enable_attestations %}
+      attestations: read
+{% endif %}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-evidence
+          path: release-evidence
+      - name: Select Python distributions
+        run: |
+          mkdir pypi-dist
+          find release-evidence -maxdepth 1 -type f \
+            \( -name '*.whl' -o -name '*.tar.gz' \) \
+            -exec cp {} pypi-dist/ \;
+          find pypi-dist -maxdepth 1 -type f -print -quit | grep -q .
+{% if enable_attestations %}
+      - name: Verify Python build provenance before publishing
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+        run: |
+          set -euo pipefail
+          mapfile -t packages < <(
+            find pypi-dist -maxdepth 1 -type f \
+              \( -name '*.whl' -o -name '*.tar.gz' \)
+          )
+          [[ "{% raw %}${#packages[@]}{% endraw %}" -gt 0 ]]
+          for package in "{% raw %}${packages[@]}{% endraw %}"; do
+            gh attestation verify "$package" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow \
+                "$GITHUB_REPOSITORY/.github/workflows/{{ release_workflow }}" \
+              --source-digest "$GITHUB_SHA" \
+              --source-ref "$GITHUB_REF"
+          done
+{% endif %}
+      - name: Publish to PyPI with OIDC
+        uses: pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26 # v1.14.2
+        with:
+          packages-dir: pypi-dist/
+{% endif %}
+{% if has_typescript and publish_npm %}
+  publish-npm:
+    name: publish-npm
+    if: github.ref_type == 'tag'
+    needs: publish-evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: {{ npm_environment | tojson }}
+      url: https://www.npmjs.com/package/{{ project_slug }}
+    permissions:
+      contents: read
+      id-token: write
+{% if enable_attestations %}
+      attestations: read
+{% endif %}
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-evidence
+          path: release-evidence
+{% if enable_attestations %}
+      - name: Verify npm build provenance before publishing
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+        run: |
+          set -euo pipefail
+          mapfile -t packages < <(
+            find release-evidence -maxdepth 1 -type f -name '*.tgz'
+          )
+          [[ "{% raw %}${#packages[@]}{% endraw %}" -eq 1 ]]
+          gh attestation verify "{% raw %}${packages[0]}{% endraw %}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow \
+              "$GITHUB_REPOSITORY/.github/workflows/{{ release_workflow }}" \
+            --source-digest "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF"
+{% endif %}
+      - name: Publish to npm with OIDC
+        run: |
+          mapfile -t packages < <(
+            find release-evidence -maxdepth 1 -type f -name '*.tgz'
+          )
+          [[ "{% raw %}${#packages[@]}{% endraw %}" -eq 1 ]] || {
+            echo "Expected exactly one npm package tarball." >&2
+            exit 1
+          }
+          expected_repo_url="https://github.com/${GITHUB_REPOSITORY}.git"
+          actual_repo_url="$(
+            tar -xOf "${packages[0]}" package/package.json |
+              node -e 'let input = ""; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => console.log(JSON.parse(input).repository?.url ?? ""));'
+          )"
+          [[ "$actual_repo_url" == "$expected_repo_url" ]] || {
+              echo "package.json repository.url must match ${expected_repo_url}." >&2
+              exit 1
+            }
+          npm publish "${packages[0]}" --provenance --access public
+{% endif %}
+{% if publish_container %}
+  publish-container:
+    name: publish verified container
+    if: github.ref_type == 'tag'
+    needs: [publish-evidence, container-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: {% raw %}${{ github.ref }}{% endraw %}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: container-evidence
+          path: container-evidence
+      - name: Verify and load the preserved container bytes
+        run: |
+          (
+            cd container-evidence
+            shasum -a 256 -c SHA256SUMS
+          )
+          docker load --input container-evidence/image.tar
+      - name: Publish immutable GHCR tags
+        id: publish
+        env:
+          GHCR_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag "csarc-release:$GITHUB_SHA" "$image:$GITHUB_REF_NAME"
+          docker tag "csarc-release:$GITHUB_SHA" "$image:sha-$GITHUB_SHA"
+          docker push "$image:$GITHUB_REF_NAME"
+          docker push "$image:sha-$GITHUB_SHA"
+          digest="sha256:$(docker buildx imagetools inspect "$image:$GITHUB_REF_NAME" --raw | shasum -a 256 | cut -d ' ' -f 1)"
+          commit_digest="sha256:$(docker buildx imagetools inspect "$image:sha-$GITHUB_SHA" --raw | shasum -a 256 | cut -d ' ' -f 1)"
+          test "$digest" = "$commit_digest"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Attest container build provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-name: {% raw %}${{ steps.publish.outputs.image }}{% endraw %}
+          subject-digest: {% raw %}${{ steps.publish.outputs.digest }}{% endraw %}
+          push-to-registry: true
+      - name: Attest container software bill of materials
+        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3.0.0
+        with:
+          subject-name: {% raw %}${{ steps.publish.outputs.image }}{% endraw %}
+          subject-digest: {% raw %}${{ steps.publish.outputs.digest }}{% endraw %}
+          sbom-path: container-evidence/sbom.spdx.json
+          push-to-registry: true
+      - name: Verify and smoke-test the published digest
+        env:
+          GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}
+          IMAGE: {% raw %}${{ steps.publish.outputs.image }}@${{ steps.publish.outputs.digest }}{% endraw %}
+        run: |
+          docker pull "$IMAGE"
+{{ container_smoke_command | indent(10, true) }}
+          gh attestation verify "oci://$IMAGE" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/{{ release_workflow }}" \
+            --source-digest "$GITHUB_SHA" \
+            --source-ref "$GITHUB_REF"
+      - name: Record publication failure
+        if: {% raw %}${{ failure() }}{% endraw %}
+        run: echo "Container publication failed; the verified build remains an Actions artifact and is not a successful release." >> "$GITHUB_STEP_SUMMARY"
+{% endif %}
+# This workflow creates release evidence; deployment remains project-specific.

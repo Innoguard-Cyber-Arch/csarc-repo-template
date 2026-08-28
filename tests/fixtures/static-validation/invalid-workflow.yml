@@ -1,0 +1,9 @@
+name: Invalid workflow fixture
+
+on:
+  push:
+
+jobs:
+  missing-runner:
+    steps:
+      - run: echo invalid

@@ -1,0 +1,196 @@
+name: Promotion post-merge
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: promotion-post-merge-${{ github.repository }}-${{ github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  pull-requests: read
+
+jobs:
+  verify:
+    name: verify promoted main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Resolve the merged pull request and its evidence
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          pull_requests="$(
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls?per_page=100"
+          )"
+          pull_request_count="$(
+            jq --arg sha "$GITHUB_SHA" \
+              '[.[][] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)] | length' \
+              <<<"$pull_requests"
+          )"
+          [[ "$pull_request_count" == "1" ]] || {
+            echo "Main commit must have exactly one merged pull request with the same merge SHA; found $pull_request_count." >&2
+            exit 1
+          }
+          pull_request="$(
+            jq -c --arg sha "$GITHUB_SHA" \
+              '[.[][] | select(.merged_at != null and .base.ref == "main" and .merge_commit_sha == $sha)][0]' \
+              <<<"$pull_requests"
+          )"
+          head_ref="$(jq -r .head.ref <<<"$pull_request")"
+          if [[ "$head_ref" == release-please--* ]]; then
+            pr_number="$(jq -r .number <<<"$pull_request")"
+            head_sha="$(jq -r '.head.sha // empty' <<<"$pull_request")"
+            read -r merge_sha base_sha extra_parent \
+              < <(git rev-list --parents -n 1 "$GITHUB_SHA")
+            [[ "$merge_sha" == "$GITHUB_SHA" \
+              && "$base_sha" =~ ^[0-9a-f]{40}$ \
+              && -z "${extra_parent:-}" \
+              && "$base_sha" == "$PUSH_BEFORE" ]] || {
+              echo "Release follow-up must have the push before SHA as its only parent." >&2
+              exit 1
+            }
+            repository_id="$(gh api "repos/$GITHUB_REPOSITORY" --jq .id)"
+            [[ "$repository_id" =~ ^[0-9]+$ ]] || {
+              echo "Repository identity is unavailable." >&2
+              exit 1
+            }
+            rules="$(gh api "repos/$GITHUB_REPOSITORY/rules/branches/main")" || {
+              echo "Cannot verify the required release-follow-up workflow." >&2
+              exit 1
+            }
+            jq -e --argjson repository_id "$repository_id" '
+              any(
+                .[];
+                .type == "workflows" and
+                any(
+                  .parameters.workflows[]?;
+                  .path == ".github/workflows/release-follow-up-policy.yml" and
+                  .ref == "refs/heads/main" and
+                  .repository_id == $repository_id
+                )
+              )
+            ' <<<"$rules" >/dev/null || {
+              echo "Release follow-up was not protected by the exact trusted workflow." >&2
+              exit 1
+            }
+            expected_file_count="$(
+              gh api "repos/$GITHUB_REPOSITORY/pulls/$pr_number" --jq .changed_files
+            )"
+            [[ "$expected_file_count" =~ ^[0-9]+$ ]] || {
+              echo "Release follow-up changed-file count is unavailable." >&2
+              exit 1
+            }
+            files_json="$RUNNER_TEMP/release-follow-up-files.json"
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/pulls/$pr_number/files?per_page=100" \
+              > "$files_json"
+            actual_file_count="$(jq '[.[][]] | length' "$files_json")"
+            [[ "$actual_file_count" == "$expected_file_count" ]] || {
+              echo "Release follow-up file list is incomplete: expected $expected_file_count, received $actual_file_count." >&2
+              exit 1
+            }
+            jq -r '.[][] | .filename, (.previous_filename // empty)' \
+              "$files_json" > "$RUNNER_TEMP/release-follow-up-files"
+            commits_json="$RUNNER_TEMP/release-follow-up-commits.json"
+            gh api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/pulls/$pr_number/commits?per_page=100" \
+              > "$commits_json"
+            trusted_root="$(mktemp -d "$RUNNER_TEMP/release-follow-up-policy.XXXXXX")"
+            git archive "$base_sha" | tar -x -C "$trusted_root"
+            actor="$(jq -r '.user.login // empty' <<<"$pull_request")"
+            actor_permission=""
+            if [[ "$actor" != "github-actions[bot]" ]]; then
+              encoded_actor="$(jq -rn --arg value "$actor" '$value | @uri')"
+              actor_permission="$(
+                gh api "repos/$GITHUB_REPOSITORY/collaborators/$encoded_actor/permission" \
+                  --jq '.permission // empty'
+              )"
+            fi
+            python3 "$trusted_root/scripts/release_policy.py" verify-release-follow-up \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$head_ref" \
+              --head-repo "$(jq -r '.head.repo.full_name // empty' <<<"$pull_request")" \
+              --head-sha "$head_sha" \
+              --actor "$actor" \
+              --actor-permission "$actor_permission" \
+              --changed-files "$RUNNER_TEMP/release-follow-up-files" \
+              --commits "$commits_json" \
+              --root "$trusted_root"
+            echo "skip_verification=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          labels="$(jq -r '[.labels[].name] | join(",")' <<<"$pull_request")"
+          branch_strategy=main
+          if [[ "$GITHUB_REPOSITORY" == "Innoguard-Cyber-Arch/csarc-repo-template" ]]; then
+            branch_strategy=delivery
+          elif [[ -f .csarc/profile.json ]]; then
+            branch_strategy="$(jq -r '.branch_strategy // "main"' .csarc/profile.json)"
+          fi
+          if [[ "$branch_strategy" == "main" && ",$labels," != *,release-recovery,* ]]; then
+            echo "skip_verification=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$head_ref" != "dev" && "$head_ref" != dev/* && "$head_ref" != "promote/next" && ! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$ && ",$labels," != *,hotfix,* && ",$labels," != *,release-recovery,* ]]; then
+            echo "Main commit did not come from a promotion, hotfix, or release recovery." >&2
+            exit 1
+          fi
+          pr_number="$(jq -r .number <<<"$pull_request")"
+          head_sha="$(jq -r .head.sha <<<"$pull_request")"
+          run_id="$(
+            gh run list --workflow promotion.yml --event pull_request \
+              --commit "$head_sha" --status success --limit 20 \
+              --json databaseId --jq '.[0].databaseId // empty'
+          )"
+          [[ -n "$run_id" ]] || {
+            echo "No successful promotion workflow was found for the merged head." >&2
+            exit 1
+          }
+          mkdir promotion-proof
+          gh run download "$run_id" \
+            --name "promotion-evidence-${pr_number}-${head_sha}" \
+            --dir promotion-proof
+          candidate_sha="$(jq -r .candidate_sha promotion-proof/promotion-evidence.json)"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$candidate_sha/check-runs" \
+            > candidate-checks.json
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+      - name: Verify main tree identity and full CI result
+        if: ${{ steps.resolve.outputs.skip_verification != 'true' }}
+        env:
+          CSARC_SYNC_TOKEN: ${{ secrets.CSARC_SYNC_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+        run: >-
+          python3 scripts/promotion_gate.py verify-main
+          --repo "$GITHUB_REPOSITORY"
+          --pr-number "$PR_NUMBER"
+          --head-sha "$HEAD_SHA"
+          --main-sha "$GITHUB_SHA"
+          --evidence promotion-proof/promotion-evidence.json
+          --checks candidate-checks.json
+          --output main-promotion-evidence.json
+      - name: Upload verified main evidence
+        if: ${{ steps.resolve.outputs.skip_verification != 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: main-promotion-evidence-${{ github.sha }}
+          path: main-promotion-evidence.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Record non-promotion main strategy or release follow-up
+        if: ${{ steps.resolve.outputs.skip_verification == 'true' }}
+        run: echo "This main commit does not require delivery promotion evidence."

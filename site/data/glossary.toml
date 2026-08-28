@@ -44,7 +44,7 @@ title_en = "Work and review"
   term_en = "Decision record"
   summary_zh_tw = "保存已確認的架構、工具、安全與相容性取捨。"
   summary_en = "The durable record of confirmed architecture, tooling, security, and compatibility trade-offs."
-  path = "docs/decisions/README.md"
+  path = "docs/adr/README.md"
 
 [[groups]]
 key = "verification"
@@ -73,7 +73,7 @@ title_en = "Verification and capability"
   term_en = "Platform capability state"
   summary_zh_tw = "以 allowed、blocked 或 unknown 記錄實測能力，不從方案名稱猜測。"
   summary_en = "Observed capability recorded as allowed, blocked, or unknown instead of inferred from plan names."
-  path = "docs/decisions/portable-decision-site.md"
+  path = "docs/adr/portable-decision-site.md"
 
   [[groups.terms]]
   key = "portable-artifact"
@@ -81,7 +81,7 @@ title_en = "Verification and capability"
   term_en = "Portable artifact"
   summary_zh_tw = "沒有 runtime 外部資產、可下載並以 file:// 離線使用的單檔交付物。"
   summary_en = "A single-file deliverable with no external runtime assets that remains usable through file://."
-  path = "docs/decisions/portable-decision-site.md"
+  path = "docs/adr/portable-decision-site.md"
 
 [[groups]]
 key = "delivery"

@@ -7,14 +7,14 @@
 - [Issue / Issue 工作單](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#working-loop): A unit of work that defines one observable outcome, its scope, and acceptance criteria. / 界定一個可驗收結果、範圍與完成條件的工作單位。
 - [Story Milestone / Story Milestone](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/milestone-description.md): An independently verifiable multi-Issue story, created only for an end-to-end outcome. / 只有端到端成果需要時才建立、可獨立驗證的多 Issue story。
 - [Pull request / Pull request](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/.github/pull_request_template.md): The integration boundary that preserves intent, verification evidence, and human review. / 保存變更意圖、驗證證據與人類審查的整合邊界。
-- [Decision record / 決策記錄](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/decisions/README.md): The durable record of confirmed architecture, tooling, security, and compatibility trade-offs. / 保存已確認的架構、工具、安全與相容性取捨。
+- [Decision record / 決策記錄](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/README.md): The durable record of confirmed architecture, tooling, security, and compatibility trade-offs. / 保存已確認的架構、工具、安全與相容性取捨。
 
 ## Verification and capability / 驗證與能力
 
 - [Fast checks / 快速驗證](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md): Short feedback checks selected by change risk; they do not replace full pre-delivery verification. / 依變更風險執行的短回饋檢查，不取代交付前完整驗證。
 - [Full verification / 完整驗證](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#commands): The repository-wide pre-delivery contract for code, policy, and artifacts. / 交付前執行的 repository 級契約，統一檢查程式、政策與產物。
-- [Platform capability state / 平台能力狀態](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/decisions/portable-decision-site.md): Observed capability recorded as allowed, blocked, or unknown instead of inferred from plan names. / 以 allowed、blocked 或 unknown 記錄實測能力，不從方案名稱猜測。
-- [Portable artifact / 可攜式產物](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/decisions/portable-decision-site.md): A single-file deliverable with no external runtime assets that remains usable through file://. / 沒有 runtime 外部資產、可下載並以 file:// 離線使用的單檔交付物。
+- [Platform capability state / 平台能力狀態](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md): Observed capability recorded as allowed, blocked, or unknown instead of inferred from plan names. / 以 allowed、blocked 或 unknown 記錄實測能力，不從方案名稱猜測。
+- [Portable artifact / 可攜式產物](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md): A single-file deliverable with no external runtime assets that remains usable through file://. / 沒有 runtime 外部資產、可下載並以 file:// 離線使用的單檔交付物。
 
 ## Integration and delivery / 整合與交付
 

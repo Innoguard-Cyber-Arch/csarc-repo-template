@@ -2042,13 +2042,13 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header class="package-hero">
+      <header class="package-hero">
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
         <h1><code>csarc-repo-template</code></h1>
         <p class="subtitle">Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。</p>
         <p class="subtitle">本頁是技術決策附錄，服務對象是想理解「為什麼這樣設計」的人；一般使用者的快速上手與導入指令請見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a>。</p>
         <div class="package-badges" aria-label="套件狀態">
-          <span class="package-badge beta">v0.11.0</span><!-- x-release-please-version -->
+          <span class="package-badge beta">v0.12.2</span><!-- x-release-please-version -->
           <span class="package-badge beta">beta</span>
           <span class="package-badge python">CI-only／Python／TypeScript／兩者</span>
           <span class="package-badge">delivery 分層／main／dev</span>
@@ -2059,23 +2059,23 @@ html[data-detail-level="simple"] .detail-panel {
       </header>
       <div class="language-contract" aria-label="程式語言 profile 決策">
         <p class="language-card"><strong>建立時必選｜四種組合</strong>只要 CI/CD 基線、Python、TypeScript，或兩者都有；宣告會寫入 repo 並由檔案自動核對。</p>
-        <p class="language-card shared"><strong>四種組合共用</strong>可選 Story Milestone、Issue／spec、分層 CI、promotion evidence、安全檢查、單一 SemVer 與 Copier 更新；建立時可選 delivery、main-only 或單一 dev。</p>
+        <p class="language-card shared"><strong>四種組合共用</strong>SDD Feature＋Task／Bug subissues、有期限的 delivery Milestone、分層 CI、promotion evidence、安全檢查、單一 SemVer 與 Copier 更新；建立時可選 delivery、main-only 或單一 dev。</p>
         <p class="language-card future"><strong>版本基線</strong>Python 3.14；TypeScript 採 Node 24 Active LTS。Go／Rust 仍是 future，不先建立空設定。</p>
       </div>
       <div class="product-start">
-        <div class="product-scope" aria-label="公版提供的能力">
+        <section class="product-scope" aria-label="公版提供的能力">
           <h3>公版會替 repo 準備</h3>
-          <p class="scope-row"><strong>規劃與 AI 契約</strong><span>可選 Story Milestone → 1..N Issues → 各自 PR；spec 可同步 Issue 或 Story</span></p>
+          <p class="scope-row"><strong>規劃與 AI 契約</strong><span>SDD → Feature parent → Task／Bug subissues → 各自 PR；Milestone 只管理有期限的交付</span></p>
           <p class="scope-row"><strong>驗證與合併</strong><span><code>./scripts/verify</code>＋分層 CI＋PR；並行 Milestone 各自整合，promotion 才進 main</span></p>
-          <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件</span></p>
+          <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件；已有 Containerfile 可選配容器驗證／GHCR</span></p>
           <p class="scope-row"><strong>可持續同步</strong><span>公版更新成為可審查差異，不會直接覆蓋產品程式</span></p>
-        </div>
-        <div class="start-paths" aria-label="三種導入方式">
+        </section>
+        <section class="start-paths" aria-label="三種導入方式">
           <h3>依你現在的 repo 狀態開始</h3>
           <article class="start-path"><h3>新 repo</h3><p>選語言與分支模式；需要端到端 story 時先建 Milestone，再由 Issue 進 PR。</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">建立指令</button></article>
           <article class="start-path"><h3>既有 repo</h3><p>在導入分支保留舊債邊界，逐項解決衝突與門禁。</p><button class="setup-trigger" type="button" data-setup="existing" aria-expanded="false">導入指令</button></article>
           <article class="start-path"><h3>已使用公版</h3><p>指定已審查的公版 SHA，只審查本次版本差異。</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">更新指令</button></article>
-        </div>
+        </section>
       </div>
       <div class="prerequisite-line product-prerequisites">
         <p><strong>開始前必裝</strong>Git、GitHub CLI、uv；TypeScript／混合案另需 Node 24+、pnpm 11。純本機驗證不用 token；套用 GitHub 設定與端到端測試前才登入 <code>gh</code>。</p>
@@ -2104,14 +2104,14 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>共用基線</td>
-					<td>Issue／spec、分層 CI、promotion evidence、安全檢查、單一 SemVer、Copier 更新</td>
+					<td>SDD Feature＋Task／Bug subissues、有期限的 delivery Milestone、分層 CI、promotion evidence、安全檢查、單一 SemVer、Copier 更新</td>
 			</tr>
 	</tbody>
 </table>
 <aside class="technical-detail" data-content-key="capability-boundary">
   <h3>真正的導入入口與能力邊界</h3>
   <ul>
-<li><strong>新 repo：</strong> 選 profile 與分支模式，需要端到端 story 時建立 Milestone，再由 1..N Issues 各自進 PR。</li>
+<li><strong>新 repo：</strong> 選 profile 與分支模式；以 SDD Feature 保存 story，Task／Bug subissues 各自進 PR，Milestone 只管理有期限的交付。</li>
 <li><strong>既有 repo：</strong> 在導入分支先做 dry-run，保留既有產品內容與技術債邊界，再逐項解決衝突與門禁。</li>
 <li><strong>已使用公版：</strong> 指定已審查的公版 SHA 執行 Copier update，只審查這次版本差異。</li>
 <li><strong>開始前必裝：</strong> Git、GitHub CLI、uv；TypeScript／混合案另需 Node 24+ 與 pnpm 11。純本機驗證不需要 token。</li>
@@ -2187,7 +2187,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <h2>一張圖看懂：<span class="accent">程式怎麼從需求走到可交付版本</span></h2>
         <p class="subtitle">CI 是 PR 上的自動檢查與回饋；CD 是合併後建立可追溯版本與成品。01–06 跟著工作走，07–10 在底層維持整套流程。</p>
       </header>
@@ -2364,7 +2364,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <h2>模板會把這些<span class="accent">工程基礎設施放進你的 repo</span></h2>
         <p class="subtitle">先選 CI/CD-only、Python、TypeScript 或兩者；共用 GitHub 層不變，只有所選語言的工具與產品目錄會出現。</p>
       </header>
@@ -2524,21 +2524,21 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
-        <h2>步驟 1｜<span class="accent">先寫清楚要解決什麼</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>可選 Story Milestone 管完整成果，1..N Issues 管可獨立工作，PR 只交付其 Issue；不是每張 Issue 都需要 Milestone。</p>
+      <header>
+        <h2>步驟 1｜<span class="accent">以 durable project memory 說清楚現況與原因</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>SDD 記錄目前契約、Feature parent 保存 story，Task／Bug subissues 與 PR 保留交付時間線；有期限時才建立 Milestone。</p>
       </header>
       <p class="context-line"><strong>寫作原則｜</strong>Issue 標題用英文摘要成果；內文再以中文交代問題與完成條件，其餘選填寫進補充。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不讓每張工作單都走過重流程</h3><ul><li><strong>只寫 Issue 標題：</strong>缺成果與驗證，人和 AI 只能猜</li><li><strong>每張都跑 Spec Kit：</strong>小工作成本過高</li><li><strong>只留在聊天：</strong>無版本紀錄，不能在 PR 審查</li></ul></article>
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
-          <details class="package-disclosure"><summary><span>預設 <span class="tech-name">spec → Issue</span>；明確 story 才同步 Milestone</span></summary><div class="package-health"><p><strong>目前：</strong><code>docs/specs/</code> 經 CI 驗證；預設 idempotently 建立或更新單一 Issue，只有 frontmatter 明列 <code>tracking: story</code> 才建立或更新 Milestone，不自動拆 child Issues。</p><p><strong>生命週期：</strong>最後一張 open Issue 關閉且所有 acceptance checkbox 已勾選時才關閉 Milestone；Issue reopen、open Issue 掛入或 criterion 取消勾選時重開。每次都讀最新 API 狀態並以 Milestone number 序列化。</p><p><strong>Spec Kit：</strong><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">github/spec-kit</a>｜MIT｜公開、未封存、持續維護。</p></div></details>
-          <p class="recommendation-copy"><strong>Story：</strong>Milestone description 以 Problem、具角色與價值的 Outcome、Acceptance criteria、Plan、Out of scope、Verification 與 References 說清楚成果；英文 H2 是穩定結構，內文使用團隊慣用語言。只掛直接推進成果的 Issues，不重複掛 PR。<br><strong>Issue：</strong>12–80 個英文 ASCII 字元、至少三個詞；建立前以 2–4 個問題或技術詞限量搜尋 open／closed Issues，閱讀候選內文、comments 與 linked PR。能互動時先向使用者摘要；已獲准直接建立時，在補充記錄舊決策是沿用、取代或駁回及理由，沒有候選則記錄搜尋範圍。<br><strong>既有 repo：</strong>adopt／update dry-run 分頁列出新版、可安全升級與人工審查項目；確認後只遷移舊 CSARC 結構，不靠標題或 label 重分群。</p>
+          <details class="package-disclosure"><summary><span>主流目錄：<span class="tech-name">docs/specs/（SDD）＋ docs/adr/（ADR）</span></span></summary><div class="package-health"><p><strong>目前：</strong><code>docs/specs/</code> 保存 Spec-Driven Development（SDD）的 living specifications 並經 CI 驗證；<code>tracking: none</code> 表示不需要工作追蹤，預設同步 Task Issue，<code>tracking: story</code> 同步 Feature parent。</p><p><strong>歷史：</strong><code>docs/adr/</code> 保存 Architecture Decision Records（ADR）的背景、選項、取捨與取代關係；Issue／PR／commit 保留完整時間線。</p><p><strong>行為與證據：</strong>Test-Driven Development（TDD）產生的自動化測試是可執行回歸；test 與 implementation 留在同一 leaf Issue／PR，不把 red／green／refactor 拆成管理工作。Behavior-Driven Development（BDD）的 Given／When／Then 情境只在跨角色行為需要澄清時使用。</p></div></details>
+          <p class="recommendation-copy"><strong>Durable project memory：</strong><code>docs/README.md</code> 是人與 agent 的閱讀入口；SDD 回答「現在保證什麼」，ADR 回答「為何這樣選」，測試與 CI 回答「如何證明」，Issues／PRs 回答「何時由誰改變」。<br><strong>Story：</strong>Feature parent 保存 what／why／acceptance；可獨立負責與驗證的 Task／Bug 才拆 subissue，dependency 只表達真實阻塞。<br><strong>Delivery：</strong>Milestone 必須有 due date，掛 leaf Issues 與其 PR；Feature parent 不掛入。Projects 預設關閉。<br><strong>Issue：</strong>建立前 bounded search open／closed Issues，閱讀候選內文、comments 與 linked PR，記錄舊決策是沿用、取代或駁回及理由。<br><strong>既有 repo：</strong>adopt／update dry-run 先預覽，確認後只遷移舊 CSARC 結構。</p>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>決策前置：</strong><code>AGENTS.md</code> 要求先查 open Milestones，再以 bounded search 搜尋 open／closed Issues 並揭露沿用或推翻理由</li><li><strong>Story 結構：</strong><code>docs/milestone-description.md</code>；References 保留可稽核決策，Plan 連結 1..N Issues</li><li><strong>Spec 同步：</strong><code>scripts/spec_to_issue.py</code>；預設 Issue，<code>tracking: story</code> 才同步 Milestone</li><li><strong>導入遷移：</strong><code>csarc adopt/update --dry-run</code> 預覽 description upgrade，確認後才寫入</li><li><strong>自動收尾：</strong><code>milestone-lifecycle.yml</code> 依最新 open issue 數關閉或重開</li></ul></aside>
-      <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/managing-issue-types-in-an-organization" target="_blank" rel="noreferrer">GitHub issue types</a>; <a href="https://github.com/github/spec-kit/blob/main/templates/spec-template.md" target="_blank" rel="noreferrer">Spec Kit template</a>; <a href="https://github.com/kubernetes/enhancements/blob/master/keps/NNNN-kep-template/README.md" target="_blank" rel="noreferrer">Kubernetes KEP</a>; <a href="https://github.com/rust-lang/rfcs/blob/master/0000-template.md" target="_blank" rel="noreferrer">Rust RFC</a>; <a href="https://github.com/grafana/grafana/blob/main/.github/ISSUE_TEMPLATE/1-feature_requests.md" target="_blank" rel="noreferrer">Grafana feature request</a>. Accessed August 24, 2026.</p>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>記憶入口：</strong><code>docs/README.md</code>；<code>AGENTS.md</code> 要求人與 agent 先讀 current SDD 與相關 ADR</li><li><strong>SDD：</strong><code>docs/specs/</code>；<code>tracking: none</code>、<code>issue</code> 或 <code>story</code></li><li><strong>Hierarchy：</strong>native Feature parent＋Task／Bug subissues；work branch 用 <code>gh issue develop</code></li><li><strong>Delivery：</strong><code>docs/milestone-description.md</code>；真實 due date＋leaf Issues／PRs</li><li><strong>ADR：</strong><code>docs/adr/</code>；保留 Accepted、Superseded 與 Rejected 的歷史</li><li><strong>TDD／BDD：</strong>測試與 CI 保存可執行證據；必要的 Given／When／Then 情境放在 SDD</li></ul></aside>
+      <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues" target="_blank" rel="noreferrer">GitHub sub-issues</a>; <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/creating-issue-dependencies" target="_blank" rel="noreferrer">GitHub issue dependencies</a>; <a href="https://github.com/github/spec-kit/blob/main/templates/spec-template.md" target="_blank" rel="noreferrer">Spec Kit template</a>; <a href="https://github.com/grafana/grafana/issues/126204" target="_blank" rel="noreferrer">Grafana epic with subissues</a>; <a href="https://google.github.io/eng-practices/review/developer/small-cls.html" target="_blank" rel="noreferrer">Google small CLs</a>. Accessed August 25, 2026.</p>
 </div>
 
 
@@ -2629,7 +2629,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <h2>步驟 2｜<span class="accent">先定 AI 契約，再開始實作</span></h2>
         <p class="subtitle"><strong>基本導入。</strong>AI 先讀工作單、repo 與 <code>AGENTS.md</code>，再提出做法、修改、測試；人保留方向、風險與合併責任。</p>
       </header>
@@ -2639,7 +2639,7 @@ html[data-detail-level="simple"] .detail-panel {
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
           <details class="package-disclosure"><summary><span><span class="tech-name">標準 AGENTS.md＋就近覆寫</span></span></summary><div class="package-health"><p><a href="https://github.com/agentsmd/agents.md" target="_blank" rel="noreferrer">agentsmd/agents.md</a>｜MIT｜公開且持續維護；格式就是一般 Markdown。</p><p><strong>熱門實例：</strong>VS Code 根檔 5 行、uv 25 行、Kubernetes 36 行；Next.js 558 行反映大型 monorepo，而不是每案都該追求的長度。</p><p><strong>官方行為：</strong>Codex 會由根目錄往工作目錄合併指令，越靠近目前檔案的規則優先。</p><p class="reference">Ref. OpenAI Docs; agentsmd/agents.md repository.</p></div></details>
-          <p class="recommendation-copy"><strong>工作契約：</strong>六段涵蓋範圍、工作迴圈、指令、修改界線、安全與審查；依語言只列真正存在的指令，根檔最多 200 行。<br><strong>平行隔離：</strong>每項可寫任務使用自己的 branch 與 Git worktree；只平行處理互不依賴的範圍。原生 Git 是基線，Worktrunk 是選用的本機輔助，不進入生成 repo 相依。合併後由建立者執行 <code>scripts/cleanup-worktrees</code>，只回收 GitHub 已驗證合併且乾淨的 worktree。<br><strong>人類負責：</strong>確認需求與技術方向、判斷風險、審查差異；唯一的 CI 例外是 human 已確認 Actions 免費額度耗盡時，agent 對 PR HEAD 完整本機驗證、留存 SHA-bound 聲明並取得一次性合併授權。Ruleset、CODEOWNERS 與供應鏈控制不因此失效。</p>
+          <p class="recommendation-copy"><strong>工作契約：</strong>六段涵蓋範圍、工作迴圈、指令、修改界線、安全與審查；依語言只列真正存在的指令，根檔最多 200 行。<br><strong>平行隔離：</strong>每項可寫任務使用自己的 branch 與 Git worktree；只平行處理互不依賴的範圍。原生 Git 是基線，Worktrunk 是選用的本機輔助，不進入生成 repo 相依。合併後由建立者執行 <code>scripts/cleanup-worktrees</code>，只回收 GitHub 已驗證合併且乾淨的 worktree。<br><strong>人類負責：</strong>確認需求與技術方向、判斷風險、審查差異；唯一的 CI 例外是 human 已確認 Actions 免費額度耗盡時，agent 對 PR HEAD 完整本機驗證、留存 SHA-bound 聲明並取得一次性合併授權。Promotion 到 main 還須保存 candidate tree 並核對合併後 tree identity，fallback 證據不能用於 release；Ruleset、CODEOWNERS 與供應鏈控制不因此失效。</p>
         </article>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>人類入口與 AI 工作契約：</strong><code>README.md</code> 說明 worktree 與 CI/CD 邊界；<code>AGENTS.md</code>＋<code>CLAUDE.md</code> 規範每項任務的隔離與安全清理</li><li><strong>實際驗證：</strong>生成 repo 與其 CI 執行 <code>scripts/verify</code>；只有中央模板 repo 執行、不下發的 <code>scripts/verify-template.sh</code> 負責建立／導入／更新 fixture</li><li><strong>唯讀權限、人類核准與指定審查者：</strong><code>policies/actions.json</code>＋<code>policies/rulesets.json</code>＋<code>CODEOWNERS</code></li></ul></aside>
@@ -2729,9 +2729,9 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <h2>步驟 3｜<span class="accent">本機與 CI 用同一把尺</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>本機保留完整驗證入口；一般 Issue PR 跑單一 runtime 的 change-aware checks，promotion／hotfix 才跑完整矩陣。</p>
+        <p class="subtitle"><strong>基本導入。</strong>本機保留完整驗證入口；一般 Issue PR 跑單一 runtime 的 change-aware checks，promotion／hotfix 才跑完整矩陣。Full tier 只做一次 canonical 完整驗證，Python 相容性與混合 TypeScript 各自留下不重複的 runtime 證據。</p>
       </header>
       <p class="context-line"><strong>問題與目的｜</strong>若每個人和 AI 都用不同指令，結果就無法重現；統一成一個驗證入口，問題可在送出 PR 前發現。</p>
       <div class="decision-strip">
@@ -2742,7 +2742,7 @@ html[data-detail-level="simple"] .detail-panel {
           <p class="recommendation-copy"><strong>Fast：</strong>每張一般 PR 跑 secret scan、格式、lint、型別、單元測試與必要 template smoke；docs-only 不啟動語言或生成矩陣。<br><strong>Full：</strong><code>dev/* → main</code> promotion、hotfix、merge queue 與手動 dispatch 才執行全部 runtime、profiles、Copier update、release 與安全回歸。<br><strong>條件式供應鏈：</strong>workflow 變更加跑 Zizmor，相依變更加跑 OSV，治理宣告變更加跑 remote governance；三者另有週期排程。未知路徑 fail closed 到 full。<br><strong>穩定門禁：</strong><code>verify</code> aggregate 每次都回報，不適用的重型 job 明確視為 skipped，避免 required check 永久 Pending；summary／artifact 記錄 tier、原因、scope 與 duration。完整契約見 <code>docs/ci-policy.md</code>。</p>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>分層規則：</strong><code>scripts/ci_tier.py</code>＋<code>scripts/verify-fast</code>＋<code>docs/ci-policy.md</code></li><li><strong>完整入口：</strong><code>scripts/verify</code>；公版為 <code>scripts/verify-template.sh</code></li><li><strong>常駐門禁：</strong><code>title</code>＋<code>delivery-sync</code>＋<code>verify</code>＋<code>promotion</code>；OSV、Zizmor 與 remote governance 由 job-level 條件或週期排程執行</li><li><strong>額度耗盡：</strong>只有帳務可見的 human 確認免費分鐘歸零，且 job 未執行任何 step，才可依 <code>AGENTS.md</code> 對精確 PR SHA 產生一次性本機驗證聲明；付款、budget、平台、設定與測試失敗都不得套用</li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>分層規則：</strong><code>scripts/ci_tier.py</code>＋<code>scripts/verify-fast</code>＋<code>docs/ci-policy.md</code></li><li><strong>完整入口：</strong><code>scripts/verify</code>；公版為 <code>scripts/verify-template.sh</code></li><li><strong>常駐門禁：</strong><code>title</code>＋<code>verify</code>＋<code>promotion</code>；delivery sync 併入 <code>title</code> policy，一般 PR 的核心流程最多啟動 policy、fast、aggregate 三個 runner，OSV、Zizmor、remote governance 與選配容器驗證由 job-level 條件或週期排程執行</li><li><strong>額度耗盡：</strong>zero-step billing block 被機械式確認、且 job 未執行任何 step 時，一般 PR 只需本機驗證通過即可留言合併；promotion 另綁定 candidate/main tree、維持雙方確認，且不可發布</li></ul></aside>
 </div>
 
 
@@ -2850,7 +2850,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <h2>步驟 4｜<span class="accent">小 PR 通過證據再合併</span></h2>
         <p class="subtitle"><strong>基本導入。</strong>CI 就是可攜式 integration layer；Issue 先進 delivery branch，完成 Milestone 或固定批次時才 promotion 到 main。</p>
       </header>
@@ -2859,7 +2859,7 @@ html[data-detail-level="simple"] .detail-panel {
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把所有變更都當成一種交付</h3><ul><li><strong>每張 PR 進 main：</strong>一般變更也重跑完整矩陣並推動發版</li><li><strong>單一永久 dev：</strong>多個 Milestone 互相等待，候選內容難以隔離</li><li><strong>每張孤立 Issue 建 Milestone：</strong>失去 Story 的意義，只是在規避批次</li></ul></article>
         <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>不同 Issue 進對應 delivery branch，main 再受審查地回流</h3><p><strong>Milestone：</strong><code>type/&lt;Issue&gt;-*</code> PR 進 <code>dev/m&lt;Milestone&gt;-*</code>；可同時有多條，完成後各自跑 full＋canary promotion。<br><strong>孤立工作：</strong>一般 Issue 進 <code>dev/next</code>，固定 release window 批次 promotion；確實要獨立 soak／canary 才使用一次性的 <code>dev/i&lt;Issue&gt;-*</code>，完成後刪除。只有 standalone <code>fix/*</code>＋<code>hotfix</code> 可直接 main。<br><strong>同步：</strong><code>main</code> 前進後，每條 active delivery branch 的 owner 以 <code>sync/main-to-*</code> PR 納入結果；blocked／unknown 自動寫入能力回到同一套手動 PR，不直接 push 或改寫歷史。</p></article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>選 delivery、main-only 或 dev：</strong><code>copier.yml</code> → <code>branch_strategy</code>，結果存入 <code>.csarc/profile.json</code></li><li><strong>核對 route、Issue、branch 編號、標題與同步：</strong><code>pr-policy.yml</code>＋<code>delivery-sync.yml</code>＋<code>promotion.yml</code></li><li><strong>完整操作與遷移：</strong><code>docs/ci-policy.md</code> 含孤立 Issue 決策樹、雙 Milestone walkthrough、promotion checklist、回復與降級</li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>選 delivery、main-only 或 dev：</strong><code>copier.yml</code> → <code>branch_strategy</code>，結果存入 <code>.csarc/profile.json</code></li><li><strong>核對 route、Issue、branch 編號、標題與同步：</strong><code>pr-policy.yml</code>＋<code>delivery-maintenance.yml</code>＋<code>promotion.yml</code></li><li><strong>完整操作與遷移：</strong><code>docs/ci-policy.md</code> 含孤立 Issue 決策樹、雙 Milestone walkthrough、promotion checklist、回復與降級</li></ul></aside>
       <p class="reference">Ref. <a href="https://github.com/home-assistant/core/blob/dev/.github/workflows/ci.yaml" target="_blank" rel="noreferrer">Home Assistant CI</a>; <a href="https://github.com/vercel/next.js/blob/canary/.github/workflows/build_and_test.yml" target="_blank" rel="noreferrer">Next.js build/test</a>; <a href="https://github.com/rust-lang/rust/blob/main/.github/workflows/ci.yml" target="_blank" rel="noreferrer">Rust CI</a>; <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore" target="_blank" rel="noreferrer">GitHub workflow filters</a>. Accessed August 24, 2026. 採用的是分流與交付邊界原則，不照抄其 branch 名稱。</p>
 </div>
 
@@ -2973,7 +2973,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <h2>步驟 5｜<span class="accent">風險立即看見，升版不搶第一天</span></h2>
         <p class="subtitle"><strong>基本導入。</strong>安全、檔案證據與「版本能否安裝」是不同問題；依賴更新也是日常維護的一環。</p>
       </header>
@@ -2986,7 +2986,7 @@ html[data-detail-level="simple"] .detail-panel {
           <p class="recommendation-copy"><strong>等待：</strong>Dependabot 一般升版先等三天；pnpm 另以嚴格 resolver 阻擋發布未滿三天的直接或間接套件，並拒絕 publisher trust 降級。遇到 trust downgrade 時先確認發布者與 provenance，不要直接停用 policy。<br><strong>漏洞：</strong>OSV 對已公開漏洞立即通知，不套用等待期。<br><strong>內容：</strong><code>uv.lock</code> 保存 SHA-256；<code>pnpm-lock.yaml</code> 保存 integrity hash；發布時解壓真正成品，再附 checksum 與非空 SBOM。<br><strong>限制：</strong>雜湊不證明來源善意，SBOM 也不會自行阻擋漏洞。</p>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>兩種生態的一般升版等三天：</strong><code>.github/dependabot.yml</code>；<strong>pnpm 本機也嚴格等待：</strong><code>pnpm-workspace.yaml</code></li><li><strong>凍結安裝並比對兩種 lockfile 雜湊：</strong><code>scripts/verify</code></li><li><strong>掃已知漏洞：</strong><code>osv.yml</code>　<strong>發布 checksum／SBOM：</strong><code>release.yml</code></li><li><strong>回報本專案自身的漏洞：</strong><code>SECURITY.md</code>；不寫死聯絡信箱或 SLA，由專案 owner 填入實際通報管道</li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>兩種生態的一般升版等三天：</strong><code>.github/dependabot.yml</code>；<strong>pnpm 本機也嚴格等待：</strong><code>pnpm-workspace.yaml</code></li><li><strong>凍結安裝並比對兩種 lockfile 雜湊：</strong><code>scripts/verify</code></li><li><strong>掃已知漏洞：</strong><code>osv.yml</code>　<strong>發布 checksum／SBOM：</strong><code>release.yml</code></li><li><strong>回報本專案自身的漏洞：</strong><code>SECURITY.md</code>；預設使用實際 repository 的公開 GitHub Issues，不寫死未核准的 email 或 SLA，也不得張貼敏感內容</li></ul></aside>
       <aside id="renovate-preset-overlay" class="config-overlay term-overlay" hidden role="region" aria-label="中央共用更新規則說明">
         <div class="config-overlay-card">
           <button class="config-overlay-close" type="button" aria-label="關閉名詞說明">×</button>
@@ -3113,7 +3113,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <h2>步驟 6｜<span class="accent">版本規則與成品接續</span></h2>
         <p class="subtitle"><strong>Release 路徑依已驗證的 promotion 邊界與當下能力選擇：</strong>PR 與成品交接能力都確認時使用 release-please；否則只在最新 main 已含經審查的版本與 CHANGELOG 時直接交付，再不行就明確停在 verification-only。</p>
       </header>
@@ -3133,7 +3133,7 @@ html[data-detail-level="simple"] .detail-panel {
         </tbody>
       </table>
       <p class="context-line"><strong>SemVer scope｜</strong>整份公版只用一個 SemVer：<code>fix(scope)</code> 升 patch、<code>feat(scope)</code> 升 minor、<code>!</code> 升 major；scope 可標 <code>ci</code>、<code>python</code>、<code>typescript</code> 或 <code>template</code>，只要任何已支援 profile 不相容，就視為整份公版的破壞性變更。</p>
-      <aside class="selection-note"><strong>選配登記：PyPI／npm 發布</strong><span>GitHub Release 是所有 profile 的共同基線；registry 依語言分開選配，預設全部關閉。公版根目錄的 PyPI job 只有在 repository variable <code>CSARC_ENABLE_PYPI_PUBLISHING=true</code> 時才執行，也不會阻擋基線 GitHub Release。PyPI／npm 都使用 GitHub environment 與 OIDC 短效憑證，發布 job 才有 <code>id-token: write</code>，不讀取長效 registry token。啟用前，package owner 必須在 registry 登記完全相符的 organization／repository、workflow 檔名（公版為 <code>release-template.yml</code>）與 environment；PyPI 首次發布可先建立 pending publisher，npm 則需由既有 package owner 在 package Settings 建立 trusted publisher。npm 路徑需要 GitHub-hosted runner、Node 22.14+ 與 npm 11.5.1+，公版使用 Node 24。</span></aside>
+      <aside class="selection-note"><strong>選配登記：PyPI／npm 發布</strong><span>GitHub Release 是所有 profile 的共同基線；registry 是生成專案依語言分開選配的能力，預設全部關閉。Root CLI 只隨 GitHub Release 交付，不發布到 PyPI，也沒有 registry publishing job。生成專案的 PyPI／npm job 使用 GitHub environment 與 OIDC 短效憑證，不讀取長效 registry token；CI/CD-only 不產生 registry job。啟用前，package owner 必須在 registry 登記完全相符的 organization／repository、workflow <code>release.yml</code> 與 environment。PyPI 首次發布可先建立 pending publisher；npm 則需由既有 package owner 建立 trusted publisher，並使用 GitHub-hosted runner、Node 22.14+ 與 npm 11.5.1+。</span></aside>
 </div>
 
 
@@ -3241,7 +3241,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <h2>先辨識 GitHub 方案，<span class="accent">再套用真的能生效的管制</span></h2>
         <p class="subtitle"><strong>基本導入｜</strong>同一份公版依 Free、Team、Enterprise 與實際 API 能力調整；不把付費功能假裝成已啟用。</p>
       </header>
@@ -3371,7 +3371,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <h2>Copier 保持同步，<span class="accent">公版本身也吃自己的規則</span></h2>
         <p class="subtitle"><strong>基本導入。</strong><code>template/</code> 是下發內容唯一來源；root 只因 GitHub 讀取慣例保留公版自己的治理設定，43 對逐位元組相同的檔案由產生腳本從 root 生成 <code>template/</code> 副本。</p>
       </header>
@@ -3468,16 +3468,16 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <h2>單檔永遠可交付，<span class="accent">平台能力只做加成</span></h2>
         <p class="subtitle"><strong>已確認選型。</strong><code>docs/index.html</code> 必須可下載、轉寄並用 <code>file://</code> 離線開啟；Pages、外部託管與 CDN 都不是 portable baseline。</p>
       </header>
       <p class="context-line"><strong>問題與目的｜</strong>保留特殊簡報設計與單檔交付，同時避免內容、樣式、互動、選型來源與逐字測試繼續綁在同一個人工維護檔案。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">不採用</span><h3>不把交付限制誤當維護方式</h3><ul><li><strong>直接手改單檔：</strong>可以離線，但來源、呈現與測試高度耦合</li><li><strong>runtime 多檔載入：</strong>轉寄容易漏檔，<code>file://</code> 行為也受瀏覽器限制</li><li><strong>立刻導入文件平台：</strong>目前沒有多頁搜尋、翻譯或跨 repo catalog 的實證需求</li><li><strong>自動保存完整聊天：</strong>會混入未確認假設、敏感脈絡與噪音</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">可維護來源 → self-contained HTML</span></span></summary><div class="package-health"><p><strong>交付契約：</strong>CSS、JavaScript、font、SVG 與圖片全部內嵌；外部連結可保留，但離線時不影響內容與操作。</p><p><strong>來源契約：</strong><code>docs/decisions/</code> 保存 canonical 選型；renderer、基礎設計與驗證由公版維護，專案內容與允許的 theme overrides 由 consuming repo 維護。</p><p><strong>互動收納：</strong>agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record；不保存完整逐字稿。</p></div></details><p><strong>所有環境：</strong>產生並驗證 committed bundle。<br><strong>Actions allowed：</strong>再增加重建比對與 artifact。<br><strong>核准 host 與寫入權限 allowed：</strong>再增加 preview／publish／access control。<br><strong>blocked／unknown：</strong>回退單檔交付，不宣稱已部署。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">可維護來源 → self-contained HTML</span></span></summary><div class="package-health"><p><strong>交付契約：</strong>CSS、JavaScript、font、SVG 與圖片全部內嵌；外部連結可保留，但離線時不影響內容與操作。</p><p><strong>來源契約：</strong><code>docs/adr/</code> 保存 canonical Architecture Decision Records（ADR）；renderer、基礎設計與驗證由公版維護，專案內容與允許的 theme overrides 由 consuming repo 維護。</p><p><strong>互動收納：</strong>agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 ADR；不保存完整逐字稿。</p></div></details><p><strong>所有環境：</strong>產生並驗證 committed bundle。<br><strong>Actions allowed：</strong>再增加重建比對與 artifact。<br><strong>核准 host 與寫入權限 allowed：</strong>再增加 preview／publish／access control。<br><strong>blocked／unknown：</strong>回退單檔交付，不宣稱已部署。</p></article>
       </div>
-      <aside class="config-guidance overview-detail"><strong>決策與落地</strong><ul><li><strong>Canonical 選型：</strong><code>docs/decisions/portable-decision-site.md</code></li><li><strong>可維護來源：</strong><code>site/</code> 分開內容、樣式、互動與原始圖片；renderer 產生 <code>docs/index.html</code> 並拒絕外部 runtime asset</li><li><strong>生成專案：</strong>公版更新 <code>site/</code> 與 renderer，專案保有 <code>docs/site-content.js</code> 與 <code>docs/site-theme.css</code></li><li><strong>安全邊界：</strong><code>noindex</code> 不是存取控制；受控發布保護入口，但下載後的離線檔仍可能被轉寄</li><li><strong>追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178" target="_blank" rel="noreferrer">Issue #178</a></li></ul></aside>
+      <aside class="config-guidance"><strong>決策與落地</strong><ul><li><strong>Canonical ADR：</strong><code>docs/adr/portable-decision-site.md</code></li><li><strong>可維護來源：</strong><code>site/</code> 分開內容、樣式、互動與原始圖片；renderer 產生 <code>docs/index.html</code> 並拒絕外部 runtime asset</li><li><strong>生成專案：</strong>公版更新 <code>site/</code> 與 renderer，專案保有 <code>docs/site-content.js</code> 與 <code>docs/site-theme.css</code></li><li><strong>安全邊界：</strong><code>noindex</code> 不是存取控制；受控發布保護入口，但下載後的離線檔仍可能被轉寄</li><li><strong>追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178" target="_blank" rel="noreferrer">Issue #178</a></li></ul></aside>
 </div>
 
 
@@ -3488,7 +3488,7 @@ html[data-detail-level="simple"] .detail-panel {
 </ul>
 <details class="package-disclosure" data-content-key="portable-bundle">
   <summary><span class="tech-name">Markdown＋Hugo → self-contained HTML</span></summary>
-  <div class="package-health"><code>docs/decisions/</code> 保存 canonical 選型；Hugo 負責內容與 HTML；未修改的 renderer 只處理資產內嵌與安全檢查。最終的 <code>docs/index.html</code> 可用 <code>file://</code> 離線開啟，不依賴 Pages、CDN 或 JavaScript package runtime。</div>
+  <div class="package-health"><code>docs/adr/</code> 保存 canonical 選型；Hugo 負責內容與 HTML；未修改的 renderer 只處理資產內嵌與安全檢查。最終的 <code>docs/index.html</code> 可用 <code>file://</code> 離線開啟，不依賴 Pages、CDN 或 JavaScript package runtime。</div>
 </details>
 <aside class="technical-detail" data-content-key="docs-site-access">
   <h3>存取與維護邊界</h3>
@@ -3563,7 +3563,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <h2>分階段導入，<span class="accent">每一步都能驗證，也能停下來</span></h2>
         <p class="subtitle"><strong>三層導入｜</strong>基本能力現在就隨模板產生；未來與可選能力先寫清楚觸發門檻，不用空檔案假裝完成。</p>
       </header>
@@ -3675,7 +3675,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <h2>五月版 SDLC 盤點｜<span class="accent">保留核心，調整實作方式</span></h2>
         <p class="subtitle">給已看過五月版的團隊承先啟後：保留方法，修正實作與導入層級；點選每列可看三句判斷。</p>
       </header>
@@ -3687,8 +3687,8 @@ html[data-detail-level="simple"] .detail-panel {
           <tr><td>p.4</td><td>Jira Ticket</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>每次改動先有最小 GitHub Issue</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本用 Jira 的 Epic → Story → Task 分工；本次只保留必要的 GitHub Issue、Milestone 與 spec。</p><p><strong>本次判斷｜</strong>一次性工作選一種類型、寫問題與完成條件；複雜需求先開規劃 Issue，再由核准 spec 建立實作 Issue。新增範圍另開 Issue。</p><p><strong>落地方式｜</strong><code>work-item.yml</code> 有類型、問題與完成條件兩個必填欄位，另加一個選填補充；<code>issue-triage.yml</code> 指派開單者；PR workflow 核對標籤、分支與同號未結案 Issue。</p></div></details></td></tr>
           <tr><td>p.5</td><td>版本控制</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>delivery branch 是 CI 整合邊界，不假裝成實體環境</summary><div class="bridge-popover"><p><strong>五月版｜</strong>保留平行分支，但不要求每案具備實體 DEV 環境。</p><p><strong>本次判斷｜</strong>並行 Milestone 各用 <code>dev/m*</code>，一般孤立工作進 <code>dev/next</code>，獨立 canary 才用暫時 <code>dev/i*</code>；完成時 promotion 到 main，hotfix 才直達 main。</p><p><strong>落地方式｜</strong>fast CI 驗證每次 Issue 整合，full CI＋可選 canary 驗證 promotion；main 前進後由 owner 以 reviewed sync PR 回流，不 rewrite 歷史。</p></div></details></td></tr>
           <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>Issue、編號分支與 PR 形成固定鏈</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是保護分支的唯一入口，方向保留；三層審查改成依風險增加審查者。</p><p><strong>本次判斷｜</strong>一般 PR 要有同編號 Issue、CI 與一位同事；高風險架構變更另附決策紀錄。</p><p><strong>落地方式｜</strong>分支固定 <code>type/123-short-slug</code>，PR 內文固定 <code>Closes #123</code>；governance workflow 在 Free private 從設定名單輪派一位個別 reviewer，GitHub Team 以上才支援 team request 與強制核准。</p></div></details></td></tr>
-          <tr><td>p.7</td><td>CI 自動化管線</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>本機與 CI 共用入口，依風險分層執行</summary><div class="bridge-popover"><p><strong>五月版｜</strong>自動觸發、測試、格式與靜態錯誤檢查全部保留。</p><p><strong>本次判斷｜</strong>一般 Issue PR 跑 fast；promotion、hotfix、merge queue 與未知高風險路徑跑 full；OSV、Zizmor 與 remote governance 另依 scope／schedule 執行。</p><p><strong>落地方式｜</strong>固定 <code>verify</code> aggregate 避免 skipped workflow 留下 Pending；候選 full run 不取消，普通 PR 新 commit 則取消舊 run。Ruleset 可用時強制 <code>title</code>、<code>delivery-sync</code>、<code>verify</code> 與 <code>promotion</code>。</p></div></details></td></tr>
-          <tr><td>p.8</td><td>CD 專案管理</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>promotion 才形成發版邊界，不為每張 Issue 狂發版</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本預設 DEV → STAGING → Canary → PROD；本次不要求每個專案照搬四層。</p><p><strong>本次判斷｜</strong>Milestone 完成時 promotion 一次，<code>dev/next</code> 固定窗口批次 promotion，全部 no-release 就略過版本；hotfix 才立即發布。Canary 必須有環境與命令，否則只誠實保留 artifact-only。</p><p><strong>落地方式｜</strong>release-source 核對 promotion 的 full verify、canary state 與 tree identity；成品 workflow 只接受 source run ID，產生 digest、SBOM、attestation，不接受任意 tag push，也不重跑完整 runtime CI。</p></div></details></td></tr>
+          <tr><td>p.7</td><td>CI 自動化管線</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>本機與 CI 共用入口，依風險分層執行</summary><div class="bridge-popover"><p><strong>五月版｜</strong>自動觸發、測試、格式與靜態錯誤檢查全部保留。</p><p><strong>本次判斷｜</strong>一般 Issue PR 跑 fast；promotion、hotfix、merge queue 與未知高風險路徑跑 full；OSV、Zizmor 與 remote governance 另依 scope／schedule 執行。</p><p><strong>落地方式｜</strong>固定 <code>verify</code> aggregate 避免 skipped workflow 留下 Pending；delivery sync 併入 <code>title</code> policy，候選 full run 不取消，普通 PR 新 commit 則取消舊 run。Ruleset 可用時強制 <code>title</code>、<code>verify</code> 與 <code>promotion</code>。</p></div></details></td></tr>
+          <tr><td>p.8</td><td>CD 專案管理</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>promotion 才形成發版邊界，不為每張 Issue 狂發版</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本預設 DEV → STAGING → Canary → PROD；本次不要求每個專案照搬四層。</p><p><strong>本次判斷｜</strong>Milestone 原則上在完成時 promotion 一次；只有後續驗收依賴同一 Milestone 的 immutable Release，才用受約束的 checkpoint promotion。<code>dev/next</code> 固定窗口批次 promotion，全部 no-release 就略過版本；hotfix 才立即發布。Canary 必須有環境與命令，否則只誠實保留 artifact-only。</p><p><strong>落地方式｜</strong>release-source 核對 promotion 的 full verify、canary state 與 tree identity；成品 workflow 只接受 source run ID，產生 digest、SBOM、attestation，不接受任意 tag push，也不重跑完整 runtime CI。</p></div></details></td></tr>
           <tr><td>p.9</td><td>可觀測性</td><td><span class="bridge-status defer">第二階段</span></td><td><details class="bridge-detail"><summary>只有上線服務才做監控和值班</summary><div class="bridge-popover"><p><strong>五月版｜</strong>操作手冊、日誌、指標、追蹤、復原與值班流程保留為第二階段。</p><p><strong>本次判斷｜</strong>只對持續運行的服務導入；先依使用的雲端、環境與負責人選工具，不先綁定 Datadog 或 PagerDuty。</p><p><strong>落地方式｜</strong>測試資料另外管理成不含個資、可建立、可清除的範例，不把測資管理混成線上監控。</p></div></details></td></tr>
           <tr><td>p.10</td><td>Copilot → Agent</td><td><span class="bridge-status defer">分階段</span></td><td><details class="bridge-detail"><summary>先受控 AI 協作；成熟後再自動重試</summary><div class="bridge-popover"><p><strong>五月版｜</strong>鼓勵 AI 從補完程式進步到能執行完整任務，方向保留，但不把工程師縮減成只會下提示詞。</p><p><strong>本次判斷｜</strong>第一階段讓 Agent 依清楚工作單研究、提計畫、修改、驗證並開 PR；平行可寫任務各自使用 branch 與 Git worktree，工具便利性由 agent-kit 管理。</p><p><strong>落地方式｜</strong><code>AGENTS.md</code> 與共同驗證命令限制工作方式；<code>actions.json</code> 設定 Actions 預設唯讀且不能核准 PR，Ruleset 要求人類核准。worktree manager 不是 CI/CD，也不取得額外 secret 或合併權限。</p></div></details></td></tr>
           <tr><td>p.11</td><td>AI 初審</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail"><summary>固定工具負責判定；AI 只補充建議</summary><div class="bridge-popover"><p><strong>五月版｜</strong>AI 初審保留，但程式碼格式與常見錯誤改由 formatter、linter 與靜態檢查穩定執行。</p><p><strong>本次判斷｜</strong>AI 審查只補充情境性錯誤、測試缺口、風險摘要與修正建議，不能當成通過證明。</p><p><strong>落地方式｜</strong>CI、同事審查與指定負責人才有合併決定權；AI 沒有核准、合併或讀取密鑰的權限。</p></div></details></td></tr>
@@ -3828,7 +3828,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <span class="selection-sequence">附錄｜技術選型依據</span>
         <h2>工具是實作手段，<span class="accent">流程與治理才是主線</span></h2>
         <p class="subtitle">供已看過五月版的人查核選型：基本導入、未來導入與可選導入分開看；日常操作請回到前面的開發者旅程。</p>
@@ -4355,7 +4355,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <span class="selection-sequence">決策附錄</span>
         <h2>存取控制決策｜<span class="accent">託管方案未定前的臨時防護</span></h2>
         <p class="subtitle">評估三種存取控制方案的成本與限制；正式方案定案前，先以 <code>noindex</code>／<code>robots.txt</code> 降低意外曝光，這不是存取控制。</p>
@@ -4469,7 +4469,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <span class="selection-sequence">決策附錄</span>
         <h2>關鍵決策｜<span class="accent">規則、理由與刻意不做</span></h2>
         <p class="subtitle">原補充文件已收斂於此；細節以可執行設定為準，條件改變時以 Issue／PR 同步更新。</p>
@@ -4606,7 +4606,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <span class="selection-sequence">決策附錄</span>
         <h2>外部基準與實測｜<span class="accent">有骨架，還不是完整平台</span></h2>
         <p class="subtitle">結論：已真正解決新 repo 建立、Copier 更新與本機／合成驗證；OSV、Release 與第一個 CI-only consuming repo 都有線上成功證據。治理仍受 GitHub 方案限制，語言 profile 尚待各自試行。</p>
@@ -4758,7 +4758,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <span class="selection-sequence">決策附錄</span>
         <h2>Fleet 治理盤點｜<span class="accent">1 個 consuming repo</span></h2>
         <p class="subtitle">2026-08-24 完成第一個真實 pilot：組織共 6 個 private repo，<code>ai-guardrail</code> 已導入並更新至 v0.3.1；其餘 4 個產品／工具 repo 尚未導入。門檻未達前不部署中央平台。</p>
@@ -4900,7 +4900,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <span class="selection-sequence">決策附錄</span>
         <h2>Fleet 治理門檻｜<span class="accent">先量問題，再加平台</span></h2>
         <p class="subtitle">Catalog 處理服務可見性與 owner；policy enforcement 處理跨 repo 設定偏離。兩種問題分開計數、分開選工具。</p>
@@ -5014,10 +5014,10 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
 
 <div class="legacy-content">
-<header>
+      <header>
         <span class="selection-sequence">決策附錄</span>
-        <h2>Spec 格式決策｜<span class="accent">預設 Issue，明確 Story 才建 Milestone</span></h2>
-        <p class="subtitle">沿用輕量 frontmatter；<code>tracking: story</code> 是顯式選項，不因 spec 存在或 Issue 數量自動升格。</p>
+        <h2>Spec 格式決策｜<span class="accent">預設 Task，明確 Story 才建 Feature</span></h2>
+        <p class="subtitle">沿用輕量 frontmatter；<code>tracking: story</code> 是顯式選項，不因 spec 存在或工作數量自動升格。</p>
       </header>
       <div class="decision-strip">
         <article class="decision-step">
@@ -5032,11 +5032,11 @@ html[data-detail-level="simple"] .detail-panel {
         </article>
         <article class="decision-step recommended">
           <span class="step-label">我們的決定</span>
-          <h3>保留單一格式，增加可選 story tracker</h3>
-          <p><strong>現行：</strong><code>docs/specs/*.md</code> 用 frontmatter 記錄狀態；預設以 <code>csarc-spec-id</code> marker 同步 Issue，明列 <code>tracking: story</code> 則以 <code>csarc-story-id</code> marker 同步 Milestone，兩者都可重跑且不自動拆工作。</p>
+          <h3>保留單一格式，使用原生 Issue hierarchy</h3>
+          <p><strong>現行：</strong><code>docs/specs/*.md</code> 用 frontmatter 記錄狀態；預設以 <code>csarc-spec-id</code> marker 同步 Task Issue，明列 <code>tracking: story</code> 則同步 Feature parent，兩者都可重跑且不自動拆工作。Milestone 另作有 due date 的 delivery／release bucket。</p>
           <p><strong>遷移成本：</strong>改採 Spec Kit 需要重寫 <code>spec_to_issue.py</code> 的解析與同步邏輯、既有 spec 全部轉檔、更新驗證腳本的斷言，且需另外設計 Issue-sync 等價機制；雙格式支援則讓兩套系統同時維護，增加認知負擔，本 Issue 不做這兩件事。</p>
           <p><strong>理由：</strong>目前規格量小、現行管線穩定且已納入回歸測試；Spec Kit 的 CLI／Agent 相依對單一小型公版 repo 效益還不明確。</p>
-          <p><strong>重新評估條件：</strong>核准規格需要由 AI 穩定拆成多張子工作，且團隊願意維護額外 CLI／Agent 流程時，再重新評估遷移或雙格式支援；與「步驟一規劃工作」頁既有立場一致。</p>
+          <p><strong>重新評估條件：</strong>native subissues 無法表達實際工作拆解，且團隊願意維護額外 CLI／Agent 流程時，再重新評估遷移或雙格式支援；與「步驟一規劃工作」頁既有立場一致。</p>
         </article>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>現行 spec 格式與驗證：</strong><code>docs/specs/*.md</code>＋<code>scripts/spec_to_issue.py</code></li><li><strong>決策追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/77" target="_blank" rel="noreferrer">Issue #77</a></li></ul></aside>
@@ -5236,7 +5236,7 @@ html[data-detail-level="simple"] .detail-panel {
     <article class="glossary-term" id="glossary-decision-record">
       <h3>決策記錄</h3>
       <p>保存已確認的架構、工具、安全與相容性取捨。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/decisions/README.md">深入閱讀 →</a>
+      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/README.md">深入閱讀 →</a>
     </article>
   </div>
 </section>
@@ -5312,12 +5312,12 @@ html[data-detail-level="simple"] .detail-panel {
     <article class="glossary-term" id="glossary-capability-state">
       <h3>平台能力狀態</h3>
       <p>以 allowed、blocked 或 unknown 記錄實測能力，不從方案名稱猜測。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/decisions/portable-decision-site.md">深入閱讀 →</a>
+      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">深入閱讀 →</a>
     </article>
     <article class="glossary-term" id="glossary-portable-artifact">
       <h3>可攜式產物</h3>
       <p>沒有 runtime 外部資產、可下載並以 file:// 離線使用的單檔交付物。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/decisions/portable-decision-site.md">深入閱讀 →</a>
+      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">深入閱讀 →</a>
     </article>
   </div>
 </section>

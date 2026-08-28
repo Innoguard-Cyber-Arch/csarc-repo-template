@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+actionlint_bin="$("$repo_root/scripts/install-actionlint")"
+shellcheck_bin="$("$repo_root/scripts/install-shellcheck")"
+
+workflow_files=()
+while IFS= read -r -d '' file_path; do
+  workflow_files+=("$file_path")
+done < <(
+  find "$repo_root/.github/workflows" -type f \
+    \( -name '*.yml' -o -name '*.yaml' \) -print0 2>/dev/null || true
+)
+if ((${#workflow_files[@]})); then
+  "$actionlint_bin" -shellcheck="$shellcheck_bin" "${workflow_files[@]}"
+fi
+
+shell_files=()
+while IFS= read -r -d '' file_path; do
+  if IFS= read -r first_line < "$file_path" && \
+    [[ "$first_line" == '#!/usr/bin/env bash' ]]; then
+    shell_files+=("$file_path")
+  fi
+done < <(find "$repo_root/scripts" -maxdepth 1 -type f -print0 2>/dev/null || true)
+if ((${#shell_files[@]})); then
+  "$shellcheck_bin" --external-sources "${shell_files[@]}"
+fi
