@@ -104,11 +104,11 @@
               </tr>
             </thead>
             <tbody>
-              <tr data-comparison-key="repositoryTruth"><th scope="row"><strong>工作依據放在哪裡</strong><span>比較需求、決策、設定與驗證證據存在哪裡，以及哪一份資料算正式。</span><span class="csarc-feature-design"><b>CSARC：</b>GitHub Issue 劃定執行範圍；<code>main</code> 上核准的 spec／ADR 保存長期契約，程式與測試證明實作，未提交內容不算正式。</span></th></tr>
-              <tr data-comparison-key="declarativeState"><th scope="row"><strong>定義如何變成 repo 狀態</strong><span>比較人直接改檔、由設定產生檔案，或由服務持續修正遠端狀態。</span><span class="csarc-feature-design"><b>CSARC：</b><code>copier.yml</code>、<code>template/</code> 與 <code>profiles/catalog.yaml</code> 宣告生成基線；<code>scripts/sync-paired-files.sh</code> 同步 root／template 配對檔，產品檔仍由下游 repo 持有。</span></th></tr>
-              <tr data-comparison-key="templateLifecycle"><th scope="row"><strong>既有 repo 如何接收新版</strong><span>比較新版模板、規則或 recipe 如何進入既有 repo，以及衝突由誰處理。</span><span class="csarc-feature-design"><b>CSARC：</b>Copier answers 記錄來源與版本；既有案執行更新後以 PR 審查 diff／衝突，並驗證產品路徑未被覆寫。</span></th></tr>
-              <tr data-comparison-key="proposalLifecycle"><th scope="row"><strong>進行中變更如何成為正式</strong><span>比較 branch、change 或設定 PR 在何時完成審查、合併與歸檔。</span><span class="csarc-feature-design"><b>CSARC：</b>每項工作先有 Issue；<code>type/&lt;issue&gt;-slug</code> 分支的 PR 以 <code>Closes #&lt;issue&gt;</code> 連回範圍，合併 <code>main</code> 後才成為正式，新增範圍另開 Issue。</span></th></tr>
-              <tr data-comparison-key="rightSizedWork"><th scope="row"><strong>小改與大型工作如何分流</strong><span>比較何時可以直接修改，何時必須增加 spec、plan、tasks 或架構文件。</span><span class="csarc-feature-design"><b>CSARC：</b>小型 bounded change 只用 Issue 與針對性驗證；跨 session、高風險或長期契約才增加 spec、ADR 或 plan。</span></th></tr>
+              <tr data-comparison-key="repositoryTruth"><th scope="row"><strong>工作依據放在哪裡</strong><span>比較需求、決策、設定與驗證證據存在哪裡，以及哪一份資料算正式。<br><br><b>CSARC：</b>GitHub Issue 劃定執行範圍；<code>main</code> 上核准的 spec／ADR 保存長期契約，程式與測試證明實作，未提交內容不算正式。</span></th></tr>
+              <tr data-comparison-key="declarativeState"><th scope="row"><strong>定義如何變成 repo 狀態</strong><span>比較人直接改檔、由設定產生檔案，或由服務持續修正遠端狀態。<br><br><b>CSARC：</b><code>copier.yml</code>、<code>template/</code> 與 <code>profiles/catalog.yaml</code> 宣告生成基線；<code>scripts/sync-paired-files.sh</code> 同步 root／template 配對檔，產品檔仍由下游 repo 持有。</span></th></tr>
+              <tr data-comparison-key="templateLifecycle"><th scope="row"><strong>既有 repo 如何接收新版</strong><span>比較新版模板、規則或 recipe 如何進入既有 repo，以及衝突由誰處理。<br><br><b>CSARC：</b>Copier answers 記錄來源與版本；既有案執行更新後以 PR 審查 diff／衝突，並驗證產品路徑未被覆寫。</span></th></tr>
+              <tr data-comparison-key="proposalLifecycle"><th scope="row"><strong>進行中變更如何成為正式</strong><span>比較 branch、change 或設定 PR 在何時完成審查、合併與歸檔。<br><br><b>CSARC：</b>每項工作先有 Issue；<code>type/&lt;issue&gt;-slug</code> 分支的 PR 以 <code>Closes #&lt;issue&gt;</code> 連回範圍，合併 <code>main</code> 後才成為正式，新增範圍另開 Issue。</span></th></tr>
+              <tr data-comparison-key="rightSizedWork"><th scope="row"><strong>小改與大型工作如何分流</strong><span>比較何時可以直接修改，何時必須增加 spec、plan、tasks 或架構文件。<br><br><b>CSARC：</b>小型 bounded change 只用 Issue 與針對性驗證；跨 session、高風險或長期契約才增加 spec、ADR 或 plan。</span></th></tr>
             </tbody>
           </table>
         </div>

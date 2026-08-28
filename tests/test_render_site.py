@@ -122,7 +122,7 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
 
     assert 'class="slide similar-tools-slide" data-audience="maintainer"' in source
     assert source.count('data-comparison-key="') == 5
-    assert source.count('class="csarc-feature-design"') == 5
+    assert source.count("<br><br><b>CSARC：</b>") == 5
     assert "similar-tools-philosophy-matrix" in source
     assert "功能分野／具體做法" in source
     assert "其他生態圈工具" in source

@@ -440,8 +440,6 @@
     .similar-tools-philosophy-matrix tbody th { width: 32%; }
     .similar-tools-philosophy-matrix tbody th strong { display: block; font-size: 15px; }
     .similar-tools-philosophy-matrix tbody th span { display: block; margin-top: 3px; color: var(--muted); font-weight: 500; }
-    .similar-tools-philosophy-matrix tbody th .csarc-feature-design { margin-top: 9px; padding-top: 8px; border-top: 1px dotted #b9b9b3; color: #174f8b; font-weight: 650; }
-    .similar-tools-philosophy-matrix tbody th .csarc-feature-design b { color: var(--ink); }
     .similar-tools-philosophy-matrix tbody td:first-of-type { background: #fffdf0; box-shadow: inset 4px 0 #b9a700; }
     .similar-tools-philosophy-matrix tbody td:last-child { font-size: 13px; }
     .similar-tools-philosophy-matrix td ul { margin: 0; padding-left: 18px; }
