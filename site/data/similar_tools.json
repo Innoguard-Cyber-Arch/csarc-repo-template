@@ -54,8 +54,8 @@
       "key": "work",
       "features": ["repositoryTruth", "declarativeState", "proposalLifecycle", "rightSizedWork"],
       "labels": {
-        "zh-tw": {"overline": "Journey 01", "title": "工作定義", "legend": "每列回答一個具體做法；主要相似工具優先，其他工具只補充局部設計"},
-        "en": {"overline": "Journey 01", "title": "Work definition", "legend": "Each row answers one concrete implementation question; primary tools come first and ecosystem tools add focused patterns."}
+        "zh-tw": {"overline": "Journey 01", "title": "工作定義", "legend": "只比較不同 repo 如何保存工作依據、把定義轉成 repo 狀態、讓變更成為正式，以及依工作規模決定文件深度"},
+        "en": {"overline": "Journey 01", "title": "Work definition", "legend": "Compares only how repositories preserve the basis for work, turn definitions into repository state, make changes authoritative, and adjust documentation depth to the size of the work."}
       }
     },
     {
