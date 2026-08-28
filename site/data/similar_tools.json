@@ -75,18 +75,18 @@
         "statusLabel": "目前狀態：",
         "status": "main 已在 #375 將 GitHub Actions 移至 archive；下列 workflow 都不會執行，只保留恢復時的責任分布。",
         "target": "要驗證什麼",
-        "commands": "現在怎麼手動驗證",
-        "workflows": "原自動流程（已停用）",
-        "localStatus": "現在能不能執行"
+        "commands": "共用程式／本機入口",
+        "workflows": "GitHub Action 入口（已停用）",
+        "localStatus": "是否共用同一份邏輯"
       },
       "en": {
         "title": "Tests",
         "statusLabel": "Current state: ",
         "status": "PR #375 moved GitHub Actions out of main and into the archive. None of the workflows below runs; the mapping only preserves ownership for a future restoration.",
         "target": "What to verify",
-        "commands": "How to verify manually",
-        "workflows": "Former automation (suspended)",
-        "localStatus": "Can it run now?"
+        "commands": "Shared code / local entry",
+        "workflows": "GitHub Action entry (suspended)",
+        "localStatus": "Does it share one implementation?"
       }
     },
     "groups": [
@@ -97,12 +97,12 @@
           "zh-tw": {
             "title": "工作定義",
             "heading": "Journey 01／工作定義",
-            "scope": "從左到右看：要驗證什麼、現在怎麼手動跑、原本由哪個自動流程負責，以及目前是否真的跑得動。"
+            "scope": "原則是驗證邏輯只寫在 scripts／tests；本機與 GitHub Action 都呼叫同一份程式。最後一欄如實標出目前尚未做到的地方。"
           },
           "en": {
             "title": "Work definition",
             "heading": "Journey 01 / Work definition",
-            "scope": "Read left to right: what to verify, how to run it manually, which automation owned it, and whether it can actually run now."
+            "scope": "Verification logic should live once in scripts/tests, with local runs and GitHub Actions calling the same code. The last column states where the implementation still falls short."
           }
         },
         "rows": [
@@ -113,7 +113,7 @@
         "workflows": [
           {"name": "Issue triage / classify", "file": "issue-triage.yml", "role": {"zh-tw": "Issue opened／edited／reopened／closed 時驗證並分類。", "en": "Validated and classified Issues when they were opened, edited, reopened, or closed."}}
         ],
-        "localStatus": {"zh-tw": "不可直接跑：helper 仍讀取已移除的 .github/workflows/issue-triage.yml。", "en": "Blocked: the helper still reads the removed .github/workflows/issue-triage.yml path."}
+        "localStatus": {"zh-tw": "否。標題規則已共用 scripts/validate-issue-title；分類規則仍內嵌在 workflow，本機測試靠抽取 YAML 的 run 區塊，workflow 移除後就失效。", "en": "No. The title rule is shared through scripts/validate-issue-title, but classification remains inline in the workflow. The local test extracts its run block from YAML and breaks when that workflow is removed."}
       },
       {
         "target": {"zh-tw": "PR 與 Issue 可追溯性", "en": "PR-to-Issue traceability"},
@@ -122,7 +122,7 @@
         "workflows": [
           {"name": "PR policy / title", "file": "pr-policy.yml", "role": {"zh-tw": "pull_request／merge_group 時驗證工作範圍與合併前條件。", "en": "Validated scope and pre-merge conditions on pull_request and merge_group events."}}
         ],
-        "localStatus": {"zh-tw": "不可直接跑：helper 仍從已移除的 .github/workflows/pr-policy.yml 抽取規則。", "en": "Blocked: the helper still extracts policy from the removed .github/workflows/pr-policy.yml path."}
+        "localStatus": {"zh-tw": "否。PR 規則仍內嵌在 workflow，本機測試靠抽取 YAML 的 run 區塊；應拆成獨立 validator，再讓兩個入口共同呼叫。", "en": "No. PR policy remains inline in the workflow and the local test extracts its run block from YAML. It should become a standalone validator called by both entry points."}
       },
       {
         "target": {"zh-tw": "Spec 契約與 Issue 同步", "en": "Spec contract and Issue synchronization"},
@@ -132,7 +132,7 @@
           {"name": "CI / fast", "file": "ci.yml", "role": {"zh-tw": "由 verify-fast 執行 spec validation 與測試。", "en": "Ran spec validation and tests through verify-fast."}},
           {"name": "Spec to Issue / sync", "file": "spec-to-issue.yml", "role": {"zh-tw": "main／dev 的 spec 變更合併後建立或更新 Issue。", "en": "Created or updated Issues after spec changes landed on main or dev."}}
         ],
-        "localStatus": {"zh-tw": "兩個 targeted command 仍可直接執行；遠端 Issue sync 已停用。", "en": "Both targeted commands still run locally; remote Issue synchronization is suspended."}
+        "localStatus": {"zh-tw": "是。scripts/spec_to_issue.py 是共用實作；本機驗證／測試它，Action 只補 GitHub 事件參數後呼叫 sync。遠端入口目前停用。", "en": "Yes. scripts/spec_to_issue.py is the shared implementation. Local commands validate/test it, while the Action supplies GitHub event arguments and calls sync. The remote entry is currently suspended."}
       },
       {
         "target": {"zh-tw": "Milestone 完成條件", "en": "Milestone completion contract"},
@@ -142,7 +142,7 @@
           {"name": "Milestone policy / due date", "file": "milestone-policy.yml", "role": {"zh-tw": "Milestone 建立或編輯時要求 due date。", "en": "Required a due date when a Milestone was created or edited."}},
           {"name": "Milestone lifecycle / sync", "file": "milestone-lifecycle.yml", "role": {"zh-tw": "Issue closed／reopened／milestoned 時重算 Milestone 狀態。", "en": "Reconciled Milestone state when Issues closed, reopened, or changed Milestone."}}
         ],
-        "localStatus": {"zh-tw": "Python 單元測試仍可直接執行；兩個事件型 Action 已停用。", "en": "The Python unit test still runs locally; both event-driven Actions are suspended."}
+        "localStatus": {"zh-tw": "部分。Milestone lifecycle 共用 scripts/sync_milestone_state.py；但 due date 規則仍內嵌在 milestone-policy.yml，尚未拆成可由本機與 Action 共用的 validator。", "en": "Partly. Milestone lifecycle shares scripts/sync_milestone_state.py, but the due-date rule remains inline in milestone-policy.yml instead of a validator shared by local runs and the Action."}
       },
       {
         "target": {"zh-tw": "Journey 01 整體回歸", "en": "Journey 01 aggregate regression"},
@@ -152,7 +152,7 @@
           {"name": "CI / fast", "file": "ci.yml", "role": {"zh-tw": "變更感知的快速檢查。", "en": "Change-aware fast checks."}},
           {"name": "CI / canonical full", "file": "ci.yml", "role": {"zh-tw": "完整模板與跨層回歸。", "en": "Full template and cross-layer regression."}}
         ],
-        "localStatus": {"zh-tw": "此 dev 預覽分支可跑；main 仍檢查已移除的 workflow 路徑，尚未解耦前不可作為乾淨基線。", "en": "This dev preview branch can run them; main still asserts removed workflow paths and is not a clean baseline until decoupled."}
+        "localStatus": {"zh-tw": "是。CI 原本直接呼叫 scripts/verify-fast 與 scripts/verify-template.sh；但後者仍含已移除 workflow 的舊斷言，main 尚未完全解耦。", "en": "Yes. CI directly called scripts/verify-fast and scripts/verify-template.sh, but the latter still contains stale assertions for removed workflows, so main is not fully decoupled yet."}
       }
         ]
       }

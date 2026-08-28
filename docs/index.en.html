@@ -418,11 +418,11 @@
     .similar-tools-testing-intro > span { color: var(--muted); }
     .similar-tools-testing-intro p { grid-column: 1 / -1; margin: 2px 0 0; }
     .similar-tools-testing-matrix { min-height: 0; font-size: 13px; line-height: 1.18; }
-    .similar-tools-testing-matrix thead th:first-child { width: 23%; }
-    .similar-tools-testing-matrix thead th:nth-child(2) { width: 24%; }
-    .similar-tools-testing-matrix thead th:nth-child(3) { width: 31%; }
-    .similar-tools-testing-matrix thead th:nth-child(4) { width: 22%; }
-    .similar-tools-testing-matrix tbody th { width: 23%; font-size: 13px; }
+    .similar-tools-testing-matrix thead th:first-child { width: 20%; }
+    .similar-tools-testing-matrix thead th:nth-child(2) { width: 22%; }
+    .similar-tools-testing-matrix thead th:nth-child(3) { width: 28%; }
+    .similar-tools-testing-matrix thead th:nth-child(4) { width: 30%; }
+    .similar-tools-testing-matrix tbody th { width: 20%; font-size: 13px; }
     .similar-tools-testing-matrix tbody th strong, .similar-tools-testing-matrix tbody th span, .similar-tools-testing-matrix td a > code, .similar-tools-testing-matrix td a + span { display: block; }
     .similar-tools-testing-matrix tbody th span, .similar-tools-testing-matrix td a + span { margin-top: 3px; color: var(--muted); font-weight: 500; }
     .similar-tools-testing-matrix td ul { margin: 0; padding-left: 17px; }
@@ -3788,42 +3788,42 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 01 / Work definition</strong><span>Read left to right: what to verify, how to run it manually, which automation owned it, and whether it can actually run now.</span>
+    <strong>Journey 01 / Work definition</strong><span>Verification logic should live once in scripts/tests, with local runs and GitHub Actions calling the same code. The last column states where the implementation still falls short.</span>
     <p><b>Current state: </b>PR #375 moved GitHub Actions out of main and into the archive. None of the workflows below runs; the mapping only preserves ownership for a future restoration.</p>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01 / Work definition">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
-      <thead><tr><th scope="col">What to verify</th><th scope="col">How to verify manually</th><th scope="col">Former automation (suspended)</th><th scope="col">Can it run now?</th></tr></thead>
+      <thead><tr><th scope="col">What to verify</th><th scope="col">Shared code / local entry</th><th scope="col">GitHub Action entry (suspended)</th><th scope="col">Does it share one implementation?</th></tr></thead>
       <tbody>
         <tr>
           <th scope="row"><strong>Issue work boundary</strong><span>Title rules, type mapping, assignee, labels, and duplicate disposition must converge.</span></th>
           <td><ul><li><code>./scripts/test-issue-triage</code></li></ul></td>
           <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/issue-triage.yml" target="_blank" rel="noreferrer"><strong>Issue triage / classify</strong><code>issue-triage.yml</code></a><span>Validated and classified Issues when they were opened, edited, reopened, or closed.</span></li></ul></td>
-          <td>Blocked: the helper still reads the removed .github/workflows/issue-triage.yml path.</td>
+          <td>No. The title rule is shared through scripts/validate-issue-title, but classification remains inline in the workflow. The local test extracts its run block from YAML and breaks when that workflow is removed.</td>
         </tr>
         <tr>
           <th scope="row"><strong>PR-to-Issue traceability</strong><span>PR title, classification label, branch, Closes/Fixes link, open Issue, and unfinished checkboxes must agree.</span></th>
           <td><ul><li><code>./scripts/test-pr-policy</code></li></ul></td>
           <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/pr-policy.yml" target="_blank" rel="noreferrer"><strong>PR policy / title</strong><code>pr-policy.yml</code></a><span>Validated scope and pre-merge conditions on pull_request and merge_group events.</span></li></ul></td>
-          <td>Blocked: the helper still extracts policy from the removed .github/workflows/pr-policy.yml path.</td>
+          <td>No. PR policy remains inline in the workflow and the local test extracts its run block from YAML. It should become a standalone validator called by both entry points.</td>
         </tr>
         <tr>
           <th scope="row"><strong>Spec contract and Issue synchronization</strong><span>Required sections, acceptance criteria, verification, stable spec identity, and idempotent Issue creation or update.</span></th>
           <td><ul><li><code>uv run python scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md</code></li><li><code>uv run pytest tests/test_spec_to_issue.py -q</code></li></ul></td>
           <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/ci.yml" target="_blank" rel="noreferrer"><strong>CI / fast</strong><code>ci.yml</code></a><span>Ran spec validation and tests through verify-fast.</span></li><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/spec-to-issue.yml" target="_blank" rel="noreferrer"><strong>Spec to Issue / sync</strong><code>spec-to-issue.yml</code></a><span>Created or updated Issues after spec changes landed on main or dev.</span></li></ul></td>
-          <td>Both targeted commands still run locally; remote Issue synchronization is suspended.</td>
+          <td>Yes. scripts/spec_to_issue.py is the shared implementation. Local commands validate/test it, while the Action supplies GitHub event arguments and calls sync. The remote entry is currently suspended.</td>
         </tr>
         <tr>
           <th scope="row"><strong>Milestone completion contract</strong><span>Due date, open-Issue count, and acceptance-criteria checkboxes jointly determine Milestone close or reopen behavior.</span></th>
           <td><ul><li><code>uv run pytest tests/test_milestone_lifecycle.py -q</code></li></ul></td>
           <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/milestone-policy.yml" target="_blank" rel="noreferrer"><strong>Milestone policy / due date</strong><code>milestone-policy.yml</code></a><span>Required a due date when a Milestone was created or edited.</span></li><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/milestone-lifecycle.yml" target="_blank" rel="noreferrer"><strong>Milestone lifecycle / sync</strong><code>milestone-lifecycle.yml</code></a><span>Reconciled Milestone state when Issues closed, reopened, or changed Milestone.</span></li></ul></td>
-          <td>The Python unit test still runs locally; both event-driven Actions are suspended.</td>
+          <td>Partly. Milestone lifecycle shares scripts/sync_milestone_state.py, but the due-date rule remains inline in milestone-policy.yml instead of a validator shared by local runs and the Action.</td>
         </tr>
         <tr>
           <th scope="row"><strong>Journey 01 aggregate regression</strong><span>Verifies Issue, PR, Spec, Milestone, and generated-template rules together rather than testing one helper in isolation.</span></th>
           <td><ul><li><code>./scripts/verify-fast</code></li><li><code>./scripts/verify-template.sh</code></li></ul></td>
           <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/ci.yml" target="_blank" rel="noreferrer"><strong>CI / fast</strong><code>ci.yml</code></a><span>Change-aware fast checks.</span></li><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/ci.yml" target="_blank" rel="noreferrer"><strong>CI / canonical full</strong><code>ci.yml</code></a><span>Full template and cross-layer regression.</span></li></ul></td>
-          <td>This dev preview branch can run them; main still asserts removed workflow paths and is not a clean baseline until decoupled.</td>
+          <td>Yes. CI directly called scripts/verify-fast and scripts/verify-template.sh, but the latter still contains stale assertions for removed workflows, so main is not fully decoupled yet.</td>
         </tr>
       </tbody>
     </table>
