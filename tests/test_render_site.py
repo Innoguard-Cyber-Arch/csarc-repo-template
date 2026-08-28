@@ -135,6 +135,13 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     testing_shortcode = (
         root / "site/layouts/shortcodes/testing.html"
     ).read_text(encoding="utf-8")
+    journey_rail = (
+        root / "site/layouts/partials/journey-rail.html"
+    ).read_text(encoding="utf-8")
+    styles = (root / "site/static/styles.css").read_text(encoding="utf-8")
+    controls = (root / "site/static/detail-toggle.css").read_text(
+        encoding="utf-8"
+    )
 
     for source in (chinese, english):
         assert 'key="similar-tools" parity="supplemental"' in source
@@ -147,6 +154,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert shortcode.count('data-audience="maintainer"') == 1
     assert "data-similar-tools-tab-testing" not in shortcode
     assert "similar-tools-testing-matrix" in testing_shortcode
+    assert 'appendix maintainer-bookend{{ if eq .Key "testing" }}' in journey_rail
+    assert ".journey-bookend.maintainer-bookend.active-selection" in styles
+    assert 'button[data-detail-level="technical"][aria-pressed="true"]' in controls
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english

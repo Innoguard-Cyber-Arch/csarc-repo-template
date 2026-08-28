@@ -630,6 +630,8 @@
     .journey-bookend.active-files { background: var(--best-soft); color: #0b6540; }
     .journey-bookend.active-selection { background: var(--ink); color: white; }
     .journey-bookend.active-bridge { background: var(--optional-soft); color: #174f8b; }
+    .journey-bookend.maintainer-bookend { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
+    .journey-bookend.maintainer-bookend.active-selection { background: var(--optional); color: white; }
     .journey-bookend:hover, .journey-bookend:focus-visible { background: #fffbea; outline: 3px solid var(--yellow); outline-offset: 1px; }
     .overview-slide .journey-rail, .repo-explorer-slide .journey-rail, .responsibility-slide .journey-rail, .quickstart-slide .journey-rail { width: 9.7%; }
     .overview-slide .journey-bookend, .repo-explorer-slide .journey-bookend, .responsibility-slide .journey-bookend, .quickstart-slide .journey-bookend { padding: 4px; font-size: 17.5px; }
