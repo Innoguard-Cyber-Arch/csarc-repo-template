@@ -4245,12 +4245,12 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 01／工作定義</strong><span>每列說明要驗證的行為、本機命令，以及停用前由哪個 GitHub Action／job 負責。</span>
+    <strong>Journey 01／工作定義</strong><span>從左到右看：要驗證什麼、現在怎麼手動跑、原本由哪個自動流程負責，以及目前是否真的跑得動。</span>
     <p><b>目前狀態：</b>main 已在 #375 將 GitHub Actions 移至 archive；下列 workflow 都不會執行，只保留恢復時的責任分布。</p>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01／工作定義">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
-      <thead><tr><th scope="col">要驗證什麼</th><th scope="col">本機要跑</th><th scope="col">封存的 GitHub Action／job</th><th scope="col">main 本機現況</th></tr></thead>
+      <thead><tr><th scope="col">要驗證什麼</th><th scope="col">現在怎麼手動驗證</th><th scope="col">原自動流程（已停用）</th><th scope="col">現在能不能執行</th></tr></thead>
       <tbody>
         <tr>
           <th scope="row"><strong>Issue 工作邊界</strong><span>標題規則、類型映射、assignee、label 與 duplicate 狀態要能收斂。</span></th>

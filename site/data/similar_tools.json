@@ -75,18 +75,18 @@
         "statusLabel": "目前狀態：",
         "status": "main 已在 #375 將 GitHub Actions 移至 archive；下列 workflow 都不會執行，只保留恢復時的責任分布。",
         "target": "要驗證什麼",
-        "commands": "本機要跑",
-        "workflows": "封存的 GitHub Action／job",
-        "localStatus": "main 本機現況"
+        "commands": "現在怎麼手動驗證",
+        "workflows": "原自動流程（已停用）",
+        "localStatus": "現在能不能執行"
       },
       "en": {
         "title": "Tests",
         "statusLabel": "Current state: ",
         "status": "PR #375 moved GitHub Actions out of main and into the archive. None of the workflows below runs; the mapping only preserves ownership for a future restoration.",
         "target": "What to verify",
-        "commands": "Run locally",
-        "workflows": "Archived GitHub Action / job",
-        "localStatus": "Local status on main"
+        "commands": "How to verify manually",
+        "workflows": "Former automation (suspended)",
+        "localStatus": "Can it run now?"
       }
     },
     "groups": [
@@ -97,12 +97,12 @@
           "zh-tw": {
             "title": "工作定義",
             "heading": "Journey 01／工作定義",
-            "scope": "每列說明要驗證的行為、本機命令，以及停用前由哪個 GitHub Action／job 負責。"
+            "scope": "從左到右看：要驗證什麼、現在怎麼手動跑、原本由哪個自動流程負責，以及目前是否真的跑得動。"
           },
           "en": {
             "title": "Work definition",
             "heading": "Journey 01 / Work definition",
-            "scope": "Each row names the behavior, local command, and the GitHub Action/job that owned it before suspension."
+            "scope": "Read left to right: what to verify, how to run it manually, which automation owned it, and whether it can actually run now."
           }
         },
         "rows": [

@@ -3788,12 +3788,12 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 01 / Work definition</strong><span>Each row names the behavior, local command, and the GitHub Action/job that owned it before suspension.</span>
+    <strong>Journey 01 / Work definition</strong><span>Read left to right: what to verify, how to run it manually, which automation owned it, and whether it can actually run now.</span>
     <p><b>Current state: </b>PR #375 moved GitHub Actions out of main and into the archive. None of the workflows below runs; the mapping only preserves ownership for a future restoration.</p>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01 / Work definition">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
-      <thead><tr><th scope="col">What to verify</th><th scope="col">Run locally</th><th scope="col">Archived GitHub Action / job</th><th scope="col">Local status on main</th></tr></thead>
+      <thead><tr><th scope="col">What to verify</th><th scope="col">How to verify manually</th><th scope="col">Former automation (suspended)</th><th scope="col">Can it run now?</th></tr></thead>
       <tbody>
         <tr>
           <th scope="row"><strong>Issue work boundary</strong><span>Title rules, type mapping, assignee, labels, and duplicate disposition must converge.</span></th>
