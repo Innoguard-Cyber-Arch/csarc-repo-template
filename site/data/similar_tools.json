@@ -72,24 +72,32 @@
       "zh-tw": {
         "title": "測試",
         "statusLabel": "目前狀態：",
-        "status": "main 的 GitHub Actions 仍封存。Journey 01 只保留一個本機入口與兩層測試；尚未收斂的檔案由 #382 處理。",
+        "status": "Journey 01 的四條 GitHub Actions 已由 #386 恢復並啟用；#382 將本機與 Action 共用的驗證邏輯收斂為單一入口。",
         "purpose": "測試目的",
         "shared": "任何使用本模板的 repo",
         "templateOnly": "repo-template 額外",
-        "milestone": "每次進 Milestone（Issue → dev）",
+        "milestone": "Issue PR → dev",
         "release": "發版（dev → main）",
-        "pending": "待 #382"
+        "tests": "測試檔／入口",
+        "automation": "CI/CD／GitHub Action",
+        "trigger": "Trigger",
+        "timeout": "Timeout",
+        "pending": "待"
       },
       "en": {
         "title": "Tests",
         "statusLabel": "Current state: ",
-        "status": "GitHub Actions remain archived on main. Journey 01 keeps one local entrypoint and only two test layers; issue #382 owns the remaining consolidation.",
+        "status": "Pull request #386 restored and enabled four Journey 01 GitHub Actions. Issue #382 consolidates the validation logic shared by local runs and Actions behind one entrypoint.",
         "purpose": "Test purpose",
         "shared": "Every repository using the template",
         "templateOnly": "Additional repo-template checks",
-        "milestone": "Every Milestone change (Issue → dev)",
+        "milestone": "Issue PR → dev",
         "release": "Release (dev → main)",
-        "pending": "Pending #382"
+        "tests": "Test file / entrypoint",
+        "automation": "CI/CD / GitHub Action",
+        "trigger": "Trigger",
+        "timeout": "Timeout",
+        "pending": "Pending"
       }
     },
     "groups": [
@@ -115,7 +123,10 @@
               "en": {"title": "Issue work boundary", "description": "Title, type, assignee, labels, and duplicate disposition must converge."}
             },
             "shared": {
-              "milestone": {"files": [{"path": "tests/test_work_definition.py", "pending": true}]}
+              "milestone": {
+                "files": [{"path": "tests/test_work_definition.py", "pending": true, "issue": 382}],
+                "automation": [{"path": ".github/workflows/issue-triage.yml", "job": "classify", "trigger": {"zh-tw": "Issue opened／edited／reopened／closed", "en": "Issue opened, edited, reopened, or closed"}, "timeout": "5 min"}]
+              }
             }
           },
           {
@@ -124,7 +135,10 @@
               "en": {"title": "PR-to-Issue traceability", "description": "PR title, branch, Closes/Fixes link, open Issue, checkboxes, and Milestone must agree."}
             },
             "shared": {
-              "milestone": {"files": [{"path": "tests/test_work_definition.py", "pending": true}]}
+              "milestone": {
+                "files": [{"path": "tests/test_work_definition.py", "pending": true, "issue": 382}],
+                "automation": [{"path": ".github/workflows/pr-policy.yml", "job": "title", "trigger": {"zh-tw": "PR 開啟、內容／commit／metadata 變更與 merge group", "en": "PR opened, content, commit, or metadata changes, and merge group"}, "timeout": "10 min"}]
+              }
             }
           },
           {
@@ -133,7 +147,10 @@
               "en": {"title": "Spec contract and Issue sync", "description": "Validate required sections, acceptance criteria, stable spec IDs, and idempotent synchronization."}
             },
             "shared": {
-              "milestone": {"files": [{"path": "tests/test_spec_to_issue.py"}]}
+              "milestone": {
+                "files": [{"path": "tests/test_spec_to_issue.py"}],
+                "automation": [{"path": ".github/workflows/spec-to-issue.yml", "job": "sync", "trigger": {"zh-tw": "Spec／同步程式進入 main 或 dev；可手動執行", "en": "Spec or sync code enters main or dev; manual dispatch is also allowed"}, "timeout": "10 min"}]
+              }
             }
           },
           {
@@ -142,7 +159,10 @@
               "en": {"title": "Milestone completion", "description": "Due date, open Issues, and acceptance checkboxes jointly determine close or reopen."}
             },
             "shared": {
-              "release": {"files": [{"path": "tests/test_milestone_lifecycle.py"}]}
+              "release": {
+                "files": [{"path": "tests/test_milestone_lifecycle.py"}],
+                "automation": [{"path": ".github/workflows/milestone-lifecycle.yml", "job": "sync", "trigger": {"zh-tw": "Issue closed／reopened／milestoned", "en": "Issue closed, reopened, or milestoned"}, "timeout": "5 min"}]
+              }
             }
           },
           {
@@ -151,11 +171,11 @@
               "en": {"title": "Journey 01 aggregate regression", "description": "Use one entrypoint for required tests so local runs and future Actions never maintain two lists."}
             },
             "shared": {
-              "milestone": {"files": [{"path": "scripts/verify", "pending": true}]},
-              "release": {"files": [{"path": "scripts/verify", "pending": true}]}
+              "milestone": {"files": [{"path": "scripts/verify", "pending": true, "issue": 382}], "automationNote": {"zh-tw": "不另設測試 Action；恢復後的 policy workflow 只呼叫共用程式。", "en": "No separate test Action; restored policy workflows call shared code only."}},
+              "release": {"files": [{"path": "scripts/verify promotion", "pending": true, "issue": 382}], "automationNote": {"zh-tw": "Journey 01 不恢復 full matrix 或發布流程。", "en": "Journey 01 does not restore the full matrix or delivery workflows."}}
             },
             "templateOnly": {
-              "release": {"files": [{"path": "tests/test_template_work_definition.py", "pending": true}]}
+              "release": {"files": [{"path": "tests/test_work_item_forms.py"}, {"path": "tests/test_template_work_definition.py", "pending": true, "issue": 382}], "automationNote": {"zh-tw": "不另設 repo-template Action；只在同一個 promotion 入口多跑交付測試。", "en": "No repo-template-only Action; the same promotion entrypoint adds delivery tests."}}
             }
           }
         ]

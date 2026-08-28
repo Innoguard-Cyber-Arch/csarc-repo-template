@@ -30,7 +30,9 @@
             {{- with $stage }}
             <li>
               <strong>{{ if eq $stageKey "milestone" }}{{ $labels.milestone }}{{ else }}{{ $labels.release }}{{ end }}</strong>
-              {{- with $stage.files }}<ul>{{ range . }}<li><code>{{ .path }}</code>{{ if .pending }} <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">{{ $labels.pending }}</a>{{ end }}</li>{{ end }}</ul>{{ end }}
+              {{- with $stage.files }}<div class="testing-kind"><b>{{ $labels.tests }}</b><ul>{{ range . }}<li><code>{{ .path }}</code>{{ if .pending }}{{ $issue := default 382 .issue }} <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/{{ $issue }}" target="_blank" rel="noreferrer">{{ $labels.pending }} #{{ $issue }}</a>{{ end }}</li>{{ end }}</ul></div>{{ end }}
+              {{- with $stage.automation }}<div class="testing-kind"><b>{{ $labels.automation }}</b><ul>{{ range . }}<li><code>{{ .path }}</code>／<code>{{ .job }}</code>{{ if .pending }}{{ $issue := default 385 .issue }} <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/{{ $issue }}" target="_blank" rel="noreferrer">{{ $labels.pending }} #{{ $issue }}</a>{{ end }}<span>{{ $labels.trigger }}：{{ index .trigger $lang }} · {{ $labels.timeout }}：{{ .timeout }}</span></li>{{ end }}</ul></div>{{ end }}
+              {{- with $stage.automationNote }}<div class="testing-kind"><b>{{ $labels.automation }}</b><span>{{ index . $lang }}</span></div>{{ end }}
               {{- with $stage.note }}<span>{{ index . $lang }}</span>{{ end }}
             </li>
             {{- end }}

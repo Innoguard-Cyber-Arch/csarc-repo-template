@@ -220,39 +220,65 @@ Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `sc
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="method" track="method" eyebrow="步驟 01" title="先寫清楚要解決什麼" subtitle="Issue 是實作範圍；Milestone 是可選的 story 成果層。" class="legacy-slide decision-slide" legacy="true" >}}
+{{< slide key="method" track="method" eyebrow="步驟 01" title="先把工作說清楚" subtitle="先寫清楚問題、完成條件與驗證；工作變大時才增加分組或交付批次。" class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
-        <h2>步驟 1｜<span class="accent">以 durable project memory 說清楚現況與原因</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>SDD 記錄目前契約、Feature parent 保存 story，Task／Bug subissues 與 PR 保留交付時間線；有期限時才建立 Milestone。</p>
+        <h2>步驟 1｜<span class="accent">工作如何從需求走到合併</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>一張 Issue 定義一項可驗收的改變，一張 PR 負責交付；多項工作需要同批完成時，才使用 Milestone。</p>
       </header>
-      <p class="context-line"><strong>寫作原則｜</strong>Issue 標題用英文摘要成果；內文再以中文交代問題與完成條件，其餘選填寫進補充。</p>
+      <p class="context-line"><strong>模板的作用｜</strong>把 Issue、PR 與交付批次的寫法和關聯固定下來，讓人與 agent 都知道要做什麼、怎樣算完成；小工作不必額外建立 Feature、Milestone 或完整規格。</p>
       <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不讓每張工作單都走過重流程</h3><ul><li><strong>只寫 Issue 標題：</strong>缺成果與驗證，人和 AI 只能猜</li><li><strong>每張都跑 Spec Kit：</strong>小工作成本過高</li><li><strong>只留在聊天：</strong>無版本紀錄，不能在 PR 審查</li></ul></article>
-        <article class="decision-step recommended">
-          <span class="step-label">我們的選擇</span>
-          <details class="package-disclosure"><summary><span>主流目錄：<span class="tech-name">docs/specs/（SDD）＋ docs/adr/（ADR）</span></span></summary><div class="package-health"><p><strong>目前：</strong><code>docs/specs/</code> 保存 Spec-Driven Development（SDD）的 living specifications 並經 CI 驗證；<code>tracking: none</code> 表示不需要工作追蹤，預設同步 Task Issue，<code>tracking: story</code> 同步 Feature parent。</p><p><strong>歷史：</strong><code>docs/adr/</code> 保存 Architecture Decision Records（ADR）的背景、選項、取捨與取代關係；Issue／PR／commit 保留完整時間線。</p><p><strong>行為與證據：</strong>Test-Driven Development（TDD）產生的自動化測試是可執行回歸；test 與 implementation 留在同一 leaf Issue／PR，不把 red／green／refactor 拆成管理工作。Behavior-Driven Development（BDD）的 Given／When／Then 情境只在跨角色行為需要澄清時使用。</p></div></details>
-          <p class="recommendation-copy"><strong>Durable project memory：</strong><code>docs/README.md</code> 是人與 agent 的閱讀入口；SDD 回答「現在保證什麼」，ADR 回答「為何這樣選」，測試與 CI 回答「如何證明」，Issues／PRs 回答「何時由誰改變」。<br><strong>Story：</strong>Feature parent 保存 what／why／acceptance；可獨立負責與驗證的 Task／Bug 才拆 subissue，dependency 只表達真實阻塞。<br><strong>Delivery：</strong>Milestone 必須有 due date，掛 leaf Issues 與其 PR；Feature parent 不掛入。Projects 預設關閉。<br><strong>Issue：</strong>建立前 bounded search open／closed Issues，閱讀候選內文、comments 與 linked PR，記錄舊決策是沿用、取代或駁回及理由。<br><strong>既有 repo：</strong>adopt／update dry-run 先預覽，確認後只遷移舊 CSARC 結構。</p>
-        </article>
+        <details class="decision-step decision-fold" open>
+          <summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">常見的工作設計思路</span></summary>
+          <ul class="work-definition-list">
+            <li><strong>先做再補文件：</strong>小而明確的工作直接完成；跨時段、有依賴或高風險時才補計畫。</li>
+            <li><strong>規格先行：</strong>先寫清楚需求、設計與工作拆分，再開始開發；適合大型或不確定性高的改變。</li>
+            <li><strong>變更提案：</strong>先把準備修改的內容獨立審查，接受後才併回正式規格；適合把規格差異當成審查核心的團隊。</li>
+            <li><strong>依複雜度分級：</strong>小工作走短流程，大型工作才增加探索、設計、分工與審查。</li>
+          </ul>
+        </details>
+        <details class="decision-step decision-fold recommended" open>
+          <summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一條工作線，按需要增加分組</span></summary>
+          <ul class="work-definition-list">
+            <li><strong>整體：</strong>Issue 說清楚 → branch 實作 → PR 審查與交付；本模板提供表單與規則，單一本機驗證入口由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">#382</a> 建置中。</li>
+            <li><strong>Milestone：</strong>多張工作有共同期限、整合或發版時才建立；收錄 Task／Bug 與對應 PR。</li>
+            <li><strong>Issue：</strong><ul><li><strong>標題：</strong>英文 ASCII 12–80 字元、至少三個詞；不加類型前綴，結尾不加句點。</li><li><strong>內文：</strong>類型、問題與完成條件必填；補充可寫關聯、驗證與風險。</li><li><strong>工作類別：</strong>Feature＝共同成果；Task＝可獨立完成的工作；Bug＝不符合預期；Documentation＝純文件工作。GitHub 原生 Type 只使用 Feature／Task／Bug；Duplicate 與 Hotfix 都不是 Type。</li><li><strong>Label：</strong>工作分類擇一：enhancement、bug、documentation；重複案件使用 duplicate，交付追蹤才使用 promotion。</li><li><strong>Assignee：</strong>建立者在送出時自我指派；agent／CLI 建立時明確指定 <code>@me</code>，正式交接時再更換。</li><li><strong>何時拆 Sub-issue：</strong>同一張 PR 能完成並用同一組結果驗證就不拆；能獨立實作、驗證與交付，或超出原範圍但必須補做才拆。</li><li><strong>Parent：</strong>描述仍未完整達成的共同成果；必要 Sub-issues 完成後才能結案。先後順序另用 Dependency。</li></ul></li>
+            <li><strong>PR：</strong><ul><li><strong>標題：</strong><code>type(scope)!: English summary</code>；scope 選填，<code>!</code> 表示破壞性變更。</li><li><strong>Angular types：</strong><code>feat</code> 新功能、<code>fix</code> 修錯、<code>docs</code> 文件、<code>refactor</code> 重構、<code>test</code> 測試、<code>build</code> 建置／相依、<code>ci</code> 自動化、<code>chore</code> 維護、<code>revert</code> 撤銷。</li><li><strong>內文：</strong>Purpose 與 <code>Closes #N</code>、完成清單必填；補充可寫風險、回退與額外影響。</li><li><strong>Label：</strong>enhancement、bug、documentation 擇一；特殊交付才另加 promotion（正式交付）、hotfix（緊急修正）或 release-recovery（補建遺漏的 Release，詳見 06），不能使用 duplicate。</li><li><strong>Assignee：</strong>建立者在送出後自我指派；交接時可更換，但作者仍列為 Assignee。</li></ul></li>
+            <li><strong>例外：</strong>Duplicate 是 Issue 的重複結案方式，不開 PR；Hotfix 是 Bug 的緊急交付 Label，可直接進 main，但仍須 Issue、驗證與審查。</li>
+          </ul>
+        </details>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>記憶入口：</strong><code>docs/README.md</code>；<code>AGENTS.md</code> 要求人與 agent 先讀 current SDD 與相關 ADR</li><li><strong>SDD：</strong><code>docs/specs/</code>；<code>tracking: none</code>、<code>issue</code> 或 <code>story</code></li><li><strong>Hierarchy：</strong>native Feature parent＋Task／Bug subissues；work branch 用 <code>gh issue develop</code></li><li><strong>Delivery：</strong><code>docs/milestone-description.md</code>；真實 due date＋leaf Issues／PRs</li><li><strong>ADR：</strong><code>docs/adr/</code>；保留 Accepted、Superseded 與 Rejected 的歷史</li><li><strong>TDD／BDD：</strong>測試與 CI 保存可執行證據；必要的 Given／When／Then 情境放在 SDD</li></ul></aside>
-      <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues" target="_blank" rel="noreferrer">GitHub sub-issues</a>; <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/creating-issue-dependencies" target="_blank" rel="noreferrer">GitHub issue dependencies</a>; <a href="https://github.com/github/spec-kit/blob/main/templates/spec-template.md" target="_blank" rel="noreferrer">Spec Kit template</a>; <a href="https://github.com/grafana/grafana/issues/126204" target="_blank" rel="noreferrer">Grafana epic with subissues</a>; <a href="https://google.github.io/eng-practices/review/developer/small-cls.html" target="_blank" rel="noreferrer">Google small CLs</a>. Accessed August 25, 2026.</p>
+      <aside class="config-guidance" data-config-direct="true"><strong>模板設定與客製化位置</strong><ul><li><strong>工作單欄位：</strong><code>.github/ISSUE_TEMPLATE/*.yml</code> 定義各工作入口的原生 Type、Label、問題與完成條件，<code>config.yml</code> 關閉空白 Issue；四種表單已由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/384" target="_blank" rel="noreferrer">#384</a> 實作</li><li><strong>工作層級：</strong><code>AGENTS.md</code> 定義 Feature／Task／Bug 的使用規則，<code>docs/adr/spec-story-and-work-items.md</code> 保存長期理由；團隊只改操作方式時調整前者，改變角色責任時兩者一起更新</li><li><strong>規格同步：</strong><code>docs/specs/</code> 放各專案的長期規格，<code>scripts/spec_to_issue.py</code> 定義 <code>tracking: issue</code>、<code>story</code>、<code>none</code> 的同步行為；一般客製只新增或修改 spec，不必改同步程式</li><li><strong>交付批次：</strong><code>docs/milestone-description.md</code> 定義 Milestone 的 Problem、Outcome、Acceptance criteria 與 Verification；可改團隊用語與範例，但仍要保留真實 due date 與可驗收結果</li></ul></aside>
+      <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues" target="_blank" rel="noreferrer">GitHub sub-issues</a>。具體工具、功能名稱與資料來源統一整理於<a href="#similar-tools">相似工具</a>。</p>
 {{< /legacy >}}
 
 {{< basic >}}
-- 開工前先列出 open Milestones、open Issues，再以 2–4 個具體詞搜尋 open／closed Issues。
-- Issue 標題用 12–80 個 ASCII 字元與至少三個詞描述成果；內文固定為「類型、問題、完成條件、補充」。
-- 超出完成條件的需求另開 Issue，不偷塞進目前 PR。
+### 我們的選擇
 
-{{< disclosure key="spec-tracking" title="spec 預設同步 Issue，明確 story 才建 Milestone" >}}
-`docs/specs/*.md` 以 front matter 記錄狀態。預設透過 `csarc-spec-id` marker idempotently 同步一張 Issue；只有明列 `tracking: story` 才用 `csarc-story-id` 同步 Milestone，不自動猜測或拆出 child Issues。
-{{< /disclosure >}}
+- **整體：** Issue 說清楚 → branch 實作 → PR 審查與交付。
+- **Milestone：** 多張工作有共同期限、整合或發版時才建立。
+- **Issue：** 寫問題、完成條件與驗證；Type 可為 Feature、Task 或 Bug。
+  - Feature＝共同成果；Task＝可獨立完成的工作；Bug＝不符合預期。
+  - 標題使用 12–80 個英文 ASCII 字元；內文必填類型、問題與完成條件。
+  - 工作 Label 從 enhancement、bug、documentation 擇一；建立者在送出時自我指派。
+  - 同一張 PR 能完成並用同一組結果驗證就不拆；能獨立實作與驗證，或超出原範圍但必須補做，才拆成 Sub-issue。
+  - Parent 描述仍未完整達成的共同成果；所有必要 Sub-issues 完成後才能結案。Dependency 才表示先後阻擋。
+- **PR：** 標題使用 <code>type(scope)!: English summary</code>；內文必填 Purpose、<code>Closes #N</code> 與完成清單，建立者在送出後自我指派。
+- **例外：** Duplicate 是 Issue 的重複結案方式；Hotfix 是 Bug 的緊急交付 Label。兩者都不是 Issue Type。
 
-{{< detail key="method-lifecycle" title="真正在 repo 裡運作的生命週期" >}}
-- Story 說明使用 `Problem`、`Outcome`、`Acceptance criteria`、`Plan`、`Out of scope`、`Verification`、`References`。
-- Milestone 只掛直接推進成果的 Issues，不重複掛 PR。
-- 最後一張 open Issue 關閉且所有 acceptance checkbox 都勾選時才關閉 Milestone；條件取消或 Issue 重開時會重開。
-- `scripts/spec_to_issue.py` 負責 spec 同步；`.github/workflows/milestone-lifecycle.yml` 依 GitHub API 最新狀態收尾。
+### 其他常見做法
+
+- **先做再補文件：**小而明確的工作直接完成；跨時段、有依賴或高風險時才補計畫。
+- **規格先行：**先寫清楚需求、設計與工作拆分，再開始開發。
+- **變更提案：**先獨立審查準備修改的內容，接受後才併回正式規格。
+- **依複雜度分級：**小工作走短流程，大型工作才增加探索、設計、分工與審查。
+
+具體工具、功能名稱與資料來源見[相似工具](#similar-tools)。
+
+{{< detail key="method-lifecycle" title="現在能做什麼，哪些仍在開發" >}}
+- **已生效：** 組織已啟用原生 Feature／Task／Bug Types；四種 Issue Form 直接寫入 Type／Label；[#386](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/386) 已恢復 Issue triage、PR policy、Spec sync 與 Milestone lifecycle 四條 GitHub Actions。
+- **開發中：** [#382](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382) 將本機與 Action 共用的工作定義驗證收斂為單一入口。
+- **尚未啟用：** Issue-to-promotion orchestration 與其他 Journey 的 CI/CD 仍封存；目前四條 Journey 01 workflow 都不是 required status check。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
@@ -507,7 +533,7 @@ GitHub Release 是所有 profile 的共同基線。PyPI／npm 分開選配、預
       <p class="context-line"><strong>問題與目的｜</strong>模板錯誤會一次影響多個專案；每次修改都要真的建立新案、導入既有案，再讓已導入的 repo 接收更新並通過完整驗證。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>這次不選，因為無法持續同步或驗證</h3><ul><li><strong>GitHub Template：</strong>只複製一次，不記得來源與答案</li><li><strong>PyScaffold：</strong>可參考 Python 結構，但會形成第二套更新機制</li><li><strong>只驗 YAML：</strong>無法證明新案、既有案與更新真的能跑</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；衝突留給 PR 由人處理。</p></div></details><p><strong>建立：</strong>CI/CD-only、Python-only、TypeScript-only、混合與最低 Python 都實跑驗證。<br><strong>導入與更新：</strong>先以 existing mode 導入已有內容，再對同一 repo 執行下一版 Copier update、確認產品目錄未被覆寫，最後執行生成專案的完整驗證。<br><strong>版本：</strong>公版四種組合共用一個 SemVer；Python 與 Node 基線則各自滿三十天觀察後再前進。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；衝突留給 PR 由人處理。</p></div></details><p><strong>建立：</strong>CI/CD-only、Python-only、TypeScript-only、混合與最低 Python 都實跑驗證。<br><strong>導入與更新：</strong>adopt／update dry-run 先預覽，確認後只遷移舊 CSARC 結構；接著對同一 repo 執行下一版 Copier update、確認產品目錄未被覆寫，最後執行生成專案的完整驗證。<br><strong>版本：</strong>公版四種組合共用一個 SemVer；Python 與 Node 基線則各自滿三十天觀察後再前進。</p></article>
       </div>
       <p class="context-line"><strong>root／template 配對檔案｜</strong>43 對 workflow、policy、文件、script 與 test（例如 <code>promotion.yml</code>、<code>docs/ci-policy.md</code>、<code>scripts/promotion_gate.py</code>）在 root 與 <code>template/</code> 之間逐位元組相同；過去只靠 <code>verify-template.sh</code> 在 CI 用 <code>diff</code> 事後比對，任何一邊漏改要等驗證跑完才被抓到。現在 <code>scripts/sync-paired-files.sh</code> 把 root 當成唯一來源：本機執行它會立即重新產生每個 <code>template/</code> 副本；加 <code>--check</code> 則不寫檔，只驗證每個副本是否符合產生腳本的確定性輸出（內容與可執行位元），任何一對不一致就印出差異並失敗。<code>verify-template.sh</code> 已改成呼叫 <code>--check</code>，並用一段複製到暫存目錄、蓄意注入內容與權限落差、確認失敗、重新產生、確認通過的回歸測試證明這個機制會擋下漂移。<code>dependabot.yml</code>、<code>.gitignore</code> 等僅因 Jinja 變數不同的檔案不在此列，仍由既有的「產生一個實案並與 root 比對」測試把關；<code>AGENTS.md</code>／<code>README.md</code> 等文件因 root 與下游專案的治理內容本來就不同，不屬於重複維護，故未強行合併。</p>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>下發來源、語言組合、保留路徑與功能開關：</strong><code>template/</code>＋<code>copier.yml</code></li><li><strong>root-only CI 與建立／導入／更新驗證：</strong><code>.github/</code>＋<code>scripts/verify-template.sh</code>；生成 repo 不會收到這支腳本或 template release workflows</li><li><strong>語言基線與三十天觀察：</strong><code>profiles/catalog.yaml</code>；<strong>Python 自動升版：</strong><code>python-version-policy.yml</code></li><li><strong>root／template 配對檔案的單一來源與漂移檢查：</strong><code>scripts/sync-paired-files.sh</code></li></ul></aside>
@@ -516,7 +542,7 @@ GitHub Release 是所有 profile 的共同基線。PyPI／npm 分開選配、預
 {{< basic >}}
 - `template/` 是下發內容來源；root 保留公版本身的 GitHub 治理與 dogfood 設定。
 - CI/CD-only、Python、TypeScript、混合與最低 Python 組合都建立後驗證。
-- 既有 repo 導入後，再對同一 repo 執行下一版 Copier update，確認產品內容未被覆寫。
+- 既有 repo 先用 adopt／update dry-run 預覽；確認後只遷移舊 CSARC 結構，再執行下一版 Copier update 並確認產品內容未被覆寫。
 
 {{< disclosure key="copier-update" title="Copier＋root dogfood＋建立／更新回歸" >}}
 [Copier](https://github.com/copier-org/copier) 記錄來源、語言與答案，能把新版公版套回可自行修改的既有 repo；衝突保留在短分支與 PR 由人處理。GitHub Template 只複製一次，PyScaffold 則會形成第二套更新機制，因此不採用。

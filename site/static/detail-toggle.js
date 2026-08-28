@@ -71,6 +71,7 @@
   });
 
   document.querySelectorAll('.legacy-content .config-guidance').forEach(guidance => {
+    if (guidance.dataset.configDirect === 'true') return;
     const actions = guidance.querySelector('.config-actions');
     const triggers = actions ? [...actions.querySelectorAll('.config-trigger')] : [];
     const overlay = triggers[0]
@@ -293,6 +294,11 @@
       item.hidden = simple;
       item.inert = simple;
     });
+    if (!simple) {
+      document.querySelectorAll('.config-guidance-fold').forEach(detail => {
+        detail.open = true;
+      });
+    }
     if (simple) {
       document.querySelectorAll('.config-overlay').forEach(overlay => {
         overlay.hidden = true;

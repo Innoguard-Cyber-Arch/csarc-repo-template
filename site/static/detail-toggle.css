@@ -42,12 +42,8 @@
 }
 
 .detail-level-control button[aria-pressed="true"] {
-  background: var(--ink);
-  color: white;
-}
-
-.detail-level-control button[data-detail-level="technical"][aria-pressed="true"] {
-  background: var(--optional);
+  background: var(--yellow);
+  color: var(--ink);
 }
 
 .detail-level-control button:focus-visible {
@@ -269,6 +265,14 @@ html[data-detail-level="simple"] .technical-tour-trigger {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 6px;
+}
+
+.markdown-slide.single-column .markdown-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.markdown-slide.single-column .markdown-body > * {
+  grid-column: 1;
 }
 
 .markdown-body > p:first-child,

@@ -258,16 +258,16 @@ with:
       ],
       method: [
         {
-          title: '英文標題摘要成果，中文內文說明脈絡',
-          goal: 'GitHub 建議標題應一眼說明重點；Issue Form 只能預填標題，真正的格式檢查交給 workflow。',
-          summary: '標題限 12–80 個 ASCII 字元及至少三個詞；不加類型前綴或句點。Spec 識別碼藏在內文註解，`issue-triage.yml` 與 PR 再檢查標題。',
-          file: 'scripts/validate-issue-title＋work-item.yml＋issue-triage.yml＋pr-policy.yml',
+          title: '工作單欄位與空白 Issue',
+          goal: '預設只提供一張開發工作表單，要求類型、問題與完成條件，並關閉沒有結構的空白 Issue。',
+          summary: '調整表單欄位、選項、必填狀態，以及是否允許空白 Issue。',
+          file: '.github/ISSUE_TEMPLATE/work-item.yml＋config.yml',
           code: `# work-item.yml
-description: 英文標題摘要重點，內文用中文定義改動
+description: 用中文定義一個可驗證改動
 body:
   - id: kind
     type: dropdown
-    options: [bug, enhancement, documentation, duplicate]
+    options: [feature, task, bug, documentation, duplicate]
   - id: problem
     type: textarea
   - id: acceptance
@@ -278,50 +278,48 @@ body:
 
 # config.yml
 blank_issues_enabled: false
-contact_links: []
-
-# validate-issue-title: 12-80 ASCII characters, 3+ words.
-# spec_to_issue.py: keep the SPEC ID in an HTML comment in the body.
-# issue-triage.yml assigns the author and work label.`
+contact_links: []`
         },
         {
-          title: '只有可端到端驗收的 story 才建立 Milestone',
-          goal: 'Milestone 是可選的 1..N Issues 成果層，不靠工作數量決定，也不重複掛 PR。',
-          summary: 'description 以 Problem、Outcome、Acceptance criteria、Plan、Out of scope、Verification 與 References 寫清楚 story；spec 預設同步 Issue，只有 `tracking: story` 同步 Milestone。',
-          file: 'docs/milestone-description.md＋scripts/spec_to_issue.py',
-          code: `---
-id: SPEC-001
-priority: P1
-estimate: 1-3 days
-status: proposed
-# Optional: create or update one Milestone instead of one Issue.
-tracking: story
----
+          title: '工作類型、標籤與父子層級',
+          goal: '模板使用 GitHub 原生 Feature、Task、Bug Types；documentation、duplicate、hotfix 則是不同用途的標籤或結案方式。',
+          summary: '定義 Feature／Task／Bug，以及 documentation、duplicate、hotfix 的用途與關係。',
+          file: 'AGENTS.md＋policies/labels.json＋docs/adr/spec-story-and-work-items.md＋scripts/ci_tier.py',
+          code: `Native Issue Types:
+  Feature -> shared outcome; label: enhancement
+  Task    -> deliverable work; label: enhancement
+  Bug     -> unexpected behavior; label: bug
 
-## Problem
+Other classifications:
+  documentation -> Task + documentation label
+  duplicate     -> duplicate close reason
+  hotfix         -> Bug + hotfix label + fix/<Issue>-* -> main`
+        },
+        {
+          title: '規格要不要建立追蹤工作',
+          goal: '各專案在 `docs/specs/` 寫長期規格；front matter 決定同步 Task、Feature，或只保存文件。',
+          summary: '決定一份 Spec 建立 Task、Feature，或只保存為長期契約。',
+          file: 'docs/specs/＋scripts/spec_to_issue.py',
+          code: `tracking: issue  # Sync one Task
+tracking: story  # Sync one Feature parent
+tracking: none   # Keep the current contract only
+
+python scripts/spec_to_issue.py validate`
+        },
+        {
+          title: '交付批次的說明格式',
+          goal: 'Milestone 只在多張工作需要同一期限、整合或發版時建立，並使用一致的可驗收說明。',
+          summary: '定義多張工作同批交付時，Milestone 要寫哪些驗收內容。',
+          file: 'docs/milestone-description.md',
+          code: `## Problem
 ## Outcome
 ## Acceptance criteria
-- [ ] Observable condition
+- [ ] Observable result
 ## Plan
 - #123 — Independently deliverable work
 ## Out of scope
 ## Verification
 ## References`
-        },
-        {
-          title: '工作合併後才以最小權限同步追蹤與生命週期',
-          goal: 'PR 內容不直接取得寫入權限；同一 spec ID 不重複開單，並依最新遠端狀態收尾 story。',
-          summary: '`spec-to-issue.yml` 在整合分支同步 Issue 或 Milestone；`milestone-lifecycle.yml` 只在 Issues 全關且 acceptance criteria 全勾選時關閉 Milestone，有 open work 或未完成 criterion 時重開。',
-          file: 'spec-to-issue.yml＋milestone-lifecycle.yml',
-          code: `on:
-  push:
-    branches: [main, dev]
-    paths: ["docs/specs/*.md"]
-  issues:
-    types: [closed, reopened, milestoned]
-permissions:
-  contents: read
-  issues: write`
         }
       ],
       pr: [
@@ -848,12 +846,54 @@ gh auth status`
       const guidance = slide.querySelector('.config-guidance');
       if (!settings || !guidance) return;
 
+      const direct = guidance.dataset.configDirect === 'true';
       const heading = document.createElement('strong');
-      heading.textContent = '需要設定的項目';
+      heading.textContent = direct ? '模板功能與客製化' : '需要設定的項目';
       const intro = document.createElement('p');
       intro.textContent = '設定內容與對應檔案如下。';
       const actions = document.createElement('div');
       actions.className = 'config-actions';
+
+      if (direct) {
+        settings.forEach(setting => {
+          const item = document.createElement('details');
+          item.className = 'config-inline-detail';
+          const itemSummary = document.createElement('summary');
+          const title = document.createElement('span');
+          title.className = 'config-trigger-title';
+          title.textContent = setting.title;
+          const description = document.createElement('span');
+          description.className = 'config-trigger-summary';
+          description.textContent = (setting.summary || setting.goal).replaceAll('`', '');
+          itemSummary.append(title, description);
+
+          const body = document.createElement('div');
+          body.className = 'config-inline-body';
+          const goal = document.createElement('p');
+          goal.textContent = setting.goal;
+          const path = document.createElement('p');
+          path.className = 'config-inline-path';
+          path.append('設定檔：');
+          const code = document.createElement('code');
+          code.textContent = setting.file;
+          path.append(code);
+          const example = document.createElement('pre');
+          example.className = 'code';
+          example.textContent = setting.code;
+          body.append(goal, path, example);
+          item.append(itemSummary, body);
+          actions.append(item);
+        });
+
+        const disclosure = document.createElement('details');
+        disclosure.className = 'config-guidance-fold';
+        disclosure.open = true;
+        const summary = document.createElement('summary');
+        summary.textContent = heading.textContent;
+        disclosure.append(summary, actions);
+        guidance.replaceChildren(disclosure);
+        return;
+      }
 
       const overlay = document.createElement('aside');
       overlay.id = `config-overlay-${track}`;

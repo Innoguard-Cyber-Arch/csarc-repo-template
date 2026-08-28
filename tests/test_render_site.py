@@ -156,7 +156,12 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "similar-tools-testing-matrix" in testing_shortcode
     assert 'appendix maintainer-bookend{{ if eq .Key "testing" }}' in journey_rail
     assert ".journey-bookend.maintainer-bookend.active-selection" in styles
-    assert 'button[data-detail-level="technical"][aria-pressed="true"]' in controls
+    assert '.detail-level-control button[aria-pressed="true"]' in controls
+    assert "background: var(--yellow);" in controls
+    assert 'data-config-direct="true"' in chinese
+    assert "guidance.dataset.configDirect === 'true'" in (
+        root / "site/static/detail-toggle.js"
+    ).read_text(encoding="utf-8")
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
@@ -179,14 +184,27 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "Milestone 完成條件",
         "Journey 01 整體回歸",
     ]
-    assert all("workflows" not in row for row in testing_rows)
     assert testing_rows[0]["shared"]["milestone"]["files"][0] == {
         "path": "tests/test_work_definition.py",
         "pending": True,
+        "issue": 382,
     }
-    assert testing_rows[-1]["templateOnly"]["release"]["files"][0] == {
+    assert testing_rows[0]["shared"]["milestone"]["automation"][0] == {
+        "path": ".github/workflows/issue-triage.yml",
+        "job": "classify",
+        "trigger": {
+            "zh-tw": "Issue opened／edited／reopened／closed",
+            "en": "Issue opened, edited, reopened, or closed",
+        },
+        "timeout": "5 min",
+    }
+    assert testing_rows[1]["shared"]["milestone"]["automation"][0][
+        "timeout"
+    ] == "10 min"
+    assert testing_rows[-1]["templateOnly"]["release"]["files"][1] == {
         "path": "tests/test_template_work_definition.py",
         "pending": True,
+        "issue": 382,
     }
     assert len(data["tools"]) == 9
     assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 26

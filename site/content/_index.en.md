@@ -73,20 +73,33 @@ Workflows, policies, scripts, and documents consumed by both root and `template/
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="method" track="method" eyebrow="Step 01" title="Define the problem before implementation" subtitle="An Issue bounds implementation; a Milestone is an optional story outcome." legacy="false"  class="candidate-slide" >}}
-- List open Milestones and Issues, then search open and closed Issues with two to four concrete terms before starting work.
-- Use a 12–80 character ASCII Issue title with at least three words; keep the body shape to type, problem, acceptance criteria, and optional supplement.
-- Open another Issue for work outside the acceptance criteria instead of hiding it in the current PR.
+{{< slide key="method" track="method" eyebrow="Step 01" title="Define the problem before implementation" subtitle="State the problem, acceptance criteria, and verification first; add grouping or a delivery batch only when the work grows." legacy="false"  class="candidate-slide dense single-column" >}}
+### Our choice
 
-{{< disclosure key="spec-tracking" title="Specs default to Issues; explicit stories create Milestones" >}}
-`docs/specs/*.md` records state in front matter. A `csarc-spec-id` marker idempotently synchronizes one Issue by default. Only `tracking: story` uses a `csarc-story-id` marker to synchronize a Milestone, without inventing child Issues.
-{{< /disclosure >}}
+- **Overall:** define the work in an Issue, implement it on a branch, then review and deliver it through a PR.
+- **Milestone:** create one only when multiple work items share a deadline, integration point, or release.
+- **Issue:** state the problem, acceptance criteria, and verification; use Feature, Task, or Bug as the native Type.
+  - Feature is a shared outcome; Task is independently deliverable work; Bug is behavior that differs from expectations. Documentation is a Task with the documentation label.
+  - Titles use 12–80 ASCII characters and at least three words; the body requires type, problem, and acceptance criteria.
+  - Select one work label from enhancement, bug, or documentation. The creator self-assigns when submitting the Issue.
+  - Keep work together when one PR and one result can verify it. Create a Sub-issue when work can be independently implemented and verified, or when required follow-up exceeds the original scope.
+  - A Parent describes the shared outcome that is not complete yet; all required Sub-issues must finish before it closes. Dependency expresses ordering instead.
+- **PR:** use `type(scope)!: English summary`; require Purpose, `Closes #N`, and the checklist in the body. The creator self-assigns after opening it.
+- **Exceptions:** Duplicate is a way to close a repeated Issue; Hotfix is an urgent Bug delivery label. Neither is an Issue Type.
 
-{{< detail key="method-lifecycle" title="The lifecycle that actually runs in the repository" >}}
-- A story description uses `Problem`, `Outcome`, `Acceptance criteria`, `Plan`, `Out of scope`, `Verification`, and `References`.
-- A Milestone contains only Issues that directly advance the outcome, never their linked PRs as duplicates.
-- The Milestone closes only when every acceptance checkbox is checked and no Issue remains open; it reopens when either condition changes.
-- `scripts/spec_to_issue.py` performs spec synchronization, and `.github/workflows/milestone-lifecycle.yml` closes or reopens from current GitHub API state.
+### Other common approaches
+
+- **Start first, document when needed:** finish small, clear work directly; add a plan only for work that spans sessions, has dependencies, or carries higher risk.
+- **Specification first:** clarify requirements, design, and task breakdown before development begins.
+- **Change proposal:** review a proposed change separately, then merge it into the official specification after acceptance.
+- **Complexity-based workflow:** use a short path for small work and add discovery, design, roles, and review only for larger work.
+
+Concrete tools, feature names, and source links are listed under [Similar tools](#similar-tools).
+
+{{< detail key="method-lifecycle" title="What works now and what is still being implemented" >}}
+- **Active:** the organization has enabled native Feature, Task, and Bug Types; four Issue Forms write their Type and label directly; [#386](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/386) restored the Issue triage, PR policy, Spec sync, and Milestone lifecycle GitHub Actions.
+- **In progress:** [#382](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382) consolidates the work-definition validation shared by local runs and Actions behind one entry point.
+- **Not enabled:** Issue-to-promotion orchestration and CI/CD for other Journeys remain archived; none of the four Journey 01 workflows is a required status check.
 {{< /detail >}}
 {{< /slide >}}
 
