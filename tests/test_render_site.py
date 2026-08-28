@@ -136,7 +136,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     for source in (chinese, english):
         assert 'key="similar-tools" parity="supplemental"' in source
         assert "{{< similar-tools >}}" in source
-    assert shortcode.count('data-audience="maintainer"') == 1
+    assert shortcode.count('data-audience="maintainer"') == 2
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
@@ -149,6 +149,19 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "rightSizedWork",
     ]
     assert data["featureGroups"][1]["features"] == ["templateLifecycle"]
+    assert len(data["testing"]["rows"]) == 5
+    assert {
+        workflow["file"]
+        for row in data["testing"]["rows"]
+        for workflow in row["workflows"]
+    } == {
+        "ci.yml",
+        "issue-triage.yml",
+        "milestone-lifecycle.yml",
+        "milestone-policy.yml",
+        "pr-policy.yml",
+        "spec-to-issue.yml",
+    }
     assert len(data["tools"]) == 9
     assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 26
     assert (

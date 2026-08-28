@@ -414,6 +414,20 @@
     .similar-tools-philosophy-matrix td ul { margin: 0; padding-left: 18px; }
     .similar-tools-philosophy-matrix td li + li { margin-top: 4px; }
     .similar-tools-philosophy-matrix .tool-comparison-detail { display: block; margin: 2px 0 0 12px; }
+    .similar-tools-testing-intro { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-bottom: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 14px; line-height: 1.2; }
+    .similar-tools-testing-intro > span { color: var(--muted); }
+    .similar-tools-testing-intro p { grid-column: 1 / -1; margin: 2px 0 0; }
+    .similar-tools-testing-matrix { min-height: 0; font-size: 13px; line-height: 1.18; }
+    .similar-tools-testing-matrix thead th:first-child { width: 23%; }
+    .similar-tools-testing-matrix thead th:nth-child(2) { width: 24%; }
+    .similar-tools-testing-matrix thead th:nth-child(3) { width: 31%; }
+    .similar-tools-testing-matrix thead th:nth-child(4) { width: 22%; }
+    .similar-tools-testing-matrix tbody th { width: 23%; font-size: 13px; }
+    .similar-tools-testing-matrix tbody th strong, .similar-tools-testing-matrix tbody th span, .similar-tools-testing-matrix td a > code, .similar-tools-testing-matrix td a + span { display: block; }
+    .similar-tools-testing-matrix tbody th span, .similar-tools-testing-matrix td a + span { margin-top: 3px; color: var(--muted); font-weight: 500; }
+    .similar-tools-testing-matrix td ul { margin: 0; padding-left: 17px; }
+    .similar-tools-testing-matrix td li + li { margin-top: 5px; }
+    .similar-tools-testing-matrix td code { overflow-wrap: anywhere; white-space: normal; }
     .similar-tools-note { margin-top: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 16px; line-height: 1.22; }
     .selection-sequence {
       position: absolute;
@@ -3973,6 +3987,7 @@ html[data-detail-level="simple"] .detail-panel {
   <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>整體接近</small>主要相似工具</button>
   <button id="similar-tools-tab-work" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-work" data-audience="maintainer" data-similar-tools-tab="1"><small>Journey 01</small>工作定義</button>
   <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-audience="maintainer" data-similar-tools-tab="2"><small>Journey 08</small>模板升級</button>
+  <button id="similar-tools-tab-testing" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-testing" data-audience="maintainer" data-similar-tools-tab="3"><small>維運</small>測試</button>
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
   <div class="similar-tools-legend">
@@ -4136,6 +4151,49 @@ html[data-detail-level="simple"] .detail-panel {
               <li><strong>Copier <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,545（2026-08-27）</span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：記住模板來源與 answers，讓既有 repo 接收新版模板。</span></li>
               <li><strong>OpenRewrite <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,679（2026-08-27）</span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：不用文字模板覆蓋檔案，而是直接執行跨版本語意遷移。</span></li>
           </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div id="similar-tools-panel-testing" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-testing" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 01／工作定義</strong><span>先盤點工作定義：每列說明要驗證的行為、本機命令，以及停用前由哪個 GitHub Action／job 負責。</span>
+    <p><b>目前狀態：</b>main 已在 #375 將 GitHub Actions 移至 archive；下列 workflow 都不會執行，只保留恢復時的責任分布。</p>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01／工作定義">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">要驗證什麼</th><th scope="col">本機要跑</th><th scope="col">封存的 GitHub Action／job</th><th scope="col">main 本機現況</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>Issue 工作邊界</strong><span>標題規則、類型映射、assignee、label 與 duplicate 狀態要能收斂。</span></th>
+          <td><ul><li><code>./scripts/test-issue-triage</code></li></ul></td>
+          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/issue-triage.yml" target="_blank" rel="noreferrer"><strong>Issue triage / classify</strong><code>issue-triage.yml</code></a><span>Issue opened／edited／reopened／closed 時驗證並分類。</span></li></ul></td>
+          <td>不可直接跑：helper 仍讀取已移除的 .github/workflows/issue-triage.yml。</td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>PR 與 Issue 可追溯性</strong><span>PR title、分類 label、分支名稱、Closes／Fixes、開啟中的 Issue 與未完成 checkbox 必須一致。</span></th>
+          <td><ul><li><code>./scripts/test-pr-policy</code></li></ul></td>
+          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/pr-policy.yml" target="_blank" rel="noreferrer"><strong>PR policy / title</strong><code>pr-policy.yml</code></a><span>pull_request／merge_group 時驗證工作範圍與合併前條件。</span></li></ul></td>
+          <td>不可直接跑：helper 仍從已移除的 .github/workflows/pr-policy.yml 抽取規則。</td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Spec 契約與 Issue 同步</strong><span>必要章節、acceptance criteria、verification、穩定 spec id，以及建立／更新 Issue 的冪等行為。</span></th>
+          <td><ul><li><code>uv run python scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md</code></li><li><code>uv run pytest tests/test_spec_to_issue.py -q</code></li></ul></td>
+          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/ci.yml" target="_blank" rel="noreferrer"><strong>CI / fast</strong><code>ci.yml</code></a><span>由 verify-fast 執行 spec validation 與測試。</span></li><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/spec-to-issue.yml" target="_blank" rel="noreferrer"><strong>Spec to Issue / sync</strong><code>spec-to-issue.yml</code></a><span>main／dev 的 spec 變更合併後建立或更新 Issue。</span></li></ul></td>
+          <td>兩個 targeted command 仍可直接執行；遠端 Issue sync 已停用。</td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Milestone 完成條件</strong><span>due date、open Issue 數量與 acceptance criteria checkbox 必須共同決定 Milestone 關閉／重開。</span></th>
+          <td><ul><li><code>uv run pytest tests/test_milestone_lifecycle.py -q</code></li></ul></td>
+          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/milestone-policy.yml" target="_blank" rel="noreferrer"><strong>Milestone policy / due date</strong><code>milestone-policy.yml</code></a><span>Milestone 建立或編輯時要求 due date。</span></li><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/milestone-lifecycle.yml" target="_blank" rel="noreferrer"><strong>Milestone lifecycle / sync</strong><code>milestone-lifecycle.yml</code></a><span>Issue closed／reopened／milestoned 時重算 Milestone 狀態。</span></li></ul></td>
+          <td>Python 單元測試仍可直接執行；兩個事件型 Action 已停用。</td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Journey 01 整體回歸</strong><span>把 Issue、PR、Spec、Milestone 規則與生成模板一起驗證，避免只測單一 helper。</span></th>
+          <td><ul><li><code>./scripts/verify-fast</code></li><li><code>./scripts/verify-template.sh</code></li></ul></td>
+          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/ci.yml" target="_blank" rel="noreferrer"><strong>CI / fast</strong><code>ci.yml</code></a><span>變更感知的快速檢查。</span></li><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/ci.yml" target="_blank" rel="noreferrer"><strong>CI / canonical full</strong><code>ci.yml</code></a><span>完整模板與跨層回歸。</span></li></ul></td>
+          <td>此 dev 預覽分支可跑；main 仍檢查已移除的 workflow 路徑，尚未解耦前不可作為乾淨基線。</td>
         </tr>
       </tbody>
     </table>

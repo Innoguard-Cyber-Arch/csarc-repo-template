@@ -8,6 +8,8 @@
   {{- $groupLabels := index $group.labels $lang }}
   <button id="similar-tools-tab-{{ $group.key }}" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-{{ $group.key }}" data-audience="maintainer" data-similar-tools-tab="{{ add $groupIndex 1 }}"><small>{{ $groupLabels.overline }}</small>{{ $groupLabels.title }}</button>
   {{- end }}
+  {{- $testingLabels := index $data.testing.labels $lang }}
+  <button id="similar-tools-tab-testing" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-testing" data-audience="maintainer" data-similar-tools-tab="{{ add (len $data.featureGroups) 1 }}"><small>{{ $testingLabels.overline }}</small>{{ $testingLabels.title }}</button>
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
   <div class="similar-tools-legend">
@@ -81,4 +83,25 @@
   </div>
 </div>
 {{- end }}
+<div id="similar-tools-panel-testing" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-testing" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>{{ $testingLabels.heading }}</strong><span>{{ $testingLabels.scope }}</span>
+    <p><b>{{ $testingLabels.statusLabel }}</b>{{ $testingLabels.status }}</p>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="{{ $testingLabels.heading }}">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">{{ $testingLabels.target }}</th><th scope="col">{{ $testingLabels.commands }}</th><th scope="col">{{ $testingLabels.workflows }}</th><th scope="col">{{ $testingLabels.localStatus }}</th></tr></thead>
+      <tbody>
+        {{- range $test := $data.testing.rows }}
+        <tr>
+          <th scope="row"><strong>{{ index $test.target $lang }}</strong><span>{{ index $test.checks $lang }}</span></th>
+          <td><ul>{{ range $test.commands }}<li><code>{{ . }}</code></li>{{ end }}</ul></td>
+          <td><ul>{{ range $test.workflows }}<li><a href="{{ $data.workflowArchiveUrl }}/{{ .file }}" target="_blank" rel="noreferrer"><strong>{{ .name }}</strong><code>{{ .file }}</code></a><span>{{ index .role $lang }}</span></li>{{ end }}</ul></td>
+          <td>{{ index $test.localStatus $lang }}</td>
+        </tr>
+        {{- end }}
+      </tbody>
+    </table>
+  </div>
+</div>
 </div>

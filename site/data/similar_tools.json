@@ -67,6 +67,85 @@
       }
     }
   ],
+  "workflowArchiveUrl": "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows",
+  "testing": {
+    "labels": {
+      "zh-tw": {
+        "overline": "維運",
+        "title": "測試",
+        "heading": "Journey 01／工作定義",
+        "scope": "先盤點工作定義：每列說明要驗證的行為、本機命令，以及停用前由哪個 GitHub Action／job 負責。",
+        "statusLabel": "目前狀態：",
+        "status": "main 已在 #375 將 GitHub Actions 移至 archive；下列 workflow 都不會執行，只保留恢復時的責任分布。",
+        "target": "要驗證什麼",
+        "commands": "本機要跑",
+        "workflows": "封存的 GitHub Action／job",
+        "localStatus": "main 本機現況"
+      },
+      "en": {
+        "overline": "Maintenance",
+        "title": "Tests",
+        "heading": "Journey 01 / Work definition",
+        "scope": "This first inventory covers work definition: each row names the behavior, local command, and the GitHub Action/job that owned it before suspension.",
+        "statusLabel": "Current state: ",
+        "status": "PR #375 moved GitHub Actions out of main and into the archive. None of the workflows below runs; the mapping only preserves ownership for a future restoration.",
+        "target": "What to verify",
+        "commands": "Run locally",
+        "workflows": "Archived GitHub Action / job",
+        "localStatus": "Local status on main"
+      }
+    },
+    "rows": [
+      {
+        "target": {"zh-tw": "Issue 工作邊界", "en": "Issue work boundary"},
+        "checks": {"zh-tw": "標題規則、類型映射、assignee、label 與 duplicate 狀態要能收斂。", "en": "Title rules, type mapping, assignee, labels, and duplicate disposition must converge."},
+        "commands": ["./scripts/test-issue-triage"],
+        "workflows": [
+          {"name": "Issue triage / classify", "file": "issue-triage.yml", "role": {"zh-tw": "Issue opened／edited／reopened／closed 時驗證並分類。", "en": "Validated and classified Issues when they were opened, edited, reopened, or closed."}}
+        ],
+        "localStatus": {"zh-tw": "不可直接跑：helper 仍讀取已移除的 .github/workflows/issue-triage.yml。", "en": "Blocked: the helper still reads the removed .github/workflows/issue-triage.yml path."}
+      },
+      {
+        "target": {"zh-tw": "PR 與 Issue 可追溯性", "en": "PR-to-Issue traceability"},
+        "checks": {"zh-tw": "PR title、分類 label、分支名稱、Closes／Fixes、開啟中的 Issue 與未完成 checkbox 必須一致。", "en": "PR title, classification label, branch, Closes/Fixes link, open Issue, and unfinished checkboxes must agree."},
+        "commands": ["./scripts/test-pr-policy"],
+        "workflows": [
+          {"name": "PR policy / title", "file": "pr-policy.yml", "role": {"zh-tw": "pull_request／merge_group 時驗證工作範圍與合併前條件。", "en": "Validated scope and pre-merge conditions on pull_request and merge_group events."}}
+        ],
+        "localStatus": {"zh-tw": "不可直接跑：helper 仍從已移除的 .github/workflows/pr-policy.yml 抽取規則。", "en": "Blocked: the helper still extracts policy from the removed .github/workflows/pr-policy.yml path."}
+      },
+      {
+        "target": {"zh-tw": "Spec 契約與 Issue 同步", "en": "Spec contract and Issue synchronization"},
+        "checks": {"zh-tw": "必要章節、acceptance criteria、verification、穩定 spec id，以及建立／更新 Issue 的冪等行為。", "en": "Required sections, acceptance criteria, verification, stable spec identity, and idempotent Issue creation or update."},
+        "commands": ["uv run python scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md", "uv run pytest tests/test_spec_to_issue.py -q"],
+        "workflows": [
+          {"name": "CI / fast", "file": "ci.yml", "role": {"zh-tw": "由 verify-fast 執行 spec validation 與測試。", "en": "Ran spec validation and tests through verify-fast."}},
+          {"name": "Spec to Issue / sync", "file": "spec-to-issue.yml", "role": {"zh-tw": "main／dev 的 spec 變更合併後建立或更新 Issue。", "en": "Created or updated Issues after spec changes landed on main or dev."}}
+        ],
+        "localStatus": {"zh-tw": "兩個 targeted command 仍可直接執行；遠端 Issue sync 已停用。", "en": "Both targeted commands still run locally; remote Issue synchronization is suspended."}
+      },
+      {
+        "target": {"zh-tw": "Milestone 完成條件", "en": "Milestone completion contract"},
+        "checks": {"zh-tw": "due date、open Issue 數量與 acceptance criteria checkbox 必須共同決定 Milestone 關閉／重開。", "en": "Due date, open-Issue count, and acceptance-criteria checkboxes jointly determine Milestone close or reopen behavior."},
+        "commands": ["uv run pytest tests/test_milestone_lifecycle.py -q"],
+        "workflows": [
+          {"name": "Milestone policy / due date", "file": "milestone-policy.yml", "role": {"zh-tw": "Milestone 建立或編輯時要求 due date。", "en": "Required a due date when a Milestone was created or edited."}},
+          {"name": "Milestone lifecycle / sync", "file": "milestone-lifecycle.yml", "role": {"zh-tw": "Issue closed／reopened／milestoned 時重算 Milestone 狀態。", "en": "Reconciled Milestone state when Issues closed, reopened, or changed Milestone."}}
+        ],
+        "localStatus": {"zh-tw": "Python 單元測試仍可直接執行；兩個事件型 Action 已停用。", "en": "The Python unit test still runs locally; both event-driven Actions are suspended."}
+      },
+      {
+        "target": {"zh-tw": "Journey 01 整體回歸", "en": "Journey 01 aggregate regression"},
+        "checks": {"zh-tw": "把 Issue、PR、Spec、Milestone 規則與生成模板一起驗證，避免只測單一 helper。", "en": "Verifies Issue, PR, Spec, Milestone, and generated-template rules together rather than testing one helper in isolation."},
+        "commands": ["./scripts/verify-fast", "./scripts/verify-template.sh"],
+        "workflows": [
+          {"name": "CI / fast", "file": "ci.yml", "role": {"zh-tw": "變更感知的快速檢查。", "en": "Change-aware fast checks."}},
+          {"name": "CI / canonical full", "file": "ci.yml", "role": {"zh-tw": "完整模板與跨層回歸。", "en": "Full template and cross-layer regression."}}
+        ],
+        "localStatus": {"zh-tw": "此 dev 預覽分支可跑；main 仍檢查已移除的 workflow 路徑，尚未解耦前不可作為乾淨基線。", "en": "This dev preview branch can run them; main still asserts removed workflow paths and is not a clean baseline until decoupled."}
+      }
+    ]
+  },
   "features": [
     {
       "key": "repositoryTruth",
