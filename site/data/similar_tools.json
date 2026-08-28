@@ -54,8 +54,8 @@
       "key": "work",
       "features": ["repositoryTruth", "declarativeState", "proposalLifecycle", "rightSizedWork"],
       "labels": {
-        "zh-tw": {"overline": "功能比較", "title": "工作定義做法", "legend": "每列回答一個具體做法；主要相似工具優先，其他工具只補充局部設計"},
-        "en": {"overline": "Feature comparison", "title": "Work-definition approaches", "legend": "Each row answers one concrete implementation question; primary tools come first and ecosystem tools add focused patterns."}
+        "zh-tw": {"overline": "Journey 01", "title": "工作定義", "legend": "每列回答一個具體做法；主要相似工具優先，其他工具只補充局部設計"},
+        "en": {"overline": "Journey 01", "title": "Work definition", "legend": "Each row answers one concrete implementation question; primary tools come first and ecosystem tools add focused patterns."}
       }
     },
     {
