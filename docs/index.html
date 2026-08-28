@@ -413,6 +413,7 @@
     .similar-tools-philosophy-matrix tbody td:last-child { font-size: 13px; }
     .similar-tools-philosophy-matrix td ul { margin: 0; padding-left: 18px; }
     .similar-tools-philosophy-matrix td li + li { margin-top: 4px; }
+    .similar-tools-philosophy-matrix .tool-comparison-detail { display: block; margin: 2px 0 0 12px; }
     .similar-tools-note { margin-top: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 16px; line-height: 1.22; }
     .selection-sequence {
       position: absolute;
@@ -4067,12 +4068,12 @@ html[data-detail-level="simple"] .detail-panel {
         <tr>
           <th scope="row"><strong>工作依據放在哪裡</strong><span>比較需求、決策、設定與驗證證據存在哪裡，以及哪一份資料算正式。<br><br><b>CSARC：</b>GitHub Issue 劃定執行範圍；main 上核准的 spec／ADR 保存長期契約，程式與測試證明實作，未提交內容不算正式。</span></th>
           <td><ul>
-              <li><strong>Repository Harness</strong>｜<a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：repo 同時保存產品文件、決策、plan、程式與驗證證據。</li>
-              <li><strong>projen</strong>｜<a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">.projenrc project model</a>：.projenrc 是唯一手寫真相，其他專案檔由 synth 產生。</li>
-              <li><strong>Backstage</strong>｜<a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entity 保存服務、owner 與關係的中央真相。</li>
-              <li><strong>Spec Kit</strong>｜<a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：spec、plan、tasks 與 constitution 在 repo 形成 feature 脈絡。</li>
-              <li><strong>OpenSpec</strong>｜<a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Specs / Changes</a>：specs 保存 current truth，changes 保存尚未接受的 delta。</li>
-              <li><strong>BMAD</strong>｜<a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：brief、spec、architecture 依複雜度累積成持久工作脈絡。</li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：repo 同時保存產品文件、決策、plan、程式與驗證證據。</span></li>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">.projenrc project model</a>：.projenrc 是唯一手寫真相，其他專案檔由 synth 產生。</span></li>
+              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entity 保存服務、owner 與關係的中央真相。</span></li>
+              <li><strong>Spec Kit</strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：spec、plan、tasks 與 constitution 在 repo 形成 feature 脈絡。</span></li>
+              <li><strong>OpenSpec</strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Specs / Changes</a>：specs 保存 current truth，changes 保存尚未接受的 delta。</span></li>
+              <li><strong>BMAD</strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：brief、spec、architecture 依複雜度累積成持久工作脈絡。</span></li>
           </ul></td>
           <td><ul>
           </ul></td>
@@ -4080,47 +4081,47 @@ html[data-detail-level="simple"] .detail-panel {
         <tr>
           <th scope="row"><strong>定義如何變成 repo 狀態</strong><span>比較人直接改檔、由設定產生檔案，或由服務持續修正遠端狀態。<br><br><b>CSARC：</b>copier.yml、template/ 與 profiles/catalog.yaml 宣告生成基線；scripts/sync-paired-files.sh 同步 root／template 配對檔，產品檔仍由下游 repo 持有。</span></th>
           <td><ul>
-              <li><strong>projen</strong>｜<a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：用 typed components 宣告期望專案，再由 synth 收斂檔案。</li>
-              <li><strong>Backstage</strong>｜<a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entity 與 Software Template 宣告 portal 中的元件和建立流程。</li>
-              <li><strong>Minder</strong>｜<a href="https://github.com/mindersec/minder/blob/main/docs/docs/understand/profiles.md" target="_blank" rel="noreferrer">Profiles</a>：Profile 宣告安全期望，服務持續評估並可自動修正。</li>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：用 typed components 宣告期望專案，再由 synth 收斂檔案。</span></li>
+              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entity 與 Software Template 宣告 portal 中的元件和建立流程。</span></li>
+              <li><strong>Minder</strong><span class="tool-comparison-detail"><a href="https://github.com/mindersec/minder/blob/main/docs/docs/understand/profiles.md" target="_blank" rel="noreferrer">Profiles</a>：Profile 宣告安全期望，服務持續評估並可自動修正。</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Copier <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,545（2026-08-27）</span></strong>｜<a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。</li>
-              <li><strong>OpenRewrite <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,679（2026-08-27）</span></strong>｜<a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：Recipe 宣告 semantic transformation，再由 parser／visitor 套用。</li>
+              <li><strong>Copier <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,545（2026-08-27）</span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。</span></li>
+              <li><strong>OpenRewrite <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,679（2026-08-27）</span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：Recipe 宣告 semantic transformation，再由 parser／visitor 套用。</span></li>
           </ul></td>
         </tr>
         <tr>
           <th scope="row"><strong>既有 repo 如何接收新版</strong><span>比較新版模板、規則或 recipe 如何進入既有 repo，以及衝突由誰處理。<br><br><b>CSARC：</b>Copier answers 記錄來源與版本；既有案執行更新後以 PR 審查 diff／衝突，並驗證產品路徑未被覆寫。</span></th>
           <td><ul>
-              <li><strong>Repository Harness</strong>｜<a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：updater 保留 upstream base，用三方合併安全更新既有 repo。</li>
-              <li><strong>projen</strong>｜<a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen upgrade &#43; synth</a>：升級 library 後重建；受管檔的手改會被 anti-tamper 攔下。</li>
-              <li><strong>Backstage</strong>｜<a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：擅長建立新元件；既有 repo 遷移仍要另接工具。</li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：updater 保留 upstream base，用三方合併安全更新既有 repo。</span></li>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen upgrade &#43; synth</a>：升級 library 後重建；受管檔的手改會被 anti-tamper 攔下。</span></li>
+              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：擅長建立新元件；既有 repo 遷移仍要另接工具。</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Copier <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,545（2026-08-27）</span></strong>｜<a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：記住模板來源與 answers，讓既有 repo 接收新版模板。</li>
-              <li><strong>OpenRewrite <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,679（2026-08-27）</span></strong>｜<a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：不用文字模板覆蓋檔案，而是直接執行跨版本語意遷移。</li>
+              <li><strong>Copier <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,545（2026-08-27）</span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：記住模板來源與 answers，讓既有 repo 接收新版模板。</span></li>
+              <li><strong>OpenRewrite <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,679（2026-08-27）</span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：不用文字模板覆蓋檔案，而是直接執行跨版本語意遷移。</span></li>
           </ul></td>
         </tr>
         <tr>
           <th scope="row"><strong>進行中變更如何成為正式</strong><span>比較 branch、change 或設定 PR 在何時完成審查、合併與歸檔。<br><br><b>CSARC：</b>每項工作先有 Issue；type/&lt;issue&gt;-slug 分支的 PR 以 Closes #&lt;issue&gt; 連回範圍，合併 main 後才成為正式，新增範圍另開 Issue。</span></th>
           <td><ul>
-              <li><strong>Repository Harness</strong>｜<a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active / completed plans</a>：跨 session 工作先進 active plan，完成後才歸檔。</li>
-              <li><strong>projen</strong>｜<a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Anti-tamper build</a>：PR 同時修改 .projenrc 與重建結果，合併後才成為正式狀態。</li>
-              <li><strong>Spec Kit</strong>｜<a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature workflow</a>：artifacts 在 feature branch 演進，最後仍交給 Git／PR 接受。</li>
-              <li><strong>OpenSpec</strong>｜<a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Change workflow</a>：propose → apply → archive 後，才把內容併回正式規格。</li>
-              <li><strong>BMAD</strong>｜<a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">BMad Delivery Loop</a>：artifacts 在 clarify → plan → build／verify 之間逐步成熟。</li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active / completed plans</a>：跨 session 工作先進 active plan，完成後才歸檔。</span></li>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Anti-tamper build</a>：PR 同時修改 .projenrc 與重建結果，合併後才成為正式狀態。</span></li>
+              <li><strong>Spec Kit</strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature workflow</a>：artifacts 在 feature branch 演進，最後仍交給 Git／PR 接受。</span></li>
+              <li><strong>OpenSpec</strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Change workflow</a>：propose → apply → archive 後，才把內容併回正式規格。</span></li>
+              <li><strong>BMAD</strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">BMad Delivery Loop</a>：artifacts 在 clarify → plan → build／verify 之間逐步成熟。</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Copier <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,545（2026-08-27）</span></strong>｜<a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Update diff</a>：更新先產生 Git diff，解衝突並合併後才接受。</li>
+              <li><strong>Copier <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,545（2026-08-27）</span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Update diff</a>：更新先產生 Git diff，解衝突並合併後才接受。</span></li>
           </ul></td>
         </tr>
         <tr>
           <th scope="row"><strong>小改與大型工作如何分流</strong><span>比較何時可以直接修改，何時必須增加 spec、plan、tasks 或架構文件。<br><br><b>CSARC：</b>小型 bounded change 只用 Issue 與針對性驗證；跨 session、高風險或長期契約才增加 spec、ADR 或 plan。</span></th>
           <td><ul>
-              <li><strong>Repository Harness</strong>｜<a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Durable-plan threshold</a>：小 typo 不建 plan；高風險或長工作才增加持久文件。</li>
-              <li><strong>Spec Kit</strong>｜<a href="https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md" target="_blank" rel="noreferrer">Agentic bugfix workflow</a>：完整流程最適合大型 feature，小修可走較短路徑。</li>
-              <li><strong>OpenSpec</strong>｜<a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Change proposal</a>：小修改可直接走 PR，大變更才建立完整 proposal。</li>
-              <li><strong>BMAD</strong>｜<a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Quick Flow / BMad Method</a>：Quick Flow 處理小改，複雜產品才加完整 planning 與 architecture。</li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Durable-plan threshold</a>：小 typo 不建 plan；高風險或長工作才增加持久文件。</span></li>
+              <li><strong>Spec Kit</strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md" target="_blank" rel="noreferrer">Agentic bugfix workflow</a>：完整流程最適合大型 feature，小修可走較短路徑。</span></li>
+              <li><strong>OpenSpec</strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Change proposal</a>：小修改可直接走 PR，大變更才建立完整 proposal。</span></li>
+              <li><strong>BMAD</strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Quick Flow / BMad Method</a>：Quick Flow 處理小改，複雜產品才加完整 planning 與 architecture。</span></li>
           </ul></td>
           <td><ul>
           </ul></td>

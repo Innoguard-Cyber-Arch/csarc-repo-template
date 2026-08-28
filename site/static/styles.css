@@ -398,6 +398,7 @@
     .similar-tools-philosophy-matrix tbody td:last-child { font-size: 13px; }
     .similar-tools-philosophy-matrix td ul { margin: 0; padding-left: 18px; }
     .similar-tools-philosophy-matrix td li + li { margin-top: 4px; }
+    .similar-tools-philosophy-matrix .tool-comparison-detail { display: block; margin: 2px 0 0 12px; }
     .similar-tools-note { margin-top: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 16px; line-height: 1.22; }
     .selection-sequence {
       position: absolute;
