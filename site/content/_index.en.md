@@ -100,6 +100,7 @@ Concrete tools, feature names, and source links are listed under [Similar tools]
 - **Active:** the organization has enabled native Feature, Task, and Bug Types; four Issue Forms write their Type and label directly; [#386](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/386) restored the Issue triage, PR policy, Spec sync, and Milestone lifecycle GitHub Actions.
 - **In progress:** [#382](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382) consolidates the work-definition validation shared by local runs and Actions behind one entry point.
 - **Not enabled:** Issue-to-promotion orchestration and CI/CD for other Journeys remain archived; none of the four Journey 01 workflows is a required status check.
+- **Execution limit:** repository Actions are enabled, but GitHub currently refuses to start a runner because of the account billing state, so no successful hosted run exists yet.
 {{< /detail >}}
 {{< /slide >}}
 

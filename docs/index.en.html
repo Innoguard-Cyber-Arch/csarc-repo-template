@@ -2526,6 +2526,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>Active:</strong> the organization has enabled native Feature, Task, and Bug Types; four Issue Forms write their Type and label directly; <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/386">#386</a> restored the Issue triage, PR policy, Spec sync, and Milestone lifecycle GitHub Actions.</li>
 <li><strong>In progress:</strong> <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382">#382</a> consolidates the work-definition validation shared by local runs and Actions behind one entry point.</li>
 <li><strong>Not enabled:</strong> Issue-to-promotion orchestration and CI/CD for other Journeys remain archived; none of the four Journey 01 workflows is a required status check.</li>
+<li><strong>Execution limit:</strong> repository Actions are enabled, but GitHub currently refuses to start a runner because of the account billing state, so no successful hosted run exists yet.</li>
 </ul>
 </aside></div>
 </section>
@@ -3929,7 +3930,7 @@ html[data-detail-level="simple"] .detail-panel {
   <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel>
   <div class="similar-tools-testing-intro">
     <strong>Journey 01 / Minimum test contract</strong><span>A normal repository needs only ./scripts/verify. During promotion, repo-template adds one check for the version it ships.</span>
-    <p><b>Current state: </b>Pull request #386 restored and enabled four Journey 01 GitHub Actions. Issue #382 consolidates the validation logic shared by local runs and Actions behind one entrypoint.</p>
+    <p><b>Current state: </b>Pull request #386 restored and enabled four Journey 01 GitHub Actions, but GitHub currently refuses to start a runner because of the account billing state. Issue #382 consolidates the validation logic shared by local runs and Actions behind one entrypoint.</p>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01 / Minimum test contract">
     <table class="similar-tools-matrix similar-tools-testing-matrix">

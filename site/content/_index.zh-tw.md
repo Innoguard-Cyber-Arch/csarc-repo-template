@@ -279,6 +279,7 @@ Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `sc
 - **已生效：** 組織已啟用原生 Feature／Task／Bug Types；四種 Issue Form 直接寫入 Type／Label；[#386](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/386) 已恢復 Issue triage、PR policy、Spec sync 與 Milestone lifecycle 四條 GitHub Actions。
 - **開發中：** [#382](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382) 將本機與 Action 共用的工作定義驗證收斂為單一入口。
 - **尚未啟用：** Issue-to-promotion orchestration 與其他 Journey 的 CI/CD 仍封存；目前四條 Journey 01 workflow 都不是 required status check。
+- **執行限制：** repository Actions 設定已開啟，但 GitHub 目前因帳務限制在 runner 啟動前拒絕執行，因此尚無線上成功證據。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}

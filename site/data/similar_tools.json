@@ -72,7 +72,7 @@
       "zh-tw": {
         "title": "測試",
         "statusLabel": "目前狀態：",
-        "status": "Journey 01 的四條 GitHub Actions 已由 #386 恢復並啟用；#382 將本機與 Action 共用的驗證邏輯收斂為單一入口。",
+        "status": "Journey 01 的四條 GitHub Actions 已由 #386 恢復並啟用；GitHub 目前因帳務限制拒絕啟動 runner。#382 將本機與 Action 共用的驗證邏輯收斂為單一入口。",
         "purpose": "測試目的",
         "shared": "任何使用本模板的 repo",
         "templateOnly": "repo-template 額外",
@@ -87,7 +87,7 @@
       "en": {
         "title": "Tests",
         "statusLabel": "Current state: ",
-        "status": "Pull request #386 restored and enabled four Journey 01 GitHub Actions. Issue #382 consolidates the validation logic shared by local runs and Actions behind one entrypoint.",
+        "status": "Pull request #386 restored and enabled four Journey 01 GitHub Actions, but GitHub currently refuses to start a runner because of the account billing state. Issue #382 consolidates the validation logic shared by local runs and Actions behind one entrypoint.",
         "purpose": "Test purpose",
         "shared": "Every repository using the template",
         "templateOnly": "Additional repo-template checks",
