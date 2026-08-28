@@ -19,8 +19,8 @@
       <thead>
         <tr>
           <th scope="col">{{ $labels.package }}</th>
-          <th scope="col">{{ $labels.version }}</th>
-          <th scope="col">{{ $labels.stars }}</th>
+          <th scope="col">{{ replace (replace $labels.version "（" "<br>（") " (" "<br>(" | safeHTML }}</th>
+          <th scope="col">{{ replace (replace $labels.stars "（" "<br>（") " (" "<br>(" | safeHTML }}</th>
           <th scope="col">{{ $labels.position }}</th>
           <th scope="col">{{ $labels.difference }}</th>
           <th scope="col">{{ $labels.coverage }}</th>
