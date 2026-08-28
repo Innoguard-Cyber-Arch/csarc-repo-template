@@ -265,7 +265,6 @@ def test_issue_body_links_source_and_identity() -> None:
     assert "csarc-spec-id: SPEC-001" in body
     assert "https://github.example/spec" in body
     assert re.findall(r"^### .+$", body, re.MULTILINE) == [
-        "### 類型",
         "### 問題",
         "### 完成條件",
         "### 補充",
@@ -342,7 +341,8 @@ def test_story_spec_syncs_feature_issue(
     create = next(call for call in calls if call[:2] == ["issue", "create"])
     assert create[create.index("--assignee") + 1] == "maintainer"
     assert create[create.index("--type") + 1] == "Feature"
-    assert bodies and "### 類型\n\nfeature" in bodies[0]
+    assert bodies and "### 問題" in bodies[0]
+    assert "### 類型" not in bodies[0]
 
 
 def test_story_sync_updates_existing_feature_issue(
@@ -370,7 +370,8 @@ def test_story_sync_updates_existing_feature_issue(
     assert edit[2] == "7"
     assert edit[edit.index("--add-assignee") + 1] == "maintainer"
     assert edit[edit.index("--type") + 1] == "Feature"
-    assert bodies and "### 類型\n\nfeature" in bodies[0]
+    assert bodies and "### 問題" in bodies[0]
+    assert "### 類型" not in bodies[0]
 
 
 def test_load_labels_uses_policy_file(tmp_path: Path) -> None:

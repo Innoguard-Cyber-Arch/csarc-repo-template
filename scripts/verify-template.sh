@@ -825,7 +825,8 @@ if run_drift_check incomplete "" "$drift_create_log" >/dev/null 2>&1; then
   echo "check-governance-drift must fail when governance drift is detected."
   exit 1
 fi
-grep -q '^issue create .*--label bug' "$drift_create_log"
+grep -q '^issue create .*--label bug .*--type Bug .*--assignee @me' \
+  "$drift_create_log"
 drift_update_log="$github_plan_fixture/drift-update.log"
 if run_drift_check incomplete 91 "$drift_update_log" >/dev/null 2>&1; then
   echo "check-governance-drift must fail when governance drift is detected."
@@ -1388,19 +1389,14 @@ if (cd "$sync_regression_fixture" && ./scripts/sync-paired-files.sh --check); th
   exit 1
 fi
 
-test "$(grep -c '^    id:' .github/ISSUE_TEMPLATE/work-item.yml)" -eq 4
-test "$(grep -c '^      required: true$' .github/ISSUE_TEMPLATE/work-item.yml)" -eq 3
-test "$(grep -c '^      required: false$' .github/ISSUE_TEMPLATE/work-item.yml)" -eq 1
-grep -q '^    id: kind$' .github/ISSUE_TEMPLATE/work-item.yml
-grep -q '^    id: problem$' .github/ISSUE_TEMPLATE/work-item.yml
-grep -q '^    id: acceptance$' .github/ISSUE_TEMPLATE/work-item.yml
-grep -q '^    id: supplement$' .github/ISSUE_TEMPLATE/work-item.yml
-test "$(grep -Ec '^      label: (類型|問題|完成條件|補充)$' \
-  .github/ISSUE_TEMPLATE/work-item.yml)" -eq 4
-grep -q '搜尋相關 open／closed Issues' .github/ISSUE_TEMPLATE/work-item.yml
-grep -q 'Promotion Issue 只列合併前可驗證' \
-  .github/ISSUE_TEMPLATE/work-item.yml
-grep -q '^        - duplicate$' .github/ISSUE_TEMPLATE/work-item.yml
+for issue_form in feature task bug documentation; do
+  test -f ".github/ISSUE_TEMPLATE/${issue_form}.yml"
+  test -f "template/.github/ISSUE_TEMPLATE/${issue_form}.yml"
+  cmp -s ".github/ISSUE_TEMPLATE/${issue_form}.yml" \
+    "template/.github/ISSUE_TEMPLATE/${issue_form}.yml"
+done
+test ! -e .github/ISSUE_TEMPLATE/work-item.yml
+test ! -e template/.github/ISSUE_TEMPLATE/work-item.yml
 test "$(grep -c '^## ' .github/pull_request_template.md)" -eq 3
 grep -q '^## Purpose$' .github/pull_request_template.md
 grep -q '^## 完成清單$' .github/pull_request_template.md
@@ -2442,14 +2438,10 @@ if grep -q '^node_modules/$' "$fixture_root/default-project/.gitignore"; then
 fi
 grep -q '^blank_issues_enabled: false$' \
   "$fixture_root/default-project/.github/ISSUE_TEMPLATE/config.yml"
-test "$(grep -c '^    id:' \
-  "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 4
-grep -q '^    id: supplement$' \
-  "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml"
-grep -q 'Promotion Issue 只列合併前可驗證' \
-  "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml"
-test "$(grep -Ec '^      label: (類型|問題|完成條件|補充)$' \
-  "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml")" -eq 4
+for issue_form in feature task bug documentation; do
+  test -f "$fixture_root/default-project/.github/ISSUE_TEMPLATE/${issue_form}.yml"
+done
+test ! -e "$fixture_root/default-project/.github/ISSUE_TEMPLATE/work-item.yml"
 test "$(grep -c '^## ' \
   "$fixture_root/default-project/.github/pull_request_template.md")" -eq 3
 grep -q '^## Purpose$' \
@@ -2467,7 +2459,12 @@ if grep -q './scripts/verify-template.sh' \
   echo "Generated PR template references the template-repository verifier."
   exit 1
 fi
-grep -q 'feature.*task.*bug.*documentation.*duplicate' \
+if grep -q '已測試新專案產生' \
+  "$fixture_root/default-project/.github/pull_request_template.md"; then
+  echo "Generated PR template requires template-repository verification."
+  exit 1
+fi
+grep -q 'Feature.*Task.*Bug.*Documentation' \
   "$fixture_root/default-project/README.md"
 grep -q 'linked Issue.*assignee.*Milestone' \
   "$fixture_root/default-project/README.md"
@@ -3084,8 +3081,8 @@ grep -q 'apply-repository-settings.sh check' \
   "$fixture_root/all-features-project/scripts/check-governance-drift"
 for issue_creator in check-template-update check-governance-drift; do
   issue_creator_path="$fixture_root/all-features-project/scripts/$issue_creator"
-  test "$(grep -c '^### ' "$issue_creator_path")" -eq 4
-  for heading in 類型 問題 完成條件 補充; do
+  test "$(grep -c '^### ' "$issue_creator_path")" -eq 3
+  for heading in 問題 完成條件 補充; do
     grep -qFx "### $heading" "$issue_creator_path"
   done
 done
@@ -3116,7 +3113,7 @@ PATH="$template_update_fixture/bin:$PATH" \
   MOCK_COPIER_EXIT=2 \
   MOCK_GH_LOG="$template_update_fixture/create.log" \
   "$fixture_root/all-features-project/scripts/check-template-update" >/dev/null
-grep -q '^issue create .*--label enhancement' \
+grep -q '^issue create .*--label enhancement .*--type Task .*--assignee @me' \
   "$template_update_fixture/create.log"
 : > "$template_update_fixture/update.log"
 PATH="$template_update_fixture/bin:$PATH" \

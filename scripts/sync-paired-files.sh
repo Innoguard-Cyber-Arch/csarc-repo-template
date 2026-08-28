@@ -14,22 +14,14 @@ set -euo pipefail
 paired_files=(
   CLAUDE.md
   .github/ISSUE_TEMPLATE/config.yml
-  .github/ISSUE_TEMPLATE/work-item.yml
-  .github/workflows/governance-comment.yml
-  .github/workflows/governance-drift.yml
-  .github/workflows/dev-next-close.yml
-  .github/workflows/delivery-maintenance.yml
+  .github/ISSUE_TEMPLATE/bug.yml
+  .github/ISSUE_TEMPLATE/documentation.yml
+  .github/ISSUE_TEMPLATE/feature.yml
+  .github/ISSUE_TEMPLATE/task.yml
   .github/workflows/issue-triage.yml
   .github/workflows/milestone-lifecycle.yml
-  .github/workflows/milestone-policy.yml
-  .github/workflows/osv.yml
-  .github/workflows/promotion-post-merge.yml
-  .github/workflows/promotion.yml
   .github/workflows/pr-policy.yml
-  .github/workflows/release-follow-up-policy.yml
-  .github/workflows/release-please.yml
   .github/workflows/spec-to-issue.yml
-  .github/workflows/zizmor.yml
   policies/actions.json
   policies/dev-next-ruleset.json
   policies/labels.json

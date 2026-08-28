@@ -1,0 +1,126 @@
+name: Issue triage
+
+on:
+  issues:
+    types: [opened, edited, reopened, closed]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  classify:
+    name: classify
+    if: github.event.issue.user.type == 'User'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Assign author and apply issue classification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_STATE_REASON: ${{ github.event.issue.state_reason }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_TYPE: ${{ github.event.issue.type.name }}
+        run: |
+          set -euo pipefail
+
+          if ! title_error="$(./scripts/validate-issue-title "$ISSUE_TITLE" 2>&1)"; then
+            # shellcheck disable=SC2016 # Markdown fences must remain literal.
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+              --body "$(printf '請先修正 Issue 標題後再開始工作。\n\n```text\n%s\n```' "$title_error")"
+            printf '%s\n' "$title_error" >&2
+            exit 1
+          fi
+
+          issue_class=""
+          state_reason="$(printf '%s' "${ISSUE_STATE_REASON:-}" | tr '[:upper:]' '[:lower:]')"
+          if [[ "$state_reason" == "duplicate" || ",${ISSUE_LABELS:-}," == *",duplicate,"* ]]; then
+            issue_class="duplicate"
+          fi
+          if [[ -z "$issue_class" ]]; then
+            case "${ISSUE_TYPE:-}" in
+              Bug) issue_class="bug" ;;
+              Feature) issue_class="feature" ;;
+              Task)
+                if [[ ",${ISSUE_LABELS:-}," == *",documentation,"* ]]; then
+                  issue_class="documentation"
+                else
+                  issue_class="task"
+                fi
+                ;;
+            esac
+          fi
+          if [[ -z "$issue_class" ]]; then
+            issue_class="$(
+              awk '
+                /^### 類型$/ { found = 1; next }
+                found && NF { print; exit }
+              ' <<<"${ISSUE_BODY:-}"
+            )"
+          fi
+          if [[ -z "$issue_class" ]]; then
+            for allowed in duplicate bug enhancement documentation; do
+              if [[ ",${ISSUE_LABELS:-}," == *",${allowed},"* ]]; then
+                issue_class="$allowed"
+                break
+              fi
+            done
+          fi
+          case "$issue_class" in
+            feature|task|bug|enhancement|documentation|duplicate) ;;
+            *)
+              echo "Select one Issue classification: feature, task, bug, documentation, or duplicate."
+              exit 1
+              ;;
+          esac
+
+          issue_label="$issue_class"
+          case "$issue_class" in
+            feature|task) issue_label="enhancement" ;;
+          esac
+          for label in bug enhancement documentation duplicate; do
+            [[ "$label" == "$issue_label" ]] && continue
+            python3 scripts/pr_lifecycle.py issue-edit \
+              --repo "$GITHUB_REPOSITORY" \
+              --issue-number "$ISSUE_NUMBER" \
+              --remove-label "$label" >/dev/null 2>&1 || true
+          done
+          python3 scripts/pr_lifecycle.py issue-edit \
+            --repo "$GITHUB_REPOSITORY" \
+            --issue-number "$ISSUE_NUMBER" \
+            --add-assignee "$ISSUE_AUTHOR"
+          python3 scripts/pr_lifecycle.py issue-edit \
+            --repo "$GITHUB_REPOSITORY" \
+            --issue-number "$ISSUE_NUMBER" \
+            --add-label "$issue_label"
+
+          native_type=""
+          case "$issue_class" in
+            bug) native_type="Bug" ;;
+            feature|enhancement) native_type="Feature" ;;
+            task|documentation) native_type="Task" ;;
+          esac
+          if [[ -n "$native_type" ]]; then
+            if ! python3 scripts/pr_lifecycle.py issue-edit \
+              --repo "$GITHUB_REPOSITORY" \
+              --issue-number "$ISSUE_NUMBER" \
+              --type "$native_type" >/dev/null 2>&1; then
+              echo "::notice::Native Issue Types are unavailable; the ${issue_class} label remains authoritative."
+            fi
+          elif ! python3 scripts/pr_lifecycle.py issue-edit \
+            --repo "$GITHUB_REPOSITORY" \
+            --issue-number "$ISSUE_NUMBER" \
+            --remove-type >/dev/null 2>&1; then
+            echo "::notice::Native Issue Types are unavailable; the duplicate label remains authoritative."
+          fi
