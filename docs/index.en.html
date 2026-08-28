@@ -645,6 +645,8 @@
     .journey-bookend.active-files { background: var(--best-soft); color: #0b6540; }
     .journey-bookend.active-selection { background: var(--ink); color: white; }
     .journey-bookend.active-bridge { background: var(--optional-soft); color: #174f8b; }
+    .journey-bookend.maintainer-bookend { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
+    .journey-bookend.maintainer-bookend.active-selection { background: var(--optional); color: white; }
     .journey-bookend:hover, .journey-bookend:focus-visible { background: #fffbea; outline: 3px solid var(--yellow); outline-offset: 1px; }
     .overview-slide .journey-rail, .repo-explorer-slide .journey-rail, .responsibility-slide .journey-rail, .quickstart-slide .journey-rail { width: 9.7%; }
     .overview-slide .journey-bookend, .repo-explorer-slide .journey-bookend, .responsibility-slide .journey-bookend, .quickstart-slide .journey-bookend { padding: 4px; font-size: 17.5px; }
@@ -1552,6 +1554,10 @@
   color: white;
 }
 
+.detail-level-control button[data-detail-level="technical"][aria-pressed="true"] {
+  background: var(--optional);
+}
+
 .detail-level-control button:focus-visible {
   outline: 3px solid var(--yellow);
   outline-offset: 2px;
@@ -2034,7 +2040,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2132,7 +2138,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2247,7 +2253,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2363,7 +2369,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2446,7 +2452,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2525,7 +2531,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2625,7 +2631,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2730,7 +2736,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2838,7 +2844,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2938,7 +2944,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -3039,7 +3045,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -3118,7 +3124,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -3196,7 +3202,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -3291,7 +3297,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix active-bridge" href="#bridge" aria-current="page">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -3414,7 +3420,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix active-selection" href="#ecosystem" aria-current="page">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -3534,7 +3540,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix active-selection" href="#similar-tools" aria-current="page">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -3775,7 +3781,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix active-selection" data-audience="maintainer" href="#testing" aria-current="page">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#testing" aria-current="page">Tests</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -3916,7 +3922,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -4011,7 +4017,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -4122,7 +4128,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -4247,7 +4253,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -4364,7 +4370,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -4451,7 +4457,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -4538,7 +4544,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -4627,7 +4633,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -4708,7 +4714,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -4789,7 +4795,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix" data-audience="maintainer" href="#testing">Tests</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">Tests</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
