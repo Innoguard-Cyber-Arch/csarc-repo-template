@@ -348,9 +348,72 @@
     .explorer-caption { margin-top: 5px; color: var(--muted); font-size: 18px; line-height: 1.18; }
     .explorer-caption strong { color: var(--ink); }
 
-    .ecosystem-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
+    .ecosystem-slide, .similar-tools-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
     .ecosystem-slide header { position: relative; margin-bottom: 1%; padding-right: 150px; }
     .ecosystem-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
+
+    .similar-tools-slide header { margin-bottom: 8px; }
+    .similar-tools-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
+    .similar-tools-tabs { display: flex; align-items: end; gap: 4px; margin-bottom: -1px; padding-left: 10px; z-index: 2; }
+    .similar-tools-tabs button {
+      min-width: 210px;
+      padding: 7px 16px 8px;
+      border: 1px solid #a9a99f;
+      border-bottom-color: var(--line);
+      border-radius: 8px 8px 0 0;
+      background: #e9e9e4;
+      color: #4b4b47;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 900;
+      text-align: left;
+    }
+    .similar-tools-tabs button small { display: block; margin-bottom: 2px; font-size: 12px; letter-spacing: .03em; }
+    .similar-tools-tabs button[aria-selected="true"] { border-top: 5px solid var(--yellow); border-bottom-color: white; background: white; color: var(--ink); }
+    .similar-tools-tabs button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+    .similar-tools-panel { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+    .similar-tools-panel[hidden] { display: none; }
+    .similar-tools-legend { display: flex; gap: 7px; margin-bottom: 7px; font-size: 14px; font-weight: 850; }
+    .similar-tools-legend span { padding: 5px 8px; border-left: 6px solid; }
+    .similar-tools-legend .competitor { border-color: #b9a700; background: #fffbea; }
+    .similar-tools-legend .reference { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
+    .similar-tools-legend .coverage-key { border-color: #999; background: var(--soft); }
+    .similar-tools-table-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); background: white; }
+    .similar-tools-table-wrap:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+    .similar-tools-matrix { width: 100%; min-height: 100%; table-layout: fixed; border-collapse: collapse; font-size: 14.5px; line-height: 1.22; }
+    .similar-tools-matrix th, .similar-tools-matrix td { padding: 7px 8px; border: 1px solid var(--line); overflow-wrap: anywhere; vertical-align: top; }
+    .similar-tools-matrix thead th { position: sticky; top: 0; z-index: 2; text-align: center; }
+    .similar-tools-matrix thead th:first-child { left: 0; z-index: 4; width: 18%; }
+    .similar-tools-matrix tbody th { position: sticky; left: 0; z-index: 1; width: 18%; background: #fffbea; color: var(--ink); font-size: 14.5px; text-align: left; }
+    .similar-tools-matrix tbody tr:nth-child(even) td { background: #fafaf8; }
+    .similar-tools-matrix td strong { color: #174f8b; }
+    .similar-tools-matrix td a { color: #174f8b; text-underline-offset: 2px; }
+    .similar-tools-primary-matrix { min-height: 0; font-size: 15px; line-height: 1.28; }
+    .similar-tools-primary-matrix thead th:first-child { width: 13%; }
+    .similar-tools-primary-matrix thead th:nth-child(2) { width: 14%; }
+    .similar-tools-primary-matrix thead th:nth-child(3) { width: 13%; }
+    .similar-tools-primary-matrix thead th:nth-child(4) { width: 21%; }
+    .similar-tools-primary-matrix thead th:nth-child(5) { width: 25%; }
+    .similar-tools-primary-matrix thead th:nth-child(6) { width: 14%; }
+    .similar-tools-primary-matrix tbody th { width: 13%; font-size: 15px; }
+    .similar-tools-primary-matrix td ul { margin: 0; padding-left: 18px; }
+    .similar-tools-primary-matrix td li + li { margin-top: 4px; }
+    .coverage-tags { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px; }
+    .coverage-tag { display: inline-flex; min-width: 29px; min-height: 23px; align-items: center; justify-content: center; padding: 2px 6px; border-radius: 999px; color: white; font-size: 12px; font-style: normal; font-weight: 900; line-height: 1; }
+    .coverage-tag.full { background: var(--best); }
+    .coverage-tag.partial { background: var(--best-soft); box-shadow: inset 0 0 0 1px #6db091; color: #0b6540; }
+    .similar-tools-philosophy-matrix { min-height: 0; font-size: 14px; line-height: 1.22; }
+    .similar-tools-philosophy-matrix thead th:first-child { width: 32%; }
+    .similar-tools-philosophy-matrix thead th:nth-child(2) { width: 45%; }
+    .similar-tools-philosophy-matrix thead th:nth-child(3) { width: 23%; }
+    .similar-tools-philosophy-matrix tbody th { width: 32%; }
+    .similar-tools-philosophy-matrix tbody th strong { display: block; font-size: 15px; }
+    .similar-tools-philosophy-matrix tbody th span { display: block; margin-top: 3px; color: var(--muted); font-weight: 500; }
+    .similar-tools-philosophy-matrix tbody td:first-of-type { background: #fffdf0; box-shadow: inset 4px 0 #b9a700; }
+    .similar-tools-philosophy-matrix tbody td:last-child { font-size: 13px; }
+    .similar-tools-philosophy-matrix td ul { margin: 0; padding-left: 18px; }
+    .similar-tools-philosophy-matrix td li + li { margin-top: 4px; }
+    .similar-tools-note { margin-top: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 16px; line-height: 1.22; }
     .selection-sequence {
       position: absolute;
       top: 0;
@@ -1463,6 +1526,7 @@
 }
 
 .detail-level-control[hidden] { display: none; }
+[data-audience="maintainer"][hidden] { display: none !important; }
 
 .controls[hidden],
 .view-controls[hidden],
@@ -1911,7 +1975,7 @@ html[data-detail-level="simple"] .detail-panel {
          lang="en">English</a>
     </nav>
     <div class="detail-level-control" role="group" aria-label="閱讀模式" hidden>
-      <button type="button" data-detail-level="simple" aria-pressed="true">概覽</button>
+      <button type="button" data-detail-level="simple" aria-pressed="true">標準</button>
       <button type="button" data-detail-level="technical" aria-pressed="false">維運</button>
     </div>
   </div>
@@ -1967,6 +2031,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -2110,6 +2175,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -2285,6 +2351,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -2443,6 +2510,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -2546,6 +2614,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -2644,6 +2713,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -2763,6 +2833,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -2884,6 +2955,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -3022,6 +3094,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -3148,6 +3221,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -3276,6 +3350,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -3371,6 +3446,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -3464,6 +3540,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -3574,6 +3651,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix active-bridge" href="#bridge" aria-current="page">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -3725,6 +3803,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix active-selection" href="#ecosystem" aria-current="page">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
 </aside>
 
@@ -3842,6 +3921,239 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
+<section class="slide markdown-slide similar-tools-slide" id="similar-tools" data-content-key="similar-tools" data-audience="maintainer" aria-label="相似工具｜整體競品與局部參考">
+  <aside class="journey-rail" aria-label="簡報目錄">
+  <h3>使用公版</h3>
+  <ol class="journey-use">
+    <li class="journey-item">
+      <a href="#capability"><span>能力／導入</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#flow"><span>CI/CD 流程</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#files"><span>檔案地圖</span></a>
+    </li>
+  </ol>
+  <h3>開發與維護</h3>
+  <ol class="journey-main">
+    <li class="journey-item">
+      <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+    </li>
+  </ol>
+  <h3>公版管理</h3>
+  <ol class="journey-support">
+    <li class="journey-item">
+      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+    </li>
+  </ol>
+  <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
+  <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix active-selection" data-audience="maintainer" href="#similar-tools" aria-current="page">相似工具</a>
+  <a class="journey-bookend appendix" href="#access-control">決策附錄</a>
+</aside>
+
+  <header class="basic-header">
+    <span class="selection-sequence">維運附錄｜相似工具</span>
+    <h2>相似工具｜整體競品與局部參考</h2>
+    <p class="subtitle">所有相似工具集中在這裡：先看整體目的接近的套件，再切換到各項工作定義的具體做法。</p>
+  </header>
+
+<div class="legacy-content similar-tools-content">
+<div class="similar-tools-tabs" role="tablist" aria-label="相似工具｜整體競品與局部參考">
+  <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>整體接近</small>主要相似工具</button>
+  <button id="similar-tools-tab-work" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-work" data-similar-tools-tab="1"><small>功能比較</small>工作定義做法</button>
+</div>
+<div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
+  <div class="similar-tools-legend">
+    <span class="competitor">整體目的相近｜完整與部分符合的旅程合計至少 4 個</span>
+    <span class="coverage-key"><i class="coverage-tag full">完全符合</i>　<i class="coverage-tag partial">部分符合</i></span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="主要相似工具">
+    <table class="similar-tools-matrix similar-tools-primary-matrix">
+      <thead>
+        <tr>
+          <th scope="col">套件名稱</th>
+          <th scope="col">比較版本（發行日）</th>
+          <th scope="col">GitHub Stars（擷取日）</th>
+          <th scope="col">自我定位</th>
+          <th scope="col">與本套件的差異</th>
+          <th scope="col">涵蓋旅程</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><a href="https://github.com/hoangnb24/repository-harness" target="_blank" rel="noreferrer">Repository Harness</a></th>
+          <td>harness-v0.1.10<br>(2026-08-13)</td>
+          <td>1,198<br>(2026-08-27)</td>
+          <td>Agent-ready repository framework：把 AI 工作規則、持久計畫、驗證與安全更新放進 repo。</td>
+          <td><ul><li>Repository Harness 偏向替既有 repo 加上 agent 工作框架與安全更新機制。</li><li>CSARC 另外提供可生成的技術 profile、GitHub 治理、交付與版本政策。</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag full" title="08: 完全符合">08</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="04: 部分符合">04</span><span class="coverage-tag partial" title="07: 部分符合">07</span><span class="coverage-tag partial" title="10: 部分符合">10</span>
+          </div></td>
+        </tr>
+        <tr>
+          <th scope="row"><a href="https://github.com/projen/projen" target="_blank" rel="noreferrer">projen</a></th>
+          <td>v0.103.5<br>(2026-08-26)</td>
+          <td>2,948<br>(2026-08-27)</td>
+          <td>Project generator：用一般程式語言宣告專案，持續 synth 出受管設定與工作流程。</td>
+          <td><ul><li>projen 把 .projenrc 當唯一來源，大量生成檔不允許直接修改。</li><li>CSARC 用 Copier 發布可更新基線，並保留產品檔案與政策檔案的責任邊界。</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="03: 完全符合">03</span><span class="coverage-tag full" title="06: 完全符合">06</span><span class="coverage-tag full" title="08: 完全符合">08</span><span class="coverage-tag partial" title="01: 部分符合">01</span><span class="coverage-tag partial" title="04: 部分符合">04</span><span class="coverage-tag partial" title="05: 部分符合">05</span><span class="coverage-tag partial" title="07: 部分符合">07</span><span class="coverage-tag partial" title="10: 部分符合">10</span>
+          </div></td>
+        </tr>
+        <tr>
+          <th scope="row"><a href="https://github.com/backstage/backstage" target="_blank" rel="noreferrer">Backstage</a></th>
+          <td>v1.54.5<br>(2026-08-25)</td>
+          <td>34,270<br>(2026-08-27)</td>
+          <td>Developer portal framework：以 Software Catalog、Software Templates 與 TechDocs 統一軟體生態系入口。</td>
+          <td><ul><li>Backstage 是需要持續維運的中央 portal，強項是服務探索、owner 與 scaffolding。</li><li>CSARC 是可攜的 repo-local 公版，直接把治理、驗證與交付基線放進每個 repo。</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="09: 完全符合">09</span><span class="coverage-tag full" title="10: 完全符合">10</span><span class="coverage-tag partial" title="07: 部分符合">07</span><span class="coverage-tag partial" title="08: 部分符合">08</span>
+          </div></td>
+        </tr>
+        <tr>
+          <th scope="row"><a href="https://github.com/mindersec/minder" target="_blank" rel="noreferrer">Minder</a></th>
+          <td>v0.3.1<br>(2026-08-10)</td>
+          <td>417<br>(2026-08-27)</td>
+          <td>Software supply chain security platform：集中評估 repository 與 artifact，並依 policy 告警或修正。</td>
+          <td><ul><li>Minder 專注中央安全姿態與持續 policy enforcement，需要常駐服務。</li><li>CSARC 涵蓋完整 repo 開發生命週期，目前以可攜政策與本機驗證為基線。</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="05: 完全符合">05</span><span class="coverage-tag full" title="07: 完全符合">07</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="10: 部分符合">10</span>
+          </div></td>
+        </tr>
+        <tr>
+          <th scope="row"><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a></th>
+          <td>v1.0.1<br>(2026-08-21)</td>
+          <td>131,843<br>(2026-08-27)</td>
+          <td>Spec-driven development toolkit：讓任何 AI coding agent 依 spec、plan 與 tasks 交付軟體。</td>
+          <td><ul><li>Spec Kit 集中在需求澄清、規格拆解與 agent 實作流程。</li><li>CSARC 另外涵蓋 repo profile、治理、供應鏈、版本交付與模板更新。</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="04: 部分符合">04</span>
+          </div></td>
+        </tr>
+        <tr>
+          <th scope="row"><a href="https://github.com/Fission-AI/OpenSpec" target="_blank" rel="noreferrer">OpenSpec</a></th>
+          <td>v1.11.0<br>(2026-08-26)</td>
+          <td>66,427<br>(2026-08-27)</td>
+          <td>Spec framework：用 current specs 與 change proposals 管理 AI 輔助開發中的需求變更。</td>
+          <td><ul><li>OpenSpec 專注規格從 propose、apply 到 archive 的生命週期。</li><li>CSARC 把同類工作邊界接到 Issue、PR、治理、交付與可更新 repo 公版。</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="04: 部分符合">04</span>
+          </div></td>
+        </tr>
+        <tr>
+          <th scope="row"><a href="https://github.com/bmad-code-org/BMAD-METHOD" target="_blank" rel="noreferrer">BMAD</a></th>
+          <td>v6.11.0<br>(2026-08-10)</td>
+          <td>52,377<br>(2026-08-27)</td>
+          <td>AI-driven agile delivery method：以多角色工作流程與依複雜度調整的規劃推進產品。</td>
+          <td><ul><li>BMAD 提供完整方法、agent 角色與分級規劃流程。</li><li>CSARC 不綁 agent persona，重點是可執行、可更新的 repository 基線。</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="04: 部分符合">04</span>
+          </div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="similar-tools-note"><strong>判斷標準：</strong>完整與部分 tag 合計達 4 個以上，即列為主要相似工具；兩種符合程度不加權，未涵蓋的旅程不顯示。</p>
+</div>
+<div id="similar-tools-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-work" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">每列回答一個具體做法；主要相似工具優先，其他工具只補充局部設計</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="工作定義做法">
+    <table class="similar-tools-matrix similar-tools-philosophy-matrix">
+      <thead><tr><th scope="col">功能分野／具體做法</th><th scope="col">主要相似工具</th><th scope="col">其他生態圈工具</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>工作依據放在哪裡</strong><span>比較需求、決策、設定與驗證證據存在哪裡，以及哪一份資料算正式。<br><br><b>CSARC：</b>GitHub Issue 劃定執行範圍；main 上核准的 spec／ADR 保存長期契約，程式與測試證明實作，未提交內容不算正式。</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong>｜<a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：repo 同時保存產品文件、決策、plan、程式與驗證證據。</li>
+              <li><strong>projen</strong>｜<a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">.projenrc project model</a>：.projenrc 是唯一手寫真相，其他專案檔由 synth 產生。</li>
+              <li><strong>Backstage</strong>｜<a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entity 保存服務、owner 與關係的中央真相。</li>
+              <li><strong>Spec Kit</strong>｜<a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：spec、plan、tasks 與 constitution 在 repo 形成 feature 脈絡。</li>
+              <li><strong>OpenSpec</strong>｜<a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Specs / Changes</a>：specs 保存 current truth，changes 保存尚未接受的 delta。</li>
+              <li><strong>BMAD</strong>｜<a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：brief、spec、architecture 依複雜度累積成持久工作脈絡。</li>
+          </ul></td>
+          <td><ul>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>定義如何變成 repo 狀態</strong><span>比較人直接改檔、由設定產生檔案，或由服務持續修正遠端狀態。<br><br><b>CSARC：</b>copier.yml、template/ 與 profiles/catalog.yaml 宣告生成基線；scripts/sync-paired-files.sh 同步 root／template 配對檔，產品檔仍由下游 repo 持有。</span></th>
+          <td><ul>
+              <li><strong>projen</strong>｜<a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：用 typed components 宣告期望專案，再由 synth 收斂檔案。</li>
+              <li><strong>Backstage</strong>｜<a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entity 與 Software Template 宣告 portal 中的元件和建立流程。</li>
+              <li><strong>Minder</strong>｜<a href="https://github.com/mindersec/minder/blob/main/docs/docs/understand/profiles.md" target="_blank" rel="noreferrer">Profiles</a>：Profile 宣告安全期望，服務持續評估並可自動修正。</li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Copier</strong>｜<a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。</li>
+              <li><strong>Allstar</strong>｜<a href="https://github.com/ossf/allstar#policies" target="_blank" rel="noreferrer">Policies</a>：GitHub App 持續讀取組織政策，檢查或處置 repo 不合規狀態。</li>
+              <li><strong>Safe Settings</strong>｜<a href="https://github.com/github-community-projects/safe-settings#hierarchical-configuration" target="_blank" rel="noreferrer">Hierarchical configuration</a>：用 org／suborg／repo YAML 階層計算並下發 GitHub 設定。</li>
+              <li><strong>OpenRewrite</strong>｜<a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：Recipe 宣告 semantic transformation，再由 parser／visitor 套用。</li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>既有 repo 如何接收新版</strong><span>比較新版模板、規則或 recipe 如何進入既有 repo，以及衝突由誰處理。<br><br><b>CSARC：</b>Copier answers 記錄來源與版本；既有案執行更新後以 PR 審查 diff／衝突，並驗證產品路徑未被覆寫。</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong>｜<a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：updater 保留 upstream base，用三方合併安全更新既有 repo。</li>
+              <li><strong>projen</strong>｜<a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen upgrade &#43; synth</a>：升級 library 後重建；受管檔的手改會被 anti-tamper 攔下。</li>
+              <li><strong>Backstage</strong>｜<a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：擅長建立新元件；既有 repo 遷移仍要另接工具。</li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Copier</strong>｜<a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：記住模板來源與 answers，讓既有 repo 接收新版模板。</li>
+              <li><strong>Cruft</strong>｜<a href="https://cruft.github.io/cruft/" target="_blank" rel="noreferrer">cruft check / diff / update</a>：追蹤 Cookiecutter 來源，用 check／diff／update 管模板漂移。</li>
+              <li><strong>OpenRewrite</strong>｜<a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：不用文字模板覆蓋檔案，而是直接執行跨版本語意遷移。</li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>進行中變更如何成為正式</strong><span>比較 branch、change 或設定 PR 在何時完成審查、合併與歸檔。<br><br><b>CSARC：</b>每項工作先有 Issue；type/&lt;issue&gt;-slug 分支的 PR 以 Closes #&lt;issue&gt; 連回範圍，合併 main 後才成為正式，新增範圍另開 Issue。</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong>｜<a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active / completed plans</a>：跨 session 工作先進 active plan，完成後才歸檔。</li>
+              <li><strong>projen</strong>｜<a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Anti-tamper build</a>：PR 同時修改 .projenrc 與重建結果，合併後才成為正式狀態。</li>
+              <li><strong>Spec Kit</strong>｜<a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature workflow</a>：artifacts 在 feature branch 演進，最後仍交給 Git／PR 接受。</li>
+              <li><strong>OpenSpec</strong>｜<a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Change workflow</a>：propose → apply → archive 後，才把內容併回正式規格。</li>
+              <li><strong>BMAD</strong>｜<a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">BMad Delivery Loop</a>：artifacts 在 clarify → plan → build／verify 之間逐步成熟。</li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Copier</strong>｜<a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Update diff</a>：更新先產生 Git diff，解衝突並合併後才接受。</li>
+              <li><strong>Cruft</strong>｜<a href="https://cruft.github.io/cruft/" target="_blank" rel="noreferrer">cruft diff / update</a>：上游差異先成為 diff 或 PR，專案接受後才更新追蹤狀態。</li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>小改與大型工作如何分流</strong><span>比較何時可以直接修改，何時必須增加 spec、plan、tasks 或架構文件。<br><br><b>CSARC：</b>小型 bounded change 只用 Issue 與針對性驗證；跨 session、高風險或長期契約才增加 spec、ADR 或 plan。</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong>｜<a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Durable-plan threshold</a>：小 typo 不建 plan；高風險或長工作才增加持久文件。</li>
+              <li><strong>Spec Kit</strong>｜<a href="https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md" target="_blank" rel="noreferrer">Agentic bugfix workflow</a>：完整流程最適合大型 feature，小修可走較短路徑。</li>
+              <li><strong>OpenSpec</strong>｜<a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Change proposal</a>：小修改可直接走 PR，大變更才建立完整 proposal。</li>
+              <li><strong>BMAD</strong>｜<a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Quick Flow / BMad Method</a>：Quick Flow 處理小改，複雜產品才加完整 planning 與 architecture。</li>
+          </ul></td>
+          <td><ul>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
+
+
+</section>
+
 <section class="slide markdown-slide legacy-slide review-notes-slide" id="access-control" data-content-key="access-control" aria-label="託管方案未定前的臨時防護">
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
@@ -3894,6 +4206,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">決策附錄</a>
 </aside>
 
@@ -4006,6 +4319,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">決策附錄</a>
 </aside>
 
@@ -4141,6 +4455,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">決策附錄</a>
 </aside>
 
@@ -4291,6 +4606,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">決策附錄</a>
 </aside>
 
@@ -4431,6 +4747,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">決策附錄</a>
 </aside>
 
@@ -4543,6 +4860,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">決策附錄</a>
 </aside>
 
@@ -4661,6 +4979,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">決策附錄</a>
 </aside>
 
@@ -4748,6 +5067,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">決策附錄</a>
 </aside>
 
@@ -4827,6 +5147,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">決策附錄</a>
 </aside>
 
@@ -4906,6 +5227,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">五月盤點</a>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">決策附錄</a>
 </aside>
 
@@ -4949,7 +5271,7 @@ html[data-detail-level="simple"] .detail-panel {
   <div class="progress" aria-hidden="true" hidden><span id="bar"></span></div>
   <script data-bundled-from="deck.js">
 (() => {
-  const slides = [...document.querySelectorAll('.slide')];
+  const allSlides = [...document.querySelectorAll('.slide')];
   const previous = document.querySelector('#previous');
   const next = document.querySelector('#next');
   const counter = document.querySelector('#counter');
@@ -4963,10 +5285,16 @@ html[data-detail-level="simple"] .detail-panel {
   const progress = document.querySelector('.progress');
   let current = 0;
   let zoom = 1;
+  let slides = [];
 
-  slides.forEach((slide, index) => {
-    slide.dataset.page = `${String(index + 1).padStart(2, '0')} / ${slides.length}`;
-  });
+  function refreshSlides() {
+    const maintenance = document.documentElement.dataset.detailLevel === 'technical';
+    slides = allSlides.filter(slide => slide.dataset.audience !== 'maintainer' || maintenance);
+    allSlides.forEach(slide => slide.removeAttribute('data-page'));
+    slides.forEach((slide, index) => {
+      slide.dataset.page = `${String(index + 1).padStart(2, '0')} / ${slides.length}`;
+    });
+  }
 
   function closeDisclosures() {
     document.querySelectorAll('.package-disclosure[open]').forEach(disclosure => {
@@ -4977,11 +5305,15 @@ html[data-detail-level="simple"] .detail-panel {
   function indexFromHash() {
     const value = location.hash.slice(1);
     const target = document.getElementById(value);
-    if (target) return slides.indexOf(target.closest('.slide'));
+    if (target) {
+      const targetIndex = slides.indexOf(target.closest('.slide'));
+      return targetIndex < 0 ? 0 : targetIndex;
+    }
     return Number(value) - 1 || 0;
   }
 
   function show(index, updateHash = true) {
+    refreshSlides();
     closeDisclosures();
     document.querySelectorAll('.config-overlay').forEach(overlay => {
       overlay.hidden = true;
@@ -4990,7 +5322,8 @@ html[data-detail-level="simple"] .detail-panel {
       trigger.setAttribute('aria-expanded', 'false');
     });
     current = Math.max(0, Math.min(slides.length - 1, index));
-    slides.forEach((slide, slideIndex) => {
+    allSlides.forEach(slide => {
+      const slideIndex = slides.indexOf(slide);
       const active = slideIndex === current;
       slide.classList.toggle('active', active);
       slide.setAttribute('aria-hidden', String(!active));
@@ -5032,12 +5365,20 @@ html[data-detail-level="simple"] .detail-panel {
   zoomIn.addEventListener('click', () => setZoom(zoom + .1));
   addEventListener('resize', fit);
   addEventListener('hashchange', () => show(indexFromHash(), false));
+  addEventListener('csarc:detail-level', () => {
+    const activeSlide = document.querySelector('.slide.active');
+    refreshSlides();
+    const activeIndex = slides.indexOf(activeSlide);
+    const fallbackIndex = slides.indexOf(document.querySelector('#ecosystem'));
+    show(activeIndex >= 0 ? activeIndex : Math.max(0, fallbackIndex));
+  });
   addEventListener('keydown', event => {
     if (event.target.closest('summary, button, a, input, textarea, select')) return;
     if (['ArrowRight', 'PageDown', ' '].includes(event.key)) show(current + 1);
     if (['ArrowLeft', 'PageUp'].includes(event.key)) show(current - 1);
   });
 
+  refreshSlides();
   fit();
   show(indexFromHash(), !location.hash);
   slideControls.hidden = false;
@@ -5963,6 +6304,8 @@ gh auth status`
   const storageKey = 'csarc-detail-level';
   const root = document.documentElement;
   const controls = document.querySelector('.detail-level-control');
+  const audienceItems = document.querySelectorAll('[data-audience="maintainer"]');
+  const languageLinks = document.querySelectorAll('.language-control a');
   const selectors = [
     '.config-guidance:not(.overview-detail)',
     '.tool-deferred',
@@ -5990,6 +6333,38 @@ gh auth status`
     selectors.split(', ').map(selector => `.legacy-content ${selector}`).join(', ')
   );
   const buttons = controls.querySelectorAll('[data-detail-level]');
+
+  languageLinks.forEach(link => {
+    link.addEventListener('click', () => {
+      const destination = new URL(link.href, location.href);
+      destination.hash = location.hash;
+      link.href = destination.href;
+    });
+  });
+
+  document.querySelectorAll('.similar-tools-slide').forEach(slide => {
+    const tabs = [...slide.querySelectorAll('[data-similar-tools-tab]')];
+    const toolPanels = [...slide.querySelectorAll('[data-similar-tools-panel]')];
+    let selectedIndex = 0;
+
+    function renderTab() {
+      tabs.forEach((tab, index) => {
+        tab.setAttribute('aria-selected', String(index === selectedIndex));
+        tab.tabIndex = index === selectedIndex ? 0 : -1;
+      });
+      toolPanels.forEach((panel, index) => {
+        panel.hidden = index !== selectedIndex;
+      });
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => {
+        selectedIndex = index;
+        renderTab();
+      });
+    });
+    renderTab();
+  });
 
   document.querySelectorAll('.legacy-content .config-guidance').forEach(guidance => {
     const actions = guidance.querySelector('.config-actions');
@@ -6210,11 +6585,16 @@ gh auth status`
       detail.inert = simple;
       detail.setAttribute('aria-hidden', String(simple));
     });
+    audienceItems.forEach(item => {
+      item.hidden = simple;
+      item.inert = simple;
+    });
     if (simple) {
       document.querySelectorAll('.config-overlay').forEach(overlay => {
         overlay.hidden = true;
       });
     }
+    dispatchEvent(new CustomEvent('csarc:detail-level', { detail: selected }));
     if (!persist) return;
     try {
       localStorage.setItem(storageKey, selected);

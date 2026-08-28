@@ -1,4 +1,4 @@
-<section class="slide markdown-slide{{ if eq .Ordinal 0 }} active{{ end }}{{ with .Get "class" }} {{ . }}{{ end }}" id="{{ .Get "key" }}" data-content-key="{{ .Get "key" }}"{{ with .Get "track" }} data-track="{{ . }}"{{ end }} aria-label="{{ .Get "title" }}">
+<section class="slide markdown-slide{{ if eq .Ordinal 0 }} active{{ end }}{{ with .Get "class" }} {{ . }}{{ end }}" id="{{ .Get "key" }}" data-content-key="{{ .Get "key" }}"{{ with .Get "track" }} data-track="{{ . }}"{{ end }}{{ with .Get "audience" }} data-audience="{{ . }}"{{ end }} aria-label="{{ .Get "title" }}">
   {{ partial "journey-rail.html" (dict "Page" .Page "Key" (.Get "key")) }}
   {{- if eq (.Get "legacy") "true" }}
   <header class="basic-header">

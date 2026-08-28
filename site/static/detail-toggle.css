@@ -23,6 +23,7 @@
 }
 
 .detail-level-control[hidden] { display: none; }
+[data-audience="maintainer"][hidden] { display: none !important; }
 
 .controls[hidden],
 .view-controls[hidden],

@@ -348,9 +348,72 @@
     .explorer-caption { margin-top: 5px; color: var(--muted); font-size: 18px; line-height: 1.18; }
     .explorer-caption strong { color: var(--ink); }
 
-    .ecosystem-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
+    .ecosystem-slide, .similar-tools-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
     .ecosystem-slide header { position: relative; margin-bottom: 1%; padding-right: 150px; }
     .ecosystem-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
+
+    .similar-tools-slide header { margin-bottom: 8px; }
+    .similar-tools-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
+    .similar-tools-tabs { display: flex; align-items: end; gap: 4px; margin-bottom: -1px; padding-left: 10px; z-index: 2; }
+    .similar-tools-tabs button {
+      min-width: 210px;
+      padding: 7px 16px 8px;
+      border: 1px solid #a9a99f;
+      border-bottom-color: var(--line);
+      border-radius: 8px 8px 0 0;
+      background: #e9e9e4;
+      color: #4b4b47;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 900;
+      text-align: left;
+    }
+    .similar-tools-tabs button small { display: block; margin-bottom: 2px; font-size: 12px; letter-spacing: .03em; }
+    .similar-tools-tabs button[aria-selected="true"] { border-top: 5px solid var(--yellow); border-bottom-color: white; background: white; color: var(--ink); }
+    .similar-tools-tabs button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+    .similar-tools-panel { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+    .similar-tools-panel[hidden] { display: none; }
+    .similar-tools-legend { display: flex; gap: 7px; margin-bottom: 7px; font-size: 14px; font-weight: 850; }
+    .similar-tools-legend span { padding: 5px 8px; border-left: 6px solid; }
+    .similar-tools-legend .competitor { border-color: #b9a700; background: #fffbea; }
+    .similar-tools-legend .reference { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
+    .similar-tools-legend .coverage-key { border-color: #999; background: var(--soft); }
+    .similar-tools-table-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); background: white; }
+    .similar-tools-table-wrap:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+    .similar-tools-matrix { width: 100%; min-height: 100%; table-layout: fixed; border-collapse: collapse; font-size: 14.5px; line-height: 1.22; }
+    .similar-tools-matrix th, .similar-tools-matrix td { padding: 7px 8px; border: 1px solid var(--line); overflow-wrap: anywhere; vertical-align: top; }
+    .similar-tools-matrix thead th { position: sticky; top: 0; z-index: 2; text-align: center; }
+    .similar-tools-matrix thead th:first-child { left: 0; z-index: 4; width: 18%; }
+    .similar-tools-matrix tbody th { position: sticky; left: 0; z-index: 1; width: 18%; background: #fffbea; color: var(--ink); font-size: 14.5px; text-align: left; }
+    .similar-tools-matrix tbody tr:nth-child(even) td { background: #fafaf8; }
+    .similar-tools-matrix td strong { color: #174f8b; }
+    .similar-tools-matrix td a { color: #174f8b; text-underline-offset: 2px; }
+    .similar-tools-primary-matrix { min-height: 0; font-size: 15px; line-height: 1.28; }
+    .similar-tools-primary-matrix thead th:first-child { width: 13%; }
+    .similar-tools-primary-matrix thead th:nth-child(2) { width: 14%; }
+    .similar-tools-primary-matrix thead th:nth-child(3) { width: 13%; }
+    .similar-tools-primary-matrix thead th:nth-child(4) { width: 21%; }
+    .similar-tools-primary-matrix thead th:nth-child(5) { width: 25%; }
+    .similar-tools-primary-matrix thead th:nth-child(6) { width: 14%; }
+    .similar-tools-primary-matrix tbody th { width: 13%; font-size: 15px; }
+    .similar-tools-primary-matrix td ul { margin: 0; padding-left: 18px; }
+    .similar-tools-primary-matrix td li + li { margin-top: 4px; }
+    .coverage-tags { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px; }
+    .coverage-tag { display: inline-flex; min-width: 29px; min-height: 23px; align-items: center; justify-content: center; padding: 2px 6px; border-radius: 999px; color: white; font-size: 12px; font-style: normal; font-weight: 900; line-height: 1; }
+    .coverage-tag.full { background: var(--best); }
+    .coverage-tag.partial { background: var(--best-soft); box-shadow: inset 0 0 0 1px #6db091; color: #0b6540; }
+    .similar-tools-philosophy-matrix { min-height: 0; font-size: 14px; line-height: 1.22; }
+    .similar-tools-philosophy-matrix thead th:first-child { width: 32%; }
+    .similar-tools-philosophy-matrix thead th:nth-child(2) { width: 45%; }
+    .similar-tools-philosophy-matrix thead th:nth-child(3) { width: 23%; }
+    .similar-tools-philosophy-matrix tbody th { width: 32%; }
+    .similar-tools-philosophy-matrix tbody th strong { display: block; font-size: 15px; }
+    .similar-tools-philosophy-matrix tbody th span { display: block; margin-top: 3px; color: var(--muted); font-weight: 500; }
+    .similar-tools-philosophy-matrix tbody td:first-of-type { background: #fffdf0; box-shadow: inset 4px 0 #b9a700; }
+    .similar-tools-philosophy-matrix tbody td:last-child { font-size: 13px; }
+    .similar-tools-philosophy-matrix td ul { margin: 0; padding-left: 18px; }
+    .similar-tools-philosophy-matrix td li + li { margin-top: 4px; }
+    .similar-tools-note { margin-top: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 16px; line-height: 1.22; }
     .selection-sequence {
       position: absolute;
       top: 0;
@@ -1463,6 +1526,7 @@
 }
 
 .detail-level-control[hidden] { display: none; }
+[data-audience="maintainer"][hidden] { display: none !important; }
 
 .controls[hidden],
 .view-controls[hidden],
@@ -1911,7 +1975,7 @@ html[data-detail-level="simple"] .detail-panel {
          lang="en" aria-current="page">English</a>
     </nav>
     <div class="detail-level-control" role="group" aria-label="Reading mode" hidden>
-      <button type="button" data-detail-level="simple" aria-pressed="true">Overview</button>
+      <button type="button" data-detail-level="simple" aria-pressed="true">Standard</button>
       <button type="button" data-detail-level="technical" aria-pressed="false">Maintenance</button>
     </div>
   </div>
@@ -1967,6 +2031,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2063,6 +2128,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2176,6 +2242,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2290,6 +2357,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2371,6 +2439,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2448,6 +2517,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2546,6 +2616,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2649,6 +2720,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2755,6 +2827,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2853,6 +2926,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -2952,6 +3026,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -3029,6 +3104,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -3105,6 +3181,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -3198,6 +3275,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix active-bridge" href="#bridge" aria-current="page">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -3319,6 +3397,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix active-selection" href="#ecosystem" aria-current="page">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix" href="#access-control">Decisions</a>
 </aside>
 
@@ -3385,6 +3464,239 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 </section>
 
+<section class="slide markdown-slide similar-tools-slide" id="similar-tools" data-content-key="similar-tools" data-audience="maintainer" aria-label="Similar tools | Direct alternatives and focused references">
+  <aside class="journey-rail" aria-label="Presentation outline">
+  <h3>Use template</h3>
+  <ol class="journey-use">
+    <li class="journey-item">
+      <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#flow"><span>CI/CD flow</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#files"><span>File map</span></a>
+    </li>
+  </ol>
+  <h3>Workflow</h3>
+  <ol class="journey-main">
+    <li class="journey-item">
+      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+    </li>
+  </ol>
+  <h3>Maintenance</h3>
+  <ol class="journey-support">
+    <li class="journey-item">
+      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+    </li>
+    <li class="journey-item">
+      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+    </li>
+  </ol>
+  <a class="journey-bookend appendix" href="#bridge">Review</a>
+  <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix active-selection" data-audience="maintainer" href="#similar-tools" aria-current="page">Similar</a>
+  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+</aside>
+
+  <header class="basic-header">
+    <span class="selection-sequence">Maintenance appendix | Similar tools</span>
+    <h2>Similar tools | Direct alternatives and focused references</h2>
+    <p class="subtitle">Review projects with a similar overall purpose first, then compare concrete approaches to defining work.</p>
+  </header>
+
+<div class="legacy-content similar-tools-content">
+<div class="similar-tools-tabs" role="tablist" aria-label="Similar tools | Direct alternatives and focused references">
+  <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>Overall match</small>Primary similar tools</button>
+  <button id="similar-tools-tab-work" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-work" data-similar-tools-tab="1"><small>Feature comparison</small>Work-definition approaches</button>
+</div>
+<div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
+  <div class="similar-tools-legend">
+    <span class="competitor">Similar overall purpose | at least four full or partial journey matches</span>
+    <span class="coverage-key"><i class="coverage-tag full">Full match</i>　<i class="coverage-tag partial">Partial match</i></span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Primary similar tools">
+    <table class="similar-tools-matrix similar-tools-primary-matrix">
+      <thead>
+        <tr>
+          <th scope="col">Package</th>
+          <th scope="col">Compared version (release date)</th>
+          <th scope="col">GitHub Stars (captured)</th>
+          <th scope="col">Self-positioning</th>
+          <th scope="col">Difference from CSARC</th>
+          <th scope="col">Journey coverage</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row"><a href="https://github.com/hoangnb24/repository-harness" target="_blank" rel="noreferrer">Repository Harness</a></th>
+          <td>harness-v0.1.10<br>(2026-08-13)</td>
+          <td>1,198<br>(2026-08-27)</td>
+          <td>An agent-ready repository framework that puts AI working rules, durable plans, verification, and safe updates in the repository.</td>
+          <td><ul><li>Repository Harness primarily adds an agent working framework and safe update mechanism to an existing repository.</li><li>CSARC also supplies generated technology profiles, GitHub governance, delivery, and version policy.</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag full" title="08: Full match">08</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="04: Partial match">04</span><span class="coverage-tag partial" title="07: Partial match">07</span><span class="coverage-tag partial" title="10: Partial match">10</span>
+          </div></td>
+        </tr>
+        <tr>
+          <th scope="row"><a href="https://github.com/projen/projen" target="_blank" rel="noreferrer">projen</a></th>
+          <td>v0.103.5<br>(2026-08-26)</td>
+          <td>2,948<br>(2026-08-27)</td>
+          <td>A project generator that declares a project in a general-purpose language and continuously synthesizes managed configuration and workflows.</td>
+          <td><ul><li>projen treats .projenrc as the only source and prevents direct edits to many generated files.</li><li>CSARC distributes an updatable Copier baseline while preserving ownership boundaries for product and policy files.</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="03: Full match">03</span><span class="coverage-tag full" title="06: Full match">06</span><span class="coverage-tag full" title="08: Full match">08</span><span class="coverage-tag partial" title="01: Partial match">01</span><span class="coverage-tag partial" title="04: Partial match">04</span><span class="coverage-tag partial" title="05: Partial match">05</span><span class="coverage-tag partial" title="07: Partial match">07</span><span class="coverage-tag partial" title="10: Partial match">10</span>
+          </div></td>
+        </tr>
+        <tr>
+          <th scope="row"><a href="https://github.com/backstage/backstage" target="_blank" rel="noreferrer">Backstage</a></th>
+          <td>v1.54.5<br>(2026-08-25)</td>
+          <td>34,270<br>(2026-08-27)</td>
+          <td>A developer portal framework that unifies a software ecosystem through Software Catalog, Software Templates, and TechDocs.</td>
+          <td><ul><li>Backstage is a centrally operated portal focused on service discovery, ownership, and scaffolding.</li><li>CSARC is a portable repository-local baseline that places governance, verification, and delivery in each repository.</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="09: Full match">09</span><span class="coverage-tag full" title="10: Full match">10</span><span class="coverage-tag partial" title="07: Partial match">07</span><span class="coverage-tag partial" title="08: Partial match">08</span>
+          </div></td>
+        </tr>
+        <tr>
+          <th scope="row"><a href="https://github.com/mindersec/minder" target="_blank" rel="noreferrer">Minder</a></th>
+          <td>v0.3.1<br>(2026-08-10)</td>
+          <td>417<br>(2026-08-27)</td>
+          <td>A software supply-chain security platform that centrally evaluates repositories and artifacts and alerts or remediates according to policy.</td>
+          <td><ul><li>Minder focuses on centralized security posture and continuous policy enforcement and requires an operating service.</li><li>CSARC spans the repository development lifecycle and currently uses portable policy plus local verification as its baseline.</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="05: Full match">05</span><span class="coverage-tag full" title="07: Full match">07</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="10: Partial match">10</span>
+          </div></td>
+        </tr>
+        <tr>
+          <th scope="row"><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a></th>
+          <td>v1.0.1<br>(2026-08-21)</td>
+          <td>131,843<br>(2026-08-27)</td>
+          <td>A spec-driven development toolkit for delivering software through specs, plans, and tasks with any AI coding agent.</td>
+          <td><ul><li>Spec Kit concentrates on requirement clarification, specification decomposition, and agent implementation workflows.</li><li>CSARC also covers repository profiles, governance, supply chain, version delivery, and template updates.</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="04: Partial match">04</span>
+          </div></td>
+        </tr>
+        <tr>
+          <th scope="row"><a href="https://github.com/Fission-AI/OpenSpec" target="_blank" rel="noreferrer">OpenSpec</a></th>
+          <td>v1.11.0<br>(2026-08-26)</td>
+          <td>66,427<br>(2026-08-27)</td>
+          <td>A specification framework that manages requirement changes in AI-assisted development through current specs and change proposals.</td>
+          <td><ul><li>OpenSpec focuses on the propose, apply, and archive lifecycle of specifications.</li><li>CSARC connects that work boundary to Issues, PRs, governance, delivery, and an updatable repository baseline.</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="04: Partial match">04</span>
+          </div></td>
+        </tr>
+        <tr>
+          <th scope="row"><a href="https://github.com/bmad-code-org/BMAD-METHOD" target="_blank" rel="noreferrer">BMAD</a></th>
+          <td>v6.11.0<br>(2026-08-10)</td>
+          <td>52,377<br>(2026-08-27)</td>
+          <td>An AI-driven agile delivery method that advances products through multi-role workflows and complexity-adjusted planning.</td>
+          <td><ul><li>BMAD provides a complete method, agent roles, and tiered planning workflows.</li><li>CSARC does not prescribe agent personas; it focuses on an executable and updatable repository baseline.</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="04: Partial match">04</span>
+          </div></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="similar-tools-note"><strong>Classification rule: </strong>A tool is primary when its full and partial tags total at least four. The levels are not weighted, and uncovered journeys are omitted.</p>
+</div>
+<div id="similar-tools-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-work" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">Each row answers one concrete implementation question; primary tools come first and ecosystem tools add focused patterns.</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Work-definition approaches">
+    <table class="similar-tools-matrix similar-tools-philosophy-matrix">
+      <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>Where the source of truth lives</strong><span>Compares where requirements, decisions, configuration, and verification evidence live, and which record is authoritative.<br><br><b>CSARC: </b>A GitHub Issue bounds the work. Approved specs and ADRs on main preserve durable contracts, while code and tests prove implementation; uncommitted material is not authoritative.</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong>｜<a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：The repository keeps product documents, decisions, plans, code, and verification evidence together.</li>
+              <li><strong>projen</strong>｜<a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">.projenrc project model</a>：.projenrc is the only hand-written source of truth; synth generates the other project files.</li>
+              <li><strong>Backstage</strong>｜<a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entities provide a central source of truth for services, owners, and relationships.</li>
+              <li><strong>Spec Kit</strong>｜<a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：A spec, plan, tasks, and constitution form the feature context inside the repository.</li>
+              <li><strong>OpenSpec</strong>｜<a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Specs / Changes</a>：Specs preserve current truth, while changes hold deltas that have not yet been accepted.</li>
+              <li><strong>BMAD</strong>｜<a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：Briefs, specifications, and architecture records accumulate durable context according to complexity.</li>
+          </ul></td>
+          <td><ul>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>How definitions become repository state</strong><span>Compares direct file edits, generated files, and services that continuously reconcile remote state.<br><br><b>CSARC: </b>copier.yml, template/, and profiles/catalog.yaml define the generated baseline. scripts/sync-paired-files.sh synchronizes paired root/template files, while downstream repositories retain ownership of product files.</span></th>
+          <td><ul>
+              <li><strong>projen</strong>｜<a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：Typed components declare the desired project and synth reconciles the files.</li>
+              <li><strong>Backstage</strong>｜<a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entities and Software Templates declare portal components and creation workflows.</li>
+              <li><strong>Minder</strong>｜<a href="https://github.com/mindersec/minder/blob/main/docs/docs/understand/profiles.md" target="_blank" rel="noreferrer">Profiles</a>：Profiles declare security expectations; the service continuously evaluates them and can remediate findings.</li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Copier</strong>｜<a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：Answers and Jinja templates declare generation inputs without continuously controlling remote state.</li>
+              <li><strong>Allstar</strong>｜<a href="https://github.com/ossf/allstar#policies" target="_blank" rel="noreferrer">Policies</a>：A GitHub App continuously reads organization policy and detects or remediates non-compliant repository state.</li>
+              <li><strong>Safe Settings</strong>｜<a href="https://github.com/github-community-projects/safe-settings#hierarchical-configuration" target="_blank" rel="noreferrer">Hierarchical configuration</a>：Organization, suborganization, and repository YAML layers calculate and apply GitHub settings.</li>
+              <li><strong>OpenRewrite</strong>｜<a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：A Recipe declares a semantic transformation that parsers and visitors apply.</li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>How existing repositories receive updates</strong><span>Compares how updated templates, policies, or recipes enter an existing repository and who resolves conflicts.<br><br><b>CSARC: </b>Copier answers record the source and version. Existing projects review update diffs and conflicts in a PR and verify that product-owned paths were not overwritten.</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong>｜<a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：The updater retains the upstream base and safely updates an existing repository through a three-way merge.</li>
+              <li><strong>projen</strong>｜<a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen upgrade &#43; synth</a>：The project is regenerated after a library upgrade, and anti-tamper checks reject manual edits to managed files.</li>
+              <li><strong>Backstage</strong>｜<a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：It excels at creating new components; existing-repository migration still needs another tool.</li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Copier</strong>｜<a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：The recorded template source and answers let an existing repository receive template updates.</li>
+              <li><strong>Cruft</strong>｜<a href="https://cruft.github.io/cruft/" target="_blank" rel="noreferrer">cruft check / diff / update</a>：Tracks a Cookiecutter source and manages template drift with check, diff, and update.</li>
+              <li><strong>OpenRewrite</strong>｜<a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：Instead of overwriting files from a text template, it performs semantic migration across versions.</li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>How proposed work becomes authoritative</strong><span>Compares when a branch, change, or configuration PR is reviewed, merged, and archived.<br><br><b>CSARC: </b>Every change starts with an Issue. A PR from type/&lt;issue&gt;-slug links its scope with Closes #&lt;issue&gt;; it becomes authoritative only after merging to main, and added scope receives another Issue.</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong>｜<a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active / completed plans</a>：Work spanning sessions stays in an active plan and is archived only after completion.</li>
+              <li><strong>projen</strong>｜<a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Anti-tamper build</a>：A PR changes .projenrc together with regenerated output; the state becomes authoritative after merge.</li>
+              <li><strong>Spec Kit</strong>｜<a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature workflow</a>：Artifacts evolve on a feature branch and are ultimately accepted through Git and a PR.</li>
+              <li><strong>OpenSpec</strong>｜<a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Change workflow</a>：Only after propose, apply, and archive does the content merge into the authoritative specification.</li>
+              <li><strong>BMAD</strong>｜<a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">BMad Delivery Loop</a>：Artifacts mature through clarify, plan, build, and verify.</li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Copier</strong>｜<a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Update diff</a>：An update first produces a Git diff and is accepted only after conflicts are resolved and the change is merged.</li>
+              <li><strong>Cruft</strong>｜<a href="https://cruft.github.io/cruft/" target="_blank" rel="noreferrer">cruft diff / update</a>：Upstream changes first become a diff or PR; tracking state advances only after the project accepts them.</li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>How small and large changes diverge</strong><span>Compares when a direct edit is sufficient and when a spec, plan, tasks, or architecture record is required.<br><br><b>CSARC: </b>A small bounded change uses an Issue and focused verification. Work spanning sessions, carrying high risk, or defining a durable contract adds a spec, ADR, or plan.</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong>｜<a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Durable-plan threshold</a>：A small typo needs no plan; risky or long-running work receives a durable record.</li>
+              <li><strong>Spec Kit</strong>｜<a href="https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md" target="_blank" rel="noreferrer">Agentic bugfix workflow</a>：The full workflow suits substantial features, while small fixes can follow a shorter path.</li>
+              <li><strong>OpenSpec</strong>｜<a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Change proposal</a>：Small edits can go directly through a PR; substantial changes receive a complete proposal.</li>
+              <li><strong>BMAD</strong>｜<a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Quick Flow / BMad Method</a>：Quick Flow handles small changes; complex products add full planning and architecture.</li>
+          </ul></td>
+          <td><ul>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>
+
+
+</section>
+
 <section class="slide markdown-slide dense" id="access-control" data-content-key="access-control" aria-label="Temporary protection before a hosting choice">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
@@ -3437,6 +3749,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -3530,6 +3843,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -3639,6 +3953,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -3762,6 +4077,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -3877,6 +4193,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -3962,6 +4279,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -4047,6 +4365,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -4134,6 +4453,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -4213,6 +4533,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -4292,6 +4613,7 @@ html[data-detail-level="simple"] .detail-panel {
   </ol>
   <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" data-audience="maintainer" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
 </aside>
 
@@ -4335,7 +4657,7 @@ html[data-detail-level="simple"] .detail-panel {
   <div class="progress" aria-hidden="true" hidden><span id="bar"></span></div>
   <script data-bundled-from="../deck.js">
 (() => {
-  const slides = [...document.querySelectorAll('.slide')];
+  const allSlides = [...document.querySelectorAll('.slide')];
   const previous = document.querySelector('#previous');
   const next = document.querySelector('#next');
   const counter = document.querySelector('#counter');
@@ -4349,10 +4671,16 @@ html[data-detail-level="simple"] .detail-panel {
   const progress = document.querySelector('.progress');
   let current = 0;
   let zoom = 1;
+  let slides = [];
 
-  slides.forEach((slide, index) => {
-    slide.dataset.page = `${String(index + 1).padStart(2, '0')} / ${slides.length}`;
-  });
+  function refreshSlides() {
+    const maintenance = document.documentElement.dataset.detailLevel === 'technical';
+    slides = allSlides.filter(slide => slide.dataset.audience !== 'maintainer' || maintenance);
+    allSlides.forEach(slide => slide.removeAttribute('data-page'));
+    slides.forEach((slide, index) => {
+      slide.dataset.page = `${String(index + 1).padStart(2, '0')} / ${slides.length}`;
+    });
+  }
 
   function closeDisclosures() {
     document.querySelectorAll('.package-disclosure[open]').forEach(disclosure => {
@@ -4363,11 +4691,15 @@ html[data-detail-level="simple"] .detail-panel {
   function indexFromHash() {
     const value = location.hash.slice(1);
     const target = document.getElementById(value);
-    if (target) return slides.indexOf(target.closest('.slide'));
+    if (target) {
+      const targetIndex = slides.indexOf(target.closest('.slide'));
+      return targetIndex < 0 ? 0 : targetIndex;
+    }
     return Number(value) - 1 || 0;
   }
 
   function show(index, updateHash = true) {
+    refreshSlides();
     closeDisclosures();
     document.querySelectorAll('.config-overlay').forEach(overlay => {
       overlay.hidden = true;
@@ -4376,7 +4708,8 @@ html[data-detail-level="simple"] .detail-panel {
       trigger.setAttribute('aria-expanded', 'false');
     });
     current = Math.max(0, Math.min(slides.length - 1, index));
-    slides.forEach((slide, slideIndex) => {
+    allSlides.forEach(slide => {
+      const slideIndex = slides.indexOf(slide);
       const active = slideIndex === current;
       slide.classList.toggle('active', active);
       slide.setAttribute('aria-hidden', String(!active));
@@ -4418,12 +4751,20 @@ html[data-detail-level="simple"] .detail-panel {
   zoomIn.addEventListener('click', () => setZoom(zoom + .1));
   addEventListener('resize', fit);
   addEventListener('hashchange', () => show(indexFromHash(), false));
+  addEventListener('csarc:detail-level', () => {
+    const activeSlide = document.querySelector('.slide.active');
+    refreshSlides();
+    const activeIndex = slides.indexOf(activeSlide);
+    const fallbackIndex = slides.indexOf(document.querySelector('#ecosystem'));
+    show(activeIndex >= 0 ? activeIndex : Math.max(0, fallbackIndex));
+  });
   addEventListener('keydown', event => {
     if (event.target.closest('summary, button, a, input, textarea, select')) return;
     if (['ArrowRight', 'PageDown', ' '].includes(event.key)) show(current + 1);
     if (['ArrowLeft', 'PageUp'].includes(event.key)) show(current - 1);
   });
 
+  refreshSlides();
   fit();
   show(indexFromHash(), !location.hash);
   slideControls.hidden = false;
@@ -4436,6 +4777,8 @@ html[data-detail-level="simple"] .detail-panel {
   const storageKey = 'csarc-detail-level';
   const root = document.documentElement;
   const controls = document.querySelector('.detail-level-control');
+  const audienceItems = document.querySelectorAll('[data-audience="maintainer"]');
+  const languageLinks = document.querySelectorAll('.language-control a');
   const selectors = [
     '.config-guidance:not(.overview-detail)',
     '.tool-deferred',
@@ -4463,6 +4806,38 @@ html[data-detail-level="simple"] .detail-panel {
     selectors.split(', ').map(selector => `.legacy-content ${selector}`).join(', ')
   );
   const buttons = controls.querySelectorAll('[data-detail-level]');
+
+  languageLinks.forEach(link => {
+    link.addEventListener('click', () => {
+      const destination = new URL(link.href, location.href);
+      destination.hash = location.hash;
+      link.href = destination.href;
+    });
+  });
+
+  document.querySelectorAll('.similar-tools-slide').forEach(slide => {
+    const tabs = [...slide.querySelectorAll('[data-similar-tools-tab]')];
+    const toolPanels = [...slide.querySelectorAll('[data-similar-tools-panel]')];
+    let selectedIndex = 0;
+
+    function renderTab() {
+      tabs.forEach((tab, index) => {
+        tab.setAttribute('aria-selected', String(index === selectedIndex));
+        tab.tabIndex = index === selectedIndex ? 0 : -1;
+      });
+      toolPanels.forEach((panel, index) => {
+        panel.hidden = index !== selectedIndex;
+      });
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => {
+        selectedIndex = index;
+        renderTab();
+      });
+    });
+    renderTab();
+  });
 
   document.querySelectorAll('.legacy-content .config-guidance').forEach(guidance => {
     const actions = guidance.querySelector('.config-actions');
@@ -4683,11 +5058,16 @@ html[data-detail-level="simple"] .detail-panel {
       detail.inert = simple;
       detail.setAttribute('aria-hidden', String(simple));
     });
+    audienceItems.forEach(item => {
+      item.hidden = simple;
+      item.inert = simple;
+    });
     if (simple) {
       document.querySelectorAll('.config-overlay').forEach(overlay => {
         overlay.hidden = true;
       });
     }
+    dispatchEvent(new CustomEvent('csarc:detail-level', { detail: selected }));
     if (!persist) return;
     try {
       localStorage.setItem(storageKey, selected);

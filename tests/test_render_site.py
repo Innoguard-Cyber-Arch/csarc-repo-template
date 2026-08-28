@@ -1,3 +1,4 @@
+import json
 import runpy
 from pathlib import Path
 
@@ -6,8 +7,12 @@ import pytest
 SITE_MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "render_site.py")
 )
+PARITY_MODULE = runpy.run_path(
+    str(Path(__file__).parents[1] / "scripts" / "check-decision-site-parity")
+)
 BundleError = SITE_MODULE["BundleError"]
 render = SITE_MODULE["render"]
+parse_parity = PARITY_MODULE["parse"]
 
 
 def test_render_inlines_local_runtime_assets(tmp_path: Path) -> None:
@@ -113,3 +118,60 @@ def test_render_accepts_legacy_content_as_schema_one(tmp_path: Path) -> None:
     )
 
     assert "window.CONTENT = {};" in render(source, root=tmp_path)
+
+
+def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
+    root = Path(__file__).parents[1]
+    chinese = (root / "site/content/_index.zh-tw.md").read_text(
+        encoding="utf-8"
+    )
+    english = (root / "site/content/_index.en.md").read_text(encoding="utf-8")
+    data = json.loads(
+        (root / "site/data/similar_tools.json").read_text(encoding="utf-8")
+    )
+
+    for source in (chinese, english):
+        assert 'key="similar-tools" audience="maintainer"' in source
+        assert "{{< similar-tools >}}" in source
+
+    assert 'simple = "標準"' in chinese
+    assert 'simple = "Standard"' in english
+    assert len(data["features"]) == 5
+    assert len(data["tools"]) == 12
+    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 30
+    assert (
+        sum(
+            len(tool["coverage"]["full"]) + len(tool["coverage"]["partial"])
+            >= data["threshold"]
+            for tool in data["tools"]
+        )
+        == 7
+    )
+    for tool in data["tools"]:
+        for comparison in tool["comparisons"]:
+            assert comparison["feature"]
+            assert comparison["docs"].startswith("https://")
+            assert set(comparison["description"]) == {"zh-tw", "en"}
+
+
+def test_parity_ignores_explicit_maintainer_only_slides(tmp_path: Path) -> None:
+    legacy = tmp_path / "legacy.html"
+    candidate = tmp_path / "candidate.html"
+    legacy.write_text(
+        '<section class="slide" data-track="journey">Shared copy</section>',
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        """<section class="slide" id="journey">
+<div class="legacy-content">Shared copy</div>
+</section>
+<section class="slide" id="similar-tools" data-audience="maintainer">
+<div class="legacy-content">Supplemental maintainer copy</div>
+</section>
+""",
+        encoding="utf-8",
+    )
+
+    assert parse_parity(legacy, candidate=False) == parse_parity(
+        candidate, candidate=True
+    )

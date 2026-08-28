@@ -5,7 +5,7 @@ notice = "內部限閱・請勿公開分享此連結（Internal use only — do 
 [controls]
 language = "閱讀語言"
 detail = "閱讀模式"
-simple = "概覽"
+simple = "標準"
 technical = "維運"
 slides = "簡報控制"
 previous = "上一頁"
@@ -700,6 +700,10 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
 Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、通用部署與監控都等可測量需求再做。公版不建立空設定或 placeholder 來假裝支援。
 {{< /detail >}}
 {{< /basic >}}
+{{< /slide >}}
+
+{{< slide key="similar-tools" audience="maintainer" eyebrow="維運附錄｜相似工具" title="相似工具｜整體競品與局部參考" subtitle="所有相似工具集中在這裡：先看整體目的接近的套件，再切換到各項工作定義的具體做法。" class="similar-tools-slide" legacy="true" >}}
+{{< similar-tools >}}
 {{< /slide >}}
 
 {{< slide key="access-control" eyebrow="存取決策" title="託管方案未定前的臨時防護" subtitle="目前只有降低誤分享的措施，沒有把提示語宣稱成安全控制。" class="legacy-slide review-notes-slide" legacy="true" >}}

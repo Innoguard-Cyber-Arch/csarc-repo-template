@@ -5,7 +5,7 @@ notice = "Internal use only — do not share this link publicly"
 [controls]
 language = "Reading language"
 detail = "Reading mode"
-simple = "Overview"
+simple = "Standard"
 technical = "Maintenance"
 slides = "Presentation controls"
 previous = "Previous slide"
@@ -273,6 +273,10 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 {{< detail key="ecosystem-deferred" title="Capabilities not enabled yet" >}}
 Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, generic deployment, and monitoring all wait for measurable demand. The template does not create empty configuration or placeholders to pretend support.
 {{< /detail >}}
+{{< /slide >}}
+
+{{< slide key="similar-tools" audience="maintainer" eyebrow="Maintenance appendix | Similar tools" title="Similar tools | Direct alternatives and focused references" subtitle="Review projects with a similar overall purpose first, then compare concrete approaches to defining work." class="similar-tools-slide" legacy="true" >}}
+{{< similar-tools >}}
 {{< /slide >}}
 
 {{< slide key="access-control" class="dense" eyebrow="Access decision" title="Temporary protection before a hosting choice" subtitle="Current measures reduce accidental sharing; none is described as access control." legacy="false" >}}

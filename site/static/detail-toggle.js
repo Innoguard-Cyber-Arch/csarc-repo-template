@@ -2,6 +2,8 @@
   const storageKey = 'csarc-detail-level';
   const root = document.documentElement;
   const controls = document.querySelector('.detail-level-control');
+  const audienceItems = document.querySelectorAll('[data-audience="maintainer"]');
+  const languageLinks = document.querySelectorAll('.language-control a');
   const selectors = [
     '.config-guidance:not(.overview-detail)',
     '.tool-deferred',
@@ -29,6 +31,38 @@
     selectors.split(', ').map(selector => `.legacy-content ${selector}`).join(', ')
   );
   const buttons = controls.querySelectorAll('[data-detail-level]');
+
+  languageLinks.forEach(link => {
+    link.addEventListener('click', () => {
+      const destination = new URL(link.href, location.href);
+      destination.hash = location.hash;
+      link.href = destination.href;
+    });
+  });
+
+  document.querySelectorAll('.similar-tools-slide').forEach(slide => {
+    const tabs = [...slide.querySelectorAll('[data-similar-tools-tab]')];
+    const toolPanels = [...slide.querySelectorAll('[data-similar-tools-panel]')];
+    let selectedIndex = 0;
+
+    function renderTab() {
+      tabs.forEach((tab, index) => {
+        tab.setAttribute('aria-selected', String(index === selectedIndex));
+        tab.tabIndex = index === selectedIndex ? 0 : -1;
+      });
+      toolPanels.forEach((panel, index) => {
+        panel.hidden = index !== selectedIndex;
+      });
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => {
+        selectedIndex = index;
+        renderTab();
+      });
+    });
+    renderTab();
+  });
 
   document.querySelectorAll('.legacy-content .config-guidance').forEach(guidance => {
     const actions = guidance.querySelector('.config-actions');
@@ -249,11 +283,16 @@
       detail.inert = simple;
       detail.setAttribute('aria-hidden', String(simple));
     });
+    audienceItems.forEach(item => {
+      item.hidden = simple;
+      item.inert = simple;
+    });
     if (simple) {
       document.querySelectorAll('.config-overlay').forEach(overlay => {
         overlay.hidden = true;
       });
     }
+    dispatchEvent(new CustomEvent('csarc:detail-level', { detail: selected }));
     if (!persist) return;
     try {
       localStorage.setItem(storageKey, selected);

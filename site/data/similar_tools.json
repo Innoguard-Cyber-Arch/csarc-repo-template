@@ -1,0 +1,256 @@
+{
+  "comparisonDate": "2026-08-27",
+  "threshold": 4,
+  "labels": {
+    "zh-tw": {
+      "eyebrow": "維運附錄｜相似工具",
+      "title": "相似工具｜整體競品與局部參考",
+      "subtitle": "所有相似工具集中在這裡：先看整體目的接近的套件，再切換到各項工作定義的具體做法。",
+      "primaryTabOverline": "整體接近",
+      "primaryTab": "主要相似工具",
+      "workTabOverline": "功能比較",
+      "workTab": "工作定義做法",
+      "primaryLegend": "整體目的相近｜完整與部分符合的旅程合計至少 4 個",
+      "coverageLegend": "完整＝深綠　部分＝淺綠",
+      "package": "套件名稱",
+      "version": "比較版本（發行日）",
+      "stars": "GitHub Stars（擷取日）",
+      "position": "自我定位",
+      "difference": "與本套件的差異",
+      "coverage": "涵蓋旅程",
+      "criterionLabel": "判斷標準：",
+      "criterion": "完整與部分 tag 合計達 4 個以上，即列為主要相似工具；兩種符合程度不加權，未涵蓋的旅程不顯示。",
+      "workLegend": "每列回答一個具體做法；主要相似工具優先，其他工具只補充局部設計",
+      "feature": "功能分野／具體做法",
+      "primaryTools": "主要相似工具",
+      "otherTools": "其他生態圈工具",
+      "full": "完全符合",
+      "partial": "部分符合",
+      "csarc": "CSARC："
+    },
+    "en": {
+      "eyebrow": "Maintenance appendix | Similar tools",
+      "title": "Similar tools | Direct alternatives and focused references",
+      "subtitle": "Review projects with a similar overall purpose first, then compare concrete approaches to defining work.",
+      "primaryTabOverline": "Overall match",
+      "primaryTab": "Primary similar tools",
+      "workTabOverline": "Feature comparison",
+      "workTab": "Work-definition approaches",
+      "primaryLegend": "Similar overall purpose | at least four full or partial journey matches",
+      "coverageLegend": "Full = dark green; partial = light green",
+      "package": "Package",
+      "version": "Compared version (release date)",
+      "stars": "GitHub Stars (captured)",
+      "position": "Self-positioning",
+      "difference": "Difference from CSARC",
+      "coverage": "Journey coverage",
+      "criterionLabel": "Classification rule: ",
+      "criterion": "A tool is primary when its full and partial tags total at least four. The levels are not weighted, and uncovered journeys are omitted.",
+      "workLegend": "Each row answers one concrete implementation question; primary tools come first and ecosystem tools add focused patterns.",
+      "feature": "Functional boundary / concrete approach",
+      "primaryTools": "Primary similar tools",
+      "otherTools": "Other ecosystem tools",
+      "full": "Full match",
+      "partial": "Partial match",
+      "csarc": "CSARC: "
+    }
+  },
+  "features": [
+    {
+      "key": "repositoryTruth",
+      "title": {"zh-tw": "工作依據放在哪裡", "en": "Where the source of truth lives"},
+      "description": {"zh-tw": "比較需求、決策、設定與驗證證據存在哪裡，以及哪一份資料算正式。", "en": "Compares where requirements, decisions, configuration, and verification evidence live, and which record is authoritative."},
+      "csarc": {"zh-tw": "GitHub Issue 劃定執行範圍；main 上核准的 spec／ADR 保存長期契約，程式與測試證明實作，未提交內容不算正式。", "en": "A GitHub Issue bounds the work. Approved specs and ADRs on main preserve durable contracts, while code and tests prove implementation; uncommitted material is not authoritative."}
+    },
+    {
+      "key": "declarativeState",
+      "title": {"zh-tw": "定義如何變成 repo 狀態", "en": "How definitions become repository state"},
+      "description": {"zh-tw": "比較人直接改檔、由設定產生檔案，或由服務持續修正遠端狀態。", "en": "Compares direct file edits, generated files, and services that continuously reconcile remote state."},
+      "csarc": {"zh-tw": "copier.yml、template/ 與 profiles/catalog.yaml 宣告生成基線；scripts/sync-paired-files.sh 同步 root／template 配對檔，產品檔仍由下游 repo 持有。", "en": "copier.yml, template/, and profiles/catalog.yaml define the generated baseline. scripts/sync-paired-files.sh synchronizes paired root/template files, while downstream repositories retain ownership of product files."}
+    },
+    {
+      "key": "templateLifecycle",
+      "title": {"zh-tw": "既有 repo 如何接收新版", "en": "How existing repositories receive updates"},
+      "description": {"zh-tw": "比較新版模板、規則或 recipe 如何進入既有 repo，以及衝突由誰處理。", "en": "Compares how updated templates, policies, or recipes enter an existing repository and who resolves conflicts."},
+      "csarc": {"zh-tw": "Copier answers 記錄來源與版本；既有案執行更新後以 PR 審查 diff／衝突，並驗證產品路徑未被覆寫。", "en": "Copier answers record the source and version. Existing projects review update diffs and conflicts in a PR and verify that product-owned paths were not overwritten."}
+    },
+    {
+      "key": "proposalLifecycle",
+      "title": {"zh-tw": "進行中變更如何成為正式", "en": "How proposed work becomes authoritative"},
+      "description": {"zh-tw": "比較 branch、change 或設定 PR 在何時完成審查、合併與歸檔。", "en": "Compares when a branch, change, or configuration PR is reviewed, merged, and archived."},
+      "csarc": {"zh-tw": "每項工作先有 Issue；type/<issue>-slug 分支的 PR 以 Closes #<issue> 連回範圍，合併 main 後才成為正式，新增範圍另開 Issue。", "en": "Every change starts with an Issue. A PR from type/<issue>-slug links its scope with Closes #<issue>; it becomes authoritative only after merging to main, and added scope receives another Issue."}
+    },
+    {
+      "key": "rightSizedWork",
+      "title": {"zh-tw": "小改與大型工作如何分流", "en": "How small and large changes diverge"},
+      "description": {"zh-tw": "比較何時可以直接修改，何時必須增加 spec、plan、tasks 或架構文件。", "en": "Compares when a direct edit is sufficient and when a spec, plan, tasks, or architecture record is required."},
+      "csarc": {"zh-tw": "小型 bounded change 只用 Issue 與針對性驗證；跨 session、高風險或長期契約才增加 spec、ADR 或 plan。", "en": "A small bounded change uses an Issue and focused verification. Work spanning sessions, carrying high risk, or defining a durable contract adds a spec, ADR, or plan."}
+    }
+  ],
+  "tools": [
+    {
+      "name": "Repository Harness",
+      "url": "https://github.com/hoangnb24/repository-harness",
+      "version": "harness-v0.1.10",
+      "released": "2026-08-13",
+      "stars": "1,198",
+      "coverage": {"full": ["01", "02", "08"], "partial": ["03", "04", "07", "10"]},
+      "position": {"zh-tw": "Agent-ready repository framework：把 AI 工作規則、持久計畫、驗證與安全更新放進 repo。", "en": "An agent-ready repository framework that puts AI working rules, durable plans, verification, and safe updates in the repository."},
+      "difference": {"zh-tw": ["Repository Harness 偏向替既有 repo 加上 agent 工作框架與安全更新機制。", "CSARC 另外提供可生成的技術 profile、GitHub 治理、交付與版本政策。"], "en": ["Repository Harness primarily adds an agent working framework and safe update mechanism to an existing repository.", "CSARC also supplies generated technology profiles, GitHub governance, delivery, and version policy."]},
+      "comparisons": [
+        {"key": "repositoryTruth", "feature": "Repository protocol", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "repo 同時保存產品文件、決策、plan、程式與驗證證據。", "en": "The repository keeps product documents, decisions, plans, code, and verification evidence together."}},
+        {"key": "templateLifecycle", "feature": "harness update", "docs": "https://github.com/hoangnb24/repository-harness#maintain-an-installation", "description": {"zh-tw": "updater 保留 upstream base，用三方合併安全更新既有 repo。", "en": "The updater retains the upstream base and safely updates an existing repository through a three-way merge."}},
+        {"key": "proposalLifecycle", "feature": "Active / completed plans", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "跨 session 工作先進 active plan，完成後才歸檔。", "en": "Work spanning sessions stays in an active plan and is archived only after completion."}},
+        {"key": "rightSizedWork", "feature": "Durable-plan threshold", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "小 typo 不建 plan；高風險或長工作才增加持久文件。", "en": "A small typo needs no plan; risky or long-running work receives a durable record."}}
+      ]
+    },
+    {
+      "name": "projen",
+      "url": "https://github.com/projen/projen",
+      "version": "v0.103.5",
+      "released": "2026-08-26",
+      "stars": "2,948",
+      "coverage": {"full": ["03", "06", "08"], "partial": ["01", "04", "05", "07", "10"]},
+      "position": {"zh-tw": "Project generator：用一般程式語言宣告專案，持續 synth 出受管設定與工作流程。", "en": "A project generator that declares a project in a general-purpose language and continuously synthesizes managed configuration and workflows."},
+      "difference": {"zh-tw": ["projen 把 .projenrc 當唯一來源，大量生成檔不允許直接修改。", "CSARC 用 Copier 發布可更新基線，並保留產品檔案與政策檔案的責任邊界。"], "en": ["projen treats .projenrc as the only source and prevents direct edits to many generated files.", "CSARC distributes an updatable Copier baseline while preserving ownership boundaries for product and policy files."]},
+      "comparisons": [
+        {"key": "repositoryTruth", "feature": ".projenrc project model", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": ".projenrc 是唯一手寫真相，其他專案檔由 synth 產生。", "en": ".projenrc is the only hand-written source of truth; synth generates the other project files."}},
+        {"key": "declarativeState", "feature": "Components + synth", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "用 typed components 宣告期望專案，再由 synth 收斂檔案。", "en": "Typed components declare the desired project and synth reconciles the files."}},
+        {"key": "templateLifecycle", "feature": "projen upgrade + synth", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "升級 library 後重建；受管檔的手改會被 anti-tamper 攔下。", "en": "The project is regenerated after a library upgrade, and anti-tamper checks reject manual edits to managed files."}},
+        {"key": "proposalLifecycle", "feature": "Anti-tamper build", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "PR 同時修改 .projenrc 與重建結果，合併後才成為正式狀態。", "en": "A PR changes .projenrc together with regenerated output; the state becomes authoritative after merge."}}
+      ]
+    },
+    {
+      "name": "Copier",
+      "url": "https://github.com/copier-org/copier",
+      "version": "v9.17.2",
+      "released": "2026-08-19",
+      "stars": "3,545",
+      "coverage": {"full": ["08"], "partial": ["04", "10"]},
+      "comparisons": [
+        {"key": "declarativeState", "feature": "Answers file + Jinja templates", "docs": "https://copier.readthedocs.io/en/stable/configuring/", "description": {"zh-tw": "answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。", "en": "Answers and Jinja templates declare generation inputs without continuously controlling remote state."}},
+        {"key": "templateLifecycle", "feature": "Smart Update", "docs": "https://copier.readthedocs.io/en/stable/updating/", "description": {"zh-tw": "記住模板來源與 answers，讓既有 repo 接收新版模板。", "en": "The recorded template source and answers let an existing repository receive template updates."}},
+        {"key": "proposalLifecycle", "feature": "Update diff", "docs": "https://copier.readthedocs.io/en/stable/updating/", "description": {"zh-tw": "更新先產生 Git diff，解衝突並合併後才接受。", "en": "An update first produces a Git diff and is accepted only after conflicts are resolved and the change is merged."}}
+      ]
+    },
+    {
+      "name": "Cruft",
+      "url": "https://github.com/cruft/cruft",
+      "version": "2.16.0",
+      "released": "2024-12-25",
+      "stars": "1,585",
+      "coverage": {"full": ["08"], "partial": ["03", "04"]},
+      "comparisons": [
+        {"key": "templateLifecycle", "feature": "cruft check / diff / update", "docs": "https://cruft.github.io/cruft/", "description": {"zh-tw": "追蹤 Cookiecutter 來源，用 check／diff／update 管模板漂移。", "en": "Tracks a Cookiecutter source and manages template drift with check, diff, and update."}},
+        {"key": "proposalLifecycle", "feature": "cruft diff / update", "docs": "https://cruft.github.io/cruft/", "description": {"zh-tw": "上游差異先成為 diff 或 PR，專案接受後才更新追蹤狀態。", "en": "Upstream changes first become a diff or PR; tracking state advances only after the project accepts them."}}
+      ]
+    },
+    {
+      "name": "Backstage",
+      "url": "https://github.com/backstage/backstage",
+      "version": "v1.54.5",
+      "released": "2026-08-25",
+      "stars": "34,270",
+      "coverage": {"full": ["09", "10"], "partial": ["07", "08"]},
+      "position": {"zh-tw": "Developer portal framework：以 Software Catalog、Software Templates 與 TechDocs 統一軟體生態系入口。", "en": "A developer portal framework that unifies a software ecosystem through Software Catalog, Software Templates, and TechDocs."},
+      "difference": {"zh-tw": ["Backstage 是需要持續維運的中央 portal，強項是服務探索、owner 與 scaffolding。", "CSARC 是可攜的 repo-local 公版，直接把治理、驗證與交付基線放進每個 repo。"], "en": ["Backstage is a centrally operated portal focused on service discovery, ownership, and scaffolding.", "CSARC is a portable repository-local baseline that places governance, verification, and delivery in each repository."]},
+      "comparisons": [
+        {"key": "repositoryTruth", "feature": "Software Catalog", "docs": "https://backstage.io/docs/features/software-catalog/", "description": {"zh-tw": "Catalog entity 保存服務、owner 與關係的中央真相。", "en": "Catalog entities provide a central source of truth for services, owners, and relationships."}},
+        {"key": "declarativeState", "feature": "Software Templates", "docs": "https://backstage.io/docs/features/software-templates/", "description": {"zh-tw": "YAML entity 與 Software Template 宣告 portal 中的元件和建立流程。", "en": "YAML entities and Software Templates declare portal components and creation workflows."}},
+        {"key": "templateLifecycle", "feature": "Software Templates", "docs": "https://backstage.io/docs/features/software-templates/", "description": {"zh-tw": "擅長建立新元件；既有 repo 遷移仍要另接工具。", "en": "It excels at creating new components; existing-repository migration still needs another tool."}}
+      ]
+    },
+    {
+      "name": "Minder",
+      "url": "https://github.com/mindersec/minder",
+      "version": "v0.3.1",
+      "released": "2026-08-10",
+      "stars": "417",
+      "coverage": {"full": ["05", "07"], "partial": ["03", "10"]},
+      "position": {"zh-tw": "Software supply chain security platform：集中評估 repository 與 artifact，並依 policy 告警或修正。", "en": "A software supply-chain security platform that centrally evaluates repositories and artifacts and alerts or remediates according to policy."},
+      "difference": {"zh-tw": ["Minder 專注中央安全姿態與持續 policy enforcement，需要常駐服務。", "CSARC 涵蓋完整 repo 開發生命週期，目前以可攜政策與本機驗證為基線。"], "en": ["Minder focuses on centralized security posture and continuous policy enforcement and requires an operating service.", "CSARC spans the repository development lifecycle and currently uses portable policy plus local verification as its baseline."]},
+      "comparisons": [
+        {"key": "declarativeState", "feature": "Profiles", "docs": "https://github.com/mindersec/minder/blob/main/docs/docs/understand/profiles.md", "description": {"zh-tw": "Profile 宣告安全期望，服務持續評估並可自動修正。", "en": "Profiles declare security expectations; the service continuously evaluates them and can remediate findings."}}
+      ]
+    },
+    {
+      "name": "Allstar",
+      "url": "https://github.com/ossf/allstar",
+      "version": "v4.5",
+      "released": "2025-10-01",
+      "stars": "1,444",
+      "coverage": {"full": ["05", "07"], "partial": ["10"]},
+      "comparisons": [
+        {"key": "declarativeState", "feature": "Policies", "docs": "https://github.com/ossf/allstar#policies", "description": {"zh-tw": "GitHub App 持續讀取組織政策，檢查或處置 repo 不合規狀態。", "en": "A GitHub App continuously reads organization policy and detects or remediates non-compliant repository state."}}
+      ]
+    },
+    {
+      "name": "Safe Settings",
+      "url": "https://github.com/github-community-projects/safe-settings",
+      "version": "2.1.21",
+      "released": "2026-05-12",
+      "stars": "913",
+      "coverage": {"full": ["07"], "partial": ["04", "10"]},
+      "comparisons": [
+        {"key": "declarativeState", "feature": "Hierarchical configuration", "docs": "https://github.com/github-community-projects/safe-settings#hierarchical-configuration", "description": {"zh-tw": "用 org／suborg／repo YAML 階層計算並下發 GitHub 設定。", "en": "Organization, suborganization, and repository YAML layers calculate and apply GitHub settings."}}
+      ]
+    },
+    {
+      "name": "Spec Kit",
+      "url": "https://github.com/github/spec-kit",
+      "version": "v1.0.1",
+      "released": "2026-08-21",
+      "stars": "131,843",
+      "coverage": {"full": ["01", "02"], "partial": ["03", "04"]},
+      "position": {"zh-tw": "Spec-driven development toolkit：讓任何 AI coding agent 依 spec、plan 與 tasks 交付軟體。", "en": "A spec-driven development toolkit for delivering software through specs, plans, and tasks with any AI coding agent."},
+      "difference": {"zh-tw": ["Spec Kit 集中在需求澄清、規格拆解與 agent 實作流程。", "CSARC 另外涵蓋 repo profile、治理、供應鏈、版本交付與模板更新。"], "en": ["Spec Kit concentrates on requirement clarification, specification decomposition, and agent implementation workflows.", "CSARC also covers repository profiles, governance, supply chain, version delivery, and template updates."]},
+      "comparisons": [
+        {"key": "repositoryTruth", "feature": "spec.md → plan.md → tasks.md", "docs": "https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md", "description": {"zh-tw": "spec、plan、tasks 與 constitution 在 repo 形成 feature 脈絡。", "en": "A spec, plan, tasks, and constitution form the feature context inside the repository."}},
+        {"key": "proposalLifecycle", "feature": "Feature workflow", "docs": "https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md", "description": {"zh-tw": "artifacts 在 feature branch 演進，最後仍交給 Git／PR 接受。", "en": "Artifacts evolve on a feature branch and are ultimately accepted through Git and a PR."}},
+        {"key": "rightSizedWork", "feature": "Agentic bugfix workflow", "docs": "https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md", "description": {"zh-tw": "完整流程最適合大型 feature，小修可走較短路徑。", "en": "The full workflow suits substantial features, while small fixes can follow a shorter path."}}
+      ]
+    },
+    {
+      "name": "OpenSpec",
+      "url": "https://github.com/Fission-AI/OpenSpec",
+      "version": "v1.11.0",
+      "released": "2026-08-26",
+      "stars": "66,427",
+      "coverage": {"full": ["01", "02"], "partial": ["03", "04"]},
+      "position": {"zh-tw": "Spec framework：用 current specs 與 change proposals 管理 AI 輔助開發中的需求變更。", "en": "A specification framework that manages requirement changes in AI-assisted development through current specs and change proposals."},
+      "difference": {"zh-tw": ["OpenSpec 專注規格從 propose、apply 到 archive 的生命週期。", "CSARC 把同類工作邊界接到 Issue、PR、治理、交付與可更新 repo 公版。"], "en": ["OpenSpec focuses on the propose, apply, and archive lifecycle of specifications.", "CSARC connects that work boundary to Issues, PRs, governance, delivery, and an updatable repository baseline."]},
+      "comparisons": [
+        {"key": "repositoryTruth", "feature": "Specs / Changes", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md", "description": {"zh-tw": "specs 保存 current truth，changes 保存尚未接受的 delta。", "en": "Specs preserve current truth, while changes hold deltas that have not yet been accepted."}},
+        {"key": "proposalLifecycle", "feature": "Change workflow", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md", "description": {"zh-tw": "propose → apply → archive 後，才把內容併回正式規格。", "en": "Only after propose, apply, and archive does the content merge into the authoritative specification."}},
+        {"key": "rightSizedWork", "feature": "Change proposal", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md", "description": {"zh-tw": "小修改可直接走 PR，大變更才建立完整 proposal。", "en": "Small edits can go directly through a PR; substantial changes receive a complete proposal."}}
+      ]
+    },
+    {
+      "name": "BMAD",
+      "url": "https://github.com/bmad-code-org/BMAD-METHOD",
+      "version": "v6.11.0",
+      "released": "2026-08-10",
+      "stars": "52,377",
+      "coverage": {"full": ["01", "02"], "partial": ["03", "04"]},
+      "position": {"zh-tw": "AI-driven agile delivery method：以多角色工作流程與依複雜度調整的規劃推進產品。", "en": "An AI-driven agile delivery method that advances products through multi-role workflows and complexity-adjusted planning."},
+      "difference": {"zh-tw": ["BMAD 提供完整方法、agent 角色與分級規劃流程。", "CSARC 不綁 agent persona，重點是可執行、可更新的 repository 基線。"], "en": ["BMAD provides a complete method, agent roles, and tiered planning workflows.", "CSARC does not prescribe agent personas; it focuses on an executable and updatable repository baseline."]},
+      "comparisons": [
+        {"key": "repositoryTruth", "feature": "Planning artifacts", "docs": "https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md", "description": {"zh-tw": "brief、spec、architecture 依複雜度累積成持久工作脈絡。", "en": "Briefs, specifications, and architecture records accumulate durable context according to complexity."}},
+        {"key": "proposalLifecycle", "feature": "BMad Delivery Loop", "docs": "https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md", "description": {"zh-tw": "artifacts 在 clarify → plan → build／verify 之間逐步成熟。", "en": "Artifacts mature through clarify, plan, build, and verify."}},
+        {"key": "rightSizedWork", "feature": "Quick Flow / BMad Method", "docs": "https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md", "description": {"zh-tw": "Quick Flow 處理小改，複雜產品才加完整 planning 與 architecture。", "en": "Quick Flow handles small changes; complex products add full planning and architecture."}}
+      ]
+    },
+    {
+      "name": "OpenRewrite",
+      "url": "https://github.com/openrewrite/rewrite",
+      "version": "v8.91.0",
+      "released": "2026-08-26",
+      "stars": "3,679",
+      "coverage": {"full": ["08"], "partial": ["03", "05"]},
+      "comparisons": [
+        {"key": "declarativeState", "feature": "Recipes", "docs": "https://docs.openrewrite.org/concepts-and-explanations/recipes", "description": {"zh-tw": "Recipe 宣告 semantic transformation，再由 parser／visitor 套用。", "en": "A Recipe declares a semantic transformation that parsers and visitors apply."}},
+        {"key": "templateLifecycle", "feature": "Running Recipes", "docs": "https://docs.openrewrite.org/running-recipes/getting-started", "description": {"zh-tw": "不用文字模板覆蓋檔案，而是直接執行跨版本語意遷移。", "en": "Instead of overwriting files from a text template, it performs semantic migration across versions."}}
+      ]
+    }
+  ]
+}

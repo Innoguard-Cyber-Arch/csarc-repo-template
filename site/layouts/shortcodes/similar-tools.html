@@ -1,0 +1,76 @@
+{{- $data := site.Data.similar_tools -}}
+{{- $lang := .Page.Lang -}}
+{{- $labels := index $data.labels $lang -}}
+<div class="legacy-content similar-tools-content">
+<div class="similar-tools-tabs" role="tablist" aria-label="{{ $labels.title }}">
+  <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>{{ $labels.primaryTabOverline }}</small>{{ $labels.primaryTab }}</button>
+  <button id="similar-tools-tab-work" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-work" data-similar-tools-tab="1"><small>{{ $labels.workTabOverline }}</small>{{ $labels.workTab }}</button>
+</div>
+<div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
+  <div class="similar-tools-legend">
+    <span class="competitor">{{ $labels.primaryLegend }}</span>
+    <span class="coverage-key"><i class="coverage-tag full">{{ $labels.full }}</i>　<i class="coverage-tag partial">{{ $labels.partial }}</i></span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="{{ $labels.primaryTab }}">
+    <table class="similar-tools-matrix similar-tools-primary-matrix">
+      <thead>
+        <tr>
+          <th scope="col">{{ $labels.package }}</th>
+          <th scope="col">{{ $labels.version }}</th>
+          <th scope="col">{{ $labels.stars }}</th>
+          <th scope="col">{{ $labels.position }}</th>
+          <th scope="col">{{ $labels.difference }}</th>
+          <th scope="col">{{ $labels.coverage }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{- range $tool := $data.tools }}
+        {{- $coverageCount := add (len $tool.coverage.full) (len $tool.coverage.partial) }}
+        {{- if ge $coverageCount $data.threshold }}
+        <tr>
+          <th scope="row"><a href="{{ $tool.url }}" target="_blank" rel="noreferrer">{{ $tool.name }}</a></th>
+          <td>{{ $tool.version }}<br>({{ $tool.released }})</td>
+          <td>{{ $tool.stars }}<br>({{ $data.comparisonDate }})</td>
+          <td>{{ index $tool.position $lang }}</td>
+          <td><ul>{{ range (index $tool.difference $lang) }}<li>{{ . }}</li>{{ end }}</ul></td>
+          <td><div class="coverage-tags">
+            {{- range $tool.coverage.full }}<span class="coverage-tag full" title="{{ . }}: {{ $labels.full }}">{{ . }}</span>{{ end }}
+            {{- range $tool.coverage.partial }}<span class="coverage-tag partial" title="{{ . }}: {{ $labels.partial }}">{{ . }}</span>{{ end }}
+          </div></td>
+        </tr>
+        {{- end }}
+        {{- end }}
+      </tbody>
+    </table>
+  </div>
+  <p class="similar-tools-note"><strong>{{ $labels.criterionLabel }}</strong>{{ $labels.criterion }}</p>
+</div>
+<div id="similar-tools-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-work" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">{{ $labels.workLegend }}</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="{{ $labels.workTab }}">
+    <table class="similar-tools-matrix similar-tools-philosophy-matrix">
+      <thead><tr><th scope="col">{{ $labels.feature }}</th><th scope="col">{{ $labels.primaryTools }}</th><th scope="col">{{ $labels.otherTools }}</th></tr></thead>
+      <tbody>
+        {{- range $feature := $data.features }}
+        <tr>
+          <th scope="row"><strong>{{ index $feature.title $lang }}</strong><span>{{ index $feature.description $lang }}<br><br><b>{{ $labels.csarc }}</b>{{ index $feature.csarc $lang }}</span></th>
+          {{- range $wantPrimary := (slice true false) }}
+          <td><ul>
+            {{- range $tool := $data.tools }}
+            {{- $coverageCount := add (len $tool.coverage.full) (len $tool.coverage.partial) }}
+            {{- $isPrimary := ge $coverageCount $data.threshold }}
+            {{- if eq $isPrimary $wantPrimary }}
+              {{- range where $tool.comparisons "key" $feature.key }}
+              <li><strong>{{ $tool.name }}</strong>｜<a href="{{ .docs }}" target="_blank" rel="noreferrer">{{ .feature }}</a>：{{ index .description $lang }}</li>
+              {{- end }}
+            {{- end }}
+            {{- end }}
+          </ul></td>
+          {{- end }}
+        </tr>
+        {{- end }}
+      </tbody>
+    </table>
+  </div>
+</div>
+</div>

@@ -1,5 +1,5 @@
 (() => {
-  const slides = [...document.querySelectorAll('.slide')];
+  const allSlides = [...document.querySelectorAll('.slide')];
   const previous = document.querySelector('#previous');
   const next = document.querySelector('#next');
   const counter = document.querySelector('#counter');
@@ -13,10 +13,16 @@
   const progress = document.querySelector('.progress');
   let current = 0;
   let zoom = 1;
+  let slides = [];
 
-  slides.forEach((slide, index) => {
-    slide.dataset.page = `${String(index + 1).padStart(2, '0')} / ${slides.length}`;
-  });
+  function refreshSlides() {
+    const maintenance = document.documentElement.dataset.detailLevel === 'technical';
+    slides = allSlides.filter(slide => slide.dataset.audience !== 'maintainer' || maintenance);
+    allSlides.forEach(slide => slide.removeAttribute('data-page'));
+    slides.forEach((slide, index) => {
+      slide.dataset.page = `${String(index + 1).padStart(2, '0')} / ${slides.length}`;
+    });
+  }
 
   function closeDisclosures() {
     document.querySelectorAll('.package-disclosure[open]').forEach(disclosure => {
@@ -27,11 +33,15 @@
   function indexFromHash() {
     const value = location.hash.slice(1);
     const target = document.getElementById(value);
-    if (target) return slides.indexOf(target.closest('.slide'));
+    if (target) {
+      const targetIndex = slides.indexOf(target.closest('.slide'));
+      return targetIndex < 0 ? 0 : targetIndex;
+    }
     return Number(value) - 1 || 0;
   }
 
   function show(index, updateHash = true) {
+    refreshSlides();
     closeDisclosures();
     document.querySelectorAll('.config-overlay').forEach(overlay => {
       overlay.hidden = true;
@@ -40,7 +50,8 @@
       trigger.setAttribute('aria-expanded', 'false');
     });
     current = Math.max(0, Math.min(slides.length - 1, index));
-    slides.forEach((slide, slideIndex) => {
+    allSlides.forEach(slide => {
+      const slideIndex = slides.indexOf(slide);
       const active = slideIndex === current;
       slide.classList.toggle('active', active);
       slide.setAttribute('aria-hidden', String(!active));
@@ -82,12 +93,20 @@
   zoomIn.addEventListener('click', () => setZoom(zoom + .1));
   addEventListener('resize', fit);
   addEventListener('hashchange', () => show(indexFromHash(), false));
+  addEventListener('csarc:detail-level', () => {
+    const activeSlide = document.querySelector('.slide.active');
+    refreshSlides();
+    const activeIndex = slides.indexOf(activeSlide);
+    const fallbackIndex = slides.indexOf(document.querySelector('#ecosystem'));
+    show(activeIndex >= 0 ? activeIndex : Math.max(0, fallbackIndex));
+  });
   addEventListener('keydown', event => {
     if (event.target.closest('summary, button, a, input, textarea, select')) return;
     if (['ArrowRight', 'PageDown', ' '].includes(event.key)) show(current + 1);
     if (['ArrowLeft', 'PageUp'].includes(event.key)) show(current - 1);
   });
 
+  refreshSlides();
   fit();
   show(indexFromHash(), !location.hash);
   slideControls.hidden = false;

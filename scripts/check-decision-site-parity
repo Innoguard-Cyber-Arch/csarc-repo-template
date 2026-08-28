@@ -60,7 +60,11 @@ class ContentParser(HTMLParser):
         if tag == "section" and "slide" in classes and self.slide_depth is None:
             self.slide_depth = len(self.stack)
             if self.candidate:
-                self.key = attrs.get("id")
+                self.key = (
+                    None
+                    if attrs.get("data-audience") == "maintainer"
+                    else attrs.get("id")
+                )
             else:
                 self.key = attrs.get("data-track") or SPECIAL_KEYS.get(
                     attrs.get("aria-label") or ""
