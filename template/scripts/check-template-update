@@ -35,10 +35,6 @@ trap 'rm -f "$body_file"' EXIT
 # These values are assigned by the validated Python output above.
 # shellcheck disable=SC2154
 cat > "$body_file" <<EOF
-### 類型
-
-enhancement
-
 ### 問題
 
 Copier template 有可用更新。目前版本：\`$current_version\`；最新版本：\`$latest_version\`。請先審查 release 與完整 commit SHA，再由工作分支套用更新；此通知不會自動修改或合併 repository。
@@ -69,5 +65,7 @@ else
   gh issue create \
     --title "$title" \
     --label enhancement \
+    --type Task \
+    --assignee @me \
     --body-file "$body_file"
 fi

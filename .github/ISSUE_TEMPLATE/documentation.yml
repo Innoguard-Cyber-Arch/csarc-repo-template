@@ -1,0 +1,37 @@
+name: Documentation｜文件工作
+description: 修改文件、範例或使用說明，不改產品行為
+title: ""
+labels: ["documentation"]
+type: "Task"
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        **標題規則：**使用 12–80 個英文 ASCII 字元及至少三個詞，直接描述成果；
+        不加 `[Docs]` 或 `docs:` 前綴，不以句點結尾。例如：`Clarify repository setup guide`。
+        Documentation 是純文件工作，原生 Type 使用 Task，並以 documentation Label
+        與其他 Task 區分。建立前先依 AGENTS.md 搜尋相關 open／closed Issues，並在
+        「補充」記錄既有決策。UI 建立者請把自己設為 Assignee；agent／CLI 建立時
+        明確使用 `--assignee @me`。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 問題
+      description: 一兩句話說明讀者目前遇到的資訊缺口。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 完成條件
+      description: 說明哪些文件內容與讀者結果會改變。
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+  - type: textarea
+    id: supplement
+    attributes:
+      label: 補充
+      description: 選填：相關頁面、既有決策、驗證方式或影響範圍。
+    validations:
+      required: false
