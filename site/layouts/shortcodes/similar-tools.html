@@ -2,11 +2,11 @@
 {{- $lang := .Page.Lang -}}
 {{- $labels := index $data.labels $lang -}}
 <div class="legacy-content similar-tools-content">
-<div class="similar-tools-tabs" role="tablist" aria-label="{{ $labels.title }}">
+<div class="similar-tools-tabs" role="tablist" aria-label="{{ $labels.title }}" data-audience="maintainer">
   <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>{{ $labels.primaryTabOverline }}</small>{{ $labels.primaryTab }}</button>
   {{- range $groupIndex, $group := $data.featureGroups }}
   {{- $groupLabels := index $group.labels $lang }}
-  <button id="similar-tools-tab-{{ $group.key }}" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-{{ $group.key }}" data-audience="maintainer" data-similar-tools-tab="{{ add $groupIndex 1 }}"><small>{{ $groupLabels.overline }}</small>{{ $groupLabels.title }}</button>
+  <button id="similar-tools-tab-{{ $group.key }}" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-{{ $group.key }}" data-similar-tools-tab="{{ add $groupIndex 1 }}"><small>{{ $groupLabels.overline }}</small>{{ $groupLabels.title }}</button>
   {{- end }}
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
