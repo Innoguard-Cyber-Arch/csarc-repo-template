@@ -61,7 +61,7 @@
             {{- $isPrimary := ge $coverageCount $data.threshold }}
             {{- if eq $isPrimary $wantPrimary }}
               {{- range where $tool.comparisons "key" $feature.key }}
-              <li><strong>{{ $tool.name }}</strong>｜<a href="{{ .docs }}" target="_blank" rel="noreferrer">{{ .feature }}</a>：{{ index .description $lang }}</li>
+              <li><strong>{{ $tool.name }}{{ if not $wantPrimary }} <span class="tool-stars" title="{{ $labels.stars }}">★ {{ $tool.stars }}{{ if eq $lang "zh-tw" }}（{{ $data.comparisonDate }}）{{ else }} ({{ $data.comparisonDate }}){{ end }}</span>{{ end }}</strong>｜<a href="{{ .docs }}" target="_blank" rel="noreferrer">{{ .feature }}</a>：{{ index .description $lang }}</li>
               {{- end }}
             {{- end }}
             {{- end }}

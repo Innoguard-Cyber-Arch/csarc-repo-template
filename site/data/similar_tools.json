@@ -134,18 +134,6 @@
       ]
     },
     {
-      "name": "Cruft",
-      "url": "https://github.com/cruft/cruft",
-      "version": "2.16.0",
-      "released": "2024-12-25",
-      "stars": "1,585",
-      "coverage": {"full": ["08"], "partial": ["03", "04"]},
-      "comparisons": [
-        {"key": "templateLifecycle", "feature": "cruft check / diff / update", "docs": "https://cruft.github.io/cruft/", "description": {"zh-tw": "追蹤 Cookiecutter 來源，用 check／diff／update 管模板漂移。", "en": "Tracks a Cookiecutter source and manages template drift with check, diff, and update."}},
-        {"key": "proposalLifecycle", "feature": "cruft diff / update", "docs": "https://cruft.github.io/cruft/", "description": {"zh-tw": "上游差異先成為 diff 或 PR，專案接受後才更新追蹤狀態。", "en": "Upstream changes first become a diff or PR; tracking state advances only after the project accepts them."}}
-      ]
-    },
-    {
       "name": "Backstage",
       "url": "https://github.com/backstage/backstage",
       "version": "v1.54.5",
@@ -171,28 +159,6 @@
       "difference": {"zh-tw": ["Minder 專注中央安全姿態與持續 policy enforcement，需要常駐服務。", "CSARC 涵蓋完整 repo 開發生命週期，目前以可攜政策與本機驗證為基線。"], "en": ["Minder focuses on centralized security posture and continuous policy enforcement and requires an operating service.", "CSARC spans the repository development lifecycle and currently uses portable policy plus local verification as its baseline."]},
       "comparisons": [
         {"key": "declarativeState", "feature": "Profiles", "docs": "https://github.com/mindersec/minder/blob/main/docs/docs/understand/profiles.md", "description": {"zh-tw": "Profile 宣告安全期望，服務持續評估並可自動修正。", "en": "Profiles declare security expectations; the service continuously evaluates them and can remediate findings."}}
-      ]
-    },
-    {
-      "name": "Allstar",
-      "url": "https://github.com/ossf/allstar",
-      "version": "v4.5",
-      "released": "2025-10-01",
-      "stars": "1,444",
-      "coverage": {"full": ["05", "07"], "partial": ["10"]},
-      "comparisons": [
-        {"key": "declarativeState", "feature": "Policies", "docs": "https://github.com/ossf/allstar#policies", "description": {"zh-tw": "GitHub App 持續讀取組織政策，檢查或處置 repo 不合規狀態。", "en": "A GitHub App continuously reads organization policy and detects or remediates non-compliant repository state."}}
-      ]
-    },
-    {
-      "name": "Safe Settings",
-      "url": "https://github.com/github-community-projects/safe-settings",
-      "version": "2.1.21",
-      "released": "2026-05-12",
-      "stars": "913",
-      "coverage": {"full": ["07"], "partial": ["04", "10"]},
-      "comparisons": [
-        {"key": "declarativeState", "feature": "Hierarchical configuration", "docs": "https://github.com/github-community-projects/safe-settings#hierarchical-configuration", "description": {"zh-tw": "用 org／suborg／repo YAML 階層計算並下發 GitHub 設定。", "en": "Organization, suborganization, and repository YAML layers calculate and apply GitHub settings."}}
       ]
     },
     {

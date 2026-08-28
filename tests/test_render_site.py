@@ -137,8 +137,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
     assert len(data["features"]) == 5
-    assert len(data["tools"]) == 12
-    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 30
+    assert len(data["tools"]) == 9
+    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 26
     assert (
         sum(
             len(tool["coverage"]["full"]) + len(tool["coverage"]["partial"])
@@ -147,6 +147,12 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         )
         == 7
     )
+    assert {
+        tool["name"]
+        for tool in data["tools"]
+        if len(tool["coverage"]["full"]) + len(tool["coverage"]["partial"])
+        < data["threshold"]
+    } == {"Copier", "OpenRewrite"}
     for tool in data["tools"]:
         for comparison in tool["comparisons"]:
             assert comparison["feature"]
