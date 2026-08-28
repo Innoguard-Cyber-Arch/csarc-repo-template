@@ -3719,7 +3719,7 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
-<section class="slide markdown-slide similar-tools-slide testing-slide" id="testing" data-content-key="testing" data-audience="maintainer" data-parity="supplemental" aria-label="Tests | Journey 01 work definition">
+<section class="slide markdown-slide similar-tools-slide testing-slide" id="testing" data-content-key="testing" data-audience="maintainer" data-parity="supplemental" aria-label="Tests | Verification map by journey">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -3778,13 +3778,17 @@ html[data-detail-level="simple"] .detail-panel {
 
   <header class="basic-header">
     <span class="selection-sequence">Maintenance appendix | Tests</span>
-    <h2>Tests | Journey 01 work definition</h2>
-    <p class="subtitle">Lists the work-definition behaviors to verify, the local commands, and the GitHub Action/job that owned each check before suspension.</p>
+    <h2>Tests | Verification map by journey</h2>
+    <p class="subtitle">Each Journey gets its own page listing the behaviors, local commands, and the GitHub Action/job that owned each check before suspension.</p>
   </header>
 
 <div class="legacy-content similar-tools-content testing-content">
+  <div class="similar-tools-tabs" role="tablist" aria-label="Tests">
+    <button id="testing-tab-work" type="button" role="tab" aria-selected="true" aria-controls="testing-panel-work" data-similar-tools-tab="0"><small>Journey 01</small>Work definition</button>
+  </div>
+  <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 01 / Work definition</strong><span>This first inventory covers work definition: each row names the behavior, local command, and the GitHub Action/job that owned it before suspension.</span>
+    <strong>Journey 01 / Work definition</strong><span>Each row names the behavior, local command, and the GitHub Action/job that owned it before suspension.</span>
     <p><b>Current state: </b>PR #375 moved GitHub Actions out of main and into the archive. None of the workflows below runs; the mapping only preserves ownership for a future restoration.</p>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01 / Work definition">
@@ -3823,6 +3827,7 @@ html[data-detail-level="simple"] .detail-panel {
         </tr>
       </tbody>
     </table>
+  </div>
   </div>
 </div>
 

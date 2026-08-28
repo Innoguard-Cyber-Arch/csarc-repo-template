@@ -159,10 +159,13 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "rightSizedWork",
     ]
     assert data["featureGroups"][1]["features"] == ["templateLifecycle"]
-    assert len(data["testing"]["rows"]) == 5
+    assert len(data["testing"]["groups"]) == 1
+    assert data["testing"]["groups"][0]["journey"] == "01"
+    assert len(data["testing"]["groups"][0]["rows"]) == 5
     assert {
         workflow["file"]
-        for row in data["testing"]["rows"]
+        for group in data["testing"]["groups"]
+        for row in group["rows"]
         for workflow in row["workflows"]
     } == {
         "ci.yml",

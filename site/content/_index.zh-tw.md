@@ -705,7 +705,7 @@ Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、�
 {{< similar-tools >}}
 {{< /slide >}}
 
-{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜測試" title="測試｜Journey 01 工作定義" subtitle="列出工作定義要驗證的行為、本機命令，以及停用前分散在哪個 GitHub Action／job。" class="similar-tools-slide testing-slide" legacy="true" >}}
+{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜測試" title="測試｜逐旅程驗證地圖" subtitle="每個 Journey 各自一頁，列出要驗證的行為、本機命令，以及停用前分散在哪個 GitHub Action／job。" class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
 {{< /slide >}}
 

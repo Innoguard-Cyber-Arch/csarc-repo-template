@@ -71,10 +71,7 @@
   "testing": {
     "labels": {
       "zh-tw": {
-        "overline": "維運",
         "title": "測試",
-        "heading": "Journey 01／工作定義",
-        "scope": "先盤點工作定義：每列說明要驗證的行為、本機命令，以及停用前由哪個 GitHub Action／job 負責。",
         "statusLabel": "目前狀態：",
         "status": "main 已在 #375 將 GitHub Actions 移至 archive；下列 workflow 都不會執行，只保留恢復時的責任分布。",
         "target": "要驗證什麼",
@@ -83,10 +80,7 @@
         "localStatus": "main 本機現況"
       },
       "en": {
-        "overline": "Maintenance",
         "title": "Tests",
-        "heading": "Journey 01 / Work definition",
-        "scope": "This first inventory covers work definition: each row names the behavior, local command, and the GitHub Action/job that owned it before suspension.",
         "statusLabel": "Current state: ",
         "status": "PR #375 moved GitHub Actions out of main and into the archive. None of the workflows below runs; the mapping only preserves ownership for a future restoration.",
         "target": "What to verify",
@@ -95,7 +89,23 @@
         "localStatus": "Local status on main"
       }
     },
-    "rows": [
+    "groups": [
+      {
+        "key": "work",
+        "journey": "01",
+        "labels": {
+          "zh-tw": {
+            "title": "工作定義",
+            "heading": "Journey 01／工作定義",
+            "scope": "每列說明要驗證的行為、本機命令，以及停用前由哪個 GitHub Action／job 負責。"
+          },
+          "en": {
+            "title": "Work definition",
+            "heading": "Journey 01 / Work definition",
+            "scope": "Each row names the behavior, local command, and the GitHub Action/job that owned it before suspension."
+          }
+        },
+        "rows": [
       {
         "target": {"zh-tw": "Issue 工作邊界", "en": "Issue work boundary"},
         "checks": {"zh-tw": "標題規則、類型映射、assignee、label 與 duplicate 狀態要能收斂。", "en": "Title rules, type mapping, assignee, labels, and duplicate disposition must converge."},
@@ -143,6 +153,8 @@
           {"name": "CI / canonical full", "file": "ci.yml", "role": {"zh-tw": "完整模板與跨層回歸。", "en": "Full template and cross-layer regression."}}
         ],
         "localStatus": {"zh-tw": "此 dev 預覽分支可跑；main 仍檢查已移除的 workflow 路徑，尚未解耦前不可作為乾淨基線。", "en": "This dev preview branch can run them; main still asserts removed workflow paths and is not a clean baseline until decoupled."}
+      }
+        ]
       }
     ]
   },
