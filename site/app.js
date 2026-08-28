@@ -1061,6 +1061,48 @@ gh auth status`
           }
         }
       ];
+      const featureDocs = {
+        repositoryTruth: {
+          'Repository Harness': ['Repository protocol', 'https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md'],
+          projen: ['.projenrc project model', 'https://projen.io/docs/introduction/'],
+          Backstage: ['Software Catalog', 'https://backstage.io/docs/features/software-catalog/'],
+          'Spec Kit': ['spec.md → plan.md → tasks.md', 'https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md'],
+          OpenSpec: ['Specs / Changes', 'https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md'],
+          BMAD: ['Planning artifacts', 'https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md']
+        },
+        declarativeState: {
+          projen: ['Components + synth', 'https://projen.io/docs/introduction/'],
+          Copier: ['Answers file + Jinja templates', 'https://copier.readthedocs.io/en/stable/configuring/'],
+          Backstage: ['Software Templates', 'https://backstage.io/docs/features/software-templates/'],
+          Minder: ['Profiles', 'https://github.com/mindersec/minder/blob/main/docs/docs/understand/profiles.md'],
+          Allstar: ['Policies', 'https://github.com/ossf/allstar#policies'],
+          'Safe Settings': ['Hierarchical configuration', 'https://github.com/github-community-projects/safe-settings#hierarchical-configuration'],
+          OpenRewrite: ['Recipes', 'https://docs.openrewrite.org/concepts-and-explanations/recipes']
+        },
+        templateLifecycle: {
+          'Repository Harness': ['harness update', 'https://github.com/hoangnb24/repository-harness#maintain-an-installation'],
+          projen: ['projen upgrade + synth', 'https://projen.io/docs/introduction/'],
+          Copier: ['Smart Update', 'https://copier.readthedocs.io/en/stable/updating/'],
+          Cruft: ['cruft check / diff / update', 'https://cruft.github.io/cruft/'],
+          Backstage: ['Software Templates', 'https://backstage.io/docs/features/software-templates/'],
+          OpenRewrite: ['Running Recipes', 'https://docs.openrewrite.org/running-recipes/getting-started']
+        },
+        proposalLifecycle: {
+          'Repository Harness': ['Active / completed plans', 'https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md'],
+          projen: ['Anti-tamper build', 'https://projen.io/docs/introduction/'],
+          Copier: ['Update diff', 'https://copier.readthedocs.io/en/stable/updating/'],
+          Cruft: ['cruft diff / update', 'https://cruft.github.io/cruft/'],
+          'Spec Kit': ['Feature workflow', 'https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md'],
+          OpenSpec: ['Change workflow', 'https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md'],
+          BMAD: ['BMad Delivery Loop', 'https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md']
+        },
+        rightSizedWork: {
+          'Repository Harness': ['Durable-plan threshold', 'https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md'],
+          'Spec Kit': ['Agentic bugfix workflow', 'https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md'],
+          OpenSpec: ['Change proposal', 'https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md'],
+          BMAD: ['Quick Flow / BMad Method', 'https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md']
+        }
+      };
       const mainSimilarityThreshold = 4;
       const isPrimaryTool = tool => tool.coverage.full.length + tool.coverage.partial.length >= mainSimilarityThreshold;
       const primaryBody = similarToolsSlide.querySelector('[data-similar-tools-primary-body]');
@@ -1116,8 +1158,14 @@ gh auth status`
           similarTools.filter(tool => isPrimaryTool(tool) === (group === 'primary') && tool.philosophies[key]).forEach(tool => {
             const entry = document.createElement('li');
             const name = document.createElement('strong');
-            name.textContent = `${tool.name}：`;
-            entry.append(name, tool.philosophies[key]);
+            name.textContent = tool.name;
+            const [featureName, featureUrl] = featureDocs[key][tool.name];
+            const featureLink = document.createElement('a');
+            featureLink.href = featureUrl;
+            featureLink.target = '_blank';
+            featureLink.rel = 'noreferrer';
+            featureLink.textContent = featureName;
+            entry.append(name, '｜', featureLink, `：${tool.philosophies[key]}`);
             list.append(entry);
           });
           cell.append(list);

@@ -122,6 +122,7 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
 
     assert 'class="slide similar-tools-slide" data-audience="maintainer"' in source
     assert source.count('data-comparison-key="') == 5
+    assert source.count('class="csarc-feature-design"') == 5
     assert "similar-tools-philosophy-matrix" in source
     assert "功能分野／具體做法" in source
     assert "其他生態圈工具" in source
@@ -152,10 +153,14 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     comparison_data = app.split("const similarTools = [", 1)[1].split(
         "const primaryBody", 1
     )[0]
+    feature_docs = app.split("const featureDocs = {", 1)[1].split(
+        "const mainSimilarityThreshold", 1
+    )[0]
     assert comparison_data.count("url: 'https://github.com/") == 12
     assert comparison_data.count("coverage:") == 12
     assert comparison_data.count("selfPosition:") == 7
     assert comparison_data.count("difference:") == 7
+    assert feature_docs.count("https://") == 30
     for key in (
         "repositoryTruth",
         "declarativeState",
@@ -168,6 +173,8 @@ def test_similar_tools_appendix_is_maintainer_only() -> None:
     assert "document.createElement('br')" in app
     assert "document.createElement('li')" in app
     assert "for (const group of ['primary', 'reference'])" in app
+    assert "featureDocs[key][tool.name]" in app
+    assert "featureLink.target = '_blank'" in app
     assert "tool.difference.forEach" in app
     assert "differenceList.append" in app
     assert "coverage-tag" in app
