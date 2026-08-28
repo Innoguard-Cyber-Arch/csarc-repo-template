@@ -4,7 +4,10 @@
 <div class="legacy-content similar-tools-content">
 <div class="similar-tools-tabs" role="tablist" aria-label="{{ $labels.title }}">
   <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>{{ $labels.primaryTabOverline }}</small>{{ $labels.primaryTab }}</button>
-  <button id="similar-tools-tab-work" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-work" data-similar-tools-tab="1"><small>{{ $labels.workTabOverline }}</small>{{ $labels.workTab }}</button>
+  {{- range $groupIndex, $group := $data.featureGroups }}
+  {{- $groupLabels := index $group.labels $lang }}
+  <button id="similar-tools-tab-{{ $group.key }}" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-{{ $group.key }}" data-similar-tools-tab="{{ add $groupIndex 1 }}"><small>{{ $groupLabels.overline }}</small>{{ $groupLabels.title }}</button>
+  {{- end }}
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
   <div class="similar-tools-legend">
@@ -45,13 +48,16 @@
   </div>
   <p class="similar-tools-note"><strong>{{ $labels.criterionLabel }}</strong>{{ $labels.criterion }}</p>
 </div>
-<div id="similar-tools-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-work" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">{{ $labels.workLegend }}</span></div>
-  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="{{ $labels.workTab }}">
+{{- range $group := $data.featureGroups }}
+{{- $groupLabels := index $group.labels $lang }}
+<div id="similar-tools-panel-{{ $group.key }}" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-{{ $group.key }}" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">{{ $groupLabels.legend }}</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="{{ $groupLabels.title }}">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">{{ $labels.feature }}</th><th scope="col">{{ $labels.primaryTools }}</th><th scope="col">{{ $labels.otherTools }}</th></tr></thead>
       <tbody>
-        {{- range $feature := $data.features }}
+        {{- range $featureKey := $group.features }}
+        {{- range $feature := where $data.features "key" $featureKey }}
         <tr>
           <th scope="row"><strong>{{ index $feature.title $lang }}</strong><span>{{ index $feature.description $lang }}<br><br><b>{{ $labels.csarc }}</b>{{ index $feature.csarc $lang }}</span></th>
           {{- range $wantPrimary := (slice true false) }}
@@ -69,8 +75,10 @@
           {{- end }}
         </tr>
         {{- end }}
+        {{- end }}
       </tbody>
     </table>
   </div>
 </div>
+{{- end }}
 </div>

@@ -137,6 +137,14 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
     assert len(data["features"]) == 5
+    assert len(data["featureGroups"]) == 2
+    assert data["featureGroups"][0]["features"] == [
+        "repositoryTruth",
+        "declarativeState",
+        "proposalLifecycle",
+        "rightSizedWork",
+    ]
+    assert data["featureGroups"][1]["features"] == ["templateLifecycle"]
     assert len(data["tools"]) == 9
     assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 26
     assert (

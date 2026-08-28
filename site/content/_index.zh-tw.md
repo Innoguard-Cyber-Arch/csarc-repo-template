@@ -701,7 +701,7 @@ Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="similar-tools" audience="maintainer" eyebrow="維運附錄｜相似工具" title="相似工具｜整體競品與局部參考" subtitle="所有相似工具集中在這裡：先看整體目的接近的套件，再切換到各項工作定義的具體做法。" class="similar-tools-slide" legacy="true" >}}
+{{< slide key="similar-tools" audience="maintainer" eyebrow="維運附錄｜相似工具" title="相似工具｜整體競品與局部參考" subtitle="所有相似工具集中在這裡：先看整體目的接近的套件，再按旅程切換各項具體做法。" class="similar-tools-slide" legacy="true" >}}
 {{< similar-tools >}}
 {{< /slide >}}
 

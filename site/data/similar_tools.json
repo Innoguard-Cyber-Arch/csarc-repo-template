@@ -5,11 +5,9 @@
     "zh-tw": {
       "eyebrow": "維運附錄｜相似工具",
       "title": "相似工具｜整體競品與局部參考",
-      "subtitle": "所有相似工具集中在這裡：先看整體目的接近的套件，再切換到各項工作定義的具體做法。",
+      "subtitle": "所有相似工具集中在這裡：先看整體目的接近的套件，再按旅程切換各項具體做法。",
       "primaryTabOverline": "整體接近",
       "primaryTab": "主要相似工具",
-      "workTabOverline": "功能比較",
-      "workTab": "工作定義做法",
       "primaryLegend": "整體目的相近｜完整與部分符合的旅程合計至少 4 個",
       "coverageLegend": "完整＝深綠　部分＝淺綠",
       "package": "套件名稱",
@@ -20,7 +18,6 @@
       "coverage": "涵蓋旅程",
       "criterionLabel": "判斷標準：",
       "criterion": "完整與部分 tag 合計達 4 個以上，即列為主要相似工具；兩種符合程度不加權，未涵蓋的旅程不顯示。",
-      "workLegend": "每列回答一個具體做法；主要相似工具優先，其他工具只補充局部設計",
       "feature": "功能分野／具體做法",
       "primaryTools": "主要相似工具",
       "otherTools": "其他生態圈工具",
@@ -31,11 +28,9 @@
     "en": {
       "eyebrow": "Maintenance appendix | Similar tools",
       "title": "Similar tools | Direct alternatives and focused references",
-      "subtitle": "Review projects with a similar overall purpose first, then compare concrete approaches to defining work.",
+      "subtitle": "Review projects with a similar overall purpose first, then compare concrete approaches by journey.",
       "primaryTabOverline": "Overall match",
       "primaryTab": "Primary similar tools",
-      "workTabOverline": "Feature comparison",
-      "workTab": "Work-definition approaches",
       "primaryLegend": "Similar overall purpose | at least four full or partial journey matches",
       "coverageLegend": "Full = dark green; partial = light green",
       "package": "Package",
@@ -46,7 +41,6 @@
       "coverage": "Journey coverage",
       "criterionLabel": "Classification rule: ",
       "criterion": "A tool is primary when its full and partial tags total at least four. The levels are not weighted, and uncovered journeys are omitted.",
-      "workLegend": "Each row answers one concrete implementation question; primary tools come first and ecosystem tools add focused patterns.",
       "feature": "Functional boundary / concrete approach",
       "primaryTools": "Primary similar tools",
       "otherTools": "Other ecosystem tools",
@@ -55,6 +49,24 @@
       "csarc": "CSARC: "
     }
   },
+  "featureGroups": [
+    {
+      "key": "work",
+      "features": ["repositoryTruth", "declarativeState", "proposalLifecycle", "rightSizedWork"],
+      "labels": {
+        "zh-tw": {"overline": "功能比較", "title": "工作定義做法", "legend": "每列回答一個具體做法；主要相似工具優先，其他工具只補充局部設計"},
+        "en": {"overline": "Feature comparison", "title": "Work-definition approaches", "legend": "Each row answers one concrete implementation question; primary tools come first and ecosystem tools add focused patterns."}
+      }
+    },
+    {
+      "key": "template-upgrade",
+      "features": ["templateLifecycle"],
+      "labels": {
+        "zh-tw": {"overline": "Journey 08", "title": "模板升級", "legend": "只比較既有 repo 如何接收新版模板、規則或 recipe，以及衝突由誰處理"},
+        "en": {"overline": "Journey 08", "title": "Template upgrades", "legend": "Compares only how existing repositories receive updated templates, policies, or recipes and who resolves conflicts."}
+      }
+    }
+  ],
   "features": [
     {
       "key": "repositoryTruth",

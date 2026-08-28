@@ -274,7 +274,7 @@ Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, gene
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="similar-tools" audience="maintainer" eyebrow="Maintenance appendix | Similar tools" title="Similar tools | Direct alternatives and focused references" subtitle="Review projects with a similar overall purpose first, then compare concrete approaches to defining work." class="similar-tools-slide" legacy="true" >}}
+{{< slide key="similar-tools" audience="maintainer" eyebrow="Maintenance appendix | Similar tools" title="Similar tools | Direct alternatives and focused references" subtitle="Review projects with a similar overall purpose first, then compare concrete approaches by journey." class="similar-tools-slide" legacy="true" >}}
 {{< similar-tools >}}
 {{< /slide >}}
 
