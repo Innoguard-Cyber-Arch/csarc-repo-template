@@ -20,7 +20,7 @@ scope_for = MODULE["scope_for"]
         ("docs/guide.md", "docs"),
         ("site/app.js", "docs"),
         ("template/site/styles.css", "docs"),
-        (".github/ISSUE_TEMPLATE/work-item.yml", "docs"),
+        (".github/ISSUE_TEMPLATE/feature.yml", "docs"),
         (".gitignore", "source"),
         ("README.md", "docs"),
         ("src/pkg/core.py", "source"),
@@ -87,7 +87,7 @@ def test_issue_form_and_gitignore_do_not_fall_through_to_full() -> None:
         "dev/next",
         "docs/9-form",
         set(),
-        [".github/ISSUE_TEMPLATE/work-item.yml"],
+        [".github/ISSUE_TEMPLATE/feature.yml"],
     )
     gitignore = classify(
         "pull_request",

@@ -1,0 +1,37 @@
+name: Bug｜非預期行為
+description: 回報實際行為不符合預期且能重現的問題
+title: ""
+labels: ["bug"]
+type: "Bug"
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        **標題規則：**使用 12–80 個英文 ASCII 字元及至少三個詞，直接描述問題；
+        不加 `[Bug]` 或 `bug:` 前綴，不以句點結尾。例如：`Fix authentication timeout handling`。
+        建立前先依 AGENTS.md 搜尋相關 open／closed Issues，並在「補充」記錄沿用、
+        取代或駁回的既有決策。Feature 內發現的 Bug 必須設定該 Feature 為 parent；
+        獨立 Bug 則說明為何沒有 parent。UI 建立者請把自己設為 Assignee；
+        agent／CLI 建立時明確使用 `--assignee @me`。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 問題
+      description: 說明預期行為、實際行為與可重現步驟。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 完成條件
+      description: 修正後可觀察的結果與必要回歸驗證。
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+  - type: textarea
+    id: supplement
+    attributes:
+      label: 補充
+      description: 選填：parent／dependency 理由、環境、風險或回退方式。
+    validations:
+      required: false

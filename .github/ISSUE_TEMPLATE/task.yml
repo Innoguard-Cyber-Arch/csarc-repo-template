@@ -1,0 +1,37 @@
+name: Task｜獨立工作
+description: 定義一項能獨立完成、驗證與交付的預定工作
+title: ""
+labels: ["enhancement"]
+type: "Task"
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        **標題規則：**使用 12–80 個英文 ASCII 字元及至少三個詞，直接描述成果；
+        不加 `[Task]` 或 `task:` 前綴，不以句點結尾。例如：`Add dependency policy checks`。
+        建立前先依 AGENTS.md 搜尋相關 open／closed Issues，並在「補充」記錄沿用、
+        取代或駁回的既有決策。若本工作是較大成果的一部分，請設定 Feature parent；
+        只有真實先後限制才設定 blocked by。UI 建立者請把自己設為 Assignee；
+        agent／CLI 建立時明確使用 `--assignee @me`。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 問題
+      description: 一兩句話說明現況與原因。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 完成條件
+      description: 完成後可觀察到的結果；超出範圍另開 Issue。
+      placeholder: "- [ ] ..."
+    validations:
+      required: true
+  - type: textarea
+    id: supplement
+    attributes:
+      label: 補充
+      description: 選填：parent／dependency 理由、相關決策、驗證方式或風險。
+    validations:
+      required: false

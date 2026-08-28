@@ -256,10 +256,7 @@ def build_issue_body(spec: Spec, source_url: str) -> str:
             ),
         ]
     )
-    kind = "feature" if spec.tracking == "story" else "task"
     return (
-        "### 類型\n\n"
-        f"{kind}\n\n"
         "### 問題\n\n"
         f"{section_map['problem']}\n\n"
         "### 完成條件\n\n"
