@@ -17,14 +17,26 @@
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="{{ $groupLabels.heading }}">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
-      <thead><tr><th scope="col">{{ $labels.target }}</th><th scope="col">{{ $labels.commands }}</th><th scope="col">{{ $labels.workflows }}</th><th scope="col">{{ $labels.localStatus }}</th></tr></thead>
+      <thead><tr><th scope="col">{{ $labels.purpose }}</th><th scope="col">{{ $labels.shared }}</th><th scope="col">{{ $labels.templateOnly }}</th></tr></thead>
       <tbody>
         {{- range $test := $group.rows }}
         <tr>
-          <th scope="row"><strong>{{ index $test.target $lang }}</strong><span>{{ index $test.checks $lang }}</span></th>
-          <td><ul>{{ range $test.commands }}<li><code>{{ . }}</code></li>{{ end }}</ul></td>
-          <td><ul>{{ range $test.workflows }}<li><a href="{{ $data.workflowArchiveUrl }}/{{ .file }}" target="_blank" rel="noreferrer"><strong>{{ .name }}</strong><code>{{ .file }}</code></a><span>{{ index .role $lang }}</span></li>{{ end }}</ul></td>
-          <td>{{ index $test.localStatus $lang }}</td>
+          {{- $purpose := index $test.purpose $lang }}
+          <th scope="row"><strong>{{ $purpose.title }}</strong><span>{{ $purpose.description }}</span></th>
+          {{- range $scope := (slice $test.shared $test.templateOnly) }}
+          <td><ul class="testing-stage-list">
+            {{- range $stageKey := (slice "milestone" "release") }}
+            {{- $stage := index $scope $stageKey }}
+            {{- with $stage }}
+            <li>
+              <strong>{{ if eq $stageKey "milestone" }}{{ $labels.milestone }}{{ else }}{{ $labels.release }}{{ end }}</strong>
+              {{- with $stage.files }}<ul>{{ range . }}<li><code>{{ .path }}</code>{{ if .pending }} <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">{{ $labels.pending }}</a>{{ end }}</li>{{ end }}</ul>{{ end }}
+              {{- with $stage.note }}<span>{{ index . $lang }}</span>{{ end }}
+            </li>
+            {{- end }}
+            {{- end }}
+          </ul></td>
+          {{- end }}
         </tr>
         {{- end }}
       </tbody>

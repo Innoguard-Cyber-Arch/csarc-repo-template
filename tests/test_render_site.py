@@ -161,19 +161,22 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert data["featureGroups"][1]["features"] == ["templateLifecycle"]
     assert len(data["testing"]["groups"]) == 1
     assert data["testing"]["groups"][0]["journey"] == "01"
-    assert len(data["testing"]["groups"][0]["rows"]) == 5
-    assert {
-        workflow["file"]
-        for group in data["testing"]["groups"]
-        for row in group["rows"]
-        for workflow in row["workflows"]
-    } == {
-        "ci.yml",
-        "issue-triage.yml",
-        "milestone-lifecycle.yml",
-        "milestone-policy.yml",
-        "pr-policy.yml",
-        "spec-to-issue.yml",
+    testing_rows = data["testing"]["groups"][0]["rows"]
+    assert [row["purpose"]["zh-tw"]["title"] for row in testing_rows] == [
+        "Issue 工作邊界",
+        "PR 與 Issue 可追溯性",
+        "Spec 契約與 Issue 同步",
+        "Milestone 完成條件",
+        "Journey 01 整體回歸",
+    ]
+    assert all("workflows" not in row for row in testing_rows)
+    assert testing_rows[0]["shared"]["milestone"]["files"][0] == {
+        "path": "tests/test_work_definition.py",
+        "pending": True,
+    }
+    assert testing_rows[-1]["templateOnly"]["release"]["files"][0] == {
+        "path": "tests/test_template_work_definition.py",
+        "pending": True,
     }
     assert len(data["tools"]) == 9
     assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 26

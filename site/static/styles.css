@@ -402,17 +402,20 @@
     .similar-tools-testing-intro { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-bottom: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 14px; line-height: 1.2; }
     .similar-tools-testing-intro > span { color: var(--muted); }
     .similar-tools-testing-intro p { grid-column: 1 / -1; margin: 2px 0 0; }
-    .similar-tools-testing-matrix { min-height: 0; font-size: 13px; line-height: 1.18; }
-    .similar-tools-testing-matrix thead th:first-child { width: 20%; }
-    .similar-tools-testing-matrix thead th:nth-child(2) { width: 22%; }
-    .similar-tools-testing-matrix thead th:nth-child(3) { width: 28%; }
-    .similar-tools-testing-matrix thead th:nth-child(4) { width: 30%; }
-    .similar-tools-testing-matrix tbody th { width: 20%; font-size: 13px; }
-    .similar-tools-testing-matrix tbody th strong, .similar-tools-testing-matrix tbody th span, .similar-tools-testing-matrix td a > code, .similar-tools-testing-matrix td a + span { display: block; }
-    .similar-tools-testing-matrix tbody th span, .similar-tools-testing-matrix td a + span { margin-top: 3px; color: var(--muted); font-weight: 500; }
-    .similar-tools-testing-matrix td ul { margin: 0; padding-left: 17px; }
-    .similar-tools-testing-matrix td li + li { margin-top: 5px; }
+    .similar-tools-testing-matrix { min-height: 0; font-size: 18px; line-height: 1.22; }
+    .similar-tools-testing-matrix thead th:first-child { width: 25%; }
+    .similar-tools-testing-matrix thead th:nth-child(2), .similar-tools-testing-matrix thead th:nth-child(3) { width: 37.5%; }
+    .similar-tools-testing-matrix tbody th { width: 25%; background: white; font-size: 18px; }
+    .similar-tools-testing-matrix tbody th strong, .similar-tools-testing-matrix tbody th span { display: block; }
+    .similar-tools-testing-matrix tbody th span { margin-top: 3px; color: var(--muted); font-weight: 500; }
+    .similar-tools-testing-matrix th, .similar-tools-testing-matrix td { padding: 8px 10px; vertical-align: top; }
     .similar-tools-testing-matrix td code { overflow-wrap: anywhere; white-space: normal; }
+    .testing-stage-list { margin: 0; padding-left: 18px; }
+    .testing-stage-list > li + li { margin-top: 6px; }
+    .testing-stage-list > li > strong { font-size: 17px; }
+    .testing-stage-list ul { margin: 3px 0 0; padding-left: 18px; }
+    .testing-stage-list span { display: block; margin-top: 3px; color: var(--muted); }
+    .testing-pending-tag { display: inline-flex; margin-left: 6px; padding: 2px 7px; border: 1px solid #b9a700; border-radius: 999px; background: #fff7a8; color: #655900 !important; font-size: 13px; font-weight: 900; line-height: 1.25; text-decoration: none; white-space: nowrap; }
     .similar-tools-note { margin-top: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 16px; line-height: 1.22; }
     .selection-sequence {
       position: absolute;

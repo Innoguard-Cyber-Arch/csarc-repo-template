@@ -417,17 +417,20 @@
     .similar-tools-testing-intro { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-bottom: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 14px; line-height: 1.2; }
     .similar-tools-testing-intro > span { color: var(--muted); }
     .similar-tools-testing-intro p { grid-column: 1 / -1; margin: 2px 0 0; }
-    .similar-tools-testing-matrix { min-height: 0; font-size: 13px; line-height: 1.18; }
-    .similar-tools-testing-matrix thead th:first-child { width: 20%; }
-    .similar-tools-testing-matrix thead th:nth-child(2) { width: 22%; }
-    .similar-tools-testing-matrix thead th:nth-child(3) { width: 28%; }
-    .similar-tools-testing-matrix thead th:nth-child(4) { width: 30%; }
-    .similar-tools-testing-matrix tbody th { width: 20%; font-size: 13px; }
-    .similar-tools-testing-matrix tbody th strong, .similar-tools-testing-matrix tbody th span, .similar-tools-testing-matrix td a > code, .similar-tools-testing-matrix td a + span { display: block; }
-    .similar-tools-testing-matrix tbody th span, .similar-tools-testing-matrix td a + span { margin-top: 3px; color: var(--muted); font-weight: 500; }
-    .similar-tools-testing-matrix td ul { margin: 0; padding-left: 17px; }
-    .similar-tools-testing-matrix td li + li { margin-top: 5px; }
+    .similar-tools-testing-matrix { min-height: 0; font-size: 18px; line-height: 1.22; }
+    .similar-tools-testing-matrix thead th:first-child { width: 25%; }
+    .similar-tools-testing-matrix thead th:nth-child(2), .similar-tools-testing-matrix thead th:nth-child(3) { width: 37.5%; }
+    .similar-tools-testing-matrix tbody th { width: 25%; background: white; font-size: 18px; }
+    .similar-tools-testing-matrix tbody th strong, .similar-tools-testing-matrix tbody th span { display: block; }
+    .similar-tools-testing-matrix tbody th span { margin-top: 3px; color: var(--muted); font-weight: 500; }
+    .similar-tools-testing-matrix th, .similar-tools-testing-matrix td { padding: 8px 10px; vertical-align: top; }
     .similar-tools-testing-matrix td code { overflow-wrap: anywhere; white-space: normal; }
+    .testing-stage-list { margin: 0; padding-left: 18px; }
+    .testing-stage-list > li + li { margin-top: 6px; }
+    .testing-stage-list > li > strong { font-size: 17px; }
+    .testing-stage-list ul { margin: 3px 0 0; padding-left: 18px; }
+    .testing-stage-list span { display: block; margin-top: 3px; color: var(--muted); }
+    .testing-pending-tag { display: inline-flex; margin-left: 6px; padding: 2px 7px; border: 1px solid #b9a700; border-radius: 999px; background: #fff7a8; color: #655900 !important; font-size: 13px; font-weight: 900; line-height: 1.25; text-decoration: none; white-space: nowrap; }
     .similar-tools-note { margin-top: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 16px; line-height: 1.22; }
     .selection-sequence {
       position: absolute;
@@ -4176,7 +4179,7 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
-<section class="slide markdown-slide similar-tools-slide testing-slide" id="testing" data-content-key="testing" data-audience="maintainer" data-parity="supplemental" aria-label="測試｜逐旅程驗證地圖">
+<section class="slide markdown-slide similar-tools-slide testing-slide" id="testing" data-content-key="testing" data-audience="maintainer" data-parity="supplemental" aria-label="測試｜Journey 01 工作定義">
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
@@ -4235,8 +4238,8 @@ html[data-detail-level="simple"] .detail-panel {
 
   <header class="basic-header">
     <span class="selection-sequence">維運附錄｜測試</span>
-    <h2>測試｜逐旅程驗證地圖</h2>
-    <p class="subtitle">每個 Journey 各自一頁，列出要驗證的行為、本機命令，以及停用前分散在哪個 GitHub Action／job。</p>
+    <h2>測試｜Journey 01 工作定義</h2>
+    <p class="subtitle">所有 repo 只驗證自己的工作定義；repo-template 只在 promotion 多驗證一次交付結果。</p>
   </header>
 
 <div class="legacy-content similar-tools-content testing-content">
@@ -4245,42 +4248,68 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 01／工作定義</strong><span>原則是驗證邏輯只寫在 scripts／tests；本機與 GitHub Action 都呼叫同一份程式。最後一欄直接列出目前缺口與修正方式。</span>
-    <p><b>目前狀態：</b>main 已在 #375 將 GitHub Actions 移至 archive；下列 workflow 都不會執行，只保留恢復時的責任分布。</p>
+    <strong>Journey 01／最小測試契約</strong><span>一般 repo 只需要 ./scripts/verify；repo-template 只在 promotion 額外驗證一次交付出去的版本。</span>
+    <p><b>目前狀態：</b>main 的 GitHub Actions 仍封存。Journey 01 只保留一個本機入口與兩層測試；尚未收斂的檔案由 #382 處理。</p>
   </div>
-  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01／工作定義">
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01／最小測試契約">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
-      <thead><tr><th scope="col">要驗證什麼</th><th scope="col">共用程式／本機入口</th><th scope="col">GitHub Action 入口（已停用）</th><th scope="col">目前缺口／修正方式</th></tr></thead>
+      <thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead>
       <tbody>
         <tr>
-          <th scope="row"><strong>Issue 工作邊界</strong><span>標題規則、類型映射、assignee、label 與 duplicate 狀態要能收斂。</span></th>
-          <td><ul><li><code>./scripts/test-issue-triage</code></li></ul></td>
-          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/issue-triage.yml" target="_blank" rel="noreferrer"><strong>Issue triage / classify</strong><code>issue-triage.yml</code></a><span>Issue opened／edited／reopened／closed 時驗證並分類。</span></li></ul></td>
-          <td>缺口：分類規則仍內嵌在 workflow，本機測試靠抽取 YAML 的 run 區塊。修正：搬到獨立 Issue validator；本機與未來 Action 都呼叫它。</td>
+          <th scope="row"><strong>Issue 工作邊界</strong><span>標題、類型、assignee、label 與 duplicate 狀態要能收斂。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>每次進 Milestone（Issue → dev）</strong><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>PR 與 Issue 可追溯性</strong><span>PR title、分類 label、分支名稱、Closes／Fixes、開啟中的 Issue 與未完成 checkbox 必須一致。</span></th>
-          <td><ul><li><code>./scripts/test-pr-policy</code></li></ul></td>
-          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/pr-policy.yml" target="_blank" rel="noreferrer"><strong>PR policy / title</strong><code>pr-policy.yml</code></a><span>pull_request／merge_group 時驗證工作範圍與合併前條件。</span></li></ul></td>
-          <td>缺口：PR 規則仍內嵌在 workflow，本機測試靠抽取 YAML 的 run 區塊。修正：搬到獨立 PR validator；本機與未來 Action 都呼叫它。</td>
+          <th scope="row"><strong>PR 與 Issue 可追溯性</strong><span>PR title、分支、Closes／Fixes、開啟中的 Issue、checkbox 與 Milestone 必須一致。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>每次進 Milestone（Issue → dev）</strong><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Spec 契約與 Issue 同步</strong><span>必要章節、acceptance criteria、verification、穩定 spec id，以及建立／更新 Issue 的冪等行為。</span></th>
-          <td><ul><li><code>uv run python scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md</code></li><li><code>uv run pytest tests/test_spec_to_issue.py -q</code></li></ul></td>
-          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/ci.yml" target="_blank" rel="noreferrer"><strong>CI / fast</strong><code>ci.yml</code></a><span>由 verify-fast 執行 spec validation 與測試。</span></li><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/spec-to-issue.yml" target="_blank" rel="noreferrer"><strong>Spec to Issue / sync</strong><code>spec-to-issue.yml</code></a><span>main／dev 的 spec 變更合併後建立或更新 Issue。</span></li></ul></td>
-          <td>已符合。scripts/spec_to_issue.py 是唯一實作；恢復 Action 時只需重新接上事件與權限。</td>
+          <th scope="row"><strong>Spec 契約與 Issue 同步</strong><span>驗證必要章節、acceptance criteria、穩定 spec id 與同步的冪等行為。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>每次進 Milestone（Issue → dev）</strong><ul><li><code>tests/test_spec_to_issue.py</code></li></ul>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Milestone 完成條件</strong><span>due date、open Issue 數量與 acceptance criteria checkbox 必須共同決定 Milestone 關閉／重開。</span></th>
-          <td><ul><li><code>uv run pytest tests/test_milestone_lifecycle.py -q</code></li></ul></td>
-          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/milestone-policy.yml" target="_blank" rel="noreferrer"><strong>Milestone policy / due date</strong><code>milestone-policy.yml</code></a><span>Milestone 建立或編輯時要求 due date。</span></li><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/milestone-lifecycle.yml" target="_blank" rel="noreferrer"><strong>Milestone lifecycle / sync</strong><code>milestone-lifecycle.yml</code></a><span>Issue closed／reopened／milestoned 時重算 Milestone 狀態。</span></li></ul></td>
-          <td>部分符合。Lifecycle 已共用 scripts/sync_milestone_state.py；修正：再把 due date 規則搬到獨立 validator，供本機與未來 Action 共用。</td>
+          <th scope="row"><strong>Milestone 完成條件</strong><span>due date、open Issue 與 acceptance checkbox 共同決定關閉或重開。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>發版（dev → main）</strong><ul><li><code>tests/test_milestone_lifecycle.py</code></li></ul>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Journey 01 整體回歸</strong><span>把 Issue、PR、Spec、Milestone 規則與生成模板一起驗證，避免只測單一 helper。</span></th>
-          <td><ul><li><code>./scripts/verify-fast</code></li><li><code>./scripts/verify-template.sh</code></li></ul></td>
-          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/ci.yml" target="_blank" rel="noreferrer"><strong>CI / fast</strong><code>ci.yml</code></a><span>變更感知的快速檢查。</span></li><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/ci.yml" target="_blank" rel="noreferrer"><strong>CI / canonical full</strong><code>ci.yml</code></a><span>完整模板與跨層回歸。</span></li></ul></td>
-          <td>入口已共用。缺口：verify-template.sh 還檢查已移除的 workflow。修正：把 workflow 結構檢查移到日後恢復 CI/CD 時才啟用的測試層。</td>
+          <th scope="row"><strong>Journey 01 整體回歸</strong><span>用一個入口組合必要測試，避免本機與未來 Action 維護兩份清單。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>每次進 Milestone（Issue → dev）</strong><ul><li><code>scripts/verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul>
+            </li>
+            <li>
+              <strong>發版（dev → main）</strong><ul><li><code>scripts/verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>發版（dev → main）</strong><ul><li><code>tests/test_template_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul>
+            </li>
+          </ul></td>
         </tr>
       </tbody>
     </table>

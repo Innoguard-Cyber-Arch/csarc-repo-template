@@ -417,17 +417,20 @@
     .similar-tools-testing-intro { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-bottom: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 14px; line-height: 1.2; }
     .similar-tools-testing-intro > span { color: var(--muted); }
     .similar-tools-testing-intro p { grid-column: 1 / -1; margin: 2px 0 0; }
-    .similar-tools-testing-matrix { min-height: 0; font-size: 13px; line-height: 1.18; }
-    .similar-tools-testing-matrix thead th:first-child { width: 20%; }
-    .similar-tools-testing-matrix thead th:nth-child(2) { width: 22%; }
-    .similar-tools-testing-matrix thead th:nth-child(3) { width: 28%; }
-    .similar-tools-testing-matrix thead th:nth-child(4) { width: 30%; }
-    .similar-tools-testing-matrix tbody th { width: 20%; font-size: 13px; }
-    .similar-tools-testing-matrix tbody th strong, .similar-tools-testing-matrix tbody th span, .similar-tools-testing-matrix td a > code, .similar-tools-testing-matrix td a + span { display: block; }
-    .similar-tools-testing-matrix tbody th span, .similar-tools-testing-matrix td a + span { margin-top: 3px; color: var(--muted); font-weight: 500; }
-    .similar-tools-testing-matrix td ul { margin: 0; padding-left: 17px; }
-    .similar-tools-testing-matrix td li + li { margin-top: 5px; }
+    .similar-tools-testing-matrix { min-height: 0; font-size: 18px; line-height: 1.22; }
+    .similar-tools-testing-matrix thead th:first-child { width: 25%; }
+    .similar-tools-testing-matrix thead th:nth-child(2), .similar-tools-testing-matrix thead th:nth-child(3) { width: 37.5%; }
+    .similar-tools-testing-matrix tbody th { width: 25%; background: white; font-size: 18px; }
+    .similar-tools-testing-matrix tbody th strong, .similar-tools-testing-matrix tbody th span { display: block; }
+    .similar-tools-testing-matrix tbody th span { margin-top: 3px; color: var(--muted); font-weight: 500; }
+    .similar-tools-testing-matrix th, .similar-tools-testing-matrix td { padding: 8px 10px; vertical-align: top; }
     .similar-tools-testing-matrix td code { overflow-wrap: anywhere; white-space: normal; }
+    .testing-stage-list { margin: 0; padding-left: 18px; }
+    .testing-stage-list > li + li { margin-top: 6px; }
+    .testing-stage-list > li > strong { font-size: 17px; }
+    .testing-stage-list ul { margin: 3px 0 0; padding-left: 18px; }
+    .testing-stage-list span { display: block; margin-top: 3px; color: var(--muted); }
+    .testing-pending-tag { display: inline-flex; margin-left: 6px; padding: 2px 7px; border: 1px solid #b9a700; border-radius: 999px; background: #fff7a8; color: #655900 !important; font-size: 13px; font-weight: 900; line-height: 1.25; text-decoration: none; white-space: nowrap; }
     .similar-tools-note { margin-top: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 16px; line-height: 1.22; }
     .selection-sequence {
       position: absolute;
@@ -3719,7 +3722,7 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
-<section class="slide markdown-slide similar-tools-slide testing-slide" id="testing" data-content-key="testing" data-audience="maintainer" data-parity="supplemental" aria-label="Tests | Verification map by journey">
+<section class="slide markdown-slide similar-tools-slide testing-slide" id="testing" data-content-key="testing" data-audience="maintainer" data-parity="supplemental" aria-label="Tests | Journey 01 work definition">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -3778,8 +3781,8 @@ html[data-detail-level="simple"] .detail-panel {
 
   <header class="basic-header">
     <span class="selection-sequence">Maintenance appendix | Tests</span>
-    <h2>Tests | Verification map by journey</h2>
-    <p class="subtitle">Each Journey gets its own page listing the behaviors, local commands, and the GitHub Action/job that owned each check before suspension.</p>
+    <h2>Tests | Journey 01 work definition</h2>
+    <p class="subtitle">Every repository verifies only its own work definition; repo-template adds one delivery check during promotion.</p>
   </header>
 
 <div class="legacy-content similar-tools-content testing-content">
@@ -3788,42 +3791,68 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 01 / Work definition</strong><span>Verification logic should live once in scripts/tests, with local runs and GitHub Actions calling the same code. The last column states the current gap and its fix.</span>
-    <p><b>Current state: </b>PR #375 moved GitHub Actions out of main and into the archive. None of the workflows below runs; the mapping only preserves ownership for a future restoration.</p>
+    <strong>Journey 01 / Minimum test contract</strong><span>A normal repository needs only ./scripts/verify. During promotion, repo-template adds one check for the version it ships.</span>
+    <p><b>Current state: </b>GitHub Actions remain archived on main. Journey 01 keeps one local entrypoint and only two test layers; issue #382 owns the remaining consolidation.</p>
   </div>
-  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01 / Work definition">
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01 / Minimum test contract">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
-      <thead><tr><th scope="col">What to verify</th><th scope="col">Shared code / local entry</th><th scope="col">GitHub Action entry (suspended)</th><th scope="col">Current gap / fix</th></tr></thead>
+      <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
       <tbody>
         <tr>
-          <th scope="row"><strong>Issue work boundary</strong><span>Title rules, type mapping, assignee, labels, and duplicate disposition must converge.</span></th>
-          <td><ul><li><code>./scripts/test-issue-triage</code></li></ul></td>
-          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/issue-triage.yml" target="_blank" rel="noreferrer"><strong>Issue triage / classify</strong><code>issue-triage.yml</code></a><span>Validated and classified Issues when they were opened, edited, reopened, or closed.</span></li></ul></td>
-          <td>Gap: classification remains inline in the workflow and the local test extracts its run block from YAML. Fix: move it into a standalone Issue validator called locally and by the future Action.</td>
+          <th scope="row"><strong>Issue work boundary</strong><span>Title, type, assignee, labels, and duplicate disposition must converge.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Every Milestone change (Issue → dev)</strong><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>PR-to-Issue traceability</strong><span>PR title, classification label, branch, Closes/Fixes link, open Issue, and unfinished checkboxes must agree.</span></th>
-          <td><ul><li><code>./scripts/test-pr-policy</code></li></ul></td>
-          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/pr-policy.yml" target="_blank" rel="noreferrer"><strong>PR policy / title</strong><code>pr-policy.yml</code></a><span>Validated scope and pre-merge conditions on pull_request and merge_group events.</span></li></ul></td>
-          <td>Gap: PR policy remains inline in the workflow and the local test extracts its run block from YAML. Fix: move it into a standalone PR validator called locally and by the future Action.</td>
+          <th scope="row"><strong>PR-to-Issue traceability</strong><span>PR title, branch, Closes/Fixes link, open Issue, checkboxes, and Milestone must agree.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Every Milestone change (Issue → dev)</strong><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Spec contract and Issue synchronization</strong><span>Required sections, acceptance criteria, verification, stable spec identity, and idempotent Issue creation or update.</span></th>
-          <td><ul><li><code>uv run python scripts/spec_to_issue.py validate docs/specs/SPEC-001-example.md</code></li><li><code>uv run pytest tests/test_spec_to_issue.py -q</code></li></ul></td>
-          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/ci.yml" target="_blank" rel="noreferrer"><strong>CI / fast</strong><code>ci.yml</code></a><span>Ran spec validation and tests through verify-fast.</span></li><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/spec-to-issue.yml" target="_blank" rel="noreferrer"><strong>Spec to Issue / sync</strong><code>spec-to-issue.yml</code></a><span>Created or updated Issues after spec changes landed on main or dev.</span></li></ul></td>
-          <td>Already aligned. scripts/spec_to_issue.py is the single implementation; restoring the Action only requires reconnecting events and permissions.</td>
+          <th scope="row"><strong>Spec contract and Issue sync</strong><span>Validate required sections, acceptance criteria, stable spec IDs, and idempotent synchronization.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Every Milestone change (Issue → dev)</strong><ul><li><code>tests/test_spec_to_issue.py</code></li></ul>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Milestone completion contract</strong><span>Due date, open-Issue count, and acceptance-criteria checkboxes jointly determine Milestone close or reopen behavior.</span></th>
-          <td><ul><li><code>uv run pytest tests/test_milestone_lifecycle.py -q</code></li></ul></td>
-          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/milestone-policy.yml" target="_blank" rel="noreferrer"><strong>Milestone policy / due date</strong><code>milestone-policy.yml</code></a><span>Required a due date when a Milestone was created or edited.</span></li><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/milestone-lifecycle.yml" target="_blank" rel="noreferrer"><strong>Milestone lifecycle / sync</strong><code>milestone-lifecycle.yml</code></a><span>Reconciled Milestone state when Issues closed, reopened, or changed Milestone.</span></li></ul></td>
-          <td>Partly aligned. Lifecycle already shares scripts/sync_milestone_state.py. Fix: move the due-date rule into a standalone validator for local and future Action use.</td>
+          <th scope="row"><strong>Milestone completion</strong><span>Due date, open Issues, and acceptance checkboxes jointly determine close or reopen.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Release (dev → main)</strong><ul><li><code>tests/test_milestone_lifecycle.py</code></li></ul>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Journey 01 aggregate regression</strong><span>Verifies Issue, PR, Spec, Milestone, and generated-template rules together rather than testing one helper in isolation.</span></th>
-          <td><ul><li><code>./scripts/verify-fast</code></li><li><code>./scripts/verify-template.sh</code></li></ul></td>
-          <td><ul><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/ci.yml" target="_blank" rel="noreferrer"><strong>CI / fast</strong><code>ci.yml</code></a><span>Change-aware fast checks.</span></li><li><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/archive/ci-cd/2026-08-27/root-workflows/ci.yml" target="_blank" rel="noreferrer"><strong>CI / canonical full</strong><code>ci.yml</code></a><span>Full template and cross-layer regression.</span></li></ul></td>
-          <td>The entry points are shared. Gap: verify-template.sh still checks removed workflows. Fix: move workflow-structure checks into a test layer enabled only when CI/CD is restored.</td>
+          <th scope="row"><strong>Journey 01 aggregate regression</strong><span>Use one entrypoint for required tests so local runs and future Actions never maintain two lists.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Every Milestone change (Issue → dev)</strong><ul><li><code>scripts/verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul>
+            </li>
+            <li>
+              <strong>Release (dev → main)</strong><ul><li><code>scripts/verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Release (dev → main)</strong><ul><li><code>tests/test_template_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul>
+            </li>
+          </ul></td>
         </tr>
       </tbody>
     </table>

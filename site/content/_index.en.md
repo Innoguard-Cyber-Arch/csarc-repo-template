@@ -278,7 +278,7 @@ Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, gene
 {{< similar-tools >}}
 {{< /slide >}}
 
-{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | Tests" title="Tests | Verification map by journey" subtitle="Each Journey gets its own page listing the behaviors, local commands, and the GitHub Action/job that owned each check before suspension." class="similar-tools-slide testing-slide" legacy="true" >}}
+{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | Tests" title="Tests | Journey 01 work definition" subtitle="Every repository verifies only its own work definition; repo-template adds one delivery check during promotion." class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
 {{< /slide >}}
 
