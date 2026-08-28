@@ -36,7 +36,7 @@ if grep -Eq 'step [0-9]+|第 [0-9]+ 點|第 [0-9]+點' \
 fi
 grep -q 'uv sync --locked --python 3.14' AGENTS.md
 grep -q 'uv run pytest <test-path>' AGENTS.md
-grep -q 'scripts/render_site.py --check' AGENTS.md
+grep -q 'scripts/build-decision-site --check' AGENTS.md
 grep -q 'scripts/pr_lifecycle.py' AGENTS.md
 grep -q 'scripts/pr_lifecycle.py' template/AGENTS.md.jinja
 grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md
@@ -77,6 +77,11 @@ assert_agent_guidance() {
   local project_root="$1"
   test "$(wc -c < "$project_root/AGENTS.md")" -le 14000
   test "$(cat "$project_root/CLAUDE.md")" = "@AGENTS.md"
+  grep -q '^## Responsibility map$' "$project_root/AGENTS.md"
+  grep -q 'AGENTS.md.*single source.*CLAUDE.md.*only imports it' \
+    "$project_root/AGENTS.md"
+  grep -q 'Journey 07.*Alpha self-merge' "$project_root/AGENTS.md"
+  grep -q 'Journey 08' "$project_root/AGENTS.md"
   grep -q 'git rev-parse --show-toplevel' "$project_root/README.md"
   grep -q 'pwd -P' "$project_root/README.md"
   grep -q 'docs/ci-policy.md#actions-額度-fallback' \
@@ -255,11 +260,20 @@ grep -q 'Existing-repository history changes start read-only' \
 grep -q 'Never infer groups' docs/agent-install.md
 grep -q 'from titles or labels alone' docs/agent-install.md
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' docs/index.html
-grep -q '^## Actions quota fallback$' AGENTS.md
-grep -q '^## Actions quota fallback$' template/AGENTS.md.jinja
-grep -q 'structurally runs over its included Actions minutes' AGENTS.md
-grep -q 'runs over included Actions minutes' template/AGENTS.md.jinja
-grep -q 'Actions quota fallback note' AGENTS.md
+test "$(cat CLAUDE.md)" = "@AGENTS.md"
+test "$(cat template/CLAUDE.md)" = "@AGENTS.md"
+grep -q '^## Responsibility map$' AGENTS.md
+grep -q '^## Responsibility map$' template/AGENTS.md.jinja
+grep -q 'Journey 07.*Alpha self-merge' AGENTS.md
+grep -q 'Journey 07.*Alpha self-merge' template/AGENTS.md.jinja
+if rg -F \
+  -e 'CI/CD and dependency-update automation are suspended' \
+  -e 'does not currently install CI/CD' \
+  -e '一般情況下不能自行合併' \
+  AGENTS.md README.md template/AGENTS.md.jinja template/README.md.jinja; then
+  echo "AI guidance still contains superseded suspension or merge rules."
+  exit 1
+fi
 grep -q 'failed payments.*spending limit' docs/ci-policy.md
 grep -q 'HEAD.*PR head SHA' docs/ci-policy.md
 grep -q 'Actions quota fallback attestation' docs/ci-policy.md
@@ -1297,10 +1311,8 @@ grep -q '^## Working loop$' AGENTS.md
 grep -q '^## Commands$' AGENTS.md
 grep -q '^## Code Review Rules$' AGENTS.md
 grep -q "pull request chain ends there" AGENTS.md
-grep -q "Target the delivery branch or immediate stack parent" AGENTS.md
-grep -q 'Use `Closes`, `Fixes`, or `Resolves` only after every PR and referenced-Issue item has evidence' AGENTS.md
 grep -q 'one branch and worktree per independent task' AGENTS.md
-grep -q 'Alpha 自行合併 / self-merged' AGENTS.md
+grep -q 'Journey 07.*Alpha self-merge' AGENTS.md
 grep -q 'gh issue develop' AGENTS.md
 grep -q 'Projects stay disabled' AGENTS.md
 grep -q 'search open and closed Issues' AGENTS.md
@@ -2264,10 +2276,6 @@ grep -q '^## Code Review Rules$' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'work branch whose pull request chain ends there' \
   "$fixture_root/default-project/AGENTS.md"
-grep -q 'Target the delivery branch or immediate stack parent' \
-  "$fixture_root/default-project/AGENTS.md"
-grep -q 'Use `Closes`, `Fixes`, or `Resolves` only after every PR and referenced-Issue item has evidence' \
-  "$fixture_root/default-project/AGENTS.md"
 grep -q 'one branch and worktree per independent task' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'search open and closed Issues' \
@@ -2389,7 +2397,7 @@ grep -q 'Coverage 是找出未測程式碼的訊號' \
   "$fixture_root/default-project/README.md"
 grep -q 'CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset' \
   "$fixture_root/default-project/README.md"
-grep -q '^## Actions quota fallback$' \
+grep -q '^## Responsibility map$' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q 'scripts/pr_lifecycle.py' \
   "$fixture_root/default-project/AGENTS.md"
@@ -2401,7 +2409,7 @@ grep -q 'finalize-quota-fallback' \
   "$fixture_root/default-project/docs/ci-policy.md"
 grep -q 'verify-quota-main' \
   "$fixture_root/default-project/docs/ci-policy.md"
-grep -q 'SHA/tree-bound.*non-release promotion path' \
+grep -q 'docs/ci-policy.md#actions-額度-fallback' \
   "$fixture_root/default-project/AGENTS.md"
 grep -q '錯誤 budget.*平台事故.*權限.*原因不明.*測試失敗' \
   "$fixture_root/default-project/docs/index.html"

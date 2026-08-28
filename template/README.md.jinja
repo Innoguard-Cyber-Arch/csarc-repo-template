@@ -4,7 +4,7 @@
 # {{ project_name }}
 
 > [!IMPORTANT]
-> CSARC Milestone 8 期間不安裝或啟用 CI/CD 與自動相依更新。相關能力須在規格確認後逐項重新導入。
+> AI 工作規範以 [`AGENTS.md`](AGENTS.md) 為唯一來源；只有 `.github/workflows/` 內的流程會執行，審查與合併資格以[07 規則治理](docs/index.html#governance)為準。
 
 <!-- csarc-project-description:start -->
 {{ project_description }}
@@ -100,9 +100,9 @@ flowchart LR
 1. 簡單工作先開「開發工作」Issue；標題以 12–80 個英文 ASCII 字元及至少三個詞直接描述成果，例如 `Add dependency policy checks`。Issue 不使用 PR 的 Conventional Commit 格式。
 2. 從 Feature、Task、Bug 或 Documentation 表單建立工作；表單直接設定原生 `Feature`、`Task`、`Bug`、`Task` Type，並以 `enhancement`、`bug` 或 `documentation` Label 保留跨 Issue／PR 分類。UI 建立者自行指派自己，agent／CLI 建立時使用 `--assignee @me`；`duplicate` 是既有 Issue 的結案處置，不是建立類型。
 3. {% if branch_strategy == "delivery" %}從 Issue 所屬的 `dev/m<Milestone 編號>-<簡稱>` 建立工作分支；沒有 Milestone 時，預設從 `dev/next` 建立，只有在 Issue 記錄獨立 soak／canary 理由時，才直接使用一次性的 `dev/i<Issue 編號>-<簡稱>` 工作與 promotion。{% else %}從 `{{ branch_strategy }}` 或最終 PR 回 `{{ branch_strategy }}` 的未合併工作分支建立。{% endif %}一般工作分支使用 `gh issue develop <issue> --base <delivery> --name type/<issue-number>-short-slug` 建立，確保 GitHub Development 關聯；若新增需求超出 Issue 的完成條件，另開 Issue 與分支。若後來確認重複，連結 canonical Issue 並用 GitHub 的 Duplicate 原生原因關閉；純 triage 不改檔案，可不開分支與 PR。
-4. 執行 `./scripts/verify`；AI 遵守 `AGENTS.md`，一般情況下不能自行合併。
+4. 執行 `./scripts/verify`；AI 遵守 `AGENTS.md`，審查、合併資格與 Alpha self-merge 例外以[07 規則治理](docs/index.html#governance)為準。
 5. PR 指向{% if branch_strategy == "delivery" %}對應 delivery branch{% else %} `{{ branch_strategy }}`{% endif %}或 stack 中的直接上游分支；整條 open PR 鏈必須最終回到該 integration branch。使用 `Closes #<issue-number>` 前，PR 與 referenced Issue 不得留有未勾選 task；風險或回退放在選填補充。PR 沒有原生 Issue Type／Issue Form，只使用 Markdown template；作者自行指派自己，並讓 Milestone 與恰好一個 `bug`、`enhancement` 或 `documentation` 分類 Label 對齊 linked Issue。
-6. 一般情況下，CI 與人工審查都通過才合併；只有下列 Actions 額度例外且 human maintainer 明確授權時，agent 才可依 repo 現行 self-merge 政策合併。{% if branch_strategy == "delivery" %}Milestone 建立時同時建立一張 `promotion` Issue；完成後用 `dev/m* → main` PR 關閉它。一般孤立工作由 `dev/next → main` 批次 promotion；`dev/i*` 的同號 Issue 本身就是 promotion Issue，合併後刪除該暫時 branch。只有 standalone `fix/*` 加上 `hotfix` label 才能直接 main。{% elif branch_strategy == "dev" %}準備發布時，再用一張審查過的 PR 將 `dev` 升版到 `main`。{% endif %}
+6. 合併前依 07 規則治理檢查目前有效的 review、required checks、Ruleset 與明確授權；README 不另外定義 self-merge 例外。{% if branch_strategy == "delivery" %}Milestone 建立時同時建立一張 `promotion` Issue；完成後用 `dev/m* → main` PR 關閉它。一般孤立工作由 `dev/next → main` 批次 promotion；`dev/i*` 的同號 Issue 本身就是 promotion Issue，合併後刪除該暫時 branch。只有 standalone `fix/*` 加上 `hotfix` label 才能直接 main。{% elif branch_strategy == "dev" %}準備發布時，再用一張審查過的 PR 將 `dev` 升版到 `main`。{% endif %}
 
 多個可寫 agents 平行執行時，一項任務使用一個 branch 與一個獨立 worktree，且只平行處理範圍互不依賴的工作；開始前先辨識目前是否已在 agent 平台管理的 worktree，不強制讓同一 branch 出現在多個 worktrees，也不自行刪除其他工具建立或含未提交變更的 worktree。原生 [`git worktree`](https://git-scm.com/docs/git-worktree) 是可攜基線；[Worktrunk](https://github.com/max-sixty/worktrunk) 可選擇簡化建立、切換與清理，但屬於本機／agent orchestration 輔助工具，不是本模板或生成 repo 的必要相依。worktree 只隔離工作目錄，整合仍以 PR、CI、人工審查及合併後完整驗證為準。
 

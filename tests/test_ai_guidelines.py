@@ -1,0 +1,66 @@
+"""Structural tests for the generated AI-guidance contract."""
+
+from pathlib import Path
+
+import pytest
+from jinja2 import Environment, StrictUndefined
+
+ROOT = Path(__file__).resolve().parents[1]
+TEMPLATE = ROOT / "template" / "AGENTS.md.jinja"
+
+
+@pytest.mark.parametrize(
+    ("language", "python_command", "typescript_command"),
+    [
+        ("ci", False, False),
+        ("python", True, False),
+        ("typescript", False, True),
+        ("python-typescript", True, True),
+    ],
+)
+def test_generated_guidance_has_one_source_and_real_commands(
+    language: str, python_command: bool, typescript_command: bool
+) -> None:
+    """Keep governance references stable and commands profile-specific."""
+    environment = Environment(autoescape=True, undefined=StrictUndefined)
+    template = environment.from_string(TEMPLATE.read_text(encoding="utf-8"))
+    rendered = template.render(
+        branch_strategy="delivery",
+        language=language,
+        project_name="Guidance fixture",
+    )
+
+    assert "## Responsibility map" in rendered
+    assert "`AGENTS.md` is the single source" in rendered
+    assert "`CLAUDE.md` only imports it" in rendered
+    assert "docs/index.html#method" in rendered
+    assert "docs/index.html#work" not in rendered
+    assert "Journey 07" in rendered
+    assert "Alpha self-merge" in rendered
+    assert "Journey 08" in rendered
+    assert "automation are suspended" not in rendered
+    assert ("Python setup:" in rendered) is python_command
+    assert ("TypeScript setup:" in rendered) is typescript_command
+
+
+def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
+    """Keep imports thin and leave merge authorization to Journey 07."""
+    assert (ROOT / "CLAUDE.md").read_text(encoding="utf-8") == "@AGENTS.md\n"
+    assert (ROOT / "template" / "CLAUDE.md").read_text(
+        encoding="utf-8"
+    ) == "@AGENTS.md\n"
+
+    root_guidance = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "## Responsibility map" in root_guidance
+    assert "Journey 07" in root_guidance
+    assert "automation are suspended" not in root_guidance
+
+    template_guidance = TEMPLATE.read_text(encoding="utf-8")
+    assert template_guidance.count("BEGIN CSARC MANAGED BLOCK") == 1
+    assert template_guidance.count("END CSARC MANAGED BLOCK") == 1
+
+    readme = (ROOT / "template" / "README.md.jinja").read_text(
+        encoding="utf-8"
+    )
+    assert "一般情況下不能自行合併" not in readme
+    assert "07 規則治理" in readme
