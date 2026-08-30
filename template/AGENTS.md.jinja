@@ -1,15 +1,18 @@
 <!-- BEGIN CSARC MANAGED BLOCK -->
 # {{ project_name }} agent instructions
 
-## Milestone 8 temporary operating mode
+## Responsibility map
 
-- This template does not currently install CI/CD or dependency-update workflows. Do not add workflow files under `.github/workflows`, enable GitHub Actions, apply required status checks, or make CI a merge condition.
-- Use the smallest relevant local check for the approved change. Automated workflows return only after their purpose, trigger, required status, and cost ceiling are explicitly accepted.
+- GitHub Issues and pull requests define work, progress, and evidence. Approved specs and ADRs preserve durable context; add a plan only for cross-session, high-risk, or hard-to-recover work, and never store raw chat transcripts. Follow [Journey 01](docs/index.html#method) for work-item relationships and fields.
+- `AGENTS.md` is the single source for AI working instructions; `CLAUDE.md` only imports it.
+- One writable task uses one Git branch and one worktree so concurrent changes stay isolated.
+- Reusable validation lives in `scripts/` and tests. Run `./scripts/verify` for the final candidate; checked-in files under `.github/workflows/` are the only active GitHub Actions. See [CI/CD settings](docs/index.html#testing) for stage ownership.
+- [Journey 07](docs/index.html#governance) and the [`docs/ci-policy.md` quota fallback](docs/ci-policy.md#actions-額度-fallback) own review requirements, merge eligibility, Alpha self-merge, and quota fallback. Do not restate or invent exceptions here.
+- Copier owns template updates. Follow [Journey 08](docs/index.html#template-upgrade) for the update contract.
 
 ## Scope and sources of truth
 
 - This file applies repository-wide. A nearer `AGENTS.md` may add subtree-specific guidance.
-- `CLAUDE.md` imports this single AI-instruction source.
 - `.csarc/profile.json` defines the CI/CD baseline and enabled language modules.
 - Use the linked Issue or `docs/specs/` SDD contract for scope; `docs/README.md` maps durable project memory.
 - Use `docs/adr/` for decisions. On updated projects, also search project-owned `docs/decisions/`; never move or overwrite it automatically.
@@ -18,24 +21,23 @@
 ## Working loop
 
 1. At task start, run only `git worktree list --porcelain`; reserve unscoped cleanup for explicit maintenance. Creator cleanup after merge remains required. Before planning or opening an Issue or Milestone, list open Milestones and open Issues, then search open and closed Issues with two to four concrete problem or technology terms. Inspect the body, comments, and linked pull requests of credible matches; titles and labels alone are not decisions. Keep each query bounded to 20 candidates.
-2. Use native Feature for an SDD story and Task or Bug subissues for independently deliverable work. Dependencies only express real ordering; a Bug inside a Feature must be its subissue, while a standalone Bug explains why it has no parent. Projects stay disabled. A Milestone is an optional dated delivery or release bucket: set a real due date, attach leaf Issues and PRs, omit the parent, and follow `docs/milestone-description.md`.
+2. Use the work-item model in [Journey 01](docs/index.html#method). A Milestone is an optional dated delivery or release bucket; follow `docs/milestone-description.md`. Projects stay disabled.
 3. Before creating the work item, present a short prior-decision summary when the user can respond. If creation is already authorized, record each relevant `#N` as preserved, superseded, or rejected with a reason in the Issue supplement or Milestone `References`; when none are found, record the bounded queries used. When a user confirms a durable architecture, tooling, security, compatibility, or platform constraint, summarize it in the work item and update the matching `docs/adr/` record through the scoped pull request. Never store a raw conversation transcript or promote an unconfirmed inference to a decision. Never silently reverse an earlier decision.
-4. Use the exact checked-in body shape whether creating through the UI, CLI, or API: Issues use `問題`, `完成條件`, and optional `補充`; their kind belongs in native Type and label metadata, not a duplicate body field. Pull requests use `Purpose`, `完成清單`, and optional `補充`. Fold verification, risk, rollback, impact, and decision details into those sections instead of adding parallel top-level sections.
+4. Use the checked-in Issue form and pull request template whether creating through the UI, CLI, or API; do not create a second body format.
 5. Open or select one GitHub Issue before editing and use its acceptance criteria as scope. Titles use 12-80 ASCII characters, at least three words, no type prefix, and no trailing period. Set one native Type, matching label, assignee, and applicable parent and Milestone. The creator is the default owner: UI creators assign themselves, while CLI and agents pass `--assignee @me`; change the assignee only for an explicit handoff.
 6. If new work exceeds that Issue, stop and open a separate Issue; do not silently widen the current branch or pull request.
-7. {% if branch_strategy == "delivery" %}Start from `dev/m<milestone-number>-<slug>`, standalone `dev/next`, or an open work branch whose pull request chain ends there. Conflicting squash-sync uses `promote/m<milestone-number>-<slug>` or `promote/next`; never rewrite delivery. Independent soak or canary may use `dev/i<issue-number>-<slug>` only when its Issue has no Milestone, has `promotion`, and closes through that branch's promotion PR. Only a qualified `fix/*` pull request labeled `hotfix` or `release-recovery` may otherwise target `main`.{% else %}Start from `{{ branch_strategy }}`, or an open work branch whose pull request chain ends at `{{ branch_strategy }}`.{% endif %} Use `gh issue develop <issue> --base <delivery> --name type/<issue-number>-short-slug` for the native Development link.
+7. {% if branch_strategy == "delivery" %}Start from the Issue's delivery branch or an open work branch whose pull request chain ends there.{% else %}Start from `{{ branch_strategy }}` or an open work branch whose pull request chain ends there.{% endif %} Use `gh issue develop <issue> --base <delivery> --name type/<issue-number>-short-slug` for the native Development link, and follow `docs/ci-policy.md` for integration, promotion, hotfix, and recovery routes.
 8. Inspect nearby code, tests, and configuration before choosing an implementation.
 9. Make the smallest coherent change; preserve unrelated work and project-owned source files.
 10. Add or update the narrowest regression test that proves non-trivial behavior.
 11. Delegates run scoped checks; only the pull request owner or integrator runs `./scripts/verify` once per final candidate tree.
-12. {% if branch_strategy == "delivery" %}Keep a final `promotion` Issue open while work lands in a delivery Milestone. If downstream acceptance needs an immutable Release first, use the `docs/ci-policy.md` checkpoint contract; otherwise add no intermediate promotion. An isolated `dev/i*` Issue is its promotion Issue. Checkboxes cover only pre-merge evidence; put closure/cleanup in a non-checkbox runbook. Before closure, recheck acceptance/evidence.{% else %}Before closing a Milestone's last Issue, recheck acceptance and add required follow-ups.{% endif %} Lifecycle closes a zero-open-Issue Milestone only when all boxes are checked, and reopens it for open work or unchecked criteria.
-13. Use `Closes`, `Fixes`, or `Resolves` only after every PR and referenced-Issue item has evidence. {% if branch_strategy == "delivery" %}Target the delivery branch or immediate stack parent; only promotion, release-please, qualified hotfix, or audited release recovery may target `main`.{% else %}Target `{{ branch_strategy }}` or the immediate stack parent.{% endif %} Assign the PR author, then sync the classification label and Milestone from the linked Issue; request a non-author reviewer outside draft. Before any automated PR Ready/Draft, authorization, label/milestone, or merge write, acquire its remote lease and use `scripts/pr_lifecycle.py`; other tasks remain read-only. Never merge except under the documented self-merge and quota fallback.
-14. After a pull request is merged, the agent that created its worktree must leave that worktree, fetch the integration ref, and run `./scripts/cleanup-worktrees --apply --worktree <path> origin/{% if branch_strategy == "delivery" %}<delivery-branch>{% else %}{{ branch_strategy }}{% endif %}` from another checkout. If the task is explicitly abandoned instead, its creator may remove only that clean worktree with `git worktree remove <path>`; keep the branch. Platform-managed worktrees stay under the platform lifecycle. For repository-wide maintenance, review the command's default dry run before omitting `--worktree`; it never removes main, current, locked, detached, dirty, unmerged, or unverifiable worktrees.
-15. Report the changed behavior, verification evidence, and any remaining limitation.
+12. Before any automated PR Ready/Draft, authorization, metadata, or merge write, acquire the remote lease and use `scripts/pr_lifecycle.py`; otherwise remain read-only. Follow Journey 07 rather than duplicating merge rules here.
+13. After merge, leave the task worktree and run `./scripts/cleanup-worktrees --apply --worktree <path> origin/{% if branch_strategy == "delivery" %}<delivery-branch>{% else %}{{ branch_strategy }}{% endif %}` from another checkout. Never remove another task's worktree or any dirty, locked, detached, unmerged, or unverifiable worktree.
+14. Report the changed behavior, verification evidence, and any remaining limitation.
 
 Writable agents use one branch and worktree per independent task. Reuse a host-managed worktree; never force a branch into multiple worktrees or remove one owned by another task or with uncommitted changes. Use local storage for active checkouts, worktrees, environments, and caches. If assigned a cloud-synced File Provider path, switch to a local checkout without routine user confirmation; preserve existing changes. Worktrees isolate files; integration still uses PR, CI, review, and final verification.
 
-Delivery routes, synchronization, promotion, release, canary, rollback, and quota procedures are canonical in [`docs/ci-policy.md`](docs/ci-policy.md). Never push directly to an integration branch, invent successful canary evidence, create or dispatch release tags manually, or bypass its gates.
+Never push directly to an integration branch, invent successful evidence, create or dispatch release tags manually, or bypass the linked governance policy.
 
 Duplicate triage may close an Issue without code changes when it links the canonical Issue and uses GitHub's native duplicate reason. If a change or `copier update` modifies an Issue or pull request body shape, migrate existing bodies before closing it; otherwise create and link a follow-up Issue first.
 
@@ -47,16 +49,9 @@ Existing-repository history changes start read-only: propose semantic story grou
 {% endif %}{% if language in ["typescript", "python-typescript"] %}- TypeScript setup: `corepack enable && pnpm install --frozen-lockfile`.
 {% endif %}{% if language == "ci" %}- Environment setup: no language toolchain install is required.
 {% endif %}- Site source check: `uv run --no-project python scripts/render_site.py --check`.
-- During the temporary suspension, `./scripts/verify` is a local check only and is not a merge requirement.
 {% if language in ["python", "python-typescript"] %}- Python iteration: `uv run ruff check <paths>`, `uv run mypy`, and `uv run pytest <test-path>`.
 {% endif %}{% if language in ["typescript", "python-typescript"] %}- TypeScript iteration: `pnpm exec biome check <paths>`, `pnpm exec tsc --noEmit`, and `pnpm exec vitest run <test-path>`.
-{% endif %}- Prefer the narrowest relevant local check while automation is suspended.
-
-## Actions quota fallback
-
-- A zero-step billing block is standing and accepted where the plan runs over included Actions minutes; others stay blocked.
-- Routine Issue PRs merge on a zero-step check, local verification, and a fallback note, without confirmation; promotion PRs to `main` keep the attestation/authorization procedure.
-- Follow the complete SHA/tree-bound procedure, including the non-release promotion path, in [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback). Never create or falsify a successful Check Run.
+{% endif %}- Final candidate: `./scripts/verify` once by the pull request owner or integrator.
 
 ## Editing boundaries
 
@@ -70,20 +65,15 @@ Existing-repository history changes start read-only: propose semantic story grou
 
 ## Platform capability and automation
 
-- Keep desired CI/CD behavior declarative in the repository and enforce it with tests; agents may edit that declaration but must not assume organization or enterprise administrator access.
-- The portable baseline must not require adopters to create a GitHub App or PAT, copy a personal token, populate `.env`, or change organization policy. Never extract or persist `gh auth token` as project configuration.
-- Detect platform capabilities during init, adopt, and update when they are observable, and re-evaluate them during CI/CD. Distinguish allowed, blocked, and unknown; never treat a permission error as evidence that a capability is available.
-- Select the highest safe supported mode and degrade explicitly to artifact-only or verification-only behavior when release or deployment writes are unavailable. Never claim that a release or deployment succeeded when it was skipped or blocked.
-- Do not make the portable fallback the capability ceiling. When stronger controls are confirmed, prefer the mode with stronger review, ordering, provenance, and deployment guarantees.
-- A pull request declares SemVer intent through its validated title. Assign the exact version only after merge from the actual default-branch history; do not reserve version numbers on open pull requests.
-- Keep external trust bootstrap such as package-registry publishers or cloud identities optional and verifiable. Do not bypass or silently weaken platform policy to make automation pass.
-- Keep the project website aligned with the capability matrix. For each policy-dependent mode, document its prerequisites, selected behavior, guarantees, limitations, and fallback without presenting unavailable capabilities as active.
+- Keep desired automation declarative and testable; do not assume organization or enterprise administrator access.
+- Never extract or persist `gh auth token` as project configuration, require a personal token for the portable baseline, or treat a permission error as proof that a capability is available.
+- Report blocked or unavailable capability explicitly. Never claim a release, deployment, review gate, or other control succeeded when it was skipped or unsupported.
 
 ## Safety
 
 - Never commit secrets, tokens, private keys, or populated `.env` files. Use GitHub Secrets or approved secret management for automation.
 - Review `scripts/apply-repository-settings.sh plan` before `apply`; do not operate production or external infrastructure without explicit authorization.
-- Do not bypass failed CI, required checks, resolved-conversation requirements, CODEOWNER review, or human approval except for the exact quota-only, SHA-bound local verification fallback defined above; that exception does not waive human authorization or any non-local control.
+- Do not bypass failed CI, required checks, review, CODEOWNER approval, or supply-chain verification. Journey 07 is the only source for any merge exception or Alpha self-merge authorization.
 
 ## Code Review Rules
 
