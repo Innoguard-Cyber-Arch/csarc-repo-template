@@ -46,6 +46,11 @@
   color: var(--ink);
 }
 
+html[data-detail-level="technical"] .detail-level-control button[aria-pressed="true"] {
+  background: var(--optional);
+  color: white;
+}
+
 .detail-level-control button:focus-visible {
   outline: 3px solid var(--yellow);
   outline-offset: 2px;

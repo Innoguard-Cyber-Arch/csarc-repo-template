@@ -64,11 +64,15 @@
       width: 1600px;
       height: 900px;
       padding: 3.7% 4.7%;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
       background: var(--paper);
       box-shadow: none;
     }
     .slide.active { display: flex; flex-direction: column; animation: enter .2s ease-out; }
+    .slide.active > :not(.journey-rail),
+    .slide.active > .legacy-content > * { flex-shrink: 0; }
     @keyframes enter { from { opacity: 0; transform: translateX(10px); } }
     .slide::after {
       content: attr(data-page);
@@ -378,6 +382,7 @@
     .similar-tools-legend .competitor { border-color: #b9a700; background: #fffbea; }
     .similar-tools-legend .reference { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
     .similar-tools-legend .coverage-key { border-color: #999; background: var(--soft); }
+    .similar-tools-legend .capture-date { margin-left: auto; border-color: var(--line); background: white; color: var(--muted); }
     .similar-tools-table-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); background: white; }
     .similar-tools-table-wrap:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
     .similar-tools-matrix { width: 100%; min-height: 100%; table-layout: fixed; border-collapse: collapse; font-size: 14.5px; line-height: 1.22; }
@@ -414,6 +419,7 @@
     .similar-tools-philosophy-matrix td ul { margin: 0; padding-left: 18px; }
     .similar-tools-philosophy-matrix td li + li { margin-top: 4px; }
     .similar-tools-philosophy-matrix .tool-comparison-detail { display: block; margin: 2px 0 0 12px; }
+    .similar-tools-philosophy-matrix .tool-meta { display: inline-flex; flex-wrap: wrap; gap: 2px 8px; margin-left: 6px; color: var(--muted); font-size: 12px; font-weight: 700; }
     .similar-tools-testing-intro { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-bottom: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 14px; line-height: 1.2; }
     .similar-tools-testing-intro > span { color: var(--muted); }
     .similar-tools-testing-intro p { grid-column: 1 / -1; margin: 2px 0 0; }
@@ -613,7 +619,7 @@
     }
     .context-line strong { color: var(--ink); }
     .journey-rail {
-      position: absolute;
+      position: fixed;
       left: 2.1%;
       top: 4.5%;
       bottom: 4.8%;
@@ -1668,6 +1674,11 @@
   color: var(--ink);
 }
 
+html[data-detail-level="technical"] .detail-level-control button[aria-pressed="true"] {
+  background: var(--optional);
+  color: white;
+}
+
 .detail-level-control button:focus-visible {
   outline: 3px solid var(--yellow);
   outline-offset: 2px;
@@ -2125,7 +2136,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -2192,7 +2203,7 @@ html[data-detail-level="simple"] .detail-panel {
       <div class="product-start">
         <section class="product-scope" aria-label="公版提供的能力">
           <h3>公版會替 repo 準備</h3>
-          <p class="scope-row"><strong>規劃與 AI 契約</strong><span>SDD → Feature parent → Task／Bug subissues → 各自 PR；Milestone 只管理有期限的交付</span></p>
+          <p class="scope-row"><strong>規劃與 AI 規範</strong><span>SDD → Feature parent → Task／Bug subissues → 各自 PR；Milestone 只管理有期限的交付</span></p>
           <p class="scope-row"><strong>驗證與合併</strong><span><code>./scripts/verify</code>＋分層 CI＋PR；並行 Milestone 各自整合，promotion 才進 main</span></p>
           <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件；已有 Containerfile 可選配容器驗證／GHCR</span></p>
           <p class="scope-row"><strong>可持續同步</strong><span>公版更新成為可審查差異，不會直接覆蓋產品程式</span></p>
@@ -2212,7 +2223,7 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 
 
-<div class="markdown-body basic-summary"><p>公版把工作定義、AI 契約、驗證、合併、依賴與交付證據放進同一條可審查流程。</p>
+<div class="markdown-body basic-summary"><p>公版把工作定義、AI 規範、驗證、合併、依賴與交付證據放進同一條可審查流程。</p>
 <table>
 	<thead>
 			<tr>
@@ -2270,7 +2281,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -2447,7 +2458,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -2607,7 +2618,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -2655,7 +2666,7 @@ html[data-detail-level="simple"] .detail-panel {
         <h2>步驟 1｜<span class="accent">工作如何從需求走到合併</span></h2>
         <p class="subtitle"><strong>基本導入。</strong>一張 Issue 定義一項可驗收的改變，一張 PR 負責交付；多項工作需要同批完成時，才使用 Milestone。</p>
       </header>
-      <p class="context-line"><strong>模板的作用｜</strong>把 Issue、PR 與交付批次的寫法和關聯固定下來，讓人與 agent 都知道要做什麼、怎樣算完成；小工作不必額外建立 Feature、Milestone 或完整規格。</p>
+      <p class="context-line"><strong>模板的作用｜</strong>統一 Issue、PR 與 Milestone 的寫法，讓人與 agent 清楚工作範圍與完成條件。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open>
           <summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">常見的工作設計思路</span></summary>
@@ -2719,7 +2730,7 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
-<section class="slide markdown-slide legacy-slide decision-slide" id="agents" data-content-key="agents" data-track="agents" aria-label="先定 AI 工作契約，再開始實作">
+<section class="slide markdown-slide legacy-slide decision-slide" id="agents" data-content-key="agents" data-track="agents" aria-label="先定 AI 規範，再開始實作">
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
@@ -2739,7 +2750,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item active priority" aria-current="step">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -2778,43 +2789,34 @@ html[data-detail-level="simple"] .detail-panel {
 
   <header class="basic-header">
     <span class="selection-sequence">步驟 02</span>
-    <h2>先定 AI 工作契約，再開始實作</h2>
-    <p class="subtitle">README 服務使用者；AGENTS.md 留下 agent 可執行的範圍與安全邊界。</p>
+    <h2>先定 AI 規範，再開始實作</h2>
+    <p class="subtitle">Issue 說明這次要做什麼；AGENTS.md 說明 agent 在 repo 裡怎麼做。</p>
   </header>
 
 <div class="legacy-content">
       <header>
-        <h2>步驟 2｜<span class="accent">先定 AI 契約，再開始實作</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>AI 先讀工作單、repo 與 <code>AGENTS.md</code>，再提出做法、修改、測試；人保留方向、風險與合併責任。</p>
+        <h2>步驟 2｜<span class="accent">先定 AI 規範，再開始實作</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>Issue 劃定這次工作；<code>AGENTS.md</code> 說明怎麼做；程式與測試提供證據，人保留需求方向與重大風險決策。</p>
       </header>
-      <p class="context-line"><strong>問題與目的｜</strong>只給一句 prompt，AI 會猜範圍；多個可寫 agents 共用 working directory，未提交變更與 branch checkout 也會互相干擾。契約要短、可執行，且不能取代人的判斷。</p>
+      <p class="context-line"><strong>模板的作用｜</strong>把 agent 開始前要讀什麼、可修改到哪裡、如何隔離平行工作、怎樣留下驗證，以及何時必須停下來問人寫進 repo；文字規範本身不是自動門禁。</p>
       <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不靠長提示詞，也不讓 agents 共用目錄</h3><ul><li><strong>同一 working directory 切 branch：</strong>未提交變更與 checkout 會互相干擾</li><li><strong>複製全部 coding style：</strong>容易與 Ruff／Biome 分歧，固定判定應交給 CI</li><li><strong>AI review 當必要門禁：</strong>結果會漂移，不能取代測試、同事審查與 Ruleset</li></ul></article>
-        <article class="decision-step recommended">
-          <span class="step-label">我們的選擇</span>
-          <details class="package-disclosure"><summary><span><span class="tech-name">標準 AGENTS.md＋就近覆寫</span></span></summary><div class="package-health"><p><a href="https://github.com/agentsmd/agents.md" target="_blank" rel="noreferrer">agentsmd/agents.md</a>｜MIT｜公開且持續維護；格式就是一般 Markdown。</p><p><strong>熱門實例：</strong>VS Code 根檔 5 行、uv 25 行、Kubernetes 36 行；Next.js 558 行反映大型 monorepo，而不是每案都該追求的長度。</p><p><strong>官方行為：</strong>Codex 會由根目錄往工作目錄合併指令，越靠近目前檔案的規則優先。</p><p class="reference">Ref. OpenAI Docs; agentsmd/agents.md repository.</p></div></details>
-          <p class="recommendation-copy"><strong>工作契約：</strong>六段涵蓋範圍、工作迴圈、指令、修改界線、安全與審查；依語言只列真正存在的指令，根檔最多 200 行。<br><strong>平行隔離：</strong>每項可寫任務使用自己的 branch 與 Git worktree；只平行處理互不依賴的範圍。原生 Git 是基線，Worktrunk 是選用的本機輔助，不進入生成 repo 相依。合併後由建立者執行 <code>scripts/cleanup-worktrees</code>，只回收 GitHub 已驗證合併且乾淨的 worktree。<br><strong>人類負責：</strong>確認需求與技術方向、判斷風險、審查差異；唯一的 CI 例外是 human 已確認 Actions 免費額度耗盡時，agent 對 PR HEAD 完整本機驗證、留存 SHA-bound 聲明並取得一次性合併授權。Promotion 到 main 還須保存 candidate tree 並核對合併後 tree identity，fallback 證據不能用於 release；Ruleset、CODEOWNERS 與供應鏈控制不因此失效。</p>
-        </article>
+        <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">常見的 AI 協作設計</span></summary><ul><li><strong>Repo 內指引：</strong>把固定命令與界線放在版本控制中，讓不同 agent 讀同一份規則。</li><li><strong>規格產物接力：</strong>大型工作先產生 spec、plan、tasks，再逐步交給 agent 執行。</li><li><strong>角色與調度：</strong>用專門角色、skills 或佇列安排多個 agent；適合工作量已大到需要額外協調時。</li><li><strong>人類檢查點：</strong>在需求、重大取捨、外部影響與不可逆操作前停下來取得決定。</li></ul></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">六項責任各有唯一位置</span></summary><ul class="work-definition-list"><li><strong>工作與脈絡：</strong>GitHub Issue／PR 記錄範圍、進度與證據；核准的 spec／ADR 保存長期決策，跨 session、高風險或難復原工作才增加 plan，不保存聊天逐字稿。</li><li><strong>AI 規範：</strong>根目錄 <code>AGENTS.md</code> 是唯一來源；<code>CLAUDE.md</code> 只做薄匯入，子目錄只有規則真的不同時才覆寫。</li><li><strong>修改隔離：</strong>每項可寫工作各用 branch／worktree，只平行處理互不依賴的範圍；唯讀工作不必另開 worktree。</li><li><strong>驗證證據：</strong>執行最小且相關的本機程式；Action 只負責事件、權限與呼叫同一程式，不複製邏輯。</li><li><strong>決策與授權：</strong>人負責需求、重大取捨、外部影響與不可逆操作；審查、合併資格與例外由 Journey 07 單獨定義。</li><li><strong>模板建立與更新：</strong>Copier 負責產生與更新共用基線；既有 repo 的更新契約由 Journey 08 定義。</li></ul></details>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>人類入口與 AI 工作契約：</strong><code>README.md</code> 說明 worktree 與 CI/CD 邊界；<code>AGENTS.md</code>＋<code>CLAUDE.md</code> 規範每項任務的隔離與安全清理</li><li><strong>實際驗證：</strong>生成 repo 與其 CI 執行 <code>scripts/verify</code>；只有中央模板 repo 執行、不下發的 <code>scripts/verify-template.sh</code> 負責建立／導入／更新 fixture</li><li><strong>唯讀權限、人類核准與指定審查者：</strong><code>policies/actions.json</code>＋<code>policies/rulesets.json</code>＋<code>CODEOWNERS</code></li></ul></aside>
+      <aside class="config-guidance" data-config-direct="true"><strong>模板功能與客製化</strong><ul><li><strong>人與 AI 各看哪份文件：</strong><code>README.md</code> 給人，<code>AGENTS.md</code> 給所有 agent；<code>CLAUDE.md</code> 只匯入同一份規範。</li><li><strong>只產生 profile 真能執行的指令：</strong><code>template/AGENTS.md.jinja</code> 與 <code>copier.yml</code> 依語言產生內容，<code>scripts/verify-template.sh</code> 驗證結果。</li><li><strong>平行可寫工作用 branch／worktree 隔離：</strong><code>AGENTS.md</code> 定義做法；<code>scripts/cleanup-worktrees</code> 與 <code>scripts/test-worktree-cleanup</code> 負責安全清理。</li><li><strong>規範、驗證與治理分開：</strong><code>AGENTS.md</code> 說明做法，<code>scripts/verify</code> 提供證據，<code>.github/workflows/</code> 只包裝執行，<code>policies/</code> 保存治理設定；此責任分界已由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388" target="_blank" rel="noreferrer">#388</a>／PR #389 實作。</li></ul></aside>
+      <p class="method-reference reference">具體工具、功能名稱與資料來源統一整理於<a href="#similar-tools">相似工具</a>；Journey 02 的本機檢查與 Action 現況見<a href="#testing">CI/CD 設定</a>。</p>
 </div>
 
 
 <div class="markdown-body basic-summary"><ul>
-<li>Agent 先讀工作單、repo 與 <code>AGENTS.md</code>，再提出做法、修改並驗證。</li>
-<li>每項可寫任務使用自己的 branch 與 Git worktree；只平行處理互不依賴的範圍。</li>
-<li>固定格式、型別與測試判定交給 Ruff、Biome、mypy、pytest、Vitest 與 CI。</li>
+<li><strong>工作與脈絡：</strong> GitHub Issue／PR 記錄工作；核准的 spec／ADR 保存長期決策，必要時才加 plan。</li>
+<li><strong>AI 規範：</strong> 根目錄 <code>AGENTS.md</code>；<code>CLAUDE.md</code> 只薄匯入。</li>
+<li><strong>修改隔離：</strong> 每項可寫工作各用 branch／worktree；唯讀工作不用。</li>
+<li><strong>驗證證據：</strong> 本機程式是唯一邏輯；Action 只呼叫它。</li>
+<li><strong>決策與授權：</strong> 人保留重大決策；審查與合併規則只由 Journey 07 定義。</li>
+<li><strong>模板建立與更新：</strong> Copier 負責共用基線；既有 repo 更新由 Journey 08 定義。</li>
 </ul>
-<details class="package-disclosure" data-content-key="agents-standard">
-  <summary><span class="tech-name">標準 AGENTS.md＋就近覆寫</span></summary>
-  <div class="package-health"><a href="https://github.com/agentsmd/agents.md">AGENTS.md</a> 是一般 Markdown。Codex 由 repo 根目錄往工作目錄合併指令，距離目前檔案越近的規則優先；只有子目錄真的需要不同命令或安全規則時才加就近覆寫。</div>
-</details>
-<aside class="technical-detail" data-content-key="agents-control">
-  <h3>真正的控制點與人類責任</h3>
-  <p>AGENTS.md 說明工作方式；GitHub 權限、Ruleset、CODEOWNERS 與 required checks 才是強制控制。人類仍負責確認需求與技術方向、判斷風險、審查差異與核准合併。</p>
-<p><code>scripts/cleanup-worktrees</code> 只回收 GitHub 已驗證合併且乾淨的 worktree。Actions 額度 fallback 也不能由 agent 推測：只有帳務可見的維護者確認 included minutes 已耗盡，才能對精確 PR SHA 留下完整本機驗證聲明並取得一次性授權。</p>
-</aside>
-</div>
+<p>具體工具見<a href="/#similar-tools">相似工具</a>，執行方式見 <a href="/#testing">CI/CD 設定</a>。</p></div>
 
 
 </section>
@@ -2839,7 +2841,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item active priority" aria-current="step">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -2960,7 +2962,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -3083,7 +3085,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -3223,7 +3225,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -3351,7 +3353,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -3481,7 +3483,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -3578,7 +3580,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -3673,7 +3675,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -3785,7 +3787,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -3938,7 +3940,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -4109,7 +4111,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -4156,12 +4158,14 @@ html[data-detail-level="simple"] .detail-panel {
 <div class="similar-tools-tabs" role="tablist" aria-label="相似工具｜整體競品與局部參考" data-audience="maintainer">
   <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>整體接近</small>主要相似工具</button>
   <button id="similar-tools-tab-work" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>工作定義</button>
-  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="2"><small>Journey 08</small>模板升級</button>
+  <button id="similar-tools-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI 規範</button>
+  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="3"><small>Journey 08</small>模板升級</button>
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
   <div class="similar-tools-legend">
-    <span class="competitor">整體目的相近｜完整與部分符合的旅程合計至少 4 個</span>
+    <span class="competitor">整體目的相近｜至少涵蓋 5 個 Journey，且近 6 個月有發版</span>
     <span class="coverage-key"><i class="coverage-tag full">完全符合</i>　<i class="coverage-tag partial">部分符合</i></span>
+    <span class="capture-date">Stars 擷取日｜2026-08-28</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="主要相似工具">
     <table class="similar-tools-matrix similar-tools-primary-matrix">
@@ -4169,7 +4173,7 @@ html[data-detail-level="simple"] .detail-panel {
         <tr>
           <th scope="col">套件名稱</th>
           <th scope="col">比較版本<br>（發行日）</th>
-          <th scope="col">GitHub Stars<br>（擷取日）</th>
+          <th scope="col">GitHub Stars</th>
           <th scope="col">自我定位</th>
           <th scope="col">與本套件的差異</th>
           <th scope="col">涵蓋旅程</th>
@@ -4177,75 +4181,30 @@ html[data-detail-level="simple"] .detail-panel {
       </thead>
       <tbody>
         <tr>
-          <th scope="row"><a href="https://github.com/hoangnb24/repository-harness" target="_blank" rel="noreferrer">Repository Harness</a></th>
-          <td>harness-v0.1.10<br>(2026-08-13)</td>
-          <td>1,198<br>(2026-08-27)</td>
-          <td>Agent-ready repository framework：把 AI 工作規則、持久計畫、驗證與安全更新放進 repo。</td>
-          <td><ul><li>Repository Harness 偏向替既有 repo 加上 agent 工作框架與安全更新機制。</li><li>CSARC 另外提供可生成的技術 profile、GitHub 治理、交付與版本政策。</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag full" title="08: 完全符合">08</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="04: 部分符合">04</span><span class="coverage-tag partial" title="07: 部分符合">07</span><span class="coverage-tag partial" title="10: 部分符合">10</span>
-          </div></td>
-        </tr>
-        <tr>
           <th scope="row"><a href="https://github.com/projen/projen" target="_blank" rel="noreferrer">projen</a></th>
           <td>v0.103.5<br>(2026-08-26)</td>
-          <td>2,948<br>(2026-08-27)</td>
+          <td>2,948</td>
           <td>Project generator：用一般程式語言宣告專案，持續 synth 出受管設定與工作流程。</td>
           <td><ul><li>projen 把 .projenrc 當唯一來源，大量生成檔不允許直接修改。</li><li>CSARC 用 Copier 發布可更新基線，並保留產品檔案與政策檔案的責任邊界。</li></ul></td>
           <td><div class="coverage-tags"><span class="coverage-tag full" title="03: 完全符合">03</span><span class="coverage-tag full" title="06: 完全符合">06</span><span class="coverage-tag full" title="08: 完全符合">08</span><span class="coverage-tag partial" title="01: 部分符合">01</span><span class="coverage-tag partial" title="04: 部分符合">04</span><span class="coverage-tag partial" title="05: 部分符合">05</span><span class="coverage-tag partial" title="07: 部分符合">07</span><span class="coverage-tag partial" title="10: 部分符合">10</span>
           </div></td>
         </tr>
         <tr>
-          <th scope="row"><a href="https://github.com/backstage/backstage" target="_blank" rel="noreferrer">Backstage</a></th>
-          <td>v1.54.5<br>(2026-08-25)</td>
-          <td>34,270<br>(2026-08-27)</td>
-          <td>Developer portal framework：以 Software Catalog、Software Templates 與 TechDocs 統一軟體生態系入口。</td>
-          <td><ul><li>Backstage 是需要持續維運的中央 portal，強項是服務探索、owner 與 scaffolding。</li><li>CSARC 是可攜的 repo-local 公版，直接把治理、驗證與交付基線放進每個 repo。</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="09: 完全符合">09</span><span class="coverage-tag full" title="10: 完全符合">10</span><span class="coverage-tag partial" title="07: 部分符合">07</span><span class="coverage-tag partial" title="08: 部分符合">08</span>
-          </div></td>
-        </tr>
-        <tr>
-          <th scope="row"><a href="https://github.com/mindersec/minder" target="_blank" rel="noreferrer">Minder</a></th>
-          <td>v0.3.1<br>(2026-08-10)</td>
-          <td>417<br>(2026-08-27)</td>
-          <td>Software supply chain security platform：集中評估 repository 與 artifact，並依 policy 告警或修正。</td>
-          <td><ul><li>Minder 專注中央安全姿態與持續 policy enforcement，需要常駐服務。</li><li>CSARC 涵蓋完整 repo 開發生命週期，目前以可攜政策與本機驗證為基線。</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="05: 完全符合">05</span><span class="coverage-tag full" title="07: 完全符合">07</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="10: 部分符合">10</span>
-          </div></td>
-        </tr>
-        <tr>
-          <th scope="row"><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a></th>
-          <td>v1.0.1<br>(2026-08-21)</td>
-          <td>131,843<br>(2026-08-27)</td>
-          <td>Spec-driven development toolkit：讓任何 AI coding agent 依 spec、plan 與 tasks 交付軟體。</td>
-          <td><ul><li>Spec Kit 集中在需求澄清、規格拆解與 agent 實作流程。</li><li>CSARC 另外涵蓋 repo profile、治理、供應鏈、版本交付與模板更新。</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="04: 部分符合">04</span>
-          </div></td>
-        </tr>
-        <tr>
-          <th scope="row"><a href="https://github.com/Fission-AI/OpenSpec" target="_blank" rel="noreferrer">OpenSpec</a></th>
-          <td>v1.11.0<br>(2026-08-26)</td>
-          <td>66,427<br>(2026-08-27)</td>
-          <td>Spec framework：用 current specs 與 change proposals 管理 AI 輔助開發中的需求變更。</td>
-          <td><ul><li>OpenSpec 專注規格從 propose、apply 到 archive 的生命週期。</li><li>CSARC 把同類工作邊界接到 Issue、PR、治理、交付與可更新 repo 公版。</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="04: 部分符合">04</span>
-          </div></td>
-        </tr>
-        <tr>
-          <th scope="row"><a href="https://github.com/bmad-code-org/BMAD-METHOD" target="_blank" rel="noreferrer">BMAD</a></th>
-          <td>v6.11.0<br>(2026-08-10)</td>
-          <td>52,377<br>(2026-08-27)</td>
-          <td>AI-driven agile delivery method：以多角色工作流程與依複雜度調整的規劃推進產品。</td>
-          <td><ul><li>BMAD 提供完整方法、agent 角色與分級規劃流程。</li><li>CSARC 不綁 agent persona，重點是可執行、可更新的 repository 基線。</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="04: 部分符合">04</span>
+          <th scope="row"><a href="https://github.com/hoangnb24/repository-harness" target="_blank" rel="noreferrer">Repository Harness</a></th>
+          <td>harness-v0.1.10<br>(2026-08-13)</td>
+          <td>1,199</td>
+          <td>Agent-ready repository framework：把 AI 工作規則、持久計畫、驗證與安全更新放進 repo。</td>
+          <td><ul><li>Repository Harness 偏向替既有 repo 加上 agent 工作框架與安全更新機制。</li><li>CSARC 另外提供可生成的技術 profile、GitHub 治理、交付與版本政策。</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag full" title="08: 完全符合">08</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="04: 部分符合">04</span><span class="coverage-tag partial" title="07: 部分符合">07</span><span class="coverage-tag partial" title="10: 部分符合">10</span>
           </div></td>
         </tr>
       </tbody>
     </table>
   </div>
-  <p class="similar-tools-note"><strong>判斷標準：</strong>完整與部分 tag 合計達 4 個以上，即列為主要相似工具；兩種符合程度不加權，未涵蓋的旅程不顯示。</p>
+  <p class="similar-tools-note"><strong>判斷標準：</strong>所有工具都須在擷取日前 6 個月內有發版；主要工具至少涵蓋 5 個 Journey，依完全、部分符合數量排序；其他工具至少 1,000 Stars。Journey tag 依 01–10 排列。</p>
 </div>
 <div id="similar-tools-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-work" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">只比較不同 repo 如何保存工作依據、把定義轉成 repo 狀態、讓變更成為正式，以及依工作規模決定文件深度</span></div>
+  <div class="similar-tools-legend"><span class="reference">只比較不同 repo 如何保存工作依據、把定義轉成 repo 狀態、讓變更成為正式，以及依工作規模決定文件深度</span><span class="capture-date">Stars 擷取日｜2026-08-28</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="工作定義">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">功能分野／具體做法</th><th scope="col">主要相似工具</th><th scope="col">其他生態圈工具</th></tr></thead>
@@ -4253,50 +4212,113 @@ html[data-detail-level="simple"] .detail-panel {
         <tr>
           <th scope="row"><strong>工作依據放在哪裡</strong><span>比較需求、決策、設定與驗證證據存在哪裡，以及哪一份資料算正式。<br><br><b>CSARC：</b>GitHub Issue 劃定執行範圍；main 上核准的 spec／ADR 保存長期契約，程式與測試證明實作，未提交內容不算正式。</span></th>
           <td><ul>
-              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：repo 同時保存產品文件、決策、plan、程式與驗證證據。</span></li>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">.projenrc project model</a>：.projenrc 是唯一手寫真相，其他專案檔由 synth 產生。</span></li>
-              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entity 保存服務、owner 與關係的中央真相。</span></li>
-              <li><strong>Spec Kit</strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：spec、plan、tasks 與 constitution 在 repo 形成 feature 脈絡。</span></li>
-              <li><strong>OpenSpec</strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Specs / Changes</a>：specs 保存 current truth，changes 保存尚未接受的 delta。</span></li>
-              <li><strong>BMAD</strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：brief、spec、architecture 依複雜度累積成持久工作脈絡。</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：repo 同時保存產品文件、決策、plan、程式與驗證證據。</span></li>
           </ul></td>
           <td><ul>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.5 (2026-08-25)</span><span>★ 34,273</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entity 保存服務、owner 與關係的中央真相。</span></li>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：brief、spec、architecture 依複雜度累積成持久工作脈絡。</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Specs / Changes</a>：specs 保存 current truth，changes 保存尚未接受的 delta。</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：spec、plan、tasks 與 constitution 在 repo 形成 feature 脈絡。</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Plans and task records</a>：把已確認的設計與實作計畫寫進 repo，再依計畫逐項執行。</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,560</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Git-native backlog</a>：任務、狀態與決策以 Markdown 留在 Git history。</span></li>
           </ul></td>
         </tr>
         <tr>
           <th scope="row"><strong>定義如何變成 repo 狀態</strong><span>比較人直接改檔、由設定產生檔案，或由服務持續修正遠端狀態。<br><br><b>CSARC：</b>copier.yml、template/ 與 profiles/catalog.yaml 宣告生成基線；scripts/sync-paired-files.sh 同步 root／template 配對檔，產品檔仍由下游 repo 持有。</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：用 typed components 宣告期望專案，再由 synth 收斂檔案。</span></li>
-              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entity 與 Software Template 宣告 portal 中的元件和建立流程。</span></li>
-              <li><strong>Minder</strong><span class="tool-comparison-detail"><a href="https://github.com/mindersec/minder/blob/main/docs/docs/understand/profiles.md" target="_blank" rel="noreferrer">Profiles</a>：Profile 宣告安全期望，服務持續評估並可自動修正。</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Copier <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,545（2026-08-27）</span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。</span></li>
-              <li><strong>OpenRewrite <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,679（2026-08-27）</span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：Recipe 宣告 semantic transformation，再由 parser／visitor 套用。</span></li>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.5 (2026-08-25)</span><span>★ 34,273</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entity 與 Software Template 宣告 portal 中的元件和建立流程。</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,546</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。</span></li>
+              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.0 (2026-08-26)</span><span>★ 3,681</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：Recipe 宣告 semantic transformation，再由 parser／visitor 套用。</span></li>
           </ul></td>
         </tr>
         <tr>
           <th scope="row"><strong>進行中變更如何成為正式</strong><span>比較 branch、change 或設定 PR 在何時完成審查、合併與歸檔。<br><br><b>CSARC：</b>每項工作先有 Issue；type/&lt;issue&gt;-slug 分支的 PR 以 Closes #&lt;issue&gt; 連回範圍，合併 main 後才成為正式，新增範圍另開 Issue。</span></th>
           <td><ul>
-              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active / completed plans</a>：跨 session 工作先進 active plan，完成後才歸檔。</span></li>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Anti-tamper build</a>：PR 同時修改 .projenrc 與重建結果，合併後才成為正式狀態。</span></li>
-              <li><strong>Spec Kit</strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature workflow</a>：artifacts 在 feature branch 演進，最後仍交給 Git／PR 接受。</span></li>
-              <li><strong>OpenSpec</strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Change workflow</a>：propose → apply → archive 後，才把內容併回正式規格。</span></li>
-              <li><strong>BMAD</strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">BMad Delivery Loop</a>：artifacts 在 clarify → plan → build／verify 之間逐步成熟。</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active / completed plans</a>：跨 session 工作先進 active plan，完成後才歸檔。</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Copier <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,545（2026-08-27）</span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Update diff</a>：更新先產生 Git diff，解衝突並合併後才接受。</span></li>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">BMad Delivery Loop</a>：artifacts 在 clarify → plan → build／verify 之間逐步成熟。</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Change workflow</a>：propose → apply → archive 後，才把內容併回正式規格。</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature workflow</a>：artifacts 在 feature branch 演進，最後仍交給 Git／PR 接受。</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Finishing a development branch</a>：完成驗證後，明確選擇 PR、合併、保留或捨棄分支。</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,546</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Update diff</a>：更新先產生 Git diff，解衝突並合併後才接受。</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,560</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task workflow</a>：任務檔隨分支與 PR 變更，合併後成為團隊共享狀態。</span></li>
           </ul></td>
         </tr>
         <tr>
           <th scope="row"><strong>小改與大型工作如何分流</strong><span>比較何時可以直接修改，何時必須增加 spec、plan、tasks 或架構文件。<br><br><b>CSARC：</b>小型 bounded change 只用 Issue 與針對性驗證；跨 session、高風險或長期契約才增加 spec、ADR 或 plan。</span></th>
           <td><ul>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Durable-plan threshold</a>：小 typo 不建 plan；高風險或長工作才增加持久文件。</span></li>
-              <li><strong>Spec Kit</strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md" target="_blank" rel="noreferrer">Agentic bugfix workflow</a>：完整流程最適合大型 feature，小修可走較短路徑。</span></li>
-              <li><strong>OpenSpec</strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Change proposal</a>：小修改可直接走 PR，大變更才建立完整 proposal。</span></li>
-              <li><strong>BMAD</strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Quick Flow / BMad Method</a>：Quick Flow 處理小改，複雜產品才加完整 planning 與 architecture。</span></li>
           </ul></td>
           <td><ul>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Quick Flow / BMad Method</a>：Quick Flow 處理小改，複雜產品才加完整 planning 與 architecture。</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Change proposal</a>：小修改可直接走 PR，大變更才建立完整 proposal。</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md" target="_blank" rel="noreferrer">Agentic bugfix workflow</a>：完整流程最適合大型 feature，小修可走較短路徑。</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Skill-triggered workflow</a>：依任務需要啟用 brainstorming、planning、TDD 或 review，不把每個步驟硬套到所有工作。</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,560</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task hierarchy</a>：以狀態、優先度與父子工作管理大小不同的任務。</span></li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div id="similar-tools-panel-agents" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-agents" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">只比較 repo 如何提供 agent 指令、保存跨時段脈絡、隔離平行修改，以及保留人的決策邊界</span><span class="capture-date">Stars 擷取日｜2026-08-28</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="AI 規範">
+    <table class="similar-tools-matrix similar-tools-philosophy-matrix">
+      <thead><tr><th scope="col">功能分野／具體做法</th><th scope="col">主要相似工具</th><th scope="col">其他生態圈工具</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>Agent 從哪裡讀規範</strong><span>比較規則使用單一 repo 檔案、依工具轉換，或由外部框架注入。<br><br><b>CSARC：</b>根目錄 AGENTS.md 是唯一來源；CLAUDE.md 只薄匯入，子目錄只有規則真的不同時才覆寫。</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository instructions</a>：把 agent 的固定工作規則與驗證命令保存在 repo 內。</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Agent roles</a>：以產品、架構、開發與 QA 等角色提示，為每個階段提供專門指令。</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/getting-started.md" target="_blank" rel="noreferrer">Project instructions</a>：repo 內的 OpenSpec 結構與命令讓不同 agent 依同一 change lifecycle 工作。</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/commands/constitution.md" target="_blank" rel="noreferrer">Constitution</a>：constitution 保存跨功能都要遵守的原則，agent 產生後續 artifacts 時會引用。</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Composable skills</a>：以可組合技能提供 agent 可重複執行的工作方法。</span></li>
+              <li><strong>Ruler<span class="tool-meta"><span>v0.3.44 (2026-06-30)</span><span>★ 2,898</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/intellectronica/ruler" target="_blank" rel="noreferrer">Centralized rule distribution</a>：集中維護規則，再輸出到各 agent 專用設定檔。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>跨時段脈絡如何保存</strong><span>比較 Issue、spec、plan 或任務檔如何保留已確認的決策與未完成工作。<br><br><b>CSARC：</b>Issue／PR 記進度，核准的 spec／ADR 記長期決策；只有跨 session、高風險或難復原工作才增加 plan。</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Durable plans</a>：跨 session、有依賴或高風險工作使用 active plan，完成後歸檔。</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：brief、PRD、UX、architecture 與 stories 讓多角色 agent 跨階段接力。</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">changes/ artifacts</a>：proposal、design、tasks 與規格差異保存在 changes/，完成後再歸檔。</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md / plan.md / tasks.md</a>：把需求、技術計畫與工作拆解保存成可跨 session 接力的檔案。</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Writing plans</a>：將設計、步驟、檔案與驗證寫成計畫，讓後續 session 可接續。</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,560</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Markdown task records</a>：agent 可直接讀寫版本化任務檔，在 session 之間保留脈絡。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>平行修改如何隔離</strong><span>比較共用目錄、分支／worktree 與 agent 調度器如何避免修改互撞。<br><br><b>CSARC：</b>每項可寫工作各用 branch／worktree，只平行處理互不依賴的範圍；唯讀工作不必建立新 worktree。</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Isolated work</a>：以獨立分支與工作目錄避免多項修改互相覆蓋。</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature branches</a>：每個 feature 在自己的分支與規格目錄演進，降低平行修改碰撞。</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Git worktrees</a>：使用 Git worktree 建立隔離工作區，再把獨立任務交給不同 agent。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>何時必須由人決定</strong><span>比較需求取捨、外部影響、不可逆操作與合併授權由誰負責。<br><br><b>CSARC：</b>人負責需求、重大取捨、外部影響與不可逆操作；Journey 07 單獨定義審查、合併資格與例外。</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Human checkpoints</a>：風險、方向與不可逆步驟在計畫中留下明確的人類檢查點。</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Workflow checkpoints</a>：依工作規模在 discovery、規劃與交付階段加入人類確認點。</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Proposal review</a>：change proposal 先由人審查意圖與差異，接受後才 apply 與 archive。</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/commands/clarify.md" target="_blank" rel="noreferrer">Clarify and analyze</a>：在規格不明或跨 artifact 不一致時先澄清，再交給 agent 產生計畫。</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Brainstorming approval</a>：先逐段確認設計，再開始撰寫計畫與實作。</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -4304,7 +4326,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
 </div>
 <div id="similar-tools-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-template-upgrade" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">只比較既有 repo 如何接收新版模板、規則或 recipe，以及衝突由誰處理</span></div>
+  <div class="similar-tools-legend"><span class="reference">只比較既有 repo 如何接收新版模板、規則或 recipe，以及衝突由誰處理</span><span class="capture-date">Stars 擷取日｜2026-08-28</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="模板升級">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">功能分野／具體做法</th><th scope="col">主要相似工具</th><th scope="col">其他生態圈工具</th></tr></thead>
@@ -4312,13 +4334,13 @@ html[data-detail-level="simple"] .detail-panel {
         <tr>
           <th scope="row"><strong>既有 repo 如何接收新版</strong><span>比較新版模板、規則或 recipe 如何進入既有 repo，以及衝突由誰處理。<br><br><b>CSARC：</b>Copier answers 記錄來源與版本；既有案執行更新後以 PR 審查 diff／衝突，並驗證產品路徑未被覆寫。</span></th>
           <td><ul>
-              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：updater 保留 upstream base，用三方合併安全更新既有 repo。</span></li>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen upgrade &#43; synth</a>：升級 library 後重建；受管檔的手改會被 anti-tamper 攔下。</span></li>
-              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：擅長建立新元件；既有 repo 遷移仍要另接工具。</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：updater 保留 upstream base，用三方合併安全更新既有 repo。</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Copier <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,545（2026-08-27）</span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：記住模板來源與 answers，讓既有 repo 接收新版模板。</span></li>
-              <li><strong>OpenRewrite <span class="tool-stars" title="GitHub Stars（擷取日）">★ 3,679（2026-08-27）</span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：不用文字模板覆蓋檔案，而是直接執行跨版本語意遷移。</span></li>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.5 (2026-08-25)</span><span>★ 34,273</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：擅長建立新元件；既有 repo 遷移仍要另接工具。</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,546</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：記住模板來源與 answers，讓既有 repo 接收新版模板。</span></li>
+              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.0 (2026-08-26)</span><span>★ 3,681</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：不用文字模板覆蓋檔案，而是直接執行跨版本語意遷移。</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -4330,7 +4352,7 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
-<section class="slide markdown-slide similar-tools-slide testing-slide" id="testing" data-content-key="testing" data-audience="maintainer" data-parity="supplemental" aria-label="測試｜Journey 01 工作定義">
+<section class="slide markdown-slide similar-tools-slide testing-slide" id="testing" data-content-key="testing" data-audience="maintainer" data-parity="supplemental" aria-label="CI/CD 設定｜依 Journey 檢查">
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
@@ -4350,7 +4372,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -4388,19 +4410,19 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header class="basic-header">
-    <span class="selection-sequence">維運附錄｜測試</span>
-    <h2>測試｜Journey 01 工作定義</h2>
-    <p class="subtitle">所有 repo 只驗證自己的工作定義；repo-template 只在 promotion 多驗證一次交付結果。</p>
+    <span class="selection-sequence">維運附錄｜CI/CD 設定</span>
+    <h2>CI/CD 設定｜依 Journey 檢查</h2>
+    <p class="subtitle">分開列出一般 repo 與 repo-template 在 Issue PR → dev、dev → main 各自需要的測試與自動化。</p>
   </header>
 
 <div class="legacy-content similar-tools-content testing-content">
-  <div class="similar-tools-tabs" role="tablist" aria-label="測試">
+  <div class="similar-tools-tabs" role="tablist" aria-label="CI/CD 設定">
     <button id="testing-tab-work" type="button" role="tab" aria-selected="true" aria-controls="testing-panel-work" data-similar-tools-tab="0"><small>Journey 01</small>工作定義</button>
+    <button id="testing-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-agents" data-similar-tools-tab="1"><small>Journey 02</small>AI 規範</button>
   </div>
   <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel>
   <div class="similar-tools-testing-intro">
     <strong>Journey 01／最小測試契約</strong><span>一般 repo 只需要 ./scripts/verify；repo-template 只在 promotion 額外驗證一次交付出去的版本。</span>
-    <p><b>目前狀態：</b>Journey 01 的四條 GitHub Actions 已由 #386 恢復並啟用；GitHub 目前因帳務限制拒絕啟動 runner。#382 將本機與 Action 共用的驗證邏輯收斂為單一入口。</p>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01／最小測試契約">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
@@ -4466,6 +4488,41 @@ html[data-detail-level="simple"] .detail-panel {
     </table>
   </div>
   </div>
+  <div id="testing-panel-agents" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-agents" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 02／最小驗證契約</strong><span>一般 repo 驗證 AI 規範入口與 worktree 清理；repo-template 只在 promotion 檢查產出的規範。</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 02／最小驗證契約">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>AI 規範入口</strong><span>所有 agent 讀同一份根規範，生成內容只列該 profile 真能執行的命令。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>發版（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR → dev</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>平行工作隔離與安全清理</strong><span>可寫工作各自使用 branch／worktree，清理時不刪除未合併或有修改的目錄。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR → dev</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
 </div>
 
 
@@ -4491,7 +4548,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -4605,7 +4662,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -4663,7 +4720,7 @@ html[data-detail-level="simple"] .detail-panel {
           <tr><td>語言與程式品質</td><td>共用治理支援四種 profile；Python 採 src layout、Ruff 80 字元與 <a href="https://google.github.io/styleguide/pyguide.html" target="_blank" rel="noreferrer">Google Python Style</a>、strict mypy；TypeScript 採 Node 24、pnpm 11、Biome、Vitest。</td></tr>
           <tr><td>CI、版本與交付</td><td>本機與 CI 共用 <code>scripts/verify</code>，PR policy 回歸案例證明錯誤 route 會被拒絕；日常 fast、promotion full，release-please 只在已驗證的批次邊界維護單一 SemVer。</td></tr>
           <tr><td>依賴與供應鏈</td><td>三天等待觀察未知惡意新版；OSV 查已公開漏洞；hash 驗內容一致；SBOM 列出成品套件；resolver 另證明版本上下界可安裝，五者互不取代。</td></tr>
-          <tr><td>AI、文件與未來能力</td><td><code>AGENTS.md</code> 是 AI 契約，README 與 repo 網站服務人類；Hugo／託管登入、部署、監控、RAG、Go／Rust 都要有 owner、使用情境與驗證後才導入。</td></tr>
+          <tr><td>AI、文件與未來能力</td><td><code>AGENTS.md</code> 是 AI 規範，README 與 repo 網站服務人類；Hugo／託管登入、部署、監控、RAG、Go／Rust 都要有 owner、使用情境與驗證後才導入。</td></tr>
           <tr><td>驗證與測試資源</td><td>「已完成」必須有檔案與測試；驗證只用本機暫存專案或本 repo 的 Issue、分支、PR、Actions，禁止為測試另開 GitHub repo。</td></tr>
         </tbody>
       </table>
@@ -4742,7 +4799,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -4894,7 +4951,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -5036,7 +5093,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -5150,7 +5207,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -5270,7 +5327,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -5359,7 +5416,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -5440,7 +5497,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -5521,7 +5578,7 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
     <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 契約</span></a>
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
     <li class="journey-item">
       <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
@@ -5723,28 +5780,21 @@ html[data-detail-level="simple"] .detail-panel {
     Object.assign(configExamples, {
       agents: [
         {
-          title: 'README 回答八個接手問題；AGENTS 只留下六類工作規則',
-          goal: '人先知道專案如何使用、驗證與求助；AI 再讀可執行的工作界線，兩份文件不互相複製。',
-          summary: 'README 必須保留概述、快速開始、技術、驗證、設定、維運、支援與公版更新；AGENTS 只寫 AI 執行規則。',
-          file: 'README.md＋AGENTS.md',
+          title: '人與 AI 各看一個清楚入口',
+          goal: 'README 服務人；根目錄 AGENTS.md 是 AI 規範唯一來源，CLAUDE.md 只薄匯入。',
+          summary: '子目錄只有命令或安全界線真的不同時才增加 AGENTS.md，避免多份規範漂移。',
+          file: 'README.md＋AGENTS.md＋CLAUDE.md',
           code: `# README.md
-## 專案概述
-## 快速開始
-## 技術與目錄
-## 開發與驗證
-## 設定與密鑰
-## 發布與維運
-## 負責人與支援
-## 公版更新
+## Quick start
+## Verification
+## Support
 
 # AGENTS.md
-
 ## Scope and sources of truth
 ## Working loop
 ## Commands
 ## Editing boundaries
-## Safety
-## Code Review Rules`
+## Safety`
         },
         {
           title: '依專案語言只產生真的可執行的指令',
@@ -5760,22 +5810,25 @@ html[data-detail-level="simple"] .detail-panel {
 - Required final check: ./scripts/verify`
         },
         {
-          title: 'AI 能執行工作，但不能自行合併',
-          goal: 'AGENTS.md 說明工作方式；GitHub 權限與 Ruleset 才是不能繞過的控制點。',
-          summary: 'Actions 預設唯讀；repository toggle 允許 release workflow 建立 PR，但只有該 job 取得 pull-requests: write。Ruleset 仍要求至少一位人員與 CODEOWNER 審查。',
-          file: 'policies/actions.json＋policies/rulesets.json＋CODEOWNERS',
-          code: `policies/actions.json
-{
-  "default_workflow_permissions": "read",
-  "can_approve_pull_request_reviews": true
-}
+          title: '平行可寫工作各自隔離',
+          goal: '一項可寫工作對應一個 branch 與 worktree，只平行處理互不依賴的範圍。',
+          summary: '唯讀工作不需另開 worktree；清理程式只回收已合併且乾淨的目錄。',
+          file: 'AGENTS.md＋scripts/cleanup-worktrees＋scripts/test-worktree-cleanup',
+          code: `git worktree add ../task-388 -b feat/388-align-ai-guidelines
+./scripts/test-worktree-cleanup
+./scripts/cleanup-worktrees`
+        },
+        {
+          title: 'AI 規範、驗證與治理各有唯一責任',
+          goal: 'AGENTS.md 說明怎麼做；scripts 提供證據；Action 只包裝執行；07 單獨定義合併資格、權限與例外。',
+          summary: '人保留需求、重大取捨、外部影響與不可逆操作；本頁不重複定義合併權限。',
+          file: 'AGENTS.md＋scripts/verify＋.github/workflows/＋policies/',
+          code: `# Local and Action use the same logic
+./scripts/verify
 
-policies/rulesets.json
-{
-  "required_approving_review_count": 1,
-  "require_code_owner_review": true,
-  "required_review_thread_resolution": true
-}`
+# Governance and merge eligibility live in Journey 07
+policies/actions.json
+policies/rulesets.json`
         }
       ],
       governance: [

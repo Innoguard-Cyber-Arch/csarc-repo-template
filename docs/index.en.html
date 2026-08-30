@@ -64,11 +64,15 @@
       width: 1600px;
       height: 900px;
       padding: 3.7% 4.7%;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
       background: var(--paper);
       box-shadow: none;
     }
     .slide.active { display: flex; flex-direction: column; animation: enter .2s ease-out; }
+    .slide.active > :not(.journey-rail),
+    .slide.active > .legacy-content > * { flex-shrink: 0; }
     @keyframes enter { from { opacity: 0; transform: translateX(10px); } }
     .slide::after {
       content: attr(data-page);
@@ -378,6 +382,7 @@
     .similar-tools-legend .competitor { border-color: #b9a700; background: #fffbea; }
     .similar-tools-legend .reference { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
     .similar-tools-legend .coverage-key { border-color: #999; background: var(--soft); }
+    .similar-tools-legend .capture-date { margin-left: auto; border-color: var(--line); background: white; color: var(--muted); }
     .similar-tools-table-wrap { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); background: white; }
     .similar-tools-table-wrap:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
     .similar-tools-matrix { width: 100%; min-height: 100%; table-layout: fixed; border-collapse: collapse; font-size: 14.5px; line-height: 1.22; }
@@ -414,6 +419,7 @@
     .similar-tools-philosophy-matrix td ul { margin: 0; padding-left: 18px; }
     .similar-tools-philosophy-matrix td li + li { margin-top: 4px; }
     .similar-tools-philosophy-matrix .tool-comparison-detail { display: block; margin: 2px 0 0 12px; }
+    .similar-tools-philosophy-matrix .tool-meta { display: inline-flex; flex-wrap: wrap; gap: 2px 8px; margin-left: 6px; color: var(--muted); font-size: 12px; font-weight: 700; }
     .similar-tools-testing-intro { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin-bottom: 7px; padding: 6px 9px; border-left: 6px solid var(--optional); background: var(--optional-soft); font-size: 14px; line-height: 1.2; }
     .similar-tools-testing-intro > span { color: var(--muted); }
     .similar-tools-testing-intro p { grid-column: 1 / -1; margin: 2px 0 0; }
@@ -613,7 +619,7 @@
     }
     .context-line strong { color: var(--ink); }
     .journey-rail {
-      position: absolute;
+      position: fixed;
       left: 2.1%;
       top: 4.5%;
       bottom: 4.8%;
@@ -1668,6 +1674,11 @@
   color: var(--ink);
 }
 
+html[data-detail-level="technical"] .detail-level-control button[aria-pressed="true"] {
+  background: var(--optional);
+  color: white;
+}
+
 .detail-level-control button:focus-visible {
   outline: 3px solid var(--yellow);
   outline-offset: 2px;
@@ -2531,7 +2542,7 @@ html[data-detail-level="simple"] .detail-panel {
 </aside></div>
 </section>
 
-<section class="slide markdown-slide candidate-slide" id="agents" data-content-key="agents" data-track="agents" aria-label="Set the AI working contract before implementation">
+<section class="slide markdown-slide candidate-slide" id="agents" data-content-key="agents" data-track="agents" aria-label="Define AI rules before implementation">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -2590,23 +2601,20 @@ html[data-detail-level="simple"] .detail-panel {
 
   <header>
     <span class="selection-sequence">Step 02</span>
-    <h2>Set the AI working contract before implementation</h2>
-    <p class="subtitle">README serves users; AGENTS.md gives agents executable scope and safety boundaries.</p>
+    <h2>Define AI rules before implementation</h2>
+    <p class="subtitle">An Issue says what this change is; AGENTS.md says how an agent works in the repository.</p>
   </header>
-  <div class="markdown-body"><ul>
-<li>The agent reads the work item, repository, and <code>AGENTS.md</code> before proposing, changing, and verifying code.</li>
-<li>Each writable task gets its own branch and Git worktree; only independent scopes run in parallel.</li>
-<li>Ruff, Biome, mypy, pytest, Vitest, and CI make repeatable formatting, typing, and test decisions.</li>
+  <div class="markdown-body"><p><strong>Baseline.</strong> An Issue bounds the work, <code>AGENTS.md</code> explains how to work, and code plus tests provide evidence. People retain product direction and material-risk decisions.</p>
+<ul>
+<li><strong>Work and context:</strong> GitHub Issues and PRs record scope, progress, and evidence. Approved specs and ADRs retain long-lived decisions; add a plan only for cross-session, high-risk, or hard-to-recover work, and never save chat transcripts.</li>
+<li><strong>AI rules:</strong> the root <code>AGENTS.md</code> is the single source; <code>CLAUDE.md</code> is a thin import, and a child file exists only for a genuine scoped difference.</li>
+<li><strong>Change isolation:</strong> each writable task uses its own branch and worktree. Parallelize only independent scopes; read-only work needs no extra worktree.</li>
+<li><strong>Verification evidence:</strong> run the smallest relevant local program. Actions provide events and permissions and call the same program instead of copying logic.</li>
+<li><strong>Decisions and authorization:</strong> people own requirements, material trade-offs, external impact, and irreversible operations. Journey 07 alone defines review, merge eligibility, and exceptions.</li>
+<li><strong>Template creation and updates:</strong> Copier generates and updates the shared baseline; Journey 08 defines existing-repository updates.</li>
 </ul>
-<details class="package-disclosure" data-content-key="agents-standard">
-  <summary><span class="tech-name">Standard AGENTS.md with local overrides</span></summary>
-  <div class="package-health"><a href="https://github.com/agentsmd/agents.md">AGENTS.md</a> is ordinary Markdown. Codex combines instructions from the repository root toward the working directory, with nearer rules taking precedence. Add a local file only when that subtree genuinely needs different commands or safety rules.</div>
-</details>
-<aside class="technical-detail" data-content-key="agents-control">
-  <h3>Actual controls and human responsibility</h3>
-  <p>AGENTS.md describes the working method. GitHub permissions, Rulesets, CODEOWNERS, and required checks enforce it. Humans still confirm requirements and technical direction, judge risk, review diffs, and authorize merges.</p>
-<p><code>scripts/cleanup-worktrees</code> removes only clean worktrees whose merge GitHub can verify. An Actions quota fallback can never be inferred by an agent: a maintainer with billing visibility must confirm exhausted included minutes before an exact PR SHA receives a full local-verification attestation and one-time authorization.</p>
-</aside>
+<p><code>README.md</code> serves people, <code>AGENTS.md</code> serves every agent, and <code>template/AGENTS.md.jinja</code> plus <code>copier.yml</code> emit only commands the selected profile can run. <code>scripts/cleanup-worktrees</code> and <code>scripts/test-worktree-cleanup</code> handle safe cleanup; <code>scripts/verify</code>, <code>.github/workflows/</code>, and <code>policies/</code> keep rules, evidence, automation, and governance separate. This responsibility split is implemented by <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388">#388</a> / PR #389.</p>
+<p>Concrete tools and sources are in <a href="/en/#similar-tools">Similar tools</a>; Journey 02 local checks and Actions are in <a href="/en/#testing">CI/CD settings</a>.</p>
 </div>
 </section>
 
@@ -3686,12 +3694,14 @@ html[data-detail-level="simple"] .detail-panel {
 <div class="similar-tools-tabs" role="tablist" aria-label="Similar tools | Direct alternatives and focused references" data-audience="maintainer">
   <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>Overall match</small>Primary similar tools</button>
   <button id="similar-tools-tab-work" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>Work definition</button>
-  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="2"><small>Journey 08</small>Template upgrades</button>
+  <button id="similar-tools-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI rules</button>
+  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="3"><small>Journey 08</small>Template upgrades</button>
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
   <div class="similar-tools-legend">
-    <span class="competitor">Similar overall purpose | at least four full or partial journey matches</span>
+    <span class="competitor">Similar overall purpose | covers at least five journeys and released within six months</span>
     <span class="coverage-key"><i class="coverage-tag full">Full match</i>　<i class="coverage-tag partial">Partial match</i></span>
+    <span class="capture-date">Stars captured｜2026-08-28</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Primary similar tools">
     <table class="similar-tools-matrix similar-tools-primary-matrix">
@@ -3699,7 +3709,7 @@ html[data-detail-level="simple"] .detail-panel {
         <tr>
           <th scope="col">Package</th>
           <th scope="col">Compared version<br>(release date)</th>
-          <th scope="col">GitHub Stars<br>(captured)</th>
+          <th scope="col">GitHub Stars</th>
           <th scope="col">Self-positioning</th>
           <th scope="col">Difference from CSARC</th>
           <th scope="col">Journey coverage</th>
@@ -3707,75 +3717,30 @@ html[data-detail-level="simple"] .detail-panel {
       </thead>
       <tbody>
         <tr>
-          <th scope="row"><a href="https://github.com/hoangnb24/repository-harness" target="_blank" rel="noreferrer">Repository Harness</a></th>
-          <td>harness-v0.1.10<br>(2026-08-13)</td>
-          <td>1,198<br>(2026-08-27)</td>
-          <td>An agent-ready repository framework that puts AI working rules, durable plans, verification, and safe updates in the repository.</td>
-          <td><ul><li>Repository Harness primarily adds an agent working framework and safe update mechanism to an existing repository.</li><li>CSARC also supplies generated technology profiles, GitHub governance, delivery, and version policy.</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag full" title="08: Full match">08</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="04: Partial match">04</span><span class="coverage-tag partial" title="07: Partial match">07</span><span class="coverage-tag partial" title="10: Partial match">10</span>
-          </div></td>
-        </tr>
-        <tr>
           <th scope="row"><a href="https://github.com/projen/projen" target="_blank" rel="noreferrer">projen</a></th>
           <td>v0.103.5<br>(2026-08-26)</td>
-          <td>2,948<br>(2026-08-27)</td>
+          <td>2,948</td>
           <td>A project generator that declares a project in a general-purpose language and continuously synthesizes managed configuration and workflows.</td>
           <td><ul><li>projen treats .projenrc as the only source and prevents direct edits to many generated files.</li><li>CSARC distributes an updatable Copier baseline while preserving ownership boundaries for product and policy files.</li></ul></td>
           <td><div class="coverage-tags"><span class="coverage-tag full" title="03: Full match">03</span><span class="coverage-tag full" title="06: Full match">06</span><span class="coverage-tag full" title="08: Full match">08</span><span class="coverage-tag partial" title="01: Partial match">01</span><span class="coverage-tag partial" title="04: Partial match">04</span><span class="coverage-tag partial" title="05: Partial match">05</span><span class="coverage-tag partial" title="07: Partial match">07</span><span class="coverage-tag partial" title="10: Partial match">10</span>
           </div></td>
         </tr>
         <tr>
-          <th scope="row"><a href="https://github.com/backstage/backstage" target="_blank" rel="noreferrer">Backstage</a></th>
-          <td>v1.54.5<br>(2026-08-25)</td>
-          <td>34,270<br>(2026-08-27)</td>
-          <td>A developer portal framework that unifies a software ecosystem through Software Catalog, Software Templates, and TechDocs.</td>
-          <td><ul><li>Backstage is a centrally operated portal focused on service discovery, ownership, and scaffolding.</li><li>CSARC is a portable repository-local baseline that places governance, verification, and delivery in each repository.</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="09: Full match">09</span><span class="coverage-tag full" title="10: Full match">10</span><span class="coverage-tag partial" title="07: Partial match">07</span><span class="coverage-tag partial" title="08: Partial match">08</span>
-          </div></td>
-        </tr>
-        <tr>
-          <th scope="row"><a href="https://github.com/mindersec/minder" target="_blank" rel="noreferrer">Minder</a></th>
-          <td>v0.3.1<br>(2026-08-10)</td>
-          <td>417<br>(2026-08-27)</td>
-          <td>A software supply-chain security platform that centrally evaluates repositories and artifacts and alerts or remediates according to policy.</td>
-          <td><ul><li>Minder focuses on centralized security posture and continuous policy enforcement and requires an operating service.</li><li>CSARC spans the repository development lifecycle and currently uses portable policy plus local verification as its baseline.</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="05: Full match">05</span><span class="coverage-tag full" title="07: Full match">07</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="10: Partial match">10</span>
-          </div></td>
-        </tr>
-        <tr>
-          <th scope="row"><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">Spec Kit</a></th>
-          <td>v1.0.1<br>(2026-08-21)</td>
-          <td>131,843<br>(2026-08-27)</td>
-          <td>A spec-driven development toolkit for delivering software through specs, plans, and tasks with any AI coding agent.</td>
-          <td><ul><li>Spec Kit concentrates on requirement clarification, specification decomposition, and agent implementation workflows.</li><li>CSARC also covers repository profiles, governance, supply chain, version delivery, and template updates.</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="04: Partial match">04</span>
-          </div></td>
-        </tr>
-        <tr>
-          <th scope="row"><a href="https://github.com/Fission-AI/OpenSpec" target="_blank" rel="noreferrer">OpenSpec</a></th>
-          <td>v1.11.0<br>(2026-08-26)</td>
-          <td>66,427<br>(2026-08-27)</td>
-          <td>A specification framework that manages requirement changes in AI-assisted development through current specs and change proposals.</td>
-          <td><ul><li>OpenSpec focuses on the propose, apply, and archive lifecycle of specifications.</li><li>CSARC connects that work boundary to Issues, PRs, governance, delivery, and an updatable repository baseline.</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="04: Partial match">04</span>
-          </div></td>
-        </tr>
-        <tr>
-          <th scope="row"><a href="https://github.com/bmad-code-org/BMAD-METHOD" target="_blank" rel="noreferrer">BMAD</a></th>
-          <td>v6.11.0<br>(2026-08-10)</td>
-          <td>52,377<br>(2026-08-27)</td>
-          <td>An AI-driven agile delivery method that advances products through multi-role workflows and complexity-adjusted planning.</td>
-          <td><ul><li>BMAD provides a complete method, agent roles, and tiered planning workflows.</li><li>CSARC does not prescribe agent personas; it focuses on an executable and updatable repository baseline.</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="04: Partial match">04</span>
+          <th scope="row"><a href="https://github.com/hoangnb24/repository-harness" target="_blank" rel="noreferrer">Repository Harness</a></th>
+          <td>harness-v0.1.10<br>(2026-08-13)</td>
+          <td>1,199</td>
+          <td>An agent-ready repository framework that puts AI working rules, durable plans, verification, and safe updates in the repository.</td>
+          <td><ul><li>Repository Harness primarily adds an agent working framework and safe update mechanism to an existing repository.</li><li>CSARC also supplies generated technology profiles, GitHub governance, delivery, and version policy.</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag full" title="08: Full match">08</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="04: Partial match">04</span><span class="coverage-tag partial" title="07: Partial match">07</span><span class="coverage-tag partial" title="10: Partial match">10</span>
           </div></td>
         </tr>
       </tbody>
     </table>
   </div>
-  <p class="similar-tools-note"><strong>Classification rule: </strong>A tool is primary when its full and partial tags total at least four. The levels are not weighted, and uncovered journeys are omitted.</p>
+  <p class="similar-tools-note"><strong>Classification rule: </strong>All listed tools must have a release within six months. Primary tools cover at least five journeys and sort by full, then partial matches; other tools also need at least 1,000 Stars. Journey tags run from 01 to 10.</p>
 </div>
 <div id="similar-tools-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-work" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares only how repositories preserve the basis for work, turn definitions into repository state, make changes authoritative, and adjust documentation depth to the size of the work.</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares only how repositories preserve the basis for work, turn definitions into repository state, make changes authoritative, and adjust documentation depth to the size of the work.</span><span class="capture-date">Stars captured｜2026-08-28</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Work definition">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
@@ -3783,50 +3748,113 @@ html[data-detail-level="simple"] .detail-panel {
         <tr>
           <th scope="row"><strong>Where the source of truth lives</strong><span>Compares where requirements, decisions, configuration, and verification evidence live, and which record is authoritative.<br><br><b>CSARC: </b>A GitHub Issue bounds the work. Approved specs and ADRs on main preserve durable contracts, while code and tests prove implementation; uncommitted material is not authoritative.</span></th>
           <td><ul>
-              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：The repository keeps product documents, decisions, plans, code, and verification evidence together.</span></li>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">.projenrc project model</a>：.projenrc is the only hand-written source of truth; synth generates the other project files.</span></li>
-              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entities provide a central source of truth for services, owners, and relationships.</span></li>
-              <li><strong>Spec Kit</strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：A spec, plan, tasks, and constitution form the feature context inside the repository.</span></li>
-              <li><strong>OpenSpec</strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Specs / Changes</a>：Specs preserve current truth, while changes hold deltas that have not yet been accepted.</span></li>
-              <li><strong>BMAD</strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：Briefs, specifications, and architecture records accumulate durable context according to complexity.</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：The repository keeps product documents, decisions, plans, code, and verification evidence together.</span></li>
           </ul></td>
           <td><ul>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.5 (2026-08-25)</span><span>★ 34,273</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entities provide a central source of truth for services, owners, and relationships.</span></li>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：Briefs, specifications, and architecture records accumulate durable context according to complexity.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Specs / Changes</a>：Specs preserve current truth, while changes hold deltas that have not yet been accepted.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：A spec, plan, tasks, and constitution form the feature context inside the repository.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Plans and task records</a>：Confirmed designs and implementation plans are written into the repository and then executed step by step.</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,560</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Git-native backlog</a>：Tasks, status, and decisions remain as Markdown in Git history.</span></li>
           </ul></td>
         </tr>
         <tr>
           <th scope="row"><strong>How definitions become repository state</strong><span>Compares direct file edits, generated files, and services that continuously reconcile remote state.<br><br><b>CSARC: </b>copier.yml, template/, and profiles/catalog.yaml define the generated baseline. scripts/sync-paired-files.sh synchronizes paired root/template files, while downstream repositories retain ownership of product files.</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：Typed components declare the desired project and synth reconciles the files.</span></li>
-              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entities and Software Templates declare portal components and creation workflows.</span></li>
-              <li><strong>Minder</strong><span class="tool-comparison-detail"><a href="https://github.com/mindersec/minder/blob/main/docs/docs/understand/profiles.md" target="_blank" rel="noreferrer">Profiles</a>：Profiles declare security expectations; the service continuously evaluates them and can remediate findings.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Copier <span class="tool-stars" title="GitHub Stars (captured)">★ 3,545 (2026-08-27)</span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：Answers and Jinja templates declare generation inputs without continuously controlling remote state.</span></li>
-              <li><strong>OpenRewrite <span class="tool-stars" title="GitHub Stars (captured)">★ 3,679 (2026-08-27)</span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：A Recipe declares a semantic transformation that parsers and visitors apply.</span></li>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.5 (2026-08-25)</span><span>★ 34,273</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entities and Software Templates declare portal components and creation workflows.</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,546</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：Answers and Jinja templates declare generation inputs without continuously controlling remote state.</span></li>
+              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.0 (2026-08-26)</span><span>★ 3,681</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：A Recipe declares a semantic transformation that parsers and visitors apply.</span></li>
           </ul></td>
         </tr>
         <tr>
           <th scope="row"><strong>How proposed work becomes authoritative</strong><span>Compares when a branch, change, or configuration PR is reviewed, merged, and archived.<br><br><b>CSARC: </b>Every change starts with an Issue. A PR from type/&lt;issue&gt;-slug links its scope with Closes #&lt;issue&gt;; it becomes authoritative only after merging to main, and added scope receives another Issue.</span></th>
           <td><ul>
-              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active / completed plans</a>：Work spanning sessions stays in an active plan and is archived only after completion.</span></li>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Anti-tamper build</a>：A PR changes .projenrc together with regenerated output; the state becomes authoritative after merge.</span></li>
-              <li><strong>Spec Kit</strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature workflow</a>：Artifacts evolve on a feature branch and are ultimately accepted through Git and a PR.</span></li>
-              <li><strong>OpenSpec</strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Change workflow</a>：Only after propose, apply, and archive does the content merge into the authoritative specification.</span></li>
-              <li><strong>BMAD</strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">BMad Delivery Loop</a>：Artifacts mature through clarify, plan, build, and verify.</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active / completed plans</a>：Work spanning sessions stays in an active plan and is archived only after completion.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Copier <span class="tool-stars" title="GitHub Stars (captured)">★ 3,545 (2026-08-27)</span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Update diff</a>：An update first produces a Git diff and is accepted only after conflicts are resolved and the change is merged.</span></li>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">BMad Delivery Loop</a>：Artifacts mature through clarify, plan, build, and verify.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Change workflow</a>：Only after propose, apply, and archive does the content merge into the authoritative specification.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature workflow</a>：Artifacts evolve on a feature branch and are ultimately accepted through Git and a PR.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Finishing a development branch</a>：After verification, the workflow explicitly chooses a PR, merge, retained branch, or discarded work.</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,546</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Update diff</a>：An update first produces a Git diff and is accepted only after conflicts are resolved and the change is merged.</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,560</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task workflow</a>：Task files change with branches and PRs and become shared state after merge.</span></li>
           </ul></td>
         </tr>
         <tr>
           <th scope="row"><strong>How small and large changes diverge</strong><span>Compares when a direct edit is sufficient and when a spec, plan, tasks, or architecture record is required.<br><br><b>CSARC: </b>A small bounded change uses an Issue and focused verification. Work spanning sessions, carrying high risk, or defining a durable contract adds a spec, ADR, or plan.</span></th>
           <td><ul>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Durable-plan threshold</a>：A small typo needs no plan; risky or long-running work receives a durable record.</span></li>
-              <li><strong>Spec Kit</strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md" target="_blank" rel="noreferrer">Agentic bugfix workflow</a>：The full workflow suits substantial features, while small fixes can follow a shorter path.</span></li>
-              <li><strong>OpenSpec</strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Change proposal</a>：Small edits can go directly through a PR; substantial changes receive a complete proposal.</span></li>
-              <li><strong>BMAD</strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Quick Flow / BMad Method</a>：Quick Flow handles small changes; complex products add full planning and architecture.</span></li>
           </ul></td>
           <td><ul>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Quick Flow / BMad Method</a>：Quick Flow handles small changes; complex products add full planning and architecture.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Change proposal</a>：Small edits can go directly through a PR; substantial changes receive a complete proposal.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md" target="_blank" rel="noreferrer">Agentic bugfix workflow</a>：The full workflow suits substantial features, while small fixes can follow a shorter path.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Skill-triggered workflow</a>：Brainstorming, planning, TDD, and review skills are activated as needed instead of forcing every step onto every task.</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,560</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task hierarchy</a>：Status, priority, and parent-child relationships organize tasks of different sizes.</span></li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div id="similar-tools-panel-agents" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-agents" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">Compares only how repositories instruct agents, preserve context across sessions, isolate parallel changes, and keep human decision boundaries.</span><span class="capture-date">Stars captured｜2026-08-28</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="AI rules">
+    <table class="similar-tools-matrix similar-tools-philosophy-matrix">
+      <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>Where agents read instructions</strong><span>Compares a single repository file, tool-specific rule conversion, and instructions injected by an external framework.<br><br><b>CSARC: </b>The root AGENTS.md is the single source. CLAUDE.md is a thin import, and child files exist only for genuine scoped differences.</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository instructions</a>：Persistent agent working rules and verification commands live in the repository.</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Agent roles</a>：Product, architecture, development, and QA roles provide specialized instructions for each phase.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/getting-started.md" target="_blank" rel="noreferrer">Project instructions</a>：The repository&#39;s OpenSpec structure and commands give different agents one shared change lifecycle.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/commands/constitution.md" target="_blank" rel="noreferrer">Constitution</a>：A constitution stores principles that every feature follows and agents reference while producing later artifacts.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Composable skills</a>：Composable skills give agents repeatable working methods.</span></li>
+              <li><strong>Ruler<span class="tool-meta"><span>v0.3.44 (2026-06-30)</span><span>★ 2,898</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/intellectronica/ruler" target="_blank" rel="noreferrer">Centralized rule distribution</a>：Rules are maintained centrally and emitted into agent-specific configuration files.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>How context survives across sessions</strong><span>Compares how Issues, specs, plans, or task files retain confirmed decisions and unfinished work.<br><br><b>CSARC: </b>Issues and PRs track progress, while approved specs and ADRs retain long-lived decisions. A plan is added only for cross-session, high-risk, or hard-to-recover work.</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Durable plans</a>：Cross-session, dependent, or high-risk work uses an active plan that is archived after completion.</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：Briefs, PRDs, UX, architecture, and stories let multiple agent roles hand work across phases.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">changes/ artifacts</a>：Proposals, designs, tasks, and specification deltas stay in changes/ and are archived after completion.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md / plan.md / tasks.md</a>：Requirements, technical plans, and task breakdowns are saved as files that survive across sessions.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Writing plans</a>：Designs, steps, files, and checks are written into plans that later sessions can continue.</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,560</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Markdown task records</a>：Agents can read and write versioned task files that preserve context across sessions.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>How parallel changes are isolated</strong><span>Compares shared directories, branches and worktrees, and agent orchestrators for preventing colliding changes.<br><br><b>CSARC: </b>Each writable task gets its own branch and worktree, and only independent scopes run in parallel. Read-only work needs no new worktree.</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Isolated work</a>：Separate branches and working directories keep concurrent changes from overwriting one another.</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature branches</a>：Each feature evolves on its own branch and specification directory, reducing collisions between parallel changes.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Git worktrees</a>：Git worktrees create isolated workspaces before independent tasks are assigned to different agents.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>When a human must decide</strong><span>Compares who owns requirement trade-offs, external effects, irreversible operations, and merge authorization.<br><br><b>CSARC: </b>People own requirements, material trade-offs, external effects, and irreversible operations. Journey 07 alone defines review, merge eligibility, and exceptions.</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Human checkpoints</a>：Plans retain explicit human checkpoints for risk, direction, and irreversible steps.</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Workflow checkpoints</a>：Human confirmation points are added during discovery, planning, and delivery according to work size.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Proposal review</a>：People review a change proposal&#39;s intent and delta before it is applied and archived.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/commands/clarify.md" target="_blank" rel="noreferrer">Clarify and analyze</a>：Ambiguity and cross-artifact inconsistencies are clarified before an agent generates the plan.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Brainstorming approval</a>：Design sections are confirmed before planning and implementation begin.</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -3834,7 +3862,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
 </div>
 <div id="similar-tools-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-template-upgrade" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares only how existing repositories receive updated templates, policies, or recipes and who resolves conflicts.</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares only how existing repositories receive updated templates, policies, or recipes and who resolves conflicts.</span><span class="capture-date">Stars captured｜2026-08-28</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Template upgrades">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
@@ -3842,13 +3870,13 @@ html[data-detail-level="simple"] .detail-panel {
         <tr>
           <th scope="row"><strong>How existing repositories receive updates</strong><span>Compares how updated templates, policies, or recipes enter an existing repository and who resolves conflicts.<br><br><b>CSARC: </b>Copier answers record the source and version. Existing projects review update diffs and conflicts in a PR and verify that product-owned paths were not overwritten.</span></th>
           <td><ul>
-              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：The updater retains the upstream base and safely updates an existing repository through a three-way merge.</span></li>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen upgrade &#43; synth</a>：The project is regenerated after a library upgrade, and anti-tamper checks reject manual edits to managed files.</span></li>
-              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：It excels at creating new components; existing-repository migration still needs another tool.</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：The updater retains the upstream base and safely updates an existing repository through a three-way merge.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Copier <span class="tool-stars" title="GitHub Stars (captured)">★ 3,545 (2026-08-27)</span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：The recorded template source and answers let an existing repository receive template updates.</span></li>
-              <li><strong>OpenRewrite <span class="tool-stars" title="GitHub Stars (captured)">★ 3,679 (2026-08-27)</span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：Instead of overwriting files from a text template, it performs semantic migration across versions.</span></li>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.5 (2026-08-25)</span><span>★ 34,273</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：It excels at creating new components; existing-repository migration still needs another tool.</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,546</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：The recorded template source and answers let an existing repository receive template updates.</span></li>
+              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.0 (2026-08-26)</span><span>★ 3,681</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：Instead of overwriting files from a text template, it performs semantic migration across versions.</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -3860,7 +3888,7 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
-<section class="slide markdown-slide similar-tools-slide testing-slide" id="testing" data-content-key="testing" data-audience="maintainer" data-parity="supplemental" aria-label="Tests | Journey 01 work definition">
+<section class="slide markdown-slide similar-tools-slide testing-slide" id="testing" data-content-key="testing" data-audience="maintainer" data-parity="supplemental" aria-label="CI/CD settings | Checks by Journey">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -3918,19 +3946,19 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header class="basic-header">
-    <span class="selection-sequence">Maintenance appendix | Tests</span>
-    <h2>Tests | Journey 01 work definition</h2>
-    <p class="subtitle">Every repository verifies only its own work definition; repo-template adds one delivery check during promotion.</p>
+    <span class="selection-sequence">Maintenance appendix | CI/CD settings</span>
+    <h2>CI/CD settings | Checks by Journey</h2>
+    <p class="subtitle">Separates the tests and automation that normal repositories and repo-template need for Issue PR → dev and dev → main.</p>
   </header>
 
 <div class="legacy-content similar-tools-content testing-content">
-  <div class="similar-tools-tabs" role="tablist" aria-label="Tests">
+  <div class="similar-tools-tabs" role="tablist" aria-label="CI/CD settings">
     <button id="testing-tab-work" type="button" role="tab" aria-selected="true" aria-controls="testing-panel-work" data-similar-tools-tab="0"><small>Journey 01</small>Work definition</button>
+    <button id="testing-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-agents" data-similar-tools-tab="1"><small>Journey 02</small>AI rules</button>
   </div>
   <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel>
   <div class="similar-tools-testing-intro">
     <strong>Journey 01 / Minimum test contract</strong><span>A normal repository needs only ./scripts/verify. During promotion, repo-template adds one check for the version it ships.</span>
-    <p><b>Current state: </b>Pull request #386 restored and enabled four Journey 01 GitHub Actions, but GitHub currently refuses to start a runner because of the account billing state. Issue #382 consolidates the validation logic shared by local runs and Actions behind one entrypoint.</p>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01 / Minimum test contract">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
@@ -3990,6 +4018,41 @@ html[data-detail-level="simple"] .detail-panel {
             <li>
               <strong>Release (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_item_forms.py</code></li><li><code>tests/test_template_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>No repo-template-only Action; the same promotion entrypoint adds delivery tests.</span></div>
             </li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
+  <div id="testing-panel-agents" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-agents" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 02 / Minimum verification contract</strong><span>A normal repository validates the AI-rule entrypoint and worktree cleanup. During promotion, repo-template also checks the emitted rules.</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 02 / Minimum verification contract">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>AI rules entrypoint</strong><span>Every agent reads one root policy, and generated content lists only commands the profile can actually run.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Release (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Parallel isolation and safe cleanup</strong><span>Writable tasks use separate branches and worktrees, and cleanup never removes unmerged or modified directories.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
           </ul></td>
         </tr>
       </tbody>
