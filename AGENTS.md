@@ -2,7 +2,7 @@
 
 ## Responsibility map
 
-- GitHub Issues and pull requests define the requested work and its evidence. Follow [Journey 01](docs/index.html#method) for work-item relationships and fields.
+- GitHub Issues and pull requests define work, progress, and evidence. Approved specs and ADRs preserve durable context; add a plan only for cross-session, high-risk, or hard-to-recover work, and never store raw chat transcripts. Follow [Journey 01](docs/index.html#method) for work-item relationships and fields.
 - `AGENTS.md` is the single source for AI working instructions; `CLAUDE.md` only imports it.
 - One writable task uses one Git branch and one worktree so concurrent changes stay isolated.
 - Reusable validation lives in `scripts/` and tests. Run `./scripts/verify-template.sh` for the final template candidate; checked-in files under `.github/workflows/` are the only active GitHub Actions. See [CI/CD settings](docs/index.html#testing) for stage ownership.

@@ -31,6 +31,9 @@ def test_generated_guidance_has_one_source_and_real_commands(
     )
 
     assert "## Responsibility map" in rendered
+    assert "Approved specs and ADRs preserve durable context" in rendered
+    assert "cross-session, high-risk, or hard-to-recover work" in rendered
+    assert "never store raw chat transcripts" in rendered
     assert "`AGENTS.md` is the single source" in rendered
     assert "`CLAUDE.md` only imports it" in rendered
     assert "docs/index.html#method" in rendered
@@ -52,6 +55,7 @@ def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
 
     root_guidance = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert "## Responsibility map" in root_guidance
+    assert "Approved specs and ADRs preserve durable context" in root_guidance
     assert "Journey 07" in root_guidance
     assert "automation are suspended" not in root_guidance
 
