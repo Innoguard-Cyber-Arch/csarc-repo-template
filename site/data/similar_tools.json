@@ -202,7 +202,7 @@
               "en": {"title": "AI rules entrypoint", "description": "Every agent reads one root policy, and generated content lists only commands the profile can actually run."}
             },
             "shared": {"release": {"files": [{"path": "scripts/verify"}]}},
-            "templateOnly": {"milestone": {"files": [{"path": "tests/test_ai_guidelines.py", "pending": true, "issue": 388}]}}
+            "templateOnly": {"milestone": {"files": [{"path": "tests/test_ai_guidelines.py"}]}}
           },
           {
             "purpose": {

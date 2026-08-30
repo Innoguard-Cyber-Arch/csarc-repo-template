@@ -2606,14 +2606,14 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
   <div class="markdown-body"><p><strong>Baseline.</strong> An Issue bounds the work, <code>AGENTS.md</code> explains how to work, and code plus tests provide evidence. People retain product direction and material-risk decisions.</p>
 <ul>
-<li><strong>Work and progress:</strong> GitHub Issues and PRs record scope, state, and review.</li>
+<li><strong>Work and context:</strong> GitHub Issues and PRs record scope, progress, and evidence. Approved specs and ADRs retain long-lived decisions; add a plan only for cross-session, high-risk, or hard-to-recover work, and never save chat transcripts.</li>
 <li><strong>AI rules:</strong> the root <code>AGENTS.md</code> is the single source; <code>CLAUDE.md</code> is a thin import, and a child file exists only for a genuine scoped difference.</li>
-<li><strong>Durable context:</strong> approved specs and ADRs preserve long-lived decisions. Add a plan only for cross-session, high-risk, or hard-to-recover work; do not save chat transcripts.</li>
 <li><strong>Change isolation:</strong> each writable task uses its own branch and worktree. Parallelize only independent scopes; read-only work needs no extra worktree.</li>
 <li><strong>Verification evidence:</strong> run the smallest relevant local program. Actions provide events and permissions and call the same program instead of copying logic.</li>
 <li><strong>Decisions and authorization:</strong> people own requirements, material trade-offs, external impact, and irreversible operations. Journey 07 alone defines review, merge eligibility, and exceptions.</li>
+<li><strong>Template creation and updates:</strong> Copier generates and updates the shared baseline; Journey 08 defines existing-repository updates.</li>
 </ul>
-<p><code>README.md</code> serves people, <code>AGENTS.md</code> serves every agent, and <code>template/AGENTS.md.jinja</code> plus <code>copier.yml</code> emit only commands the selected profile can run. <code>scripts/cleanup-worktrees</code> and <code>scripts/test-worktree-cleanup</code> handle safe cleanup; <code>scripts/verify</code>, <code>.github/workflows/</code>, and <code>policies/</code> keep rules, evidence, automation, and governance separate. Implementation drift is being resolved by <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388">#388</a> / PR #389.</p>
+<p><code>README.md</code> serves people, <code>AGENTS.md</code> serves every agent, and <code>template/AGENTS.md.jinja</code> plus <code>copier.yml</code> emit only commands the selected profile can run. <code>scripts/cleanup-worktrees</code> and <code>scripts/test-worktree-cleanup</code> handle safe cleanup; <code>scripts/verify</code>, <code>.github/workflows/</code>, and <code>policies/</code> keep rules, evidence, automation, and governance separate. This responsibility split is implemented by <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388">#388</a> / PR #389.</p>
 <p>Concrete tools and sources are in <a href="/en/#similar-tools">Similar tools</a>; Journey 02 local checks and Actions are in <a href="/en/#testing">CI/CD settings</a>.</p>
 </div>
 </section>
@@ -4041,7 +4041,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388" target="_blank" rel="noreferrer">Pending #388</a></li></ul></div>
+              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
             </li>
           </ul></td>
         </tr>

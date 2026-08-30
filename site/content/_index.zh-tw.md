@@ -293,19 +293,19 @@ Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `sc
       <p class="context-line"><strong>模板的作用｜</strong>把 agent 開始前要讀什麼、可修改到哪裡、如何隔離平行工作、怎樣留下驗證，以及何時必須停下來問人寫進 repo；文字規範本身不是自動門禁。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">常見的 AI 協作設計</span></summary><ul><li><strong>Repo 內指引：</strong>把固定命令與界線放在版本控制中，讓不同 agent 讀同一份規則。</li><li><strong>規格產物接力：</strong>大型工作先產生 spec、plan、tasks，再逐步交給 agent 執行。</li><li><strong>角色與調度：</strong>用專門角色、skills 或佇列安排多個 agent；適合工作量已大到需要額外協調時。</li><li><strong>人類檢查點：</strong>在需求、重大取捨、外部影響與不可逆操作前停下來取得決定。</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">六項責任各有唯一位置</span></summary><ul class="work-definition-list"><li><strong>工作與進度：</strong>GitHub Issue／PR 記錄範圍、狀態與審查。</li><li><strong>AI 規範：</strong>根目錄 <code>AGENTS.md</code> 是唯一來源；<code>CLAUDE.md</code> 只做薄匯入，子目錄只有規則真的不同時才覆寫。</li><li><strong>長期脈絡：</strong>只有核准的 spec／ADR 保存長期決策；跨 session、高風險或難復原工作才增加 plan，不保存聊天逐字稿。</li><li><strong>修改隔離：</strong>每項可寫工作各用 branch／worktree，只平行處理互不依賴的範圍；唯讀工作不必另開 worktree。</li><li><strong>驗證證據：</strong>執行最小且相關的本機程式；Action 只負責事件、權限與呼叫同一程式，不複製邏輯。</li><li><strong>決策與授權：</strong>人負責需求、重大取捨、外部影響與不可逆操作；審查、合併資格與例外由 Journey 07 單獨定義。</li></ul></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">六項責任各有唯一位置</span></summary><ul class="work-definition-list"><li><strong>工作與脈絡：</strong>GitHub Issue／PR 記錄範圍、進度與證據；核准的 spec／ADR 保存長期決策，跨 session、高風險或難復原工作才增加 plan，不保存聊天逐字稿。</li><li><strong>AI 規範：</strong>根目錄 <code>AGENTS.md</code> 是唯一來源；<code>CLAUDE.md</code> 只做薄匯入，子目錄只有規則真的不同時才覆寫。</li><li><strong>修改隔離：</strong>每項可寫工作各用 branch／worktree，只平行處理互不依賴的範圍；唯讀工作不必另開 worktree。</li><li><strong>驗證證據：</strong>執行最小且相關的本機程式；Action 只負責事件、權限與呼叫同一程式，不複製邏輯。</li><li><strong>決策與授權：</strong>人負責需求、重大取捨、外部影響與不可逆操作；審查、合併資格與例外由 Journey 07 單獨定義。</li><li><strong>模板建立與更新：</strong>Copier 負責產生與更新共用基線；既有 repo 的更新契約由 Journey 08 定義。</li></ul></details>
       </div>
-      <aside class="config-guidance" data-config-direct="true"><strong>模板功能與客製化</strong><ul><li><strong>人與 AI 各看哪份文件：</strong><code>README.md</code> 給人，<code>AGENTS.md</code> 給所有 agent；<code>CLAUDE.md</code> 只匯入同一份規範。</li><li><strong>只產生 profile 真能執行的指令：</strong><code>template/AGENTS.md.jinja</code> 與 <code>copier.yml</code> 依語言產生內容，<code>scripts/verify-template.sh</code> 驗證結果。</li><li><strong>平行可寫工作用 branch／worktree 隔離：</strong><code>AGENTS.md</code> 定義做法；<code>scripts/cleanup-worktrees</code> 與 <code>scripts/test-worktree-cleanup</code> 負責安全清理。</li><li><strong>規範、驗證與治理分開：</strong><code>AGENTS.md</code> 說明做法，<code>scripts/verify</code> 提供證據，<code>.github/workflows/</code> 只包裝執行，<code>policies/</code> 保存治理設定；實作漂移由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388" target="_blank" rel="noreferrer">#388</a>／PR #389 收斂中。</li></ul></aside>
+      <aside class="config-guidance" data-config-direct="true"><strong>模板功能與客製化</strong><ul><li><strong>人與 AI 各看哪份文件：</strong><code>README.md</code> 給人，<code>AGENTS.md</code> 給所有 agent；<code>CLAUDE.md</code> 只匯入同一份規範。</li><li><strong>只產生 profile 真能執行的指令：</strong><code>template/AGENTS.md.jinja</code> 與 <code>copier.yml</code> 依語言產生內容，<code>scripts/verify-template.sh</code> 驗證結果。</li><li><strong>平行可寫工作用 branch／worktree 隔離：</strong><code>AGENTS.md</code> 定義做法；<code>scripts/cleanup-worktrees</code> 與 <code>scripts/test-worktree-cleanup</code> 負責安全清理。</li><li><strong>規範、驗證與治理分開：</strong><code>AGENTS.md</code> 說明做法，<code>scripts/verify</code> 提供證據，<code>.github/workflows/</code> 只包裝執行，<code>policies/</code> 保存治理設定；此責任分界已由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388" target="_blank" rel="noreferrer">#388</a>／PR #389 實作。</li></ul></aside>
       <p class="method-reference reference">具體工具、功能名稱與資料來源統一整理於<a href="#similar-tools">相似工具</a>；Journey 02 的本機檢查與 Action 現況見<a href="#testing">CI/CD 設定</a>。</p>
 {{< /legacy >}}
 
 {{< basic >}}
-- **工作與進度：** GitHub Issue／PR。
+- **工作與脈絡：** GitHub Issue／PR 記錄工作；核准的 spec／ADR 保存長期決策，必要時才加 plan。
 - **AI 規範：** 根目錄 `AGENTS.md`；`CLAUDE.md` 只薄匯入。
-- **長期脈絡：** 核准的 spec／ADR；跨 session、高風險或難復原時才加 plan。
 - **修改隔離：** 每項可寫工作各用 branch／worktree；唯讀工作不用。
 - **驗證證據：** 本機程式是唯一邏輯；Action 只呼叫它。
 - **決策與授權：** 人保留重大決策；審查與合併規則只由 Journey 07 定義。
+- **模板建立與更新：** Copier 負責共用基線；既有 repo 更新由 Journey 08 定義。
 
 具體工具見[相似工具](#similar-tools)，執行方式見 [CI/CD 設定](#testing)。
 {{< /basic >}}

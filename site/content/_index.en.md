@@ -107,14 +107,14 @@ Concrete tools, feature names, and source links are listed under [Similar tools]
 {{< slide key="agents" track="agents" eyebrow="Step 02" title="Define AI rules before implementation" subtitle="An Issue says what this change is; AGENTS.md says how an agent works in the repository." legacy="false"  class="candidate-slide" >}}
 **Baseline.** An Issue bounds the work, `AGENTS.md` explains how to work, and code plus tests provide evidence. People retain product direction and material-risk decisions.
 
-- **Work and progress:** GitHub Issues and PRs record scope, state, and review.
+- **Work and context:** GitHub Issues and PRs record scope, progress, and evidence. Approved specs and ADRs retain long-lived decisions; add a plan only for cross-session, high-risk, or hard-to-recover work, and never save chat transcripts.
 - **AI rules:** the root `AGENTS.md` is the single source; `CLAUDE.md` is a thin import, and a child file exists only for a genuine scoped difference.
-- **Durable context:** approved specs and ADRs preserve long-lived decisions. Add a plan only for cross-session, high-risk, or hard-to-recover work; do not save chat transcripts.
 - **Change isolation:** each writable task uses its own branch and worktree. Parallelize only independent scopes; read-only work needs no extra worktree.
 - **Verification evidence:** run the smallest relevant local program. Actions provide events and permissions and call the same program instead of copying logic.
 - **Decisions and authorization:** people own requirements, material trade-offs, external impact, and irreversible operations. Journey 07 alone defines review, merge eligibility, and exceptions.
+- **Template creation and updates:** Copier generates and updates the shared baseline; Journey 08 defines existing-repository updates.
 
-`README.md` serves people, `AGENTS.md` serves every agent, and `template/AGENTS.md.jinja` plus `copier.yml` emit only commands the selected profile can run. `scripts/cleanup-worktrees` and `scripts/test-worktree-cleanup` handle safe cleanup; `scripts/verify`, `.github/workflows/`, and `policies/` keep rules, evidence, automation, and governance separate. Implementation drift is being resolved by [#388](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388) / PR #389.
+`README.md` serves people, `AGENTS.md` serves every agent, and `template/AGENTS.md.jinja` plus `copier.yml` emit only commands the selected profile can run. `scripts/cleanup-worktrees` and `scripts/test-worktree-cleanup` handle safe cleanup; `scripts/verify`, `.github/workflows/`, and `policies/` keep rules, evidence, automation, and governance separate. This responsibility split is implemented by [#388](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388) / PR #389.
 
 Concrete tools and sources are in [Similar tools](#similar-tools); Journey 02 local checks and Actions are in [CI/CD settings](#testing).
 {{< /slide >}}

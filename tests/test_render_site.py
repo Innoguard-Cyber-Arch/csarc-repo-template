@@ -228,7 +228,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         {"path": "scripts/verify"}
     ]
     assert agent_rows[0]["templateOnly"]["milestone"]["files"] == [
-        {"path": "tests/test_ai_guidelines.py", "pending": True, "issue": 388}
+        {"path": "tests/test_ai_guidelines.py"}
     ]
     assert agent_rows[1]["shared"]["milestone"]["files"] == [
         {"path": "scripts/test-worktree-cleanup"}
