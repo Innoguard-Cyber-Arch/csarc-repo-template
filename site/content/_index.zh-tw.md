@@ -41,7 +41,7 @@ fit = "符合畫面"
       <div class="product-start">
         <section class="product-scope" aria-label="公版提供的能力">
           <h3>公版會替 repo 準備</h3>
-          <p class="scope-row"><strong>規劃與 AI 契約</strong><span>SDD → Feature parent → Task／Bug subissues → 各自 PR；Milestone 只管理有期限的交付</span></p>
+          <p class="scope-row"><strong>規劃與 AI 規範</strong><span>SDD → Feature parent → Task／Bug subissues → 各自 PR；Milestone 只管理有期限的交付</span></p>
           <p class="scope-row"><strong>驗證與合併</strong><span><code>./scripts/verify</code>＋分層 CI＋PR；並行 Milestone 各自整合，promotion 才進 main</span></p>
           <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件；已有 Containerfile 可選配容器驗證／GHCR</span></p>
           <p class="scope-row"><strong>可持續同步</strong><span>公版更新成為可審查差異，不會直接覆蓋產品程式</span></p>
@@ -61,7 +61,7 @@ fit = "符合畫面"
 {{< /legacy >}}
 
 {{< basic >}}
-公版把工作定義、AI 契約、驗證、合併、依賴與交付證據放進同一條可審查流程。
+公版把工作定義、AI 規範、驗證、合併、依賴與交付證據放進同一條可審查流程。
 
 | 可以直接選擇 | 目前提供的正式能力 |
 | --- | --- |
@@ -226,7 +226,7 @@ Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `sc
         <h2>步驟 1｜<span class="accent">工作如何從需求走到合併</span></h2>
         <p class="subtitle"><strong>基本導入。</strong>一張 Issue 定義一項可驗收的改變，一張 PR 負責交付；多項工作需要同批完成時，才使用 Milestone。</p>
       </header>
-      <p class="context-line"><strong>模板的作用｜</strong>把 Issue、PR 與交付批次的寫法和關聯固定下來，讓人與 agent 都知道要做什麼、怎樣算完成；小工作不必額外建立 Feature、Milestone 或完整規格。</p>
+      <p class="context-line"><strong>模板的作用｜</strong>統一 Issue、PR 與 Milestone 的寫法，讓人與 agent 清楚工作範圍與完成條件。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open>
           <summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">常見的工作設計思路</span></summary>
@@ -284,38 +284,30 @@ Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `sc
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="agents" track="agents" eyebrow="步驟 02" title="先定 AI 工作契約，再開始實作" subtitle="README 服務使用者；AGENTS.md 留下 agent 可執行的範圍與安全邊界。" class="legacy-slide decision-slide" legacy="true" >}}
+{{< slide key="agents" track="agents" eyebrow="步驟 02" title="先定 AI 規範，再開始實作" subtitle="Issue 說明這次要做什麼；AGENTS.md 說明 agent 在 repo 裡怎麼做。" class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
-        <h2>步驟 2｜<span class="accent">先定 AI 契約，再開始實作</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>AI 先讀工作單、repo 與 <code>AGENTS.md</code>，再提出做法、修改、測試；人保留方向、風險與合併責任。</p>
+        <h2>步驟 2｜<span class="accent">先定 AI 規範，再開始實作</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>Issue 劃定這次工作；<code>AGENTS.md</code> 說明怎麼做；程式與測試提供證據，人保留需求方向與重大風險決策。</p>
       </header>
-      <p class="context-line"><strong>問題與目的｜</strong>只給一句 prompt，AI 會猜範圍；多個可寫 agents 共用 working directory，未提交變更與 branch checkout 也會互相干擾。契約要短、可執行，且不能取代人的判斷。</p>
+      <p class="context-line"><strong>模板的作用｜</strong>把 agent 開始前要讀什麼、可修改到哪裡、如何隔離平行工作、怎樣留下驗證，以及何時必須停下來問人寫進 repo；文字規範本身不是自動門禁。</p>
       <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不靠長提示詞，也不讓 agents 共用目錄</h3><ul><li><strong>同一 working directory 切 branch：</strong>未提交變更與 checkout 會互相干擾</li><li><strong>複製全部 coding style：</strong>容易與 Ruff／Biome 分歧，固定判定應交給 CI</li><li><strong>AI review 當必要門禁：</strong>結果會漂移，不能取代測試、同事審查與 Ruleset</li></ul></article>
-        <article class="decision-step recommended">
-          <span class="step-label">我們的選擇</span>
-          <details class="package-disclosure"><summary><span><span class="tech-name">標準 AGENTS.md＋就近覆寫</span></span></summary><div class="package-health"><p><a href="https://github.com/agentsmd/agents.md" target="_blank" rel="noreferrer">agentsmd/agents.md</a>｜MIT｜公開且持續維護；格式就是一般 Markdown。</p><p><strong>熱門實例：</strong>VS Code 根檔 5 行、uv 25 行、Kubernetes 36 行；Next.js 558 行反映大型 monorepo，而不是每案都該追求的長度。</p><p><strong>官方行為：</strong>Codex 會由根目錄往工作目錄合併指令，越靠近目前檔案的規則優先。</p><p class="reference">Ref. OpenAI Docs; agentsmd/agents.md repository.</p></div></details>
-          <p class="recommendation-copy"><strong>工作契約：</strong>六段涵蓋範圍、工作迴圈、指令、修改界線、安全與審查；依語言只列真正存在的指令，根檔最多 200 行。<br><strong>平行隔離：</strong>每項可寫任務使用自己的 branch 與 Git worktree；只平行處理互不依賴的範圍。原生 Git 是基線，Worktrunk 是選用的本機輔助，不進入生成 repo 相依。合併後由建立者執行 <code>scripts/cleanup-worktrees</code>，只回收 GitHub 已驗證合併且乾淨的 worktree。<br><strong>人類負責：</strong>確認需求與技術方向、判斷風險、審查差異；唯一的 CI 例外是 human 已確認 Actions 免費額度耗盡時，agent 對 PR HEAD 完整本機驗證、留存 SHA-bound 聲明並取得一次性合併授權。Promotion 到 main 還須保存 candidate tree 並核對合併後 tree identity，fallback 證據不能用於 release；Ruleset、CODEOWNERS 與供應鏈控制不因此失效。</p>
-        </article>
+        <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">常見的 AI 協作設計</span></summary><ul><li><strong>Repo 內指引：</strong>把固定命令與界線放在版本控制中，讓不同 agent 讀同一份規則。</li><li><strong>規格產物接力：</strong>大型工作先產生 spec、plan、tasks，再逐步交給 agent 執行。</li><li><strong>角色與調度：</strong>用專門角色、skills 或佇列安排多個 agent；適合工作量已大到需要額外協調時。</li><li><strong>人類檢查點：</strong>在需求、重大取捨、外部影響與不可逆操作前停下來取得決定。</li></ul></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">六項責任各有唯一位置</span></summary><ul class="work-definition-list"><li><strong>工作與進度：</strong>GitHub Issue／PR 記錄範圍、狀態與審查。</li><li><strong>AI 規範：</strong>根目錄 <code>AGENTS.md</code> 是唯一來源；<code>CLAUDE.md</code> 只做薄匯入，子目錄只有規則真的不同時才覆寫。</li><li><strong>長期脈絡：</strong>只有核准的 spec／ADR 保存長期決策；跨 session、高風險或難復原工作才增加 plan，不保存聊天逐字稿。</li><li><strong>修改隔離：</strong>每項可寫工作各用 branch／worktree，只平行處理互不依賴的範圍；唯讀工作不必另開 worktree。</li><li><strong>驗證證據：</strong>執行最小且相關的本機程式；Action 只負責事件、權限與呼叫同一程式，不複製邏輯。</li><li><strong>決策與授權：</strong>人負責需求、重大取捨、外部影響與不可逆操作；審查、合併資格與例外由 Journey 07 單獨定義。</li></ul></details>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>人類入口與 AI 工作契約：</strong><code>README.md</code> 說明 worktree 與 CI/CD 邊界；<code>AGENTS.md</code>＋<code>CLAUDE.md</code> 規範每項任務的隔離與安全清理</li><li><strong>實際驗證：</strong>生成 repo 與其 CI 執行 <code>scripts/verify</code>；只有中央模板 repo 執行、不下發的 <code>scripts/verify-template.sh</code> 負責建立／導入／更新 fixture</li><li><strong>唯讀權限、人類核准與指定審查者：</strong><code>policies/actions.json</code>＋<code>policies/rulesets.json</code>＋<code>CODEOWNERS</code></li></ul></aside>
+      <aside class="config-guidance" data-config-direct="true"><strong>模板功能與客製化</strong><ul><li><strong>人與 AI 各看哪份文件：</strong><code>README.md</code> 給人，<code>AGENTS.md</code> 給所有 agent；<code>CLAUDE.md</code> 只匯入同一份規範。</li><li><strong>只產生 profile 真能執行的指令：</strong><code>template/AGENTS.md.jinja</code> 與 <code>copier.yml</code> 依語言產生內容，<code>scripts/verify-template.sh</code> 驗證結果。</li><li><strong>平行可寫工作用 branch／worktree 隔離：</strong><code>AGENTS.md</code> 定義做法；<code>scripts/cleanup-worktrees</code> 與 <code>scripts/test-worktree-cleanup</code> 負責安全清理。</li><li><strong>規範、驗證與治理分開：</strong><code>AGENTS.md</code> 說明做法，<code>scripts/verify</code> 提供證據，<code>.github/workflows/</code> 只包裝執行，<code>policies/</code> 保存治理設定；實作漂移由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388" target="_blank" rel="noreferrer">#388</a>／PR #389 收斂中。</li></ul></aside>
+      <p class="method-reference reference">具體工具、功能名稱與資料來源統一整理於<a href="#similar-tools">相似工具</a>；Journey 02 的本機檢查與 Action 現況見<a href="#testing">CI/CD 設定</a>。</p>
 {{< /legacy >}}
 
 {{< basic >}}
-- Agent 先讀工作單、repo 與 `AGENTS.md`，再提出做法、修改並驗證。
-- 每項可寫任務使用自己的 branch 與 Git worktree；只平行處理互不依賴的範圍。
-- 固定格式、型別與測試判定交給 Ruff、Biome、mypy、pytest、Vitest 與 CI。
+- **工作與進度：** GitHub Issue／PR。
+- **AI 規範：** 根目錄 `AGENTS.md`；`CLAUDE.md` 只薄匯入。
+- **長期脈絡：** 核准的 spec／ADR；跨 session、高風險或難復原時才加 plan。
+- **修改隔離：** 每項可寫工作各用 branch／worktree；唯讀工作不用。
+- **驗證證據：** 本機程式是唯一邏輯；Action 只呼叫它。
+- **決策與授權：** 人保留重大決策；審查與合併規則只由 Journey 07 定義。
 
-{{< disclosure key="agents-standard" title="標準 AGENTS.md＋就近覆寫" >}}
-[AGENTS.md](https://github.com/agentsmd/agents.md) 是一般 Markdown。Codex 由 repo 根目錄往工作目錄合併指令，距離目前檔案越近的規則優先；只有子目錄真的需要不同命令或安全規則時才加就近覆寫。
-{{< /disclosure >}}
-
-{{< detail key="agents-control" title="真正的控制點與人類責任" >}}
-AGENTS.md 說明工作方式；GitHub 權限、Ruleset、CODEOWNERS 與 required checks 才是強制控制。人類仍負責確認需求與技術方向、判斷風險、審查差異與核准合併。
-
-`scripts/cleanup-worktrees` 只回收 GitHub 已驗證合併且乾淨的 worktree。Actions 額度 fallback 也不能由 agent 推測：只有帳務可見的維護者確認 included minutes 已耗盡，才能對精確 PR SHA 留下完整本機驗證聲明並取得一次性授權。
-{{< /detail >}}
+具體工具見[相似工具](#similar-tools)，執行方式見 [CI/CD 設定](#testing)。
 {{< /basic >}}
 {{< /slide >}}
 
@@ -732,7 +724,7 @@ Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、�
 {{< similar-tools >}}
 {{< /slide >}}
 
-{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜測試" title="測試｜Journey 01 工作定義" subtitle="所有 repo 只驗證自己的工作定義；repo-template 只在 promotion 多驗證一次交付結果。" class="similar-tools-slide testing-slide" legacy="true" >}}
+{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜CI/CD 設定" title="CI/CD 設定｜依 Journey 檢查" subtitle="分開列出一般 repo 與 repo-template 在 Issue PR → dev、dev → main 各自需要的測試與自動化。" class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
 {{< /slide >}}
 
@@ -781,7 +773,7 @@ Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、�
           <tr><td>語言與程式品質</td><td>共用治理支援四種 profile；Python 採 src layout、Ruff 80 字元與 <a href="https://google.github.io/styleguide/pyguide.html" target="_blank" rel="noreferrer">Google Python Style</a>、strict mypy；TypeScript 採 Node 24、pnpm 11、Biome、Vitest。</td></tr>
           <tr><td>CI、版本與交付</td><td>本機與 CI 共用 <code>scripts/verify</code>，PR policy 回歸案例證明錯誤 route 會被拒絕；日常 fast、promotion full，release-please 只在已驗證的批次邊界維護單一 SemVer。</td></tr>
           <tr><td>依賴與供應鏈</td><td>三天等待觀察未知惡意新版；OSV 查已公開漏洞；hash 驗內容一致；SBOM 列出成品套件；resolver 另證明版本上下界可安裝，五者互不取代。</td></tr>
-          <tr><td>AI、文件與未來能力</td><td><code>AGENTS.md</code> 是 AI 契約，README 與 repo 網站服務人類；Hugo／託管登入、部署、監控、RAG、Go／Rust 都要有 owner、使用情境與驗證後才導入。</td></tr>
+          <tr><td>AI、文件與未來能力</td><td><code>AGENTS.md</code> 是 AI 規範，README 與 repo 網站服務人類；Hugo／託管登入、部署、監控、RAG、Go／Rust 都要有 owner、使用情境與驗證後才導入。</td></tr>
           <tr><td>驗證與測試資源</td><td>「已完成」必須有檔案與測試；驗證只用本機暫存專案或本 repo 的 Issue、分支、PR、Actions，禁止為測試另開 GitHub repo。</td></tr>
         </tbody>
       </table>

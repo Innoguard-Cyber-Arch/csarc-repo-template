@@ -4,28 +4,21 @@
     Object.assign(configExamples, {
       agents: [
         {
-          title: 'README 回答八個接手問題；AGENTS 只留下六類工作規則',
-          goal: '人先知道專案如何使用、驗證與求助；AI 再讀可執行的工作界線，兩份文件不互相複製。',
-          summary: 'README 必須保留概述、快速開始、技術、驗證、設定、維運、支援與公版更新；AGENTS 只寫 AI 執行規則。',
-          file: 'README.md＋AGENTS.md',
+          title: '人與 AI 各看一個清楚入口',
+          goal: 'README 服務人；根目錄 AGENTS.md 是 AI 規範唯一來源，CLAUDE.md 只薄匯入。',
+          summary: '子目錄只有命令或安全界線真的不同時才增加 AGENTS.md，避免多份規範漂移。',
+          file: 'README.md＋AGENTS.md＋CLAUDE.md',
           code: `# README.md
-## 專案概述
-## 快速開始
-## 技術與目錄
-## 開發與驗證
-## 設定與密鑰
-## 發布與維運
-## 負責人與支援
-## 公版更新
+## Quick start
+## Verification
+## Support
 
 # AGENTS.md
-
 ## Scope and sources of truth
 ## Working loop
 ## Commands
 ## Editing boundaries
-## Safety
-## Code Review Rules`
+## Safety`
         },
         {
           title: '依專案語言只產生真的可執行的指令',
@@ -41,22 +34,25 @@
 - Required final check: ./scripts/verify`
         },
         {
-          title: 'AI 能執行工作，但不能自行合併',
-          goal: 'AGENTS.md 說明工作方式；GitHub 權限與 Ruleset 才是不能繞過的控制點。',
-          summary: 'Actions 預設唯讀；repository toggle 允許 release workflow 建立 PR，但只有該 job 取得 pull-requests: write。Ruleset 仍要求至少一位人員與 CODEOWNER 審查。',
-          file: 'policies/actions.json＋policies/rulesets.json＋CODEOWNERS',
-          code: `policies/actions.json
-{
-  "default_workflow_permissions": "read",
-  "can_approve_pull_request_reviews": true
-}
+          title: '平行可寫工作各自隔離',
+          goal: '一項可寫工作對應一個 branch 與 worktree，只平行處理互不依賴的範圍。',
+          summary: '唯讀工作不需另開 worktree；清理程式只回收已合併且乾淨的目錄。',
+          file: 'AGENTS.md＋scripts/cleanup-worktrees＋scripts/test-worktree-cleanup',
+          code: `git worktree add ../task-388 -b feat/388-align-ai-guidelines
+./scripts/test-worktree-cleanup
+./scripts/cleanup-worktrees`
+        },
+        {
+          title: 'AI 規範、驗證與治理各有唯一責任',
+          goal: 'AGENTS.md 說明怎麼做；scripts 提供證據；Action 只包裝執行；07 單獨定義合併資格、權限與例外。',
+          summary: '人保留需求、重大取捨、外部影響與不可逆操作；本頁不重複定義合併權限。',
+          file: 'AGENTS.md＋scripts/verify＋.github/workflows/＋policies/',
+          code: `# Local and Action use the same logic
+./scripts/verify
 
-policies/rulesets.json
-{
-  "required_approving_review_count": 1,
-  "require_code_owner_review": true,
-  "required_review_thread_resolution": true
-}`
+# Governance and merge eligibility live in Journey 07
+policies/actions.json
+policies/rulesets.json`
         }
       ],
       governance: [

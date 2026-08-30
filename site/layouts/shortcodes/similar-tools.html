@@ -1,6 +1,22 @@
 {{- $data := site.Data.similar_tools -}}
 {{- $lang := .Page.Lang -}}
 {{- $labels := index $data.labels $lang -}}
+{{- $rankedTools := slice -}}
+{{- range $tool := $data.tools -}}
+  {{- $fullCount := len $tool.coverage.full -}}
+  {{- $partialCount := len $tool.coverage.partial -}}
+  {{- $coverageCount := add $fullCount $partialCount -}}
+  {{- $hasReleaseDate := eq (len (findRE `^[0-9]{4}-[0-9]{2}-[0-9]{2}$` $tool.released)) 1 -}}
+  {{- $isRecent := and $hasReleaseDate (ge $tool.released $data.releaseCutoff) -}}
+  {{- $isPrimary := and $isRecent (ge $coverageCount $data.threshold) -}}
+  {{- $stars := int (replace $tool.stars "," "") -}}
+  {{- $isEcosystem := and $isRecent (not $isPrimary) (ge $stars $data.starThreshold) -}}
+  {{- $sortKey := printf "%02d-%02d-%s" (sub 99 $fullCount) (sub 99 $partialCount) (lower $tool.name) -}}
+  {{- if or $isPrimary $isEcosystem -}}
+    {{- $rankedTools = $rankedTools | append (dict "tool" $tool "sortKey" $sortKey "primary" $isPrimary) -}}
+  {{- end -}}
+{{- end -}}
+{{- $rankedTools = sort $rankedTools "sortKey" "asc" -}}
 <div class="legacy-content similar-tools-content">
 <div class="similar-tools-tabs" role="tablist" aria-label="{{ $labels.title }}" data-audience="maintainer">
   <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>{{ $labels.primaryTabOverline }}</small>{{ $labels.primaryTab }}</button>
@@ -13,6 +29,7 @@
   <div class="similar-tools-legend">
     <span class="competitor">{{ $labels.primaryLegend }}</span>
     <span class="coverage-key"><i class="coverage-tag full">{{ $labels.full }}</i>　<i class="coverage-tag partial">{{ $labels.partial }}</i></span>
+    <span class="capture-date">{{ $labels.captureDate }}｜{{ $data.comparisonDate }}</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="{{ $labels.primaryTab }}">
     <table class="similar-tools-matrix similar-tools-primary-matrix">
@@ -27,18 +44,18 @@
         </tr>
       </thead>
       <tbody>
-        {{- range $tool := $data.tools }}
-        {{- $coverageCount := add (len $tool.coverage.full) (len $tool.coverage.partial) }}
-        {{- if ge $coverageCount $data.threshold }}
+        {{- range $rankedTool := $rankedTools }}
+        {{- $tool := $rankedTool.tool }}
+        {{- if $rankedTool.primary }}
         <tr>
           <th scope="row"><a href="{{ $tool.url }}" target="_blank" rel="noreferrer">{{ $tool.name }}</a></th>
           <td>{{ $tool.version }}<br>({{ $tool.released }})</td>
-          <td>{{ $tool.stars }}<br>({{ $data.comparisonDate }})</td>
+          <td>{{ $tool.stars }}</td>
           <td>{{ index $tool.position $lang }}</td>
           <td><ul>{{ range (index $tool.difference $lang) }}<li>{{ . }}</li>{{ end }}</ul></td>
           <td><div class="coverage-tags">
-            {{- range $tool.coverage.full }}<span class="coverage-tag full" title="{{ . }}: {{ $labels.full }}">{{ . }}</span>{{ end }}
-            {{- range $tool.coverage.partial }}<span class="coverage-tag partial" title="{{ . }}: {{ $labels.partial }}">{{ . }}</span>{{ end }}
+            {{- range sort $tool.coverage.full }}<span class="coverage-tag full" title="{{ . }}: {{ $labels.full }}">{{ . }}</span>{{ end }}
+            {{- range sort $tool.coverage.partial }}<span class="coverage-tag partial" title="{{ . }}: {{ $labels.partial }}">{{ . }}</span>{{ end }}
           </div></td>
         </tr>
         {{- end }}
@@ -51,7 +68,7 @@
 {{- range $group := $data.featureGroups }}
 {{- $groupLabels := index $group.labels $lang }}
 <div id="similar-tools-panel-{{ $group.key }}" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-{{ $group.key }}" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">{{ $groupLabels.legend }}</span></div>
+  <div class="similar-tools-legend"><span class="reference">{{ $groupLabels.legend }}</span><span class="capture-date">{{ $labels.captureDate }}｜{{ $data.comparisonDate }}</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="{{ $groupLabels.title }}">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">{{ $labels.feature }}</th><th scope="col">{{ $labels.primaryTools }}</th><th scope="col">{{ $labels.otherTools }}</th></tr></thead>
@@ -62,12 +79,11 @@
           <th scope="row"><strong>{{ index $feature.title $lang }}</strong><span>{{ index $feature.description $lang }}<br><br><b>{{ $labels.csarc }}</b>{{ index $feature.csarc $lang }}</span></th>
           {{- range $wantPrimary := (slice true false) }}
           <td><ul>
-            {{- range $tool := $data.tools }}
-            {{- $coverageCount := add (len $tool.coverage.full) (len $tool.coverage.partial) }}
-            {{- $isPrimary := ge $coverageCount $data.threshold }}
-            {{- if eq $isPrimary $wantPrimary }}
+            {{- range $rankedTool := $rankedTools }}
+            {{- $tool := $rankedTool.tool }}
+            {{- if eq $rankedTool.primary $wantPrimary }}
               {{- range where $tool.comparisons "key" $feature.key }}
-              <li><strong>{{ $tool.name }}{{ if not $wantPrimary }} <span class="tool-stars" title="{{ $labels.stars }}">★ {{ $tool.stars }}{{ if eq $lang "zh-tw" }}（{{ $data.comparisonDate }}）{{ else }} ({{ $data.comparisonDate }}){{ end }}</span>{{ end }}</strong><span class="tool-comparison-detail"><a href="{{ .docs }}" target="_blank" rel="noreferrer">{{ .feature }}</a>：{{ index .description $lang }}</span></li>
+              <li><strong>{{ $tool.name }}{{ if not $wantPrimary }}<span class="tool-meta"><span>{{ $tool.version }} ({{ $tool.released }})</span><span>★ {{ $tool.stars }}</span></span>{{ end }}</strong><span class="tool-comparison-detail"><a href="{{ .docs }}" target="_blank" rel="noreferrer">{{ .feature }}</a>：{{ index .description $lang }}</span></li>
               {{- end }}
             {{- end }}
             {{- end }}

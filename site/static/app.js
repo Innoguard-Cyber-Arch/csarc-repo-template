@@ -841,7 +841,7 @@ gh auth status`
       { id: 'flow', label: 'CI/CD 流程', tier: 'priority', group: 'use' },
       { id: 'files', label: '檔案地圖', tier: 'priority', group: 'use' },
       { id: 'method', code: '01', label: '工作定義', tier: 'priority', group: 'main' },
-      { id: 'agents', code: '02', label: 'AI 契約／實作', tier: 'priority', group: 'main' },
+      { id: 'agents', code: '02', label: 'AI 規範／實作', tier: 'priority', group: 'main' },
       { id: 'contract', code: '03', label: '驗證＋CI', tier: 'priority', group: 'main' },
       { id: 'pr', code: '04', label: 'PR／合併', tier: 'priority', group: 'main' },
       { id: 'supply', code: '05', label: '依賴安全', tier: 'priority', group: 'main' },

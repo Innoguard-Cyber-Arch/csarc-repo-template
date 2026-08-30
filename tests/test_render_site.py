@@ -142,6 +142,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     controls = (root / "site/static/detail-toggle.css").read_text(
         encoding="utf-8"
     )
+    active_components = (root / "site/static/legacy-components.js").read_text(
+        encoding="utf-8"
+    )
 
     for source in (chinese, english):
         assert 'key="similar-tools" parity="supplemental"' in source
@@ -154,27 +157,40 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert shortcode.count('data-audience="maintainer"') == 1
     assert "data-similar-tools-tab-testing" not in shortcode
     assert "similar-tools-testing-matrix" in testing_shortcode
+    assert "statusLabel" not in data["testing"]["labels"]["zh-tw"]
+    assert "statusLabel" not in data["testing"]["labels"]["en"]
     assert 'appendix maintainer-bookend{{ if eq .Key "testing" }}' in journey_rail
     assert ".journey-bookend.maintainer-bookend.active-selection" in styles
     assert '.detail-level-control button[aria-pressed="true"]' in controls
     assert "background: var(--yellow);" in controls
-    assert 'data-config-direct="true"' in chinese
+    assert "overflow-y: auto;" in styles
+    assert ".journey-rail {\n      position: fixed;" in styles
+    assert ".slide.active > .legacy-content > * { flex-shrink: 0; }" in styles
+    assert chinese.count('data-config-direct="true"') == 2
     assert "guidance.dataset.configDirect === 'true'" in (
         root / "site/static/detail-toggle.js"
     ).read_text(encoding="utf-8")
+    assert "07 單獨定義合併資格、權限與例外" in active_components
+    assert "AI 能執行工作，但不能自行合併" not in active_components
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
-    assert len(data["features"]) == 5
-    assert len(data["featureGroups"]) == 2
+    assert len(data["features"]) == 9
+    assert len(data["featureGroups"]) == 3
     assert data["featureGroups"][0]["features"] == [
         "repositoryTruth",
         "declarativeState",
         "proposalLifecycle",
         "rightSizedWork",
     ]
-    assert data["featureGroups"][1]["features"] == ["templateLifecycle"]
-    assert len(data["testing"]["groups"]) == 1
+    assert data["featureGroups"][1]["features"] == [
+        "agentInstructions",
+        "durableAgentContext",
+        "parallelAgentIsolation",
+        "humanDecisionBoundary",
+    ]
+    assert data["featureGroups"][2]["features"] == ["templateLifecycle"]
+    assert len(data["testing"]["groups"]) == 2
     assert data["testing"]["groups"][0]["journey"] == "01"
     testing_rows = data["testing"]["groups"][0]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in testing_rows] == [
@@ -206,22 +222,89 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "pending": True,
         "issue": 382,
     }
-    assert len(data["tools"]) == 9
-    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 26
-    assert (
-        sum(
-            len(tool["coverage"]["full"]) + len(tool["coverage"]["partial"])
-            >= data["threshold"]
-            for tool in data["tools"]
-        )
-        == 7
+    agent_rows = data["testing"]["groups"][1]["rows"]
+    assert data["testing"]["groups"][1]["journey"] == "02"
+    assert agent_rows[0]["shared"]["release"]["files"] == [
+        {"path": "scripts/verify"}
+    ]
+    assert agent_rows[0]["templateOnly"]["milestone"]["files"] == [
+        {"path": "tests/test_ai_guidelines.py", "pending": True, "issue": 388}
+    ]
+    assert agent_rows[1]["shared"]["milestone"]["files"] == [
+        {"path": "scripts/test-worktree-cleanup"}
+    ]
+    assert all(
+        "automation" not in stage
+        for row in agent_rows
+        for scope in (row["shared"], row["templateOnly"])
+        for stage in scope.values()
     )
-    assert {
+
+    assert len(data["tools"]) == 13
+    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 53
+    assert data["releaseCutoff"] == "2026-02-28"
+    assert data["threshold"] == 5
+    assert data["starThreshold"] == 1000
+    assert 'class="tool-meta"' in shortcode
+    assert shortcode.count('class="capture-date"') == 2
+    assert data["labels"]["zh-tw"]["stars"] == "GitHub Stars"
+    assert data["labels"]["en"]["stars"] == "GitHub Stars"
+
+    def recent(tool: dict[str, object]) -> bool:
+        released = str(tool["released"])
+        return len(released) == 10 and released >= data["releaseCutoff"]
+
+    def coverage_count(tool: dict[str, object]) -> int:
+        coverage = tool["coverage"]
+        assert isinstance(coverage, dict)
+        return len(coverage["full"]) + len(coverage["partial"])
+
+    primary = [
+        tool
+        for tool in data["tools"]
+        if recent(tool) and coverage_count(tool) >= data["threshold"]
+    ]
+    primary.sort(
+        key=lambda tool: (
+            -len(tool["coverage"]["full"]),
+            -len(tool["coverage"]["partial"]),
+            tool["name"].lower(),
+        )
+    )
+    assert [tool["name"] for tool in primary] == ["projen", "Repository Harness"]
+
+    ecosystem = {
         tool["name"]
         for tool in data["tools"]
-        if len(tool["coverage"]["full"]) + len(tool["coverage"]["partial"])
-        < data["threshold"]
-    } == {"Copier", "OpenRewrite"}
+        if recent(tool)
+        and coverage_count(tool) < data["threshold"]
+        and int(tool["stars"].replace(",", "")) >= data["starThreshold"]
+    }
+    assert ecosystem == {
+        "Backlog.md",
+        "Backstage",
+        "BMAD",
+        "Copier",
+        "OpenRewrite",
+        "OpenSpec",
+        "Ruler",
+        "Spec Kit",
+        "Superpowers",
+    }
+    assert {tool["name"] for tool in data["tools"]} - {
+        tool["name"] for tool in primary
+    } - ecosystem == {"AGENTS.md", "Minder"}
+    superpowers = next(tool for tool in data["tools"] if tool["name"] == "Superpowers")
+    assert superpowers["coverage"] == {
+        "full": ["02"],
+        "partial": ["01", "03", "04"],
+    }
+    comparison_keys = {
+        tool["name"]: {comparison["key"] for comparison in tool["comparisons"]}
+        for tool in data["tools"]
+    }
+    assert comparison_keys["AGENTS.md"] == {"agentInstructions"}
+    assert comparison_keys["Ruler"] == {"agentInstructions"}
     for tool in data["tools"]:
         for comparison in tool["comparisons"]:
             assert comparison["feature"]
