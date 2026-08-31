@@ -1,6 +1,7 @@
 {% set python_target = "3.14" if python_support_mode == "latest" else python_min_version -%}
-{% set has_python = language in ["python", "python-typescript"] -%}
-{% set has_typescript = language in ["typescript", "python-typescript"] -%}
+{% set has_python = "python" in languages -%}
+{% set has_typescript = "typescript" in languages -%}
+{% set has_rust = "rust" in languages -%}
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -47,4 +48,9 @@ pnpm install --frozen-lockfile --ignore-scripts
 pnpm exec biome ci .
 pnpm exec tsc --noEmit
 pnpm exec vitest run
+{% endif -%}
+{% if has_rust -%}
+cargo fmt --all -- --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-features
 {% endif -%}

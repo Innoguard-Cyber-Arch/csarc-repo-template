@@ -10,16 +10,20 @@ TEMPLATE = ROOT / "template" / "AGENTS.md.jinja"
 
 
 @pytest.mark.parametrize(
-    ("language", "python_command", "typescript_command"),
+    ("language", "python_command", "typescript_command", "rust_command"),
     [
-        ("ci", False, False),
-        ("python", True, False),
-        ("typescript", False, True),
-        ("python-typescript", True, True),
+        ("ci", False, False, False),
+        ("python", True, False, False),
+        ("typescript", False, True, False),
+        ("rust", False, False, True),
+        ("python-typescript", True, True, False),
     ],
 )
 def test_generated_guidance_has_one_source_and_real_commands(
-    language: str, python_command: bool, typescript_command: bool
+    language: str,
+    python_command: bool,
+    typescript_command: bool,
+    rust_command: bool,
 ) -> None:
     """Keep governance references stable and commands profile-specific."""
     environment = Environment(autoescape=True, undefined=StrictUndefined)
@@ -27,6 +31,8 @@ def test_generated_guidance_has_one_source_and_real_commands(
     rendered = template.render(
         branch_strategy="delivery",
         language=language,
+        languages=[] if language == "ci" else language.split("-"),
+        package_name="guidance_fixture",
         project_name="Guidance fixture",
     )
 
@@ -38,12 +44,13 @@ def test_generated_guidance_has_one_source_and_real_commands(
     assert "`CLAUDE.md` only imports it" in rendered
     assert "docs/index.html#method" in rendered
     assert "docs/index.html#work" not in rendered
-    assert "Journey 07" in rendered
-    assert "Alpha self-merge" in rendered
     assert "Journey 08" in rendered
+    assert "Alpha self-merge" in rendered
+    assert "Journey 09" in rendered
     assert "automation are suspended" not in rendered
     assert ("Python setup:" in rendered) is python_command
     assert ("TypeScript setup:" in rendered) is typescript_command
+    assert ("Rust setup:" in rendered) is rust_command
 
 
 def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
@@ -56,7 +63,7 @@ def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
     root_guidance = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     assert "## Responsibility map" in root_guidance
     assert "Approved specs and ADRs preserve durable context" in root_guidance
-    assert "Journey 07" in root_guidance
+    assert "Journey 08" in root_guidance
     assert "automation are suspended" not in root_guidance
 
     template_guidance = TEMPLATE.read_text(encoding="utf-8")
@@ -65,4 +72,4 @@ def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
 
     readme = (ROOT / "template" / "README.md.jinja").read_text(encoding="utf-8")
     assert "一般情況下不能自行合併" not in readme
-    assert "07 規則治理" in readme
+    assert "08 規則治理" in readme

@@ -21,17 +21,18 @@ Standard mode is for general AI-assisted or vibe-coding developers; it does not 
 
 | Choice | Production capability available today |
 | --- | --- |
-| Project type | Workflow only, Python, TypeScript, or Python plus TypeScript |
+| Programming languages | Select Python, TypeScript, and Rust independently; select none for the shared workflow only |
 | Branch approach | One development branch per delivery batch, all changes directly into `main`, or one shared `dev` branch |
+| Template settings | Creation or adoption writes choices to `.csarc/config.yml`; template updates maintain this single repository configuration |
 | Shared capability | Work-item (Issue) and change-proposal (PR) forms, AI working rules, automated checks, dependency safety, version records, and template updates |
 
 {{< detail key="capability-boundary" title="Adoption paths and current scope" >}}
 - **New repository:** choose a project type and branch approach; split only larger outcomes into independently verifiable sub-items.
-- **Existing repository:** preview the adoption diff, preserve existing product content, then resolve conflicts and required checks one by one.
-- **Repository already using the template:** select a reviewed template version, run the update, and review only that version's diff.
-- **Prerequisites:** Git, GitHub CLI, and uv; TypeScript or mixed projects also need Node 24+ and pnpm 11. Local verification needs no token.
+- **Existing repository:** the template detects current languages and creates `.csarc/config.yml`, then previews the adoption diff while preserving product content.
+- **Repository already using the template:** change options or upgrade through `csarc update`; the template updates the configuration and managed files together.
+- **Prerequisites:** Git, GitHub CLI, and uv; TypeScript needs Node 24+ and pnpm 11, while Rust needs rustup. Local verification needs no token.
 
-The template promises only capabilities that are implemented and tested. Go, Rust, generic deployment, monitoring, AI knowledge retrieval, and hosted documentation remain future or optional work.
+The template promises only capabilities that are implemented and tested. Go, generic deployment, monitoring, AI knowledge retrieval, and hosted documentation remain future or optional work.
 {{< /detail >}}
 {{< /slide >}}
 
@@ -59,7 +60,7 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 {{< slide key="files" track="files" class="dense" eyebrow="File map" title="The template puts required settings in the right place" subtitle="This lists the major files currently generated; template updates never silently overwrite product-owned content." legacy="false" >}}
 | Path | Purpose | Responsibility |
 | --- | --- | --- |
-| `.copier-answers.yml`, `.csarc/profile.json` | Template source, profile, and branch strategy | Template-led |
+| `.csarc/config.yml` | Template source, languages, branch strategy, and optional capabilities | Template-led |
 | `.github/ISSUE_TEMPLATE/`, `pull_request_template.md` | Work definition and PR contract | Template-led |
 | `.github/workflows/` | Six active flows: Issue triage, Milestone sync, spec sync, PR rules, verification, and scheduled vulnerability scanning | Template-led |
 | `AGENTS.md`, `README.md`, `CLAUDE.md` | Agent working rules and user entry point | Shared |
@@ -129,7 +130,18 @@ Workflows, policies, scripts, and documents shared by root and `template/` are k
 Verification logic lives only in scripts and tests. This step restores only `.github/workflows/ci.yml`; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys.
 {{< /slide >}}
 
-{{< slide key="pr" track="pr" eyebrow="Step 05" title="Make completed changes reviewable and deliverable" subtitle="A work PR completes one work item; a release PR then carries the verified batch into main." legacy="false"  class="candidate-slide" >}}
+{{< slide key="languages" track="languages" eyebrow="Step 04" title="Choose a language and receive the matching checks" subtitle="Each language owns its tools and tests; shared rules run once." legacy="false" class="candidate-slide" >}}
+Choose a project language and the template prepares the matching checks:
+
+- **Every project:** checks work rules, documentation, secrets, and dependency safety.
+- **Python:** checks formatting, types, tests, and the installable package.
+- **TypeScript:** checks formatting, types, tests, and the installable package.
+- **Rust:** checks formatting, common mistakes, tests, the release build, and the installable package.
+
+Each language is selected independently. Selecting several languages combines their modules while each shared check still runs once; the documentation does not enumerate combinations.
+{{< /slide >}}
+
+{{< slide key="pr" track="pr" eyebrow="Step 06" title="Make completed changes reviewable and deliverable" subtitle="A work PR completes one work item; a release PR then carries the verified batch into main." legacy="false"  class="candidate-slide" >}}
 | PR stage | Destination | What this stage completes |
 | --- | --- | --- |
 | Issue PR | Work branch → dev | Review one change and close its linked Issue after merge |
@@ -145,7 +157,7 @@ Verification logic lives only in scripts and tests. This step restores only `.gi
 {{< /disclosure >}}
 {{< /slide >}}
 
-{{< slide key="supply" track="supply" eyebrow="Step 04" title="Update, check, and record third-party packages separately" subtitle="Observe ordinary releases, act on known vulnerabilities immediately, and retain a traceable release inventory." legacy="false"  class="candidate-slide" >}}
+{{< slide key="supply" track="supply" eyebrow="Step 05" title="Update, check, and record third-party packages separately" subtitle="Observe ordinary releases, act on known vulnerabilities immediately, and retain a traceable release inventory." legacy="false"  class="candidate-slide" >}}
 | Risk | What the template does today |
 | --- | --- |
 | A dependency change cannot be reproduced | PR verification reinstalls from the locked-version list (lockfile), so every run receives the same packages |
@@ -161,7 +173,7 @@ Verification logic lives only in scripts and tests. This step restores only `.gi
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="deploy" track="deploy" class="dense" eyebrow="Step 06" title="Connect version policy to artifacts" subtitle="Verify the promotion source, then select a safe delivery mode from current platform capabilities." legacy="false" >}}
+{{< slide key="deploy" track="deploy" class="dense" eyebrow="Step 07" title="Connect version policy to artifacts" subtitle="Verify the promotion source, then select a safe delivery mode from current platform capabilities." legacy="false" >}}
 **Milestone closure:** after a successful release records its delivery evidence, close the lifecycle tracking Issue and the Milestone. To stop early, state why and move or cancel every unfinished Issue first.
 
 | Preconditions | Mode | Behavior and guarantee |
@@ -181,7 +193,7 @@ GitHub Release is the baseline for every profile. PyPI and npm are separate opt-
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="governance" track="governance" class="dense" eyebrow="Step 07" title="Detect GitHub capability before applying controls" subtitle="The organization currently probes as Free plus private, so main is not protected by an enforced Ruleset." legacy="false" >}}
+{{< slide key="governance" track="governance" class="dense" eyebrow="Step 08" title="Detect GitHub capability before applying controls" subtitle="The organization currently probes as Free plus private, so main is not protected by an enforced Ruleset." legacy="false" >}}
 | GitHub state | `apply` result | Actual gate |
 | --- | --- | --- |
 | Free + public | Apply a Ruleset through REST | Missing or mismatched rules fail |
@@ -196,9 +208,10 @@ Each check is a snapshot. A setting changed and restored between runs still requ
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="template-release" track="template-release" eyebrow="Step 08" title="Copier keeps repositories aligned, and the template dogfoods its rules" subtitle="A template defect affects many projects, so creation, adoption, and update all run as real tests." legacy="false"  class="candidate-slide" >}}
+{{< slide key="template-release" track="template-release" eyebrow="Step 09" title="Copier keeps repositories aligned, and the template dogfoods its rules" subtitle="A template defect affects many projects, so creation, adoption, and update all run as real tests." legacy="false"  class="candidate-slide" >}}
 - `template/` is the delivered source; root retains the template repository's own GitHub governance and dogfood configuration.
-- CI/CD-only, Python, TypeScript, mixed, and minimum-Python compositions are generated and verified.
+- `.csarc/config.yml` is both Copier's update record and the repository's only template configuration. Languages, branch strategy, and optional capabilities read from it; later extensions add settings here instead of creating another configuration file.
+- The shared baseline and the Python, TypeScript, and Rust modules are verified independently. Selecting several languages combines modules without creating a combination-specific workflow.
 - An existing repository is adopted and then updated from the next Copier revision, proving product content is preserved.
 
 {{< disclosure key="copier-update" title="Copier + root dogfood + create/update regression" >}}
@@ -206,13 +219,15 @@ Each check is a snapshot. A setting changed and restored between runs still requ
 {{< /disclosure >}}
 
 {{< detail key="template-release-scope" title="Single source, runtime baselines, and the root-only boundary" >}}
+`.csarc/config.yml` retains Copier's required template source and revision together with the capabilities selected for this repository. Change it through `csarc update --data` so manual edits cannot drift from Copier. A derived template should add its own settings to the same YAML instead of duplicating CSARC fields.
+
 `scripts/sync-paired-files.sh` makes root the source of paired files and verifies copied content and permissions with `--check`. `profiles/catalog.yaml` records runtime baselines and real pilot status. Python and Node baselines advance only after their own thirty-day observation period.
 
 `scripts/verify-template.sh` runs create/adopt/update fixtures only in the template repository and is never delivered downstream. Generated repositories use the smaller `scripts/verify` entry point.
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="docs-site" track="docs-site" eyebrow="Step 09" title="A portable single file remains the baseline" subtitle="Hugo owns content structure; the existing renderer produces an offline, forwardable HTML file." legacy="false"  class="candidate-slide" >}}
+{{< slide key="docs-site" track="docs-site" eyebrow="Step 10" title="A portable single file remains the baseline" subtitle="Hugo owns content structure; the existing renderer produces an offline, forwardable HTML file." legacy="false"  class="candidate-slide" >}}
 - `site/content/` holds bilingual Markdown with matching content keys.
 - `site/static/styles.css` retains the presentation identity; Hugo shortcodes produce the shared content structure.
 - `scripts/render_site.py` embeds CSS, JavaScript, fonts, and images and rejects external runtime assets.
@@ -228,13 +243,13 @@ Each check is a snapshot. A setting changed and restored between runs still requ
 <aside class="config-guidance"><strong>Website access</strong><p>If reader restrictions become necessary, evaluate Cloudflare Pages + Access first. The host, identity provider, data policy, and organization owner still require separate approval.</p></aside>
 {{< /slide >}}
 
-{{< slide key="rollout" track="rollout" eyebrow="Step 10" title="Adopt in stages, with a stop after every step" subtitle="Maturity follows operational evidence, not a date or the mere presence of files." legacy="false"  class="candidate-slide" >}}
+{{< slide key="rollout" track="rollout" eyebrow="Step 11" title="Adopt in stages, with a stop after every step" subtitle="Maturity follows operational evidence, not a date or the mere presence of files." legacy="false"  class="candidate-slide" >}}
 | Level | Current state |
 | --- | --- |
-| Baseline capability | Four profiles, Issues/specs, PR/CI, local verification, lockfile policy, and the repository site have executable implementations |
+| Baseline capability | The shared baseline and Python, TypeScript, and Rust modules, plus Issues/specs, PR/CI, local verification, lockfile policy, and the repository site have executable implementations |
 | Verified online | Release handoff, traceable artifacts, consumer attestation, and the first CI-only downstream adoption and update |
-| Still piloting | Python, TypeScript, and mixed compositions each need one real consuming-repository pilot |
-| Future/optional | Central catalog or governance, Go/Rust, authenticated hosting, deployment, monitoring, RAG, and autonomous agents |
+| Still piloting | The Python, TypeScript, and Rust modules still need real consuming-repository pilots |
+| Future/optional | Central catalog or governance, Go, authenticated hosting, deployment, monitoring, RAG, and autonomous agents |
 
 {{< detail key="rollout-evidence" title="Why capabilities are not enabled all at once" >}}
 A big-bang switch spreads defects across every project; a calendar date does not prove readiness; a profile without real adoption evidence is only a promise. `profiles/catalog.yaml` separates synthetic verification from consuming-repository evidence. `scripts/verify-template.sh` proves generation and update paths, but cannot replace a pilot.
@@ -331,7 +346,7 @@ Agents do not save raw conversations. Only a user-confirmed durable architecture
 | Real consuming repository | CI-only proven | `ai-guardrail` adopted v0.2.4 and updated to v0.3.1; other profiles still need pilots |
 
 {{< detail key="benchmark-gap" title="Current gaps" >}}
-There is no cross-repository catalog, comprehensive hosted governance, or generic deployment platform. The root-only `Live integration smoke` continues to exercise OSV, Release Please, release handoff, and governance drift. Python, TypeScript, and mixed compositions advance to beta only after their own real pilots.
+There is no cross-repository catalog, comprehensive hosted governance, or generic deployment platform. The root-only `Live integration smoke` continues to exercise OSV, Release Please, release handoff, and governance drift. The Python, TypeScript, and Rust modules advance to beta only after real pilots.
 {{< /detail >}}
 {{< /slide >}}
 

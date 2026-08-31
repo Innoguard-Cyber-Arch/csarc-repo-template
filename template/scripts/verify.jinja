@@ -23,8 +23,8 @@ record_project_verification_status not-run
 
 mode="${1:-full}"
 if [[ "$mode" != "full" && "$mode" != "python-compatibility" &&
-  "$mode" != "typescript" ]]; then
-  echo "Usage: $0 [full|python-compatibility|typescript]" >&2
+  "$mode" != "typescript" && "$mode" != "rust" ]]; then
+  echo "Usage: $0 [full|python-compatibility|typescript|rust]" >&2
   exit 2
 fi
 
@@ -36,8 +36,9 @@ for workflow in .github/workflows/{pr-policy,ci}.yml; do
   fi
 done
 
-verify_python={{ "true" if language in ["python", "python-typescript"] else "false" }}
-verify_typescript="${CSARC_VERIFY_TYPESCRIPT:-{{ "true" if language in ["typescript", "python-typescript"] else "false" }}}"
+verify_python={{ "true" if "python" in languages else "false" }}
+verify_typescript="${CSARC_VERIFY_TYPESCRIPT:-{{ "true" if "typescript" in languages else "false" }}}"
+verify_rust={{ "true" if "rust" in languages else "false" }}
 temporary_paths=()
 cleanup() {
   local path
@@ -74,6 +75,17 @@ verify_typescript_module() {
   )
 }
 
+verify_rust_module() {
+  command -v cargo >/dev/null
+  command -v rustc >/dev/null
+  test "$(rustc --version | cut -d' ' -f2)" = "1.98.0"
+  cargo fmt --all -- --check
+  cargo clippy --locked --all-targets --all-features -- -D warnings
+  cargo test --locked --all-features
+  cargo build --release --locked
+  cargo package --locked --allow-dirty
+}
+
 if [[ "$mode" == "python-compatibility" ]]; then
   if ! $verify_python; then
     echo "Python compatibility is unavailable for this language profile." >&2
@@ -92,6 +104,15 @@ if [[ "$mode" == "typescript" ]]; then
     exit 2
   fi
   verify_typescript_module
+  exit 0
+fi
+
+if [[ "$mode" == "rust" ]]; then
+  if ! $verify_rust; then
+    echo "Rust verification is unavailable for this language profile." >&2
+    exit 2
+  fi
+  verify_rust_module
   exit 0
 fi
 
@@ -154,6 +175,10 @@ if [[ "$verify_typescript" == "true" ]]; then
   verify_typescript_module
 fi
 
+if $verify_rust; then
+  verify_rust_module
+fi
+
 if $verify_python; then
   platform_python=(uv run python)
 else
@@ -168,21 +193,25 @@ grep -q 'Architecture Decision Records' docs/README.md
 grep -q 'Test-Driven Development' docs/README.md
 grep -q 'Behavior-Driven Development' docs/README.md
 grep -q 'docs/decisions/' docs/README.md
-"${platform_python[@]}" -m json.tool .csarc/profile.json >/dev/null
 "${platform_python[@]}" - <<'PY'
-import json
 from pathlib import Path, PurePosixPath
 
-profile = json.loads(Path(".csarc/profile.json").read_text(encoding="utf-8"))
-container = profile.get("container", {})
-mode = container.get("mode")
+from scripts.csarc_config import load_config
+
+config = load_config()
+expected_languages = set({{ languages | tojson }})
+if set(config.get("languages", [])) != expected_languages:
+    raise SystemExit("Configured languages do not match the rendered template")
+if config.get("project_mode") not in {"new", "existing"}:
+    raise SystemExit("project_mode must be new or existing")
+if config.get("branch_strategy") not in {"main", "dev", "delivery"}:
+    raise SystemExit("branch_strategy must be main, dev, or delivery")
+mode = config.get("container_mode", "none")
 if mode not in {"none", "verify", "ghcr"}:
     raise SystemExit(f"Invalid container mode: {mode!r}")
 enabled = mode != "none"
-if profile.get("modules", {}).get("container") is not enabled:
-    raise SystemExit("Container module does not match container mode")
 if enabled:
-    containerfile = container.get("file", "")
+    containerfile = config.get("containerfile_path", "")
     if not isinstance(containerfile, str):
         raise SystemExit("Container file must be a string")
     path = PurePosixPath(containerfile)
@@ -190,7 +219,7 @@ if enabled:
         raise SystemExit("Container file must be a safe repository-relative path")
     if not Path(containerfile).is_file():
         raise SystemExit(f"Container file does not exist: {containerfile}")
-    smoke = container.get("smoke_command", "")
+    smoke = config.get("container_smoke_command", "")
     if (
         not isinstance(smoke, str)
         or "$IMAGE" not in smoke
@@ -223,6 +252,10 @@ if Path("package.json").exists():
     versions["package.json"] = json.loads(
         Path("package.json").read_text(encoding="utf-8")
     )["version"]
+if Path("Cargo.toml").exists():
+    versions["Cargo.toml"] = tomllib.loads(
+        Path("Cargo.toml").read_text(encoding="utf-8")
+    )["package"]["version"]
 if Path("version.txt").exists():
     versions["version.txt"] = Path("version.txt").read_text(encoding="utf-8").strip()
 if len(set(versions.values())) != 1:
@@ -239,7 +272,7 @@ grep -q 'release pull request (human-only)' docs/ci-policy.md
 
 test -f AGENTS.md
 test "$(cat CLAUDE.md)" = "@AGENTS.md"
-template_mode="$("${platform_python[@]}" -c 'import json; print(json.load(open(".csarc/profile.json"))["template_mode"])')"
+template_mode="$("${platform_python[@]}" scripts/csarc_config.py project_mode)"
 if [[ "$template_mode" == "new" ]]; then
   test "$(wc -l < AGENTS.md)" -le 200
   required_readme_headings=(

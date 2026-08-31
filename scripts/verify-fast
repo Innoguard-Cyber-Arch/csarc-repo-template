@@ -56,5 +56,5 @@ if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
   fi
   "$smoke_root/project/scripts/test-pr-policy"
   "$smoke_root/project/scripts/test-release-follow-up-gates"
-  python3 -m json.tool "$smoke_root/project/.csarc/profile.json" >/dev/null
+  python3 "$smoke_root/project/scripts/csarc_config.py" languages >/dev/null
 fi

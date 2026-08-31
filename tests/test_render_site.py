@@ -162,34 +162,37 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         assert inactive not in file_map
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
     assert "版本與發佈流程尚未啟用" in flow
-    assert "使用 AI／vibe coding 的一般開發者" in chinese_home
+    assert "使用 AI／vibe coding 的一般開發者" in chinese_home  # noqa: RUF001
     assert "不要求具備工程或 CI/CD 維運背景" in chinese_home
     assert "general AI-assisted or vibe-coding developers" in english_home
     assert "does not assume an engineering or CI/CD operations background" in (
         english_home
     )
     for explanation in (
-        "鎖定版本清單（lockfile）",
-        "自動更新服務（Dependabot）",
-        "已知漏洞掃描（OSV）",
-        "軟體成分清單（SBOM）",
+        "鎖定版本清單（lockfile）",  # noqa: RUF001
+        "自動更新服務（Dependabot）",  # noqa: RUF001
+        "已知漏洞掃描（OSV）",  # noqa: RUF001
+        "軟體成分清單（SBOM）",  # noqa: RUF001
     ):
         assert explanation in supply
     journey_decisions = chinese.split('{{< slide key="method"', 1)[1].split(
         '{{< slide key="ecosystem"', 1
     )[0]
     assert '<article class="decision-step' not in journey_decisions
-    assert journey_decisions.count('class="decision-step decision-fold') == 18
-    assert journey_decisions.count('class="decision-step decision-fold" open') == 9
+    assert journey_decisions.count('class="decision-step decision-fold') == 20
+    assert (
+        journey_decisions.count('class="decision-step decision-fold" open')
+        == 10
+    )
     assert (
         journey_decisions.count(
             'class="decision-step decision-fold recommended" open'
         )
-        == 9
+        == 10
     )
 
 
-def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
+def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:  # noqa: C901
     root = Path(__file__).parents[1]
     chinese = (root / "site/content/_index.zh-tw.md").read_text(
         encoding="utf-8"
@@ -294,8 +297,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
-    assert len(data["features"]) == 23
-    assert len(data["featureGroups"]) == 6
+    assert len(data["features"]) == 27
+    assert len(data["featureGroups"]) == 7
     assert data["featureGroups"][0]["features"] == [
         "repositoryTruth",
         "workItemStructure",
@@ -315,33 +318,38 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "generatedProjectVerification",
     ]
     assert data["featureGroups"][3]["features"] == [
+        "languageSelection",
+        "nativeLanguageChecks",
+        "composableLanguageModules",
+        "languageConfiguration",
+    ]
+    assert data["featureGroups"][4]["features"] == [
         "dependencyUpdatePolicy",
         "lockedDependencyResolution",
         "knownVulnerabilityDetection",
         "releaseArtifactInventory",
     ]
-    assert data["featureGroups"][4]["features"] == [
+    assert data["featureGroups"][5]["features"] == [
         "pullRequestUnit",
         "integrationRoute",
         "mergeReadiness",
         "baseSynchronization",
         "proposalLifecycle",
     ]
-    assert data["featureGroups"][5]["features"] == [
+    assert data["featureGroups"][6]["features"] == [
         "declarativeState",
         "templateLifecycle",
     ]
-    assert len(data["testing"]["groups"]) == 6
+    assert len(data["testing"]["groups"]) == 7
     duration_rows = data["testing"]["duration"]["rows"]
     assert [row["key"] for row in duration_rows] == ["issue", "release"]
-    assert all(len(row["shared"]["items"]) == 4 for row in duration_rows)
-    assert all(len(row["templateOnly"]["items"]) == 4 for row in duration_rows)
+    assert all(len(row["shared"]["items"]) == 5 for row in duration_rows)
+    assert all(len(row["templateOnly"]["items"]) == 5 for row in duration_rows)
     for row in duration_rows:
         for scope in ("shared", "templateOnly"):
             assert [
-                item["label"]["zh-tw"][:2]
-                for item in row[scope]["items"]
-            ] == ["02", "03", "04", "05"]
+                item["label"]["zh-tw"][:2] for item in row[scope]["items"]
+            ] == ["02", "03", "04", "05", "06"]
     assert duration_rows[0]["shared"]["total"]["zh-tw"] == "約 1\u20137 分鐘"
     assert duration_rows[1]["templateOnly"]["total"]["zh-tw"] == (
         "約 9\u201314 分鐘"
@@ -418,8 +426,17 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert verification_rows[0]["shared"]["milestone"]["files"] == [
         {"path": "scripts/ci_tier.py"}
     ]
-    supply_rows = data["testing"]["groups"][3]["rows"]
+    language_rows = data["testing"]["groups"][3]["rows"]
     assert data["testing"]["groups"][3]["journey"] == "04"
+    assert [row["purpose"]["zh-tw"]["title"] for row in language_rows] == [
+        "設定與實際檔案一致",
+        "各語言使用自己的檢查",
+    ]
+    assert language_rows[0]["shared"]["milestone"]["files"][0] == {
+        "path": ".csarc/config.yml"
+    }
+    supply_rows = data["testing"]["groups"][4]["rows"]
+    assert data["testing"]["groups"][4]["journey"] == "05"
     assert [row["purpose"]["zh-tw"]["title"] for row in supply_rows] == [
         "鎖定版本可重現安裝",
         "一般更新自動提出 PR",
@@ -435,8 +452,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert supply_rows[2]["shared"]["release"]["automation"][1]["path"] == (
         ".github/workflows/osv.yml"
     )
-    assert data["testing"]["groups"][5]["journey"] == "06"
-    delivery_rows = data["testing"]["groups"][5]["rows"]
+    assert data["testing"]["groups"][6]["journey"] == "07"
+    delivery_rows = data["testing"]["groups"][6]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in delivery_rows] == [
         "發版後續規則",
         "里程碑結案",
@@ -467,8 +484,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         }
     ]
     assert verification_rows[0]["templateOnly"] == {}
-    merge_rows = data["testing"]["groups"][4]["rows"]
-    assert data["testing"]["groups"][4]["journey"] == "05"
+    merge_rows = data["testing"]["groups"][5]["rows"]
+    assert data["testing"]["groups"][5]["journey"] == "06"
     assert [row["purpose"]["zh-tw"]["title"] for row in merge_rows] == [
         "PR 資料與目的分支",
         "候選內容包含最新基準",
@@ -489,8 +506,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "archived" not in data["testing"]["labels"]["zh-tw"]
     assert "archived" not in testing_shortcode
 
-    assert len(data["tools"]) == 22
-    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 83
+    assert len(data["tools"]) == 24
+    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 96
     assert data["comparisonDate"] == "2026-08-31"
     assert data["releaseCutoff"] == "2026-02-28"
     assert data["threshold"] == 5
@@ -524,6 +541,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert [tool["name"] for tool in primary] == [
         "projen",
         "Repository Harness",
+        "Backstage",
     ]
 
     ecosystem = {
@@ -535,7 +553,6 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     }
     assert ecosystem == {
         "Backlog.md",
-        "Backstage",
         "BMAD",
         "Copier",
         "OpenRewrite",
@@ -549,6 +566,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "Dependabot",
         "Renovate",
         "pnpm",
+        "uv",
+        "Rust / Cargo",
         "OSV-Scanner",
         "Syft",
         "Sapling",
@@ -561,7 +580,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     )
     assert superpowers["coverage"] == {
         "full": ["02"],
-        "partial": ["01", "03", "05"],
+        "partial": ["01", "03", "06"],
     }
     comparison_keys = {
         tool["name"]: {comparison["key"] for comparison in tool["comparisons"]}

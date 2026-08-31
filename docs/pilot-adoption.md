@@ -60,4 +60,4 @@
 
 ## 成熟度結論
 
-共用治理與 `ci` composition 已具備一個真實 consuming repo、owner、導入、更新及完整線上驗證證據，維持 beta。Python、TypeScript 與混合 composition 的合成建立／更新測試雖完整，但仍缺各自的真實 consuming repo，因此調整為 alpha；個別 profile 完成同一份 checklist 後才能升為 beta。
+共用治理與 CI/CD-only 基線已具備一個真實 consuming repo、owner、導入、更新及完整線上驗證證據，維持 beta。Python、TypeScript 與 Rust 語言模組雖可合成建立與更新，但仍缺真實 consuming repo，因此維持 alpha；個別模組完成同一份 checklist 後才能升為 beta。同時選取多個模組不形成另一種 composition。

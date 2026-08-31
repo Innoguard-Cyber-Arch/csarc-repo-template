@@ -2108,28 +2108,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -2153,17 +2156,17 @@ html[data-detail-level="simple"] .detail-panel {
         <div class="package-badges" aria-label="套件狀態">
           <span class="package-badge beta">v0.12.2</span><!-- x-release-please-version -->
           <span class="package-badge beta">beta</span>
-          <span class="package-badge python">四種專案種類</span>
+          <span class="package-badge python">三個語言模組</span>
           <span class="package-badge">三種分支做法</span>
           <span class="package-badge">公版可持續更新</span>
           <span class="package-badge security">自動驗證／安全檢查</span>
           <span class="package-badge warning">免費私人 repo：無法強制保護 main</span>
         </div>
       </header>
-      <div class="language-contract" aria-label="程式語言 profile 決策">
-        <p class="language-card"><strong>建立時必選｜四種專案種類</strong>只需要工作流程、Python、TypeScript，或同時使用兩種語言；模板會依選擇準備必要設定。</p>
-        <p class="language-card shared"><strong>所有專案共用</strong>工作單與子工作、AI 規範、自動驗證、依賴安全、版本記錄與公版更新；分支則可依交付批次、只用 main，或先集中到 dev。</p>
-        <p class="language-card future"><strong>目前支援版本</strong>Python 3.14；TypeScript 使用 Node 24 長期支援版。Go 與 Rust 尚未支援，因此不產生空設定。</p>
+      <div class="language-contract" aria-label="程式語言與公版設定">
+        <p class="language-card"><strong>建立／導入時選擇程式語言</strong>Python、TypeScript、Rust 需要哪些就勾哪些；都不選時只準備共通工作流程。</p>
+        <p class="language-card shared"><strong>一份公版設定</strong>模板把語言、分支與選用能力記在 <code>.csarc/config.yml</code>；更新時由公版維護，不必分散找設定。</p>
+        <p class="language-card future"><strong>目前支援版本</strong>Python 3.14、TypeScript 使用 Node 24 長期支援版、Rust 1.98。Go 尚未支援，因此不產生空設定。</p>
       </div>
       <div class="product-start">
         <section class="product-scope" aria-label="公版提供的能力">
@@ -2181,7 +2184,7 @@ html[data-detail-level="simple"] .detail-panel {
         </section>
       </div>
       <div class="prerequisite-line product-prerequisites">
-        <p><strong>開始前必裝</strong>Git、GitHub CLI、uv；TypeScript／混合案另需 Node 24+、pnpm 11。純本機驗證不用 token；套用 GitHub 設定與端到端測試前才登入 <code>gh</code>。</p>
+        <p><strong>開始前必裝</strong>Git、GitHub CLI、uv；選 TypeScript 另需 Node 24+、pnpm 11，選 Rust 另需 rustup。純本機驗證不用 token；套用 GitHub 設定與端到端測試前才登入 <code>gh</code>。</p>
         <button class="setup-trigger" type="button" data-setup="mac" aria-expanded="false">macOS 安裝</button>
         <button class="setup-trigger" type="button" data-setup="windows" aria-expanded="false">Windows 安裝</button>
       </div>
@@ -2198,12 +2201,16 @@ html[data-detail-level="simple"] .detail-panel {
 	</thead>
 	<tbody>
 			<tr>
-					<td>專案種類</td>
-					<td>只需要工作流程、Python、TypeScript，或同時使用 Python 與 TypeScript</td>
+					<td>程式語言</td>
+					<td>Python、TypeScript、Rust 可獨立複選；都不選時只使用共通工作流程</td>
 			</tr>
 			<tr>
 					<td>分支做法</td>
 					<td>每個交付批次有自己的開發分支、所有修改直接進 <code>main</code>，或先集中到 <code>dev</code></td>
+			</tr>
+			<tr>
+					<td>公版設定</td>
+					<td>建立／導入時把選項寫入 <code>.csarc/config.yml</code>；之後由公版更新，不必到不同檔案重複設定</td>
 			</tr>
 			<tr>
 					<td>共用能力</td>
@@ -2215,11 +2222,11 @@ html[data-detail-level="simple"] .detail-panel {
   <h3>導入方法與目前範圍</h3>
   <ul>
 <li><strong>新 repo：</strong> 選專案種類與分支做法；大型成果才拆成主要工作與可獨立驗收的子工作。</li>
-<li><strong>既有 repo：</strong> 先預覽導入差異，保留原有產品內容，再逐項解決衝突與必要檢查。</li>
-<li><strong>已使用公版：</strong> 選定已審查的公版版本執行更新，只審查這次版本差異。</li>
-<li><strong>開始前必裝：</strong> Git、GitHub CLI、uv；TypeScript／混合案另需 Node 24+ 與 pnpm 11。純本機驗證不需要 token。</li>
+<li><strong>既有 repo：</strong> 公版先偵測現有語言並產生 <code>.csarc/config.yml</code>，再預覽導入差異、保留產品內容。</li>
+<li><strong>已使用公版：</strong> 透過 <code>csarc update</code> 調整選項或升級；公版同步設定與必要檔案，只審查這次差異。</li>
+<li><strong>開始前必裝：</strong> Git、GitHub CLI、uv；選 TypeScript 另需 Node 24+ 與 pnpm 11，選 Rust 另需 rustup。純本機驗證不需要 token。</li>
 </ul>
-<p>公版只承諾已經實作並測試的能力。Go、Rust、通用部署、監控、AI 知識檢索與網站託管仍是未來或選配項目。</p>
+<p>公版只承諾已經實作並測試的能力。Go、通用部署、監控、AI 知識檢索與網站託管仍是未來或選配項目。</p>
 </aside>
 </div>
 
@@ -2252,28 +2259,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -2408,28 +2418,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -2457,7 +2470,7 @@ html[data-detail-level="simple"] .detail-panel {
         </div>
         <div class="repo-tree-head"><span>路徑（依 repo 結構）</span><span>功能／對應旅程編號</span><span>語言</span><span>模板影響</span></div>
         <div class="repo-tree-body">
-          <div class="repo-tree-row"><span class="repo-tree-path">.copier-answers.yml＋.csarc/profile.json</span><span class="repo-tree-purpose"><span class="journey-code">08</span><span class="purpose-copy">來源、語言與分支模式</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path">.csarc/config.yml</span><span class="repo-tree-purpose"><span class="journey-code">09</span><span class="purpose-copy">公版來源、語言、分支與選用能力</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path">.gitignore</span><span class="repo-tree-purpose"><span class="journey-code">02</span><span class="purpose-copy">環境雜訊／語言產物</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path folder">.github/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04／05</span><span class="purpose-copy">GitHub 表單、自動檢查與審查設定</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">CODEOWNERS＋REVIEWERS</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">指定 owner 與 reviewer 候選</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
@@ -2494,8 +2507,8 @@ html[data-detail-level="simple"] .detail-panel {
 	</thead>
 	<tbody>
 			<tr>
-					<td><code>.copier-answers.yml</code>、<code>.csarc/profile.json</code></td>
-					<td>記錄公版來源、profile 與分支模式</td>
+					<td><code>.csarc/config.yml</code></td>
+					<td>記錄公版來源、語言、分支與選用能力</td>
 					<td>公版主導</td>
 			</tr>
 			<tr>
@@ -2571,28 +2584,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -2703,28 +2719,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -2792,28 +2811,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -2854,6 +2876,98 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
+<section class="slide markdown-slide legacy-slide decision-slide" id="languages" data-content-key="languages" data-track="languages" aria-label="選擇程式語言後，自動帶入適合的檢查">
+  <aside class="journey-rail" aria-label="簡報目錄">
+  <h3>使用公版</h3>
+  <ol class="journey-use">
+    <li class="journey-item priority">
+      <a href="#capability"><span>能力／導入</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#flow"><span>CI/CD 流程</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#files"><span>檔案地圖</span></a>
+    </li>
+  </ol>
+  <h3>開發與維護</h3>
+  <ol class="journey-main">
+    <li class="journey-item priority">
+      <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
+    </li>
+    <li class="journey-item priority active" aria-current="step">
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
+    </li>
+    <li class="journey-item best">
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
+    </li>
+  </ol>
+  <h3>公版管理</h3>
+  <ol class="journey-support">
+    <li class="journey-item priority">
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
+    </li>
+    <li class="journey-item best">
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
+    </li>
+  </ol>
+  <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
+</aside>
+
+  <header class="basic-header">
+    <span class="selection-sequence">步驟 04</span>
+    <h2>選擇程式語言後，自動帶入適合的檢查</h2>
+    <p class="subtitle">每種語言各自定義工具與測試；共通規則只執行一次。</p>
+  </header>
+
+<div class="legacy-content">
+      <header>
+        <h2>步驟 4｜<span class="accent">每種程式語言各自管理</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>使用者只要選擇專案語言，模板就產生對應版本、鎖檔、格式、靜態檢查、測試與建置設定。</p>
+      </header>
+      <p class="context-line"><strong>模板的作用｜</strong>依選擇的程式語言準備檢查；同時使用多種語言時，共通項目不重複執行。</p>
+      <div class="decision-strip">
+        <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">語言工具可以集中，也可以交回各生態圈</span></summary><ul><li><strong>單一跨語言工具：</strong>入口一致，但需要另外維護抽象層。</li><li><strong>各語言原生工具：</strong>開發者容易理解，版本與輸出則要由模板統一管理。</li><li><strong>每種組合各寫一套：</strong>初期直觀，組合增加後很容易重複與漂移。</li></ul></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">每種語言各自檢查需要的事情</span></summary><ul><li><strong>所有專案：</strong>檢查工作規則、文件、敏感資料與套件風險。</li><li><strong>Python：</strong>檢查程式格式、型別、測試，以及能否製作安裝包。</li><li><strong>TypeScript：</strong>檢查程式格式、型別、測試，以及能否製作安裝包。</li><li><strong>Rust：</strong>檢查程式格式、常見錯誤、測試，以及正式版本能否建置與打包。</li><li><strong>同時使用多種語言：</strong>合併各語言的檢查，共通項目只跑一次。</li></ul></details>
+      </div>
+      <aside class="config-guidance"><strong>模板功能與客製化</strong><ul><li><strong>單一設定來源：</strong><code>.csarc/config.yml</code> 同時是 repo 的公版設定與 Copier answers file；建立、導入與更新都由 Copier 寫入，不再另存 profile JSON。</li><li><strong>變更方式：</strong><code>copier.yml</code> 定義可選項；使用 <code>csarc update --data</code> 變更，不直接編輯生成設定。</li><li><strong>共通入口：</strong><code>scripts/verify-fast</code> 與 <code>scripts/verify</code>；GitHub Actions 只呼叫相同的本機檢查。</li><li><strong>Python：</strong><code>.python-version</code>、<code>pyproject.toml</code>、<code>uv.lock</code>；Python 3.14、uv、Ruff、mypy、pytest、wheel。</li><li><strong>TypeScript：</strong><code>.node-version</code>、<code>package.json</code>、<code>pnpm-lock.yaml</code>；Node 24、pnpm、Biome、TypeScript、Vitest、npm package。</li><li><strong>Rust：</strong><code>rust-toolchain.toml</code>、<code>Cargo.toml</code>、<code>Cargo.lock</code>；Rust 1.98、rustfmt、Clippy、cargo test、release build、Cargo package。</li><li><strong>版本基線：</strong><code>profiles/catalog.yaml</code>；各語言各自維護，不定義組合專屬版本。</li></ul></aside>
+</div>
+
+
+<div class="markdown-body basic-summary"><p>選擇專案語言後，模板會自動準備對應檢查：</p>
+<ul>
+<li>**所有專案：**檢查工作規則、文件、機密與套件安全。</li>
+<li>**Python：**檢查格式、型別、測試及安裝包。</li>
+<li>**TypeScript：**檢查格式、型別、測試及安裝包。</li>
+<li>**Rust：**檢查格式、常見錯誤、測試、正式建置及安裝包。</li>
+</ul>
+<p>同一項共通檢查只跑一次。語言可以同時勾選，但不另外建立或說明每一種排列組合。</p>
+</div>
+
+
+</section>
+
 <section class="slide markdown-slide legacy-slide decision-slide" id="pr" data-content-key="pr" data-track="pr" aria-label="讓完成的改動可審查、可交付">
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
@@ -2880,28 +2994,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
-    </li>
-    <li class="journey-item priority active" aria-current="step">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
-    </li>
-    <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority active" aria-current="step">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
+    </li>
+    <li class="journey-item best">
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -2911,14 +3028,14 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header class="basic-header">
-    <span class="selection-sequence">步驟 05</span>
+    <span class="selection-sequence">步驟 06</span>
     <h2>讓完成的改動可審查、可交付</h2>
     <p class="subtitle">工作 PR 先完成單項工作；發版 PR 再把已驗證的整批成果送進 main。</p>
   </header>
 
 <div class="legacy-content">
       <header>
-        <h2>步驟 5｜<span class="accent">讓完成的改動可審查、可交付</span></h2>
+        <h2>步驟 6｜<span class="accent">讓完成的改動可審查、可交付</span></h2>
         <p class="subtitle"><strong>基本導入。</strong>這一頁從準備開 PR 開始：工作 PR 完成一張 Issue，發版 PR 再確認整批成果。</p>
       </header>
       <p class="context-line"><strong>模板的作用｜</strong>把完成的修改帶到正確分支，確認它連回原工作、通過驗證並在合併後結束對應工作。</p>
@@ -2926,7 +3043,7 @@ html[data-detail-level="simple"] .detail-panel {
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">依團隊規模選擇不同合併模型</span></summary><ul><li><strong>GitHub Flow：</strong>每張完成的 PR 直接進 main，路徑最短，適合可持續交付的團隊。</li><li><strong>長期整合分支：</strong>多項工作先在 dev／release branch 集中驗收，代價是要處理同步。</li><li><strong>Stacked PR：</strong>把大型改動拆成相依的小 PR，審查較聚焦，但需要維護堆疊順序。</li><li><strong>Merge queue：</strong>把已核准 PR 依最新 main 重新驗證後排序合併，需要平台門禁支援。</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">工作 PR 完成單項工作，發版 PR 完成交付批次</span></summary><ul><li><strong>Issue PR（工作分支 → dev）：</strong>一張 PR 只完成一張可驗收 Issue；內文以 <code>Closes #N</code> 連回同號未結案 Issue，合併後結束該工作。</li><li><strong>PR 標題：</strong>採用 Angular／Conventional Commits 格式，簡短說明這次改動與版本影響。<details class="package-disclosure inline-disclosure"><summary><span class="tech-name">查看可用格式與版本影響</span></summary><div class="package-health"><p><strong>格式：</strong><code>type(scope)!: English summary</code></p><ul><li><strong>type：</strong><code>feat</code> 新功能、<code>fix</code> 修錯、<code>docs</code> 文件、<code>refactor</code> 重構、<code>test</code> 測試、<code>build</code> 建置／相依、<code>ci</code> 自動化、<code>chore</code> 維護、<code>revert</code> 撤回。</li><li><strong>scope：</strong>可省略；使用小寫指出影響範圍。</li><li><strong>!</strong>：可省略；只在破壞相容性時使用。</li><li><strong>版本影響：</strong><code>feat</code>＝minor、<code>fix</code>／<code>revert</code>＝patch、<code>!</code>＝major；其餘不主動升版。</li></ul></div></details></li><li><strong>PR 資料：</strong>分類、里程碑與負責人都要完整。<details class="package-disclosure inline-disclosure"><summary><span class="tech-name">查看 Label、里程碑與負責人規則</span></summary><div class="package-health"><ul><li><strong>Label：</strong><code>enhancement</code>、<code>bug</code>、<code>documentation</code> 擇一，且必須和連結的 Issue 相同。</li><li><strong>里程碑：</strong>必須和連結的 Issue 相同；Issue 未加入里程碑時，PR 也不加入。</li><li><strong>負責人：</strong>PR 作者必須列為 Assignee；正式交接時可再加入其他負責人。</li></ul></div></details></li><li><strong>發版 PR（dev → main）：</strong>里程碑工作完成後才執行完整驗證，確認整批內容與證據；里程碑的結案仍由生命週期追蹤 Issue 控制。</li><li><strong>同步：</strong>main 前進後，以另一張 PR 把變更帶回仍在開發的 dev 分支；不直接推送或改寫歷史。</li><li><strong>例外與授權：</strong>Hotfix 可從 <code>fix/*</code> 直接進 main，但仍需 Issue、驗證與審查；審查者、Alpha 例外與平台門禁都由「規則治理」定義。</li></ul></details>
       </div>
-      <aside class="config-guidance"><strong>模板功能與客製化</strong><ul><li><strong>PR 格式：</strong><code>pull_request_template.md</code> 說明必填內文，<code>pr-policy.yml</code> 呼叫共用 validator 檢查標題、Label、Assignee、里程碑、Issue 關聯與目的分支。</li><li><strong>選分支模型：</strong><code>copier.yml</code> 的 <code>branch_strategy</code>，結果保存在 <code>.csarc/profile.json</code>。</li><li><strong>驗證與基準：</strong><code>ci.yml</code> 執行對應驗證；<code>delivery_sync.py</code> 確認候選包含必要的 main 內容。</li><li><strong>尚未自動化：</strong>發版 PR 建立與 main 更新後的跨分支同步仍由維運者建立 PR；相關 workflows 保留在 archive。</li></ul></aside>
+      <aside class="config-guidance"><strong>模板功能與客製化</strong><ul><li><strong>PR 格式：</strong><code>pull_request_template.md</code> 說明必填內文，<code>pr-policy.yml</code> 呼叫共用 validator 檢查標題、Label、Assignee、里程碑、Issue 關聯與目的分支。</li><li><strong>選分支模型：</strong><code>copier.yml</code> 的 <code>branch_strategy</code>，結果保存在 <code>.csarc/config.yml</code>。</li><li><strong>驗證與基準：</strong><code>ci.yml</code> 執行對應驗證；<code>delivery_sync.py</code> 確認候選包含必要的 main 內容。</li><li><strong>尚未自動化：</strong>發版 PR 建立與 main 更新後的跨分支同步仍由維運者建立 PR；相關 workflows 保留在 archive。</li></ul></aside>
 </div>
 
 
@@ -2993,29 +3110,32 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
+    <li class="journey-item priority">
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
+    </li>
     <li class="journey-item priority active" aria-current="step">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -3025,14 +3145,14 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header class="basic-header">
-    <span class="selection-sequence">步驟 04</span>
+    <span class="selection-sequence">步驟 05</span>
     <h2>第三方套件分開更新、檢查與記錄</h2>
     <p class="subtitle">一般新版先觀察，已知漏洞立即處理，發版成品留下可追查清單。</p>
   </header>
 
 <div class="legacy-content">
       <header>
-        <h2>步驟 4｜<span class="accent">第三方套件分開更新、檢查與記錄</span></h2>
+        <h2>步驟 5｜<span class="accent">第三方套件分開更新、檢查與記錄</span></h2>
         <p class="subtitle"><strong>基本導入。</strong>套件從哪裡更新、能否重裝、有沒有已知漏洞，以及成品包含什麼，是四件需要分開確認的事。</p>
       </header>
       <p class="context-line"><strong>模板的作用｜</strong>依賴異動必須能重裝與驗證；一般新版保留觀察期，已公開漏洞不等待，發版時再列出實際成品內容。</p>
@@ -3113,28 +3233,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best active" aria-current="step">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -3144,14 +3267,14 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header class="basic-header">
-    <span class="selection-sequence">步驟 06</span>
+    <span class="selection-sequence">步驟 07</span>
     <h2>版本規則與成品接續</h2>
     <p class="subtitle">先驗證 promotion 來源，再依平台當下能力選安全交付模式。</p>
   </header>
 
 <div class="legacy-content">
       <header>
-        <h2>步驟 6｜<span class="accent">版本規則與成品接續</span></h2>
+        <h2>步驟 7｜<span class="accent">版本規則與成品接續</span></h2>
         <p class="subtitle"><strong>Release 路徑依已驗證的 promotion 邊界與當下能力選擇：</strong>PR 與成品交接能力都確認時使用 release-please；否則只在最新 main 已含經審查的版本與 CHANGELOG 時直接交付，再不行就明確停在 verification-only。</p>
       </header>
       <p class="context-line"><strong>設計流程｜</strong>Issue PR 只宣告 patch／minor／major／no-release 意圖；里程碑完成、<code>dev/next</code> 固定窗口、isolated canary 或 hotfix 才形成 release 邊界，整批取最高意圖，全部 no-release 就略過。</p>
@@ -3165,7 +3288,7 @@ html[data-detail-level="simple"] .detail-panel {
         <thead><tr><th>版本範圍</th><th>單一來源</th><th>必須同步</th><th>獨立狀態</th></tr></thead>
         <tbody>
           <tr><td>公版與 CLI Release</td><td>root <code>.release-please-manifest.json</code></td><td>root 版本檔、README／docs current marker、CHANGELOG、tag、Release 與成品</td><td>無</td></tr>
-          <tr><td>Copier 公版 revision</td><td>已發布 tag＋完整 commit SHA</td><td>Release provenance、<code>.copier-answers.yml</code> 的 <code>_commit</code></td><td>不另編版本</td></tr>
+          <tr><td>Copier 公版 revision</td><td>已發布 tag＋完整 commit SHA</td><td>Release provenance、<code>.csarc/config.yml</code> 的 <code>_commit</code></td><td>不另編版本</td></tr>
           <tr><td>生成專案 Release</td><td>生成後的 <code>.release-please-manifest.json</code></td><td>該專案自己的 manifest、package、CHANGELOG、tag 與成品</td><td>從 <code>0.1.0</code> 開始，不跟隨公版版本</td></tr>
         </tbody>
       </table>
@@ -3243,28 +3366,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority active" aria-current="step">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -3274,7 +3400,7 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header class="basic-header">
-    <span class="selection-sequence">步驟 07</span>
+    <span class="selection-sequence">步驟 08</span>
     <h2>先辨識 GitHub 能力，再套用真的管制</h2>
     <p class="subtitle">目前組織實測是 Free＋private，因此 main 尚未受 Ruleset 強制保護。</p>
   </header>
@@ -3372,28 +3498,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority active" aria-current="step">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -3403,7 +3532,7 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header class="basic-header">
-    <span class="selection-sequence">步驟 08</span>
+    <span class="selection-sequence">步驟 09</span>
     <h2>Copier 保持同步，公版也吃自己的規則</h2>
     <p class="subtitle">模板錯誤會一次影響多個專案，因此建立、導入與更新都要實跑。</p>
   </header>
@@ -3416,16 +3545,17 @@ html[data-detail-level="simple"] .detail-panel {
       <p class="context-line"><strong>問題與目的｜</strong>模板錯誤會一次影響多個專案；每次修改都要真的建立新案、導入既有案，再讓已導入的 repo 接收更新並通過完整驗證。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">這次不選，因為無法持續同步或驗證</span></summary><ul><li><strong>GitHub Template：</strong>只複製一次，不記得來源與答案</li><li><strong>PyScaffold：</strong>可參考 Python 結構，但會形成第二套更新機制</li><li><strong>只驗 YAML：</strong>無法證明新案、既有案與更新真的能跑</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">Copier＋建立／更新回歸</span></summary><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；衝突留給 PR 由人處理。</p></div></details><p><strong>建立：</strong>CI/CD-only、Python-only、TypeScript-only、混合與最低 Python 都實跑驗證。<br><strong>導入與更新：</strong>adopt／update dry-run 先預覽，確認後只遷移舊 CSARC 結構；接著對同一 repo 執行下一版 Copier update、確認產品目錄未被覆寫，最後執行生成專案的完整驗證。<br><strong>版本：</strong>公版四種組合共用一個 SemVer；Python 與 Node 基線則各自滿三十天觀察後再前進。</p></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">Copier＋建立／更新回歸</span></summary><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；衝突留給 PR 由人處理。</p></div></details><p><strong>建立：</strong>共通基線與 Python、TypeScript、Rust 模組各自實跑驗證；多選時合併模組，不建立組合專屬流程。<br><strong>導入與更新：</strong>adopt／update dry-run 先預覽，確認後只遷移舊 CSARC 結構；接著對同一 repo 執行下一版 Copier update、確認產品目錄未被覆寫，最後執行生成專案的完整驗證。<br><strong>版本：</strong>公版與所有語言模組共用一個 SemVer；各語言基線則依自己的穩定版政策前進。</p></details>
       </div>
       <p class="context-line"><strong>root／template 配對檔案｜</strong>43 對 workflow、policy、文件、script 與 test（例如 <code>promotion.yml</code>、<code>docs/ci-policy.md</code>、<code>scripts/promotion_gate.py</code>）在 root 與 <code>template/</code> 之間逐位元組相同；過去只靠 <code>verify-template.sh</code> 在 CI 用 <code>diff</code> 事後比對，任何一邊漏改要等驗證跑完才被抓到。現在 <code>scripts/sync-paired-files.sh</code> 把 root 當成唯一來源：本機執行它會立即重新產生每個 <code>template/</code> 副本；加 <code>--check</code> 則不寫檔，只驗證每個副本是否符合產生腳本的確定性輸出（內容與可執行位元），任何一對不一致就印出差異並失敗。<code>verify-template.sh</code> 已改成呼叫 <code>--check</code>，並用一段複製到暫存目錄、蓄意注入內容與權限落差、確認失敗、重新產生、確認通過的回歸測試證明這個機制會擋下漂移。<code>dependabot.yml</code>、<code>.gitignore</code> 等僅因 Jinja 變數不同的檔案不在此列，仍由既有的「產生一個實案並與 root 比對」測試把關；<code>AGENTS.md</code>／<code>README.md</code> 等文件因 root 與下游專案的治理內容本來就不同，不屬於重複維護，故未強行合併。</p>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>下發來源、語言組合、保留路徑與功能開關：</strong><code>template/</code>＋<code>copier.yml</code></li><li><strong>root-only CI 與建立／導入／更新驗證：</strong><code>.github/</code>＋<code>scripts/verify-template.sh</code>；生成 repo 不會收到這支腳本或 template release workflows</li><li><strong>語言基線與三十天觀察：</strong><code>profiles/catalog.yaml</code>；<strong>Python 自動升版：</strong><code>python-version-policy.yml</code></li><li><strong>root／template 配對檔案的單一來源與漂移檢查：</strong><code>scripts/sync-paired-files.sh</code></li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>下發來源、所選語言模組、保留路徑與功能開關：</strong><code>template/</code>＋<code>copier.yml</code></li><li><strong>root-only CI 與建立／導入／更新驗證：</strong><code>.github/</code>＋<code>scripts/verify-template.sh</code>；生成 repo 不會收到這支腳本或 template release workflows</li><li><strong>語言基線與三十天觀察：</strong><code>profiles/catalog.yaml</code>；<strong>Python 自動升版：</strong><code>python-version-policy.yml</code></li><li><strong>root／template 配對檔案的單一來源與漂移檢查：</strong><code>scripts/sync-paired-files.sh</code></li></ul></aside>
 </div>
 
 
 <div class="markdown-body basic-summary"><ul>
 <li><code>template/</code> 是下發內容來源；root 保留公版本身的 GitHub 治理與 dogfood 設定。</li>
-<li>CI/CD-only、Python、TypeScript、混合與最低 Python 組合都建立後驗證。</li>
+<li><code>.csarc/config.yml</code> 同時是 Copier 的更新紀錄與 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取，後續擴充也增加設定項目，不另建第二份設定檔。</li>
+<li>共通基線與 Python、TypeScript、Rust 模組各自驗證；同時選取多個語言時合併執行，不建立組合專屬流程。</li>
 <li>既有 repo 先用 adopt／update dry-run 預覽；確認後只遷移舊 CSARC 結構，再執行下一版 Copier update 並確認產品內容未被覆寫。</li>
 </ul>
 <details class="package-disclosure" data-content-key="copier-update">
@@ -3434,7 +3564,8 @@ html[data-detail-level="simple"] .detail-panel {
 </details>
 <aside class="technical-detail" data-content-key="template-release-scope">
   <h3>單一來源、版本基線與 root-only 邊界</h3>
-  <p><code>scripts/sync-paired-files.sh</code> 讓 root 成為成對檔案的單一來源，<code>--check</code> 驗證副本內容與權限。<code>profiles/catalog.yaml</code> 保存語言基線與真實 pilot 狀態；Python 與 Node 基線各自觀察三十天後才前進。</p>
+  <p><code>.csarc/config.yml</code> 保留 Copier 必要的模板來源與版本，並保存這個 repo 選用的公版能力；設定變更透過 <code>csarc update --data</code> 寫回，避免手動修改後與 Copier 不同步。未來的繼承公版應在同一份 YAML 增加自己的設定，不複製 CSARC 已有欄位。</p>
+<p><code>scripts/sync-paired-files.sh</code> 讓 root 成為成對檔案的單一來源，<code>--check</code> 驗證副本內容與權限。<code>profiles/catalog.yaml</code> 保存語言基線與真實 pilot 狀態；Python 與 Node 基線各自觀察三十天後才前進。</p>
 <p><code>scripts/verify-template.sh</code> 只在公版 repo 實跑建立／導入／更新 fixture，不會下發到 consuming repository；生成 repo 使用較小的 <code>scripts/verify</code>。</p>
 </aside>
 </div>
@@ -3468,28 +3599,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority active" aria-current="step">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -3499,7 +3633,7 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header class="basic-header">
-    <span class="selection-sequence">步驟 09</span>
+    <span class="selection-sequence">步驟 10</span>
     <h2>單檔永遠可交付</h2>
     <p class="subtitle">Hugo 管內容結構，既有 renderer 打包成可離線轉寄的 HTML。</p>
   </header>
@@ -3562,28 +3696,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best active" aria-current="step">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -3593,7 +3730,7 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header class="basic-header">
-    <span class="selection-sequence">步驟 10</span>
+    <span class="selection-sequence">步驟 11</span>
     <h2>分階段導入，每一步都能停</h2>
     <p class="subtitle">成熟度看實際證據，不以日期或檔案存在假裝完成。</p>
   </header>
@@ -3606,7 +3743,7 @@ html[data-detail-level="simple"] .detail-panel {
       <p class="context-line"><strong>問題與目的｜</strong>一次導入模板、CI、部署、監控與 AI，團隊很難判斷哪裡出錯；分期後每一步都有完成條件。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">不按聲量或日期一次把功能全打開</span></summary><ul><li><strong>一次切換：</strong>錯誤會同時擴散到所有專案</li><li><strong>固定日期解鎖：</strong>時間到了不代表使用條件已成熟</li><li><strong>所有語言同時上：</strong>未驗證的 profile 只是空承諾</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">三層不是日期，而是導入條件</span></summary><p><strong>基本導入：</strong>CI/CD-only、Python-only、TypeScript-only、混合 profile，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已完成。Free 會先查能力並套可用設定；private repo 不宣稱有 Ruleset 強制保護。<br><strong>已完成線上驗證：</strong>release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier 更新；共用治理與 CI-only composition 為 beta。<br><strong>仍在試行：</strong>Python、TypeScript 與混合 composition 仍各需一個真實 consuming repo 才能升為 beta。<br><strong>未來／可選：</strong>中央 catalog／治理平台、多 repo、Go／Rust、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">三層不是日期，而是導入條件</span></summary><p><strong>基本導入：</strong>共通基線與 Python、TypeScript、Rust 語言模組，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已有可執行實作。Free 會先查能力並套可用設定；private repo 不宣稱有 Ruleset 強制保護。<br><strong>已完成線上驗證：</strong>release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier 更新；共用治理與 CI-only 基線為 beta。<br><strong>仍在試行：</strong>Python、TypeScript 與 Rust 語言模組仍各需真實 consuming repo 證據才能升為 beta。<br><strong>未來／可選：</strong>中央 catalog／治理平台、多 repo、Go、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></details>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>哪些 profile 已可用或仍在規劃：</strong><code>profiles/catalog.yaml</code></li><li><strong>先查方案再套可用設定：</strong><code>scripts/apply-repository-settings.sh</code>；Ruleset／App 條件備妥後再啟用</li><li><strong>建立與更新路徑是否都能通過：</strong><code>scripts/verify-template.sh</code></li></ul></aside>
 </div>
@@ -3622,7 +3759,7 @@ html[data-detail-level="simple"] .detail-panel {
 	<tbody>
 			<tr>
 					<td>基本能力</td>
-					<td>四種 profile、Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 網站已有可執行檔案</td>
+					<td>共通基線與 Python、TypeScript、Rust 語言模組，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 網站已有可執行檔案</td>
 			</tr>
 			<tr>
 					<td>已完成線上驗證</td>
@@ -3630,11 +3767,11 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>仍在試行</td>
-					<td>Python、TypeScript、混合 composition 各缺一個真實 consuming repo pilot</td>
+					<td>Python、TypeScript、Rust 語言模組仍缺真實 consuming repo pilot</td>
 			</tr>
 			<tr>
 					<td>未來／選配</td>
-					<td>中央 catalog／治理平台、Go／Rust、託管登入、部署、監控、RAG、自主 Agent</td>
+					<td>中央 catalog／治理平台、Go、託管登入、部署、監控、RAG、自主 Agent</td>
 			</tr>
 	</tbody>
 </table>
@@ -3673,28 +3810,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -3825,28 +3965,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix active-selection" href="#ecosystem" aria-current="page">工具附錄</a>
@@ -3903,7 +4046,7 @@ html[data-detail-level="simple"] .detail-panel {
       </div>
       <aside class="tool-deferred" aria-label="未來選配與暫不採用工具">
         <p><strong>依賴安全選型：</strong>Dependabot 提出更新、OSV-Scanner 檢查已知漏洞、Syft 建立 SBOM；三者各自負責，不互相替代。</p>
-        <p><strong>尚未啟用：</strong>Go／Rust profile、Scorecard、Harden-Runner、網站託管／登入（<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">#79</a>）、Hugo、RAG、通用部署與監控；repo 內部網站與生成內容模板已可用。</p>
+        <p><strong>尚未啟用：</strong>Go、Scorecard、Harden-Runner、網站託管／登入（<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">#79</a>）、Hugo、RAG、通用部署與監控；repo 內部網站與生成內容模板已可用。</p>
       </aside>
       <p class="ecosystem-reference reference">Ref. Official project repositories linked above; logo assets from each project's brand kit.</p>
 </div>
@@ -3962,7 +4105,7 @@ html[data-detail-level="simple"] .detail-panel {
 </table>
 <aside class="technical-detail" data-content-key="ecosystem-deferred">
   <h3>尚未啟用的能力</h3>
-  Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、通用部署與監控都等可測量需求再做。公版不建立空設定或 placeholder 來假裝支援。
+  Go、Scorecard、Harden-Runner、網站託管與登入、RAG、通用部署與監控都等可測量需求再做。公版不建立空設定或 placeholder 來假裝支援。
 </aside>
 </div>
 
@@ -3995,28 +4138,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -4037,9 +4183,10 @@ html[data-detail-level="simple"] .detail-panel {
   <button id="similar-tools-tab-work" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>工作定義</button>
   <button id="similar-tools-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI 規範</button>
   <button id="similar-tools-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>驗證／CI</button>
-  <button id="similar-tools-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-supply" data-similar-tools-tab="4"><small>Journey 04</small>依賴安全</button>
-  <button id="similar-tools-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-pr" data-similar-tools-tab="5"><small>Journey 05</small>PR／合併</button>
-  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="6"><small>Journey 08</small>模板升級</button>
+  <button id="similar-tools-tab-languages" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-languages" data-similar-tools-tab="4"><small>Journey 04</small>程式語言</button>
+  <button id="similar-tools-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>依賴安全</button>
+  <button id="similar-tools-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR／合併</button>
+  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="7"><small>Journey 09</small>模板升級</button>
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
   <div class="similar-tools-legend">
@@ -4066,7 +4213,7 @@ html[data-detail-level="simple"] .detail-panel {
           <td>2,952</td>
           <td>Project generator：用一般程式語言宣告專案，持續 synth 出受管設定與工作流程。</td>
           <td><ul><li>projen 把 .projenrc 當唯一來源，大量生成檔不允許直接修改。</li><li>CSARC 用 Copier 發布可更新基線，並保留產品檔案與政策檔案的責任邊界。</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="03: 完全符合">03</span><span class="coverage-tag full" title="06: 完全符合">06</span><span class="coverage-tag full" title="08: 完全符合">08</span><span class="coverage-tag partial" title="01: 部分符合">01</span><span class="coverage-tag partial" title="04: 部分符合">04</span><span class="coverage-tag partial" title="05: 部分符合">05</span><span class="coverage-tag partial" title="07: 部分符合">07</span><span class="coverage-tag partial" title="10: 部分符合">10</span>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="03: 完全符合">03</span><span class="coverage-tag full" title="07: 完全符合">07</span><span class="coverage-tag full" title="09: 完全符合">09</span><span class="coverage-tag partial" title="01: 部分符合">01</span><span class="coverage-tag partial" title="04: 部分符合">04</span><span class="coverage-tag partial" title="05: 部分符合">05</span><span class="coverage-tag partial" title="06: 部分符合">06</span><span class="coverage-tag partial" title="08: 部分符合">08</span><span class="coverage-tag partial" title="11: 部分符合">11</span>
           </div></td>
         </tr>
         <tr>
@@ -4075,13 +4222,22 @@ html[data-detail-level="simple"] .detail-panel {
           <td>1,207</td>
           <td>Agent-ready repository framework：把 AI 工作規則、持久計畫、驗證與安全更新放進 repo。</td>
           <td><ul><li>Repository Harness 偏向替既有 repo 加上 agent 工作框架與安全更新機制。</li><li>CSARC 另外提供可生成的技術 profile、GitHub 治理、交付與版本政策。</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag full" title="08: 完全符合">08</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="05: 部分符合">05</span><span class="coverage-tag partial" title="07: 部分符合">07</span><span class="coverage-tag partial" title="10: 部分符合">10</span>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag full" title="09: 完全符合">09</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="06: 部分符合">06</span><span class="coverage-tag partial" title="08: 部分符合">08</span><span class="coverage-tag partial" title="11: 部分符合">11</span>
+          </div></td>
+        </tr>
+        <tr>
+          <th scope="row"><a href="https://github.com/backstage/backstage" target="_blank" rel="noreferrer">Backstage</a></th>
+          <td>v1.54.6<br>(2026-08-28)</td>
+          <td>34,277</td>
+          <td>Developer portal framework：以 Software Catalog、Software Templates 與 TechDocs 統一軟體生態系入口。</td>
+          <td><ul><li>Backstage 是需要持續維運的中央 portal，強項是服務探索、owner 與 scaffolding。</li><li>CSARC 是可攜的 repo-local 公版，直接把治理、驗證與交付基線放進每個 repo。</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="10: 完全符合">10</span><span class="coverage-tag full" title="11: 完全符合">11</span><span class="coverage-tag partial" title="04: 部分符合">04</span><span class="coverage-tag partial" title="08: 部分符合">08</span><span class="coverage-tag partial" title="09: 部分符合">09</span>
           </div></td>
         </tr>
       </tbody>
     </table>
   </div>
-  <p class="similar-tools-note"><strong>判斷標準：</strong>所有工具都須在擷取日前 6 個月內有發版；主要工具至少涵蓋 5 個 Journey，依完全、部分符合數量排序；其他工具至少 1,000 Stars。Journey tag 依 01–10 排列。</p>
+  <p class="similar-tools-note"><strong>判斷標準：</strong>所有工具都須在擷取日前 6 個月內有發版；主要工具至少涵蓋 5 個 Journey，依完全、部分符合數量排序；其他工具至少 1,000 Stars。Journey tag 依 01–11 排列。</p>
 </div>
 <div id="similar-tools-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-work" data-similar-tools-panel hidden>
   <div class="similar-tools-legend"><span class="reference">只比較需求記在哪裡、單項與群組如何表示、里程碑如何取得開工同意，以及工作變大時何時增加文件</span><span class="capture-date">Stars 擷取日｜2026-08-31</span></div>
@@ -4094,9 +4250,9 @@ html[data-detail-level="simple"] .detail-panel {
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">.projenrc project model</a>：.projenrc 是唯一手寫真相，其他專案檔由 synth 產生。</span></li>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：repo 同時保存產品文件、決策、plan、程式與驗證證據。</span></li>
+              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entity 保存服務、owner 與關係的中央真相。</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entity 保存服務、owner 與關係的中央真相。</span></li>
               <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：brief、spec、architecture 依複雜度累積成持久工作脈絡。</span></li>
               <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Specs / Changes</a>：specs 保存 current truth，changes 保存尚未接受的 delta。</span></li>
               <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：spec、plan、tasks 與 constitution 在 repo 形成 feature 脈絡。</span></li>
@@ -4234,12 +4390,61 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>模板產物由誰驗證</strong><span>比較只測產生器、測輸出快照，或真的建立／導入／更新候選 repo 再執行驗證。<br><br><b>CSARC：</b>一般 repo 只測自己的產品；repo-template 的 full 入口執行完整 pytest，實際涵蓋 Python／TypeScript 的生成與既有 repo 導入，不維護整棵輸出的 snapshot。</span></th>
+          <th scope="row"><strong>模板產物由誰驗證</strong><span>比較只測產生器、測輸出快照，或真的建立／導入／更新候選 repo 再執行驗證。<br><br><b>CSARC：</b>一般 repo 只測自己的產品；repo-template 的 full 入口執行完整 pytest，實際涵蓋 Python／TypeScript／Rust 的生成與既有 repo 導入，不維護整棵輸出的 snapshot。</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/custom/testing/" target="_blank" rel="noreferrer">Testing.synth</a>：在測試中 synth 專案並檢查生成檔；官方也提醒整棵樹的 snapshot 過大，應縮到有意義的輸出。</span></li>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/tests/README.md" target="_blank" rel="noreferrer">Test Suite Map</a>：以可觀察的不變條件整理 installer、workflow、文件與 release 測試；已移除的歷史能力不繼續留在現行 pre-merge。</span></li>
           </ul></td>
           <td><ul>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div id="similar-tools-panel-languages" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-languages" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">只比較如何選擇語言、是否沿用各生態圈原生工具、多語言如何共存，以及設定是否集中可更新</span><span class="capture-date">Stars 擷取日｜2026-08-31</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="程式語言">
+    <table class="similar-tools-matrix similar-tools-philosophy-matrix">
+      <thead><tr><th scope="col">功能分野／具體做法</th><th scope="col">主要相似工具</th><th scope="col">其他生態圈工具</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>建立時如何選擇程式語言</strong><span>比較固定專案類型、可複選語言模組，以及完全交由使用者事後設定。<br><br><b>CSARC：</b>建立或導入時可獨立選擇 Python、TypeScript、Rust；沒有選取的語言不產生相關檔案或 CI 步驟。</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Project types &#43; components</a>：先選語言／框架的 project type，再以 components 加入能力；不像 CSARC 以獨立語言勾選組合同一個 repo。</span></li>
+              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/input-examples" target="_blank" rel="noreferrer">Template parameters &#43; conditional steps</a>：建立元件時可詢問語言／框架並條件式執行步驟，適合入口網站；既有 repo 仍要另接更新機制。</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Multiselect questions &#43; conditional files</a>：模板可用複選答案決定產生哪些語言檔案；Copier 提供機制，但不替模板決定要用哪些測試工具。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>各語言具體檢查什麼</strong><span>比較共用抽象工具與各生態圈原生的格式、型別、測試、建置及打包工具。<br><br><b>CSARC：</b>Python 使用 Ruff、mypy、pytest 與 wheel；TypeScript 使用 Biome、TypeScript、Vitest 與 npm package；Rust 使用 rustfmt、Clippy、cargo test、release build 與 Cargo package。</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>pnpm<span class="tool-meta"><span>v11.25.0 (2026-08-29)</span><span>★ 36,332</span></span></strong><span class="tool-comparison-detail"><a href="https://pnpm.io/workspaces" target="_blank" rel="noreferrer">Scripts &#43; workspace</a>：以 package scripts 與 workspace 執行 TypeScript／JavaScript 生態圈原生的 build、test 與 package；不處理其他語言。</span></li>
+              <li><strong>Rust / Cargo<span class="tool-meta"><span>1.98.0 (2026-08-20)</span><span>★ 116,688</span></span></strong><span class="tool-comparison-detail"><a href="https://doc.rust-lang.org/cargo/commands/index.html" target="_blank" rel="noreferrer">cargo fmt / clippy / test / build / package</a>：同一個官方工具鏈完成格式、常見錯誤、測試、正式建置與套件驗證。</span></li>
+              <li><strong>uv<span class="tool-meta"><span>0.12.7 (2026-08-27)</span><span>★ 89,282</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.astral.sh/uv/guides/projects/" target="_blank" rel="noreferrer">uv run &#43; build</a>：依 pyproject 與 lockfile 建立環境、執行 Python 工具並建置套件；格式、型別與測試仍由 Ruff、mypy、pytest 負責。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>多語言如何共存</strong><span>比較每個組合另做一套流程，以及把可重用的單語言模組合併執行。<br><br><b>CSARC：</b>每種語言只定義一次；多選時合併所選模組，共通的工作規則、文件、機密與依賴檢查只跑一次。</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>Nx<span class="tool-meta"><span>23.1.2 (2026-08-26)</span><span>★ 29,280</span></span></strong><span class="tool-comparison-detail"><a href="https://nx.dev/concepts/inferred-tasks" target="_blank" rel="noreferrer">Plugins &#43; inferred tasks</a>：plugin 從各專案設定推導 build／test 任務並放進同一張 project graph；適合大型 workspace，但需要 Nx runtime。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>語言設定如何保存與更新</strong><span>比較散落在各工具檔案、獨立 profile，與一份可追蹤模板來源的 repo 設定。<br><br><b>CSARC：</b>`.csarc/config.yml` 同時是 Copier answers file 與公版設定；所有入口讀同一份資料，調整時由 `csarc update` 同步設定與生成檔。</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">.projenrc &#43; synth</a>：.projenrc 是單一宣告來源，synth 重建受管檔；一致性強，但手改生成檔會被覆寫。</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/#the-copier-answers-file" target="_blank" rel="noreferrer">Answers file</a>：answers file 保存來源、版本與選項，可供 smart update 重用；CSARC 直接把它當唯一公版設定，避免再同步另一份 profile。</span></li>
+              <li><strong>Rust / Cargo<span class="tool-meta"><span>1.98.0 (2026-08-20)</span><span>★ 116,688</span></span></strong><span class="tool-comparison-detail"><a href="https://rust-lang.github.io/rustup/overrides.html#the-toolchain-file" target="_blank" rel="noreferrer">rust-toolchain.toml &#43; Cargo.toml</a>：工具鏈檔固定 Rust 版本，Cargo.toml 描述套件；CSARC 再從單一公版設定決定是否產生這組檔案。</span></li>
+              <li><strong>uv<span class="tool-meta"><span>0.12.7 (2026-08-27)</span><span>★ 89,282</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.astral.sh/uv/concepts/projects/layout/" target="_blank" rel="noreferrer">pyproject.toml &#43; uv.lock</a>：以 Python 標準專案資料加 uv.lock 固定環境；不保存 CSARC 的分支與治理選項。</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -4263,11 +4468,13 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>安裝時如何固定套件</strong><span>比較最新版、lockfile 與 resolver 限制。<br><br><b>CSARC：</b>兩種語言都依 lockfile 安裝；pnpm 另拒絕未滿三天或 publisher trust 降級的版本。本機與 CI 都執行。</span></th>
+          <th scope="row"><strong>安裝時如何固定套件</strong><span>比較最新版、lockfile 與 resolver 限制。<br><br><b>CSARC：</b>Python、TypeScript、Rust 都依 lockfile 安裝；pnpm 另拒絕未滿三天或 publisher trust 降級的版本。本機與 CI 都執行。</span></th>
           <td><ul>
           </ul></td>
           <td><ul>
               <li><strong>pnpm<span class="tool-meta"><span>v11.25.0 (2026-08-29)</span><span>★ 36,332</span></span></strong><span class="tool-comparison-detail"><a href="https://pnpm.io/settings#minimumreleaseage" target="_blank" rel="noreferrer">minimumReleaseAge &#43; trustPolicy</a>：安裝時拒絕太新的版本與 publisher trust 降級。</span></li>
+              <li><strong>Rust / Cargo<span class="tool-meta"><span>1.98.0 (2026-08-20)</span><span>★ 116,688</span></span></strong><span class="tool-comparison-detail"><a href="https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html" target="_blank" rel="noreferrer">Cargo.lock</a>：Cargo.lock 記錄精確相依版本，CI 使用 --locked 拒絕未更新的解析結果。</span></li>
+              <li><strong>uv<span class="tool-meta"><span>0.12.7 (2026-08-27)</span><span>★ 89,282</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.astral.sh/uv/concepts/projects/layout/#the-lockfile" target="_blank" rel="noreferrer">Universal lockfile</a>：uv.lock 保存跨平台解析結果，安裝時可拒絕鎖檔漂移。</span></li>
           </ul></td>
         </tr>
         <tr>
@@ -4362,11 +4569,11 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>定義如何變成 repo 狀態</strong><span>比較人直接改檔、由設定產生檔案，或由服務持續修正遠端狀態。<br><br><b>CSARC：</b>copier.yml、template/ 與 profiles/catalog.yaml 宣告生成基線；scripts/sync-paired-files.sh 同步 root／template 配對檔，產品檔仍由下游 repo 持有。</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：用 typed components 宣告期望專案，再由 synth 收斂檔案。</span></li>
+              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entity 與 Software Template 宣告 portal 中的元件和建立流程。</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entity 與 Software Template 宣告 portal 中的元件和建立流程。</span></li>
-              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：Recipe 宣告 semantic transformation，再由 parser／visitor 套用。</span></li>
               <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。</span></li>
+              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：Recipe 宣告 semantic transformation，再由 parser／visitor 套用。</span></li>
           </ul></td>
         </tr>
         <tr>
@@ -4374,11 +4581,11 @@ html[data-detail-level="simple"] .detail-panel {
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen upgrade &#43; synth</a>：升級 library 後重建；受管檔的手改會被 anti-tamper 攔下。</span></li>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：updater 保留 upstream base，用三方合併安全更新既有 repo。</span></li>
+              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：擅長建立新元件；既有 repo 遷移仍要另接工具。</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：擅長建立新元件；既有 repo 遷移仍要另接工具。</span></li>
-              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：不用文字模板覆蓋檔案，而是直接執行跨版本語意遷移。</span></li>
               <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：記住模板來源與 answers，讓既有 repo 接收新版模板。</span></li>
+              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：不用文字模板覆蓋檔案，而是直接執行跨版本語意遷移。</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -4416,28 +4623,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -4458,9 +4668,10 @@ html[data-detail-level="simple"] .detail-panel {
     <button id="testing-tab-work" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>工作定義</button>
     <button id="testing-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI 規範</button>
     <button id="testing-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>驗證／CI</button>
-    <button id="testing-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-supply" data-similar-tools-tab="4"><small>Journey 04</small>依賴安全</button>
-    <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="5"><small>Journey 05</small>PR／合併</button>
-    <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="6"><small>Journey 06</small>版本／交付</button>
+    <button id="testing-tab-languages" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-languages" data-similar-tools-tab="4"><small>Journey 04</small>程式語言</button>
+    <button id="testing-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>依賴安全</button>
+    <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR／合併</button>
+    <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="7"><small>Journey 07</small>版本／交付</button>
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
     <div class="similar-tools-testing-intro">
@@ -4474,13 +4685,13 @@ html[data-detail-level="simple"] .detail-panel {
         <tbody>
           <tr>
             <th scope="row"><strong>Issue PR（工作分支 → dev）</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>02 AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>docs &lt; 1 分鐘；fast 2–5 分鐘</li><li><strong>04 依賴安全：</strong>fast 其中通常少於 1 分鐘</li><li><strong>05 PR／合併：</strong>約 1–2 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–7 分鐘</p></td>
-            <td><ul class="testing-duration-list"><li><strong>02 AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>docs &lt; 1 分鐘；fast 3–6 分鐘</li><li><strong>04 依賴安全：</strong>fast 其中通常少於 1 分鐘</li><li><strong>05 PR／合併：</strong>約 1–2 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–8 分鐘</p></td>
+            <td><ul class="testing-duration-list"><li><strong>02 AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>docs &lt; 1 分鐘；fast 2–5 分鐘</li><li><strong>04 程式語言：</strong>依所選語言約 1–5 分鐘</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–7 分鐘</p></td>
+            <td><ul class="testing-duration-list"><li><strong>02 AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>docs &lt; 1 分鐘；fast 3–6 分鐘</li><li><strong>04 程式語言：</strong>依所選語言約 1–5 分鐘</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–8 分鐘</p></td>
           </tr>
           <tr>
             <th scope="row"><strong>發版 PR（dev → main）</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>02 AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>full 5–15 分鐘</li><li><strong>04 依賴安全：</strong>full 其中通常少於 1 分鐘</li><li><strong>05 PR／合併：</strong>約 1–2 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–17 分鐘</p></td>
-            <td><ul class="testing-duration-list"><li><strong>02 AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>full 8–12 分鐘</li><li><strong>04 依賴安全：</strong>full 其中通常少於 1 分鐘</li><li><strong>05 PR／合併：</strong>約 1–2 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 9–14 分鐘</p></td>
+            <td><ul class="testing-duration-list"><li><strong>02 AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>full 5–15 分鐘</li><li><strong>04 程式語言：</strong>依所選語言約 3–10 分鐘</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–17 分鐘</p></td>
+            <td><ul class="testing-duration-list"><li><strong>02 AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>full 8–12 分鐘</li><li><strong>04 程式語言：</strong>含生成矩陣約 4–8 分鐘</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 9–14 分鐘</p></td>
           </tr>
         </tbody>
       </table>
@@ -4488,7 +4699,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 01／最小測試契約</strong><span>只驗證 Issue 如何成為可執行工作，以及里程碑是否取得開工同意；PR 合併與里程碑結案分別列在 Journey 05、06。</span>
+    <strong>Journey 01／最小測試契約</strong><span>只驗證 Issue 如何成為可執行工作，以及里程碑是否取得開工同意；PR 合併與里程碑結案分別列在 Journey 06、07。</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01／最小測試契約">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
@@ -4623,11 +4834,55 @@ html[data-detail-level="simple"] .detail-panel {
     </table>
   </div>
   </div>
+  <div id="testing-panel-languages" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-languages" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 04／語言模組</strong><span>建立或導入時選擇語言；Issue PR 只跑所選模組，發版 PR 再完成建置與打包。所有入口都讀取同一份公版設定。</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 04／語言模組">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>設定與實際檔案一致</strong><span>公版設定列出的語言必須和 repo 內的 Python、TypeScript、Rust 專案檔一致。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>.csarc/config.yml</code></li><li><code>scripts/detect-language-profile</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：修改程式、套件或公版設定的 Issue PR · Timeout：30 min</span></li></ul></div>
+            </li>
+            <li>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>.csarc/config.yml</code></li><li><code>scripts/detect-language-profile</code></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_language_profiles.py</code></li></ul></div><span>確認 Copier 建立單一設定檔，並正確組合各語言模組。</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>各語言使用自己的檢查</strong><span>Python、TypeScript、Rust 各自執行格式、靜態檢查、測試與必要的建置；共通規則只跑一次。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
+            </li>
+            <li>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>另外建立各語言與多選範例，確認生成、更新與鎖檔仍可使用。</span>
+            </li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
   <div id="testing-panel-supply" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-supply" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 04／依賴安全</strong><span>依賴異動先重現鎖檔安裝；已知漏洞只在依賴變更與發版候選加跑，週期掃描另補沒有 PR 的時段。</span>
+    <strong>Journey 05／依賴安全</strong><span>依賴異動先重現鎖檔安裝；已知漏洞只在依賴變更與發版候選加跑，週期掃描另補沒有 PR 的時段。</span>
   </div>
-  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 04／依賴安全">
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 05／依賴安全">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
       <thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead>
       <tbody>
@@ -4692,9 +4947,9 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-pr" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-pr" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 05／兩階段 PR</strong><span>工作 PR 先驗證單一 Issue 與目的分支；發版 PR 再驗證完整批次。合併授權由規則治理統一處理。</span>
+    <strong>Journey 06／兩階段 PR</strong><span>工作 PR 先驗證單一 Issue 與目的分支；發版 PR 再驗證完整批次。合併授權由規則治理統一處理。</span>
   </div>
-  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 05／兩階段 PR">
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 06／兩階段 PR">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
       <thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead>
       <tbody>
@@ -4746,9 +5001,9 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-delivery" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-delivery" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 06／交付與結案</strong><span>發版成功並留下交付證據後才結束里程碑；提前終止則先處理未完成工作。</span>
+    <strong>Journey 07／交付與結案</strong><span>發版成功並留下交付證據後才結束里程碑；提前終止則先處理未完成工作。</span>
   </div>
-  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 06／交付與結案">
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 07／交付與結案">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
       <thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead>
       <tbody>
@@ -4813,28 +5068,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -4926,28 +5184,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -4974,10 +5235,10 @@ html[data-detail-level="simple"] .detail-panel {
           <tr><td>方案與 <code>main</code> 保護</td><td>Free private 會套基本設定並保存 Ruleset policy，但公開 API 無法建立 Ruleset，<code>main</code> 仍未受強制保護；至少升 Team 並建立 CODEOWNERS team，或經核准改為 public，核准與必要檢查才成為 merge gate。</td></tr>
           <tr><td>工作範圍與責任</td><td>Issue-first；標題用 12–80 字元英文摘要成果，內文可用中文；開單者自動成為負責人。新增需求超出完成條件就另開 Issue。</td></tr>
           <tr><td>公版更新邊界</td><td><code>template/</code> 是下發來源，root 讓公版自我治理；Copier 更新政策但保護產品程式與規格，成對設定由驗證腳本防止漂移。</td></tr>
-          <tr><td>語言與程式品質</td><td>共用治理支援四種 profile；Python 採 src layout、Ruff 80 字元與 <a href="https://google.github.io/styleguide/pyguide.html" target="_blank" rel="noreferrer">Google Python Style</a>、strict mypy；TypeScript 採 Node 24、pnpm 11、Biome、Vitest。</td></tr>
+          <tr><td>語言與程式品質</td><td>Python、TypeScript、Rust 為獨立模組，可任意複選；Python 採 Ruff、mypy、pytest，TypeScript 採 Node 24、pnpm、Biome、Vitest，Rust 採 Rust 1.98、rustfmt、Clippy 與 Cargo。</td></tr>
           <tr><td>CI、版本與交付</td><td>本機與 CI 共用 <code>scripts/verify</code>，PR policy 回歸案例證明錯誤 route 會被拒絕；日常 fast、promotion full，release-please 只在已驗證的批次邊界維護單一 SemVer。</td></tr>
           <tr><td>依賴與供應鏈</td><td>三天等待觀察未知惡意新版；OSV 查已公開漏洞；hash 驗內容一致；SBOM 列出成品套件；resolver 另證明版本上下界可安裝，五者互不取代。</td></tr>
-          <tr><td>AI、文件與未來能力</td><td><code>AGENTS.md</code> 是 AI 規範，README 與 repo 網站服務人類；Hugo／託管登入、部署、監控、RAG、Go／Rust 都要有 owner、使用情境與驗證後才導入。</td></tr>
+          <tr><td>AI、文件與未來能力</td><td><code>AGENTS.md</code> 是 AI 規範，README 與 repo 網站服務人類；Hugo／託管登入、部署、監控、RAG、Go 都要有 owner、使用情境與驗證後才導入。</td></tr>
           <tr><td>驗證與測試資源</td><td>「已完成」必須有檔案與測試；驗證只用本機暫存專案或本 repo 的 Issue、分支、PR、Actions，禁止為測試另開 GitHub repo。</td></tr>
         </tbody>
       </table>
@@ -5062,28 +5323,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -5115,7 +5379,7 @@ html[data-detail-level="simple"] .detail-panel {
           <tr><td>OSV reusable workflow＋<a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows" target="_blank" rel="noreferrer">權限傳遞</a></td><td><span class="tier-chip best">已修正</span></td><td>呼叫端權限只能維持或縮小，不能替被呼叫 workflow 補權限；<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92" target="_blank" rel="noreferrer">PR #92</a> 補回必要權限後，<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32646097257" target="_blank" rel="noreferrer">main 線上 run</a> 已成功。</td></tr>
           <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a>＋<a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip best">消費端門禁完成</span></td><td>生成專案的 PyPI／npm 再發布路徑會在啟用 attestation 時，強制比對 repository、tag、artifact digest 與 signer workflow；CI-only 不產生空 job。公版另以真實 immutable Release wheel 完成線上成功與受控 digest mismatch 驗證，細節見 <a href="artifact-consumption.md">artifact consumption evidence</a>。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/104" target="_blank" rel="noreferrer">#104</a></td></tr>
           <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> 安全基線</td><td><span class="tier-chip optional">方案感知</span></td><td>已有 pinned Actions、OSV、<code>SECURITY.md</code>、完整 Git 歷史與工作樹 secret scan；public repo 預設啟用 CodeQL，private／internal 則依 GitHub Code Security 授權明確 opt-in。</td></tr>
-          <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip best">CI-only 已證明</span></td><td><code>ai-guardrail</code> 已透過 Issue、兩支 PR 完成 v0.2.4 導入、產品客製化保留、v0.3.1 Copier update 與兩次完整線上檢查；Python、TypeScript 與混合 composition 仍缺各自的真實 pilot。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a>／<a href="pilot-adoption.md">證據</a></td></tr>
+          <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip best">CI-only 已證明</span></td><td><code>ai-guardrail</code> 已透過 Issue、兩支 PR 完成 v0.2.4 導入、產品客製化保留、v0.3.1 Copier update 與兩次完整線上檢查；Python、TypeScript 與 Rust 模組仍缺真實 pilot。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a>／<a href="pilot-adoption.md">證據</a></td></tr>
         </tbody>
       </table>
       <p class="review-note-footer"><strong>簡潔度判斷：</strong>Copier＋GitHub Actions＋標準工具的方向夠簡潔；真實 CI-only pilot 已補上合成測試以外的證據。root-only <code>Live integration smoke</code> 持續驗證 OSV、Release Please、release handoff 與 governance drift；其餘語言 profile 各完成 pilot 後才升 beta。</p>
@@ -5180,7 +5444,7 @@ html[data-detail-level="simple"] .detail-panel {
 </table>
 <aside class="technical-detail" data-content-key="benchmark-gap">
   <h3>現階段缺口</h3>
-  沒有跨 repo catalog、全面託管治理或通用部署平台。Root-only <code>Live integration smoke</code> 持續驗證 OSV、Release Please、release handoff 與 governance drift；Python、TypeScript 與混合 composition 各完成真實 pilot 後才能升為 beta。
+  沒有跨 repo catalog、全面託管治理或通用部署平台。Root-only <code>Live integration smoke</code> 持續驗證 OSV、Release Please、release handoff 與 governance drift；Python、TypeScript 與 Rust 模組完成真實 pilot 後才能升為 beta。
 </aside>
 </div>
 
@@ -5213,28 +5477,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -5354,28 +5621,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -5467,28 +5737,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
@@ -5728,14 +6001,17 @@ html[data-detail-level="simple"] .detail-panel {
         },
         {
           title: '依專案語言只產生真的可執行的指令',
-          goal: 'CI/CD-only 不假裝有語言指令；Python-only 不看到 pnpm；TypeScript-only 不看到 uv；混合案才同時列出兩套。',
-          summary: 'Copier 依 `language` 渲染指令；四種組合最後都回到 `./scripts/verify`，公版驗證也會阻擋錯誤 profile。',
+          goal: '沒有選語言時只保留共通規則；選了哪些語言，就只產生那些語言的指令。',
+          summary: 'Copier 依 `languages` 複選結果渲染模組；同時選取多個語言時合併執行，共通檢查仍只跑一次。',
           file: 'template/AGENTS.md.jinja＋scripts/verify-template.sh',
-          code: `{% if language in ["python", "python-typescript"] %}
+          code: `{% if "python" in languages %}
 - Python iteration: uv run ruff check <paths>
 {% endif %}
-{% if language in ["typescript", "python-typescript"] %}
+{% if "typescript" in languages %}
 - TypeScript iteration: pnpm exec biome check <paths>
+{% endif %}
+{% if "rust" in languages %}
+- Rust iteration: cargo clippy --all-targets --all-features -- -D warnings
 {% endif %}
 - Required final check: ./scripts/verify`
         },
@@ -5813,13 +6089,14 @@ required checks:
       ],
       template: [
         {
-          title: '先宣告語言組合，再只產生需要的工具鏈',
-          goal: '可選 CI/CD-only、Python-only、TypeScript-only 或兩者；Python 另提供 latest／minimum。',
-          summary: '答案寫入 `.csarc/profile.json`；驗證入口會依實際 `pyproject.toml`／`package.json` 自動核對。Python minimum 目前刻意從 3.12 起；CI 會跑所選版本的精確 `.0` 下界，以及一路到 reviewed stable 的每個 feature release 最新 patch，最後以穩定的 `verify` context 彙總。',
+          title: '獨立勾選語言，只產生需要的工具鏈',
+          goal: 'Python、TypeScript、Rust 都是獨立模組；全不選時只產生共通 CI/CD 基線。',
+          summary: '答案寫入 `.csarc/config.yml`；它同時是 repo 的公版設定與 Copier 更新依據，不再另存 profile JSON。',
           file: 'copier.yml',
-          code: `language:
-  choices: [ci, python, typescript, python-typescript]
-  default: python
+          code: `languages:
+  multiselect: true
+  choices: [python, typescript, rust]
+  default: [python]
 python_support_mode:
   type: str
   choices: [latest, minimum]
@@ -5858,28 +6135,29 @@ profiles:
     stage: alpha
     latest_reviewed_active_lts: "24"
     package_manager: pnpm
+  rust:
+    stage: alpha
+    latest_reviewed_stable: "1.98.0"
+    package_manager: cargo
   go: {stage: future}
 
 compositions:
   ci: {stage: beta, profiles: []}
-  python: {stage: alpha, profiles: [python]}
-  typescript: {stage: alpha, profiles: [typescript]}
-  python_typescript: {stage: alpha, profiles: [python, typescript]}
-  rust: {stage: future}
+  language_modules:
+    stage: alpha
+    selectable_profiles: [python, typescript, rust]
+    selection: any_subset
 
 version_policy:
   stable_release_observation_days: 30
   merge_after_full_verification: automatic
 
-compositions:
-  python: {stage: alpha, profiles: [python]}
-  typescript: {stage: alpha, profiles: [typescript]}
-  python_typescript: {stage: alpha, profiles: [python, typescript]}`
+verification: selected_modules_plus_shared_checks_once`
         },
         {
           title: '既有 repo 在短分支同步審查過的模板內容',
           goal: 'Copier 保留來源與答案；先從核准 release tag 查出 40 字元 SHA，再決定實際套用內容。',
-          file: '.copier-answers.yml',
+          file: '.csarc/config.yml',
           code: `gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template --limit 5
 gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/v0.1.0 --jq .sha
 git switch -c chore/update-repo-template
@@ -5890,18 +6168,15 @@ uvx --from copier copier update --trust \
       ],
       contract: [
         {
-          title: '先宣告 repo 使用 CI/CD-only、Python、TypeScript 或兩者',
+          title: '宣告 repo 使用哪些語言模組',
           goal: 'Copier 將選擇寫進 repo；偵測器只負責提醒實際檔案與宣告不一致，不擅自改設定。',
-          summary: '`language_profile` 是唯一依據；`--suggest` 可依根目錄的 `pyproject.toml` 與 `package.json` 提示最可能的組合。',
-          file: '.csarc/profile.json＋scripts/detect-language-profile',
-          code: `{
-  "language_profile": "python-typescript",
-  "modules": {
-    "ci_cd": true,
-    "python": true,
-    "typescript": true
-  }
-}
+          summary: '`languages` 是唯一依據；`--suggest` 可依根目錄的 manifest 提示應勾選哪些語言。',
+          file: '.csarc/config.yml＋scripts/detect-language-profile',
+          code: `languages:
+- python
+- typescript
+- rust
+branch_strategy: delivery
 
 ./scripts/detect-language-profile --suggest
 ./scripts/detect-language-profile`
@@ -5909,8 +6184,8 @@ uvx --from copier copier update --trust \
         {
           title: '各語言保留自己的品質、測試與鎖定設定',
           goal: '共用治理不等於硬湊成同一套工具；每種語言使用其主流工具，再由同一驗證入口協調。',
-          summary: 'Python 使用 uv、Ruff、mypy、pytest；TypeScript 使用 pnpm、Biome、TypeScript strict、Vitest，兩邊都鎖定實際相依與完整性資料。',
-          file: 'pyproject.toml／package.json＋兩種 lockfile',
+          summary: 'Python 使用 uv、Ruff、mypy、pytest；TypeScript 使用 pnpm、Biome、TypeScript strict、Vitest；Rust 使用 Cargo、rustfmt、Clippy 與 cargo test。',
+          file: '各語言 manifest＋lockfile',
           code: `# Python module
 uv sync --locked
 uv run ruff check .
@@ -5940,7 +6215,7 @@ on:
 uses: Cyber-Arch/csarc-repo-template/
   .github/workflows/reusable-ci.yml@<full-commit-sha>
 with:
-  language-profile: python-typescript`
+  language-profile: python`
         }
       ],
       method: [
@@ -6026,7 +6301,7 @@ milestone: same as Issue #123`
           title: '工作 PR、發版 PR 與同步 PR',
           goal: '工作先進 dev，完整批次再進 main；main 更新後以 PR 同步，不直接改寫開發分支。',
           summary: 'validator 會檢查工作 PR 的目的分支與堆疊鏈；發版 PR 建立及 main-to-dev 同步目前仍由維運者手動發起。',
-          file: 'copier.yml＋.csarc/profile.json＋scripts/delivery_sync.py',
+          file: 'copier.yml＋.csarc/config.yml＋scripts/delivery_sync.py',
           code: `work:    type/123-short-slug -> dev/m8-*
 release: dev/m8-* -> main
 sync:    sync/main-to-m8-*-<sha> -> dev/m8-*`
@@ -6072,7 +6347,7 @@ workflow_ref: <40-character-commit-sha>
 
 uses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@<40-character-commit-sha>
 with:
-  language-profile: python-typescript
+  language-profile: python
 
 gh api --method PUT \\
   repos/Innoguard-Cyber-Arch/csarc-repo-template/actions/permissions/access \\
@@ -6234,17 +6509,15 @@ dispatch_artifacts(next_tag)`
       ],
       rollout: [
         {
-          title: '可用組合依真實採用證據分級',
+          title: '語言模組依真實採用證據分級',
           goal: '基本、未來與可選不是口號，而是對可用能力的承諾。',
-          summary: '共用治理與 CI/CD-only 已有真實 pilot，維持 `beta`；Python、TypeScript 與混合組合可建立但尚無 consuming repo，維持 `alpha`；Go、Rust 保持 `future`。',
+          summary: '共用治理與 CI/CD-only 已有真實 pilot，維持 `beta`；Python、TypeScript 與 Rust 模組可建立但尚無 consuming repo，維持 `alpha`；Go 保持 `future`。',
           file: 'profiles/catalog.yaml',
           code: `ci: {stage: beta, profiles: []}
 python: {stage: alpha}
 typescript: {stage: alpha}
 go: {stage: future}
-rust: {stage: future}
-
-python_typescript: {stage: alpha}`
+rust: {stage: alpha}`
         },
         {
           title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
@@ -6287,7 +6560,7 @@ Policy review:
           goal: '不提供關閉型別或秘密掃描的開關；嚴格門檻是公版契約。',
           summary: '語言與分支模式都在建立時明確選擇；delivery 模式把 CI 當整合層，main／dev 仍保留給適合的 repo。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。',
           file: 'copier.yml',
-          code: `language: python
+          code: `languages: [python]
 branch_strategy: delivery  # delivery | main | dev
 python_support_mode: latest  # latest | minimum
 python_min_version: "3.12"  # Used only in minimum mode
@@ -6335,9 +6608,9 @@ CSARC_VERSION_BOT_CLIENT_ID
 CSARC_VERSION_BOT_PRIVATE_KEY`
         },
         {
-          title: '四種 profile 與 Copier 更新都要真的執行',
+          title: '共通基線與每個語言模組都要真的執行',
           goal: 'beta 必須同時有合成生命週期與真實 consuming repo 證據。',
-          summary: '四種組合都通過合成建立／更新；目前只有 CI/CD-only 完成真實產品導入、客製化保留與線上 update。',
+          summary: '共通基線與每個語言模組都通過合成建立／更新；同時選取時合併執行，不另外維護組合測試。',
           file: 'scripts/verify-template.sh＋profiles/catalog.yaml',
           code: `./scripts/verify-template.sh
 
@@ -6348,8 +6621,7 @@ ci: {stage: beta, profiles: []}
 python: {stage: alpha}
 typescript: {stage: alpha}
 go: {stage: future}
-rust: {stage: future}
-python_typescript: {stage: alpha}`
+rust: {stage: alpha}`
         }
       ]
     });
@@ -6376,7 +6648,7 @@ uvx --from csarc-repo-cli csarc adopt .`
       },
       update: {
         title: '更新已使用公版的 repo',
-        goal: 'CLI 讀取 .copier-answers.yml，解析核准 release，以 Copier smart update 顯示新版差異；衝突時保留差異並 fail closed。',
+        goal: 'CLI 讀取 .csarc/config.yml，解析核准 release，以 Copier smart update 顯示新版差異；衝突時保留差異並 fail closed。',
         location: '專案 repo 根目錄',
         code: `git switch -c chore/<issue-number>-update-repo-template
 uvx --from csarc-repo-cli csarc update --check --json
@@ -6384,7 +6656,7 @@ uvx --from csarc-repo-cli csarc update`
       },
       mac: {
         title: 'macOS 本機需求',
-        goal: '共同安裝 Git、GitHub CLI、uv；TypeScript／混合案再使用 Node 與 pnpm。只有 GitHub 連線操作需要登入。',
+        goal: '共同安裝 Git、GitHub CLI、uv；選 TypeScript 再使用 Node 與 pnpm，選 Rust 再使用 rustup 與 Cargo。只有 GitHub 連線操作需要登入。',
         location: 'Terminal',
         code: `brew install git gh uv node pnpm
 
@@ -6394,7 +6666,7 @@ gh auth status`
       },
       windows: {
         title: 'Windows 本機需求',
-        goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；TypeScript／混合案再安裝 Node 24 與 pnpm 11。',
+        goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；選 TypeScript 再安裝 Node 24 與 pnpm 11，選 Rust 再安裝 rustup。',
         location: 'PowerShell（管理員）→ Ubuntu',
         code: `# PowerShell (Administrator)
 wsl --install -d Ubuntu

@@ -253,6 +253,50 @@ def test_release_follow_up_accepts_only_automation_owned_changes(
     )
 
 
+def test_release_follow_up_accepts_rust_manifest_and_lockfile(
+    tmp_path: Path,
+) -> None:
+    """Treat Cargo's manifest and lockfile as one supported release surface."""
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "rust",
+                "packages": {".": {"component": "demo"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "Cargo.lock").touch()
+    head_sha = "a" * 40
+    commits = [
+        {
+            "sha": head_sha,
+            "author": {"login": "github-actions[bot]"},
+            "committer": {"login": "web-flow"},
+            "commit": {"verification": {"verified": True, "reason": "valid"}},
+        }
+    ]
+
+    assert (
+        release_follow_up_errors(
+            tmp_path,
+            "owner/repo",
+            "release-please--branches--main--components--demo",
+            "owner/repo",
+            head_sha,
+            "github-actions[bot]",
+            [
+                ".release-please-manifest.json",
+                "CHANGELOG.md",
+                "Cargo.toml",
+                "Cargo.lock",
+            ],
+            commits,
+        )
+        == []
+    )
+
+
 def capabilities(
     pull_requests: str, contents: str, release: str, dispatch: str
 ) -> dict[str, object]:

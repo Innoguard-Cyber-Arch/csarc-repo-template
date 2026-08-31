@@ -2108,28 +2108,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -2153,12 +2156,16 @@ html[data-detail-level="simple"] .detail-panel {
 	</thead>
 	<tbody>
 			<tr>
-					<td>Project type</td>
-					<td>Workflow only, Python, TypeScript, or Python plus TypeScript</td>
+					<td>Programming languages</td>
+					<td>Select Python, TypeScript, and Rust independently; select none for the shared workflow only</td>
 			</tr>
 			<tr>
 					<td>Branch approach</td>
 					<td>One development branch per delivery batch, all changes directly into <code>main</code>, or one shared <code>dev</code> branch</td>
+			</tr>
+			<tr>
+					<td>Template settings</td>
+					<td>Creation or adoption writes choices to <code>.csarc/config.yml</code>; template updates maintain this single repository configuration</td>
 			</tr>
 			<tr>
 					<td>Shared capability</td>
@@ -2170,11 +2177,11 @@ html[data-detail-level="simple"] .detail-panel {
   <h3>Adoption paths and current scope</h3>
   <ul>
 <li><strong>New repository:</strong> choose a project type and branch approach; split only larger outcomes into independently verifiable sub-items.</li>
-<li><strong>Existing repository:</strong> preview the adoption diff, preserve existing product content, then resolve conflicts and required checks one by one.</li>
-<li><strong>Repository already using the template:</strong> select a reviewed template version, run the update, and review only that version&rsquo;s diff.</li>
-<li><strong>Prerequisites:</strong> Git, GitHub CLI, and uv; TypeScript or mixed projects also need Node 24+ and pnpm 11. Local verification needs no token.</li>
+<li><strong>Existing repository:</strong> the template detects current languages and creates <code>.csarc/config.yml</code>, then previews the adoption diff while preserving product content.</li>
+<li><strong>Repository already using the template:</strong> change options or upgrade through <code>csarc update</code>; the template updates the configuration and managed files together.</li>
+<li><strong>Prerequisites:</strong> Git, GitHub CLI, and uv; TypeScript needs Node 24+ and pnpm 11, while Rust needs rustup. Local verification needs no token.</li>
 </ul>
-<p>The template promises only capabilities that are implemented and tested. Go, Rust, generic deployment, monitoring, AI knowledge retrieval, and hosted documentation remain future or optional work.</p>
+<p>The template promises only capabilities that are implemented and tested. Go, generic deployment, monitoring, AI knowledge retrieval, and hosted documentation remain future or optional work.</p>
 </aside>
 </div>
 </section>
@@ -2205,28 +2212,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -2310,28 +2320,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -2355,8 +2368,8 @@ html[data-detail-level="simple"] .detail-panel {
 	</thead>
 	<tbody>
 			<tr>
-					<td><code>.copier-answers.yml</code>, <code>.csarc/profile.json</code></td>
-					<td>Template source, profile, and branch strategy</td>
+					<td><code>.csarc/config.yml</code></td>
+					<td>Template source, languages, branch strategy, and optional capabilities</td>
 					<td>Template-led</td>
 			</tr>
 			<tr>
@@ -2430,28 +2443,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -2528,28 +2544,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -2602,28 +2621,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -2645,6 +2667,81 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
 </ul>
 <p>Verification logic lives only in scripts and tests. This step restores only <code>.github/workflows/ci.yml</code>; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys.</p></div>
+</section>
+
+<section class="slide markdown-slide candidate-slide" id="languages" data-content-key="languages" data-track="languages" aria-label="Choose a language and receive the matching checks">
+  <aside class="journey-rail" aria-label="Presentation outline">
+  <h3>Use template</h3>
+  <ol class="journey-use">
+    <li class="journey-item priority">
+      <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#flow"><span>CI/CD flow</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#files"><span>File map</span></a>
+    </li>
+  </ol>
+  <h3>Workflow</h3>
+  <ol class="journey-main">
+    <li class="journey-item priority">
+      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
+    </li>
+    <li class="journey-item priority active" aria-current="step">
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
+    </li>
+    <li class="journey-item best">
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
+    </li>
+  </ol>
+  <h3>Maintenance</h3>
+  <ol class="journey-support">
+    <li class="journey-item priority">
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
+    </li>
+    <li class="journey-item best">
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
+    </li>
+  </ol>
+  <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
+</aside>
+
+  <header>
+    <span class="selection-sequence">Step 04</span>
+    <h2>Choose a language and receive the matching checks</h2>
+    <p class="subtitle">Each language owns its tools and tests; shared rules run once.</p>
+  </header>
+  <div class="markdown-body"><p>Choose a project language and the template prepares the matching checks:</p>
+<ul>
+<li><strong>Every project:</strong> checks work rules, documentation, secrets, and dependency safety.</li>
+<li><strong>Python:</strong> checks formatting, types, tests, and the installable package.</li>
+<li><strong>TypeScript:</strong> checks formatting, types, tests, and the installable package.</li>
+<li><strong>Rust:</strong> checks formatting, common mistakes, tests, the release build, and the installable package.</li>
+</ul>
+<p>Each language is selected independently. Selecting several languages combines their modules while each shared check still runs once; the documentation does not enumerate combinations.</p>
+</div>
 </section>
 
 <section class="slide markdown-slide candidate-slide" id="pr" data-content-key="pr" data-track="pr" aria-label="Make completed changes reviewable and deliverable">
@@ -2673,28 +2770,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
-    </li>
-    <li class="journey-item priority active" aria-current="step">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
-    </li>
-    <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority active" aria-current="step">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
+    </li>
+    <li class="journey-item best">
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -2704,7 +2804,7 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header>
-    <span class="selection-sequence">Step 05</span>
+    <span class="selection-sequence">Step 06</span>
     <h2>Make completed changes reviewable and deliverable</h2>
     <p class="subtitle">A work PR completes one work item; a release PR then carries the verified batch into main.</p>
   </header>
@@ -2769,29 +2869,32 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
+    <li class="journey-item priority">
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
+    </li>
     <li class="journey-item priority active" aria-current="step">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -2801,7 +2904,7 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header>
-    <span class="selection-sequence">Step 04</span>
+    <span class="selection-sequence">Step 05</span>
     <h2>Update, check, and record third-party packages separately</h2>
     <p class="subtitle">Observe ordinary releases, act on known vulnerabilities immediately, and retain a traceable release inventory.</p>
   </header>
@@ -2869,28 +2972,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best active" aria-current="step">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -2900,7 +3006,7 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header>
-    <span class="selection-sequence">Step 06</span>
+    <span class="selection-sequence">Step 07</span>
     <h2>Connect version policy to artifacts</h2>
     <p class="subtitle">Verify the promotion source, then select a safe delivery mode from current platform capabilities.</p>
   </header>
@@ -2969,28 +3075,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority active" aria-current="step">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -3000,7 +3109,7 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header>
-    <span class="selection-sequence">Step 07</span>
+    <span class="selection-sequence">Step 08</span>
     <h2>Detect GitHub capability before applying controls</h2>
     <p class="subtitle">The organization currently probes as Free plus private, so main is not protected by an enforced Ruleset.</p>
   </header>
@@ -3069,28 +3178,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority active" aria-current="step">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -3100,13 +3212,14 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header>
-    <span class="selection-sequence">Step 08</span>
+    <span class="selection-sequence">Step 09</span>
     <h2>Copier keeps repositories aligned, and the template dogfoods its rules</h2>
     <p class="subtitle">A template defect affects many projects, so creation, adoption, and update all run as real tests.</p>
   </header>
   <div class="markdown-body"><ul>
 <li><code>template/</code> is the delivered source; root retains the template repository&rsquo;s own GitHub governance and dogfood configuration.</li>
-<li>CI/CD-only, Python, TypeScript, mixed, and minimum-Python compositions are generated and verified.</li>
+<li><code>.csarc/config.yml</code> is both Copier&rsquo;s update record and the repository&rsquo;s only template configuration. Languages, branch strategy, and optional capabilities read from it; later extensions add settings here instead of creating another configuration file.</li>
+<li>The shared baseline and the Python, TypeScript, and Rust modules are verified independently. Selecting several languages combines modules without creating a combination-specific workflow.</li>
 <li>An existing repository is adopted and then updated from the next Copier revision, proving product content is preserved.</li>
 </ul>
 <details class="package-disclosure" data-content-key="copier-update">
@@ -3115,7 +3228,8 @@ html[data-detail-level="simple"] .detail-panel {
 </details>
 <aside class="technical-detail" data-content-key="template-release-scope">
   <h3>Single source, runtime baselines, and the root-only boundary</h3>
-  <p><code>scripts/sync-paired-files.sh</code> makes root the source of paired files and verifies copied content and permissions with <code>--check</code>. <code>profiles/catalog.yaml</code> records runtime baselines and real pilot status. Python and Node baselines advance only after their own thirty-day observation period.</p>
+  <p><code>.csarc/config.yml</code> retains Copier&rsquo;s required template source and revision together with the capabilities selected for this repository. Change it through <code>csarc update --data</code> so manual edits cannot drift from Copier. A derived template should add its own settings to the same YAML instead of duplicating CSARC fields.</p>
+<p><code>scripts/sync-paired-files.sh</code> makes root the source of paired files and verifies copied content and permissions with <code>--check</code>. <code>profiles/catalog.yaml</code> records runtime baselines and real pilot status. Python and Node baselines advance only after their own thirty-day observation period.</p>
 <p><code>scripts/verify-template.sh</code> runs create/adopt/update fixtures only in the template repository and is never delivered downstream. Generated repositories use the smaller <code>scripts/verify</code> entry point.</p>
 </aside>
 </div>
@@ -3147,28 +3261,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority active" aria-current="step">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -3178,7 +3295,7 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header>
-    <span class="selection-sequence">Step 09</span>
+    <span class="selection-sequence">Step 10</span>
     <h2>A portable single file remains the baseline</h2>
     <p class="subtitle">Hugo owns content structure; the existing renderer produces an offline, forwardable HTML file.</p>
   </header>
@@ -3224,28 +3341,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best active" aria-current="step">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -3255,7 +3375,7 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header>
-    <span class="selection-sequence">Step 10</span>
+    <span class="selection-sequence">Step 11</span>
     <h2>Adopt in stages, with a stop after every step</h2>
     <p class="subtitle">Maturity follows operational evidence, not a date or the mere presence of files.</p>
   </header>
@@ -3269,7 +3389,7 @@ html[data-detail-level="simple"] .detail-panel {
 	<tbody>
 			<tr>
 					<td>Baseline capability</td>
-					<td>Four profiles, Issues/specs, PR/CI, local verification, lockfile policy, and the repository site have executable implementations</td>
+					<td>The shared baseline and Python, TypeScript, and Rust modules, plus Issues/specs, PR/CI, local verification, lockfile policy, and the repository site have executable implementations</td>
 			</tr>
 			<tr>
 					<td>Verified online</td>
@@ -3277,11 +3397,11 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>Still piloting</td>
-					<td>Python, TypeScript, and mixed compositions each need one real consuming-repository pilot</td>
+					<td>The Python, TypeScript, and Rust modules still need real consuming-repository pilots</td>
 			</tr>
 			<tr>
 					<td>Future/optional</td>
-					<td>Central catalog or governance, Go/Rust, authenticated hosting, deployment, monitoring, RAG, and autonomous agents</td>
+					<td>Central catalog or governance, Go, authenticated hosting, deployment, monitoring, RAG, and autonomous agents</td>
 			</tr>
 	</tbody>
 </table>
@@ -3318,28 +3438,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -3440,28 +3563,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix active-selection" href="#ecosystem" aria-current="page">Tools</a>
@@ -3559,28 +3685,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -3601,9 +3730,10 @@ html[data-detail-level="simple"] .detail-panel {
   <button id="similar-tools-tab-work" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>Work definition</button>
   <button id="similar-tools-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI rules</button>
   <button id="similar-tools-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>Verification / CI</button>
-  <button id="similar-tools-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-supply" data-similar-tools-tab="4"><small>Journey 04</small>Dependency security</button>
-  <button id="similar-tools-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-pr" data-similar-tools-tab="5"><small>Journey 05</small>PR / merge</button>
-  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="6"><small>Journey 08</small>Template upgrades</button>
+  <button id="similar-tools-tab-languages" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-languages" data-similar-tools-tab="4"><small>Journey 04</small>Programming languages</button>
+  <button id="similar-tools-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>Dependency security</button>
+  <button id="similar-tools-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR / merge</button>
+  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="7"><small>Journey 09</small>Template upgrades</button>
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
   <div class="similar-tools-legend">
@@ -3630,7 +3760,7 @@ html[data-detail-level="simple"] .detail-panel {
           <td>2,952</td>
           <td>A project generator that declares a project in a general-purpose language and continuously synthesizes managed configuration and workflows.</td>
           <td><ul><li>projen treats .projenrc as the only source and prevents direct edits to many generated files.</li><li>CSARC distributes an updatable Copier baseline while preserving ownership boundaries for product and policy files.</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="03: Full match">03</span><span class="coverage-tag full" title="06: Full match">06</span><span class="coverage-tag full" title="08: Full match">08</span><span class="coverage-tag partial" title="01: Partial match">01</span><span class="coverage-tag partial" title="04: Partial match">04</span><span class="coverage-tag partial" title="05: Partial match">05</span><span class="coverage-tag partial" title="07: Partial match">07</span><span class="coverage-tag partial" title="10: Partial match">10</span>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="03: Full match">03</span><span class="coverage-tag full" title="07: Full match">07</span><span class="coverage-tag full" title="09: Full match">09</span><span class="coverage-tag partial" title="01: Partial match">01</span><span class="coverage-tag partial" title="04: Partial match">04</span><span class="coverage-tag partial" title="05: Partial match">05</span><span class="coverage-tag partial" title="06: Partial match">06</span><span class="coverage-tag partial" title="08: Partial match">08</span><span class="coverage-tag partial" title="11: Partial match">11</span>
           </div></td>
         </tr>
         <tr>
@@ -3639,13 +3769,22 @@ html[data-detail-level="simple"] .detail-panel {
           <td>1,207</td>
           <td>An agent-ready repository framework that puts AI working rules, durable plans, verification, and safe updates in the repository.</td>
           <td><ul><li>Repository Harness primarily adds an agent working framework and safe update mechanism to an existing repository.</li><li>CSARC also supplies generated technology profiles, GitHub governance, delivery, and version policy.</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag full" title="08: Full match">08</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="05: Partial match">05</span><span class="coverage-tag partial" title="07: Partial match">07</span><span class="coverage-tag partial" title="10: Partial match">10</span>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag full" title="09: Full match">09</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="06: Partial match">06</span><span class="coverage-tag partial" title="08: Partial match">08</span><span class="coverage-tag partial" title="11: Partial match">11</span>
+          </div></td>
+        </tr>
+        <tr>
+          <th scope="row"><a href="https://github.com/backstage/backstage" target="_blank" rel="noreferrer">Backstage</a></th>
+          <td>v1.54.6<br>(2026-08-28)</td>
+          <td>34,277</td>
+          <td>A developer portal framework that unifies a software ecosystem through Software Catalog, Software Templates, and TechDocs.</td>
+          <td><ul><li>Backstage is a centrally operated portal focused on service discovery, ownership, and scaffolding.</li><li>CSARC is a portable repository-local baseline that places governance, verification, and delivery in each repository.</li></ul></td>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="10: Full match">10</span><span class="coverage-tag full" title="11: Full match">11</span><span class="coverage-tag partial" title="04: Partial match">04</span><span class="coverage-tag partial" title="08: Partial match">08</span><span class="coverage-tag partial" title="09: Partial match">09</span>
           </div></td>
         </tr>
       </tbody>
     </table>
   </div>
-  <p class="similar-tools-note"><strong>Classification rule: </strong>All listed tools must have a release within six months. Primary tools cover at least five journeys and sort by full, then partial matches; other tools also need at least 1,000 Stars. Journey tags run from 01 to 10.</p>
+  <p class="similar-tools-note"><strong>Classification rule: </strong>All listed tools must have a release within six months. Primary tools cover at least five journeys and sort by full, then partial matches; other tools also need at least 1,000 Stars. Journey tags run from 01 to 11.</p>
 </div>
 <div id="similar-tools-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-work" data-similar-tools-panel hidden>
   <div class="similar-tools-legend"><span class="reference">Compares where a request is recorded, how individual and grouped work are represented, how a Milestone gains approval to start, and when larger work needs more documentation.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
@@ -3658,9 +3797,9 @@ html[data-detail-level="simple"] .detail-panel {
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">.projenrc project model</a>：.projenrc is the only hand-written source of truth; synth generates the other project files.</span></li>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：The repository keeps product documents, decisions, plans, code, and verification evidence together.</span></li>
+              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entities provide a central source of truth for services, owners, and relationships.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entities provide a central source of truth for services, owners, and relationships.</span></li>
               <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：Briefs, specifications, and architecture records accumulate durable context according to complexity.</span></li>
               <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Specs / Changes</a>：Specs preserve current truth, while changes hold deltas that have not yet been accepted.</span></li>
               <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：A spec, plan, tasks, and constitution form the feature context inside the repository.</span></li>
@@ -3798,12 +3937,61 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Who verifies generated projects</strong><span>Compares testing only the generator, snapshotting output, and creating, adopting, or updating candidate repositories before running their checks.<br><br><b>CSARC: </b>A normal repository tests only its product. The repo-template full entrypoint runs the complete pytest suite, covering Python and TypeScript generation and existing-repository adoption without maintaining whole-tree snapshots.</span></th>
+          <th scope="row"><strong>Who verifies generated projects</strong><span>Compares testing only the generator, snapshotting output, and creating, adopting, or updating candidate repositories before running their checks.<br><br><b>CSARC: </b>A normal repository tests only its product. The repo-template full entrypoint runs the complete pytest suite, covering Python, TypeScript, and Rust generation plus existing-repository adoption without maintaining whole-tree snapshots.</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/custom/testing/" target="_blank" rel="noreferrer">Testing.synth</a>：Tests synthesize a project and inspect generated files; the guide also warns that whole-tree snapshots are unwieldy and should be narrowed to meaningful output.</span></li>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/tests/README.md" target="_blank" rel="noreferrer">Test Suite Map</a>：Installer, workflow, documentation, and release tests are mapped to observable invariants; removed historical capabilities no longer stay in the current pre-merge suite.</span></li>
           </ul></td>
           <td><ul>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div id="similar-tools-panel-languages" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-languages" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">Compares how languages are selected, whether native ecosystem tools remain visible, how multiple languages coexist, and whether configuration stays centralized and updatable.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Programming languages">
+    <table class="similar-tools-matrix similar-tools-philosophy-matrix">
+      <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>How languages are selected at creation</strong><span>Compares fixed project types, independently selectable language modules, and leaving all setup to users after creation.<br><br><b>CSARC: </b>Creation and adoption select Python, TypeScript, and Rust independently. Unselected languages produce neither files nor CI steps.</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Project types &#43; components</a>：A language or framework project type establishes the base and components add capabilities; unlike CSARC, it does not compose one repository from independent language selections.</span></li>
+              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/input-examples" target="_blank" rel="noreferrer">Template parameters &#43; conditional steps</a>：Component creation can ask for a language or framework and run conditional steps, which suits a portal; existing repositories still need a separate update mechanism.</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Multiselect questions &#43; conditional files</a>：A template can use multiselect answers to choose language files. Copier supplies the mechanism but does not choose the testing tools.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>What each language actually checks</strong><span>Compares one abstract tool with each ecosystem&#39;s native formatting, type, test, build, and packaging tools.<br><br><b>CSARC: </b>Python uses Ruff, mypy, pytest, and wheel; TypeScript uses Biome, TypeScript, Vitest, and npm package; Rust uses rustfmt, Clippy, cargo test, release builds, and Cargo package.</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>pnpm<span class="tool-meta"><span>v11.25.0 (2026-08-29)</span><span>★ 36,332</span></span></strong><span class="tool-comparison-detail"><a href="https://pnpm.io/workspaces" target="_blank" rel="noreferrer">Scripts &#43; workspace</a>：Package scripts and workspaces run native TypeScript and JavaScript build, test, and package commands; other languages are outside its scope.</span></li>
+              <li><strong>Rust / Cargo<span class="tool-meta"><span>1.98.0 (2026-08-20)</span><span>★ 116,688</span></span></strong><span class="tool-comparison-detail"><a href="https://doc.rust-lang.org/cargo/commands/index.html" target="_blank" rel="noreferrer">cargo fmt / clippy / test / build / package</a>：One official toolchain handles formatting, common mistakes, tests, release builds, and package verification.</span></li>
+              <li><strong>uv<span class="tool-meta"><span>0.12.7 (2026-08-27)</span><span>★ 89,282</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.astral.sh/uv/guides/projects/" target="_blank" rel="noreferrer">uv run &#43; build</a>：Creates the environment from pyproject and its lockfile, runs Python tools, and builds packages; Ruff, mypy, and pytest still own formatting, typing, and tests.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>How multiple languages coexist</strong><span>Compares separate workflows for every combination with composing reusable single-language modules.<br><br><b>CSARC: </b>Each language is defined once. Multi-language repositories combine selected modules while shared work-rule, documentation, secret, and dependency checks run once.</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>Nx<span class="tool-meta"><span>23.1.2 (2026-08-26)</span><span>★ 29,280</span></span></strong><span class="tool-comparison-detail"><a href="https://nx.dev/concepts/inferred-tasks" target="_blank" rel="noreferrer">Plugins &#43; inferred tasks</a>：Plugins infer build and test tasks from project settings and place them in one project graph. This suits large workspaces but requires the Nx runtime.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>How language settings are stored and updated</strong><span>Compares settings scattered across tool files, a separate profile, and one repository configuration that also tracks its template source.<br><br><b>CSARC: </b>`.csarc/config.yml` is both the Copier answers file and template configuration. Every entrypoint reads it, and `csarc update` changes the setting together with generated files.</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">.projenrc &#43; synth</a>：.projenrc is the single declaration source and synth regenerates managed files. This is strongly consistent, but direct edits to generated files are overwritten.</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/#the-copier-answers-file" target="_blank" rel="noreferrer">Answers file</a>：The answers file retains source, revision, and selections for smart updates. CSARC also uses it as the sole template configuration so no second profile can drift.</span></li>
+              <li><strong>Rust / Cargo<span class="tool-meta"><span>1.98.0 (2026-08-20)</span><span>★ 116,688</span></span></strong><span class="tool-comparison-detail"><a href="https://rust-lang.github.io/rustup/overrides.html#the-toolchain-file" target="_blank" rel="noreferrer">rust-toolchain.toml &#43; Cargo.toml</a>：The toolchain file pins Rust and Cargo.toml describes the package; CSARC&#39;s single template configuration decides whether to generate this pair.</span></li>
+              <li><strong>uv<span class="tool-meta"><span>0.12.7 (2026-08-27)</span><span>★ 89,282</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.astral.sh/uv/concepts/projects/layout/" target="_blank" rel="noreferrer">pyproject.toml &#43; uv.lock</a>：Uses standard Python project metadata plus uv.lock for the environment; it does not store CSARC branch or governance selections.</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -3827,11 +4015,13 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>How installs pin the package set</strong><span>Compares latest versions, lockfiles, and resolver policies.<br><br><b>CSARC: </b>Both languages install from lockfiles. pnpm also rejects releases younger than three days or publisher-trust downgrades. Local and CI runs both enforce it.</span></th>
+          <th scope="row"><strong>How installs pin the package set</strong><span>Compares latest versions, lockfiles, and resolver policies.<br><br><b>CSARC: </b>Python, TypeScript, and Rust install from lockfiles. pnpm also rejects releases younger than three days or publisher-trust downgrades. Local and CI runs both enforce it.</span></th>
           <td><ul>
           </ul></td>
           <td><ul>
               <li><strong>pnpm<span class="tool-meta"><span>v11.25.0 (2026-08-29)</span><span>★ 36,332</span></span></strong><span class="tool-comparison-detail"><a href="https://pnpm.io/settings#minimumreleaseage" target="_blank" rel="noreferrer">minimumReleaseAge &#43; trustPolicy</a>：Rejects overly new releases and publisher-trust downgrades during installation.</span></li>
+              <li><strong>Rust / Cargo<span class="tool-meta"><span>1.98.0 (2026-08-20)</span><span>★ 116,688</span></span></strong><span class="tool-comparison-detail"><a href="https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html" target="_blank" rel="noreferrer">Cargo.lock</a>：Cargo.lock records exact dependency versions and CI uses --locked to reject an unrecorded resolution.</span></li>
+              <li><strong>uv<span class="tool-meta"><span>0.12.7 (2026-08-27)</span><span>★ 89,282</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.astral.sh/uv/concepts/projects/layout/#the-lockfile" target="_blank" rel="noreferrer">Universal lockfile</a>：uv.lock records cross-platform resolution and installation can reject lockfile drift.</span></li>
           </ul></td>
         </tr>
         <tr>
@@ -3926,11 +4116,11 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>How definitions become repository state</strong><span>Compares direct file edits, generated files, and services that continuously reconcile remote state.<br><br><b>CSARC: </b>copier.yml, template/, and profiles/catalog.yaml define the generated baseline. scripts/sync-paired-files.sh synchronizes paired root/template files, while downstream repositories retain ownership of product files.</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：Typed components declare the desired project and synth reconciles the files.</span></li>
+              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entities and Software Templates declare portal components and creation workflows.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entities and Software Templates declare portal components and creation workflows.</span></li>
-              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：A Recipe declares a semantic transformation that parsers and visitors apply.</span></li>
               <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：Answers and Jinja templates declare generation inputs without continuously controlling remote state.</span></li>
+              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：A Recipe declares a semantic transformation that parsers and visitors apply.</span></li>
           </ul></td>
         </tr>
         <tr>
@@ -3938,11 +4128,11 @@ html[data-detail-level="simple"] .detail-panel {
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen upgrade &#43; synth</a>：The project is regenerated after a library upgrade, and anti-tamper checks reject manual edits to managed files.</span></li>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：The updater retains the upstream base and safely updates an existing repository through a three-way merge.</span></li>
+              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：It excels at creating new components; existing-repository migration still needs another tool.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：It excels at creating new components; existing-repository migration still needs another tool.</span></li>
-              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：Instead of overwriting files from a text template, it performs semantic migration across versions.</span></li>
               <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：The recorded template source and answers let an existing repository receive template updates.</span></li>
+              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：Instead of overwriting files from a text template, it performs semantic migration across versions.</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -3980,28 +4170,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -4022,9 +4215,10 @@ html[data-detail-level="simple"] .detail-panel {
     <button id="testing-tab-work" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>Work definition</button>
     <button id="testing-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI rules</button>
     <button id="testing-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>Verification / CI</button>
-    <button id="testing-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-supply" data-similar-tools-tab="4"><small>Journey 04</small>Dependency security</button>
-    <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="5"><small>Journey 05</small>PR / merge</button>
-    <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="6"><small>Journey 06</small>Version / delivery</button>
+    <button id="testing-tab-languages" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-languages" data-similar-tools-tab="4"><small>Journey 04</small>Programming languages</button>
+    <button id="testing-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>Dependency security</button>
+    <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR / merge</button>
+    <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="7"><small>Journey 07</small>Version / delivery</button>
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
     <div class="similar-tools-testing-intro">
@@ -4038,13 +4232,13 @@ html[data-detail-level="simple"] .detail-panel {
         <tbody>
           <tr>
             <th scope="row"><strong>Issue PR (work branch → dev)</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; fast 2–5 min</li><li><strong>04 Dependency security：</strong>Typically under 1 min within fast</li><li><strong>05 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; fast 3–6 min</li><li><strong>04 Dependency security：</strong>Typically under 1 min within fast</li><li><strong>05 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–8 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; fast 2–5 min</li><li><strong>04 Programming languages：</strong>About 1–5 min for selected languages</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; fast 3–6 min</li><li><strong>04 Programming languages：</strong>About 1–5 min for selected languages</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–8 min</p></td>
           </tr>
           <tr>
             <th scope="row"><strong>Release PR (dev → main)</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full 5–15 min</li><li><strong>04 Dependency security：</strong>Typically under 1 min within full</li><li><strong>05 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full 8–12 min</li><li><strong>04 Dependency security：</strong>Typically under 1 min within full</li><li><strong>05 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 9–14 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full 5–15 min</li><li><strong>04 Programming languages：</strong>About 3–10 min for selected languages</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full 8–12 min</li><li><strong>04 Programming languages：</strong>About 4–8 min including generated profiles</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 9–14 min</p></td>
           </tr>
         </tbody>
       </table>
@@ -4052,7 +4246,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 01 / Minimum test contract</strong><span>Validates how Issues become actionable and how a Milestone gains approval to start. PR merging and Milestone closure belong to Journeys 05 and 06.</span>
+    <strong>Journey 01 / Minimum test contract</strong><span>Validates how Issues become actionable and how a Milestone gains approval to start. PR merging and Milestone closure belong to Journeys 06 and 07.</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01 / Minimum test contract">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
@@ -4187,11 +4381,55 @@ html[data-detail-level="simple"] .detail-panel {
     </table>
   </div>
   </div>
+  <div id="testing-panel-languages" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-languages" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 04 / Language modules</strong><span>Languages are selected during creation or adoption. Issue PRs run the selected modules, while release PRs add builds and packaging. Every entrypoint reads the same template configuration.</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 04 / Language modules">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>Configuration matches repository files</strong><span>Languages listed by the template configuration must match the Python, TypeScript, and Rust project files in the repository.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.csarc/config.yml</code></li><li><code>scripts/detect-language-profile</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing code, dependencies, or template settings · Timeout：30 min</span></li></ul></div>
+            </li>
+            <li>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.csarc/config.yml</code></li><li><code>scripts/detect-language-profile</code></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_language_profiles.py</code></li></ul></div><span>Confirms that Copier creates one configuration file and composes the selected language modules correctly.</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Each language runs its native checks</strong><span>Python, TypeScript, and Rust each run their own formatting, static checks, tests, and required builds while shared rules run once.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
+            </li>
+            <li>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Additionally creates single- and multi-language fixtures to confirm generation, updates, and lockfiles remain usable.</span>
+            </li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
   <div id="testing-panel-supply" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-supply" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 04 / Dependency security</strong><span>Dependency changes first reproduce the locked install. Vulnerability checks run for dependency changes and release candidates, while a schedule covers periods without PRs.</span>
+    <strong>Journey 05 / Dependency security</strong><span>Dependency changes first reproduce the locked install. Vulnerability checks run for dependency changes and release candidates, while a schedule covers periods without PRs.</span>
   </div>
-  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 04 / Dependency security">
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 05 / Dependency security">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
       <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
       <tbody>
@@ -4256,9 +4494,9 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-pr" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-pr" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 05 / Two PR stages</strong><span>A work PR first validates one Issue and its destination; a release PR then validates the complete batch. Rules governance owns merge authorization.</span>
+    <strong>Journey 06 / Two PR stages</strong><span>A work PR first validates one Issue and its destination; a release PR then validates the complete batch. Rules governance owns merge authorization.</span>
   </div>
-  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 05 / Two PR stages">
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 06 / Two PR stages">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
       <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
       <tbody>
@@ -4310,9 +4548,9 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-delivery" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-delivery" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 06 / Delivery and closure</strong><span>A Milestone closes only after a successful release records delivery evidence. Early termination first disposes of unfinished work.</span>
+    <strong>Journey 07 / Delivery and closure</strong><span>A Milestone closes only after a successful release records delivery evidence. Early termination first disposes of unfinished work.</span>
   </div>
-  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 06 / Delivery and closure">
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 07 / Delivery and closure">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
       <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
       <tbody>
@@ -4377,28 +4615,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -4471,28 +4712,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -4581,28 +4825,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -4674,7 +4921,7 @@ html[data-detail-level="simple"] .detail-panel {
 </table>
 <aside class="technical-detail" data-content-key="benchmark-gap">
   <h3>Current gaps</h3>
-  There is no cross-repository catalog, comprehensive hosted governance, or generic deployment platform. The root-only <code>Live integration smoke</code> continues to exercise OSV, Release Please, release handoff, and governance drift. Python, TypeScript, and mixed compositions advance to beta only after their own real pilots.
+  There is no cross-repository catalog, comprehensive hosted governance, or generic deployment platform. The root-only <code>Live integration smoke</code> continues to exercise OSV, Release Please, release handoff, and governance drift. The Python, TypeScript, and Rust modules advance to beta only after real pilots.
 </aside>
 </div>
 </section>
@@ -4705,28 +4952,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -4821,28 +5071,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
@@ -4907,28 +5160,31 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
     <li class="journey-item priority">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
     </li>
     <li class="journey-item priority">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
     <li class="journey-item best">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>

@@ -123,8 +123,23 @@ profiles:
     reason: Add only after a real consuming repository defines its stable toolchain and compatibility policy, then passes create and update tests.
 
   rust:
-    stage: future
-    reason: Add only after a real consuming repository defines its stable toolchain and MSRV policy, then passes create and update tests.
+    stage: alpha
+    latest_reviewed_stable: "1.98.0"
+    stable_channel: rust_stable
+    stable_release_observation_days: 12
+    msrv: "1.98"
+    edition: "2024"
+    package_manager: cargo
+    configuration:
+      - Cargo.toml
+      - rust-toolchain.toml
+    lockfile: Cargo.lock
+    source_directory: src
+    verification: ./scripts/verify
+    tools:
+      format: rustfmt
+      lint: clippy
+      test_and_build: cargo
 
 compositions:
   ci:
@@ -133,21 +148,11 @@ compositions:
     profiles: []
     release_output: github_release_source_archive
 
-  python:
+  language_modules:
     stage: alpha
-    profiles:
-      - python
-
-  python_typescript:
-    stage: alpha
-    profiles:
-      - python
-      - typescript
-
-  typescript:
-    stage: alpha
-    profiles:
-      - typescript
+    selectable_profiles: [python, typescript, rust]
+    selection: any_subset
+    verification: selected_modules_plus_shared_checks_once
 
 optional_modules:
   container_delivery:
@@ -188,7 +193,7 @@ promotion_evidence:
     status: pending_real_consuming_repository
   typescript:
     status: pending_real_consuming_repository
-  python_typescript:
+  rust:
     status: pending_real_consuming_repository
   container_delivery:
     status: pilot_candidate_identified

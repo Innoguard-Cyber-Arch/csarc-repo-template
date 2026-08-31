@@ -1,6 +1,7 @@
 {% set python_target = "3.14" if python_support_mode == "latest" else python_min_version -%}
-{% set has_python = language in ["python", "python-typescript"] -%}
-{% set has_typescript = language in ["typescript", "python-typescript"] -%}
+{% set has_python = "python" in languages -%}
+{% set has_typescript = "typescript" in languages -%}
+{% set has_rust = "rust" in languages -%}
 name: CI
 
 on:
@@ -76,6 +77,12 @@ jobs:
         with:
           node-version: "24"
           cache: pnpm
+{% endif %}
+{% if has_rust %}
+      - if: {% raw %}${{ steps.plan.outputs.tier != 'docs' }}{% endraw %}
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
+          rustup default 1.98.0
 {% endif %}
       - name: Run bounded verification
         if: {% raw %}${{ steps.plan.outputs.tier == 'docs' || steps.plan.outputs.tier == 'fast' }}{% endraw %}

@@ -22,14 +22,17 @@
         },
         {
           title: '依專案語言只產生真的可執行的指令',
-          goal: 'CI/CD-only 不假裝有語言指令；Python-only 不看到 pnpm；TypeScript-only 不看到 uv；混合案才同時列出兩套。',
-          summary: 'Copier 依 `language` 渲染指令；四種組合最後都回到 `./scripts/verify`，公版驗證也會阻擋錯誤 profile。',
+          goal: '沒有選語言時只保留共通規則；選了哪些語言，就只產生那些語言的指令。',
+          summary: 'Copier 依 `languages` 複選結果渲染模組；同時選取多個語言時合併執行，共通檢查仍只跑一次。',
           file: 'template/AGENTS.md.jinja＋scripts/verify-template.sh',
-          code: `{% if language in ["python", "python-typescript"] %}
+          code: `{% if "python" in languages %}
 - Python iteration: uv run ruff check <paths>
 {% endif %}
-{% if language in ["typescript", "python-typescript"] %}
+{% if "typescript" in languages %}
 - TypeScript iteration: pnpm exec biome check <paths>
+{% endif %}
+{% if "rust" in languages %}
+- Rust iteration: cargo clippy --all-targets --all-features -- -D warnings
 {% endif %}
 - Required final check: ./scripts/verify`
         },
@@ -107,13 +110,14 @@ required checks:
       ],
       template: [
         {
-          title: '先宣告語言組合，再只產生需要的工具鏈',
-          goal: '可選 CI/CD-only、Python-only、TypeScript-only 或兩者；Python 另提供 latest／minimum。',
-          summary: '答案寫入 `.csarc/profile.json`；驗證入口會依實際 `pyproject.toml`／`package.json` 自動核對。Python minimum 目前刻意從 3.12 起；CI 會跑所選版本的精確 `.0` 下界，以及一路到 reviewed stable 的每個 feature release 最新 patch，最後以穩定的 `verify` context 彙總。',
+          title: '獨立勾選語言，只產生需要的工具鏈',
+          goal: 'Python、TypeScript、Rust 都是獨立模組；全不選時只產生共通 CI/CD 基線。',
+          summary: '答案寫入 `.csarc/config.yml`；它同時是 repo 的公版設定與 Copier 更新依據，不再另存 profile JSON。',
           file: 'copier.yml',
-          code: `language:
-  choices: [ci, python, typescript, python-typescript]
-  default: python
+          code: `languages:
+  multiselect: true
+  choices: [python, typescript, rust]
+  default: [python]
 python_support_mode:
   type: str
   choices: [latest, minimum]
@@ -152,28 +156,29 @@ profiles:
     stage: alpha
     latest_reviewed_active_lts: "24"
     package_manager: pnpm
+  rust:
+    stage: alpha
+    latest_reviewed_stable: "1.98.0"
+    package_manager: cargo
   go: {stage: future}
 
 compositions:
   ci: {stage: beta, profiles: []}
-  python: {stage: alpha, profiles: [python]}
-  typescript: {stage: alpha, profiles: [typescript]}
-  python_typescript: {stage: alpha, profiles: [python, typescript]}
-  rust: {stage: future}
+  language_modules:
+    stage: alpha
+    selectable_profiles: [python, typescript, rust]
+    selection: any_subset
 
 version_policy:
   stable_release_observation_days: 30
   merge_after_full_verification: automatic
 
-compositions:
-  python: {stage: alpha, profiles: [python]}
-  typescript: {stage: alpha, profiles: [typescript]}
-  python_typescript: {stage: alpha, profiles: [python, typescript]}`
+verification: selected_modules_plus_shared_checks_once`
         },
         {
           title: '既有 repo 在短分支同步審查過的模板內容',
           goal: 'Copier 保留來源與答案；先從核准 release tag 查出 40 字元 SHA，再決定實際套用內容。',
-          file: '.copier-answers.yml',
+          file: '.csarc/config.yml',
           code: `gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template --limit 5
 gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/v0.1.0 --jq .sha
 git switch -c chore/update-repo-template
@@ -184,18 +189,15 @@ uvx --from copier copier update --trust \
       ],
       contract: [
         {
-          title: '先宣告 repo 使用 CI/CD-only、Python、TypeScript 或兩者',
+          title: '宣告 repo 使用哪些語言模組',
           goal: 'Copier 將選擇寫進 repo；偵測器只負責提醒實際檔案與宣告不一致，不擅自改設定。',
-          summary: '`language_profile` 是唯一依據；`--suggest` 可依根目錄的 `pyproject.toml` 與 `package.json` 提示最可能的組合。',
-          file: '.csarc/profile.json＋scripts/detect-language-profile',
-          code: `{
-  "language_profile": "python-typescript",
-  "modules": {
-    "ci_cd": true,
-    "python": true,
-    "typescript": true
-  }
-}
+          summary: '`languages` 是唯一依據；`--suggest` 可依根目錄的 manifest 提示應勾選哪些語言。',
+          file: '.csarc/config.yml＋scripts/detect-language-profile',
+          code: `languages:
+- python
+- typescript
+- rust
+branch_strategy: delivery
 
 ./scripts/detect-language-profile --suggest
 ./scripts/detect-language-profile`
@@ -203,8 +205,8 @@ uvx --from copier copier update --trust \
         {
           title: '各語言保留自己的品質、測試與鎖定設定',
           goal: '共用治理不等於硬湊成同一套工具；每種語言使用其主流工具，再由同一驗證入口協調。',
-          summary: 'Python 使用 uv、Ruff、mypy、pytest；TypeScript 使用 pnpm、Biome、TypeScript strict、Vitest，兩邊都鎖定實際相依與完整性資料。',
-          file: 'pyproject.toml／package.json＋兩種 lockfile',
+          summary: 'Python 使用 uv、Ruff、mypy、pytest；TypeScript 使用 pnpm、Biome、TypeScript strict、Vitest；Rust 使用 Cargo、rustfmt、Clippy 與 cargo test。',
+          file: '各語言 manifest＋lockfile',
           code: `# Python module
 uv sync --locked
 uv run ruff check .
@@ -234,7 +236,7 @@ on:
 uses: Cyber-Arch/csarc-repo-template/
   .github/workflows/reusable-ci.yml@<full-commit-sha>
 with:
-  language-profile: python-typescript`
+  language-profile: python`
         }
       ],
       method: [
@@ -320,7 +322,7 @@ milestone: same as Issue #123`
           title: '工作 PR、發版 PR 與同步 PR',
           goal: '工作先進 dev，完整批次再進 main；main 更新後以 PR 同步，不直接改寫開發分支。',
           summary: 'validator 會檢查工作 PR 的目的分支與堆疊鏈；發版 PR 建立及 main-to-dev 同步目前仍由維運者手動發起。',
-          file: 'copier.yml＋.csarc/profile.json＋scripts/delivery_sync.py',
+          file: 'copier.yml＋.csarc/config.yml＋scripts/delivery_sync.py',
           code: `work:    type/123-short-slug -> dev/m8-*
 release: dev/m8-* -> main
 sync:    sync/main-to-m8-*-<sha> -> dev/m8-*`
@@ -366,7 +368,7 @@ workflow_ref: <40-character-commit-sha>
 
 uses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@<40-character-commit-sha>
 with:
-  language-profile: python-typescript
+  language-profile: python
 
 gh api --method PUT \\
   repos/Innoguard-Cyber-Arch/csarc-repo-template/actions/permissions/access \\
@@ -528,17 +530,15 @@ dispatch_artifacts(next_tag)`
       ],
       rollout: [
         {
-          title: '可用組合依真實採用證據分級',
+          title: '語言模組依真實採用證據分級',
           goal: '基本、未來與可選不是口號，而是對可用能力的承諾。',
-          summary: '共用治理與 CI/CD-only 已有真實 pilot，維持 `beta`；Python、TypeScript 與混合組合可建立但尚無 consuming repo，維持 `alpha`；Go、Rust 保持 `future`。',
+          summary: '共用治理與 CI/CD-only 已有真實 pilot，維持 `beta`；Python、TypeScript 與 Rust 模組可建立但尚無 consuming repo，維持 `alpha`；Go 保持 `future`。',
           file: 'profiles/catalog.yaml',
           code: `ci: {stage: beta, profiles: []}
 python: {stage: alpha}
 typescript: {stage: alpha}
 go: {stage: future}
-rust: {stage: future}
-
-python_typescript: {stage: alpha}`
+rust: {stage: alpha}`
         },
         {
           title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
@@ -581,7 +581,7 @@ Policy review:
           goal: '不提供關閉型別或秘密掃描的開關；嚴格門檻是公版契約。',
           summary: '語言與分支模式都在建立時明確選擇；delivery 模式把 CI 當整合層，main／dev 仍保留給適合的 repo。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。',
           file: 'copier.yml',
-          code: `language: python
+          code: `languages: [python]
 branch_strategy: delivery  # delivery | main | dev
 python_support_mode: latest  # latest | minimum
 python_min_version: "3.12"  # Used only in minimum mode
@@ -629,9 +629,9 @@ CSARC_VERSION_BOT_CLIENT_ID
 CSARC_VERSION_BOT_PRIVATE_KEY`
         },
         {
-          title: '四種 profile 與 Copier 更新都要真的執行',
+          title: '共通基線與每個語言模組都要真的執行',
           goal: 'beta 必須同時有合成生命週期與真實 consuming repo 證據。',
-          summary: '四種組合都通過合成建立／更新；目前只有 CI/CD-only 完成真實產品導入、客製化保留與線上 update。',
+          summary: '共通基線與每個語言模組都通過合成建立／更新；同時選取時合併執行，不另外維護組合測試。',
           file: 'scripts/verify-template.sh＋profiles/catalog.yaml',
           code: `./scripts/verify-template.sh
 
@@ -642,8 +642,7 @@ ci: {stage: beta, profiles: []}
 python: {stage: alpha}
 typescript: {stage: alpha}
 go: {stage: future}
-rust: {stage: future}
-python_typescript: {stage: alpha}`
+rust: {stage: alpha}`
         }
       ]
     });
@@ -670,7 +669,7 @@ uvx --from csarc-repo-cli csarc adopt .`
       },
       update: {
         title: '更新已使用公版的 repo',
-        goal: 'CLI 讀取 .copier-answers.yml，解析核准 release，以 Copier smart update 顯示新版差異；衝突時保留差異並 fail closed。',
+        goal: 'CLI 讀取 .csarc/config.yml，解析核准 release，以 Copier smart update 顯示新版差異；衝突時保留差異並 fail closed。',
         location: '專案 repo 根目錄',
         code: `git switch -c chore/<issue-number>-update-repo-template
 uvx --from csarc-repo-cli csarc update --check --json
@@ -678,7 +677,7 @@ uvx --from csarc-repo-cli csarc update`
       },
       mac: {
         title: 'macOS 本機需求',
-        goal: '共同安裝 Git、GitHub CLI、uv；TypeScript／混合案再使用 Node 與 pnpm。只有 GitHub 連線操作需要登入。',
+        goal: '共同安裝 Git、GitHub CLI、uv；選 TypeScript 再使用 Node 與 pnpm，選 Rust 再使用 rustup 與 Cargo。只有 GitHub 連線操作需要登入。',
         location: 'Terminal',
         code: `brew install git gh uv node pnpm
 
@@ -688,7 +687,7 @@ gh auth status`
       },
       windows: {
         title: 'Windows 本機需求',
-        goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；TypeScript／混合案再安裝 Node 24 與 pnpm 11。',
+        goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；選 TypeScript 再安裝 Node 24 與 pnpm 11，選 Rust 再安裝 rustup。',
         location: 'PowerShell（管理員）→ Ubuntu',
         code: `# PowerShell (Administrator)
 wsl --install -d Ubuntu
