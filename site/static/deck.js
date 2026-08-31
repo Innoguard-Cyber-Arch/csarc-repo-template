@@ -17,7 +17,7 @@
 
   function refreshSlides() {
     const maintenance = document.documentElement.dataset.detailLevel === 'technical';
-    slides = allSlides.filter(slide => slide.dataset.audience !== 'maintainer' || maintenance);
+    slides = allSlides.filter(slide => slide.dataset.audience !== 'archive' && (slide.dataset.audience !== 'maintainer' || maintenance));
     allSlides.forEach(slide => slide.removeAttribute('data-page'));
     slides.forEach((slide, index) => {
       slide.dataset.page = `${String(index + 1).padStart(2, '0')} / ${slides.length}`;

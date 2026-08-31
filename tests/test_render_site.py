@@ -138,6 +138,16 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     journey_rail = (root / "site/layouts/partials/journey-rail.html").read_text(
         encoding="utf-8"
     )
+    presentation = (root / "site/layouts/home.presentation.html").read_text(
+        encoding="utf-8"
+    )
+    deck = (root / "site/static/deck.js").read_text(encoding="utf-8")
+    glossary = (root / "site/layouts/shortcodes/glossary.html").read_text(
+        encoding="utf-8"
+    )
+    components = (root / "site/static/legacy-components.js").read_text(
+        encoding="utf-8"
+    )
     styles = (root / "site/static/styles.css").read_text(encoding="utf-8")
     controls = (root / "site/static/detail-toggle.css").read_text(
         encoding="utf-8"
@@ -164,6 +174,32 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert (
         'appendix maintainer-bookend{{ if eq .Key "testing" }}' in journey_rail
     )
+    assert (
+        journey_rail.index('href="#testing"')
+        < journey_rail.index('href="#bridge"')
+        < journey_rail.index('href="#glossary"')
+    )
+    assert "五月盤點" in journey_rail
+    assert "決策附錄" not in journey_rail
+    assert 'data-audience="maintainer"' in glossary
+    assert "備忘\uff5c名詞表" in glossary
+    assert "testing.after(bridge)" in presentation
+    assert "slide.dataset.audience !== 'archive'" in deck
+    assert "Cloudflare Pages" in chinese
+    assert "存取 #79" in chinese
+    assert "不另導入 Spec Kit" in components
+    assert "Fleet 盤點與平台門檻" in components
+    for source in (chinese, english):
+        assert 'key="bridge" audience="maintainer"' in source
+        for key in (
+            "access-control",
+            "principles",
+            "benchmark",
+            "fleet-inventory",
+            "fleet-governance-thresholds",
+            "spec-format",
+        ):
+            assert f'key="{key}" audience="archive"' in source
     assert ".journey-bookend.maintainer-bookend.active-selection" in styles
     assert '.detail-level-control button[aria-pressed="true"]' in controls
     assert "background: var(--yellow);" in controls

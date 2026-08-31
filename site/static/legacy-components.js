@@ -291,7 +291,7 @@ Dependency -> actual execution order`
         {
           title: '規格要不要建立追蹤工作',
           goal: '各專案在 `docs/specs/` 寫長期規格；front matter 決定同步 Task、Feature，或只保存文件。',
-          summary: '決定一份 Spec 建立 Task、Feature，或只保存為長期契約。',
+          summary: '現階段沿用單一輕量格式，不另導入 Spec Kit；需求真的需要完整 spec／plan／tasks 流程時再評估。',
           file: 'docs/specs/＋scripts/spec_to_issue.py',
           code: `tracking: issue  # Sync one Task
 tracking: story  # Sync one Feature parent
@@ -628,6 +628,19 @@ scripts/apply-repository-settings.sh`
 csarc adopt . --dry-run --report-dir ../csarc-adoption-report
 csarc update --check --json
 csarc update`
+        },
+        {
+          title: 'Fleet 盤點與平台門檻',
+          goal: '目前只有一個真實 consuming repo，先累積採用與漂移證據，不預先部署中央平台。',
+          summary: '10 個活躍 consuming repo，或至少 3 個且反覆發生 owner／服務查找問題時才評估 catalog；至少 5 個且出現跨 repo 漂移或人工修正成本時才評估中央 policy enforcement。',
+          file: 'profiles/catalog.yaml＋governance-drift runs',
+          code: `Catalog review:
+  - 10 active consuming repositories; or
+  - 3+ repositories and repeated owner/service lookup delays
+
+Policy review:
+  - 5+ consuming repositories; and
+  - repeated cross-repository drift or measurable manual repair cost`
         }
       ],
       'template-release': [

@@ -545,7 +545,7 @@ GitHub Release 是所有 profile 的共同基線。PyPI／npm 分開選配、預
         <article class="decision-step"><span class="step-label">不採用</span><h3>不把交付限制誤當維護方式</h3><ul><li><strong>直接手改單檔：</strong>可以離線，但來源、呈現與測試高度耦合</li><li><strong>runtime 多檔載入：</strong>轉寄容易漏檔，<code>file://</code> 行為也受瀏覽器限制</li><li><strong>立刻導入文件平台：</strong>目前沒有多頁搜尋、翻譯或跨 repo catalog 的實證需求</li><li><strong>自動保存完整聊天：</strong>會混入未確認假設、敏感脈絡與噪音</li></ul></article>
         <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">可維護來源 → self-contained HTML</span></span></summary><div class="package-health"><p><strong>交付契約：</strong>CSS、JavaScript、font、SVG 與圖片全部內嵌；外部連結可保留，但離線時不影響內容與操作。</p><p><strong>來源契約：</strong><code>docs/adr/</code> 保存 canonical Architecture Decision Records（ADR）；renderer、基礎設計與驗證由公版維護，專案內容與允許的 theme overrides 由 consuming repo 維護。</p><p><strong>互動收納：</strong>agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 ADR；不保存完整逐字稿。</p></div></details><p><strong>所有環境：</strong>產生並驗證 committed bundle。<br><strong>Actions allowed：</strong>再增加重建比對與 artifact。<br><strong>核准 host 與寫入權限 allowed：</strong>再增加 preview／publish／access control。<br><strong>blocked／unknown：</strong>回退單檔交付，不宣稱已部署。</p></article>
       </div>
-      <aside class="config-guidance"><strong>決策與落地</strong><ul><li><strong>Canonical ADR：</strong><code>docs/adr/portable-decision-site.md</code></li><li><strong>可維護來源：</strong><code>site/</code> 分開內容、樣式、互動與原始圖片；renderer 產生 <code>docs/index.html</code> 並拒絕外部 runtime asset</li><li><strong>生成專案：</strong>公版更新 <code>site/</code> 與 renderer，專案保有 <code>docs/site-content.js</code> 與 <code>docs/site-theme.css</code></li><li><strong>安全邊界：</strong><code>noindex</code> 不是存取控制；受控發布保護入口，但下載後的離線檔仍可能被轉寄</li><li><strong>追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178" target="_blank" rel="noreferrer">Issue #178</a></li></ul></aside>
+      <aside class="config-guidance"><strong>決策與落地</strong><ul><li><strong>Canonical ADR：</strong><code>docs/adr/portable-decision-site.md</code></li><li><strong>可維護來源：</strong><code>site/</code> 分開內容、樣式、互動與原始圖片；renderer 產生 <code>docs/index.html</code> 並拒絕外部 runtime asset</li><li><strong>生成專案：</strong>公版更新 <code>site/</code> 與 renderer，專案保有 <code>docs/site-content.js</code> 與 <code>docs/site-theme.css</code></li><li><strong>網站存取：</strong><code>noindex</code>／<code>robots.txt</code> 只能降低誤分享，不是登入保護；需要限制讀者時，優先評估 Cloudflare Pages＋Access，host、身分提供者、資料政策與組織 owner 另案核准</li><li><strong>追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">存取 #79</a>／<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178" target="_blank" rel="noreferrer">網站 #178</a></li></ul></aside>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -591,11 +591,11 @@ GitHub Release 是所有 profile 的共同基線。PyPI／npm 分開選配、預
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="bridge" eyebrow="2025-05 → 2026-08" title="保留核心，調整實作方式" subtitle="五月版 SDLC 原則持續有效，但路由、能力偵測與交付邊界更精確。" class="legacy-slide bridge-slide" legacy="true" >}}
+{{< slide key="bridge" audience="maintainer" eyebrow="2026/05 內部分享簡報" title="回顧當時原則，對照目前實作" subtitle="回顧 2026 年 5 月內部分享的 SDLC 構想，標示目前保留、調整或延後的做法。" class="legacy-slide bridge-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
-        <h2>五月版 SDLC 盤點｜<span class="accent">保留核心，調整實作方式</span></h2>
-        <p class="subtitle">給已看過五月版的團隊承先啟後：保留方法，修正實作與導入層級；點選每列可看三句判斷。</p>
+        <h2>2026/05 內部分享簡報｜<span class="accent">SDLC 盤點</span></h2>
+        <p class="subtitle">回顧 2026 年 5 月內部分享的構想：保留方法，修正實作與導入層級；點選每列可看三句判斷。</p>
       </header>
       <table class="bridge-table" aria-label="五月版簡報與目前設計的逐頁對照">
         <colgroup><col class="page-col"><col class="topic-col"><col class="status-col"><col class="decision-col"></colgroup>
@@ -713,7 +713,7 @@ Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、�
 {{< testing >}}
 {{< /slide >}}
 
-{{< slide key="access-control" eyebrow="存取決策" title="託管方案未定前的臨時防護" subtitle="目前只有降低誤分享的措施，沒有把提示語宣稱成安全控制。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="access-control" audience="archive" eyebrow="存取決策" title="託管方案未定前的臨時防護" subtitle="目前只有降低誤分享的措施，沒有把提示語宣稱成安全控制。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
@@ -742,7 +742,7 @@ Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="principles" eyebrow="關鍵決策" title="規則、理由與刻意不做" subtitle="這些是目前可由檔案與測試證明的決定。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="principles" audience="archive" eyebrow="關鍵決策" title="規則、理由與刻意不做" subtitle="這些是目前可由檔案與測試證明的決定。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
@@ -783,7 +783,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="benchmark" eyebrow="外部基準與實測" title="有骨架，還不是完整平台" subtitle="新 repo、Copier 更新、OSV、Release 與第一個 CI-only pilot 已有證據；其餘邊界仍明列。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="benchmark" audience="archive" eyebrow="外部基準與實測" title="有骨架，還不是完整平台" subtitle="新 repo、Copier 更新、OSV、Release 與第一個 CI-only pilot 已有證據；其餘邊界仍明列。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
@@ -826,7 +826,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="fleet-inventory" eyebrow="Fleet 治理" title="採用盤點以真實 repo 為準" subtitle="2026-08-24：組織共 6 個 private repo，目前只有 1 個 consuming repo。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="fleet-inventory" audience="archive" eyebrow="Fleet 治理" title="採用盤點以真實 repo 為準" subtitle="2026-08-24：組織共 6 個 private repo，目前只有 1 個 consuming repo。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
@@ -864,7 +864,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="fleet-governance-thresholds" eyebrow="Fleet 門檻" title="先量問題，再加平台" subtitle="Catalog 與 policy enforcement 解決不同問題，分開計數、分開選工具。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="fleet-governance-thresholds" audience="archive" eyebrow="Fleet 門檻" title="先量問題，再加平台" subtitle="Catalog 與 policy enforcement 解決不同問題，分開計數、分開選工具。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
@@ -900,7 +900,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="spec-format" eyebrow="Spec 格式" title="預設 Issue，明確 Story 才建 Milestone" subtitle="保留一種輕量格式，不在需求尚未出現時同時維護兩套系統。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="spec-format" audience="archive" eyebrow="Spec 格式" title="預設 Issue，明確 Story 才建 Milestone" subtitle="保留一種輕量格式，不在需求尚未出現時同時維護兩套系統。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>

@@ -98,6 +98,8 @@ Workflows, policies, scripts, and documents consumed by both root and `template/
 
 Concrete tools, feature names, and source links are listed under [Similar tools](#similar-tools).
 
+<aside class="config-guidance"><strong>Specification format</strong><p>Keep the current lightweight Issue and spec format. Reconsider a separate Spec Kit workflow only when approved requirements routinely need a full spec, plan, and task breakdown.</p></aside>
+
 {{< /slide >}}
 
 {{< slide key="agents" track="agents" eyebrow="Step 02" title="Define AI rules before implementation" subtitle="An Issue says what this change is; AGENTS.md says how an agent works in the repository." legacy="false"  class="candidate-slide" >}}
@@ -223,6 +225,8 @@ Scheduled checks are snapshots. A setting changed and restored between runs stil
 {{< detail key="docs-site-access" title="Access and maintenance boundaries" >}}
 `noindex` and `robots.txt` reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
 {{< /detail >}}
+
+<aside class="config-guidance"><strong>Website access</strong><p>If reader restrictions become necessary, evaluate Cloudflare Pages + Access first. The host, identity provider, data policy, and organization owner still require separate approval.</p></aside>
 {{< /slide >}}
 
 {{< slide key="rollout" track="rollout" eyebrow="Step 10" title="Adopt in stages, with a stop after every step" subtitle="Maturity follows operational evidence, not a date or the mere presence of files." legacy="false"  class="candidate-slide" >}}
@@ -236,9 +240,11 @@ Scheduled checks are snapshots. A setting changed and restored between runs stil
 {{< detail key="rollout-evidence" title="Why capabilities are not enabled all at once" >}}
 A big-bang switch spreads defects across every project; a calendar date does not prove readiness; a profile without real adoption evidence is only a promise. `profiles/catalog.yaml` separates synthetic verification from consuming-repository evidence. `scripts/verify-template.sh` proves generation and update paths, but cannot replace a pilot.
 {{< /detail >}}
+
+<aside class="config-guidance"><strong>Fleet platform thresholds</strong><p>Evaluate a catalog at ten active consuming repositories, or at three or more with repeated owner or service lookup delays. Evaluate central policy enforcement at five or more only after repeated cross-repository drift or measurable manual repair cost.</p></aside>
 {{< /slide >}}
 
-{{< slide key="bridge" class="dense" eyebrow="2025-05 → 2026-08" title="Keep the principles and adjust the implementation" subtitle="The earlier SDLC direction remains valid, with more precise routing, capability detection, and delivery boundaries." legacy="false" >}}
+{{< slide key="bridge" audience="maintainer" class="dense" eyebrow="May 2026 internal presentation" title="Review the original principles against today's implementation" subtitle="Revisits the SDLC ideas shared internally in May 2026 and marks what is retained, adjusted, or deferred." legacy="false" >}}
 | Earlier topic | Current decision |
 | --- | --- |
 | Core SDLC stages | Keep plan, build, test, deliver, and monitor in maintainable GitHub objects |
@@ -283,7 +289,7 @@ Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, gene
 {{< testing >}}
 {{< /slide >}}
 
-{{< slide key="access-control" class="dense" eyebrow="Access decision" title="Temporary protection before a hosting choice" subtitle="Current measures reduce accidental sharing; none is described as access control." legacy="false" >}}
+{{< slide key="access-control" audience="archive" class="dense" eyebrow="Access decision" title="Temporary protection before a hosting choice" subtitle="Current measures reduce accidental sharing; none is described as access control." legacy="false" >}}
 | Option | Cost and benefit | Current limitation or owner |
 | --- | --- | --- |
 | Cloudflare Pages + Access | Free allowance can provide a small-team login wall | Organization owner must establish Cloudflare, domain, DNS, and SSO/OTP policy |
@@ -295,7 +301,7 @@ Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, gene
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="principles" class="dense" eyebrow="Key decisions" title="Rules, reasons, and deliberate omissions" subtitle="These decisions are backed by current files and checks." legacy="false" >}}
+{{< slide key="principles" audience="archive" class="dense" eyebrow="Key decisions" title="Rules, reasons, and deliberate omissions" subtitle="These decisions are backed by current files and checks." legacy="false" >}}
 | Review question | Current decision |
 | --- | --- |
 | `main` protection on Free private | Preserve Ruleset policy and report `DEGRADED`; never claim an enforced merge gate |
@@ -312,7 +318,7 @@ Agents do not save raw conversations. Only a user-confirmed durable architecture
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="benchmark" class="dense" eyebrow="External benchmark and live evidence" title="A solid foundation, not a complete platform" subtitle="New projects, Copier updates, OSV, Release, and the first CI-only pilot have evidence; remaining boundaries stay explicit." legacy="false" >}}
+{{< slide key="benchmark" audience="archive" class="dense" eyebrow="External benchmark and live evidence" title="A solid foundation, not a complete platform" subtitle="New projects, Copier updates, OSV, Release, and the first CI-only pilot have evidence; remaining boundaries stay explicit." legacy="false" >}}
 | Benchmark or probe | Assessment | Current evidence and boundary |
 | --- | --- | --- |
 | Copier vs projen | Good fit | Editable output plus smart update matches the requirement |
@@ -330,7 +336,7 @@ There is no cross-repository catalog, comprehensive hosted governance, or generi
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="fleet-inventory" class="dense" eyebrow="Fleet governance" title="Inventory real repositories, not assumptions" subtitle="As of 2026-08-24, the organization has six private repositories and one consuming repository." legacy="false" >}}
+{{< slide key="fleet-inventory" audience="archive" class="dense" eyebrow="Fleet governance" title="Inventory real repositories, not assumptions" subtitle="As of 2026-08-24, the organization has six private repositories and one consuming repository." legacy="false" >}}
 | Repository | Owner | Template state | Drift data |
 | --- | --- | --- | --- |
 | `csarc-repo-template` | `@Innoguard-Cyber-Arch/arch` | Source repository | Live integration proves the drift check can run |
@@ -345,7 +351,7 @@ The inventory reads GitHub repositories, default branches, CODEOWNERS, Copier an
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="fleet-governance-thresholds" eyebrow="Fleet thresholds" title="Measure the problem before adding a platform" subtitle="Catalog and policy enforcement solve different problems and use separate evidence." legacy="false"  class="candidate-slide" >}}
+{{< slide key="fleet-governance-thresholds" audience="archive" eyebrow="Fleet thresholds" title="Measure the problem before adding a platform" subtitle="Catalog and policy enforcement solve different problems and use separate evidence." legacy="false"  class="candidate-slide" >}}
 | Need | Quantified reevaluation threshold |
 | --- | --- |
 | Catalog / Backstage | Ten active consuming repositories; or at least three plus two Issues within 90 days recording owner/service lookup over 30 minutes |
@@ -356,7 +362,7 @@ Open an evaluation Issue that names a platform owner, cost ceiling, trial scope,
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="spec-format" eyebrow="Specification format" title="Default to an Issue; create a Milestone only for an explicit story" subtitle="Keep one lightweight format instead of maintaining two systems before the need exists." legacy="false"  class="candidate-slide" >}}
+{{< slide key="spec-format" audience="archive" eyebrow="Specification format" title="Default to an Issue; create a Milestone only for an explicit story" subtitle="Keep one lightweight format instead of maintaining two systems before the need exists." legacy="false"  class="candidate-slide" >}}
 | Option | Current state |
 | --- | --- |
 | Current `docs/specs/*.md` | Front matter records ID, priority, state, and optional tracking; markers repeatably synchronize an Issue or Milestone |
