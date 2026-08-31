@@ -343,13 +343,13 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert len(data["testing"]["groups"]) == 7
     duration_rows = data["testing"]["duration"]["rows"]
     assert [row["key"] for row in duration_rows] == ["issue", "release"]
-    assert all(len(row["shared"]["items"]) == 5 for row in duration_rows)
-    assert all(len(row["templateOnly"]["items"]) == 5 for row in duration_rows)
+    assert all(len(row["shared"]["items"]) == 6 for row in duration_rows)
+    assert all(len(row["templateOnly"]["items"]) == 6 for row in duration_rows)
     for row in duration_rows:
         for scope in ("shared", "templateOnly"):
             assert [
                 item["label"]["zh-tw"][:2] for item in row[scope]["items"]
-            ] == ["02", "03", "04", "05", "06"]
+            ] == ["01", "02", "03", "04", "05", "06"]
     assert duration_rows[0]["shared"]["total"]["zh-tw"] == "約 1\u20137 分鐘"
     assert duration_rows[1]["templateOnly"]["total"]["zh-tw"] == (
         "約 9\u201314 分鐘"
@@ -358,6 +358,12 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         data["testing"]["duration"], ensure_ascii=False
     )
     assert "no separate minutes" not in json.dumps(data["testing"]["duration"])
+    assert all(
+        [item["label"]["en"] for item in row[scope]["items"]][:2]
+        == ["01 Work definition", "02 AI rules"]
+        for row in duration_rows
+        for scope in ("shared", "templateOnly")
+    )
     language_durations = [
         item["value"]["en"]
         for row in duration_rows
