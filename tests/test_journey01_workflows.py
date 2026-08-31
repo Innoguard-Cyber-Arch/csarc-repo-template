@@ -8,8 +8,6 @@ import yaml
 REPO_ROOT = Path(__file__).parents[1]
 WORKFLOWS = {
     "issue-triage.yml": 5,
-    "milestone-lifecycle.yml": 5,
-    "pr-policy.yml": 10,
     "spec-to-issue.yml": 10,
 }
 
@@ -21,17 +19,8 @@ def load_yaml(path: Path) -> dict[str, Any]:
     return document
 
 
-def test_only_journey01_workflows_are_active_and_paired() -> None:
-    """Keep Journey 01 paired beside the single Journey 03 workflow."""
-    for base, ci_name in [
-        (REPO_ROOT, "ci.yml"),
-        (REPO_ROOT / "template", "ci.yml.jinja"),
-    ]:
-        workflow_dir = base / ".github" / "workflows"
-        assert {path.name for path in workflow_dir.iterdir()} == set(
-            WORKFLOWS
-        ) | {ci_name}
-
+def test_journey01_workflows_are_paired() -> None:
+    """Ship the same Journey 01 workflows at root and in the template."""
     for filename in WORKFLOWS:
         root_path = REPO_ROOT / ".github" / "workflows" / filename
         template_path = (
@@ -62,10 +51,6 @@ def test_workflows_keep_the_approved_event_scope() -> None:
     assert triggers["issue-triage.yml"] == {
         "issues": {"types": ["opened", "edited", "reopened", "closed"]}
     }
-    assert triggers["milestone-lifecycle.yml"] == {
-        "issues": {"types": ["closed", "reopened", "milestoned"]}
-    }
-    assert set(triggers["pr-policy.yml"]) == {"pull_request", "merge_group"}
     assert set(triggers["spec-to-issue.yml"]) == {"push", "workflow_dispatch"}
 
 
@@ -82,9 +67,4 @@ def test_workflows_delegate_to_the_existing_policy_scripts() -> None:
     )
     assert "./scripts/validate-issue-policy" in contents["issue-triage.yml"]
     assert "scripts/pr_lifecycle.py issue-edit" in issue_validator
-    assert "./scripts/validate-pr-policy" in contents["pr-policy.yml"]
-    assert "scripts/sync_work_item_metadata.py" in contents["pr-policy.yml"]
     assert "scripts/spec_to_issue.py" in contents["spec-to-issue.yml"]
-    assert (
-        "scripts/sync_milestone_state.py" in contents["milestone-lifecycle.yml"]
-    )

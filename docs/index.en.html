@@ -690,6 +690,9 @@
       font-weight: 700;
       line-height: 1.05;
     }
+    .journey-item.priority { border-color: #d6c900; background: #fffbea; color: #655900; }
+    .journey-item.best { border-color: #6db091; background: var(--best-soft); color: #0b6540; }
+    .journey-item.optional { border-color: #7ba4d1; background: var(--optional-soft); color: #174f8b; }
     .journey-item a {
       display: flex;
       width: 100%;
@@ -720,6 +723,8 @@
     .journey-item.active.priority { border-color: #b9a700; background: var(--yellow); }
     .journey-item.active.best { border-color: var(--best); background: var(--best-soft); color: #0b6540; }
     .journey-item.active.optional { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
+    .journey-bookend.appendix:not(.maintainer-bookend) { border-color: #d6c900; background: #fffbea; color: #655900; }
+    .journey-bookend.appendix.active-selection:not(.maintainer-bookend) { background: var(--yellow); color: var(--ink); }
     .decision-tier-tag {
       display: inline-block;
       margin-right: 7px;
@@ -818,6 +823,18 @@
     }
     .package-disclosure summary::-webkit-details-marker { display: none; }
     .package-disclosure summary:focus-visible { outline: 4px solid var(--yellow); outline-offset: 3px; }
+    .inline-disclosure { display: inline-block; margin: 0 0 0 5px; vertical-align: baseline; }
+    .inline-disclosure summary { display: inline-block; font-size: inherit; line-height: inherit; }
+    .inline-disclosure .package-health {
+      position: fixed;
+      top: 50%;
+      right: auto;
+      left: 50%;
+      width: min(720px, calc(100vw - 48px));
+      max-height: none;
+      overflow: visible;
+      transform: translate(-50%, -50%);
+    }
     .tech-name {
       color: #174f8b;
       text-decoration: underline dotted 2px;
@@ -2069,49 +2086,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2166,49 +2183,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2244,8 +2261,8 @@ html[data-detail-level="simple"] .detail-panel {
 					<td>The PR template prompts for the linked Issue, completed result, and verification evidence</td>
 			</tr>
 			<tr>
-					<td>Read the result</td>
-					<td>The template selects the necessary checks and identifies what must be fixed</td>
+					<td>Read verification and dependency results</td>
+					<td>The template selects the necessary checks; dependency changes also require release-age, vulnerability, and lockfile results</td>
 			</tr>
 			<tr>
 					<td>Review and merge</td>
@@ -2271,49 +2288,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2387,53 +2404,53 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 </section>
 
-<section class="slide markdown-slide candidate-slide dense single-column" id="method" data-content-key="method" data-track="method" aria-label="Define the problem before implementation">
+<section class="slide markdown-slide candidate-slide dense single-column" id="method" data-content-key="method" data-track="method" aria-label="Define the work before implementation">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2445,27 +2462,36 @@ html[data-detail-level="simple"] .detail-panel {
 
   <header>
     <span class="selection-sequence">Step 01</span>
-    <h2>Define the problem before implementation</h2>
-    <p class="subtitle">State the problem, acceptance criteria, and verification first; add grouping or a delivery batch only when the work grows.</p>
+    <h2>Define the work before implementation</h2>
+    <p class="subtitle">Turn a request into an actionable Issue; create a Milestone only when several work items must move together.</p>
   </header>
   <div class="markdown-body"><h3 id="our-choice">Our choice</h3>
 <ul>
-<li><strong>Overall:</strong> define the work in an Issue, implement it on a branch, then review and deliver it through a PR.</li>
-<li><strong>Milestone:</strong> create one only when multiple work items share a deadline, integration point, or release.</li>
+<li><strong>Overall:</strong> turn the request into one Issue that can be completed and verified independently.</li>
+<li><strong>Milestone:</strong> create one only when several Issues share an outcome, deadline, or delivery batch, and give it one lifecycle tracking Issue.
+<ul>
+<li>Work may start only after at least one person other than the proposer agrees and no objection remains unresolved.</li>
+</ul>
+</li>
 <li><strong>Issue:</strong> choose the Feature, Task, Bug, or Documentation form, then state the problem, acceptance criteria, and verification.
 <ul>
+<li>Use a clear English title; the creator owns the Issue by default.</li>
+</ul>
+</li>
+<li><strong>Exceptions:</strong> close repeated work as Duplicate. Define urgent work as a Bug first; the PR / merge section owns its delivery route.</li>
+</ul>
+<details class="package-disclosure" data-content-key="work-item-details">
+  <summary><span class="tech-name">Issue types and splitting rules</span></summary>
+  <div class="package-health"><ul>
 <li>Feature is an outcome that needs several pieces of work.</li>
 <li>Task is work that can be completed and verified independently.</li>
 <li>Bug is a result that differs from expectations.</li>
 <li>Documentation changes only documentation or examples.</li>
-<li>Use a clear English title; the creator owns the Issue by default.</li>
-<li>Keep work together when one PR and one result can verify it. Create a Sub-issue when work can be independently implemented and verified, or when required follow-up exceeds the original scope.</li>
-<li>A Parent describes the shared outcome that is not complete yet; all required Sub-issues must finish before it closes. Dependency expresses ordering instead.</li>
+<li>Keep work together when one completion condition and one body of evidence can prove it. Create a Sub-issue when work can be completed independently or required follow-up exceeds the original scope.</li>
+<li>A Parent describes the shared outcome that is not complete yet; Dependency expresses ordering instead.</li>
 </ul>
-</li>
-<li><strong>PR:</strong> explain what was completed, link the Issue it closes, and deliver it after the checks pass; the creator owns it by default.</li>
-<li><strong>Exceptions:</strong> close repeated work as Duplicate. Hotfix marks an urgent fix, but still requires an Issue, verification, and review.</li>
-</ul>
+</div>
+</details>
 <h3 id="other-common-approaches">Other common approaches</h3>
 <ul>
 <li><strong>Start first, document when needed:</strong> finish small, clear work directly; add a plan only for work that spans sessions, has dependencies, or carries higher risk.</li>
@@ -2482,49 +2508,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2557,49 +2583,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2617,164 +2643,60 @@ html[data-detail-level="simple"] .detail-panel {
   <div class="markdown-body"><ul>
 <li><strong>During development:</strong> run only the focused check that proves the current change, using fresh output before claiming completion.</li>
 <li><strong>Issue PR (work branch → dev):</strong> the system selects the appropriate checks from the change; when unsure, it runs full verification.</li>
-<li><strong>High-risk boundaries:</strong> promotions, hotfixes, release recovery, merge queues, and manual runs use full.</li>
+<li><strong>When full verification is needed:</strong> run it before a release, for an urgent fix, or whenever the system cannot safely narrow the test scope.</li>
 <li><strong>One implementation:</strong> GitHub Actions has one <code>verify</code> job with a 30-minute timeout and only calls repository scripts.</li>
 <li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
 </ul>
 <p>Verification logic lives only in scripts and tests. This step restores only <code>.github/workflows/ci.yml</code>; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys. See <a href="/en/#similar-tools">Similar tools</a> for concrete comparisons and <a href="/en/#testing">CI/CD settings</a> for execution locations.</p></div>
 </section>
 
-<section class="slide markdown-slide candidate-slide" id="pr" data-content-key="pr" data-track="pr" aria-label="Merge small PRs after evidence passes">
+<section class="slide markdown-slide candidate-slide" id="pr" data-content-key="pr" data-track="pr" aria-label="Make completed changes reviewable and deliverable">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority active" aria-current="step">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
-    </li>
-  </ol>
-  <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
-  <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-</aside>
-
-  <header>
-    <span class="selection-sequence">Step 04</span>
-    <h2>Merge small PRs after evidence passes</h2>
-    <p class="subtitle">Issues integrate on delivery branches; promotion brings verified outcomes to main.</p>
-  </header>
-  <div class="markdown-body"><table>
-	<thead>
-			<tr>
-					<th>Work type</th>
-					<th>PR base</th>
-					<th>Route into <code>main</code></th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Milestone Issue</td>
-					<td><code>dev/m&lt;Milestone&gt;-*</code></td>
-					<td>Milestone promotion PR</td>
-			</tr>
-			<tr>
-					<td>Ordinary standalone Issue</td>
-					<td><code>dev/next</code></td>
-					<td>Batched promotion in the release window</td>
-			</tr>
-			<tr>
-					<td>Issue requiring isolated soak or canary</td>
-					<td>Temporary <code>dev/i&lt;Issue&gt;-*</code></td>
-					<td>That Issue&rsquo;s promotion PR</td>
-			</tr>
-			<tr>
-					<td>Emergency correction</td>
-					<td><code>main</code></td>
-					<td>Only a standalone <code>fix/*</code> PR labeled <code>hotfix</code></td>
-			</tr>
-	</tbody>
-</table>
-<aside class="technical-detail" data-content-key="pr-version-intent">
-  <h3>Concrete branch, synchronization, and version-intent rules</h3>
-  <ul>
-<li>Work branches use <code>type/&lt;Issue&gt;-short-slug</code>, and the PR links the matching open Issue.</li>
-<li>When <code>main</code> advances, each active delivery owner integrates it through a reviewed <code>sync/main-to-*</code> PR without direct pushes or history rewrites.</li>
-<li><code>feat</code>, <code>fix</code>, and <code>!</code> determine SemVer only after merge from actual default-branch history; open PRs never reserve versions.</li>
-<li><code>pr-policy.yml</code>, <code>delivery-sync.yml</code>, and <code>promotion.yml</code> verify route, Issue, title, synchronization, and promotion evidence.</li>
-</ul>
-</aside>
-</div>
-</section>
-
-<section class="slide markdown-slide candidate-slide" id="supply" data-content-key="supply" data-track="supply" aria-label="Expose risk immediately; do not chase day-one upgrades">
-  <aside class="journey-rail" aria-label="Presentation outline">
-  <h3>Use template</h3>
-  <ol class="journey-use">
-    <li class="journey-item">
-      <a href="#capability"><span>Capability</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#flow"><span>CI/CD flow</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#files"><span>File map</span></a>
-    </li>
-  </ol>
-  <h3>Workflow</h3>
-  <ol class="journey-main">
-    <li class="journey-item">
-      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
-    </li>
-    <li class="journey-item active priority" aria-current="step">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
-    </li>
-  </ol>
-  <h3>Maintenance</h3>
-  <ol class="journey-support">
-    <li class="journey-item">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2786,6 +2708,103 @@ html[data-detail-level="simple"] .detail-panel {
 
   <header>
     <span class="selection-sequence">Step 05</span>
+    <h2>Make completed changes reviewable and deliverable</h2>
+    <p class="subtitle">A work PR completes one work item; a release PR then carries the verified batch into main.</p>
+  </header>
+  <div class="markdown-body"><table>
+	<thead>
+			<tr>
+					<th>PR stage</th>
+					<th>Destination</th>
+					<th>What this stage completes</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Issue PR</td>
+					<td>Work branch → dev</td>
+					<td>Review one change and close its linked Issue after merge</td>
+			</tr>
+			<tr>
+					<td>Release PR</td>
+					<td>dev → main</td>
+					<td>Fully verify and deliver the batch; Version / delivery then closes the Milestone</td>
+			</tr>
+	</tbody>
+</table>
+<details class="package-disclosure" data-content-key="pr-version-intent">
+  <summary><span class="tech-name">PR titles, branches, and exceptions</span></summary>
+  <div class="package-health"><ul>
+<li>Work branches use <code>type/&lt;Issue&gt;-short-slug</code>, and the PR links the matching open Issue.</li>
+<li>PR titles use the Angular / Conventional Commits form <code>type(scope)!: English summary</code>: <code>feat</code> adds a feature, <code>fix</code> corrects behavior, <code>docs</code> changes documentation, <code>refactor</code> restructures code, <code>test</code> changes tests, <code>build</code> changes builds or dependencies, <code>ci</code> changes automation, <code>chore</code> performs maintenance, and <code>revert</code> undoes a change. Scope and <code>!</code> are optional. Release intent is minor for <code>feat</code>, patch for <code>fix</code> / <code>revert</code>, major for <code>!</code>, and no release for the other types.</li>
+<li>The classification label and Milestone match the linked Issue; the PR author must be an assignee.</li>
+<li>Milestone work targets <code>dev/m&lt;Milestone&gt;-*</code>; ordinary standalone work targets <code>dev/next</code>.</li>
+<li>When main advances, a <code>sync/main-to-*</code> PR updates active dev branches without direct pushes or history rewrites.</li>
+<li>Only an explicitly labeled standalone hotfix may target main directly. Rules governance decides who may merge.</li>
+</ul>
+</div>
+</details>
+</div>
+</section>
+
+<section class="slide markdown-slide candidate-slide" id="supply" data-content-key="supply" data-track="supply" aria-label="Expose risk immediately; do not chase day-one upgrades">
+  <aside class="journey-rail" aria-label="Presentation outline">
+  <h3>Use template</h3>
+  <ol class="journey-use">
+    <li class="journey-item priority">
+      <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#flow"><span>CI/CD flow</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#files"><span>File map</span></a>
+    </li>
+  </ol>
+  <h3>Workflow</h3>
+  <ol class="journey-main">
+    <li class="journey-item priority">
+      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
+    </li>
+    <li class="journey-item priority active" aria-current="step">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
+    </li>
+    <li class="journey-item best">
+      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
+    </li>
+  </ol>
+  <h3>Maintenance</h3>
+  <ol class="journey-support">
+    <li class="journey-item priority">
+      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
+    </li>
+    <li class="journey-item best">
+      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
+    </li>
+  </ol>
+  <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
+  <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
+</aside>
+
+  <header>
+    <span class="selection-sequence">Step 04</span>
     <h2>Expose risk immediately; do not chase day-one upgrades</h2>
     <p class="subtitle">A malicious new release, a disclosed vulnerability, and artifact contents are different problems.</p>
   </header>
@@ -2839,49 +2858,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item active best" aria-current="step">
+    <li class="journey-item best active" aria-current="step">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2896,7 +2915,8 @@ html[data-detail-level="simple"] .detail-panel {
     <h2>Connect version policy to artifacts</h2>
     <p class="subtitle">Verify the promotion source, then select a safe delivery mode from current platform capabilities.</p>
   </header>
-  <div class="markdown-body"><table>
+  <div class="markdown-body"><p><strong>Milestone closure:</strong> after a successful release records its delivery evidence, close the lifecycle tracking Issue and the Milestone. To stop early, state why and move or cancel every unfinished Issue first.</p>
+<table>
 	<thead>
 			<tr>
 					<th>Preconditions</th>
@@ -2938,49 +2958,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3038,49 +3058,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3116,49 +3136,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3193,49 +3213,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item active best" aria-current="step">
+    <li class="journey-item best active" aria-current="step">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3287,49 +3307,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3409,49 +3429,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3528,49 +3548,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3591,8 +3611,9 @@ html[data-detail-level="simple"] .detail-panel {
   <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>Overall match</small>Primary similar tools</button>
   <button id="similar-tools-tab-work" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>Work definition</button>
   <button id="similar-tools-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI rules</button>
-  <button id="similar-tools-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>Verification &#43; CI</button>
-  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="4"><small>Journey 08</small>Template upgrades</button>
+  <button id="similar-tools-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>Verification / CI</button>
+  <button id="similar-tools-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-pr" data-similar-tools-tab="4"><small>Journey 05</small>PR / merge</button>
+  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="5"><small>Journey 08</small>Template upgrades</button>
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
   <div class="similar-tools-legend">
@@ -3628,7 +3649,7 @@ html[data-detail-level="simple"] .detail-panel {
           <td>1,207</td>
           <td>An agent-ready repository framework that puts AI working rules, durable plans, verification, and safe updates in the repository.</td>
           <td><ul><li>Repository Harness primarily adds an agent working framework and safe update mechanism to an existing repository.</li><li>CSARC also supplies generated technology profiles, GitHub governance, delivery, and version policy.</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag full" title="08: Full match">08</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="04: Partial match">04</span><span class="coverage-tag partial" title="07: Partial match">07</span><span class="coverage-tag partial" title="10: Partial match">10</span>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag full" title="08: Full match">08</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="05: Partial match">05</span><span class="coverage-tag partial" title="07: Partial match">07</span><span class="coverage-tag partial" title="10: Partial match">10</span>
           </div></td>
         </tr>
       </tbody>
@@ -3637,13 +3658,13 @@ html[data-detail-level="simple"] .detail-panel {
   <p class="similar-tools-note"><strong>Classification rule: </strong>All listed tools must have a release within six months. Primary tools cover at least five journeys and sort by full, then partial matches; other tools also need at least 1,000 Stars. Journey tags run from 01 to 10.</p>
 </div>
 <div id="similar-tools-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-work" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares only how repositories preserve the basis for work, turn definitions into repository state, make changes authoritative, and adjust documentation depth to the size of the work.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares where a request is recorded, how individual and grouped work are represented, how a Milestone gains approval to start, and when larger work needs more documentation.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Work definition">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
       <tbody>
         <tr>
-          <th scope="row"><strong>Where the source of truth lives</strong><span>Compares where requirements, decisions, configuration, and verification evidence live, and which record is authoritative.<br><br><b>CSARC: </b>A GitHub Issue bounds the work. Approved specs and ADRs on main preserve durable contracts, while code and tests prove implementation; uncommitted material is not authoritative.</span></th>
+          <th scope="row"><strong>Where requested work is recorded</strong><span>Compares where requests, completion conditions, and long-lived decisions are kept and which record starts the work.<br><br><b>CSARC: </b>A GitHub Issue is the entrypoint for each work item. Approved specs and ADRs retain only durable decisions; chat transcripts and uncommitted material do not replace the Issue.</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">.projenrc project model</a>：.projenrc is the only hand-written source of truth; synth generates the other project files.</span></li>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：The repository keeps product documents, decisions, plans, code, and verification evidence together.</span></li>
@@ -3658,29 +3679,22 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>How definitions become repository state</strong><span>Compares direct file edits, generated files, and services that continuously reconcile remote state.<br><br><b>CSARC: </b>copier.yml, template/, and profiles/catalog.yaml define the generated baseline. scripts/sync-paired-files.sh synchronizes paired root/template files, while downstream repositories retain ownership of product files.</span></th>
+          <th scope="row"><strong>How individual and grouped work are represented</strong><span>Compares what work types, parent and sub-issues, dependencies, and Milestones each represent.<br><br><b>CSARC: </b>Feature, Task, and Bug express the nature of work. Parent and sub-issues express decomposition, Dependency expresses blocking order, and a Milestone only groups Issues sharing an outcome, deadline, or delivery batch.</span></th>
           <td><ul>
-              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：Typed components declare the desired project and synth reconciles the files.</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active plan</a>：Only cross-session, dependent, or high-risk work receives an active plan. It organizes execution steps without defining GitHub Issue Types, parents, or Milestones.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entities and Software Templates declare portal components and creation workflows.</span></li>
-              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：Answers and Jinja templates declare generation inputs without continuously controlling remote state.</span></li>
-              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：A Recipe declares a semantic transformation that parsers and visitors apply.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：A feature is decomposed into a specification, plan, and tasks. This suits substantial features but is not GitHub&#39;s native parent, dependency, and Milestone model.</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,581</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task hierarchy</a>：Status, priority, and parent-child relationships organize tasks in Markdown rather than native GitHub Issues and Milestones.</span></li>
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>How proposed work becomes authoritative</strong><span>Compares when a branch, change, or configuration PR is reviewed, merged, and archived.<br><br><b>CSARC: </b>Every change starts with an Issue. A PR from type/&lt;issue&gt;-slug links its scope with Closes #&lt;issue&gt;; it becomes authoritative only after merging to main, and added scope receives another Issue.</span></th>
+          <th scope="row"><strong>How a Milestone gains approval to start</strong><span>Compares how a batch gains approval before work starts and how unresolved objections block kickoff.<br><br><b>CSARC: </b>Each Milestone has one lifecycle tracking Issue. Work starts only after at least one non-proposer agrees and no objection remains unresolved.</span></th>
           <td><ul>
-              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Anti-tamper build</a>：A PR changes .projenrc together with regenerated output; the state becomes authoritative after merge.</span></li>
-              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active / completed plans</a>：Work spanning sessions stays in an active plan and is archived only after completion.</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Human checkpoints</a>：High-risk decisions may use human checkpoints, but there is no Milestone gate requiring prior agreement from a non-proposer.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">BMad Delivery Loop</a>：Artifacts mature through clarify, plan, build, and verify.</span></li>
-              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Change workflow</a>：Only after propose, apply, and archive does the content merge into the authoritative specification.</span></li>
-              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature workflow</a>：Artifacts evolve on a feature branch and are ultimately accepted through Git and a PR.</span></li>
-              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Finishing a development branch</a>：After verification, the workflow explicitly chooses a PR, merge, retained branch, or discarded work.</span></li>
-              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Update diff</a>：An update first produces a Git diff and is accepted only after conflicts are resolved and the change is merged.</span></li>
-              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,581</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task workflow</a>：Task files change with branches and PRs and become shared state after merge.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Proposal review</a>：A change proposal may be reviewed before apply, but it does not provide an independent agreement and objection gate for a Milestone.</span></li>
           </ul></td>
         </tr>
         <tr>
@@ -3693,7 +3707,6 @@ html[data-detail-level="simple"] .detail-panel {
               <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Change proposal</a>：Small edits can go directly through a PR; substantial changes receive a complete proposal.</span></li>
               <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md" target="_blank" rel="noreferrer">Agentic bugfix workflow</a>：The full workflow suits substantial features, while small fixes can follow a shorter path.</span></li>
               <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Skill-triggered workflow</a>：Brainstorming, planning, TDD, and review skills are activated as needed instead of forcing every step onto every task.</span></li>
-              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,581</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task hierarchy</a>：Status, priority, and parent-child relationships organize tasks of different sizes.</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -3760,7 +3773,7 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 <div id="similar-tools-panel-contract" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-contract" data-similar-tools-panel hidden>
   <div class="similar-tools-legend"><span class="reference">Compares only where verification logic lives, how each run is scoped, what proves completion, and who verifies generated projects.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
-  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Verification &#43; CI">
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Verification / CI">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
       <tbody>
@@ -3807,12 +3820,84 @@ html[data-detail-level="simple"] .detail-panel {
     </table>
   </div>
 </div>
+<div id="similar-tools-panel-pr" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-pr" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">Compares how much work one PR contains, how changes are staged into main, what makes a PR merge-ready, and how branches resynchronize after the base advances.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="PR / merge">
+    <table class="similar-tools-matrix similar-tools-philosophy-matrix">
+      <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>How much work belongs in one PR</strong><span>Compares one independently acceptable change per PR, a stack of dependent PRs, and one PR carrying a complete batch.<br><br><b>CSARC: </b>A work PR maps to one open Issue whose acceptance checklist is complete. Added scope receives another Issue, while a Milestone represents only the delivery batch.</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active plan &#43; branch</a>：One active plan uses one isolated branch, while small changes can omit a durable plan so every PR does not carry a full specification.</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Sapling<span class="tool-meta"><span>0.2.20260811-150444&#43;8fb02b32 (2026-08-11)</span><span>★ 6,997</span></span></strong><span class="tool-comparison-detail"><a href="https://sapling-scm.com/docs/overview/stacks" target="_blank" rel="noreferrer">Commit stacks</a>：Dependent work remains a stack of individually reviewable commits instead of one large squashed change.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>How work is staged into main</strong><span>Compares merging every PR directly into main, staging work on a long-lived integration branch, and preserving dependencies in a short-lived stack.<br><br><b>CSARC: </b>Work PRs first enter their matching dev branch. After a batch is complete, a release PR carries the verified result into main.</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>Git Town<span class="tool-meta"><span>v24.0.0 (2026-07-23)</span><span>★ 3,367</span></span></strong><span class="tool-comparison-detail"><a href="https://www.git-town.com/stacked-changes" target="_blank" rel="noreferrer">Stacked Changes</a>：Each feature branch can build on the previous branch in a stack, keeping dependent changes in smaller PRs.</span></li>
+              <li><strong>Sapling<span class="tool-meta"><span>0.2.20260811-150444&#43;8fb02b32 (2026-08-11)</span><span>★ 6,997</span></span></strong><span class="tool-comparison-detail"><a href="https://sapling-scm.com/docs/git/github" target="_blank" rel="noreferrer">GitHub integration</a>：It maps a stack to GitHub pull requests and updates their dependencies, which suits deep stacks but requires the Sapling workflow.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>What makes a PR merge-ready</strong><span>Compares human judgment alone, checks and reviews, and merge queues that retest against the latest base.<br><br><b>CSARC: </b>PR policy and CI produce evidence before the merge tool binds checks and authorization to the exact head SHA. The current Free private repository has no enforceable Ruleset, so maintainers must still follow the policy manually.</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/integrations/github/" target="_blank" rel="noreferrer">Tasks &#43; GitHub workflows</a>：The project model generates PR workflows that run existing tasks, while GitHub branch protection or Rulesets still decide whether merging is allowed.</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/scripts/validate-premerge.sh" target="_blank" rel="noreferrer">Pre-Merge Contract</a>：The same local script validates the required contract before merge. It produces evidence without defining a separate multi-layer delivery-branch model.</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers/blob/main/skills/finishing-a-development-branch/SKILL.md" target="_blank" rel="noreferrer">Finishing a Development Branch</a>：After tests pass, a person explicitly chooses merge, PR, retain, or discard. This is an agent workflow step, not an enforced GitHub gate.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>How branches resynchronize after the base advances</strong><span>Compares direct pushes, rebasing or restacking, and reviewable synchronization PRs for resolving conflicts.<br><br><b>CSARC: </b>After main advances, a sync/main-to-* PR updates each active dev branch. Its owner resolves conflicts without force-pushing or writing directly to the destination branch.</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>Git Town<span class="tool-meta"><span>v24.0.0 (2026-07-23)</span><span>★ 3,367</span></span></strong><span class="tool-comparison-detail"><a href="https://www.git-town.com/commands/sync" target="_blank" rel="noreferrer">git town sync</a>：It updates main, parent, and child branches along their lineage and stops for the author to resolve local conflicts.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>How proposed work becomes authoritative</strong><span>Compares when a branch, change, or configuration PR is reviewed, merged, and archived.<br><br><b>CSARC: </b>A work PR links its scope with Closes #&lt;issue&gt; and closes that work when merged into dev. A release PR then carries the verified batch into main as the authoritative delivery.</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Anti-tamper build</a>：A PR changes .projenrc together with regenerated output; the state becomes authoritative after merge.</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active / completed plans</a>：Work spanning sessions stays in an active plan and is archived only after completion.</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">BMad Delivery Loop</a>：Artifacts mature through clarify, plan, build, and verify.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Change workflow</a>：Only after propose, apply, and archive does the content merge into the authoritative specification.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature workflow</a>：Artifacts evolve on a feature branch and are ultimately accepted through Git and a PR.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Finishing a development branch</a>：After verification, the workflow explicitly chooses a PR, merge, retained branch, or discarded work.</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Update diff</a>：An update first produces a Git diff and is accepted only after conflicts are resolved and the change is merged.</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,581</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task workflow</a>：Task files change with branches and PRs and become shared state after merge.</span></li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 <div id="similar-tools-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-template-upgrade" data-similar-tools-panel hidden>
   <div class="similar-tools-legend"><span class="reference">Compares only how existing repositories receive updated templates, policies, or recipes and who resolves conflicts.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Template upgrades">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
       <tbody>
+        <tr>
+          <th scope="row"><strong>How definitions become repository state</strong><span>Compares direct file edits, generated files, and services that continuously reconcile remote state.<br><br><b>CSARC: </b>copier.yml, template/, and profiles/catalog.yaml define the generated baseline. scripts/sync-paired-files.sh synchronizes paired root/template files, while downstream repositories retain ownership of product files.</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：Typed components declare the desired project and synth reconciles the files.</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entities and Software Templates declare portal components and creation workflows.</span></li>
+              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：A Recipe declares a semantic transformation that parsers and visitors apply.</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：Answers and Jinja templates declare generation inputs without continuously controlling remote state.</span></li>
+          </ul></td>
+        </tr>
         <tr>
           <th scope="row"><strong>How existing repositories receive updates</strong><span>Compares how updated templates, policies, or recipes enter an existing repository and who resolves conflicts.<br><br><b>CSARC: </b>Copier answers record the source and version. Existing projects review update diffs and conflicts in a PR and verify that product-owned paths were not overwritten.</span></th>
           <td><ul>
@@ -3821,8 +3906,8 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
           <td><ul>
               <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：It excels at creating new components; existing-repository migration still needs another tool.</span></li>
-              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：The recorded template source and answers let an existing repository receive template updates.</span></li>
               <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：Instead of overwriting files from a text template, it performs semantic migration across versions.</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：The recorded template source and answers let an existing repository receive template updates.</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -3838,49 +3923,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3901,11 +3986,13 @@ html[data-detail-level="simple"] .detail-panel {
     <button id="testing-tab-duration" type="button" role="tab" aria-selected="true" aria-controls="testing-panel-duration" data-similar-tools-tab="0"><small>Overview</small>Expected runtime</button>
     <button id="testing-tab-work" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>Work definition</button>
     <button id="testing-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI rules</button>
-    <button id="testing-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>Verification &#43; CI</button>
+    <button id="testing-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>Verification / CI</button>
+    <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="4"><small>Journey 05</small>PR / merge</button>
+    <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="5"><small>Journey 06</small>Version / delivery</button>
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
     <div class="similar-tools-testing-intro">
-      <strong>Expected runtime for both PR stages</strong><span>Each cell totals the runner minutes expected for one PR. Queue time is excluded, and concurrent jobs are still counted separately. First-time dependency downloads and cache misses may take longer.</span>
+      <strong>Expected runtime for both PR stages</strong><span>Each cell totals the runner minutes expected for one PR. Work inside the same job is marked as included and is not added twice. Queue time is excluded; first-time dependency downloads and cache misses may take longer.</span>
       <p>Runner | Zero steps means repository code never ran; check the runner, billing, and GitHub status first.</p>
       <p>Archive | archive/ci-cd/ is reference only; verify purpose, triggers, permissions, timeout, and the local entry point before restoring one workflow.</p>
     </div>
@@ -3915,13 +4002,13 @@ html[data-detail-level="simple"] .detail-panel {
         <tbody>
           <tr>
             <th scope="row"><strong>Issue PR (work branch → dev)</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>Work definition：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in verification; no separate minutes</li><li><strong>Verification &#43; CI：</strong>docs &lt;1 min; fast 2–5 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>Work definition：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in verification; no separate minutes</li><li><strong>Verification &#43; CI：</strong>docs &lt;1 min; fast 3–6 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–8 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>Verification / CI：</strong>docs &lt;1 min; fast 2–5 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>Verification / CI：</strong>docs &lt;1 min; fast 3–6 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–8 min</p></td>
           </tr>
           <tr>
             <th scope="row"><strong>Release PR (dev → main)</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>Work definition：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in full verification; no separate minutes</li><li><strong>Verification &#43; CI：</strong>full 5–15 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>Work definition：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in full verification; no separate minutes</li><li><strong>Verification &#43; CI：</strong>full 8–12 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 9–14 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Under 1 min within full</li><li><strong>Verification / CI：</strong>full 5–15 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Under 1 min within full</li><li><strong>Verification / CI：</strong>full 8–12 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 9–14 min</p></td>
           </tr>
         </tbody>
       </table>
@@ -3929,7 +4016,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 01 / Minimum test contract</strong><span>A normal repository needs only ./scripts/verify. During promotion, repo-template adds one check for the version it ships.</span>
+    <strong>Journey 01 / Minimum test contract</strong><span>Validates how Issues become actionable and how a Milestone gains approval to start. PR merging and Milestone closure belong to Journeys 04 and 06.</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01 / Minimum test contract">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
@@ -3939,56 +4026,33 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Issue work boundary</strong><span>Title, type, assignee, labels, and duplicate disposition must converge.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/issue-triage.yml</code>／<code>classify</code><span>Trigger：Issue opened, edited, reopened, or closed · Timeout：5 min</span></li></ul></div>
+              <strong>Before work starts</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-issue-triage</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/issue-triage.yml</code>／<code>classify</code><span>Trigger：Issue opened, edited, reopened, or closed · Timeout：5 min</span></li></ul></div>
             </li>
           </ul></td>
-          <td><ul class="testing-stage-list">
-          </ul></td>
-        </tr>
-        <tr>
-          <th scope="row"><strong>PR-to-Issue traceability</strong><span>PR title, branch, Closes/Fixes link, open Issue, checkboxes, and Milestone must agree.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR opened, content, commit, or metadata changes, and merge group · Timeout：10 min</span></li></ul></div>
+              <strong>When work ends</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_item_forms.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>repo-template also confirms that generated Issue forms retain the definition.</span></div>
             </li>
-          </ul></td>
-          <td><ul class="testing-stage-list">
           </ul></td>
         </tr>
         <tr>
           <th scope="row"><strong>Spec contract and Issue sync</strong><span>Validate required sections, acceptance criteria, stable spec IDs, and idempotent synchronization.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_spec_to_issue.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/spec-to-issue.yml</code>／<code>sync</code><span>Trigger：Spec or sync code enters main or dev; manual dispatch is also allowed · Timeout：10 min</span></li></ul></div>
+              <strong>Before work starts</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_spec_to_issue.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/spec-to-issue.yml</code>／<code>sync</code><span>Trigger：Spec or sync code enters main or dev; manual dispatch is also allowed · Timeout：10 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Milestone completion</strong><span>Due date, open Issues, and acceptance checkboxes jointly determine close or reopen.</span></th>
+          <th scope="row"><strong>Milestone kickoff gate</strong><span>One lifecycle Issue records agreement and objections. Work starts only with one non-proposer agreement and no unresolved objection.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：Issue closed, reopened, or milestoned · Timeout：5 min</span></li></ul></div>
+              <strong>Before work starts</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_milestone_approval.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/400" target="_blank" rel="noreferrer">Pending #400</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>The existing milestone-lifecycle Action does not yet validate agreement and objections in comments; #400 adds the shared validator.</span></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
-          </ul></td>
-        </tr>
-        <tr>
-          <th scope="row"><strong>Journey 01 aggregate regression</strong><span>Use one entrypoint for required tests so local runs and future Actions never maintain two lists.</span></th>
-          <td><ul class="testing-stage-list">
-            <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>No separate test Action; restored policy workflows call shared code only.</span></div>
-            </li>
-            <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify promotion</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Journey 01 does not restore the full matrix or delivery workflows.</span></div>
-            </li>
-          </ul></td>
-          <td><ul class="testing-stage-list">
-            <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_item_forms.py</code></li><li><code>tests/test_template_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>No repo-template-only Action; the same promotion entrypoint adds delivery tests.</span></div>
-            </li>
           </ul></td>
         </tr>
       </tbody>
@@ -4081,6 +4145,82 @@ html[data-detail-level="simple"] .detail-panel {
     </table>
   </div>
   </div>
+  <div id="testing-panel-pr" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-pr" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 05 / Two PR stages</strong><span>A work PR first validates one Issue and its destination; a release PR then validates the complete batch. Rules governance owns merge authorization.</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 05 / Two PR stages">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>PR metadata and destination</strong><span>Title, Issue, label, Milestone, and destination branch must agree.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR opened or its content, commits, or metadata changes · Timeout：10 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR (work branch → dev)</strong><span>Uses the same validator; repo-template has no second PR policy.</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Candidate contains the current base</strong><span>A work PR must trace through its dev chain to main; a sync PR may carry only the exact main update back to its target dev branch.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_delivery_sync.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：Every work-PR and sync-PR update · Timeout：10 min</span></li></ul></div>
+            </li>
+            <li>
+              <strong>Release PR (dev → main)</strong><span>Release-PR creation and cross-branch synchronization after main advances remain manual PRs; their workflows are still archived.</span>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Close the Issue after its work PR merges</strong><span>Close the matching Issue only after its work PR enters the correct dev branch. The release PR does not close it again.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_pr_closure.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/401" target="_blank" rel="noreferrer">Pending #401</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>close-work</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/401" target="_blank" rel="noreferrer">Pending #401</a><span>Trigger：Work PR merged or closed · Timeout：5 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR (work branch → dev)</strong><span>Uses the same closure program; repo-template has no second rule.</span>
+            </li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
+  <div id="testing-panel-delivery" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-delivery" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 06 / Delivery and closure</strong><span>A Milestone closes only after a successful release records delivery evidence. Early termination first disposes of unfinished work.</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 06 / Delivery and closure">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>Milestone closure</strong><span>Normal completion confirms release and delivery evidence. Early termination records a reason and first moves or cancels unfinished Issues.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>After release</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li><li><code>tests/test_milestone_closure.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/400" target="_blank" rel="noreferrer">Pending #400</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：Lifecycle Issue closed, reopened, or milestoned · Timeout：5 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>After release</strong><span>Uses the same closure program; repo-template has no second Milestone rule.</span>
+            </li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
 </div>
 
 
@@ -4090,49 +4230,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -4184,49 +4324,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -4294,49 +4434,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -4418,49 +4558,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -4534,49 +4674,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -4620,49 +4760,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -4717,8 +4857,11 @@ html[data-detail-level="simple"] .detail-panel {
   <div class="progress" aria-hidden="true" hidden><span id="bar"></span></div>
   <script>
     (() => {
+      const pr = document.querySelector('[data-track="pr"]');
+      const supply = document.querySelector('[data-track="supply"]');
       const testing = document.querySelector("#testing");
       const bridge = document.querySelector("#bridge");
+      if (pr && supply) pr.before(supply);
       if (testing && bridge) testing.after(bridge);
     })();
   </script>

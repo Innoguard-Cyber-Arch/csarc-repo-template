@@ -690,6 +690,9 @@
       font-weight: 700;
       line-height: 1.05;
     }
+    .journey-item.priority { border-color: #d6c900; background: #fffbea; color: #655900; }
+    .journey-item.best { border-color: #6db091; background: var(--best-soft); color: #0b6540; }
+    .journey-item.optional { border-color: #7ba4d1; background: var(--optional-soft); color: #174f8b; }
     .journey-item a {
       display: flex;
       width: 100%;
@@ -720,6 +723,8 @@
     .journey-item.active.priority { border-color: #b9a700; background: var(--yellow); }
     .journey-item.active.best { border-color: var(--best); background: var(--best-soft); color: #0b6540; }
     .journey-item.active.optional { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
+    .journey-bookend.appendix:not(.maintainer-bookend) { border-color: #d6c900; background: #fffbea; color: #655900; }
+    .journey-bookend.appendix.active-selection:not(.maintainer-bookend) { background: var(--yellow); color: var(--ink); }
     .decision-tier-tag {
       display: inline-block;
       margin-right: 7px;
@@ -818,6 +823,18 @@
     }
     .package-disclosure summary::-webkit-details-marker { display: none; }
     .package-disclosure summary:focus-visible { outline: 4px solid var(--yellow); outline-offset: 3px; }
+    .inline-disclosure { display: inline-block; margin: 0 0 0 5px; vertical-align: baseline; }
+    .inline-disclosure summary { display: inline-block; font-size: inherit; line-height: inherit; }
+    .inline-disclosure .package-health {
+      position: fixed;
+      top: 50%;
+      right: auto;
+      left: 50%;
+      width: min(720px, calc(100vw - 48px));
+      max-height: none;
+      overflow: visible;
+      transform: translate(-50%, -50%);
+    }
     .tech-name {
       color: #174f8b;
       text-decoration: underline dotted 2px;
@@ -2069,49 +2086,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -2213,49 +2230,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -2295,8 +2312,8 @@ html[data-detail-level="simple"] .detail-panel {
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">第四步｜系統協助</span>
-            <h3>自動檢查</h3>
-            <p>目前會依變更內容選擇文件、快速或完整驗證。</p>
+            <h3>驗證與依賴安全</h3>
+            <p>依變更內容選擇必要驗證；相依變更再確認新版等待、已知漏洞與 lockfile 結果。</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">第五步｜確認結果</span>
@@ -2311,7 +2328,7 @@ html[data-detail-level="simple"] .detail-panel {
         <div class="pipeline-foundation" aria-label="支撐整體流程的平台能力">
           <div class="pipeline-foundation-label"><strong>模板先準備好</strong><span>一般使用者依提示操作；維運者才需要調整設定。</span></div>
           <article class="pipeline-foundation-card"><h3>工作格式</h3><p>Issue 與 PR 表單提示必要內容。</p></article>
-          <article class="pipeline-foundation-card"><h3>驗證規則</h3><p>依變更內容選擇必要檢查。</p></article>
+          <article class="pipeline-foundation-card"><h3>驗證與安全規則</h3><p>依變更內容選擇必要檢查，並辨識相依風險。</p></article>
           <article class="pipeline-foundation-card"><h3>合併設定</h3><p>依 GitHub 方案套用可用保護。</p></article>
           <article class="pipeline-foundation-card best"><h3>版本發佈</h3><p>設定仍保留；Action 尚未啟用。</p></article>
         </div>
@@ -2340,8 +2357,8 @@ html[data-detail-level="simple"] .detail-panel {
 					<td>PR 範本提示連回 Issue，並填寫完成內容與驗證結果</td>
 			</tr>
 			<tr>
-					<td>查看結果</td>
-					<td>模板依變更內容選擇必要檢查，失敗時指出需要修正的項目</td>
+					<td>查看驗證與安全結果</td>
+					<td>模板依變更內容選擇必要檢查；相依變更另確認新版等待、已知漏洞與 lockfile 結果</td>
 			</tr>
 			<tr>
 					<td>審查與合併</td>
@@ -2369,49 +2386,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -2442,15 +2459,15 @@ html[data-detail-level="simple"] .detail-panel {
         <div class="repo-tree-body">
           <div class="repo-tree-row"><span class="repo-tree-path">.copier-answers.yml＋.csarc/profile.json</span><span class="repo-tree-purpose"><span class="journey-code">08</span><span class="purpose-copy">來源、語言與分支模式</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path">.gitignore</span><span class="repo-tree-purpose"><span class="journey-code">02</span><span class="purpose-copy">環境雜訊／語言產物</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path folder">.github/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04</span><span class="purpose-copy">GitHub 表單、自動檢查與審查設定</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1">CODEOWNERS＋REVIEWERS</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">指定 owner 與 reviewer 候選</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path folder">.github/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04／05</span><span class="purpose-copy">GitHub 表單、自動檢查與審查設定</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1">CODEOWNERS＋REVIEWERS</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">指定 owner 與 reviewer 候選</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">ISSUE_TEMPLATE/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">工作單欄位／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1">pull_request_template.md</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">PR 必填內容</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04</span><span class="purpose-copy">5 條現行自動流程</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1">pull_request_template.md</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">PR 必填內容</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／05</span><span class="purpose-copy">5 條現行自動流程</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">ci.yml</span><span class="repo-tree-purpose"><span class="journey-code">03</span><span class="purpose-copy">執行已宣告模組</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">issue-triage.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">檢查並整理工作單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">milestone-lifecycle.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">同步交付批次狀態</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">pr-policy.yml</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">Issue／分支／PR 規則</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">pr-policy.yml</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">Issue／分支／PR 規則</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">spec-to-issue.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">規格自動開單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">docs/specs/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">功能規格／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge project">專案持有</span></div>
           <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">docs/＋site/</span><span class="repo-tree-purpose"><span class="journey-code">09</span><span class="purpose-copy">專案說明、決策與內部網站</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
@@ -2459,7 +2476,7 @@ html[data-detail-level="simple"] .detail-panel {
           <div class="repo-tree-row"><span class="repo-tree-path">version source＋CHANGELOG＋release-please config／manifest</span><span class="repo-tree-purpose"><span class="journey-code">06</span><span class="purpose-copy">保留版本基線；發版 Action 未啟用</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge shared">共同維護</span></div>
           <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">src/＋tests/；typescript/src/＋tests/</span><span class="repo-tree-purpose"><span class="journey-code">02／03</span><span class="purpose-copy">啟用模組的產品程式</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge project">專案持有</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path">README.md＋AGENTS.md＋CLAUDE.md</span><span class="repo-tree-purpose"><span class="journey-code">01–08</span><span class="purpose-copy">人與 AI 的使用規範</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path">pyproject.toml／uv.lock／package.json／pnpm-lock.yaml</span><span class="repo-tree-purpose"><span class="journey-code">03／05</span><span class="purpose-copy">語言工具與相依版本</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge shared">共同維護</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path">pyproject.toml／uv.lock／package.json／pnpm-lock.yaml</span><span class="repo-tree-purpose"><span class="journey-code">03／04</span><span class="purpose-copy">語言工具與相依版本</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge shared">共同維護</span></div>
         </div>
         <div class="repo-map-legend"><span><strong>黃色編號：</strong>對照左側旅程 tag。<strong>模板影響：</strong>公版主導會在 update 提出差異；共同維護可能衝突並由人處理。</span><span><strong>橘線：</strong>專案持有且不改寫。</span></div>
       </div>
@@ -2527,53 +2544,53 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
-<section class="slide markdown-slide legacy-slide decision-slide" id="method" data-content-key="method" data-track="method" aria-label="先把工作說清楚">
+<section class="slide markdown-slide legacy-slide decision-slide" id="method" data-content-key="method" data-track="method" aria-label="先把要做的事定義清楚">
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -2585,16 +2602,16 @@ html[data-detail-level="simple"] .detail-panel {
 
   <header class="basic-header">
     <span class="selection-sequence">步驟 01</span>
-    <h2>先把工作說清楚</h2>
-    <p class="subtitle">先寫清楚問題、完成條件與驗證；工作變大時才增加分組或交付批次。</p>
+    <h2>先把要做的事定義清楚</h2>
+    <p class="subtitle">把需求整理成可執行的 Issue；多張工作需要一起推進時，才建立 Milestone。</p>
   </header>
 
 <div class="legacy-content">
       <header>
-        <h2>步驟 1｜<span class="accent">工作如何從需求走到合併</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>一張 Issue 定義一項可驗收的改變，一張 PR 負責交付；多項工作需要同批完成時，才使用 Milestone。</p>
+        <h2>步驟 1｜<span class="accent">把需求整理成可以開始的工作</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>一張 Issue 定義一項可獨立完成的改變；多項工作需要共同目標與期限時，才使用 Milestone。</p>
       </header>
-      <p class="context-line"><strong>模板的作用｜</strong>統一 Issue、PR 與 Milestone 的寫法，讓人與 agent 清楚工作範圍與完成條件。</p>
+      <p class="context-line"><strong>模板的作用｜</strong>統一 Issue 與 Milestone 的內容，讓人與 agent 在動手前知道要解決什麼、怎樣算完成。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open>
           <summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">常見的工作設計思路</span></summary>
@@ -2606,39 +2623,47 @@ html[data-detail-level="simple"] .detail-panel {
           </ul>
         </details>
         <details class="decision-step decision-fold recommended" open>
-          <summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一條工作線，按需要增加分組</span></summary>
+          <summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">先定義單項工作，需要時才組成 Milestone</span></summary>
           <ul class="work-definition-list">
-            <li><strong>整體：</strong>Issue 說清楚 → branch 實作 → PR 審查與交付；本模板提供一致的表單、規則與驗證入口。</li>
-            <li><strong>Milestone：</strong>多張工作有共同期限、整合或發版時才建立；收錄 Task／Bug 與對應 PR。</li>
-            <li><strong>Issue：</strong><ul><li><strong>選擇工作類別：</strong>Feature＝需要多項工作一起完成的成果；Task＝可獨立完成與驗證的工作；Bug＝結果不符合預期；Documentation＝只修改文件或範例。</li><li><strong>寫清楚工作：</strong>使用清楚的英文標題，說明問題、完成條件與驗證；建立者預設負責。</li><li><strong>何時拆 Sub-issue：</strong>同一張 PR 能完成並用同一組結果驗證就不拆；能獨立實作、驗證與交付，或超出原範圍但必須補做才拆。</li><li><strong>Parent：</strong>描述仍未完整達成的共同成果；必要 Sub-issues 完成後才能結案。先後順序另用 Dependency。</li></ul></li>
-            <li><strong>PR：</strong><ul><li><strong>標題：</strong><code>type(scope)!: English summary</code>；scope 選填，<code>!</code> 表示破壞性變更。</li><li><strong>Angular types：</strong><code>feat</code> 新功能、<code>fix</code> 修錯、<code>docs</code> 文件、<code>refactor</code> 重構、<code>test</code> 測試、<code>build</code> 建置／相依、<code>ci</code> 自動化、<code>chore</code> 維護、<code>revert</code> 撤銷。</li><li><strong>內文：</strong>Purpose 與 <code>Closes #N</code>、完成清單必填；補充可寫風險、回退與額外影響。</li><li><strong>Label：</strong>enhancement、bug、documentation 擇一；特殊交付才另加 promotion（正式交付）、hotfix（緊急修正）或 release-recovery（補建遺漏的 Release，詳見 06），不能使用 duplicate。</li><li><strong>Assignee：</strong>建立者在送出後自我指派；交接時可更換，但作者仍列為 Assignee。</li></ul></li>
-            <li><strong>例外：</strong>Duplicate 是 Issue 的重複結案方式，不開 PR；Hotfix 是 Bug 的緊急交付 Label，可直接進 main，但仍須 Issue、驗證與審查。</li>
+            <li><strong>單項工作：</strong>先建立 Issue，寫清楚問題、完成條件、驗證方式與負責人；內容足以開始實作就不增加其他文件。</li>
+            <li><strong>Issue 類型與拆分：</strong>先選工作類型，只在工作能獨立完成或超出原範圍時拆分。<details class="package-disclosure inline-disclosure"><summary><span class="tech-name">查看可用類型與拆分規則</span></summary><div class="package-health"><ul><li><strong>Feature：</strong>需要多項工作一起完成的成果。</li><li><strong>Task：</strong>可獨立完成與驗證的工作。</li><li><strong>Bug：</strong>結果不符合預期。</li><li><strong>Documentation：</strong>只修改文件或範例。</li><li><strong>拆分：</strong>同一個完成條件與同一份驗證能證明就不拆；能獨立完成或超出原範圍但必須補做，才建立 Sub-issue。Parent 表示未完成的共同成果，Dependency 表示先後順序。</li></ul></div></details></li>
+            <li><strong>Milestone：</strong>多張 Issue 有共同目標、期限或交付批次時才建立，並指定一張生命週期追蹤 Issue。至少一位非提案者同意，且沒有尚未解決的反駁，才開始執行。</li>
+            <li><strong>例外：</strong>Duplicate 是 Issue 的重複結案方式；緊急工作仍先定義為 Bug，如何快速交付由「PR／合併」處理。</li>
           </ul>
         </details>
       </div>
-      <aside class="config-guidance" data-config-direct="true"><strong>模板設定與客製化位置</strong><ul><li><strong>Issue 表單限制：</strong><code>.github/ISSUE_TEMPLATE/*.yml</code> 規定標題使用 12–80 個英文 ASCII 字元、至少三個詞，並要求填寫問題與完成條件；<code>config.yml</code> 關閉空白 Issue</li><li><strong>Type、Label 與負責人：</strong>Feature／Task／Bug 使用同名原生 Type；Documentation 使用 Task Type 加 documentation Label；enhancement、bug、documentation 擇一，duplicate 與 promotion 只在對應情境加入；建立者自我指派，agent／CLI 使用 <code>@me</code></li><li><strong>工作層級：</strong><code>AGENTS.md</code> 定義 Feature／Task／Bug 的使用規則，<code>docs/adr/spec-story-and-work-items.md</code> 保存長期理由；團隊只改操作方式時調整前者，改變角色責任時兩者一起更新</li><li><strong>規格同步：</strong><code>docs/specs/</code> 放各專案的長期規格，<code>scripts/spec_to_issue.py</code> 定義 <code>tracking: issue</code>、<code>story</code>、<code>none</code> 的同步行為；一般客製只新增或修改 spec，不必改同步程式</li><li><strong>交付批次：</strong><code>docs/milestone-description.md</code> 定義 Milestone 的 Problem、Outcome、Acceptance criteria 與 Verification；可改團隊用語與範例，但仍要保留真實 due date 與可驗收結果</li></ul></aside>
+      <aside class="config-guidance" data-config-direct="true"><strong>模板設定與客製化位置</strong><ul><li><strong>Issue 表單限制：</strong><code>.github/ISSUE_TEMPLATE/*.yml</code> 規定標題使用 12–80 個英文 ASCII 字元、至少三個詞，並要求填寫問題與完成條件；<code>config.yml</code> 關閉空白 Issue</li><li><strong>Type、Label 與負責人：</strong>Feature／Task／Bug 使用同名原生 Type；Documentation 使用 Task Type 加 documentation Label；enhancement、bug、documentation 擇一，duplicate 只用於重複工作；建立者自我指派，agent／CLI 使用 <code>@me</code></li><li><strong>工作層級：</strong><code>AGENTS.md</code> 定義 Feature／Task／Bug、Parent、Sub-issue 與 Dependency；<code>docs/adr/spec-story-and-work-items.md</code> 保存長期理由</li><li><strong>規格同步：</strong><code>docs/specs/</code> 放各專案的長期規格，<code>scripts/spec_to_issue.py</code> 定義 <code>tracking: issue</code>、<code>story</code>、<code>none</code> 的同步行為</li><li><strong>Milestone 啟動：</strong><code>docs/milestone-description.md</code> 定義目標、完成條件與生命週期追蹤 Issue；結案方式由「版本／交付」定義</li></ul></aside>
       <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues" target="_blank" rel="noreferrer">GitHub sub-issues</a>。具體工具、功能名稱與資料來源統一整理於<a href="#similar-tools">相似工具</a>。</p>
 </div>
 
 
 <div class="markdown-body basic-summary"><h3 id="我們的選擇">我們的選擇</h3>
 <ul>
-<li><strong>整體：</strong> Issue 說清楚 → branch 實作 → PR 審查與交付。</li>
-<li><strong>Milestone：</strong> 多張工作有共同期限、整合或發版時才建立。</li>
+<li><strong>整體：</strong> 先把需求整理成一張可獨立完成與驗證的 Issue。</li>
+<li><strong>Milestone：</strong> 多張工作有共同目標、期限或交付批次時才建立，並配一張生命週期追蹤 Issue。
+<ul>
+<li>至少一位非提案者同意，且沒有尚未解決的反駁，才開始執行。</li>
+</ul>
+</li>
 <li><strong>Issue：</strong> 選擇 Feature、Task、Bug 或 Documentation 表單，再寫清楚問題、完成條件與驗證。
 <ul>
+<li>標題使用清楚的英文；建立者預設負責這張 Issue。</li>
+</ul>
+</li>
+<li><strong>例外：</strong> 重複工作以 Duplicate 結案；緊急工作仍先定義為 Bug，交付方式由「PR／合併」處理。</li>
+</ul>
+<details class="package-disclosure" data-content-key="work-item-details">
+  <summary><span class="tech-name">Issue 類型與拆分規則</span></summary>
+  <div class="package-health"><ul>
 <li>Feature＝需要多項工作一起完成的成果。</li>
 <li>Task＝可以獨立完成與驗證的工作。</li>
 <li>Bug＝實際結果與預期不同。</li>
 <li>Documentation＝只修改文件或範例。</li>
-<li>標題使用清楚的英文；建立者預設負責這張 Issue。</li>
-<li>同一張 PR 能完成並用同一組結果驗證就不拆；能獨立實作與驗證，或超出原範圍但必須補做，才拆成 Sub-issue。</li>
-<li>Parent 描述仍未完整達成的共同成果；所有必要 Sub-issues 完成後才能結案。Dependency 才表示先後阻擋。</li>
+<li>同一個完成條件與同一份驗證能證明就不拆；能獨立完成或超出原範圍但必須補做，才拆成 Sub-issue。</li>
+<li>Parent 描述尚未達成的共同成果；Dependency 才表示先後阻擋。</li>
 </ul>
-</li>
-<li><strong>PR：</strong> 寫清楚完成了什麼、連結要關閉的 Issue，完成檢查後交付；建立者預設負責。</li>
-<li><strong>例外：</strong> 重複工作以 Duplicate 結案；Hotfix 表示緊急修正，但仍需要 Issue、驗證與審查。</li>
-</ul>
+</div>
+</details>
 <h3 id="其他常見做法">其他常見做法</h3>
 <ul>
 <li>**先做再補文件：**小而明確的工作直接完成；跨時段、有依賴或高風險時才補計畫。</li>
@@ -2655,49 +2680,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -2745,49 +2770,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority active" aria-current="step">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -2800,7 +2825,7 @@ html[data-detail-level="simple"] .detail-panel {
   <header class="basic-header">
     <span class="selection-sequence">步驟 03</span>
     <h2>先驗證改動，再讓 CI 重跑同一套規則</h2>
-    <p class="subtitle">Issue PR 依變更範圍分級；高風險邊界才跑完整驗證。</p>
+    <p class="subtitle">日常改動跑必要檢查；準備發版或緊急修正才跑完整驗證。</p>
   </header>
 
 <div class="legacy-content">
@@ -2810,8 +2835,8 @@ html[data-detail-level="simple"] .detail-panel {
       </header>
       <p class="context-line"><strong>模板的作用｜</strong>把測試邏輯留在 repo 內可直接執行的 scripts／tests；GitHub Action 只負責何時啟動、使用哪些權限，以及呼叫同一份程式。</p>
       <div class="decision-strip">
-        <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">四種都合理，但成本不同</span></summary><ul><li><strong>每次全跑：</strong>每張 PR 都取得完整信心，適合測試很小、執行很快的 repo。</li><li><strong>只跑受影響項目：</strong>依 dependency graph 或路徑縮小範圍，回饋快，但分流規則必須可測。</li><li><strong>獨立 pipeline runtime：</strong>本機與不同 CI 平台執行相同 pipeline，換來額外引擎與環境成本。</li><li><strong>分階段驗證：</strong>日常快速、整合候選完整；需要清楚定義何時升級與哪一份結果有效。</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一份邏輯、一支 Action、兩種 repo 範圍</span></summary><ul class="work-definition-list"><li><strong>開發中：</strong>人或 agent 只跑能證明這次修改的 focused check，先取得新鮮輸出再宣稱完成。</li><li><strong>Issue PR（工作分支 → dev）：</strong>系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li><li><strong>高風險邊界：</strong>promotion、hotfix、release recovery、merge queue 與手動執行都走 full。</li><li><strong>同一套邏輯：</strong>GitHub Actions 只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li><li><strong>專案範圍：</strong>一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li></ul></details>
+        <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">依 repo 規模與風險選擇驗證範圍</span></summary><ul><li><strong>每次全跑：</strong>每張 PR 都取得完整信心，適合測試很小、執行很快的 repo。</li><li><strong>只跑受影響項目：</strong>依 dependency graph 或路徑縮小範圍，回饋快，但分流規則必須可測。</li><li><strong>獨立 pipeline runtime：</strong>本機與不同 CI 平台執行相同 pipeline，換來額外引擎與環境成本。</li><li><strong>分階段驗證：</strong>日常快速、整合候選完整；需要清楚定義何時升級與哪一份結果有效。</li></ul></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一份邏輯、一支 Action、兩種 repo 範圍</span></summary><ul class="work-definition-list"><li><strong>開發中：</strong>人或 agent 只跑能證明這次修改的 focused check，先取得新鮮輸出再宣稱完成。</li><li><strong>Issue PR（工作分支 → dev）：</strong>系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li><li><strong>需要完整檢查時：</strong>準備發版、緊急修正，或系統無法安全縮小測試範圍時，執行完整檢查。</li><li><strong>同一套邏輯：</strong>GitHub Actions 只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li><li><strong>專案範圍：</strong>一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li></ul></details>
       </div>
       <aside class="config-guidance" data-config-direct="true"><strong>模板功能與客製化</strong><ul><li><strong>分級依據：</strong>系統依修改內容與交付階段選擇檢查範圍；<code>docs/ci-policy.md</code> 說明升級條件。</li><li><strong>快速驗證：</strong><code>scripts/verify-fast</code> 已存在於 root 與生成模板；一般 repo 的完整入口是 <code>scripts/verify</code>。</li><li><strong>模板額外驗證：</strong><code>scripts/verify-template.sh</code> 只屬於 repo-template，不應成為每個採用 repo 的成本。</li><li><strong>目前邊界：</strong>只恢復 <code>.github/workflows/ci.yml</code>；release、promotion、安全掃描、遠端治理、部署與排程仍由各自 Journey 決定。</li></ul></aside>
       <p class="method-reference reference">具體工具與功能來源見<a href="#similar-tools">相似工具</a>；每個階段實際使用的程式與 Action 現況見<a href="#testing">CI/CD 設定</a>。</p>
@@ -2821,7 +2846,7 @@ html[data-detail-level="simple"] .detail-panel {
 <div class="markdown-body basic-summary"><ul>
 <li>**開發中：**只跑能證明本次修改的 focused check。</li>
 <li>**Issue PR（工作分支 → dev）：**系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li>
-<li>**高風險邊界：**promotion、hotfix、release recovery、merge queue 與手動執行走 full。</li>
+<li>**需要完整檢查時：**準備發版、緊急修正，或系統無法安全縮小測試範圍時，執行完整檢查。</li>
 <li>**Action：**只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li>
 <li>**專案範圍：**一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li>
 </ul>
@@ -2830,175 +2855,53 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
-<section class="slide markdown-slide legacy-slide decision-slide" id="pr" data-content-key="pr" data-track="pr" aria-label="小 PR 通過證據再合併">
+<section class="slide markdown-slide legacy-slide decision-slide" id="pr" data-content-key="pr" data-track="pr" aria-label="讓完成的改動可審查、可交付">
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority active" aria-current="step">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
-    </li>
-  </ol>
-  <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
-  <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-</aside>
-
-  <header class="basic-header">
-    <span class="selection-sequence">步驟 04</span>
-    <h2>小 PR 通過證據再合併</h2>
-    <p class="subtitle">Issue 先進整合分支；promotion 才把已驗證成果送進 main。</p>
-  </header>
-
-<div class="legacy-content">
-      <header>
-        <h2>步驟 4｜<span class="accent">小 PR 通過證據再合併</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>CI 就是可攜式 integration layer；Issue 先進 delivery branch，完成 Milestone 或固定批次時才 promotion 到 main。</p>
-      </header>
-      <p class="context-line"><strong>問題與目的｜</strong>每張 PR 都送 main 會同時放大完整 CI 與發版次數；分支與 workflow 必須一起分層，才能在日常保留快回饋、在交付邊界集中完整信心。</p>
-      <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把所有變更都當成一種交付</h3><ul><li><strong>每張 PR 進 main：</strong>一般變更也重跑完整矩陣並推動發版</li><li><strong>單一永久 dev：</strong>多個 Milestone 互相等待，候選內容難以隔離</li><li><strong>每張孤立 Issue 建 Milestone：</strong>失去 Story 的意義，只是在規避批次</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>不同 Issue 進對應 delivery branch，main 再受審查地回流</h3><p><strong>Milestone：</strong><code>type/&lt;Issue&gt;-*</code> PR 進 <code>dev/m&lt;Milestone&gt;-*</code>；可同時有多條，完成後各自跑 full＋canary promotion。<br><strong>孤立工作：</strong>一般 Issue 進 <code>dev/next</code>，固定 release window 批次 promotion；確實要獨立 soak／canary 才使用一次性的 <code>dev/i&lt;Issue&gt;-*</code>，完成後刪除。只有 standalone <code>fix/*</code>＋<code>hotfix</code> 可直接 main。<br><strong>同步：</strong><code>main</code> 前進後，每條 active delivery branch 的 owner 以 <code>sync/main-to-*</code> PR 納入結果；blocked／unknown 自動寫入能力回到同一套手動 PR，不直接 push 或改寫歷史。</p></article>
-      </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>選 delivery、main-only 或 dev：</strong><code>copier.yml</code> → <code>branch_strategy</code>，結果存入 <code>.csarc/profile.json</code></li><li><strong>核對 route、Issue、branch 編號、標題與同步：</strong><code>pr-policy.yml</code>＋<code>delivery-maintenance.yml</code>＋<code>promotion.yml</code></li><li><strong>完整操作與遷移：</strong><code>docs/ci-policy.md</code> 含孤立 Issue 決策樹、雙 Milestone walkthrough、promotion checklist、回復與降級</li></ul></aside>
-      <p class="reference">Ref. <a href="https://github.com/home-assistant/core/blob/dev/.github/workflows/ci.yaml" target="_blank" rel="noreferrer">Home Assistant CI</a>; <a href="https://github.com/vercel/next.js/blob/canary/.github/workflows/build_and_test.yml" target="_blank" rel="noreferrer">Next.js build/test</a>; <a href="https://github.com/rust-lang/rust/blob/main/.github/workflows/ci.yml" target="_blank" rel="noreferrer">Rust CI</a>; <a href="https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore" target="_blank" rel="noreferrer">GitHub workflow filters</a>. Accessed August 24, 2026. 採用的是分流與交付邊界原則，不照抄其 branch 名稱。</p>
-</div>
-
-
-<div class="markdown-body basic-summary"><table>
-	<thead>
-			<tr>
-					<th>工作類型</th>
-					<th>PR 目的地</th>
-					<th>進入 <code>main</code> 的方式</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Milestone Issue</td>
-					<td><code>dev/m&lt;Milestone&gt;-*</code></td>
-					<td>Milestone promotion PR</td>
-			</tr>
-			<tr>
-					<td>一般 standalone Issue</td>
-					<td><code>dev/next</code></td>
-					<td>固定 release window 批次 promotion</td>
-			</tr>
-			<tr>
-					<td>需獨立 soak／canary 的 Issue</td>
-					<td>暫時 <code>dev/i&lt;Issue&gt;-*</code></td>
-					<td>該 Issue 的 promotion PR</td>
-			</tr>
-			<tr>
-					<td>緊急修正</td>
-					<td><code>main</code></td>
-					<td>僅限 standalone <code>fix/*</code>＋<code>hotfix</code> label</td>
-			</tr>
-	</tbody>
-</table>
-<aside class="technical-detail" data-content-key="pr-version-intent">
-  <h3>分支、同步與版本意圖的實際規則</h3>
-  <ul>
-<li>工作分支固定為 <code>type/&lt;Issue&gt;-short-slug</code>，PR 連回同號未結案 Issue。</li>
-<li><code>main</code> 前進後，active delivery branch owner 以 <code>sync/main-to-*</code> PR 納入結果，不直接 push 或改寫歷史。</li>
-<li><code>feat</code>、<code>fix</code> 與 <code>!</code> 只在合併後由 default-branch history 決定 SemVer；open PR 不預留版本號。</li>
-<li><code>pr-policy.yml</code>、<code>delivery-sync.yml</code> 與 <code>promotion.yml</code> 核對 route、Issue、標題、同步與 promotion 證據。</li>
-</ul>
-</aside>
-</div>
-
-
-</section>
-
-<section class="slide markdown-slide legacy-slide decision-slide" id="supply" data-content-key="supply" data-track="supply" aria-label="風險立即看見，升版不搶第一天">
-  <aside class="journey-rail" aria-label="簡報目錄">
-  <h3>使用公版</h3>
-  <ol class="journey-use">
-    <li class="journey-item">
-      <a href="#capability"><span>能力／導入</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#flow"><span>CI/CD 流程</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#files"><span>檔案地圖</span></a>
-    </li>
-  </ol>
-  <h3>開發與維護</h3>
-  <ol class="journey-main">
-    <li class="journey-item">
-      <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
-    </li>
-    <li class="journey-item active priority" aria-current="step">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
-    </li>
-  </ol>
-  <h3>公版管理</h3>
-  <ol class="journey-support">
-    <li class="journey-item">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
-    </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -3010,13 +2913,128 @@ html[data-detail-level="simple"] .detail-panel {
 
   <header class="basic-header">
     <span class="selection-sequence">步驟 05</span>
+    <h2>讓完成的改動可審查、可交付</h2>
+    <p class="subtitle">工作 PR 先完成單項工作；發版 PR 再把已驗證的整批成果送進 main。</p>
+  </header>
+
+<div class="legacy-content">
+      <header>
+        <h2>步驟 5｜<span class="accent">讓完成的改動可審查、可交付</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>這一頁從準備開 PR 開始：工作 PR 完成一張 Issue，發版 PR 再確認整批成果。</p>
+      </header>
+      <p class="context-line"><strong>模板的作用｜</strong>把完成的修改帶到正確分支，確認它連回原工作、通過驗證並在合併後結束對應工作。</p>
+      <div class="decision-strip">
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>依團隊規模選擇不同合併模型</h3><ul><li><strong>GitHub Flow：</strong>每張完成的 PR 直接進 main，路徑最短，適合可持續交付的團隊。</li><li><strong>長期整合分支：</strong>多項工作先在 dev／release branch 集中驗收，代價是要處理同步。</li><li><strong>Stacked PR：</strong>把大型改動拆成相依的小 PR，審查較聚焦，但需要維護堆疊順序。</li><li><strong>Merge queue：</strong>把已核准 PR 依最新 main 重新驗證後排序合併，需要平台門禁支援。</li></ul></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>工作 PR 完成單項工作，發版 PR 完成交付批次</h3><ul><li><strong>Issue PR（工作分支 → dev）：</strong>一張 PR 只完成一張可驗收 Issue；內文以 <code>Closes #N</code> 連回同號未結案 Issue，合併後結束該工作。</li><li><strong>PR 標題：</strong>採用 Angular／Conventional Commits 格式，簡短說明這次改動與版本影響。<details class="package-disclosure inline-disclosure"><summary><span class="tech-name">查看可用格式與版本影響</span></summary><div class="package-health"><p><strong>格式：</strong><code>type(scope)!: English summary</code></p><ul><li><strong>type：</strong><code>feat</code> 新功能、<code>fix</code> 修錯、<code>docs</code> 文件、<code>refactor</code> 重構、<code>test</code> 測試、<code>build</code> 建置／相依、<code>ci</code> 自動化、<code>chore</code> 維護、<code>revert</code> 撤回。</li><li><strong>scope：</strong>可省略；使用小寫指出影響範圍。</li><li><strong>!</strong>：可省略；只在破壞相容性時使用。</li><li><strong>版本影響：</strong><code>feat</code>＝minor、<code>fix</code>／<code>revert</code>＝patch、<code>!</code>＝major；其餘不主動升版。</li></ul></div></details></li><li><strong>PR 資料：</strong>分類、Milestone 與負責人都要完整。<details class="package-disclosure inline-disclosure"><summary><span class="tech-name">查看 Label、Milestone 與負責人規則</span></summary><div class="package-health"><ul><li><strong>Label：</strong><code>enhancement</code>、<code>bug</code>、<code>documentation</code> 擇一，且必須和連結的 Issue 相同。</li><li><strong>Milestone：</strong>必須和連結的 Issue 相同；Issue 未加入 Milestone 時，PR 也不加入。</li><li><strong>負責人：</strong>PR 作者必須列為 Assignee；正式交接時可再加入其他負責人。</li></ul></div></details></li><li><strong>發版 PR（dev → main）：</strong>Milestone 工作完成後才執行完整驗證，確認整批內容與證據；Milestone 的結案仍由生命週期追蹤 Issue 控制。</li><li><strong>同步：</strong>main 前進後，以另一張 PR 把變更帶回仍在開發的 dev 分支；不直接推送或改寫歷史。</li><li><strong>例外與授權：</strong>Hotfix 可從 <code>fix/*</code> 直接進 main，但仍需 Issue、驗證與審查；審查者、Alpha 例外與平台門禁都由「規則治理」定義。</li></ul></article>
+      </div>
+      <aside class="config-guidance"><strong>模板功能與客製化</strong><ul><li><strong>PR 格式：</strong><code>pull_request_template.md</code> 說明必填內文，<code>pr-policy.yml</code> 呼叫共用 validator 檢查標題、Label、Assignee、Milestone、Issue 關聯與目的分支。</li><li><strong>選分支模型：</strong><code>copier.yml</code> 的 <code>branch_strategy</code>，結果保存在 <code>.csarc/profile.json</code>。</li><li><strong>驗證與基準：</strong><code>ci.yml</code> 執行對應驗證；<code>delivery_sync.py</code> 確認候選包含必要的 main 內容。</li><li><strong>尚未自動化：</strong>發版 PR 建立與 main 更新後的跨分支同步仍由維運者建立 PR；相關 workflows 保留在 archive。</li></ul></aside>
+      <p class="reference">具體設計比較見<a href="#similar-tools">相似工具</a>；實際程式、Action 與封存邊界見<a href="#testing">CI/CD 設定</a>。</p>
+</div>
+
+
+<div class="markdown-body basic-summary"><table>
+	<thead>
+			<tr>
+					<th>PR 階段</th>
+					<th>目的地</th>
+					<th>這一步完成什麼</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Issue PR</td>
+					<td>工作分支 → dev</td>
+					<td>審查一項改動；合併後關閉連結的 Issue</td>
+			</tr>
+			<tr>
+					<td>發版 PR</td>
+					<td>dev → main</td>
+					<td>完整驗證整批成果後交付；「版本／交付」再負責結束 Milestone</td>
+			</tr>
+	</tbody>
+</table>
+<details class="package-disclosure" data-content-key="pr-version-intent">
+  <summary><span class="tech-name">PR 標題、分支與例外</span></summary>
+  <div class="package-health"><ul>
+<li>工作分支使用 <code>type/&lt;Issue&gt;-short-slug</code>，並連回同號未結案 Issue。</li>
+<li>PR 標題使用 Angular／Conventional Commits 格式：<code>type(scope)!: English summary</code>。type 可用 <code>feat</code> 新功能、<code>fix</code> 修錯、<code>docs</code> 文件、<code>refactor</code> 重構、<code>test</code> 測試、<code>build</code> 建置／相依、<code>ci</code> 自動化、<code>chore</code> 維護、<code>revert</code> 撤回；scope 與 <code>!</code> 可省略。版本意圖為 <code>feat</code>＝minor、<code>fix</code>／<code>revert</code>＝patch、<code>!</code>＝breaking／major，其餘不主動升版。</li>
+<li>工作 Label 與 Milestone 要和 Issue 一致；PR 作者必須列為負責人。</li>
+<li>Milestone 工作進 <code>dev/m&lt;Milestone&gt;-*</code>；一般獨立工作進 <code>dev/next</code>。</li>
+<li>main 前進後，以 <code>sync/main-to-*</code> PR 更新仍在開發的 dev 分支，不直接 push。</li>
+<li>只有明確標示的 standalone hotfix 可直接進 main；誰能合併由「規則治理」決定。</li>
+</ul>
+</div>
+</details>
+</div>
+
+
+</section>
+
+<section class="slide markdown-slide legacy-slide decision-slide" id="supply" data-content-key="supply" data-track="supply" aria-label="風險立即看見，升版不搶第一天">
+  <aside class="journey-rail" aria-label="簡報目錄">
+  <h3>使用公版</h3>
+  <ol class="journey-use">
+    <li class="journey-item priority">
+      <a href="#capability"><span>能力／導入</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#flow"><span>CI/CD 流程</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#files"><span>檔案地圖</span></a>
+    </li>
+  </ol>
+  <h3>開發與維護</h3>
+  <ol class="journey-main">
+    <li class="journey-item priority">
+      <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
+    </li>
+    <li class="journey-item priority active" aria-current="step">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
+    </li>
+    <li class="journey-item best">
+      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
+    </li>
+  </ol>
+  <h3>公版管理</h3>
+  <ol class="journey-support">
+    <li class="journey-item priority">
+      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
+    </li>
+    <li class="journey-item priority">
+      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
+    </li>
+    <li class="journey-item best">
+      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
+    </li>
+  </ol>
+  <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
+  <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
+</aside>
+
+  <header class="basic-header">
+    <span class="selection-sequence">步驟 04</span>
     <h2>風險立即看見，升版不搶第一天</h2>
     <p class="subtitle">未知惡意新版、已公開漏洞與成品內容是三種不同問題。</p>
   </header>
 
 <div class="legacy-content">
       <header>
-        <h2>步驟 5｜<span class="accent">風險立即看見，升版不搶第一天</span></h2>
+        <h2>步驟 4｜<span class="accent">風險立即看見，升版不搶第一天</span></h2>
         <p class="subtitle"><strong>基本導入。</strong>安全、檔案證據與「版本能否安裝」是不同問題；依賴更新也是日常維護的一環。</p>
       </header>
       <p class="context-line"><strong>問題與目的｜</strong>第三方套件出現漏洞時要立刻知道；一般新版則先等三天，避免成為供應鏈攻擊最早一批受害者。</p>
@@ -3095,49 +3113,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item active best" aria-current="step">
+    <li class="journey-item best active" aria-current="step">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -3161,7 +3179,7 @@ html[data-detail-level="simple"] .detail-panel {
       <p class="context-line"><strong>設計流程｜</strong>Issue PR 只宣告 patch／minor／major／no-release 意圖；Milestone 完成、<code>dev/next</code> 固定窗口、isolated canary 或 hotfix 才形成 release 邊界，整批取最高意圖，全部 no-release 就略過。</p>
       <div class="decision-strip">
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不為版本號另加一套平台</h3><ul><li><strong>Changesets：</strong>適合 npm workspace；CI-only／Python 案會多背 Node 設定</li><li><strong>Nx release：</strong>適合既有 Nx 大型 workspace；本案只需一個 release unit</li><li><strong>profile 各自編號：</strong>會增加相依矩陣與升級對版成本</li></ul></article>
-        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">promotion-gated adaptive release</span>＋單一 SemVer</span></summary><div class="package-health release-policy-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜持續維護。</p><p><strong>來源證據：</strong>release-source 先核對 promotion 的 full <code>verify</code>、canary state、納入 PR 與 main tree identity；非 promotion／hotfix 的 main commit 只能 verification-only。</p><p><strong>三態能力：</strong><code>allowed</code>、<code>blocked</code>、<code>unknown</code> 分別記錄 Actions PR、contents、Release 與 dispatch；403、409、無 remote 或無管理權都不會被誤當 allowed。</p><table class="release-policy-matrix" aria-label="Release policy capability matrix"><thead><tr><th>前提</th><th>選擇</th><th>行為與保證</th><th>限制與 fallback</th></tr></thead><tbody><tr><td>來源有效且四項 allowed</td><td>Release PR</td><td>可審查版本／changelog；合併後帶 source run ID dispatch 成品</td><td>任一能力漂移就不再選用</td></tr><tr><td>來源有效；PR blocked／unknown；其餘 allowed</td><td>Direct</td><td>只為已版本化且含 CHANGELOG 的最新 main 配置 tag；亂序 run no-op</td><td>缺少版本 commit 時轉為 verification-only，需維護者先開 PR</td></tr><tr><td>來源無效或任一交付寫入非 allowed</td><td>Verification only</td><td>保存 machine-readable artifact</td><td>不建立 release；後續 run 重新判斷</td></tr></tbody></table><p class="reference">Ref. <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer">GitHub workflow trigger docs</a> and live workflow runs, accessed August 24, 2026.</p></div></details><p><strong>收斂：</strong>direct mode 重讀 default branch head，只有最新 main commit 且 source、tag、CHANGELOG、promotion evidence 一致時才能交付；concurrency 不必保證 FIFO。<br><strong>成品：</strong>workflow 不監聽任意 tag push，只接受 release-source run ID；tag checkout 產生 digest、SBOM／attestation，不重跑 promotion 已完成的 full runtime CI。</p></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><p><strong>Milestone 結案：</strong>發版成功並補齊交付證據後，關閉生命週期追蹤 Issue 與 Milestone；提前終止時先寫明原因，並移轉或取消未完成 Issue。</p><details class="package-disclosure"><summary><span><span class="tech-name">promotion-gated adaptive release</span>＋單一 SemVer</span></summary><div class="package-health release-policy-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜持續維護。</p><p><strong>來源證據：</strong>release-source 先核對 promotion 的 full <code>verify</code>、canary state、納入 PR 與 main tree identity；非 promotion／hotfix 的 main commit 只能 verification-only。</p><p><strong>三態能力：</strong><code>allowed</code>、<code>blocked</code>、<code>unknown</code> 分別記錄 Actions PR、contents、Release 與 dispatch；403、409、無 remote 或無管理權都不會被誤當 allowed。</p><table class="release-policy-matrix" aria-label="Release policy capability matrix"><thead><tr><th>前提</th><th>選擇</th><th>行為與保證</th><th>限制與 fallback</th></tr></thead><tbody><tr><td>來源有效且四項 allowed</td><td>Release PR</td><td>可審查版本／changelog；合併後帶 source run ID dispatch 成品</td><td>任一能力漂移就不再選用</td></tr><tr><td>來源有效；PR blocked／unknown；其餘 allowed</td><td>Direct</td><td>只為已版本化且含 CHANGELOG 的最新 main 配置 tag；亂序 run no-op</td><td>缺少版本 commit 時轉為 verification-only，需維護者先開 PR</td></tr><tr><td>來源無效或任一交付寫入非 allowed</td><td>Verification only</td><td>保存 machine-readable artifact</td><td>不建立 release；後續 run 重新判斷</td></tr></tbody></table><p class="reference">Ref. <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer">GitHub workflow trigger docs</a> and live workflow runs, accessed August 24, 2026.</p></div></details><p><strong>收斂：</strong>direct mode 重讀 default branch head，只有最新 main commit 且 source、tag、CHANGELOG、promotion evidence 一致時才能交付；concurrency 不必保證 FIFO。<br><strong>成品：</strong>workflow 不監聽任意 tag push，只接受 release-source run ID；tag checkout 產生 digest、SBOM／attestation，不重跑 promotion 已完成的 full runtime CI。</p></article>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>promotion 與 release-source：</strong><code>promotion.yml</code>＋<code>scripts/promotion_gate.py</code>＋<code>release-please.yml</code></li><li><strong>能力與版本配置：</strong><code>scripts/release_policy.py</code>；CLI 做唯讀 preflight，workflow 每次重新偵測</li><li><strong>查詢證據：</strong>promotion／release-source artifact 保留 90 天，PR、Issue、Milestone、commit 與 tag 作長期索引</li></ul></aside>
       <aside class="selection-note"><strong>目前邊界</strong><span>不要求導入者建立 PAT、GitHub App 或修改無權控制的組織政策；若 contents、Release 或 dispatch 無法確認，workflow 只完成驗證並明確告警，不宣稱已自動發版。Python 排程升版 App 仍是另一個選配身份。</span></aside>
@@ -3178,7 +3196,10 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 
 
-<div class="markdown-body basic-summary"><table>
+<div class="markdown-body basic-summary"><ul>
+<li>**Milestone 結案：**發版成功並補齊交付證據後，關閉生命週期追蹤 Issue 與 Milestone；提前終止時先說明原因，並移轉或取消未完成 Issue。</li>
+</ul>
+<table>
 	<thead>
 			<tr>
 					<th>前提</th>
@@ -3222,49 +3243,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -3351,49 +3372,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -3447,49 +3468,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -3541,49 +3562,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item active best" aria-current="step">
+    <li class="journey-item best active" aria-current="step">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -3652,49 +3673,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -3804,49 +3825,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -3974,49 +3995,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -4037,8 +4058,9 @@ html[data-detail-level="simple"] .detail-panel {
   <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>整體接近</small>主要相似工具</button>
   <button id="similar-tools-tab-work" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>工作定義</button>
   <button id="similar-tools-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI 規範</button>
-  <button id="similar-tools-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>驗證＋CI</button>
-  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="4"><small>Journey 08</small>模板升級</button>
+  <button id="similar-tools-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>驗證／CI</button>
+  <button id="similar-tools-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-pr" data-similar-tools-tab="4"><small>Journey 05</small>PR／合併</button>
+  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="5"><small>Journey 08</small>模板升級</button>
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
   <div class="similar-tools-legend">
@@ -4074,7 +4096,7 @@ html[data-detail-level="simple"] .detail-panel {
           <td>1,207</td>
           <td>Agent-ready repository framework：把 AI 工作規則、持久計畫、驗證與安全更新放進 repo。</td>
           <td><ul><li>Repository Harness 偏向替既有 repo 加上 agent 工作框架與安全更新機制。</li><li>CSARC 另外提供可生成的技術 profile、GitHub 治理、交付與版本政策。</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag full" title="08: 完全符合">08</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="04: 部分符合">04</span><span class="coverage-tag partial" title="07: 部分符合">07</span><span class="coverage-tag partial" title="10: 部分符合">10</span>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag full" title="08: 完全符合">08</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="05: 部分符合">05</span><span class="coverage-tag partial" title="07: 部分符合">07</span><span class="coverage-tag partial" title="10: 部分符合">10</span>
           </div></td>
         </tr>
       </tbody>
@@ -4083,13 +4105,13 @@ html[data-detail-level="simple"] .detail-panel {
   <p class="similar-tools-note"><strong>判斷標準：</strong>所有工具都須在擷取日前 6 個月內有發版；主要工具至少涵蓋 5 個 Journey，依完全、部分符合數量排序；其他工具至少 1,000 Stars。Journey tag 依 01–10 排列。</p>
 </div>
 <div id="similar-tools-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-work" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">只比較不同 repo 如何保存工作依據、把定義轉成 repo 狀態、讓變更成為正式，以及依工作規模決定文件深度</span><span class="capture-date">Stars 擷取日｜2026-08-31</span></div>
+  <div class="similar-tools-legend"><span class="reference">只比較需求記在哪裡、單項與群組如何表示、Milestone 如何取得開工同意，以及工作變大時何時增加文件</span><span class="capture-date">Stars 擷取日｜2026-08-31</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="工作定義">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">功能分野／具體做法</th><th scope="col">主要相似工具</th><th scope="col">其他生態圈工具</th></tr></thead>
       <tbody>
         <tr>
-          <th scope="row"><strong>工作依據放在哪裡</strong><span>比較需求、決策、設定與驗證證據存在哪裡，以及哪一份資料算正式。<br><br><b>CSARC：</b>GitHub Issue 劃定執行範圍；main 上核准的 spec／ADR 保存長期契約，程式與測試證明實作，未提交內容不算正式。</span></th>
+          <th scope="row"><strong>要做的事記在哪裡</strong><span>比較需求、完成條件與長期決策分別保存在哪裡，以及從哪份資料開始工作。<br><br><b>CSARC：</b>GitHub Issue 是每項工作的入口；核准的 spec／ADR 只保存需要長期維持的決策，不以聊天紀錄或未提交內容取代 Issue。</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">.projenrc project model</a>：.projenrc 是唯一手寫真相，其他專案檔由 synth 產生。</span></li>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：repo 同時保存產品文件、決策、plan、程式與驗證證據。</span></li>
@@ -4104,29 +4126,22 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>定義如何變成 repo 狀態</strong><span>比較人直接改檔、由設定產生檔案，或由服務持續修正遠端狀態。<br><br><b>CSARC：</b>copier.yml、template/ 與 profiles/catalog.yaml 宣告生成基線；scripts/sync-paired-files.sh 同步 root／template 配對檔，產品檔仍由下游 repo 持有。</span></th>
+          <th scope="row"><strong>單項與群組如何表示</strong><span>比較工作類別、Parent／Sub-issue、Dependency 與 Milestone 各自表達什麼關係。<br><br><b>CSARC：</b>Feature／Task／Bug 表示工作性質；Parent／Sub-issue 表示成果拆分；Dependency 表示先後阻擋；Milestone 只集合有共同目標、期限或交付批次的 Issue。</span></th>
           <td><ul>
-              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：用 typed components 宣告期望專案，再由 synth 收斂檔案。</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active plan</a>：跨 session、有依賴或高風險的工作才建立 active plan；它管理執行步驟，但不另外定義 GitHub Issue Type、Parent 或 Milestone。</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entity 與 Software Template 宣告 portal 中的元件和建立流程。</span></li>
-              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。</span></li>
-              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：Recipe 宣告 semantic transformation，再由 parser／visitor 套用。</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：一個 feature 依序拆成規格、計畫與 tasks；適合大型功能，但不是 GitHub 原生 Parent、Dependency 與 Milestone 模型。</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,581</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task hierarchy</a>：以狀態、優先度與父子工作管理任務；資料保存在 Markdown，而不是 GitHub 原生 Issue 與 Milestone。</span></li>
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>進行中變更如何成為正式</strong><span>比較 branch、change 或設定 PR 在何時完成審查、合併與歸檔。<br><br><b>CSARC：</b>每項工作先有 Issue；type/&lt;issue&gt;-slug 分支的 PR 以 Closes #&lt;issue&gt; 連回範圍，合併 main 後才成為正式，新增範圍另開 Issue。</span></th>
+          <th scope="row"><strong>Milestone 如何取得開工同意</strong><span>比較批次開始前如何取得同意，以及尚未解決的反駁如何阻擋開工。<br><br><b>CSARC：</b>每個 Milestone 配一張生命週期追蹤 Issue；至少一位非提案者同意且沒有尚未解決的反駁才開始。</span></th>
           <td><ul>
-              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Anti-tamper build</a>：PR 同時修改 .projenrc 與重建結果，合併後才成為正式狀態。</span></li>
-              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active / completed plans</a>：跨 session 工作先進 active plan，完成後才歸檔。</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Human checkpoints</a>：高風險決策可設人類檢查點，但沒有要求另一位非提案者先留言同意的 Milestone 門檻。</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">BMad Delivery Loop</a>：artifacts 在 clarify → plan → build／verify 之間逐步成熟。</span></li>
-              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Change workflow</a>：propose → apply → archive 後，才把內容併回正式規格。</span></li>
-              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature workflow</a>：artifacts 在 feature branch 演進，最後仍交給 Git／PR 接受。</span></li>
-              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Finishing a development branch</a>：完成驗證後，明確選擇 PR、合併、保留或捨棄分支。</span></li>
-              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Update diff</a>：更新先產生 Git diff，解衝突並合併後才接受。</span></li>
-              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,581</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task workflow</a>：任務檔隨分支與 PR 變更，合併後成為團隊共享狀態。</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Proposal review</a>：change proposal 可先審查再 apply，但不提供 Milestone 的獨立同意與反駁門檻。</span></li>
           </ul></td>
         </tr>
         <tr>
@@ -4139,7 +4154,6 @@ html[data-detail-level="simple"] .detail-panel {
               <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Change proposal</a>：小修改可直接走 PR，大變更才建立完整 proposal。</span></li>
               <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md" target="_blank" rel="noreferrer">Agentic bugfix workflow</a>：完整流程最適合大型 feature，小修可走較短路徑。</span></li>
               <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Skill-triggered workflow</a>：依任務需要啟用 brainstorming、planning、TDD 或 review，不把每個步驟硬套到所有工作。</span></li>
-              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,581</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task hierarchy</a>：以狀態、優先度與父子工作管理大小不同的任務。</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -4206,7 +4220,7 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 <div id="similar-tools-panel-contract" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-contract" data-similar-tools-panel hidden>
   <div class="similar-tools-legend"><span class="reference">只比較驗證邏輯放在哪裡、如何縮小本次範圍、怎樣證明完成，以及模板產物由誰驗證</span><span class="capture-date">Stars 擷取日｜2026-08-31</span></div>
-  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="驗證＋CI">
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="驗證／CI">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">功能分野／具體做法</th><th scope="col">主要相似工具</th><th scope="col">其他生態圈工具</th></tr></thead>
       <tbody>
@@ -4253,12 +4267,84 @@ html[data-detail-level="simple"] .detail-panel {
     </table>
   </div>
 </div>
+<div id="similar-tools-panel-pr" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-pr" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">只比較一張 PR 包含多少工作、如何分批進 main、何時可合併，以及基準分支前進後如何同步</span><span class="capture-date">Stars 擷取日｜2026-08-31</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="PR／合併">
+    <table class="similar-tools-matrix similar-tools-philosophy-matrix">
+      <thead><tr><th scope="col">功能分野／具體做法</th><th scope="col">主要相似工具</th><th scope="col">其他生態圈工具</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>一張 PR 包含多少工作</strong><span>比較一張 PR 對應單一可驗收工作、相依 PR 堆疊，或一次提交整批變更。<br><br><b>CSARC：</b>Issue PR 對應一張仍開啟、完成條件已勾選的 Issue；新增範圍另開 Issue，Milestone 只代表交付批次。</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active plan &#43; branch</a>：一項 active plan 使用一條隔離分支；小改則可不建立持久 plan，避免每張 PR 都背負完整規格。</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Sapling<span class="tool-meta"><span>0.2.20260811-150444&#43;8fb02b32 (2026-08-11)</span><span>★ 6,997</span></span></strong><span class="tool-comparison-detail"><a href="https://sapling-scm.com/docs/overview/stacks" target="_blank" rel="noreferrer">Commit stacks</a>：把相依工作保存為一串可 individually review 的 commits，不必先壓成一個大型變更。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>工作如何分批進 main</strong><span>比較每張 PR 直接進 main、先進長期整合分支，或以短期堆疊維持相依順序。<br><br><b>CSARC：</b>Issue PR 先進對應 dev 分支；一批工作完成後，發版 PR 才把已驗證結果送進 main。</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>Git Town<span class="tool-meta"><span>v24.0.0 (2026-07-23)</span><span>★ 3,367</span></span></strong><span class="tool-comparison-detail"><a href="https://www.git-town.com/stacked-changes" target="_blank" rel="noreferrer">Stacked Changes</a>：每條 feature branch 可基於前一條分支形成 stack，讓相依改動仍拆成較小的 PR。</span></li>
+              <li><strong>Sapling<span class="tool-meta"><span>0.2.20260811-150444&#43;8fb02b32 (2026-08-11)</span><span>★ 6,997</span></span></strong><span class="tool-comparison-detail"><a href="https://sapling-scm.com/docs/git/github" target="_blank" rel="noreferrer">GitHub integration</a>：將 stack 對應為 GitHub PR 並更新相依關係；適合深度堆疊，但需要 Sapling 工作模型。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>何時可以合併</strong><span>比較只靠人工判斷、依 checks／review 合併，或由 merge queue 以最新基準重驗。<br><br><b>CSARC：</b>PR policy 與 CI 先產生證據；合併工具再把授權與檢查綁到精確 head SHA。Free private 目前沒有可強制的 Ruleset，因此仍需人工遵守。</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/integrations/github/" target="_blank" rel="noreferrer">Tasks &#43; GitHub workflows</a>：由 project model 產生 PR workflows 並執行既有 tasks；是否允許合併仍交給 GitHub branch protection／Ruleset。</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/scripts/validate-premerge.sh" target="_blank" rel="noreferrer">Pre-Merge Contract</a>：合併前以同一支本機腳本驗證必要契約；它提供證據，但不另外定義多層 delivery branch。</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers/blob/main/skills/finishing-a-development-branch/SKILL.md" target="_blank" rel="noreferrer">Finishing a Development Branch</a>：測試通過後才讓人明確選擇 merge、PR、保留或捨棄分支；它是 agent 工作步驟，不是 GitHub 強制門禁。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>基準前進後如何同步</strong><span>比較直接 push、rebase／stack restack，以及用可審查的同步 PR 處理衝突。<br><br><b>CSARC：</b>main 前進後，以 sync/main-to-* PR 更新仍在開發的 dev 分支；衝突由該分支 owner 解決，不 force-push 或直接改寫目標分支。</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>Git Town<span class="tool-meta"><span>v24.0.0 (2026-07-23)</span><span>★ 3,367</span></span></strong><span class="tool-comparison-detail"><a href="https://www.git-town.com/commands/sync" target="_blank" rel="noreferrer">git town sync</a>：把 main、parent 與 child branches 依 lineage 更新，衝突停在本機交由作者處理。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>進行中變更如何成為正式</strong><span>比較 branch、change 或設定 PR 在何時完成審查、合併與歸檔。<br><br><b>CSARC：</b>工作 PR 以 Closes #&lt;issue&gt; 連回範圍，合併 dev 後結束單項工作；發版 PR 再把已驗證批次送進 main，成為正式交付。</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Anti-tamper build</a>：PR 同時修改 .projenrc 與重建結果，合併後才成為正式狀態。</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active / completed plans</a>：跨 session 工作先進 active plan，完成後才歸檔。</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">BMad Delivery Loop</a>：artifacts 在 clarify → plan → build／verify 之間逐步成熟。</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Change workflow</a>：propose → apply → archive 後，才把內容併回正式規格。</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature workflow</a>：artifacts 在 feature branch 演進，最後仍交給 Git／PR 接受。</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Finishing a development branch</a>：完成驗證後，明確選擇 PR、合併、保留或捨棄分支。</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Update diff</a>：更新先產生 Git diff，解衝突並合併後才接受。</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,581</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task workflow</a>：任務檔隨分支與 PR 變更，合併後成為團隊共享狀態。</span></li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 <div id="similar-tools-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-template-upgrade" data-similar-tools-panel hidden>
   <div class="similar-tools-legend"><span class="reference">只比較既有 repo 如何接收新版模板、規則或 recipe，以及衝突由誰處理</span><span class="capture-date">Stars 擷取日｜2026-08-31</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="模板升級">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">功能分野／具體做法</th><th scope="col">主要相似工具</th><th scope="col">其他生態圈工具</th></tr></thead>
       <tbody>
+        <tr>
+          <th scope="row"><strong>定義如何變成 repo 狀態</strong><span>比較人直接改檔、由設定產生檔案，或由服務持續修正遠端狀態。<br><br><b>CSARC：</b>copier.yml、template/ 與 profiles/catalog.yaml 宣告生成基線；scripts/sync-paired-files.sh 同步 root／template 配對檔，產品檔仍由下游 repo 持有。</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：用 typed components 宣告期望專案，再由 synth 收斂檔案。</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entity 與 Software Template 宣告 portal 中的元件和建立流程。</span></li>
+              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：Recipe 宣告 semantic transformation，再由 parser／visitor 套用。</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。</span></li>
+          </ul></td>
+        </tr>
         <tr>
           <th scope="row"><strong>既有 repo 如何接收新版</strong><span>比較新版模板、規則或 recipe 如何進入既有 repo，以及衝突由誰處理。<br><br><b>CSARC：</b>Copier answers 記錄來源與版本；既有案執行更新後以 PR 審查 diff／衝突，並驗證產品路徑未被覆寫。</span></th>
           <td><ul>
@@ -4267,8 +4353,8 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
           <td><ul>
               <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：擅長建立新元件；既有 repo 遷移仍要另接工具。</span></li>
-              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：記住模板來源與 answers，讓既有 repo 接收新版模板。</span></li>
               <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：不用文字模板覆蓋檔案，而是直接執行跨版本語意遷移。</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：記住模板來源與 answers，讓既有 repo 接收新版模板。</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -4284,49 +4370,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -4347,11 +4433,13 @@ html[data-detail-level="simple"] .detail-panel {
     <button id="testing-tab-duration" type="button" role="tab" aria-selected="true" aria-controls="testing-panel-duration" data-similar-tools-tab="0"><small>總覽</small>預計執行時間</button>
     <button id="testing-tab-work" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>工作定義</button>
     <button id="testing-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI 規範</button>
-    <button id="testing-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>驗證＋CI</button>
+    <button id="testing-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>驗證／CI</button>
+    <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="4"><small>Journey 05</small>PR／合併</button>
+    <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="5"><small>Journey 06</small>版本／交付</button>
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
     <div class="similar-tools-testing-intro">
-      <strong>兩種 PR 的預計執行時間</strong><span>每格加總一次 PR 預計使用的 runner minutes；不含排隊，並行 job 仍分別計算。首次下載相依或 cache miss 可能較久。</span>
+      <strong>兩種 PR 的預計執行時間</strong><span>每格加總一次 PR 預計使用的 runner minutes；同一個 job 內的項目會標示已計入，不重複相加。不含排隊，首次下載相依或 cache miss 可能較久。</span>
       <p>Runner｜0 steps 表示程式尚未執行，先檢查 runner、帳務與 GitHub 狀態。</p>
       <p>封存｜archive/ci-cd/ 只供參考；恢復前逐條確認目的、觸發、權限、timeout 與本機入口。</p>
     </div>
@@ -4361,13 +4449,13 @@ html[data-detail-level="simple"] .detail-panel {
         <tbody>
           <tr>
             <th scope="row"><strong>Issue PR（工作分支 → dev）</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>工作定義：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>併入驗證，不另計</li><li><strong>驗證＋CI：</strong>docs &lt; 1 分鐘；fast 2–5 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–7 分鐘</p></td>
-            <td><ul class="testing-duration-list"><li><strong>工作定義：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>併入驗證，不另計</li><li><strong>驗證＋CI：</strong>docs &lt; 1 分鐘；fast 3–6 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–8 分鐘</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR／合併：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>驗證／CI：</strong>docs &lt; 1 分鐘；fast 2–5 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–7 分鐘</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR／合併：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>驗證／CI：</strong>docs &lt; 1 分鐘；fast 3–6 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–8 分鐘</p></td>
           </tr>
           <tr>
             <th scope="row"><strong>發版 PR（dev → main）</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>工作定義：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>併入完整驗證，不另計</li><li><strong>驗證＋CI：</strong>full 5–15 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–17 分鐘</p></td>
-            <td><ul class="testing-duration-list"><li><strong>工作定義：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>併入完整驗證，不另計</li><li><strong>驗證＋CI：</strong>full 8–12 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 9–14 分鐘</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR／合併：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>驗證／CI：</strong>full 5–15 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–17 分鐘</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR／合併：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>驗證／CI：</strong>full 8–12 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 9–14 分鐘</p></td>
           </tr>
         </tbody>
       </table>
@@ -4375,7 +4463,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 01／最小測試契約</strong><span>一般 repo 只需要 ./scripts/verify；repo-template 只在 promotion 額外驗證一次交付出去的版本。</span>
+    <strong>Journey 01／最小測試契約</strong><span>只驗證 Issue 如何成為可執行工作，以及 Milestone 是否取得開工同意；PR 合併與 Milestone 結案分別列在 Journey 05、06。</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01／最小測試契約">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
@@ -4385,56 +4473,33 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Issue 工作邊界</strong><span>標題、類型、assignee、label 與 duplicate 狀態要能收斂。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/issue-triage.yml</code>／<code>classify</code><span>Trigger：Issue opened／edited／reopened／closed · Timeout：5 min</span></li></ul></div>
+              <strong>工作開始前</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-issue-triage</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/issue-triage.yml</code>／<code>classify</code><span>Trigger：Issue opened／edited／reopened／closed · Timeout：5 min</span></li></ul></div>
             </li>
           </ul></td>
-          <td><ul class="testing-stage-list">
-          </ul></td>
-        </tr>
-        <tr>
-          <th scope="row"><strong>PR 與 Issue 可追溯性</strong><span>PR title、分支、Closes／Fixes、開啟中的 Issue、checkbox 與 Milestone 必須一致。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR 開啟、內容／commit／metadata 變更與 merge group · Timeout：10 min</span></li></ul></div>
+              <strong>工作結束時</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_item_forms.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>repo-template 額外確認產生出去的 Issue 表單仍符合定義。</span></div>
             </li>
-          </ul></td>
-          <td><ul class="testing-stage-list">
           </ul></td>
         </tr>
         <tr>
           <th scope="row"><strong>Spec 契約與 Issue 同步</strong><span>驗證必要章節、acceptance criteria、穩定 spec id 與同步的冪等行為。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_spec_to_issue.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/spec-to-issue.yml</code>／<code>sync</code><span>Trigger：Spec／同步程式進入 main 或 dev；可手動執行 · Timeout：10 min</span></li></ul></div>
+              <strong>工作開始前</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_spec_to_issue.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/spec-to-issue.yml</code>／<code>sync</code><span>Trigger：Spec／同步程式進入 main 或 dev；可手動執行 · Timeout：10 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Milestone 完成條件</strong><span>due date、open Issue 與 acceptance checkbox 共同決定關閉或重開。</span></th>
+          <th scope="row"><strong>Milestone 啟動門檻</strong><span>生命週期追蹤 Issue 保存同意與反駁；至少一位非提案者同意且沒有未解決反駁才開始。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：Issue closed／reopened／milestoned · Timeout：5 min</span></li></ul></div>
+              <strong>工作開始前</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_milestone_approval.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/400" target="_blank" rel="noreferrer">待 #400</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>既有 milestone-lifecycle Action 尚未驗證留言中的同意與反駁；由 #400 補上共用 validator。</span></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
-          </ul></td>
-        </tr>
-        <tr>
-          <th scope="row"><strong>Journey 01 整體回歸</strong><span>用一個入口組合必要測試，避免本機與未來 Action 維護兩份清單。</span></th>
-          <td><ul class="testing-stage-list">
-            <li>
-              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>不另設測試 Action；恢復後的 policy workflow 只呼叫共用程式。</span></div>
-            </li>
-            <li>
-              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify promotion</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>Journey 01 不恢復 full matrix 或發布流程。</span></div>
-            </li>
-          </ul></td>
-          <td><ul class="testing-stage-list">
-            <li>
-              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_item_forms.py</code></li><li><code>tests/test_template_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>不另設 repo-template Action；只在同一個 promotion 入口多跑交付測試。</span></div>
-            </li>
           </ul></td>
         </tr>
       </tbody>
@@ -4527,6 +4592,82 @@ html[data-detail-level="simple"] .detail-panel {
     </table>
   </div>
   </div>
+  <div id="testing-panel-pr" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-pr" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 05／兩階段 PR</strong><span>工作 PR 先驗證單一 Issue 與目的分支；發版 PR 再驗證完整批次。合併授權由規則治理統一處理。</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 05／兩階段 PR">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>PR 資料與目的分支</strong><span>標題、Issue、label、Milestone 與目的分支必須互相一致。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR 開啟、內容／commit／metadata 變更 · Timeout：10 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR（工作分支 → dev）</strong><span>使用相同 validator；repo-template 不維護另一套 PR 規則。</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>候選內容包含最新基準</strong><span>工作 PR 必須沿可追溯的 dev 鏈回到 main；同步 PR 只能把精確的 main 更新帶回目標 dev。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_delivery_sync.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：每次工作 PR 與 sync PR 更新 · Timeout：10 min</span></li></ul></div>
+            </li>
+            <li>
+              <strong>發版 PR（dev → main）</strong><span>發版 PR 建立與 main 前進後的跨分支同步仍是人工 PR；對應 workflows 尚在 archive。</span>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>工作 PR 合併後結束 Issue</strong><span>工作 PR 成功進入正確 dev 分支後，才結束同號 Issue；發版 PR 不重複關單。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_pr_closure.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/401" target="_blank" rel="noreferrer">待 #401</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>close-work</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/401" target="_blank" rel="noreferrer">待 #401</a><span>Trigger：工作 PR merged／closed · Timeout：5 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR（工作分支 → dev）</strong><span>使用相同關單程式；repo-template 不維護另一套規則。</span>
+            </li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
+  <div id="testing-panel-delivery" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-delivery" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 06／交付與結案</strong><span>發版成功並留下交付證據後才結束 Milestone；提前終止則先處理未完成工作。</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 06／交付與結案">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>Milestone 結案</strong><span>正常完成時確認發版與交付證據；提前終止時先記錄原因，並移轉或取消未完成 Issue。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>發版後</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li><li><code>tests/test_milestone_closure.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/400" target="_blank" rel="noreferrer">待 #400</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：生命週期追蹤 Issue closed／reopened／milestoned · Timeout：5 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>發版後</strong><span>使用相同結案程式；repo-template 不維護另一套 Milestone 規則。</span>
+            </li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
 </div>
 
 
@@ -4536,49 +4677,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -4649,49 +4790,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -4785,49 +4926,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -4936,49 +5077,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -5077,49 +5218,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -5190,49 +5331,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>能力／導入</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD 流程</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>檔案地圖</span></a>
     </li>
   </ol>
   <h3>開發與維護</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
+    <li class="journey-item priority">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
+    <li class="journey-item priority">
+      <a href="#supply"><span class="journey-code">04</span><span>依賴安全</span></a>
     </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    <li class="journey-item priority">
+      <a href="#pr"><span class="journey-code">05</span><span>PR／合併</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
     </li>
   </ol>
   <h3>公版管理</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
     </li>
   </ol>
@@ -5320,8 +5461,11 @@ html[data-detail-level="simple"] .detail-panel {
   <div class="progress" aria-hidden="true" hidden><span id="bar"></span></div>
   <script>
     (() => {
+      const pr = document.querySelector('[data-track="pr"]');
+      const supply = document.querySelector('[data-track="supply"]');
       const testing = document.querySelector("#testing");
       const bridge = document.querySelector("#bridge");
+      if (pr && supply) pr.before(supply);
       if (testing && bridge) testing.after(bridge);
     })();
   </script>
@@ -5733,9 +5877,9 @@ tracking: none   # Keep the current contract only
 python scripts/spec_to_issue.py validate`
         },
         {
-          title: '交付批次的說明格式',
-          goal: 'Milestone 只在多張工作需要同一期限、整合或發版時建立，並使用一致的可驗收說明。',
-          summary: '定義多張工作同批交付時，Milestone 要寫哪些驗收內容。',
+          title: 'Milestone 的啟動門檻',
+          goal: '每個 Milestone 使用一張生命週期追蹤 Issue，集中保存同意與反駁。',
+          summary: '至少一位非提案者同意，且沒有尚未解決的反駁，工作才開始；Milestone 結案方式由「版本／交付」定義。',
           file: 'docs/milestone-description.md',
           code: `## Problem
 ## Outcome
@@ -5743,6 +5887,9 @@ python scripts/spec_to_issue.py validate`
 - [ ] Observable result
 ## Plan
 - #123 — Independently deliverable work
+## Kickoff decision
+- Approval: one non-proposer agreement
+- Objections: none unresolved
 ## Out of scope
 ## Verification
 ## References`
@@ -5750,49 +5897,38 @@ python scripts/spec_to_issue.py validate`
       ],
       pr: [
         {
-          title: '選定的保護分支要求一位核准、CODEOWNER 與必要檢查',
-          goal: '新提交會讓舊核准失效，不能直接推送或 force push。',
-          summary: '要求一位核准、CODEOWNER、最後推送者以外的人核准，並解完 review thread；新 commit 會撤銷舊核准。',
-          file: 'policies/rulesets.json',
-          code: `{
-  "type": "pull_request",
-  "parameters": {
-    "required_approving_review_count": 1,
-    "dismiss_stale_reviews_on_push": true,
-    "require_code_owner_review": true,
-    "require_last_push_approval": true,
-    "required_review_thread_resolution": true
-  }
-}`
-        },
-        {
-          title: '保留 reviewer 名單，目前人工指定審查者',
-          goal: 'Free private 先保留明確候選人；支援 Ruleset 時再把核准變成 merge gate。',
-          summary: 'CODEOWNERS 與 REVIEWERS 保存 owner 和 reviewer 候選；自動輪派 Action 位於 `archive/ci-cd/`，目前不會執行。',
-          file: '.github/CODEOWNERS＋.github/REVIEWERS',
-          code: `* {{ code_owner }}`
-        },
-        {
-          title: 'PR 同時核對標籤、Issue 編號、stack 來源與版本標題',
-          goal: '先有工作紀錄再改程式；標題仍是版本計算依據，內文可以用中文。',
-          summary: 'PR 至少選一個工作標籤；分支須為 `type/123-short-slug`，base 的 open PR 鏈須回到 main／dev，且連結 Issue 必須未結案、標題合格。',
-          file: '.github/workflows/pr-policy.yml＋scripts/test-pr-policy＋pull_request_template.md',
-          code: `^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+
-
-if printf '%s' "$PR_TITLE" | LC_ALL=C \
-  grep -q '[^ -~]'; then
-  echo "The PR body may be written in Chinese."
-  exit 1
-fi
-
+          title: 'PR 格式與工作關聯',
+          goal: '一張工作 PR 完成一張 Issue，合併後由 GitHub 關閉同一項工作。',
+          summary: '標題與目的分支符合規則；分類 Label 與 Milestone 必須和 Issue 相同，PR 作者必須列為 Assignee，內文使用 Closes #N 連回同號未結案 Issue。',
+          file: 'pull_request_template.md＋.github/workflows/pr-policy.yml＋scripts/validate-pr-policy',
+          code: `title: feat(scope): English summary
 branch: feat/123-short-slug
-base: feat/122-parent -> main
 body: Closes #123
 label: enhancement
+assignee: PR author
+milestone: same as Issue #123`
+        },
+        {
+          title: '工作 PR、發版 PR 與同步 PR',
+          goal: '工作先進 dev，完整批次再進 main；main 更新後以 PR 同步，不直接改寫開發分支。',
+          summary: 'validator 會檢查工作 PR 的目的分支與堆疊鏈；發版 PR 建立及 main-to-dev 同步目前仍由維運者手動發起。',
+          file: 'copier.yml＋.csarc/profile.json＋scripts/delivery_sync.py',
+          code: `work:    type/123-short-slug -> dev/m8-*
+release: dev/m8-* -> main
+sync:    sync/main-to-m8-*-<sha> -> dev/m8-*`
+        },
+        {
+          title: '審查與合併門檻',
+          goal: 'PR policy 與 CI 提供證據；誰可以合併及哪些例外只由規則治理定義。',
+          summary: 'CODEOWNERS、REVIEWERS 與 Ruleset policy 保存在 repo；目前 Free private 無法強制 Ruleset，自動輪派與合併工具也尚未恢復，維運者須人工指定審查者與合併。',
+          file: '.github/CODEOWNERS＋.github/REVIEWERS＋policies/rulesets.json',
+          code: `desired reviews: 1
+require CODEOWNER: true
+dismiss stale reviews: true
+resolve review threads: true
 
-## Purpose
-## Checklist
-## Supplement`
+# Run before relying on enforcement
+./scripts/apply-repository-settings.sh check`
         }
       ],
       ci: [
@@ -5964,6 +6100,21 @@ acknowledgement window. -->`
         }
       ],
       deploy: [
+        {
+          title: '發版完成後結束 Milestone',
+          goal: '發版成功並留下交付證據後，才關閉生命週期追蹤 Issue 與 Milestone。',
+          summary: '正常完成要連回發版與驗證證據；提前終止要先說明原因，並移轉或取消所有未完成 Issue。',
+          file: 'docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/milestone-lifecycle.yml',
+          code: `normal completion:
+  release evidence: recorded
+  unfinished Issues: none
+  lifecycle Issue: completed
+
+early termination:
+  reason: recorded
+  unfinished Issues: moved or not planned
+  lifecycle Issue: not planned`
+        },
         {
           title: '待啟用｜GitHub App 只給 Python 排程升版用',
           goal: 'Client ID 放 Variable、private key 放 Secret；App 只建立 PR，不取得 Ruleset bypass，也不把長期憑證寫進 repo 或 .env。',

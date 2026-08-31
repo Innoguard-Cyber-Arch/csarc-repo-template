@@ -6,9 +6,9 @@
   (dict "key" "files" "tier" "priority" "group" "use" "zh" "檔案地圖" "en" "File map")
   (dict "key" "method" "code" "01" "tier" "priority" "group" "main" "zh" "工作定義" "en" "Work")
   (dict "key" "agents" "code" "02" "tier" "priority" "group" "main" "zh" "AI 規範" "en" "AI rules")
-  (dict "key" "contract" "code" "03" "tier" "priority" "group" "main" "zh" "驗證＋CI" "en" "Verify")
-  (dict "key" "pr" "code" "04" "tier" "priority" "group" "main" "zh" "PR／合併" "en" "PR merge")
-  (dict "key" "supply" "code" "05" "tier" "priority" "group" "main" "zh" "依賴安全" "en" "Supply")
+  (dict "key" "contract" "code" "03" "tier" "priority" "group" "main" "zh" "驗證／CI" "en" "Verify")
+  (dict "key" "supply" "code" "04" "tier" "priority" "group" "main" "zh" "依賴安全" "en" "Supply")
+  (dict "key" "pr" "code" "05" "tier" "priority" "group" "main" "zh" "PR／合併" "en" "PR merge")
   (dict "key" "deploy" "code" "06" "tier" "best" "group" "main" "zh" "版本／交付" "en" "Delivery")
   (dict "key" "governance" "code" "07" "tier" "priority" "group" "main" "zh" "規則治理" "en" "Governance")
   (dict "key" "template-release" "code" "08" "tier" "priority" "group" "support" "zh" "模板升級" "en" "Updates")
@@ -19,7 +19,7 @@
   <h3>{{ cond $english "Use template" "使用公版" }}</h3>
   <ol class="journey-use">
     {{- range where $items "group" "use" }}
-    <li class="journey-item{{ if eq $.Key .key }} active {{ .tier }}{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+    <li class="journey-item {{ .tier }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
       <a href="#{{ .key }}"><span>{{ index . $labelKey }}</span></a>
     </li>
     {{- end }}
@@ -27,7 +27,7 @@
   <h3>{{ cond $english "Workflow" "開發與維護" }}</h3>
   <ol class="journey-main">
     {{- range where $items "group" "main" }}
-    <li class="journey-item{{ if eq $.Key .key }} active {{ .tier }}{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+    <li class="journey-item {{ .tier }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
       <a href="#{{ .key }}"><span class="journey-code">{{ .code }}</span><span>{{ index . $labelKey }}</span></a>
     </li>
     {{- end }}
@@ -35,7 +35,7 @@
   <h3>{{ cond $english "Maintenance" "公版管理" }}</h3>
   <ol class="journey-support">
     {{- range where $items "group" "support" }}
-    <li class="journey-item{{ if eq $.Key .key }} active {{ .tier }}{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+    <li class="journey-item {{ .tier }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
       <a href="#{{ .key }}"><span class="journey-code">{{ .code }}</span><span>{{ index . $labelKey }}</span></a>
     </li>
     {{- end }}
