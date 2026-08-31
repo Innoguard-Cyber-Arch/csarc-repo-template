@@ -24,7 +24,7 @@ title_en = "Work and review"
 
   [[groups.terms]]
   key = "story-milestone"
-  term_zh_tw = "Story Milestone"
+  term_zh_tw = "故事里程碑"
   term_en = "Story Milestone"
   summary_zh_tw = "只有端到端成果需要時才建立、可獨立驗證的多 Issue story。"
   summary_en = "An independently verifiable multi-Issue story, created only for an end-to-end outcome."

@@ -30,10 +30,10 @@ uv run ruff format --check src scripts tests
 uv run ruff check src scripts tests
 uv run mypy
 uv run pytest -m "not large"
-./scripts/test-pr-policy
-./scripts/test-release-follow-up-gates
 ./scripts/test-issue-triage
 ./scripts/test-worktree-cleanup
+./scripts/test-pr-policy
+./scripts/test-release-follow-up-gates
 
 if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
   "$scopes" == *,shell,* ||

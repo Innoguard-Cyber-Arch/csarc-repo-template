@@ -26,10 +26,10 @@ if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
   ./scripts/lint-workflows-shell
 fi
 
-./scripts/test-pr-policy
-./scripts/test-release-follow-up-gates
 ./scripts/test-issue-triage
 ./scripts/test-worktree-cleanup
+./scripts/test-pr-policy
+./scripts/test-release-follow-up-gates
 {% if has_python -%}
 python_version="$UV_PYTHON"
 uv sync --locked --python "$python_version"

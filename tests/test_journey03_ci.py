@@ -8,6 +8,16 @@ import yaml
 REPO_ROOT = Path(__file__).parents[1]
 
 
+def direct_regression_commands(path: str) -> set[str]:
+    """Return standalone regressions invoked by one stage entry point."""
+    source = (REPO_ROOT / path).read_text(encoding="utf-8")
+    return {
+        line.strip()
+        for line in source.splitlines()
+        if line.strip().startswith("./scripts/test-")
+    }
+
+
 def load_yaml(path: Path) -> dict[str, Any]:
     """Load one mapping-only YAML document."""
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -65,3 +75,36 @@ def test_documentation_tier_validates_the_generated_site() -> None:
 
     assert "./scripts/build-decision-site --check" in root_fast
     assert "python3 scripts/render_site.py --check" in template_fast
+
+
+def test_release_verification_contains_issue_pr_regressions() -> None:
+    """Keep each release set a provable superset of its Issue PR set."""
+    root_issue = direct_regression_commands("scripts/verify-fast")
+    root_release = direct_regression_commands("scripts/verify-template.sh")
+    generated_issue = direct_regression_commands(
+        "template/scripts/verify-fast.jinja"
+    )
+    generated_release = direct_regression_commands(
+        "template/scripts/verify.jinja"
+    )
+
+    assert root_issue == generated_issue
+    assert root_issue <= root_release
+    assert generated_issue <= generated_release
+
+
+def test_full_pytest_includes_the_issue_pr_ai_contract() -> None:
+    """Run the unmarked AI-guidance tests in both repo-template stages."""
+    issue_entry = (REPO_ROOT / "scripts/verify-fast").read_text(
+        encoding="utf-8"
+    )
+    release_entry = (REPO_ROOT / "scripts/verify-template.sh").read_text(
+        encoding="utf-8"
+    )
+    ai_contract = (REPO_ROOT / "tests/test_ai_guidelines.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'uv run pytest -m "not large"' in issue_entry
+    assert "uv run pytest --cov=csarc_cli" in release_entry
+    assert "pytest.mark.large" not in ai_contract

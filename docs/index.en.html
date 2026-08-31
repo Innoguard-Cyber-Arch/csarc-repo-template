@@ -4028,6 +4028,9 @@ html[data-detail-level="simple"] .detail-panel {
             <li>
               <strong>Before work starts</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-issue-triage</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/issue-triage.yml</code>／<code>classify</code><span>Trigger：Issue opened, edited, reopened, or closed · Timeout：5 min</span></li></ul></div>
             </li>
+            <li>
+              <strong>When work ends</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-issue-triage</code></li></ul></div>
+            </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
@@ -4061,7 +4064,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-agents" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-agents" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 02 / Minimum verification contract</strong><span>A normal repository validates the AI-rule entrypoint and worktree cleanup. During promotion, repo-template also checks the emitted rules.</span>
+    <strong>Journey 02 / Minimum verification contract</strong><span>A normal repository validates safe worktree cleanup at both PR stages. repo-template also checks the AI-rule source and generated guidance.</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 02 / Minimum verification contract">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
@@ -4070,13 +4073,13 @@ html[data-detail-level="simple"] .detail-panel {
         <tr>
           <th scope="row"><strong>AI rules entrypoint</strong><span>Every agent reads one root policy, and generated content lists only commands the profile can actually run.</span></th>
           <td><ul class="testing-stage-list">
-            <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
-            </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
               <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
+            </li>
+            <li>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
             </li>
           </ul></td>
         </tr>
@@ -4085,6 +4088,9 @@ html[data-detail-level="simple"] .detail-panel {
           <td><ul class="testing-stage-list">
             <li>
               <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
+            </li>
+            <li>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4159,6 +4165,9 @@ html[data-detail-level="simple"] .detail-panel {
             <li>
               <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR opened or its content, commits, or metadata changes · Timeout：10 min</span></li></ul></div>
             </li>
+            <li>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div>
+            </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
@@ -4204,6 +4213,19 @@ html[data-detail-level="simple"] .detail-panel {
     <table class="similar-tools-matrix similar-tools-testing-matrix">
       <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
       <tbody>
+        <tr>
+          <th scope="row"><strong>Release follow-up rules</strong><span>Keep the regression now so future release restoration cannot lose the existing safety boundary. No dedicated Action is active.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Before release</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-release-follow-up-gates</code></li></ul></div>
+            </li>
+            <li>
+              <strong>After release</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-release-follow-up-gates</code></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
+        </tr>
         <tr>
           <th scope="row"><strong>Milestone closure</strong><span>Normal completion confirms release and delivery evidence. Early termination records a reason and first moves or cancels unfinished Issues.</span></th>
           <td><ul class="testing-stage-list">

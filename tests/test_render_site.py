@@ -298,14 +298,16 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert duration_rows[1]["templateOnly"]["total"]["zh-tw"] == (
         "約 9\u201314 分鐘"
     )
-    assert "不另計" not in json.dumps(data["testing"]["duration"], ensure_ascii=False)
+    assert "不另計" not in json.dumps(
+        data["testing"]["duration"], ensure_ascii=False
+    )
     assert "no separate minutes" not in json.dumps(data["testing"]["duration"])
     assert data["testing"]["groups"][0]["journey"] == "01"
     testing_rows = data["testing"]["groups"][0]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in testing_rows] == [
         "Issue 工作邊界",
         "Spec 契約與 Issue 同步",
-        "Milestone 啟動門檻",
+        "里程碑啟動門檻",
     ]
     assert data["testing"]["groups"][0]["stageLabels"]["zh-tw"] == {
         "milestone": "工作開始前",
@@ -314,6 +316,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert testing_rows[0]["shared"]["milestone"]["files"][0] == {
         "path": "scripts/test-issue-triage"
     }
+    assert testing_rows[0]["shared"]["release"]["files"] == [
+        {"path": "scripts/test-issue-triage"}
+    ]
     assert testing_rows[0]["shared"]["milestone"]["automation"][0] == {
         "path": ".github/workflows/issue-triage.yml",
         "job": "classify",
@@ -336,13 +341,17 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "release" not in testing_rows[2]["shared"]
     agent_rows = data["testing"]["groups"][1]["rows"]
     assert data["testing"]["groups"][1]["journey"] == "02"
-    assert agent_rows[0]["shared"]["release"]["files"] == [
-        {"path": "scripts/verify"}
-    ]
+    assert agent_rows[0]["shared"] == {}
     assert agent_rows[0]["templateOnly"]["milestone"]["files"] == [
         {"path": "tests/test_ai_guidelines.py"}
     ]
+    assert agent_rows[0]["templateOnly"]["release"]["files"] == [
+        {"path": "tests/test_ai_guidelines.py"}
+    ]
     assert agent_rows[1]["shared"]["milestone"]["files"] == [
+        {"path": "scripts/test-worktree-cleanup"}
+    ]
+    assert agent_rows[1]["shared"]["release"]["files"] == [
         {"path": "scripts/test-worktree-cleanup"}
     ]
     assert all(
@@ -364,9 +373,16 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert data["testing"]["groups"][4]["journey"] == "06"
     delivery_rows = data["testing"]["groups"][4]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in delivery_rows] == [
-        "Milestone 結案"
+        "發版後續規則",
+        "里程碑結案",
+    ]
+    assert delivery_rows[0]["shared"]["milestone"]["files"] == [
+        {"path": "scripts/test-release-follow-up-gates"}
     ]
     assert delivery_rows[0]["shared"]["release"]["files"] == [
+        {"path": "scripts/test-release-follow-up-gates"}
+    ]
+    assert delivery_rows[1]["shared"]["release"]["files"] == [
         {"path": "tests/test_milestone_lifecycle.py"},
         {
             "path": "tests/test_milestone_closure.py",
