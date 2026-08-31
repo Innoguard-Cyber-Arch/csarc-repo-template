@@ -709,7 +709,7 @@ Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、�
 {{< similar-tools >}}
 {{< /slide >}}
 
-{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜CI/CD 設定" title="CI/CD 設定｜依 Journey 檢查" subtitle="分開列出一般 repo 與 repo-template 在 Issue PR → dev、dev → main 各自需要的測試與自動化。" class="similar-tools-slide testing-slide" legacy="true" >}}
+{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜CI/CD 設定" title="CI/CD 設定｜依 Journey 檢查" subtitle="分開列出一般 repo 與 repo-template 在 Issue PR → dev、Promotion PR → main（發版）各自需要的測試與自動化。" class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
 {{< /slide >}}
 

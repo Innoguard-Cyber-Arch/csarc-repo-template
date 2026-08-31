@@ -279,7 +279,7 @@ Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, gene
 {{< similar-tools >}}
 {{< /slide >}}
 
-{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | CI/CD settings" title="CI/CD settings | Checks by Journey" subtitle="Separates the tests and automation that normal repositories and repo-template need for Issue PR → dev and dev → main." class="similar-tools-slide testing-slide" legacy="true" >}}
+{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | CI/CD settings" title="CI/CD settings | Checks by Journey" subtitle="Separates the tests and automation that normal repositories and repo-template need for Issue PR → dev and Promotion PR → main (release)." class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
 {{< /slide >}}
 

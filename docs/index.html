@@ -4428,7 +4428,7 @@ html[data-detail-level="simple"] .detail-panel {
   <header class="basic-header">
     <span class="selection-sequence">維運附錄｜CI/CD 設定</span>
     <h2>CI/CD 設定｜依 Journey 檢查</h2>
-    <p class="subtitle">分開列出一般 repo 與 repo-template 在 Issue PR → dev、dev → main 各自需要的測試與自動化。</p>
+    <p class="subtitle">分開列出一般 repo 與 repo-template 在 Issue PR → dev、Promotion PR → main（發版）各自需要的測試與自動化。</p>
   </header>
 
 <div class="legacy-content similar-tools-content testing-content">
@@ -4507,7 +4507,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Milestone 完成條件</strong><span>due date、open Issue 與 acceptance checkbox 共同決定關閉或重開。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>發版（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：Issue closed／reopened／milestoned · Timeout：5 min</span></li></ul></div>
+              <strong>Promotion PR → main（發版）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：Issue closed／reopened／milestoned · Timeout：5 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4520,12 +4520,12 @@ html[data-detail-level="simple"] .detail-panel {
               <strong>Issue PR → dev</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>不另設測試 Action；恢復後的 policy workflow 只呼叫共用程式。</span></div>
             </li>
             <li>
-              <strong>發版（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify promotion</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>Journey 01 不恢復 full matrix 或發布流程。</span></div>
+              <strong>Promotion PR → main（發版）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify promotion</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>Journey 01 不恢復 full matrix 或發布流程。</span></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>發版（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_item_forms.py</code></li><li><code>tests/test_template_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>不另設 repo-template Action；只在同一個 promotion 入口多跑交付測試。</span></div>
+              <strong>Promotion PR → main（發版）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_item_forms.py</code></li><li><code>tests/test_template_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>不另設 repo-template Action；只在同一個 promotion 入口多跑交付測試。</span></div>
             </li>
           </ul></td>
         </tr>
@@ -4545,7 +4545,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>AI 規範入口</strong><span>所有 agent 讀同一份根規範，生成內容只列該 profile 真能執行的命令。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>發版（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div>
+              <strong>Promotion PR → main（發版）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4583,7 +4583,7 @@ html[data-detail-level="simple"] .detail-panel {
               <strong>Issue PR → dev</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR → dev · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
-              <strong>發版（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：promotion／merge group／hotfix／手動執行 · Timeout：30 min</span></li></ul></div>
+              <strong>Promotion PR → main（發版）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：promotion／merge group／hotfix／手動執行 · Timeout：30 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4606,12 +4606,12 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>發版候選的完整證據</strong><span>只對固定且未再變動的候選版本跑一次完整驗證；成功後以 SHA／tree 證明合併的是同一份內容。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>發版（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div>
+              <strong>Promotion PR → main（發版）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>發版（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑。</span>
+              <strong>Promotion PR → main（發版）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑。</span>
             </li>
           </ul></td>
         </tr>

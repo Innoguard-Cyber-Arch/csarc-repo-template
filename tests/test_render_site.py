@@ -289,6 +289,12 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         }
     ]
     assert verification_rows[0]["templateOnly"] == {}
+    assert data["testing"]["labels"]["zh-tw"]["release"] == (
+        "Promotion PR → main\uff08發版\uff09"
+    )
+    assert data["testing"]["labels"]["en"]["release"] == (
+        "Promotion PR → main (release)"
+    )
     assert "archived" not in data["testing"]["labels"]["zh-tw"]
     assert "archived" not in testing_shortcode
 
