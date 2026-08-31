@@ -2017,85 +2017,50 @@ html[data-detail-level="simple"] .technical-tour-trigger {
   background: var(--best-soft);
 }
 
-.glossary-intro {
-  padding: 10px 14px;
-  border-left: 7px solid var(--yellow);
-  background: #fffbea;
-  font-size: 20px;
-}
-
-.glossary-accordion {
+.notes-list {
   display: grid;
   gap: 10px;
-  margin-top: 12px;
 }
 
-.glossary-group {
+.notes-item {
+  padding: 12px 15px;
   border: 1px solid var(--line);
-  border-top: 6px solid var(--yellow);
+  border-left: 7px solid var(--optional);
   background: white;
 }
 
-.glossary-group > summary {
+.notes-item h3 { margin-bottom: 4px; font-size: 21px; }
+.notes-item > p { color: var(--muted); font-size: 18px; line-height: 1.32; }
+
+.notes-detail { margin-top: 8px; }
+.notes-detail > summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 13px 16px;
   cursor: pointer;
-  font-size: 21px;
-  font-weight: 850;
+  font-size: 17px;
+  font-weight: 800;
   list-style: none;
 }
 
-.glossary-group > summary::-webkit-details-marker { display: none; }
-.glossary-group > summary small { color: var(--muted); font-size: 16px; }
-.glossary-group > summary::after {
+.notes-detail > summary::-webkit-details-marker { display: none; }
+.notes-detail > summary::after {
   content: "+";
   display: grid;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   place-items: center;
   border-radius: 4px;
-  background: var(--yellow);
-  font-size: 22px;
+  background: var(--optional-soft);
+  color: var(--optional);
+  font-size: 20px;
   line-height: 1;
 }
-.glossary-group[open] > summary::after { content: "−"; }
-.glossary-group > summary:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
-
-.glossary-term-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  padding: 0 12px 12px;
-}
-
-.glossary-term {
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  background: var(--soft);
-}
-
-.glossary-term h3 { margin-bottom: 5px; font-size: 19px; }
-.glossary-term p,
-.glossary-term a {
-  font-size: 16px;
-  line-height: 1.3;
-}
-
-.glossary-term a {
-  color: var(--ink);
-  font-weight: 800;
-  text-decoration-color: var(--yellow);
-  text-decoration-thickness: 3px;
-}
-
-.glossary-term:target {
-  outline: 5px solid var(--yellow);
-  outline-offset: -5px;
-}
+.notes-detail[open] > summary::after { content: "−"; }
+.notes-detail > summary:focus-visible { outline: 3px solid var(--optional); outline-offset: 2px; }
+.notes-detail > p { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--line); font-size: 16px; line-height: 1.32; }
 
 .detail-panel {
   display: grid;
@@ -2199,7 +2164,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -2297,7 +2262,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -2403,7 +2368,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -2524,7 +2489,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -2616,7 +2581,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -2692,7 +2657,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -2764,7 +2729,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -2869,7 +2834,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -2977,7 +2942,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -3077,7 +3042,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -3178,7 +3143,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -3257,7 +3222,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -3335,7 +3300,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -3430,7 +3395,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#bridge" aria-current="page">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -3553,7 +3518,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -3673,7 +3638,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix active-selection" href="#similar-tools" aria-current="page">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header class="basic-header">
@@ -3984,7 +3949,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#testing" aria-current="page">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header class="basic-header">
@@ -4235,7 +4200,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -4330,7 +4295,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -4441,7 +4406,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -4566,7 +4531,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -4683,7 +4648,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -4770,7 +4735,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">Notes</a>
 </aside>
 
   <header>
@@ -4803,7 +4768,7 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 </section>
 
-<section class="slide markdown-slide glossary-slide" id="glossary" data-content-key="glossary-index" data-audience="maintainer" aria-label="Terms and conventions">
+<section class="slide markdown-slide notes-slide" id="notes" data-content-key="notes" data-audience="maintainer" aria-label="Cross-cutting development and operations reminders">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -4857,88 +4822,32 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#glossary" aria-current="page">Notes</a>
+  <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#notes" aria-current="page">Notes</a>
 </aside>
 
-  <header><span class="selection-sequence">Notes</span><h2>Terms and conventions</h2></header>
-  <p class="glossary-intro">Expand a section with “&#43;” only when needed; the page stays reduced to three groups by default.</p>
-  <div class="glossary-accordion">
-    <details class="glossary-group">
-      <summary><span>Work and review</span><small>4 items</small></summary>
-      <div class="glossary-term-list">
-        <article class="glossary-term" id="glossary-issue">
-          <h3>Issue</h3>
-          <p>A unit of work that defines one observable outcome, its scope, and acceptance criteria.</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#working-loop">Read more →</a>
-        </article>
-        <article class="glossary-term" id="glossary-story-milestone">
-          <h3>Story Milestone</h3>
-          <p>An independently verifiable multi-Issue story, created only for an end-to-end outcome.</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/milestone-description.md">Read more →</a>
-        </article>
-        <article class="glossary-term" id="glossary-pull-request">
-          <h3>Pull request</h3>
-          <p>The integration boundary that preserves intent, verification evidence, and human review.</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/.github/pull_request_template.md">Read more →</a>
-        </article>
-        <article class="glossary-term" id="glossary-decision-record">
-          <h3>Decision record</h3>
-          <p>The durable record of confirmed architecture, tooling, security, and compatibility trade-offs.</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/README.md">Read more →</a>
-        </article>
-      </div>
-    </details>
-    <details class="glossary-group">
-      <summary><span>Verification and capability</span><small>4 items</small></summary>
-      <div class="glossary-term-list">
-        <article class="glossary-term" id="glossary-fast-checks">
-          <h3>Fast checks</h3>
-          <p>Short feedback checks selected by change risk; they do not replace full pre-delivery verification.</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
-        </article>
-        <article class="glossary-term" id="glossary-full-verification">
-          <h3>Full verification</h3>
-          <p>The repository-wide pre-delivery contract for code, policy, and artifacts.</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#commands">Read more →</a>
-        </article>
-        <article class="glossary-term" id="glossary-capability-state">
-          <h3>Platform capability state</h3>
-          <p>Observed capability recorded as allowed, blocked, or unknown instead of inferred from plan names.</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">Read more →</a>
-        </article>
-        <article class="glossary-term" id="glossary-portable-artifact">
-          <h3>Portable artifact</h3>
-          <p>A single-file deliverable with no external runtime assets that remains usable through file://.</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">Read more →</a>
-        </article>
-      </div>
-    </details>
-    <details class="glossary-group">
-      <summary><span>Integration and delivery</span><small>4 items</small></summary>
-      <div class="glossary-term-list">
-        <article class="glossary-term" id="glossary-delivery-branch">
-          <h3>Delivery branch</h3>
-          <p>The branch where independent PRs for one story integrate before promotion reaches main.</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
-        </article>
-        <article class="glossary-term" id="glossary-promotion">
-          <h3>Promotion</h3>
-          <p>The explicit delivery action that advances a verified delivery branch to main.</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
-        </article>
-        <article class="glossary-term" id="glossary-release-intent">
-          <h3>SemVer intent</h3>
-          <p>Declared by a validated PR title; the exact version is derived from merged history.</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
-        </article>
-        <article class="glossary-term" id="glossary-copier-update">
-          <h3>Copier update</h3>
-          <p>A reviewable template update that preserves project-owned content in an existing repository.</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/README.md">Read more →</a>
-        </article>
-      </div>
-    </details>
-  </div>
+  <header>
+    <span class="selection-sequence">Notes</span>
+    <h2>Cross-cutting development and operations reminders</h2>
+    <p class="subtitle">Only topics that do not belong to one Journey stay here; conclusions remain visible and extra interpretation sits behind “&#43;”.</p>
+  </header>
+  <div class="markdown-body"><div class="notes-list">
+  <article class="notes-item">
+    <h3>A runner that never starts is not a code failure</h3>
+    <p>If a GitHub job ends before any step starts, treat it first as a billing, quota, or platform execution problem; still retain local verification evidence.</p>
+    <details class="notes-detail"><summary>Distinguish an external problem from a failed test</summary><p><strong>Zero steps:</strong> no repository code ran, so check runner availability, billing, and GitHub status. <strong>Steps exist:</strong> follow the first failed step to the code or setting that needs correction.</p></details>
+  </article>
+  <article class="notes-item">
+    <h3>Archived workflows are not active capabilities</h3>
+    <p><code>archive/ci-cd/</code> is reference material only; only the five GitHub Actions listed in the file map currently run.</p>
+    <details class="notes-detail"><summary>What to confirm before restoring a workflow</summary><p>Define its purpose and tests in the matching Journey, then confirm triggers, permissions, timeout, and the shared local entry point. Do not restore the archive as one batch.</p></details>
+  </article>
+  <article class="notes-item">
+    <h3>The template never enables an external platform by itself</h3>
+    <p>Plan upgrades, hosted access, and central governance platforms require an explicit owner plus cost and security approval; the template only records conditions and configuration locations.</p>
+    <details class="notes-detail"><summary>Changes that require separate authorization</summary><p>This includes GitHub plan upgrades, Cloudflare or SSO, Backstage or another external service, and any irreversible operation or organization-wide permission change.</p></details>
+  </article>
+</div>
+</div>
 </section>
 
 </main>

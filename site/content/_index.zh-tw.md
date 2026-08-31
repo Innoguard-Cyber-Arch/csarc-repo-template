@@ -931,4 +931,22 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< glossary >}}
+{{< slide key="notes" audience="maintainer" eyebrow="備忘" title="跨章節的開發與維運提醒" subtitle="只保留無法歸入單一 Journey 的事項；結論直接顯示，補充判讀才收在「＋」裡。" legacy="false" class="notes-slide" >}}
+<div class="notes-list">
+  <article class="notes-item">
+    <h3>Runner 沒有啟動，不等於程式驗證失敗</h3>
+    <p>若 GitHub job 在任何 step 前就結束，先視為帳務、配額或平台執行問題；本機驗證結果仍要保存。</p>
+    <details class="notes-detail"><summary>怎麼分辨外部問題與測試失敗</summary><p><strong>0 steps：</strong>程式尚未執行，先檢查 runner、帳務與 GitHub 狀態。<strong>已有 steps：</strong>再依第一個失敗步驟修正程式或設定。</p></details>
+  </article>
+  <article class="notes-item">
+    <h3>封存的流程不算現行能力</h3>
+    <p><code>archive/ci-cd/</code> 只保存恢復參考；目前只有檔案地圖列出的 5 條 GitHub Actions 會執行。</p>
+    <details class="notes-detail"><summary>恢復流程前要確認什麼</summary><p>先在對應 Journey 定義目的與測試，再確認觸發條件、權限、timeout 與共用本機入口；不要整批搬回 archive。</p></details>
+  </article>
+  <article class="notes-item">
+    <h3>外部平台不會由模板自行啟用</h3>
+    <p>帳號升級、網站登入與中央治理平台都需要明確 owner、成本與安全核准；模板只保存條件與設定位置。</p>
+    <details class="notes-detail"><summary>哪些變更需要另外授權</summary><p>包含 GitHub 方案升級、Cloudflare／SSO、Backstage 或其他外部服務，以及任何不可逆或會影響組織權限的操作。</p></details>
+  </article>
+</div>
+{{< /slide >}}

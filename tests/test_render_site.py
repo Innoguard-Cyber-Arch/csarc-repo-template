@@ -175,9 +175,6 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         encoding="utf-8"
     )
     deck = (root / "site/static/deck.js").read_text(encoding="utf-8")
-    glossary = (root / "site/layouts/shortcodes/glossary.html").read_text(
-        encoding="utf-8"
-    )
     styles = (root / "site/static/styles.css").read_text(encoding="utf-8")
     controls = (root / "site/static/detail-toggle.css").read_text(
         encoding="utf-8"
@@ -207,15 +204,17 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert (
         journey_rail.index('href="#testing"')
         < journey_rail.index('href="#bridge"')
-        < journey_rail.index('href="#glossary"')
+        < journey_rail.index('href="#notes"')
     )
     assert "五月盤點" in journey_rail
     assert "決策附錄" not in journey_rail
-    assert 'data-audience="maintainer"' in glossary
-    assert '{{ cond $english "Notes" "備忘" }}' in glossary
-    assert glossary.count('<section class="slide') == 1
-    assert '<details class="glossary-group">' in glossary
-    assert 'id="glossary-group-' not in glossary
+    assert 'href="#glossary"' not in journey_rail
+    for source in (chinese, english):
+        assert 'key="notes" audience="maintainer"' in source
+        assert source.count('class="notes-detail"') == 3
+        assert "{{< glossary >}}" not in source
+    assert "跨章節的開發與維運提醒" in chinese
+    assert "名詞與約定" not in chinese
     assert "testing.after(bridge)" in presentation
     assert "slide.dataset.audience !== 'archive'" in deck
     assert "Cloudflare Pages" in chinese

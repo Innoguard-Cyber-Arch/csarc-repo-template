@@ -44,5 +44,5 @@
   <a class="journey-bookend appendix{{ if eq .Key "similar-tools" }} active-selection{{ end }}" href="#similar-tools"{{ if eq .Key "similar-tools" }} aria-current="page"{{ end }}>{{ cond $english "Similar" "相似工具" }}</a>
   <a class="journey-bookend appendix maintainer-bookend{{ if eq .Key "testing" }} active-selection{{ end }}" data-audience="maintainer" href="#testing"{{ if eq .Key "testing" }} aria-current="page"{{ end }}>{{ cond $english "CI/CD" "CI/CD 設定" }}</a>
   <a class="journey-bookend appendix maintainer-bookend{{ if eq .Key "bridge" }} active-selection{{ end }}" data-audience="maintainer" href="#bridge"{{ if eq .Key "bridge" }} aria-current="page"{{ end }}>{{ cond $english "May review" "五月盤點" }}</a>
-  <a class="journey-bookend appendix maintainer-bookend{{ if hasPrefix .Key "glossary" }} active-selection{{ end }}" data-audience="maintainer" href="#glossary"{{ if hasPrefix .Key "glossary" }} aria-current="page"{{ end }}>{{ cond $english "Notes" "備忘" }}</a>
+  <a class="journey-bookend appendix maintainer-bookend{{ if eq .Key "notes" }} active-selection{{ end }}" data-audience="maintainer" href="#notes"{{ if eq .Key "notes" }} aria-current="page"{{ end }}>{{ cond $english "Notes" "備忘" }}</a>
 </aside>

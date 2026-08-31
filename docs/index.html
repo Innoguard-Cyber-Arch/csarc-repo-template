@@ -2017,85 +2017,50 @@ html[data-detail-level="simple"] .technical-tour-trigger {
   background: var(--best-soft);
 }
 
-.glossary-intro {
-  padding: 10px 14px;
-  border-left: 7px solid var(--yellow);
-  background: #fffbea;
-  font-size: 20px;
-}
-
-.glossary-accordion {
+.notes-list {
   display: grid;
   gap: 10px;
-  margin-top: 12px;
 }
 
-.glossary-group {
+.notes-item {
+  padding: 12px 15px;
   border: 1px solid var(--line);
-  border-top: 6px solid var(--yellow);
+  border-left: 7px solid var(--optional);
   background: white;
 }
 
-.glossary-group > summary {
+.notes-item h3 { margin-bottom: 4px; font-size: 21px; }
+.notes-item > p { color: var(--muted); font-size: 18px; line-height: 1.32; }
+
+.notes-detail { margin-top: 8px; }
+.notes-detail > summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 13px 16px;
   cursor: pointer;
-  font-size: 21px;
-  font-weight: 850;
+  font-size: 17px;
+  font-weight: 800;
   list-style: none;
 }
 
-.glossary-group > summary::-webkit-details-marker { display: none; }
-.glossary-group > summary small { color: var(--muted); font-size: 16px; }
-.glossary-group > summary::after {
+.notes-detail > summary::-webkit-details-marker { display: none; }
+.notes-detail > summary::after {
   content: "+";
   display: grid;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   place-items: center;
   border-radius: 4px;
-  background: var(--yellow);
-  font-size: 22px;
+  background: var(--optional-soft);
+  color: var(--optional);
+  font-size: 20px;
   line-height: 1;
 }
-.glossary-group[open] > summary::after { content: "−"; }
-.glossary-group > summary:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
-
-.glossary-term-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  padding: 0 12px 12px;
-}
-
-.glossary-term {
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  background: var(--soft);
-}
-
-.glossary-term h3 { margin-bottom: 5px; font-size: 19px; }
-.glossary-term p,
-.glossary-term a {
-  font-size: 16px;
-  line-height: 1.3;
-}
-
-.glossary-term a {
-  color: var(--ink);
-  font-weight: 800;
-  text-decoration-color: var(--yellow);
-  text-decoration-thickness: 3px;
-}
-
-.glossary-term:target {
-  outline: 5px solid var(--yellow);
-  outline-offset: -5px;
-}
+.notes-detail[open] > summary::after { content: "−"; }
+.notes-detail > summary:focus-visible { outline: 3px solid var(--optional); outline-offset: 2px; }
+.notes-detail > p { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--line); font-size: 16px; line-height: 1.32; }
 
 .detail-panel {
   display: grid;
@@ -2199,7 +2164,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -2344,7 +2309,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -2501,7 +2466,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -2664,7 +2629,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -2789,7 +2754,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -2880,7 +2845,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -2970,7 +2935,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -3093,7 +3058,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -3233,7 +3198,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -3361,7 +3326,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -3491,7 +3456,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -3588,7 +3553,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -3683,7 +3648,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -3795,7 +3760,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#bridge" aria-current="page">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -3948,7 +3913,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -4119,7 +4084,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix active-selection" href="#similar-tools" aria-current="page">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -4430,7 +4395,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#testing" aria-current="page">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -4681,7 +4646,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -4795,7 +4760,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -4932,7 +4897,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -5084,7 +5049,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -5226,7 +5191,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -5340,7 +5305,7 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#glossary">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#notes">備忘</a>
 </aside>
 
   <header class="basic-header">
@@ -5406,7 +5371,7 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
-<section class="slide markdown-slide glossary-slide" id="glossary" data-content-key="glossary-index" data-audience="maintainer" aria-label="名詞與約定">
+<section class="slide markdown-slide notes-slide" id="notes" data-content-key="notes" data-audience="maintainer" aria-label="跨章節的開發與維運提醒">
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
@@ -5460,88 +5425,32 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#glossary" aria-current="page">備忘</a>
+  <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#notes" aria-current="page">備忘</a>
 </aside>
 
-  <header><span class="selection-sequence">備忘</span><h2>名詞與約定</h2></header>
-  <p class="glossary-intro">需要時按「＋」展開；平常只保留三個分類，避免干擾主要內容。</p>
-  <div class="glossary-accordion">
-    <details class="glossary-group">
-      <summary><span>工作與審查</span><small>4 項</small></summary>
-      <div class="glossary-term-list">
-        <article class="glossary-term" id="glossary-issue">
-          <h3>Issue 工作單</h3>
-          <p>界定一個可驗收結果、範圍與完成條件的工作單位。</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#working-loop">深入閱讀 →</a>
-        </article>
-        <article class="glossary-term" id="glossary-story-milestone">
-          <h3>Story Milestone</h3>
-          <p>只有端到端成果需要時才建立、可獨立驗證的多 Issue story。</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/milestone-description.md">深入閱讀 →</a>
-        </article>
-        <article class="glossary-term" id="glossary-pull-request">
-          <h3>Pull request</h3>
-          <p>保存變更意圖、驗證證據與人類審查的整合邊界。</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/.github/pull_request_template.md">深入閱讀 →</a>
-        </article>
-        <article class="glossary-term" id="glossary-decision-record">
-          <h3>決策記錄</h3>
-          <p>保存已確認的架構、工具、安全與相容性取捨。</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/README.md">深入閱讀 →</a>
-        </article>
-      </div>
-    </details>
-    <details class="glossary-group">
-      <summary><span>驗證與能力</span><small>4 項</small></summary>
-      <div class="glossary-term-list">
-        <article class="glossary-term" id="glossary-fast-checks">
-          <h3>快速驗證</h3>
-          <p>依變更風險執行的短回饋檢查，不取代交付前完整驗證。</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">深入閱讀 →</a>
-        </article>
-        <article class="glossary-term" id="glossary-full-verification">
-          <h3>完整驗證</h3>
-          <p>交付前執行的 repository 級契約，統一檢查程式、政策與產物。</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#commands">深入閱讀 →</a>
-        </article>
-        <article class="glossary-term" id="glossary-capability-state">
-          <h3>平台能力狀態</h3>
-          <p>以 allowed、blocked 或 unknown 記錄實測能力，不從方案名稱猜測。</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">深入閱讀 →</a>
-        </article>
-        <article class="glossary-term" id="glossary-portable-artifact">
-          <h3>可攜式產物</h3>
-          <p>沒有 runtime 外部資產、可下載並以 file:// 離線使用的單檔交付物。</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">深入閱讀 →</a>
-        </article>
-      </div>
-    </details>
-    <details class="glossary-group">
-      <summary><span>整合與交付</span><small>4 項</small></summary>
-      <div class="glossary-term-list">
-        <article class="glossary-term" id="glossary-delivery-branch">
-          <h3>Delivery branch</h3>
-          <p>讓同一 story 的獨立 PR 先整合，再由 promotion 進入 main 的分支。</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">深入閱讀 →</a>
-        </article>
-        <article class="glossary-term" id="glossary-promotion">
-          <h3>Promotion</h3>
-          <p>把已驗證的 delivery branch 提升到 main 的明確交付動作。</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">深入閱讀 →</a>
-        </article>
-        <article class="glossary-term" id="glossary-release-intent">
-          <h3>SemVer 意圖</h3>
-          <p>由已驗證的 PR 標題宣告，合併後才從實際歷史決定版本。</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">深入閱讀 →</a>
-        </article>
-        <article class="glossary-term" id="glossary-copier-update">
-          <h3>Copier 更新</h3>
-          <p>以可審查差異把公版變更套入既有 repository，保留專案持有內容。</p>
-          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/README.md">深入閱讀 →</a>
-        </article>
-      </div>
-    </details>
-  </div>
+  <header>
+    <span class="selection-sequence">備忘</span>
+    <h2>跨章節的開發與維運提醒</h2>
+    <p class="subtitle">只保留無法歸入單一 Journey 的事項；結論直接顯示，補充判讀才收在「＋」裡。</p>
+  </header>
+  <div class="markdown-body"><div class="notes-list">
+  <article class="notes-item">
+    <h3>Runner 沒有啟動，不等於程式驗證失敗</h3>
+    <p>若 GitHub job 在任何 step 前就結束，先視為帳務、配額或平台執行問題；本機驗證結果仍要保存。</p>
+    <details class="notes-detail"><summary>怎麼分辨外部問題與測試失敗</summary><p><strong>0 steps：</strong>程式尚未執行，先檢查 runner、帳務與 GitHub 狀態。<strong>已有 steps：</strong>再依第一個失敗步驟修正程式或設定。</p></details>
+  </article>
+  <article class="notes-item">
+    <h3>封存的流程不算現行能力</h3>
+    <p><code>archive/ci-cd/</code> 只保存恢復參考；目前只有檔案地圖列出的 5 條 GitHub Actions 會執行。</p>
+    <details class="notes-detail"><summary>恢復流程前要確認什麼</summary><p>先在對應 Journey 定義目的與測試，再確認觸發條件、權限、timeout 與共用本機入口；不要整批搬回 archive。</p></details>
+  </article>
+  <article class="notes-item">
+    <h3>外部平台不會由模板自行啟用</h3>
+    <p>帳號升級、網站登入與中央治理平台都需要明確 owner、成本與安全核准；模板只保存條件與設定位置。</p>
+    <details class="notes-detail"><summary>哪些變更需要另外授權</summary><p>包含 GitHub 方案升級、Cloudflare／SSO、Backstage 或其他外部服務，以及任何不可逆或會影響組織權限的操作。</p></details>
+  </article>
+</div>
+</div>
 </section>
 
 </main>
