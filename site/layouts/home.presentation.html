@@ -45,8 +45,11 @@
   <div class="progress" aria-hidden="true" hidden><span id="bar"></span></div>
   <script>
     (() => {
+      const pr = document.querySelector('[data-track="pr"]');
+      const supply = document.querySelector('[data-track="supply"]');
       const testing = document.querySelector("#testing");
       const bridge = document.querySelector("#bridge");
+      if (pr && supply) pr.before(supply);
       if (testing && bridge) testing.after(bridge);
     })();
   </script>

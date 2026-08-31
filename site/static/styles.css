@@ -803,6 +803,18 @@
     }
     .package-disclosure summary::-webkit-details-marker { display: none; }
     .package-disclosure summary:focus-visible { outline: 4px solid var(--yellow); outline-offset: 3px; }
+    .inline-disclosure { display: inline-block; margin: 0 0 0 5px; vertical-align: baseline; }
+    .inline-disclosure summary { display: inline-block; font-size: inherit; line-height: inherit; }
+    .inline-disclosure .package-health {
+      position: fixed;
+      top: 50%;
+      right: auto;
+      left: 50%;
+      width: min(720px, calc(100vw - 48px));
+      max-height: none;
+      overflow: visible;
+      transform: translate(-50%, -50%);
+    }
     .tech-name {
       color: #174f8b;
       text-decoration: underline dotted 2px;

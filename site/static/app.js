@@ -808,7 +808,7 @@ gh auth status`
       }
     };
 
-    const lifecycleOrder = ['method', 'agents', 'contract', 'pr', 'supply', 'deploy', 'governance'];
+    const lifecycleOrder = ['method', 'agents', 'contract', 'supply', 'pr', 'deploy', 'governance'];
     const platformOrder = ['template-release', 'docs-site', 'rollout'];
     const deckRoot = document.querySelector('.deck');
     const capabilitySlide = document.querySelector('.capability-slide');
@@ -842,7 +842,7 @@ gh auth status`
       { id: 'files', label: '檔案地圖', tier: 'priority', group: 'use' },
       { id: 'method', code: '01', label: '工作定義', tier: 'priority', group: 'main' },
       { id: 'agents', code: '02', label: 'AI 規範／實作', tier: 'priority', group: 'main' },
-      { id: 'contract', code: '03', label: '驗證＋CI', tier: 'priority', group: 'main' },
+      { id: 'contract', code: '03', label: '驗證／CI', tier: 'priority', group: 'main' },
       { id: 'pr', code: '04', label: 'PR／合併', tier: 'priority', group: 'main' },
       { id: 'supply', code: '05', label: '依賴安全', tier: 'priority', group: 'main' },
       { id: 'deploy', code: '06', label: '版本／交付', tier: 'best', group: 'main' },

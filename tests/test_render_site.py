@@ -220,6 +220,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     )
     assert "名詞與約定" not in chinese
     assert "testing.after(bridge)" in presentation
+    assert "pr.before(supply)" in presentation
     assert "slide.dataset.audience !== 'archive'" in deck
     assert "Cloudflare Pages" in chinese
     assert "存取 #79" in chinese
@@ -253,12 +254,12 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
-    assert len(data["features"]) == 13
-    assert len(data["featureGroups"]) == 4
+    assert len(data["features"]) == 19
+    assert len(data["featureGroups"]) == 5
     assert data["featureGroups"][0]["features"] == [
         "repositoryTruth",
-        "declarativeState",
-        "proposalLifecycle",
+        "workItemStructure",
+        "milestoneKickoff",
         "rightSizedWork",
     ]
     assert data["featureGroups"][1]["features"] == [
@@ -273,8 +274,18 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "freshCompletionEvidence",
         "generatedProjectVerification",
     ]
-    assert data["featureGroups"][3]["features"] == ["templateLifecycle"]
-    assert len(data["testing"]["groups"]) == 3
+    assert data["featureGroups"][3]["features"] == [
+        "pullRequestUnit",
+        "integrationRoute",
+        "mergeReadiness",
+        "baseSynchronization",
+        "proposalLifecycle",
+    ]
+    assert data["featureGroups"][4]["features"] == [
+        "declarativeState",
+        "templateLifecycle",
+    ]
+    assert len(data["testing"]["groups"]) == 5
     duration_rows = data["testing"]["duration"]["rows"]
     assert [row["key"] for row in duration_rows] == ["issue", "release"]
     assert all(len(row["shared"]["items"]) == 3 for row in duration_rows)
@@ -287,15 +298,15 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     testing_rows = data["testing"]["groups"][0]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in testing_rows] == [
         "Issue 工作邊界",
-        "PR 與 Issue 可追溯性",
         "Spec 契約與 Issue 同步",
-        "Milestone 完成條件",
-        "Journey 01 整體回歸",
+        "Milestone 啟動門檻",
     ]
+    assert data["testing"]["groups"][0]["stageLabels"]["zh-tw"] == {
+        "milestone": "工作開始前",
+        "release": "工作結束時",
+    }
     assert testing_rows[0]["shared"]["milestone"]["files"][0] == {
-        "path": "tests/test_work_definition.py",
-        "pending": True,
-        "issue": 382,
+        "path": "scripts/test-issue-triage"
     }
     assert testing_rows[0]["shared"]["milestone"]["automation"][0] == {
         "path": ".github/workflows/issue-triage.yml",
@@ -306,15 +317,17 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         },
         "timeout": "5 min",
     }
-    assert (
-        testing_rows[1]["shared"]["milestone"]["automation"][0]["timeout"]
-        == "10 min"
-    )
-    assert testing_rows[-1]["templateOnly"]["release"]["files"][1] == {
-        "path": "tests/test_template_work_definition.py",
-        "pending": True,
-        "issue": 382,
-    }
+    assert testing_rows[2]["shared"]["milestone"]["files"] == [
+        {
+            "path": "tests/test_milestone_approval.py",
+            "pending": True,
+            "issue": 400,
+        }
+    ]
+    assert testing_rows[0]["templateOnly"]["release"]["files"] == [
+        {"path": "tests/test_work_item_forms.py"}
+    ]
+    assert "release" not in testing_rows[2]["shared"]
     agent_rows = data["testing"]["groups"][1]["rows"]
     assert data["testing"]["groups"][1]["journey"] == "02"
     assert agent_rows[0]["shared"]["release"]["files"] == [
@@ -342,6 +355,19 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert verification_rows[0]["shared"]["milestone"]["files"] == [
         {"path": "scripts/ci_tier.py"}
     ]
+    assert data["testing"]["groups"][4]["journey"] == "06"
+    delivery_rows = data["testing"]["groups"][4]["rows"]
+    assert [row["purpose"]["zh-tw"]["title"] for row in delivery_rows] == [
+        "Milestone 結案"
+    ]
+    assert delivery_rows[0]["shared"]["release"]["files"] == [
+        {"path": "tests/test_milestone_lifecycle.py"},
+        {
+            "path": "tests/test_milestone_closure.py",
+            "pending": True,
+            "issue": 400,
+        },
+    ]
     assert verification_rows[0]["shared"]["milestone"]["automation"] == [
         {
             "path": ".github/workflows/ci.yml",
@@ -354,6 +380,19 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         }
     ]
     assert verification_rows[0]["templateOnly"] == {}
+    merge_rows = data["testing"]["groups"][3]["rows"]
+    assert data["testing"]["groups"][3]["journey"] == "05"
+    assert [row["purpose"]["zh-tw"]["title"] for row in merge_rows] == [
+        "PR 資料與目的分支",
+        "候選內容包含最新基準",
+        "工作 PR 合併後結束 Issue",
+    ]
+    assert (
+        merge_rows[0]["shared"]["milestone"]["automation"][0]["path"]
+        == ".github/workflows/pr-policy.yml"
+    )
+    assert merge_rows[2]["shared"]["milestone"]["automation"][0]["pending"]
+    assert merge_rows[2]["shared"]["milestone"]["automation"][0]["issue"] == 401
     assert data["testing"]["labels"]["zh-tw"]["release"] == (
         "發版 PR\uff08dev → main\uff09"
     )
@@ -363,8 +402,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "archived" not in data["testing"]["labels"]["zh-tw"]
     assert "archived" not in testing_shortcode
 
-    assert len(data["tools"]) == 15
-    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 64
+    assert len(data["tools"]) == 17
+    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 76
     assert data["comparisonDate"] == "2026-08-31"
     assert data["releaseCutoff"] == "2026-02-28"
     assert data["threshold"] == 5
@@ -418,7 +457,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "Spec Kit",
         "Superpowers",
         "Dagger",
+        "Git Town",
         "Nx",
+        "Sapling",
     }
     assert {tool["name"] for tool in data["tools"]} - {
         tool["name"] for tool in primary
@@ -428,7 +469,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     )
     assert superpowers["coverage"] == {
         "full": ["02"],
-        "partial": ["01", "03", "04"],
+        "partial": ["01", "03", "05"],
     }
     comparison_keys = {
         tool["name"]: {comparison["key"] for comparison in tool["comparisons"]}

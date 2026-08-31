@@ -41,7 +41,7 @@ The template claims only capabilities backed by executable files and regression 
 | Create the work | The Issue form prompts for the problem, completion conditions, and necessary context |
 | Make the change | Repository guidance tells people and agents how to work and which local check to run first |
 | Open a PR | The PR template prompts for the linked Issue, completed result, and verification evidence |
-| Read the result | The template selects the necessary checks and identifies what must be fixed |
+| Read verification and dependency results | The template selects the necessary checks; dependency changes also require release-age, vulnerability, and lockfile results |
 | Review and merge | Merge into the correct branch after the result and human review are clear |
 
 Users do not need to memorize workflow or script names. Current automation focuses on work items, PR rules, and necessary verification; automated versioning and publishing are not enabled yet.
@@ -75,21 +75,24 @@ Workflows, policies, scripts, and documents shared by root and `template/` are k
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="method" track="method" eyebrow="Step 01" title="Define the problem before implementation" subtitle="State the problem, acceptance criteria, and verification first; add grouping or a delivery batch only when the work grows." legacy="false"  class="candidate-slide dense single-column" >}}
+{{< slide key="method" track="method" eyebrow="Step 01" title="Define the work before implementation" subtitle="Turn a request into an actionable Issue; create a Milestone only when several work items must move together." legacy="false"  class="candidate-slide dense single-column" >}}
 ### Our choice
 
-- **Overall:** define the work in an Issue, implement it on a branch, then review and deliver it through a PR.
-- **Milestone:** create one only when multiple work items share a deadline, integration point, or release.
+- **Overall:** turn the request into one Issue that can be completed and verified independently.
+- **Milestone:** create one only when several Issues share an outcome, deadline, or delivery batch, and give it one lifecycle tracking Issue.
+  - Work may start only after at least one person other than the proposer agrees and no objection remains unresolved.
 - **Issue:** choose the Feature, Task, Bug, or Documentation form, then state the problem, acceptance criteria, and verification.
-  - Feature is an outcome that needs several pieces of work.
-  - Task is work that can be completed and verified independently.
-  - Bug is a result that differs from expectations.
-  - Documentation changes only documentation or examples.
   - Use a clear English title; the creator owns the Issue by default.
-  - Keep work together when one PR and one result can verify it. Create a Sub-issue when work can be independently implemented and verified, or when required follow-up exceeds the original scope.
-  - A Parent describes the shared outcome that is not complete yet; all required Sub-issues must finish before it closes. Dependency expresses ordering instead.
-- **PR:** explain what was completed, link the Issue it closes, and deliver it after the checks pass; the creator owns it by default.
-- **Exceptions:** close repeated work as Duplicate. Hotfix marks an urgent fix, but still requires an Issue, verification, and review.
+- **Exceptions:** close repeated work as Duplicate. Define urgent work as a Bug first; the PR / merge section owns its delivery route.
+
+{{< disclosure key="work-item-details" title="Issue types and splitting rules" >}}
+- Feature is an outcome that needs several pieces of work.
+- Task is work that can be completed and verified independently.
+- Bug is a result that differs from expectations.
+- Documentation changes only documentation or examples.
+- Keep work together when one completion condition and one body of evidence can prove it. Create a Sub-issue when work can be completed independently or required follow-up exceeds the original scope.
+- A Parent describes the shared outcome that is not complete yet; Dependency expresses ordering instead.
+{{< /disclosure >}}
 
 ### Other common approaches
 
@@ -122,30 +125,30 @@ Concrete tools and sources are in [Similar tools](#similar-tools); Journey 02 lo
 {{< slide key="contract" track="contract" eyebrow="Step 03" title="Verify the change, then let CI rerun the same rules" subtitle="Issue PRs are tiered by change scope; full verification is reserved for high-risk boundaries." legacy="false"  class="candidate-slide" >}}
 - **During development:** run only the focused check that proves the current change, using fresh output before claiming completion.
 - **Issue PR (work branch → dev):** the system selects the appropriate checks from the change; when unsure, it runs full verification.
-- **High-risk boundaries:** promotions, hotfixes, release recovery, merge queues, and manual runs use full.
+- **When full verification is needed:** run it before a release, for an urgent fix, or whenever the system cannot safely narrow the test scope.
 - **One implementation:** GitHub Actions has one `verify` job with a 30-minute timeout and only calls repository scripts.
 - **Repository scope:** a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.
 
 Verification logic lives only in scripts and tests. This step restores only `.github/workflows/ci.yml`; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys. See [Similar tools](#similar-tools) for concrete comparisons and [CI/CD settings](#testing) for execution locations.
 {{< /slide >}}
 
-{{< slide key="pr" track="pr" eyebrow="Step 04" title="Merge small PRs after evidence passes" subtitle="Issues integrate on delivery branches; promotion brings verified outcomes to main." legacy="false"  class="candidate-slide" >}}
-| Work type | PR base | Route into `main` |
+{{< slide key="pr" track="pr" eyebrow="Step 05" title="Make completed changes reviewable and deliverable" subtitle="A work PR completes one work item; a release PR then carries the verified batch into main." legacy="false"  class="candidate-slide" >}}
+| PR stage | Destination | What this stage completes |
 | --- | --- | --- |
-| Milestone Issue | `dev/m<Milestone>-*` | Milestone promotion PR |
-| Ordinary standalone Issue | `dev/next` | Batched promotion in the release window |
-| Issue requiring isolated soak or canary | Temporary `dev/i<Issue>-*` | That Issue's promotion PR |
-| Emergency correction | `main` | Only a standalone `fix/*` PR labeled `hotfix` |
+| Issue PR | Work branch → dev | Review one change and close its linked Issue after merge |
+| Release PR | dev → main | Fully verify and deliver the batch; Version / delivery then closes the Milestone |
 
-{{< detail key="pr-version-intent" title="Concrete branch, synchronization, and version-intent rules" >}}
+{{< disclosure key="pr-version-intent" title="PR titles, branches, and exceptions" >}}
 - Work branches use `type/<Issue>-short-slug`, and the PR links the matching open Issue.
-- When `main` advances, each active delivery owner integrates it through a reviewed `sync/main-to-*` PR without direct pushes or history rewrites.
-- `feat`, `fix`, and `!` determine SemVer only after merge from actual default-branch history; open PRs never reserve versions.
-- `pr-policy.yml`, `delivery-sync.yml`, and `promotion.yml` verify route, Issue, title, synchronization, and promotion evidence.
-{{< /detail >}}
+- PR titles use the Angular / Conventional Commits form `type(scope)!: English summary`: `feat` adds a feature, `fix` corrects behavior, `docs` changes documentation, `refactor` restructures code, `test` changes tests, `build` changes builds or dependencies, `ci` changes automation, `chore` performs maintenance, and `revert` undoes a change. Scope and `!` are optional. Release intent is minor for `feat`, patch for `fix` / `revert`, major for `!`, and no release for the other types.
+- The classification label and Milestone match the linked Issue; the PR author must be an assignee.
+- Milestone work targets `dev/m<Milestone>-*`; ordinary standalone work targets `dev/next`.
+- When main advances, a `sync/main-to-*` PR updates active dev branches without direct pushes or history rewrites.
+- Only an explicitly labeled standalone hotfix may target main directly. Rules governance decides who may merge.
+{{< /disclosure >}}
 {{< /slide >}}
 
-{{< slide key="supply" track="supply" eyebrow="Step 05" title="Expose risk immediately; do not chase day-one upgrades" subtitle="A malicious new release, a disclosed vulnerability, and artifact contents are different problems." legacy="false"  class="candidate-slide" >}}
+{{< slide key="supply" track="supply" eyebrow="Step 04" title="Expose risk immediately; do not chase day-one upgrades" subtitle="A malicious new release, a disclosed vulnerability, and artifact contents are different problems." legacy="false"  class="candidate-slide" >}}
 | Problem | Current control | What it does not prove |
 | --- | --- | --- |
 | Brand-new package version | Dependabot and pnpm wait three days for ordinary releases | The package has no disclosed vulnerability |
@@ -167,6 +170,8 @@ Renovate offers a more flexible shared preset, but a self-hosted token cannot tr
 {{< /slide >}}
 
 {{< slide key="deploy" track="deploy" class="dense" eyebrow="Step 06" title="Connect version policy to artifacts" subtitle="Verify the promotion source, then select a safe delivery mode from current platform capabilities." legacy="false" >}}
+**Milestone closure:** after a successful release records its delivery evidence, close the lifecycle tracking Issue and the Milestone. To stop early, state why and move or cancel every unfinished Issue first.
+
 | Preconditions | Mode | Behavior and guarantee |
 | --- | --- | --- |
 | Valid source; PR, contents, Release, and dispatch are all `allowed` | Release PR | Reviewable version and changelog; merge dispatches artifacts with the source run ID |

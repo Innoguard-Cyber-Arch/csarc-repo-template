@@ -285,9 +285,9 @@ tracking: none   # Keep the current contract only
 python scripts/spec_to_issue.py validate`
         },
         {
-          title: '交付批次的說明格式',
-          goal: 'Milestone 只在多張工作需要同一期限、整合或發版時建立，並使用一致的可驗收說明。',
-          summary: '定義多張工作同批交付時，Milestone 要寫哪些驗收內容。',
+          title: 'Milestone 的啟動門檻',
+          goal: '每個 Milestone 使用一張生命週期追蹤 Issue，集中保存同意與反駁。',
+          summary: '至少一位非提案者同意，且沒有尚未解決的反駁，工作才開始；Milestone 結案方式由「版本／交付」定義。',
           file: 'docs/milestone-description.md',
           code: `## Problem
 ## Outcome
@@ -295,6 +295,9 @@ python scripts/spec_to_issue.py validate`
 - [ ] Observable result
 ## Plan
 - #123 — Independently deliverable work
+## Kickoff decision
+- Approval: one non-proposer agreement
+- Objections: none unresolved
 ## Out of scope
 ## Verification
 ## References`
@@ -302,49 +305,38 @@ python scripts/spec_to_issue.py validate`
       ],
       pr: [
         {
-          title: '選定的保護分支要求一位核准、CODEOWNER 與必要檢查',
-          goal: '新提交會讓舊核准失效，不能直接推送或 force push。',
-          summary: '要求一位核准、CODEOWNER、最後推送者以外的人核准，並解完 review thread；新 commit 會撤銷舊核准。',
-          file: 'policies/rulesets.json',
-          code: `{
-  "type": "pull_request",
-  "parameters": {
-    "required_approving_review_count": 1,
-    "dismiss_stale_reviews_on_push": true,
-    "require_code_owner_review": true,
-    "require_last_push_approval": true,
-    "required_review_thread_resolution": true
-  }
-}`
-        },
-        {
-          title: '保留 reviewer 名單，目前人工指定審查者',
-          goal: 'Free private 先保留明確候選人；支援 Ruleset 時再把核准變成 merge gate。',
-          summary: 'CODEOWNERS 與 REVIEWERS 保存 owner 和 reviewer 候選；自動輪派 Action 位於 `archive/ci-cd/`，目前不會執行。',
-          file: '.github/CODEOWNERS＋.github/REVIEWERS',
-          code: `* {{ code_owner }}`
-        },
-        {
-          title: 'PR 同時核對標籤、Issue 編號、stack 來源與版本標題',
-          goal: '先有工作紀錄再改程式；標題仍是版本計算依據，內文可以用中文。',
-          summary: 'PR 至少選一個工作標籤；分支須為 `type/123-short-slug`，base 的 open PR 鏈須回到 main／dev，且連結 Issue 必須未結案、標題合格。',
-          file: '.github/workflows/pr-policy.yml＋scripts/test-pr-policy＋pull_request_template.md',
-          code: `^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+
-
-if printf '%s' "$PR_TITLE" | LC_ALL=C \
-  grep -q '[^ -~]'; then
-  echo "The PR body may be written in Chinese."
-  exit 1
-fi
-
+          title: 'PR 格式與工作關聯',
+          goal: '一張工作 PR 完成一張 Issue，合併後由 GitHub 關閉同一項工作。',
+          summary: '標題與目的分支符合規則；分類 Label 與 Milestone 必須和 Issue 相同，PR 作者必須列為 Assignee，內文使用 Closes #N 連回同號未結案 Issue。',
+          file: 'pull_request_template.md＋.github/workflows/pr-policy.yml＋scripts/validate-pr-policy',
+          code: `title: feat(scope): English summary
 branch: feat/123-short-slug
-base: feat/122-parent -> main
 body: Closes #123
 label: enhancement
+assignee: PR author
+milestone: same as Issue #123`
+        },
+        {
+          title: '工作 PR、發版 PR 與同步 PR',
+          goal: '工作先進 dev，完整批次再進 main；main 更新後以 PR 同步，不直接改寫開發分支。',
+          summary: 'validator 會檢查工作 PR 的目的分支與堆疊鏈；發版 PR 建立及 main-to-dev 同步目前仍由維運者手動發起。',
+          file: 'copier.yml＋.csarc/profile.json＋scripts/delivery_sync.py',
+          code: `work:    type/123-short-slug -> dev/m8-*
+release: dev/m8-* -> main
+sync:    sync/main-to-m8-*-<sha> -> dev/m8-*`
+        },
+        {
+          title: '審查與合併門檻',
+          goal: 'PR policy 與 CI 提供證據；誰可以合併及哪些例外只由規則治理定義。',
+          summary: 'CODEOWNERS、REVIEWERS 與 Ruleset policy 保存在 repo；目前 Free private 無法強制 Ruleset，自動輪派與合併工具也尚未恢復，維運者須人工指定審查者與合併。',
+          file: '.github/CODEOWNERS＋.github/REVIEWERS＋policies/rulesets.json',
+          code: `desired reviews: 1
+require CODEOWNER: true
+dismiss stale reviews: true
+resolve review threads: true
 
-## Purpose
-## Checklist
-## Supplement`
+# Run before relying on enforcement
+./scripts/apply-repository-settings.sh check`
         }
       ],
       ci: [
@@ -516,6 +508,21 @@ acknowledgement window. -->`
         }
       ],
       deploy: [
+        {
+          title: '發版完成後結束 Milestone',
+          goal: '發版成功並留下交付證據後，才關閉生命週期追蹤 Issue 與 Milestone。',
+          summary: '正常完成要連回發版與驗證證據；提前終止要先說明原因，並移轉或取消所有未完成 Issue。',
+          file: 'docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/milestone-lifecycle.yml',
+          code: `normal completion:
+  release evidence: recorded
+  unfinished Issues: none
+  lifecycle Issue: completed
+
+early termination:
+  reason: recorded
+  unfinished Issues: moved or not planned
+  lifecycle Issue: not planned`
+        },
         {
           title: '待啟用｜GitHub App 只給 Python 排程升版用',
           goal: 'Client ID 放 Variable、private key 放 Secret；App 只建立 PR，不取得 Ruleset bypass，也不把長期憑證寫進 repo 或 .env。',
