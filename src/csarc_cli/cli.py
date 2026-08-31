@@ -22,6 +22,9 @@ from urllib.parse import quote
 import yaml  # type: ignore[import-untyped]
 from reportlab.lib import colors  # type: ignore[import-untyped]
 from reportlab.lib.pagesizes import A4  # type: ignore[import-untyped]
+from reportlab.pdfbase.pdfmetrics import (  # type: ignore[import-untyped]
+    stringWidth,
+)
 from reportlab.pdfgen.canvas import Canvas  # type: ignore[import-untyped]
 
 CANONICAL_SOURCE = (
@@ -1302,10 +1305,19 @@ def adoption_report_markdown(
     return "\n".join(lines)
 
 
-def pdf_text(value: object, limit: int = 92) -> str:
+def pdf_text(
+    value: object, limit: int = 92, max_width: float | None = None
+) -> str:
     """Return printable ASCII text supported by the bundled PDF font."""
     escaped = printable(value).encode("ascii", "backslashreplace").decode()
-    return escaped if len(escaped) <= limit else escaped[: limit - 3] + "..."
+    text = escaped if len(escaped) <= limit else escaped[: limit - 3] + "..."
+    while (
+        max_width is not None
+        and len(text) > 3
+        and stringWidth(text, "Helvetica", 8) > max_width
+    ):
+        text = text[:-4] + "..."
+    return text
 
 
 def draw_adoption_pdf(
@@ -1379,12 +1391,16 @@ def draw_adoption_pdf(
         ("Hook result", hook_result),
         ("Hook reason", hook.get("reason") or "(none)"),
     )
+    value_x = 56 + max(
+        stringWidth(label, "Helvetica-Bold", 8) for label, _ in metadata
+    )
+    value_width = page_width - 48 - value_x
     y = page_height - 178
     for label, value in metadata:
         document.setFont("Helvetica-Bold", 8)
         document.drawString(48, y, label)
         document.setFont("Helvetica", 8)
-        document.drawString(110, y, pdf_text(value, 105))
+        document.drawString(value_x, y, pdf_text(value, 105, value_width))
         y -= 15
 
     counts = (
