@@ -1042,7 +1042,7 @@
     .dense-flow .flow-step { padding: 8px 10px; }
 
     .pipeline-map { display: grid; flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr) auto auto; gap: 12px; }
-    .pipeline-track { display: grid; min-height: 0; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 18px; }
+    .pipeline-track { display: grid; min-height: 0; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px; }
     .pipeline-stage {
       position: relative;
       min-width: 0;

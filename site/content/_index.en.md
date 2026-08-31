@@ -35,15 +35,16 @@ The template claims only capabilities backed by executable files and regression 
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="flow" track="flow" eyebrow="Developer journey" title="From a requirement to a deliverable version" subtitle="Steps 01–06 follow each change; 07–10 continuously support the flow." legacy="false"  class="candidate-slide" >}}
-| Stage | Human and agent action | Automation evidence |
-| --- | --- | --- |
-| 01 Define work | State the problem and acceptance criteria in an Issue | Title, field, and prior-work checks |
-| 02 Implement and test | Work from `AGENTS.md` on a short branch and isolated worktree | Focused local checks |
-| 03 Open a PR | Link the Issue and explain purpose, verification, and rollback | PR policy and delivery route |
-| 04 Run CI | Ordinary Issue PRs use the fast tier | Stable `verify` aggregate result |
-| 05 Review and merge | Fix failures, resolve review, and merge to the delivery branch | Approval and required checks |
-| 06 Version and deliver | Promotion batches version and artifact creation | Full verify, checksum, SBOM, attestation |
+{{< slide key="flow" track="flow" eyebrow="CI/CD flow" title="The template guides every change" subtitle="Follow the Issue and PR prompts; the template prepares the right settings and tells you what needs attention." legacy="false"  class="candidate-slide" >}}
+| What you are doing | How the template guides you |
+| --- | --- |
+| Create the work | The Issue form prompts for the problem, completion conditions, and necessary context |
+| Make the change | Repository guidance tells people and agents how to work and which local check to run first |
+| Open a PR | The PR template prompts for the linked Issue, completed result, and verification evidence |
+| Read the result | The template selects the necessary checks and identifies what must be fixed |
+| Review and merge | Merge into the correct branch after the result and human review are clear |
+
+Users do not need to memorize workflow or script names. Current automation focuses on work items, PR rules, and necessary verification; automated versioning and publishing are not enabled yet.
 
 {{< detail key="flow-foundation" title="Four foundations across the whole flow" >}}
 - **07 Governance:** consistent permissions, branch, review, and merge rules.
@@ -51,25 +52,26 @@ The template claims only capabilities backed by executable files and regression 
 - **09 Internal site:** keeps practices, limits, evidence, and decisions discoverable.
 - **10 Adoption levels:** start with the baseline and add platform capability only after conditions are met.
 
-A CI failure returns to step 02 in the same PR. A problem found after delivery returns to step 01 as the next bounded Issue.
+A failed check is fixed in the same PR. A new problem found after merge becomes a separate, bounded Issue.
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="files" track="files" class="dense" eyebrow="Responsibility map" title="Files the template actually creates and maintains" subtitle="The template may propose infrastructure updates without silently overwriting product-owned content." legacy="false" >}}
+{{< slide key="files" track="files" class="dense" eyebrow="File map" title="The template puts required settings in the right place" subtitle="This lists the major files currently generated; template updates never silently overwrite product-owned content." legacy="false" >}}
 | Path | Purpose | Responsibility |
 | --- | --- | --- |
 | `.copier-answers.yml`, `.csarc/profile.json` | Template source, profile, and branch strategy | Template-led |
 | `.github/ISSUE_TEMPLATE/`, `pull_request_template.md` | Work definition and PR contract | Template-led |
-| `.github/workflows/` | CI, promotion, release, OSV, and governance drift | Template-led |
-| `AGENTS.md`, `README.md` | Agent working rules and user entry point | Shared |
+| `.github/workflows/` | Five active flows: Issue triage, Milestone sync, spec sync, PR rules, and necessary verification | Template-led |
+| `AGENTS.md`, `README.md`, `CLAUDE.md` | Agent working rules and user entry point | Shared |
 | `policies/`, `CODEOWNERS`, `.github/REVIEWERS` | Desired settings, owners, and reviewers | Shared |
-| `scripts/verify` | Single verification entry point in generated projects | Template-led |
+| `scripts/` | Local verification, work synchronization, and repository settings | Template-led |
+| `docs/`, `site/` | Project guidance, specifications, decisions, and internal site | Shared |
 | `src/`, product tests, and product specifications | Product behavior | Project-owned |
 
 {{< detail key="files-update" title="How updates protect product content" >}}
 Copier carries updates into a short branch and leaves conflicts in the PR for human review. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.
 
-Workflows, policies, scripts, and documents consumed by both root and `template/` are generated from root by `scripts/sync-paired-files.sh`; `--check` verifies content and executable bits. Files that differ because of Copier variables are checked by generating a real project.
+Workflows, policies, scripts, and documents shared by root and `template/` are kept in sync. Files that differ because of project choices are verified by generating a real project. Version and publishing configuration remains present, but its GitHub Actions are not enabled yet.
 {{< /detail >}}
 {{< /slide >}}
 

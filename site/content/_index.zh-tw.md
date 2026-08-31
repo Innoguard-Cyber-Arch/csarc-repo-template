@@ -80,74 +80,64 @@ fit = "符合畫面"
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="flow" track="flow" eyebrow="開發者旅程" title="從需求到可交付版本" subtitle="01–06 跟著工作走；07–10 持續支撐整套流程。" class="legacy-slide pipeline-slide" legacy="true" >}}
+{{< slide key="flow" track="flow" eyebrow="CI/CD 流程" title="模板會帶你走完每次變更" subtitle="依表單填寫、提交 PR、查看結果；模板負責準備正確設定並指出要修正的地方。" class="legacy-slide pipeline-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
-        <h2>一張圖看懂：<span class="accent">程式怎麼從需求走到可交付版本</span></h2>
-        <p class="subtitle">CI 是 PR 上的自動檢查與回饋；CD 是合併後建立可追溯版本與成品。01–06 跟著工作走，07–10 在底層維持整套流程。</p>
+        <h2>模板會把每次變更<span class="accent">帶到正確的位置</span></h2>
+        <p class="subtitle">使用者依 Issue 與 PR 的提示工作；模板準備表單、設定與必要檢查。維運模式才需要知道實際流程名稱。</p>
       </header>
       <div class="pipeline-map">
         <div class="pipeline-track" aria-label="日常開發與交付主流程">
           <article class="pipeline-stage">
-            <span class="pipeline-phase">PLAN｜先決定要做什麼</span>
-            <div class="pipeline-tags"><span class="pipeline-tag">01</span></div>
-            <h3>定義工作</h3>
-            <p>用 Issue 說清楚問題與完成條件，其餘選填寫進補充。</p>
+            <span class="pipeline-phase">第一步｜先說清楚</span>
+            <h3>建立工作</h3>
+            <p>Issue 表單會提示問題、完成條件與必要背景。</p>
           </article>
           <article class="pipeline-stage">
-            <span class="pipeline-phase">CODE｜在短分支完成</span>
-            <div class="pipeline-tags"><span class="pipeline-tag">02</span></div>
-            <h3>實作與測試</h3>
-            <p>人或 AI 依 AGENTS.md 修改，先在本機驗證。</p>
+            <span class="pipeline-phase">第二步｜開始修改</span>
+            <h3>完成變更</h3>
+            <p>人或 AI 依 repo 內指引修改，先做最相關的本機檢查。</p>
           </article>
           <article class="pipeline-stage">
-            <span class="pipeline-phase">PR｜把變更交給團隊看</span>
-            <div class="pipeline-tags"><span class="pipeline-tag">04</span></div>
+            <span class="pipeline-phase">第三步｜交給團隊</span>
             <h3>提出 PR</h3>
-            <p>連回 Issue，說明目的、測試與回退方式。</p>
+            <p>PR 範本會提示連回 Issue，並說明完成內容與驗證結果。</p>
           </article>
           <article class="pipeline-stage">
-            <span class="pipeline-phase">CI｜機器先找明確錯誤</span>
-            <div class="pipeline-tags"><span class="pipeline-tag">03</span><span class="pipeline-tag">05</span></div>
+            <span class="pipeline-phase">第四步｜系統協助</span>
             <h3>自動檢查</h3>
-            <p>Issue PR 跑 fast；promotion 才跑 full 與可選 canary。</p>
+            <p>目前會依變更內容選擇文件、快速或完整驗證。</p>
           </article>
           <article class="pipeline-stage">
-            <span class="pipeline-phase">REVIEW｜人判斷是否合理</span>
-            <div class="pipeline-tags"><span class="pipeline-tag">04</span></div>
+            <span class="pipeline-phase">第五步｜確認結果</span>
             <h3>審查與合併</h3>
-            <p>修到檢查通過、同事核准，先進對應 delivery branch。</p>
-          </article>
-          <article class="pipeline-stage best">
-            <span class="pipeline-phase">CD｜交付同一份成品</span>
-            <div class="pipeline-tags"><span class="pipeline-tag best">06</span></div>
-            <h3>版本與交付</h3>
-            <p>promotion 批次建立 SemVer、artifact、checksum 與 SBOM；部署另訂。</p>
+            <p>結果與審查都清楚後再合併；強制程度依 GitHub 方案能力。</p>
           </article>
         </div>
         <div class="pipeline-loop" aria-label="CI 回饋迴圈">
-          <strong>↶ 檢查失敗：回到 02 修正，再更新同一張 PR</strong>
-          <span>交付後的新問題回到 01，成為下一張有邊界的 Issue。</span>
+          <strong>↶ 檢查失敗：依結果修正，再更新同一張 PR</strong>
+          <span>合併後發現的新問題，另外建立一張範圍清楚的 Issue。</span>
         </div>
         <div class="pipeline-foundation" aria-label="支撐整體流程的平台能力">
-          <div class="pipeline-foundation-label"><strong>一直支撐全流程</strong><span>不是每次手動執行，而是公版持續維護的基礎設施。</span></div>
-          <article class="pipeline-foundation-card"><h3><span class="pipeline-tag">07</span>規則治理</h3><p>權限、分支與合併規則一致。</p></article>
-          <article class="pipeline-foundation-card"><h3><span class="pipeline-tag">08</span>模板升級</h3><p>用 Copier 把政策更新帶回 repo。</p></article>
-          <article class="pipeline-foundation-card"><h3><span class="pipeline-tag">09</span>內部網站</h3><p>讓做法、限制與決策容易查找。</p></article>
-          <article class="pipeline-foundation-card best"><h3><span class="pipeline-tag best">10</span>導入層級</h3><p>基本先做；條件成熟再加進階能力。</p></article>
+          <div class="pipeline-foundation-label"><strong>模板先準備好</strong><span>一般使用者依提示操作；維運者才需要調整設定。</span></div>
+          <article class="pipeline-foundation-card"><h3>工作格式</h3><p>Issue 與 PR 表單提示必要內容。</p></article>
+          <article class="pipeline-foundation-card"><h3>驗證規則</h3><p>依變更內容選擇必要檢查。</p></article>
+          <article class="pipeline-foundation-card"><h3>合併設定</h3><p>依 GitHub 方案套用可用保護。</p></article>
+          <article class="pipeline-foundation-card best"><h3>版本發佈</h3><p>設定仍保留；Action 尚未啟用。</p></article>
         </div>
       </div>
 {{< /legacy >}}
 
 {{< basic >}}
-| 階段 | 人與 agent 做什麼 | 自動化證據 |
-| --- | --- | --- |
-| 01 定義工作 | Issue 說清楚問題與完成條件 | 標題、欄位與重複工作檢查 |
-| 02 實作測試 | 依 `AGENTS.md` 在短分支與獨立 worktree 修改 | 本機 focused checks |
-| 03 提出 PR | 連回 Issue，說明目的、驗證與回退 | PR policy 與 delivery route |
-| 04 自動檢查 | 一般 Issue PR 跑 fast | `verify` aggregate 回報結果 |
-| 05 審查合併 | 修正失敗、解決 review、先進 delivery branch | 核准與 required checks |
-| 06 版本交付 | promotion 才批次建立版本與成品 | full verify、checksum、SBOM、attestation |
+| 你正在做什麼 | 模板會怎麼引導 |
+| --- | --- |
+| 建立工作 | Issue 表單提示你寫清楚問題、完成條件與必要背景 |
+| 完成修改 | Repo 內指引告訴人與 AI 怎麼工作，以及先跑哪個本機檢查 |
+| 提交 PR | PR 範本提示連回 Issue，並填寫完成內容與驗證結果 |
+| 查看結果 | 模板依變更內容選擇必要檢查，失敗時指出需要修正的項目 |
+| 審查與合併 | 檢查結果和人工審查都清楚後，再把變更合併到正確分支 |
+
+一般使用者不必記 workflow 或 script 名稱；依畫面提示操作即可。目前自動化以工作單、PR 規則與必要驗證為主，版本與發佈流程尚未啟用。
 
 {{< detail key="flow-foundation" title="橫跨全流程的四項基礎" >}}
 - **07 規則治理：** 權限、分支、審查與合併規則一致。
@@ -155,16 +145,16 @@ fit = "符合畫面"
 - **09 內部網站：** 讓做法、限制、證據與決策容易查找。
 - **10 導入層級：** 基本能力先做；需求與平台條件成熟後才加進階能力。
 
-CI 失敗就回到 02 修正同一張 PR；交付後的新問題回到 01，成為下一張有邊界的 Issue。
+檢查失敗就修正同一張 PR；合併後的新問題則另外建立 Issue。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="files" track="files" eyebrow="責任地圖" title="模板實際加入與維護的檔案" subtitle="公版可提更新，但不靜默覆寫專案持有的產品內容。" class="legacy-slide managed-files-slide" legacy="true" >}}
+{{< slide key="files" track="files" eyebrow="檔案地圖" title="模板把必要設定放到正確位置" subtitle="列出目前實際產生的主要檔案；公版可提出更新，但不會靜默覆寫產品內容。" class="legacy-slide managed-files-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
-        <h2>模板會把這些<span class="accent">工程基礎設施放進你的 repo</span></h2>
-        <p class="subtitle">先選 CI/CD-only、Python、TypeScript 或兩者；共用 GitHub 層不變，只有所選語言的工具與產品目錄會出現。</p>
+        <h2>模板會把<span class="accent">必要設定放到正確位置</span></h2>
+        <p class="subtitle">共用規則與 5 條現行 GitHub Actions 每個 repo 都有；語言工具與產品目錄才依 CI/CD-only、Python、TypeScript 或混合模式產生。</p>
       </header>
       <div class="repo-map-window" aria-label="模板產生檔案的視覺對照">
         <div class="repo-map-toolbar">
@@ -176,26 +166,24 @@ CI 失敗就回到 02 修正同一張 PR；交付後的新問題回到 01，成�
         <div class="repo-tree-body">
           <div class="repo-tree-row"><span class="repo-tree-path">.copier-answers.yml＋.csarc/profile.json</span><span class="repo-tree-purpose"><span class="journey-code">08</span><span class="purpose-copy">來源、語言與分支模式</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path">.gitignore</span><span class="repo-tree-purpose"><span class="journey-code">02</span><span class="purpose-copy">環境雜訊／語言產物</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path folder">.github/</span><span class="repo-tree-purpose"><span class="journey-code">03–06</span><span class="purpose-copy">GitHub 自動化入口</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1">CODEOWNERS＋REVIEWERS＋governance workflow</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">指定並輪派個別 reviewer</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path folder">.github/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04</span><span class="purpose-copy">GitHub 表單、自動檢查與審查設定</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1">CODEOWNERS＋REVIEWERS</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">指定 owner 與 reviewer 候選</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">ISSUE_TEMPLATE/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">工作單欄位／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1">dependabot.yml</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">依語言更新相依</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">pull_request_template.md</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">PR 必填內容</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03–06</span><span class="purpose-copy">八條自動流程</span></span><span class="scope-badge mixed">混合</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04</span><span class="purpose-copy">5 條現行自動流程</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">ci.yml</span><span class="repo-tree-purpose"><span class="journey-code">03</span><span class="purpose-copy">執行已宣告模組</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">osv.yml</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">跨生態漏洞掃描</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">issue-triage.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">檢查並整理工作單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">milestone-lifecycle.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">同步交付批次狀態</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">pr-policy.yml</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">Issue／分支／PR 規則</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">release-please.yml</span><span class="repo-tree-purpose"><span class="journey-code">06</span><span class="purpose-copy">版本與 Release PR</span></span><span class="scope-badge mixed">混合</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">release.yml</span><span class="repo-tree-purpose"><span class="journey-code">05／06</span><span class="purpose-copy">依語言打包與 SBOM</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">spec-to-issue.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">規格自動開單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">zizmor.yml</span><span class="repo-tree-purpose"><span class="journey-code">03</span><span class="purpose-copy">Actions 安全</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">docs/specs/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">功能規格／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge project">專案持有</span></div>
+          <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">docs/＋site/</span><span class="repo-tree-purpose"><span class="journey-code">09</span><span class="purpose-copy">專案說明、決策與內部網站</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path folder">policies/</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">repo 規則／治理</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path folder">scripts/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／07</span><span class="purpose-copy">開單、驗證與套用設定</span></span><span class="scope-badge mixed">混合</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path">version source＋CHANGELOG＋release-please config／manifest</span><span class="repo-tree-purpose"><span class="journey-code">06</span><span class="purpose-copy">單一版號與變更紀錄</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge shared">共同維護</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path">version source＋CHANGELOG＋release-please config／manifest</span><span class="repo-tree-purpose"><span class="journey-code">06</span><span class="purpose-copy">保留版本基線；發版 Action 未啟用</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge shared">共同維護</span></div>
           <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">src/＋tests/；typescript/src/＋tests/</span><span class="repo-tree-purpose"><span class="journey-code">02／03</span><span class="purpose-copy">啟用模組的產品程式</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge project">專案持有</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path">README.md＋AGENTS.md＋CLAUDE.md</span><span class="repo-tree-purpose"><span class="journey-code">01–08</span><span class="purpose-copy">人與 AI 的使用規範</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path">pyproject／package／兩種 lockfile</span><span class="repo-tree-purpose"><span class="journey-code">03／05</span><span class="purpose-copy">版本與語言工具</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge shared">共同維護</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path">README.md＋AGENTS.md＋CLAUDE.md</span><span class="repo-tree-purpose"><span class="journey-code">01–08</span><span class="purpose-copy">人與 AI 的使用規範</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path">pyproject.toml／uv.lock／package.json／pnpm-lock.yaml</span><span class="repo-tree-purpose"><span class="journey-code">03／05</span><span class="purpose-copy">語言工具與相依版本</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge shared">共同維護</span></div>
         </div>
         <div class="repo-map-legend"><span><strong>黃色編號：</strong>對照左側旅程 tag。<strong>模板影響：</strong>公版主導會在 update 提出差異；共同維護可能衝突並由人處理。</span><span><strong>橘線：</strong>專案持有且不改寫。</span></div>
       </div>
@@ -206,16 +194,17 @@ CI 失敗就回到 02 修正同一張 PR；交付後的新問題回到 01，成�
 | --- | --- | --- |
 | `.copier-answers.yml`、`.csarc/profile.json` | 記錄公版來源、profile 與分支模式 | 公版主導 |
 | `.github/ISSUE_TEMPLATE/`、`pull_request_template.md` | 工作定義與 PR 契約 | 公版主導 |
-| `.github/workflows/` | CI、promotion、release、OSV 與治理漂移 | 公版主導 |
-| `AGENTS.md`、`README.md` | Agent 工作方式與使用者入口 | 共同維護 |
+| `.github/workflows/` | 5 條現行流程：工作單整理、Milestone 同步、規格開單、PR 規則與必要驗證 | 公版主導 |
+| `AGENTS.md`、`README.md`、`CLAUDE.md` | Agent 工作方式與使用者入口 | 共同維護 |
 | `policies/`、`CODEOWNERS`、`.github/REVIEWERS` | 期望設定、owner 與 reviewer | 共同維護 |
-| `scripts/verify` | 生成 repo 的單一驗證入口 | 公版主導 |
+| `scripts/` | 本機驗證、工作同步與套用設定 | 公版主導 |
+| `docs/`、`site/` | 專案說明、規格、決策與內部網站 | 共同維護 |
 | `src/`、產品測試與規格 | 真正產品行為 | 專案持有 |
 
 {{< detail key="files-update" title="更新時怎麼保護產品內容" >}}
 Copier 把更新帶進短分支，衝突留在 PR 由人檢視。建立、既有 repo 導入與同一 repo 後續 update 都有 fixture；回歸測試會刻意加入產品檔案，再確認更新後內容沒有被覆寫。
 
-Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `scripts/sync-paired-files.sh` 從 root 產生副本；`--check` 驗證內容與可執行位元沒有漂移。僅因 Copier 變數而不同的檔案則由實際生成專案比對。
+Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同步程式維持一致；只因專案選項而不同的檔案則以實際生成專案驗證。目前版本與發佈設定檔仍保留，但對應 GitHub Actions 尚未啟用。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}

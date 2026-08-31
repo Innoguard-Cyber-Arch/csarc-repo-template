@@ -120,6 +120,39 @@ def test_render_accepts_legacy_content_as_schema_one(tmp_path: Path) -> None:
     assert "window.CONTENT = {};" in render(source, root=tmp_path)
 
 
+def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
+    root = Path(__file__).parents[1]
+    chinese = (root / "site/content/_index.zh-tw.md").read_text(
+        encoding="utf-8"
+    )
+    flow = chinese.split('{{< slide key="flow"', 1)[1].split(
+        "{{< /slide >}}", 1
+    )[0]
+    file_map = chinese.split('{{< slide key="files"', 1)[1].split(
+        "{{< /slide >}}", 1
+    )[0]
+    workflows = {
+        path.name.removesuffix(".jinja")
+        for path in (root / "template/.github/workflows").iterdir()
+        if path.is_file()
+    }
+
+    assert workflows == {
+        "ci.yml",
+        "issue-triage.yml",
+        "milestone-lifecycle.yml",
+        "pr-policy.yml",
+        "spec-to-issue.yml",
+    }
+    assert "5 條現行自動流程" in file_map
+    for workflow in workflows:
+        assert workflow in file_map
+    for inactive in ("osv.yml", "release-please.yml", "release.yml"):
+        assert inactive not in file_map
+    assert "一般使用者不必記 workflow 或 script 名稱" in flow
+    assert "版本與發佈流程尚未啟用" in flow
+
+
 def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     root = Path(__file__).parents[1]
     chinese = (root / "site/content/_index.zh-tw.md").read_text(

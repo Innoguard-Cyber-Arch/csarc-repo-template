@@ -1057,7 +1057,7 @@
     .dense-flow .flow-step { padding: 8px 10px; }
 
     .pipeline-map { display: grid; flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr) auto auto; gap: 12px; }
-    .pipeline-track { display: grid; min-height: 0; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 18px; }
+    .pipeline-track { display: grid; min-height: 0; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px; }
     .pipeline-stage {
       position: relative;
       min-width: 0;
@@ -2220,7 +2220,7 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 </section>
 
-<section class="slide markdown-slide candidate-slide" id="flow" data-content-key="flow" data-track="flow" aria-label="From a requirement to a deliverable version">
+<section class="slide markdown-slide candidate-slide" id="flow" data-content-key="flow" data-track="flow" aria-label="The template guides every change">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -2278,51 +2278,41 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header>
-    <span class="selection-sequence">Developer journey</span>
-    <h2>From a requirement to a deliverable version</h2>
-    <p class="subtitle">Steps 01–06 follow each change; 07–10 continuously support the flow.</p>
+    <span class="selection-sequence">CI/CD flow</span>
+    <h2>The template guides every change</h2>
+    <p class="subtitle">Follow the Issue and PR prompts; the template prepares the right settings and tells you what needs attention.</p>
   </header>
   <div class="markdown-body"><table>
 	<thead>
 			<tr>
-					<th>Stage</th>
-					<th>Human and agent action</th>
-					<th>Automation evidence</th>
+					<th>What you are doing</th>
+					<th>How the template guides you</th>
 			</tr>
 	</thead>
 	<tbody>
 			<tr>
-					<td>01 Define work</td>
-					<td>State the problem and acceptance criteria in an Issue</td>
-					<td>Title, field, and prior-work checks</td>
+					<td>Create the work</td>
+					<td>The Issue form prompts for the problem, completion conditions, and necessary context</td>
 			</tr>
 			<tr>
-					<td>02 Implement and test</td>
-					<td>Work from <code>AGENTS.md</code> on a short branch and isolated worktree</td>
-					<td>Focused local checks</td>
+					<td>Make the change</td>
+					<td>Repository guidance tells people and agents how to work and which local check to run first</td>
 			</tr>
 			<tr>
-					<td>03 Open a PR</td>
-					<td>Link the Issue and explain purpose, verification, and rollback</td>
-					<td>PR policy and delivery route</td>
+					<td>Open a PR</td>
+					<td>The PR template prompts for the linked Issue, completed result, and verification evidence</td>
 			</tr>
 			<tr>
-					<td>04 Run CI</td>
-					<td>Ordinary Issue PRs use the fast tier</td>
-					<td>Stable <code>verify</code> aggregate result</td>
+					<td>Read the result</td>
+					<td>The template selects the necessary checks and identifies what must be fixed</td>
 			</tr>
 			<tr>
-					<td>05 Review and merge</td>
-					<td>Fix failures, resolve review, and merge to the delivery branch</td>
-					<td>Approval and required checks</td>
-			</tr>
-			<tr>
-					<td>06 Version and deliver</td>
-					<td>Promotion batches version and artifact creation</td>
-					<td>Full verify, checksum, SBOM, attestation</td>
+					<td>Review and merge</td>
+					<td>Merge into the correct branch after the result and human review are clear</td>
 			</tr>
 	</tbody>
 </table>
+<p>Users do not need to memorize workflow or script names. Current automation focuses on work items, PR rules, and necessary verification; automated versioning and publishing are not enabled yet.</p>
 <aside class="technical-detail" data-content-key="flow-foundation">
   <h3>Four foundations across the whole flow</h3>
   <ul>
@@ -2331,11 +2321,12 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>09 Internal site:</strong> keeps practices, limits, evidence, and decisions discoverable.</li>
 <li><strong>10 Adoption levels:</strong> start with the baseline and add platform capability only after conditions are met.</li>
 </ul>
-<p>A CI failure returns to step 02 in the same PR. A problem found after delivery returns to step 01 as the next bounded Issue.</p>
-</aside></div>
+<p>A failed check is fixed in the same PR. A new problem found after merge becomes a separate, bounded Issue.</p>
+</aside>
+</div>
 </section>
 
-<section class="slide markdown-slide dense" id="files" data-content-key="files" data-track="files" aria-label="Files the template actually creates and maintains">
+<section class="slide markdown-slide dense" id="files" data-content-key="files" data-track="files" aria-label="The template puts required settings in the right place">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -2393,9 +2384,9 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 
   <header>
-    <span class="selection-sequence">Responsibility map</span>
-    <h2>Files the template actually creates and maintains</h2>
-    <p class="subtitle">The template may propose infrastructure updates without silently overwriting product-owned content.</p>
+    <span class="selection-sequence">File map</span>
+    <h2>The template puts required settings in the right place</h2>
+    <p class="subtitle">This lists the major files currently generated; template updates never silently overwrite product-owned content.</p>
   </header>
   <div class="markdown-body"><table>
 	<thead>
@@ -2418,11 +2409,11 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>CI, promotion, release, OSV, and governance drift</td>
+					<td>Five active flows: Issue triage, Milestone sync, spec sync, PR rules, and necessary verification</td>
 					<td>Template-led</td>
 			</tr>
 			<tr>
-					<td><code>AGENTS.md</code>, <code>README.md</code></td>
+					<td><code>AGENTS.md</code>, <code>README.md</code>, <code>CLAUDE.md</code></td>
 					<td>Agent working rules and user entry point</td>
 					<td>Shared</td>
 			</tr>
@@ -2432,9 +2423,14 @@ html[data-detail-level="simple"] .detail-panel {
 					<td>Shared</td>
 			</tr>
 			<tr>
-					<td><code>scripts/verify</code></td>
-					<td>Single verification entry point in generated projects</td>
+					<td><code>scripts/</code></td>
+					<td>Local verification, work synchronization, and repository settings</td>
 					<td>Template-led</td>
+			</tr>
+			<tr>
+					<td><code>docs/</code>, <code>site/</code></td>
+					<td>Project guidance, specifications, decisions, and internal site</td>
+					<td>Shared</td>
 			</tr>
 			<tr>
 					<td><code>src/</code>, product tests, and product specifications</td>
@@ -2446,7 +2442,7 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="technical-detail" data-content-key="files-update">
   <h3>How updates protect product content</h3>
   <p>Copier carries updates into a short branch and leaves conflicts in the PR for human review. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.</p>
-<p>Workflows, policies, scripts, and documents consumed by both root and <code>template/</code> are generated from root by <code>scripts/sync-paired-files.sh</code>; <code>--check</code> verifies content and executable bits. Files that differ because of Copier variables are checked by generating a real project.</p>
+<p>Workflows, policies, scripts, and documents shared by root and <code>template/</code> are kept in sync. Files that differ because of project choices are verified by generating a real project. Version and publishing configuration remains present, but its GitHub Actions are not enabled yet.</p>
 </aside>
 </div>
 </section>
