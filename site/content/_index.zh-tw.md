@@ -528,7 +528,7 @@ GitHub Release 是所有 profile 的共同基線。PyPI／npm 分開選配、預
 {{< detail key="template-release-scope" title="單一來源、版本基線與 root-only 邊界" >}}
 `.csarc/config.yml` 保留 Copier 必要的模板來源與版本，並保存這個 repo 選用的公版能力；設定變更透過 `csarc update --data` 寫回，避免手動修改後與 Copier 不同步。未來的繼承公版應在同一份 YAML 增加自己的設定，不複製 CSARC 已有欄位。
 
-`scripts/sync-paired-files.sh` 讓 root 成為成對檔案的單一來源，`--check` 驗證副本內容與權限。`profiles/catalog.yaml` 保存語言基線與真實 pilot 狀態；Python 與 Node 基線各自觀察三十天後才前進。
+`scripts/sync-paired-files.sh` 讓 root 成為成對檔案的單一來源，`--check` 驗證副本內容與權限。`profiles/catalog.yaml` 保存語言基線與驗收證據；Python 與 Node 基線各自觀察三十天後才前進。
 
 `scripts/verify-template.sh` 只在公版 repo 實跑建立／導入／更新 fixture，不會下發到 consuming repository；生成 repo 使用較小的 `scripts/verify`。
 {{< /detail >}}
@@ -573,7 +573,7 @@ GitHub Release 是所有 profile 的共同基線。PyPI／npm 分開選配、預
       <p class="context-line"><strong>問題與目的｜</strong>一次導入模板、CI、部署、監控與 AI，團隊很難判斷哪裡出錯；分期後每一步都有完成條件。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">不按聲量或日期一次把功能全打開</span></summary><ul><li><strong>一次切換：</strong>錯誤會同時擴散到所有專案</li><li><strong>固定日期解鎖：</strong>時間到了不代表使用條件已成熟</li><li><strong>所有語言同時上：</strong>未驗證的 profile 只是空承諾</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">三層不是日期，而是導入條件</span></summary><p><strong>基本導入：</strong>共通基線與 Python、TypeScript、Rust 語言模組，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已有可執行實作。Free 會先查能力並套可用設定；private repo 不宣稱有 Ruleset 強制保護。<br><strong>已完成線上驗證：</strong>release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier 更新；共用治理與 CI-only 基線為 beta。<br><strong>仍在試行：</strong>Python、TypeScript 與 Rust 語言模組仍各需真實 consuming repo 證據才能升為 beta。<br><strong>未來／可選：</strong>中央 catalog／治理平台、多 repo、Go、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">三層不是日期，而是導入條件</span></summary><p><strong>基本導入：</strong>共通基線與 Python、TypeScript、Rust 語言模組，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已有可執行實作。Free 會先查能力並套可用設定；private repo 不宣稱有 Ruleset 強制保護。<br><strong>已完成線上驗證：</strong>release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier 更新。<br><strong>語言模組已驗收：</strong>Python、TypeScript 與 Rust 都會實際建立、導入既有 repo、更新、測試、建置與封裝，因此列為 beta。<br><strong>未來／可選：</strong>中央 catalog／治理平台、多 repo、Go、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></details>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>哪些 profile 已可用或仍在規劃：</strong><code>profiles/catalog.yaml</code></li><li><strong>先查方案再套可用設定：</strong><code>scripts/apply-repository-settings.sh</code>；Ruleset／App 條件備妥後再啟用</li><li><strong>建立與更新路徑是否都能通過：</strong><code>scripts/verify-template.sh</code></li></ul></aside>
 {{< /legacy >}}
@@ -583,11 +583,11 @@ GitHub Release 是所有 profile 的共同基線。PyPI／npm 分開選配、預
 | --- | --- |
 | 基本能力 | 共通基線與 Python、TypeScript、Rust 語言模組，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 網站已有可執行檔案 |
 | 已完成線上驗證 | release handoff、可追溯成品、attestation 消費端驗證、第一個 CI-only 下游導入與更新 |
-| 仍在試行 | Python、TypeScript、Rust 語言模組仍缺真實 consuming repo pilot |
+| 語言模組已驗收 | Python、TypeScript、Rust 都通過建立、既有 repo 導入、更新、鎖檔、測試、建置與封裝 |
 | 未來／選配 | 中央 catalog／治理平台、Go、託管登入、部署、監控、RAG、自主 Agent |
 
 {{< detail key="rollout-evidence" title="為什麼不一次全部打開" >}}
-一次切換會讓錯誤同時擴散；固定日期不代表使用條件成熟；沒有真實採用證據的 profile 只是空承諾。`profiles/catalog.yaml` 分開記錄合成驗證與 consuming repo evidence，`scripts/verify-template.sh` 證明建立與更新路徑能跑，但不能取代 pilot。
+一次切換會讓錯誤同時擴散，固定日期也不代表使用條件成熟。一個真實 consuming repo 證明共用導入、更新與線上 CI 邊界；各語言再用可重現的建立、既有 repo 導入、更新與原生工具鏈測試取得 beta，不另外建立重複的專用試行 repo。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
@@ -789,7 +789,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
       <header>
         <span class="selection-sequence">決策附錄</span>
         <h2>外部基準與實測｜<span class="accent">有骨架，還不是完整平台</span></h2>
-        <p class="subtitle">結論：已真正解決新 repo 建立、Copier 更新與本機／合成驗證；OSV、Release 與第一個 CI-only consuming repo 都有線上成功證據。治理仍受 GitHub 方案限制，語言 profile 尚待各自試行。</p>
+        <p class="subtitle">結論：已真正解決新 repo 建立、Copier 更新與本機／合成驗證；OSV、Release 與第一個 CI-only consuming repo 都有線上成功證據。治理仍受 GitHub 方案限制，語言模組則以可重現的生命週期與原生工具驗收。</p>
       </header>
       <table class="decision-register audit-register" aria-label="外部基準與線上實測比較">
         <thead><tr><th>外部基準／實測</th><th>判斷</th><th>研究選擇與目前邊界</th></tr></thead>
@@ -802,10 +802,10 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
           <tr><td>OSV reusable workflow＋<a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows" target="_blank" rel="noreferrer">權限傳遞</a></td><td><span class="tier-chip best">已修正</span></td><td>呼叫端權限只能維持或縮小，不能替被呼叫 workflow 補權限；<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92" target="_blank" rel="noreferrer">PR #92</a> 補回必要權限後，<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32646097257" target="_blank" rel="noreferrer">main 線上 run</a> 已成功。</td></tr>
           <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a>＋<a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip best">消費端門禁完成</span></td><td>生成專案的 PyPI／npm 再發布路徑會在啟用 attestation 時，強制比對 repository、tag、artifact digest 與 signer workflow；CI-only 不產生空 job。公版另以真實 immutable Release wheel 完成線上成功與受控 digest mismatch 驗證，細節見 <a href="artifact-consumption.md">artifact consumption evidence</a>。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/104" target="_blank" rel="noreferrer">#104</a></td></tr>
           <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> 安全基線</td><td><span class="tier-chip optional">方案感知</span></td><td>已有 pinned Actions、OSV、<code>SECURITY.md</code>、完整 Git 歷史與工作樹 secret scan；public repo 預設啟用 CodeQL，private／internal 則依 GitHub Code Security 授權明確 opt-in。</td></tr>
-          <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip best">CI-only 已證明</span></td><td><code>ai-guardrail</code> 已透過 Issue、兩支 PR 完成 v0.2.4 導入、產品客製化保留、v0.3.1 Copier update 與兩次完整線上檢查；Python、TypeScript 與 Rust 模組仍缺真實 pilot。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a>／<a href="pilot-adoption.md">證據</a></td></tr>
+          <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip best">共用生命週期已證明</span></td><td><code>ai-guardrail</code> 已透過 Issue、兩支 PR 完成 v0.2.4 導入、產品客製化保留、v0.3.1 Copier update 與兩次完整線上檢查；Python、TypeScript 與 Rust 另有各自可執行的 beta 驗收證據。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a>／<a href="pilot-adoption.md">證據</a></td></tr>
         </tbody>
       </table>
-      <p class="review-note-footer"><strong>簡潔度判斷：</strong>Copier＋GitHub Actions＋標準工具的方向夠簡潔；真實 CI-only pilot 已補上合成測試以外的證據。root-only <code>Live integration smoke</code> 持續驗證 OSV、Release Please、release handoff 與 governance drift；其餘語言 profile 各完成 pilot 後才升 beta。</p>
+      <p class="review-note-footer"><strong>簡潔度判斷：</strong>Copier＋GitHub Actions＋標準工具的方向夠簡潔；真實 CI-only pilot 已補上共用生命週期的線上證據。root-only <code>Live integration smoke</code> 持續驗證 OSV、Release Please、release handoff 與 governance drift；語言模組則由各自的可重現測試維持 beta。</p>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -819,10 +819,10 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 | OSV reusable workflow | 已修正 | 權限傳遞修正後已有成功 main run |
 | Artifact Attestations／SLSA | 消費端門禁完成 | 核對 repository、tag、digest 與 signer workflow |
 | OpenSSF Scorecard | 方案感知 | public 預設 CodeQL；private/internal 依授權 opt-in |
-| 真實 consuming repo | CI-only 已證明 | `ai-guardrail` 已完成 v0.2.4 導入與 v0.3.1 update；其他 profile 尚缺 pilot |
+| 真實 consuming repo | 共用生命週期已證明 | `ai-guardrail` 已完成 v0.2.4 導入與 v0.3.1 update；語言模組另有可執行 beta 證據 |
 
 {{< detail key="benchmark-gap" title="現階段缺口" >}}
-沒有跨 repo catalog、全面託管治理或通用部署平台。Root-only `Live integration smoke` 持續驗證 OSV、Release Please、release handoff 與 governance drift；Python、TypeScript 與 Rust 模組完成真實 pilot 後才能升為 beta。
+沒有跨 repo catalog、全面託管治理或通用部署平台。Root-only `Live integration smoke` 持續驗證 OSV、Release Please、release handoff 與 governance drift；真實產品 repo 繼續累積營運證據，但不作為一次性的語言測試 fixture。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}

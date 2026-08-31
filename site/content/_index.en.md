@@ -221,7 +221,7 @@ Each check is a snapshot. A setting changed and restored between runs still requ
 {{< detail key="template-release-scope" title="Single source, runtime baselines, and the root-only boundary" >}}
 `.csarc/config.yml` retains Copier's required template source and revision together with the capabilities selected for this repository. Change it through `csarc update --data` so manual edits cannot drift from Copier. A derived template should add its own settings to the same YAML instead of duplicating CSARC fields.
 
-`scripts/sync-paired-files.sh` makes root the source of paired files and verifies copied content and permissions with `--check`. `profiles/catalog.yaml` records runtime baselines and real pilot status. Python and Node baselines advance only after their own thirty-day observation period.
+`scripts/sync-paired-files.sh` makes root the source of paired files and verifies copied content and permissions with `--check`. `profiles/catalog.yaml` records runtime baselines and their evidence. Python and Node baselines advance only after their own thirty-day observation period.
 
 `scripts/verify-template.sh` runs create/adopt/update fixtures only in the template repository and is never delivered downstream. Generated repositories use the smaller `scripts/verify` entry point.
 {{< /detail >}}
@@ -248,11 +248,11 @@ Each check is a snapshot. A setting changed and restored between runs still requ
 | --- | --- |
 | Baseline capability | The shared baseline and Python, TypeScript, and Rust modules, plus Issues/specs, PR/CI, local verification, lockfile policy, and the repository site have executable implementations |
 | Verified online | Release handoff, traceable artifacts, consumer attestation, and the first CI-only downstream adoption and update |
-| Still piloting | The Python, TypeScript, and Rust modules still need real consuming-repository pilots |
+| Verified language modules | Python, TypeScript, and Rust each pass create, existing-repository adoption, update, lockfile, test, build, and package checks |
 | Future/optional | Central catalog or governance, Go, authenticated hosting, deployment, monitoring, RAG, and autonomous agents |
 
 {{< detail key="rollout-evidence" title="Why capabilities are not enabled all at once" >}}
-A big-bang switch spreads defects across every project; a calendar date does not prove readiness; a profile without real adoption evidence is only a promise. `profiles/catalog.yaml` separates synthetic verification from consuming-repository evidence. `scripts/verify-template.sh` proves generation and update paths, but cannot replace a pilot.
+A big-bang switch spreads defects across every project, and a calendar date does not prove readiness. One real consuming repository proves the shared adoption, update, and hosted-CI boundary. Each language module then earns beta through repeatable create, existing-repository adoption, update, and native-toolchain checks; separate disposable pilot repositories would only duplicate the shared mechanism.
 {{< /detail >}}
 
 <aside class="config-guidance"><strong>Fleet platform thresholds</strong><p>Evaluate a catalog at ten active consuming repositories, or at three or more with repeated owner or service lookup delays. Evaluate central policy enforcement at five or more only after repeated cross-repository drift or measurable manual repair cost.</p></aside>
@@ -343,10 +343,10 @@ Agents do not save raw conversations. Only a user-confirmed durable architecture
 | OSV reusable workflow | Corrected | A successful main run exists after permission propagation was fixed |
 | Artifact Attestations / SLSA | Consumer gate complete | Repository, tag, digest, and signer workflow are verified |
 | OpenSSF Scorecard | Plan-aware | Public enables CodeQL by default; private/internal explicitly opt in when licensed |
-| Real consuming repository | CI-only proven | `ai-guardrail` adopted v0.2.4 and updated to v0.3.1; other profiles still need pilots |
+| Real consuming repository | Shared lifecycle proven | `ai-guardrail` adopted v0.2.4 and updated to v0.3.1; language modules carry separate executable beta evidence |
 
 {{< detail key="benchmark-gap" title="Current gaps" >}}
-There is no cross-repository catalog, comprehensive hosted governance, or generic deployment platform. The root-only `Live integration smoke` continues to exercise OSV, Release Please, release handoff, and governance drift. The Python, TypeScript, and Rust modules advance to beta only after real pilots.
+There is no cross-repository catalog, comprehensive hosted governance, or generic deployment platform. The root-only `Live integration smoke` continues to exercise OSV, Release Please, release handoff, and governance drift. Production repositories will add operational evidence without serving as disposable language test fixtures.
 {{< /detail >}}
 {{< /slide >}}
 

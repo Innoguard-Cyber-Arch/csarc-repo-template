@@ -26,6 +26,24 @@ def test_languages_are_independent_modules() -> None:
     assert config["language"]["when"] is False
 
 
+def test_supported_language_modules_have_executable_beta_evidence() -> None:
+    """Require repeatable evidence instead of disposable pilot repos."""
+    catalog = yaml.safe_load(
+        (ROOT / "profiles/catalog.yaml").read_text(encoding="utf-8")
+    )
+    requirements = catalog["promotion_requirements"]
+
+    assert catalog["compositions"]["language_modules"]["stage"] == "beta"
+    assert "real_consuming_repository" in requirements["shared_lifecycle"]
+    assert "real_consuming_repository" not in requirements["language_module"]
+    for language in ("python", "typescript", "rust"):
+        assert catalog["profiles"][language]["stage"] == "beta"
+        evidence = catalog["promotion_evidence"][language]
+        assert evidence["status"] == "satisfied"
+        assert evidence["method"] == "executable_template_lifecycle"
+        assert evidence["evidence"]
+
+
 def test_detect_languages_composes_selected_modules(
     tmp_path: Path,
 ) -> None:
@@ -154,26 +172,56 @@ def test_config_supports_ci_only_and_extension_settings(tmp_path: Path) -> None:
     assert extension == "strict"
 
 
+@pytest.mark.parametrize(
+    ("language", "required_tools", "verify_mode", "manifest", "lockfile"),
+    [
+        ("python", ("uv",), "python", "pyproject.toml", "uv.lock"),
+        (
+            "typescript",
+            ("node", "pnpm"),
+            "typescript",
+            "package.json",
+            "pnpm-lock.yaml",
+        ),
+        (
+            "rust",
+            ("cargo", "rustc"),
+            "rust",
+            "Cargo.toml",
+            "Cargo.lock",
+        ),
+    ],
+)
 @pytest.mark.large
-def test_generated_rust_profile_runs_its_own_verifier(tmp_path: Path) -> None:
-    """Render and execute the standalone Rust module."""
-    if shutil.which("cargo") is None:
-        pytest.skip("Cargo is required for the Rust profile integration test")
+def test_generated_language_module_runs_its_own_verifier(
+    tmp_path: Path,
+    language: str,
+    required_tools: tuple[str, ...],
+    verify_mode: str,
+    manifest: str,
+    lockfile: str,
+) -> None:
+    """Render and execute each standalone language module."""
+    missing = [tool for tool in required_tools if shutil.which(tool) is None]
+    if missing:
+        pytest.skip(
+            f"Required language tools are unavailable: {', '.join(missing)}"
+        )
 
     source = tmp_path / "source"
     source.mkdir()
     shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
     shutil.copytree(ROOT / "template", source / "template")
-    project = tmp_path / "rust-project"
+    project = tmp_path / f"{language}-project"
     run_copy(
         str(source),
         project,
         data={
-            "languages": ["rust"],
-            "project_name": "Rust Fixture",
-            "project_slug": "rust-fixture",
-            "project_description": "A generated Rust fixture.",
-            "repository_url": "https://github.com/example/rust-fixture",
+            "languages": [language],
+            "project_name": f"{language.title()} Fixture",
+            "project_slug": f"{language}-fixture",
+            "project_description": f"A generated {language} fixture.",
+            "repository_url": f"https://github.com/example/{language}-fixture",
             "security_reporting_channel": "Use the private security contact.",
         },
         defaults=True,
@@ -183,12 +231,11 @@ def test_generated_rust_profile_runs_its_own_verifier(tmp_path: Path) -> None:
     profile = yaml.safe_load(
         (project / ".csarc/config.yml").read_text(encoding="utf-8")
     )
-    assert profile["languages"] == ["rust"]
+    assert profile["languages"] == [language]
     assert not (project / ".copier-answers.yml").exists()
     assert not (project / ".csarc/profile.json").exists()
-    assert (project / "Cargo.lock").is_file()
-    assert not (project / "pyproject.toml").exists()
-    assert not (project / "package.json").exists()
+    assert (project / manifest).is_file()
+    assert (project / lockfile).is_file()
     subprocess.run(  # noqa: S603
-        [project / "scripts/verify", "rust"], cwd=project, check=True
+        [project / "scripts/verify", verify_mode], cwd=project, check=True
     )

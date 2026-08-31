@@ -3229,7 +3229,7 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="technical-detail" data-content-key="template-release-scope">
   <h3>Single source, runtime baselines, and the root-only boundary</h3>
   <p><code>.csarc/config.yml</code> retains Copier&rsquo;s required template source and revision together with the capabilities selected for this repository. Change it through <code>csarc update --data</code> so manual edits cannot drift from Copier. A derived template should add its own settings to the same YAML instead of duplicating CSARC fields.</p>
-<p><code>scripts/sync-paired-files.sh</code> makes root the source of paired files and verifies copied content and permissions with <code>--check</code>. <code>profiles/catalog.yaml</code> records runtime baselines and real pilot status. Python and Node baselines advance only after their own thirty-day observation period.</p>
+<p><code>scripts/sync-paired-files.sh</code> makes root the source of paired files and verifies copied content and permissions with <code>--check</code>. <code>profiles/catalog.yaml</code> records runtime baselines and their evidence. Python and Node baselines advance only after their own thirty-day observation period.</p>
 <p><code>scripts/verify-template.sh</code> runs create/adopt/update fixtures only in the template repository and is never delivered downstream. Generated repositories use the smaller <code>scripts/verify</code> entry point.</p>
 </aside>
 </div>
@@ -3396,8 +3396,8 @@ html[data-detail-level="simple"] .detail-panel {
 					<td>Release handoff, traceable artifacts, consumer attestation, and the first CI-only downstream adoption and update</td>
 			</tr>
 			<tr>
-					<td>Still piloting</td>
-					<td>The Python, TypeScript, and Rust modules still need real consuming-repository pilots</td>
+					<td>Verified language modules</td>
+					<td>Python, TypeScript, and Rust each pass create, existing-repository adoption, update, lockfile, test, build, and package checks</td>
 			</tr>
 			<tr>
 					<td>Future/optional</td>
@@ -3407,7 +3407,7 @@ html[data-detail-level="simple"] .detail-panel {
 </table>
 <aside class="technical-detail" data-content-key="rollout-evidence">
   <h3>Why capabilities are not enabled all at once</h3>
-  A big-bang switch spreads defects across every project; a calendar date does not prove readiness; a profile without real adoption evidence is only a promise. <code>profiles/catalog.yaml</code> separates synthetic verification from consuming-repository evidence. <code>scripts/verify-template.sh</code> proves generation and update paths, but cannot replace a pilot.
+  A big-bang switch spreads defects across every project, and a calendar date does not prove readiness. One real consuming repository proves the shared adoption, update, and hosted-CI boundary. Each language module then earns beta through repeatable create, existing-repository adoption, update, and native-toolchain checks; separate disposable pilot repositories would only duplicate the shared mechanism.
 </aside>
 <aside class="config-guidance"><strong>Fleet platform thresholds</strong><p>Evaluate a catalog at ten active consuming repositories, or at three or more with repeated owner or service lookup delays. Evaluate central policy enforcement at five or more only after repeated cross-repository drift or measurable manual repair cost.</p></aside></div>
 </section>
@@ -4914,14 +4914,14 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>Real consuming repository</td>
-					<td>CI-only proven</td>
-					<td><code>ai-guardrail</code> adopted v0.2.4 and updated to v0.3.1; other profiles still need pilots</td>
+					<td>Shared lifecycle proven</td>
+					<td><code>ai-guardrail</code> adopted v0.2.4 and updated to v0.3.1; language modules carry separate executable beta evidence</td>
 			</tr>
 	</tbody>
 </table>
 <aside class="technical-detail" data-content-key="benchmark-gap">
   <h3>Current gaps</h3>
-  There is no cross-repository catalog, comprehensive hosted governance, or generic deployment platform. The root-only <code>Live integration smoke</code> continues to exercise OSV, Release Please, release handoff, and governance drift. The Python, TypeScript, and Rust modules advance to beta only after real pilots.
+  There is no cross-repository catalog, comprehensive hosted governance, or generic deployment platform. The root-only <code>Live integration smoke</code> continues to exercise OSV, Release Please, release handoff, and governance drift. Production repositories will add operational evidence without serving as disposable language test fixtures.
 </aside>
 </div>
 </section>

@@ -4353,8 +4353,8 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
 
     template_commands = pytest_commands(ROOT / "template/scripts/verify.jinja")
     assert len(template_commands) > 1
-    assert excludes_large(template_commands[0])
-    assert not any(excludes_large(command) for command in template_commands[1:])
+    assert any(excludes_large(command) for command in template_commands)
+    assert any(not excludes_large(command) for command in template_commands)
 
     marked_large = {
         name

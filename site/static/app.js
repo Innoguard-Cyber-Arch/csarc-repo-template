@@ -151,15 +151,15 @@ use_reusable_workflow:
 # CI checks the selected .0 lower bound and every feature release through 3.14.`
         },
         {
-          title: '可用性與真實採用成熟度分開標示',
-          goal: 'profile 清單同時記錄合成驗證與 consuming repo 證據，不把可建立誤寫成已成熟。',
+          title: '共用生命週期與語言模組分開驗收',
+          goal: '真實 repo 證明共用導入與線上邊界；語言模組以可重現的生命週期與原生工具驗收。',
           file: 'profiles/catalog.yaml',
           code: `template_release_policy:
   strategy: single_semver_for_all_compositions
 
 profiles:
   python:
-    stage: alpha
+    stage: beta
     latest_reviewed_stable: "3.14"
     default_support_mode: latest
     support_modes:
@@ -171,11 +171,11 @@ profiles:
       name: Google Python Style Guide
       line_length: 80
   typescript:
-    stage: alpha
+    stage: beta
     latest_reviewed_active_lts: "24"
     package_manager: pnpm
   rust:
-    stage: alpha
+    stage: beta
     latest_reviewed_stable: "1.98.0"
     package_manager: cargo
   go: {stage: future}
@@ -183,7 +183,7 @@ profiles:
 compositions:
   ci: {stage: beta, profiles: []}
   language_modules:
-    stage: alpha
+    stage: beta
     selectable_profiles: [python, typescript, rust]
     selection: any_subset
 
@@ -637,15 +637,15 @@ dispatch_artifacts(next_tag)`
       ],
       rollout: [
         {
-          title: '語言模組依真實採用證據分級',
+          title: '語言模組依可重現證據分級',
           goal: '基本、未來與可選不是口號，而是對可用能力的承諾。',
-          summary: '共用治理與 CI/CD-only 已有真實 pilot，維持 `beta`；Python、TypeScript 與 Rust 模組可建立但尚無 consuming repo，維持 `alpha`；Go 保持 `future`。',
+          summary: '真實 consuming repo 已證明共用生命週期；Python、TypeScript 與 Rust 各自通過建立、導入、更新與原生工具鏈，列為 `beta`；Go 保持 `future`。',
           file: 'profiles/catalog.yaml',
           code: `ci: {stage: beta, profiles: []}
-python: {stage: alpha}
-typescript: {stage: alpha}
+python: {stage: beta}
+typescript: {stage: beta}
 go: {stage: future}
-rust: {stage: alpha}`
+rust: {stage: beta}`
         },
         {
           title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
@@ -727,8 +727,8 @@ CSARC_VERSION_BOT_PRIVATE_KEY`
         },
         {
           title: '共通基線與每個語言模組都要真的執行',
-          goal: 'beta 必須同時有合成生命週期與真實 consuming repo 證據。',
-          summary: '共通基線與每個語言模組都通過合成建立／更新；同時選取時合併執行，不另外維護組合測試。',
+          goal: '每個 beta 語言都必須真的建立、導入、更新並執行自己的原生工具。',
+          summary: '共通生命週期由真實 repo 證明；每個語言模組則用可重現測試驗收，同時選取時合併執行，不另外維護組合測試。',
           file: 'scripts/verify-template.sh＋profiles/catalog.yaml',
           code: `./scripts/verify-template.sh
 
@@ -736,10 +736,10 @@ CSARC_VERSION_BOT_PRIVATE_KEY`
 # reusable workflow and copier update.
 
 ci: {stage: beta, profiles: []}
-python: {stage: alpha}
-typescript: {stage: alpha}
+python: {stage: beta}
+typescript: {stage: beta}
 go: {stage: future}
-rust: {stage: alpha}`
+rust: {stage: beta}`
         }
       ]
     });

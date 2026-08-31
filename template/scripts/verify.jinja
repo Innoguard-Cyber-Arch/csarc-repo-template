@@ -22,9 +22,10 @@ record_project_verification_status() {
 record_project_verification_status not-run
 
 mode="${1:-full}"
-if [[ "$mode" != "full" && "$mode" != "python-compatibility" &&
+if [[ "$mode" != "full" && "$mode" != "python" &&
+  "$mode" != "python-compatibility" &&
   "$mode" != "typescript" && "$mode" != "rust" ]]; then
-  echo "Usage: $0 [full|python-compatibility|typescript|rust]" >&2
+  echo "Usage: $0 [full|python|python-compatibility|typescript|rust]" >&2
   exit 2
 fi
 
@@ -86,6 +87,59 @@ verify_rust_module() {
   cargo package --locked --allow-dirty
 }
 
+verify_python_module() {
+  python_version="${CSARC_PYTHON_VERSION:-3.14}"
+  export UV_PYTHON="$python_version"
+  uv sync --locked --python "$python_version"
+  uv run ruff format --check .
+  uv run ruff check .
+  uv run mypy
+  uv run python - <<'PY'
+from importlib import import_module
+from importlib.metadata import version
+
+package_version = getattr(import_module("{{ package_name }}"), "__version__", None)
+installed_version = version("{{ project_slug }}")
+if package_version != installed_version:
+    raise SystemExit(
+        "Python package __version__ does not match pyproject.toml: "
+        f"{package_version} != {installed_version}"
+    )
+PY
+{% if coverage_mode == "global" %}
+  uv run pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under={{ coverage_threshold }}
+{% else %}
+  uv run pytest --cov --cov-report=term-missing --cov-report=xml
+  compare_branch="${DIFF_COVER_COMPARE_BRANCH:-origin/main}"
+  if ! git rev-parse --verify --quiet "$compare_branch" >/dev/null; then
+    echo "Set DIFF_COVER_COMPARE_BRANCH to an existing ref (current: $compare_branch)." >&2
+    exit 1
+  fi
+  uv run diff-cover coverage.xml --compare-branch="$compare_branch" --fail-under={{ coverage_threshold }}
+{% endif %}
+  uv build --clear
+  python_sdist="$(find dist -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+  test -n "$python_sdist"
+  python_sdist_entries="$(tar -tzf "$python_sdist")"
+  grep -q '/src/{{ package_name }}/' <<<"$python_sdist_entries"
+  if grep -Eq '/(\.github|policies|scripts|tests|typescript)/' <<<"$python_sdist_entries"; then
+    echo "Python sdist contains repository infrastructure or test files." >&2
+    exit 1
+  fi
+  uv run --isolated --no-project --with ./dist/*.whl \
+    python -c "import {{ package_name }}"
+  uv run --isolated --no-project --with twine twine check dist/*
+}
+
+if [[ "$mode" == "python" ]]; then
+  if ! $verify_python; then
+    echo "Python verification is unavailable for this language profile." >&2
+    exit 2
+  fi
+  verify_python_module
+  exit 0
+fi
+
 if [[ "$mode" == "python-compatibility" ]]; then
   if ! $verify_python; then
     echo "Python compatibility is unavailable for this language profile." >&2
@@ -128,47 +182,7 @@ uv run --no-project python scripts/render_site.py --check
 ./scripts/lint-workflows-shell
 
 if $verify_python; then
-  python_version="${CSARC_PYTHON_VERSION:-3.14}"
-  export UV_PYTHON="$python_version"
-  uv sync --locked --python "$python_version"
-  uv run ruff format --check .
-  uv run ruff check .
-  uv run mypy
-  uv run python - <<'PY'
-from importlib import import_module
-from importlib.metadata import version
-
-package_version = getattr(import_module("{{ package_name }}"), "__version__", None)
-installed_version = version("{{ project_slug }}")
-if package_version != installed_version:
-    raise SystemExit(
-        "Python package __version__ does not match pyproject.toml: "
-        f"{package_version} != {installed_version}"
-    )
-PY
-{% if coverage_mode == "global" %}
-  uv run pytest --cov --cov-report=term-missing --cov-report=xml --cov-fail-under={{ coverage_threshold }}
-{% else %}
-  uv run pytest --cov --cov-report=term-missing --cov-report=xml
-  compare_branch="${DIFF_COVER_COMPARE_BRANCH:-origin/main}"
-  if ! git rev-parse --verify --quiet "$compare_branch" >/dev/null; then
-    echo "Set DIFF_COVER_COMPARE_BRANCH to an existing ref (current: $compare_branch)." >&2
-    exit 1
-  fi
-  uv run diff-cover coverage.xml --compare-branch="$compare_branch" --fail-under={{ coverage_threshold }}
-{% endif %}
-  uv build --clear
-  python_sdist="$(find dist -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
-  test -n "$python_sdist"
-  python_sdist_entries="$(tar -tzf "$python_sdist")"
-  grep -q '/src/{{ package_name }}/' <<<"$python_sdist_entries"
-  if grep -Eq '/(\.github|policies|scripts|tests|typescript)/' <<<"$python_sdist_entries"; then
-    echo "Python sdist contains repository infrastructure or test files." >&2
-    exit 1
-  fi
-  uv run --isolated --no-project --with ./dist/*.whl \
-    python -c "import {{ package_name }}"
-  uv run --isolated --no-project --with twine twine check dist/*
+  verify_python_module
 fi
 
 if [[ "$verify_typescript" == "true" ]]; then

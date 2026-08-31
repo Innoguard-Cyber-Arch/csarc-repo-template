@@ -40,13 +40,12 @@ def test_dependabot_uses_three_day_cooldown() -> None:
             expected.add("npm")
         if "rust" in languages:
             expected.add("cargo")
-        container_mode = subprocess.run(
-            [sys.executable, "scripts/csarc_config.py", "container_mode"],
-            cwd=REPO_ROOT,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        container_match = re.search(
+            r"^container_mode:\s*(\S+)\s*$",
+            config_path.read_text(encoding="utf-8"),
+            re.M,
+        )
+        container_mode = container_match.group(1) if container_match else "none"
         if container_mode != "none":
             expected.add("docker")
 
