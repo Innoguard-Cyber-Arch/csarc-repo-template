@@ -224,7 +224,8 @@
               "milestone": {
                 "files": [{"path": "scripts/test-issue-triage"}],
                 "automation": [{"path": ".github/workflows/issue-triage.yml", "job": "classify", "trigger": {"zh-tw": "Issue opened／edited／reopened／closed", "en": "Issue opened, edited, reopened, or closed"}, "timeout": "5 min"}]
-              }
+              },
+              "release": {"files": [{"path": "scripts/test-issue-triage"}]}
             },
             "templateOnly": {
               "release": {
@@ -263,8 +264,8 @@
         "key": "agents",
         "journey": "02",
         "labels": {
-          "zh-tw": {"title": "AI 規範", "heading": "Journey 02／最小驗證契約", "scope": "一般 repo 驗證 AI 規範入口與 worktree 清理；repo-template 只在 promotion 檢查產出的規範。"},
-          "en": {"title": "AI rules", "heading": "Journey 02 / Minimum verification contract", "scope": "A normal repository validates the AI-rule entrypoint and worktree cleanup. During promotion, repo-template also checks the emitted rules."}
+          "zh-tw": {"title": "AI 規範", "heading": "Journey 02／最小驗證契約", "scope": "一般 repo 在兩個 PR 階段都驗證 worktree 安全清理；repo-template 另外檢查 AI 規範來源與產出內容。"},
+          "en": {"title": "AI rules", "heading": "Journey 02 / Minimum verification contract", "scope": "A normal repository validates safe worktree cleanup at both PR stages. repo-template also checks the AI-rule source and generated guidance."}
         },
         "rows": [
           {
@@ -272,15 +273,21 @@
               "zh-tw": {"title": "AI 規範入口", "description": "所有 agent 讀同一份根規範，生成內容只列該 profile 真能執行的命令。"},
               "en": {"title": "AI rules entrypoint", "description": "Every agent reads one root policy, and generated content lists only commands the profile can actually run."}
             },
-            "shared": {"release": {"files": [{"path": "scripts/verify"}]}},
-            "templateOnly": {"milestone": {"files": [{"path": "tests/test_ai_guidelines.py"}]}}
+            "shared": {},
+            "templateOnly": {
+              "milestone": {"files": [{"path": "tests/test_ai_guidelines.py"}]},
+              "release": {"files": [{"path": "tests/test_ai_guidelines.py"}]}
+            }
           },
           {
             "purpose": {
               "zh-tw": {"title": "平行工作隔離與安全清理", "description": "可寫工作各自使用 branch／worktree，清理時不刪除未合併或有修改的目錄。"},
               "en": {"title": "Parallel isolation and safe cleanup", "description": "Writable tasks use separate branches and worktrees, and cleanup never removes unmerged or modified directories."}
             },
-            "shared": {"milestone": {"files": [{"path": "scripts/test-worktree-cleanup"}]}},
+            "shared": {
+              "milestone": {"files": [{"path": "scripts/test-worktree-cleanup"}]},
+              "release": {"files": [{"path": "scripts/test-worktree-cleanup"}]}
+            },
             "templateOnly": {}
           }
         ]
@@ -347,7 +354,8 @@
               "milestone": {
                 "files": [{"path": "scripts/test-pr-policy"}],
                 "automation": [{"path": ".github/workflows/pr-policy.yml", "job": "title", "trigger": {"zh-tw": "PR 開啟、內容／commit／metadata 變更", "en": "PR opened or its content, commits, or metadata changes"}, "timeout": "10 min"}]
-              }
+              },
+              "release": {"files": [{"path": "scripts/test-pr-policy"}]}
             },
             "templateOnly": {
               "milestone": {"note": {"zh-tw": "使用相同 validator；repo-template 不維護另一套 PR 規則。", "en": "Uses the same validator; repo-template has no second PR policy."}}
@@ -395,6 +403,17 @@
           "en": {"milestone": "Before release", "release": "After release"}
         },
         "rows": [
+          {
+            "purpose": {
+              "zh-tw": {"title": "發版後續規則", "description": "先保留回歸測試，避免未來恢復發版流程時遺失既有安全邊界；目前沒有專用 Action。"},
+              "en": {"title": "Release follow-up rules", "description": "Keep the regression now so future release restoration cannot lose the existing safety boundary. No dedicated Action is active."}
+            },
+            "shared": {
+              "milestone": {"files": [{"path": "scripts/test-release-follow-up-gates"}]},
+              "release": {"files": [{"path": "scripts/test-release-follow-up-gates"}]}
+            },
+            "templateOnly": {}
+          },
           {
             "purpose": {
               "zh-tw": {"title": "Milestone 結案", "description": "正常完成時確認發版與交付證據；提前終止時先記錄原因，並移轉或取消未完成 Issue。"},

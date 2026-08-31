@@ -4475,6 +4475,9 @@ html[data-detail-level="simple"] .detail-panel {
             <li>
               <strong>工作開始前</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-issue-triage</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/issue-triage.yml</code>／<code>classify</code><span>Trigger：Issue opened／edited／reopened／closed · Timeout：5 min</span></li></ul></div>
             </li>
+            <li>
+              <strong>工作結束時</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-issue-triage</code></li></ul></div>
+            </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
@@ -4508,7 +4511,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-agents" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-agents" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 02／最小驗證契約</strong><span>一般 repo 驗證 AI 規範入口與 worktree 清理；repo-template 只在 promotion 檢查產出的規範。</span>
+    <strong>Journey 02／最小驗證契約</strong><span>一般 repo 在兩個 PR 階段都驗證 worktree 安全清理；repo-template 另外檢查 AI 規範來源與產出內容。</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 02／最小驗證契約">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
@@ -4517,13 +4520,13 @@ html[data-detail-level="simple"] .detail-panel {
         <tr>
           <th scope="row"><strong>AI 規範入口</strong><span>所有 agent 讀同一份根規範，生成內容只列該 profile 真能執行的命令。</span></th>
           <td><ul class="testing-stage-list">
-            <li>
-              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div>
-            </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
               <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
+            </li>
+            <li>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
             </li>
           </ul></td>
         </tr>
@@ -4532,6 +4535,9 @@ html[data-detail-level="simple"] .detail-panel {
           <td><ul class="testing-stage-list">
             <li>
               <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
+            </li>
+            <li>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4606,6 +4612,9 @@ html[data-detail-level="simple"] .detail-panel {
             <li>
               <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR 開啟、內容／commit／metadata 變更 · Timeout：10 min</span></li></ul></div>
             </li>
+            <li>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div>
+            </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
@@ -4651,6 +4660,19 @@ html[data-detail-level="simple"] .detail-panel {
     <table class="similar-tools-matrix similar-tools-testing-matrix">
       <thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead>
       <tbody>
+        <tr>
+          <th scope="row"><strong>發版後續規則</strong><span>先保留回歸測試，避免未來恢復發版流程時遺失既有安全邊界；目前沒有專用 Action。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>發版前</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-release-follow-up-gates</code></li></ul></div>
+            </li>
+            <li>
+              <strong>發版後</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-release-follow-up-gates</code></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
+        </tr>
         <tr>
           <th scope="row"><strong>Milestone 結案</strong><span>正常完成時確認發版與交付證據；提前終止時先記錄原因，並移轉或取消未完成 Issue。</span></th>
           <td><ul class="testing-stage-list">

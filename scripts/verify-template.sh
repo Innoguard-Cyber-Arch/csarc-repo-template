@@ -23,6 +23,10 @@ uv run ruff format --check src scripts tests
 uv run ruff check src scripts tests
 uv run mypy
 uv run pytest --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80
+./scripts/test-issue-triage
+./scripts/test-worktree-cleanup
+./scripts/test-pr-policy
+./scripts/test-release-follow-up-gates
 uv build
 
 wheel="$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
