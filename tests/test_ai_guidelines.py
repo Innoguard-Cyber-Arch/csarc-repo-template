@@ -63,8 +63,6 @@ def test_thin_imports_and_readme_do_not_duplicate_merge_policy() -> None:
     assert template_guidance.count("BEGIN CSARC MANAGED BLOCK") == 1
     assert template_guidance.count("END CSARC MANAGED BLOCK") == 1
 
-    readme = (ROOT / "template" / "README.md.jinja").read_text(
-        encoding="utf-8"
-    )
+    readme = (ROOT / "template" / "README.md.jinja").read_text(encoding="utf-8")
     assert "一般情況下不能自行合併" not in readme
     assert "07 規則治理" in readme

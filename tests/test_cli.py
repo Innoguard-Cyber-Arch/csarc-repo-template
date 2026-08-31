@@ -1234,7 +1234,7 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert "README.md" in payload["files"]["preserve"]
     assert "CHANGELOG.md" in payload["files"]["preserve"]
     assert ".github/workflows/release.yml" in payload["files"]["preserve"]
-    assert ".github/workflows/csarc-release.yml" in payload["files"]["add"]
+    assert ".github/workflows/csarc-release.yml" not in payload["files"]["add"]
     assert cli.PROVENANCE_FILE.as_posix() in payload["files"]["add"]
     assert payload["adoption"]["project_verification_hook"] == {
         "configured": True,
@@ -1268,7 +1268,9 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert product_release.read_text(encoding="utf-8").startswith(
         "name: Product release"
     )
-    assert (project / ".github" / "workflows" / "csarc-release.yml").is_file()
+    assert not (
+        project / ".github" / "workflows" / "csarc-release.yml"
+    ).is_file()
     assert "Keep this rule." in (project / "AGENTS.md").read_text(
         encoding="utf-8"
     )
@@ -4242,18 +4244,6 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         commands = pytest_commands(bounded_gate)
         assert commands
         assert all(excludes_large(command) for command in commands)
-
-    root_ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    compatibility_job = root_ci.split("  python-compatibility:\n", 1)[1].split(
-        "\n  adoption-macos:\n", 1
-    )[0]
-    compatibility_commands = [
-        shlex.split(line.strip())
-        for line in compatibility_job.splitlines()
-        if line.strip().startswith("uv run pytest")
-    ]
-    assert compatibility_commands
-    assert all(excludes_large(command) for command in compatibility_commands)
 
     root_full_commands = pytest_commands(ROOT / "scripts/verify-template.sh")
     assert root_full_commands

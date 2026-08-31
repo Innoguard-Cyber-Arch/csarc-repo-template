@@ -42,7 +42,7 @@ def test_root_release_config_updates_site_source_and_rendered_bundle() -> None:
     paths = {
         item if isinstance(item, str) else item["path"] for item in extra_files
     }
-    assert {"site/index.html", "docs/index.html"} <= paths
+    assert {"site/content/_index.zh-tw.md", "docs/index.html"} <= paths
 
 
 def test_release_version_checks_configured_site_source(tmp_path: Path) -> None:

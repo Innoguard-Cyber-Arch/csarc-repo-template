@@ -15,6 +15,7 @@ git diff --check
 
 if [[ "$tier" == "docs" ]]; then
   python3 scripts/spec_to_issue.py validate
+  ./scripts/build-decision-site --check
   exit 0
 fi
 

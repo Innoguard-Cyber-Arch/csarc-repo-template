@@ -1842,15 +1842,16 @@ jobs:
             workflow
         )
 
-    for name in ("pr-policy.yml", "promotion.yml"):
+    for name in ("pr-policy.yml", "ci.yml"):
         source = (root / ".github/workflows" / name).read_text()
         assert "secrets.CSARC_SYNC_TOKEN" not in source
-        assert "GH_TOKEN: ${{ github.token }}" in source
 
 
 def test_admin_secret_is_limited_to_trusted_workflow_definitions() -> None:
     """Privileged restoration runs only from default-branch workflow sources."""
     root = Path(__file__).parents[1] / ".github/workflows"
+    if not (root / "delivery-maintenance.yml").is_file():
+        pytest.skip("Journey 06 trusted delivery workflows remain archived")
     maintenance = (root / "delivery-maintenance.yml").read_text()
     post_merge = (root / "promotion-post-merge.yml").read_text()
     close_signal = (root / "dev-next-close.yml").read_text()
@@ -1877,6 +1878,8 @@ def test_admin_secret_is_limited_to_trusted_workflow_definitions() -> None:
 def test_post_merge_accepts_promotion_bridge() -> None:
     """Trusted post-merge workflows accept both promotion bridge routes."""
     root = Path(__file__).parents[1] / ".github/workflows"
+    if not (root / "promotion-post-merge.yml").is_file():
+        pytest.skip("Journey 06 post-merge workflows remain archived")
     workflow = (root / "promotion-post-merge.yml").read_text()
     assert ('! "$head_ref" =~ ^promote/m[0-9]+-[a-z0-9][a-z0-9-]*$') in workflow
     assert '"$head_ref" != "promote/next"' in workflow

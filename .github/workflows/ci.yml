@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select verification tier
+        id: plan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          PR_BASE: ${{ github.event.pull_request.base.ref || github.event.merge_group.base_ref || '' }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref || github.event.merge_group.head_ref || '' }}
+        run: |
+          files="$RUNNER_TEMP/changed-files"
+          if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]]; then
+            git diff --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$files"
+          else
+            git ls-files -z > "$files"
+          fi
+          args=()
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            args+=(--force-full)
+          fi
+          python3 scripts/ci_tier.py \
+            --event "$EVENT_NAME" \
+            --base "${PR_BASE#refs/heads/}" \
+            --head "${PR_HEAD#refs/heads/}" \
+            --labels "$LABELS" \
+            --files-from "$files" \
+            --output-json ci-plan.json \
+            --github-output "$GITHUB_OUTPUT" \
+            --summary "$GITHUB_STEP_SUMMARY" \
+            "${args[@]}"
+      - if: ${{ steps.plan.outputs.tier != 'docs' }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - if: ${{ steps.plan.outputs.tier != 'docs' }}
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - if: ${{ steps.plan.outputs.tier == 'full' }}
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: "11.22.0"
+          run_install: false
+      - if: ${{ steps.plan.outputs.tier == 'full' }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Run bounded verification
+        if: ${{ steps.plan.outputs.tier == 'docs' || steps.plan.outputs.tier == 'fast' }}
+        env:
+          CSARC_CI_SCOPES: ${{ steps.plan.outputs.scopes }}
+          CSARC_CI_TIER: ${{ steps.plan.outputs.tier }}
+          CSARC_PYTHON_VERSION: "3.14"
+        run: ./scripts/verify-fast
+      - name: Run full verification
+        if: ${{ steps.plan.outputs.tier == 'full' }}
+        env:
+          CSARC_PYTHON_VERSION: "3.14"
+        run: ./scripts/verify-template.sh
+      - name: Record result
+        if: ${{ always() }}
+        env:
+          RESULT: ${{ job.status }}
+        run: echo "- Verification — $RESULT" >> "$GITHUB_STEP_SUMMARY"
