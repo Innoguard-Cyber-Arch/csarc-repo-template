@@ -51,7 +51,9 @@ paired_files=(
   scripts/test-pr-policy
   scripts/test-release-follow-up-gates
   scripts/test-worktree-cleanup
+  scripts/validate-issue-policy
   scripts/validate-issue-title
+  scripts/validate-pr-policy
   tests/test_ci_tier.py
   tests/test_spec_to_issue.py
   tests/test_delivery_sync.py
