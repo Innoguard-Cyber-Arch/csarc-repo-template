@@ -79,6 +79,14 @@
       }
     },
     {
+      "key": "supply",
+      "features": ["dependencyUpdatePolicy", "lockedDependencyResolution", "knownVulnerabilityDetection", "releaseArtifactInventory"],
+      "labels": {
+        "zh-tw": {"overline": "Journey 04", "title": "依賴安全", "legend": "只比較套件更新如何進入 PR、安裝時如何固定版本、已公開漏洞何時檢查，以及發版成品如何留下清冊"},
+        "en": {"overline": "Journey 04", "title": "Dependency security", "legend": "Compares only how package updates enter a PR, how installs pin versions, when disclosed vulnerabilities are checked, and how releases retain an inventory."}
+      }
+    },
+    {
       "key": "pr",
       "features": ["pullRequestUnit", "integrationRoute", "mergeReadiness", "baseSynchronization", "proposalLifecycle"],
       "labels": {
@@ -159,7 +167,8 @@
             "items": [
               {"label": {"zh-tw": "PR／合併", "en": "PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
               {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "驗證／CI 其中 < 1 分鐘", "en": "Under 1 min within Verification / CI"}},
-              {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 2–5 分鐘", "en": "docs <1 min; fast 2–5 min"}}
+              {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 2–5 分鐘", "en": "docs <1 min; fast 2–5 min"}},
+              {"label": {"zh-tw": "依賴安全", "en": "Dependency security"}, "value": {"zh-tw": "fast 其中約 1–3 分鐘；#407 後重測", "en": "About 1–3 min within fast; remeasure after #407"}}
             ],
             "total": {"zh-tw": "約 1–7 分鐘", "en": "About 1–7 min"}
           },
@@ -167,7 +176,8 @@
             "items": [
               {"label": {"zh-tw": "PR／合併", "en": "PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
               {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "驗證／CI 其中 < 1 分鐘", "en": "Under 1 min within Verification / CI"}},
-              {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 3–6 分鐘", "en": "docs <1 min; fast 3–6 min"}}
+              {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 3–6 分鐘", "en": "docs <1 min; fast 3–6 min"}},
+              {"label": {"zh-tw": "依賴安全", "en": "Dependency security"}, "value": {"zh-tw": "fast 其中約 1–3 分鐘；#407 後重測", "en": "About 1–3 min within fast; remeasure after #407"}}
             ],
             "total": {"zh-tw": "約 1–8 分鐘", "en": "About 1–8 min"}
           }
@@ -179,7 +189,8 @@
             "items": [
               {"label": {"zh-tw": "PR／合併", "en": "PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
               {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "full 其中 < 1 分鐘", "en": "Under 1 min within full"}},
-              {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "full 5–15 分鐘", "en": "full 5–15 min"}}
+              {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "full 5–15 分鐘", "en": "full 5–15 min"}},
+              {"label": {"zh-tw": "依賴安全", "en": "Dependency security"}, "value": {"zh-tw": "full 其中約 1–3 分鐘；#407 後重測", "en": "About 1–3 min within full; remeasure after #407"}}
             ],
             "total": {"zh-tw": "約 6–17 分鐘", "en": "About 6–17 min"}
           },
@@ -187,7 +198,8 @@
             "items": [
               {"label": {"zh-tw": "PR／合併", "en": "PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
               {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "full 其中 < 1 分鐘", "en": "Under 1 min within full"}},
-              {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "full 8–12 分鐘", "en": "full 8–12 min"}}
+              {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "full 8–12 分鐘", "en": "full 8–12 min"}},
+              {"label": {"zh-tw": "依賴安全", "en": "Dependency security"}, "value": {"zh-tw": "full 其中約 1–3 分鐘；#407 後重測", "en": "About 1–3 min within full; remeasure after #407"}}
             ],
             "total": {"zh-tw": "約 9–14 分鐘", "en": "About 9–14 min"}
           }
@@ -207,7 +219,7 @@
           "en": {
             "title": "Work definition",
             "heading": "Journey 01 / Minimum test contract",
-            "scope": "Validates how Issues become actionable and how a Milestone gains approval to start. PR merging and Milestone closure belong to Journeys 04 and 06."
+            "scope": "Validates how Issues become actionable and how a Milestone gains approval to start. PR merging and Milestone closure belong to Journeys 05 and 06."
           }
         },
         "stageLabels": {
@@ -334,6 +346,82 @@
             "templateOnly": {
               "release": {"files": [{"path": "scripts/verify-template.sh"}], "note": {"zh-tw": "額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑。", "en": "Additionally verifies the template, generated output, and existing-repository adoption and update paths."}}
             }
+          }
+        ]
+      },
+      {
+        "key": "supply",
+        "journey": "04",
+        "labels": {
+          "zh-tw": {"title": "依賴安全", "heading": "Journey 04／依賴安全", "scope": "依賴異動先重現鎖檔安裝；已知漏洞只在依賴變更與發版候選加跑，週期掃描另補沒有 PR 的時段。自動更新與掃描由 #407 恢復。"},
+          "en": {"title": "Dependency security", "heading": "Journey 04 / Dependency security", "scope": "Dependency changes first reproduce the locked install. Vulnerability checks run for dependency changes and release candidates, while a schedule covers periods without PRs. #407 restores update and scanning automation."}
+        },
+        "rows": [
+          {
+            "purpose": {
+              "zh-tw": {"title": "鎖定版本可重現安裝", "description": "依 lockfile 安裝，拒絕未記錄的解析結果；TypeScript 另執行三天觀察期與發布者 trust policy。"},
+              "en": {"title": "Reproduce the locked dependency set", "description": "Install from the lockfile and reject unrecorded resolution. TypeScript also enforces a three-day observation window and publisher trust policy."}
+            },
+            "shared": {
+              "milestone": {
+                "files": [{"path": "scripts/verify-fast"}],
+                "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "依賴檔案變更的 Issue PR", "en": "Issue PR changing dependency files"}, "timeout": "30 min"}]
+              },
+              "release": {
+                "files": [{"path": "scripts/verify"}],
+                "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "發版 PR／merge group／手動完整驗證", "en": "Release PR, merge group, or manual full verification"}, "timeout": "30 min"}]
+              }
+            },
+            "templateOnly": {
+              "milestone": {"files": [{"path": "scripts/verify-fast"}], "note": {"zh-tw": "依賴設定變更時，額外產生一個代表性 repo 驗證生成結果。", "en": "A dependency-setting change also generates one representative repository to verify the rendered result."}},
+              "release": {"files": [{"path": "scripts/verify-template.sh"}], "note": {"zh-tw": "完整測試所有 profile 的生成與鎖檔契約。", "en": "Fully tests generated profiles and their lockfile contract."}}
+            }
+          },
+          {
+            "purpose": {
+              "zh-tw": {"title": "一般更新自動提出 PR", "description": "Dependabot 依生態圈分組更新，一般新版等三天；安全修補不套用等待期。"},
+              "en": {"title": "Open routine update PRs", "description": "Dependabot groups updates by ecosystem and waits three days for ordinary releases without delaying security fixes."}
+            },
+            "shared": {
+              "milestone": {
+                "files": [{"path": ".github/dependabot.yml", "pending": true, "issue": 407}],
+                "automationNote": {"zh-tw": "待 #407 從 archive 恢復；建立的更新 PR 仍走同一個 CI job。", "en": "#407 restores this from the archive; generated update PRs still use the same CI job."}
+              }
+            },
+            "templateOnly": {
+              "release": {"files": [{"path": "tests/test_dependency_policy.py", "pending": true, "issue": 407}], "note": {"zh-tw": "確認不同 profile 只生成適用的更新生態圈。", "en": "Confirms that each profile emits only its applicable update ecosystems."}}
+            }
+          },
+          {
+            "purpose": {
+              "zh-tw": {"title": "已公開漏洞立即檢查", "description": "依賴檔案變更與發版候選使用同一個 OSV 本機入口；每週排程補上沒有 PR 的期間。"},
+              "en": {"title": "Check disclosed vulnerabilities immediately", "description": "Dependency changes and release candidates share one local OSV entrypoint; a weekly schedule covers periods without PRs."}
+            },
+            "shared": {
+              "milestone": {
+                "files": [{"path": "scripts/verify-dependencies", "pending": true, "issue": 407}],
+                "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "依賴檔案變更的 Issue PR", "en": "Issue PR changing dependency files"}, "timeout": "30 min", "pending": true, "issue": 407}]
+              },
+              "release": {
+                "files": [{"path": "scripts/verify-dependencies", "pending": true, "issue": 407}],
+                "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "發版 PR／merge group／手動完整驗證", "en": "Release PR, merge group, or manual full verification"}, "timeout": "30 min", "pending": true, "issue": 407}],
+                "automationNote": {"zh-tw": "每週與手動掃描另由薄 workflow 呼叫同一入口，不複製掃描邏輯。", "en": "A thin weekly and manual workflow calls the same entrypoint without duplicating scanning logic."}
+              }
+            },
+            "templateOnly": {}
+          },
+          {
+            "purpose": {
+              "zh-tw": {"title": "發版成品清冊與雜湊", "description": "從精確 tag 的真正成品建立 SPDX SBOM、checksum 與相互綁定的證據。"},
+              "en": {"title": "Release inventory and digests", "description": "Build an SPDX SBOM, checksums, and mutually bound evidence from the real artifacts at the exact tag."}
+            },
+            "shared": {
+              "release": {
+                "files": [{"path": "scripts/release_assets.py"}, {"path": "tests/test_release_assets.py"}],
+                "automationNote": {"zh-tw": "依賴安全擁有 SBOM 規格與驗證；真正成品出現時由發版流程觸發，但不把責任移到「版本／交付」。", "en": "Dependency security owns the SBOM contract and validation. The release flow triggers it when real artifacts exist without taking ownership of the rule."}
+              }
+            },
+            "templateOnly": {}
           }
         ]
       },
@@ -528,6 +616,30 @@
       "csarc": {"zh-tw": "一般 repo 只測自己的產品；repo-template 的 full 入口執行完整 pytest，實際涵蓋 Python／TypeScript 的生成與既有 repo 導入，不維護整棵輸出的 snapshot。", "en": "A normal repository tests only its product. The repo-template full entrypoint runs the complete pytest suite, covering Python and TypeScript generation and existing-repository adoption without maintaining whole-tree snapshots."}
     },
     {
+      "key": "dependencyUpdatePolicy",
+      "title": {"zh-tw": "套件更新如何進入 PR", "en": "How package updates enter a PR"},
+      "description": {"zh-tw": "比較定期 PR、中央分組與人工升版。", "en": "Compares scheduled PRs, central grouping, and manual upgrades."},
+      "csarc": {"zh-tw": "Dependabot 依生態分組；一般更新等三天，安全更新不等。設定待 #407 恢復。", "en": "Dependabot groups ecosystems; ordinary updates wait three days and security updates do not. #407 restores the configuration."}
+    },
+    {
+      "key": "lockedDependencyResolution",
+      "title": {"zh-tw": "安裝時如何固定套件", "en": "How installs pin the package set"},
+      "description": {"zh-tw": "比較最新版、lockfile 與 resolver 限制。", "en": "Compares latest versions, lockfiles, and resolver policies."},
+      "csarc": {"zh-tw": "兩種語言都依 lockfile 安裝；pnpm 另拒絕未滿三天或 publisher trust 降級的版本。本機與 CI 都執行。", "en": "Both languages install from lockfiles. pnpm also rejects releases younger than three days or publisher-trust downgrades. Local and CI runs both enforce it."}
+    },
+    {
+      "key": "knownVulnerabilityDetection",
+      "title": {"zh-tw": "已公開漏洞何時檢查", "en": "When disclosed vulnerabilities are checked"},
+      "description": {"zh-tw": "比較更新通知、PR 檢查與週期掃描。", "en": "Compares update notifications, PR checks, and scheduled scans."},
+      "csarc": {"zh-tw": "OSV 是單一資料入口；依賴 PR、發版候選與週期排程共用本機程式，待 #407 恢復。", "en": "OSV is the single data source. Dependency PRs, release candidates, and schedules share one local program, pending #407."}
+    },
+    {
+      "key": "releaseArtifactInventory",
+      "title": {"zh-tw": "發版成品如何留下清冊", "en": "How a release retains an artifact inventory"},
+      "description": {"zh-tw": "比較原始碼推測、真正成品掃描與平台套件清單。", "en": "Compares source inference, real-artifact scans, and platform package lists."},
+      "csarc": {"zh-tw": "Syft 掃精確 tag 成品；程式再綁定 SPDX 2.3、checksum、來源與 provenance。規格與測試已存在。", "en": "Syft scans exact-tag artifacts; repository code binds SPDX 2.3, checksums, source, and provenance. The contract and tests exist."}
+    },
+    {
       "key": "pullRequestUnit",
       "title": {"zh-tw": "一張 PR 包含多少工作", "en": "How much work belongs in one PR"},
       "description": {"zh-tw": "比較一張 PR 對應單一可驗收工作、相依 PR 堆疊，或一次提交整批變更。", "en": "Compares one independently acceptable change per PR, a stack of dependent PRs, and one PR carrying a complete batch."},
@@ -596,6 +708,7 @@
         {"key": "sharedVerificationEntry", "feature": "Tasks", "docs": "https://projen.io/docs/concepts/tasks/", "description": {"zh-tw": "把 build、test 等步驟定義成可由本機 CLI 與生成 workflow 共用的 task graph。", "en": "Build and test steps are defined as a task graph shared by the local CLI and generated workflows."}},
         {"key": "riskBasedSelection", "feature": "Task conditions", "docs": "https://projen.io/docs/concepts/tasks/#conditions", "description": {"zh-tw": "task 或 step 可用 condition 決定是否執行；適合條件分流，但條件本身仍要維護正確。", "en": "A task or step can use a condition to decide whether it runs; this supports routing but the conditions still need correct maintenance."}},
         {"key": "generatedProjectVerification", "feature": "Testing.synth", "docs": "https://projen.io/docs/custom/testing/", "description": {"zh-tw": "在測試中 synth 專案並檢查生成檔；官方也提醒整棵樹的 snapshot 過大，應縮到有意義的輸出。", "en": "Tests synthesize a project and inspect generated files; the guide also warns that whole-tree snapshots are unwieldy and should be narrowed to meaningful output."}},
+        {"key": "dependencyUpdatePolicy", "feature": "Dependabot component", "docs": "https://projen.io/docs/api/github/#projen.github.Dependabot", "description": {"zh-tw": "由 project model 產生設定；自訂仍回到 .projenrc。", "en": "The project model generates the configuration; customization returns to .projenrc."}},
         {"key": "mergeReadiness", "feature": "Tasks + GitHub workflows", "docs": "https://projen.io/docs/integrations/github/", "description": {"zh-tw": "由 project model 產生 PR workflows 並執行既有 tasks；是否允許合併仍交給 GitHub branch protection／Ruleset。", "en": "The project model generates PR workflows that run existing tasks, while GitHub branch protection or Rulesets still decide whether merging is allowed."}}
       ]
     },
@@ -827,6 +940,72 @@
       "comparisons": [
         {"key": "pullRequestUnit", "feature": "Commit stacks", "docs": "https://sapling-scm.com/docs/overview/stacks", "description": {"zh-tw": "把相依工作保存為一串可 individually review 的 commits，不必先壓成一個大型變更。", "en": "Dependent work remains a stack of individually reviewable commits instead of one large squashed change."}},
         {"key": "integrationRoute", "feature": "GitHub integration", "docs": "https://sapling-scm.com/docs/git/github", "description": {"zh-tw": "將 stack 對應為 GitHub PR 並更新相依關係；適合深度堆疊，但需要 Sapling 工作模型。", "en": "It maps a stack to GitHub pull requests and updates their dependencies, which suits deep stacks but requires the Sapling workflow."}}
+      ]
+    },
+    {
+      "name": "Dependabot",
+      "url": "https://github.com/dependabot/dependabot-core",
+      "version": "v0.393.0",
+      "released": "2026-08-24",
+      "stars": "5,745",
+      "coverage": {"full": [], "partial": ["04"]},
+      "position": {"zh-tw": "GitHub 原生依賴更新服務：依 repo 設定提出版本與安全更新 PR。", "en": "GitHub-native dependency update service that opens version and security update PRs from repository configuration."},
+      "difference": {"zh-tw": ["Dependabot 專注於發現並提出套件更新。", "CSARC 以它作為更新入口，另由鎖檔、OSV 與 SBOM 處理安裝、漏洞與成品證據。"], "en": ["Dependabot focuses on discovering and proposing package updates.", "CSARC uses it as the update entrypoint and handles installation, vulnerabilities, and artifact evidence with lockfiles, OSV, and SBOMs."]},
+      "comparisons": [
+        {"key": "dependencyUpdatePolicy", "feature": "Version updates + cooldown", "docs": "https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#cooldown-", "description": {"zh-tw": "依 ecosystem、分組與 cooldown 提出 PR；安全更新不等待。", "en": "Opens PRs by ecosystem, group, and cooldown; security updates do not wait."}},
+        {"key": "knownVulnerabilityDetection", "feature": "Security updates", "docs": "https://docs.github.com/en/code-security/dependabot/dependabot-security-updates/about-dependabot-security-updates", "description": {"zh-tw": "依 advisory 提出最小安全更新 PR；不取代完整掃描。", "en": "Opens a minimal security PR from an advisory; it does not replace a complete scan."}}
+      ]
+    },
+    {
+      "name": "Renovate",
+      "url": "https://github.com/renovatebot/renovate",
+      "version": "44.52.1",
+      "released": "2026-08-31",
+      "stars": "22,379",
+      "coverage": {"full": [], "partial": ["04"]},
+      "position": {"zh-tw": "可高度客製的依賴更新平台：以 presets 與 packageRules 集中控制更新行為。", "en": "A highly configurable dependency update platform using presets and packageRules to centralize update behavior."},
+      "difference": {"zh-tw": ["Renovate 的跨 repo preset、分組與時程控制比 Dependabot 細。", "CSARC 目前優先採 GitHub 原生身分；直到確有跨 repo 規則缺口才承擔 App 權限與維運成本。"], "en": ["Renovate offers finer cross-repository presets, grouping, and scheduling than Dependabot.", "CSARC currently prefers GitHub's native identity and accepts App permissions and operational cost only when a real fleet-policy gap appears."]},
+      "comparisons": [
+        {"key": "dependencyUpdatePolicy", "feature": "packageRules + minimumReleaseAge", "docs": "https://docs.renovatebot.com/configuration-options/#minimumreleaseage", "description": {"zh-tw": "共用 preset 可依套件、版本型態與年齡分組或延後。", "en": "Shared presets group or delay updates by package, version type, and age."}}
+      ]
+    },
+    {
+      "name": "pnpm",
+      "url": "https://github.com/pnpm/pnpm",
+      "version": "v11.25.0",
+      "released": "2026-08-29",
+      "stars": "36,332",
+      "coverage": {"full": [], "partial": ["04"]},
+      "position": {"zh-tw": "JavaScript 套件管理器：以內容尋址儲存、lockfile 與解析政策控制實際安裝。", "en": "A JavaScript package manager controlling actual installs with content-addressed storage, a lockfile, and resolution policies."},
+      "difference": {"zh-tw": ["pnpm 只處理 JavaScript 相依解析與安裝。", "CSARC 使用它保護 TypeScript profile，並以其他工具涵蓋 Python、漏洞與發版證據。"], "en": ["pnpm handles JavaScript dependency resolution and installation only.", "CSARC uses it to protect TypeScript profiles and adds separate tools for Python, vulnerabilities, and release evidence."]},
+      "comparisons": [
+        {"key": "lockedDependencyResolution", "feature": "minimumReleaseAge + trustPolicy", "docs": "https://pnpm.io/settings#minimumreleaseage", "description": {"zh-tw": "安裝時拒絕太新的版本與 publisher trust 降級。", "en": "Rejects overly new releases and publisher-trust downgrades during installation."}}
+      ]
+    },
+    {
+      "name": "OSV-Scanner",
+      "url": "https://github.com/google/osv-scanner",
+      "version": "v2.5.1",
+      "released": "2026-08-17",
+      "stars": "10,948",
+      "coverage": {"full": [], "partial": ["04"]},
+      "position": {"zh-tw": "開源漏洞掃描器：把 lockfile、SBOM 或目錄中的套件版本對照 OSV 資料庫。", "en": "An open-source vulnerability scanner matching package versions from lockfiles, SBOMs, or directories against the OSV database."},
+      "difference": {"zh-tw": ["OSV-Scanner 專注於已公開漏洞，不負責更新排程或建立成品清冊。", "CSARC 將它放在依賴 PR、完整驗證與週期掃描的同一入口。"], "en": ["OSV-Scanner focuses on disclosed vulnerabilities rather than update scheduling or artifact inventory.", "CSARC places it behind one entrypoint shared by dependency PRs, full verification, and scheduled scans."]},
+      "comparisons": [
+        {"key": "knownVulnerabilityDetection", "feature": "osv-scanner scan", "docs": "https://google.github.io/osv-scanner/", "description": {"zh-tw": "掃 lockfile／SBOM，沒有新版通知也能找出已知漏洞。", "en": "Scans lockfiles or SBOMs and finds vulnerabilities without a new-version notice."}}
+      ]
+    },
+    {
+      "name": "Syft",
+      "url": "https://github.com/anchore/syft",
+      "version": "v1.51.1",
+      "released": "2026-08-27",
+      "stars": "9,487",
+      "coverage": {"full": [], "partial": ["04"]},
+      "position": {"zh-tw": "SBOM 產生器：掃描容器映像、檔案系統或 archive，輸出 SPDX、CycloneDX 等格式。", "en": "An SBOM generator that scans container images, filesystems, or archives and emits SPDX, CycloneDX, and other formats."},
+      "difference": {"zh-tw": ["Syft 產生套件清冊，不判斷更新時機或阻擋漏洞。", "CSARC 用固定 Syft 版本掃真正成品，再額外驗證 root package、dependency graph、checksum 與來源綁定。"], "en": ["Syft generates package inventories without deciding update timing or blocking vulnerabilities.", "CSARC scans real artifacts with a pinned Syft version and additionally validates root packages, the dependency graph, checksums, and source bindings."]},
+      "comparisons": [
+        {"key": "releaseArtifactInventory", "feature": "SPDX / CycloneDX SBOM", "docs": "https://github.com/anchore/syft#sbom-formats", "description": {"zh-tw": "掃實際檔案、archive 或 image；發版流程再綁定版本與 digest。", "en": "Scans real files, archives, or images; the release flow then binds version and digest."}}
       ]
     }
   ]

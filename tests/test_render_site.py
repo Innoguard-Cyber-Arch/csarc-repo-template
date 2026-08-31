@@ -221,7 +221,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     )
     assert "名詞與約定" not in chinese
     assert "testing.after(bridge)" in presentation
-    assert "pr.before(supply)" in presentation
+    assert "supply.before(pr)" in presentation
     assert "slide.dataset.audience !== 'archive'" in deck
     assert "Cloudflare Pages" in chinese
     assert "存取 #79" in chinese
@@ -258,8 +258,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
-    assert len(data["features"]) == 19
-    assert len(data["featureGroups"]) == 5
+    assert len(data["features"]) == 23
+    assert len(data["featureGroups"]) == 6
     assert data["featureGroups"][0]["features"] == [
         "repositoryTruth",
         "workItemStructure",
@@ -279,21 +279,27 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "generatedProjectVerification",
     ]
     assert data["featureGroups"][3]["features"] == [
+        "dependencyUpdatePolicy",
+        "lockedDependencyResolution",
+        "knownVulnerabilityDetection",
+        "releaseArtifactInventory",
+    ]
+    assert data["featureGroups"][4]["features"] == [
         "pullRequestUnit",
         "integrationRoute",
         "mergeReadiness",
         "baseSynchronization",
         "proposalLifecycle",
     ]
-    assert data["featureGroups"][4]["features"] == [
+    assert data["featureGroups"][5]["features"] == [
         "declarativeState",
         "templateLifecycle",
     ]
-    assert len(data["testing"]["groups"]) == 5
+    assert len(data["testing"]["groups"]) == 6
     duration_rows = data["testing"]["duration"]["rows"]
     assert [row["key"] for row in duration_rows] == ["issue", "release"]
-    assert all(len(row["shared"]["items"]) == 3 for row in duration_rows)
-    assert all(len(row["templateOnly"]["items"]) == 3 for row in duration_rows)
+    assert all(len(row["shared"]["items"]) == 4 for row in duration_rows)
+    assert all(len(row["templateOnly"]["items"]) == 4 for row in duration_rows)
     assert duration_rows[0]["shared"]["total"]["zh-tw"] == "約 1\u20137 分鐘"
     assert duration_rows[1]["templateOnly"]["total"]["zh-tw"] == (
         "約 9\u201314 分鐘"
@@ -370,8 +376,18 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert verification_rows[0]["shared"]["milestone"]["files"] == [
         {"path": "scripts/ci_tier.py"}
     ]
-    assert data["testing"]["groups"][4]["journey"] == "06"
-    delivery_rows = data["testing"]["groups"][4]["rows"]
+    supply_rows = data["testing"]["groups"][3]["rows"]
+    assert data["testing"]["groups"][3]["journey"] == "04"
+    assert [row["purpose"]["zh-tw"]["title"] for row in supply_rows] == [
+        "鎖定版本可重現安裝",
+        "一般更新自動提出 PR",
+        "已公開漏洞立即檢查",
+        "發版成品清冊與雜湊",
+    ]
+    assert supply_rows[1]["shared"]["milestone"]["files"][0]["issue"] == 407
+    assert supply_rows[2]["shared"]["milestone"]["automation"][0]["pending"]
+    assert data["testing"]["groups"][5]["journey"] == "06"
+    delivery_rows = data["testing"]["groups"][5]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in delivery_rows] == [
         "發版後續規則",
         "里程碑結案",
@@ -402,8 +418,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         }
     ]
     assert verification_rows[0]["templateOnly"] == {}
-    merge_rows = data["testing"]["groups"][3]["rows"]
-    assert data["testing"]["groups"][3]["journey"] == "05"
+    merge_rows = data["testing"]["groups"][4]["rows"]
+    assert data["testing"]["groups"][4]["journey"] == "05"
     assert [row["purpose"]["zh-tw"]["title"] for row in merge_rows] == [
         "PR 資料與目的分支",
         "候選內容包含最新基準",
@@ -424,8 +440,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "archived" not in data["testing"]["labels"]["zh-tw"]
     assert "archived" not in testing_shortcode
 
-    assert len(data["tools"]) == 17
-    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 76
+    assert len(data["tools"]) == 22
+    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 83
     assert data["comparisonDate"] == "2026-08-31"
     assert data["releaseCutoff"] == "2026-02-28"
     assert data["threshold"] == 5
@@ -481,6 +497,11 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "Dagger",
         "Git Town",
         "Nx",
+        "Dependabot",
+        "Renovate",
+        "pnpm",
+        "OSV-Scanner",
+        "Syft",
         "Sapling",
     }
     assert {tool["name"] for tool in data["tools"]} - {

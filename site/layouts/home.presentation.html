@@ -49,7 +49,7 @@
       const supply = document.querySelector('[data-track="supply"]');
       const testing = document.querySelector("#testing");
       const bridge = document.querySelector("#bridge");
-      if (pr && supply) pr.before(supply);
+      if (pr && supply) supply.before(pr);
       if (testing && bridge) testing.after(bridge);
     })();
   </script>
