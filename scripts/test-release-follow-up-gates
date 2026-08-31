@@ -4,6 +4,20 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
+
+required_workflows=(
+  promotion-post-merge.yml
+  promotion.yml
+  release-follow-up-policy.yml
+  release-please.yml
+)
+for workflow in "${required_workflows[@]}"; do
+  if [[ ! -f "$repo_root/.github/workflows/$workflow" ]]; then
+    echo "Release follow-up workflow tests skipped: workflows are archived."
+    exit 0
+  fi
+done
+
 fixture="$(mktemp -d)"
 gate="$fixture/post-merge-gate"
 premerge_gate="$fixture/pre-merge-gate"

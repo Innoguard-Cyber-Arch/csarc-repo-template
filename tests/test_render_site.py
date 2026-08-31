@@ -135,9 +135,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     testing_shortcode = (
         root / "site/layouts/shortcodes/testing.html"
     ).read_text(encoding="utf-8")
-    journey_rail = (
-        root / "site/layouts/partials/journey-rail.html"
-    ).read_text(encoding="utf-8")
+    journey_rail = (root / "site/layouts/partials/journey-rail.html").read_text(
+        encoding="utf-8"
+    )
     styles = (root / "site/static/styles.css").read_text(encoding="utf-8")
     controls = (root / "site/static/detail-toggle.css").read_text(
         encoding="utf-8"
@@ -159,7 +159,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "similar-tools-testing-matrix" in testing_shortcode
     assert "statusLabel" not in data["testing"]["labels"]["zh-tw"]
     assert "statusLabel" not in data["testing"]["labels"]["en"]
-    assert 'appendix maintainer-bookend{{ if eq .Key "testing" }}' in journey_rail
+    assert (
+        'appendix maintainer-bookend{{ if eq .Key "testing" }}' in journey_rail
+    )
     assert ".journey-bookend.maintainer-bookend.active-selection" in styles
     assert '.detail-level-control button[aria-pressed="true"]' in controls
     assert "background: var(--yellow);" in controls
@@ -171,7 +173,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         root / "site/static/detail-toggle.js"
     ).read_text(encoding="utf-8")
     assert "07 單獨定義合併資格、權限與例外" in active_components
-    assert "AI 能執行工作，但不能自行合併" not in active_components
+    assert "AI 能執行工作，但不能自行合併" not in active_components  # noqa: RUF001
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
@@ -209,14 +211,15 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "path": ".github/workflows/issue-triage.yml",
         "job": "classify",
         "trigger": {
-            "zh-tw": "Issue opened／edited／reopened／closed",
+            "zh-tw": "Issue opened／edited／reopened／closed",  # noqa: RUF001
             "en": "Issue opened, edited, reopened, or closed",
         },
         "timeout": "5 min",
     }
-    assert testing_rows[1]["shared"]["milestone"]["automation"][0][
-        "timeout"
-    ] == "10 min"
+    assert (
+        testing_rows[1]["shared"]["milestone"]["automation"][0]["timeout"]
+        == "10 min"
+    )
     assert testing_rows[-1]["templateOnly"]["release"]["files"][1] == {
         "path": "tests/test_template_work_definition.py",
         "pending": True,
@@ -271,7 +274,10 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
             tool["name"].lower(),
         )
     )
-    assert [tool["name"] for tool in primary] == ["projen", "Repository Harness"]
+    assert [tool["name"] for tool in primary] == [
+        "projen",
+        "Repository Harness",
+    ]
 
     ecosystem = {
         tool["name"]
@@ -294,7 +300,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert {tool["name"] for tool in data["tools"]} - {
         tool["name"] for tool in primary
     } - ecosystem == {"AGENTS.md", "Minder"}
-    superpowers = next(tool for tool in data["tools"] if tool["name"] == "Superpowers")
+    superpowers = next(
+        tool for tool in data["tools"] if tool["name"] == "Superpowers"
+    )
     assert superpowers["coverage"] == {
         "full": ["02"],
         "partial": ["01", "03", "04"],
