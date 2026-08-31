@@ -96,12 +96,6 @@ Workflows, policies, scripts, and documents consumed by both root and `template/
 
 Concrete tools, feature names, and source links are listed under [Similar tools](#similar-tools).
 
-{{< detail key="method-lifecycle" title="What works now and what is still being implemented" >}}
-- **Active:** the organization has enabled native Feature, Task, and Bug Types; four Issue Forms write their Type and label directly; [#386](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/386) restored the Issue triage, PR policy, Spec sync, and Milestone lifecycle GitHub Actions.
-- **In progress:** [#382](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382) consolidates the work-definition validation shared by local runs and Actions behind one entry point.
-- **Not enabled:** Issue-to-promotion orchestration and CI/CD for other Journeys remain archived; none of the four Journey 01 workflows is a required status check.
-- **Execution limit:** repository Actions are enabled, but GitHub currently refuses to start a runner because of the account billing state, so no successful hosted run exists yet.
-{{< /detail >}}
 {{< /slide >}}
 
 {{< slide key="agents" track="agents" eyebrow="Step 02" title="Define AI rules before implementation" subtitle="An Issue says what this change is; AGENTS.md says how an agent works in the repository." legacy="false"  class="candidate-slide" >}}
@@ -114,7 +108,7 @@ Concrete tools, feature names, and source links are listed under [Similar tools]
 - **Decisions and authorization:** people own requirements, material trade-offs, external impact, and irreversible operations. Journey 07 alone defines review, merge eligibility, and exceptions.
 - **Template creation and updates:** Copier generates and updates the shared baseline; Journey 08 defines existing-repository updates.
 
-`README.md` serves people, `AGENTS.md` serves every agent, and `template/AGENTS.md.jinja` plus `copier.yml` emit only commands the selected profile can run. `scripts/cleanup-worktrees` and `scripts/test-worktree-cleanup` handle safe cleanup; `scripts/verify`, `.github/workflows/`, and `policies/` keep rules, evidence, automation, and governance separate. This responsibility split is implemented by [#388](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388) / PR #389.
+`README.md` serves people, `AGENTS.md` serves every agent, and `template/AGENTS.md.jinja` plus `copier.yml` emit only commands the selected profile can run. `scripts/cleanup-worktrees` and `scripts/test-worktree-cleanup` handle safe cleanup; `scripts/verify`, `.github/workflows/`, and `policies/` keep rules, evidence, automation, and governance separate.
 
 Concrete tools and sources are in [Similar tools](#similar-tools); Journey 02 local checks and Actions are in [CI/CD settings](#testing).
 {{< /slide >}}

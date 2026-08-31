@@ -2530,16 +2530,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>Change proposal:</strong> review a proposed change separately, then merge it into the official specification after acceptance.</li>
 <li><strong>Complexity-based workflow:</strong> use a short path for small work and add discovery, design, roles, and review only for larger work.</li>
 </ul>
-<p>Concrete tools, feature names, and source links are listed under <a href="/en/#similar-tools">Similar tools</a>.</p>
-<aside class="technical-detail" data-content-key="method-lifecycle">
-  <h3>What works now and what is still being implemented</h3>
-  <ul>
-<li><strong>Active:</strong> the organization has enabled native Feature, Task, and Bug Types; four Issue Forms write their Type and label directly; <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/386">#386</a> restored the Issue triage, PR policy, Spec sync, and Milestone lifecycle GitHub Actions.</li>
-<li><strong>In progress:</strong> <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382">#382</a> consolidates the work-definition validation shared by local runs and Actions behind one entry point.</li>
-<li><strong>Not enabled:</strong> Issue-to-promotion orchestration and CI/CD for other Journeys remain archived; none of the four Journey 01 workflows is a required status check.</li>
-<li><strong>Execution limit:</strong> repository Actions are enabled, but GitHub currently refuses to start a runner because of the account billing state, so no successful hosted run exists yet.</li>
-</ul>
-</aside></div>
+<p>Concrete tools, feature names, and source links are listed under <a href="/en/#similar-tools">Similar tools</a>.</p></div>
 </section>
 
 <section class="slide markdown-slide candidate-slide" id="agents" data-content-key="agents" data-track="agents" aria-label="Define AI rules before implementation">
@@ -2613,7 +2604,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>Decisions and authorization:</strong> people own requirements, material trade-offs, external impact, and irreversible operations. Journey 07 alone defines review, merge eligibility, and exceptions.</li>
 <li><strong>Template creation and updates:</strong> Copier generates and updates the shared baseline; Journey 08 defines existing-repository updates.</li>
 </ul>
-<p><code>README.md</code> serves people, <code>AGENTS.md</code> serves every agent, and <code>template/AGENTS.md.jinja</code> plus <code>copier.yml</code> emit only commands the selected profile can run. <code>scripts/cleanup-worktrees</code> and <code>scripts/test-worktree-cleanup</code> handle safe cleanup; <code>scripts/verify</code>, <code>.github/workflows/</code>, and <code>policies/</code> keep rules, evidence, automation, and governance separate. This responsibility split is implemented by <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388">#388</a> / PR #389.</p>
+<p><code>README.md</code> serves people, <code>AGENTS.md</code> serves every agent, and <code>template/AGENTS.md.jinja</code> plus <code>copier.yml</code> emit only commands the selected profile can run. <code>scripts/cleanup-worktrees</code> and <code>scripts/test-worktree-cleanup</code> handle safe cleanup; <code>scripts/verify</code>, <code>.github/workflows/</code>, and <code>policies/</code> keep rules, evidence, automation, and governance separate.</p>
 <p>Concrete tools and sources are in <a href="/en/#similar-tools">Similar tools</a>; Journey 02 local checks and Actions are in <a href="/en/#testing">CI/CD settings</a>.</p>
 </div>
 </section>
