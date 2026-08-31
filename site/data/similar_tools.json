@@ -58,7 +58,7 @@
       "key": "work",
       "features": ["repositoryTruth", "workItemStructure", "milestoneKickoff", "rightSizedWork"],
       "labels": {
-        "zh-tw": {"overline": "Journey 01", "title": "工作定義", "legend": "只比較需求記在哪裡、單項與群組如何表示、Milestone 如何取得開工同意，以及工作變大時何時增加文件"},
+        "zh-tw": {"overline": "Journey 01", "title": "工作定義", "legend": "只比較需求記在哪裡、單項與群組如何表示、里程碑如何取得開工同意，以及工作變大時何時增加文件"},
         "en": {"overline": "Journey 01", "title": "Work definition", "legend": "Compares where a request is recorded, how individual and grouped work are represented, how a Milestone gains approval to start, and when larger work needs more documentation."}
       }
     },
@@ -202,7 +202,7 @@
           "zh-tw": {
             "title": "工作定義",
             "heading": "Journey 01／最小測試契約",
-            "scope": "只驗證 Issue 如何成為可執行工作，以及 Milestone 是否取得開工同意；PR 合併與 Milestone 結案分別列在 Journey 05、06。"
+            "scope": "只驗證 Issue 如何成為可執行工作，以及里程碑是否取得開工同意；PR 合併與里程碑結案分別列在 Journey 05、06。"
           },
           "en": {
             "title": "Work definition",
@@ -248,7 +248,7 @@
           },
           {
             "purpose": {
-              "zh-tw": {"title": "Milestone 啟動門檻", "description": "生命週期追蹤 Issue 保存同意與反駁；至少一位非提案者同意且沒有未解決反駁才開始。"},
+              "zh-tw": {"title": "里程碑啟動門檻", "description": "生命週期追蹤 Issue 保存同意與反駁；至少一位非提案者同意且沒有未解決反駁才開始。"},
               "en": {"title": "Milestone kickoff gate", "description": "One lifecycle Issue records agreement and objections. Work starts only with one non-proposer agreement and no unresolved objection."}
             },
             "shared": {
@@ -347,7 +347,7 @@
         "rows": [
           {
             "purpose": {
-              "zh-tw": {"title": "PR 資料與目的分支", "description": "標題、Issue、label、Milestone 與目的分支必須互相一致。"},
+              "zh-tw": {"title": "PR 資料與目的分支", "description": "標題、Issue、label、里程碑與目的分支必須互相一致。"},
               "en": {"title": "PR metadata and destination", "description": "Title, Issue, label, Milestone, and destination branch must agree."}
             },
             "shared": {
@@ -395,7 +395,7 @@
         "key": "delivery",
         "journey": "06",
         "labels": {
-          "zh-tw": {"title": "版本／交付", "heading": "Journey 06／交付與結案", "scope": "發版成功並留下交付證據後才結束 Milestone；提前終止則先處理未完成工作。"},
+          "zh-tw": {"title": "版本／交付", "heading": "Journey 06／交付與結案", "scope": "發版成功並留下交付證據後才結束里程碑；提前終止則先處理未完成工作。"},
           "en": {"title": "Version / delivery", "heading": "Journey 06 / Delivery and closure", "scope": "A Milestone closes only after a successful release records delivery evidence. Early termination first disposes of unfinished work."}
         },
         "stageLabels": {
@@ -416,7 +416,7 @@
           },
           {
             "purpose": {
-              "zh-tw": {"title": "Milestone 結案", "description": "正常完成時確認發版與交付證據；提前終止時先記錄原因，並移轉或取消未完成 Issue。"},
+              "zh-tw": {"title": "里程碑結案", "description": "正常完成時確認發版與交付證據；提前終止時先記錄原因，並移轉或取消未完成 Issue。"},
               "en": {"title": "Milestone closure", "description": "Normal completion confirms release and delivery evidence. Early termination records a reason and first moves or cancels unfinished Issues."}
             },
             "shared": {
@@ -429,7 +429,7 @@
               }
             },
             "templateOnly": {
-              "release": {"note": {"zh-tw": "使用相同結案程式；repo-template 不維護另一套 Milestone 規則。", "en": "Uses the same closure program; repo-template has no second Milestone rule."}}
+              "release": {"note": {"zh-tw": "使用相同結案程式；repo-template 不維護另一套里程碑規則。", "en": "Uses the same closure program; repo-template has no second Milestone rule."}}
             }
           }
         ]
@@ -446,14 +446,14 @@
     {
       "key": "workItemStructure",
       "title": {"zh-tw": "單項與群組如何表示", "en": "How individual and grouped work are represented"},
-      "description": {"zh-tw": "比較工作類別、Parent／Sub-issue、Dependency 與 Milestone 各自表達什麼關係。", "en": "Compares what work types, parent and sub-issues, dependencies, and Milestones each represent."},
-      "csarc": {"zh-tw": "Feature／Task／Bug 表示工作性質；Parent／Sub-issue 表示成果拆分；Dependency 表示先後阻擋；Milestone 只集合有共同目標、期限或交付批次的 Issue。", "en": "Feature, Task, and Bug express the nature of work. Parent and sub-issues express decomposition, Dependency expresses blocking order, and a Milestone only groups Issues sharing an outcome, deadline, or delivery batch."}
+      "description": {"zh-tw": "比較工作類別、Parent／Sub-issue、Dependency 與里程碑各自表達什麼關係。", "en": "Compares what work types, parent and sub-issues, dependencies, and Milestones each represent."},
+      "csarc": {"zh-tw": "Feature／Task／Bug 表示工作性質；Parent／Sub-issue 表示成果拆分；Dependency 表示先後阻擋；里程碑只集合有共同目標、期限或交付批次的 Issue。", "en": "Feature, Task, and Bug express the nature of work. Parent and sub-issues express decomposition, Dependency expresses blocking order, and a Milestone only groups Issues sharing an outcome, deadline, or delivery batch."}
     },
     {
       "key": "milestoneKickoff",
-      "title": {"zh-tw": "Milestone 如何取得開工同意", "en": "How a Milestone gains approval to start"},
+      "title": {"zh-tw": "里程碑如何取得開工同意", "en": "How a Milestone gains approval to start"},
       "description": {"zh-tw": "比較批次開始前如何取得同意，以及尚未解決的反駁如何阻擋開工。", "en": "Compares how a batch gains approval before work starts and how unresolved objections block kickoff."},
-      "csarc": {"zh-tw": "每個 Milestone 配一張生命週期追蹤 Issue；至少一位非提案者同意且沒有尚未解決的反駁才開始。", "en": "Each Milestone has one lifecycle tracking Issue. Work starts only after at least one non-proposer agrees and no objection remains unresolved."}
+      "csarc": {"zh-tw": "每個里程碑配一張生命週期追蹤 Issue；至少一位非提案者同意且沒有尚未解決的反駁才開始。", "en": "Each Milestone has one lifecycle tracking Issue. Work starts only after at least one non-proposer agrees and no objection remains unresolved."}
     },
     {
       "key": "declarativeState",
@@ -531,7 +531,7 @@
       "key": "pullRequestUnit",
       "title": {"zh-tw": "一張 PR 包含多少工作", "en": "How much work belongs in one PR"},
       "description": {"zh-tw": "比較一張 PR 對應單一可驗收工作、相依 PR 堆疊，或一次提交整批變更。", "en": "Compares one independently acceptable change per PR, a stack of dependent PRs, and one PR carrying a complete batch."},
-      "csarc": {"zh-tw": "Issue PR 對應一張仍開啟、完成條件已勾選的 Issue；新增範圍另開 Issue，Milestone 只代表交付批次。", "en": "A work PR maps to one open Issue whose acceptance checklist is complete. Added scope receives another Issue, while a Milestone represents only the delivery batch."}
+      "csarc": {"zh-tw": "Issue PR 對應一張仍開啟、完成條件已勾選的 Issue；新增範圍另開 Issue，里程碑只代表交付批次。", "en": "A work PR maps to one open Issue whose acceptance checklist is complete. Added scope receives another Issue, while a Milestone represents only the delivery batch."}
     },
     {
       "key": "integrationRoute",
@@ -564,8 +564,8 @@
       "difference": {"zh-tw": ["Repository Harness 偏向替既有 repo 加上 agent 工作框架與安全更新機制。", "CSARC 另外提供可生成的技術 profile、GitHub 治理、交付與版本政策。"], "en": ["Repository Harness primarily adds an agent working framework and safe update mechanism to an existing repository.", "CSARC also supplies generated technology profiles, GitHub governance, delivery, and version policy."]},
       "comparisons": [
         {"key": "repositoryTruth", "feature": "Repository protocol", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "repo 同時保存產品文件、決策、plan、程式與驗證證據。", "en": "The repository keeps product documents, decisions, plans, code, and verification evidence together."}},
-        {"key": "workItemStructure", "feature": "Active plan", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "跨 session、有依賴或高風險的工作才建立 active plan；它管理執行步驟，但不另外定義 GitHub Issue Type、Parent 或 Milestone。", "en": "Only cross-session, dependent, or high-risk work receives an active plan. It organizes execution steps without defining GitHub Issue Types, parents, or Milestones."}},
-        {"key": "milestoneKickoff", "feature": "Human checkpoints", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "高風險決策可設人類檢查點，但沒有要求另一位非提案者先留言同意的 Milestone 門檻。", "en": "High-risk decisions may use human checkpoints, but there is no Milestone gate requiring prior agreement from a non-proposer."}},
+        {"key": "workItemStructure", "feature": "Active plan", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "跨 session、有依賴或高風險的工作才建立 active plan；它管理執行步驟，但不另外定義 GitHub Issue Type、Parent 或里程碑。", "en": "Only cross-session, dependent, or high-risk work receives an active plan. It organizes execution steps without defining GitHub Issue Types, parents, or Milestones."}},
+        {"key": "milestoneKickoff", "feature": "Human checkpoints", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "高風險決策可設人類檢查點，但沒有要求另一位非提案者先留言同意的里程碑門檻。", "en": "High-risk decisions may use human checkpoints, but there is no Milestone gate requiring prior agreement from a non-proposer."}},
         {"key": "templateLifecycle", "feature": "harness update", "docs": "https://github.com/hoangnb24/repository-harness#maintain-an-installation", "description": {"zh-tw": "updater 保留 upstream base，用三方合併安全更新既有 repo。", "en": "The updater retains the upstream base and safely updates an existing repository through a three-way merge."}},
         {"key": "proposalLifecycle", "feature": "Active / completed plans", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "跨 session 工作先進 active plan，完成後才歸檔。", "en": "Work spanning sessions stays in an active plan and is archived only after completion."}},
         {"key": "rightSizedWork", "feature": "Durable-plan threshold", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "小 typo 不建 plan；高風險或長工作才增加持久文件。", "en": "A small typo needs no plan; risky or long-running work receives a durable record."}},
@@ -651,7 +651,7 @@
       "difference": {"zh-tw": ["Spec Kit 集中在需求澄清、規格拆解與 agent 實作流程。", "CSARC 另外涵蓋 repo profile、治理、供應鏈、版本交付與模板更新。"], "en": ["Spec Kit concentrates on requirement clarification, specification decomposition, and agent implementation workflows.", "CSARC also covers repository profiles, governance, supply chain, version delivery, and template updates."]},
       "comparisons": [
         {"key": "repositoryTruth", "feature": "spec.md → plan.md → tasks.md", "docs": "https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md", "description": {"zh-tw": "spec、plan、tasks 與 constitution 在 repo 形成 feature 脈絡。", "en": "A spec, plan, tasks, and constitution form the feature context inside the repository."}},
-        {"key": "workItemStructure", "feature": "spec.md → plan.md → tasks.md", "docs": "https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md", "description": {"zh-tw": "一個 feature 依序拆成規格、計畫與 tasks；適合大型功能，但不是 GitHub 原生 Parent、Dependency 與 Milestone 模型。", "en": "A feature is decomposed into a specification, plan, and tasks. This suits substantial features but is not GitHub's native parent, dependency, and Milestone model."}},
+        {"key": "workItemStructure", "feature": "spec.md → plan.md → tasks.md", "docs": "https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md", "description": {"zh-tw": "一個 feature 依序拆成規格、計畫與 tasks；適合大型功能，但不是 GitHub 原生 Parent、Dependency 與里程碑模型。", "en": "A feature is decomposed into a specification, plan, and tasks. This suits substantial features but is not GitHub's native parent, dependency, and Milestone model."}},
         {"key": "proposalLifecycle", "feature": "Feature workflow", "docs": "https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md", "description": {"zh-tw": "artifacts 在 feature branch 演進，最後仍交給 Git／PR 接受。", "en": "Artifacts evolve on a feature branch and are ultimately accepted through Git and a PR."}},
         {"key": "rightSizedWork", "feature": "Agentic bugfix workflow", "docs": "https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md", "description": {"zh-tw": "完整流程最適合大型 feature，小修可走較短路徑。", "en": "The full workflow suits substantial features, while small fixes can follow a shorter path."}},
         {"key": "agentInstructions", "feature": "Constitution", "docs": "https://github.com/github/spec-kit/blob/main/docs/reference/commands/constitution.md", "description": {"zh-tw": "constitution 保存跨功能都要遵守的原則，agent 產生後續 artifacts 時會引用。", "en": "A constitution stores principles that every feature follows and agents reference while producing later artifacts."}},
@@ -672,7 +672,7 @@
       "difference": {"zh-tw": ["OpenSpec 專注規格從 propose、apply 到 archive 的生命週期。", "CSARC 把同類工作邊界接到 Issue、PR、治理、交付與可更新 repo 公版。"], "en": ["OpenSpec focuses on the propose, apply, and archive lifecycle of specifications.", "CSARC connects that work boundary to Issues, PRs, governance, delivery, and an updatable repository baseline."]},
       "comparisons": [
         {"key": "repositoryTruth", "feature": "Specs / Changes", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md", "description": {"zh-tw": "specs 保存 current truth，changes 保存尚未接受的 delta。", "en": "Specs preserve current truth, while changes hold deltas that have not yet been accepted."}},
-        {"key": "milestoneKickoff", "feature": "Proposal review", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md", "description": {"zh-tw": "change proposal 可先審查再 apply，但不提供 Milestone 的獨立同意與反駁門檻。", "en": "A change proposal may be reviewed before apply, but it does not provide an independent agreement and objection gate for a Milestone."}},
+        {"key": "milestoneKickoff", "feature": "Proposal review", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md", "description": {"zh-tw": "change proposal 可先審查再 apply，但不提供里程碑的獨立同意與反駁門檻。", "en": "A change proposal may be reviewed before apply, but it does not provide an independent agreement and objection gate for a Milestone."}},
         {"key": "proposalLifecycle", "feature": "Change workflow", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md", "description": {"zh-tw": "propose → apply → archive 後，才把內容併回正式規格。", "en": "Only after propose, apply, and archive does the content merge into the authoritative specification."}},
         {"key": "rightSizedWork", "feature": "Change proposal", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md", "description": {"zh-tw": "小修改可直接走 PR，大變更才建立完整 proposal。", "en": "Small edits can go directly through a PR; substantial changes receive a complete proposal."}},
         {"key": "agentInstructions", "feature": "Project instructions", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/docs/getting-started.md", "description": {"zh-tw": "repo 內的 OpenSpec 結構與命令讓不同 agent 依同一 change lifecycle 工作。", "en": "The repository's OpenSpec structure and commands give different agents one shared change lifecycle."}},
@@ -771,7 +771,7 @@
       "comparisons": [
         {"key": "repositoryTruth", "feature": "Git-native backlog", "docs": "https://github.com/MrLesk/Backlog.md", "description": {"zh-tw": "任務、狀態與決策以 Markdown 留在 Git history。", "en": "Tasks, status, and decisions remain as Markdown in Git history."}},
         {"key": "proposalLifecycle", "feature": "Task workflow", "docs": "https://github.com/MrLesk/Backlog.md", "description": {"zh-tw": "任務檔隨分支與 PR 變更，合併後成為團隊共享狀態。", "en": "Task files change with branches and PRs and become shared state after merge."}},
-        {"key": "workItemStructure", "feature": "Task hierarchy", "docs": "https://github.com/MrLesk/Backlog.md", "description": {"zh-tw": "以狀態、優先度與父子工作管理任務；資料保存在 Markdown，而不是 GitHub 原生 Issue 與 Milestone。", "en": "Status, priority, and parent-child relationships organize tasks in Markdown rather than native GitHub Issues and Milestones."}},
+        {"key": "workItemStructure", "feature": "Task hierarchy", "docs": "https://github.com/MrLesk/Backlog.md", "description": {"zh-tw": "以狀態、優先度與父子工作管理任務；資料保存在 Markdown，而不是 GitHub 原生 Issue 與里程碑。", "en": "Status, priority, and parent-child relationships organize tasks in Markdown rather than native GitHub Issues and Milestones."}},
         {"key": "durableAgentContext", "feature": "Markdown task records", "docs": "https://github.com/MrLesk/Backlog.md", "description": {"zh-tw": "agent 可直接讀寫版本化任務檔，在 session 之間保留脈絡。", "en": "Agents can read and write versioned task files that preserve context across sessions."}}
       ]
     },
@@ -809,7 +809,7 @@
       "stars": "3,367",
       "coverage": {"full": [], "partial": ["05"]},
       "position": {"zh-tw": "Git branch workflow CLI：在既有 Git hosting 上管理 feature branches、stack、同步與交付。", "en": "A Git branch workflow CLI for feature branches, stacks, synchronization, and delivery on existing Git hosting."},
-      "difference": {"zh-tw": ["Git Town 專注於本機 branch 與 stacked changes 的操作體驗。", "CSARC 另外定義 Issue／Milestone 路由、驗證證據與 GitHub 治理；目前不要求安裝額外 Git CLI。"], "en": ["Git Town focuses on the local branch and stacked-change workflow.", "CSARC also defines Issue and Milestone routing, verification evidence, and GitHub governance without requiring another Git CLI."]},
+      "difference": {"zh-tw": ["Git Town 專注於本機 branch 與 stacked changes 的操作體驗。", "CSARC 另外定義 Issue／里程碑路由、驗證證據與 GitHub 治理；目前不要求安裝額外 Git CLI。"], "en": ["Git Town focuses on the local branch and stacked-change workflow.", "CSARC also defines Issue and Milestone routing, verification evidence, and GitHub governance without requiring another Git CLI."]},
       "comparisons": [
         {"key": "integrationRoute", "feature": "Stacked Changes", "docs": "https://www.git-town.com/stacked-changes", "description": {"zh-tw": "每條 feature branch 可基於前一條分支形成 stack，讓相依改動仍拆成較小的 PR。", "en": "Each feature branch can build on the previous branch in a stack, keeping dependent changes in smaller PRs."}},
         {"key": "baseSynchronization", "feature": "git town sync", "docs": "https://www.git-town.com/commands/sync", "description": {"zh-tw": "把 main、parent 與 child branches 依 lineage 更新，衝突停在本機交由作者處理。", "en": "It updates main, parent, and child branches along their lineage and stops for the author to resolve local conflicts."}}

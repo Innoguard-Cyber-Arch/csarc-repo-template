@@ -307,8 +307,8 @@ python scripts/spec_to_issue.py validate`
         },
         {
           title: '交付批次的說明格式',
-          goal: 'Milestone 只在多張工作需要同一期限、整合或發版時建立，並使用一致的可驗收說明。',
-          summary: '定義多張工作同批交付時，Milestone 要寫哪些驗收內容。',
+          goal: '里程碑只在多張工作需要同一期限、整合或發版時建立，並使用一致的可驗收說明。',
+          summary: '定義多張工作同批交付時，里程碑要寫哪些驗收內容。',
           file: 'docs/milestone-description.md',
           code: `## Problem
 ## Outcome

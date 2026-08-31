@@ -307,7 +307,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert [row["purpose"]["zh-tw"]["title"] for row in testing_rows] == [
         "Issue 工作邊界",
         "Spec 契約與 Issue 同步",
-        "Milestone 啟動門檻",
+        "里程碑啟動門檻",
     ]
     assert data["testing"]["groups"][0]["stageLabels"]["zh-tw"] == {
         "milestone": "工作開始前",
@@ -374,7 +374,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     delivery_rows = data["testing"]["groups"][4]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in delivery_rows] == [
         "發版後續規則",
-        "Milestone 結案",
+        "里程碑結案",
     ]
     assert delivery_rows[0]["shared"]["milestone"]["files"] == [
         {"path": "scripts/test-release-follow-up-gates"}

@@ -285,9 +285,9 @@ tracking: none   # Keep the current contract only
 python scripts/spec_to_issue.py validate`
         },
         {
-          title: 'Milestone 的啟動門檻',
-          goal: '每個 Milestone 使用一張生命週期追蹤 Issue，集中保存同意與反駁。',
-          summary: '至少一位非提案者同意，且沒有尚未解決的反駁，工作才開始；Milestone 結案方式由「版本／交付」定義。',
+          title: '里程碑的啟動門檻',
+          goal: '每個里程碑使用一張生命週期追蹤 Issue，集中保存同意與反駁。',
+          summary: '至少一位非提案者同意，且沒有尚未解決的反駁，工作才開始；里程碑結案方式由「版本／交付」定義。',
           file: 'docs/milestone-description.md',
           code: `## Problem
 ## Outcome
@@ -307,7 +307,7 @@ python scripts/spec_to_issue.py validate`
         {
           title: 'PR 格式與工作關聯',
           goal: '一張工作 PR 完成一張 Issue，合併後由 GitHub 關閉同一項工作。',
-          summary: '標題與目的分支符合規則；分類 Label 與 Milestone 必須和 Issue 相同，PR 作者必須列為 Assignee，內文使用 Closes #N 連回同號未結案 Issue。',
+          summary: '標題與目的分支符合規則；分類 Label 與里程碑必須和 Issue 相同，PR 作者必須列為 Assignee，內文使用 Closes #N 連回同號未結案 Issue。',
           file: 'pull_request_template.md＋.github/workflows/pr-policy.yml＋scripts/validate-pr-policy',
           code: `title: feat(scope): English summary
 branch: feat/123-short-slug
@@ -509,8 +509,8 @@ acknowledgement window. -->`
       ],
       deploy: [
         {
-          title: '發版完成後結束 Milestone',
-          goal: '發版成功並留下交付證據後，才關閉生命週期追蹤 Issue 與 Milestone。',
+          title: '發版完成後結束里程碑',
+          goal: '發版成功並留下交付證據後，才關閉生命週期追蹤 Issue 與里程碑。',
           summary: '正常完成要連回發版與驗證證據；提前終止要先說明原因，並移轉或取消所有未完成 Issue。',
           file: 'docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/milestone-lifecycle.yml',
           code: `normal completion:
