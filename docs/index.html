@@ -2170,7 +2170,7 @@ html[data-detail-level="simple"] .detail-panel {
           <h3>公版會替 repo 準備</h3>
           <p class="scope-row"><strong>規劃與 AI 規範</strong><span>SDD → Feature parent → Task／Bug subissues → 各自 PR；里程碑只管理有期限的交付</span></p>
           <p class="scope-row"><strong>驗證與合併</strong><span><code>./scripts/verify</code>＋分層 CI＋PR；並行里程碑各自整合，promotion 才進 main</span></p>
-          <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件；已有 Containerfile 可選配容器驗證／GHCR</span></p>
+          <p class="scope-row"><strong>依賴與交付證據</strong><span>依鎖檔重裝；TypeScript 新版先等三天；自動更新、漏洞掃描與 SBOM 正逐項恢復</span></p>
           <p class="scope-row"><strong>可持續同步</strong><span>公版更新成為可審查差異，不會直接覆蓋產品程式</span></p>
         </section>
         <section class="start-paths" aria-label="三種導入方式">
@@ -2313,7 +2313,7 @@ html[data-detail-level="simple"] .detail-panel {
           <article class="pipeline-stage">
             <span class="pipeline-phase">第四步｜系統協助</span>
             <h3>驗證與依賴安全</h3>
-            <p>依變更內容選擇必要驗證；相依變更再確認新版等待、已知漏洞與 lockfile 結果。</p>
+            <p>依變更內容選擇必要驗證；相依變更先確認鎖定版本能正確安裝。</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">第五步｜確認結果</span>
@@ -2970,7 +2970,7 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
-<section class="slide markdown-slide legacy-slide decision-slide" id="supply" data-content-key="supply" data-track="supply" aria-label="風險立即看見，升版不搶第一天">
+<section class="slide markdown-slide legacy-slide decision-slide" id="supply" data-content-key="supply" data-track="supply" aria-label="第三方套件分開更新、檢查與記錄">
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
@@ -3028,83 +3028,65 @@ html[data-detail-level="simple"] .detail-panel {
 
   <header class="basic-header">
     <span class="selection-sequence">步驟 04</span>
-    <h2>風險立即看見，升版不搶第一天</h2>
-    <p class="subtitle">未知惡意新版、已公開漏洞與成品內容是三種不同問題。</p>
+    <h2>第三方套件分開更新、檢查與記錄</h2>
+    <p class="subtitle">一般新版先觀察，已知漏洞立即處理，發版成品留下可追查清單。</p>
   </header>
 
 <div class="legacy-content">
       <header>
-        <h2>步驟 4｜<span class="accent">風險立即看見，升版不搶第一天</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>安全、檔案證據與「版本能否安裝」是不同問題；依賴更新也是日常維護的一環。</p>
+        <h2>步驟 4｜<span class="accent">第三方套件分開更新、檢查與記錄</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>更新來源、安裝結果、已知漏洞與發版清單是四件不同的事，不由一個工具假裝全部解決。</p>
       </header>
-      <p class="context-line"><strong>問題與目的｜</strong>第三方套件出現漏洞時要立刻知道；一般新版則先等三天，避免成為供應鏈攻擊最早一批受害者。</p>
+      <p class="context-line"><strong>模板的作用｜</strong>依賴異動必須能重裝與驗證；一般新版保留觀察期，已公開漏洞不等待，發版時再列出實際成品內容。</p>
       <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把所有風險都當成同一種更新</h3><ul><li><strong>新版一出就升：</strong>可能成為惡意版本最早一批使用者</li><li><strong>漏洞也等三天：</strong>已知風險不應延後處理</li><li><strong>換成 Renovate：</strong><button class="term-trigger" type="button" aria-expanded="false" aria-controls="renovate-preset-overlay">中央共用更新規則（preset）</button>較靈活，但目前會額外依賴高權限身分</li></ul></article>
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>依規模選擇不同組合</h3><ul><li><strong>自動更新服務：</strong>定期提出升版 PR，適合不想人工巡查版本的團隊。</li><li><strong>套件管理器政策：</strong>在安裝時限制版本年齡與鎖檔，保護本機與 CI。</li><li><strong>漏洞掃描：</strong>比對公開漏洞資料庫；即使沒有升版 PR，也能發現既有風險。</li><li><strong>成品清冊：</strong>發版時建立 SBOM，供事件追查與使用者核對。</li></ul></article>
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
-          <details class="package-disclosure"><summary><span><span class="tech-name">Dependabot＋OSV＋anchore/sbom-action</span> 已完成</span></summary><div class="package-health"><p><a href="https://github.com/google/osv-scanner" target="_blank" rel="noreferrer">OSV-Scanner</a>｜Apache-2.0；<a href="https://github.com/anchore/syft" target="_blank" rel="noreferrer">Syft</a>｜Apache-2.0。</p><p><strong>Renovate：</strong>AGPL-3.0；#110 決定不換手。Dependabot 使用 GitHub 原生 automation identity，PR 會觸發既有 policy 與 change-aware verify；相依變更才加跑 OSV，workflow 變更才加跑 Zizmor，promotion 與週期排程則兩者都跑，不需要第三方 App 或長效 PAT。pnpm <code>minimumReleaseAge</code> 另保護本機與 CI resolution，<code>trustPolicy: no-downgrade</code> 則保護發布者信任，兩者都保留。</p></div></details>
-          <p class="recommendation-copy"><strong>等待：</strong>Dependabot 一般升版先等三天；pnpm 另以嚴格 resolver 阻擋發布未滿三天的直接或間接套件，並拒絕 publisher trust 降級。遇到 trust downgrade 時先確認發布者與 provenance，不要直接停用 policy。<br><strong>漏洞：</strong>OSV 對已公開漏洞立即通知，不套用等待期。<br><strong>內容：</strong><code>uv.lock</code> 保存 SHA-256；<code>pnpm-lock.yaml</code> 保存 integrity hash；發布時解壓真正成品，再附 checksum 與非空 SBOM。<br><strong>限制：</strong>雜湊不證明來源善意，SBOM 也不會自行阻擋漏洞。</p>
+          <h3>先守住可重現安裝，再逐項恢復自動化</h3>
+          <ul><li><strong>現在會執行：</strong>依賴檔案變更會走 CI；Python 與 TypeScript 都依鎖檔重裝，TypeScript 另拒絕未滿三天的新版本與發布者信任降級。</li><li><strong>已保留規格：</strong>Dependabot 一般更新等三天；OSV 對已公開漏洞立即失敗；Syft 從實際發版成品產生 SPDX SBOM。</li><li><strong>目前未啟用：</strong>Dependabot、OSV 排程與 Release workflow 仍在 archive，不能寫成已自動執行。</li><li><strong>工具邊界：</strong>鎖檔證明安裝內容一致，不證明發布者善意；漏洞掃描只認已公開資料；SBOM 是清冊，不是阻擋器。</li></ul>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>兩種生態的一般升版等三天：</strong><code>.github/dependabot.yml</code>；<strong>pnpm 本機也嚴格等待：</strong><code>pnpm-workspace.yaml</code></li><li><strong>凍結安裝並比對兩種 lockfile 雜湊：</strong><code>scripts/verify</code></li><li><strong>掃已知漏洞：</strong><code>osv.yml</code>　<strong>發布 checksum／SBOM：</strong><code>release.yml</code></li><li><strong>回報本專案自身的漏洞：</strong><code>SECURITY.md</code>；預設使用實際 repository 的公開 GitHub Issues，不寫死未核准的 email 或 SLA，也不得張貼敏感內容</li></ul></aside>
-      <aside id="renovate-preset-overlay" class="config-overlay term-overlay" hidden role="region" aria-label="中央共用更新規則說明">
-        <div class="config-overlay-card">
-          <button class="config-overlay-close" type="button" aria-label="關閉名詞說明">×</button>
-          <h3>中央共用更新規則（preset）是什麼？</h3>
-          <p class="term-overlay-copy"><strong>白話說：</strong>把套件更新規則放在一個共用設定；其他 repo 只要寫「沿用這套規則」，之後改一次就能同步等待天數、排程與分組。</p>
-          <p class="term-overlay-copy"><strong>何時需要：</strong>repo 變多、各專案設定開始不一致，或 Dependabot 已無法表達共同規則時。</p>
-          <p class="term-overlay-copy"><strong>目前決定：</strong>預設保留 Dependabot 與既有 CI/CD checks。自架 Renovate 的 <code>GITHUB_TOKEN</code> 不能建立可正常觸發所有必要檢查的 PR；Mend Renovate App 又要求 organization members read、repository administration read 與 workflow／content／PR write。只有 Dependabot 已無法表達實際跨 repo 政策時才考慮選配安裝。</p>
-          <table class="release-policy-matrix" aria-label="Optional integration capability matrix"><thead><tr><th>preflight 狀態</th><th>誰會看到</th><th>下一步</th></tr></thead><tbody><tr><td><code>available</code></td><td>personal repo owner，或同時具 repo admin 的 organization owner</td><td>開啟 <a href="https://github.com/apps/renovate/installations/new" target="_blank" rel="noreferrer">Renovate App 安裝頁</a>，檢查 GitHub 顯示的權限並只選目標 repo；CLI 不代為同意或安裝</td></tr><tr><td><code>request-owner</code></td><td>有 repo admin、但不是 account／organization owner</td><td>把同一安裝入口交給 owner 核准；等待期間保留 Dependabot</td></tr><tr><td><code>fallback</code></td><td>無 admin、權限未知、API 失敗或尚無 GitHub origin</td><td>不假設可安裝，繼續使用 Dependabot 與 required CI/CD checks；推送遠端後可重跑 preflight</td></tr></tbody></table>
-          <p class="term-overlay-copy"><strong>導入時檢查：</strong><code>csarc init</code>／<code>adopt</code>／<code>update</code> 會在 origin 可讀時查 owner 類型、repo admin 與 organization membership。新 repo 尚未有 origin 時可先設定 <code>GH_REPO=owner/repo</code>，推送後也能執行 <code>python scripts/release_policy.py preflight --repo owner/repo</code> 重查；整段只讀，不要求長效廣域 PAT。</p>
-        </div>
-      </aside>
+      <aside class="config-guidance"><strong>模板功能與客製化</strong><ul><li><strong>鎖檔安裝與一般驗證：</strong><code>template/scripts/verify-fast.jinja</code>、<code>template/scripts/verify.jinja</code>；repo-template 使用 <code>scripts/verify-fast</code>、<code>scripts/verify-template.sh</code>。</li><li><strong>TypeScript 三天觀察期與 trust policy：</strong><code>template/pnpm-workspace.yaml</code>。</li><li><strong>發版成品與 SBOM 契約：</strong><code>scripts/release_assets.py</code>、<code>tests/test_release_assets.py</code>；目前只保留程式與測試。</li><li><strong>尚待恢復：</strong><code>archive/ci-cd/2026-08-27/*dependabot*</code>、<code>root-workflows/osv.yml</code> 與 release workflows；恢復時移出 archive，不能同時保留兩份。</li><li><strong>漏洞回報入口：</strong><code>SECURITY.md</code>；不得在公開 Issue 張貼敏感漏洞細節。</li></ul></aside>
+      <p class="reference">具體設計比較見<a href="#similar-tools">相似工具</a>；各 PR 階段與待恢復項目見<a href="#testing">CI/CD 設定</a>。</p>
 </div>
 
 
 <div class="markdown-body basic-summary"><table>
 	<thead>
 			<tr>
-					<th>問題</th>
-					<th>現行控制</th>
-					<th>不代表什麼</th>
+					<th>這次要防什麼</th>
+					<th>模板目前怎麼處理</th>
 			</tr>
 	</thead>
 	<tbody>
 			<tr>
-					<td>太新的套件</td>
-					<td>Dependabot 與 pnpm 一般版本等待三天</td>
-					<td>不代表套件沒有既知漏洞</td>
+					<td>改了套件卻無法重裝</td>
+					<td>PR 會依鎖定版本重新安裝並跑必要驗證</td>
 			</tr>
 			<tr>
-					<td>已公開漏洞</td>
-					<td>OSV 立即掃描與告警</td>
-					<td>不驗證下載內容相同</td>
+					<td>剛發布的惡意版本</td>
+					<td>TypeScript 套件先觀察三天；其他自動更新仍待恢復</td>
 			</tr>
 			<tr>
-					<td>內容完整性</td>
-					<td><code>uv.lock</code> SHA-256、pnpm integrity、release checksum</td>
-					<td>不證明發布者善意</td>
+					<td>已公開漏洞沒有被注意</td>
+					<td>掃描規則已保留，但自動掃描尚未啟用</td>
 			</tr>
 			<tr>
-					<td>成品組成</td>
-					<td>解壓真正 artifact 後產生 CycloneDX SBOM</td>
-					<td>SBOM 不會自行阻擋漏洞</td>
+					<td>發版後不知道包含什麼</td>
+					<td>依賴安全負責成品清冊規格；在真正成品產生時執行</td>
 			</tr>
 	</tbody>
 </table>
-<details class="package-disclosure" data-content-key="supply-tools">
-  <summary><span class="tech-name">Dependabot＋OSV＋anchore/sbom-action</span></summary>
-  <div class="package-health">Dependabot 保留 GitHub 原生 automation identity，PR 可直接觸發既有 policy 與 change-aware checks，不要求每個 repo 安裝高權限 App 或長效 PAT。pnpm <code>minimumReleaseAge</code> 保護本機與 CI resolution，<code>trustPolicy: no-downgrade</code> 拒絕 publisher trust 降級。</div>
-</details>
 <aside class="technical-detail" data-content-key="supply-boundaries">
-  <h3>設定位置與 Renovate 決策</h3>
+  <h3>這四種保護為什麼要分開</h3>
   <ul>
-<li>更新等待：<code>.github/dependabot.yml</code> 與 <code>pnpm-workspace.yaml</code>。</li>
-<li>凍結安裝與 lockfile 完整性：<code>scripts/verify</code>。</li>
-<li>漏洞與發布證據：<code>osv.yml</code>、<code>release.yml</code>、<code>SECURITY.md</code>。</li>
+<li>**鎖定版本：**確認每次安裝使用同一批套件。</li>
+<li>**觀察期：**不在一般新版發布當天立刻採用。</li>
+<li>**漏洞掃描：**立即比對已公開的安全問題，不等待三天。</li>
+<li>**成品清冊（SBOM）：**列出發布成品實際包含的套件，方便追查；它本身不會阻擋漏洞。</li>
 </ul>
-<p>Renovate 的中央 preset 更靈活，但自架 token 無法正常觸發所有必要 checks；Mend App 又要求 organization members read、repository administration read，以及 workflow／content／PR write。目前保留 Dependabot；只有多 repo 政策真的無法表達時才重新評估。</p>
-</aside></div>
+</aside>
+</div>
 
 
 </section>
@@ -3924,7 +3906,7 @@ html[data-detail-level="simple"] .detail-panel {
         </article>
       </div>
       <aside class="tool-deferred" aria-label="未來選配與暫不採用工具">
-        <p><strong>基本方案另已採用：</strong>Dependabot、OSV-Scanner、anchore/sbom-action（底層使用 Syft）。</p>
+        <p><strong>依賴安全選型：</strong>保留 Dependabot、OSV-Scanner 與 Syft；自動化由 #407 逐項恢復，不把 archive 當成現行設定。</p>
         <p><strong>尚未啟用：</strong>Go／Rust profile、Scorecard、Harden-Runner、網站託管／登入（<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">#79</a>）、Hugo、RAG、通用部署與監控；repo 內部網站與生成內容模板已可用。</p>
       </aside>
       <p class="ecosystem-reference reference">Ref. Official project repositories linked above; logo assets from each project's brand kit.</p>
@@ -3953,7 +3935,7 @@ html[data-detail-level="simple"] .detail-panel {
 			<tr>
 					<td>Dependabot、OSV、Syft</td>
 					<td>依賴更新、漏洞與 SBOM</td>
-					<td>基本導入</td>
+					<td>工具與責任已確定；自動化待恢復</td>
 			</tr>
 			<tr>
 					<td><img src="data:image/png;base64,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" alt="GitHub Community Projects logo"> <a href="https://github.com/github-community-projects/safe-settings">Safe Settings</a></td>
@@ -4059,8 +4041,9 @@ html[data-detail-level="simple"] .detail-panel {
   <button id="similar-tools-tab-work" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>工作定義</button>
   <button id="similar-tools-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI 規範</button>
   <button id="similar-tools-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>驗證／CI</button>
-  <button id="similar-tools-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-pr" data-similar-tools-tab="4"><small>Journey 05</small>PR／合併</button>
-  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="5"><small>Journey 08</small>模板升級</button>
+  <button id="similar-tools-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-supply" data-similar-tools-tab="4"><small>Journey 04</small>依賴安全</button>
+  <button id="similar-tools-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-pr" data-similar-tools-tab="5"><small>Journey 05</small>PR／合併</button>
+  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="6"><small>Journey 08</small>模板升級</button>
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
   <div class="similar-tools-legend">
@@ -4267,6 +4250,51 @@ html[data-detail-level="simple"] .detail-panel {
     </table>
   </div>
 </div>
+<div id="similar-tools-panel-supply" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-supply" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">只比較套件更新如何進入 PR、安裝時如何固定版本、已公開漏洞何時檢查，以及發版成品如何留下清冊</span><span class="capture-date">Stars 擷取日｜2026-08-31</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="依賴安全">
+    <table class="similar-tools-matrix similar-tools-philosophy-matrix">
+      <thead><tr><th scope="col">功能分野／具體做法</th><th scope="col">主要相似工具</th><th scope="col">其他生態圈工具</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>套件更新如何進入 PR</strong><span>比較定期 PR、中央分組與人工升版。<br><br><b>CSARC：</b>Dependabot 依生態分組；一般更新等三天，安全更新不等。設定待 #407 恢復。</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/api/github/#projen.github.Dependabot" target="_blank" rel="noreferrer">Dependabot component</a>：由 project model 產生設定；自訂仍回到 .projenrc。</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Dependabot<span class="tool-meta"><span>v0.393.0 (2026-08-24)</span><span>★ 5,745</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#cooldown-" target="_blank" rel="noreferrer">Version updates &#43; cooldown</a>：依 ecosystem、分組與 cooldown 提出 PR；安全更新不等待。</span></li>
+              <li><strong>Renovate<span class="tool-meta"><span>44.52.1 (2026-08-31)</span><span>★ 22,379</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.renovatebot.com/configuration-options/#minimumreleaseage" target="_blank" rel="noreferrer">packageRules &#43; minimumReleaseAge</a>：共用 preset 可依套件、版本型態與年齡分組或延後。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>安裝時如何固定套件</strong><span>比較最新版、lockfile 與 resolver 限制。<br><br><b>CSARC：</b>兩種語言都依 lockfile 安裝；pnpm 另拒絕未滿三天或 publisher trust 降級的版本。本機與 CI 都執行。</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>pnpm<span class="tool-meta"><span>v11.25.0 (2026-08-29)</span><span>★ 36,332</span></span></strong><span class="tool-comparison-detail"><a href="https://pnpm.io/settings#minimumreleaseage" target="_blank" rel="noreferrer">minimumReleaseAge &#43; trustPolicy</a>：安裝時拒絕太新的版本與 publisher trust 降級。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>已公開漏洞何時檢查</strong><span>比較更新通知、PR 檢查與週期掃描。<br><br><b>CSARC：</b>OSV 是單一資料入口；依賴 PR、發版候選與週期排程共用本機程式，待 #407 恢復。</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>Dependabot<span class="tool-meta"><span>v0.393.0 (2026-08-24)</span><span>★ 5,745</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.github.com/en/code-security/dependabot/dependabot-security-updates/about-dependabot-security-updates" target="_blank" rel="noreferrer">Security updates</a>：依 advisory 提出最小安全更新 PR；不取代完整掃描。</span></li>
+              <li><strong>OSV-Scanner<span class="tool-meta"><span>v2.5.1 (2026-08-17)</span><span>★ 10,948</span></span></strong><span class="tool-comparison-detail"><a href="https://google.github.io/osv-scanner/" target="_blank" rel="noreferrer">osv-scanner scan</a>：掃 lockfile／SBOM，沒有新版通知也能找出已知漏洞。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>發版成品如何留下清冊</strong><span>比較原始碼推測、真正成品掃描與平台套件清單。<br><br><b>CSARC：</b>Syft 掃精確 tag 成品；程式再綁定 SPDX 2.3、checksum、來源與 provenance。規格與測試已存在。</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>Syft<span class="tool-meta"><span>v1.51.1 (2026-08-27)</span><span>★ 9,487</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/anchore/syft#sbom-formats" target="_blank" rel="noreferrer">SPDX / CycloneDX SBOM</a>：掃實際檔案、archive 或 image；發版流程再綁定版本與 digest。</span></li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 <div id="similar-tools-panel-pr" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-pr" data-similar-tools-panel hidden>
   <div class="similar-tools-legend"><span class="reference">只比較一張 PR 包含多少工作、如何分批進 main、何時可合併，以及基準分支前進後如何同步</span><span class="capture-date">Stars 擷取日｜2026-08-31</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="PR／合併">
@@ -4434,8 +4462,9 @@ html[data-detail-level="simple"] .detail-panel {
     <button id="testing-tab-work" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>工作定義</button>
     <button id="testing-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI 規範</button>
     <button id="testing-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>驗證／CI</button>
-    <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="4"><small>Journey 05</small>PR／合併</button>
-    <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="5"><small>Journey 06</small>版本／交付</button>
+    <button id="testing-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-supply" data-similar-tools-tab="4"><small>Journey 04</small>依賴安全</button>
+    <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="5"><small>Journey 05</small>PR／合併</button>
+    <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="6"><small>Journey 06</small>版本／交付</button>
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
     <div class="similar-tools-testing-intro">
@@ -4449,13 +4478,13 @@ html[data-detail-level="simple"] .detail-panel {
         <tbody>
           <tr>
             <th scope="row"><strong>Issue PR（工作分支 → dev）</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>PR／合併：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>驗證／CI：</strong>docs &lt; 1 分鐘；fast 2–5 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–7 分鐘</p></td>
-            <td><ul class="testing-duration-list"><li><strong>PR／合併：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>驗證／CI：</strong>docs &lt; 1 分鐘；fast 3–6 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–8 分鐘</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR／合併：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>驗證／CI：</strong>docs &lt; 1 分鐘；fast 2–5 分鐘</li><li><strong>依賴安全：</strong>fast 其中約 1–3 分鐘；#407 後重測</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–7 分鐘</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR／合併：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>驗證／CI：</strong>docs &lt; 1 分鐘；fast 3–6 分鐘</li><li><strong>依賴安全：</strong>fast 其中約 1–3 分鐘；#407 後重測</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–8 分鐘</p></td>
           </tr>
           <tr>
             <th scope="row"><strong>發版 PR（dev → main）</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>PR／合併：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>驗證／CI：</strong>full 5–15 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–17 分鐘</p></td>
-            <td><ul class="testing-duration-list"><li><strong>PR／合併：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>驗證／CI：</strong>full 8–12 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 9–14 分鐘</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR／合併：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>驗證／CI：</strong>full 5–15 分鐘</li><li><strong>依賴安全：</strong>full 其中約 1–3 分鐘；#407 後重測</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–17 分鐘</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR／合併：</strong>約 1–2 分鐘</li><li><strong>AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>驗證／CI：</strong>full 8–12 分鐘</li><li><strong>依賴安全：</strong>full 其中約 1–3 分鐘；#407 後重測</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 9–14 分鐘</p></td>
           </tr>
         </tbody>
       </table>
@@ -4592,6 +4621,73 @@ html[data-detail-level="simple"] .detail-panel {
             <li>
               <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑。</span>
             </li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
+  <div id="testing-panel-supply" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-supply" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 04／依賴安全</strong><span>依賴異動先重現鎖檔安裝；已知漏洞只在依賴變更與發版候選加跑，週期掃描另補沒有 PR 的時段。自動更新與掃描由 #407 恢復。</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 04／依賴安全">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>鎖定版本可重現安裝</strong><span>依 lockfile 安裝，拒絕未記錄的解析結果；TypeScript 另執行三天觀察期與發布者 trust policy。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-fast</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：依賴檔案變更的 Issue PR · Timeout：30 min</span></li></ul></div>
+            </li>
+            <li>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：發版 PR／merge group／手動完整驗證 · Timeout：30 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-fast</code></li></ul></div><span>依賴設定變更時，額外產生一個代表性 repo 驗證生成結果。</span>
+            </li>
+            <li>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>完整測試所有 profile 的生成與鎖檔契約。</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>一般更新自動提出 PR</strong><span>Dependabot 依生態圈分組更新，一般新版等三天；安全修補不套用等待期。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>.github/dependabot.yml</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407" target="_blank" rel="noreferrer">待 #407</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>待 #407 從 archive 恢復；建立的更新 PR 仍走同一個 CI job。</span></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_dependency_policy.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407" target="_blank" rel="noreferrer">待 #407</a></li></ul></div><span>確認不同 profile 只生成適用的更新生態圈。</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>已公開漏洞立即檢查</strong><span>依賴檔案變更與發版候選使用同一個 OSV 本機入口；每週排程補上沒有 PR 的期間。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-dependencies</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407" target="_blank" rel="noreferrer">待 #407</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407" target="_blank" rel="noreferrer">待 #407</a><span>Trigger：依賴檔案變更的 Issue PR · Timeout：30 min</span></li></ul></div>
+            </li>
+            <li>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-dependencies</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407" target="_blank" rel="noreferrer">待 #407</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407" target="_blank" rel="noreferrer">待 #407</a><span>Trigger：發版 PR／merge group／手動完整驗證 · Timeout：30 min</span></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>每週與手動掃描另由薄 workflow 呼叫同一入口，不複製掃描邏輯。</span></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>發版成品清冊與雜湊</strong><span>從精確 tag 的真正成品建立 SPDX SBOM、checksum 與相互綁定的證據。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/release_assets.py</code></li><li><code>tests/test_release_assets.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>依賴安全擁有 SBOM 規格與驗證；真正成品出現時由發版流程觸發，但不把責任移到「版本／交付」。</span></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
           </ul></td>
         </tr>
       </tbody>
@@ -5487,7 +5583,7 @@ html[data-detail-level="simple"] .detail-panel {
       const supply = document.querySelector('[data-track="supply"]');
       const testing = document.querySelector("#testing");
       const bridge = document.querySelector("#bridge");
-      if (pr && supply) pr.before(supply);
+      if (pr && supply) supply.before(pr);
       if (testing && bridge) testing.after(bridge);
     })();
   </script>
@@ -6006,27 +6102,10 @@ jobs:
       ],
       supply: [
         {
-          title: '一般套件新版觀察三天，再由測試與人員決定是否合併',
-          goal: '安全更新不等待；三天規則主要降低剛發布惡意版本的早期風險。',
-          summary: 'Dependabot 同時管理 `uv` 與 `npm` 生態；`cooldown.default-days=3` 延後一般升版，安全更新仍立即提出。',
-          file: '.github/dependabot.yml',
-          code: `updates:
-  - package-ecosystem: uv
-    directory: /
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 3
-  - package-ecosystem: npm
-    directory: /
-    cooldown:
-      default-days: 3`
-        },
-        {
-          title: '兩種 lockfile 都驗內容；pnpm 本機也嚴格等三天',
-          goal: '版本號只供人閱讀；Python 比對 artifact SHA-256，npm 比對 integrity hash。',
-          summary: '`uv sync --locked` 與 `pnpm install --frozen-lockfile --ignore-scripts` 都會拒絕設定漂移；pnpm resolver 另阻擋發布未滿三天的直接與間接套件。',
-          file: 'uv.lock＋pnpm-lock.yaml＋pnpm-workspace.yaml＋scripts/verify',
+          title: '已啟用｜依鎖檔重裝，TypeScript 另等三天',
+          goal: '先證明已提交的套件集合可以重現，不把「安裝成功」誤當成「沒有漏洞」。',
+          summary: 'Python 使用 uv 的 locked install；TypeScript 使用 pnpm frozen lockfile，並在解析時拒絕發布未滿三天或 publisher trust 降級的版本。',
+          file: 'template/scripts/verify-fast.jinja＋template/scripts/verify.jinja＋template/pnpm-workspace.yaml',
           code: `uv sync --locked
 pnpm install --frozen-lockfile --ignore-scripts
 
@@ -6035,78 +6114,35 @@ minimumReleaseAgeStrict: true
 trustPolicy: no-downgrade`
         },
         {
-          title: '相依下界要能測，天花板要能指出是誰擋住',
-          goal: 'Ruff／mypy 的 Python target 只管語法；uv resolver 另外證明 dev 相依範圍可安裝。這不是漏洞掃描。',
-          summary: '`lowest-direct` 將直接相依降到宣告下界並重跑測試；每週排程逐一嘗試 PyPI 最新版，把 uv 的完整衝突鏈寫入 Actions summary。',
-          file: 'scripts/verify＋scripts/report_dependency_ceiling.py',
-          code: `uv pip compile pyproject.toml --group dev \
-  --resolution lowest-direct
-uv pip check --python <lower-bound-python>
+          title: '待 #407｜Dependabot 提出一般與安全更新 PR',
+          goal: '一般新版先觀察三天；已知安全修補不等待，且更新 PR 繼續走相同 CI。',
+          summary: '保留 GitHub 原生 automation identity，不要求每個 repo 安裝高權限 App。設定目前只在 archive，恢復後必須刪除封存副本。',
+          file: 'archive/ci-cd/2026-08-27/*dependabot* → .github/dependabot.yml',
+          code: `cooldown:
+  default-days: 3
 
-# Weekly ceiling report uses an exact requirement:
-uv pip compile pyproject.toml --group dev \
-  --upgrade-package "<package>==<latest>"`
+# Security updates are not delayed by the cooldown.`
         },
         {
-          title: 'PR、main 與每週排程掃描已公開登錄的漏洞',
-          goal: 'OSV 發現漏洞就失敗，不和一般新版的三天觀察混在一起。',
-          summary: '在 PR、main push 與每週一排程執行 OSV；掃到已登錄漏洞就讓檢查失敗，不套用三天等待。',
-          file: '.github/workflows/osv.yml',
-          code: `on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
-  schedule:
-    - cron: "17 3 * * 1"`
+          title: '待 #407｜OSV 共用本機、PR 與每週掃描',
+          goal: '已公開漏洞立即處理，不和一般新版的三天觀察混在一起。',
+          summary: '依賴檔變更與發版候選執行同一支本機程式；每週排程只補沒有 PR 的期間。workflow 不自行重寫掃描條件。',
+          file: 'scripts/verify-dependencies＋.github/workflows/ci.yml＋dependency-security.yml',
+          code: `Issue PR with dependency changes -> verify-dependencies
+Release PR -> verify-dependencies
+Weekly schedule -> verify-dependencies`
         },
         {
-          title: '方案感知的 CodeQL SAST，只分析實際語言',
-          goal: 'Ruff／TypeScript lint 找程式品質問題，OSV 找已知相依漏洞；CodeQL 另補跨函式資料流與安全查詢，三者不互相冒充。',
-          summary: 'Python／TypeScript public repo 預設產生 CodeQL；private／internal 只有確認 GitHub Code Security 授權後才 opt-in，否則明列 SAST 未涵蓋並由產品選核准替代工具。CI-only 不產生空 job。CodeQL 仍可能誤報或漏報，結果需人工 triage。',
-          file: 'copier.yml＋.github/workflows/codeql.yml',
-          code: `enable_codeql: true
-
-permissions:
-  contents: read
-  security-events: write
-
-matrix:
-  language: ["python", "javascript-typescript"]`
+          title: '依賴安全擁有｜真正成品的 SPDX SBOM 與 checksum',
+          goal: '清冊必須來自精確 tag 的真正成品，不能只從原始碼猜測。',
+          summary: 'Syft 產生 SPDX 2.3 SBOM；repo 程式驗證 root package、dependency graph、checksum、來源與 provenance。發版流程只負責在成品出現時觸發，不另外定義規則。',
+          file: 'scripts/release_assets.py＋tests/test_release_assets.py',
+          code: `syft <extracted-artifacts> -o spdx-json=sbom.spdx.json
+python scripts/release_assets.py build ...
+python scripts/release_assets.py verify ...`
         },
         {
-          title: 'tag 發布時建立交付成品、SHA-256 與 CycloneDX SBOM',
-          goal: 'anchore/sbom-action 以 Syft 盤點內容；來源證明依專案可見度決定預設值。',
-          summary: '依 profile 打包並計算 SHA-256；先把真正成品解壓到隔離目錄，再由 Syft 產生 CycloneDX。`components` 為空就讓 workflow 失敗；tag、commit 與 workflow run metadata 連同成品附加到 GitHub Release。Copier 的 `project_visibility` 選 public 時，`enable_release_attestations` 預設開啟，`publish-evidence` job 自動取得 `id-token: write`／`attestations: write` 並執行兩次 `actions/attest`；private／internal 維持現行明確 opt-in、預設關閉。',
-          file: '.github/workflows/release.yml',
-          code: `- run: uv build               # Python
-- run: pnpm run build && pnpm pack --pack-destination dist # TypeScript
-- run: shasum -a 256 dist/* > SHA256SUMS
-- name: Extract release artifacts
-  run: |
-    mkdir -p "\${RUNNER_TEMP}/sbom-root"
-    # Extract each archive into the isolated SBOM input directory.
-- uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
-  with:
-    path: \${{ runner.temp }}/sbom-root
-    format: cyclonedx-json
-    output-file: sbom.cdx.json`
-        },
-        {
-          title: '決定｜保留 Dependabot 與 pnpm 的原生門禁',
-          goal: '讓 dependency PR 繼續觸發既有 CI/CD checks，且不要求每個導入者安裝高權限 App 或保存長效 PAT。',
-          summary: '不導入 Renovate：Dependabot 使用 GitHub 原生 automation identity，現有 PR checks 可直接執行。Dependabot cooldown 管理自動升版 PR 的三天等待；pnpm minimumReleaseAge 也保護本機與 CI resolution，並非完全重複。pnpm trustPolicy、OSV、resolver 上下界檢查與 SBOM 各自保留原本職責。若未來 Dependabot 無法表達已發生的跨 repo 需求，而且已有可維護的非 GITHUB_TOKEN 身分，再另案重評。',
-          file: '.github/dependabot.yml＋pnpm-workspace.yaml＋profiles/catalog.yaml',
-          code: `# Native updater; no extra App or long-lived token.
-.github/dependabot.yml
-
-# Install-time observation and publisher-trust gates.
-minimumReleaseAge: 4320
-minimumReleaseAgeStrict: true
-trustPolicy: no-downgrade`
-        },
-        {
-          title: '回報本專案自身的漏洞，不是掃相依套件',
+          title: '已啟用｜回報本專案自身的漏洞',
           goal: '掃描工具只看得到已知模式；有人主動回報才補得到掃描漏抓的問題。Issue 是公開索引的，通報流程要先把人導離開 Issue。',
           summary: '不寫死聯絡信箱或 SLA：模板不知道下游專案的實際通報管道，假造一個反而誤導回報者。專案 owner 必須在 `SECURITY.md` 填入實際管道與回應期待後，這份政策才算生效。',
           file: 'SECURITY.md',

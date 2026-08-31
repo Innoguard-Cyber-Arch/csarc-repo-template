@@ -392,27 +392,10 @@ jobs:
       ],
       supply: [
         {
-          title: '一般套件新版觀察三天，再由測試與人員決定是否合併',
-          goal: '安全更新不等待；三天規則主要降低剛發布惡意版本的早期風險。',
-          summary: 'Dependabot 同時管理 `uv` 與 `npm` 生態；`cooldown.default-days=3` 延後一般升版，安全更新仍立即提出。',
-          file: '.github/dependabot.yml',
-          code: `updates:
-  - package-ecosystem: uv
-    directory: /
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 3
-  - package-ecosystem: npm
-    directory: /
-    cooldown:
-      default-days: 3`
-        },
-        {
-          title: '兩種 lockfile 都驗內容；pnpm 本機也嚴格等三天',
-          goal: '版本號只供人閱讀；Python 比對 artifact SHA-256，npm 比對 integrity hash。',
-          summary: '`uv sync --locked` 與 `pnpm install --frozen-lockfile --ignore-scripts` 都會拒絕設定漂移；pnpm resolver 另阻擋發布未滿三天的直接與間接套件。',
-          file: 'uv.lock＋pnpm-lock.yaml＋pnpm-workspace.yaml＋scripts/verify',
+          title: '已啟用｜依鎖檔重裝，TypeScript 另等三天',
+          goal: '先證明已提交的套件集合可以重現，不把「安裝成功」誤當成「沒有漏洞」。',
+          summary: 'Python 使用 uv 的 locked install；TypeScript 使用 pnpm frozen lockfile，並在解析時拒絕發布未滿三天或 publisher trust 降級的版本。',
+          file: 'template/scripts/verify-fast.jinja＋template/scripts/verify.jinja＋template/pnpm-workspace.yaml',
           code: `uv sync --locked
 pnpm install --frozen-lockfile --ignore-scripts
 
@@ -421,78 +404,35 @@ minimumReleaseAgeStrict: true
 trustPolicy: no-downgrade`
         },
         {
-          title: '相依下界要能測，天花板要能指出是誰擋住',
-          goal: 'Ruff／mypy 的 Python target 只管語法；uv resolver 另外證明 dev 相依範圍可安裝。這不是漏洞掃描。',
-          summary: '`lowest-direct` 將直接相依降到宣告下界並重跑測試；每週排程逐一嘗試 PyPI 最新版，把 uv 的完整衝突鏈寫入 Actions summary。',
-          file: 'scripts/verify＋scripts/report_dependency_ceiling.py',
-          code: `uv pip compile pyproject.toml --group dev \
-  --resolution lowest-direct
-uv pip check --python <lower-bound-python>
+          title: '待 #407｜Dependabot 提出一般與安全更新 PR',
+          goal: '一般新版先觀察三天；已知安全修補不等待，且更新 PR 繼續走相同 CI。',
+          summary: '保留 GitHub 原生 automation identity，不要求每個 repo 安裝高權限 App。設定目前只在 archive，恢復後必須刪除封存副本。',
+          file: 'archive/ci-cd/2026-08-27/*dependabot* → .github/dependabot.yml',
+          code: `cooldown:
+  default-days: 3
 
-# Weekly ceiling report uses an exact requirement:
-uv pip compile pyproject.toml --group dev \
-  --upgrade-package "<package>==<latest>"`
+# Security updates are not delayed by the cooldown.`
         },
         {
-          title: 'PR、main 與每週排程掃描已公開登錄的漏洞',
-          goal: 'OSV 發現漏洞就失敗，不和一般新版的三天觀察混在一起。',
-          summary: '在 PR、main push 與每週一排程執行 OSV；掃到已登錄漏洞就讓檢查失敗，不套用三天等待。',
-          file: '.github/workflows/osv.yml',
-          code: `on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
-  schedule:
-    - cron: "17 3 * * 1"`
+          title: '待 #407｜OSV 共用本機、PR 與每週掃描',
+          goal: '已公開漏洞立即處理，不和一般新版的三天觀察混在一起。',
+          summary: '依賴檔變更與發版候選執行同一支本機程式；每週排程只補沒有 PR 的期間。workflow 不自行重寫掃描條件。',
+          file: 'scripts/verify-dependencies＋.github/workflows/ci.yml＋dependency-security.yml',
+          code: `Issue PR with dependency changes -> verify-dependencies
+Release PR -> verify-dependencies
+Weekly schedule -> verify-dependencies`
         },
         {
-          title: '方案感知的 CodeQL SAST，只分析實際語言',
-          goal: 'Ruff／TypeScript lint 找程式品質問題，OSV 找已知相依漏洞；CodeQL 另補跨函式資料流與安全查詢，三者不互相冒充。',
-          summary: 'Python／TypeScript public repo 預設產生 CodeQL；private／internal 只有確認 GitHub Code Security 授權後才 opt-in，否則明列 SAST 未涵蓋並由產品選核准替代工具。CI-only 不產生空 job。CodeQL 仍可能誤報或漏報，結果需人工 triage。',
-          file: 'copier.yml＋.github/workflows/codeql.yml',
-          code: `enable_codeql: true
-
-permissions:
-  contents: read
-  security-events: write
-
-matrix:
-  language: ["python", "javascript-typescript"]`
+          title: '依賴安全擁有｜真正成品的 SPDX SBOM 與 checksum',
+          goal: '清冊必須來自精確 tag 的真正成品，不能只從原始碼猜測。',
+          summary: 'Syft 產生 SPDX 2.3 SBOM；repo 程式驗證 root package、dependency graph、checksum、來源與 provenance。發版流程只負責在成品出現時觸發，不另外定義規則。',
+          file: 'scripts/release_assets.py＋tests/test_release_assets.py',
+          code: `syft <extracted-artifacts> -o spdx-json=sbom.spdx.json
+python scripts/release_assets.py build ...
+python scripts/release_assets.py verify ...`
         },
         {
-          title: 'tag 發布時建立交付成品、SHA-256 與 CycloneDX SBOM',
-          goal: 'anchore/sbom-action 以 Syft 盤點內容；來源證明依專案可見度決定預設值。',
-          summary: '依 profile 打包並計算 SHA-256；先把真正成品解壓到隔離目錄，再由 Syft 產生 CycloneDX。`components` 為空就讓 workflow 失敗；tag、commit 與 workflow run metadata 連同成品附加到 GitHub Release。Copier 的 `project_visibility` 選 public 時，`enable_release_attestations` 預設開啟，`publish-evidence` job 自動取得 `id-token: write`／`attestations: write` 並執行兩次 `actions/attest`；private／internal 維持現行明確 opt-in、預設關閉。',
-          file: '.github/workflows/release.yml',
-          code: `- run: uv build               # Python
-- run: pnpm run build && pnpm pack --pack-destination dist # TypeScript
-- run: shasum -a 256 dist/* > SHA256SUMS
-- name: Extract release artifacts
-  run: |
-    mkdir -p "\${RUNNER_TEMP}/sbom-root"
-    # Extract each archive into the isolated SBOM input directory.
-- uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
-  with:
-    path: \${{ runner.temp }}/sbom-root
-    format: cyclonedx-json
-    output-file: sbom.cdx.json`
-        },
-        {
-          title: '決定｜保留 Dependabot 與 pnpm 的原生門禁',
-          goal: '讓 dependency PR 繼續觸發既有 CI/CD checks，且不要求每個導入者安裝高權限 App 或保存長效 PAT。',
-          summary: '不導入 Renovate：Dependabot 使用 GitHub 原生 automation identity，現有 PR checks 可直接執行。Dependabot cooldown 管理自動升版 PR 的三天等待；pnpm minimumReleaseAge 也保護本機與 CI resolution，並非完全重複。pnpm trustPolicy、OSV、resolver 上下界檢查與 SBOM 各自保留原本職責。若未來 Dependabot 無法表達已發生的跨 repo 需求，而且已有可維護的非 GITHUB_TOKEN 身分，再另案重評。',
-          file: '.github/dependabot.yml＋pnpm-workspace.yaml＋profiles/catalog.yaml',
-          code: `# Native updater; no extra App or long-lived token.
-.github/dependabot.yml
-
-# Install-time observation and publisher-trust gates.
-minimumReleaseAge: 4320
-minimumReleaseAgeStrict: true
-trustPolicy: no-downgrade`
-        },
-        {
-          title: '回報本專案自身的漏洞，不是掃相依套件',
+          title: '已啟用｜回報本專案自身的漏洞',
           goal: '掃描工具只看得到已知模式；有人主動回報才補得到掃描漏抓的問題。Issue 是公開索引的，通報流程要先把人導離開 Issue。',
           summary: '不寫死聯絡信箱或 SLA：模板不知道下游專案的實際通報管道，假造一個反而誤導回報者。專案 owner 必須在 `SECURITY.md` 填入實際管道與回應期待後，這份政策才算生效。',
           file: 'SECURITY.md',

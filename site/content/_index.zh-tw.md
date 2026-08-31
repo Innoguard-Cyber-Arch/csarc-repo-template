@@ -43,7 +43,7 @@ fit = "符合畫面"
           <h3>公版會替 repo 準備</h3>
           <p class="scope-row"><strong>規劃與 AI 規範</strong><span>SDD → Feature parent → Task／Bug subissues → 各自 PR；里程碑只管理有期限的交付</span></p>
           <p class="scope-row"><strong>驗證與合併</strong><span><code>./scripts/verify</code>＋分層 CI＋PR；並行里程碑各自整合，promotion 才進 main</span></p>
-          <p class="scope-row"><strong>依賴與交付證據</strong><span>新版先等三天；OSV 查已公開漏洞；checksum 驗檔案一致；SBOM 列成品套件；已有 Containerfile 可選配容器驗證／GHCR</span></p>
+          <p class="scope-row"><strong>依賴與交付證據</strong><span>依鎖檔重裝；TypeScript 新版先等三天；自動更新、漏洞掃描與 SBOM 正逐項恢復</span></p>
           <p class="scope-row"><strong>可持續同步</strong><span>公版更新成為可審查差異，不會直接覆蓋產品程式</span></p>
         </section>
         <section class="start-paths" aria-label="三種導入方式">
@@ -106,7 +106,7 @@ fit = "符合畫面"
           <article class="pipeline-stage">
             <span class="pipeline-phase">第四步｜系統協助</span>
             <h3>驗證與依賴安全</h3>
-            <p>依變更內容選擇必要驗證；相依變更再確認新版等待、已知漏洞與 lockfile 結果。</p>
+            <p>依變更內容選擇必要驗證；相依變更先確認鎖定版本能正確安裝。</p>
           </article>
           <article class="pipeline-stage">
             <span class="pipeline-phase">第五步｜確認結果</span>
@@ -356,53 +356,38 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="supply" track="supply" eyebrow="步驟 04" title="風險立即看見，升版不搶第一天" subtitle="未知惡意新版、已公開漏洞與成品內容是三種不同問題。" class="legacy-slide decision-slide" legacy="true" >}}
+{{< slide key="supply" track="supply" eyebrow="步驟 04" title="第三方套件分開更新、檢查與記錄" subtitle="一般新版先觀察，已知漏洞立即處理，發版成品留下可追查清單。" class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
-        <h2>步驟 4｜<span class="accent">風險立即看見，升版不搶第一天</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>安全、檔案證據與「版本能否安裝」是不同問題；依賴更新也是日常維護的一環。</p>
+        <h2>步驟 4｜<span class="accent">第三方套件分開更新、檢查與記錄</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>更新來源、安裝結果、已知漏洞與發版清單是四件不同的事，不由一個工具假裝全部解決。</p>
       </header>
-      <p class="context-line"><strong>問題與目的｜</strong>第三方套件出現漏洞時要立刻知道；一般新版則先等三天，避免成為供應鏈攻擊最早一批受害者。</p>
+      <p class="context-line"><strong>模板的作用｜</strong>依賴異動必須能重裝與驗證；一般新版保留觀察期，已公開漏洞不等待，發版時再列出實際成品內容。</p>
       <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不把所有風險都當成同一種更新</h3><ul><li><strong>新版一出就升：</strong>可能成為惡意版本最早一批使用者</li><li><strong>漏洞也等三天：</strong>已知風險不應延後處理</li><li><strong>換成 Renovate：</strong><button class="term-trigger" type="button" aria-expanded="false" aria-controls="renovate-preset-overlay">中央共用更新規則（preset）</button>較靈活，但目前會額外依賴高權限身分</li></ul></article>
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>依規模選擇不同組合</h3><ul><li><strong>自動更新服務：</strong>定期提出升版 PR，適合不想人工巡查版本的團隊。</li><li><strong>套件管理器政策：</strong>在安裝時限制版本年齡與鎖檔，保護本機與 CI。</li><li><strong>漏洞掃描：</strong>比對公開漏洞資料庫；即使沒有升版 PR，也能發現既有風險。</li><li><strong>成品清冊：</strong>發版時建立 SBOM，供事件追查與使用者核對。</li></ul></article>
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
-          <details class="package-disclosure"><summary><span><span class="tech-name">Dependabot＋OSV＋anchore/sbom-action</span> 已完成</span></summary><div class="package-health"><p><a href="https://github.com/google/osv-scanner" target="_blank" rel="noreferrer">OSV-Scanner</a>｜Apache-2.0；<a href="https://github.com/anchore/syft" target="_blank" rel="noreferrer">Syft</a>｜Apache-2.0。</p><p><strong>Renovate：</strong>AGPL-3.0；#110 決定不換手。Dependabot 使用 GitHub 原生 automation identity，PR 會觸發既有 policy 與 change-aware verify；相依變更才加跑 OSV，workflow 變更才加跑 Zizmor，promotion 與週期排程則兩者都跑，不需要第三方 App 或長效 PAT。pnpm <code>minimumReleaseAge</code> 另保護本機與 CI resolution，<code>trustPolicy: no-downgrade</code> 則保護發布者信任，兩者都保留。</p></div></details>
-          <p class="recommendation-copy"><strong>等待：</strong>Dependabot 一般升版先等三天；pnpm 另以嚴格 resolver 阻擋發布未滿三天的直接或間接套件，並拒絕 publisher trust 降級。遇到 trust downgrade 時先確認發布者與 provenance，不要直接停用 policy。<br><strong>漏洞：</strong>OSV 對已公開漏洞立即通知，不套用等待期。<br><strong>內容：</strong><code>uv.lock</code> 保存 SHA-256；<code>pnpm-lock.yaml</code> 保存 integrity hash；發布時解壓真正成品，再附 checksum 與非空 SBOM。<br><strong>限制：</strong>雜湊不證明來源善意，SBOM 也不會自行阻擋漏洞。</p>
+          <h3>先守住可重現安裝，再逐項恢復自動化</h3>
+          <ul><li><strong>現在會執行：</strong>依賴檔案變更會走 CI；Python 與 TypeScript 都依鎖檔重裝，TypeScript 另拒絕未滿三天的新版本與發布者信任降級。</li><li><strong>已保留規格：</strong>Dependabot 一般更新等三天；OSV 對已公開漏洞立即失敗；Syft 從實際發版成品產生 SPDX SBOM。</li><li><strong>目前未啟用：</strong>Dependabot、OSV 排程與 Release workflow 仍在 archive，不能寫成已自動執行。</li><li><strong>工具邊界：</strong>鎖檔證明安裝內容一致，不證明發布者善意；漏洞掃描只認已公開資料；SBOM 是清冊，不是阻擋器。</li></ul>
         </article>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>兩種生態的一般升版等三天：</strong><code>.github/dependabot.yml</code>；<strong>pnpm 本機也嚴格等待：</strong><code>pnpm-workspace.yaml</code></li><li><strong>凍結安裝並比對兩種 lockfile 雜湊：</strong><code>scripts/verify</code></li><li><strong>掃已知漏洞：</strong><code>osv.yml</code>　<strong>發布 checksum／SBOM：</strong><code>release.yml</code></li><li><strong>回報本專案自身的漏洞：</strong><code>SECURITY.md</code>；預設使用實際 repository 的公開 GitHub Issues，不寫死未核准的 email 或 SLA，也不得張貼敏感內容</li></ul></aside>
-      <aside id="renovate-preset-overlay" class="config-overlay term-overlay" hidden role="region" aria-label="中央共用更新規則說明">
-        <div class="config-overlay-card">
-          <button class="config-overlay-close" type="button" aria-label="關閉名詞說明">×</button>
-          <h3>中央共用更新規則（preset）是什麼？</h3>
-          <p class="term-overlay-copy"><strong>白話說：</strong>把套件更新規則放在一個共用設定；其他 repo 只要寫「沿用這套規則」，之後改一次就能同步等待天數、排程與分組。</p>
-          <p class="term-overlay-copy"><strong>何時需要：</strong>repo 變多、各專案設定開始不一致，或 Dependabot 已無法表達共同規則時。</p>
-          <p class="term-overlay-copy"><strong>目前決定：</strong>預設保留 Dependabot 與既有 CI/CD checks。自架 Renovate 的 <code>GITHUB_TOKEN</code> 不能建立可正常觸發所有必要檢查的 PR；Mend Renovate App 又要求 organization members read、repository administration read 與 workflow／content／PR write。只有 Dependabot 已無法表達實際跨 repo 政策時才考慮選配安裝。</p>
-          <table class="release-policy-matrix" aria-label="Optional integration capability matrix"><thead><tr><th>preflight 狀態</th><th>誰會看到</th><th>下一步</th></tr></thead><tbody><tr><td><code>available</code></td><td>personal repo owner，或同時具 repo admin 的 organization owner</td><td>開啟 <a href="https://github.com/apps/renovate/installations/new" target="_blank" rel="noreferrer">Renovate App 安裝頁</a>，檢查 GitHub 顯示的權限並只選目標 repo；CLI 不代為同意或安裝</td></tr><tr><td><code>request-owner</code></td><td>有 repo admin、但不是 account／organization owner</td><td>把同一安裝入口交給 owner 核准；等待期間保留 Dependabot</td></tr><tr><td><code>fallback</code></td><td>無 admin、權限未知、API 失敗或尚無 GitHub origin</td><td>不假設可安裝，繼續使用 Dependabot 與 required CI/CD checks；推送遠端後可重跑 preflight</td></tr></tbody></table>
-          <p class="term-overlay-copy"><strong>導入時檢查：</strong><code>csarc init</code>／<code>adopt</code>／<code>update</code> 會在 origin 可讀時查 owner 類型、repo admin 與 organization membership。新 repo 尚未有 origin 時可先設定 <code>GH_REPO=owner/repo</code>，推送後也能執行 <code>python scripts/release_policy.py preflight --repo owner/repo</code> 重查；整段只讀，不要求長效廣域 PAT。</p>
-        </div>
-      </aside>
+      <aside class="config-guidance"><strong>模板功能與客製化</strong><ul><li><strong>鎖檔安裝與一般驗證：</strong><code>template/scripts/verify-fast.jinja</code>、<code>template/scripts/verify.jinja</code>；repo-template 使用 <code>scripts/verify-fast</code>、<code>scripts/verify-template.sh</code>。</li><li><strong>TypeScript 三天觀察期與 trust policy：</strong><code>template/pnpm-workspace.yaml</code>。</li><li><strong>發版成品與 SBOM 契約：</strong><code>scripts/release_assets.py</code>、<code>tests/test_release_assets.py</code>；目前只保留程式與測試。</li><li><strong>尚待恢復：</strong><code>archive/ci-cd/2026-08-27/*dependabot*</code>、<code>root-workflows/osv.yml</code> 與 release workflows；恢復時移出 archive，不能同時保留兩份。</li><li><strong>漏洞回報入口：</strong><code>SECURITY.md</code>；不得在公開 Issue 張貼敏感漏洞細節。</li></ul></aside>
+      <p class="reference">具體設計比較見<a href="#similar-tools">相似工具</a>；各 PR 階段與待恢復項目見<a href="#testing">CI/CD 設定</a>。</p>
 {{< /legacy >}}
 
 {{< basic >}}
-| 問題 | 現行控制 | 不代表什麼 |
-| --- | --- | --- |
-| 太新的套件 | Dependabot 與 pnpm 一般版本等待三天 | 不代表套件沒有既知漏洞 |
-| 已公開漏洞 | OSV 立即掃描與告警 | 不驗證下載內容相同 |
-| 內容完整性 | `uv.lock` SHA-256、pnpm integrity、release checksum | 不證明發布者善意 |
-| 成品組成 | 解壓真正 artifact 後產生 CycloneDX SBOM | SBOM 不會自行阻擋漏洞 |
+| 這次要防什麼 | 模板目前怎麼處理 |
+| --- | --- |
+| 改了套件卻無法重裝 | PR 會依鎖定版本重新安裝並跑必要驗證 |
+| 剛發布的惡意版本 | TypeScript 套件先觀察三天；其他自動更新仍待恢復 |
+| 已公開漏洞沒有被注意 | 掃描規則已保留，但自動掃描尚未啟用 |
+| 發版後不知道包含什麼 | 依賴安全負責成品清冊規格；在真正成品產生時執行 |
 
-{{< disclosure key="supply-tools" title="Dependabot＋OSV＋anchore/sbom-action" >}}
-Dependabot 保留 GitHub 原生 automation identity，PR 可直接觸發既有 policy 與 change-aware checks，不要求每個 repo 安裝高權限 App 或長效 PAT。pnpm `minimumReleaseAge` 保護本機與 CI resolution，`trustPolicy: no-downgrade` 拒絕 publisher trust 降級。
-{{< /disclosure >}}
-
-{{< detail key="supply-boundaries" title="設定位置與 Renovate 決策" >}}
-- 更新等待：`.github/dependabot.yml` 與 `pnpm-workspace.yaml`。
-- 凍結安裝與 lockfile 完整性：`scripts/verify`。
-- 漏洞與發布證據：`osv.yml`、`release.yml`、`SECURITY.md`。
-
-Renovate 的中央 preset 更靈活，但自架 token 無法正常觸發所有必要 checks；Mend App 又要求 organization members read、repository administration read，以及 workflow／content／PR write。目前保留 Dependabot；只有多 repo 政策真的無法表達時才重新評估。
+{{< detail key="supply-boundaries" title="這四種保護為什麼要分開" >}}
+- **鎖定版本：**確認每次安裝使用同一批套件。
+- **觀察期：**不在一般新版發布當天立刻採用。
+- **漏洞掃描：**立即比對已公開的安全問題，不等待三天。
+- **成品清冊（SBOM）：**列出發布成品實際包含的套件，方便追查；它本身不會阻擋漏洞。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
@@ -674,7 +659,7 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
         </article>
       </div>
       <aside class="tool-deferred" aria-label="未來選配與暫不採用工具">
-        <p><strong>基本方案另已採用：</strong>Dependabot、OSV-Scanner、anchore/sbom-action（底層使用 Syft）。</p>
+        <p><strong>依賴安全選型：</strong>保留 Dependabot、OSV-Scanner 與 Syft；自動化由 #407 逐項恢復，不把 archive 當成現行設定。</p>
         <p><strong>尚未啟用：</strong>Go／Rust profile、Scorecard、Harden-Runner、網站託管／登入（<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">#79</a>）、Hugo、RAG、通用部署與監控；repo 內部網站與生成內容模板已可用。</p>
       </aside>
       <p class="ecosystem-reference reference">Ref. Official project repositories linked above; logo assets from each project's brand kit.</p>
@@ -685,7 +670,7 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
 | --- | --- | --- |
 | ![Copier logo](assets/copier.svg) [Copier](https://github.com/copier-org/copier) | 可更新模板 | 基本導入；差異走 PR |
 | ![zizmor logo](assets/zizmor.png) [zizmor](https://github.com/zizmorcore/zizmor) | GitHub Actions 安全 | 基本導入；workflow 變更與週期排程執行 |
-| Dependabot、OSV、Syft | 依賴更新、漏洞與 SBOM | 基本導入 |
+| Dependabot、OSV、Syft | 依賴更新、漏洞與 SBOM | 工具與責任已確定；自動化待恢復 |
 | ![GitHub Community Projects logo](assets/github-community-projects.png) [Safe Settings](https://github.com/github-community-projects/safe-settings) | 多 repo 設定治理 | 規模與漂移門檻成立後才評估 |
 | ![Renovate logo](assets/renovate.png) [Renovate](https://github.com/renovatebot/renovate) | 更彈性的更新 preset | 現階段不取代 Dependabot |
 | ![GitHub Actions logo](assets/github-actions.svg) ![PyScaffold logo](assets/pyscaffold.svg) Starter Workflows、PyScaffold | 官方 workflow 與 Python 結構範例 | 只作內容檢查表，不照抄政策 |

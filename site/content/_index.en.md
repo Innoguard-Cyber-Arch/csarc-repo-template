@@ -41,7 +41,7 @@ The template claims only capabilities backed by executable files and regression 
 | Create the work | The Issue form prompts for the problem, completion conditions, and necessary context |
 | Make the change | Repository guidance tells people and agents how to work and which local check to run first |
 | Open a PR | The PR template prompts for the linked Issue, completed result, and verification evidence |
-| Read verification and dependency results | The template selects the necessary checks; dependency changes also require release-age, vulnerability, and lockfile results |
+| Read verification and dependency results | The template selects the necessary checks; dependency changes first prove that the locked package set still installs |
 | Review and merge | Merge into the correct branch after the result and human review are clear |
 
 Users do not need to memorize workflow or script names. Current automation focuses on work items, PR rules, and necessary verification; automated versioning and publishing are not enabled yet.
@@ -148,24 +148,19 @@ Verification logic lives only in scripts and tests. This step restores only `.gi
 {{< /disclosure >}}
 {{< /slide >}}
 
-{{< slide key="supply" track="supply" eyebrow="Step 04" title="Expose risk immediately; do not chase day-one upgrades" subtitle="A malicious new release, a disclosed vulnerability, and artifact contents are different problems." legacy="false"  class="candidate-slide" >}}
-| Problem | Current control | What it does not prove |
-| --- | --- | --- |
-| Brand-new package version | Dependabot and pnpm wait three days for ordinary releases | The package has no disclosed vulnerability |
-| Disclosed vulnerability | OSV scans and alerts immediately | Downloaded content is identical |
-| Content integrity | `uv.lock` SHA-256, pnpm integrity, release checksum | The publisher is trustworthy |
-| Artifact composition | CycloneDX SBOM generated from the unpacked artifact | The SBOM blocks vulnerabilities by itself |
+{{< slide key="supply" track="supply" eyebrow="Step 04" title="Update, check, and record third-party packages separately" subtitle="Observe ordinary releases, act on known vulnerabilities immediately, and retain a traceable release inventory." legacy="false"  class="candidate-slide" >}}
+| Risk | What the template does today |
+| --- | --- |
+| A dependency change cannot be reproduced | PR verification reinstalls the locked versions and runs the required checks |
+| A newly published malicious version | TypeScript packages wait three days; other automated updates still await restoration |
+| A disclosed vulnerability goes unnoticed | The scanning contract is retained, but automated scanning is not enabled yet |
+| Nobody knows what a release contains | Dependency security owns the inventory contract and runs it when real release artifacts exist |
 
-{{< disclosure key="supply-tools" title="Dependabot + OSV + anchore/sbom-action" >}}
-Dependabot keeps GitHub's native automation identity, so its PRs trigger existing policy and change-aware checks without a privileged App or long-lived PAT in every repository. pnpm `minimumReleaseAge` protects local and CI resolution, while `trustPolicy: no-downgrade` rejects publisher-trust downgrades.
-{{< /disclosure >}}
-
-{{< detail key="supply-boundaries" title="Configuration locations and the Renovate decision" >}}
-- Update delay: `.github/dependabot.yml` and `pnpm-workspace.yaml`.
-- Frozen installation and lockfile integrity: `scripts/verify`.
-- Vulnerability and release evidence: `osv.yml`, `release.yml`, and `SECURITY.md`.
-
-Renovate offers a more flexible shared preset, but a self-hosted token cannot trigger every required check normally, while the Mend App asks for organization-member read, repository-administration read, and workflow/content/PR write. Dependabot remains the default until a real fleet policy cannot be expressed without Renovate.
+{{< detail key="supply-boundaries" title="Why these four protections stay separate" >}}
+- **Locked versions:** reproduce the same package set on every install.
+- **Observation window:** avoid adopting an ordinary release on day one.
+- **Vulnerability scan:** check disclosed security issues immediately, without waiting three days.
+- **Software bill of materials (SBOM):** list packages present in the released artifact for investigation; it does not block vulnerabilities by itself.
 {{< /detail >}}
 {{< /slide >}}
 
@@ -239,7 +234,7 @@ Each check is a snapshot. A setting changed and restored between runs still requ
 {{< slide key="rollout" track="rollout" eyebrow="Step 10" title="Adopt in stages, with a stop after every step" subtitle="Maturity follows operational evidence, not a date or the mere presence of files." legacy="false"  class="candidate-slide" >}}
 | Level | Current state |
 | --- | --- |
-| Baseline capability | Four profiles, Issues/specs, PR/CI, local verification, OSV, dependency policy, and the repository site have executable implementations |
+| Baseline capability | Four profiles, Issues/specs, PR/CI, local verification, lockfile policy, and the repository site have executable implementations |
 | Verified online | Release handoff, traceable artifacts, consumer attestation, and the first CI-only downstream adoption and update |
 | Still piloting | Python, TypeScript, and mixed compositions each need one real consuming-repository pilot |
 | Future/optional | Central catalog or governance, Go/Rust, authenticated hosting, deployment, monitoring, RAG, and autonomous agents |
@@ -276,7 +271,7 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 | --- | --- | --- |
 | ![Copier logo](../assets/copier.svg) [Copier](https://github.com/copier-org/copier) | Updatable templates | Baseline; changes arrive through PRs |
 | ![zizmor logo](../assets/zizmor.png) [zizmor](https://github.com/zizmorcore/zizmor) | GitHub Actions security | Baseline; runs for workflow changes and on schedule |
-| Dependabot, OSV, Syft | Dependency updates, vulnerabilities, and SBOM | Baseline |
+| Dependabot, OSV, Syft | Dependency updates, vulnerabilities, and SBOM | Tools and responsibilities selected; automation pending restoration |
 | ![GitHub Community Projects logo](../assets/github-community-projects.png) [Safe Settings](https://github.com/github-community-projects/safe-settings) | Cross-repository settings | Evaluate after fleet and drift thresholds are met |
 | ![Renovate logo](../assets/renovate.png) [Renovate](https://github.com/renovatebot/renovate) | Flexible update presets | Do not replace Dependabot today |
 | ![GitHub Actions logo](../assets/github-actions.svg) ![PyScaffold logo](../assets/pyscaffold.svg) Starter Workflows, PyScaffold | Official workflow and Python structure examples | Content checklists only; do not copy policy blindly |
