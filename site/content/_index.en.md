@@ -188,14 +188,14 @@ GitHub Release is the baseline for every profile. PyPI and npm are separate opt-
 | GitHub state | `apply` result | Actual gate |
 | --- | --- | --- |
 | Free + public | Apply a Ruleset through REST | Missing or mismatched rules fail |
-| Free organization + private | Apply baseline settings and retain desired Ruleset in `policies/rulesets.json` | Request one individual reviewer and report `DEGRADED`; no merge gate |
+| Free organization + private | Apply baseline settings and retain desired Ruleset in `policies/rulesets.json` | Report `DEGRADED`, assign a reviewer manually, and provide no merge gate |
 | Pro personal + private | Apply a Ruleset | Same as Free public |
 | Team/Enterprise organization + private | Verify the CODEOWNERS team, then apply a Ruleset | Review, CODEOWNER, and status checks become merge gates |
 
 {{< detail key="governance-observation" title="Concrete operations and observation limits" >}}
-Run `scripts/apply-repository-settings.sh plan`, `apply`, then `check`. The check compares CODEOWNERS, repository settings, Actions, policy labels, and effective Rulesets. `.github/workflows/governance-drift.yml` reruns daily and opens or updates a tracking Issue for repairable drift.
+Run `scripts/apply-repository-settings.sh plan`, `apply`, then `check`. The check compares CODEOWNERS, repository settings, Actions, policy labels, and effective Rulesets. `scripts/check-governance-drift` can run locally, but its former daily Action remains under `archive/ci-cd/`; it neither runs on a schedule nor opens Issues automatically.
 
-Scheduled checks are snapshots. A setting changed and restored between runs still requires the GitHub audit log or organization monitoring. Complete administration fields should be checked from a trusted checkout with Administration read credentials, never by exposing that token to PR code.
+Each check is a snapshot. A setting changed and restored between runs still requires the GitHub audit log or organization monitoring. Complete administration fields should be checked from a trusted checkout with Administration read credentials, never by exposing that token to PR code. GitHub plan upgrades, irreversible operations, and organization-wide permission changes require separate approval from an organization owner.
 {{< /detail >}}
 {{< /slide >}}
 
@@ -373,24 +373,4 @@ Open an evaluation Issue that names a platform owner, cost ceiling, trial scope,
 {{< detail key="spec-format-cost" title="Why migration is deferred and what would trigger it" >}}
 Adopting Spec Kit requires rewriting `scripts/spec_to_issue.py`, converting existing specs, updating verification assertions, and designing an equivalent Issue sync. Supporting both formats adds cognitive and maintenance cost. Reevaluate when approved specifications regularly need reliable AI decomposition into several work items and the team accepts an additional CLI/agent workflow. Issue #77 tracks the decision.
 {{< /detail >}}
-{{< /slide >}}
-
-{{< slide key="notes" audience="maintainer" eyebrow="Notes" title="Cross-cutting development and operations reminders" subtitle="Only topics that do not belong to one Journey stay here; conclusions and details start open and can be collapsed when needed." legacy="false" class="notes-slide" >}}
-<div class="notes-list">
-  <article class="notes-item">
-    <h3>A runner that never starts is not a code failure</h3>
-    <p>If a GitHub job ends before any step starts, treat it first as a billing, quota, or platform execution problem; still retain local verification evidence.</p>
-    <details class="notes-detail" open><summary>Distinguish an external problem from a failed test</summary><p><strong>Zero steps:</strong> no repository code ran, so check runner availability, billing, and GitHub status. <strong>Steps exist:</strong> follow the first failed step to the code or setting that needs correction.</p></details>
-  </article>
-  <article class="notes-item">
-    <h3>Archived workflows are not active capabilities</h3>
-    <p><code>archive/ci-cd/</code> is reference material only; only the five GitHub Actions listed in the file map currently run.</p>
-    <details class="notes-detail" open><summary>What to confirm before restoring a workflow</summary><p>Define its purpose and tests in the matching Journey, then confirm triggers, permissions, timeout, and the shared local entry point. Do not restore the archive as one batch.</p></details>
-  </article>
-  <article class="notes-item">
-    <h3>The template never enables an external platform by itself</h3>
-    <p>Plan upgrades, hosted access, and central governance platforms require an explicit owner plus cost and security approval; the template only records conditions and configuration locations.</p>
-    <details class="notes-detail" open><summary>Changes that require separate authorization</summary><p>This includes GitHub plan upgrades, Cloudflare or SSO, Backstage or another external service, and any irreversible operation or organization-wide permission change.</p></details>
-  </article>
-</div>
 {{< /slide >}}

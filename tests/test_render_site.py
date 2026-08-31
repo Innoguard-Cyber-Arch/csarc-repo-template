@@ -201,20 +201,21 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert (
         'appendix maintainer-bookend{{ if eq .Key "testing" }}' in journey_rail
     )
-    assert (
-        journey_rail.index('href="#testing"')
-        < journey_rail.index('href="#bridge"')
-        < journey_rail.index('href="#notes"')
+    assert journey_rail.index('href="#testing"') < journey_rail.index(
+        'href="#bridge"'
     )
     assert "五月盤點" in journey_rail
     assert "決策附錄" not in journey_rail
     assert 'href="#glossary"' not in journey_rail
     for source in (chinese, english):
-        assert 'key="notes" audience="maintainer"' in source
-        assert source.count('class="notes-detail"') == 3
-        assert source.count('class="notes-detail" open') == 3
+        assert 'key="notes"' not in source
         assert "{{< glossary >}}" not in source
-    assert "跨章節的開發與維運提醒" in chinese
+    assert "0 steps 表示程式尚未執行" in data["testing"]["duration"][
+        "labels"
+    ]["zh-tw"]["runnerNote"]
+    assert "archive/ci-cd/ 只供參考" in data["testing"]["duration"][
+        "labels"
+    ]["zh-tw"]["archiveNote"]
     assert "名詞與約定" not in chinese
     assert "testing.after(bridge)" in presentation
     assert "slide.dataset.audience !== 'archive'" in deck

@@ -82,8 +82,8 @@ gh api "repos/$repo/rulesets"
         {
           title: '方案決定 Ruleset 是否成為真正門禁',
           goal: 'Free private 先在 repo 保存相同政策；public、Pro、Team 或 Enterprise 可強制 PR、一位核准、CODEOWNER 與必要檢查。Enterprise 的組織規則仍另審。',
-          summary: '所有方案都先用 repository teams API 驗證 PR 內設定的 team 與 write access；Free private 另從 REVIEWERS 名單輪派一位個別 reviewer，但 Ruleset 只保留 STAGED／MISSING 與 DEGRADED 紀錄。',
-          file: 'policies/rulesets.json＋.github/CODEOWNERS＋governance-comment.yml',
+          summary: '所有方案都先用 repository teams API 驗證 PR 內設定的 team 與 write access；Free private 的 REVIEWERS 名單仍保留，但目前由人工指定 reviewer，自動輪派 Action 尚未恢復。Ruleset 只保留 STAGED／MISSING 與 DEGRADED 紀錄。',
+          file: 'policies/rulesets.json＋.github/CODEOWNERS＋.github/REVIEWERS',
           code: `# The same policy is stored in every repository and enforced when supported.
 required reviews: 1
 require CODEOWNER review: true
@@ -96,28 +96,13 @@ required checks:
 # Enterprise organization controls are report-only here.`
         },
         {
-          title: '排程每天重跑 check，縮短 CI-only 的檢查間隔',
-          goal: 'CI 觸發的 check 只是一次性快照；daily cron 能抓出排程執行時仍存在的偏離，降低沒有程式碼變更時長期失察的風險。不需要另外導入 GitHub App 或第三方常駐服務，沿用同一個 check 邏輯即可。',
-          summary: '`governance-drift.yml` 用 daily cron 呼叫 `scripts/check-governance-drift`，它包一層 `apply-repository-settings.sh check`；可修正偏離會用 `gh issue create`／`gh issue edit` 開立或更新單一追蹤 Issue，內容附上 repository、Actions、政策標籤或 Ruleset 的實際差異。方案或組織限制造成的 DEGRADED 不讓 portable CI 永久失敗，也不會誤稱為沒有 drift；具體差異保留在 workflow log 與 warning annotation。這仍是快照檢查：若設定在兩次執行之間遭變更後又恢復，需由 GitHub audit log 或組織層事件監控追溯。下發專案透過 `enable_governance_drift_check`（預設關閉）選配同一 workflow。',
-          file: '.github/workflows/governance-drift.yml＋scripts/check-governance-drift',
-          code: `on:
-  schedule:
-    - cron: "13 4 * * *"
-  workflow_dispatch:
+          title: '治理漂移檢查保留本機入口，排程尚未恢復',
+          goal: '先用同一支腳本檢查設定差異；需要持續監測時，再逐條恢復觸發、權限、timeout 與 Issue 通知。',
+          summary: '`scripts/check-governance-drift` 會呼叫 `apply-repository-settings.sh check`，可在可信任的本機 checkout 執行。原本的 `governance-drift.yml` 位於 `archive/ci-cd/`，目前不會每日執行或自動開立追蹤 Issue。',
+          file: 'scripts/check-governance-drift＋archive/ci-cd/2026-08-27/root-workflows/governance-drift.yml',
+          code: `./scripts/check-governance-drift
 
-permissions:
-  contents: read
-  issues: write
-
-- run: ./scripts/check-governance-drift
-
-# Inside the script:
-./scripts/apply-repository-settings.sh check
-# On drift, open/update one tracking Issue:
-gh issue list --state open --json number,title \
-  --jq '.[] | select(.title == "Repository governance drift detected") | .number'
-gh issue create --label bug --body-file "$body_file"
-gh issue edit "$issue_number" --body-file "$body_file"`
+# The scheduled workflow is archived and does not run.`
         }
       ],
       template: [
@@ -333,10 +318,10 @@ python scripts/spec_to_issue.py validate`
 }`
         },
         {
-          title: 'PR 自動輪派一位同事審查',
-          goal: 'Free private 先可靠通知同事；支援 Ruleset 時再把核准變成 merge gate。',
-          summary: 'workflow 只 checkout base branch，從 REVIEWERS 設定排除作者後輪派一人；不執行 PR 分支程式碼。',
-          file: '.github/CODEOWNERS＋.github/REVIEWERS＋.github/workflows/governance-comment.yml',
+          title: '保留 reviewer 名單，目前人工指定審查者',
+          goal: 'Free private 先保留明確候選人；支援 Ruleset 時再把核准變成 merge gate。',
+          summary: 'CODEOWNERS 與 REVIEWERS 保存 owner 和 reviewer 候選；自動輪派 Action 位於 `archive/ci-cd/`，目前不會執行。',
+          file: '.github/CODEOWNERS＋.github/REVIEWERS',
           code: `* {{ code_owner }}`
         },
         {

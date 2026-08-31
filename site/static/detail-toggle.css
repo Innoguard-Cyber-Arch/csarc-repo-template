@@ -383,51 +383,6 @@ html[data-detail-level="simple"] .technical-tour-trigger {
   background: var(--best-soft);
 }
 
-.notes-list {
-  display: grid;
-  gap: 10px;
-}
-
-.notes-item {
-  padding: 12px 15px;
-  border: 1px solid var(--line);
-  border-left: 7px solid var(--optional);
-  background: white;
-}
-
-.notes-item h3 { margin-bottom: 4px; font-size: 21px; }
-.notes-item > p { color: var(--muted); font-size: 18px; line-height: 1.32; }
-
-.notes-detail { margin-top: 8px; }
-.notes-detail > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  cursor: pointer;
-  font-size: 17px;
-  font-weight: 800;
-  list-style: none;
-}
-
-.notes-detail > summary::-webkit-details-marker { display: none; }
-.notes-detail > summary::after {
-  content: "+";
-  display: grid;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
-  place-items: center;
-  border-radius: 4px;
-  background: var(--optional-soft);
-  color: var(--optional);
-  font-size: 20px;
-  line-height: 1;
-}
-.notes-detail[open] > summary::after { content: "−"; }
-.notes-detail > summary:focus-visible { outline: 3px solid var(--optional); outline-offset: 2px; }
-.notes-detail > p { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--line); font-size: 16px; line-height: 1.32; }
-
 .detail-panel {
   display: grid;
   min-height: 0;
