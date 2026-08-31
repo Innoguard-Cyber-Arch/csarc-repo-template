@@ -77,7 +77,12 @@ def test_workflows_delegate_to_the_existing_policy_scripts() -> None:
         )
         for filename in WORKFLOWS
     }
-    assert "scripts/pr_lifecycle.py issue-edit" in contents["issue-triage.yml"]
+    issue_validator = (REPO_ROOT / "scripts/validate-issue-policy").read_text(
+        encoding="utf-8"
+    )
+    assert "./scripts/validate-issue-policy" in contents["issue-triage.yml"]
+    assert "scripts/pr_lifecycle.py issue-edit" in issue_validator
+    assert "./scripts/validate-pr-policy" in contents["pr-policy.yml"]
     assert "scripts/sync_work_item_metadata.py" in contents["pr-policy.yml"]
     assert "scripts/spec_to_issue.py" in contents["spec-to-issue.yml"]
     assert (
