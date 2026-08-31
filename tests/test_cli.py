@@ -1355,6 +1355,49 @@ def test_adoption_report_classifies_unknown_content(
     assert "Repository" in pdf_text and "(none)" in pdf_text
     assert "Visibility" in pdf_text and "private (safe-default)" in pdf_text
     assert "Template source" in pdf_text
+    placements: list[tuple[str, float, float]] = []
+
+    def record_pdf_text(
+        text: str,
+        _cm: list[float],
+        tm: list[float],
+        _font: dict[str, object] | None,
+        _size: float,
+    ) -> None:
+        if clean := text.strip():
+            placements.append((clean, tm[4], tm[5]))
+
+    PdfReader(report_dir / "csarc-adoption-dry-run.pdf").pages[0].extract_text(
+        visitor_text=record_pdf_text
+    )
+    labels = {
+        "Target",
+        "Repository",
+        "Visibility",
+        "Template source",
+        "Template",
+        "Verification",
+        "Profile",
+        "Project hook",
+        "Hook configured",
+        "Hook result",
+        "Hook reason",
+    }
+    for label, label_x, label_y in (
+        item for item in placements if item[0] in labels
+    ):
+        value, value_x, _ = next(
+            item
+            for item in placements
+            if item[2] == label_y and item[1] > label_x
+        )
+        assert (
+            value_x - label_x - cli.stringWidth(label, "Helvetica-Bold", 8)
+            >= 7.9
+        )
+        assert (
+            value_x + cli.stringWidth(value, "Helvetica", 8) <= cli.A4[0] - 48
+        )
     assert git(project, "status", "--porcelain") == before
 
 
