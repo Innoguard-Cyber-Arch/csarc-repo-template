@@ -125,7 +125,17 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     chinese = (root / "site/content/_index.zh-tw.md").read_text(
         encoding="utf-8"
     )
+    english = (root / "site/content/_index.en.md").read_text(encoding="utf-8")
+    chinese_home = chinese.split('{{< slide key="capability"', 1)[1].split(
+        "{{< /slide >}}", 1
+    )[0]
+    english_home = english.split('{{< slide key="capability"', 1)[1].split(
+        "{{< /slide >}}", 1
+    )[0]
     flow = chinese.split('{{< slide key="flow"', 1)[1].split(
+        "{{< /slide >}}", 1
+    )[0]
+    supply = chinese.split('{{< slide key="supply"', 1)[1].split(
         "{{< /slide >}}", 1
     )[0]
     file_map = chinese.split('{{< slide key="files"', 1)[1].split(
@@ -152,6 +162,19 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         assert inactive not in file_map
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
     assert "版本與發佈流程尚未啟用" in flow
+    assert "使用 AI／vibe coding 的一般開發者" in chinese_home
+    assert "不要求具備工程或 CI/CD 維運背景" in chinese_home
+    assert "general AI-assisted or vibe-coding developers" in english_home
+    assert "does not assume an engineering or CI/CD operations background" in (
+        english_home
+    )
+    for explanation in (
+        "鎖定版本清單（lockfile）",
+        "自動更新服務（Dependabot）",
+        "已知漏洞掃描（OSV）",
+        "軟體成分清單（SBOM）",
+    ):
+        assert explanation in supply
 
 
 def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:

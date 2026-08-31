@@ -2143,7 +2143,7 @@ html[data-detail-level="simple"] .detail-panel {
     <h2>An updatable repository foundation</h2>
     <p class="subtitle">Create a new project, adopt an existing one, or receive policy updates through verified pull requests.</p>
   </header>
-  <div class="markdown-body"><p>The template puts work definition, AI instructions, verification, merging, dependencies, and delivery evidence into one reviewable flow.</p>
+  <div class="markdown-body"><p>Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. It explains what to do and what result to expect. Files, scripts, and GitHub Actions stay in Maintenance mode.</p>
 <table>
 	<thead>
 			<tr>
@@ -2153,28 +2153,28 @@ html[data-detail-level="simple"] .detail-panel {
 	</thead>
 	<tbody>
 			<tr>
-					<td>Project composition</td>
-					<td>CI/CD-only, Python 3.14, TypeScript with Node 24 and pnpm 11, or Python plus TypeScript</td>
+					<td>Project type</td>
+					<td>Workflow only, Python, TypeScript, or Python plus TypeScript</td>
 			</tr>
 			<tr>
-					<td>Branch strategy</td>
-					<td>Milestone delivery branches, <code>main</code>-only, or one long-lived <code>dev</code></td>
+					<td>Branch approach</td>
+					<td>One development branch per delivery batch, all changes directly into <code>main</code>, or one shared <code>dev</code> branch</td>
 			</tr>
 			<tr>
-					<td>Shared baseline</td>
-					<td>SDD Features with Task/Bug subissues, dated delivery Milestones, tiered CI, promotion evidence, security checks, one SemVer, and Copier updates</td>
+					<td>Shared capability</td>
+					<td>Work-item (Issue) and change-proposal (PR) forms, AI working rules, automated checks, dependency safety, version records, and template updates</td>
 			</tr>
 	</tbody>
 </table>
 <aside class="technical-detail" data-content-key="capability-boundary">
-  <h3>Real entry points and capability boundaries</h3>
+  <h3>Adoption paths and current scope</h3>
   <ul>
-<li><strong>New repository:</strong> choose a profile and branch strategy; keep the story in an SDD Feature, deliver Task/Bug subissues through separate PRs, and use a Milestone only for dated delivery.</li>
-<li><strong>Existing repository:</strong> preview adoption on a branch, preserve product content and legacy-debt boundaries, then resolve conflicts and gates explicitly.</li>
-<li><strong>Repository already using the template:</strong> update from a reviewed template SHA and review only that revision&rsquo;s diff.</li>
+<li><strong>New repository:</strong> choose a project type and branch approach; split only larger outcomes into independently verifiable sub-items.</li>
+<li><strong>Existing repository:</strong> preview the adoption diff, preserve existing product content, then resolve conflicts and required checks one by one.</li>
+<li><strong>Repository already using the template:</strong> select a reviewed template version, run the update, and review only that version&rsquo;s diff.</li>
 <li><strong>Prerequisites:</strong> Git, GitHub CLI, and uv; TypeScript or mixed projects also need Node 24+ and pnpm 11. Local verification needs no token.</li>
 </ul>
-<p>The template claims only capabilities backed by executable files and regression checks. Go, Rust, generic deployment, monitoring, RAG, and hosted documentation remain future or optional work.</p>
+<p>The template promises only capabilities that are implemented and tested. Go, Rust, generic deployment, monitoring, AI knowledge retrieval, and hosted documentation remain future or optional work.</p>
 </aside>
 </div>
 </section>
@@ -2262,7 +2262,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>Read verification and dependency results</td>
-					<td>The template selects the necessary checks; dependency changes first prove that the locked package set still installs</td>
+					<td>The template selects the necessary checks; package changes also prove that the saved version list still installs</td>
 			</tr>
 			<tr>
 					<td>Review and merge</td>
@@ -2815,19 +2815,19 @@ html[data-detail-level="simple"] .detail-panel {
 	<tbody>
 			<tr>
 					<td>A dependency change cannot be reproduced</td>
-					<td>PR verification reinstalls the locked versions and runs the required checks</td>
+					<td>PR verification reinstalls from the locked-version list (lockfile), so every run receives the same packages</td>
 			</tr>
 			<tr>
 					<td>A newly published malicious version</td>
-					<td>Dependabot opens grouped PRs; ordinary releases wait three days, while security updates do not</td>
+					<td>GitHub&rsquo;s automated update service (Dependabot) groups update PRs; ordinary releases wait three days, while security updates do not</td>
 			</tr>
 			<tr>
 					<td>A disclosed vulnerability goes unnoticed</td>
-					<td>Dependency PRs and release candidates run OSV; a weekly scan covers periods without PRs</td>
+					<td>The Open Source Vulnerabilities scan (OSV) checks dependency PRs and release candidates; a weekly scan covers periods without PRs</td>
 			</tr>
 			<tr>
 					<td>Nobody knows what a release contains</td>
-					<td>Dependency security owns and verifies the SBOM contract when delivery produces real artifacts</td>
+					<td>A software bill of materials (SBOM) lists packages in the artifact; dependency security verifies it when delivery produces the artifact</td>
 			</tr>
 	</tbody>
 </table>

@@ -21,36 +21,36 @@ fit = "符合畫面"
       <header class="package-hero">
         <p class="package-kicker">Innoguard-Cyber-Arch / repository infrastructure</p>
         <h1><code>csarc-repo-template</code></h1>
-        <p class="subtitle">Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由 PR 合併。</p>
-        <p class="subtitle">本頁是技術決策附錄，服務對象是想理解「為什麼這樣設計」的人；一般使用者的快速上手與導入指令請見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a>。</p>
+        <p class="subtitle">Cyber-Arch 的可更新 repo 公版：建立新案、導入既有案、接收政策更新，都先驗證再由變更提案（PR）合併。</p>
+        <p class="subtitle">標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；維運模式才補充設定檔、程式與技術理由。快速導入指令請見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template#readme" target="_blank" rel="noreferrer">repo README</a>。</p>
         <div class="package-badges" aria-label="套件狀態">
           <span class="package-badge beta">v0.12.2</span><!-- x-release-please-version -->
           <span class="package-badge beta">beta</span>
-          <span class="package-badge python">CI-only／Python／TypeScript／兩者</span>
-          <span class="package-badge">delivery 分層／main／dev</span>
-          <span class="package-badge">Copier 可更新</span>
-          <span class="package-badge security">CI／安全檢查</span>
-          <span class="package-badge warning">Free private：main 尚未受保護</span>
+          <span class="package-badge python">四種專案種類</span>
+          <span class="package-badge">三種分支做法</span>
+          <span class="package-badge">公版可持續更新</span>
+          <span class="package-badge security">自動驗證／安全檢查</span>
+          <span class="package-badge warning">免費私人 repo：無法強制保護 main</span>
         </div>
       </header>
       <div class="language-contract" aria-label="程式語言 profile 決策">
-        <p class="language-card"><strong>建立時必選｜四種組合</strong>只要 CI/CD 基線、Python、TypeScript，或兩者都有；宣告會寫入 repo 並由檔案自動核對。</p>
-        <p class="language-card shared"><strong>四種組合共用</strong>SDD Feature＋Task／Bug subissues、有期限的 delivery 里程碑、分層 CI、promotion evidence、安全檢查、單一 SemVer 與 Copier 更新；建立時可選 delivery、main-only 或單一 dev。</p>
-        <p class="language-card future"><strong>版本基線</strong>Python 3.14；TypeScript 採 Node 24 Active LTS。Go／Rust 仍是 future，不先建立空設定。</p>
+        <p class="language-card"><strong>建立時必選｜四種專案種類</strong>只需要工作流程、Python、TypeScript，或同時使用兩種語言；模板會依選擇準備必要設定。</p>
+        <p class="language-card shared"><strong>所有專案共用</strong>工作單與子工作、AI 規範、自動驗證、依賴安全、版本記錄與公版更新；分支則可依交付批次、只用 main，或先集中到 dev。</p>
+        <p class="language-card future"><strong>目前支援版本</strong>Python 3.14；TypeScript 使用 Node 24 長期支援版。Go 與 Rust 尚未支援，因此不產生空設定。</p>
       </div>
       <div class="product-start">
         <section class="product-scope" aria-label="公版提供的能力">
           <h3>公版會替 repo 準備</h3>
-          <p class="scope-row"><strong>規劃與 AI 規範</strong><span>SDD → Feature parent → Task／Bug subissues → 各自 PR；里程碑只管理有期限的交付</span></p>
-          <p class="scope-row"><strong>驗證與合併</strong><span><code>./scripts/verify</code>＋分層 CI＋PR；並行里程碑各自整合，promotion 才進 main</span></p>
-          <p class="scope-row"><strong>依賴與交付證據</strong><span>依鎖檔重裝；TypeScript 新版先等三天；自動更新、漏洞掃描與 SBOM 正逐項恢復</span></p>
+          <p class="scope-row"><strong>規劃與 AI 規範</strong><span>工作先寫清楚；大型成果才拆成主要工作與可獨立完成的子工作</span></p>
+          <p class="scope-row"><strong>驗證與合併</strong><span>本機先跑相關檢查，提出變更後由 GitHub 自動重跑，再交由團隊審查</span></p>
+          <p class="scope-row"><strong>依賴與交付證據</strong><span>固定使用的套件版本、先觀察一般新版、檢查已知漏洞，並記錄成品包含哪些套件</span></p>
           <p class="scope-row"><strong>可持續同步</strong><span>公版更新成為可審查差異，不會直接覆蓋產品程式</span></p>
         </section>
         <section class="start-paths" aria-label="三種導入方式">
           <h3>依你現在的 repo 狀態開始</h3>
-          <article class="start-path"><h3>新 repo</h3><p>選語言與分支模式；需要端到端 story 時先建里程碑，再由 Issue 進 PR。</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">建立指令</button></article>
-          <article class="start-path"><h3>既有 repo</h3><p>在導入分支保留舊債邊界，逐項解決衝突與門禁。</p><button class="setup-trigger" type="button" data-setup="existing" aria-expanded="false">導入指令</button></article>
-          <article class="start-path"><h3>已使用公版</h3><p>指定已審查的公版 SHA，只審查本次版本差異。</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">更新指令</button></article>
+          <article class="start-path"><h3>新 repo</h3><p>選專案種類與分支做法；多張工作需要一起交付時才建立里程碑。</p><button class="setup-trigger" type="button" data-setup="new" aria-expanded="false">建立指令</button></article>
+          <article class="start-path"><h3>既有 repo</h3><p>先在獨立分支預覽差異，保留原有產品內容，再逐項處理衝突。</p><button class="setup-trigger" type="button" data-setup="existing" aria-expanded="false">導入指令</button></article>
+          <article class="start-path"><h3>已使用公版</h3><p>選定已審查的公版版本，只審查這次更新帶來的差異。</p><button class="setup-trigger" type="button" data-setup="update" aria-expanded="false">更新指令</button></article>
         </section>
       </div>
       <div class="prerequisite-line product-prerequisites">
@@ -61,21 +61,21 @@ fit = "符合畫面"
 {{< /legacy >}}
 
 {{< basic >}}
-公版把工作定義、AI 規範、驗證、合併、依賴與交付證據放進同一條可審查流程。
+標準模式給使用 AI／vibe coding 的一般開發者，不要求具備工程或 CI/CD 維運背景；內容先說明要做什麼、會看到什麼結果。設定檔、程式與 GitHub Actions 留在維運模式。
 
 | 可以直接選擇 | 目前提供的正式能力 |
 | --- | --- |
-| 專案組合 | CI/CD-only、Python 3.14、TypeScript（Node 24／pnpm 11）、Python＋TypeScript |
-| 分支模式 | 里程碑 delivery branches、`main`-only、單一 `dev` |
-| 共用基線 | SDD Feature＋Task／Bug subissues、有期限的 delivery 里程碑、分層 CI、promotion evidence、安全檢查、單一 SemVer、Copier 更新 |
+| 專案種類 | 只需要工作流程、Python、TypeScript，或同時使用 Python 與 TypeScript |
+| 分支做法 | 每個交付批次有自己的開發分支、所有修改直接進 `main`，或先集中到 `dev` |
+| 共用能力 | 工作單（Issue）與變更提案（PR）表單、AI 工作規範、自動驗證、依賴安全、版本記錄與公版更新 |
 
-{{< detail key="capability-boundary" title="真正的導入入口與能力邊界" >}}
-- **新 repo：** 選 profile 與分支模式；以 SDD Feature 保存 story，Task／Bug subissues 各自進 PR，里程碑只管理有期限的交付。
-- **既有 repo：** 在導入分支先做 dry-run，保留既有產品內容與技術債邊界，再逐項解決衝突與門禁。
-- **已使用公版：** 指定已審查的公版 SHA 執行 Copier update，只審查這次版本差異。
+{{< detail key="capability-boundary" title="導入方法與目前範圍" >}}
+- **新 repo：** 選專案種類與分支做法；大型成果才拆成主要工作與可獨立驗收的子工作。
+- **既有 repo：** 先預覽導入差異，保留原有產品內容，再逐項解決衝突與必要檢查。
+- **已使用公版：** 選定已審查的公版版本執行更新，只審查這次版本差異。
 - **開始前必裝：** Git、GitHub CLI、uv；TypeScript／混合案另需 Node 24+ 與 pnpm 11。純本機驗證不需要 token。
 
-公版只宣告已有可執行檔案與回歸驗證的能力。Go、Rust、通用部署、監控、RAG 與網站託管仍是未來或選配項目。
+公版只承諾已經實作並測試的能力。Go、Rust、通用部署、監控、AI 知識檢索與網站託管仍是未來或選配項目。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
@@ -134,7 +134,7 @@ fit = "符合畫面"
 | 建立工作 | Issue 表單提示你寫清楚問題、完成條件與必要背景 |
 | 完成修改 | Repo 內指引告訴人與 AI 怎麼工作，以及先跑哪個本機檢查 |
 | 提交 PR | PR 範本提示連回 Issue，並填寫完成內容與驗證結果 |
-| 查看驗證與安全結果 | 模板依變更內容選擇必要檢查；相依變更另確認新版等待、已知漏洞與 lockfile 結果 |
+| 查看驗證與安全結果 | 模板依變更內容選擇必要檢查；套件變更另確認新版等待、已知漏洞與鎖定版本清單是否一致 |
 | 審查與合併 | 檢查結果和人工審查都清楚後，再把變更合併到正確分支 |
 
 一般使用者不必記 workflow 或 script 名稱；依畫面提示操作即可。目前自動化以工作單、PR 規則與必要驗證為主，版本與發佈流程尚未啟用。
@@ -355,15 +355,15 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< legacy >}}
       <header>
         <h2>步驟 4｜<span class="accent">第三方套件分開更新、檢查與記錄</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>更新來源、安裝結果、已知漏洞與發版清單是四件不同的事，不由一個工具假裝全部解決。</p>
+        <p class="subtitle"><strong>基本導入。</strong>套件從哪裡更新、能否重裝、有沒有已知漏洞，以及成品包含什麼，是四件需要分開確認的事。</p>
       </header>
       <p class="context-line"><strong>模板的作用｜</strong>依賴異動必須能重裝與驗證；一般新版保留觀察期，已公開漏洞不等待，發版時再列出實際成品內容。</p>
       <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>依規模選擇不同組合</h3><ul><li><strong>自動更新服務：</strong>定期提出升版 PR，適合不想人工巡查版本的團隊。</li><li><strong>套件管理器政策：</strong>在安裝時限制版本年齡與鎖檔，保護本機與 CI。</li><li><strong>漏洞掃描：</strong>比對公開漏洞資料庫；即使沒有升版 PR，也能發現既有風險。</li><li><strong>成品清冊：</strong>發版時建立 SBOM，供事件追查與使用者核對。</li></ul></article>
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>依規模選擇不同組合</h3><ul><li><strong>自動更新服務：</strong>定期提出升版的變更提案（PR），適合不想人工巡查版本的團隊。</li><li><strong>套件安裝政策：</strong>固定可安裝版本並觀察剛發布的版本，降低每次安裝拿到不同內容的風險。</li><li><strong>漏洞掃描：</strong>比對公開漏洞資料庫；即使沒有升版 PR，也能發現既有風險。</li><li><strong>軟體成分清單（SBOM）：</strong>發版時列出成品包含的套件，供事件追查與使用者核對。</li></ul></article>
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
           <h3>可重現安裝、更新與漏洞掃描各自負責</h3>
-          <ul><li><strong>安裝：</strong>Python 與 TypeScript 都依鎖檔重裝；TypeScript 另拒絕未滿三天的新版本與發布者信任降級。</li><li><strong>更新：</strong>Dependabot 每週依生態圈分組提出 PR；一般新版等三天，已知安全修補不等待。</li><li><strong>漏洞：</strong>依賴變更與發版候選執行 OSV；每週與手動掃描補上沒有 PR 的期間。</li><li><strong>成品：</strong>依賴安全定義並驗證 Syft SPDX SBOM；發版流程只在真正成品出現時呼叫，不另寫一套規則。</li><li><strong>工具邊界：</strong>鎖檔證明安裝內容一致，不證明發布者善意；漏洞掃描只認已公開資料；SBOM 是清冊，不是阻擋器。</li></ul>
+          <ul><li><strong>安裝：</strong>Python 與 TypeScript 都依鎖定版本清單（lockfile）重裝；TypeScript 另拒絕未滿三天的一般新版。</li><li><strong>更新：</strong>自動更新服務（Dependabot）每週依套件來源分組提出 PR；一般新版等三天，已知安全修補不等待。</li><li><strong>漏洞：</strong>已知漏洞掃描（OSV）檢查依賴變更與發版候選；每週與手動掃描補上沒有 PR 的期間。</li><li><strong>成品：</strong>軟體成分清單（SBOM）列出真正成品包含的套件，由清單工具 Syft 產生並接受同一套驗證。</li><li><strong>工具邊界：</strong>鎖定版本只證明每次安裝內容一致；漏洞掃描只認已公開資料；成分清單用來追查，不會主動阻擋漏洞。</li></ul>
         </article>
       </div>
       <aside class="config-guidance"><strong>模板功能與客製化</strong><ul><li><strong>鎖檔安裝與一般驗證：</strong><code>template/scripts/verify-fast.jinja</code>、<code>template/scripts/verify.jinja</code>；repo-template 使用 <code>scripts/verify-fast</code>、<code>scripts/verify-template.sh</code>。</li><li><strong>TypeScript 三天觀察期與 trust policy：</strong><code>template/pnpm-workspace.yaml</code>。</li><li><strong>更新 PR：</strong><code>.github/dependabot.yml</code>；公版依 profile 由 <code>template/.github/dependabot.yml.jinja</code> 產生適用的生態圈。</li><li><strong>漏洞掃描：</strong><code>scripts/verify-dependencies</code> 是唯一入口；<code>ci.yml</code> 與 <code>osv.yml</code> 只決定何時呼叫。</li><li><strong>發版成品與 SBOM：</strong><code>scripts/release_assets.py</code>、<code>tests/test_release_assets.py</code> 定義與驗證清冊；成品交付時呼叫。</li><li><strong>漏洞回報入口：</strong><code>SECURITY.md</code>；不得在公開 Issue 張貼敏感漏洞細節。</li></ul></aside>
@@ -372,10 +372,10 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< basic >}}
 | 這次要防什麼 | 模板目前怎麼處理 |
 | --- | --- |
-| 改了套件卻無法重裝 | PR 會依鎖定版本重新安裝並跑必要驗證 |
-| 剛發布的惡意版本 | Dependabot 分組提出 PR；一般新版等三天，安全更新不等待 |
-| 已公開漏洞沒有被注意 | 依賴 PR 與發版候選跑 OSV；每週掃描補上沒有 PR 的期間 |
-| 發版後不知道包含什麼 | 依賴安全負責並驗證 SBOM；成品交付時執行 |
+| 改了套件卻無法重裝 | PR 會依鎖定版本清單（lockfile）重新安裝，確認每次拿到同一批套件 |
+| 剛發布的惡意版本 | 自動更新服務（Dependabot）分組提出 PR；一般新版等三天，安全更新不等待 |
+| 已公開漏洞沒有被注意 | 已知漏洞掃描（OSV）會檢查依賴 PR 與發版候選；每週掃描補上沒有 PR 的期間 |
+| 發版後不知道包含什麼 | 軟體成分清單（SBOM）列出成品包含的套件；依賴安全負責驗證，交付成品時產生 |
 
 {{< detail key="supply-boundaries" title="這四種保護為什麼要分開" >}}
 - **鎖定版本：**確認每次安裝使用同一批套件。

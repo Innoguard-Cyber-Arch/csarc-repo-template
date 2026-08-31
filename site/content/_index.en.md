@@ -17,21 +17,21 @@ fit = "Fit"
 +++
 
 {{< slide key="capability" track="capability" eyebrow="CSARC Repo Template · beta" title="An updatable repository foundation" subtitle="Create a new project, adopt an existing one, or receive policy updates through verified pull requests." legacy="false" class="presentation-slide" >}}
-The template puts work definition, AI instructions, verification, merging, dependencies, and delivery evidence into one reviewable flow.
+Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. It explains what to do and what result to expect. Files, scripts, and GitHub Actions stay in Maintenance mode.
 
 | Choice | Production capability available today |
 | --- | --- |
-| Project composition | CI/CD-only, Python 3.14, TypeScript with Node 24 and pnpm 11, or Python plus TypeScript |
-| Branch strategy | Milestone delivery branches, `main`-only, or one long-lived `dev` |
-| Shared baseline | SDD Features with Task/Bug subissues, dated delivery Milestones, tiered CI, promotion evidence, security checks, one SemVer, and Copier updates |
+| Project type | Workflow only, Python, TypeScript, or Python plus TypeScript |
+| Branch approach | One development branch per delivery batch, all changes directly into `main`, or one shared `dev` branch |
+| Shared capability | Work-item (Issue) and change-proposal (PR) forms, AI working rules, automated checks, dependency safety, version records, and template updates |
 
-{{< detail key="capability-boundary" title="Real entry points and capability boundaries" >}}
-- **New repository:** choose a profile and branch strategy; keep the story in an SDD Feature, deliver Task/Bug subissues through separate PRs, and use a Milestone only for dated delivery.
-- **Existing repository:** preview adoption on a branch, preserve product content and legacy-debt boundaries, then resolve conflicts and gates explicitly.
-- **Repository already using the template:** update from a reviewed template SHA and review only that revision's diff.
+{{< detail key="capability-boundary" title="Adoption paths and current scope" >}}
+- **New repository:** choose a project type and branch approach; split only larger outcomes into independently verifiable sub-items.
+- **Existing repository:** preview the adoption diff, preserve existing product content, then resolve conflicts and required checks one by one.
+- **Repository already using the template:** select a reviewed template version, run the update, and review only that version's diff.
 - **Prerequisites:** Git, GitHub CLI, and uv; TypeScript or mixed projects also need Node 24+ and pnpm 11. Local verification needs no token.
 
-The template claims only capabilities backed by executable files and regression checks. Go, Rust, generic deployment, monitoring, RAG, and hosted documentation remain future or optional work.
+The template promises only capabilities that are implemented and tested. Go, Rust, generic deployment, monitoring, AI knowledge retrieval, and hosted documentation remain future or optional work.
 {{< /detail >}}
 {{< /slide >}}
 
@@ -41,7 +41,7 @@ The template claims only capabilities backed by executable files and regression 
 | Create the work | The Issue form prompts for the problem, completion conditions, and necessary context |
 | Make the change | Repository guidance tells people and agents how to work and which local check to run first |
 | Open a PR | The PR template prompts for the linked Issue, completed result, and verification evidence |
-| Read verification and dependency results | The template selects the necessary checks; dependency changes first prove that the locked package set still installs |
+| Read verification and dependency results | The template selects the necessary checks; package changes also prove that the saved version list still installs |
 | Review and merge | Merge into the correct branch after the result and human review are clear |
 
 Users do not need to memorize workflow or script names. Current automation focuses on work items, PR rules, and necessary verification; automated versioning and publishing are not enabled yet.
@@ -148,10 +148,10 @@ Verification logic lives only in scripts and tests. This step restores only `.gi
 {{< slide key="supply" track="supply" eyebrow="Step 04" title="Update, check, and record third-party packages separately" subtitle="Observe ordinary releases, act on known vulnerabilities immediately, and retain a traceable release inventory." legacy="false"  class="candidate-slide" >}}
 | Risk | What the template does today |
 | --- | --- |
-| A dependency change cannot be reproduced | PR verification reinstalls the locked versions and runs the required checks |
-| A newly published malicious version | Dependabot opens grouped PRs; ordinary releases wait three days, while security updates do not |
-| A disclosed vulnerability goes unnoticed | Dependency PRs and release candidates run OSV; a weekly scan covers periods without PRs |
-| Nobody knows what a release contains | Dependency security owns and verifies the SBOM contract when delivery produces real artifacts |
+| A dependency change cannot be reproduced | PR verification reinstalls from the locked-version list (lockfile), so every run receives the same packages |
+| A newly published malicious version | GitHub's automated update service (Dependabot) groups update PRs; ordinary releases wait three days, while security updates do not |
+| A disclosed vulnerability goes unnoticed | The Open Source Vulnerabilities scan (OSV) checks dependency PRs and release candidates; a weekly scan covers periods without PRs |
+| Nobody knows what a release contains | A software bill of materials (SBOM) lists packages in the artifact; dependency security verifies it when delivery produces the artifact |
 
 {{< detail key="supply-boundaries" title="Why these four protections stay separate" >}}
 - **Locked versions:** reproduce the same package set on every install.
