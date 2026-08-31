@@ -117,7 +117,7 @@ Concrete tools and sources are in [Similar tools](#similar-tools); Journey 02 lo
 
 {{< slide key="contract" track="contract" eyebrow="Step 03" title="Verify the change, then let CI rerun the same rules" subtitle="Issue PRs are tiered by change scope; full verification is reserved for high-risk boundaries." legacy="false"  class="candidate-slide" >}}
 - **During development:** run only the focused check that proves the current change, using fresh output before claiming completion.
-- **Issue PR → dev:** the system selects the appropriate checks from the change; when unsure, it runs full verification.
+- **Issue PR (work branch → dev):** the system selects the appropriate checks from the change; when unsure, it runs full verification.
 - **High-risk boundaries:** promotions, hotfixes, release recovery, merge queues, and manual runs use full.
 - **One implementation:** GitHub Actions has one `verify` job with a 30-minute timeout and only calls repository scripts.
 - **Repository scope:** a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.
@@ -279,7 +279,7 @@ Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, gene
 {{< similar-tools >}}
 {{< /slide >}}
 
-{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | CI/CD settings" title="CI/CD settings | Checks by Journey" subtitle="Separates the tests and automation that normal repositories and repo-template need for Issue PR → dev and Promotion PR → main (release)." class="similar-tools-slide testing-slide" legacy="true" >}}
+{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | CI/CD settings" title="CI/CD settings | Checks by Journey" subtitle="Separates the tests and automation that normal repositories and repo-template need for Issue PR (work branch → dev) and Release PR (dev → main)." class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
 {{< /slide >}}
 

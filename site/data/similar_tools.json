@@ -94,8 +94,8 @@
         "purpose": "測試目的",
         "shared": "任何使用本模板的 repo",
         "templateOnly": "repo-template 額外",
-        "milestone": "Issue PR → dev",
-        "release": "Promotion PR → main（發版）",
+        "milestone": "Issue PR（工作分支 → dev）",
+        "release": "發版 PR（dev → main）",
         "tests": "測試檔／入口",
         "automation": "CI/CD／GitHub Action",
         "trigger": "Trigger",
@@ -107,8 +107,8 @@
         "purpose": "Test purpose",
         "shared": "Every repository using the template",
         "templateOnly": "Additional repo-template checks",
-        "milestone": "Issue PR → dev",
-        "release": "Promotion PR → main (release)",
+        "milestone": "Issue PR (work branch → dev)",
+        "release": "Release PR (dev → main)",
         "tests": "Test file / entrypoint",
         "automation": "CI/CD / GitHub Action",
         "trigger": "Trigger",
@@ -300,7 +300,7 @@
               "en": {"title": "Decide how much to run", "description": "Developers run focused checks directly. CI selects docs, fast, or full from changed paths and delivery stage, with unknown paths escalating to full."}
             },
             "shared": {
-              "milestone": {"files": [{"path": "scripts/ci_tier.py"}], "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "Issue PR → dev", "en": "Issue PR → dev"}, "timeout": "30 min"}]},
+              "milestone": {"files": [{"path": "scripts/ci_tier.py"}], "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "Issue PR（工作分支 → dev）", "en": "Issue PR (work branch → dev)"}, "timeout": "30 min"}]},
               "release": {"files": [{"path": "scripts/ci_tier.py"}], "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "promotion／merge group／hotfix／手動執行", "en": "Promotion, merge group, hotfix, or manual dispatch"}, "timeout": "30 min"}]}
             },
             "templateOnly": {}

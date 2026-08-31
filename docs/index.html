@@ -2889,7 +2889,7 @@ html[data-detail-level="simple"] .detail-panel {
       <p class="context-line"><strong>模板的作用｜</strong>把測試邏輯留在 repo 內可直接執行的 scripts／tests；GitHub Action 只負責何時啟動、使用哪些權限，以及呼叫同一份程式。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">四種都合理，但成本不同</span></summary><ul><li><strong>每次全跑：</strong>每張 PR 都取得完整信心，適合測試很小、執行很快的 repo。</li><li><strong>只跑受影響項目：</strong>依 dependency graph 或路徑縮小範圍，回饋快，但分流規則必須可測。</li><li><strong>獨立 pipeline runtime：</strong>本機與不同 CI 平台執行相同 pipeline，換來額外引擎與環境成本。</li><li><strong>分階段驗證：</strong>日常快速、整合候選完整；需要清楚定義何時升級與哪一份結果有效。</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一份邏輯、一支 Action、兩種 repo 範圍</span></summary><ul class="work-definition-list"><li><strong>開發中：</strong>人或 agent 只跑能證明這次修改的 focused check，先取得新鮮輸出再宣稱完成。</li><li><strong>Issue PR → dev：</strong>系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li><li><strong>高風險邊界：</strong>promotion、hotfix、release recovery、merge queue 與手動執行都走 full。</li><li><strong>同一套邏輯：</strong>GitHub Actions 只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li><li><strong>專案範圍：</strong>一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li></ul></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一份邏輯、一支 Action、兩種 repo 範圍</span></summary><ul class="work-definition-list"><li><strong>開發中：</strong>人或 agent 只跑能證明這次修改的 focused check，先取得新鮮輸出再宣稱完成。</li><li><strong>Issue PR（工作分支 → dev）：</strong>系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li><li><strong>高風險邊界：</strong>promotion、hotfix、release recovery、merge queue 與手動執行都走 full。</li><li><strong>同一套邏輯：</strong>GitHub Actions 只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li><li><strong>專案範圍：</strong>一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li></ul></details>
       </div>
       <aside class="config-guidance" data-config-direct="true"><strong>模板功能與客製化</strong><ul><li><strong>分級依據：</strong>系統依修改內容與交付階段選擇檢查範圍；<code>docs/ci-policy.md</code> 說明升級條件。</li><li><strong>快速驗證：</strong><code>scripts/verify-fast</code> 已存在於 root 與生成模板；一般 repo 的完整入口是 <code>scripts/verify</code>。</li><li><strong>模板額外驗證：</strong><code>scripts/verify-template.sh</code> 只屬於 repo-template，不應成為每個採用 repo 的成本。</li><li><strong>目前邊界：</strong>只恢復 <code>.github/workflows/ci.yml</code>；release、promotion、安全掃描、遠端治理、部署與排程仍由各自 Journey 決定。</li></ul></aside>
       <p class="method-reference reference">具體工具與功能來源見<a href="#similar-tools">相似工具</a>；每個階段實際使用的程式與 Action 現況見<a href="#testing">CI/CD 設定</a>。</p>
@@ -2898,7 +2898,7 @@ html[data-detail-level="simple"] .detail-panel {
 
 <div class="markdown-body basic-summary"><ul>
 <li>**開發中：**只跑能證明本次修改的 focused check。</li>
-<li>**Issue PR → dev：**系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li>
+<li>**Issue PR（工作分支 → dev）：**系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li>
 <li>**高風險邊界：**promotion、hotfix、release recovery、merge queue 與手動執行走 full。</li>
 <li>**Action：**只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li>
 <li>**專案範圍：**一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li>
@@ -4428,7 +4428,7 @@ html[data-detail-level="simple"] .detail-panel {
   <header class="basic-header">
     <span class="selection-sequence">維運附錄｜CI/CD 設定</span>
     <h2>CI/CD 設定｜依 Journey 檢查</h2>
-    <p class="subtitle">分開列出一般 repo 與 repo-template 在 Issue PR → dev、Promotion PR → main（發版）各自需要的測試與自動化。</p>
+    <p class="subtitle">分開列出一般 repo 與 repo-template 在 Issue PR（工作分支 → dev）、發版 PR（dev → main）各自需要的測試與自動化。</p>
   </header>
 
 <div class="legacy-content similar-tools-content testing-content">
@@ -4477,7 +4477,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Issue 工作邊界</strong><span>標題、類型、assignee、label 與 duplicate 狀態要能收斂。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/issue-triage.yml</code>／<code>classify</code><span>Trigger：Issue opened／edited／reopened／closed · Timeout：5 min</span></li></ul></div>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/issue-triage.yml</code>／<code>classify</code><span>Trigger：Issue opened／edited／reopened／closed · Timeout：5 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4487,7 +4487,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>PR 與 Issue 可追溯性</strong><span>PR title、分支、Closes／Fixes、開啟中的 Issue、checkbox 與 Milestone 必須一致。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR 開啟、內容／commit／metadata 變更與 merge group · Timeout：10 min</span></li></ul></div>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR 開啟、內容／commit／metadata 變更與 merge group · Timeout：10 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4497,7 +4497,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Spec 契約與 Issue 同步</strong><span>驗證必要章節、acceptance criteria、穩定 spec id 與同步的冪等行為。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_spec_to_issue.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/spec-to-issue.yml</code>／<code>sync</code><span>Trigger：Spec／同步程式進入 main 或 dev；可手動執行 · Timeout：10 min</span></li></ul></div>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_spec_to_issue.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/spec-to-issue.yml</code>／<code>sync</code><span>Trigger：Spec／同步程式進入 main 或 dev；可手動執行 · Timeout：10 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4507,7 +4507,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Milestone 完成條件</strong><span>due date、open Issue 與 acceptance checkbox 共同決定關閉或重開。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Promotion PR → main（發版）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：Issue closed／reopened／milestoned · Timeout：5 min</span></li></ul></div>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：Issue closed／reopened／milestoned · Timeout：5 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4517,15 +4517,15 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Journey 01 整體回歸</strong><span>用一個入口組合必要測試，避免本機與未來 Action 維護兩份清單。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>不另設測試 Action；恢復後的 policy workflow 只呼叫共用程式。</span></div>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>不另設測試 Action；恢復後的 policy workflow 只呼叫共用程式。</span></div>
             </li>
             <li>
-              <strong>Promotion PR → main（發版）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify promotion</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>Journey 01 不恢復 full matrix 或發布流程。</span></div>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify promotion</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>Journey 01 不恢復 full matrix 或發布流程。</span></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Promotion PR → main（發版）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_item_forms.py</code></li><li><code>tests/test_template_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>不另設 repo-template Action；只在同一個 promotion 入口多跑交付測試。</span></div>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_item_forms.py</code></li><li><code>tests/test_template_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">待 #382</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>不另設 repo-template Action；只在同一個 promotion 入口多跑交付測試。</span></div>
             </li>
           </ul></td>
         </tr>
@@ -4545,12 +4545,12 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>AI 規範入口</strong><span>所有 agent 讀同一份根規範，生成內容只列該 profile 真能執行的命令。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Promotion PR → main（發版）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
             </li>
           </ul></td>
         </tr>
@@ -4558,7 +4558,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>平行工作隔離與安全清理</strong><span>可寫工作各自使用 branch／worktree，清理時不刪除未合併或有修改的目錄。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4580,10 +4580,10 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>判斷這次要跑多少</strong><span>開發時自行跑 focused check；CI 依變更路徑與交付階段選 docs、fast 或 full，未知路徑升級為 full。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR → dev · Timeout：30 min</span></li></ul></div>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR（工作分支 → dev） · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
-              <strong>Promotion PR → main（發版）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：promotion／merge group／hotfix／手動執行 · Timeout：30 min</span></li></ul></div>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：promotion／merge group／hotfix／手動執行 · Timeout：30 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4593,12 +4593,12 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Issue PR 的快速回饋</strong><span>只跑與本次修改相關的格式、靜態檢查、一般測試與必要 smoke；不跑完整 profile／adopt／update 矩陣。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
+              <strong>Issue PR（工作分支 → dev）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><span>template、workflow 或 shell 有變更時，fast 會額外產生一個代表性 repo 做 smoke 驗證。</span>
+              <strong>Issue PR（工作分支 → dev）</strong><span>template、workflow 或 shell 有變更時，fast 會額外產生一個代表性 repo 做 smoke 驗證。</span>
             </li>
           </ul></td>
         </tr>
@@ -4606,12 +4606,12 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>發版候選的完整證據</strong><span>只對固定且未再變動的候選版本跑一次完整驗證；成功後以 SHA／tree 證明合併的是同一份內容。</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Promotion PR → main（發版）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Promotion PR → main（發版）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑。</span>
+              <strong>發版 PR（dev → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑。</span>
             </li>
           </ul></td>
         </tr>

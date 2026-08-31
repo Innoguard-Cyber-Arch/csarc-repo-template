@@ -2679,7 +2679,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
   <div class="markdown-body"><ul>
 <li><strong>During development:</strong> run only the focused check that proves the current change, using fresh output before claiming completion.</li>
-<li><strong>Issue PR → dev:</strong> the system selects the appropriate checks from the change; when unsure, it runs full verification.</li>
+<li><strong>Issue PR (work branch → dev):</strong> the system selects the appropriate checks from the change; when unsure, it runs full verification.</li>
 <li><strong>High-risk boundaries:</strong> promotions, hotfixes, release recovery, merge queues, and manual runs use full.</li>
 <li><strong>One implementation:</strong> GitHub Actions has one <code>verify</code> job with a 30-minute timeout and only calls repository scripts.</li>
 <li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
@@ -3967,7 +3967,7 @@ html[data-detail-level="simple"] .detail-panel {
   <header class="basic-header">
     <span class="selection-sequence">Maintenance appendix | CI/CD settings</span>
     <h2>CI/CD settings | Checks by Journey</h2>
-    <p class="subtitle">Separates the tests and automation that normal repositories and repo-template need for Issue PR → dev and Promotion PR → main (release).</p>
+    <p class="subtitle">Separates the tests and automation that normal repositories and repo-template need for Issue PR (work branch → dev) and Release PR (dev → main).</p>
   </header>
 
 <div class="legacy-content similar-tools-content testing-content">
@@ -4016,7 +4016,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Issue work boundary</strong><span>Title, type, assignee, labels, and duplicate disposition must converge.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/issue-triage.yml</code>／<code>classify</code><span>Trigger：Issue opened, edited, reopened, or closed · Timeout：5 min</span></li></ul></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/issue-triage.yml</code>／<code>classify</code><span>Trigger：Issue opened, edited, reopened, or closed · Timeout：5 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4026,7 +4026,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>PR-to-Issue traceability</strong><span>PR title, branch, Closes/Fixes link, open Issue, checkboxes, and Milestone must agree.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR opened, content, commit, or metadata changes, and merge group · Timeout：10 min</span></li></ul></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR opened, content, commit, or metadata changes, and merge group · Timeout：10 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4036,7 +4036,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Spec contract and Issue sync</strong><span>Validate required sections, acceptance criteria, stable spec IDs, and idempotent synchronization.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_spec_to_issue.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/spec-to-issue.yml</code>／<code>sync</code><span>Trigger：Spec or sync code enters main or dev; manual dispatch is also allowed · Timeout：10 min</span></li></ul></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_spec_to_issue.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/spec-to-issue.yml</code>／<code>sync</code><span>Trigger：Spec or sync code enters main or dev; manual dispatch is also allowed · Timeout：10 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4046,7 +4046,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Milestone completion</strong><span>Due date, open Issues, and acceptance checkboxes jointly determine close or reopen.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Promotion PR → main (release)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：Issue closed, reopened, or milestoned · Timeout：5 min</span></li></ul></div>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：Issue closed, reopened, or milestoned · Timeout：5 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4056,15 +4056,15 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Journey 01 aggregate regression</strong><span>Use one entrypoint for required tests so local runs and future Actions never maintain two lists.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>No separate test Action; restored policy workflows call shared code only.</span></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>No separate test Action; restored policy workflows call shared code only.</span></div>
             </li>
             <li>
-              <strong>Promotion PR → main (release)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify promotion</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Journey 01 does not restore the full matrix or delivery workflows.</span></div>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify promotion</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Journey 01 does not restore the full matrix or delivery workflows.</span></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Promotion PR → main (release)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_item_forms.py</code></li><li><code>tests/test_template_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>No repo-template-only Action; the same promotion entrypoint adds delivery tests.</span></div>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_item_forms.py</code></li><li><code>tests/test_template_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>No repo-template-only Action; the same promotion entrypoint adds delivery tests.</span></div>
             </li>
           </ul></td>
         </tr>
@@ -4084,12 +4084,12 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>AI rules entrypoint</strong><span>Every agent reads one root policy, and generated content lists only commands the profile can actually run.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Promotion PR → main (release)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
             </li>
           </ul></td>
         </tr>
@@ -4097,7 +4097,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Parallel isolation and safe cleanup</strong><span>Writable tasks use separate branches and worktrees, and cleanup never removes unmerged or modified directories.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4119,10 +4119,10 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Decide how much to run</strong><span>Developers run focused checks directly. CI selects docs, fast, or full from changed paths and delivery stage, with unknown paths escalating to full.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR → dev · Timeout：30 min</span></li></ul></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR (work branch → dev) · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
-              <strong>Promotion PR → main (release)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Promotion, merge group, hotfix, or manual dispatch · Timeout：30 min</span></li></ul></div>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Promotion, merge group, hotfix, or manual dispatch · Timeout：30 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4132,12 +4132,12 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Fast feedback for an Issue PR</strong><span>Run relevant formatting, static checks, ordinary tests, and necessary smoke checks without the full profile, adoption, or update matrix.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><span>When template, workflow, or shell files change, fast also generates one representative repository for a smoke check.</span>
+              <strong>Issue PR (work branch → dev)</strong><span>When template, workflow, or shell files change, fast also generates one representative repository for a smoke check.</span>
             </li>
           </ul></td>
         </tr>
@@ -4145,12 +4145,12 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Complete evidence for a release candidate</strong><span>Run full verification once on a fixed, unchanged candidate, then bind the merge to the same SHA and tree.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Promotion PR → main (release)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Promotion PR → main (release)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Additionally verifies the template, generated output, and existing-repository adoption and update paths.</span>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Additionally verifies the template, generated output, and existing-repository adoption and update paths.</span>
             </li>
           </ul></td>
         </tr>

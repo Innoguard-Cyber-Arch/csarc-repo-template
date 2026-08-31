@@ -282,18 +282,18 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
             "path": ".github/workflows/ci.yml",
             "job": "verify",
             "trigger": {
-                "zh-tw": "Issue PR → dev",
-                "en": "Issue PR → dev",
+                "zh-tw": "Issue PR\uff08工作分支 → dev\uff09",
+                "en": "Issue PR (work branch → dev)",
             },
             "timeout": "30 min",
         }
     ]
     assert verification_rows[0]["templateOnly"] == {}
     assert data["testing"]["labels"]["zh-tw"]["release"] == (
-        "Promotion PR → main\uff08發版\uff09"
+        "發版 PR\uff08dev → main\uff09"
     )
     assert data["testing"]["labels"]["en"]["release"] == (
-        "Promotion PR → main (release)"
+        "Release PR (dev → main)"
     )
     assert "archived" not in data["testing"]["labels"]["zh-tw"]
     assert "archived" not in testing_shortcode

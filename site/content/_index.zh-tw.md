@@ -316,7 +316,7 @@ Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `sc
       <p class="context-line"><strong>模板的作用｜</strong>把測試邏輯留在 repo 內可直接執行的 scripts／tests；GitHub Action 只負責何時啟動、使用哪些權限，以及呼叫同一份程式。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">四種都合理，但成本不同</span></summary><ul><li><strong>每次全跑：</strong>每張 PR 都取得完整信心，適合測試很小、執行很快的 repo。</li><li><strong>只跑受影響項目：</strong>依 dependency graph 或路徑縮小範圍，回饋快，但分流規則必須可測。</li><li><strong>獨立 pipeline runtime：</strong>本機與不同 CI 平台執行相同 pipeline，換來額外引擎與環境成本。</li><li><strong>分階段驗證：</strong>日常快速、整合候選完整；需要清楚定義何時升級與哪一份結果有效。</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一份邏輯、一支 Action、兩種 repo 範圍</span></summary><ul class="work-definition-list"><li><strong>開發中：</strong>人或 agent 只跑能證明這次修改的 focused check，先取得新鮮輸出再宣稱完成。</li><li><strong>Issue PR → dev：</strong>系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li><li><strong>高風險邊界：</strong>promotion、hotfix、release recovery、merge queue 與手動執行都走 full。</li><li><strong>同一套邏輯：</strong>GitHub Actions 只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li><li><strong>專案範圍：</strong>一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li></ul></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一份邏輯、一支 Action、兩種 repo 範圍</span></summary><ul class="work-definition-list"><li><strong>開發中：</strong>人或 agent 只跑能證明這次修改的 focused check，先取得新鮮輸出再宣稱完成。</li><li><strong>Issue PR（工作分支 → dev）：</strong>系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li><li><strong>高風險邊界：</strong>promotion、hotfix、release recovery、merge queue 與手動執行都走 full。</li><li><strong>同一套邏輯：</strong>GitHub Actions 只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li><li><strong>專案範圍：</strong>一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li></ul></details>
       </div>
       <aside class="config-guidance" data-config-direct="true"><strong>模板功能與客製化</strong><ul><li><strong>分級依據：</strong>系統依修改內容與交付階段選擇檢查範圍；<code>docs/ci-policy.md</code> 說明升級條件。</li><li><strong>快速驗證：</strong><code>scripts/verify-fast</code> 已存在於 root 與生成模板；一般 repo 的完整入口是 <code>scripts/verify</code>。</li><li><strong>模板額外驗證：</strong><code>scripts/verify-template.sh</code> 只屬於 repo-template，不應成為每個採用 repo 的成本。</li><li><strong>目前邊界：</strong>只恢復 <code>.github/workflows/ci.yml</code>；release、promotion、安全掃描、遠端治理、部署與排程仍由各自 Journey 決定。</li></ul></aside>
       <p class="method-reference reference">具體工具與功能來源見<a href="#similar-tools">相似工具</a>；每個階段實際使用的程式與 Action 現況見<a href="#testing">CI/CD 設定</a>。</p>
@@ -324,7 +324,7 @@ Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `sc
 
 {{< basic >}}
 - **開發中：**只跑能證明本次修改的 focused check。
-- **Issue PR → dev：**系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。
+- **Issue PR（工作分支 → dev）：**系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。
 - **高風險邊界：**promotion、hotfix、release recovery、merge queue 與手動執行走 full。
 - **Action：**只有一個 `verify` job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。
 - **專案範圍：**一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。
@@ -709,7 +709,7 @@ Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、�
 {{< similar-tools >}}
 {{< /slide >}}
 
-{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜CI/CD 設定" title="CI/CD 設定｜依 Journey 檢查" subtitle="分開列出一般 repo 與 repo-template 在 Issue PR → dev、Promotion PR → main（發版）各自需要的測試與自動化。" class="similar-tools-slide testing-slide" legacy="true" >}}
+{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜CI/CD 設定" title="CI/CD 設定｜依 Journey 檢查" subtitle="分開列出一般 repo 與 repo-template 在 Issue PR（工作分支 → dev）、發版 PR（dev → main）各自需要的測試與自動化。" class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
 {{< /slide >}}
 
