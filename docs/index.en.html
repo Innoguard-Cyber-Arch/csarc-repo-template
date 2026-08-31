@@ -3987,7 +3987,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
     <div class="similar-tools-testing-intro">
-      <strong>Expected runtime for both PR stages</strong><span>Each cell totals the runner minutes expected for one PR. Queue time is excluded, and concurrent jobs are still counted separately. First-time dependency downloads and cache misses may take longer.</span>
+      <strong>Expected runtime for both PR stages</strong><span>Each cell totals the runner minutes expected for one PR. Work inside the same job is marked as included and is not added twice. Queue time is excluded; first-time dependency downloads and cache misses may take longer.</span>
       <p>Runner | Zero steps means repository code never ran; check the runner, billing, and GitHub status first.</p>
       <p>Archive | archive/ci-cd/ is reference only; verify purpose, triggers, permissions, timeout, and the local entry point before restoring one workflow.</p>
     </div>
@@ -3997,13 +3997,13 @@ html[data-detail-level="simple"] .detail-panel {
         <tbody>
           <tr>
             <th scope="row"><strong>Issue PR (work branch → dev)</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in verification; no separate minutes</li><li><strong>Verification / CI：</strong>docs &lt;1 min; fast 2–5 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in verification; no separate minutes</li><li><strong>Verification / CI：</strong>docs &lt;1 min; fast 3–6 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–8 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>Verification / CI：</strong>docs &lt;1 min; fast 2–5 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>Verification / CI：</strong>docs &lt;1 min; fast 3–6 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–8 min</p></td>
           </tr>
           <tr>
             <th scope="row"><strong>Release PR (dev → main)</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in full verification; no separate minutes</li><li><strong>Verification / CI：</strong>full 5–15 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in full verification; no separate minutes</li><li><strong>Verification / CI：</strong>full 8–12 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 9–14 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Under 1 min within full</li><li><strong>Verification / CI：</strong>full 5–15 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Under 1 min within full</li><li><strong>Verification / CI：</strong>full 8–12 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 9–14 min</p></td>
           </tr>
         </tbody>
       </table>

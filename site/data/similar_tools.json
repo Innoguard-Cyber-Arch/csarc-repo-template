@@ -130,7 +130,7 @@
           "overline": "總覽",
           "title": "預計執行時間",
           "heading": "兩種 PR 的預計執行時間",
-          "scope": "每格加總一次 PR 預計使用的 runner minutes；不含排隊，並行 job 仍分別計算。首次下載相依或 cache miss 可能較久。",
+          "scope": "每格加總一次 PR 預計使用的 runner minutes；同一個 job 內的項目會標示已計入，不重複相加。不含排隊，首次下載相依或 cache miss 可能較久。",
           "runnerNote": "Runner｜0 steps 表示程式尚未執行，先檢查 runner、帳務與 GitHub 狀態。",
           "archiveNote": "封存｜archive/ci-cd/ 只供參考；恢復前逐條確認目的、觸發、權限、timeout 與本機入口。",
           "stage": "PR 階段",
@@ -142,7 +142,7 @@
           "overline": "Overview",
           "title": "Expected runtime",
           "heading": "Expected runtime for both PR stages",
-          "scope": "Each cell totals the runner minutes expected for one PR. Queue time is excluded, and concurrent jobs are still counted separately. First-time dependency downloads and cache misses may take longer.",
+          "scope": "Each cell totals the runner minutes expected for one PR. Work inside the same job is marked as included and is not added twice. Queue time is excluded; first-time dependency downloads and cache misses may take longer.",
           "runnerNote": "Runner | Zero steps means repository code never ran; check the runner, billing, and GitHub status first.",
           "archiveNote": "Archive | archive/ci-cd/ is reference only; verify purpose, triggers, permissions, timeout, and the local entry point before restoring one workflow.",
           "stage": "PR stage",
@@ -158,7 +158,7 @@
           "shared": {
             "items": [
               {"label": {"zh-tw": "PR／合併", "en": "PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
-              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "併入驗證，不另計", "en": "Included in verification; no separate minutes"}},
+              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "驗證／CI 其中 < 1 分鐘", "en": "Under 1 min within Verification / CI"}},
               {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 2–5 分鐘", "en": "docs <1 min; fast 2–5 min"}}
             ],
             "total": {"zh-tw": "約 1–7 分鐘", "en": "About 1–7 min"}
@@ -166,7 +166,7 @@
           "templateOnly": {
             "items": [
               {"label": {"zh-tw": "PR／合併", "en": "PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
-              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "併入驗證，不另計", "en": "Included in verification; no separate minutes"}},
+              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "驗證／CI 其中 < 1 分鐘", "en": "Under 1 min within Verification / CI"}},
               {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 3–6 分鐘", "en": "docs <1 min; fast 3–6 min"}}
             ],
             "total": {"zh-tw": "約 1–8 分鐘", "en": "About 1–8 min"}
@@ -178,7 +178,7 @@
           "shared": {
             "items": [
               {"label": {"zh-tw": "PR／合併", "en": "PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
-              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "併入完整驗證，不另計", "en": "Included in full verification; no separate minutes"}},
+              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "full 其中 < 1 分鐘", "en": "Under 1 min within full"}},
               {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "full 5–15 分鐘", "en": "full 5–15 min"}}
             ],
             "total": {"zh-tw": "約 6–17 分鐘", "en": "About 6–17 min"}
@@ -186,7 +186,7 @@
           "templateOnly": {
             "items": [
               {"label": {"zh-tw": "PR／合併", "en": "PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
-              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "併入完整驗證，不另計", "en": "Included in full verification; no separate minutes"}},
+              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "full 其中 < 1 分鐘", "en": "Under 1 min within full"}},
               {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "full 8–12 分鐘", "en": "full 8–12 min"}}
             ],
             "total": {"zh-tw": "約 9–14 分鐘", "en": "About 9–14 min"}

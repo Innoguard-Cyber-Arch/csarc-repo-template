@@ -294,6 +294,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert duration_rows[1]["templateOnly"]["total"]["zh-tw"] == (
         "約 9\u201314 分鐘"
     )
+    assert "不另計" not in json.dumps(data["testing"]["duration"], ensure_ascii=False)
+    assert "no separate minutes" not in json.dumps(data["testing"]["duration"])
     assert data["testing"]["groups"][0]["journey"] == "01"
     testing_rows = data["testing"]["groups"][0]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in testing_rows] == [
