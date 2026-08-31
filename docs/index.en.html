@@ -2679,7 +2679,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
   <div class="markdown-body"><ul>
 <li><strong>During development:</strong> run only the focused check that proves the current change, using fresh output before claiming completion.</li>
-<li><strong>Issue PR → dev:</strong> <code>ci_tier.py</code> selects docs or fast from changed paths; unknown paths escalate to full.</li>
+<li><strong>Issue PR → dev:</strong> the system selects the appropriate checks from the change; when unsure, it runs full verification.</li>
 <li><strong>High-risk boundaries:</strong> promotions, hotfixes, release recovery, merge queues, and manual runs use full.</li>
 <li><strong>One implementation:</strong> GitHub Actions has one <code>verify</code> job with a 30-minute timeout and only calls repository scripts.</li>
 <li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
@@ -3848,7 +3848,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>How each run is scoped</strong><span>Compares running everything, selecting affected tasks from a dependency graph, and routing by changed path plus delivery stage.<br><br><b>CSARC: </b>ci_tier.py selects docs, fast, or full from paths and stage. Issue PRs use fast; promotions, hotfixes, merge queues, and unknown paths use full.</span></th>
+          <th scope="row"><strong>How each run is scoped</strong><span>Compares running everything, selecting affected tasks from a dependency graph, and routing by changed path plus delivery stage.<br><br><b>CSARC: </b>The system selects docs, fast, or full from the change and delivery stage. Issue PRs use fast; promotions, hotfixes, merge queues, and unknown paths use full.</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/concepts/tasks/#conditions" target="_blank" rel="noreferrer">Task conditions</a>：A task or step can use a condition to decide whether it runs; this supports routing but the conditions still need correct maintenance.</span></li>
           </ul></td>

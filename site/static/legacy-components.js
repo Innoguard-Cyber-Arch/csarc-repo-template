@@ -410,7 +410,7 @@ jobs:
   audit:
     steps:
       - run: uvx --from zizmor==1.29.0 zizmor . --format plain
-# PR workflow changes are routed to the same audit by ci_tier.py.`
+# PR workflow changes are routed to the same audit by the CI tier rules.`
         }
       ],
       supply: [

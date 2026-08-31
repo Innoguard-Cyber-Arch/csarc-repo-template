@@ -398,7 +398,7 @@
       "key": "riskBasedSelection",
       "title": {"zh-tw": "怎麼縮小本次驗證範圍", "en": "How each run is scoped"},
       "description": {"zh-tw": "比較每次全跑、依 dependency graph 選 affected tasks，或依變更路徑與交付階段分級。", "en": "Compares running everything, selecting affected tasks from a dependency graph, and routing by changed path plus delivery stage."},
-      "csarc": {"zh-tw": "ci_tier.py 依路徑與階段選 docs／fast／full；Issue PR 走 fast，promotion、hotfix、merge queue 與未知路徑走 full。", "en": "ci_tier.py selects docs, fast, or full from paths and stage. Issue PRs use fast; promotions, hotfixes, merge queues, and unknown paths use full."}
+      "csarc": {"zh-tw": "系統依修改內容與交付階段選 docs／fast／full；Issue PR 走 fast，promotion、hotfix、merge queue 與未知路徑走 full。", "en": "The system selects docs, fast, or full from the change and delivery stage. Issue PRs use fast; promotions, hotfixes, merge queues, and unknown paths use full."}
     },
     {
       "key": "freshCompletionEvidence",
