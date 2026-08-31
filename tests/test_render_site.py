@@ -141,13 +141,14 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         "ci.yml",
         "issue-triage.yml",
         "milestone-lifecycle.yml",
+        "osv.yml",
         "pr-policy.yml",
         "spec-to-issue.yml",
     }
-    assert "5 條現行自動流程" in file_map
+    assert "6 條現行自動流程" in file_map
     for workflow in workflows:
         assert workflow in file_map
-    for inactive in ("osv.yml", "release-please.yml", "release.yml"):
+    for inactive in ("release-please.yml", "release.yml"):
         assert inactive not in file_map
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
     assert "版本與發佈流程尚未啟用" in flow
@@ -384,8 +385,15 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "已公開漏洞立即檢查",
         "發版成品清冊與雜湊",
     ]
-    assert supply_rows[1]["shared"]["milestone"]["files"][0]["issue"] == 407
-    assert supply_rows[2]["shared"]["milestone"]["automation"][0]["pending"]
+    assert supply_rows[1]["shared"]["milestone"]["files"] == [
+        {"path": ".github/dependabot.yml"}
+    ]
+    assert supply_rows[2]["shared"]["milestone"]["files"] == [
+        {"path": "scripts/verify-dependencies"}
+    ]
+    assert supply_rows[2]["shared"]["release"]["automation"][1]["path"] == (
+        ".github/workflows/osv.yml"
+    )
     assert data["testing"]["groups"][5]["journey"] == "06"
     delivery_rows = data["testing"]["groups"][5]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in delivery_rows] == [

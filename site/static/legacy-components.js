@@ -404,20 +404,20 @@ minimumReleaseAgeStrict: true
 trustPolicy: no-downgrade`
         },
         {
-          title: '待 #407｜Dependabot 提出一般與安全更新 PR',
+          title: '已啟用｜Dependabot 提出一般與安全更新 PR',
           goal: '一般新版先觀察三天；已知安全修補不等待，且更新 PR 繼續走相同 CI。',
-          summary: '保留 GitHub 原生 automation identity，不要求每個 repo 安裝高權限 App。設定目前只在 archive，恢復後必須刪除封存副本。',
-          file: 'archive/ci-cd/2026-08-27/*dependabot* → .github/dependabot.yml',
+          summary: '使用 GitHub 原生 automation identity，不要求每個 repo 安裝高權限 App；一般更新與安全更新 PR 都走相同審查與 CI。',
+          file: '.github/dependabot.yml＋template/.github/dependabot.yml.jinja',
           code: `cooldown:
   default-days: 3
 
 # Security updates are not delayed by the cooldown.`
         },
         {
-          title: '待 #407｜OSV 共用本機、PR 與每週掃描',
+          title: '已啟用｜OSV 共用本機、PR 與每週掃描',
           goal: '已公開漏洞立即處理，不和一般新版的三天觀察混在一起。',
           summary: '依賴檔變更與發版候選執行同一支本機程式；每週排程只補沒有 PR 的期間。workflow 不自行重寫掃描條件。',
-          file: 'scripts/verify-dependencies＋.github/workflows/ci.yml＋dependency-security.yml',
+          file: 'scripts/verify-dependencies＋.github/workflows/ci.yml＋.github/workflows/osv.yml',
           code: `Issue PR with dependency changes -> verify-dependencies
 Release PR -> verify-dependencies
 Weekly schedule -> verify-dependencies`

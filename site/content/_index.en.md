@@ -61,7 +61,7 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 | --- | --- | --- |
 | `.copier-answers.yml`, `.csarc/profile.json` | Template source, profile, and branch strategy | Template-led |
 | `.github/ISSUE_TEMPLATE/`, `pull_request_template.md` | Work definition and PR contract | Template-led |
-| `.github/workflows/` | Five active flows: Issue triage, Milestone sync, spec sync, PR rules, and necessary verification | Template-led |
+| `.github/workflows/` | Six active flows: Issue triage, Milestone sync, spec sync, PR rules, verification, and scheduled vulnerability scanning | Template-led |
 | `AGENTS.md`, `README.md`, `CLAUDE.md` | Agent working rules and user entry point | Shared |
 | `policies/`, `CODEOWNERS`, `.github/REVIEWERS` | Desired settings, owners, and reviewers | Shared |
 | `scripts/` | Local verification, work synchronization, and repository settings | Template-led |
@@ -101,8 +101,6 @@ Workflows, policies, scripts, and documents shared by root and `template/` are k
 - **Change proposal:** review a proposed change separately, then merge it into the official specification after acceptance.
 - **Complexity-based workflow:** use a short path for small work and add discovery, design, roles, and review only for larger work.
 
-Concrete tools, feature names, and source links are listed under [Similar tools](#similar-tools).
-
 <aside class="config-guidance"><strong>Specification format</strong><p>Keep the current lightweight Issue and spec format. Reconsider a separate Spec Kit workflow only when approved requirements routinely need a full spec, plan, and task breakdown.</p></aside>
 
 {{< /slide >}}
@@ -119,7 +117,6 @@ Concrete tools, feature names, and source links are listed under [Similar tools]
 
 `README.md` serves people, `AGENTS.md` serves every agent, and `template/AGENTS.md.jinja` plus `copier.yml` emit only commands the selected profile can run. `scripts/cleanup-worktrees` and `scripts/test-worktree-cleanup` handle safe cleanup; `scripts/verify`, `.github/workflows/`, and `policies/` keep rules, evidence, automation, and governance separate.
 
-Concrete tools and sources are in [Similar tools](#similar-tools); Journey 02 local checks and Actions are in [CI/CD settings](#testing).
 {{< /slide >}}
 
 {{< slide key="contract" track="contract" eyebrow="Step 03" title="Verify the change, then let CI rerun the same rules" subtitle="Issue PRs are tiered by change scope; full verification is reserved for high-risk boundaries." legacy="false"  class="candidate-slide" >}}
@@ -129,7 +126,7 @@ Concrete tools and sources are in [Similar tools](#similar-tools); Journey 02 lo
 - **One implementation:** GitHub Actions has one `verify` job with a 30-minute timeout and only calls repository scripts.
 - **Repository scope:** a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.
 
-Verification logic lives only in scripts and tests. This step restores only `.github/workflows/ci.yml`; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys. See [Similar tools](#similar-tools) for concrete comparisons and [CI/CD settings](#testing) for execution locations.
+Verification logic lives only in scripts and tests. This step restores only `.github/workflows/ci.yml`; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys.
 {{< /slide >}}
 
 {{< slide key="pr" track="pr" eyebrow="Step 05" title="Make completed changes reviewable and deliverable" subtitle="A work PR completes one work item; a release PR then carries the verified batch into main." legacy="false"  class="candidate-slide" >}}
@@ -152,9 +149,9 @@ Verification logic lives only in scripts and tests. This step restores only `.gi
 | Risk | What the template does today |
 | --- | --- |
 | A dependency change cannot be reproduced | PR verification reinstalls the locked versions and runs the required checks |
-| A newly published malicious version | TypeScript packages wait three days; other automated updates still await restoration |
-| A disclosed vulnerability goes unnoticed | The scanning contract is retained, but automated scanning is not enabled yet |
-| Nobody knows what a release contains | Dependency security owns the inventory contract and runs it when real release artifacts exist |
+| A newly published malicious version | Dependabot opens grouped PRs; ordinary releases wait three days, while security updates do not |
+| A disclosed vulnerability goes unnoticed | Dependency PRs and release candidates run OSV; a weekly scan covers periods without PRs |
+| Nobody knows what a release contains | Dependency security owns and verifies the SBOM contract when delivery produces real artifacts |
 
 {{< detail key="supply-boundaries" title="Why these four protections stay separate" >}}
 - **Locked versions:** reproduce the same package set on every install.
@@ -271,7 +268,7 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 | --- | --- | --- |
 | ![Copier logo](../assets/copier.svg) [Copier](https://github.com/copier-org/copier) | Updatable templates | Baseline; changes arrive through PRs |
 | ![zizmor logo](../assets/zizmor.png) [zizmor](https://github.com/zizmorcore/zizmor) | GitHub Actions security | Baseline; runs for workflow changes and on schedule |
-| Dependabot, OSV, Syft | Dependency updates, vulnerabilities, and SBOM | Tools and responsibilities selected; automation pending restoration |
+| Dependabot, OSV, Syft | Dependency updates, vulnerabilities, and SBOM | Dependabot and OSV are active; the SBOM contract is verified against real release artifacts |
 | ![GitHub Community Projects logo](../assets/github-community-projects.png) [Safe Settings](https://github.com/github-community-projects/safe-settings) | Cross-repository settings | Evaluate after fleet and drift thresholds are met |
 | ![Renovate logo](../assets/renovate.png) [Renovate](https://github.com/renovatebot/renovate) | Flexible update presets | Do not replace Dependabot today |
 | ![GitHub Actions logo](../assets/github-actions.svg) ![PyScaffold logo](../assets/pyscaffold.svg) Starter Workflows, PyScaffold | Official workflow and Python structure examples | Content checklists only; do not copy policy blindly |

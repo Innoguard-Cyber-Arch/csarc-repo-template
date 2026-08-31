@@ -96,6 +96,7 @@ if [[ "$mode" == "typescript" ]]; then
 fi
 
 ./scripts/check-update-conflicts
+./scripts/verify-dependencies
 ./scripts/check-project-metadata
 uv run --no-project python scripts/render_site.py --check
 ./scripts/detect-language-profile

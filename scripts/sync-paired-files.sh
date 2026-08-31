@@ -20,6 +20,7 @@ paired_files=(
   .github/ISSUE_TEMPLATE/task.yml
   .github/workflows/issue-triage.yml
   .github/workflows/milestone-lifecycle.yml
+  .github/workflows/osv.yml
   .github/workflows/pr-policy.yml
   .github/workflows/spec-to-issue.yml
   policies/actions.json
@@ -40,6 +41,7 @@ paired_files=(
   scripts/cleanup-worktrees
   scripts/install-actionlint
   scripts/install-gitleaks
+  scripts/install-osv-scanner
   scripts/install-shellcheck
   scripts/lint-workflows-shell
   scripts/release_policy.py
@@ -54,7 +56,9 @@ paired_files=(
   scripts/validate-issue-policy
   scripts/validate-issue-title
   scripts/validate-pr-policy
+  scripts/verify-dependencies
   tests/test_ci_tier.py
+  tests/test_dependency_security.py
   tests/test_spec_to_issue.py
   tests/test_delivery_sync.py
   tests/test_pr_lifecycle.py

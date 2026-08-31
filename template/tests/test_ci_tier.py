@@ -34,6 +34,8 @@ scope_for = MODULE["scope_for"]
         ("template/scripts/verify.jinja", "shell"),
         ("uv.lock", "dependency"),
         ("template/pyproject.toml.jinja", "dependency"),
+        ("template/.github/dependabot.yml.jinja", "dependency"),
+        ("template/pnpm-workspace.yaml", "dependency"),
         ("policies/rulesets.json", "governance"),
         ("policies/dev-next-ruleset.json", "governance"),
         ("template/policies/rulesets.json.jinja", "governance"),
@@ -142,6 +144,19 @@ def test_governance_checkers_run_only_remote_governance(path: str) -> None:
     assert plan.run_governance
     assert not plan.run_osv
     assert not plan.run_zizmor
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["scripts/verify-dependencies", "scripts/install-osv-scanner"],
+)
+def test_osv_scripts_trigger_their_own_check_and_shell_validation(
+    path: str,
+) -> None:
+    """Scan and lint changes to the local vulnerability entrypoint."""
+    plan = classify("pull_request", "dev/next", "fix/407-osv", set(), [path])
+    assert plan.scopes == ("shell",)
+    assert plan.run_osv
 
 
 @pytest.mark.parametrize(

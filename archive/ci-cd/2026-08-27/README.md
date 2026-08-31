@@ -13,5 +13,6 @@ and monthly cost ceiling.
 
 Once a workflow is restored, its archived root and template copies are removed
 in the same change. The active workflow is then the only source to inspect.
-`ci`, `issue-triage`, `milestone-lifecycle`, `pr-policy`, and `spec-to-issue`
-have already moved back to their active locations.
+`ci`, `issue-triage`, `milestone-lifecycle`, `osv`, `pr-policy`, and
+`spec-to-issue` have already moved back to their active locations. Dependabot
+has also moved back to `.github/dependabot.yml`.

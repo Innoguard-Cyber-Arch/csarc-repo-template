@@ -154,7 +154,7 @@ fit = "符合畫面"
 {{< legacy >}}
       <header>
         <h2>模板會把<span class="accent">必要設定放到正確位置</span></h2>
-        <p class="subtitle">共用規則與 5 條現行 GitHub Actions 每個 repo 都有；語言工具與產品目錄才依 CI/CD-only、Python、TypeScript 或混合模式產生。</p>
+        <p class="subtitle">共用規則與 6 條現行 GitHub Actions 每個 repo 都有；語言工具與產品目錄才依 CI/CD-only、Python、TypeScript 或混合模式產生。</p>
       </header>
       <div class="repo-map-window" aria-label="模板產生檔案的視覺對照">
         <div class="repo-map-toolbar">
@@ -170,10 +170,11 @@ fit = "符合畫面"
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">CODEOWNERS＋REVIEWERS</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">指定 owner 與 reviewer 候選</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">ISSUE_TEMPLATE/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">工作單欄位／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">pull_request_template.md</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">PR 必填內容</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／05</span><span class="purpose-copy">5 條現行自動流程</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04／05</span><span class="purpose-copy">6 條現行自動流程</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">ci.yml</span><span class="repo-tree-purpose"><span class="journey-code">03</span><span class="purpose-copy">執行已宣告模組</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">issue-triage.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">檢查並整理工作單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">milestone-lifecycle.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">同步交付批次狀態</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">osv.yml</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">每週與手動漏洞掃描</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">pr-policy.yml</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">Issue／分支／PR 規則</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">spec-to-issue.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">規格自動開單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">docs/specs/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">功能規格／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge project">專案持有</span></div>
@@ -194,7 +195,7 @@ fit = "符合畫面"
 | --- | --- | --- |
 | `.copier-answers.yml`、`.csarc/profile.json` | 記錄公版來源、profile 與分支模式 | 公版主導 |
 | `.github/ISSUE_TEMPLATE/`、`pull_request_template.md` | 工作定義與 PR 契約 | 公版主導 |
-| `.github/workflows/` | 5 條現行流程：工作單整理、里程碑同步、規格開單、PR 規則與必要驗證 | 公版主導 |
+| `.github/workflows/` | 6 條現行流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證與漏洞排程 | 公版主導 |
 | `AGENTS.md`、`README.md`、`CLAUDE.md` | Agent 工作方式與使用者入口 | 共同維護 |
 | `policies/`、`CODEOWNERS`、`.github/REVIEWERS` | 期望設定、owner 與 reviewer | 共同維護 |
 | `scripts/` | 本機驗證、工作同步與套用設定 | 公版主導 |
@@ -237,7 +238,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         </details>
       </div>
       <aside class="config-guidance" data-config-direct="true"><strong>模板設定與客製化位置</strong><ul><li><strong>Issue 表單限制：</strong><code>.github/ISSUE_TEMPLATE/*.yml</code> 規定標題使用 12–80 個英文 ASCII 字元、至少三個詞，並要求填寫問題與完成條件；<code>config.yml</code> 關閉空白 Issue</li><li><strong>Type、Label 與負責人：</strong>Feature／Task／Bug 使用同名原生 Type；Documentation 使用 Task Type 加 documentation Label；enhancement、bug、documentation 擇一，duplicate 只用於重複工作；建立者自我指派，agent／CLI 使用 <code>@me</code></li><li><strong>工作層級：</strong><code>AGENTS.md</code> 定義 Feature／Task／Bug、Parent、Sub-issue 與 Dependency；<code>docs/adr/spec-story-and-work-items.md</code> 保存長期理由</li><li><strong>規格同步：</strong><code>docs/specs/</code> 放各專案的長期規格，<code>scripts/spec_to_issue.py</code> 定義 <code>tracking: issue</code>、<code>story</code>、<code>none</code> 的同步行為</li><li><strong>里程碑啟動：</strong><code>docs/milestone-description.md</code> 定義目標、完成條件與生命週期追蹤 Issue；結案方式由「版本／交付」定義</li></ul></aside>
-      <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues" target="_blank" rel="noreferrer">GitHub sub-issues</a>。具體工具、功能名稱與資料來源統一整理於<a href="#similar-tools">相似工具</a>。</p>
+      <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues" target="_blank" rel="noreferrer">GitHub sub-issues</a>。</p>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -266,8 +267,6 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - **變更提案：**先獨立審查準備修改的內容，接受後才併回正式規格。
 - **依複雜度分級：**小工作走短流程，大型工作才增加探索、設計、分工與審查。
 
-具體工具、功能名稱與資料來源見[相似工具](#similar-tools)。
-
 {{< /basic >}}
 {{< /slide >}}
 
@@ -283,7 +282,6 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">六項責任各有唯一位置</span></summary><ul class="work-definition-list"><li><strong>工作與脈絡：</strong>GitHub Issue／PR 記錄範圍、進度與證據；核准的 spec／ADR 保存長期決策，跨 session、高風險或難復原工作才增加 plan，不保存聊天逐字稿。</li><li><strong>AI 規範：</strong>根目錄 <code>AGENTS.md</code> 是唯一來源；<code>CLAUDE.md</code> 只做薄匯入，子目錄只有規則真的不同時才覆寫。</li><li><strong>修改隔離：</strong>每項可寫工作各用 branch／worktree，只平行處理互不依賴的範圍；唯讀工作不必另開 worktree。</li><li><strong>驗證證據：</strong>執行最小且相關的本機程式；Action 只負責事件、權限與呼叫同一程式，不複製邏輯。</li><li><strong>決策與授權：</strong>人負責需求、重大取捨、外部影響與不可逆操作；審查、合併資格與例外由「規則治理」定義。</li><li><strong>模板建立與更新：</strong>Copier 負責產生與更新共用基線；既有 repo 的更新契約由「模板升級」定義。</li></ul></details>
       </div>
       <aside class="config-guidance" data-config-direct="true"><strong>模板功能與客製化</strong><ul><li><strong>人與 AI 各看哪份文件：</strong><code>README.md</code> 給人，<code>AGENTS.md</code> 給所有 agent；<code>CLAUDE.md</code> 只匯入同一份規範。</li><li><strong>只產生 profile 真能執行的指令：</strong><code>template/AGENTS.md.jinja</code> 與 <code>copier.yml</code> 依語言產生內容，<code>scripts/verify-template.sh</code> 驗證結果。</li><li><strong>平行可寫工作用 branch／worktree 隔離：</strong><code>AGENTS.md</code> 定義做法；<code>scripts/cleanup-worktrees</code> 與 <code>scripts/test-worktree-cleanup</code> 負責安全清理。</li><li><strong>規範、驗證與治理分開：</strong><code>AGENTS.md</code> 說明做法，<code>scripts/verify</code> 提供證據，<code>.github/workflows/</code> 只包裝執行，<code>policies/</code> 保存治理設定。</li></ul></aside>
-      <p class="method-reference reference">具體工具、功能名稱與資料來源統一整理於<a href="#similar-tools">相似工具</a>；Journey 02 的本機檢查與 Action 現況見<a href="#testing">CI/CD 設定</a>。</p>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -294,7 +292,6 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - **決策與授權：** 人保留重大決策；審查與合併規則只由「規則治理」定義。
 - **模板建立與更新：** Copier 負責共用基線；既有 repo 更新由「模板升級」定義。
 
-具體工具見[相似工具](#similar-tools)，執行方式見 [CI/CD 設定](#testing)。
 {{< /basic >}}
 {{< /slide >}}
 
@@ -310,7 +307,6 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一份邏輯、一支 Action、兩種 repo 範圍</span></summary><ul class="work-definition-list"><li><strong>開發中：</strong>人或 agent 只跑能證明這次修改的 focused check，先取得新鮮輸出再宣稱完成。</li><li><strong>Issue PR（工作分支 → dev）：</strong>系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li><li><strong>需要完整檢查時：</strong>準備發版、緊急修正，或系統無法安全縮小測試範圍時，執行完整檢查。</li><li><strong>同一套邏輯：</strong>GitHub Actions 只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li><li><strong>專案範圍：</strong>一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li></ul></details>
       </div>
       <aside class="config-guidance" data-config-direct="true"><strong>模板功能與客製化</strong><ul><li><strong>分級依據：</strong>系統依修改內容與交付階段選擇檢查範圍；<code>docs/ci-policy.md</code> 說明升級條件。</li><li><strong>快速驗證：</strong><code>scripts/verify-fast</code> 已存在於 root 與生成模板；一般 repo 的完整入口是 <code>scripts/verify</code>。</li><li><strong>模板額外驗證：</strong><code>scripts/verify-template.sh</code> 只屬於 repo-template，不應成為每個採用 repo 的成本。</li><li><strong>目前邊界：</strong>只恢復 <code>.github/workflows/ci.yml</code>；release、promotion、安全掃描、遠端治理、部署與排程仍由各自 Journey 決定。</li></ul></aside>
-      <p class="method-reference reference">具體工具與功能來源見<a href="#similar-tools">相似工具</a>；每個階段實際使用的程式與 Action 現況見<a href="#testing">CI/CD 設定</a>。</p>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -320,7 +316,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - **Action：**只有一個 `verify` job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。
 - **專案範圍：**一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。
 
-測試邏輯只寫在 scripts／tests；本次只恢復 `.github/workflows/ci.yml`。具體比較見[相似工具](#similar-tools)，執行位置見 [CI/CD 設定](#testing)。
+測試邏輯只寫在 scripts／tests；本次只恢復 `.github/workflows/ci.yml`。
 {{< /basic >}}
 {{< /slide >}}
 
@@ -336,7 +332,6 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>工作 PR 完成單項工作，發版 PR 完成交付批次</h3><ul><li><strong>Issue PR（工作分支 → dev）：</strong>一張 PR 只完成一張可驗收 Issue；內文以 <code>Closes #N</code> 連回同號未結案 Issue，合併後結束該工作。</li><li><strong>PR 標題：</strong>採用 Angular／Conventional Commits 格式，簡短說明這次改動與版本影響。<details class="package-disclosure inline-disclosure"><summary><span class="tech-name">查看可用格式與版本影響</span></summary><div class="package-health"><p><strong>格式：</strong><code>type(scope)!: English summary</code></p><ul><li><strong>type：</strong><code>feat</code> 新功能、<code>fix</code> 修錯、<code>docs</code> 文件、<code>refactor</code> 重構、<code>test</code> 測試、<code>build</code> 建置／相依、<code>ci</code> 自動化、<code>chore</code> 維護、<code>revert</code> 撤回。</li><li><strong>scope：</strong>可省略；使用小寫指出影響範圍。</li><li><strong>!</strong>：可省略；只在破壞相容性時使用。</li><li><strong>版本影響：</strong><code>feat</code>＝minor、<code>fix</code>／<code>revert</code>＝patch、<code>!</code>＝major；其餘不主動升版。</li></ul></div></details></li><li><strong>PR 資料：</strong>分類、里程碑與負責人都要完整。<details class="package-disclosure inline-disclosure"><summary><span class="tech-name">查看 Label、里程碑與負責人規則</span></summary><div class="package-health"><ul><li><strong>Label：</strong><code>enhancement</code>、<code>bug</code>、<code>documentation</code> 擇一，且必須和連結的 Issue 相同。</li><li><strong>里程碑：</strong>必須和連結的 Issue 相同；Issue 未加入里程碑時，PR 也不加入。</li><li><strong>負責人：</strong>PR 作者必須列為 Assignee；正式交接時可再加入其他負責人。</li></ul></div></details></li><li><strong>發版 PR（dev → main）：</strong>里程碑工作完成後才執行完整驗證，確認整批內容與證據；里程碑的結案仍由生命週期追蹤 Issue 控制。</li><li><strong>同步：</strong>main 前進後，以另一張 PR 把變更帶回仍在開發的 dev 分支；不直接推送或改寫歷史。</li><li><strong>例外與授權：</strong>Hotfix 可從 <code>fix/*</code> 直接進 main，但仍需 Issue、驗證與審查；審查者、Alpha 例外與平台門禁都由「規則治理」定義。</li></ul></article>
       </div>
       <aside class="config-guidance"><strong>模板功能與客製化</strong><ul><li><strong>PR 格式：</strong><code>pull_request_template.md</code> 說明必填內文，<code>pr-policy.yml</code> 呼叫共用 validator 檢查標題、Label、Assignee、里程碑、Issue 關聯與目的分支。</li><li><strong>選分支模型：</strong><code>copier.yml</code> 的 <code>branch_strategy</code>，結果保存在 <code>.csarc/profile.json</code>。</li><li><strong>驗證與基準：</strong><code>ci.yml</code> 執行對應驗證；<code>delivery_sync.py</code> 確認候選包含必要的 main 內容。</li><li><strong>尚未自動化：</strong>發版 PR 建立與 main 更新後的跨分支同步仍由維運者建立 PR；相關 workflows 保留在 archive。</li></ul></aside>
-      <p class="reference">具體設計比較見<a href="#similar-tools">相似工具</a>；實際程式、Action 與封存邊界見<a href="#testing">CI/CD 設定</a>。</p>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -367,21 +362,20 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <article class="decision-step"><span class="step-label">其他常見做法</span><h3>依規模選擇不同組合</h3><ul><li><strong>自動更新服務：</strong>定期提出升版 PR，適合不想人工巡查版本的團隊。</li><li><strong>套件管理器政策：</strong>在安裝時限制版本年齡與鎖檔，保護本機與 CI。</li><li><strong>漏洞掃描：</strong>比對公開漏洞資料庫；即使沒有升版 PR，也能發現既有風險。</li><li><strong>成品清冊：</strong>發版時建立 SBOM，供事件追查與使用者核對。</li></ul></article>
         <article class="decision-step recommended">
           <span class="step-label">我們的選擇</span>
-          <h3>先守住可重現安裝，再逐項恢復自動化</h3>
-          <ul><li><strong>現在會執行：</strong>依賴檔案變更會走 CI；Python 與 TypeScript 都依鎖檔重裝，TypeScript 另拒絕未滿三天的新版本與發布者信任降級。</li><li><strong>已保留規格：</strong>Dependabot 一般更新等三天；OSV 對已公開漏洞立即失敗；Syft 從實際發版成品產生 SPDX SBOM。</li><li><strong>目前未啟用：</strong>Dependabot、OSV 排程與 Release workflow 仍在 archive，不能寫成已自動執行。</li><li><strong>工具邊界：</strong>鎖檔證明安裝內容一致，不證明發布者善意；漏洞掃描只認已公開資料；SBOM 是清冊，不是阻擋器。</li></ul>
+          <h3>可重現安裝、更新與漏洞掃描各自負責</h3>
+          <ul><li><strong>安裝：</strong>Python 與 TypeScript 都依鎖檔重裝；TypeScript 另拒絕未滿三天的新版本與發布者信任降級。</li><li><strong>更新：</strong>Dependabot 每週依生態圈分組提出 PR；一般新版等三天，已知安全修補不等待。</li><li><strong>漏洞：</strong>依賴變更與發版候選執行 OSV；每週與手動掃描補上沒有 PR 的期間。</li><li><strong>成品：</strong>依賴安全定義並驗證 Syft SPDX SBOM；發版流程只在真正成品出現時呼叫，不另寫一套規則。</li><li><strong>工具邊界：</strong>鎖檔證明安裝內容一致，不證明發布者善意；漏洞掃描只認已公開資料；SBOM 是清冊，不是阻擋器。</li></ul>
         </article>
       </div>
-      <aside class="config-guidance"><strong>模板功能與客製化</strong><ul><li><strong>鎖檔安裝與一般驗證：</strong><code>template/scripts/verify-fast.jinja</code>、<code>template/scripts/verify.jinja</code>；repo-template 使用 <code>scripts/verify-fast</code>、<code>scripts/verify-template.sh</code>。</li><li><strong>TypeScript 三天觀察期與 trust policy：</strong><code>template/pnpm-workspace.yaml</code>。</li><li><strong>發版成品與 SBOM 契約：</strong><code>scripts/release_assets.py</code>、<code>tests/test_release_assets.py</code>；目前只保留程式與測試。</li><li><strong>尚待恢復：</strong><code>archive/ci-cd/2026-08-27/*dependabot*</code>、<code>root-workflows/osv.yml</code> 與 release workflows；恢復時移出 archive，不能同時保留兩份。</li><li><strong>漏洞回報入口：</strong><code>SECURITY.md</code>；不得在公開 Issue 張貼敏感漏洞細節。</li></ul></aside>
-      <p class="reference">具體設計比較見<a href="#similar-tools">相似工具</a>；各 PR 階段與待恢復項目見<a href="#testing">CI/CD 設定</a>。</p>
+      <aside class="config-guidance"><strong>模板功能與客製化</strong><ul><li><strong>鎖檔安裝與一般驗證：</strong><code>template/scripts/verify-fast.jinja</code>、<code>template/scripts/verify.jinja</code>；repo-template 使用 <code>scripts/verify-fast</code>、<code>scripts/verify-template.sh</code>。</li><li><strong>TypeScript 三天觀察期與 trust policy：</strong><code>template/pnpm-workspace.yaml</code>。</li><li><strong>更新 PR：</strong><code>.github/dependabot.yml</code>；公版依 profile 由 <code>template/.github/dependabot.yml.jinja</code> 產生適用的生態圈。</li><li><strong>漏洞掃描：</strong><code>scripts/verify-dependencies</code> 是唯一入口；<code>ci.yml</code> 與 <code>osv.yml</code> 只決定何時呼叫。</li><li><strong>發版成品與 SBOM：</strong><code>scripts/release_assets.py</code>、<code>tests/test_release_assets.py</code> 定義與驗證清冊；成品交付時呼叫。</li><li><strong>漏洞回報入口：</strong><code>SECURITY.md</code>；不得在公開 Issue 張貼敏感漏洞細節。</li></ul></aside>
 {{< /legacy >}}
 
 {{< basic >}}
 | 這次要防什麼 | 模板目前怎麼處理 |
 | --- | --- |
 | 改了套件卻無法重裝 | PR 會依鎖定版本重新安裝並跑必要驗證 |
-| 剛發布的惡意版本 | TypeScript 套件先觀察三天；其他自動更新仍待恢復 |
-| 已公開漏洞沒有被注意 | 掃描規則已保留，但自動掃描尚未啟用 |
-| 發版後不知道包含什麼 | 依賴安全負責成品清冊規格；在真正成品產生時執行 |
+| 剛發布的惡意版本 | Dependabot 分組提出 PR；一般新版等三天，安全更新不等待 |
+| 已公開漏洞沒有被注意 | 依賴 PR 與發版候選跑 OSV；每週掃描補上沒有 PR 的期間 |
+| 發版後不知道包含什麼 | 依賴安全負責並驗證 SBOM；成品交付時執行 |
 
 {{< detail key="supply-boundaries" title="這四種保護為什麼要分開" >}}
 - **鎖定版本：**確認每次安裝使用同一批套件。
@@ -659,7 +653,7 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
         </article>
       </div>
       <aside class="tool-deferred" aria-label="未來選配與暫不採用工具">
-        <p><strong>依賴安全選型：</strong>保留 Dependabot、OSV-Scanner 與 Syft；自動化由 #407 逐項恢復，不把 archive 當成現行設定。</p>
+        <p><strong>依賴安全選型：</strong>Dependabot 提出更新、OSV-Scanner 檢查已知漏洞、Syft 建立 SBOM；三者各自負責，不互相替代。</p>
         <p><strong>尚未啟用：</strong>Go／Rust profile、Scorecard、Harden-Runner、網站託管／登入（<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">#79</a>）、Hugo、RAG、通用部署與監控；repo 內部網站與生成內容模板已可用。</p>
       </aside>
       <p class="ecosystem-reference reference">Ref. Official project repositories linked above; logo assets from each project's brand kit.</p>
@@ -670,7 +664,7 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
 | --- | --- | --- |
 | ![Copier logo](assets/copier.svg) [Copier](https://github.com/copier-org/copier) | 可更新模板 | 基本導入；差異走 PR |
 | ![zizmor logo](assets/zizmor.png) [zizmor](https://github.com/zizmorcore/zizmor) | GitHub Actions 安全 | 基本導入；workflow 變更與週期排程執行 |
-| Dependabot、OSV、Syft | 依賴更新、漏洞與 SBOM | 工具與責任已確定；自動化待恢復 |
+| Dependabot、OSV、Syft | 依賴更新、漏洞與 SBOM | Dependabot 與 OSV 已啟用；SBOM 契約以真正發版成品驗證 |
 | ![GitHub Community Projects logo](assets/github-community-projects.png) [Safe Settings](https://github.com/github-community-projects/safe-settings) | 多 repo 設定治理 | 規模與漂移門檻成立後才評估 |
 | ![Renovate logo](assets/renovate.png) [Renovate](https://github.com/renovatebot/renovate) | 更彈性的更新 preset | 現階段不取代 Dependabot |
 | ![GitHub Actions logo](assets/github-actions.svg) ![PyScaffold logo](assets/pyscaffold.svg) Starter Workflows、PyScaffold | 官方 workflow 與 Python 結構範例 | 只作內容檢查表，不照抄政策 |

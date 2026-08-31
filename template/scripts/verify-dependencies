@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+osv_scanner="${CSARC_OSV_SCANNER:-}"
+if [[ -z "$osv_scanner" ]]; then
+  osv_scanner="$("$repo_root/scripts/install-osv-scanner")"
+fi
+if [[ ! -x "$osv_scanner" ]]; then
+  echo "OSV-Scanner is not executable: $osv_scanner" >&2
+  exit 1
+fi
+
+cd "$repo_root"
+lockfiles=()
+for candidate in uv.lock pnpm-lock.yaml package-lock.json yarn.lock; do
+  [[ -f "$candidate" ]] && lockfiles+=(--lockfile "$candidate")
+done
+if [[ "${#lockfiles[@]}" -eq 0 ]]; then
+  echo "No supported dependency lockfile is present; OSV scan is not applicable."
+  exit 0
+fi
+exec "$osv_scanner" scan source "${lockfiles[@]}"
