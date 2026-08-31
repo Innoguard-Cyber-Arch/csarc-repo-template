@@ -2605,8 +2605,8 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>AI rules:</strong> the root <code>AGENTS.md</code> is the single source; <code>CLAUDE.md</code> is a thin import, and a child file exists only for a genuine scoped difference.</li>
 <li><strong>Change isolation:</strong> each writable task uses its own branch and worktree. Parallelize only independent scopes; read-only work needs no extra worktree.</li>
 <li><strong>Verification evidence:</strong> run the smallest relevant local program. Actions provide events and permissions and call the same program instead of copying logic.</li>
-<li><strong>Decisions and authorization:</strong> people own requirements, material trade-offs, external impact, and irreversible operations. Journey 07 alone defines review, merge eligibility, and exceptions.</li>
-<li><strong>Template creation and updates:</strong> Copier generates and updates the shared baseline; Journey 08 defines existing-repository updates.</li>
+<li><strong>Decisions and authorization:</strong> people own requirements, material trade-offs, external impact, and irreversible operations. Rules governance defines review, merge eligibility, and exceptions.</li>
+<li><strong>Template creation and updates:</strong> Copier generates and updates the shared baseline; the Template upgrades section defines existing-repository updates.</li>
 </ul>
 <p><code>README.md</code> serves people, <code>AGENTS.md</code> serves every agent, and <code>template/AGENTS.md.jinja</code> plus <code>copier.yml</code> emit only commands the selected profile can run. <code>scripts/cleanup-worktrees</code> and <code>scripts/test-worktree-cleanup</code> handle safe cleanup; <code>scripts/verify</code>, <code>.github/workflows/</code>, and <code>policies/</code> keep rules, evidence, automation, and governance separate.</p>
 <p>Concrete tools and sources are in <a href="/en/#similar-tools">Similar tools</a>; Journey 02 local checks and Actions are in <a href="/en/#testing">CI/CD settings</a>.</p>
@@ -3814,7 +3814,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>When a human must decide</strong><span>Compares who owns requirement trade-offs, external effects, irreversible operations, and merge authorization.<br><br><b>CSARC: </b>People own requirements, material trade-offs, external effects, and irreversible operations. Journey 07 alone defines review, merge eligibility, and exceptions.</span></th>
+          <th scope="row"><strong>When a human must decide</strong><span>Compares who owns requirement trade-offs, external effects, irreversible operations, and merge authorization.<br><br><b>CSARC: </b>People own requirements, material trade-offs, external effects, and irreversible operations. Rules governance defines review, merge eligibility, and exceptions.</span></th>
           <td><ul>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Human checkpoints</a>：Plans retain explicit human checkpoints for risk, direction, and irreversible steps.</span></li>
           </ul></td>

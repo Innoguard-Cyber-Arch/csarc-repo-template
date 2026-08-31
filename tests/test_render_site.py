@@ -176,7 +176,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "guidance.dataset.configDirect === 'true'" in (
         root / "site/static/detail-toggle.js"
     ).read_text(encoding="utf-8")
-    assert "07 單獨定義合併資格、權限與例外" in active_components
+    assert "規則治理單獨定義合併資格、權限與例外" in active_components
     assert "AI 能執行工作，但不能自行合併" not in active_components  # noqa: RUF001
 
     assert 'simple = "標準"' in chinese

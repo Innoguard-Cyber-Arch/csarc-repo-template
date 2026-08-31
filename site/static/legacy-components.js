@@ -44,13 +44,13 @@
         },
         {
           title: 'AI 規範、驗證與治理各有唯一責任',
-          goal: 'AGENTS.md 說明怎麼做；scripts 提供證據；Action 只包裝執行；07 單獨定義合併資格、權限與例外。',
+          goal: 'AGENTS.md 說明怎麼做；scripts 提供證據；Action 只包裝執行；規則治理單獨定義合併資格、權限與例外。',
           summary: '人保留需求、重大取捨、外部影響與不可逆操作；本頁不重複定義合併權限。',
           file: 'AGENTS.md＋scripts/verify＋.github/workflows/＋policies/',
           code: `# Local and Action use the same logic
 ./scripts/verify
 
-# Governance and merge eligibility live in Journey 07
+# Governance and merge eligibility live under Rules governance
 policies/actions.json
 policies/rulesets.json`
         }

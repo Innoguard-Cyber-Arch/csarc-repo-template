@@ -386,7 +386,7 @@
       "key": "humanDecisionBoundary",
       "title": {"zh-tw": "何時必須由人決定", "en": "When a human must decide"},
       "description": {"zh-tw": "比較需求取捨、外部影響、不可逆操作與合併授權由誰負責。", "en": "Compares who owns requirement trade-offs, external effects, irreversible operations, and merge authorization."},
-      "csarc": {"zh-tw": "人負責需求、重大取捨、外部影響與不可逆操作；Journey 07 單獨定義審查、合併資格與例外。", "en": "People own requirements, material trade-offs, external effects, and irreversible operations. Journey 07 alone defines review, merge eligibility, and exceptions."}
+      "csarc": {"zh-tw": "人負責需求、重大取捨、外部影響與不可逆操作；「規則治理」定義審查、合併資格與例外。", "en": "People own requirements, material trade-offs, external effects, and irreversible operations. Rules governance defines review, merge eligibility, and exceptions."}
     },
     {
       "key": "sharedVerificationEntry",

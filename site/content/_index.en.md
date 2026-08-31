@@ -105,8 +105,8 @@ Concrete tools, feature names, and source links are listed under [Similar tools]
 - **AI rules:** the root `AGENTS.md` is the single source; `CLAUDE.md` is a thin import, and a child file exists only for a genuine scoped difference.
 - **Change isolation:** each writable task uses its own branch and worktree. Parallelize only independent scopes; read-only work needs no extra worktree.
 - **Verification evidence:** run the smallest relevant local program. Actions provide events and permissions and call the same program instead of copying logic.
-- **Decisions and authorization:** people own requirements, material trade-offs, external impact, and irreversible operations. Journey 07 alone defines review, merge eligibility, and exceptions.
-- **Template creation and updates:** Copier generates and updates the shared baseline; Journey 08 defines existing-repository updates.
+- **Decisions and authorization:** people own requirements, material trade-offs, external impact, and irreversible operations. Rules governance defines review, merge eligibility, and exceptions.
+- **Template creation and updates:** Copier generates and updates the shared baseline; the Template upgrades section defines existing-repository updates.
 
 `README.md` serves people, `AGENTS.md` serves every agent, and `template/AGENTS.md.jinja` plus `copier.yml` emit only commands the selected profile can run. `scripts/cleanup-worktrees` and `scripts/test-worktree-cleanup` handle safe cleanup; `scripts/verify`, `.github/workflows/`, and `policies/` keep rules, evidence, automation, and governance separate.
 
