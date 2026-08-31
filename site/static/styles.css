@@ -260,7 +260,7 @@
     .file-pane { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
     .file-list-head, .file-row {
       display: grid;
-      min-width: 0;
+      min-width: 128px;
       grid-template-columns: minmax(0, 1.55fr) minmax(120px, .68fr) minmax(155px, .72fr);
       align-items: center;
       gap: 8px;
@@ -345,8 +345,9 @@
     .similar-tools-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
     .similar-tools-tabs { display: flex; align-items: end; gap: 4px; margin-bottom: -1px; padding-left: 10px; z-index: 2; }
     .similar-tools-tabs button {
-      min-width: 210px;
-      padding: 7px 16px 8px;
+      flex: 0 0 auto;
+      min-width: 136px;
+      padding: 6px 10px 7px;
       border: 1px solid #a9a99f;
       border-bottom-color: var(--line);
       border-radius: 8px 8px 0 0;
@@ -356,6 +357,7 @@
       font-size: 16px;
       font-weight: 900;
       text-align: left;
+      white-space: nowrap;
     }
     .similar-tools-tabs button small { display: block; margin-bottom: 2px; font-size: 12px; letter-spacing: .03em; }
     .similar-tools-tabs button[aria-selected="true"] { border-top: 5px solid var(--yellow); border-bottom-color: white; background: white; color: var(--ink); }
@@ -416,6 +418,10 @@
     .similar-tools-testing-matrix tbody th span { margin-top: 3px; color: var(--muted); font-weight: 500; }
     .similar-tools-testing-matrix th, .similar-tools-testing-matrix td { padding: 8px 10px; vertical-align: top; }
     .similar-tools-testing-matrix td code { overflow-wrap: anywhere; white-space: normal; }
+    .testing-duration-matrix tbody th strong { display: block; }
+    .testing-duration-list { margin: 0; padding-left: 18px; }
+    .testing-duration-list li + li { margin-top: 4px; }
+    .testing-duration-total { margin: 7px 0 0; padding-top: 6px; border-top: 1px solid var(--line); }
     .testing-stage-list { margin: 0; padding-left: 18px; }
     .testing-stage-list > li + li { margin-top: 6px; }
     .testing-stage-list > li > strong { font-size: 17px; }
@@ -1036,7 +1042,7 @@
     .dense-flow .flow-step { padding: 8px 10px; }
 
     .pipeline-map { display: grid; flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr) auto auto; gap: 12px; }
-    .pipeline-track { display: grid; min-height: 0; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 18px; }
+    .pipeline-track { display: grid; min-height: 0; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px; }
     .pipeline-stage {
       position: relative;
       min-width: 0;

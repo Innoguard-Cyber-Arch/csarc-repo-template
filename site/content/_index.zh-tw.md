@@ -80,74 +80,64 @@ fit = "符合畫面"
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="flow" track="flow" eyebrow="開發者旅程" title="從需求到可交付版本" subtitle="01–06 跟著工作走；07–10 持續支撐整套流程。" class="legacy-slide pipeline-slide" legacy="true" >}}
+{{< slide key="flow" track="flow" eyebrow="CI/CD 流程" title="模板會帶你走完每次變更" subtitle="依表單填寫、提交 PR、查看結果；模板負責準備正確設定並指出要修正的地方。" class="legacy-slide pipeline-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
-        <h2>一張圖看懂：<span class="accent">程式怎麼從需求走到可交付版本</span></h2>
-        <p class="subtitle">CI 是 PR 上的自動檢查與回饋；CD 是合併後建立可追溯版本與成品。01–06 跟著工作走，07–10 在底層維持整套流程。</p>
+        <h2>模板會把每次變更<span class="accent">帶到正確的位置</span></h2>
+        <p class="subtitle">使用者依 Issue 與 PR 的提示工作；模板準備表單、設定與必要檢查。維運模式才需要知道實際流程名稱。</p>
       </header>
       <div class="pipeline-map">
         <div class="pipeline-track" aria-label="日常開發與交付主流程">
           <article class="pipeline-stage">
-            <span class="pipeline-phase">PLAN｜先決定要做什麼</span>
-            <div class="pipeline-tags"><span class="pipeline-tag">01</span></div>
-            <h3>定義工作</h3>
-            <p>用 Issue 說清楚問題與完成條件，其餘選填寫進補充。</p>
+            <span class="pipeline-phase">第一步｜先說清楚</span>
+            <h3>建立工作</h3>
+            <p>Issue 表單會提示問題、完成條件與必要背景。</p>
           </article>
           <article class="pipeline-stage">
-            <span class="pipeline-phase">CODE｜在短分支完成</span>
-            <div class="pipeline-tags"><span class="pipeline-tag">02</span></div>
-            <h3>實作與測試</h3>
-            <p>人或 AI 依 AGENTS.md 修改，先在本機驗證。</p>
+            <span class="pipeline-phase">第二步｜開始修改</span>
+            <h3>完成變更</h3>
+            <p>人或 AI 依 repo 內指引修改，先做最相關的本機檢查。</p>
           </article>
           <article class="pipeline-stage">
-            <span class="pipeline-phase">PR｜把變更交給團隊看</span>
-            <div class="pipeline-tags"><span class="pipeline-tag">04</span></div>
+            <span class="pipeline-phase">第三步｜交給團隊</span>
             <h3>提出 PR</h3>
-            <p>連回 Issue，說明目的、測試與回退方式。</p>
+            <p>PR 範本會提示連回 Issue，並說明完成內容與驗證結果。</p>
           </article>
           <article class="pipeline-stage">
-            <span class="pipeline-phase">CI｜機器先找明確錯誤</span>
-            <div class="pipeline-tags"><span class="pipeline-tag">03</span><span class="pipeline-tag">05</span></div>
+            <span class="pipeline-phase">第四步｜系統協助</span>
             <h3>自動檢查</h3>
-            <p>Issue PR 跑 fast；promotion 才跑 full 與可選 canary。</p>
+            <p>目前會依變更內容選擇文件、快速或完整驗證。</p>
           </article>
           <article class="pipeline-stage">
-            <span class="pipeline-phase">REVIEW｜人判斷是否合理</span>
-            <div class="pipeline-tags"><span class="pipeline-tag">04</span></div>
+            <span class="pipeline-phase">第五步｜確認結果</span>
             <h3>審查與合併</h3>
-            <p>修到檢查通過、同事核准，先進對應 delivery branch。</p>
-          </article>
-          <article class="pipeline-stage best">
-            <span class="pipeline-phase">CD｜交付同一份成品</span>
-            <div class="pipeline-tags"><span class="pipeline-tag best">06</span></div>
-            <h3>版本與交付</h3>
-            <p>promotion 批次建立 SemVer、artifact、checksum 與 SBOM；部署另訂。</p>
+            <p>結果與審查都清楚後再合併；強制程度依 GitHub 方案能力。</p>
           </article>
         </div>
         <div class="pipeline-loop" aria-label="CI 回饋迴圈">
-          <strong>↶ 檢查失敗：回到 02 修正，再更新同一張 PR</strong>
-          <span>交付後的新問題回到 01，成為下一張有邊界的 Issue。</span>
+          <strong>↶ 檢查失敗：依結果修正，再更新同一張 PR</strong>
+          <span>合併後發現的新問題，另外建立一張範圍清楚的 Issue。</span>
         </div>
         <div class="pipeline-foundation" aria-label="支撐整體流程的平台能力">
-          <div class="pipeline-foundation-label"><strong>一直支撐全流程</strong><span>不是每次手動執行，而是公版持續維護的基礎設施。</span></div>
-          <article class="pipeline-foundation-card"><h3><span class="pipeline-tag">07</span>規則治理</h3><p>權限、分支與合併規則一致。</p></article>
-          <article class="pipeline-foundation-card"><h3><span class="pipeline-tag">08</span>模板升級</h3><p>用 Copier 把政策更新帶回 repo。</p></article>
-          <article class="pipeline-foundation-card"><h3><span class="pipeline-tag">09</span>內部網站</h3><p>讓做法、限制與決策容易查找。</p></article>
-          <article class="pipeline-foundation-card best"><h3><span class="pipeline-tag best">10</span>導入層級</h3><p>基本先做；條件成熟再加進階能力。</p></article>
+          <div class="pipeline-foundation-label"><strong>模板先準備好</strong><span>一般使用者依提示操作；維運者才需要調整設定。</span></div>
+          <article class="pipeline-foundation-card"><h3>工作格式</h3><p>Issue 與 PR 表單提示必要內容。</p></article>
+          <article class="pipeline-foundation-card"><h3>驗證規則</h3><p>依變更內容選擇必要檢查。</p></article>
+          <article class="pipeline-foundation-card"><h3>合併設定</h3><p>依 GitHub 方案套用可用保護。</p></article>
+          <article class="pipeline-foundation-card best"><h3>版本發佈</h3><p>設定仍保留；Action 尚未啟用。</p></article>
         </div>
       </div>
 {{< /legacy >}}
 
 {{< basic >}}
-| 階段 | 人與 agent 做什麼 | 自動化證據 |
-| --- | --- | --- |
-| 01 定義工作 | Issue 說清楚問題與完成條件 | 標題、欄位與重複工作檢查 |
-| 02 實作測試 | 依 `AGENTS.md` 在短分支與獨立 worktree 修改 | 本機 focused checks |
-| 03 提出 PR | 連回 Issue，說明目的、驗證與回退 | PR policy 與 delivery route |
-| 04 自動檢查 | 一般 Issue PR 跑 fast | `verify` aggregate 回報結果 |
-| 05 審查合併 | 修正失敗、解決 review、先進 delivery branch | 核准與 required checks |
-| 06 版本交付 | promotion 才批次建立版本與成品 | full verify、checksum、SBOM、attestation |
+| 你正在做什麼 | 模板會怎麼引導 |
+| --- | --- |
+| 建立工作 | Issue 表單提示你寫清楚問題、完成條件與必要背景 |
+| 完成修改 | Repo 內指引告訴人與 AI 怎麼工作，以及先跑哪個本機檢查 |
+| 提交 PR | PR 範本提示連回 Issue，並填寫完成內容與驗證結果 |
+| 查看結果 | 模板依變更內容選擇必要檢查，失敗時指出需要修正的項目 |
+| 審查與合併 | 檢查結果和人工審查都清楚後，再把變更合併到正確分支 |
+
+一般使用者不必記 workflow 或 script 名稱；依畫面提示操作即可。目前自動化以工作單、PR 規則與必要驗證為主，版本與發佈流程尚未啟用。
 
 {{< detail key="flow-foundation" title="橫跨全流程的四項基礎" >}}
 - **07 規則治理：** 權限、分支、審查與合併規則一致。
@@ -155,16 +145,16 @@ fit = "符合畫面"
 - **09 內部網站：** 讓做法、限制、證據與決策容易查找。
 - **10 導入層級：** 基本能力先做；需求與平台條件成熟後才加進階能力。
 
-CI 失敗就回到 02 修正同一張 PR；交付後的新問題回到 01，成為下一張有邊界的 Issue。
+檢查失敗就修正同一張 PR；合併後的新問題則另外建立 Issue。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="files" track="files" eyebrow="責任地圖" title="模板實際加入與維護的檔案" subtitle="公版可提更新，但不靜默覆寫專案持有的產品內容。" class="legacy-slide managed-files-slide" legacy="true" >}}
+{{< slide key="files" track="files" eyebrow="檔案地圖" title="模板把必要設定放到正確位置" subtitle="列出目前實際產生的主要檔案；公版可提出更新，但不會靜默覆寫產品內容。" class="legacy-slide managed-files-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
-        <h2>模板會把這些<span class="accent">工程基礎設施放進你的 repo</span></h2>
-        <p class="subtitle">先選 CI/CD-only、Python、TypeScript 或兩者；共用 GitHub 層不變，只有所選語言的工具與產品目錄會出現。</p>
+        <h2>模板會把<span class="accent">必要設定放到正確位置</span></h2>
+        <p class="subtitle">共用規則與 5 條現行 GitHub Actions 每個 repo 都有；語言工具與產品目錄才依 CI/CD-only、Python、TypeScript 或混合模式產生。</p>
       </header>
       <div class="repo-map-window" aria-label="模板產生檔案的視覺對照">
         <div class="repo-map-toolbar">
@@ -176,26 +166,24 @@ CI 失敗就回到 02 修正同一張 PR；交付後的新問題回到 01，成�
         <div class="repo-tree-body">
           <div class="repo-tree-row"><span class="repo-tree-path">.copier-answers.yml＋.csarc/profile.json</span><span class="repo-tree-purpose"><span class="journey-code">08</span><span class="purpose-copy">來源、語言與分支模式</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path">.gitignore</span><span class="repo-tree-purpose"><span class="journey-code">02</span><span class="purpose-copy">環境雜訊／語言產物</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path folder">.github/</span><span class="repo-tree-purpose"><span class="journey-code">03–06</span><span class="purpose-copy">GitHub 自動化入口</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1">CODEOWNERS＋REVIEWERS＋governance workflow</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">指定並輪派個別 reviewer</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path folder">.github/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04</span><span class="purpose-copy">GitHub 表單、自動檢查與審查設定</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1">CODEOWNERS＋REVIEWERS</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">指定 owner 與 reviewer 候選</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">ISSUE_TEMPLATE/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">工作單欄位／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1">dependabot.yml</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">依語言更新相依</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">pull_request_template.md</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">PR 必填內容</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03–06</span><span class="purpose-copy">八條自動流程</span></span><span class="scope-badge mixed">混合</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04</span><span class="purpose-copy">5 條現行自動流程</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">ci.yml</span><span class="repo-tree-purpose"><span class="journey-code">03</span><span class="purpose-copy">執行已宣告模組</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">osv.yml</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">跨生態漏洞掃描</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">issue-triage.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">檢查並整理工作單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">milestone-lifecycle.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">同步交付批次狀態</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">pr-policy.yml</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">Issue／分支／PR 規則</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">release-please.yml</span><span class="repo-tree-purpose"><span class="journey-code">06</span><span class="purpose-copy">版本與 Release PR</span></span><span class="scope-badge mixed">混合</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">release.yml</span><span class="repo-tree-purpose"><span class="journey-code">05／06</span><span class="purpose-copy">依語言打包與 SBOM</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">spec-to-issue.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">規格自動開單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">zizmor.yml</span><span class="repo-tree-purpose"><span class="journey-code">03</span><span class="purpose-copy">Actions 安全</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">docs/specs/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">功能規格／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge project">專案持有</span></div>
+          <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">docs/＋site/</span><span class="repo-tree-purpose"><span class="journey-code">09</span><span class="purpose-copy">專案說明、決策與內部網站</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path folder">policies/</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">repo 規則／治理</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path folder">scripts/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／07</span><span class="purpose-copy">開單、驗證與套用設定</span></span><span class="scope-badge mixed">混合</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path">version source＋CHANGELOG＋release-please config／manifest</span><span class="repo-tree-purpose"><span class="journey-code">06</span><span class="purpose-copy">單一版號與變更紀錄</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge shared">共同維護</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path">version source＋CHANGELOG＋release-please config／manifest</span><span class="repo-tree-purpose"><span class="journey-code">06</span><span class="purpose-copy">保留版本基線；發版 Action 未啟用</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge shared">共同維護</span></div>
           <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">src/＋tests/；typescript/src/＋tests/</span><span class="repo-tree-purpose"><span class="journey-code">02／03</span><span class="purpose-copy">啟用模組的產品程式</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge project">專案持有</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path">README.md＋AGENTS.md＋CLAUDE.md</span><span class="repo-tree-purpose"><span class="journey-code">01–08</span><span class="purpose-copy">人與 AI 的使用規範</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path">pyproject／package／兩種 lockfile</span><span class="repo-tree-purpose"><span class="journey-code">03／05</span><span class="purpose-copy">版本與語言工具</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge shared">共同維護</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path">README.md＋AGENTS.md＋CLAUDE.md</span><span class="repo-tree-purpose"><span class="journey-code">01–08</span><span class="purpose-copy">人與 AI 的使用規範</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path">pyproject.toml／uv.lock／package.json／pnpm-lock.yaml</span><span class="repo-tree-purpose"><span class="journey-code">03／05</span><span class="purpose-copy">語言工具與相依版本</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge shared">共同維護</span></div>
         </div>
         <div class="repo-map-legend"><span><strong>黃色編號：</strong>對照左側旅程 tag。<strong>模板影響：</strong>公版主導會在 update 提出差異；共同維護可能衝突並由人處理。</span><span><strong>橘線：</strong>專案持有且不改寫。</span></div>
       </div>
@@ -206,16 +194,17 @@ CI 失敗就回到 02 修正同一張 PR；交付後的新問題回到 01，成�
 | --- | --- | --- |
 | `.copier-answers.yml`、`.csarc/profile.json` | 記錄公版來源、profile 與分支模式 | 公版主導 |
 | `.github/ISSUE_TEMPLATE/`、`pull_request_template.md` | 工作定義與 PR 契約 | 公版主導 |
-| `.github/workflows/` | CI、promotion、release、OSV 與治理漂移 | 公版主導 |
-| `AGENTS.md`、`README.md` | Agent 工作方式與使用者入口 | 共同維護 |
+| `.github/workflows/` | 5 條現行流程：工作單整理、Milestone 同步、規格開單、PR 規則與必要驗證 | 公版主導 |
+| `AGENTS.md`、`README.md`、`CLAUDE.md` | Agent 工作方式與使用者入口 | 共同維護 |
 | `policies/`、`CODEOWNERS`、`.github/REVIEWERS` | 期望設定、owner 與 reviewer | 共同維護 |
-| `scripts/verify` | 生成 repo 的單一驗證入口 | 公版主導 |
+| `scripts/` | 本機驗證、工作同步與套用設定 | 公版主導 |
+| `docs/`、`site/` | 專案說明、規格、決策與內部網站 | 共同維護 |
 | `src/`、產品測試與規格 | 真正產品行為 | 專案持有 |
 
 {{< detail key="files-update" title="更新時怎麼保護產品內容" >}}
 Copier 把更新帶進短分支，衝突留在 PR 由人檢視。建立、既有 repo 導入與同一 repo 後續 update 都有 fixture；回歸測試會刻意加入產品檔案，再確認更新後內容沒有被覆寫。
 
-Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `scripts/sync-paired-files.sh` 從 root 產生副本；`--check` 驗證內容與可執行位元沒有漂移。僅因 Copier 變數而不同的檔案則由實際生成專案比對。
+Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同步程式維持一致；只因專案選項而不同的檔案則以實際生成專案驗證。目前版本與發佈設定檔仍保留，但對應 GitHub Actions 尚未啟用。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
@@ -240,15 +229,15 @@ Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `sc
         <details class="decision-step decision-fold recommended" open>
           <summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一條工作線，按需要增加分組</span></summary>
           <ul class="work-definition-list">
-            <li><strong>整體：</strong>Issue 說清楚 → branch 實作 → PR 審查與交付；本模板提供表單與規則，單一本機驗證入口由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">#382</a> 建置中。</li>
+            <li><strong>整體：</strong>Issue 說清楚 → branch 實作 → PR 審查與交付；本模板提供一致的表單、規則與驗證入口。</li>
             <li><strong>Milestone：</strong>多張工作有共同期限、整合或發版時才建立；收錄 Task／Bug 與對應 PR。</li>
-            <li><strong>Issue：</strong><ul><li><strong>標題：</strong>英文 ASCII 12–80 字元、至少三個詞；不加類型前綴，結尾不加句點。</li><li><strong>內文：</strong>類型、問題與完成條件必填；補充可寫關聯、驗證與風險。</li><li><strong>工作類別：</strong>Feature＝共同成果；Task＝可獨立完成的工作；Bug＝不符合預期；Documentation＝純文件工作。GitHub 原生 Type 只使用 Feature／Task／Bug；Duplicate 與 Hotfix 都不是 Type。</li><li><strong>Label：</strong>工作分類擇一：enhancement、bug、documentation；重複案件使用 duplicate，交付追蹤才使用 promotion。</li><li><strong>Assignee：</strong>建立者在送出時自我指派；agent／CLI 建立時明確指定 <code>@me</code>，正式交接時再更換。</li><li><strong>何時拆 Sub-issue：</strong>同一張 PR 能完成並用同一組結果驗證就不拆；能獨立實作、驗證與交付，或超出原範圍但必須補做才拆。</li><li><strong>Parent：</strong>描述仍未完整達成的共同成果；必要 Sub-issues 完成後才能結案。先後順序另用 Dependency。</li></ul></li>
+            <li><strong>Issue：</strong><ul><li><strong>選擇工作類別：</strong>Feature＝需要多項工作一起完成的成果；Task＝可獨立完成與驗證的工作；Bug＝結果不符合預期；Documentation＝只修改文件或範例。</li><li><strong>寫清楚工作：</strong>使用清楚的英文標題，說明問題、完成條件與驗證；建立者預設負責。</li><li><strong>何時拆 Sub-issue：</strong>同一張 PR 能完成並用同一組結果驗證就不拆；能獨立實作、驗證與交付，或超出原範圍但必須補做才拆。</li><li><strong>Parent：</strong>描述仍未完整達成的共同成果；必要 Sub-issues 完成後才能結案。先後順序另用 Dependency。</li></ul></li>
             <li><strong>PR：</strong><ul><li><strong>標題：</strong><code>type(scope)!: English summary</code>；scope 選填，<code>!</code> 表示破壞性變更。</li><li><strong>Angular types：</strong><code>feat</code> 新功能、<code>fix</code> 修錯、<code>docs</code> 文件、<code>refactor</code> 重構、<code>test</code> 測試、<code>build</code> 建置／相依、<code>ci</code> 自動化、<code>chore</code> 維護、<code>revert</code> 撤銷。</li><li><strong>內文：</strong>Purpose 與 <code>Closes #N</code>、完成清單必填；補充可寫風險、回退與額外影響。</li><li><strong>Label：</strong>enhancement、bug、documentation 擇一；特殊交付才另加 promotion（正式交付）、hotfix（緊急修正）或 release-recovery（補建遺漏的 Release，詳見 06），不能使用 duplicate。</li><li><strong>Assignee：</strong>建立者在送出後自我指派；交接時可更換，但作者仍列為 Assignee。</li></ul></li>
             <li><strong>例外：</strong>Duplicate 是 Issue 的重複結案方式，不開 PR；Hotfix 是 Bug 的緊急交付 Label，可直接進 main，但仍須 Issue、驗證與審查。</li>
           </ul>
         </details>
       </div>
-      <aside class="config-guidance" data-config-direct="true"><strong>模板設定與客製化位置</strong><ul><li><strong>工作單欄位：</strong><code>.github/ISSUE_TEMPLATE/*.yml</code> 定義各工作入口的原生 Type、Label、問題與完成條件，<code>config.yml</code> 關閉空白 Issue；四種表單已由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/384" target="_blank" rel="noreferrer">#384</a> 實作</li><li><strong>工作層級：</strong><code>AGENTS.md</code> 定義 Feature／Task／Bug 的使用規則，<code>docs/adr/spec-story-and-work-items.md</code> 保存長期理由；團隊只改操作方式時調整前者，改變角色責任時兩者一起更新</li><li><strong>規格同步：</strong><code>docs/specs/</code> 放各專案的長期規格，<code>scripts/spec_to_issue.py</code> 定義 <code>tracking: issue</code>、<code>story</code>、<code>none</code> 的同步行為；一般客製只新增或修改 spec，不必改同步程式</li><li><strong>交付批次：</strong><code>docs/milestone-description.md</code> 定義 Milestone 的 Problem、Outcome、Acceptance criteria 與 Verification；可改團隊用語與範例，但仍要保留真實 due date 與可驗收結果</li></ul></aside>
+      <aside class="config-guidance" data-config-direct="true"><strong>模板設定與客製化位置</strong><ul><li><strong>Issue 表單限制：</strong><code>.github/ISSUE_TEMPLATE/*.yml</code> 規定標題使用 12–80 個英文 ASCII 字元、至少三個詞，並要求填寫問題與完成條件；<code>config.yml</code> 關閉空白 Issue</li><li><strong>Type、Label 與負責人：</strong>Feature／Task／Bug 使用同名原生 Type；Documentation 使用 Task Type 加 documentation Label；enhancement、bug、documentation 擇一，duplicate 與 promotion 只在對應情境加入；建立者自我指派，agent／CLI 使用 <code>@me</code></li><li><strong>工作層級：</strong><code>AGENTS.md</code> 定義 Feature／Task／Bug 的使用規則，<code>docs/adr/spec-story-and-work-items.md</code> 保存長期理由；團隊只改操作方式時調整前者，改變角色責任時兩者一起更新</li><li><strong>規格同步：</strong><code>docs/specs/</code> 放各專案的長期規格，<code>scripts/spec_to_issue.py</code> 定義 <code>tracking: issue</code>、<code>story</code>、<code>none</code> 的同步行為；一般客製只新增或修改 spec，不必改同步程式</li><li><strong>交付批次：</strong><code>docs/milestone-description.md</code> 定義 Milestone 的 Problem、Outcome、Acceptance criteria 與 Verification；可改團隊用語與範例，但仍要保留真實 due date 與可驗收結果</li></ul></aside>
       <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues" target="_blank" rel="noreferrer">GitHub sub-issues</a>。具體工具、功能名稱與資料來源統一整理於<a href="#similar-tools">相似工具</a>。</p>
 {{< /legacy >}}
 
@@ -257,14 +246,16 @@ Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `sc
 
 - **整體：** Issue 說清楚 → branch 實作 → PR 審查與交付。
 - **Milestone：** 多張工作有共同期限、整合或發版時才建立。
-- **Issue：** 寫問題、完成條件與驗證；Type 可為 Feature、Task 或 Bug。
-  - Feature＝共同成果；Task＝可獨立完成的工作；Bug＝不符合預期。
-  - 標題使用 12–80 個英文 ASCII 字元；內文必填類型、問題與完成條件。
-  - 工作 Label 從 enhancement、bug、documentation 擇一；建立者在送出時自我指派。
+- **Issue：** 選擇 Feature、Task、Bug 或 Documentation 表單，再寫清楚問題、完成條件與驗證。
+  - Feature＝需要多項工作一起完成的成果。
+  - Task＝可以獨立完成與驗證的工作。
+  - Bug＝實際結果與預期不同。
+  - Documentation＝只修改文件或範例。
+  - 標題使用清楚的英文；建立者預設負責這張 Issue。
   - 同一張 PR 能完成並用同一組結果驗證就不拆；能獨立實作與驗證，或超出原範圍但必須補做，才拆成 Sub-issue。
   - Parent 描述仍未完整達成的共同成果；所有必要 Sub-issues 完成後才能結案。Dependency 才表示先後阻擋。
-- **PR：** 標題使用 <code>type(scope)!: English summary</code>；內文必填 Purpose、<code>Closes #N</code> 與完成清單，建立者在送出後自我指派。
-- **例外：** Duplicate 是 Issue 的重複結案方式；Hotfix 是 Bug 的緊急交付 Label。兩者都不是 Issue Type。
+- **PR：** 寫清楚完成了什麼、連結要關閉的 Issue，完成檢查後交付；建立者預設負責。
+- **例外：** 重複工作以 Duplicate 結案；Hotfix 表示緊急修正，但仍需要 Issue、驗證與審查。
 
 ### 其他常見做法
 
@@ -275,12 +266,6 @@ Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `sc
 
 具體工具、功能名稱與資料來源見[相似工具](#similar-tools)。
 
-{{< detail key="method-lifecycle" title="現在能做什麼，哪些仍在開發" >}}
-- **已生效：** 組織已啟用原生 Feature／Task／Bug Types；四種 Issue Form 直接寫入 Type／Label；[#386](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/386) 已恢復 Issue triage、PR policy、Spec sync 與 Milestone lifecycle 四條 GitHub Actions。
-- **開發中：** [#382](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382) 將本機與 Action 共用的工作定義驗證收斂為單一入口。
-- **尚未啟用：** Issue-to-promotion orchestration 與其他 Journey 的 CI/CD 仍封存；目前四條 Journey 01 workflow 都不是 required status check。
-- **執行限制：** repository Actions 設定已開啟，但 GitHub 目前因帳務限制在 runner 啟動前拒絕執行，因此尚無線上成功證據。
-{{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
 
@@ -293,9 +278,9 @@ Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `sc
       <p class="context-line"><strong>模板的作用｜</strong>把 agent 開始前要讀什麼、可修改到哪裡、如何隔離平行工作、怎樣留下驗證，以及何時必須停下來問人寫進 repo；文字規範本身不是自動門禁。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">常見的 AI 協作設計</span></summary><ul><li><strong>Repo 內指引：</strong>把固定命令與界線放在版本控制中，讓不同 agent 讀同一份規則。</li><li><strong>規格產物接力：</strong>大型工作先產生 spec、plan、tasks，再逐步交給 agent 執行。</li><li><strong>角色與調度：</strong>用專門角色、skills 或佇列安排多個 agent；適合工作量已大到需要額外協調時。</li><li><strong>人類檢查點：</strong>在需求、重大取捨、外部影響與不可逆操作前停下來取得決定。</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">六項責任各有唯一位置</span></summary><ul class="work-definition-list"><li><strong>工作與脈絡：</strong>GitHub Issue／PR 記錄範圍、進度與證據；核准的 spec／ADR 保存長期決策，跨 session、高風險或難復原工作才增加 plan，不保存聊天逐字稿。</li><li><strong>AI 規範：</strong>根目錄 <code>AGENTS.md</code> 是唯一來源；<code>CLAUDE.md</code> 只做薄匯入，子目錄只有規則真的不同時才覆寫。</li><li><strong>修改隔離：</strong>每項可寫工作各用 branch／worktree，只平行處理互不依賴的範圍；唯讀工作不必另開 worktree。</li><li><strong>驗證證據：</strong>執行最小且相關的本機程式；Action 只負責事件、權限與呼叫同一程式，不複製邏輯。</li><li><strong>決策與授權：</strong>人負責需求、重大取捨、外部影響與不可逆操作；審查、合併資格與例外由 Journey 07 單獨定義。</li><li><strong>模板建立與更新：</strong>Copier 負責產生與更新共用基線；既有 repo 的更新契約由 Journey 08 定義。</li></ul></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">六項責任各有唯一位置</span></summary><ul class="work-definition-list"><li><strong>工作與脈絡：</strong>GitHub Issue／PR 記錄範圍、進度與證據；核准的 spec／ADR 保存長期決策，跨 session、高風險或難復原工作才增加 plan，不保存聊天逐字稿。</li><li><strong>AI 規範：</strong>根目錄 <code>AGENTS.md</code> 是唯一來源；<code>CLAUDE.md</code> 只做薄匯入，子目錄只有規則真的不同時才覆寫。</li><li><strong>修改隔離：</strong>每項可寫工作各用 branch／worktree，只平行處理互不依賴的範圍；唯讀工作不必另開 worktree。</li><li><strong>驗證證據：</strong>執行最小且相關的本機程式；Action 只負責事件、權限與呼叫同一程式，不複製邏輯。</li><li><strong>決策與授權：</strong>人負責需求、重大取捨、外部影響與不可逆操作；審查、合併資格與例外由「規則治理」定義。</li><li><strong>模板建立與更新：</strong>Copier 負責產生與更新共用基線；既有 repo 的更新契約由「模板升級」定義。</li></ul></details>
       </div>
-      <aside class="config-guidance" data-config-direct="true"><strong>模板功能與客製化</strong><ul><li><strong>人與 AI 各看哪份文件：</strong><code>README.md</code> 給人，<code>AGENTS.md</code> 給所有 agent；<code>CLAUDE.md</code> 只匯入同一份規範。</li><li><strong>只產生 profile 真能執行的指令：</strong><code>template/AGENTS.md.jinja</code> 與 <code>copier.yml</code> 依語言產生內容，<code>scripts/verify-template.sh</code> 驗證結果。</li><li><strong>平行可寫工作用 branch／worktree 隔離：</strong><code>AGENTS.md</code> 定義做法；<code>scripts/cleanup-worktrees</code> 與 <code>scripts/test-worktree-cleanup</code> 負責安全清理。</li><li><strong>規範、驗證與治理分開：</strong><code>AGENTS.md</code> 說明做法，<code>scripts/verify</code> 提供證據，<code>.github/workflows/</code> 只包裝執行，<code>policies/</code> 保存治理設定；此責任分界已由 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388" target="_blank" rel="noreferrer">#388</a>／PR #389 實作。</li></ul></aside>
+      <aside class="config-guidance" data-config-direct="true"><strong>模板功能與客製化</strong><ul><li><strong>人與 AI 各看哪份文件：</strong><code>README.md</code> 給人，<code>AGENTS.md</code> 給所有 agent；<code>CLAUDE.md</code> 只匯入同一份規範。</li><li><strong>只產生 profile 真能執行的指令：</strong><code>template/AGENTS.md.jinja</code> 與 <code>copier.yml</code> 依語言產生內容，<code>scripts/verify-template.sh</code> 驗證結果。</li><li><strong>平行可寫工作用 branch／worktree 隔離：</strong><code>AGENTS.md</code> 定義做法；<code>scripts/cleanup-worktrees</code> 與 <code>scripts/test-worktree-cleanup</code> 負責安全清理。</li><li><strong>規範、驗證與治理分開：</strong><code>AGENTS.md</code> 說明做法，<code>scripts/verify</code> 提供證據，<code>.github/workflows/</code> 只包裝執行，<code>policies/</code> 保存治理設定。</li></ul></aside>
       <p class="method-reference reference">具體工具、功能名稱與資料來源統一整理於<a href="#similar-tools">相似工具</a>；Journey 02 的本機檢查與 Action 現況見<a href="#testing">CI/CD 設定</a>。</p>
 {{< /legacy >}}
 
@@ -304,47 +289,36 @@ Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `sc
 - **AI 規範：** 根目錄 `AGENTS.md`；`CLAUDE.md` 只薄匯入。
 - **修改隔離：** 每項可寫工作各用 branch／worktree；唯讀工作不用。
 - **驗證證據：** 本機程式是唯一邏輯；Action 只呼叫它。
-- **決策與授權：** 人保留重大決策；審查與合併規則只由 Journey 07 定義。
-- **模板建立與更新：** Copier 負責共用基線；既有 repo 更新由 Journey 08 定義。
+- **決策與授權：** 人保留重大決策；審查與合併規則只由「規則治理」定義。
+- **模板建立與更新：** Copier 負責共用基線；既有 repo 更新由「模板升級」定義。
 
 具體工具見[相似工具](#similar-tools)，執行方式見 [CI/CD 設定](#testing)。
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="contract" track="contract" eyebrow="步驟 03" title="本機與 CI 用同一把尺" subtitle="日常快回饋，交付邊界再集中跑完整證據。" class="legacy-slide decision-slide" legacy="true" >}}
+{{< slide key="contract" track="contract" eyebrow="步驟 03" title="先驗證改動，再讓 CI 重跑同一套規則" subtitle="Issue PR 依變更範圍分級；高風險邊界才跑完整驗證。" class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
-        <h2>步驟 3｜<span class="accent">本機與 CI 用同一把尺</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>本機保留完整驗證入口；一般 Issue PR 跑單一 runtime 的 change-aware checks，promotion／hotfix 才跑完整矩陣。Full tier 只做一次 canonical 完整驗證，Python 相容性與混合 TypeScript 各自留下不重複的 runtime 證據。</p>
+        <h2>步驟 3｜<span class="accent">先驗證改動，再讓 CI 重跑同一套規則</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>開發時先跑與改動直接相關的測試；Issue PR 再由同一支 Action 依變更範圍選擇 docs、fast 或 full。</p>
       </header>
-      <p class="context-line"><strong>問題與目的｜</strong>若每個人和 AI 都用不同指令，結果就無法重現；統一成一個驗證入口，問題可在送出 PR 前發現。</p>
+      <p class="context-line"><strong>模板的作用｜</strong>把測試邏輯留在 repo 內可直接執行的 scripts／tests；GitHub Action 只負責何時啟動、使用哪些權限，以及呼叫同一份程式。</p>
       <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>這次不選，因為會出現兩套標準</h3><ul><li><strong>只靠 IDE／pre-commit：</strong>本機可跳過，不能作合併證據</li><li><strong>每個 workflow 重寫指令：</strong>本機綠燈不代表 CI 會綠</li><li><strong>ESLint＋Prettier：</strong>TypeScript 基線先用一份 Biome 設定，減少重疊</li><li><strong>Python flat layout：</strong>測到原始碼，不是真正會發布的成品</li></ul></article>
-        <article class="decision-step recommended">
-          <span class="step-label">我們的選擇</span>
-          <details class="package-disclosure"><summary><span><span class="tech-name">Python：uv／Ruff／mypy／pytest　TS：pnpm／Biome／Vitest</span></span></summary><div class="package-health"><p><a href="https://github.com/astral-sh/uv" target="_blank" rel="noreferrer">uv／Ruff</a>、<a href="https://github.com/biomejs/biome" target="_blank" rel="noreferrer">Biome</a>、<a href="https://github.com/vitest-dev/vitest" target="_blank" rel="noreferrer">Vitest</a> 與 <a href="https://github.com/gitleaks/gitleaks" target="_blank" rel="noreferrer">Gitleaks</a> 都是公開且持續維護的主流工具。</p><p><strong>選型：</strong>各語言用自己的格式、型別、測試與打包工具；安全與治理入口仍共用。</p></div></details>
-          <p class="recommendation-copy"><strong>Fast：</strong>每張一般 PR 跑 secret scan、格式、lint、型別、單元測試與必要 template smoke；docs-only 不啟動語言或生成矩陣。<br><strong>Full：</strong><code>dev/* → main</code> promotion、hotfix、merge queue 與手動 dispatch 才執行全部 runtime、profiles、Copier update、release 與安全回歸。<br><strong>條件式供應鏈：</strong>workflow 變更加跑 Zizmor，相依變更加跑 OSV，治理宣告變更加跑 remote governance；三者另有週期排程。未知路徑 fail closed 到 full。<br><strong>穩定門禁：</strong><code>verify</code> aggregate 每次都回報，不適用的重型 job 明確視為 skipped，避免 required check 永久 Pending；summary／artifact 記錄 tier、原因、scope 與 duration。完整契約見 <code>docs/ci-policy.md</code>。</p>
-        </article>
+        <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">四種都合理，但成本不同</span></summary><ul><li><strong>每次全跑：</strong>每張 PR 都取得完整信心，適合測試很小、執行很快的 repo。</li><li><strong>只跑受影響項目：</strong>依 dependency graph 或路徑縮小範圍，回饋快，但分流規則必須可測。</li><li><strong>獨立 pipeline runtime：</strong>本機與不同 CI 平台執行相同 pipeline，換來額外引擎與環境成本。</li><li><strong>分階段驗證：</strong>日常快速、整合候選完整；需要清楚定義何時升級與哪一份結果有效。</li></ul></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一份邏輯、一支 Action、兩種 repo 範圍</span></summary><ul class="work-definition-list"><li><strong>開發中：</strong>人或 agent 只跑能證明這次修改的 focused check，先取得新鮮輸出再宣稱完成。</li><li><strong>Issue PR（工作分支 → dev）：</strong>系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li><li><strong>高風險邊界：</strong>promotion、hotfix、release recovery、merge queue 與手動執行都走 full。</li><li><strong>同一套邏輯：</strong>GitHub Actions 只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li><li><strong>專案範圍：</strong>一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li></ul></details>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>分層規則：</strong><code>scripts/ci_tier.py</code>＋<code>scripts/verify-fast</code>＋<code>docs/ci-policy.md</code></li><li><strong>完整入口：</strong><code>scripts/verify</code>；公版為 <code>scripts/verify-template.sh</code></li><li><strong>常駐門禁：</strong><code>title</code>＋<code>verify</code>＋<code>promotion</code>；delivery sync 併入 <code>title</code> policy，一般 PR 的核心流程最多啟動 policy、fast、aggregate 三個 runner，OSV、Zizmor、remote governance 與選配容器驗證由 job-level 條件或週期排程執行</li><li><strong>額度耗盡：</strong>zero-step billing block 被機械式確認、且 job 未執行任何 step 時，一般 PR 只需本機驗證通過即可留言合併；promotion 另綁定 candidate/main tree、維持雙方確認，且不可發布</li></ul></aside>
+      <aside class="config-guidance" data-config-direct="true"><strong>模板功能與客製化</strong><ul><li><strong>分級依據：</strong>系統依修改內容與交付階段選擇檢查範圍；<code>docs/ci-policy.md</code> 說明升級條件。</li><li><strong>快速驗證：</strong><code>scripts/verify-fast</code> 已存在於 root 與生成模板；一般 repo 的完整入口是 <code>scripts/verify</code>。</li><li><strong>模板額外驗證：</strong><code>scripts/verify-template.sh</code> 只屬於 repo-template，不應成為每個採用 repo 的成本。</li><li><strong>目前邊界：</strong>只恢復 <code>.github/workflows/ci.yml</code>；release、promotion、安全掃描、遠端治理、部署與排程仍由各自 Journey 決定。</li></ul></aside>
+      <p class="method-reference reference">具體工具與功能來源見<a href="#similar-tools">相似工具</a>；每個階段實際使用的程式與 Action 現況見<a href="#testing">CI/CD 設定</a>。</p>
 {{< /legacy >}}
 
 {{< basic >}}
-| 驗證層級 | 何時執行 | 內容 |
-| --- | --- | --- |
-| Focused | 開發迭代 | 只跑本次變更直接相關的 lint、type 與 tests |
-| Fast | 一般 Issue PR | secret scan、格式、lint、型別、單元測試、必要 template smoke |
-| Full | promotion、hotfix、merge queue、手動 dispatch | 全 runtime、profiles、Copier update、release 與安全回歸 |
+- **開發中：**只跑能證明本次修改的 focused check。
+- **Issue PR（工作分支 → dev）：**系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。
+- **高風險邊界：**promotion、hotfix、release recovery、merge queue 與手動執行走 full。
+- **Action：**只有一個 `verify` job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。
+- **專案範圍：**一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。
 
-{{< disclosure key="language-toolchain" title="Python：uv／Ruff／mypy／pytest；TypeScript：pnpm／Biome／Vitest" >}}
-各語言使用自己的格式、型別、測試與打包工具；Gitleaks、安全、政策與工作流協調共用同一入口。生成 repo 的完整入口是 `./scripts/verify`，公版本身使用 `./scripts/verify-template.sh`。
-{{< /disclosure >}}
-
-{{< detail key="contract-quota" title="條件式檢查、穩定門禁與額度例外" >}}
-Workflow 變更加跑 Zizmor，相依變更加跑 OSV，治理宣告變更加跑 remote governance；未知路徑 fail closed 到 full。`verify` aggregate 每次都回報，不適用的重型 job 明確標為 skipped，避免 required check 永久 Pending。
-
-Actions 額度例外只適用於帳務可見維護者確認本期 included minutes 用完、且 job 沒執行任何 step 的情況。付款、budget、平台、設定或測試失敗都不能套用。完整契約見 `docs/ci-policy.md`。
-{{< /detail >}}
+測試邏輯只寫在 scripts／tests；本次只恢復 `.github/workflows/ci.yml`。具體比較見[相似工具](#similar-tools)，執行位置見 [CI/CD 設定](#testing)。
 {{< /basic >}}
 {{< /slide >}}
 
@@ -483,17 +457,17 @@ GitHub Release 是所有 profile 的共同基線。PyPI／npm 分開選配、預
       </header>
       <p class="context-line"><strong>目前實測｜</strong><code>Innoguard-Cyber-Arch</code> API 回報 Free＋private；因此 <code>main</code> 現在確實沒有強制保護，CI 紅燈仍可能被有權限者繞過。</p>
       <div class="plan-grid">
-        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>提出審查要求，強制能力降級：</strong>governance workflow 會從 <code>.github/REVIEWERS</code> 輪派一位非作者 reviewer；private repo 只把期望 Ruleset 保留在 <code>policies/rulesets.json</code>，因為 REST 與 GraphQL 建立 API 都會拒絕。check 標示 DEGRADED，CI 與 release 照常執行。</p><ul><li>一位設定的同事會收到 review request，但 team request 與 merge gate 仍不可用</li><li>CI 與留言提供紀錄，但無法取代 merge gate</li></ul></article>
+        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保留審查設定，強制能力降級：</strong><code>.github/REVIEWERS</code> 保存 reviewer 名單；private repo 只把期望 Ruleset 保留在 <code>policies/rulesets.json</code>，因為 REST 與 GraphQL 建立 API 都會拒絕。check 標示 DEGRADED。</p><ul><li>目前由人工指定 reviewer；自動輪派 Action 仍在封存區</li><li>沒有 team request 或 merge gate，審查紀錄不能取代強制門禁</li></ul></article>
         <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches、強制核准、CODEOWNER 與必要檢查。</p><ul><li>同一個 CODEOWNERS team 必須存在並有 repo write access</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
         <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
       </div>
-      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性、repository teams 與 Ruleset API；team 不存在、不可見或沒有 repo write access 時直接停止，不能再被 Free private 的降級路徑掩蓋。導入時可設定一到多位 reviewers；非 draft PR 的 workflow 只 checkout base branch，排除作者後輪派一位。Free private 不支援 team request，也無法強制核准。Web UI 可供管理員人工預建 disabled Ruleset，但公開 REST／GraphQL API 無法自動建立。腳本本身不會改可見性。依序執行 <code>plan</code>、<code>apply</code>、<code>check</code>；可修正差異 fail-closed，不支援的 Ruleset 或受限制的管理欄位回報具體 DEGRADED。完整管理欄位驗證應由管理員在可信任 checkout 使用 Administration read 憑證，不把該 token 暴露給 PR 程式碼。Enterprise 的身分、網路與稽核政策另經組織層審查；Code Security／Secret Protection 另購。</span></aside>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用支援的設定：</strong><code>scripts/apply-repository-settings.sh apply</code></li><li><strong>比對全部可觀察設定：</strong><code>scripts/apply-repository-settings.sh check</code> 比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset</li><li><strong>排程偵測漂移：</strong><code>.github/workflows/governance-drift.yml</code>（daily cron）每天重跑 <code>check</code>；可修正 drift 會開立或更新追蹤 Issue，DEGRADED 的具體差異留在 workflow log 與 warning annotation，不會誤稱為沒有 drift。兩次快照之間曾變更又恢復的事件仍需 audit log 或組織層監控，下發專案以 <code>enable_governance_drift_check</code> 選配</li></ul></aside>
+      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性、repository teams 與 Ruleset API；team 不存在、不可見或沒有 repo write access 時直接停止，不能再被 Free private 的降級路徑掩蓋。導入時可設定一到多位 reviewers；目前由人工指定，自動輪派 Action 尚未恢復。Free private 不支援 team request，也無法強制核准。Web UI 可供管理員人工預建 disabled Ruleset，但公開 REST／GraphQL API 無法自動建立。腳本本身不會改可見性。依序執行 <code>plan</code>、<code>apply</code>、<code>check</code>；可修正差異 fail-closed，不支援的 Ruleset 或受限制的管理欄位回報具體 DEGRADED。完整管理欄位驗證應由管理員在可信任 checkout 使用 Administration read 憑證，不把該 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更都需組織 owner 另案核准；模板不會自行執行。</span></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用支援的設定：</strong><code>scripts/apply-repository-settings.sh apply</code></li><li><strong>比對全部可觀察設定：</strong><code>scripts/apply-repository-settings.sh check</code> 比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset</li><li><strong>檢查治理漂移：</strong><code>scripts/check-governance-drift</code> 可在本機執行；原本的 daily Action 位於 <code>archive/ci-cd/</code>，目前不會排程或自動開 Issue</li></ul></aside>
       <table class="decision-register" aria-label="GitHub 方案與 apply／check 行為對照">
         <thead><tr><th>GitHub 方案與可見性</th><th><code>apply</code> 結果</th><th><code>check</code>／PR／CI/CD 行為</th></tr></thead>
         <tbody>
           <tr><td>Free＋public</td><td>透過 REST 套用並啟用 Ruleset</td><td>驗證 <code>main</code> 的有效規則；缺少或不符即失敗</td></tr>
-          <tr><td>Free organization＋private</td><td>套用基本設定，並把期望 Ruleset 保留在 <code>policies/rulesets.json</code>；公開 API 無法建立 Ruleset</td><td>從設定名單輪派一位個別 reviewer，並標示 <code>DEGRADED</code>；team request、紅燈或未核准都不能成為 merge gate</td></tr>
+          <tr><td>Free organization＋private</td><td>套用基本設定，並把期望 Ruleset 保留在 <code>policies/rulesets.json</code>；公開 API 無法建立 Ruleset</td><td>標示 <code>DEGRADED</code>，由人工指定 reviewer；team request、紅燈或未核准都不能成為 merge gate</td></tr>
           <tr><td>Pro 個人帳號＋private</td><td>套用並啟用 Ruleset</td><td>與 Free public 相同</td></tr>
           <tr><td>Team／Enterprise organization＋private</td><td>確認 CODEOWNERS team 後套用並啟用 Ruleset</td><td>必要審查、CODEOWNER 與 status checks 成為 merge gate；不符政策時 fail-closed</td></tr>
         </tbody>
@@ -505,14 +479,14 @@ GitHub Release 是所有 profile 的共同基線。PyPI／npm 分開選配、預
 | GitHub 狀態 | `apply` 結果 | 實際門禁 |
 | --- | --- | --- |
 | Free＋public | 透過 REST 套用 Ruleset | 缺少或不符即失敗 |
-| Free organization＋private | 套基本設定，期望 Ruleset 留在 `policies/rulesets.json` | 輪派個別 reviewer 並標示 `DEGRADED`；無 merge gate |
+| Free organization＋private | 套基本設定，期望 Ruleset 留在 `policies/rulesets.json` | 標示 `DEGRADED`，人工指定 reviewer；無 merge gate |
 | Pro 個人＋private | 套用 Ruleset | 與 Free public 相同 |
 | Team／Enterprise organization＋private | 確認 CODEOWNERS team 後套用 Ruleset | 審查、CODEOWNER 與 status checks 成為 merge gate |
 
 {{< detail key="governance-observation" title="實際操作與觀察限制" >}}
-依序執行 `scripts/apply-repository-settings.sh plan`、`apply`、`check`。`check` 比對 CODEOWNERS、repository、Actions、政策 labels 與有效 Ruleset；`.github/workflows/governance-drift.yml` 每日重跑，可修正 drift 會開立或更新追蹤 Issue。
+依序執行 `scripts/apply-repository-settings.sh plan`、`apply`、`check`。`check` 比對 CODEOWNERS、repository、Actions、政策 labels 與有效 Ruleset；`scripts/check-governance-drift` 可在本機執行，但原本的每日 Action 仍在 `archive/ci-cd/`，不會排程或自動開 Issue。
 
-排程檢查是快照：兩次執行之間曾變更又復原的事件仍需 GitHub audit log 或組織層監控。完整管理欄位應由管理員在可信任 checkout 使用 Administration read 憑證，不把 token 暴露給 PR 程式碼。
+每次檢查都是快照：兩次執行之間曾變更又復原的事件仍需 GitHub audit log 或組織層監控。完整管理欄位應由管理員在可信任 checkout 使用 Administration read 憑證，不把 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更需組織 owner 另案核准。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
@@ -560,7 +534,7 @@ GitHub Release 是所有 profile 的共同基線。PyPI／npm 分開選配、預
         <article class="decision-step"><span class="step-label">不採用</span><h3>不把交付限制誤當維護方式</h3><ul><li><strong>直接手改單檔：</strong>可以離線，但來源、呈現與測試高度耦合</li><li><strong>runtime 多檔載入：</strong>轉寄容易漏檔，<code>file://</code> 行為也受瀏覽器限制</li><li><strong>立刻導入文件平台：</strong>目前沒有多頁搜尋、翻譯或跨 repo catalog 的實證需求</li><li><strong>自動保存完整聊天：</strong>會混入未確認假設、敏感脈絡與噪音</li></ul></article>
         <article class="decision-step recommended"><span class="step-label">我們的選擇</span><details class="package-disclosure"><summary><span><span class="tech-name">可維護來源 → self-contained HTML</span></span></summary><div class="package-health"><p><strong>交付契約：</strong>CSS、JavaScript、font、SVG 與圖片全部內嵌；外部連結可保留，但離線時不影響內容與操作。</p><p><strong>來源契約：</strong><code>docs/adr/</code> 保存 canonical Architecture Decision Records（ADR）；renderer、基礎設計與驗證由公版維護，專案內容與允許的 theme overrides 由 consuming repo 維護。</p><p><strong>互動收納：</strong>agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 ADR；不保存完整逐字稿。</p></div></details><p><strong>所有環境：</strong>產生並驗證 committed bundle。<br><strong>Actions allowed：</strong>再增加重建比對與 artifact。<br><strong>核准 host 與寫入權限 allowed：</strong>再增加 preview／publish／access control。<br><strong>blocked／unknown：</strong>回退單檔交付，不宣稱已部署。</p></article>
       </div>
-      <aside class="config-guidance"><strong>決策與落地</strong><ul><li><strong>Canonical ADR：</strong><code>docs/adr/portable-decision-site.md</code></li><li><strong>可維護來源：</strong><code>site/</code> 分開內容、樣式、互動與原始圖片；renderer 產生 <code>docs/index.html</code> 並拒絕外部 runtime asset</li><li><strong>生成專案：</strong>公版更新 <code>site/</code> 與 renderer，專案保有 <code>docs/site-content.js</code> 與 <code>docs/site-theme.css</code></li><li><strong>安全邊界：</strong><code>noindex</code> 不是存取控制；受控發布保護入口，但下載後的離線檔仍可能被轉寄</li><li><strong>追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178" target="_blank" rel="noreferrer">Issue #178</a></li></ul></aside>
+      <aside class="config-guidance"><strong>決策與落地</strong><ul><li><strong>Canonical ADR：</strong><code>docs/adr/portable-decision-site.md</code></li><li><strong>可維護來源：</strong><code>site/</code> 分開內容、樣式、互動與原始圖片；renderer 產生 <code>docs/index.html</code> 並拒絕外部 runtime asset</li><li><strong>生成專案：</strong>公版更新 <code>site/</code> 與 renderer，專案保有 <code>docs/site-content.js</code> 與 <code>docs/site-theme.css</code></li><li><strong>網站存取：</strong><code>noindex</code>／<code>robots.txt</code> 只能降低誤分享，不是登入保護；需要限制讀者時，優先評估 Cloudflare Pages＋Access，host、身分提供者、資料政策與組織 owner 另案核准</li><li><strong>追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">存取 #79</a>／<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178" target="_blank" rel="noreferrer">網站 #178</a></li></ul></aside>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -606,11 +580,11 @@ GitHub Release 是所有 profile 的共同基線。PyPI／npm 分開選配、預
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="bridge" eyebrow="2025-05 → 2026-08" title="保留核心，調整實作方式" subtitle="五月版 SDLC 原則持續有效，但路由、能力偵測與交付邊界更精確。" class="legacy-slide bridge-slide" legacy="true" >}}
+{{< slide key="bridge" audience="maintainer" eyebrow="2026/05 內部分享簡報" title="回顧當時原則，對照目前實作" subtitle="回顧 2026 年 5 月內部分享的 SDLC 構想，標示目前保留、調整或延後的做法。" class="legacy-slide bridge-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
-        <h2>五月版 SDLC 盤點｜<span class="accent">保留核心，調整實作方式</span></h2>
-        <p class="subtitle">給已看過五月版的團隊承先啟後：保留方法，修正實作與導入層級；點選每列可看三句判斷。</p>
+        <h2>2026/05 內部分享簡報｜<span class="accent">SDLC 盤點</span></h2>
+        <p class="subtitle">回顧 2026 年 5 月內部分享的構想：保留方法，修正實作與導入層級；點選每列可看三句判斷。</p>
       </header>
       <table class="bridge-table" aria-label="五月版簡報與目前設計的逐頁對照">
         <colgroup><col class="page-col"><col class="topic-col"><col class="status-col"><col class="decision-col"></colgroup>
@@ -619,7 +593,7 @@ GitHub Release 是所有 profile 的共同基線。PyPI／npm 分開選配、預
           <tr><td>p.3</td><td>SDLC 核心階段</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>把計畫到監控集中在 GitHub</summary><div class="bridge-popover"><p><strong>五月版｜</strong>計畫、開發、測試、部署、監控的核心順序保留。</p><p><strong>本次判斷｜</strong>工作單、模板、合併申請、自動檢查與交付設定都放在 GitHub，方便持續維護。</p><p><strong>落地方式｜</strong>不是每個專案都要部署與監控，但都先遵守工作規劃、變更審查與驗證規則。</p></div></details></td></tr>
           <tr><td>p.4</td><td>Jira Ticket</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>每次改動先有最小 GitHub Issue</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本用 Jira 的 Epic → Story → Task 分工；本次只保留必要的 GitHub Issue、Milestone 與 spec。</p><p><strong>本次判斷｜</strong>一次性工作選一種類型、寫問題與完成條件；複雜需求先開規劃 Issue，再由核准 spec 建立實作 Issue。新增範圍另開 Issue。</p><p><strong>落地方式｜</strong><code>work-item.yml</code> 有類型、問題與完成條件兩個必填欄位，另加一個選填補充；<code>issue-triage.yml</code> 指派開單者；PR workflow 核對標籤、分支與同號未結案 Issue。</p></div></details></td></tr>
           <tr><td>p.5</td><td>版本控制</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>delivery branch 是 CI 整合邊界，不假裝成實體環境</summary><div class="bridge-popover"><p><strong>五月版｜</strong>保留平行分支，但不要求每案具備實體 DEV 環境。</p><p><strong>本次判斷｜</strong>並行 Milestone 各用 <code>dev/m*</code>，一般孤立工作進 <code>dev/next</code>，獨立 canary 才用暫時 <code>dev/i*</code>；完成時 promotion 到 main，hotfix 才直達 main。</p><p><strong>落地方式｜</strong>fast CI 驗證每次 Issue 整合，full CI＋可選 canary 驗證 promotion；main 前進後由 owner 以 reviewed sync PR 回流，不 rewrite 歷史。</p></div></details></td></tr>
-          <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>Issue、編號分支與 PR 形成固定鏈</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是保護分支的唯一入口，方向保留；三層審查改成依風險增加審查者。</p><p><strong>本次判斷｜</strong>一般 PR 要有同編號 Issue、CI 與一位同事；高風險架構變更另附決策紀錄。</p><p><strong>落地方式｜</strong>分支固定 <code>type/123-short-slug</code>，PR 內文固定 <code>Closes #123</code>；governance workflow 在 Free private 從設定名單輪派一位個別 reviewer，GitHub Team 以上才支援 team request 與強制核准。</p></div></details></td></tr>
+          <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>Issue、編號分支與 PR 形成固定鏈</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是保護分支的唯一入口，方向保留；三層審查改成依風險增加審查者。</p><p><strong>本次判斷｜</strong>一般 PR 要有同編號 Issue、CI 與一位同事；高風險架構變更另附決策紀錄。</p><p><strong>落地方式｜</strong>分支固定 <code>type/123-short-slug</code>，PR 內文固定 <code>Closes #123</code>；Free private 目前由人工指定 reviewer，自動輪派 Action 尚未恢復；GitHub Team 以上才支援 team request 與強制核准。</p></div></details></td></tr>
           <tr><td>p.7</td><td>CI 自動化管線</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>本機與 CI 共用入口，依風險分層執行</summary><div class="bridge-popover"><p><strong>五月版｜</strong>自動觸發、測試、格式與靜態錯誤檢查全部保留。</p><p><strong>本次判斷｜</strong>一般 Issue PR 跑 fast；promotion、hotfix、merge queue 與未知高風險路徑跑 full；OSV、Zizmor 與 remote governance 另依 scope／schedule 執行。</p><p><strong>落地方式｜</strong>固定 <code>verify</code> aggregate 避免 skipped workflow 留下 Pending；delivery sync 併入 <code>title</code> policy，候選 full run 不取消，普通 PR 新 commit 則取消舊 run。Ruleset 可用時強制 <code>title</code>、<code>verify</code> 與 <code>promotion</code>。</p></div></details></td></tr>
           <tr><td>p.8</td><td>CD 專案管理</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>promotion 才形成發版邊界，不為每張 Issue 狂發版</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本預設 DEV → STAGING → Canary → PROD；本次不要求每個專案照搬四層。</p><p><strong>本次判斷｜</strong>Milestone 原則上在完成時 promotion 一次；只有後續驗收依賴同一 Milestone 的 immutable Release，才用受約束的 checkpoint promotion。<code>dev/next</code> 固定窗口批次 promotion，全部 no-release 就略過版本；hotfix 才立即發布。Canary 必須有環境與命令，否則只誠實保留 artifact-only。</p><p><strong>落地方式｜</strong>release-source 核對 promotion 的 full verify、canary state 與 tree identity；成品 workflow 只接受 source run ID，產生 digest、SBOM、attestation，不接受任意 tag push，也不重跑完整 runtime CI。</p></div></details></td></tr>
           <tr><td>p.9</td><td>可觀測性</td><td><span class="bridge-status defer">第二階段</span></td><td><details class="bridge-detail"><summary>只有上線服務才做監控和值班</summary><div class="bridge-popover"><p><strong>五月版｜</strong>操作手冊、日誌、指標、追蹤、復原與值班流程保留為第二階段。</p><p><strong>本次判斷｜</strong>只對持續運行的服務導入；先依使用的雲端、環境與負責人選工具，不先綁定 Datadog 或 PagerDuty。</p><p><strong>落地方式｜</strong>測試資料另外管理成不含個資、可建立、可清除的範例，不把測資管理混成線上監控。</p></div></details></td></tr>
@@ -724,11 +698,11 @@ Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、�
 {{< similar-tools >}}
 {{< /slide >}}
 
-{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜CI/CD 設定" title="CI/CD 設定｜依 Journey 檢查" subtitle="分開列出一般 repo 與 repo-template 在 Issue PR → dev、dev → main 各自需要的測試與自動化。" class="similar-tools-slide testing-slide" legacy="true" >}}
+{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜CI/CD 設定" title="CI/CD 設定｜依 Journey 檢查" subtitle="分開列出一般 repo 與 repo-template 在 Issue PR（工作分支 → dev）、發版 PR（dev → main）各自需要的測試與自動化。" class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
 {{< /slide >}}
 
-{{< slide key="access-control" eyebrow="存取決策" title="託管方案未定前的臨時防護" subtitle="目前只有降低誤分享的措施，沒有把提示語宣稱成安全控制。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="access-control" audience="archive" eyebrow="存取決策" title="託管方案未定前的臨時防護" subtitle="目前只有降低誤分享的措施，沒有把提示語宣稱成安全控制。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
@@ -757,7 +731,7 @@ Go／Rust profile、Scorecard、Harden-Runner、網站託管與登入、RAG、�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="principles" eyebrow="關鍵決策" title="規則、理由與刻意不做" subtitle="這些是目前可由檔案與測試證明的決定。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="principles" audience="archive" eyebrow="關鍵決策" title="規則、理由與刻意不做" subtitle="這些是目前可由檔案與測試證明的決定。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
@@ -798,7 +772,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="benchmark" eyebrow="外部基準與實測" title="有骨架，還不是完整平台" subtitle="新 repo、Copier 更新、OSV、Release 與第一個 CI-only pilot 已有證據；其餘邊界仍明列。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="benchmark" audience="archive" eyebrow="外部基準與實測" title="有骨架，還不是完整平台" subtitle="新 repo、Copier 更新、OSV、Release 與第一個 CI-only pilot 已有證據；其餘邊界仍明列。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
@@ -841,7 +815,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="fleet-inventory" eyebrow="Fleet 治理" title="採用盤點以真實 repo 為準" subtitle="2026-08-24：組織共 6 個 private repo，目前只有 1 個 consuming repo。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="fleet-inventory" audience="archive" eyebrow="Fleet 治理" title="採用盤點以真實 repo 為準" subtitle="2026-08-24：組織共 6 個 private repo，目前只有 1 個 consuming repo。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
@@ -879,7 +853,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="fleet-governance-thresholds" eyebrow="Fleet 門檻" title="先量問題，再加平台" subtitle="Catalog 與 policy enforcement 解決不同問題，分開計數、分開選工具。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="fleet-governance-thresholds" audience="archive" eyebrow="Fleet 門檻" title="先量問題，再加平台" subtitle="Catalog 與 policy enforcement 解決不同問題，分開計數、分開選工具。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
@@ -915,7 +889,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="spec-format" eyebrow="Spec 格式" title="預設 Issue，明確 Story 才建 Milestone" subtitle="保留一種輕量格式，不在需求尚未出現時同時維護兩套系統。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="spec-format" audience="archive" eyebrow="Spec 格式" title="預設 Issue，明確 Story 才建 Milestone" subtitle="保留一種輕量格式，不在需求尚未出現時同時維護兩套系統。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
@@ -956,5 +930,3 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
-
-{{< glossary >}}

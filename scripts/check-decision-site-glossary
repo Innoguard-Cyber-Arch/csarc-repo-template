@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify glossary source, rendered anchors, and published LLM indexes."""
+"""Verify the glossary source and published LLM indexes."""
 
 from __future__ import annotations
 
@@ -37,8 +37,6 @@ def read_source(
     str,
     list[str],
     list[tuple[str, str, str]],
-    set[str],
-    set[str],
 ]:
     """Read the canonical data and return expected rendered values."""
     with source.open("rb") as stream:
@@ -74,8 +72,6 @@ def read_source(
 
     headings: list[str] = []
     links: list[tuple[str, str, str]] = []
-    anchors = {"glossary"}
-    linked_anchors: set[str] = set()
     seen_keys: set[str] = set()
     root = repo_root.resolve()
     for group_index, group in enumerate(groups, 1):
@@ -84,7 +80,6 @@ def read_source(
         context = f"{source}: group {group_index}"
         group_key = required(group, "key", context)
         add_key(group_key, seen_keys, context)
-        anchors.add(f"glossary-group-{group_key}")
         headings.append(
             " / ".join(
                 (
@@ -105,9 +100,6 @@ def read_source(
             term_context = f"{context}, term {term_index}"
             term_key = required(term, "key", term_context)
             add_key(term_key, seen_keys, term_context)
-            term_anchor = f"glossary-{term_key}"
-            anchors.add(term_anchor)
-            linked_anchors.add(term_anchor)
             path = required(term, "path", term_context)
             relative_path = urldefrag(path).url
             target = (root / relative_path).resolve()
@@ -132,26 +124,7 @@ def read_source(
                     ),
                 )
             )
-    return title, summary, headings, links, anchors, linked_anchors
-
-
-def check_candidate(
-    path: Path, anchors: set[str], linked_anchors: set[str]
-) -> None:
-    """Require every glossary anchor exactly once in a candidate page."""
-    html = path.read_text(encoding="utf-8")
-    for anchor in anchors:
-        count = html.count(f'id="{anchor}"')
-        if count != 1:
-            raise ValueError(
-                f"{path}: expected one #{anchor} anchor, found {count}"
-            )
-    for anchor in linked_anchors:
-        count = html.count(f'href="#{anchor}"')
-        if count != 1:
-            raise ValueError(
-                f"{path}: expected one link to #{anchor}, found {count}"
-            )
+    return title, summary, headings, links
 
 
 def check_llms(
@@ -185,39 +158,17 @@ def main() -> int:
         "--source", type=Path, default=Path("site/data/glossary.toml")
     )
     parser.add_argument("--repo-root", type=Path, default=Path("."))
-    parser.add_argument("--content", action="append", type=Path)
-    parser.add_argument("--candidate", action="append", type=Path)
     parser.add_argument(
         "--generated", type=Path, default=Path("dist/hugo-site/llms.txt")
     )
     parser.add_argument("--published", action="append", type=Path)
     args = parser.parse_args()
-    contents = args.content or [
-        Path("site/content/_index.zh-tw.md"),
-        Path("site/content/_index.en.md"),
-    ]
-    candidates = args.candidate or [
-        Path("docs/index.html"),
-        Path("docs/index.en.html"),
-    ]
     published = args.published or [Path("llms.txt"), Path("docs/llms.txt")]
 
     try:
-        title, summary, headings, links, anchors, linked_anchors = read_source(
+        title, summary, headings, links = read_source(
             args.source, args.repo_root
         )
-        for content_path in contents:
-            if (
-                content_path.read_text(encoding="utf-8").count(
-                    "{{< glossary >}}"
-                )
-                != 1
-            ):
-                raise ValueError(
-                    f"{content_path}: expected one glossary shortcode"
-                )
-        for candidate in candidates:
-            check_candidate(candidate, anchors, linked_anchors)
         generated = check_llms(args.generated, title, summary, headings, links)
         for output in published:
             if output.read_bytes() != generated:

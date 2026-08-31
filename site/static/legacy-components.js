@@ -44,13 +44,13 @@
         },
         {
           title: 'AI 規範、驗證與治理各有唯一責任',
-          goal: 'AGENTS.md 說明怎麼做；scripts 提供證據；Action 只包裝執行；07 單獨定義合併資格、權限與例外。',
+          goal: 'AGENTS.md 說明怎麼做；scripts 提供證據；Action 只包裝執行；規則治理單獨定義合併資格、權限與例外。',
           summary: '人保留需求、重大取捨、外部影響與不可逆操作；本頁不重複定義合併權限。',
           file: 'AGENTS.md＋scripts/verify＋.github/workflows/＋policies/',
           code: `# Local and Action use the same logic
 ./scripts/verify
 
-# Governance and merge eligibility live in Journey 07
+# Governance and merge eligibility live under Rules governance
 policies/actions.json
 policies/rulesets.json`
         }
@@ -82,8 +82,8 @@ gh api "repos/$repo/rulesets"
         {
           title: '方案決定 Ruleset 是否成為真正門禁',
           goal: 'Free private 先在 repo 保存相同政策；public、Pro、Team 或 Enterprise 可強制 PR、一位核准、CODEOWNER 與必要檢查。Enterprise 的組織規則仍另審。',
-          summary: '所有方案都先用 repository teams API 驗證 PR 內設定的 team 與 write access；Free private 另從 REVIEWERS 名單輪派一位個別 reviewer，但 Ruleset 只保留 STAGED／MISSING 與 DEGRADED 紀錄。',
-          file: 'policies/rulesets.json＋.github/CODEOWNERS＋governance-comment.yml',
+          summary: '所有方案都先用 repository teams API 驗證 PR 內設定的 team 與 write access；Free private 的 REVIEWERS 名單仍保留，但目前由人工指定 reviewer，自動輪派 Action 尚未恢復。Ruleset 只保留 STAGED／MISSING 與 DEGRADED 紀錄。',
+          file: 'policies/rulesets.json＋.github/CODEOWNERS＋.github/REVIEWERS',
           code: `# The same policy is stored in every repository and enforced when supported.
 required reviews: 1
 require CODEOWNER review: true
@@ -96,28 +96,13 @@ required checks:
 # Enterprise organization controls are report-only here.`
         },
         {
-          title: '排程每天重跑 check，縮短 CI-only 的檢查間隔',
-          goal: 'CI 觸發的 check 只是一次性快照；daily cron 能抓出排程執行時仍存在的偏離，降低沒有程式碼變更時長期失察的風險。不需要另外導入 GitHub App 或第三方常駐服務，沿用同一個 check 邏輯即可。',
-          summary: '`governance-drift.yml` 用 daily cron 呼叫 `scripts/check-governance-drift`，它包一層 `apply-repository-settings.sh check`；可修正偏離會用 `gh issue create`／`gh issue edit` 開立或更新單一追蹤 Issue，內容附上 repository、Actions、政策標籤或 Ruleset 的實際差異。方案或組織限制造成的 DEGRADED 不讓 portable CI 永久失敗，也不會誤稱為沒有 drift；具體差異保留在 workflow log 與 warning annotation。這仍是快照檢查：若設定在兩次執行之間遭變更後又恢復，需由 GitHub audit log 或組織層事件監控追溯。下發專案透過 `enable_governance_drift_check`（預設關閉）選配同一 workflow。',
-          file: '.github/workflows/governance-drift.yml＋scripts/check-governance-drift',
-          code: `on:
-  schedule:
-    - cron: "13 4 * * *"
-  workflow_dispatch:
+          title: '治理漂移檢查保留本機入口，排程尚未恢復',
+          goal: '先用同一支腳本檢查設定差異；需要持續監測時，再逐條恢復觸發、權限、timeout 與 Issue 通知。',
+          summary: '`scripts/check-governance-drift` 會呼叫 `apply-repository-settings.sh check`，可在可信任的本機 checkout 執行。原本的 `governance-drift.yml` 位於 `archive/ci-cd/`，目前不會每日執行或自動開立追蹤 Issue。',
+          file: 'scripts/check-governance-drift＋archive/ci-cd/2026-08-27/root-workflows/governance-drift.yml',
+          code: `./scripts/check-governance-drift
 
-permissions:
-  contents: read
-  issues: write
-
-- run: ./scripts/check-governance-drift
-
-# Inside the script:
-./scripts/apply-repository-settings.sh check
-# On drift, open/update one tracking Issue:
-gh issue list --state open --json number,title \
-  --jq '.[] | select(.title == "Repository governance drift detected") | .number'
-gh issue create --label bug --body-file "$body_file"
-gh issue edit "$issue_number" --body-file "$body_file"`
+# The scheduled workflow is archived and does not run.`
         }
       ],
       template: [
@@ -254,47 +239,44 @@ with:
       ],
       method: [
         {
-          title: '工作單欄位與空白 Issue',
-          goal: '預設只提供一張開發工作表單，要求類型、問題與完成條件，並關閉沒有結構的空白 Issue。',
-          summary: '調整表單欄位、選項、必填狀態，以及是否允許空白 Issue。',
-          file: '.github/ISSUE_TEMPLATE/work-item.yml＋config.yml',
-          code: `# work-item.yml
-description: 用中文定義一個可驗證改動
-body:
-  - id: kind
-    type: dropdown
-    options: [feature, task, bug, documentation, duplicate]
-  - id: problem
-    type: textarea
-  - id: acceptance
-    type: textarea
-  - id: supplement
-    type: textarea
-    required: false
+          title: '四種 Issue 表單與必填內容',
+          goal: '提供 Feature、Task、Bug、Documentation 四個入口；都要求問題與完成條件，並關閉空白 Issue。',
+          summary: '調整表單說明、必填內容，以及是否允許沒有結構的空白 Issue。',
+          file: '.github/ISSUE_TEMPLATE/{feature,task,bug,documentation}.yml＋config.yml',
+          code: `Feature       -> Type: Feature; label: enhancement
+Task          -> Type: Task; label: enhancement
+Bug           -> Type: Bug; label: bug
+Documentation -> Type: Task; label: documentation
+
+Required fields:
+  - problem
+  - acceptance
 
 # config.yml
 blank_issues_enabled: false
 contact_links: []`
         },
         {
-          title: '工作類型、標籤與父子層級',
-          goal: '模板使用 GitHub 原生 Feature、Task、Bug Types；documentation、duplicate、hotfix 則是不同用途的標籤或結案方式。',
-          summary: '定義 Feature／Task／Bug，以及 documentation、duplicate、hotfix 的用途與關係。',
-          file: 'AGENTS.md＋policies/labels.json＋docs/adr/spec-story-and-work-items.md＋scripts/ci_tier.py',
-          code: `Native Issue Types:
-  Feature -> shared outcome; label: enhancement
-  Task    -> deliverable work; label: enhancement
-  Bug     -> unexpected behavior; label: bug
+          title: '標題、Label、負責人與工作層級',
+          goal: '標題使用 12–80 個英文 ASCII 字元及至少三個詞；建立者自我指派，agent／CLI 使用 @me。',
+          summary: '調整精確欄位限制，以及 duplicate、hotfix、promotion、Parent 與 Dependency 的使用規則。',
+          file: '.github/ISSUE_TEMPLATE/*.yml＋AGENTS.md＋policies/labels.json＋docs/adr/spec-story-and-work-items.md',
+          code: `Title: 12-80 ASCII characters; at least 3 words
+Assignee: creator; agent/CLI uses @me
 
 Other classifications:
   documentation -> Task + documentation label
   duplicate     -> duplicate close reason
-  hotfix         -> Bug + hotfix label + fix/<Issue>-* -> main`
+  hotfix        -> Bug + hotfix label + fix/<Issue>-* -> main
+  promotion     -> delivery tracking only
+
+Parent     -> shared outcome still incomplete
+Dependency -> actual execution order`
         },
         {
           title: '規格要不要建立追蹤工作',
           goal: '各專案在 `docs/specs/` 寫長期規格；front matter 決定同步 Task、Feature，或只保存文件。',
-          summary: '決定一份 Spec 建立 Task、Feature，或只保存為長期契約。',
+          summary: '現階段沿用單一輕量格式，不另導入 Spec Kit；需求真的需要完整 spec／plan／tasks 流程時再評估。',
           file: 'docs/specs/＋scripts/spec_to_issue.py',
           code: `tracking: issue  # Sync one Task
 tracking: story  # Sync one Feature parent
@@ -336,10 +318,10 @@ python scripts/spec_to_issue.py validate`
 }`
         },
         {
-          title: 'PR 自動輪派一位同事審查',
-          goal: 'Free private 先可靠通知同事；支援 Ruleset 時再把核准變成 merge gate。',
-          summary: 'workflow 只 checkout base branch，從 REVIEWERS 設定排除作者後輪派一人；不執行 PR 分支程式碼。',
-          file: '.github/CODEOWNERS＋.github/REVIEWERS＋.github/workflows/governance-comment.yml',
+          title: '保留 reviewer 名單，目前人工指定審查者',
+          goal: 'Free private 先保留明確候選人；支援 Ruleset 時再把核准變成 merge gate。',
+          summary: 'CODEOWNERS 與 REVIEWERS 保存 owner 和 reviewer 候選；自動輪派 Action 位於 `archive/ci-cd/`，目前不會執行。',
+          file: '.github/CODEOWNERS＋.github/REVIEWERS',
           code: `* {{ code_owner }}`
         },
         {
@@ -413,7 +395,7 @@ jobs:
   audit:
     steps:
       - run: uvx --from zizmor==1.29.0 zizmor . --format plain
-# PR workflow changes are routed to the same audit by ci_tier.py.`
+# PR workflow changes are routed to the same audit by the CI tier rules.`
         }
       ],
       supply: [
@@ -631,6 +613,19 @@ scripts/apply-repository-settings.sh`
 csarc adopt . --dry-run --report-dir ../csarc-adoption-report
 csarc update --check --json
 csarc update`
+        },
+        {
+          title: 'Fleet 盤點與平台門檻',
+          goal: '目前只有一個真實 consuming repo，先累積採用與漂移證據，不預先部署中央平台。',
+          summary: '10 個活躍 consuming repo，或至少 3 個且反覆發生 owner／服務查找問題時才評估 catalog；至少 5 個且出現跨 repo 漂移或人工修正成本時才評估中央 policy enforcement。',
+          file: 'profiles/catalog.yaml＋governance-drift runs',
+          code: `Catalog review:
+  - 10 active consuming repositories; or
+  - 3+ repositories and repeated owner/service lookup delays
+
+Policy review:
+  - 5+ consuming repositories; and
+  - repeated cross-repository drift or measurable manual repair cost`
         }
       ],
       'template-release': [

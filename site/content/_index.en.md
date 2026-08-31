@@ -35,15 +35,16 @@ The template claims only capabilities backed by executable files and regression 
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="flow" track="flow" eyebrow="Developer journey" title="From a requirement to a deliverable version" subtitle="Steps 01–06 follow each change; 07–10 continuously support the flow." legacy="false"  class="candidate-slide" >}}
-| Stage | Human and agent action | Automation evidence |
-| --- | --- | --- |
-| 01 Define work | State the problem and acceptance criteria in an Issue | Title, field, and prior-work checks |
-| 02 Implement and test | Work from `AGENTS.md` on a short branch and isolated worktree | Focused local checks |
-| 03 Open a PR | Link the Issue and explain purpose, verification, and rollback | PR policy and delivery route |
-| 04 Run CI | Ordinary Issue PRs use the fast tier | Stable `verify` aggregate result |
-| 05 Review and merge | Fix failures, resolve review, and merge to the delivery branch | Approval and required checks |
-| 06 Version and deliver | Promotion batches version and artifact creation | Full verify, checksum, SBOM, attestation |
+{{< slide key="flow" track="flow" eyebrow="CI/CD flow" title="The template guides every change" subtitle="Follow the Issue and PR prompts; the template prepares the right settings and tells you what needs attention." legacy="false"  class="candidate-slide" >}}
+| What you are doing | How the template guides you |
+| --- | --- |
+| Create the work | The Issue form prompts for the problem, completion conditions, and necessary context |
+| Make the change | Repository guidance tells people and agents how to work and which local check to run first |
+| Open a PR | The PR template prompts for the linked Issue, completed result, and verification evidence |
+| Read the result | The template selects the necessary checks and identifies what must be fixed |
+| Review and merge | Merge into the correct branch after the result and human review are clear |
+
+Users do not need to memorize workflow or script names. Current automation focuses on work items, PR rules, and necessary verification; automated versioning and publishing are not enabled yet.
 
 {{< detail key="flow-foundation" title="Four foundations across the whole flow" >}}
 - **07 Governance:** consistent permissions, branch, review, and merge rules.
@@ -51,25 +52,26 @@ The template claims only capabilities backed by executable files and regression 
 - **09 Internal site:** keeps practices, limits, evidence, and decisions discoverable.
 - **10 Adoption levels:** start with the baseline and add platform capability only after conditions are met.
 
-A CI failure returns to step 02 in the same PR. A problem found after delivery returns to step 01 as the next bounded Issue.
+A failed check is fixed in the same PR. A new problem found after merge becomes a separate, bounded Issue.
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="files" track="files" class="dense" eyebrow="Responsibility map" title="Files the template actually creates and maintains" subtitle="The template may propose infrastructure updates without silently overwriting product-owned content." legacy="false" >}}
+{{< slide key="files" track="files" class="dense" eyebrow="File map" title="The template puts required settings in the right place" subtitle="This lists the major files currently generated; template updates never silently overwrite product-owned content." legacy="false" >}}
 | Path | Purpose | Responsibility |
 | --- | --- | --- |
 | `.copier-answers.yml`, `.csarc/profile.json` | Template source, profile, and branch strategy | Template-led |
 | `.github/ISSUE_TEMPLATE/`, `pull_request_template.md` | Work definition and PR contract | Template-led |
-| `.github/workflows/` | CI, promotion, release, OSV, and governance drift | Template-led |
-| `AGENTS.md`, `README.md` | Agent working rules and user entry point | Shared |
+| `.github/workflows/` | Five active flows: Issue triage, Milestone sync, spec sync, PR rules, and necessary verification | Template-led |
+| `AGENTS.md`, `README.md`, `CLAUDE.md` | Agent working rules and user entry point | Shared |
 | `policies/`, `CODEOWNERS`, `.github/REVIEWERS` | Desired settings, owners, and reviewers | Shared |
-| `scripts/verify` | Single verification entry point in generated projects | Template-led |
+| `scripts/` | Local verification, work synchronization, and repository settings | Template-led |
+| `docs/`, `site/` | Project guidance, specifications, decisions, and internal site | Shared |
 | `src/`, product tests, and product specifications | Product behavior | Project-owned |
 
 {{< detail key="files-update" title="How updates protect product content" >}}
 Copier carries updates into a short branch and leaves conflicts in the PR for human review. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.
 
-Workflows, policies, scripts, and documents consumed by both root and `template/` are generated from root by `scripts/sync-paired-files.sh`; `--check` verifies content and executable bits. Files that differ because of Copier variables are checked by generating a real project.
+Workflows, policies, scripts, and documents shared by root and `template/` are kept in sync. Files that differ because of project choices are verified by generating a real project. Version and publishing configuration remains present, but its GitHub Actions are not enabled yet.
 {{< /detail >}}
 {{< /slide >}}
 
@@ -78,14 +80,16 @@ Workflows, policies, scripts, and documents consumed by both root and `template/
 
 - **Overall:** define the work in an Issue, implement it on a branch, then review and deliver it through a PR.
 - **Milestone:** create one only when multiple work items share a deadline, integration point, or release.
-- **Issue:** state the problem, acceptance criteria, and verification; use Feature, Task, or Bug as the native Type.
-  - Feature is a shared outcome; Task is independently deliverable work; Bug is behavior that differs from expectations. Documentation is a Task with the documentation label.
-  - Titles use 12–80 ASCII characters and at least three words; the body requires type, problem, and acceptance criteria.
-  - Select one work label from enhancement, bug, or documentation. The creator self-assigns when submitting the Issue.
+- **Issue:** choose the Feature, Task, Bug, or Documentation form, then state the problem, acceptance criteria, and verification.
+  - Feature is an outcome that needs several pieces of work.
+  - Task is work that can be completed and verified independently.
+  - Bug is a result that differs from expectations.
+  - Documentation changes only documentation or examples.
+  - Use a clear English title; the creator owns the Issue by default.
   - Keep work together when one PR and one result can verify it. Create a Sub-issue when work can be independently implemented and verified, or when required follow-up exceeds the original scope.
   - A Parent describes the shared outcome that is not complete yet; all required Sub-issues must finish before it closes. Dependency expresses ordering instead.
-- **PR:** use `type(scope)!: English summary`; require Purpose, `Closes #N`, and the checklist in the body. The creator self-assigns after opening it.
-- **Exceptions:** Duplicate is a way to close a repeated Issue; Hotfix is an urgent Bug delivery label. Neither is an Issue Type.
+- **PR:** explain what was completed, link the Issue it closes, and deliver it after the checks pass; the creator owns it by default.
+- **Exceptions:** close repeated work as Duplicate. Hotfix marks an urgent fix, but still requires an Issue, verification, and review.
 
 ### Other common approaches
 
@@ -96,12 +100,8 @@ Workflows, policies, scripts, and documents consumed by both root and `template/
 
 Concrete tools, feature names, and source links are listed under [Similar tools](#similar-tools).
 
-{{< detail key="method-lifecycle" title="What works now and what is still being implemented" >}}
-- **Active:** the organization has enabled native Feature, Task, and Bug Types; four Issue Forms write their Type and label directly; [#386](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/386) restored the Issue triage, PR policy, Spec sync, and Milestone lifecycle GitHub Actions.
-- **In progress:** [#382](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382) consolidates the work-definition validation shared by local runs and Actions behind one entry point.
-- **Not enabled:** Issue-to-promotion orchestration and CI/CD for other Journeys remain archived; none of the four Journey 01 workflows is a required status check.
-- **Execution limit:** repository Actions are enabled, but GitHub currently refuses to start a runner because of the account billing state, so no successful hosted run exists yet.
-{{< /detail >}}
+<aside class="config-guidance"><strong>Specification format</strong><p>Keep the current lightweight Issue and spec format. Reconsider a separate Spec Kit workflow only when approved requirements routinely need a full spec, plan, and task breakdown.</p></aside>
+
 {{< /slide >}}
 
 {{< slide key="agents" track="agents" eyebrow="Step 02" title="Define AI rules before implementation" subtitle="An Issue says what this change is; AGENTS.md says how an agent works in the repository." legacy="false"  class="candidate-slide" >}}
@@ -111,30 +111,22 @@ Concrete tools, feature names, and source links are listed under [Similar tools]
 - **AI rules:** the root `AGENTS.md` is the single source; `CLAUDE.md` is a thin import, and a child file exists only for a genuine scoped difference.
 - **Change isolation:** each writable task uses its own branch and worktree. Parallelize only independent scopes; read-only work needs no extra worktree.
 - **Verification evidence:** run the smallest relevant local program. Actions provide events and permissions and call the same program instead of copying logic.
-- **Decisions and authorization:** people own requirements, material trade-offs, external impact, and irreversible operations. Journey 07 alone defines review, merge eligibility, and exceptions.
-- **Template creation and updates:** Copier generates and updates the shared baseline; Journey 08 defines existing-repository updates.
+- **Decisions and authorization:** people own requirements, material trade-offs, external impact, and irreversible operations. Rules governance defines review, merge eligibility, and exceptions.
+- **Template creation and updates:** Copier generates and updates the shared baseline; the Template upgrades section defines existing-repository updates.
 
-`README.md` serves people, `AGENTS.md` serves every agent, and `template/AGENTS.md.jinja` plus `copier.yml` emit only commands the selected profile can run. `scripts/cleanup-worktrees` and `scripts/test-worktree-cleanup` handle safe cleanup; `scripts/verify`, `.github/workflows/`, and `policies/` keep rules, evidence, automation, and governance separate. This responsibility split is implemented by [#388](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388) / PR #389.
+`README.md` serves people, `AGENTS.md` serves every agent, and `template/AGENTS.md.jinja` plus `copier.yml` emit only commands the selected profile can run. `scripts/cleanup-worktrees` and `scripts/test-worktree-cleanup` handle safe cleanup; `scripts/verify`, `.github/workflows/`, and `policies/` keep rules, evidence, automation, and governance separate.
 
 Concrete tools and sources are in [Similar tools](#similar-tools); Journey 02 local checks and Actions are in [CI/CD settings](#testing).
 {{< /slide >}}
 
-{{< slide key="contract" track="contract" eyebrow="Step 03" title="Use the same standard locally and in CI" subtitle="Keep daily feedback fast and concentrate complete evidence at delivery boundaries." legacy="false"  class="candidate-slide" >}}
-| Verification tier | When it runs | Scope |
-| --- | --- | --- |
-| Focused | Development iteration | Only lint, type, and tests directly relevant to the change |
-| Fast | Ordinary Issue PR | Secret scan, format, lint, type, unit tests, and necessary template smoke |
-| Full | Promotion, hotfix, merge queue, or manual dispatch | Every runtime, profile, Copier update, release, and security regression |
+{{< slide key="contract" track="contract" eyebrow="Step 03" title="Verify the change, then let CI rerun the same rules" subtitle="Issue PRs are tiered by change scope; full verification is reserved for high-risk boundaries." legacy="false"  class="candidate-slide" >}}
+- **During development:** run only the focused check that proves the current change, using fresh output before claiming completion.
+- **Issue PR (work branch → dev):** the system selects the appropriate checks from the change; when unsure, it runs full verification.
+- **High-risk boundaries:** promotions, hotfixes, release recovery, merge queues, and manual runs use full.
+- **One implementation:** GitHub Actions has one `verify` job with a 30-minute timeout and only calls repository scripts.
+- **Repository scope:** a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.
 
-{{< disclosure key="language-toolchain" title="Python: uv, Ruff, mypy, pytest; TypeScript: pnpm, Biome, Vitest" >}}
-Each language uses its native formatting, typing, testing, and packaging tools. Gitleaks, security, policy, and workflow orchestration share one entry point. Generated repositories use `./scripts/verify`; the template repository uses `./scripts/verify-template.sh`.
-{{< /disclosure >}}
-
-{{< detail key="contract-quota" title="Conditional checks, stable gates, and the quota exception" >}}
-Workflow changes add Zizmor, dependency changes add OSV, and governance declarations add remote governance. Unknown paths fail closed to full. The `verify` aggregate always reports; inapplicable heavy jobs are explicitly skipped so a required check never remains pending.
-
-The Actions exception applies only when a maintainer with billing visibility confirms that included minutes are exhausted and the job ran no step. Payment, budget, platform, configuration, and test failures do not qualify. The full contract is in `docs/ci-policy.md`.
-{{< /detail >}}
+Verification logic lives only in scripts and tests. This step restores only `.github/workflows/ci.yml`; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys. See [Similar tools](#similar-tools) for concrete comparisons and [CI/CD settings](#testing) for execution locations.
 {{< /slide >}}
 
 {{< slide key="pr" track="pr" eyebrow="Step 04" title="Merge small PRs after evidence passes" subtitle="Issues integrate on delivery branches; promotion brings verified outcomes to main." legacy="false"  class="candidate-slide" >}}
@@ -196,14 +188,14 @@ GitHub Release is the baseline for every profile. PyPI and npm are separate opt-
 | GitHub state | `apply` result | Actual gate |
 | --- | --- | --- |
 | Free + public | Apply a Ruleset through REST | Missing or mismatched rules fail |
-| Free organization + private | Apply baseline settings and retain desired Ruleset in `policies/rulesets.json` | Request one individual reviewer and report `DEGRADED`; no merge gate |
+| Free organization + private | Apply baseline settings and retain desired Ruleset in `policies/rulesets.json` | Report `DEGRADED`, assign a reviewer manually, and provide no merge gate |
 | Pro personal + private | Apply a Ruleset | Same as Free public |
 | Team/Enterprise organization + private | Verify the CODEOWNERS team, then apply a Ruleset | Review, CODEOWNER, and status checks become merge gates |
 
 {{< detail key="governance-observation" title="Concrete operations and observation limits" >}}
-Run `scripts/apply-repository-settings.sh plan`, `apply`, then `check`. The check compares CODEOWNERS, repository settings, Actions, policy labels, and effective Rulesets. `.github/workflows/governance-drift.yml` reruns daily and opens or updates a tracking Issue for repairable drift.
+Run `scripts/apply-repository-settings.sh plan`, `apply`, then `check`. The check compares CODEOWNERS, repository settings, Actions, policy labels, and effective Rulesets. `scripts/check-governance-drift` can run locally, but its former daily Action remains under `archive/ci-cd/`; it neither runs on a schedule nor opens Issues automatically.
 
-Scheduled checks are snapshots. A setting changed and restored between runs still requires the GitHub audit log or organization monitoring. Complete administration fields should be checked from a trusted checkout with Administration read credentials, never by exposing that token to PR code.
+Each check is a snapshot. A setting changed and restored between runs still requires the GitHub audit log or organization monitoring. Complete administration fields should be checked from a trusted checkout with Administration read credentials, never by exposing that token to PR code. GitHub plan upgrades, irreversible operations, and organization-wide permission changes require separate approval from an organization owner.
 {{< /detail >}}
 {{< /slide >}}
 
@@ -235,6 +227,8 @@ Scheduled checks are snapshots. A setting changed and restored between runs stil
 {{< detail key="docs-site-access" title="Access and maintenance boundaries" >}}
 `noindex` and `robots.txt` reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
 {{< /detail >}}
+
+<aside class="config-guidance"><strong>Website access</strong><p>If reader restrictions become necessary, evaluate Cloudflare Pages + Access first. The host, identity provider, data policy, and organization owner still require separate approval.</p></aside>
 {{< /slide >}}
 
 {{< slide key="rollout" track="rollout" eyebrow="Step 10" title="Adopt in stages, with a stop after every step" subtitle="Maturity follows operational evidence, not a date or the mere presence of files." legacy="false"  class="candidate-slide" >}}
@@ -248,9 +242,11 @@ Scheduled checks are snapshots. A setting changed and restored between runs stil
 {{< detail key="rollout-evidence" title="Why capabilities are not enabled all at once" >}}
 A big-bang switch spreads defects across every project; a calendar date does not prove readiness; a profile without real adoption evidence is only a promise. `profiles/catalog.yaml` separates synthetic verification from consuming-repository evidence. `scripts/verify-template.sh` proves generation and update paths, but cannot replace a pilot.
 {{< /detail >}}
+
+<aside class="config-guidance"><strong>Fleet platform thresholds</strong><p>Evaluate a catalog at ten active consuming repositories, or at three or more with repeated owner or service lookup delays. Evaluate central policy enforcement at five or more only after repeated cross-repository drift or measurable manual repair cost.</p></aside>
 {{< /slide >}}
 
-{{< slide key="bridge" class="dense" eyebrow="2025-05 → 2026-08" title="Keep the principles and adjust the implementation" subtitle="The earlier SDLC direction remains valid, with more precise routing, capability detection, and delivery boundaries." legacy="false" >}}
+{{< slide key="bridge" audience="maintainer" class="dense" eyebrow="May 2026 internal presentation" title="Review the original principles against today's implementation" subtitle="Revisits the SDLC ideas shared internally in May 2026 and marks what is retained, adjusted, or deferred." legacy="false" >}}
 | Earlier topic | Current decision |
 | --- | --- |
 | Core SDLC stages | Keep plan, build, test, deliver, and monitor in maintainable GitHub objects |
@@ -291,11 +287,11 @@ Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, gene
 {{< similar-tools >}}
 {{< /slide >}}
 
-{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | CI/CD settings" title="CI/CD settings | Checks by Journey" subtitle="Separates the tests and automation that normal repositories and repo-template need for Issue PR → dev and dev → main." class="similar-tools-slide testing-slide" legacy="true" >}}
+{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | CI/CD settings" title="CI/CD settings | Checks by Journey" subtitle="Separates the tests and automation that normal repositories and repo-template need for Issue PR (work branch → dev) and Release PR (dev → main)." class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
 {{< /slide >}}
 
-{{< slide key="access-control" class="dense" eyebrow="Access decision" title="Temporary protection before a hosting choice" subtitle="Current measures reduce accidental sharing; none is described as access control." legacy="false" >}}
+{{< slide key="access-control" audience="archive" class="dense" eyebrow="Access decision" title="Temporary protection before a hosting choice" subtitle="Current measures reduce accidental sharing; none is described as access control." legacy="false" >}}
 | Option | Cost and benefit | Current limitation or owner |
 | --- | --- | --- |
 | Cloudflare Pages + Access | Free allowance can provide a small-team login wall | Organization owner must establish Cloudflare, domain, DNS, and SSO/OTP policy |
@@ -307,7 +303,7 @@ Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, gene
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="principles" class="dense" eyebrow="Key decisions" title="Rules, reasons, and deliberate omissions" subtitle="These decisions are backed by current files and checks." legacy="false" >}}
+{{< slide key="principles" audience="archive" class="dense" eyebrow="Key decisions" title="Rules, reasons, and deliberate omissions" subtitle="These decisions are backed by current files and checks." legacy="false" >}}
 | Review question | Current decision |
 | --- | --- |
 | `main` protection on Free private | Preserve Ruleset policy and report `DEGRADED`; never claim an enforced merge gate |
@@ -324,7 +320,7 @@ Agents do not save raw conversations. Only a user-confirmed durable architecture
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="benchmark" class="dense" eyebrow="External benchmark and live evidence" title="A solid foundation, not a complete platform" subtitle="New projects, Copier updates, OSV, Release, and the first CI-only pilot have evidence; remaining boundaries stay explicit." legacy="false" >}}
+{{< slide key="benchmark" audience="archive" class="dense" eyebrow="External benchmark and live evidence" title="A solid foundation, not a complete platform" subtitle="New projects, Copier updates, OSV, Release, and the first CI-only pilot have evidence; remaining boundaries stay explicit." legacy="false" >}}
 | Benchmark or probe | Assessment | Current evidence and boundary |
 | --- | --- | --- |
 | Copier vs projen | Good fit | Editable output plus smart update matches the requirement |
@@ -342,7 +338,7 @@ There is no cross-repository catalog, comprehensive hosted governance, or generi
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="fleet-inventory" class="dense" eyebrow="Fleet governance" title="Inventory real repositories, not assumptions" subtitle="As of 2026-08-24, the organization has six private repositories and one consuming repository." legacy="false" >}}
+{{< slide key="fleet-inventory" audience="archive" class="dense" eyebrow="Fleet governance" title="Inventory real repositories, not assumptions" subtitle="As of 2026-08-24, the organization has six private repositories and one consuming repository." legacy="false" >}}
 | Repository | Owner | Template state | Drift data |
 | --- | --- | --- | --- |
 | `csarc-repo-template` | `@Innoguard-Cyber-Arch/arch` | Source repository | Live integration proves the drift check can run |
@@ -357,7 +353,7 @@ The inventory reads GitHub repositories, default branches, CODEOWNERS, Copier an
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="fleet-governance-thresholds" eyebrow="Fleet thresholds" title="Measure the problem before adding a platform" subtitle="Catalog and policy enforcement solve different problems and use separate evidence." legacy="false"  class="candidate-slide" >}}
+{{< slide key="fleet-governance-thresholds" audience="archive" eyebrow="Fleet thresholds" title="Measure the problem before adding a platform" subtitle="Catalog and policy enforcement solve different problems and use separate evidence." legacy="false"  class="candidate-slide" >}}
 | Need | Quantified reevaluation threshold |
 | --- | --- |
 | Catalog / Backstage | Ten active consuming repositories; or at least three plus two Issues within 90 days recording owner/service lookup over 30 minutes |
@@ -368,7 +364,7 @@ Open an evaluation Issue that names a platform owner, cost ceiling, trial scope,
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="spec-format" eyebrow="Specification format" title="Default to an Issue; create a Milestone only for an explicit story" subtitle="Keep one lightweight format instead of maintaining two systems before the need exists." legacy="false"  class="candidate-slide" >}}
+{{< slide key="spec-format" audience="archive" eyebrow="Specification format" title="Default to an Issue; create a Milestone only for an explicit story" subtitle="Keep one lightweight format instead of maintaining two systems before the need exists." legacy="false"  class="candidate-slide" >}}
 | Option | Current state |
 | --- | --- |
 | Current `docs/specs/*.md` | Front matter records ID, priority, state, and optional tracking; markers repeatably synchronize an Issue or Milestone |
@@ -378,5 +374,3 @@ Open an evaluation Issue that names a platform owner, cost ceiling, trial scope,
 Adopting Spec Kit requires rewriting `scripts/spec_to_issue.py`, converting existing specs, updating verification assertions, and designing an equivalent Issue sync. Supporting both formats adds cognitive and maintenance cost. Reevaluate when approved specifications regularly need reliable AI decomposition into several work items and the team accepts an additional CLI/agent workflow. Issue #77 tracks the decision.
 {{< /detail >}}
 {{< /slide >}}
-
-{{< glossary >}}

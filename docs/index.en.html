@@ -275,7 +275,7 @@
     .file-pane { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
     .file-list-head, .file-row {
       display: grid;
-      min-width: 0;
+      min-width: 128px;
       grid-template-columns: minmax(0, 1.55fr) minmax(120px, .68fr) minmax(155px, .72fr);
       align-items: center;
       gap: 8px;
@@ -360,8 +360,9 @@
     .similar-tools-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
     .similar-tools-tabs { display: flex; align-items: end; gap: 4px; margin-bottom: -1px; padding-left: 10px; z-index: 2; }
     .similar-tools-tabs button {
-      min-width: 210px;
-      padding: 7px 16px 8px;
+      flex: 0 0 auto;
+      min-width: 136px;
+      padding: 6px 10px 7px;
       border: 1px solid #a9a99f;
       border-bottom-color: var(--line);
       border-radius: 8px 8px 0 0;
@@ -371,6 +372,7 @@
       font-size: 16px;
       font-weight: 900;
       text-align: left;
+      white-space: nowrap;
     }
     .similar-tools-tabs button small { display: block; margin-bottom: 2px; font-size: 12px; letter-spacing: .03em; }
     .similar-tools-tabs button[aria-selected="true"] { border-top: 5px solid var(--yellow); border-bottom-color: white; background: white; color: var(--ink); }
@@ -431,6 +433,10 @@
     .similar-tools-testing-matrix tbody th span { margin-top: 3px; color: var(--muted); font-weight: 500; }
     .similar-tools-testing-matrix th, .similar-tools-testing-matrix td { padding: 8px 10px; vertical-align: top; }
     .similar-tools-testing-matrix td code { overflow-wrap: anywhere; white-space: normal; }
+    .testing-duration-matrix tbody th strong { display: block; }
+    .testing-duration-list { margin: 0; padding-left: 18px; }
+    .testing-duration-list li + li { margin-top: 4px; }
+    .testing-duration-total { margin: 7px 0 0; padding-top: 6px; border-top: 1px solid var(--line); }
     .testing-stage-list { margin: 0; padding-left: 18px; }
     .testing-stage-list > li + li { margin-top: 6px; }
     .testing-stage-list > li > strong { font-size: 17px; }
@@ -1051,7 +1057,7 @@
     .dense-flow .flow-step { padding: 8px 10px; }
 
     .pipeline-map { display: grid; flex: 1; min-height: 0; grid-template-rows: minmax(0, 1fr) auto auto; gap: 12px; }
-    .pipeline-track { display: grid; min-height: 0; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 18px; }
+    .pipeline-track { display: grid; min-height: 0; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px; }
     .pipeline-stage {
       position: relative;
       min-width: 0;
@@ -2011,63 +2017,6 @@ html[data-detail-level="simple"] .technical-tour-trigger {
   background: var(--best-soft);
 }
 
-.glossary-intro {
-  padding: 12px 15px;
-  border-left: 7px solid var(--yellow);
-  background: #fffbea;
-  font-size: 22px;
-}
-
-.glossary-index,
-.glossary-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.glossary-index {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.glossary-index section,
-.glossary-term {
-  padding: 16px 20px;
-  border: 1px solid var(--line);
-  border-top: 7px solid var(--yellow);
-  background: white;
-}
-
-.glossary-index h3,
-.glossary-term h3 {
-  margin-bottom: 8px;
-  font-size: 21px;
-}
-
-.glossary-index ul {
-  margin: 0;
-  padding-left: 20px;
-}
-
-.glossary-index li,
-.glossary-term p,
-.glossary-term a {
-  font-size: 17px;
-  line-height: 1.35;
-}
-
-.glossary-index a,
-.glossary-term a {
-  color: var(--ink);
-  font-weight: 800;
-  text-decoration-color: var(--yellow);
-  text-decoration-thickness: 3px;
-}
-
-.glossary-term:target {
-  outline: 5px solid var(--yellow);
-  outline-offset: -5px;
-}
-
 .detail-panel {
   display: grid;
   min-height: 0;
@@ -2166,11 +2115,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -2214,7 +2162,7 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 </section>
 
-<section class="slide markdown-slide candidate-slide" id="flow" data-content-key="flow" data-track="flow" aria-label="From a requirement to a deliverable version">
+<section class="slide markdown-slide candidate-slide" id="flow" data-content-key="flow" data-track="flow" aria-label="The template guides every change">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -2264,59 +2212,48 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
-    <span class="selection-sequence">Developer journey</span>
-    <h2>From a requirement to a deliverable version</h2>
-    <p class="subtitle">Steps 01–06 follow each change; 07–10 continuously support the flow.</p>
+    <span class="selection-sequence">CI/CD flow</span>
+    <h2>The template guides every change</h2>
+    <p class="subtitle">Follow the Issue and PR prompts; the template prepares the right settings and tells you what needs attention.</p>
   </header>
   <div class="markdown-body"><table>
 	<thead>
 			<tr>
-					<th>Stage</th>
-					<th>Human and agent action</th>
-					<th>Automation evidence</th>
+					<th>What you are doing</th>
+					<th>How the template guides you</th>
 			</tr>
 	</thead>
 	<tbody>
 			<tr>
-					<td>01 Define work</td>
-					<td>State the problem and acceptance criteria in an Issue</td>
-					<td>Title, field, and prior-work checks</td>
+					<td>Create the work</td>
+					<td>The Issue form prompts for the problem, completion conditions, and necessary context</td>
 			</tr>
 			<tr>
-					<td>02 Implement and test</td>
-					<td>Work from <code>AGENTS.md</code> on a short branch and isolated worktree</td>
-					<td>Focused local checks</td>
+					<td>Make the change</td>
+					<td>Repository guidance tells people and agents how to work and which local check to run first</td>
 			</tr>
 			<tr>
-					<td>03 Open a PR</td>
-					<td>Link the Issue and explain purpose, verification, and rollback</td>
-					<td>PR policy and delivery route</td>
+					<td>Open a PR</td>
+					<td>The PR template prompts for the linked Issue, completed result, and verification evidence</td>
 			</tr>
 			<tr>
-					<td>04 Run CI</td>
-					<td>Ordinary Issue PRs use the fast tier</td>
-					<td>Stable <code>verify</code> aggregate result</td>
+					<td>Read the result</td>
+					<td>The template selects the necessary checks and identifies what must be fixed</td>
 			</tr>
 			<tr>
-					<td>05 Review and merge</td>
-					<td>Fix failures, resolve review, and merge to the delivery branch</td>
-					<td>Approval and required checks</td>
-			</tr>
-			<tr>
-					<td>06 Version and deliver</td>
-					<td>Promotion batches version and artifact creation</td>
-					<td>Full verify, checksum, SBOM, attestation</td>
+					<td>Review and merge</td>
+					<td>Merge into the correct branch after the result and human review are clear</td>
 			</tr>
 	</tbody>
 </table>
+<p>Users do not need to memorize workflow or script names. Current automation focuses on work items, PR rules, and necessary verification; automated versioning and publishing are not enabled yet.</p>
 <aside class="technical-detail" data-content-key="flow-foundation">
   <h3>Four foundations across the whole flow</h3>
   <ul>
@@ -2325,11 +2262,12 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>09 Internal site:</strong> keeps practices, limits, evidence, and decisions discoverable.</li>
 <li><strong>10 Adoption levels:</strong> start with the baseline and add platform capability only after conditions are met.</li>
 </ul>
-<p>A CI failure returns to step 02 in the same PR. A problem found after delivery returns to step 01 as the next bounded Issue.</p>
-</aside></div>
+<p>A failed check is fixed in the same PR. A new problem found after merge becomes a separate, bounded Issue.</p>
+</aside>
+</div>
 </section>
 
-<section class="slide markdown-slide dense" id="files" data-content-key="files" data-track="files" aria-label="Files the template actually creates and maintains">
+<section class="slide markdown-slide dense" id="files" data-content-key="files" data-track="files" aria-label="The template puts required settings in the right place">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -2379,17 +2317,16 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
-    <span class="selection-sequence">Responsibility map</span>
-    <h2>Files the template actually creates and maintains</h2>
-    <p class="subtitle">The template may propose infrastructure updates without silently overwriting product-owned content.</p>
+    <span class="selection-sequence">File map</span>
+    <h2>The template puts required settings in the right place</h2>
+    <p class="subtitle">This lists the major files currently generated; template updates never silently overwrite product-owned content.</p>
   </header>
   <div class="markdown-body"><table>
 	<thead>
@@ -2412,11 +2349,11 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>CI, promotion, release, OSV, and governance drift</td>
+					<td>Five active flows: Issue triage, Milestone sync, spec sync, PR rules, and necessary verification</td>
 					<td>Template-led</td>
 			</tr>
 			<tr>
-					<td><code>AGENTS.md</code>, <code>README.md</code></td>
+					<td><code>AGENTS.md</code>, <code>README.md</code>, <code>CLAUDE.md</code></td>
 					<td>Agent working rules and user entry point</td>
 					<td>Shared</td>
 			</tr>
@@ -2426,9 +2363,14 @@ html[data-detail-level="simple"] .detail-panel {
 					<td>Shared</td>
 			</tr>
 			<tr>
-					<td><code>scripts/verify</code></td>
-					<td>Single verification entry point in generated projects</td>
+					<td><code>scripts/</code></td>
+					<td>Local verification, work synchronization, and repository settings</td>
 					<td>Template-led</td>
+			</tr>
+			<tr>
+					<td><code>docs/</code>, <code>site/</code></td>
+					<td>Project guidance, specifications, decisions, and internal site</td>
+					<td>Shared</td>
 			</tr>
 			<tr>
 					<td><code>src/</code>, product tests, and product specifications</td>
@@ -2440,7 +2382,7 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="technical-detail" data-content-key="files-update">
   <h3>How updates protect product content</h3>
   <p>Copier carries updates into a short branch and leaves conflicts in the PR for human review. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.</p>
-<p>Workflows, policies, scripts, and documents consumed by both root and <code>template/</code> are generated from root by <code>scripts/sync-paired-files.sh</code>; <code>--check</code> verifies content and executable bits. Files that differ because of Copier variables are checked by generating a real project.</p>
+<p>Workflows, policies, scripts, and documents shared by root and <code>template/</code> are kept in sync. Files that differ because of project choices are verified by generating a real project. Version and publishing configuration remains present, but its GitHub Actions are not enabled yet.</p>
 </aside>
 </div>
 </section>
@@ -2495,11 +2437,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -2511,17 +2452,19 @@ html[data-detail-level="simple"] .detail-panel {
 <ul>
 <li><strong>Overall:</strong> define the work in an Issue, implement it on a branch, then review and deliver it through a PR.</li>
 <li><strong>Milestone:</strong> create one only when multiple work items share a deadline, integration point, or release.</li>
-<li><strong>Issue:</strong> state the problem, acceptance criteria, and verification; use Feature, Task, or Bug as the native Type.
+<li><strong>Issue:</strong> choose the Feature, Task, Bug, or Documentation form, then state the problem, acceptance criteria, and verification.
 <ul>
-<li>Feature is a shared outcome; Task is independently deliverable work; Bug is behavior that differs from expectations. Documentation is a Task with the documentation label.</li>
-<li>Titles use 12–80 ASCII characters and at least three words; the body requires type, problem, and acceptance criteria.</li>
-<li>Select one work label from enhancement, bug, or documentation. The creator self-assigns when submitting the Issue.</li>
+<li>Feature is an outcome that needs several pieces of work.</li>
+<li>Task is work that can be completed and verified independently.</li>
+<li>Bug is a result that differs from expectations.</li>
+<li>Documentation changes only documentation or examples.</li>
+<li>Use a clear English title; the creator owns the Issue by default.</li>
 <li>Keep work together when one PR and one result can verify it. Create a Sub-issue when work can be independently implemented and verified, or when required follow-up exceeds the original scope.</li>
 <li>A Parent describes the shared outcome that is not complete yet; all required Sub-issues must finish before it closes. Dependency expresses ordering instead.</li>
 </ul>
 </li>
-<li><strong>PR:</strong> use <code>type(scope)!: English summary</code>; require Purpose, <code>Closes #N</code>, and the checklist in the body. The creator self-assigns after opening it.</li>
-<li><strong>Exceptions:</strong> Duplicate is a way to close a repeated Issue; Hotfix is an urgent Bug delivery label. Neither is an Issue Type.</li>
+<li><strong>PR:</strong> explain what was completed, link the Issue it closes, and deliver it after the checks pass; the creator owns it by default.</li>
+<li><strong>Exceptions:</strong> close repeated work as Duplicate. Hotfix marks an urgent fix, but still requires an Issue, verification, and review.</li>
 </ul>
 <h3 id="other-common-approaches">Other common approaches</h3>
 <ul>
@@ -2531,15 +2474,8 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>Complexity-based workflow:</strong> use a short path for small work and add discovery, design, roles, and review only for larger work.</li>
 </ul>
 <p>Concrete tools, feature names, and source links are listed under <a href="/en/#similar-tools">Similar tools</a>.</p>
-<aside class="technical-detail" data-content-key="method-lifecycle">
-  <h3>What works now and what is still being implemented</h3>
-  <ul>
-<li><strong>Active:</strong> the organization has enabled native Feature, Task, and Bug Types; four Issue Forms write their Type and label directly; <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/386">#386</a> restored the Issue triage, PR policy, Spec sync, and Milestone lifecycle GitHub Actions.</li>
-<li><strong>In progress:</strong> <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382">#382</a> consolidates the work-definition validation shared by local runs and Actions behind one entry point.</li>
-<li><strong>Not enabled:</strong> Issue-to-promotion orchestration and CI/CD for other Journeys remain archived; none of the four Journey 01 workflows is a required status check.</li>
-<li><strong>Execution limit:</strong> repository Actions are enabled, but GitHub currently refuses to start a runner because of the account billing state, so no successful hosted run exists yet.</li>
-</ul>
-</aside></div>
+<aside class="config-guidance"><strong>Specification format</strong><p>Keep the current lightweight Issue and spec format. Reconsider a separate Spec Kit workflow only when approved requirements routinely need a full spec, plan, and task breakdown.</p></aside>
+</div>
 </section>
 
 <section class="slide markdown-slide candidate-slide" id="agents" data-content-key="agents" data-track="agents" aria-label="Define AI rules before implementation">
@@ -2592,11 +2528,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -2610,15 +2545,15 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>AI rules:</strong> the root <code>AGENTS.md</code> is the single source; <code>CLAUDE.md</code> is a thin import, and a child file exists only for a genuine scoped difference.</li>
 <li><strong>Change isolation:</strong> each writable task uses its own branch and worktree. Parallelize only independent scopes; read-only work needs no extra worktree.</li>
 <li><strong>Verification evidence:</strong> run the smallest relevant local program. Actions provide events and permissions and call the same program instead of copying logic.</li>
-<li><strong>Decisions and authorization:</strong> people own requirements, material trade-offs, external impact, and irreversible operations. Journey 07 alone defines review, merge eligibility, and exceptions.</li>
-<li><strong>Template creation and updates:</strong> Copier generates and updates the shared baseline; Journey 08 defines existing-repository updates.</li>
+<li><strong>Decisions and authorization:</strong> people own requirements, material trade-offs, external impact, and irreversible operations. Rules governance defines review, merge eligibility, and exceptions.</li>
+<li><strong>Template creation and updates:</strong> Copier generates and updates the shared baseline; the Template upgrades section defines existing-repository updates.</li>
 </ul>
-<p><code>README.md</code> serves people, <code>AGENTS.md</code> serves every agent, and <code>template/AGENTS.md.jinja</code> plus <code>copier.yml</code> emit only commands the selected profile can run. <code>scripts/cleanup-worktrees</code> and <code>scripts/test-worktree-cleanup</code> handle safe cleanup; <code>scripts/verify</code>, <code>.github/workflows/</code>, and <code>policies/</code> keep rules, evidence, automation, and governance separate. This responsibility split is implemented by <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/388">#388</a> / PR #389.</p>
+<p><code>README.md</code> serves people, <code>AGENTS.md</code> serves every agent, and <code>template/AGENTS.md.jinja</code> plus <code>copier.yml</code> emit only commands the selected profile can run. <code>scripts/cleanup-worktrees</code> and <code>scripts/test-worktree-cleanup</code> handle safe cleanup; <code>scripts/verify</code>, <code>.github/workflows/</code>, and <code>policies/</code> keep rules, evidence, automation, and governance separate.</p>
 <p>Concrete tools and sources are in <a href="/en/#similar-tools">Similar tools</a>; Journey 02 local checks and Actions are in <a href="/en/#testing">CI/CD settings</a>.</p>
 </div>
 </section>
 
-<section class="slide markdown-slide candidate-slide" id="contract" data-content-key="contract" data-track="contract" aria-label="Use the same standard locally and in CI">
+<section class="slide markdown-slide candidate-slide" id="contract" data-content-key="contract" data-track="contract" aria-label="Verify the change, then let CI rerun the same rules">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -2668,54 +2603,25 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
     <span class="selection-sequence">Step 03</span>
-    <h2>Use the same standard locally and in CI</h2>
-    <p class="subtitle">Keep daily feedback fast and concentrate complete evidence at delivery boundaries.</p>
+    <h2>Verify the change, then let CI rerun the same rules</h2>
+    <p class="subtitle">Issue PRs are tiered by change scope; full verification is reserved for high-risk boundaries.</p>
   </header>
-  <div class="markdown-body"><table>
-	<thead>
-			<tr>
-					<th>Verification tier</th>
-					<th>When it runs</th>
-					<th>Scope</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Focused</td>
-					<td>Development iteration</td>
-					<td>Only lint, type, and tests directly relevant to the change</td>
-			</tr>
-			<tr>
-					<td>Fast</td>
-					<td>Ordinary Issue PR</td>
-					<td>Secret scan, format, lint, type, unit tests, and necessary template smoke</td>
-			</tr>
-			<tr>
-					<td>Full</td>
-					<td>Promotion, hotfix, merge queue, or manual dispatch</td>
-					<td>Every runtime, profile, Copier update, release, and security regression</td>
-			</tr>
-	</tbody>
-</table>
-<details class="package-disclosure" data-content-key="language-toolchain">
-  <summary><span class="tech-name">Python: uv, Ruff, mypy, pytest; TypeScript: pnpm, Biome, Vitest</span></summary>
-  <div class="package-health">Each language uses its native formatting, typing, testing, and packaging tools. Gitleaks, security, policy, and workflow orchestration share one entry point. Generated repositories use <code>./scripts/verify</code>; the template repository uses <code>./scripts/verify-template.sh</code>.</div>
-</details>
-<aside class="technical-detail" data-content-key="contract-quota">
-  <h3>Conditional checks, stable gates, and the quota exception</h3>
-  <p>Workflow changes add Zizmor, dependency changes add OSV, and governance declarations add remote governance. Unknown paths fail closed to full. The <code>verify</code> aggregate always reports; inapplicable heavy jobs are explicitly skipped so a required check never remains pending.</p>
-<p>The Actions exception applies only when a maintainer with billing visibility confirms that included minutes are exhausted and the job ran no step. Payment, budget, platform, configuration, and test failures do not qualify. The full contract is in <code>docs/ci-policy.md</code>.</p>
-</aside>
-</div>
+  <div class="markdown-body"><ul>
+<li><strong>During development:</strong> run only the focused check that proves the current change, using fresh output before claiming completion.</li>
+<li><strong>Issue PR (work branch → dev):</strong> the system selects the appropriate checks from the change; when unsure, it runs full verification.</li>
+<li><strong>High-risk boundaries:</strong> promotions, hotfixes, release recovery, merge queues, and manual runs use full.</li>
+<li><strong>One implementation:</strong> GitHub Actions has one <code>verify</code> job with a 30-minute timeout and only calls repository scripts.</li>
+<li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
+</ul>
+<p>Verification logic lives only in scripts and tests. This step restores only <code>.github/workflows/ci.yml</code>; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys. See <a href="/en/#similar-tools">Similar tools</a> for concrete comparisons and <a href="/en/#testing">CI/CD settings</a> for execution locations.</p></div>
 </section>
 
 <section class="slide markdown-slide candidate-slide" id="pr" data-content-key="pr" data-track="pr" aria-label="Merge small PRs after evidence passes">
@@ -2768,11 +2674,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -2873,11 +2778,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -2981,11 +2885,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -3081,11 +2984,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -3110,7 +3012,7 @@ html[data-detail-level="simple"] .detail-panel {
 			<tr>
 					<td>Free organization + private</td>
 					<td>Apply baseline settings and retain desired Ruleset in <code>policies/rulesets.json</code></td>
-					<td>Request one individual reviewer and report <code>DEGRADED</code>; no merge gate</td>
+					<td>Report <code>DEGRADED</code>, assign a reviewer manually, and provide no merge gate</td>
 			</tr>
 			<tr>
 					<td>Pro personal + private</td>
@@ -3126,8 +3028,8 @@ html[data-detail-level="simple"] .detail-panel {
 </table>
 <aside class="technical-detail" data-content-key="governance-observation">
   <h3>Concrete operations and observation limits</h3>
-  <p>Run <code>scripts/apply-repository-settings.sh plan</code>, <code>apply</code>, then <code>check</code>. The check compares CODEOWNERS, repository settings, Actions, policy labels, and effective Rulesets. <code>.github/workflows/governance-drift.yml</code> reruns daily and opens or updates a tracking Issue for repairable drift.</p>
-<p>Scheduled checks are snapshots. A setting changed and restored between runs still requires the GitHub audit log or organization monitoring. Complete administration fields should be checked from a trusted checkout with Administration read credentials, never by exposing that token to PR code.</p>
+  <p>Run <code>scripts/apply-repository-settings.sh plan</code>, <code>apply</code>, then <code>check</code>. The check compares CODEOWNERS, repository settings, Actions, policy labels, and effective Rulesets. <code>scripts/check-governance-drift</code> can run locally, but its former daily Action remains under <code>archive/ci-cd/</code>; it neither runs on a schedule nor opens Issues automatically.</p>
+<p>Each check is a snapshot. A setting changed and restored between runs still requires the GitHub audit log or organization monitoring. Complete administration fields should be checked from a trusted checkout with Administration read credentials, never by exposing that token to PR code. GitHub plan upgrades, irreversible operations, and organization-wide permission changes require separate approval from an organization owner.</p>
 </aside>
 </div>
 </section>
@@ -3182,11 +3084,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -3261,11 +3162,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -3286,7 +3186,7 @@ html[data-detail-level="simple"] .detail-panel {
   <h3>Access and maintenance boundaries</h3>
   <code>noindex</code> and <code>robots.txt</code> reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
 </aside>
-</div>
+<aside class="config-guidance"><strong>Website access</strong><p>If reader restrictions become necessary, evaluate Cloudflare Pages + Access first. The host, identity provider, data policy, and organization owner still require separate approval.</p></aside></div>
 </section>
 
 <section class="slide markdown-slide candidate-slide" id="rollout" data-content-key="rollout" data-track="rollout" aria-label="Adopt in stages, with a stop after every step">
@@ -3339,11 +3239,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -3381,10 +3280,10 @@ html[data-detail-level="simple"] .detail-panel {
   <h3>Why capabilities are not enabled all at once</h3>
   A big-bang switch spreads defects across every project; a calendar date does not prove readiness; a profile without real adoption evidence is only a promise. <code>profiles/catalog.yaml</code> separates synthetic verification from consuming-repository evidence. <code>scripts/verify-template.sh</code> proves generation and update paths, but cannot replace a pilot.
 </aside>
-</div>
+<aside class="config-guidance"><strong>Fleet platform thresholds</strong><p>Evaluate a catalog at ten active consuming repositories, or at three or more with repeated owner or service lookup delays. Evaluate central policy enforcement at five or more only after repeated cross-repository drift or measurable manual repair cost.</p></aside></div>
 </section>
 
-<section class="slide markdown-slide dense" id="bridge" data-content-key="bridge" aria-label="Keep the principles and adjust the implementation">
+<section class="slide markdown-slide dense" id="bridge" data-content-key="bridge" data-audience="maintainer" aria-label="Review the original principles against today&#39;s implementation">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -3434,17 +3333,16 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix active-bridge" href="#bridge" aria-current="page">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#bridge" aria-current="page">May review</a>
 </aside>
 
   <header>
-    <span class="selection-sequence">2025-05 → 2026-08</span>
-    <h2>Keep the principles and adjust the implementation</h2>
-    <p class="subtitle">The earlier SDLC direction remains valid, with more precise routing, capability detection, and delivery boundaries.</p>
+    <span class="selection-sequence">May 2026 internal presentation</span>
+    <h2>Review the original principles against today&#39;s implementation</h2>
+    <p class="subtitle">Revisits the SDLC ideas shared internally in May 2026 and marks what is retained, adjusted, or deferred.</p>
   </header>
   <div class="markdown-body"><table>
 	<thead>
@@ -3557,11 +3455,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix active-selection" href="#ecosystem" aria-current="page">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -3677,11 +3574,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix active-selection" href="#similar-tools" aria-current="page">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header class="basic-header">
@@ -3695,13 +3591,14 @@ html[data-detail-level="simple"] .detail-panel {
   <button id="similar-tools-tab-primary" type="button" role="tab" aria-selected="true" aria-controls="similar-tools-panel-primary" data-similar-tools-tab="0"><small>Overall match</small>Primary similar tools</button>
   <button id="similar-tools-tab-work" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>Work definition</button>
   <button id="similar-tools-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI rules</button>
-  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="3"><small>Journey 08</small>Template upgrades</button>
+  <button id="similar-tools-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>Verification &#43; CI</button>
+  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="4"><small>Journey 08</small>Template upgrades</button>
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
   <div class="similar-tools-legend">
     <span class="competitor">Similar overall purpose | covers at least five journeys and released within six months</span>
     <span class="coverage-key"><i class="coverage-tag full">Full match</i>　<i class="coverage-tag partial">Partial match</i></span>
-    <span class="capture-date">Stars captured｜2026-08-28</span>
+    <span class="capture-date">Stars captured｜2026-08-31</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Primary similar tools">
     <table class="similar-tools-matrix similar-tools-primary-matrix">
@@ -3718,8 +3615,8 @@ html[data-detail-level="simple"] .detail-panel {
       <tbody>
         <tr>
           <th scope="row"><a href="https://github.com/projen/projen" target="_blank" rel="noreferrer">projen</a></th>
-          <td>v0.103.5<br>(2026-08-26)</td>
-          <td>2,948</td>
+          <td>v0.103.11<br>(2026-08-29)</td>
+          <td>2,952</td>
           <td>A project generator that declares a project in a general-purpose language and continuously synthesizes managed configuration and workflows.</td>
           <td><ul><li>projen treats .projenrc as the only source and prevents direct edits to many generated files.</li><li>CSARC distributes an updatable Copier baseline while preserving ownership boundaries for product and policy files.</li></ul></td>
           <td><div class="coverage-tags"><span class="coverage-tag full" title="03: Full match">03</span><span class="coverage-tag full" title="06: Full match">06</span><span class="coverage-tag full" title="08: Full match">08</span><span class="coverage-tag partial" title="01: Partial match">01</span><span class="coverage-tag partial" title="04: Partial match">04</span><span class="coverage-tag partial" title="05: Partial match">05</span><span class="coverage-tag partial" title="07: Partial match">07</span><span class="coverage-tag partial" title="10: Partial match">10</span>
@@ -3728,7 +3625,7 @@ html[data-detail-level="simple"] .detail-panel {
         <tr>
           <th scope="row"><a href="https://github.com/hoangnb24/repository-harness" target="_blank" rel="noreferrer">Repository Harness</a></th>
           <td>harness-v0.1.10<br>(2026-08-13)</td>
-          <td>1,199</td>
+          <td>1,207</td>
           <td>An agent-ready repository framework that puts AI working rules, durable plans, verification, and safe updates in the repository.</td>
           <td><ul><li>Repository Harness primarily adds an agent working framework and safe update mechanism to an existing repository.</li><li>CSARC also supplies generated technology profiles, GitHub governance, delivery, and version policy.</li></ul></td>
           <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag full" title="08: Full match">08</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="04: Partial match">04</span><span class="coverage-tag partial" title="07: Partial match">07</span><span class="coverage-tag partial" title="10: Partial match">10</span>
@@ -3740,7 +3637,7 @@ html[data-detail-level="simple"] .detail-panel {
   <p class="similar-tools-note"><strong>Classification rule: </strong>All listed tools must have a release within six months. Primary tools cover at least five journeys and sort by full, then partial matches; other tools also need at least 1,000 Stars. Journey tags run from 01 to 10.</p>
 </div>
 <div id="similar-tools-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-work" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares only how repositories preserve the basis for work, turn definitions into repository state, make changes authoritative, and adjust documentation depth to the size of the work.</span><span class="capture-date">Stars captured｜2026-08-28</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares only how repositories preserve the basis for work, turn definitions into repository state, make changes authoritative, and adjust documentation depth to the size of the work.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Work definition">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
@@ -3752,12 +3649,12 @@ html[data-detail-level="simple"] .detail-panel {
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：The repository keeps product documents, decisions, plans, code, and verification evidence together.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Backstage<span class="tool-meta"><span>v1.54.5 (2026-08-25)</span><span>★ 34,273</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entities provide a central source of truth for services, owners, and relationships.</span></li>
-              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：Briefs, specifications, and architecture records accumulate durable context according to complexity.</span></li>
-              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Specs / Changes</a>：Specs preserve current truth, while changes hold deltas that have not yet been accepted.</span></li>
-              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：A spec, plan, tasks, and constitution form the feature context inside the repository.</span></li>
-              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Plans and task records</a>：Confirmed designs and implementation plans are written into the repository and then executed step by step.</span></li>
-              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,560</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Git-native backlog</a>：Tasks, status, and decisions remain as Markdown in Git history.</span></li>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entities provide a central source of truth for services, owners, and relationships.</span></li>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：Briefs, specifications, and architecture records accumulate durable context according to complexity.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Specs / Changes</a>：Specs preserve current truth, while changes hold deltas that have not yet been accepted.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：A spec, plan, tasks, and constitution form the feature context inside the repository.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Plans and task records</a>：Confirmed designs and implementation plans are written into the repository and then executed step by step.</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,581</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Git-native backlog</a>：Tasks, status, and decisions remain as Markdown in Git history.</span></li>
           </ul></td>
         </tr>
         <tr>
@@ -3766,9 +3663,9 @@ html[data-detail-level="simple"] .detail-panel {
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：Typed components declare the desired project and synth reconciles the files.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Backstage<span class="tool-meta"><span>v1.54.5 (2026-08-25)</span><span>★ 34,273</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entities and Software Templates declare portal components and creation workflows.</span></li>
-              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,546</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：Answers and Jinja templates declare generation inputs without continuously controlling remote state.</span></li>
-              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.0 (2026-08-26)</span><span>★ 3,681</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：A Recipe declares a semantic transformation that parsers and visitors apply.</span></li>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entities and Software Templates declare portal components and creation workflows.</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：Answers and Jinja templates declare generation inputs without continuously controlling remote state.</span></li>
+              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：A Recipe declares a semantic transformation that parsers and visitors apply.</span></li>
           </ul></td>
         </tr>
         <tr>
@@ -3778,12 +3675,12 @@ html[data-detail-level="simple"] .detail-panel {
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active / completed plans</a>：Work spanning sessions stays in an active plan and is archived only after completion.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">BMad Delivery Loop</a>：Artifacts mature through clarify, plan, build, and verify.</span></li>
-              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Change workflow</a>：Only after propose, apply, and archive does the content merge into the authoritative specification.</span></li>
-              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature workflow</a>：Artifacts evolve on a feature branch and are ultimately accepted through Git and a PR.</span></li>
-              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Finishing a development branch</a>：After verification, the workflow explicitly chooses a PR, merge, retained branch, or discarded work.</span></li>
-              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,546</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Update diff</a>：An update first produces a Git diff and is accepted only after conflicts are resolved and the change is merged.</span></li>
-              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,560</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task workflow</a>：Task files change with branches and PRs and become shared state after merge.</span></li>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">BMad Delivery Loop</a>：Artifacts mature through clarify, plan, build, and verify.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Change workflow</a>：Only after propose, apply, and archive does the content merge into the authoritative specification.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature workflow</a>：Artifacts evolve on a feature branch and are ultimately accepted through Git and a PR.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Finishing a development branch</a>：After verification, the workflow explicitly chooses a PR, merge, retained branch, or discarded work.</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Update diff</a>：An update first produces a Git diff and is accepted only after conflicts are resolved and the change is merged.</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,581</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task workflow</a>：Task files change with branches and PRs and become shared state after merge.</span></li>
           </ul></td>
         </tr>
         <tr>
@@ -3792,11 +3689,11 @@ html[data-detail-level="simple"] .detail-panel {
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Durable-plan threshold</a>：A small typo needs no plan; risky or long-running work receives a durable record.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Quick Flow / BMad Method</a>：Quick Flow handles small changes; complex products add full planning and architecture.</span></li>
-              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Change proposal</a>：Small edits can go directly through a PR; substantial changes receive a complete proposal.</span></li>
-              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md" target="_blank" rel="noreferrer">Agentic bugfix workflow</a>：The full workflow suits substantial features, while small fixes can follow a shorter path.</span></li>
-              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Skill-triggered workflow</a>：Brainstorming, planning, TDD, and review skills are activated as needed instead of forcing every step onto every task.</span></li>
-              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,560</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task hierarchy</a>：Status, priority, and parent-child relationships organize tasks of different sizes.</span></li>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Quick Flow / BMad Method</a>：Quick Flow handles small changes; complex products add full planning and architecture.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Change proposal</a>：Small edits can go directly through a PR; substantial changes receive a complete proposal.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/agentic-bugfix.md" target="_blank" rel="noreferrer">Agentic bugfix workflow</a>：The full workflow suits substantial features, while small fixes can follow a shorter path.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Skill-triggered workflow</a>：Brainstorming, planning, TDD, and review skills are activated as needed instead of forcing every step onto every task.</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,581</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Task hierarchy</a>：Status, priority, and parent-child relationships organize tasks of different sizes.</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -3804,7 +3701,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
 </div>
 <div id="similar-tools-panel-agents" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-agents" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares only how repositories instruct agents, preserve context across sessions, isolate parallel changes, and keep human decision boundaries.</span><span class="capture-date">Stars captured｜2026-08-28</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares only how repositories instruct agents, preserve context across sessions, isolate parallel changes, and keep human decision boundaries.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="AI rules">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
@@ -3815,11 +3712,11 @@ html[data-detail-level="simple"] .detail-panel {
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository instructions</a>：Persistent agent working rules and verification commands live in the repository.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Agent roles</a>：Product, architecture, development, and QA roles provide specialized instructions for each phase.</span></li>
-              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/getting-started.md" target="_blank" rel="noreferrer">Project instructions</a>：The repository&#39;s OpenSpec structure and commands give different agents one shared change lifecycle.</span></li>
-              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/commands/constitution.md" target="_blank" rel="noreferrer">Constitution</a>：A constitution stores principles that every feature follows and agents reference while producing later artifacts.</span></li>
-              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Composable skills</a>：Composable skills give agents repeatable working methods.</span></li>
-              <li><strong>Ruler<span class="tool-meta"><span>v0.3.44 (2026-06-30)</span><span>★ 2,898</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/intellectronica/ruler" target="_blank" rel="noreferrer">Centralized rule distribution</a>：Rules are maintained centrally and emitted into agent-specific configuration files.</span></li>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Agent roles</a>：Product, architecture, development, and QA roles provide specialized instructions for each phase.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/getting-started.md" target="_blank" rel="noreferrer">Project instructions</a>：The repository&#39;s OpenSpec structure and commands give different agents one shared change lifecycle.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/commands/constitution.md" target="_blank" rel="noreferrer">Constitution</a>：A constitution stores principles that every feature follows and agents reference while producing later artifacts.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Composable skills</a>：Composable skills give agents repeatable working methods.</span></li>
+              <li><strong>Ruler<span class="tool-meta"><span>v0.3.44 (2026-06-30)</span><span>★ 2,901</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/intellectronica/ruler" target="_blank" rel="noreferrer">Centralized rule distribution</a>：Rules are maintained centrally and emitted into agent-specific configuration files.</span></li>
           </ul></td>
         </tr>
         <tr>
@@ -3828,11 +3725,11 @@ html[data-detail-level="simple"] .detail-panel {
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Durable plans</a>：Cross-session, dependent, or high-risk work uses an active plan that is archived after completion.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：Briefs, PRDs, UX, architecture, and stories let multiple agent roles hand work across phases.</span></li>
-              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">changes/ artifacts</a>：Proposals, designs, tasks, and specification deltas stay in changes/ and are archived after completion.</span></li>
-              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md / plan.md / tasks.md</a>：Requirements, technical plans, and task breakdowns are saved as files that survive across sessions.</span></li>
-              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Writing plans</a>：Designs, steps, files, and checks are written into plans that later sessions can continue.</span></li>
-              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,560</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Markdown task records</a>：Agents can read and write versioned task files that preserve context across sessions.</span></li>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：Briefs, PRDs, UX, architecture, and stories let multiple agent roles hand work across phases.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">changes/ artifacts</a>：Proposals, designs, tasks, and specification deltas stay in changes/ and are archived after completion.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md / plan.md / tasks.md</a>：Requirements, technical plans, and task breakdowns are saved as files that survive across sessions.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Writing plans</a>：Designs, steps, files, and checks are written into plans that later sessions can continue.</span></li>
+              <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,581</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Markdown task records</a>：Agents can read and write versioned task files that preserve context across sessions.</span></li>
           </ul></td>
         </tr>
         <tr>
@@ -3841,20 +3738,69 @@ html[data-detail-level="simple"] .detail-panel {
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Isolated work</a>：Separate branches and working directories keep concurrent changes from overwriting one another.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature branches</a>：Each feature evolves on its own branch and specification directory, reducing collisions between parallel changes.</span></li>
-              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Git worktrees</a>：Git worktrees create isolated workspaces before independent tasks are assigned to different agents.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">Feature branches</a>：Each feature evolves on its own branch and specification directory, reducing collisions between parallel changes.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Git worktrees</a>：Git worktrees create isolated workspaces before independent tasks are assigned to different agents.</span></li>
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>When a human must decide</strong><span>Compares who owns requirement trade-offs, external effects, irreversible operations, and merge authorization.<br><br><b>CSARC: </b>People own requirements, material trade-offs, external effects, and irreversible operations. Journey 07 alone defines review, merge eligibility, and exceptions.</span></th>
+          <th scope="row"><strong>When a human must decide</strong><span>Compares who owns requirement trade-offs, external effects, irreversible operations, and merge authorization.<br><br><b>CSARC: </b>People own requirements, material trade-offs, external effects, and irreversible operations. Rules governance defines review, merge eligibility, and exceptions.</span></th>
           <td><ul>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Human checkpoints</a>：Plans retain explicit human checkpoints for risk, direction, and irreversible steps.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,410</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Workflow checkpoints</a>：Human confirmation points are added during discovery, planning, and delivery according to work size.</span></li>
-              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,496</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Proposal review</a>：People review a change proposal&#39;s intent and delta before it is applied and archived.</span></li>
-              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 131,938</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/commands/clarify.md" target="_blank" rel="noreferrer">Clarify and analyze</a>：Ambiguity and cross-artifact inconsistencies are clarified before an agent generates the plan.</span></li>
-              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 278,757</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Brainstorming approval</a>：Design sections are confirmed before planning and implementation begin.</span></li>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Workflow checkpoints</a>：Human confirmation points are added during discovery, planning, and delivery according to work size.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md" target="_blank" rel="noreferrer">Proposal review</a>：People review a change proposal&#39;s intent and delta before it is applied and archived.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/commands/clarify.md" target="_blank" rel="noreferrer">Clarify and analyze</a>：Ambiguity and cross-artifact inconsistencies are clarified before an agent generates the plan.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Brainstorming approval</a>：Design sections are confirmed before planning and implementation begin.</span></li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div id="similar-tools-panel-contract" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-contract" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">Compares only where verification logic lives, how each run is scoped, what proves completion, and who verifies generated projects.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Verification &#43; CI">
+    <table class="similar-tools-matrix similar-tools-philosophy-matrix">
+      <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>What local and CI runs share</strong><span>Compares whether verification lives in locally runnable programs, CI-only YAML, or another pipeline runtime.<br><br><b>CSARC: </b>Verification logic lives in scripts and tests. Local runs execute it directly, while Actions only provide events, permissions, and a call to the same entrypoint.</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/concepts/tasks/" target="_blank" rel="noreferrer">Tasks</a>：Build and test steps are defined as a task graph shared by the local CLI and generated workflows.</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/scripts/validate-premerge.sh" target="_blank" rel="noreferrer">scripts/validate-premerge.sh</a>：Local runs and the Pre-Merge Contract workflow execute the same validation script instead of rewriting test logic in YAML.</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Dagger<span class="tool-meta"><span>v0.21.9 (2026-08-26)</span><span>★ 16,217</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.dagger.io/getting-started/ci-integrations/" target="_blank" rel="noreferrer">Local-first CI</a>：The same pipeline function runs on a developer machine and across CI providers, at the cost of a Dagger engine and container dependency.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>How each run is scoped</strong><span>Compares running everything, selecting affected tasks from a dependency graph, and routing by changed path plus delivery stage.<br><br><b>CSARC: </b>The system selects docs, fast, or full from the change and delivery stage. Issue PRs use fast; promotions, hotfixes, merge queues, and unknown paths use full.</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/concepts/tasks/#conditions" target="_blank" rel="noreferrer">Task conditions</a>：A task or step can use a condition to decide whether it runs; this supports routing but the conditions still need correct maintenance.</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Nx<span class="tool-meta"><span>23.1.2 (2026-08-26)</span><span>★ 29,280</span></span></strong><span class="tool-comparison-detail"><a href="https://nx.dev/ci/features/affected" target="_blank" rel="noreferrer">nx affected</a>：It compares the Git base and head against the project graph and runs only tasks affected by the change.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>When completion may be claimed</strong><span>Compares relying on old results, requiring fresh complete output, and binding evidence to an exact commit or candidate.<br><br><b>CSARC: </b>Completion claims require fresh command output. Merge evidence binds to the exact PR head, promotion also checks the candidate tree, and a zero-step billing block is not test success.</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/build/test-completed-work.md" target="_blank" rel="noreferrer">Test completed work</a>：Completed work is exercised through usage scenarios before delivery, keeping acceptance tied to behavior instead of task status alone.</span></li>
+              <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/skills/openspec-verify-change/SKILL.md" target="_blank" rel="noreferrer">openspec-verify-change</a>：Before archiving, it checks change artifacts, tasks, and implementation and explicitly reports anything unverified or inconsistent.</span></li>
+              <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/templates/commands/analyze.md" target="_blank" rel="noreferrer">/speckit.analyze</a>：A read-only pre-implementation analysis checks the spec, plan, tasks, and constitution; it proves artifact consistency, not program correctness.</span></li>
+              <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers/blob/main/skills/verification-before-completion/SKILL.md" target="_blank" rel="noreferrer">Verification Before Completion</a>：Before claiming completion, it requires rerunning the complete command that proves the claim, reading its output, and checking the exit code.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Who verifies generated projects</strong><span>Compares testing only the generator, snapshotting output, and creating, adopting, or updating candidate repositories before running their checks.<br><br><b>CSARC: </b>A normal repository tests only its product. The repo-template full entrypoint runs the complete pytest suite, covering Python and TypeScript generation and existing-repository adoption without maintaining whole-tree snapshots.</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/custom/testing/" target="_blank" rel="noreferrer">Testing.synth</a>：Tests synthesize a project and inspect generated files; the guide also warns that whole-tree snapshots are unwieldy and should be narrowed to meaningful output.</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/tests/README.md" target="_blank" rel="noreferrer">Test Suite Map</a>：Installer, workflow, documentation, and release tests are mapped to observable invariants; removed historical capabilities no longer stay in the current pre-merge suite.</span></li>
+          </ul></td>
+          <td><ul>
           </ul></td>
         </tr>
       </tbody>
@@ -3862,7 +3808,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
 </div>
 <div id="similar-tools-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-template-upgrade" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares only how existing repositories receive updated templates, policies, or recipes and who resolves conflicts.</span><span class="capture-date">Stars captured｜2026-08-28</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares only how existing repositories receive updated templates, policies, or recipes and who resolves conflicts.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Template upgrades">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
@@ -3874,9 +3820,9 @@ html[data-detail-level="simple"] .detail-panel {
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：The updater retains the upstream base and safely updates an existing repository through a three-way merge.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Backstage<span class="tool-meta"><span>v1.54.5 (2026-08-25)</span><span>★ 34,273</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：It excels at creating new components; existing-repository migration still needs another tool.</span></li>
-              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,546</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：The recorded template source and answers let an existing repository receive template updates.</span></li>
-              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.0 (2026-08-26)</span><span>★ 3,681</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：Instead of overwriting files from a text template, it performs semantic migration across versions.</span></li>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：It excels at creating new components; existing-repository migration still needs another tool.</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：The recorded template source and answers let an existing repository receive template updates.</span></li>
+              <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：Instead of overwriting files from a text template, it performs semantic migration across versions.</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -3938,25 +3884,50 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#testing" aria-current="page">CI/CD</a>
-  <a class="journey-bookend appendix" href="#access-control">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header class="basic-header">
     <span class="selection-sequence">Maintenance appendix | CI/CD settings</span>
     <h2>CI/CD settings | Checks by Journey</h2>
-    <p class="subtitle">Separates the tests and automation that normal repositories and repo-template need for Issue PR → dev and dev → main.</p>
+    <p class="subtitle">Separates the tests and automation that normal repositories and repo-template need for Issue PR (work branch → dev) and Release PR (dev → main).</p>
   </header>
 
 <div class="legacy-content similar-tools-content testing-content">
   <div class="similar-tools-tabs" role="tablist" aria-label="CI/CD settings">
-    <button id="testing-tab-work" type="button" role="tab" aria-selected="true" aria-controls="testing-panel-work" data-similar-tools-tab="0"><small>Journey 01</small>Work definition</button>
-    <button id="testing-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-agents" data-similar-tools-tab="1"><small>Journey 02</small>AI rules</button>
+    <button id="testing-tab-duration" type="button" role="tab" aria-selected="true" aria-controls="testing-panel-duration" data-similar-tools-tab="0"><small>Overview</small>Expected runtime</button>
+    <button id="testing-tab-work" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>Work definition</button>
+    <button id="testing-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI rules</button>
+    <button id="testing-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>Verification &#43; CI</button>
   </div>
-  <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel>
+  <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
+    <div class="similar-tools-testing-intro">
+      <strong>Expected runtime for both PR stages</strong><span>Each cell totals the runner minutes expected for one PR. Queue time is excluded, and concurrent jobs are still counted separately. First-time dependency downloads and cache misses may take longer.</span>
+      <p>Runner | Zero steps means repository code never ran; check the runner, billing, and GitHub status first.</p>
+      <p>Archive | archive/ci-cd/ is reference only; verify purpose, triggers, permissions, timeout, and the local entry point before restoring one workflow.</p>
+    </div>
+    <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Expected runtime for both PR stages">
+      <table class="similar-tools-matrix similar-tools-testing-matrix testing-duration-matrix">
+        <thead><tr><th scope="col">PR stage</th><th scope="col">Every repository using the template</th><th scope="col">repo-template</th></tr></thead>
+        <tbody>
+          <tr>
+            <th scope="row"><strong>Issue PR (work branch → dev)</strong></th>
+            <td><ul class="testing-duration-list"><li><strong>Work definition：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in verification; no separate minutes</li><li><strong>Verification &#43; CI：</strong>docs &lt;1 min; fast 2–5 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>Work definition：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in verification; no separate minutes</li><li><strong>Verification &#43; CI：</strong>docs &lt;1 min; fast 3–6 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–8 min</p></td>
+          </tr>
+          <tr>
+            <th scope="row"><strong>Release PR (dev → main)</strong></th>
+            <td><ul class="testing-duration-list"><li><strong>Work definition：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in full verification; no separate minutes</li><li><strong>Verification &#43; CI：</strong>full 5–15 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>Work definition：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in full verification; no separate minutes</li><li><strong>Verification &#43; CI：</strong>full 8–12 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 9–14 min</p></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
     <strong>Journey 01 / Minimum test contract</strong><span>A normal repository needs only ./scripts/verify. During promotion, repo-template adds one check for the version it ships.</span>
   </div>
@@ -3968,7 +3939,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Issue work boundary</strong><span>Title, type, assignee, labels, and duplicate disposition must converge.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/issue-triage.yml</code>／<code>classify</code><span>Trigger：Issue opened, edited, reopened, or closed · Timeout：5 min</span></li></ul></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/issue-triage.yml</code>／<code>classify</code><span>Trigger：Issue opened, edited, reopened, or closed · Timeout：5 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -3978,7 +3949,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>PR-to-Issue traceability</strong><span>PR title, branch, Closes/Fixes link, open Issue, checkboxes, and Milestone must agree.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR opened, content, commit, or metadata changes, and merge group · Timeout：10 min</span></li></ul></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR opened, content, commit, or metadata changes, and merge group · Timeout：10 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -3988,7 +3959,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Spec contract and Issue sync</strong><span>Validate required sections, acceptance criteria, stable spec IDs, and idempotent synchronization.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_spec_to_issue.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/spec-to-issue.yml</code>／<code>sync</code><span>Trigger：Spec or sync code enters main or dev; manual dispatch is also allowed · Timeout：10 min</span></li></ul></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_spec_to_issue.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/spec-to-issue.yml</code>／<code>sync</code><span>Trigger：Spec or sync code enters main or dev; manual dispatch is also allowed · Timeout：10 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -3998,7 +3969,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Milestone completion</strong><span>Due date, open Issues, and acceptance checkboxes jointly determine close or reopen.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Release (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：Issue closed, reopened, or milestoned · Timeout：5 min</span></li></ul></div>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：Issue closed, reopened, or milestoned · Timeout：5 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4008,15 +3979,15 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Journey 01 aggregate regression</strong><span>Use one entrypoint for required tests so local runs and future Actions never maintain two lists.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>No separate test Action; restored policy workflows call shared code only.</span></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>No separate test Action; restored policy workflows call shared code only.</span></div>
             </li>
             <li>
-              <strong>Release (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify promotion</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Journey 01 does not restore the full matrix or delivery workflows.</span></div>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify promotion</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Journey 01 does not restore the full matrix or delivery workflows.</span></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Release (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_item_forms.py</code></li><li><code>tests/test_template_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>No repo-template-only Action; the same promotion entrypoint adds delivery tests.</span></div>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_item_forms.py</code></li><li><code>tests/test_template_work_definition.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/382" target="_blank" rel="noreferrer">Pending #382</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>No repo-template-only Action; the same promotion entrypoint adds delivery tests.</span></div>
             </li>
           </ul></td>
         </tr>
@@ -4036,12 +4007,12 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>AI rules entrypoint</strong><span>Every agent reads one root policy, and generated content lists only commands the profile can actually run.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Release (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
             </li>
           </ul></td>
         </tr>
@@ -4049,10 +4020,61 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Parallel isolation and safe cleanup</strong><span>Writable tasks use separate branches and worktrees, and cleanup never removes unmerged or modified directories.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR → dev</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
+  <div id="testing-panel-contract" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-contract" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 03 / Staged verification</strong><span>A normal repository verifies its own change. A repo-template release candidate also verifies generation, adoption, and updates. Actions only call the same local programs.</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 03 / Staged verification">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>Decide how much to run</strong><span>Developers run focused checks directly. CI selects docs, fast, or full from changed paths and delivery stage, with unknown paths escalating to full.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR (work branch → dev) · Timeout：30 min</span></li></ul></div>
+            </li>
+            <li>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Promotion, merge group, hotfix, or manual dispatch · Timeout：30 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Fast feedback for an Issue PR</strong><span>Run relevant formatting, static checks, ordinary tests, and necessary smoke checks without the full profile, adoption, or update matrix.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Issue PR (work branch → dev)</strong><span>When template, workflow, or shell files change, fast also generates one representative repository for a smoke check.</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Complete evidence for a release candidate</strong><span>Run full verification once on a fixed, unchanged candidate, then bind the merge to the same SHA and tree.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Additionally verifies the template, generated output, and existing-repository adoption and update paths.</span>
+            </li>
           </ul></td>
         </tr>
       </tbody>
@@ -4064,7 +4086,7 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
-<section class="slide markdown-slide dense" id="access-control" data-content-key="access-control" aria-label="Temporary protection before a hosting choice">
+<section class="slide markdown-slide dense" id="access-control" data-content-key="access-control" data-audience="archive" aria-label="Temporary protection before a hosting choice">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -4114,11 +4136,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -4159,7 +4180,7 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 </section>
 
-<section class="slide markdown-slide dense" id="principles" data-content-key="principles" aria-label="Rules, reasons, and deliberate omissions">
+<section class="slide markdown-slide dense" id="principles" data-content-key="principles" data-audience="archive" aria-label="Rules, reasons, and deliberate omissions">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -4209,11 +4230,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -4270,7 +4290,7 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 </section>
 
-<section class="slide markdown-slide dense" id="benchmark" data-content-key="benchmark" aria-label="A solid foundation, not a complete platform">
+<section class="slide markdown-slide dense" id="benchmark" data-content-key="benchmark" data-audience="archive" aria-label="A solid foundation, not a complete platform">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -4320,11 +4340,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -4395,7 +4414,7 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 </section>
 
-<section class="slide markdown-slide dense" id="fleet-inventory" data-content-key="fleet-inventory" aria-label="Inventory real repositories, not assumptions">
+<section class="slide markdown-slide dense" id="fleet-inventory" data-content-key="fleet-inventory" data-audience="archive" aria-label="Inventory real repositories, not assumptions">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -4445,11 +4464,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -4512,7 +4530,7 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 </section>
 
-<section class="slide markdown-slide candidate-slide" id="fleet-governance-thresholds" data-content-key="fleet-governance-thresholds" aria-label="Measure the problem before adding a platform">
+<section class="slide markdown-slide candidate-slide" id="fleet-governance-thresholds" data-content-key="fleet-governance-thresholds" data-audience="archive" aria-label="Measure the problem before adding a platform">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -4562,11 +4580,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -4599,7 +4616,7 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 </section>
 
-<section class="slide markdown-slide candidate-slide" id="spec-format" data-content-key="spec-format" aria-label="Default to an Issue; create a Milestone only for an explicit story">
+<section class="slide markdown-slide candidate-slide" id="spec-format" data-content-key="spec-format" data-audience="archive" aria-label="Default to an Issue; create a Milestone only for an explicit story">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -4649,11 +4666,10 @@ html[data-detail-level="simple"] .detail-panel {
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
   <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
   <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
+  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
 </aside>
 
   <header>
@@ -4686,339 +4702,6 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 </section>
 
-<section class="slide markdown-slide glossary-slide" id="glossary" data-content-key="glossary-index" aria-label="Shared glossary">
-  <aside class="journey-rail" aria-label="Presentation outline">
-  <h3>Use template</h3>
-  <ol class="journey-use">
-    <li class="journey-item">
-      <a href="#capability"><span>Capability</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#flow"><span>CI/CD flow</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#files"><span>File map</span></a>
-    </li>
-  </ol>
-  <h3>Workflow</h3>
-  <ol class="journey-main">
-    <li class="journey-item">
-      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
-    </li>
-  </ol>
-  <h3>Maintenance</h3>
-  <ol class="journey-support">
-    <li class="journey-item">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
-    </li>
-  </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
-  <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
-  <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
-</aside>
-
-  <header><span class="selection-sequence">Glossary</span><h2>Shared glossary</h2></header>
-  <p class="glossary-intro">Every term has a stable anchor and a deeper source; this page and llms.txt are generated from this data.</p>
-  <div class="glossary-index">
-    <section>
-      <h3>Work and review</h3>
-      <ul>
-        <li><a href="#glossary-issue">Issue</a></li>
-        <li><a href="#glossary-story-milestone">Story Milestone</a></li>
-        <li><a href="#glossary-pull-request">Pull request</a></li>
-        <li><a href="#glossary-decision-record">Decision record</a></li>
-      </ul>
-    </section>
-    <section>
-      <h3>Verification and capability</h3>
-      <ul>
-        <li><a href="#glossary-fast-checks">Fast checks</a></li>
-        <li><a href="#glossary-full-verification">Full verification</a></li>
-        <li><a href="#glossary-capability-state">Platform capability state</a></li>
-        <li><a href="#glossary-portable-artifact">Portable artifact</a></li>
-      </ul>
-    </section>
-    <section>
-      <h3>Integration and delivery</h3>
-      <ul>
-        <li><a href="#glossary-delivery-branch">Delivery branch</a></li>
-        <li><a href="#glossary-promotion">Promotion</a></li>
-        <li><a href="#glossary-release-intent">SemVer intent</a></li>
-        <li><a href="#glossary-copier-update">Copier update</a></li>
-      </ul>
-    </section>
-  </div>
-</section>
-<section class="slide markdown-slide glossary-slide" id="glossary-group-work" data-content-key="glossary-work" aria-label="Work and review">
-  <aside class="journey-rail" aria-label="Presentation outline">
-  <h3>Use template</h3>
-  <ol class="journey-use">
-    <li class="journey-item">
-      <a href="#capability"><span>Capability</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#flow"><span>CI/CD flow</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#files"><span>File map</span></a>
-    </li>
-  </ol>
-  <h3>Workflow</h3>
-  <ol class="journey-main">
-    <li class="journey-item">
-      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
-    </li>
-  </ol>
-  <h3>Maintenance</h3>
-  <ol class="journey-support">
-    <li class="journey-item">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
-    </li>
-  </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
-  <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
-  <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
-</aside>
-
-  <header><span class="selection-sequence">Glossary</span><h2>Work and review</h2></header>
-  <div class="glossary-grid">
-    <article class="glossary-term" id="glossary-issue">
-      <h3>Issue</h3>
-      <p>A unit of work that defines one observable outcome, its scope, and acceptance criteria.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#working-loop">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-story-milestone">
-      <h3>Story Milestone</h3>
-      <p>An independently verifiable multi-Issue story, created only for an end-to-end outcome.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/milestone-description.md">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-pull-request">
-      <h3>Pull request</h3>
-      <p>The integration boundary that preserves intent, verification evidence, and human review.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/.github/pull_request_template.md">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-decision-record">
-      <h3>Decision record</h3>
-      <p>The durable record of confirmed architecture, tooling, security, and compatibility trade-offs.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/README.md">Read more →</a>
-    </article>
-  </div>
-</section>
-<section class="slide markdown-slide glossary-slide" id="glossary-group-verification" data-content-key="glossary-verification" aria-label="Verification and capability">
-  <aside class="journey-rail" aria-label="Presentation outline">
-  <h3>Use template</h3>
-  <ol class="journey-use">
-    <li class="journey-item">
-      <a href="#capability"><span>Capability</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#flow"><span>CI/CD flow</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#files"><span>File map</span></a>
-    </li>
-  </ol>
-  <h3>Workflow</h3>
-  <ol class="journey-main">
-    <li class="journey-item">
-      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
-    </li>
-  </ol>
-  <h3>Maintenance</h3>
-  <ol class="journey-support">
-    <li class="journey-item">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
-    </li>
-  </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
-  <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
-  <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
-</aside>
-
-  <header><span class="selection-sequence">Glossary</span><h2>Verification and capability</h2></header>
-  <div class="glossary-grid">
-    <article class="glossary-term" id="glossary-fast-checks">
-      <h3>Fast checks</h3>
-      <p>Short feedback checks selected by change risk; they do not replace full pre-delivery verification.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-full-verification">
-      <h3>Full verification</h3>
-      <p>The repository-wide pre-delivery contract for code, policy, and artifacts.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#commands">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-capability-state">
-      <h3>Platform capability state</h3>
-      <p>Observed capability recorded as allowed, blocked, or unknown instead of inferred from plan names.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-portable-artifact">
-      <h3>Portable artifact</h3>
-      <p>A single-file deliverable with no external runtime assets that remains usable through file://.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">Read more →</a>
-    </article>
-  </div>
-</section>
-<section class="slide markdown-slide glossary-slide" id="glossary-group-delivery" data-content-key="glossary-delivery" aria-label="Integration and delivery">
-  <aside class="journey-rail" aria-label="Presentation outline">
-  <h3>Use template</h3>
-  <ol class="journey-use">
-    <li class="journey-item">
-      <a href="#capability"><span>Capability</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#flow"><span>CI/CD flow</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#files"><span>File map</span></a>
-    </li>
-  </ol>
-  <h3>Workflow</h3>
-  <ol class="journey-main">
-    <li class="journey-item">
-      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
-    </li>
-  </ol>
-  <h3>Maintenance</h3>
-  <ol class="journey-support">
-    <li class="journey-item">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
-    </li>
-  </ol>
-  <a class="journey-bookend appendix" href="#bridge">Review</a>
-  <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
-  <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix active-overview" href="#access-control" aria-current="page">Decisions</a>
-</aside>
-
-  <header><span class="selection-sequence">Glossary</span><h2>Integration and delivery</h2></header>
-  <div class="glossary-grid">
-    <article class="glossary-term" id="glossary-delivery-branch">
-      <h3>Delivery branch</h3>
-      <p>The branch where independent PRs for one story integrate before promotion reaches main.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-promotion">
-      <h3>Promotion</h3>
-      <p>The explicit delivery action that advances a verified delivery branch to main.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-release-intent">
-      <h3>SemVer intent</h3>
-      <p>Declared by a validated PR title; the exact version is derived from merged history.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-copier-update">
-      <h3>Copier update</h3>
-      <p>A reviewable template update that preserves project-owned content in an existing repository.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/README.md">Read more →</a>
-    </article>
-  </div>
-</section>
-
 </main>
   <nav class="controls" aria-label="Presentation controls" hidden>
     <button id="previous" type="button" aria-label="Previous slide">←</button>
@@ -5032,6 +4715,13 @@ html[data-detail-level="simple"] .detail-panel {
     <button id="zoom-in" type="button" aria-label="Zoom in">＋</button>
   </nav>
   <div class="progress" aria-hidden="true" hidden><span id="bar"></span></div>
+  <script>
+    (() => {
+      const testing = document.querySelector("#testing");
+      const bridge = document.querySelector("#bridge");
+      if (testing && bridge) testing.after(bridge);
+    })();
+  </script>
   <script data-bundled-from="../deck.js">
 (() => {
   const allSlides = [...document.querySelectorAll('.slide')];
@@ -5052,7 +4742,7 @@ html[data-detail-level="simple"] .detail-panel {
 
   function refreshSlides() {
     const maintenance = document.documentElement.dataset.detailLevel === 'technical';
-    slides = allSlides.filter(slide => slide.dataset.audience !== 'maintainer' || maintenance);
+    slides = allSlides.filter(slide => slide.dataset.audience !== 'archive' && (slide.dataset.audience !== 'maintainer' || maintenance));
     allSlides.forEach(slide => slide.removeAttribute('data-page'));
     slides.forEach((slide, index) => {
       slide.dataset.page = `${String(index + 1).padStart(2, '0')} / ${slides.length}`;

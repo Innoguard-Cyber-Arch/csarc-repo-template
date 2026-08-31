@@ -15,7 +15,6 @@
   (dict "key" "docs-site" "code" "09" "tier" "priority" "group" "support" "zh" "內部網站" "en" "Docs site")
   (dict "key" "rollout" "code" "10" "tier" "best" "group" "support" "zh" "導入層級" "en" "Rollout")
 -}}
-{{- $reviewKeys := slice "access-control" "principles" "benchmark" "fleet-inventory" "fleet-governance-thresholds" "spec-format" -}}
 <aside class="journey-rail" aria-label="{{ cond $english "Presentation outline" "簡報目錄" }}">
   <h3>{{ cond $english "Use template" "使用公版" }}</h3>
   <ol class="journey-use">
@@ -41,9 +40,8 @@
     </li>
     {{- end }}
   </ol>
-  <a class="journey-bookend appendix{{ if eq .Key "bridge" }} active-bridge{{ end }}" href="#bridge"{{ if eq .Key "bridge" }} aria-current="page"{{ end }}>{{ cond $english "Review" "五月盤點" }}</a>
   <a class="journey-bookend appendix{{ if eq .Key "ecosystem" }} active-selection{{ end }}" href="#ecosystem"{{ if eq .Key "ecosystem" }} aria-current="page"{{ end }}>{{ cond $english "Tools" "工具附錄" }}</a>
   <a class="journey-bookend appendix{{ if eq .Key "similar-tools" }} active-selection{{ end }}" href="#similar-tools"{{ if eq .Key "similar-tools" }} aria-current="page"{{ end }}>{{ cond $english "Similar" "相似工具" }}</a>
   <a class="journey-bookend appendix maintainer-bookend{{ if eq .Key "testing" }} active-selection{{ end }}" data-audience="maintainer" href="#testing"{{ if eq .Key "testing" }} aria-current="page"{{ end }}>{{ cond $english "CI/CD" "CI/CD 設定" }}</a>
-  <a class="journey-bookend appendix{{ if or (in $reviewKeys .Key) (hasPrefix .Key "glossary") }} active-overview{{ end }}" href="#access-control"{{ if or (in $reviewKeys .Key) (hasPrefix .Key "glossary") }} aria-current="page"{{ end }}>{{ cond $english "Decisions" "決策附錄" }}</a>
+  <a class="journey-bookend appendix maintainer-bookend{{ if eq .Key "bridge" }} active-selection{{ end }}" data-audience="maintainer" href="#bridge"{{ if eq .Key "bridge" }} aria-current="page"{{ end }}>{{ cond $english "May review" "五月盤點" }}</a>
 </aside>

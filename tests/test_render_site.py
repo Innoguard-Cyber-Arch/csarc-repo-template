@@ -120,6 +120,39 @@ def test_render_accepts_legacy_content_as_schema_one(tmp_path: Path) -> None:
     assert "window.CONTENT = {};" in render(source, root=tmp_path)
 
 
+def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
+    root = Path(__file__).parents[1]
+    chinese = (root / "site/content/_index.zh-tw.md").read_text(
+        encoding="utf-8"
+    )
+    flow = chinese.split('{{< slide key="flow"', 1)[1].split(
+        "{{< /slide >}}", 1
+    )[0]
+    file_map = chinese.split('{{< slide key="files"', 1)[1].split(
+        "{{< /slide >}}", 1
+    )[0]
+    workflows = {
+        path.name.removesuffix(".jinja")
+        for path in (root / "template/.github/workflows").iterdir()
+        if path.is_file()
+    }
+
+    assert workflows == {
+        "ci.yml",
+        "issue-triage.yml",
+        "milestone-lifecycle.yml",
+        "pr-policy.yml",
+        "spec-to-issue.yml",
+    }
+    assert "5 條現行自動流程" in file_map
+    for workflow in workflows:
+        assert workflow in file_map
+    for inactive in ("osv.yml", "release-please.yml", "release.yml"):
+        assert inactive not in file_map
+    assert "一般使用者不必記 workflow 或 script 名稱" in flow
+    assert "版本與發佈流程尚未啟用" in flow
+
+
 def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     root = Path(__file__).parents[1]
     chinese = (root / "site/content/_index.zh-tw.md").read_text(
@@ -138,6 +171,10 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     journey_rail = (root / "site/layouts/partials/journey-rail.html").read_text(
         encoding="utf-8"
     )
+    presentation = (root / "site/layouts/home.presentation.html").read_text(
+        encoding="utf-8"
+    )
+    deck = (root / "site/static/deck.js").read_text(encoding="utf-8")
     styles = (root / "site/static/styles.css").read_text(encoding="utf-8")
     controls = (root / "site/static/detail-toggle.css").read_text(
         encoding="utf-8"
@@ -157,28 +194,65 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert shortcode.count('data-audience="maintainer"') == 1
     assert "data-similar-tools-tab-testing" not in shortcode
     assert "similar-tools-testing-matrix" in testing_shortcode
+    assert 'id="testing-tab-duration"' in testing_shortcode
+    assert 'id="testing-panel-duration"' in testing_shortcode
     assert "statusLabel" not in data["testing"]["labels"]["zh-tw"]
     assert "statusLabel" not in data["testing"]["labels"]["en"]
     assert (
         'appendix maintainer-bookend{{ if eq .Key "testing" }}' in journey_rail
     )
+    assert journey_rail.index('href="#testing"') < journey_rail.index(
+        'href="#bridge"'
+    )
+    assert "五月盤點" in journey_rail
+    assert "決策附錄" not in journey_rail
+    assert 'href="#glossary"' not in journey_rail
+    for source in (chinese, english):
+        assert 'key="notes"' not in source
+        assert "{{< glossary >}}" not in source
+    assert "0 steps 表示程式尚未執行" in data["testing"]["duration"][
+        "labels"
+    ]["zh-tw"]["runnerNote"]
+    assert "archive/ci-cd/ 只供參考" in data["testing"]["duration"][
+        "labels"
+    ]["zh-tw"]["archiveNote"]
+    assert "名詞與約定" not in chinese
+    assert "testing.after(bridge)" in presentation
+    assert "slide.dataset.audience !== 'archive'" in deck
+    assert "Cloudflare Pages" in chinese
+    assert "存取 #79" in chinese
+    assert "不另導入 Spec Kit" in active_components
+    assert "Fleet 盤點與平台門檻" in active_components
+    for source in (chinese, english):
+        assert 'key="bridge" audience="maintainer"' in source
+        for key in (
+            "access-control",
+            "principles",
+            "benchmark",
+            "fleet-inventory",
+            "fleet-governance-thresholds",
+            "spec-format",
+        ):
+            assert f'key="{key}" audience="archive"' in source
     assert ".journey-bookend.maintainer-bookend.active-selection" in styles
     assert '.detail-level-control button[aria-pressed="true"]' in controls
     assert "background: var(--yellow);" in controls
     assert "overflow-y: auto;" in styles
     assert ".journey-rail {\n      position: fixed;" in styles
     assert ".slide.active > .legacy-content > * { flex-shrink: 0; }" in styles
-    assert chinese.count('data-config-direct="true"') == 2
+    assert ".similar-tools-tabs button {\n      flex: 0 0 auto;" in styles
+    assert "min-width: 210px;" not in styles
+    assert chinese.count('data-config-direct="true"') == 3
     assert "guidance.dataset.configDirect === 'true'" in (
         root / "site/static/detail-toggle.js"
     ).read_text(encoding="utf-8")
-    assert "07 單獨定義合併資格、權限與例外" in active_components
+    assert "規則治理單獨定義合併資格、權限與例外" in active_components
     assert "AI 能執行工作，但不能自行合併" not in active_components  # noqa: RUF001
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
-    assert len(data["features"]) == 9
-    assert len(data["featureGroups"]) == 3
+    assert len(data["features"]) == 13
+    assert len(data["featureGroups"]) == 4
     assert data["featureGroups"][0]["features"] == [
         "repositoryTruth",
         "declarativeState",
@@ -191,8 +265,22 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "parallelAgentIsolation",
         "humanDecisionBoundary",
     ]
-    assert data["featureGroups"][2]["features"] == ["templateLifecycle"]
-    assert len(data["testing"]["groups"]) == 2
+    assert data["featureGroups"][2]["features"] == [
+        "sharedVerificationEntry",
+        "riskBasedSelection",
+        "freshCompletionEvidence",
+        "generatedProjectVerification",
+    ]
+    assert data["featureGroups"][3]["features"] == ["templateLifecycle"]
+    assert len(data["testing"]["groups"]) == 3
+    duration_rows = data["testing"]["duration"]["rows"]
+    assert [row["key"] for row in duration_rows] == ["issue", "release"]
+    assert all(len(row["shared"]["items"]) == 3 for row in duration_rows)
+    assert all(len(row["templateOnly"]["items"]) == 3 for row in duration_rows)
+    assert duration_rows[0]["shared"]["total"]["zh-tw"] == "約 1\u20137 分鐘"
+    assert duration_rows[1]["templateOnly"]["total"]["zh-tw"] == (
+        "約 9\u201314 分鐘"
+    )
     assert data["testing"]["groups"][0]["journey"] == "01"
     testing_rows = data["testing"]["groups"][0]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in testing_rows] == [
@@ -242,9 +330,40 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         for scope in (row["shared"], row["templateOnly"])
         for stage in scope.values()
     )
+    verification_rows = data["testing"]["groups"][2]["rows"]
+    assert data["testing"]["groups"][2]["journey"] == "03"
+    assert [row["purpose"]["zh-tw"]["title"] for row in verification_rows] == [
+        "判斷這次要跑多少",
+        "Issue PR 的快速回饋",
+        "發版候選的完整證據",
+    ]
+    assert verification_rows[0]["shared"]["milestone"]["files"] == [
+        {"path": "scripts/ci_tier.py"}
+    ]
+    assert verification_rows[0]["shared"]["milestone"]["automation"] == [
+        {
+            "path": ".github/workflows/ci.yml",
+            "job": "verify",
+            "trigger": {
+                "zh-tw": "Issue PR\uff08工作分支 → dev\uff09",
+                "en": "Issue PR (work branch → dev)",
+            },
+            "timeout": "30 min",
+        }
+    ]
+    assert verification_rows[0]["templateOnly"] == {}
+    assert data["testing"]["labels"]["zh-tw"]["release"] == (
+        "發版 PR\uff08dev → main\uff09"
+    )
+    assert data["testing"]["labels"]["en"]["release"] == (
+        "Release PR (dev → main)"
+    )
+    assert "archived" not in data["testing"]["labels"]["zh-tw"]
+    assert "archived" not in testing_shortcode
 
-    assert len(data["tools"]) == 13
-    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 53
+    assert len(data["tools"]) == 15
+    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 64
+    assert data["comparisonDate"] == "2026-08-31"
     assert data["releaseCutoff"] == "2026-02-28"
     assert data["threshold"] == 5
     assert data["starThreshold"] == 1000
@@ -296,6 +415,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "Ruler",
         "Spec Kit",
         "Superpowers",
+        "Dagger",
+        "Nx",
     }
     assert {tool["name"] for tool in data["tools"]} - {
         tool["name"] for tool in primary
