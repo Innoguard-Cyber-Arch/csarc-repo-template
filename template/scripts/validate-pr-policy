@@ -424,4 +424,3 @@ done
 if [[ "$branch_strategy" == "delivery" && -n "${GITHUB_OUTPUT:-}" ]]; then
   echo "delivery_base=$base_branch" >> "$GITHUB_OUTPUT"
 fi
-
