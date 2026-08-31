@@ -19,7 +19,7 @@
   <h3>{{ cond $english "Use template" "使用公版" }}</h3>
   <ol class="journey-use">
     {{- range where $items "group" "use" }}
-    <li class="journey-item{{ if eq $.Key .key }} active {{ .tier }}{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+    <li class="journey-item {{ .tier }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
       <a href="#{{ .key }}"><span>{{ index . $labelKey }}</span></a>
     </li>
     {{- end }}
@@ -27,7 +27,7 @@
   <h3>{{ cond $english "Workflow" "開發與維護" }}</h3>
   <ol class="journey-main">
     {{- range where $items "group" "main" }}
-    <li class="journey-item{{ if eq $.Key .key }} active {{ .tier }}{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+    <li class="journey-item {{ .tier }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
       <a href="#{{ .key }}"><span class="journey-code">{{ .code }}</span><span>{{ index . $labelKey }}</span></a>
     </li>
     {{- end }}
@@ -35,7 +35,7 @@
   <h3>{{ cond $english "Maintenance" "公版管理" }}</h3>
   <ol class="journey-support">
     {{- range where $items "group" "support" }}
-    <li class="journey-item{{ if eq $.Key .key }} active {{ .tier }}{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+    <li class="journey-item {{ .tier }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
       <a href="#{{ .key }}"><span class="journey-code">{{ .code }}</span><span>{{ index . $labelKey }}</span></a>
     </li>
     {{- end }}

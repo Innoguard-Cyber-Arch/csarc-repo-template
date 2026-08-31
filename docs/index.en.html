@@ -690,6 +690,9 @@
       font-weight: 700;
       line-height: 1.05;
     }
+    .journey-item.priority { border-color: #d6c900; background: #fffbea; color: #655900; }
+    .journey-item.best { border-color: #6db091; background: var(--best-soft); color: #0b6540; }
+    .journey-item.optional { border-color: #7ba4d1; background: var(--optional-soft); color: #174f8b; }
     .journey-item a {
       display: flex;
       width: 100%;
@@ -720,6 +723,8 @@
     .journey-item.active.priority { border-color: #b9a700; background: var(--yellow); }
     .journey-item.active.best { border-color: var(--best); background: var(--best-soft); color: #0b6540; }
     .journey-item.active.optional { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
+    .journey-bookend.appendix:not(.maintainer-bookend) { border-color: #d6c900; background: #fffbea; color: #655900; }
+    .journey-bookend.appendix.active-selection:not(.maintainer-bookend) { background: var(--yellow); color: var(--ink); }
     .decision-tier-tag {
       display: inline-block;
       margin-right: 7px;
@@ -2081,49 +2086,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2178,49 +2183,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2283,49 +2288,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2403,49 +2408,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2503,49 +2508,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2578,49 +2583,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2649,49 +2654,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2746,49 +2751,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2853,49 +2858,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item active best" aria-current="step">
+    <li class="journey-item best active" aria-current="step">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -2953,49 +2958,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3053,49 +3058,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3131,49 +3136,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item active priority" aria-current="step">
+    <li class="journey-item priority active" aria-current="step">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3208,49 +3213,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item active best" aria-current="step">
+    <li class="journey-item best active" aria-current="step">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3302,49 +3307,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3424,49 +3429,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3543,49 +3548,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -3918,49 +3923,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -4225,49 +4230,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -4319,49 +4324,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -4429,49 +4434,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -4553,49 +4558,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -4669,49 +4674,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>
@@ -4755,49 +4760,49 @@ html[data-detail-level="simple"] .detail-panel {
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#capability"><span>Capability</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#files"><span>File map</span></a>
     </li>
   </ol>
   <h3>Workflow</h3>
   <ol class="journey-main">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#supply"><span class="journey-code">04</span><span>Supply</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#pr"><span class="journey-code">05</span><span>PR merge</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
     </li>
   </ol>
   <h3>Maintenance</h3>
   <ol class="journey-support">
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item priority">
       <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item">
+    <li class="journey-item best">
       <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
     </li>
   </ol>

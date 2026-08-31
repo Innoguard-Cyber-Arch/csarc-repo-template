@@ -675,6 +675,9 @@
       font-weight: 700;
       line-height: 1.05;
     }
+    .journey-item.priority { border-color: #d6c900; background: #fffbea; color: #655900; }
+    .journey-item.best { border-color: #6db091; background: var(--best-soft); color: #0b6540; }
+    .journey-item.optional { border-color: #7ba4d1; background: var(--optional-soft); color: #174f8b; }
     .journey-item a {
       display: flex;
       width: 100%;
@@ -705,6 +708,8 @@
     .journey-item.active.priority { border-color: #b9a700; background: var(--yellow); }
     .journey-item.active.best { border-color: var(--best); background: var(--best-soft); color: #0b6540; }
     .journey-item.active.optional { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
+    .journey-bookend.appendix:not(.maintainer-bookend) { border-color: #d6c900; background: #fffbea; color: #655900; }
+    .journey-bookend.appendix.active-selection:not(.maintainer-bookend) { background: var(--yellow); color: var(--ink); }
     .decision-tier-tag {
       display: inline-block;
       margin-right: 7px;

@@ -204,6 +204,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert journey_rail.index('href="#testing"') < journey_rail.index(
         'href="#bridge"'
     )
+    assert journey_rail.count('class="journey-item {{ .tier }}') == 3
     assert "五月盤點" in journey_rail
     assert "決策附錄" not in journey_rail
     assert 'href="#glossary"' not in journey_rail
@@ -238,6 +239,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         ):
             assert f'key="{key}" audience="archive"' in source
     assert ".journey-bookend.maintainer-bookend.active-selection" in styles
+    assert ".journey-item.priority" in styles
+    assert ".journey-item.best" in styles
+    assert ".journey-bookend.appendix:not(.maintainer-bookend)" in styles
     assert '.detail-level-control button[aria-pressed="true"]' in controls
     assert "background: var(--yellow);" in controls
     assert "overflow-y: auto;" in styles
