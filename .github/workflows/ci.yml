@@ -75,6 +75,7 @@ jobs:
           CSARC_CI_SCOPES: ${{ steps.plan.outputs.scopes }}
           CSARC_CI_TIER: ${{ steps.plan.outputs.tier }}
           CSARC_PYTHON_VERSION: "3.14"
+          CSARC_RUN_OSV: ${{ steps.plan.outputs.run_osv }}
         run: ./scripts/verify-fast
       - name: Run full verification
         if: ${{ steps.plan.outputs.tier == 'full' }}

@@ -11,6 +11,7 @@ cd "$repo_root"
 git diff --check
 ./scripts/check-update-conflicts
 ./scripts/scan-secrets
+./scripts/verify-dependencies
 ./scripts/build-decision-site --check
 ./scripts/lint-workflows-shell
 ./scripts/test-static-validation

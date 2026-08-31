@@ -19,6 +19,10 @@ if [[ "$tier" == "docs" ]]; then
   exit 0
 fi
 
+if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
+  ./scripts/verify-dependencies
+fi
+
 run_static_checks=false
 if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
   run_static_checks=true

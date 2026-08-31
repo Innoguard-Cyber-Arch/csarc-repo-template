@@ -22,6 +22,10 @@ if [[ "$tier" == "docs" ]]; then
   exit 0
 fi
 
+if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
+  ./scripts/verify-dependencies
+fi
+
 if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
   ./scripts/lint-workflows-shell
 fi

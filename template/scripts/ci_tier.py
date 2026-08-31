@@ -56,7 +56,7 @@ def scope_for(path: str) -> str:
             "pyproject.toml",
             "uv.lock",
         }
-        or path in {".github/dependabot.yml", "template/.github/dependabot.yml"}
+        or name in {"dependabot.yml", "pnpm-workspace.yaml"}
         or path.startswith(".github/dependency-review-config")
     ):
         return "dependency"
@@ -141,7 +141,15 @@ def classify(
         reason=reason,
         scopes=scopes,
         run_governance=full or "governance" in scopes,
-        run_osv=full or "dependency" in scopes,
+        run_osv=(
+            full
+            or "dependency" in scopes
+            or any(
+                Path(path).name
+                in {"install-osv-scanner", "verify-dependencies"}
+                for path in changed_files
+            )
+        ),
         run_zizmor=full or "workflow" in scopes,
         upload_site=(
             force_full

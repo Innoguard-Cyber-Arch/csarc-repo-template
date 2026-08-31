@@ -125,7 +125,17 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     chinese = (root / "site/content/_index.zh-tw.md").read_text(
         encoding="utf-8"
     )
+    english = (root / "site/content/_index.en.md").read_text(encoding="utf-8")
+    chinese_home = chinese.split('{{< slide key="capability"', 1)[1].split(
+        "{{< /slide >}}", 1
+    )[0]
+    english_home = english.split('{{< slide key="capability"', 1)[1].split(
+        "{{< /slide >}}", 1
+    )[0]
     flow = chinese.split('{{< slide key="flow"', 1)[1].split(
+        "{{< /slide >}}", 1
+    )[0]
+    supply = chinese.split('{{< slide key="supply"', 1)[1].split(
         "{{< /slide >}}", 1
     )[0]
     file_map = chinese.split('{{< slide key="files"', 1)[1].split(
@@ -141,16 +151,42 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         "ci.yml",
         "issue-triage.yml",
         "milestone-lifecycle.yml",
+        "osv.yml",
         "pr-policy.yml",
         "spec-to-issue.yml",
     }
-    assert "5 條現行自動流程" in file_map
+    assert "6 條現行自動流程" in file_map
     for workflow in workflows:
         assert workflow in file_map
-    for inactive in ("osv.yml", "release-please.yml", "release.yml"):
+    for inactive in ("release-please.yml", "release.yml"):
         assert inactive not in file_map
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
     assert "版本與發佈流程尚未啟用" in flow
+    assert "使用 AI／vibe coding 的一般開發者" in chinese_home
+    assert "不要求具備工程或 CI/CD 維運背景" in chinese_home
+    assert "general AI-assisted or vibe-coding developers" in english_home
+    assert "does not assume an engineering or CI/CD operations background" in (
+        english_home
+    )
+    for explanation in (
+        "鎖定版本清單（lockfile）",
+        "自動更新服務（Dependabot）",
+        "已知漏洞掃描（OSV）",
+        "軟體成分清單（SBOM）",
+    ):
+        assert explanation in supply
+    journey_decisions = chinese.split('{{< slide key="method"', 1)[1].split(
+        '{{< slide key="ecosystem"', 1
+    )[0]
+    assert '<article class="decision-step' not in journey_decisions
+    assert journey_decisions.count('class="decision-step decision-fold') == 18
+    assert journey_decisions.count('class="decision-step decision-fold" open') == 9
+    assert (
+        journey_decisions.count(
+            'class="decision-step decision-fold recommended" open'
+        )
+        == 9
+    )
 
 
 def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
@@ -300,6 +336,12 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert [row["key"] for row in duration_rows] == ["issue", "release"]
     assert all(len(row["shared"]["items"]) == 4 for row in duration_rows)
     assert all(len(row["templateOnly"]["items"]) == 4 for row in duration_rows)
+    for row in duration_rows:
+        for scope in ("shared", "templateOnly"):
+            assert [
+                item["label"]["zh-tw"][:2]
+                for item in row[scope]["items"]
+            ] == ["02", "03", "04", "05"]
     assert duration_rows[0]["shared"]["total"]["zh-tw"] == "約 1\u20137 分鐘"
     assert duration_rows[1]["templateOnly"]["total"]["zh-tw"] == (
         "約 9\u201314 分鐘"
@@ -384,8 +426,15 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "已公開漏洞立即檢查",
         "發版成品清冊與雜湊",
     ]
-    assert supply_rows[1]["shared"]["milestone"]["files"][0]["issue"] == 407
-    assert supply_rows[2]["shared"]["milestone"]["automation"][0]["pending"]
+    assert supply_rows[1]["shared"]["milestone"]["files"] == [
+        {"path": ".github/dependabot.yml"}
+    ]
+    assert supply_rows[2]["shared"]["milestone"]["files"] == [
+        {"path": "scripts/verify-dependencies"}
+    ]
+    assert supply_rows[2]["shared"]["release"]["automation"][1]["path"] == (
+        ".github/workflows/osv.yml"
+    )
     assert data["testing"]["groups"][5]["journey"] == "06"
     delivery_rows = data["testing"]["groups"][5]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in delivery_rows] == [

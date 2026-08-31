@@ -82,6 +82,7 @@ jobs:
         env:
           CSARC_CI_SCOPES: {% raw %}${{ steps.plan.outputs.scopes }}{% endraw %}
           CSARC_CI_TIER: {% raw %}${{ steps.plan.outputs.tier }}{% endraw %}
+          CSARC_RUN_OSV: {% raw %}${{ steps.plan.outputs.run_osv }}{% endraw %}
 {% if has_python %}
           CSARC_PYTHON_VERSION: "{{ python_target }}"
 {% endif %}

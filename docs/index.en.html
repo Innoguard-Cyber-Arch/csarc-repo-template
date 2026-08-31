@@ -2143,7 +2143,7 @@ html[data-detail-level="simple"] .detail-panel {
     <h2>An updatable repository foundation</h2>
     <p class="subtitle">Create a new project, adopt an existing one, or receive policy updates through verified pull requests.</p>
   </header>
-  <div class="markdown-body"><p>The template puts work definition, AI instructions, verification, merging, dependencies, and delivery evidence into one reviewable flow.</p>
+  <div class="markdown-body"><p>Standard mode is for general AI-assisted or vibe-coding developers; it does not assume an engineering or CI/CD operations background. It explains what to do and what result to expect. Files, scripts, and GitHub Actions stay in Maintenance mode.</p>
 <table>
 	<thead>
 			<tr>
@@ -2153,28 +2153,28 @@ html[data-detail-level="simple"] .detail-panel {
 	</thead>
 	<tbody>
 			<tr>
-					<td>Project composition</td>
-					<td>CI/CD-only, Python 3.14, TypeScript with Node 24 and pnpm 11, or Python plus TypeScript</td>
+					<td>Project type</td>
+					<td>Workflow only, Python, TypeScript, or Python plus TypeScript</td>
 			</tr>
 			<tr>
-					<td>Branch strategy</td>
-					<td>Milestone delivery branches, <code>main</code>-only, or one long-lived <code>dev</code></td>
+					<td>Branch approach</td>
+					<td>One development branch per delivery batch, all changes directly into <code>main</code>, or one shared <code>dev</code> branch</td>
 			</tr>
 			<tr>
-					<td>Shared baseline</td>
-					<td>SDD Features with Task/Bug subissues, dated delivery Milestones, tiered CI, promotion evidence, security checks, one SemVer, and Copier updates</td>
+					<td>Shared capability</td>
+					<td>Work-item (Issue) and change-proposal (PR) forms, AI working rules, automated checks, dependency safety, version records, and template updates</td>
 			</tr>
 	</tbody>
 </table>
 <aside class="technical-detail" data-content-key="capability-boundary">
-  <h3>Real entry points and capability boundaries</h3>
+  <h3>Adoption paths and current scope</h3>
   <ul>
-<li><strong>New repository:</strong> choose a profile and branch strategy; keep the story in an SDD Feature, deliver Task/Bug subissues through separate PRs, and use a Milestone only for dated delivery.</li>
-<li><strong>Existing repository:</strong> preview adoption on a branch, preserve product content and legacy-debt boundaries, then resolve conflicts and gates explicitly.</li>
-<li><strong>Repository already using the template:</strong> update from a reviewed template SHA and review only that revision&rsquo;s diff.</li>
+<li><strong>New repository:</strong> choose a project type and branch approach; split only larger outcomes into independently verifiable sub-items.</li>
+<li><strong>Existing repository:</strong> preview the adoption diff, preserve existing product content, then resolve conflicts and required checks one by one.</li>
+<li><strong>Repository already using the template:</strong> select a reviewed template version, run the update, and review only that version&rsquo;s diff.</li>
 <li><strong>Prerequisites:</strong> Git, GitHub CLI, and uv; TypeScript or mixed projects also need Node 24+ and pnpm 11. Local verification needs no token.</li>
 </ul>
-<p>The template claims only capabilities backed by executable files and regression checks. Go, Rust, generic deployment, monitoring, RAG, and hosted documentation remain future or optional work.</p>
+<p>The template promises only capabilities that are implemented and tested. Go, Rust, generic deployment, monitoring, AI knowledge retrieval, and hosted documentation remain future or optional work.</p>
 </aside>
 </div>
 </section>
@@ -2262,7 +2262,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>Read verification and dependency results</td>
-					<td>The template selects the necessary checks; dependency changes first prove that the locked package set still installs</td>
+					<td>The template selects the necessary checks; package changes also prove that the saved version list still installs</td>
 			</tr>
 			<tr>
 					<td>Review and merge</td>
@@ -2366,7 +2366,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>Five active flows: Issue triage, Milestone sync, spec sync, PR rules, and necessary verification</td>
+					<td>Six active flows: Issue triage, Milestone sync, spec sync, PR rules, verification, and scheduled vulnerability scanning</td>
 					<td>Template-led</td>
 			</tr>
 			<tr>
@@ -2499,9 +2499,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>Change proposal:</strong> review a proposed change separately, then merge it into the official specification after acceptance.</li>
 <li><strong>Complexity-based workflow:</strong> use a short path for small work and add discovery, design, roles, and review only for larger work.</li>
 </ul>
-<p>Concrete tools, feature names, and source links are listed under <a href="/en/#similar-tools">Similar tools</a>.</p>
-<aside class="config-guidance"><strong>Specification format</strong><p>Keep the current lightweight Issue and spec format. Reconsider a separate Spec Kit workflow only when approved requirements routinely need a full spec, plan, and task breakdown.</p></aside>
-</div>
+<aside class="config-guidance"><strong>Specification format</strong><p>Keep the current lightweight Issue and spec format. Reconsider a separate Spec Kit workflow only when approved requirements routinely need a full spec, plan, and task breakdown.</p></aside></div>
 </section>
 
 <section class="slide markdown-slide candidate-slide" id="agents" data-content-key="agents" data-track="agents" aria-label="Define AI rules before implementation">
@@ -2575,7 +2573,6 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>Template creation and updates:</strong> Copier generates and updates the shared baseline; the Template upgrades section defines existing-repository updates.</li>
 </ul>
 <p><code>README.md</code> serves people, <code>AGENTS.md</code> serves every agent, and <code>template/AGENTS.md.jinja</code> plus <code>copier.yml</code> emit only commands the selected profile can run. <code>scripts/cleanup-worktrees</code> and <code>scripts/test-worktree-cleanup</code> handle safe cleanup; <code>scripts/verify</code>, <code>.github/workflows/</code>, and <code>policies/</code> keep rules, evidence, automation, and governance separate.</p>
-<p>Concrete tools and sources are in <a href="/en/#similar-tools">Similar tools</a>; Journey 02 local checks and Actions are in <a href="/en/#testing">CI/CD settings</a>.</p>
 </div>
 </section>
 
@@ -2647,7 +2644,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>One implementation:</strong> GitHub Actions has one <code>verify</code> job with a 30-minute timeout and only calls repository scripts.</li>
 <li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
 </ul>
-<p>Verification logic lives only in scripts and tests. This step restores only <code>.github/workflows/ci.yml</code>; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys. See <a href="/en/#similar-tools">Similar tools</a> for concrete comparisons and <a href="/en/#testing">CI/CD settings</a> for execution locations.</p></div>
+<p>Verification logic lives only in scripts and tests. This step restores only <code>.github/workflows/ci.yml</code>; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys.</p></div>
 </section>
 
 <section class="slide markdown-slide candidate-slide" id="pr" data-content-key="pr" data-track="pr" aria-label="Make completed changes reviewable and deliverable">
@@ -2818,19 +2815,19 @@ html[data-detail-level="simple"] .detail-panel {
 	<tbody>
 			<tr>
 					<td>A dependency change cannot be reproduced</td>
-					<td>PR verification reinstalls the locked versions and runs the required checks</td>
+					<td>PR verification reinstalls from the locked-version list (lockfile), so every run receives the same packages</td>
 			</tr>
 			<tr>
 					<td>A newly published malicious version</td>
-					<td>TypeScript packages wait three days; other automated updates still await restoration</td>
+					<td>GitHub&rsquo;s automated update service (Dependabot) groups update PRs; ordinary releases wait three days, while security updates do not</td>
 			</tr>
 			<tr>
 					<td>A disclosed vulnerability goes unnoticed</td>
-					<td>The scanning contract is retained, but automated scanning is not enabled yet</td>
+					<td>The Open Source Vulnerabilities scan (OSV) checks dependency PRs and release candidates; a weekly scan covers periods without PRs</td>
 			</tr>
 			<tr>
 					<td>Nobody knows what a release contains</td>
-					<td>Dependency security owns the inventory contract and runs it when real release artifacts exist</td>
+					<td>A software bill of materials (SBOM) lists packages in the artifact; dependency security verifies it when delivery produces the artifact</td>
 			</tr>
 	</tbody>
 </table>
@@ -3500,7 +3497,7 @@ html[data-detail-level="simple"] .detail-panel {
 			<tr>
 					<td>Dependabot, OSV, Syft</td>
 					<td>Dependency updates, vulnerabilities, and SBOM</td>
-					<td>Tools and responsibilities selected; automation pending restoration</td>
+					<td>Dependabot and OSV are active; the SBOM contract is verified against real release artifacts</td>
 			</tr>
 			<tr>
 					<td><img src="data:image/png;base64,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" alt="GitHub Community Projects logo"> <a href="https://github.com/github-community-projects/safe-settings">Safe Settings</a></td>
@@ -3820,7 +3817,7 @@ html[data-detail-level="simple"] .detail-panel {
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
       <tbody>
         <tr>
-          <th scope="row"><strong>How package updates enter a PR</strong><span>Compares scheduled PRs, central grouping, and manual upgrades.<br><br><b>CSARC: </b>Dependabot groups ecosystems; ordinary updates wait three days and security updates do not. #407 restores the configuration.</span></th>
+          <th scope="row"><strong>How package updates enter a PR</strong><span>Compares scheduled PRs, central grouping, and manual upgrades.<br><br><b>CSARC: </b>Dependabot opens weekly PRs grouped by ecosystem; ordinary updates wait three days and security updates do not.</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/api/github/#projen.github.Dependabot" target="_blank" rel="noreferrer">Dependabot component</a>：The project model generates the configuration; customization returns to .projenrc.</span></li>
           </ul></td>
@@ -3838,7 +3835,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>When disclosed vulnerabilities are checked</strong><span>Compares update notifications, PR checks, and scheduled scans.<br><br><b>CSARC: </b>OSV is the single data source. Dependency PRs, release candidates, and schedules share one local program, pending #407.</span></th>
+          <th scope="row"><strong>When disclosed vulnerabilities are checked</strong><span>Compares update notifications, PR checks, and scheduled scans.<br><br><b>CSARC: </b>OSV is the single data source. Dependency PRs, release candidates, and weekly or manual schedules share one local program.</span></th>
           <td><ul>
           </ul></td>
           <td><ul>
@@ -4041,13 +4038,13 @@ html[data-detail-level="simple"] .detail-panel {
         <tbody>
           <tr>
             <th scope="row"><strong>Issue PR (work branch → dev)</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>Verification / CI：</strong>docs &lt;1 min; fast 2–5 min</li><li><strong>Dependency security：</strong>About 1–3 min within fast; remeasure after #407</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>Verification / CI：</strong>docs &lt;1 min; fast 3–6 min</li><li><strong>Dependency security：</strong>About 1–3 min within fast; remeasure after #407</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–8 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; fast 2–5 min</li><li><strong>04 Dependency security：</strong>Typically under 1 min within fast</li><li><strong>05 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; fast 3–6 min</li><li><strong>04 Dependency security：</strong>Typically under 1 min within fast</li><li><strong>05 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–8 min</p></td>
           </tr>
           <tr>
             <th scope="row"><strong>Release PR (dev → main)</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Under 1 min within full</li><li><strong>Verification / CI：</strong>full 5–15 min</li><li><strong>Dependency security：</strong>About 1–3 min within full; remeasure after #407</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>PR / merge：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Under 1 min within full</li><li><strong>Verification / CI：</strong>full 8–12 min</li><li><strong>Dependency security：</strong>About 1–3 min within full; remeasure after #407</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 9–14 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full 5–15 min</li><li><strong>04 Dependency security：</strong>Typically under 1 min within full</li><li><strong>05 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full 8–12 min</li><li><strong>04 Dependency security：</strong>Typically under 1 min within full</li><li><strong>05 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 9–14 min</p></td>
           </tr>
         </tbody>
       </table>
@@ -4192,7 +4189,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-supply" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-supply" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 04 / Dependency security</strong><span>Dependency changes first reproduce the locked install. Vulnerability checks run for dependency changes and release candidates, while a schedule covers periods without PRs. #407 restores update and scanning automation.</span>
+    <strong>Journey 04 / Dependency security</strong><span>Dependency changes first reproduce the locked install. Vulnerability checks run for dependency changes and release candidates, while a schedule covers periods without PRs.</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 04 / Dependency security">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
@@ -4221,12 +4218,12 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Open routine update PRs</strong><span>Dependabot groups updates by ecosystem and waits three days for ordinary releases without delaying security fixes.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.github/dependabot.yml</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407" target="_blank" rel="noreferrer">Pending #407</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>#407 restores this from the archive; generated update PRs still use the same CI job.</span></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.github/dependabot.yml</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Opens weekly update PRs by ecosystem; generated PRs still use the same CI job.</span></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_dependency_policy.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407" target="_blank" rel="noreferrer">Pending #407</a></li></ul></div><span>Confirms that each profile emits only its applicable update ecosystems.</span>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_dependency_security.py</code></li></ul></div><span>Confirms that each profile emits only its applicable update ecosystems.</span>
             </li>
           </ul></td>
         </tr>
@@ -4234,10 +4231,10 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Check disclosed vulnerabilities immediately</strong><span>Dependency changes and release candidates share one local OSV entrypoint; a weekly schedule covers periods without PRs.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-dependencies</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407" target="_blank" rel="noreferrer">Pending #407</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407" target="_blank" rel="noreferrer">Pending #407</a><span>Trigger：Issue PR changing dependency files · Timeout：30 min</span></li></ul></div>
+              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-dependencies</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing dependency files · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-dependencies</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407" target="_blank" rel="noreferrer">Pending #407</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407" target="_blank" rel="noreferrer">Pending #407</a><span>Trigger：Release PR, merge group, or manual full verification · Timeout：30 min</span></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>A thin weekly and manual workflow calls the same entrypoint without duplicating scanning logic.</span></div>
+              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-dependencies</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Release PR, merge group, or manual full verification · Timeout：30 min</span></li><li><code>.github/workflows/osv.yml</code>／<code>scan</code><span>Trigger：Weekly Monday or manual scan · Timeout：10 min</span></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>A thin weekly and manual workflow calls the same entrypoint without duplicating scanning logic.</span></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">

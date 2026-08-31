@@ -44,9 +44,10 @@ def test_root_ci_is_one_bounded_verification_job() -> None:
     assert "python3 scripts/ci_tier.py" in source
     assert "run: ./scripts/verify-fast" in source
     assert "run: ./scripts/verify-template.sh" in source
+    assert "CSARC_RUN_OSV: ${{ steps.plan.outputs.run_osv }}" in source
     assert all(
         name not in source
-        for name in ("osv", "zizmor", "matrix:", "schedule:", "push:")
+        for name in ("zizmor", "matrix:", "schedule:", "push:")
     )
 
 
@@ -60,9 +61,11 @@ def test_generated_ci_uses_the_same_one_job_contract() -> None:
     assert "python3 scripts/ci_tier.py" in source
     assert "run: ./scripts/verify-fast" in source
     assert "run: ./scripts/verify" in source
+    assert "CSARC_RUN_OSV:" in source
+    assert "steps.plan.outputs.run_osv" in source
     assert all(
         name not in source
-        for name in ("osv", "zizmor", "matrix:", "schedule:", "push:")
+        for name in ("zizmor", "matrix:", "schedule:", "push:")
     )
 
 
