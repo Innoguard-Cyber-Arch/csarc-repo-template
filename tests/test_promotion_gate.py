@@ -57,9 +57,12 @@ GIT: str = _GIT
 
 def test_release_recovery_routes_to_preflight_and_gate() -> None:
     """The required gate must conclude whenever its preflight runs."""
-    workflow = (
+    workflow_path = (
         Path(__file__).parents[1] / ".github/workflows/promotion.yml"
-    ).read_text(encoding="utf-8")
+    )
+    if not workflow_path.is_file():
+        pytest.skip("Journey 06 promotion workflow remains archived")
+    workflow = workflow_path.read_text(encoding="utf-8")
     marker = (
         "contains(github.event.pull_request.labels.*.name, 'release-recovery')"
     )

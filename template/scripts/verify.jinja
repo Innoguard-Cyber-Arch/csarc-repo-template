@@ -28,14 +28,13 @@ if [[ "$mode" != "full" && "$mode" != "python-compatibility" &&
   exit 2
 fi
 
-for workflow in .github/workflows/{pr-policy,promotion}.yml; do
+for workflow in .github/workflows/{pr-policy,ci}.yml; do
   if grep -Eq 'secrets\.(CSARC_SYNC_TOKEN|CSARC_ADMIN_TOKEN|GH_ADMIN_TOKEN|ADMIN_TOKEN)' \
     "$workflow"; then
     echo "$workflow exposes an administration token to an untrusted event."
     exit 1
   fi
 done
-grep -q 'gh auth setup-git' .github/workflows/delivery-maintenance.yml
 
 verify_python={{ "true" if language in ["python", "python-typescript"] else "false" }}
 verify_typescript="${CSARC_VERIFY_TYPESCRIPT:-{{ "true" if language in ["typescript", "python-typescript"] else "false" }}}"

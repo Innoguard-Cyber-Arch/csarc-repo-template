@@ -145,9 +145,6 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     glossary = (root / "site/layouts/shortcodes/glossary.html").read_text(
         encoding="utf-8"
     )
-    components = (root / "site/static/legacy-components.js").read_text(
-        encoding="utf-8"
-    )
     styles = (root / "site/static/styles.css").read_text(encoding="utf-8")
     controls = (root / "site/static/detail-toggle.css").read_text(
         encoding="utf-8"
@@ -187,8 +184,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "slide.dataset.audience !== 'archive'" in deck
     assert "Cloudflare Pages" in chinese
     assert "存取 #79" in chinese
-    assert "不另導入 Spec Kit" in components
-    assert "Fleet 盤點與平台門檻" in components
+    assert "不另導入 Spec Kit" in active_components
+    assert "Fleet 盤點與平台門檻" in active_components
     for source in (chinese, english):
         assert 'key="bridge" audience="maintainer"' in source
         for key in (
