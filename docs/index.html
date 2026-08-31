@@ -2686,13 +2686,13 @@ html[data-detail-level="simple"] .detail-panel {
           <ul class="work-definition-list">
             <li><strong>整體：</strong>Issue 說清楚 → branch 實作 → PR 審查與交付；本模板提供一致的表單、規則與驗證入口。</li>
             <li><strong>Milestone：</strong>多張工作有共同期限、整合或發版時才建立；收錄 Task／Bug 與對應 PR。</li>
-            <li><strong>Issue：</strong><ul><li><strong>標題：</strong>英文 ASCII 12–80 字元、至少三個詞；不加類型前綴，結尾不加句點。</li><li><strong>內文：</strong>類型、問題與完成條件必填；補充可寫關聯、驗證與風險。</li><li><strong>工作類別：</strong>Feature＝共同成果；Task＝可獨立完成的工作；Bug＝不符合預期；Documentation＝純文件工作。GitHub 原生 Type 只使用 Feature／Task／Bug；Duplicate 與 Hotfix 都不是 Type。</li><li><strong>Label：</strong>工作分類擇一：enhancement、bug、documentation；重複案件使用 duplicate，交付追蹤才使用 promotion。</li><li><strong>Assignee：</strong>建立者在送出時自我指派；agent／CLI 建立時明確指定 <code>@me</code>，正式交接時再更換。</li><li><strong>何時拆 Sub-issue：</strong>同一張 PR 能完成並用同一組結果驗證就不拆；能獨立實作、驗證與交付，或超出原範圍但必須補做才拆。</li><li><strong>Parent：</strong>描述仍未完整達成的共同成果；必要 Sub-issues 完成後才能結案。先後順序另用 Dependency。</li></ul></li>
+            <li><strong>Issue：</strong><ul><li><strong>選擇工作類別：</strong>Feature＝需要多項工作一起完成的成果；Task＝可獨立完成與驗證的工作；Bug＝結果不符合預期；Documentation＝只修改文件或範例。</li><li><strong>寫清楚工作：</strong>使用清楚的英文標題，說明問題、完成條件與驗證；建立者預設負責。</li><li><strong>何時拆 Sub-issue：</strong>同一張 PR 能完成並用同一組結果驗證就不拆；能獨立實作、驗證與交付，或超出原範圍但必須補做才拆。</li><li><strong>Parent：</strong>描述仍未完整達成的共同成果；必要 Sub-issues 完成後才能結案。先後順序另用 Dependency。</li></ul></li>
             <li><strong>PR：</strong><ul><li><strong>標題：</strong><code>type(scope)!: English summary</code>；scope 選填，<code>!</code> 表示破壞性變更。</li><li><strong>Angular types：</strong><code>feat</code> 新功能、<code>fix</code> 修錯、<code>docs</code> 文件、<code>refactor</code> 重構、<code>test</code> 測試、<code>build</code> 建置／相依、<code>ci</code> 自動化、<code>chore</code> 維護、<code>revert</code> 撤銷。</li><li><strong>內文：</strong>Purpose 與 <code>Closes #N</code>、完成清單必填；補充可寫風險、回退與額外影響。</li><li><strong>Label：</strong>enhancement、bug、documentation 擇一；特殊交付才另加 promotion（正式交付）、hotfix（緊急修正）或 release-recovery（補建遺漏的 Release，詳見 06），不能使用 duplicate。</li><li><strong>Assignee：</strong>建立者在送出後自我指派；交接時可更換，但作者仍列為 Assignee。</li></ul></li>
             <li><strong>例外：</strong>Duplicate 是 Issue 的重複結案方式，不開 PR；Hotfix 是 Bug 的緊急交付 Label，可直接進 main，但仍須 Issue、驗證與審查。</li>
           </ul>
         </details>
       </div>
-      <aside class="config-guidance" data-config-direct="true"><strong>模板設定與客製化位置</strong><ul><li><strong>工作單欄位：</strong><code>.github/ISSUE_TEMPLATE/*.yml</code> 定義各工作入口的原生 Type、Label、問題與完成條件，<code>config.yml</code> 關閉空白 Issue</li><li><strong>工作層級：</strong><code>AGENTS.md</code> 定義 Feature／Task／Bug 的使用規則，<code>docs/adr/spec-story-and-work-items.md</code> 保存長期理由；團隊只改操作方式時調整前者，改變角色責任時兩者一起更新</li><li><strong>規格同步：</strong><code>docs/specs/</code> 放各專案的長期規格，<code>scripts/spec_to_issue.py</code> 定義 <code>tracking: issue</code>、<code>story</code>、<code>none</code> 的同步行為；一般客製只新增或修改 spec，不必改同步程式</li><li><strong>交付批次：</strong><code>docs/milestone-description.md</code> 定義 Milestone 的 Problem、Outcome、Acceptance criteria 與 Verification；可改團隊用語與範例，但仍要保留真實 due date 與可驗收結果</li></ul></aside>
+      <aside class="config-guidance" data-config-direct="true"><strong>模板設定與客製化位置</strong><ul><li><strong>Issue 表單限制：</strong><code>.github/ISSUE_TEMPLATE/*.yml</code> 規定標題使用 12–80 個英文 ASCII 字元、至少三個詞，並要求填寫問題與完成條件；<code>config.yml</code> 關閉空白 Issue</li><li><strong>Type、Label 與負責人：</strong>Feature／Task／Bug 使用同名原生 Type；Documentation 使用 Task Type 加 documentation Label；enhancement、bug、documentation 擇一，duplicate 與 promotion 只在對應情境加入；建立者自我指派，agent／CLI 使用 <code>@me</code></li><li><strong>工作層級：</strong><code>AGENTS.md</code> 定義 Feature／Task／Bug 的使用規則，<code>docs/adr/spec-story-and-work-items.md</code> 保存長期理由；團隊只改操作方式時調整前者，改變角色責任時兩者一起更新</li><li><strong>規格同步：</strong><code>docs/specs/</code> 放各專案的長期規格，<code>scripts/spec_to_issue.py</code> 定義 <code>tracking: issue</code>、<code>story</code>、<code>none</code> 的同步行為；一般客製只新增或修改 spec，不必改同步程式</li><li><strong>交付批次：</strong><code>docs/milestone-description.md</code> 定義 Milestone 的 Problem、Outcome、Acceptance criteria 與 Verification；可改團隊用語與範例，但仍要保留真實 due date 與可驗收結果</li></ul></aside>
       <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues" target="_blank" rel="noreferrer">GitHub sub-issues</a>。具體工具、功能名稱與資料來源統一整理於<a href="#similar-tools">相似工具</a>。</p>
 </div>
 
@@ -2701,17 +2701,19 @@ html[data-detail-level="simple"] .detail-panel {
 <ul>
 <li><strong>整體：</strong> Issue 說清楚 → branch 實作 → PR 審查與交付。</li>
 <li><strong>Milestone：</strong> 多張工作有共同期限、整合或發版時才建立。</li>
-<li><strong>Issue：</strong> 寫問題、完成條件與驗證；Type 可為 Feature、Task 或 Bug。
+<li><strong>Issue：</strong> 選擇 Feature、Task、Bug 或 Documentation 表單，再寫清楚問題、完成條件與驗證。
 <ul>
-<li>Feature＝共同成果；Task＝可獨立完成的工作；Bug＝不符合預期。</li>
-<li>標題使用 12–80 個英文 ASCII 字元；內文必填類型、問題與完成條件。</li>
-<li>工作 Label 從 enhancement、bug、documentation 擇一；建立者在送出時自我指派。</li>
+<li>Feature＝需要多項工作一起完成的成果。</li>
+<li>Task＝可以獨立完成與驗證的工作。</li>
+<li>Bug＝實際結果與預期不同。</li>
+<li>Documentation＝只修改文件或範例。</li>
+<li>標題使用清楚的英文；建立者預設負責這張 Issue。</li>
 <li>同一張 PR 能完成並用同一組結果驗證就不拆；能獨立實作與驗證，或超出原範圍但必須補做，才拆成 Sub-issue。</li>
 <li>Parent 描述仍未完整達成的共同成果；所有必要 Sub-issues 完成後才能結案。Dependency 才表示先後阻擋。</li>
 </ul>
 </li>
-<li><strong>PR：</strong> 標題使用 <code>type(scope)!: English summary</code>；內文必填 Purpose、<code>Closes #N</code> 與完成清單，建立者在送出後自我指派。</li>
-<li><strong>例外：</strong> Duplicate 是 Issue 的重複結案方式；Hotfix 是 Bug 的緊急交付 Label。兩者都不是 Issue Type。</li>
+<li><strong>PR：</strong> 寫清楚完成了什麼、連結要關閉的 Issue，完成檢查後交付；建立者預設負責。</li>
+<li><strong>例外：</strong> 重複工作以 Duplicate 結案；Hotfix 表示緊急修正，但仍需要 Issue、驗證與審查。</li>
 </ul>
 <h3 id="其他常見做法">其他常見做法</h3>
 <ul>
@@ -6124,42 +6126,39 @@ with:
       ],
       method: [
         {
-          title: '工作單欄位與空白 Issue',
-          goal: '預設只提供一張開發工作表單，要求類型、問題與完成條件，並關閉沒有結構的空白 Issue。',
-          summary: '調整表單欄位、選項、必填狀態，以及是否允許空白 Issue。',
-          file: '.github/ISSUE_TEMPLATE/work-item.yml＋config.yml',
-          code: `# work-item.yml
-description: 用中文定義一個可驗證改動
-body:
-  - id: kind
-    type: dropdown
-    options: [feature, task, bug, documentation, duplicate]
-  - id: problem
-    type: textarea
-  - id: acceptance
-    type: textarea
-  - id: supplement
-    type: textarea
-    required: false
+          title: '四種 Issue 表單與必填內容',
+          goal: '提供 Feature、Task、Bug、Documentation 四個入口；都要求問題與完成條件，並關閉空白 Issue。',
+          summary: '調整表單說明、必填內容，以及是否允許沒有結構的空白 Issue。',
+          file: '.github/ISSUE_TEMPLATE/{feature,task,bug,documentation}.yml＋config.yml',
+          code: `Feature       -> Type: Feature; label: enhancement
+Task          -> Type: Task; label: enhancement
+Bug           -> Type: Bug; label: bug
+Documentation -> Type: Task; label: documentation
+
+Required fields:
+  - problem
+  - acceptance
 
 # config.yml
 blank_issues_enabled: false
 contact_links: []`
         },
         {
-          title: '工作類型、標籤與父子層級',
-          goal: '模板使用 GitHub 原生 Feature、Task、Bug Types；documentation、duplicate、hotfix 則是不同用途的標籤或結案方式。',
-          summary: '定義 Feature／Task／Bug，以及 documentation、duplicate、hotfix 的用途與關係。',
-          file: 'AGENTS.md＋policies/labels.json＋docs/adr/spec-story-and-work-items.md＋scripts/ci_tier.py',
-          code: `Native Issue Types:
-  Feature -> shared outcome; label: enhancement
-  Task    -> deliverable work; label: enhancement
-  Bug     -> unexpected behavior; label: bug
+          title: '標題、Label、負責人與工作層級',
+          goal: '標題使用 12–80 個英文 ASCII 字元及至少三個詞；建立者自我指派，agent／CLI 使用 @me。',
+          summary: '調整精確欄位限制，以及 duplicate、hotfix、promotion、Parent 與 Dependency 的使用規則。',
+          file: '.github/ISSUE_TEMPLATE/*.yml＋AGENTS.md＋policies/labels.json＋docs/adr/spec-story-and-work-items.md',
+          code: `Title: 12-80 ASCII characters; at least 3 words
+Assignee: creator; agent/CLI uses @me
 
 Other classifications:
   documentation -> Task + documentation label
   duplicate     -> duplicate close reason
-  hotfix         -> Bug + hotfix label + fix/<Issue>-* -> main`
+  hotfix        -> Bug + hotfix label + fix/<Issue>-* -> main
+  promotion     -> delivery tracking only
+
+Parent     -> shared outcome still incomplete
+Dependency -> actual execution order`
         },
         {
           title: '規格要不要建立追蹤工作',

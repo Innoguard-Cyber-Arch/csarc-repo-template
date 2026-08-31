@@ -254,42 +254,39 @@ with:
       ],
       method: [
         {
-          title: '工作單欄位與空白 Issue',
-          goal: '預設只提供一張開發工作表單，要求類型、問題與完成條件，並關閉沒有結構的空白 Issue。',
-          summary: '調整表單欄位、選項、必填狀態，以及是否允許空白 Issue。',
-          file: '.github/ISSUE_TEMPLATE/work-item.yml＋config.yml',
-          code: `# work-item.yml
-description: 用中文定義一個可驗證改動
-body:
-  - id: kind
-    type: dropdown
-    options: [feature, task, bug, documentation, duplicate]
-  - id: problem
-    type: textarea
-  - id: acceptance
-    type: textarea
-  - id: supplement
-    type: textarea
-    required: false
+          title: '四種 Issue 表單與必填內容',
+          goal: '提供 Feature、Task、Bug、Documentation 四個入口；都要求問題與完成條件，並關閉空白 Issue。',
+          summary: '調整表單說明、必填內容，以及是否允許沒有結構的空白 Issue。',
+          file: '.github/ISSUE_TEMPLATE/{feature,task,bug,documentation}.yml＋config.yml',
+          code: `Feature       -> Type: Feature; label: enhancement
+Task          -> Type: Task; label: enhancement
+Bug           -> Type: Bug; label: bug
+Documentation -> Type: Task; label: documentation
+
+Required fields:
+  - problem
+  - acceptance
 
 # config.yml
 blank_issues_enabled: false
 contact_links: []`
         },
         {
-          title: '工作類型、標籤與父子層級',
-          goal: '模板使用 GitHub 原生 Feature、Task、Bug Types；documentation、duplicate、hotfix 則是不同用途的標籤或結案方式。',
-          summary: '定義 Feature／Task／Bug，以及 documentation、duplicate、hotfix 的用途與關係。',
-          file: 'AGENTS.md＋policies/labels.json＋docs/adr/spec-story-and-work-items.md＋scripts/ci_tier.py',
-          code: `Native Issue Types:
-  Feature -> shared outcome; label: enhancement
-  Task    -> deliverable work; label: enhancement
-  Bug     -> unexpected behavior; label: bug
+          title: '標題、Label、負責人與工作層級',
+          goal: '標題使用 12–80 個英文 ASCII 字元及至少三個詞；建立者自我指派，agent／CLI 使用 @me。',
+          summary: '調整精確欄位限制，以及 duplicate、hotfix、promotion、Parent 與 Dependency 的使用規則。',
+          file: '.github/ISSUE_TEMPLATE/*.yml＋AGENTS.md＋policies/labels.json＋docs/adr/spec-story-and-work-items.md',
+          code: `Title: 12-80 ASCII characters; at least 3 words
+Assignee: creator; agent/CLI uses @me
 
 Other classifications:
   documentation -> Task + documentation label
   duplicate     -> duplicate close reason
-  hotfix         -> Bug + hotfix label + fix/<Issue>-* -> main`
+  hotfix        -> Bug + hotfix label + fix/<Issue>-* -> main
+  promotion     -> delivery tracking only
+
+Parent     -> shared outcome still incomplete
+Dependency -> actual execution order`
         },
         {
           title: '規格要不要建立追蹤工作',

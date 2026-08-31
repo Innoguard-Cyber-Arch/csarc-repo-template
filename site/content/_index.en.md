@@ -78,14 +78,16 @@ Workflows, policies, scripts, and documents consumed by both root and `template/
 
 - **Overall:** define the work in an Issue, implement it on a branch, then review and deliver it through a PR.
 - **Milestone:** create one only when multiple work items share a deadline, integration point, or release.
-- **Issue:** state the problem, acceptance criteria, and verification; use Feature, Task, or Bug as the native Type.
-  - Feature is a shared outcome; Task is independently deliverable work; Bug is behavior that differs from expectations. Documentation is a Task with the documentation label.
-  - Titles use 12–80 ASCII characters and at least three words; the body requires type, problem, and acceptance criteria.
-  - Select one work label from enhancement, bug, or documentation. The creator self-assigns when submitting the Issue.
+- **Issue:** choose the Feature, Task, Bug, or Documentation form, then state the problem, acceptance criteria, and verification.
+  - Feature is an outcome that needs several pieces of work.
+  - Task is work that can be completed and verified independently.
+  - Bug is a result that differs from expectations.
+  - Documentation changes only documentation or examples.
+  - Use a clear English title; the creator owns the Issue by default.
   - Keep work together when one PR and one result can verify it. Create a Sub-issue when work can be independently implemented and verified, or when required follow-up exceeds the original scope.
   - A Parent describes the shared outcome that is not complete yet; all required Sub-issues must finish before it closes. Dependency expresses ordering instead.
-- **PR:** use `type(scope)!: English summary`; require Purpose, `Closes #N`, and the checklist in the body. The creator self-assigns after opening it.
-- **Exceptions:** Duplicate is a way to close a repeated Issue; Hotfix is an urgent Bug delivery label. Neither is an Issue Type.
+- **PR:** explain what was completed, link the Issue it closes, and deliver it after the checks pass; the creator owns it by default.
+- **Exceptions:** close repeated work as Duplicate. Hotfix marks an urgent fix, but still requires an Issue, verification, and review.
 
 ### Other common approaches
 
