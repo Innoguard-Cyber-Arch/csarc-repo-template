@@ -175,6 +175,18 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         "軟體成分清單（SBOM）",
     ):
         assert explanation in supply
+    journey_decisions = chinese.split('{{< slide key="method"', 1)[1].split(
+        '{{< slide key="ecosystem"', 1
+    )[0]
+    assert '<article class="decision-step' not in journey_decisions
+    assert journey_decisions.count('class="decision-step decision-fold') == 18
+    assert journey_decisions.count('class="decision-step decision-fold" open') == 9
+    assert (
+        journey_decisions.count(
+            'class="decision-step decision-fold recommended" open'
+        )
+        == 9
+    )
 
 
 def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
