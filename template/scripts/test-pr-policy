@@ -5,7 +5,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 cd "$repo_root"
 fixture="$(mktemp -d)"
-validator="$fixture/validator"
+validator="$repo_root/scripts/validate-pr-policy"
 trap 'rm -rf "$fixture"' EXIT
 case_count=0
 export PR_ISSUE_TITLE="Add verified report workflow"
@@ -140,23 +140,6 @@ SH
 chmod +x "$fixture/gh"
 export GITHUB_REPOSITORY="acme/project"
 export PATH="$fixture:$PATH"
-
-{
-  printf '#!/usr/bin/env bash\n'
-  awk '
-    /^      - name: Validate pull request policy$/ { found = 1; next }
-    found && /^        run: \|$/ { in_run = 1; next }
-    in_run && /^$/ { print; next }
-    in_run && /^          / { sub(/^          /, ""); print; next }
-    in_run { exit }
-  ' "$repo_root/.github/workflows/pr-policy.yml"
-} > "$validator"
-chmod +x "$validator"
-
-if ! grep -q 'branch_pattern=' "$validator"; then
-  echo "Could not extract the PR policy from the workflow."
-  exit 1
-fi
 
 case_count=$((case_count + 1))
 PR_POLICY_FIXTURE=false \
@@ -819,7 +802,7 @@ case_count=$((case_count + 1))
 title_validator="$repo_root/scripts/validate-issue-title"
 mv "$title_validator" "$title_validator.bak"
 restore_title_validator() { mv "$title_validator.bak" "$title_validator" 2>/dev/null || true; }
-trap 'restore_title_validator; rm -f "$validator"' EXIT
+trap 'restore_title_validator; rm -rf "$fixture"' EXIT
 if ! (
   cd "$repo_root" && \
   PR_BRANCH_STRATEGY="main" \

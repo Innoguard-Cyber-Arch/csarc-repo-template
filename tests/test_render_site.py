@@ -210,12 +210,14 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     for source in (chinese, english):
         assert 'key="notes"' not in source
         assert "{{< glossary >}}" not in source
-    assert "0 steps 表示程式尚未執行" in data["testing"]["duration"][
-        "labels"
-    ]["zh-tw"]["runnerNote"]
-    assert "archive/ci-cd/ 只供參考" in data["testing"]["duration"][
-        "labels"
-    ]["zh-tw"]["archiveNote"]
+    assert (
+        "0 steps 表示程式尚未執行"
+        in data["testing"]["duration"]["labels"]["zh-tw"]["runnerNote"]
+    )
+    assert (
+        "archive/ci-cd/ 只供參考"
+        in data["testing"]["duration"]["labels"]["zh-tw"]["archiveNote"]
+    )
     assert "名詞與約定" not in chinese
     assert "testing.after(bridge)" in presentation
     assert "slide.dataset.audience !== 'archive'" in deck

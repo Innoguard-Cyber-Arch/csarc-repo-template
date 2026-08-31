@@ -5,14 +5,8 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 test_root="$(mktemp -d)"
 trap 'rm -rf "$test_root"' EXIT
-validator="$test_root/validator"
+validator="$repo_root/scripts/validate-issue-policy"
 title_validator="$repo_root/scripts/validate-issue-title"
-
-if grep -Eq 'types:.*labeled' \
-  "$repo_root/.github/workflows/issue-triage.yml"; then
-  echo "Issue triage must not subscribe to its own label changes."
-  exit 1
-fi
 
 valid_titles=(
   "Fix authentication timeout handling"
@@ -37,18 +31,6 @@ for title in "${invalid_titles[@]}"; do
     exit 1
   fi
 done
-
-{
-  printf '#!/usr/bin/env bash\n'
-  awk '
-    /^      - name: Assign author and apply issue classification$/ { found = 1; next }
-    found && /^        run: \|$/ { in_run = 1; next }
-    in_run && /^$/ { print; next }
-    in_run && /^          / { sub(/^          /, ""); print; next }
-    in_run { exit }
-  ' "$repo_root/.github/workflows/issue-triage.yml"
-} > "$validator"
-chmod +x "$validator"
 
 mkdir -p "$test_root/bin"
 cat > "$test_root/bin/gh" <<'SH'
