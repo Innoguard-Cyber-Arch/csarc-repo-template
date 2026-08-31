@@ -1,5 +1,16 @@
 # 分層 CI 政策
 
+## 現行 Journey 03 自動化
+
+目前只啟用 `.github/workflows/ci.yml`：`pull_request`、`merge_group` 與手動執行都進入同一個 `verify` job，timeout 為 30 分鐘。`scripts/ci_tier.py` 依事件與變更路徑選擇 docs、fast 或 full；Action 本身不重寫測試規則。
+
+- docs／fast 呼叫 `scripts/verify-fast`。
+- 一般 repo 的 full 呼叫 `scripts/verify`；repo-template 的 full 呼叫 `scripts/verify-template.sh`。
+- 未知路徑、promotion、hotfix、release recovery、merge queue 與手動執行採 full。
+- release、promotion、OSV、Zizmor、remote governance、deployment 與 schedule workflows 仍在 `archive/ci-cd/2026-08-27/`，尚未恢復。
+
+下列分支、promotion、release、quota fallback 與治理內容保留為跨 Journey 的政策設計；其中提到的專用 workflow 只有移回 `.github/workflows/` 後才算現行自動化，不能只因文件存在就宣稱已執行。
+
 CI 是沒有獨立測試環境時的可攜式 integration layer；外部環境與 canary
 則在 promotion 階段補充端到端證據。分支策略與 workflow 分層必須一起使用：
 只把 PR 改送 `dev/*`，但仍讓每張 PR 跑完整矩陣，不會降低使用量。
