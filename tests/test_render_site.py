@@ -212,6 +212,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     for source in (chinese, english):
         assert 'key="notes" audience="maintainer"' in source
         assert source.count('class="notes-detail"') == 3
+        assert source.count('class="notes-detail" open') == 3
         assert "{{< glossary >}}" not in source
     assert "跨章節的開發與維運提醒" in chinese
     assert "名詞與約定" not in chinese

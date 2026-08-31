@@ -375,22 +375,22 @@ Adopting Spec Kit requires rewriting `scripts/spec_to_issue.py`, converting exis
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="notes" audience="maintainer" eyebrow="Notes" title="Cross-cutting development and operations reminders" subtitle="Only topics that do not belong to one Journey stay here; conclusions remain visible and extra interpretation sits behind “+”." legacy="false" class="notes-slide" >}}
+{{< slide key="notes" audience="maintainer" eyebrow="Notes" title="Cross-cutting development and operations reminders" subtitle="Only topics that do not belong to one Journey stay here; conclusions and details start open and can be collapsed when needed." legacy="false" class="notes-slide" >}}
 <div class="notes-list">
   <article class="notes-item">
     <h3>A runner that never starts is not a code failure</h3>
     <p>If a GitHub job ends before any step starts, treat it first as a billing, quota, or platform execution problem; still retain local verification evidence.</p>
-    <details class="notes-detail"><summary>Distinguish an external problem from a failed test</summary><p><strong>Zero steps:</strong> no repository code ran, so check runner availability, billing, and GitHub status. <strong>Steps exist:</strong> follow the first failed step to the code or setting that needs correction.</p></details>
+    <details class="notes-detail" open><summary>Distinguish an external problem from a failed test</summary><p><strong>Zero steps:</strong> no repository code ran, so check runner availability, billing, and GitHub status. <strong>Steps exist:</strong> follow the first failed step to the code or setting that needs correction.</p></details>
   </article>
   <article class="notes-item">
     <h3>Archived workflows are not active capabilities</h3>
     <p><code>archive/ci-cd/</code> is reference material only; only the five GitHub Actions listed in the file map currently run.</p>
-    <details class="notes-detail"><summary>What to confirm before restoring a workflow</summary><p>Define its purpose and tests in the matching Journey, then confirm triggers, permissions, timeout, and the shared local entry point. Do not restore the archive as one batch.</p></details>
+    <details class="notes-detail" open><summary>What to confirm before restoring a workflow</summary><p>Define its purpose and tests in the matching Journey, then confirm triggers, permissions, timeout, and the shared local entry point. Do not restore the archive as one batch.</p></details>
   </article>
   <article class="notes-item">
     <h3>The template never enables an external platform by itself</h3>
     <p>Plan upgrades, hosted access, and central governance platforms require an explicit owner plus cost and security approval; the template only records conditions and configuration locations.</p>
-    <details class="notes-detail"><summary>Changes that require separate authorization</summary><p>This includes GitHub plan upgrades, Cloudflare or SSO, Backstage or another external service, and any irreversible operation or organization-wide permission change.</p></details>
+    <details class="notes-detail" open><summary>Changes that require separate authorization</summary><p>This includes GitHub plan upgrades, Cloudflare or SSO, Backstage or another external service, and any irreversible operation or organization-wide permission change.</p></details>
   </article>
 </div>
 {{< /slide >}}
