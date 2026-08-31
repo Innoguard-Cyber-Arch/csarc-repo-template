@@ -118,7 +118,7 @@ Concrete tools and sources are in [Similar tools](#similar-tools); Journey 02 lo
 - **Issue PR → dev:** `ci_tier.py` selects docs or fast from changed paths; unknown paths escalate to full.
 - **High-risk boundaries:** promotions, hotfixes, release recovery, merge queues, and manual runs use full.
 - **One implementation:** GitHub Actions has one `verify` job with a 30-minute timeout and only calls repository scripts.
-- **Responsibility:** a normal repository uses `scripts/verify`; repo-template uses `scripts/verify-template.sh` to add template, generated-output, and existing-repository adoption checks.
+- **Repository scope:** a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.
 
 Verification logic lives only in scripts and tests. This step restores only `.github/workflows/ci.yml`; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys. See [Similar tools](#similar-tools) for concrete comparisons and [CI/CD settings](#testing) for execution locations.
 {{< /slide >}}

@@ -2680,7 +2680,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>Issue PR → dev:</strong> <code>ci_tier.py</code> selects docs or fast from changed paths; unknown paths escalate to full.</li>
 <li><strong>High-risk boundaries:</strong> promotions, hotfixes, release recovery, merge queues, and manual runs use full.</li>
 <li><strong>One implementation:</strong> GitHub Actions has one <code>verify</code> job with a 30-minute timeout and only calls repository scripts.</li>
-<li><strong>Responsibility:</strong> a normal repository uses <code>scripts/verify</code>; repo-template uses <code>scripts/verify-template.sh</code> to add template, generated-output, and existing-repository adoption checks.</li>
+<li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
 </ul>
 <p>Verification logic lives only in scripts and tests. This step restores only <code>.github/workflows/ci.yml</code>; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys. See <a href="/en/#similar-tools">Similar tools</a> for concrete comparisons and <a href="/en/#testing">CI/CD settings</a> for execution locations.</p></div>
 </section>
