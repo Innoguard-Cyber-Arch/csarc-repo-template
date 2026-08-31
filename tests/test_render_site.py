@@ -203,20 +203,13 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     ]
     assert data["featureGroups"][3]["features"] == ["templateLifecycle"]
     assert len(data["testing"]["groups"]) == 3
-    assert [row["journey"] for row in data["testing"]["duration"]["rows"]] == [
-        "01",
-        "02",
-        "03",
-    ]
-    assert (
-        "6\u201317" in data["testing"]["duration"]["labels"]["zh-tw"]["total"]
-    )
-    assert (
-        "9\u201314" in data["testing"]["duration"]["labels"]["zh-tw"]["total"]
-    )
-    assert (
-        data["testing"]["duration"]["rows"][1]["shared"]["estimate"]["zh-tw"]
-        == "專用 runner\uff1a0 分鐘"
+    duration_rows = data["testing"]["duration"]["rows"]
+    assert [row["key"] for row in duration_rows] == ["issue", "release"]
+    assert all(len(row["shared"]["items"]) == 3 for row in duration_rows)
+    assert all(len(row["templateOnly"]["items"]) == 3 for row in duration_rows)
+    assert duration_rows[0]["shared"]["total"]["zh-tw"] == "約 1\u20137 分鐘"
+    assert duration_rows[1]["templateOnly"]["total"]["zh-tw"] == (
+        "約 9\u201314 分鐘"
     )
     assert data["testing"]["groups"][0]["journey"] == "01"
     testing_rows = data["testing"]["groups"][0]["rows"]

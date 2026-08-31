@@ -433,8 +433,10 @@
     .similar-tools-testing-matrix tbody th span { margin-top: 3px; color: var(--muted); font-weight: 500; }
     .similar-tools-testing-matrix th, .similar-tools-testing-matrix td { padding: 8px 10px; vertical-align: top; }
     .similar-tools-testing-matrix td code { overflow-wrap: anywhere; white-space: normal; }
-    .testing-duration-matrix tbody th small, .testing-duration-matrix tbody th strong, .testing-duration-matrix tbody td strong, .testing-duration-matrix tbody td span { display: block; }
-    .testing-duration-matrix tbody th small, .testing-duration-matrix tbody td span { margin-top: 3px; color: var(--muted); font-weight: 500; }
+    .testing-duration-matrix tbody th strong { display: block; }
+    .testing-duration-list { margin: 0; padding-left: 18px; }
+    .testing-duration-list li + li { margin-top: 4px; }
+    .testing-duration-total { margin: 7px 0 0; padding-top: 6px; border-top: 1px solid var(--line); }
     .testing-stage-list { margin: 0; padding-left: 18px; }
     .testing-stage-list > li + li { margin-top: 6px; }
     .testing-stage-list > li > strong { font-size: 17px; }
@@ -3979,26 +3981,21 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
     <div class="similar-tools-testing-intro">
-      <strong>Total (one full verification run)</strong><span>Normal repo: about 6–17 min | repo-template: about 9–14 min</span><p>A full run uses the full tier; Journey 02 is already included and is not counted twice. Timing starts when the runner starts and excludes queue time; first-time dependency downloads and cache misses may take longer.</p>
+      <strong>Expected runtime for both PR stages</strong><span>Each cell totals the runner minutes expected for one PR. Queue time is excluded, and concurrent jobs are still counted separately. First-time dependency downloads and cache misses may take longer.</span>
     </div>
-    <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Expected runtime by Journey">
+    <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Expected runtime for both PR stages">
       <table class="similar-tools-matrix similar-tools-testing-matrix testing-duration-matrix">
-        <thead><tr><th scope="col">Journey</th><th scope="col">Every repository using the template</th><th scope="col">repo-template</th></tr></thead>
+        <thead><tr><th scope="col">PR stage</th><th scope="col">Every repository using the template</th><th scope="col">repo-template</th></tr></thead>
         <tbody>
           <tr>
-            <th scope="row"><small>Journey 01</small><strong>Work definition</strong></th>
-            <td><strong>About 1–2 min per event</strong><span>Runs only the policy job for that Issue, PR, Spec, or Milestone event.</span></td>
-            <td><strong>About 1–2 min per event</strong><span>Same as a normal repository, with no template-only runner.</span></td>
+            <th scope="row"><strong>Issue PR (work branch → dev)</strong></th>
+            <td><ul class="testing-duration-list"><li><strong>Work definition：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in verification; no separate minutes</li><li><strong>Verification &#43; CI：</strong>docs &lt;1 min; fast 2–5 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>Work definition：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in verification; no separate minutes</li><li><strong>Verification &#43; CI：</strong>docs &lt;1 min; fast 3–6 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–8 min</p></td>
           </tr>
           <tr>
-            <th scope="row"><small>Journey 02</small><strong>AI rules</strong></th>
-            <td><strong>Dedicated runner: 0 min</strong><span>Rules and worktree checks are included in shared verification, with no separate Action.</span></td>
-            <td><strong>Dedicated runner: 0 min</strong><span>Generated-rule checks are included in full verification without a separate runner.</span></td>
-          </tr>
-          <tr>
-            <th scope="row"><small>Journey 03</small><strong>Verification &#43; CI</strong></th>
-            <td><strong>docs &lt;1; fast 2–5; full 5–15 min</strong><span>Actual time varies with language, dependency cache, and project test volume.</span></td>
-            <td><strong>docs &lt;1; fast 3–6; full 8–12 min</strong><span>Full includes template, generation, adoption, and complete pytest checks; the run still has a 30-minute limit.</span></td>
+            <th scope="row"><strong>Release PR (dev → main)</strong></th>
+            <td><ul class="testing-duration-list"><li><strong>Work definition：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in full verification; no separate minutes</li><li><strong>Verification &#43; CI：</strong>full 5–15 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>Work definition：</strong>About 1–2 min</li><li><strong>AI rules：</strong>Included in full verification; no separate minutes</li><li><strong>Verification &#43; CI：</strong>full 8–12 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 9–14 min</p></td>
           </tr>
         </tbody>
       </table>

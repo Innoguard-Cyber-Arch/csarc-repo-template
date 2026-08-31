@@ -12,17 +12,17 @@
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
     <div class="similar-tools-testing-intro">
-      <strong>{{ $durationLabels.totalHeading }}</strong><span>{{ $durationLabels.total }}</span><p>{{ $durationLabels.scope }}</p>
+      <strong>{{ $durationLabels.heading }}</strong><span>{{ $durationLabels.scope }}</span>
     </div>
     <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="{{ $durationLabels.heading }}">
       <table class="similar-tools-matrix similar-tools-testing-matrix testing-duration-matrix">
-        <thead><tr><th scope="col">{{ $durationLabels.journey }}</th><th scope="col">{{ $durationLabels.shared }}</th><th scope="col">{{ $durationLabels.templateOnly }}</th></tr></thead>
+        <thead><tr><th scope="col">{{ $durationLabels.stage }}</th><th scope="col">{{ $durationLabels.shared }}</th><th scope="col">{{ $durationLabels.templateOnly }}</th></tr></thead>
         <tbody>
           {{- range $row := $data.testing.duration.rows }}
           <tr>
-            <th scope="row"><small>Journey {{ $row.journey }}</small><strong>{{ index $row.title $lang }}</strong></th>
+            <th scope="row"><strong>{{ index $row.stage $lang }}</strong></th>
             {{- range $scope := (slice $row.shared $row.templateOnly) }}
-            <td><strong>{{ index $scope.estimate $lang }}</strong><span>{{ index $scope.description $lang }}</span></td>
+            <td><ul class="testing-duration-list">{{ range $scope.items }}<li><strong>{{ index .label $lang }}：</strong>{{ index .value $lang }}</li>{{ end }}</ul><p class="testing-duration-total"><strong>{{ $durationLabels.total }}</strong>{{ index $scope.total $lang }}</p></td>
             {{- end }}
           </tr>
           {{- end }}

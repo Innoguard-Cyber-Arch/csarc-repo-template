@@ -121,61 +121,63 @@
         "zh-tw": {
           "overline": "總覽",
           "title": "預計執行時間",
-          "heading": "各 Journey 的預計執行時間",
-          "totalHeading": "總合（單次完整驗證）",
-          "total": "一般 repo：約 6–17 分鐘｜repo-template：約 9–14 分鐘",
-          "scope": "以 full 為完整驗證；Journey 02 已包含其中，不重複計時。時間從 runner 開始計算，不含排隊；首次下載相依或 cache miss 可能較久。",
-          "journey": "Journey",
+          "heading": "兩種 PR 的預計執行時間",
+          "scope": "每格加總一次 PR 預計使用的 runner minutes；不含排隊，並行 job 仍分別計算。首次下載相依或 cache miss 可能較久。",
+          "stage": "PR 階段",
           "shared": "任何使用本模板的 repo",
-          "templateOnly": "repo-template"
+          "templateOnly": "repo-template",
+          "total": "Runner 總合："
         },
         "en": {
           "overline": "Overview",
           "title": "Expected runtime",
-          "heading": "Expected runtime by Journey",
-          "totalHeading": "Total (one full verification run)",
-          "total": "Normal repo: about 6–17 min | repo-template: about 9–14 min",
-          "scope": "A full run uses the full tier; Journey 02 is already included and is not counted twice. Timing starts when the runner starts and excludes queue time; first-time dependency downloads and cache misses may take longer.",
-          "journey": "Journey",
+          "heading": "Expected runtime for both PR stages",
+          "scope": "Each cell totals the runner minutes expected for one PR. Queue time is excluded, and concurrent jobs are still counted separately. First-time dependency downloads and cache misses may take longer.",
+          "stage": "PR stage",
           "shared": "Every repository using the template",
-          "templateOnly": "repo-template"
+          "templateOnly": "repo-template",
+          "total": "Runner total:"
         }
       },
       "rows": [
         {
-          "journey": "01",
-          "title": {"zh-tw": "工作定義", "en": "Work definition"},
+          "key": "issue",
+          "stage": {"zh-tw": "Issue PR（工作分支 → dev）", "en": "Issue PR (work branch → dev)"},
           "shared": {
-            "estimate": {"zh-tw": "約 1–2 分鐘／次", "en": "About 1–2 min per event"},
-            "description": {"zh-tw": "只執行該次 Issue、PR、Spec 或 Milestone 事件對應的 policy job。", "en": "Runs only the policy job for that Issue, PR, Spec, or Milestone event."}
+            "items": [
+              {"label": {"zh-tw": "工作定義", "en": "Work definition"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
+              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "併入驗證，不另計", "en": "Included in verification; no separate minutes"}},
+              {"label": {"zh-tw": "驗證＋CI", "en": "Verification + CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 2–5 分鐘", "en": "docs <1 min; fast 2–5 min"}}
+            ],
+            "total": {"zh-tw": "約 1–7 分鐘", "en": "About 1–7 min"}
           },
           "templateOnly": {
-            "estimate": {"zh-tw": "約 1–2 分鐘／次", "en": "About 1–2 min per event"},
-            "description": {"zh-tw": "與一般 repo 相同，不增加模板專用 runner。", "en": "Same as a normal repository, with no template-only runner."}
+            "items": [
+              {"label": {"zh-tw": "工作定義", "en": "Work definition"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
+              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "併入驗證，不另計", "en": "Included in verification; no separate minutes"}},
+              {"label": {"zh-tw": "驗證＋CI", "en": "Verification + CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 3–6 分鐘", "en": "docs <1 min; fast 3–6 min"}}
+            ],
+            "total": {"zh-tw": "約 1–8 分鐘", "en": "About 1–8 min"}
           }
         },
         {
-          "journey": "02",
-          "title": {"zh-tw": "AI 規範", "en": "AI rules"},
+          "key": "release",
+          "stage": {"zh-tw": "發版 PR（dev → main）", "en": "Release PR (dev → main)"},
           "shared": {
-            "estimate": {"zh-tw": "專用 runner：0 分鐘", "en": "Dedicated runner: 0 min"},
-            "description": {"zh-tw": "規範與 worktree 檢查併入共用驗證，不另啟 Action。", "en": "Rules and worktree checks are included in shared verification, with no separate Action."}
+            "items": [
+              {"label": {"zh-tw": "工作定義", "en": "Work definition"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
+              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "併入完整驗證，不另計", "en": "Included in full verification; no separate minutes"}},
+              {"label": {"zh-tw": "驗證＋CI", "en": "Verification + CI"}, "value": {"zh-tw": "full 5–15 分鐘", "en": "full 5–15 min"}}
+            ],
+            "total": {"zh-tw": "約 6–17 分鐘", "en": "About 6–17 min"}
           },
           "templateOnly": {
-            "estimate": {"zh-tw": "專用 runner：0 分鐘", "en": "Dedicated runner: 0 min"},
-            "description": {"zh-tw": "模板產出檢查併入 full，不另外計費。", "en": "Generated-rule checks are included in full verification without a separate runner."}
-          }
-        },
-        {
-          "journey": "03",
-          "title": {"zh-tw": "驗證＋CI", "en": "Verification + CI"},
-          "shared": {
-            "estimate": {"zh-tw": "docs < 1；fast 2–5；full 5–15 分鐘", "en": "docs <1; fast 2–5; full 5–15 min"},
-            "description": {"zh-tw": "實際時間依語言、相依快取與專案測試量調整。", "en": "Actual time varies with language, dependency cache, and project test volume."}
-          },
-          "templateOnly": {
-            "estimate": {"zh-tw": "docs < 1；fast 3–6；full 8–12 分鐘", "en": "docs <1; fast 3–6; full 8–12 min"},
-            "description": {"zh-tw": "full 包含模板、生成、導入與完整 pytest；單次上限仍為 30 分鐘。", "en": "Full includes template, generation, adoption, and complete pytest checks; the run still has a 30-minute limit."}
+            "items": [
+              {"label": {"zh-tw": "工作定義", "en": "Work definition"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
+              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "併入完整驗證，不另計", "en": "Included in full verification; no separate minutes"}},
+              {"label": {"zh-tw": "驗證＋CI", "en": "Verification + CI"}, "value": {"zh-tw": "full 8–12 分鐘", "en": "full 8–12 min"}}
+            ],
+            "total": {"zh-tw": "約 9–14 分鐘", "en": "About 9–14 min"}
           }
         }
       ]
