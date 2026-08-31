@@ -1,5 +1,5 @@
 {
-  "comparisonDate": "2026-08-28",
+  "comparisonDate": "2026-08-31",
   "releaseCutoff": "2026-02-28",
   "threshold": 5,
   "starThreshold": 1000,
@@ -68,6 +68,14 @@
       "labels": {
         "zh-tw": {"overline": "Journey 02", "title": "AI 規範", "legend": "只比較 repo 如何提供 agent 指令、保存跨時段脈絡、隔離平行修改，以及保留人的決策邊界"},
         "en": {"overline": "Journey 02", "title": "AI rules", "legend": "Compares only how repositories instruct agents, preserve context across sessions, isolate parallel changes, and keep human decision boundaries."}
+      }
+    },
+    {
+      "key": "contract",
+      "features": ["sharedVerificationEntry", "riskBasedSelection", "freshCompletionEvidence", "generatedProjectVerification"],
+      "labels": {
+        "zh-tw": {"overline": "Journey 03", "title": "驗證＋CI", "legend": "只比較驗證邏輯放在哪裡、如何縮小本次範圍、怎樣證明完成，以及模板產物由誰驗證"},
+        "en": {"overline": "Journey 03", "title": "Verification + CI", "legend": "Compares only where verification logic lives, how each run is scoped, what proves completion, and who verifies generated projects."}
       }
     },
     {
@@ -213,6 +221,51 @@
             "templateOnly": {}
           }
         ]
+      },
+      {
+        "key": "contract",
+        "journey": "03",
+        "labels": {
+          "zh-tw": {"title": "驗證＋CI", "heading": "Journey 03／分階段驗證", "scope": "一般 repo 只驗證自己的改動；repo-template 在發版候選額外驗證生成、導入與更新。Action 只呼叫同一份本機程式。"},
+          "en": {"title": "Verification + CI", "heading": "Journey 03 / Staged verification", "scope": "A normal repository verifies its own change. A repo-template release candidate also verifies generation, adoption, and updates. Actions only call the same local programs."}
+        },
+        "rows": [
+          {
+            "purpose": {
+              "zh-tw": {"title": "判斷這次要跑多少", "description": "開發時自行跑 focused check；CI 依變更路徑與交付階段選 docs、fast 或 full，未知路徑升級為 full。"},
+              "en": {"title": "Decide how much to run", "description": "Developers run focused checks directly. CI selects docs, fast, or full from changed paths and delivery stage, with unknown paths escalating to full."}
+            },
+            "shared": {
+              "milestone": {"files": [{"path": "scripts/ci_tier.py"}], "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "Issue PR → dev", "en": "Issue PR → dev"}, "timeout": "30 min"}]},
+              "release": {"files": [{"path": "scripts/ci_tier.py"}], "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "promotion／merge group／hotfix／手動執行", "en": "Promotion, merge group, hotfix, or manual dispatch"}, "timeout": "30 min"}]}
+            },
+            "templateOnly": {}
+          },
+          {
+            "purpose": {
+              "zh-tw": {"title": "Issue PR 的快速回饋", "description": "只跑與本次修改相關的格式、靜態檢查、一般測試與必要 smoke；不跑完整 profile／adopt／update 矩陣。"},
+              "en": {"title": "Fast feedback for an Issue PR", "description": "Run relevant formatting, static checks, ordinary tests, and necessary smoke checks without the full profile, adoption, or update matrix."}
+            },
+            "shared": {
+              "milestone": {"files": [{"path": "scripts/verify-fast"}]}
+            },
+            "templateOnly": {
+              "milestone": {"note": {"zh-tw": "template、workflow 或 shell 有變更時，fast 會額外產生一個代表性 repo 做 smoke 驗證。", "en": "When template, workflow, or shell files change, fast also generates one representative repository for a smoke check."}}
+            }
+          },
+          {
+            "purpose": {
+              "zh-tw": {"title": "發版候選的完整證據", "description": "只對固定且未再變動的候選版本跑一次完整驗證；成功後以 SHA／tree 證明合併的是同一份內容。"},
+              "en": {"title": "Complete evidence for a release candidate", "description": "Run full verification once on a fixed, unchanged candidate, then bind the merge to the same SHA and tree."}
+            },
+            "shared": {
+              "release": {"files": [{"path": "scripts/verify"}]}
+            },
+            "templateOnly": {
+              "release": {"files": [{"path": "scripts/verify-template.sh"}], "note": {"zh-tw": "額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑。", "en": "Additionally verifies the template, generated output, and existing-repository adoption and update paths."}}
+            }
+          }
+        ]
       }
     ]
   },
@@ -270,6 +323,30 @@
       "title": {"zh-tw": "何時必須由人決定", "en": "When a human must decide"},
       "description": {"zh-tw": "比較需求取捨、外部影響、不可逆操作與合併授權由誰負責。", "en": "Compares who owns requirement trade-offs, external effects, irreversible operations, and merge authorization."},
       "csarc": {"zh-tw": "人負責需求、重大取捨、外部影響與不可逆操作；Journey 07 單獨定義審查、合併資格與例外。", "en": "People own requirements, material trade-offs, external effects, and irreversible operations. Journey 07 alone defines review, merge eligibility, and exceptions."}
+    },
+    {
+      "key": "sharedVerificationEntry",
+      "title": {"zh-tw": "本機與 CI 共用什麼", "en": "What local and CI runs share"},
+      "description": {"zh-tw": "比較驗證邏輯是可在本機重跑的程式、CI 專用 YAML，或另一套 pipeline runtime。", "en": "Compares whether verification lives in locally runnable programs, CI-only YAML, or another pipeline runtime."},
+      "csarc": {"zh-tw": "測試邏輯放在 scripts／tests；本機直接執行，Action 只設定事件、權限與呼叫同一入口，不複製判斷。", "en": "Verification logic lives in scripts and tests. Local runs execute it directly, while Actions only provide events, permissions, and a call to the same entrypoint."}
+    },
+    {
+      "key": "riskBasedSelection",
+      "title": {"zh-tw": "怎麼縮小本次驗證範圍", "en": "How each run is scoped"},
+      "description": {"zh-tw": "比較每次全跑、依 dependency graph 選 affected tasks，或依變更路徑與交付階段分級。", "en": "Compares running everything, selecting affected tasks from a dependency graph, and routing by changed path plus delivery stage."},
+      "csarc": {"zh-tw": "ci_tier.py 依路徑與階段選 docs／fast／full；Issue PR 走 fast，promotion、hotfix、merge queue 與未知路徑走 full。", "en": "ci_tier.py selects docs, fast, or full from paths and stage. Issue PRs use fast; promotions, hotfixes, merge queues, and unknown paths use full."}
+    },
+    {
+      "key": "freshCompletionEvidence",
+      "title": {"zh-tw": "何時可以宣稱完成", "en": "When completion may be claimed"},
+      "description": {"zh-tw": "比較只看舊結果、要求當次完整輸出，或把證據綁到精確 commit／candidate。", "en": "Compares relying on old results, requiring fresh complete output, and binding evidence to an exact commit or candidate."},
+      "csarc": {"zh-tw": "完成宣稱必須有當次指令與結果；合併證據綁定精確 PR HEAD，promotion 再核對 candidate tree，零步數帳務阻擋不算測試成功。", "en": "Completion claims require fresh command output. Merge evidence binds to the exact PR head, promotion also checks the candidate tree, and a zero-step billing block is not test success."}
+    },
+    {
+      "key": "generatedProjectVerification",
+      "title": {"zh-tw": "模板產物由誰驗證", "en": "Who verifies generated projects"},
+      "description": {"zh-tw": "比較只測產生器、測輸出快照，或真的建立／導入／更新候選 repo 再執行驗證。", "en": "Compares testing only the generator, snapshotting output, and creating, adopting, or updating candidate repositories before running their checks."},
+      "csarc": {"zh-tw": "一般 repo 只測自己的產品；repo-template 的 full 入口執行完整 pytest，實際涵蓋 Python／TypeScript 的生成與既有 repo 導入，不維護整棵輸出的 snapshot。", "en": "A normal repository tests only its product. The repo-template full entrypoint runs the complete pytest suite, covering Python and TypeScript generation and existing-repository adoption without maintaining whole-tree snapshots."}
     }
   ],
   "tools": [
@@ -278,7 +355,7 @@
       "url": "https://github.com/hoangnb24/repository-harness",
       "version": "harness-v0.1.10",
       "released": "2026-08-13",
-      "stars": "1,199",
+      "stars": "1,207",
       "coverage": {"full": ["01", "02", "08"], "partial": ["03", "04", "07", "10"]},
       "position": {"zh-tw": "Agent-ready repository framework：把 AI 工作規則、持久計畫、驗證與安全更新放進 repo。", "en": "An agent-ready repository framework that puts AI working rules, durable plans, verification, and safe updates in the repository."},
       "difference": {"zh-tw": ["Repository Harness 偏向替既有 repo 加上 agent 工作框架與安全更新機制。", "CSARC 另外提供可生成的技術 profile、GitHub 治理、交付與版本政策。"], "en": ["Repository Harness primarily adds an agent working framework and safe update mechanism to an existing repository.", "CSARC also supplies generated technology profiles, GitHub governance, delivery, and version policy."]},
@@ -290,15 +367,17 @@
         {"key": "agentInstructions", "feature": "Repository instructions", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "把 agent 的固定工作規則與驗證命令保存在 repo 內。", "en": "Persistent agent working rules and verification commands live in the repository."}},
         {"key": "durableAgentContext", "feature": "Durable plans", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "跨 session、有依賴或高風險工作使用 active plan，完成後歸檔。", "en": "Cross-session, dependent, or high-risk work uses an active plan that is archived after completion."}},
         {"key": "parallelAgentIsolation", "feature": "Isolated work", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "以獨立分支與工作目錄避免多項修改互相覆蓋。", "en": "Separate branches and working directories keep concurrent changes from overwriting one another."}},
-        {"key": "humanDecisionBoundary", "feature": "Human checkpoints", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "風險、方向與不可逆步驟在計畫中留下明確的人類檢查點。", "en": "Plans retain explicit human checkpoints for risk, direction, and irreversible steps."}}
+        {"key": "humanDecisionBoundary", "feature": "Human checkpoints", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "風險、方向與不可逆步驟在計畫中留下明確的人類檢查點。", "en": "Plans retain explicit human checkpoints for risk, direction, and irreversible steps."}},
+        {"key": "sharedVerificationEntry", "feature": "scripts/validate-premerge.sh", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/scripts/validate-premerge.sh", "description": {"zh-tw": "本機與 Pre-Merge Contract workflow 執行同一支驗證程式，不在 YAML 重寫測試邏輯。", "en": "Local runs and the Pre-Merge Contract workflow execute the same validation script instead of rewriting test logic in YAML."}},
+        {"key": "generatedProjectVerification", "feature": "Test Suite Map", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/tests/README.md", "description": {"zh-tw": "以可觀察的不變條件整理 installer、workflow、文件與 release 測試；已移除的歷史能力不繼續留在現行 pre-merge。", "en": "Installer, workflow, documentation, and release tests are mapped to observable invariants; removed historical capabilities no longer stay in the current pre-merge suite."}}
       ]
     },
     {
       "name": "projen",
       "url": "https://github.com/projen/projen",
-      "version": "v0.103.5",
-      "released": "2026-08-26",
-      "stars": "2,948",
+      "version": "v0.103.11",
+      "released": "2026-08-29",
+      "stars": "2,952",
       "coverage": {"full": ["03", "06", "08"], "partial": ["01", "04", "05", "07", "10"]},
       "position": {"zh-tw": "Project generator：用一般程式語言宣告專案，持續 synth 出受管設定與工作流程。", "en": "A project generator that declares a project in a general-purpose language and continuously synthesizes managed configuration and workflows."},
       "difference": {"zh-tw": ["projen 把 .projenrc 當唯一來源，大量生成檔不允許直接修改。", "CSARC 用 Copier 發布可更新基線，並保留產品檔案與政策檔案的責任邊界。"], "en": ["projen treats .projenrc as the only source and prevents direct edits to many generated files.", "CSARC distributes an updatable Copier baseline while preserving ownership boundaries for product and policy files."]},
@@ -306,7 +385,10 @@
         {"key": "repositoryTruth", "feature": ".projenrc project model", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": ".projenrc 是唯一手寫真相，其他專案檔由 synth 產生。", "en": ".projenrc is the only hand-written source of truth; synth generates the other project files."}},
         {"key": "declarativeState", "feature": "Components + synth", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "用 typed components 宣告期望專案，再由 synth 收斂檔案。", "en": "Typed components declare the desired project and synth reconciles the files."}},
         {"key": "templateLifecycle", "feature": "projen upgrade + synth", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "升級 library 後重建；受管檔的手改會被 anti-tamper 攔下。", "en": "The project is regenerated after a library upgrade, and anti-tamper checks reject manual edits to managed files."}},
-        {"key": "proposalLifecycle", "feature": "Anti-tamper build", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "PR 同時修改 .projenrc 與重建結果，合併後才成為正式狀態。", "en": "A PR changes .projenrc together with regenerated output; the state becomes authoritative after merge."}}
+        {"key": "proposalLifecycle", "feature": "Anti-tamper build", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "PR 同時修改 .projenrc 與重建結果，合併後才成為正式狀態。", "en": "A PR changes .projenrc together with regenerated output; the state becomes authoritative after merge."}},
+        {"key": "sharedVerificationEntry", "feature": "Tasks", "docs": "https://projen.io/docs/concepts/tasks/", "description": {"zh-tw": "把 build、test 等步驟定義成可由本機 CLI 與生成 workflow 共用的 task graph。", "en": "Build and test steps are defined as a task graph shared by the local CLI and generated workflows."}},
+        {"key": "riskBasedSelection", "feature": "Task conditions", "docs": "https://projen.io/docs/concepts/tasks/#conditions", "description": {"zh-tw": "task 或 step 可用 condition 決定是否執行；適合條件分流，但條件本身仍要維護正確。", "en": "A task or step can use a condition to decide whether it runs; this supports routing but the conditions still need correct maintenance."}},
+        {"key": "generatedProjectVerification", "feature": "Testing.synth", "docs": "https://projen.io/docs/custom/testing/", "description": {"zh-tw": "在測試中 synth 專案並檢查生成檔；官方也提醒整棵樹的 snapshot 過大，應縮到有意義的輸出。", "en": "Tests synthesize a project and inspect generated files; the guide also warns that whole-tree snapshots are unwieldy and should be narrowed to meaningful output."}}
       ]
     },
     {
@@ -314,7 +396,7 @@
       "url": "https://github.com/copier-org/copier",
       "version": "v9.17.2",
       "released": "2026-08-19",
-      "stars": "3,546",
+      "stars": "3,550",
       "coverage": {"full": ["08"], "partial": ["04", "10"]},
       "comparisons": [
         {"key": "declarativeState", "feature": "Answers file + Jinja templates", "docs": "https://copier.readthedocs.io/en/stable/configuring/", "description": {"zh-tw": "answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。", "en": "Answers and Jinja templates declare generation inputs without continuously controlling remote state."}},
@@ -325,9 +407,9 @@
     {
       "name": "Backstage",
       "url": "https://github.com/backstage/backstage",
-      "version": "v1.54.5",
-      "released": "2026-08-25",
-      "stars": "34,273",
+      "version": "v1.54.6",
+      "released": "2026-08-28",
+      "stars": "34,277",
       "coverage": {"full": ["09", "10"], "partial": ["07", "08"]},
       "position": {"zh-tw": "Developer portal framework：以 Software Catalog、Software Templates 與 TechDocs 統一軟體生態系入口。", "en": "A developer portal framework that unifies a software ecosystem through Software Catalog, Software Templates, and TechDocs."},
       "difference": {"zh-tw": ["Backstage 是需要持續維運的中央 portal，強項是服務探索、owner 與 scaffolding。", "CSARC 是可攜的 repo-local 公版，直接把治理、驗證與交付基線放進每個 repo。"], "en": ["Backstage is a centrally operated portal focused on service discovery, ownership, and scaffolding.", "CSARC is a portable repository-local baseline that places governance, verification, and delivery in each repository."]},
@@ -342,7 +424,7 @@
       "url": "https://github.com/mindersec/minder",
       "version": "v0.3.1",
       "released": "2026-08-10",
-      "stars": "417",
+      "stars": "419",
       "coverage": {"full": ["05", "07"], "partial": ["03", "10"]},
       "position": {"zh-tw": "Software supply chain security platform：集中評估 repository 與 artifact，並依 policy 告警或修正。", "en": "A software supply-chain security platform that centrally evaluates repositories and artifacts and alerts or remediates according to policy."},
       "difference": {"zh-tw": ["Minder 專注中央安全姿態與持續 policy enforcement，需要常駐服務。", "CSARC 涵蓋完整 repo 開發生命週期，目前以可攜政策與本機驗證為基線。"], "en": ["Minder focuses on centralized security posture and continuous policy enforcement and requires an operating service.", "CSARC spans the repository development lifecycle and currently uses portable policy plus local verification as its baseline."]},
@@ -355,7 +437,7 @@
       "url": "https://github.com/github/spec-kit",
       "version": "v1.0.1",
       "released": "2026-08-21",
-      "stars": "131,938",
+      "stars": "132,351",
       "coverage": {"full": ["01", "02"], "partial": ["03", "04"]},
       "position": {"zh-tw": "Spec-driven development toolkit：讓任何 AI coding agent 依 spec、plan 與 tasks 交付軟體。", "en": "A spec-driven development toolkit for delivering software through specs, plans, and tasks with any AI coding agent."},
       "difference": {"zh-tw": ["Spec Kit 集中在需求澄清、規格拆解與 agent 實作流程。", "CSARC 另外涵蓋 repo profile、治理、供應鏈、版本交付與模板更新。"], "en": ["Spec Kit concentrates on requirement clarification, specification decomposition, and agent implementation workflows.", "CSARC also covers repository profiles, governance, supply chain, version delivery, and template updates."]},
@@ -366,7 +448,8 @@
         {"key": "agentInstructions", "feature": "Constitution", "docs": "https://github.com/github/spec-kit/blob/main/docs/reference/commands/constitution.md", "description": {"zh-tw": "constitution 保存跨功能都要遵守的原則，agent 產生後續 artifacts 時會引用。", "en": "A constitution stores principles that every feature follows and agents reference while producing later artifacts."}},
         {"key": "durableAgentContext", "feature": "spec.md / plan.md / tasks.md", "docs": "https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md", "description": {"zh-tw": "把需求、技術計畫與工作拆解保存成可跨 session 接力的檔案。", "en": "Requirements, technical plans, and task breakdowns are saved as files that survive across sessions."}},
         {"key": "parallelAgentIsolation", "feature": "Feature branches", "docs": "https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md", "description": {"zh-tw": "每個 feature 在自己的分支與規格目錄演進，降低平行修改碰撞。", "en": "Each feature evolves on its own branch and specification directory, reducing collisions between parallel changes."}},
-        {"key": "humanDecisionBoundary", "feature": "Clarify and analyze", "docs": "https://github.com/github/spec-kit/blob/main/docs/reference/commands/clarify.md", "description": {"zh-tw": "在規格不明或跨 artifact 不一致時先澄清，再交給 agent 產生計畫。", "en": "Ambiguity and cross-artifact inconsistencies are clarified before an agent generates the plan."}}
+        {"key": "humanDecisionBoundary", "feature": "Clarify and analyze", "docs": "https://github.com/github/spec-kit/blob/main/docs/reference/commands/clarify.md", "description": {"zh-tw": "在規格不明或跨 artifact 不一致時先澄清，再交給 agent 產生計畫。", "en": "Ambiguity and cross-artifact inconsistencies are clarified before an agent generates the plan."}},
+        {"key": "freshCompletionEvidence", "feature": "/speckit.analyze", "docs": "https://github.com/github/spec-kit/blob/main/templates/commands/analyze.md", "description": {"zh-tw": "實作前以唯讀分析核對 spec、plan、tasks 與 constitution；它證明規格一致，不取代程式測試。", "en": "A read-only pre-implementation analysis checks the spec, plan, tasks, and constitution; it proves artifact consistency, not program correctness."}}
       ]
     },
     {
@@ -374,7 +457,7 @@
       "url": "https://github.com/Fission-AI/OpenSpec",
       "version": "v1.11.0",
       "released": "2026-08-26",
-      "stars": "66,496",
+      "stars": "66,720",
       "coverage": {"full": ["01", "02"], "partial": ["03", "04"]},
       "position": {"zh-tw": "Spec framework：用 current specs 與 change proposals 管理 AI 輔助開發中的需求變更。", "en": "A specification framework that manages requirement changes in AI-assisted development through current specs and change proposals."},
       "difference": {"zh-tw": ["OpenSpec 專注規格從 propose、apply 到 archive 的生命週期。", "CSARC 把同類工作邊界接到 Issue、PR、治理、交付與可更新 repo 公版。"], "en": ["OpenSpec focuses on the propose, apply, and archive lifecycle of specifications.", "CSARC connects that work boundary to Issues, PRs, governance, delivery, and an updatable repository baseline."]},
@@ -384,7 +467,8 @@
         {"key": "rightSizedWork", "feature": "Change proposal", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md", "description": {"zh-tw": "小修改可直接走 PR，大變更才建立完整 proposal。", "en": "Small edits can go directly through a PR; substantial changes receive a complete proposal."}},
         {"key": "agentInstructions", "feature": "Project instructions", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/docs/getting-started.md", "description": {"zh-tw": "repo 內的 OpenSpec 結構與命令讓不同 agent 依同一 change lifecycle 工作。", "en": "The repository's OpenSpec structure and commands give different agents one shared change lifecycle."}},
         {"key": "durableAgentContext", "feature": "changes/ artifacts", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md", "description": {"zh-tw": "proposal、design、tasks 與規格差異保存在 changes/，完成後再歸檔。", "en": "Proposals, designs, tasks, and specification deltas stay in changes/ and are archived after completion."}},
-        {"key": "humanDecisionBoundary", "feature": "Proposal review", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md", "description": {"zh-tw": "change proposal 先由人審查意圖與差異，接受後才 apply 與 archive。", "en": "People review a change proposal's intent and delta before it is applied and archived."}}
+        {"key": "humanDecisionBoundary", "feature": "Proposal review", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/docs/reviewing-changes.md", "description": {"zh-tw": "change proposal 先由人審查意圖與差異，接受後才 apply 與 archive。", "en": "People review a change proposal's intent and delta before it is applied and archived."}},
+        {"key": "freshCompletionEvidence", "feature": "openspec-verify-change", "docs": "https://github.com/Fission-AI/OpenSpec/blob/main/skills/openspec-verify-change/SKILL.md", "description": {"zh-tw": "在歸檔前逐項核對 change artifacts、tasks 與實作，並把未驗證或不一致處明確列出。", "en": "Before archiving, it checks change artifacts, tasks, and implementation and explicitly reports anything unverified or inconsistent."}}
       ]
     },
     {
@@ -392,7 +476,7 @@
       "url": "https://github.com/bmad-code-org/BMAD-METHOD",
       "version": "v6.11.0",
       "released": "2026-08-10",
-      "stars": "52,410",
+      "stars": "52,478",
       "coverage": {"full": ["01", "02"], "partial": ["03", "04"]},
       "position": {"zh-tw": "AI-driven agile delivery method：以多角色工作流程與依複雜度調整的規劃推進產品。", "en": "An AI-driven agile delivery method that advances products through multi-role workflows and complexity-adjusted planning."},
       "difference": {"zh-tw": ["BMAD 提供完整方法、agent 角色與分級規劃流程。", "CSARC 不綁 agent persona，重點是可執行、可更新的 repository 基線。"], "en": ["BMAD provides a complete method, agent roles, and tiered planning workflows.", "CSARC does not prescribe agent personas; it focuses on an executable and updatable repository baseline."]},
@@ -402,15 +486,16 @@
         {"key": "rightSizedWork", "feature": "Quick Flow / BMad Method", "docs": "https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md", "description": {"zh-tw": "Quick Flow 處理小改，複雜產品才加完整 planning 與 architecture。", "en": "Quick Flow handles small changes; complex products add full planning and architecture."}},
         {"key": "agentInstructions", "feature": "Agent roles", "docs": "https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md", "description": {"zh-tw": "以產品、架構、開發與 QA 等角色提示，為每個階段提供專門指令。", "en": "Product, architecture, development, and QA roles provide specialized instructions for each phase."}},
         {"key": "durableAgentContext", "feature": "Planning artifacts", "docs": "https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md", "description": {"zh-tw": "brief、PRD、UX、architecture 與 stories 讓多角色 agent 跨階段接力。", "en": "Briefs, PRDs, UX, architecture, and stories let multiple agent roles hand work across phases."}},
-        {"key": "humanDecisionBoundary", "feature": "Workflow checkpoints", "docs": "https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md", "description": {"zh-tw": "依工作規模在 discovery、規劃與交付階段加入人類確認點。", "en": "Human confirmation points are added during discovery, planning, and delivery according to work size."}}
+        {"key": "humanDecisionBoundary", "feature": "Workflow checkpoints", "docs": "https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md", "description": {"zh-tw": "依工作規模在 discovery、規劃與交付階段加入人類確認點。", "en": "Human confirmation points are added during discovery, planning, and delivery according to work size."}},
+        {"key": "freshCompletionEvidence", "feature": "Test completed work", "docs": "https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/build/test-completed-work.md", "description": {"zh-tw": "交付前依使用情境檢查完成的功能，讓驗收回到實際行為而不是只看工作狀態。", "en": "Completed work is exercised through usage scenarios before delivery, keeping acceptance tied to behavior instead of task status alone."}}
       ]
     },
     {
       "name": "OpenRewrite",
       "url": "https://github.com/openrewrite/rewrite",
-      "version": "v8.91.0",
-      "released": "2026-08-26",
-      "stars": "3,681",
+      "version": "v8.91.2",
+      "released": "2026-08-28",
+      "stars": "3,683",
       "coverage": {"full": ["08"], "partial": ["03", "05"]},
       "comparisons": [
         {"key": "declarativeState", "feature": "Recipes", "docs": "https://docs.openrewrite.org/concepts-and-explanations/recipes", "description": {"zh-tw": "Recipe 宣告 semantic transformation，再由 parser／visitor 套用。", "en": "A Recipe declares a semantic transformation that parsers and visitors apply."}},
@@ -422,7 +507,7 @@
       "url": "https://github.com/obra/superpowers",
       "version": "v6.3.0",
       "released": "2026-08-12",
-      "stars": "278,757",
+      "stars": "279,672",
       "coverage": {"full": ["02"], "partial": ["01", "03", "04"]},
       "position": {"zh-tw": "Agent skills framework：用可組合 skills 固定從釐清、規劃、實作到審查的開發方法。", "en": "An agent-skills framework that standardizes clarification, planning, implementation, and review with composable skills."},
       "difference": {"zh-tw": ["Superpowers 定義 agent 如何執行軟體工作的技能與節奏。", "CSARC 定義 repo 應保存的契約、驗證、治理與升級機制，不把技能框架列為相依。"], "en": ["Superpowers defines the skills and cadence an agent uses to execute software work.", "CSARC defines the contracts, verification, governance, and upgrade mechanisms a repository retains without depending on a skills framework."]},
@@ -433,7 +518,8 @@
         {"key": "agentInstructions", "feature": "Composable skills", "docs": "https://github.com/obra/superpowers", "description": {"zh-tw": "以可組合技能提供 agent 可重複執行的工作方法。", "en": "Composable skills give agents repeatable working methods."}},
         {"key": "durableAgentContext", "feature": "Writing plans", "docs": "https://github.com/obra/superpowers", "description": {"zh-tw": "將設計、步驟、檔案與驗證寫成計畫，讓後續 session 可接續。", "en": "Designs, steps, files, and checks are written into plans that later sessions can continue."}},
         {"key": "parallelAgentIsolation", "feature": "Git worktrees", "docs": "https://github.com/obra/superpowers", "description": {"zh-tw": "使用 Git worktree 建立隔離工作區，再把獨立任務交給不同 agent。", "en": "Git worktrees create isolated workspaces before independent tasks are assigned to different agents."}},
-        {"key": "humanDecisionBoundary", "feature": "Brainstorming approval", "docs": "https://github.com/obra/superpowers", "description": {"zh-tw": "先逐段確認設計，再開始撰寫計畫與實作。", "en": "Design sections are confirmed before planning and implementation begin."}}
+        {"key": "humanDecisionBoundary", "feature": "Brainstorming approval", "docs": "https://github.com/obra/superpowers", "description": {"zh-tw": "先逐段確認設計，再開始撰寫計畫與實作。", "en": "Design sections are confirmed before planning and implementation begin."}},
+        {"key": "freshCompletionEvidence", "feature": "Verification Before Completion", "docs": "https://github.com/obra/superpowers/blob/main/skills/verification-before-completion/SKILL.md", "description": {"zh-tw": "宣稱完成前必須重新執行能證明該主張的完整命令、讀完輸出並確認 exit code。", "en": "Before claiming completion, it requires rerunning the complete command that proves the claim, reading its output, and checking the exit code."}}
       ]
     },
     {
@@ -441,7 +527,7 @@
       "url": "https://github.com/agentsmd/agents.md",
       "version": "open format",
       "released": "—",
-      "stars": "23,958",
+      "stars": "23,993",
       "coverage": {"full": [], "partial": ["02"]},
       "position": {"zh-tw": "Open format：用 repo 內的 Markdown 為 coding agents 提供指令。", "en": "An open format for giving coding agents instructions through Markdown inside a repository."},
       "difference": {"zh-tw": ["AGENTS.md 只定義 agent 指令的可攜入口，不管理工作、驗證或治理。", "CSARC 採用這個格式，但另外規範 Issue／PR、worktree、測試與權限。"], "en": ["AGENTS.md defines only a portable instruction entrypoint and does not manage work, verification, or governance.", "CSARC adopts the format and separately defines Issues, PRs, worktrees, tests, and permissions."]},
@@ -454,7 +540,7 @@
       "url": "https://github.com/intellectronica/ruler",
       "version": "v0.3.44",
       "released": "2026-06-30",
-      "stars": "2,898",
+      "stars": "2,901",
       "coverage": {"full": [], "partial": ["02"]},
       "position": {"zh-tw": "Agent rules distributor：從中央規則產生多種 coding agent 的設定檔。", "en": "An agent-rules distributor that emits configuration files for multiple coding agents from central rules."},
       "difference": {"zh-tw": ["Ruler 解決多種 agent 各自格式不同的同步問題。", "CSARC 直接選 AGENTS.md 為唯一來源，不先增加轉換層。"], "en": ["Ruler synchronizes different rule-file formats used by multiple agents.", "CSARC chooses AGENTS.md as the single source and does not add a conversion layer yet."]},
@@ -467,7 +553,7 @@
       "url": "https://github.com/MrLesk/Backlog.md",
       "version": "v1.50.1",
       "released": "2026-08-10",
-      "stars": "6,560",
+      "stars": "6,581",
       "coverage": {"full": [], "partial": ["01", "02"]},
       "position": {"zh-tw": "Git-native task manager：把 backlog、狀態與決策留在 repo 內供人與 agent 共用。", "en": "A Git-native task manager that keeps backlog, state, and decisions in the repository for people and agents."},
       "difference": {"zh-tw": ["Backlog.md 以 Markdown 檔案取代外部工作追蹤器。", "CSARC 以 GitHub Issue／PR 作為日常狀態，repo 文件只保存長期契約。"], "en": ["Backlog.md uses Markdown files instead of an external work tracker.", "CSARC uses GitHub Issues and PRs for daily state and keeps only durable contracts in repository documents."]},
@@ -476,6 +562,32 @@
         {"key": "proposalLifecycle", "feature": "Task workflow", "docs": "https://github.com/MrLesk/Backlog.md", "description": {"zh-tw": "任務檔隨分支與 PR 變更，合併後成為團隊共享狀態。", "en": "Task files change with branches and PRs and become shared state after merge."}},
         {"key": "rightSizedWork", "feature": "Task hierarchy", "docs": "https://github.com/MrLesk/Backlog.md", "description": {"zh-tw": "以狀態、優先度與父子工作管理大小不同的任務。", "en": "Status, priority, and parent-child relationships organize tasks of different sizes."}},
         {"key": "durableAgentContext", "feature": "Markdown task records", "docs": "https://github.com/MrLesk/Backlog.md", "description": {"zh-tw": "agent 可直接讀寫版本化任務檔，在 session 之間保留脈絡。", "en": "Agents can read and write versioned task files that preserve context across sessions."}}
+      ]
+    },
+    {
+      "name": "Nx",
+      "url": "https://github.com/nrwl/nx",
+      "version": "23.1.2",
+      "released": "2026-08-26",
+      "stars": "29,280",
+      "coverage": {"full": [], "partial": ["03"]},
+      "position": {"zh-tw": "Monorepo build platform：用 project graph、task graph 與遠端快取縮小並加速本機及 CI 工作。", "en": "A monorepo build platform that uses project and task graphs plus remote caching to reduce and accelerate local and CI work."},
+      "difference": {"zh-tw": ["Nx 的 affected 計算建立在 monorepo project graph，適合大量互相依賴的專案。", "CSARC 面向單一 repo 公版，先以路徑與交付階段分級，不要求導入 Nx runtime。"], "en": ["Nx computes affected work from a monorepo project graph and suits many interdependent projects.", "CSARC targets a single-repository baseline and first routes by paths and delivery stage without requiring the Nx runtime."]},
+      "comparisons": [
+        {"key": "riskBasedSelection", "feature": "nx affected", "docs": "https://nx.dev/ci/features/affected", "description": {"zh-tw": "比較 Git base／head 與 project graph，只執行受變更影響的 tasks。", "en": "It compares the Git base and head against the project graph and runs only tasks affected by the change."}}
+      ]
+    },
+    {
+      "name": "Dagger",
+      "url": "https://github.com/dagger/dagger",
+      "version": "v0.21.9",
+      "released": "2026-08-26",
+      "stars": "16,217",
+      "coverage": {"full": [], "partial": ["03", "04", "06"]},
+      "position": {"zh-tw": "可程式化 pipeline engine：同一套容器化 pipeline 可在本機、CI 或雲端執行。", "en": "A programmable pipeline engine whose containerized pipeline runs locally, in CI, or in the cloud."},
+      "difference": {"zh-tw": ["Dagger 以 SDK、容器與 cache graph 提供跨 CI 平台一致的執行環境。", "CSARC 只要求可直接執行的 repo-local scripts，避免所有採用者先承擔額外 pipeline runtime。"], "en": ["Dagger uses SDKs, containers, and a cache graph for consistent execution across CI providers.", "CSARC requires directly runnable repository-local scripts so adopters do not first need another pipeline runtime."]},
+      "comparisons": [
+        {"key": "sharedVerificationEntry", "feature": "Local-first CI", "docs": "https://docs.dagger.io/getting-started/ci-integrations/", "description": {"zh-tw": "同一支 pipeline function 可在開發機與不同 CI provider 執行；換來的是 Dagger engine 與容器依賴。", "en": "The same pipeline function runs on a developer machine and across CI providers, at the cost of a Dagger engine and container dependency."}}
       ]
     }
   ]

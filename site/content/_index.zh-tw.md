@@ -311,40 +311,29 @@ Root 與 `template/` 同時消費的 workflow、policy、script 與文件由 `sc
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="contract" track="contract" eyebrow="步驟 03" title="本機與 CI 用同一把尺" subtitle="日常快回饋，交付邊界再集中跑完整證據。" class="legacy-slide decision-slide" legacy="true" >}}
+{{< slide key="contract" track="contract" eyebrow="步驟 03" title="先驗證改動，再讓 CI 重跑同一套規則" subtitle="Issue PR 依變更範圍分級；高風險邊界才跑完整驗證。" class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
-        <h2>步驟 3｜<span class="accent">本機與 CI 用同一把尺</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>本機保留完整驗證入口；一般 Issue PR 跑單一 runtime 的 change-aware checks，promotion／hotfix 才跑完整矩陣。Full tier 只做一次 canonical 完整驗證，Python 相容性與混合 TypeScript 各自留下不重複的 runtime 證據。</p>
+        <h2>步驟 3｜<span class="accent">先驗證改動，再讓 CI 重跑同一套規則</span></h2>
+        <p class="subtitle"><strong>基本導入。</strong>開發時先跑與改動直接相關的測試；Issue PR 再由同一支 Action 依變更範圍選擇 docs、fast 或 full。</p>
       </header>
-      <p class="context-line"><strong>問題與目的｜</strong>若每個人和 AI 都用不同指令，結果就無法重現；統一成一個驗證入口，問題可在送出 PR 前發現。</p>
+      <p class="context-line"><strong>模板的作用｜</strong>把測試邏輯留在 repo 內可直接執行的 scripts／tests；GitHub Action 只負責何時啟動、使用哪些權限，以及呼叫同一份程式。</p>
       <div class="decision-strip">
-        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>這次不選，因為會出現兩套標準</h3><ul><li><strong>只靠 IDE／pre-commit：</strong>本機可跳過，不能作合併證據</li><li><strong>每個 workflow 重寫指令：</strong>本機綠燈不代表 CI 會綠</li><li><strong>ESLint＋Prettier：</strong>TypeScript 基線先用一份 Biome 設定，減少重疊</li><li><strong>Python flat layout：</strong>測到原始碼，不是真正會發布的成品</li></ul></article>
-        <article class="decision-step recommended">
-          <span class="step-label">我們的選擇</span>
-          <details class="package-disclosure"><summary><span><span class="tech-name">Python：uv／Ruff／mypy／pytest　TS：pnpm／Biome／Vitest</span></span></summary><div class="package-health"><p><a href="https://github.com/astral-sh/uv" target="_blank" rel="noreferrer">uv／Ruff</a>、<a href="https://github.com/biomejs/biome" target="_blank" rel="noreferrer">Biome</a>、<a href="https://github.com/vitest-dev/vitest" target="_blank" rel="noreferrer">Vitest</a> 與 <a href="https://github.com/gitleaks/gitleaks" target="_blank" rel="noreferrer">Gitleaks</a> 都是公開且持續維護的主流工具。</p><p><strong>選型：</strong>各語言用自己的格式、型別、測試與打包工具；安全與治理入口仍共用。</p></div></details>
-          <p class="recommendation-copy"><strong>Fast：</strong>每張一般 PR 跑 secret scan、格式、lint、型別、單元測試與必要 template smoke；docs-only 不啟動語言或生成矩陣。<br><strong>Full：</strong><code>dev/* → main</code> promotion、hotfix、merge queue 與手動 dispatch 才執行全部 runtime、profiles、Copier update、release 與安全回歸。<br><strong>條件式供應鏈：</strong>workflow 變更加跑 Zizmor，相依變更加跑 OSV，治理宣告變更加跑 remote governance；三者另有週期排程。未知路徑 fail closed 到 full。<br><strong>穩定門禁：</strong><code>verify</code> aggregate 每次都回報，不適用的重型 job 明確視為 skipped，避免 required check 永久 Pending；summary／artifact 記錄 tier、原因、scope 與 duration。完整契約見 <code>docs/ci-policy.md</code>。</p>
-        </article>
+        <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">四種都合理，但成本不同</span></summary><ul><li><strong>每次全跑：</strong>每張 PR 都取得完整信心，適合測試很小、執行很快的 repo。</li><li><strong>只跑受影響項目：</strong>依 dependency graph 或路徑縮小範圍，回饋快，但分流規則必須可測。</li><li><strong>獨立 pipeline runtime：</strong>本機與不同 CI 平台執行相同 pipeline，換來額外引擎與環境成本。</li><li><strong>分階段驗證：</strong>日常快速、整合候選完整；需要清楚定義何時升級與哪一份結果有效。</li></ul></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一份邏輯、一支 Action、兩種 repo 範圍</span></summary><ul class="work-definition-list"><li><strong>開發中：</strong>人或 agent 只跑能證明這次修改的 focused check，先取得新鮮輸出再宣稱完成。</li><li><strong>Issue PR → dev：</strong><code>ci_tier.py</code> 依變更路徑選 docs 或 fast；未知路徑才升級為 full。</li><li><strong>高風險邊界：</strong>promotion、hotfix、release recovery、merge queue 與手動執行都走 full。</li><li><strong>同一套邏輯：</strong>GitHub Actions 只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li><li><strong>一般 repo：</strong>完整入口是 <code>scripts/verify</code>；<strong>repo-template：</strong>改用 <code>scripts/verify-template.sh</code>，額外驗證模板、生成結果與既有 repo 導入。</li></ul></details>
       </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>分層規則：</strong><code>scripts/ci_tier.py</code>＋<code>scripts/verify-fast</code>＋<code>docs/ci-policy.md</code></li><li><strong>完整入口：</strong><code>scripts/verify</code>；公版為 <code>scripts/verify-template.sh</code></li><li><strong>常駐門禁：</strong><code>title</code>＋<code>verify</code>＋<code>promotion</code>；delivery sync 併入 <code>title</code> policy，一般 PR 的核心流程最多啟動 policy、fast、aggregate 三個 runner，OSV、Zizmor、remote governance 與選配容器驗證由 job-level 條件或週期排程執行</li><li><strong>額度耗盡：</strong>zero-step billing block 被機械式確認、且 job 未執行任何 step 時，一般 PR 只需本機驗證通過即可留言合併；promotion 另綁定 candidate/main tree、維持雙方確認，且不可發布</li></ul></aside>
+      <aside class="config-guidance" data-config-direct="true"><strong>模板功能與客製化</strong><ul><li><strong>分級依據：</strong><code>scripts/ci_tier.py</code> 判斷變更範圍；<code>docs/ci-policy.md</code> 說明階段與升級條件。</li><li><strong>快速驗證：</strong><code>scripts/verify-fast</code> 已存在於 root 與生成模板；一般 repo 的完整入口是 <code>scripts/verify</code>。</li><li><strong>模板額外驗證：</strong><code>scripts/verify-template.sh</code> 只屬於 repo-template，不應成為每個採用 repo 的成本。</li><li><strong>目前邊界：</strong>只恢復 <code>.github/workflows/ci.yml</code>；release、promotion、安全掃描、遠端治理、部署與排程仍由各自 Journey 決定。</li></ul></aside>
+      <p class="method-reference reference">具體工具與功能來源見<a href="#similar-tools">相似工具</a>；每個階段實際使用的程式與 Action 現況見<a href="#testing">CI/CD 設定</a>。</p>
 {{< /legacy >}}
 
 {{< basic >}}
-| 驗證層級 | 何時執行 | 內容 |
-| --- | --- | --- |
-| Focused | 開發迭代 | 只跑本次變更直接相關的 lint、type 與 tests |
-| Fast | 一般 Issue PR | secret scan、格式、lint、型別、單元測試、必要 template smoke |
-| Full | promotion、hotfix、merge queue、手動 dispatch | 全 runtime、profiles、Copier update、release 與安全回歸 |
+- **開發中：**只跑能證明本次修改的 focused check。
+- **Issue PR → dev：**依路徑選 docs 或 fast；未知路徑才升級為 full。
+- **高風險邊界：**promotion、hotfix、release recovery、merge queue 與手動執行走 full。
+- **Action：**只有一個 `verify` job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。
+- **責任：**一般 repo 的完整入口是 `scripts/verify`；repo-template 改用 `scripts/verify-template.sh`。
 
-{{< disclosure key="language-toolchain" title="Python：uv／Ruff／mypy／pytest；TypeScript：pnpm／Biome／Vitest" >}}
-各語言使用自己的格式、型別、測試與打包工具；Gitleaks、安全、政策與工作流協調共用同一入口。生成 repo 的完整入口是 `./scripts/verify`，公版本身使用 `./scripts/verify-template.sh`。
-{{< /disclosure >}}
-
-{{< detail key="contract-quota" title="條件式檢查、穩定門禁與額度例外" >}}
-Workflow 變更加跑 Zizmor，相依變更加跑 OSV，治理宣告變更加跑 remote governance；未知路徑 fail closed 到 full。`verify` aggregate 每次都回報，不適用的重型 job 明確標為 skipped，避免 required check 永久 Pending。
-
-Actions 額度例外只適用於帳務可見維護者確認本期 included minutes 用完、且 job 沒執行任何 step 的情況。付款、budget、平台、設定或測試失敗都不能套用。完整契約見 `docs/ci-policy.md`。
-{{< /detail >}}
+測試邏輯只寫在 scripts／tests；本次只恢復 `.github/workflows/ci.yml`。具體比較見[相似工具](#similar-tools)，執行位置見 [CI/CD 設定](#testing)。
 {{< /basic >}}
 {{< /slide >}}
 

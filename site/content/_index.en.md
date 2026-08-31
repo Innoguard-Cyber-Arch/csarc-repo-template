@@ -119,22 +119,14 @@ Concrete tools, feature names, and source links are listed under [Similar tools]
 Concrete tools and sources are in [Similar tools](#similar-tools); Journey 02 local checks and Actions are in [CI/CD settings](#testing).
 {{< /slide >}}
 
-{{< slide key="contract" track="contract" eyebrow="Step 03" title="Use the same standard locally and in CI" subtitle="Keep daily feedback fast and concentrate complete evidence at delivery boundaries." legacy="false"  class="candidate-slide" >}}
-| Verification tier | When it runs | Scope |
-| --- | --- | --- |
-| Focused | Development iteration | Only lint, type, and tests directly relevant to the change |
-| Fast | Ordinary Issue PR | Secret scan, format, lint, type, unit tests, and necessary template smoke |
-| Full | Promotion, hotfix, merge queue, or manual dispatch | Every runtime, profile, Copier update, release, and security regression |
+{{< slide key="contract" track="contract" eyebrow="Step 03" title="Verify the change, then let CI rerun the same rules" subtitle="Issue PRs are tiered by change scope; full verification is reserved for high-risk boundaries." legacy="false"  class="candidate-slide" >}}
+- **During development:** run only the focused check that proves the current change, using fresh output before claiming completion.
+- **Issue PR → dev:** `ci_tier.py` selects docs or fast from changed paths; unknown paths escalate to full.
+- **High-risk boundaries:** promotions, hotfixes, release recovery, merge queues, and manual runs use full.
+- **One implementation:** GitHub Actions has one `verify` job with a 30-minute timeout and only calls repository scripts.
+- **Responsibility:** a normal repository uses `scripts/verify`; repo-template uses `scripts/verify-template.sh` to add template, generated-output, and existing-repository adoption checks.
 
-{{< disclosure key="language-toolchain" title="Python: uv, Ruff, mypy, pytest; TypeScript: pnpm, Biome, Vitest" >}}
-Each language uses its native formatting, typing, testing, and packaging tools. Gitleaks, security, policy, and workflow orchestration share one entry point. Generated repositories use `./scripts/verify`; the template repository uses `./scripts/verify-template.sh`.
-{{< /disclosure >}}
-
-{{< detail key="contract-quota" title="Conditional checks, stable gates, and the quota exception" >}}
-Workflow changes add Zizmor, dependency changes add OSV, and governance declarations add remote governance. Unknown paths fail closed to full. The `verify` aggregate always reports; inapplicable heavy jobs are explicitly skipped so a required check never remains pending.
-
-The Actions exception applies only when a maintainer with billing visibility confirms that included minutes are exhausted and the job ran no step. Payment, budget, platform, configuration, and test failures do not qualify. The full contract is in `docs/ci-policy.md`.
-{{< /detail >}}
+Verification logic lives only in scripts and tests. This step restores only `.github/workflows/ci.yml`; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys. See [Similar tools](#similar-tools) for concrete comparisons and [CI/CD settings](#testing) for execution locations.
 {{< /slide >}}
 
 {{< slide key="pr" track="pr" eyebrow="Step 04" title="Merge small PRs after evidence passes" subtitle="Issues integrate on delivery branches; promotion brings verified outcomes to main." legacy="false"  class="candidate-slide" >}}
