@@ -168,6 +168,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "overflow-y: auto;" in styles
     assert ".journey-rail {\n      position: fixed;" in styles
     assert ".slide.active > .legacy-content > * { flex-shrink: 0; }" in styles
+    assert ".similar-tools-tabs button {\n      flex: 0 0 auto;" in styles
+    assert "min-width: 210px;" not in styles
     assert chinese.count('data-config-direct="true"') == 3
     assert "guidance.dataset.configDirect === 'true'" in (
         root / "site/static/detail-toggle.js"
