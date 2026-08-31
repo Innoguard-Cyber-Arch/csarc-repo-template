@@ -324,6 +324,12 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert [row["key"] for row in duration_rows] == ["issue", "release"]
     assert all(len(row["shared"]["items"]) == 4 for row in duration_rows)
     assert all(len(row["templateOnly"]["items"]) == 4 for row in duration_rows)
+    for row in duration_rows:
+        for scope in ("shared", "templateOnly"):
+            assert [
+                item["label"]["zh-tw"][:2]
+                for item in row[scope]["items"]
+            ] == ["02", "03", "04", "05"]
     assert duration_rows[0]["shared"]["total"]["zh-tw"] == "約 1\u20137 分鐘"
     assert duration_rows[1]["templateOnly"]["total"]["zh-tw"] == (
         "約 9\u201314 分鐘"

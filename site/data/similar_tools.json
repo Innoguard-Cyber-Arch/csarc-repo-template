@@ -165,19 +165,19 @@
           "stage": {"zh-tw": "Issue PR（工作分支 → dev）", "en": "Issue PR (work branch → dev)"},
           "shared": {
             "items": [
-              {"label": {"zh-tw": "PR／合併", "en": "PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
-              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "驗證／CI 其中 < 1 分鐘", "en": "Under 1 min within Verification / CI"}},
-              {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 2–5 分鐘", "en": "docs <1 min; fast 2–5 min"}},
-              {"label": {"zh-tw": "依賴安全", "en": "Dependency security"}, "value": {"zh-tw": "fast 其中通常少於 1 分鐘", "en": "Typically under 1 min within fast"}}
+              {"label": {"zh-tw": "02 AI 規範", "en": "02 AI rules"}, "value": {"zh-tw": "驗證／CI 其中 < 1 分鐘", "en": "Under 1 min within Verification / CI"}},
+              {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 2–5 分鐘", "en": "docs <1 min; fast 2–5 min"}},
+              {"label": {"zh-tw": "04 依賴安全", "en": "04 Dependency security"}, "value": {"zh-tw": "fast 其中通常少於 1 分鐘", "en": "Typically under 1 min within fast"}},
+              {"label": {"zh-tw": "05 PR／合併", "en": "05 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}}
             ],
             "total": {"zh-tw": "約 1–7 分鐘", "en": "About 1–7 min"}
           },
           "templateOnly": {
             "items": [
-              {"label": {"zh-tw": "PR／合併", "en": "PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
-              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "驗證／CI 其中 < 1 分鐘", "en": "Under 1 min within Verification / CI"}},
-              {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 3–6 分鐘", "en": "docs <1 min; fast 3–6 min"}},
-              {"label": {"zh-tw": "依賴安全", "en": "Dependency security"}, "value": {"zh-tw": "fast 其中通常少於 1 分鐘", "en": "Typically under 1 min within fast"}}
+              {"label": {"zh-tw": "02 AI 規範", "en": "02 AI rules"}, "value": {"zh-tw": "驗證／CI 其中 < 1 分鐘", "en": "Under 1 min within Verification / CI"}},
+              {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 3–6 分鐘", "en": "docs <1 min; fast 3–6 min"}},
+              {"label": {"zh-tw": "04 依賴安全", "en": "04 Dependency security"}, "value": {"zh-tw": "fast 其中通常少於 1 分鐘", "en": "Typically under 1 min within fast"}},
+              {"label": {"zh-tw": "05 PR／合併", "en": "05 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}}
             ],
             "total": {"zh-tw": "約 1–8 分鐘", "en": "About 1–8 min"}
           }
@@ -187,19 +187,19 @@
           "stage": {"zh-tw": "發版 PR（dev → main）", "en": "Release PR (dev → main)"},
           "shared": {
             "items": [
-              {"label": {"zh-tw": "PR／合併", "en": "PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
-              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "full 其中 < 1 分鐘", "en": "Under 1 min within full"}},
-              {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "full 5–15 分鐘", "en": "full 5–15 min"}},
-              {"label": {"zh-tw": "依賴安全", "en": "Dependency security"}, "value": {"zh-tw": "full 其中通常少於 1 分鐘", "en": "Typically under 1 min within full"}}
+              {"label": {"zh-tw": "02 AI 規範", "en": "02 AI rules"}, "value": {"zh-tw": "full 其中 < 1 分鐘", "en": "Under 1 min within full"}},
+              {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "full 5–15 分鐘", "en": "full 5–15 min"}},
+              {"label": {"zh-tw": "04 依賴安全", "en": "04 Dependency security"}, "value": {"zh-tw": "full 其中通常少於 1 分鐘", "en": "Typically under 1 min within full"}},
+              {"label": {"zh-tw": "05 PR／合併", "en": "05 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}}
             ],
             "total": {"zh-tw": "約 6–17 分鐘", "en": "About 6–17 min"}
           },
           "templateOnly": {
             "items": [
-              {"label": {"zh-tw": "PR／合併", "en": "PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
-              {"label": {"zh-tw": "AI 規範", "en": "AI rules"}, "value": {"zh-tw": "full 其中 < 1 分鐘", "en": "Under 1 min within full"}},
-              {"label": {"zh-tw": "驗證／CI", "en": "Verification / CI"}, "value": {"zh-tw": "full 8–12 分鐘", "en": "full 8–12 min"}},
-              {"label": {"zh-tw": "依賴安全", "en": "Dependency security"}, "value": {"zh-tw": "full 其中通常少於 1 分鐘", "en": "Typically under 1 min within full"}}
+              {"label": {"zh-tw": "02 AI 規範", "en": "02 AI rules"}, "value": {"zh-tw": "full 其中 < 1 分鐘", "en": "Under 1 min within full"}},
+              {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "full 8–12 分鐘", "en": "full 8–12 min"}},
+              {"label": {"zh-tw": "04 依賴安全", "en": "04 Dependency security"}, "value": {"zh-tw": "full 其中通常少於 1 分鐘", "en": "Typically under 1 min within full"}},
+              {"label": {"zh-tw": "05 PR／合併", "en": "05 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}}
             ],
             "total": {"zh-tw": "約 9–14 分鐘", "en": "About 9–14 min"}
           }
