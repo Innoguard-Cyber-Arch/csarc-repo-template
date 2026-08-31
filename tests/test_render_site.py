@@ -212,7 +212,10 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "五月盤點" in journey_rail
     assert "決策附錄" not in journey_rail
     assert 'data-audience="maintainer"' in glossary
-    assert "備忘\uff5c名詞表" in glossary
+    assert '{{ cond $english "Notes" "備忘" }}' in glossary
+    assert glossary.count('<section class="slide') == 1
+    assert '<details class="glossary-group">' in glossary
+    assert 'id="glossary-group-' not in glossary
     assert "testing.after(bridge)" in presentation
     assert "slide.dataset.audience !== 'archive'" in deck
     assert "Cloudflare Pages" in chinese

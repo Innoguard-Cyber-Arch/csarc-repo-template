@@ -2018,50 +2018,73 @@ html[data-detail-level="simple"] .technical-tour-trigger {
 }
 
 .glossary-intro {
-  padding: 12px 15px;
+  padding: 10px 14px;
   border-left: 7px solid var(--yellow);
   background: #fffbea;
-  font-size: 22px;
+  font-size: 20px;
 }
 
-.glossary-index,
-.glossary-grid {
+.glossary-accordion {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
+  margin-top: 12px;
 }
 
-.glossary-index {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.glossary-index section,
-.glossary-term {
-  padding: 16px 20px;
+.glossary-group {
   border: 1px solid var(--line);
-  border-top: 7px solid var(--yellow);
+  border-top: 6px solid var(--yellow);
   background: white;
 }
 
-.glossary-index h3,
-.glossary-term h3 {
-  margin-bottom: 8px;
+.glossary-group > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 16px;
+  cursor: pointer;
   font-size: 21px;
+  font-weight: 850;
+  list-style: none;
 }
 
-.glossary-index ul {
-  margin: 0;
-  padding-left: 20px;
+.glossary-group > summary::-webkit-details-marker { display: none; }
+.glossary-group > summary small { color: var(--muted); font-size: 16px; }
+.glossary-group > summary::after {
+  content: "+";
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--yellow);
+  font-size: 22px;
+  line-height: 1;
+}
+.glossary-group[open] > summary::after { content: "−"; }
+.glossary-group > summary:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+
+.glossary-term-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 12px 12px;
 }
 
-.glossary-index li,
+.glossary-term {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--soft);
+}
+
+.glossary-term h3 { margin-bottom: 5px; font-size: 19px; }
 .glossary-term p,
 .glossary-term a {
-  font-size: 17px;
-  line-height: 1.35;
+  font-size: 16px;
+  line-height: 1.3;
 }
 
-.glossary-index a,
 .glossary-term a {
   color: var(--ink);
   font-weight: 800;
@@ -5383,7 +5406,7 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
-<section class="slide markdown-slide glossary-slide" id="glossary" data-content-key="glossary-index" data-audience="maintainer" aria-label="共用詞彙表">
+<section class="slide markdown-slide glossary-slide" id="glossary" data-content-key="glossary-index" data-audience="maintainer" aria-label="名詞與約定">
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
@@ -5440,279 +5463,84 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#glossary" aria-current="page">備忘</a>
 </aside>
 
-  <header><span class="selection-sequence">備忘｜名詞表</span><h2>共用詞彙表</h2></header>
-  <p class="glossary-intro">每個詞彙都有穩定錨點與深入來源；本頁與 llms.txt 都由這份資料產生。</p>
-  <div class="glossary-index">
-    <section>
-      <h3>工作與審查</h3>
-      <ul>
-        <li><a href="#glossary-issue">Issue 工作單</a></li>
-        <li><a href="#glossary-story-milestone">Story Milestone</a></li>
-        <li><a href="#glossary-pull-request">Pull request</a></li>
-        <li><a href="#glossary-decision-record">決策記錄</a></li>
-      </ul>
-    </section>
-    <section>
-      <h3>驗證與能力</h3>
-      <ul>
-        <li><a href="#glossary-fast-checks">快速驗證</a></li>
-        <li><a href="#glossary-full-verification">完整驗證</a></li>
-        <li><a href="#glossary-capability-state">平台能力狀態</a></li>
-        <li><a href="#glossary-portable-artifact">可攜式產物</a></li>
-      </ul>
-    </section>
-    <section>
-      <h3>整合與交付</h3>
-      <ul>
-        <li><a href="#glossary-delivery-branch">Delivery branch</a></li>
-        <li><a href="#glossary-promotion">Promotion</a></li>
-        <li><a href="#glossary-release-intent">SemVer 意圖</a></li>
-        <li><a href="#glossary-copier-update">Copier 更新</a></li>
-      </ul>
-    </section>
-  </div>
-</section>
-<section class="slide markdown-slide glossary-slide" id="glossary-group-work" data-content-key="glossary-work" data-audience="maintainer" aria-label="工作與審查">
-  <aside class="journey-rail" aria-label="簡報目錄">
-  <h3>使用公版</h3>
-  <ol class="journey-use">
-    <li class="journey-item">
-      <a href="#capability"><span>能力／導入</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#flow"><span>CI/CD 流程</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#files"><span>檔案地圖</span></a>
-    </li>
-  </ol>
-  <h3>開發與維護</h3>
-  <ol class="journey-main">
-    <li class="journey-item">
-      <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
-    </li>
-  </ol>
-  <h3>公版管理</h3>
-  <ol class="journey-support">
-    <li class="journey-item">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
-    </li>
-  </ol>
-  <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
-  <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#glossary" aria-current="page">備忘</a>
-</aside>
-
-  <header><span class="selection-sequence">備忘｜名詞表</span><h2>工作與審查</h2></header>
-  <div class="glossary-grid">
-    <article class="glossary-term" id="glossary-issue">
-      <h3>Issue 工作單</h3>
-      <p>界定一個可驗收結果、範圍與完成條件的工作單位。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#working-loop">深入閱讀 →</a>
-    </article>
-    <article class="glossary-term" id="glossary-story-milestone">
-      <h3>Story Milestone</h3>
-      <p>只有端到端成果需要時才建立、可獨立驗證的多 Issue story。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/milestone-description.md">深入閱讀 →</a>
-    </article>
-    <article class="glossary-term" id="glossary-pull-request">
-      <h3>Pull request</h3>
-      <p>保存變更意圖、驗證證據與人類審查的整合邊界。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/.github/pull_request_template.md">深入閱讀 →</a>
-    </article>
-    <article class="glossary-term" id="glossary-decision-record">
-      <h3>決策記錄</h3>
-      <p>保存已確認的架構、工具、安全與相容性取捨。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/README.md">深入閱讀 →</a>
-    </article>
-  </div>
-</section>
-<section class="slide markdown-slide glossary-slide" id="glossary-group-verification" data-content-key="glossary-verification" data-audience="maintainer" aria-label="驗證與能力">
-  <aside class="journey-rail" aria-label="簡報目錄">
-  <h3>使用公版</h3>
-  <ol class="journey-use">
-    <li class="journey-item">
-      <a href="#capability"><span>能力／導入</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#flow"><span>CI/CD 流程</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#files"><span>檔案地圖</span></a>
-    </li>
-  </ol>
-  <h3>開發與維護</h3>
-  <ol class="journey-main">
-    <li class="journey-item">
-      <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
-    </li>
-  </ol>
-  <h3>公版管理</h3>
-  <ol class="journey-support">
-    <li class="journey-item">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
-    </li>
-  </ol>
-  <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
-  <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#glossary" aria-current="page">備忘</a>
-</aside>
-
-  <header><span class="selection-sequence">備忘｜名詞表</span><h2>驗證與能力</h2></header>
-  <div class="glossary-grid">
-    <article class="glossary-term" id="glossary-fast-checks">
-      <h3>快速驗證</h3>
-      <p>依變更風險執行的短回饋檢查，不取代交付前完整驗證。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">深入閱讀 →</a>
-    </article>
-    <article class="glossary-term" id="glossary-full-verification">
-      <h3>完整驗證</h3>
-      <p>交付前執行的 repository 級契約，統一檢查程式、政策與產物。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#commands">深入閱讀 →</a>
-    </article>
-    <article class="glossary-term" id="glossary-capability-state">
-      <h3>平台能力狀態</h3>
-      <p>以 allowed、blocked 或 unknown 記錄實測能力，不從方案名稱猜測。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">深入閱讀 →</a>
-    </article>
-    <article class="glossary-term" id="glossary-portable-artifact">
-      <h3>可攜式產物</h3>
-      <p>沒有 runtime 外部資產、可下載並以 file:// 離線使用的單檔交付物。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">深入閱讀 →</a>
-    </article>
-  </div>
-</section>
-<section class="slide markdown-slide glossary-slide" id="glossary-group-delivery" data-content-key="glossary-delivery" data-audience="maintainer" aria-label="整合與交付">
-  <aside class="journey-rail" aria-label="簡報目錄">
-  <h3>使用公版</h3>
-  <ol class="journey-use">
-    <li class="journey-item">
-      <a href="#capability"><span>能力／導入</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#flow"><span>CI/CD 流程</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#files"><span>檔案地圖</span></a>
-    </li>
-  </ol>
-  <h3>開發與維護</h3>
-  <ol class="journey-main">
-    <li class="journey-item">
-      <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證＋CI</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR／合併</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#deploy"><span class="journey-code">06</span><span>版本／交付</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#governance"><span class="journey-code">07</span><span>規則治理</span></a>
-    </li>
-  </ol>
-  <h3>公版管理</h3>
-  <ol class="journey-support">
-    <li class="journey-item">
-      <a href="#template-release"><span class="journey-code">08</span><span>模板升級</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#docs-site"><span class="journey-code">09</span><span>內部網站</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#rollout"><span class="journey-code">10</span><span>導入層級</span></a>
-    </li>
-  </ol>
-  <a class="journey-bookend appendix" href="#ecosystem">工具附錄</a>
-  <a class="journey-bookend appendix" href="#similar-tools">相似工具</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD 設定</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#glossary" aria-current="page">備忘</a>
-</aside>
-
-  <header><span class="selection-sequence">備忘｜名詞表</span><h2>整合與交付</h2></header>
-  <div class="glossary-grid">
-    <article class="glossary-term" id="glossary-delivery-branch">
-      <h3>Delivery branch</h3>
-      <p>讓同一 story 的獨立 PR 先整合，再由 promotion 進入 main 的分支。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">深入閱讀 →</a>
-    </article>
-    <article class="glossary-term" id="glossary-promotion">
-      <h3>Promotion</h3>
-      <p>把已驗證的 delivery branch 提升到 main 的明確交付動作。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">深入閱讀 →</a>
-    </article>
-    <article class="glossary-term" id="glossary-release-intent">
-      <h3>SemVer 意圖</h3>
-      <p>由已驗證的 PR 標題宣告，合併後才從實際歷史決定版本。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">深入閱讀 →</a>
-    </article>
-    <article class="glossary-term" id="glossary-copier-update">
-      <h3>Copier 更新</h3>
-      <p>以可審查差異把公版變更套入既有 repository，保留專案持有內容。</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/README.md">深入閱讀 →</a>
-    </article>
+  <header><span class="selection-sequence">備忘</span><h2>名詞與約定</h2></header>
+  <p class="glossary-intro">需要時按「＋」展開；平常只保留三個分類，避免干擾主要內容。</p>
+  <div class="glossary-accordion">
+    <details class="glossary-group">
+      <summary><span>工作與審查</span><small>4 項</small></summary>
+      <div class="glossary-term-list">
+        <article class="glossary-term" id="glossary-issue">
+          <h3>Issue 工作單</h3>
+          <p>界定一個可驗收結果、範圍與完成條件的工作單位。</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#working-loop">深入閱讀 →</a>
+        </article>
+        <article class="glossary-term" id="glossary-story-milestone">
+          <h3>Story Milestone</h3>
+          <p>只有端到端成果需要時才建立、可獨立驗證的多 Issue story。</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/milestone-description.md">深入閱讀 →</a>
+        </article>
+        <article class="glossary-term" id="glossary-pull-request">
+          <h3>Pull request</h3>
+          <p>保存變更意圖、驗證證據與人類審查的整合邊界。</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/.github/pull_request_template.md">深入閱讀 →</a>
+        </article>
+        <article class="glossary-term" id="glossary-decision-record">
+          <h3>決策記錄</h3>
+          <p>保存已確認的架構、工具、安全與相容性取捨。</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/README.md">深入閱讀 →</a>
+        </article>
+      </div>
+    </details>
+    <details class="glossary-group">
+      <summary><span>驗證與能力</span><small>4 項</small></summary>
+      <div class="glossary-term-list">
+        <article class="glossary-term" id="glossary-fast-checks">
+          <h3>快速驗證</h3>
+          <p>依變更風險執行的短回饋檢查，不取代交付前完整驗證。</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">深入閱讀 →</a>
+        </article>
+        <article class="glossary-term" id="glossary-full-verification">
+          <h3>完整驗證</h3>
+          <p>交付前執行的 repository 級契約，統一檢查程式、政策與產物。</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#commands">深入閱讀 →</a>
+        </article>
+        <article class="glossary-term" id="glossary-capability-state">
+          <h3>平台能力狀態</h3>
+          <p>以 allowed、blocked 或 unknown 記錄實測能力，不從方案名稱猜測。</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">深入閱讀 →</a>
+        </article>
+        <article class="glossary-term" id="glossary-portable-artifact">
+          <h3>可攜式產物</h3>
+          <p>沒有 runtime 外部資產、可下載並以 file:// 離線使用的單檔交付物。</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">深入閱讀 →</a>
+        </article>
+      </div>
+    </details>
+    <details class="glossary-group">
+      <summary><span>整合與交付</span><small>4 項</small></summary>
+      <div class="glossary-term-list">
+        <article class="glossary-term" id="glossary-delivery-branch">
+          <h3>Delivery branch</h3>
+          <p>讓同一 story 的獨立 PR 先整合，再由 promotion 進入 main 的分支。</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">深入閱讀 →</a>
+        </article>
+        <article class="glossary-term" id="glossary-promotion">
+          <h3>Promotion</h3>
+          <p>把已驗證的 delivery branch 提升到 main 的明確交付動作。</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">深入閱讀 →</a>
+        </article>
+        <article class="glossary-term" id="glossary-release-intent">
+          <h3>SemVer 意圖</h3>
+          <p>由已驗證的 PR 標題宣告，合併後才從實際歷史決定版本。</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">深入閱讀 →</a>
+        </article>
+        <article class="glossary-term" id="glossary-copier-update">
+          <h3>Copier 更新</h3>
+          <p>以可審查差異把公版變更套入既有 repository，保留專案持有內容。</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/README.md">深入閱讀 →</a>
+        </article>
+      </div>
+    </details>
   </div>
 </section>
 

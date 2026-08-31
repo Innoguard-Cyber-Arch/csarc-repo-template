@@ -2018,50 +2018,73 @@ html[data-detail-level="simple"] .technical-tour-trigger {
 }
 
 .glossary-intro {
-  padding: 12px 15px;
+  padding: 10px 14px;
   border-left: 7px solid var(--yellow);
   background: #fffbea;
-  font-size: 22px;
+  font-size: 20px;
 }
 
-.glossary-index,
-.glossary-grid {
+.glossary-accordion {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
+  margin-top: 12px;
 }
 
-.glossary-index {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.glossary-index section,
-.glossary-term {
-  padding: 16px 20px;
+.glossary-group {
   border: 1px solid var(--line);
-  border-top: 7px solid var(--yellow);
+  border-top: 6px solid var(--yellow);
   background: white;
 }
 
-.glossary-index h3,
-.glossary-term h3 {
-  margin-bottom: 8px;
+.glossary-group > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 16px;
+  cursor: pointer;
   font-size: 21px;
+  font-weight: 850;
+  list-style: none;
 }
 
-.glossary-index ul {
-  margin: 0;
-  padding-left: 20px;
+.glossary-group > summary::-webkit-details-marker { display: none; }
+.glossary-group > summary small { color: var(--muted); font-size: 16px; }
+.glossary-group > summary::after {
+  content: "+";
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--yellow);
+  font-size: 22px;
+  line-height: 1;
+}
+.glossary-group[open] > summary::after { content: "−"; }
+.glossary-group > summary:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+
+.glossary-term-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 12px 12px;
 }
 
-.glossary-index li,
+.glossary-term {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--soft);
+}
+
+.glossary-term h3 { margin-bottom: 5px; font-size: 19px; }
 .glossary-term p,
 .glossary-term a {
-  font-size: 17px;
-  line-height: 1.35;
+  font-size: 16px;
+  line-height: 1.3;
 }
 
-.glossary-index a,
 .glossary-term a {
   color: var(--ink);
   font-weight: 800;
@@ -4780,7 +4803,7 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 </section>
 
-<section class="slide markdown-slide glossary-slide" id="glossary" data-content-key="glossary-index" data-audience="maintainer" aria-label="Shared glossary">
+<section class="slide markdown-slide glossary-slide" id="glossary" data-content-key="glossary-index" data-audience="maintainer" aria-label="Terms and conventions">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -4837,279 +4860,84 @@ html[data-detail-level="simple"] .detail-panel {
   <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#glossary" aria-current="page">Notes</a>
 </aside>
 
-  <header><span class="selection-sequence">Notes | Glossary</span><h2>Shared glossary</h2></header>
-  <p class="glossary-intro">Every term has a stable anchor and a deeper source; this page and llms.txt are generated from this data.</p>
-  <div class="glossary-index">
-    <section>
-      <h3>Work and review</h3>
-      <ul>
-        <li><a href="#glossary-issue">Issue</a></li>
-        <li><a href="#glossary-story-milestone">Story Milestone</a></li>
-        <li><a href="#glossary-pull-request">Pull request</a></li>
-        <li><a href="#glossary-decision-record">Decision record</a></li>
-      </ul>
-    </section>
-    <section>
-      <h3>Verification and capability</h3>
-      <ul>
-        <li><a href="#glossary-fast-checks">Fast checks</a></li>
-        <li><a href="#glossary-full-verification">Full verification</a></li>
-        <li><a href="#glossary-capability-state">Platform capability state</a></li>
-        <li><a href="#glossary-portable-artifact">Portable artifact</a></li>
-      </ul>
-    </section>
-    <section>
-      <h3>Integration and delivery</h3>
-      <ul>
-        <li><a href="#glossary-delivery-branch">Delivery branch</a></li>
-        <li><a href="#glossary-promotion">Promotion</a></li>
-        <li><a href="#glossary-release-intent">SemVer intent</a></li>
-        <li><a href="#glossary-copier-update">Copier update</a></li>
-      </ul>
-    </section>
-  </div>
-</section>
-<section class="slide markdown-slide glossary-slide" id="glossary-group-work" data-content-key="glossary-work" data-audience="maintainer" aria-label="Work and review">
-  <aside class="journey-rail" aria-label="Presentation outline">
-  <h3>Use template</h3>
-  <ol class="journey-use">
-    <li class="journey-item">
-      <a href="#capability"><span>Capability</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#flow"><span>CI/CD flow</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#files"><span>File map</span></a>
-    </li>
-  </ol>
-  <h3>Workflow</h3>
-  <ol class="journey-main">
-    <li class="journey-item">
-      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
-    </li>
-  </ol>
-  <h3>Maintenance</h3>
-  <ol class="journey-support">
-    <li class="journey-item">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
-    </li>
-  </ol>
-  <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
-  <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#glossary" aria-current="page">Notes</a>
-</aside>
-
-  <header><span class="selection-sequence">Notes | Glossary</span><h2>Work and review</h2></header>
-  <div class="glossary-grid">
-    <article class="glossary-term" id="glossary-issue">
-      <h3>Issue</h3>
-      <p>A unit of work that defines one observable outcome, its scope, and acceptance criteria.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#working-loop">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-story-milestone">
-      <h3>Story Milestone</h3>
-      <p>An independently verifiable multi-Issue story, created only for an end-to-end outcome.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/milestone-description.md">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-pull-request">
-      <h3>Pull request</h3>
-      <p>The integration boundary that preserves intent, verification evidence, and human review.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/.github/pull_request_template.md">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-decision-record">
-      <h3>Decision record</h3>
-      <p>The durable record of confirmed architecture, tooling, security, and compatibility trade-offs.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/README.md">Read more →</a>
-    </article>
-  </div>
-</section>
-<section class="slide markdown-slide glossary-slide" id="glossary-group-verification" data-content-key="glossary-verification" data-audience="maintainer" aria-label="Verification and capability">
-  <aside class="journey-rail" aria-label="Presentation outline">
-  <h3>Use template</h3>
-  <ol class="journey-use">
-    <li class="journey-item">
-      <a href="#capability"><span>Capability</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#flow"><span>CI/CD flow</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#files"><span>File map</span></a>
-    </li>
-  </ol>
-  <h3>Workflow</h3>
-  <ol class="journey-main">
-    <li class="journey-item">
-      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
-    </li>
-  </ol>
-  <h3>Maintenance</h3>
-  <ol class="journey-support">
-    <li class="journey-item">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
-    </li>
-  </ol>
-  <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
-  <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#glossary" aria-current="page">Notes</a>
-</aside>
-
-  <header><span class="selection-sequence">Notes | Glossary</span><h2>Verification and capability</h2></header>
-  <div class="glossary-grid">
-    <article class="glossary-term" id="glossary-fast-checks">
-      <h3>Fast checks</h3>
-      <p>Short feedback checks selected by change risk; they do not replace full pre-delivery verification.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-full-verification">
-      <h3>Full verification</h3>
-      <p>The repository-wide pre-delivery contract for code, policy, and artifacts.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#commands">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-capability-state">
-      <h3>Platform capability state</h3>
-      <p>Observed capability recorded as allowed, blocked, or unknown instead of inferred from plan names.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-portable-artifact">
-      <h3>Portable artifact</h3>
-      <p>A single-file deliverable with no external runtime assets that remains usable through file://.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">Read more →</a>
-    </article>
-  </div>
-</section>
-<section class="slide markdown-slide glossary-slide" id="glossary-group-delivery" data-content-key="glossary-delivery" data-audience="maintainer" aria-label="Integration and delivery">
-  <aside class="journey-rail" aria-label="Presentation outline">
-  <h3>Use template</h3>
-  <ol class="journey-use">
-    <li class="journey-item">
-      <a href="#capability"><span>Capability</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#flow"><span>CI/CD flow</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#files"><span>File map</span></a>
-    </li>
-  </ol>
-  <h3>Workflow</h3>
-  <ol class="journey-main">
-    <li class="journey-item">
-      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#pr"><span class="journey-code">04</span><span>PR merge</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#deploy"><span class="journey-code">06</span><span>Delivery</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#governance"><span class="journey-code">07</span><span>Governance</span></a>
-    </li>
-  </ol>
-  <h3>Maintenance</h3>
-  <ol class="journey-support">
-    <li class="journey-item">
-      <a href="#template-release"><span class="journey-code">08</span><span>Updates</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#docs-site"><span class="journey-code">09</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item">
-      <a href="#rollout"><span class="journey-code">10</span><span>Rollout</span></a>
-    </li>
-  </ol>
-  <a class="journey-bookend appendix" href="#ecosystem">Tools</a>
-  <a class="journey-bookend appendix" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix maintainer-bookend" data-audience="maintainer" href="#bridge">May review</a>
-  <a class="journey-bookend appendix maintainer-bookend active-selection" data-audience="maintainer" href="#glossary" aria-current="page">Notes</a>
-</aside>
-
-  <header><span class="selection-sequence">Notes | Glossary</span><h2>Integration and delivery</h2></header>
-  <div class="glossary-grid">
-    <article class="glossary-term" id="glossary-delivery-branch">
-      <h3>Delivery branch</h3>
-      <p>The branch where independent PRs for one story integrate before promotion reaches main.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-promotion">
-      <h3>Promotion</h3>
-      <p>The explicit delivery action that advances a verified delivery branch to main.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-release-intent">
-      <h3>SemVer intent</h3>
-      <p>Declared by a validated PR title; the exact version is derived from merged history.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
-    </article>
-    <article class="glossary-term" id="glossary-copier-update">
-      <h3>Copier update</h3>
-      <p>A reviewable template update that preserves project-owned content in an existing repository.</p>
-      <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/README.md">Read more →</a>
-    </article>
+  <header><span class="selection-sequence">Notes</span><h2>Terms and conventions</h2></header>
+  <p class="glossary-intro">Expand a section with “&#43;” only when needed; the page stays reduced to three groups by default.</p>
+  <div class="glossary-accordion">
+    <details class="glossary-group">
+      <summary><span>Work and review</span><small>4 items</small></summary>
+      <div class="glossary-term-list">
+        <article class="glossary-term" id="glossary-issue">
+          <h3>Issue</h3>
+          <p>A unit of work that defines one observable outcome, its scope, and acceptance criteria.</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#working-loop">Read more →</a>
+        </article>
+        <article class="glossary-term" id="glossary-story-milestone">
+          <h3>Story Milestone</h3>
+          <p>An independently verifiable multi-Issue story, created only for an end-to-end outcome.</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/milestone-description.md">Read more →</a>
+        </article>
+        <article class="glossary-term" id="glossary-pull-request">
+          <h3>Pull request</h3>
+          <p>The integration boundary that preserves intent, verification evidence, and human review.</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/.github/pull_request_template.md">Read more →</a>
+        </article>
+        <article class="glossary-term" id="glossary-decision-record">
+          <h3>Decision record</h3>
+          <p>The durable record of confirmed architecture, tooling, security, and compatibility trade-offs.</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/README.md">Read more →</a>
+        </article>
+      </div>
+    </details>
+    <details class="glossary-group">
+      <summary><span>Verification and capability</span><small>4 items</small></summary>
+      <div class="glossary-term-list">
+        <article class="glossary-term" id="glossary-fast-checks">
+          <h3>Fast checks</h3>
+          <p>Short feedback checks selected by change risk; they do not replace full pre-delivery verification.</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
+        </article>
+        <article class="glossary-term" id="glossary-full-verification">
+          <h3>Full verification</h3>
+          <p>The repository-wide pre-delivery contract for code, policy, and artifacts.</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#commands">Read more →</a>
+        </article>
+        <article class="glossary-term" id="glossary-capability-state">
+          <h3>Platform capability state</h3>
+          <p>Observed capability recorded as allowed, blocked, or unknown instead of inferred from plan names.</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">Read more →</a>
+        </article>
+        <article class="glossary-term" id="glossary-portable-artifact">
+          <h3>Portable artifact</h3>
+          <p>A single-file deliverable with no external runtime assets that remains usable through file://.</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md">Read more →</a>
+        </article>
+      </div>
+    </details>
+    <details class="glossary-group">
+      <summary><span>Integration and delivery</span><small>4 items</small></summary>
+      <div class="glossary-term-list">
+        <article class="glossary-term" id="glossary-delivery-branch">
+          <h3>Delivery branch</h3>
+          <p>The branch where independent PRs for one story integrate before promotion reaches main.</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
+        </article>
+        <article class="glossary-term" id="glossary-promotion">
+          <h3>Promotion</h3>
+          <p>The explicit delivery action that advances a verified delivery branch to main.</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
+        </article>
+        <article class="glossary-term" id="glossary-release-intent">
+          <h3>SemVer intent</h3>
+          <p>Declared by a validated PR title; the exact version is derived from merged history.</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">Read more →</a>
+        </article>
+        <article class="glossary-term" id="glossary-copier-update">
+          <h3>Copier update</h3>
+          <p>A reviewable template update that preserves project-owned content in an existing repository.</p>
+          <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/README.md">Read more →</a>
+        </article>
+      </div>
+    </details>
   </div>
 </section>
 

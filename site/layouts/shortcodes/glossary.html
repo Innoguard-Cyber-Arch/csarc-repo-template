@@ -7,33 +7,22 @@
 {{- $sourceLabelKey := cond $english "source_label_en" "source_label_zh_tw" -}}
 <section class="slide markdown-slide glossary-slide" id="glossary" data-content-key="glossary-index" data-audience="maintainer" aria-label="{{ index $glossary $titleKey }}">
   {{ partial "journey-rail.html" (dict "Page" .Page "Key" "glossary-index") }}
-  <header><span class="selection-sequence">{{ cond $english "Notes | Glossary" "備忘｜名詞表" }}</span><h2>{{ index $glossary $titleKey }}</h2></header>
+  <header><span class="selection-sequence">{{ cond $english "Notes" "備忘" }}</span><h2>{{ index $glossary $titleKey }}</h2></header>
   <p class="glossary-intro">{{ index $glossary $introKey }}</p>
-  <div class="glossary-index">
+  <div class="glossary-accordion">
     {{- range $glossary.groups }}
-    <section>
-      <h3>{{ index . $titleKey }}</h3>
-      <ul>
+    <details class="glossary-group">
+      <summary><span>{{ index . $titleKey }}</span><small>{{ len .terms }} {{ cond $english "items" "項" }}</small></summary>
+      <div class="glossary-term-list">
         {{- range .terms }}
-        <li><a href="#glossary-{{ .key }}">{{ index . $termKey }}</a></li>
+        <article class="glossary-term" id="glossary-{{ .key }}">
+          <h3>{{ index . $termKey }}</h3>
+          <p>{{ index . $summaryKey }}</p>
+          <a href="{{ $glossary.source_base }}{{ .path }}">{{ index $glossary $sourceLabelKey }} →</a>
+        </article>
         {{- end }}
-      </ul>
-    </section>
+      </div>
+    </details>
     {{- end }}
   </div>
 </section>
-{{- range $glossary.groups }}
-<section class="slide markdown-slide glossary-slide" id="glossary-group-{{ .key }}" data-content-key="glossary-{{ .key }}" data-audience="maintainer" aria-label="{{ index . $titleKey }}">
-  {{ partial "journey-rail.html" (dict "Page" $.Page "Key" (printf "glossary-%s" .key)) }}
-  <header><span class="selection-sequence">{{ cond $english "Notes | Glossary" "備忘｜名詞表" }}</span><h2>{{ index . $titleKey }}</h2></header>
-  <div class="glossary-grid">
-    {{- range .terms }}
-    <article class="glossary-term" id="glossary-{{ .key }}">
-      <h3>{{ index . $termKey }}</h3>
-      <p>{{ index . $summaryKey }}</p>
-      <a href="{{ $glossary.source_base }}{{ .path }}">{{ index $glossary $sourceLabelKey }} →</a>
-    </article>
-    {{- end }}
-  </div>
-</section>
-{{- end }}
