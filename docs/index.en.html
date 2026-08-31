@@ -433,6 +433,8 @@
     .similar-tools-testing-matrix tbody th span { margin-top: 3px; color: var(--muted); font-weight: 500; }
     .similar-tools-testing-matrix th, .similar-tools-testing-matrix td { padding: 8px 10px; vertical-align: top; }
     .similar-tools-testing-matrix td code { overflow-wrap: anywhere; white-space: normal; }
+    .testing-duration-matrix tbody th small, .testing-duration-matrix tbody th strong, .testing-duration-matrix tbody td strong, .testing-duration-matrix tbody td span { display: block; }
+    .testing-duration-matrix tbody th small, .testing-duration-matrix tbody td span { margin-top: 3px; color: var(--muted); font-weight: 500; }
     .testing-stage-list { margin: 0; padding-left: 18px; }
     .testing-stage-list > li + li { margin-top: 6px; }
     .testing-stage-list > li > strong { font-size: 17px; }
@@ -3968,11 +3970,39 @@ html[data-detail-level="simple"] .detail-panel {
 
 <div class="legacy-content similar-tools-content testing-content">
   <div class="similar-tools-tabs" role="tablist" aria-label="CI/CD settings">
-    <button id="testing-tab-work" type="button" role="tab" aria-selected="true" aria-controls="testing-panel-work" data-similar-tools-tab="0"><small>Journey 01</small>Work definition</button>
-    <button id="testing-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-agents" data-similar-tools-tab="1"><small>Journey 02</small>AI rules</button>
-    <button id="testing-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-contract" data-similar-tools-tab="2"><small>Journey 03</small>Verification &#43; CI</button>
+    <button id="testing-tab-duration" type="button" role="tab" aria-selected="true" aria-controls="testing-panel-duration" data-similar-tools-tab="0"><small>Overview</small>Expected runtime</button>
+    <button id="testing-tab-work" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>Work definition</button>
+    <button id="testing-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI rules</button>
+    <button id="testing-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>Verification &#43; CI</button>
   </div>
-  <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel>
+  <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
+    <div class="similar-tools-testing-intro">
+      <strong>Expected runtime by Journey</strong><span>Targets start when the runner starts and exclude queue time; first-time dependency downloads and cache misses may take longer.</span>
+    </div>
+    <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Expected runtime by Journey">
+      <table class="similar-tools-matrix similar-tools-testing-matrix testing-duration-matrix">
+        <thead><tr><th scope="col">Journey</th><th scope="col">Every repository using the template</th><th scope="col">repo-template</th></tr></thead>
+        <tbody>
+          <tr>
+            <th scope="row"><small>Journey 01</small><strong>Work definition</strong></th>
+            <td><strong>About 1–2 min per event</strong><span>Runs only the policy job for that Issue, PR, Spec, or Milestone event.</span></td>
+            <td><strong>About 1–2 min per event</strong><span>Same as a normal repository, with no template-only runner.</span></td>
+          </tr>
+          <tr>
+            <th scope="row"><small>Journey 02</small><strong>AI rules</strong></th>
+            <td><strong>Dedicated runner: 0 min</strong><span>Rules and worktree checks are included in shared verification, with no separate Action.</span></td>
+            <td><strong>Dedicated runner: 0 min</strong><span>Generated-rule checks are included in full verification without a separate runner.</span></td>
+          </tr>
+          <tr>
+            <th scope="row"><small>Journey 03</small><strong>Verification &#43; CI</strong></th>
+            <td><strong>docs &lt;1; fast 2–5; full 5–15 min</strong><span>Actual time varies with language, dependency cache, and project test volume.</span></td>
+            <td><strong>docs &lt;1; fast 3–6; full 8–12 min</strong><span>Full includes template, generation, adoption, and complete pytest checks; the run still has a 30-minute limit.</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
     <strong>Journey 01 / Minimum test contract</strong><span>A normal repository needs only ./scripts/verify. During promotion, repo-template adds one check for the version it ships.</span>
   </div>

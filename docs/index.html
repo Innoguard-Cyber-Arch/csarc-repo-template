@@ -433,6 +433,8 @@
     .similar-tools-testing-matrix tbody th span { margin-top: 3px; color: var(--muted); font-weight: 500; }
     .similar-tools-testing-matrix th, .similar-tools-testing-matrix td { padding: 8px 10px; vertical-align: top; }
     .similar-tools-testing-matrix td code { overflow-wrap: anywhere; white-space: normal; }
+    .testing-duration-matrix tbody th small, .testing-duration-matrix tbody th strong, .testing-duration-matrix tbody td strong, .testing-duration-matrix tbody td span { display: block; }
+    .testing-duration-matrix tbody th small, .testing-duration-matrix tbody td span { margin-top: 3px; color: var(--muted); font-weight: 500; }
     .testing-stage-list { margin: 0; padding-left: 18px; }
     .testing-stage-list > li + li { margin-top: 6px; }
     .testing-stage-list > li > strong { font-size: 17px; }
@@ -4429,11 +4431,39 @@ html[data-detail-level="simple"] .detail-panel {
 
 <div class="legacy-content similar-tools-content testing-content">
   <div class="similar-tools-tabs" role="tablist" aria-label="CI/CD 設定">
-    <button id="testing-tab-work" type="button" role="tab" aria-selected="true" aria-controls="testing-panel-work" data-similar-tools-tab="0"><small>Journey 01</small>工作定義</button>
-    <button id="testing-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-agents" data-similar-tools-tab="1"><small>Journey 02</small>AI 規範</button>
-    <button id="testing-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-contract" data-similar-tools-tab="2"><small>Journey 03</small>驗證＋CI</button>
+    <button id="testing-tab-duration" type="button" role="tab" aria-selected="true" aria-controls="testing-panel-duration" data-similar-tools-tab="0"><small>總覽</small>預計執行時間</button>
+    <button id="testing-tab-work" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>工作定義</button>
+    <button id="testing-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI 規範</button>
+    <button id="testing-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>驗證＋CI</button>
   </div>
-  <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel>
+  <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
+    <div class="similar-tools-testing-intro">
+      <strong>各 Journey 的預計執行時間</strong><span>以下為 runner 開始後的目標區間，不含排隊；首次下載相依或 cache miss 可能較久。</span>
+    </div>
+    <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="各 Journey 的預計執行時間">
+      <table class="similar-tools-matrix similar-tools-testing-matrix testing-duration-matrix">
+        <thead><tr><th scope="col">Journey</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template</th></tr></thead>
+        <tbody>
+          <tr>
+            <th scope="row"><small>Journey 01</small><strong>工作定義</strong></th>
+            <td><strong>約 1–2 分鐘／次</strong><span>只執行該次 Issue、PR、Spec 或 Milestone 事件對應的 policy job。</span></td>
+            <td><strong>約 1–2 分鐘／次</strong><span>與一般 repo 相同，不增加模板專用 runner。</span></td>
+          </tr>
+          <tr>
+            <th scope="row"><small>Journey 02</small><strong>AI 規範</strong></th>
+            <td><strong>專用 runner：0 分鐘</strong><span>規範與 worktree 檢查併入共用驗證，不另啟 Action。</span></td>
+            <td><strong>專用 runner：0 分鐘</strong><span>模板產出檢查併入 full，不另外計費。</span></td>
+          </tr>
+          <tr>
+            <th scope="row"><small>Journey 03</small><strong>驗證＋CI</strong></th>
+            <td><strong>docs &lt; 1；fast 2–5；full 5–15 分鐘</strong><span>實際時間依語言、相依快取與專案測試量調整。</span></td>
+            <td><strong>docs &lt; 1；fast 3–6；full 8–12 分鐘</strong><span>full 包含模板、生成、導入與完整 pytest；單次上限仍為 30 分鐘。</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
     <strong>Journey 01／最小測試契約</strong><span>一般 repo 只需要 ./scripts/verify；repo-template 只在 promotion 額外驗證一次交付出去的版本。</span>
   </div>

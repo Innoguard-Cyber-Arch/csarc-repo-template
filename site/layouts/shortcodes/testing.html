@@ -1,16 +1,38 @@
 {{- $data := site.Data.similar_tools -}}
 {{- $lang := .Page.Lang -}}
 {{- $labels := index $data.testing.labels $lang -}}
+{{- $durationLabels := index $data.testing.duration.labels $lang -}}
 <div class="legacy-content similar-tools-content testing-content">
   <div class="similar-tools-tabs" role="tablist" aria-label="{{ $labels.title }}">
+    <button id="testing-tab-duration" type="button" role="tab" aria-selected="true" aria-controls="testing-panel-duration" data-similar-tools-tab="0"><small>{{ $durationLabels.overline }}</small>{{ $durationLabels.title }}</button>
     {{- range $groupIndex, $group := $data.testing.groups }}
     {{- $groupLabels := index $group.labels $lang }}
-    <button id="testing-tab-{{ $group.key }}" type="button" role="tab" aria-selected="{{ if eq $groupIndex 0 }}true{{ else }}false{{ end }}" aria-controls="testing-panel-{{ $group.key }}" data-similar-tools-tab="{{ $groupIndex }}"><small>Journey {{ $group.journey }}</small>{{ $groupLabels.title }}</button>
+    <button id="testing-tab-{{ $group.key }}" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-{{ $group.key }}" data-similar-tools-tab="{{ add $groupIndex 1 }}"><small>Journey {{ $group.journey }}</small>{{ $groupLabels.title }}</button>
     {{- end }}
+  </div>
+  <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
+    <div class="similar-tools-testing-intro">
+      <strong>{{ $durationLabels.heading }}</strong><span>{{ $durationLabels.scope }}</span>
+    </div>
+    <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="{{ $durationLabels.heading }}">
+      <table class="similar-tools-matrix similar-tools-testing-matrix testing-duration-matrix">
+        <thead><tr><th scope="col">{{ $durationLabels.journey }}</th><th scope="col">{{ $durationLabels.shared }}</th><th scope="col">{{ $durationLabels.templateOnly }}</th></tr></thead>
+        <tbody>
+          {{- range $row := $data.testing.duration.rows }}
+          <tr>
+            <th scope="row"><small>Journey {{ $row.journey }}</small><strong>{{ index $row.title $lang }}</strong></th>
+            {{- range $scope := (slice $row.shared $row.templateOnly) }}
+            <td><strong>{{ index $scope.estimate $lang }}</strong><span>{{ index $scope.description $lang }}</span></td>
+            {{- end }}
+          </tr>
+          {{- end }}
+        </tbody>
+      </table>
+    </div>
   </div>
   {{- range $groupIndex, $group := $data.testing.groups }}
   {{- $groupLabels := index $group.labels $lang }}
-  <div id="testing-panel-{{ $group.key }}" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-{{ $group.key }}" data-similar-tools-panel{{ if gt $groupIndex 0 }} hidden{{ end }}>
+  <div id="testing-panel-{{ $group.key }}" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-{{ $group.key }}" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
     <strong>{{ $groupLabels.heading }}</strong><span>{{ $groupLabels.scope }}</span>
   </div>

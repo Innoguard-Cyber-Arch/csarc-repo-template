@@ -116,6 +116,66 @@
         "pending": "Pending"
       }
     },
+    "duration": {
+      "labels": {
+        "zh-tw": {
+          "overline": "總覽",
+          "title": "預計執行時間",
+          "heading": "各 Journey 的預計執行時間",
+          "scope": "以下為 runner 開始後的目標區間，不含排隊；首次下載相依或 cache miss 可能較久。",
+          "journey": "Journey",
+          "shared": "任何使用本模板的 repo",
+          "templateOnly": "repo-template"
+        },
+        "en": {
+          "overline": "Overview",
+          "title": "Expected runtime",
+          "heading": "Expected runtime by Journey",
+          "scope": "Targets start when the runner starts and exclude queue time; first-time dependency downloads and cache misses may take longer.",
+          "journey": "Journey",
+          "shared": "Every repository using the template",
+          "templateOnly": "repo-template"
+        }
+      },
+      "rows": [
+        {
+          "journey": "01",
+          "title": {"zh-tw": "工作定義", "en": "Work definition"},
+          "shared": {
+            "estimate": {"zh-tw": "約 1–2 分鐘／次", "en": "About 1–2 min per event"},
+            "description": {"zh-tw": "只執行該次 Issue、PR、Spec 或 Milestone 事件對應的 policy job。", "en": "Runs only the policy job for that Issue, PR, Spec, or Milestone event."}
+          },
+          "templateOnly": {
+            "estimate": {"zh-tw": "約 1–2 分鐘／次", "en": "About 1–2 min per event"},
+            "description": {"zh-tw": "與一般 repo 相同，不增加模板專用 runner。", "en": "Same as a normal repository, with no template-only runner."}
+          }
+        },
+        {
+          "journey": "02",
+          "title": {"zh-tw": "AI 規範", "en": "AI rules"},
+          "shared": {
+            "estimate": {"zh-tw": "專用 runner：0 分鐘", "en": "Dedicated runner: 0 min"},
+            "description": {"zh-tw": "規範與 worktree 檢查併入共用驗證，不另啟 Action。", "en": "Rules and worktree checks are included in shared verification, with no separate Action."}
+          },
+          "templateOnly": {
+            "estimate": {"zh-tw": "專用 runner：0 分鐘", "en": "Dedicated runner: 0 min"},
+            "description": {"zh-tw": "模板產出檢查併入 full，不另外計費。", "en": "Generated-rule checks are included in full verification without a separate runner."}
+          }
+        },
+        {
+          "journey": "03",
+          "title": {"zh-tw": "驗證＋CI", "en": "Verification + CI"},
+          "shared": {
+            "estimate": {"zh-tw": "docs < 1；fast 2–5；full 5–15 分鐘", "en": "docs <1; fast 2–5; full 5–15 min"},
+            "description": {"zh-tw": "實際時間依語言、相依快取與專案測試量調整。", "en": "Actual time varies with language, dependency cache, and project test volume."}
+          },
+          "templateOnly": {
+            "estimate": {"zh-tw": "docs < 1；fast 3–6；full 8–12 分鐘", "en": "docs <1; fast 3–6; full 8–12 min"},
+            "description": {"zh-tw": "full 包含模板、生成、導入與完整 pytest；單次上限仍為 30 分鐘。", "en": "Full includes template, generation, adoption, and complete pytest checks; the run still has a 30-minute limit."}
+          }
+        }
+      ]
+    },
     "groups": [
       {
         "key": "work",

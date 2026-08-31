@@ -157,6 +157,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert shortcode.count('data-audience="maintainer"') == 1
     assert "data-similar-tools-tab-testing" not in shortcode
     assert "similar-tools-testing-matrix" in testing_shortcode
+    assert 'id="testing-tab-duration"' in testing_shortcode
+    assert 'id="testing-panel-duration"' in testing_shortcode
     assert "statusLabel" not in data["testing"]["labels"]["zh-tw"]
     assert "statusLabel" not in data["testing"]["labels"]["en"]
     assert (
@@ -201,6 +203,15 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     ]
     assert data["featureGroups"][3]["features"] == ["templateLifecycle"]
     assert len(data["testing"]["groups"]) == 3
+    assert [row["journey"] for row in data["testing"]["duration"]["rows"]] == [
+        "01",
+        "02",
+        "03",
+    ]
+    assert (
+        data["testing"]["duration"]["rows"][1]["shared"]["estimate"]["zh-tw"]
+        == "專用 runner\uff1a0 分鐘"
+    )
     assert data["testing"]["groups"][0]["journey"] == "01"
     testing_rows = data["testing"]["groups"][0]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in testing_rows] == [
