@@ -358,6 +358,18 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         data["testing"]["duration"], ensure_ascii=False
     )
     assert "no separate minutes" not in json.dumps(data["testing"]["duration"])
+    language_durations = [
+        item["value"]["en"]
+        for row in duration_rows
+        for scope in ("shared", "templateOnly")
+        for item in row[scope]["items"]
+        if item["label"]["en"] == "04 Programming languages"
+    ]
+    assert language_durations
+    assert all(
+        value.index("Python") < value.index("Rust") < value.index("TypeScript")
+        for value in language_durations
+    )
     assert data["testing"]["groups"][0]["journey"] == "01"
     testing_rows = data["testing"]["groups"][0]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in testing_rows] == [
