@@ -122,7 +122,9 @@
           "overline": "總覽",
           "title": "預計執行時間",
           "heading": "各 Journey 的預計執行時間",
-          "scope": "以下為 runner 開始後的目標區間，不含排隊；首次下載相依或 cache miss 可能較久。",
+          "totalHeading": "總合（單次完整驗證）",
+          "total": "一般 repo：約 6–17 分鐘｜repo-template：約 9–14 分鐘",
+          "scope": "以 full 為完整驗證；Journey 02 已包含其中，不重複計時。時間從 runner 開始計算，不含排隊；首次下載相依或 cache miss 可能較久。",
           "journey": "Journey",
           "shared": "任何使用本模板的 repo",
           "templateOnly": "repo-template"
@@ -131,7 +133,9 @@
           "overline": "Overview",
           "title": "Expected runtime",
           "heading": "Expected runtime by Journey",
-          "scope": "Targets start when the runner starts and exclude queue time; first-time dependency downloads and cache misses may take longer.",
+          "totalHeading": "Total (one full verification run)",
+          "total": "Normal repo: about 6–17 min | repo-template: about 9–14 min",
+          "scope": "A full run uses the full tier; Journey 02 is already included and is not counted twice. Timing starts when the runner starts and excludes queue time; first-time dependency downloads and cache misses may take longer.",
           "journey": "Journey",
           "shared": "Every repository using the template",
           "templateOnly": "repo-template"

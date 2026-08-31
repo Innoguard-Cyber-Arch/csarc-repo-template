@@ -209,6 +209,12 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "03",
     ]
     assert (
+        "6\u201317" in data["testing"]["duration"]["labels"]["zh-tw"]["total"]
+    )
+    assert (
+        "9\u201314" in data["testing"]["duration"]["labels"]["zh-tw"]["total"]
+    )
+    assert (
         data["testing"]["duration"]["rows"][1]["shared"]["estimate"]["zh-tw"]
         == "專用 runner\uff1a0 分鐘"
     )
