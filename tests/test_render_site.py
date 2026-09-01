@@ -163,7 +163,7 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         "spec-to-issue.yml",
         "work-item-closure.yml",
     }
-    assert "7 條現行自動流程" in file_map
+    assert "8 條現行自動流程" in file_map
     for workflow in workflows:
         assert workflow in file_map
     for inactive in ("release-please.yml",):

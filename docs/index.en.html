@@ -4742,7 +4742,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Close the Issue after its work PR merges</strong><span>Close the matching Issue only after its work PR enters the correct dev branch. The release PR does not close it again.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_pr_closure.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/401" target="_blank" rel="noreferrer">Pending #401</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>close-work</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/401" target="_blank" rel="noreferrer">Pending #401</a><span>Trigger：Work PR merged or closed · Timeout：5 min</span></li></ul></div>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_pr_closure.py</code></li><li><code>scripts/pr_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/work-item-closure.yml</code>／<code>close-work</code><span>Trigger：Milestone work PR merged into dev/m* · Timeout：5 min</span></li></ul></div><span>Standalone work and hotfixes merged directly to main retain GitHub-native closure and do not start this Action.</span>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">

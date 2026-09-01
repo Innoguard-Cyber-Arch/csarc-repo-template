@@ -155,7 +155,7 @@ fit = "符合畫面"
 {{< legacy >}}
       <header>
         <h2>模板會把<span class="accent">必要設定放到正確位置</span></h2>
-        <p class="subtitle">共用規則與 7 條現行 GitHub Actions 每個新 repo 都有；語言工具與產品目錄才依未選語言、Python、Rust、TypeScript 或多語言模式產生。</p>
+        <p class="subtitle">共用規則與 8 條現行 GitHub Actions 每個新 repo 都有；語言工具與產品目錄才依未選語言、Python、Rust、TypeScript 或多語言模式產生。</p>
       </header>
       <div class="repo-map-window" aria-label="模板產生檔案的視覺對照">
         <div class="repo-map-toolbar">
@@ -171,7 +171,7 @@ fit = "符合畫面"
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">CODEOWNERS＋REVIEWERS</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">指定 owner 與 reviewer 候選</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">ISSUE_TEMPLATE/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">工作單欄位／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">pull_request_template.md</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">PR 必填內容</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04／05／07</span><span class="purpose-copy">7 條現行自動流程</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04／05／06／07</span><span class="purpose-copy">8 條現行自動流程</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">ci.yml</span><span class="repo-tree-purpose"><span class="journey-code">03</span><span class="purpose-copy">執行已宣告模組</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">issue-triage.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">檢查並整理工作單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">milestone-lifecycle.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">同步交付批次狀態</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
@@ -198,7 +198,7 @@ fit = "符合畫面"
 | --- | --- | --- |
 | `.csarc/config.yml` | 記錄公版來源、語言、分支與選用能力 | 公版主導 |
 | `.github/ISSUE_TEMPLATE/`、`pull_request_template.md` | 工作定義與 PR 契約 | 公版主導 |
-| `.github/workflows/` | 7 條現行流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程與發版 | 公版主導 |
+| `.github/workflows/` | 8 條現行流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、工作關單與發版 | 公版主導 |
 | `AGENTS.md`、`README.md`、`CLAUDE.md` | Agent 工作方式與使用者入口 | 共同維護 |
 | `policies/`、`CODEOWNERS`、`.github/REVIEWERS` | 期望設定、owner 與 reviewer | 共同維護 |
 | `scripts/` | 本機驗證、工作同步與套用設定 | 公版主導 |

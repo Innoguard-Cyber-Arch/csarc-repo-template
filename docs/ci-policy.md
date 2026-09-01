@@ -67,6 +67,7 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
 | Issue triage | Issue 事件 | workflow 內的 bounded routing | 最小 Issue metadata write | label／milestone routing；active |
 | Spec to Issue | spec 事件／manual | checked-in spec conversion entrypoint | 最小 Issue metadata write | 可審查 Issue；active |
 | Milestone lifecycle | milestone／Issue 事件 | 現行 workflow | 最小 metadata write | 部分自動化；完整結案仍由 #400 擁有 |
+| Work Issue closure | 里程碑工作 PR 合併進 `dev/m*` | `scripts/pr_lifecycle.py close-work` | `contents: read`、Issue write；5 分鐘 | workflow 已啟用；closed event checkout 修正仍由 #401 驗收 |
 | Dependabot | schedule／manifest | `.github/dependabot.yml` | GitHub 原生 bot 邊界 | dependency PR；active |
 | Version／Release | `main` push、manual rerun | `scripts/verify-release-candidate`、`scripts/release_bundle.py` | `contents`／PR／Issue／status write；30 分鐘；同 repo 不取消舊 run | 受審查版本 PR；合併後產生 verified immutable GitHub Release；active |
 
