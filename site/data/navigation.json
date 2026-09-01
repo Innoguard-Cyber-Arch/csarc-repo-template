@@ -6,8 +6,8 @@
       "workflow": "開發與維護",
       "support": "公版管理",
       "legend": "顏色說明",
-      "human": "需人判斷",
-      "automated": "可自動完成",
+      "human": "需要人決策",
+      "automated": "預設自動完成",
       "maintainer": "僅維運可見"
     },
     "en": {
@@ -17,7 +17,7 @@
       "support": "Maintenance",
       "legend": "Color key",
       "human": "Human decision",
-      "automated": "Automated",
+      "automated": "Automated by default",
       "maintainer": "Maintainers only"
     }
   },
@@ -26,10 +26,10 @@
     {"key": "flow", "group": "use", "participation": "automated", "labels": {"zh-tw": "CI/CD 流程", "en": "CI/CD flow"}},
     {"key": "files", "group": "use", "participation": "human", "labels": {"zh-tw": "檔案地圖", "en": "File map"}},
     {"key": "method", "code": "01", "group": "workflow", "participation": "human", "labels": {"zh-tw": "工作定義", "en": "Work"}},
-    {"key": "agents", "code": "02", "group": "workflow", "participation": "human", "labels": {"zh-tw": "AI 規範", "en": "AI rules"}},
+    {"key": "agents", "code": "02", "group": "workflow", "participation": "automated", "labels": {"zh-tw": "AI 規範", "en": "AI rules"}},
     {"key": "contract", "code": "03", "group": "workflow", "participation": "automated", "labels": {"zh-tw": "驗證／CI", "en": "Verify"}},
     {"key": "languages", "code": "04", "group": "workflow", "participation": "automated", "labels": {"zh-tw": "程式語言", "en": "Languages"}},
-    {"key": "supply", "code": "05", "group": "workflow", "participation": "human", "labels": {"zh-tw": "依賴安全", "en": "Supply"}},
+    {"key": "supply", "code": "05", "group": "workflow", "participation": "automated", "labels": {"zh-tw": "依賴安全", "en": "Supply"}},
     {"key": "pr", "code": "06", "group": "workflow", "participation": "human", "labels": {"zh-tw": "PR／合併", "en": "PR merge"}},
     {"key": "deploy", "code": "07", "group": "workflow", "participation": "human", "labels": {"zh-tw": "版本／交付", "en": "Delivery"}},
     {"key": "governance", "code": "08", "group": "workflow", "participation": "human", "labels": {"zh-tw": "規則治理", "en": "Governance"}},

@@ -109,6 +109,8 @@ Workflows, policies, scripts, and documents shared by root and `template/` are k
 {{< /slide >}}
 
 {{< slide key="agents" track="agents" eyebrow="Step 02" title="Define AI rules before implementation" subtitle="An Issue says what this change is; AGENTS.md says how an agent works in the repository." legacy="false"  class="candidate-slide" >}}
+**Automated by default.** The template generates and checks the AI rules. People step in only to customize policy, make material decisions, or approve exceptions.
+
 **Baseline.** An Issue bounds the work, `AGENTS.md` explains how to work, and code plus tests provide evidence. People retain product direction and material-risk decisions.
 
 - **Work and context:** GitHub Issues and PRs record scope, progress, and evidence. Approved specs and ADRs retain long-lived decisions; add a plan only for cross-session, high-risk, or hard-to-recover work, and never save chat transcripts.
@@ -168,6 +170,8 @@ Each language is selected independently. Selecting several languages combines th
 {{< /slide >}}
 
 {{< slide key="supply" track="supply" eyebrow="Step 05" title="Update, check, and record third-party packages separately" subtitle="Observe ordinary releases, act on known vulnerabilities immediately, and retain a traceable release inventory." legacy="false"  class="candidate-slide" >}}
+Routine updates and security checks run automatically. People step in only for upgrade conflicts, vulnerability response, and risk acceptance.
+
 | Risk | What the template does today |
 | --- | --- |
 | A dependency change cannot be reproduced | PR verification reinstalls from the locked-version list (lockfile), so every run receives the same packages |

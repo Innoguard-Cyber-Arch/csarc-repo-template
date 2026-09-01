@@ -279,7 +279,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <h2>步驟 2｜<span class="accent">先定 AI 規範，再開始實作</span></h2>
         <p class="subtitle"><strong>基本導入。</strong>Issue 劃定這次工作；<code>AGENTS.md</code> 說明怎麼做；程式與測試提供證據，人保留需求方向與重大風險決策。</p>
       </header>
-      <p class="context-line"><strong>模板的作用｜</strong>把 agent 開始前要讀什麼、可修改到哪裡、如何隔離平行工作、怎樣留下驗證，以及何時必須停下來問人寫進 repo；文字規範本身不是自動門禁。</p>
+      <p class="context-line"><strong>模板的作用｜</strong>自動產生並檢查 agent 開始前要讀什麼、可修改到哪裡、如何隔離平行工作與怎樣留下驗證；只有客製規範、重大決策與例外需要人判斷。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">常見的 AI 協作設計</span></summary><ul><li><strong>Repo 內指引：</strong>把固定命令與界線放在版本控制中，讓不同 agent 讀同一份規則。</li><li><strong>規格產物接力：</strong>大型工作先產生 spec、plan、tasks，再逐步交給 agent 執行。</li><li><strong>角色與調度：</strong>用專門角色、skills 或佇列安排多個 agent；適合工作量已大到需要額外協調時。</li><li><strong>人類檢查點：</strong>在需求、重大取捨、外部影響與不可逆操作前停下來取得決定。</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">六項責任各有唯一位置</span></summary><ul class="work-definition-list"><li><strong>工作與脈絡：</strong>GitHub Issue／PR 記錄範圍、進度與證據；核准的 spec／ADR 保存長期決策，跨 session、高風險或難復原工作才增加 plan，不保存聊天逐字稿。</li><li><strong>AI 規範：</strong>根目錄 <code>AGENTS.md</code> 是唯一來源；<code>CLAUDE.md</code> 只做薄匯入，子目錄只有規則真的不同時才覆寫。</li><li><strong>修改隔離：</strong>每項可寫工作各用 branch／worktree，只平行處理互不依賴的範圍；唯讀工作不必另開 worktree。</li><li><strong>驗證證據：</strong>執行最小且相關的本機程式；Action 只負責事件、權限與呼叫同一程式，不複製邏輯。</li><li><strong>決策與授權：</strong>人負責需求、重大取捨、外部影響與不可逆操作；審查、合併資格與例外由「規則治理」定義。</li><li><strong>模板建立與更新：</strong>Copier 負責產生與更新共用基線；既有 repo 的更新契約由「模板升級」定義。</li></ul></details>
@@ -288,6 +288,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< /legacy >}}
 
 {{< basic >}}
+- **預設自動：** 模板會產生並檢查 AI 規範；只有客製規範、重大決策與例外需要人判斷。
 - **工作與脈絡：** GitHub Issue／PR 記錄工作；核准的 spec／ADR 保存長期決策，必要時才加 plan。
 - **AI 規範：** 根目錄 `AGENTS.md`；`CLAUDE.md` 只薄匯入。
 - **修改隔離：** 每項可寫工作各用 branch／worktree；唯讀工作不用。
@@ -398,6 +399,8 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< /legacy >}}
 
 {{< basic >}}
+模板會自動執行例行的更新與安全檢查；只有升級衝突、漏洞處置與風險接受需要人判斷。
+
 | 這次要防什麼 | 模板目前怎麼處理 |
 | --- | --- |
 | 改了套件卻無法重裝 | PR 會依鎖定版本清單（lockfile）重新安裝，確認每次拿到同一批套件 |

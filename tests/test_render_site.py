@@ -249,8 +249,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert navigation["appendices"][-2]["key"] == "testing"
     assert navigation["appendices"][-1]["key"] == "bridge"
     assert navigation["appendices"][-2]["audience"] == "maintainer"
-    assert navigation["labels"]["zh-tw"]["human"] == "需人判斷"
-    assert navigation["labels"]["zh-tw"]["automated"] == "可自動完成"
+    assert navigation["labels"]["zh-tw"]["human"] == "需要人決策"
+    assert navigation["labels"]["zh-tw"]["automated"] == "預設自動完成"
     assert navigation["labels"]["zh-tw"]["maintainer"] == "僅維運可見"
     workflow_participation = {
         item["key"]: item["participation"]
@@ -259,10 +259,10 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     }
     assert workflow_participation == {
         "method": "human",
-        "agents": "human",
+        "agents": "automated",
         "contract": "automated",
         "languages": "automated",
-        "supply": "human",
+        "supply": "automated",
         "pr": "human",
         "deploy": "human",
         "governance": "human",
