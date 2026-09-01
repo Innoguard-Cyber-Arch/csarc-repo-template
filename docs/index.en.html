@@ -3349,6 +3349,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><code>.csarc/config.yml</code> is each repository&rsquo;s only template configuration. Languages, branch strategy, and optional capabilities read from it. Generated repositories also keep Copier source and revision metadata in that file; root does not store self-referential metadata that would immediately become stale.</li>
 <li>The shared baseline and the Python, Rust, and TypeScript modules are verified independently. Selecting several languages combines modules without creating a combination-specific workflow.</li>
 <li>An existing repository is adopted and then updated from the next Copier revision, proving product content is preserved.</li>
+<li>The optional update notice checks weekly and only creates or refreshes one Issue; it never modifies the repository automatically.</li>
 </ul>
 <details class="package-disclosure" data-content-key="copier-update">
   <summary><span class="tech-name">Copier &#43; root dogfood &#43; create/update regression</span></summary>
@@ -3357,6 +3358,7 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="technical-detail" data-content-key="template-release-scope">
   <h3>Single source, runtime baselines, and the root-only boundary</h3>
   <p>Root <code>.csarc/config.yml</code> records the capabilities selected by the template repository itself. A generated repository additionally records Copier&rsquo;s source and revision and writes changes through <code>csarc update --data</code>. The template source does not invent <code>_src_path</code> or <code>_commit</code> values that point back to itself or immediately become stale. A derived template should add namespaced settings to the same YAML instead of duplicating CSARC fields.</p>
+<p><code>enable_template_update_notifications</code> generates <code>template-update.yml</code> and <code>check-template-update</code> only when selected. Public sources need no secret; private sources use a repository secret limited to read-only access to that template source.</p>
 <p><code>scripts/sync-paired-files.sh</code> makes root the source of paired files and verifies copied content and permissions with <code>--check</code>. <code>profiles/catalog.yaml</code> records runtime baselines and their evidence. Python and Node baselines advance only after their own thirty-day observation period.</p>
 <p><code>scripts/verify-template.sh</code> runs create/adopt/update fixtures only in the template repository and is never delivered downstream. Generated repositories use the smaller <code>scripts/verify</code> entry point.</p>
 </aside>
@@ -4430,6 +4432,7 @@ html[data-detail-level="simple"] .detail-panel {
     <button id="testing-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>Dependency security</button>
     <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR / merge</button>
     <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="7"><small>Journey 07</small>Version / delivery</button>
+    <button id="testing-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-template-upgrade" data-similar-tools-tab="8"><small>Journey 09</small>Template upgrades</button>
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
     <div class="similar-tools-testing-intro">
@@ -4833,6 +4836,31 @@ html[data-detail-level="simple"] .detail-panel {
           <td><ul class="testing-stage-list">
             <li>
               <strong>After delivery</strong><span>Uses the same closure program; repo-template has no second Milestone rule.</span>
+            </li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
+  <div id="testing-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-template-upgrade" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 09 / Update notices</strong><span>An opted-in repository checks weekly or on demand. A newer version only creates or refreshes one Issue; it never applies or merges an update.</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 09 / Update notices">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>Detect updates without applying them</strong><span>Read Copier&#39;s recorded source and version, then create or refresh one tracking Issue for human review and a separate update PR.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Weekly schedule / manual run</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/check-template-update</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/template-update.yml</code>／<code>check</code><span>Trigger：Every Monday or manual dispatch; generated only when enabled · Timeout：10 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Template release candidate</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_template_update_notifications.py</code></li></ul></div><span>Confirms that the workflow and checker are both generated when enabled, both absent when disabled, and never run in the template root.</span>
             </li>
           </ul></td>
         </tr>

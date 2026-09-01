@@ -116,7 +116,6 @@ def test_restored_files_have_no_archive_copy() -> None:
         return
     assert not (archive / "root-dependabot.yml").exists()
     assert not (archive / "root-workflows/osv.yml").exists()
-
     removed_delivery_workflows = {
         "delivery-maintenance.yml",
         "dev-next-close.yml",
@@ -138,3 +137,6 @@ def test_restored_files_have_no_archive_copy() -> None:
     assert not (archive / "template-workflows/dev-next-close.yml").exists()
     assert not (archive / "template-workflows/promotion.yml").exists()
     assert not (archive / "template-workflows/release-please.yml").exists()
+    assert not (
+        archive / "template-workflows/template-update.yml.jinja"
+    ).exists()

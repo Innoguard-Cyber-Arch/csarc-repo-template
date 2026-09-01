@@ -247,6 +247,7 @@ Each check is a snapshot. A setting changed and restored between runs still requ
 - `.csarc/config.yml` is each repository's only template configuration. Languages, branch strategy, and optional capabilities read from it. Generated repositories also keep Copier source and revision metadata in that file; root does not store self-referential metadata that would immediately become stale.
 - The shared baseline and the Python, Rust, and TypeScript modules are verified independently. Selecting several languages combines modules without creating a combination-specific workflow.
 - An existing repository is adopted and then updated from the next Copier revision, proving product content is preserved.
+- The optional update notice checks weekly and only creates or refreshes one Issue; it never modifies the repository automatically.
 
 {{< disclosure key="copier-update" title="Copier + root dogfood + create/update regression" >}}
 [Copier](https://github.com/copier-org/copier) records source, language, and answers, then reapplies newer template revisions to an editable repository. Conflicts leave the repository unchanged; a person adjusts the affected files, reruns the update, and reviews the PR. GitHub Template copies only once, while PyScaffold would create a second update mechanism, so neither fits this requirement.
@@ -254,6 +255,8 @@ Each check is a snapshot. A setting changed and restored between runs still requ
 
 {{< detail key="template-release-scope" title="Single source, runtime baselines, and the root-only boundary" >}}
 Root `.csarc/config.yml` records the capabilities selected by the template repository itself. A generated repository additionally records Copier's source and revision and writes changes through `csarc update --data`. The template source does not invent `_src_path` or `_commit` values that point back to itself or immediately become stale. A derived template should add namespaced settings to the same YAML instead of duplicating CSARC fields.
+
+`enable_template_update_notifications` generates `template-update.yml` and `check-template-update` only when selected. Public sources need no secret; private sources use a repository secret limited to read-only access to that template source.
 
 `scripts/sync-paired-files.sh` makes root the source of paired files and verifies copied content and permissions with `--check`. `profiles/catalog.yaml` records runtime baselines and their evidence. Python and Node baselines advance only after their own thirty-day observation period.
 
