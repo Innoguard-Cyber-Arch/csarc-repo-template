@@ -1,26 +1,38 @@
-# Artifact consumption verification
+# Artifact consumption contract and historical evidence
 
-產生 attestation 只證明成品有可驗證的來源聲明；消費端真的執行驗證並在失敗時停止，才形成門禁。
+> [!IMPORTANT]
+> 現行 `.github/workflows/` 沒有 release consumption 或 registry publisher Action。
+> 本頁區分仍保留的本機安全契約與 2026-08 的一次性線上證據。
 
-## 實際消費路徑
+Attestation 只連結成品、來源與 build identity，不保證成品安全。只有真實消費者依核准
+policy 驗證 repository、tag、digest 與 signer，並在不符時停止，才形成消費端門禁。
 
-| 路徑 | 消費行為 | 強制驗證 |
+## Current state
+
+| 路徑 | 狀態 | 現在保留的契約 |
 | --- | --- | --- |
-| 生成專案的 PyPI 發布 | `publish-python` 下載 build job 的 wheel／sdist，再發布到 PyPI | 同時啟用 release attestation 與 PyPI publishing 時，逐一執行 `gh attestation verify` |
-| 生成專案的 npm 發布 | `publish-npm` 下載 build job 的 npm tarball，再發布到 npm | 同時啟用 release attestation 與 npm publishing 時，發布前執行 `gh attestation verify` |
-| 公版 CLI Release smoke | `Release consumption verification` 下載最新 immutable Release 的 wheel，驗證後開啟壓縮檔 | `gh release verify` 驗簽，再檢查 repository、repository ID、tag、commit、artifact SHA-256 與 GitHub Release signer |
+| 公版 GitHub Release | Manual／blocked | #369 決定唯一 release owner 前不恢復 Action |
+| checksum 與 SPDX SBOM | Conditional | `scripts/release_assets.py` 及測試可在本機驗證 exact-tag 成品 |
+| attestation consumption | Conditional | `scripts/verify_release_consumption.py` 及測試保留 fail-closed policy |
+| PyPI／npm／GHCR | Not configured | 模板不產生 publisher job，也不要求 token 或 GitHub environment |
+| production deployment | Not applicable | 由產品自行定義環境、健康檢查、核准與復原 |
 
-生成專案的 registry gate 會把 repository、`refs/tags/<tag>` 與 signer workflow 固定為目前 repo 的 `.github/workflows/release.yml`；`gh` 也會以本機檔案重新計算 digest。attestation 缺失、來源 repo／workflow 不符、ref 不符或 digest 不符都會讓發布 job 失敗。
+## Historical evidence
 
-公版目前是 GitHub Free private repo，不能產生 Actions build attestation。它的 immutable Release attestation 由 `https://dotcom.releases.github.com` 簽署，沒有 Actions workflow identity；因此 root-only smoke 明確驗證該 release-service signer，不能拿它宣稱已驗證 build workflow。生成專案在支援 artifact attestation 的方案上，才由 registry gate 強制驗證 Actions workflow identity。
+2026-08 的 `Release consumption verification` 曾下載當時最新的 immutable Release wheel，
+核對 GitHub release-service signer、repository、repository ID、tag、commit 與 SHA-256，
+並以竄改副本證明 digest mismatch 會被拒絕。該 run 只證明當時的 tag 與 workflow；它不
+證明目前有 active build attestation、publisher 或 consumption gate。
 
-## 條件與邊界
+當時公版是 GitHub Free private repository，無法產生 Actions build attestation，因此歷史
+Release 使用 `https://dotcom.releases.github.com` signer。這不能用來宣稱 build workflow
+identity 已驗證。
 
-- 只有建立語言成品、啟用對應 registry publishing，而且啟用 release attestation 時，才產生 registry verification step。
-- CI/CD-only profile 沒有語言成品或 registry 消費路徑，不產生空 verification job。
-- 只附加 GitHub Release assets 是發布，不算消費；人工指令是除錯方式，不算自動門禁。
-- 本模板沒有可泛化的部署目標，因此不新增通用 deploy workflow。產品有真實部署路徑時，應在部署下載成品後套用同一個 fail-closed 原則。
+## 恢復條件
 
-## 線上證據
+真實產品需要發版或 registry 時，先在自己的 Issue／ADR 明列成品、唯一 publisher、OIDC
+或 environment approval、最小權限、tag policy、失敗復原與消費端 policy，再用本機契約
+建立薄 workflow。只上傳 Release assets 不算消費驗證，人工除錯指令也不算自動門禁。
 
-從 Actions 手動執行 `Release consumption verification` 可指定 immutable release tag，留白則使用 latest。workflow 會保存成功驗證 JSON，再複製同名 wheel、修改內容並確認 digest mismatch 被拒絕；受控失敗若意外通過，整個 job 反而失敗。證據 artifact 保留 30 天。
+完整 lifecycle 與歷史 Action disposition 見
+[`adr/release-security-and-dependencies.md`](adr/release-security-and-dependencies.md)。

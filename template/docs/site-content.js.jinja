@@ -1,4 +1,3 @@
-{% set has_container = (container_mode | default("none")) != "none" -%}
 window.CSARC_SITE_CONTENT = {
   schemaVersion: 1,
   project: {
@@ -35,24 +34,22 @@ window.CSARC_SITE_CONTENT = {
     { path: "src/＋Cargo.toml", purpose: "Rust 產品、相依與測試", owner: "專案維護" },
 {% endif %}{% if "typescript" in languages %}
     { path: "typescript/", purpose: "TypeScript 產品與測試", owner: "專案維護" },
-{% endif %}{% if has_container %}
-    { path: {{ containerfile_path | tojson }}, purpose: "產品容器建置、啟動與漏洞掃描", owner: "專案維護" },
 {% endif %}
     { path: "scripts/verify", purpose: "本機與 CI 共同入口", owner: "公版主導" },
     { path: "docs/site-content.js", purpose: "本網站的專案內容", owner: "專案維護" }
   ],
   workflow: [
     { title: "1｜讀取記憶並定義工作", detail: "先讀 docs/README.md 的 durable project memory 地圖、Spec-Driven Development（SDD）的相關 living specifications 與 Architecture Decision Records（ADR），再限量搜尋 open／closed Issues、comments 與 linked PR；記錄既有決策是沿用、取代或駁回。" },
-    { title: "2｜分支與實作", detail: "Feature parent 保存 SDD story，可獨立交付的 Task／Bug 才拆 subissue。{% if branch_strategy == 'delivery' %}有期限的 Milestone 工作進對應 dev/m<編號>-<簡稱>；一般孤立工作從最新 main 建立並直接回 main。只有文件化的獨立 soak／canary 才使用暫時 dev/i<Issue>-*，hotfix 才形成緊急 release boundary{% else %}從 {{ branch_strategy }} 或最終回到它的 open PR 分支建立{% endif %} work branch，並用 gh issue develop 保留 native Development link；若超出原單就另開 Issue。" },
+    { title: "2｜分支與實作", detail: "Feature parent 保存 SDD story，可獨立交付的 Task／Bug 才拆 subissue。{% if branch_strategy == 'delivery' %}有期限的里程碑工作進對應 dev/m<編號>-<簡稱>；一般孤立工作從最新 main 建立並直接回 main。只有文件化的獨立 soak／canary 才使用暫時 dev/i<Issue>-*，hotfix 才形成緊急 release boundary{% else %}從 {{ branch_strategy }} 或最終回到它的 open PR 分支建立{% endif %} work branch，並用 gh issue develop 保留 native Development link；若超出原單就另開 Issue。" },
     { title: "3｜驗證", detail: "本機與 CI 共用 repo 內的驗證程式。Issue PR 依變更選擇 docs／fast／full；未知路徑、promotion、hotfix、release recovery、merge queue 或手動 dispatch 走 full。現行 Action 只有一個 verify job，完整契約與封存邊界見 docs/ci-policy.md。" },
     { title: "4｜審查", detail: "非 draft PR 會從導入時設定的 reviewers 排除作者後輪派一位；PR assignee、classification label 與 Milestone 從 linked Issue 同步。使用 closing keyword 前，自身與 referenced Issue 不得留有未勾選 task。" },
-    { title: "5｜交付", detail: "{% if branch_strategy == 'delivery' %}Milestone 完成、獨立 canary 與 hotfix 形成 release boundary；standalone 與 bot PR 直接進 main 後保留 release intent，全部 no-release 就略過；{% endif %}成品 workflow 只接受 release-source evidence，再建立可追溯成品、SHA-256 與非空 SBOM；部署依專案另訂。" }
+    { title: "5｜交付", detail: "合併到 main 是 repository delivery，不等於發版。版本與 CHANGELOG 目前由人工 PR 一起配置；沒有 active 的 tag、GitHub Release、registry publisher 或 deployment workflow。" }
   ],
   safeguards: [
 {% if "python" in languages or "typescript" in languages %}
     "Coverage 是未測程式碼的訊號，不等於品質；新案看全域、既有案先看 changed lines，門檻依缺陷與模組風險調整。",
 {% endif %}
-    "一般相依新版等待三天；pnpm 另拒絕 publisher trust 降級，OSV 在相依變更、promotion 與每週排程掃描已知漏洞。",
+    "一般相依新版等待三天；pnpm 另拒絕 publisher trust 降級，OSV 在相依變更、交付候選與每週排程掃描已知漏洞。",
     "lockfile 保存下載內容雜湊；第三方 Actions 固定完整 commit SHA。",
     "PR 政策包含合法／不合法回歸測資，避免門禁只會顯示綠燈。",
 {% if "python" in languages %}
@@ -62,14 +59,11 @@ window.CSARC_SITE_CONTENT = {
     "導入 preflight 會把 Renovate 標成 available、request-owner 或 fallback；只有 account／organization owner 可進入 GitHub 同意頁並只選本 repo，其餘狀況保留 Dependabot 與既有 CI/CD。",
     "設定腳本的 check 會比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset；Free private 或 GITHUB_TOKEN 看不到管理欄位時以 DEGRADED 記錄，完整檢查應由管理員在可信任 checkout 使用 Administration read 憑證。",
     "review request 使用短效 GITHUB_TOKEN、排除 PR 作者且只 checkout base branch；Free private 只能要求一位個別 reviewer，team request 與強制核准需 GitHub Team 以上。",
-    "Artifact attestation 在 public repo 預設開啟；若也啟用 PyPI／npm 發布，registry job 會先驗 repository、tag、digest 與 signer workflow，private／internal repo 維持明確 opt-in。",
-{% if has_container %}
-    "容器模式 {{ container_mode }} 使用產品既有的 {{ containerfile_path }}；PR job 沒有 registry write，runtime 部署、健康檢查與回復仍由產品定義。",
-{% endif %}
+    "Artifact attestation 是未來發版可採用的 evidence primitive，不保證成品安全；目前沒有 active publisher，不能宣稱已產生或已在消費端驗證。",
   ],
   release: {
-    current: {% if (container_mode | default("none")) == "ghcr" %}"已驗證的 release-source 才能發布 GHCR；workflow 保存已 smoke／scan 的 image bytes，附加 provenance 與 SPDX SBOM，再以 digest 重跑 smoke test。這不是 runtime 部署。"{% elif not languages %}"已驗證的 release-source 會建立 GitHub Release、來源封存檔與 exact-tag SPDX SBOM；沒有語言套件，但仍保存可驗證的來源清冊。任意 tag push 不會啟動發布。"{% else %}"已驗證的 release-source 才能 dispatch 成品 workflow；checksum、exact-tag SPDX SBOM 與來源 metadata 會附加到 GitHub Release，不重跑完整 runtime CI。沒有通用部署流程。"{% endif %},
-    optional: {% if (container_mode | default("none")) == "verify" %}"容器只做 CI build／smoke／scan，不發布 registry；portable baseline 不要求長效 token。"{% elif (container_mode | default("none")) == "ghcr" %}"只有 GHCR 發布 job 取得 packages、id-token 與 attestations write；PR CI 維持唯讀且不 push。"{% elif not languages %}"CI/CD-only 沒有語言套件或 registry 發布；portable baseline 不要求導入者建立長效 token 或修改組織政策。"{% else %}"Artifact attestation 與選取語言的 registry 發布能力分開設定；portable baseline 不要求導入者建立長效 token 或修改組織政策。"{% endif %},
+    current: "目前只有人工版本與 repository delivery；沒有 active 的 Release Please、tag、GitHub Release、registry publisher 或 deployment workflow。",
+    optional: "checksum、SBOM、attestation 與 consumption scripts 保留為 conditional contract；產品決定唯一 owner 並建立實際 workflow 後才會執行。",
     update: "Copier 從 {{ branch_strategy }} 的工作分支套用已審查的完整 commit SHA，再執行 ./scripts/verify。"
   }
 };
