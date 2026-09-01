@@ -32,6 +32,16 @@ CI 是沒有獨立測試環境時的可攜式 integration layer；外部環境�
 - `main` 更新後，尚在進行的 delivery branch 先透過受審查的 `sync/main-to-*` PR
   納入新結果，再接受新的 Issue PR 或 promotion。
 
+### 分支清理
+
+- Repository 設定啟用合併後自動刪除來源分支；工作 PR 合併後不保留
+  `type/<Issue>-*`。
+- 採 delivery 策略時，一個進行中的 Milestone 只使用一個
+  `dev/m<編號>-<簡稱>`；發版完成並補齊證據後才刪除。提前終止時，先移轉或取消
+  未完成 Issue，再刪除該分支。
+- 本機從另一個 checkout 執行 `scripts/cleanup-worktrees --apply`；程式只刪除乾淨、
+  未鎖定且能確認已合併的 worktree，含未提交內容者保留。
+
 ### 孤立 Issue 決策樹
 
 ```text
