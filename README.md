@@ -91,7 +91,7 @@ flowchart LR
 
 公版的完整入口是 `./scripts/verify-template.sh`；生成專案使用 `./scripts/verify`。現行 `.github/workflows/ci.yml` 只有一個 `verify` job，依變更選擇 docs／fast／full，再呼叫同一份 repo-local 程式；一般 PR 不會為 fast、full、安全與 aggregate 各啟動一個 runner。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 30 分鐘。詳細分級與目前封存邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
-Dependabot、PR 條件式 OSV、每週／手動 OSV 掃描與單一 release workflow 已啟用。專用 promotion、release handoff、registry publisher 與 deployment workflows 不恢復，歷史由 Git／Issue／PR 保存；Zizmor、remote governance 與其他仍待各自 owner 決定的 workflow 才保留在 `archive/ci-cd/2026-08-27/`。
+Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用；單一 release workflow 已設定為候選，待預設分支實跑後才算啟用。專用 promotion、release handoff、registry publisher 與 deployment workflows 不恢復，歷史由 Git／Issue／PR 保存；Zizmor、remote governance 與其他仍待各自 owner 決定的 workflow 才保留在 `archive/ci-cd/2026-08-27/`。
 
 ### Actions 額度耗盡的一次性驗證
 

@@ -20,6 +20,7 @@ classify_probe = MODULE["classify_probe"]
 detect_runtime_capabilities = MODULE["detect_runtime_capabilities"]
 prepare_release_candidate = MODULE["prepare_release_candidate"]
 preflight_capabilities = MODULE["preflight_capabilities"]
+preflight_policy_observations = MODULE["preflight_policy_observations"]
 release_intent = MODULE["release_intent"]
 release_follow_up_errors = MODULE["release_follow_up_errors"]
 release_boundary_errors = MODULE["release_boundary_errors"]
@@ -346,25 +347,40 @@ def test_http_failures_are_never_allowed() -> None:
     assert classify_probe(422, validation_proves_access=True).state == "allowed"
 
 
-def test_repository_pr_setting_false_without_publish_proof_blocks(
+def test_cli_preflight_separates_policy_from_token_permission(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Local candidacy cannot prove that GitHub publication is available."""
+    """Readable policy settings never masquerade as workflow-token access."""
     monkeypatch.setattr(MODULE["shutil"], "which", lambda _: "/usr/bin/gh")
+
+    def fake_run(
+        command: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        del kwargs
+        allowed = not command[-1].startswith("orgs/")
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps({"can_approve_pull_request_reviews": allowed}),
+            stderr="",
+        )
+
     monkeypatch.setattr(
         MODULE["subprocess"],
         "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess(
-            args[0],
-            0,
-            stdout='{"can_approve_pull_request_reviews": false}',
-            stderr="",
-        ),
+        fake_run,
     )
 
-    observed = preflight_capabilities("owner/repo")
+    token_permissions = preflight_capabilities("owner/repo")
+    policies = preflight_policy_observations("owner/repo")
+    payload = report(token_permissions, "cli-preflight", policies=policies)
 
-    assert select_release_mode(observed)[0] == "blocked"
+    assert payload["organization_policy"]["state"] == "blocked"
+    assert payload["repository_setting"]["state"] == "allowed"
+    assert payload["token_permissions"]["actions_pull_requests"]["state"] == (
+        "unknown"
+    )
+    assert payload["effective"]["mode"] == "blocked"
 
 
 @pytest.mark.parametrize("status", [403, 409])

@@ -109,3 +109,29 @@ def test_guided_path_has_no_repo_local_publisher() -> None:
     assert 'add_parser("release")' not in source
     assert '"tag_name"' not in source
     assert '"/dispatches"' not in source
+
+
+def test_release_status_stays_candidate_until_default_branch_evidence() -> None:
+    """Keep root, generated README, and both site languages honest."""
+    root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    template_readme = (ROOT / "template/README.md.jinja").read_text(
+        encoding="utf-8"
+    )
+    chinese = (ROOT / "site/content/_index.zh-tw.md").read_text(
+        encoding="utf-8"
+    )
+    english = (ROOT / "site/content/_index.en.md").read_text(encoding="utf-8")
+    rendered_chinese = (ROOT / "docs/index.html").read_text(encoding="utf-8")
+    rendered_english = (ROOT / "docs/index.en.html").read_text(encoding="utf-8")
+    fullwidth_slash = "\N{FULLWIDTH SOLIDUS}"
+
+    assert f"Candidate{fullwidth_slash}Blocked" in root_readme
+    assert "Configured" in template_readme
+    assert f"Candidate{fullwidth_slash}Blocked" in chinese
+    assert "Candidate / Blocked" in english
+    assert f"Candidate{fullwidth_slash}Blocked" in rendered_chinese
+    assert "Candidate / Blocked" in rendered_english
+    assert f"| tag{fullwidth_slash}GitHub Release | Active |" not in chinese
+    assert "| Tag and GitHub Release | Active |" not in english
+    assert "release workflow are active" not in english
+    assert "Action 尚未啟用" not in chinese

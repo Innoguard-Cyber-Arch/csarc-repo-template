@@ -351,10 +351,25 @@ def test_capability_preflight_uses_readable_github_origin(
     script = tmp_path / "release_policy.py"
     script.touch()
     response = {
-        "mode": "guided",
-        "capabilities": {
-            "actions_pull_requests": {"state": "blocked"},
+        "mode": "blocked",
+        "organization_policy": {
+            "state": "blocked",
+            "reason": "organization policy blocks pull requests",
+        },
+        "repository_setting": {
+            "state": "allowed",
+            "reason": "repository setting allows pull requests",
+        },
+        "token_permissions": {
+            "actions_pull_requests": {"state": "unknown"},
             "contents": {"state": "unknown"},
+            "release": {"state": "unknown"},
+        },
+        "effective": {"mode": "blocked", "reason": "publication unproven"},
+        "capabilities": {
+            "actions_pull_requests": {"state": "unknown"},
+            "contents": {"state": "unknown"},
+            "release": {"state": "unknown"},
         },
         "integrations": {
             "renovate": {
@@ -390,7 +405,10 @@ def test_capability_preflight_uses_readable_github_origin(
     monkeypatch.setattr(cli, "run", fake_run)
     assert cli.capability_preflight(script, tmp_path) == response
     output = capsys.readouterr().out
-    assert "actions_pull_requests=blocked" in output
+    assert "organization_policy=blocked" in output
+    assert "repository_setting=allowed" in output
+    assert "token actions_pull_requests=unknown" in output
+    assert "effective=blocked" in output
     assert "Optional integration renovate: request-owner" in output
     assert "Next: Ask the organization owner." in output
 

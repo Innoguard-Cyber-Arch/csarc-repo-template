@@ -2373,7 +2373,7 @@ html[data-detail-level="simple"] .detail-panel {
           <article class="pipeline-foundation-card"><h3>工作格式</h3><p>Issue 與 PR 表單提示必要內容。</p></article>
           <article class="pipeline-foundation-card"><h3>驗證與安全規則</h3><p>依變更內容選擇必要檢查，並辨識相依風險。</p></article>
           <article class="pipeline-foundation-card"><h3>合併設定</h3><p>依 GitHub 方案套用可用保護。</p></article>
-          <article class="pipeline-foundation-card best"><h3>版本發佈</h3><p>設定仍保留；Action 尚未啟用。</p></article>
+          <article class="pipeline-foundation-card best"><h3>版本發佈</h3><p>流程已設定為候選；預設分支實跑成功後才算啟用。</p></article>
         </div>
       </div>
 </div>
@@ -2409,7 +2409,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 	</tbody>
 </table>
-<p>一般使用者不必記 workflow 或 script 名稱；依畫面提示操作即可。目前自動化涵蓋工作單、PR 規則、必要驗證，以及需人審查版本 PR 的自動發版。</p>
+<p>一般使用者不必記 workflow 或 script 名稱；依畫面提示操作即可。目前自動化涵蓋工作單、PR 規則與必要驗證；需人審查版本 PR 的發版流程仍是候選。</p>
 <aside class="technical-detail" data-content-key="flow-foundation">
   <h3>橫跨全流程的四項基礎</h3>
   <ul>
@@ -2514,13 +2514,13 @@ html[data-detail-level="simple"] .detail-panel {
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">CODEOWNERS＋REVIEWERS</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">指定 owner 與 reviewer 候選</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">ISSUE_TEMPLATE/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">工作單欄位／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">pull_request_template.md</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">PR 必填內容</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04／05／06／07</span><span class="purpose-copy">8 條現行自動流程</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04／05／06／07</span><span class="purpose-copy">7 條 Active＋1 條 Candidate</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">ci.yml</span><span class="repo-tree-purpose"><span class="journey-code">03</span><span class="purpose-copy">執行已宣告模組</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">issue-triage.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">檢查並整理工作單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">milestone-lifecycle.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">同步交付批次狀態</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">osv.yml</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">每週與手動漏洞掃描</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">pr-policy.yml</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">Issue／分支／PR 規則</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">release.yml</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">版本 PR 與 verified GitHub Release</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">release.yml</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">候選版本 PR 與 GitHub Release</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">spec-to-issue.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">規格自動開單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">work-item-closure.yml</span><span class="repo-tree-purpose"><span class="journey-code">06</span><span class="purpose-copy">里程碑工作合併後關單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">docs/specs/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">功能規格／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge project">專案持有</span></div>
@@ -2558,7 +2558,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>8 條現行流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、工作關單與發版</td>
+					<td>7 條 active 流程處理工作單、里程碑、規格、PR、驗證與漏洞；另有 1 條候選發版流程</td>
 					<td>公版主導</td>
 			</tr>
 			<tr>
@@ -2934,7 +2934,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li>**Action：**只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li>
 <li>**專案範圍：**一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li>
 </ul>
-<p>測試邏輯只寫在 scripts／tests。目前 active 的自動化是 CI、PR policy、Issue triage、spec-to-Issue、Milestone lifecycle、OSV 與 Dependabot；專用 release／promotion／成品發布／消費／live-integration／deployment workflow 未啟用。</p></div>
+<p>測試邏輯只寫在 scripts／tests。目前 active 的自動化是 CI、PR policy、Issue triage、spec-to-Issue、Milestone lifecycle、OSV 與 Dependabot；單一 release workflow 已設定為候選，另行的 promotion／release handoff／registry publisher／消費／live-integration／deployment workflow 未啟用。</p></div>
 
 
 </section>
@@ -3361,7 +3361,7 @@ html[data-detail-level="simple"] .detail-panel {
     <p class="subtitle">工作先交付到 main；需要新版本時，系統建立一張仍須人工審查的版本 PR。</p>
   </header>
 
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>一支 release workflow 負責版本 PR 與 verified immutable GitHub Release；registry、attestation 與部署仍未自動啟用。</span></aside>
+<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>一支候選 release workflow 預計負責版本 PR 與 verified immutable GitHub Release；待預設分支實跑後才算啟用。Registry、attestation 與部署仍未自動啟用。</span></aside>
 <div class="legacy-content">
       <header>
         <h2>步驟 7｜<span class="accent">版本規則與成品接續</span></h2>
@@ -3412,18 +3412,18 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>正式版本與 CHANGELOG</td>
-					<td>Active</td>
-					<td>Release Please 建立同一張受審查 PR；已發布版本不改寫</td>
+					<td>Candidate／Guided</td>
+					<td>Automatic 由 Release Please 建立受審查 PR；受平台政策限制時，Guided 由人或 agent 開一般 PR</td>
 			</tr>
 			<tr>
 					<td>tag／GitHub Release</td>
-					<td>Active</td>
-					<td>版本 PR 合併、完整驗證與成品重驗後自動發布</td>
+					<td>Candidate／Blocked</td>
+					<td>版本 PR 合併後由唯一 workflow 發布；待預設分支實跑證明</td>
 			</tr>
 			<tr>
 					<td>checksum／SBOM</td>
-					<td>Active</td>
-					<td>與 exact-tag 成品一起建立，下載後重新驗證</td>
+					<td>Configured</td>
+					<td>已納入同一候選流程；首次成功實跑後才算 Active</td>
 			</tr>
 			<tr>
 					<td>attestation／消費驗證</td>
@@ -3904,7 +3904,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>發版證據</td>
-					<td>現行 release workflow 建立 exact-tag 成品、checksum、SPDX SBOM 與 immutable Release；舊 handoff／consumption run 只供稽核</td>
+					<td>候選 release workflow 預計建立 exact-tag 成品、checksum、SPDX SBOM 與 immutable Release；待預設分支實跑，舊 handoff／consumption run 只供稽核</td>
 			</tr>
 			<tr>
 					<td>語言模組已驗收</td>
@@ -5489,7 +5489,7 @@ html[data-detail-level="simple"] .detail-panel {
     <p class="subtitle">這些是目前可由檔案與測試證明的決定。</p>
   </header>
 
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 的 promotion／兩段式 release handoff 是歷史設計。現行 CI 依風險分級；Release Please 版本 PR 與單一 release workflow 分別負責審查與發布。</span></aside>
+<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 的 promotion／兩段式 release handoff 是歷史設計。現行 CI 依風險分級；候選 Release Please 版本 PR 與單一 release workflow 預計分別負責審查與發布。</span></aside>
 <div class="legacy-content">
       <header>
         <span class="selection-sequence">決策附錄</span>
@@ -5634,7 +5634,7 @@ html[data-detail-level="simple"] .detail-panel {
     <p class="subtitle">新 repo、Copier 更新、OSV、Release 與第一個 CI-only pilot 已有證據；其餘邊界仍明列。</p>
   </header>
 
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 保留舊 run 與當時判斷供稽核；Release Please 已由單一 release workflow 採用，release consumption 與 live-integration 專用 workflows 仍未恢復。</span></aside>
+<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 保留舊 run 與當時判斷供稽核；Release Please 已納入單一候選 release workflow，待預設分支實跑；release consumption 與 live-integration 專用 workflows 仍未恢復。</span></aside>
 <div class="legacy-content">
       <header>
         <span class="selection-sequence">決策附錄</span>

@@ -2417,7 +2417,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>Seven active flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, and release</td>
+					<td>Seven active flows for Issue, Milestone, spec, PR, verification, and vulnerability handling; plus one candidate release flow</td>
 					<td>Template-led</td>
 			</tr>
 			<tr>
@@ -2726,7 +2726,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>One implementation:</strong> GitHub Actions has one <code>verify</code> job with a 30-minute timeout and only calls repository scripts.</li>
 <li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
 </ul>
-<p>Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, OSV, Dependabot, and one release workflow are active. Dedicated promotion, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.</p>
+<p>Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, OSV, and Dependabot are active. One release workflow is configured as a candidate pending a successful default-branch run. Dedicated promotion, release-handoff, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.</p>
 <aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>local and CI execution share scripts and tests; work PRs select fast or full by risk, while Milestone or canary delivery, hotfix, merge queue, manual, and unknown high-risk changes run full.</li><li><strong>Adjustable:</strong><code>coverage_mode</code>, <code>coverage_threshold</code>, and <code>enable_precommit</code>; advanced teams may enable <code>use_reusable_workflow</code> with a full commit SHA.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>scripts/verify-fast</code>, <code>scripts/verify</code>, and <code>.github/workflows/ci.yml</code>.</li></ul></aside></div>
 </section>
 
@@ -3124,18 +3124,18 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>Exact version and changelog</td>
-					<td>Active</td>
-					<td>Release Please opens one reviewed PR; published versions are never rewritten</td>
+					<td>Candidate / Guided</td>
+					<td>Automatic uses a reviewed Release Please PR; when platform policy blocks it, Guided uses a normal PR opened by a person or agent</td>
 			</tr>
 			<tr>
 					<td>Tag and GitHub Release</td>
-					<td>Active</td>
-					<td>Publish automatically only after the version PR, full verification, and downloaded artifact verification pass</td>
+					<td>Candidate / Blocked</td>
+					<td>The sole workflow publishes after the version PR; activation awaits a default-branch run</td>
 			</tr>
 			<tr>
 					<td>Checksums and SBOM</td>
-					<td>Active</td>
-					<td>Build with the exact tag and verify again after downloading the Release assets</td>
+					<td>Configured</td>
+					<td>Included in the same candidate path; Active only after its first successful run</td>
 			</tr>
 			<tr>
 					<td>Attestations and consumption</td>
@@ -3159,7 +3159,7 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 <aside class="technical-detail" data-content-key="manual-release-boundary">
   <h3>Automatic-release ownership</h3>
-  <p>The template root and each new repository publish through their own release workflow. An adopted repository keeps its product-owned workflow. Every path still needs one owner, least privileges, full-SHA pins, a timeout, concurrency behavior, failure recovery, and a runner-cost ceiling; historical runs remain reference evidence only.</p>
+  <p>The template root and each new repository are configured to publish through their own release workflow. An adopted repository keeps its product-owned workflow. Every path still needs one owner, least privileges, full-SHA pins, a timeout, concurrency behavior, failure recovery, and a runner-cost ceiling; historical runs remain reference evidence only.</p>
 <p>Milestone closure remains manual until #400 completes its lifecycle contract, and work-Issue closure remains owned by #401. Work branches are removed after merge; a Milestone delivery branch waits until closure and unfinished work are handled.</p>
 </aside>
 </div>

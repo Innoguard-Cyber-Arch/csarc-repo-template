@@ -680,43 +680,63 @@ def workflow_policy_observations(
 
 
 def preflight_capabilities(repo: str) -> dict[str, Capability]:
-    """Read the repository PR policy; defer token-write checks to runtime."""
-    capabilities = unknown_capabilities("requires the runtime workflow token")
+    """Leave token permissions unknown until the workflow runs."""
+    del repo
+    return unknown_capabilities("requires the runtime workflow token")
+
+
+def preflight_policy_observations(repo: str) -> dict[str, Capability]:
+    """Read org/repository settings without treating them as token access."""
+    unknown = {
+        name: Capability("unknown", "GitHub CLI is unavailable")
+        for name in ("organization_policy", "repository_setting")
+    }
     executable = shutil.which("gh")
     if executable is None:
-        capabilities["actions_pull_requests"] = Capability(
-            "unknown", "GitHub CLI is unavailable"
+        return unknown
+
+    def observe(endpoint: str, scope: str) -> Capability:
+        result = subprocess.run(  # noqa: S603
+            [executable, "api", endpoint],
+            check=False,
+            capture_output=True,
+            text=True,
         )
-        return capabilities
-    result = subprocess.run(  # noqa: S603
-        [executable, "api", f"repos/{repo}/actions/permissions/workflow"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        capabilities["actions_pull_requests"] = Capability(
-            "unknown",
-            "Actions policy is not readable with the current identity",
-        )
-        return capabilities
-    try:
-        response = json.loads(result.stdout)
+        if result.returncode != 0:
+            return Capability(
+                "unknown",
+                f"{scope} Actions policy is not readable with the current "
+                "identity",
+            )
+        try:
+            response = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            response = None
         allowed = (
             response.get("can_approve_pull_request_reviews")
             if isinstance(response, dict)
             else None
         )
-    except json.JSONDecodeError:
-        allowed = None
-    if isinstance(allowed, bool):
-        capabilities["actions_pull_requests"] = Capability(
+        if not isinstance(allowed, bool):
+            return Capability(
+                "unknown", f"{scope} Actions policy response is incomplete"
+            )
+        return Capability(
             "allowed" if allowed else "blocked",
-            "repository Actions policy allows pull requests"
-            if allowed
-            else "repository Actions policy blocks pull requests",
+            f"{scope} Actions policy "
+            + ("allows" if allowed else "blocks")
+            + " pull requests",
         )
-    return capabilities
+
+    owner = repo.split("/", 1)[0]
+    return {
+        "organization_policy": observe(
+            f"orgs/{owner}/actions/permissions/workflow", "organization"
+        ),
+        "repository_setting": observe(
+            f"repos/{repo}/actions/permissions/workflow", "repository"
+        ),
+    }
 
 
 def gh_json(executable: str, endpoint: str) -> dict[str, object] | None:
@@ -1636,10 +1656,12 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         print(f"Release version {version} is consistent.")  # noqa: T201
         return 0
     if args.command == "preflight":
+        policies = preflight_policy_observations(args.repo)
         write_report(
             report(
                 preflight_capabilities(args.repo),
                 "cli-preflight",
+                policies=policies,
                 integrations=optional_integration_preflight(args.repo),
             ),
             None,
