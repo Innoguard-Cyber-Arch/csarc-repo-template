@@ -610,9 +610,13 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         for stage in row["shared"].values()
         for item in stage.get("files", [])
     )
-    update_notification = template_rows[3]["shared"]["release"]["automation"][0]
-    assert update_notification["pending"]
-    assert update_notification["issue"] == 451
+    update_notification = template_rows[3]["shared"]["milestone"]["automation"][
+        0
+    ]
+    assert update_notification["path"] == (
+        ".github/workflows/template-update.yml"
+    )
+    assert "pending" not in update_notification
     assert verification_rows[0]["shared"]["milestone"]["automation"] == [
         {
             "path": ".github/workflows/ci.yml",
