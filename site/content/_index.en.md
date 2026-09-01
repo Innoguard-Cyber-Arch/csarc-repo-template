@@ -242,7 +242,7 @@ Each check is a snapshot. A setting changed and restored between runs still requ
 
 {{< slide key="template-release" track="template-release" eyebrow="Step 09" title="Copier keeps repositories aligned, and the template dogfoods its rules" subtitle="A template defect affects many projects, so creation, adoption, and update all run as real tests." legacy="false"  class="candidate-slide" >}}
 - `template/` is the delivered source; root retains the template repository's own GitHub governance and dogfood configuration.
-- `.csarc/config.yml` is both Copier's update record and the repository's only template configuration. Languages, branch strategy, and optional capabilities read from it; later extensions add settings here instead of creating another configuration file.
+- `.csarc/config.yml` is each repository's only template configuration. Languages, branch strategy, and optional capabilities read from it. Generated repositories also keep Copier source and revision metadata in that file; root does not store self-referential metadata that would immediately become stale.
 - The shared baseline and the Python, Rust, and TypeScript modules are verified independently. Selecting several languages combines modules without creating a combination-specific workflow.
 - An existing repository is adopted and then updated from the next Copier revision, proving product content is preserved.
 
@@ -251,7 +251,7 @@ Each check is a snapshot. A setting changed and restored between runs still requ
 {{< /disclosure >}}
 
 {{< detail key="template-release-scope" title="Single source, runtime baselines, and the root-only boundary" >}}
-`.csarc/config.yml` retains Copier's required template source and revision together with the capabilities selected for this repository. Change it through `csarc update --data` so manual edits cannot drift from Copier. A derived template should add its own settings to the same YAML instead of duplicating CSARC fields.
+Root `.csarc/config.yml` records the capabilities selected by the template repository itself. A generated repository additionally records Copier's source and revision and writes changes through `csarc update --data`. The template source does not invent `_src_path` or `_commit` values that point back to itself or immediately become stale. A derived template should add namespaced settings to the same YAML instead of duplicating CSARC fields.
 
 `scripts/sync-paired-files.sh` makes root the source of paired files and verifies copied content and permissions with `--check`. `profiles/catalog.yaml` records runtime baselines and their evidence. Python and Node baselines advance only after their own thirty-day observation period.
 
