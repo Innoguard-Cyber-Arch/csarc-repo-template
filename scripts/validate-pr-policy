@@ -364,6 +364,12 @@ if [[ "$branch_strategy" == "delivery" ]]; then
         python3 scripts/promotion_gate.py check-intent \
           --title "$PR_TITLE" \
           --titles-json "$included_titles"
+      elif [[ -n "${PR_INCLUDED_TITLES_JSON:-}" ]]; then
+        # Test-only override: exercise title/intent validation without a
+        # live GitHub compare call. Real runs never set this variable.
+        python3 scripts/promotion_gate.py check-intent \
+          --title "$PR_TITLE" \
+          --titles-json "$PR_INCLUDED_TITLES_JSON"
       else
         if [[ -z "${PR_BASE_SHA:-}" || -z "${PR_HEAD_SHA:-}" ]]; then
           echo "Promotion intent validation requires exact base and head SHAs."

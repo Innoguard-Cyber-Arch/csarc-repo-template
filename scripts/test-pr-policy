@@ -256,6 +256,7 @@ PR_BODY="Closes #999" \
 PR_ISSUE_STATE="open" \
 PR_ISSUE_LABELS="enhancement,promotion" \
 PR_ISSUE_MILESTONE_NUMBER="7" \
+PR_INCLUDED_TITLES_JSON='["feat!: promote without routine fallback"]' \
   "$validator" >/dev/null
 
 while IFS='|' read -r name head base; do
