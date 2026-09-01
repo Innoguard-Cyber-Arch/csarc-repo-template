@@ -175,7 +175,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 CLI 會先預覽 Copier smart diff、conflict risk 與 Milestone description migration；確認後才執行 update、`./scripts/verify` 與 repository settings plan。若有衝突，CLI 會列出檔案但不修改 repo；請在目前分支調整衝突內容後重跑。它會更新 `site/` 版型並重建單檔，但不覆寫 `docs/site-content.js` 或 `docs/site-theme.css`，也不會自行 apply settings、push 或開 PR。相依更新一般等待三天；{% if has_typescript %}pnpm 遇到 publisher trust 降級時會停止安裝，先確認套件發布者與 provenance，不要直接停用 policy；{% endif %}OSV 對已公開漏洞立即通知。
 {% if enable_template_update_notifications %}
-每週 template update workflow 只會建立或更新一張通知 Issue，不會自動套用或合併變更。若 `_src_path` 指向 private GitHub repository，請設定只有來源 repository Contents read 權限的 `CSARC_TEMPLATE_READ_TOKEN`；公開來源不需要這個 secret。
+每週一或手動執行 template update workflow 時，只會建立或更新一張通知 Issue，不會自動套用或合併變更。公開模板來源不需要 secret；若 `_src_path` 指向 private GitHub repository，才設定只有來源 repository Contents read 權限的 `CSARC_TEMPLATE_READ_TOKEN`。
 {% endif %}
 
 ## 負責人與支援

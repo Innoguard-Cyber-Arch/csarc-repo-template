@@ -3671,10 +3671,10 @@ html[data-detail-level="simple"] .detail-panel {
       <p class="context-line"><strong>問題與目的｜</strong>模板錯誤會一次影響多個專案；每次修改都要真的建立新案、導入既有案，再讓已導入的 repo 接收更新並通過完整驗證。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">這次不選，因為無法持續同步或驗證</span></summary><ul><li><strong>GitHub Template：</strong>只複製一次，不記得來源與答案</li><li><strong>PyScaffold：</strong>可參考 Python 結構，但會形成第二套更新機制</li><li><strong>只驗 YAML：</strong>無法證明新案、既有案與更新真的能跑</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">Copier＋建立／更新回歸</span></summary><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；衝突時保持 repo 不變，調整後重跑再由 PR 審查。</p></div></details><p><strong>建立：</strong>共通基線與 Python、Rust、TypeScript 模組各自實跑驗證；多選時合併模組，不建立組合專屬流程。<br><strong>導入與更新：</strong>adopt／update dry-run 先預覽，確認後只遷移舊 CSARC 結構；接著對同一 repo 執行下一版 Copier update、確認產品目錄未被覆寫，最後執行生成專案的完整驗證。<br><strong>版本：</strong>公版與所有語言模組共用一個 SemVer；各語言基線則依自己的穩定版政策前進。</p></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">Copier＋建立／更新回歸</span></summary><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；衝突時保持 repo 不變，調整後重跑再由 PR 審查。</p></div></details><p><strong>建立：</strong>共通基線與 Python、Rust、TypeScript 模組各自實跑驗證；多選時合併模組，不建立組合專屬流程。<br><strong>導入與更新：</strong>adopt／update dry-run 先預覽，確認後只遷移舊 CSARC 結構；接著對同一 repo 執行下一版 Copier update、確認產品目錄未被覆寫，最後執行生成專案的完整驗證。<br><strong>更新通知：</strong>選用後每週檢查一次；有新版只建立或更新一張 Issue，不會自動修改 repo。<br><strong>版本：</strong>公版與所有語言模組共用一個 SemVer；各語言基線則依自己的穩定版政策前進。</p></details>
       </div>
       <p class="context-line"><strong>root／template 配對檔案｜</strong>43 對 workflow、policy、文件、script 與 test（例如 <code>promotion.yml</code>、<code>docs/ci-policy.md</code>、<code>scripts/promotion_gate.py</code>）在 root 與 <code>template/</code> 之間逐位元組相同；過去只靠 <code>verify-template.sh</code> 在 CI 用 <code>diff</code> 事後比對，任何一邊漏改要等驗證跑完才被抓到。現在 <code>scripts/sync-paired-files.sh</code> 把 root 當成唯一來源：本機執行它會立即重新產生每個 <code>template/</code> 副本；加 <code>--check</code> 則不寫檔，只驗證每個副本是否符合產生腳本的確定性輸出（內容與可執行位元），任何一對不一致就印出差異並失敗。<code>verify-template.sh</code> 已改成呼叫 <code>--check</code>，並用一段複製到暫存目錄、蓄意注入內容與權限落差、確認失敗、重新產生、確認通過的回歸測試證明這個機制會擋下漂移。<code>dependabot.yml</code>、<code>.gitignore</code> 等僅因 Jinja 變數不同的檔案不在此列，仍由既有的「產生一個實案並與 root 比對」測試把關；<code>AGENTS.md</code>／<code>README.md</code> 等文件因 root 與下游專案的治理內容本來就不同，不屬於重複維護，故未強行合併。</p>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>下發來源、所選語言模組、保留路徑與功能開關：</strong><code>template/</code>＋<code>copier.yml</code></li><li><strong>root-only CI 與建立／導入／更新驗證：</strong><code>.github/</code>＋<code>scripts/verify-template.sh</code>；生成 repo 不會收到這支腳本或 template release workflows</li><li><strong>語言基線與三十天觀察：</strong><code>profiles/catalog.yaml</code>；<strong>Python 自動升版：</strong><code>python-version-policy.yml</code></li><li><strong>root／template 配對檔案的單一來源與漂移檢查：</strong><code>scripts/sync-paired-files.sh</code></li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>下發來源、所選語言模組、保留路徑與功能開關：</strong><code>template/</code>＋<code>copier.yml</code></li><li><strong>更新通知：</strong><code>enable_template_update_notifications</code> 開啟時才產生 <code>template-update.yml</code> 與 <code>check-template-update</code>；公開來源不需 secret，private 來源才使用唯讀 token</li><li><strong>root-only CI 與建立／導入／更新驗證：</strong><code>.github/</code>＋<code>scripts/verify-template.sh</code>；生成 repo 不會收到這支腳本或 template release workflows</li><li><strong>語言基線與三十天觀察：</strong><code>profiles/catalog.yaml</code>；<strong>Python 自動升版：</strong><code>python-version-policy.yml</code></li><li><strong>root／template 配對檔案的單一來源與漂移檢查：</strong><code>scripts/sync-paired-files.sh</code></li></ul></aside>
 </div>
 
 
@@ -3683,6 +3683,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><code>.csarc/config.yml</code> 是每個 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取。生成 repo 另在同一檔案保存 Copier 來源與版本，root 不保存會立即過期的自我指向資訊。</li>
 <li>共通基線與 Python、Rust、TypeScript 模組各自驗證；同時選取多個語言時合併執行，不建立組合專屬流程。</li>
 <li>既有 repo 先用 adopt／update dry-run 預覽；確認後只遷移舊 CSARC 結構，再執行下一版 Copier update 並確認產品內容未被覆寫。</li>
+<li>可選的更新通知每週檢查新版；只建立或更新一張 Issue，不會自動修改 repo。</li>
 </ul>
 <details class="package-disclosure" data-content-key="copier-update">
   <summary><span class="tech-name">Copier＋root dogfood＋建立／更新回歸</span></summary>
@@ -4883,6 +4884,7 @@ html[data-detail-level="simple"] .detail-panel {
     <button id="testing-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>依賴安全</button>
     <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR／合併</button>
     <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="7"><small>Journey 07</small>版本／交付</button>
+    <button id="testing-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-template-upgrade" data-similar-tools-tab="8"><small>Journey 09</small>模板升級</button>
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
     <div class="similar-tools-testing-intro">
@@ -5286,6 +5288,31 @@ html[data-detail-level="simple"] .detail-panel {
           <td><ul class="testing-stage-list">
             <li>
               <strong>交付後</strong><span>使用相同結案程式；repo-template 不維護另一套里程碑規則。</span>
+            </li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
+  <div id="testing-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-template-upgrade" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 09／更新通知</strong><span>選用通知的 repo 每週或手動檢查一次；有新版只維護一張 Issue，不會自動修改或合併。</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 09／更新通知">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>發現新版但不自動套用</strong><span>讀取 Copier 保存的來源與版本；有新版時建立或更新同一張追蹤 Issue，交由人審查後另開更新 PR。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>每週排程／手動執行</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/check-template-update</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/template-update.yml</code>／<code>check</code><span>Trigger：每週一／手動執行；只有設定開啟才產生 · Timeout：10 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>公版發版候選</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_template_update_notifications.py</code></li></ul></div><span>確認開啟時 workflow 與 checker 同時產生，關閉時兩者都不存在，而且 root 不會誤執行。</span>
             </li>
           </ul></td>
         </tr>

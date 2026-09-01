@@ -152,8 +152,9 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         for path in (root / "template/.github/workflows").iterdir()
         if path.is_file()
     }
+    optional_workflows = {"template-update.yml"}
 
-    assert workflows == {
+    assert workflows - optional_workflows == {
         "ci.yml",
         "issue-triage.yml",
         "milestone-lifecycle.yml",
@@ -163,8 +164,9 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         "spec-to-issue.yml",
         "work-item-closure.yml",
     }
+    assert optional_workflows <= workflows
     assert "8 條現行自動流程" in file_map
-    for workflow in workflows:
+    for workflow in workflows - optional_workflows:
         assert workflow in file_map
     for inactive in ("release-please.yml",):
         assert inactive not in file_map
@@ -405,7 +407,16 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "declarativeState",
         "templateLifecycle",
     ]
-    assert len(data["testing"]["groups"]) == 7
+    assert [group["journey"] for group in data["testing"]["groups"]] == [
+        "01",
+        "02",
+        "03",
+        "04",
+        "05",
+        "06",
+        "07",
+        "09",
+    ]
     duration_rows = data["testing"]["duration"]["rows"]
     assert [row["key"] for row in duration_rows] == ["issue", "release"]
     assert all(len(row["shared"]["items"]) == 6 for row in duration_rows)
