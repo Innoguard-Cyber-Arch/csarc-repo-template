@@ -2417,7 +2417,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>Seven active flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, and release</td>
+					<td>Seven active flows for Issue, Milestone, spec, PR, closure, verification, and vulnerability handling; plus one candidate release flow</td>
 					<td>Template-led</td>
 			</tr>
 			<tr>
@@ -2726,8 +2726,10 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>One implementation:</strong> GitHub Actions has one <code>verify</code> job with a 30-minute timeout and only calls repository scripts.</li>
 <li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
 </ul>
-<p>Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, OSV, Dependabot, and one release workflow are active. Dedicated promotion, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.</p>
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>local and CI execution share scripts and tests; work PRs select fast or full by risk, while Milestone or canary delivery, hotfix, merge queue, manual, and unknown high-risk changes run full.</li><li><strong>Adjustable:</strong><code>coverage_mode</code>, <code>coverage_threshold</code>, and <code>enable_precommit</code>; advanced teams may enable <code>use_reusable_workflow</code> with a full commit SHA.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>scripts/verify-fast</code>, <code>scripts/verify</code>, and <code>.github/workflows/ci.yml</code>.</li></ul></aside></div>
+<p>Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, Work Issue closure, and Dependabot are active in a newly generated repository from its first commit. One release workflow is configured as a candidate pending a successful default-branch run. Dedicated promotion, release-handoff, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.</p>
+<aside class="config-guidance" data-audience="maintainer"><strong>Root repository state</strong><p>In <code>csarc-repo-template</code> itself, OSV is also candidate: its workflow has not yet landed on this repository's own <code>main</code>, and its trigger set does not include <code>pull_request</code>, so it cannot pre-register from a candidate branch. See the CI/CD settings page's current-automation table for the exact live-registration check and timestamp.</p></aside>
+<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>local and CI execution share scripts and tests; work PRs select fast or full by risk, while Milestone or canary delivery, hotfix, merge queue, manual, and unknown high-risk changes run full.</li><li><strong>Adjustable:</strong><code>coverage_mode</code>, <code>coverage_threshold</code>, and <code>enable_precommit</code>; advanced teams may enable <code>use_reusable_workflow</code> with a full commit SHA.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>scripts/verify-fast</code>, <code>scripts/verify</code>, and <code>.github/workflows/ci.yml</code>.</li></ul></aside>
+</div>
 </section>
 
 <section class="slide markdown-slide candidate-slide" id="languages" data-content-key="languages" data-track="languages" aria-label="Choose a language and receive the matching checks">
@@ -3124,18 +3126,18 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>Exact version and changelog</td>
-					<td>Active</td>
-					<td>Release Please opens one reviewed PR; published versions are never rewritten</td>
+					<td>Candidate / Guided</td>
+					<td>Automatic uses a reviewed Release Please PR; when platform policy blocks it, Guided uses a normal PR opened by a person or agent</td>
 			</tr>
 			<tr>
 					<td>Tag and GitHub Release</td>
-					<td>Active</td>
-					<td>Publish automatically only after the version PR, full verification, and downloaded artifact verification pass</td>
+					<td>Candidate / Blocked</td>
+					<td>The sole workflow publishes after the version PR; activation awaits a default-branch run</td>
 			</tr>
 			<tr>
 					<td>Checksums and SBOM</td>
-					<td>Active</td>
-					<td>Build with the exact tag and verify again after downloading the Release assets</td>
+					<td>Configured</td>
+					<td>Included in the same candidate path; Active only after its first successful run</td>
 			</tr>
 			<tr>
 					<td>Attestations and consumption</td>
@@ -3159,7 +3161,7 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 <aside class="technical-detail" data-content-key="manual-release-boundary">
   <h3>Automatic-release ownership</h3>
-  <p>The template root and each new repository publish through their own release workflow. An adopted repository keeps its product-owned workflow. Every path still needs one owner, least privileges, full-SHA pins, a timeout, concurrency behavior, failure recovery, and a runner-cost ceiling; historical runs remain reference evidence only.</p>
+  <p>The template root and each new repository are configured to publish through their own release workflow. An adopted repository keeps its product-owned workflow. Every path still needs one owner, least privileges, full-SHA pins, a timeout, concurrency behavior, failure recovery, and a runner-cost ceiling; historical runs remain reference evidence only.</p>
 <p>Milestone closure remains manual until #400 completes its lifecycle contract, and work-Issue closure remains owned by #401. Work branches are removed after merge; a Milestone delivery branch waits until closure and unfinished work are handled.</p>
 </aside>
 </div>
@@ -3535,7 +3537,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>Release evidence</td>
-					<td>The current workflow produces exact-tag artifacts, checksums, an SPDX SBOM, and immutable-release verification; older handoff and consumption runs remain historical evidence only</td>
+					<td>The candidate workflow is configured to produce exact-tag artifacts, checksums, an SPDX SBOM, and immutable-release verification; activation awaits a default-branch run, and older handoff and consumption runs remain historical evidence only</td>
 			</tr>
 			<tr>
 					<td>Verified language modules</td>
@@ -3775,7 +3777,7 @@ html[data-detail-level="simple"] .detail-panel {
 			<tr>
 					<td>Dependabot, OSV, Syft</td>
 					<td>Dependency updates, vulnerabilities, and SBOM</td>
-					<td>Dependabot and OSV are active; the SBOM contract is conditional and locally tested</td>
+					<td>Dependabot is active; OSV is active in a new repository and candidate here pending this repository&rsquo;s own <code>main</code> landing; the SBOM contract is conditional and locally tested</td>
 			</tr>
 			<tr>
 					<td><img src="data:image/png;base64,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" alt="GitHub Community Projects logo"> <a href="https://github.com/github-community-projects/safe-settings">Safe Settings</a></td>
