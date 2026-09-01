@@ -546,7 +546,7 @@ Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<I
 
 {{< basic >}}
 - `template/` 是下發內容來源；root 保留公版本身的 GitHub 治理與 dogfood 設定。
-- `.csarc/config.yml` 同時是 Copier 的更新紀錄與 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取，後續擴充也增加設定項目，不另建第二份設定檔。
+- `.csarc/config.yml` 是每個 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取。生成 repo 另在同一檔案保存 Copier 來源與版本，root 不保存會立即過期的自我指向資訊。
 - 共通基線與 Python、Rust、TypeScript 模組各自驗證；同時選取多個語言時合併執行，不建立組合專屬流程。
 - 既有 repo 先用 adopt／update dry-run 預覽；確認後只遷移舊 CSARC 結構，再執行下一版 Copier update 並確認產品內容未被覆寫。
 
@@ -555,7 +555,7 @@ Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<I
 {{< /disclosure >}}
 
 {{< detail key="template-release-scope" title="單一來源、版本基線與 root-only 邊界" >}}
-`.csarc/config.yml` 保留 Copier 必要的模板來源與版本，並保存這個 repo 選用的公版能力；設定變更透過 `csarc update --data` 寫回，避免手動修改後與 Copier 不同步。未來的繼承公版應在同一份 YAML 增加自己的設定，不複製 CSARC 已有欄位。
+`.csarc/config.yml` 在 root 保存公版本身選用的能力；生成 repo 另保存 Copier 必要的來源與版本，並透過 `csarc update --data` 寫回。模板來源不偽造 `_src_path` 或 `_commit`，避免指向自己或留下立刻過期的版本。未來的繼承公版應在同一份 YAML 增加具命名空間的設定，不複製 CSARC 已有欄位。
 
 `scripts/sync-paired-files.sh` 讓 root 成為成對檔案的單一來源，`--check` 驗證副本內容與權限。`profiles/catalog.yaml` 保存語言基線與驗收證據；Python 與 Node 基線各自觀察三十天後才前進。
 

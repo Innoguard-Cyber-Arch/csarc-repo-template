@@ -42,7 +42,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 `<approved-full-commit-sha>` 由核准 GitHub Release 的 pinned prompt 提供，不可直接輸入預留字樣。`init`／`adopt` 會要求 `project_description`、`project_run_command` 與 `security_reporting_channel`；前兩項可接受顯示的專案實值預設，安全通報管道預設使用該 repository 的公開 GitHub Issues。公開 Issue 不得張貼 secrets、credentials、personal data 或其他敏感內容，也不得猜測 email 或回應 SLA。GitHub origin 可辨識時，CLI 會用實際 repository URL 產生 badge、clone 指令與 package metadata。`project_run_command` 只是產品啟動方式，不會被當成驗證指令；既有 repo 可用 `project_verification_hook=scripts/verify-skills` 指定一個 repository-relative executable，未指定時才相容沿用 `scripts/verify-product`。
 
-建立或導入時選擇 Python、Rust、TypeScript 的任意組合；結果與分支、驗證、發布等公版選項都保存在 `.csarc/config.yml`。這同時是 Copier 的 answers file，也是 repo 唯一的公版設定來源；請用 `csarc update --data languages=python,rust` 等更新命令調整，不要再建立另一份 profile 設定。
+建立或導入時選擇 Python、Rust、TypeScript 的任意組合；結果與分支、驗證、發布等公版選項都保存在 `.csarc/config.yml`。這是每個 repo 唯一的公版設定來源；生成 repo 也在同一檔案保存 Copier 的來源與版本。請用 `csarc update --data languages=python,rust` 等更新命令調整生成 repo，不要再建立另一份 profile 設定。
 
 CLI 固定驗證 canonical repository numeric ID、immutable stable Release、release attestation、tag 指向與 commit signature，再把 GitHub Release 解析成完整 commit SHA 並顯示計畫；任何不一致都會在 Copier 寫檔前停止。互動模式等使用者確認，CI 或 agent 則要同時明確給 `--yes --non-interactive`。範本來源目前是 private repo，需先以 `gh auth login` 登入；root CLI 不發布到 PyPI。
 
@@ -51,7 +51,7 @@ CLI 固定驗證 canonical repository numeric ID、immutable stable Release、re
 | 路徑 | 用途 |
 | --- | --- |
 | `copier.yml`、`template/` | 問題、下發檔案與建立後任務 |
-| `.csarc/config.yml`（生成 repo） | Copier 來源／版本與公版選項的單一設定來源 |
+| `.csarc/config.yml` | root 與生成 repo 共用的公版設定；生成 repo 另含 Copier 來源／版本 |
 | `profiles/catalog.yaml` | 已支援語言與版本政策 |
 | `.github/`、`policies/` | 公版本身的 CI 與 GitHub 設定 |
 | `scripts/verify-template.sh` | 建立、更新、語言與供應鏈回歸 |
