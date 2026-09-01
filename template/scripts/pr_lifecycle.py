@@ -893,10 +893,7 @@ def require_routine_route(  # noqa: C901
         )
     if (
         not isinstance(base_ref, str)
-        or (
-            base_ref != "dev/next"
-            and DELIVERY_BRANCH.fullmatch(base_ref) is None
-        )
+        or DELIVERY_BRANCH.fullmatch(base_ref) is None
         or not isinstance(head_ref, str)
         or not isinstance(head_repo, str)
         or head_repo.casefold() != repo.casefold()

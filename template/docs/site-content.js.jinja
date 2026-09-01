@@ -43,10 +43,10 @@ window.CSARC_SITE_CONTENT = {
   ],
   workflow: [
     { title: "1｜讀取記憶並定義工作", detail: "先讀 docs/README.md 的 durable project memory 地圖、Spec-Driven Development（SDD）的相關 living specifications 與 Architecture Decision Records（ADR），再限量搜尋 open／closed Issues、comments 與 linked PR；記錄既有決策是沿用、取代或駁回。" },
-    { title: "2｜分支與實作", detail: "Feature parent 保存 SDD story，可獨立交付的 Task／Bug 才拆 subissue。{% if branch_strategy == 'delivery' %}有期限的 Milestone 工作進對應 dev/m<編號>-<簡稱>，一般孤立工作進 dev/next；只有文件化的獨立 soak／canary 才使用暫時 dev/i<Issue>-*，hotfix 才直接 main。main 前進後由 owner 以 reviewed sync PR 回流{% else %}從 {{ branch_strategy }} 或最終回到它的 open PR 分支建立{% endif %} work branch，並用 gh issue develop 保留 native Development link；若超出原單就另開 Issue。" },
+    { title: "2｜分支與實作", detail: "Feature parent 保存 SDD story，可獨立交付的 Task／Bug 才拆 subissue。{% if branch_strategy == 'delivery' %}有期限的 Milestone 工作進對應 dev/m<編號>-<簡稱>；一般孤立工作從最新 main 建立並直接回 main。只有文件化的獨立 soak／canary 才使用暫時 dev/i<Issue>-*，hotfix 才形成緊急 release boundary{% else %}從 {{ branch_strategy }} 或最終回到它的 open PR 分支建立{% endif %} work branch，並用 gh issue develop 保留 native Development link；若超出原單就另開 Issue。" },
     { title: "3｜驗證", detail: "本機與 CI 共用 repo 內的驗證程式。Issue PR 依變更選擇 docs／fast／full；未知路徑、promotion、hotfix、release recovery、merge queue 或手動 dispatch 走 full。現行 Action 只有一個 verify job，完整契約與封存邊界見 docs/ci-policy.md。" },
     { title: "4｜審查", detail: "非 draft PR 會從導入時設定的 reviewers 排除作者後輪派一位；PR assignee、classification label 與 Milestone 從 linked Issue 同步。使用 closing keyword 前，自身與 referenced Issue 不得留有未勾選 task。" },
-    { title: "5｜交付", detail: "{% if branch_strategy == 'delivery' %}Milestone 完成與 dev/next 固定窗口才形成批次 release 邊界，全部 no-release 就略過，hotfix 才立即發布；{% endif %}成品 workflow 只接受 release-source evidence，再建立可追溯成品、SHA-256 與非空 SBOM；部署依專案另訂。" }
+    { title: "5｜交付", detail: "{% if branch_strategy == 'delivery' %}Milestone 完成、獨立 canary 與 hotfix 形成 release boundary；standalone 與 bot PR 直接進 main 後保留 release intent，全部 no-release 就略過；{% endif %}成品 workflow 只接受 release-source evidence，再建立可追溯成品、SHA-256 與非空 SBOM；部署依專案另訂。" }
   ],
   safeguards: [
 {% if "python" in languages or "typescript" in languages %}

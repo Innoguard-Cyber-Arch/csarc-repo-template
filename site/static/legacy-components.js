@@ -310,9 +310,9 @@ milestone: same as Issue #123`
         {
           title: '可調整｜工作 PR 的分支模型',
           goal: '工作先進 dev，完整批次再進 main；main 更新後以 PR 同步，不直接改寫開發分支。',
-          summary: '`branch_strategy` 可選 delivery、main 或 dev；validator 依所選模型檢查目的分支與同步鏈。',
+          summary: '`branch_strategy` 可選 delivery 或 main；validator 依所選模型檢查目的分支與同步鏈。',
           file: 'copier.yml＋.csarc/config.yml＋scripts/delivery_sync.py',
-          code: `branch_strategy: delivery  # delivery | main | dev
+          code: `branch_strategy: delivery  # delivery | main
 
 work:    type/123-short-slug -> dev/m8-*
 release: dev/m8-* -> main
@@ -594,10 +594,10 @@ Policy review:
         {
           title: 'Copier 只詢問會改變骨架或驗證行為的選項',
           goal: '不提供關閉型別或秘密掃描的開關；嚴格門檻是公版契約。',
-          summary: '語言與分支模式都在建立時明確選擇；delivery 模式把 CI 當整合層，main／dev 仍保留給適合的 repo。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。',
+          summary: '語言與分支模式都在建立時明確選擇；delivery 模式只為 Milestone 建立短命整合 branch，standalone 直接回 main。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。',
           file: 'copier.yml',
           code: `languages: [python]
-branch_strategy: delivery  # delivery | main | dev
+branch_strategy: delivery  # delivery | main
 python_support_mode: latest  # latest | minimum
 python_min_version: "3.12"  # Used only in minimum mode
 coverage_mode: global  # global | diff

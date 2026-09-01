@@ -2891,12 +2891,12 @@ html[data-detail-level="simple"] .detail-panel {
 	<tbody>
 			<tr>
 					<td>Issue PR</td>
-					<td>Work branch → dev</td>
+					<td>Work branch → <code>dev/m*</code> or <code>main</code></td>
 					<td>Review one change and close its linked Issue after merge</td>
 			</tr>
 			<tr>
 					<td>Release PR</td>
-					<td>dev → main</td>
+					<td><code>dev/m*</code> or <code>dev/i*</code> → <code>main</code></td>
 					<td>Fully verify and deliver the batch; Version / delivery then closes the Milestone</td>
 			</tr>
 	</tbody>
@@ -2907,9 +2907,9 @@ html[data-detail-level="simple"] .detail-panel {
 <li>Work branches use <code>type/&lt;Issue&gt;-short-slug</code>, and the PR links the matching open Issue.</li>
 <li>PR titles use the Angular / Conventional Commits form <code>type(scope)!: English summary</code>: <code>feat</code> adds a feature, <code>fix</code> corrects behavior, <code>docs</code> changes documentation, <code>refactor</code> restructures code, <code>test</code> changes tests, <code>build</code> changes builds or dependencies, <code>ci</code> changes automation, <code>chore</code> performs maintenance, and <code>revert</code> undoes a change. Scope and <code>!</code> are optional. Release intent is minor for <code>feat</code>, patch for <code>fix</code> / <code>revert</code>, major for <code>!</code>, and no release for the other types.</li>
 <li>The classification label and Milestone match the linked Issue; the PR author must be an assignee.</li>
-<li>Milestone work targets <code>dev/m&lt;Milestone&gt;-*</code>; ordinary standalone work targets <code>dev/next</code>.</li>
-<li>When main advances, a <code>sync/main-to-*</code> PR updates active dev branches without direct pushes or history rewrites.</li>
-<li>Only an explicitly labeled standalone hotfix may target main directly. Rules governance decides who may merge.</li>
+<li>Milestone work targets <code>dev/m&lt;Milestone&gt;-*</code>; ordinary standalone work starts from current <code>main</code> and targets <code>main</code> directly.</li>
+<li>Main advances do not fan out synchronization. Each Milestone uses one reviewed <code>sync/main-to-m*</code> PR at final promotion; only an owner-recorded dependency permits an earlier sync.</li>
+<li>A documented standalone canary may use one short-lived <code>dev/i&lt;Issue&gt;-*</code>; an explicitly labeled hotfix may target main directly. Rules governance decides who may merge.</li>
 </ul>
 </div>
 </details>

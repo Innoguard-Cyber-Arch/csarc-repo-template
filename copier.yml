@@ -59,6 +59,43 @@ _tasks:
   - command: "uv run --no-project python scripts/render_site.py"
 _migrations:
   - command:
+      - python3
+      - -c
+      - |-
+        import hashlib
+        import re
+        from pathlib import Path
+
+        path = Path(".copier-answers.yml")
+        source = path.read_text(encoding="utf-8")
+        migrated, count = re.subn(
+            r"(?m)^(branch_strategy:\s*)(?:dev|'dev'|\"dev\")(\s*(?:#.*)?)$",
+            r"\1main\2",
+            source,
+        )
+        if count > 1:
+            raise SystemExit("Found duplicate legacy branch_strategy answers")
+        if count == 1:
+            path.write_text(migrated, encoding="utf-8")
+
+        legacy_template_tests = {
+            Path("tests/test_delivery_sync.py"):
+                "50fc918666723264272a9268ebaf5c0b120341e588e1e1f5841686f8448abc99",
+            Path("tests/test_promotion_gate.py"):
+                "c09481ea74c15f679e8eea5c39516a1a77e7d941b91bc716fb225a1ac2b3b0ad",
+            Path("tests/test_release_policy.py"):
+                "89d35a7eafdf5ec17f607e59ea192b2676989bf2e0ec94dd76961baacdd41bf5",
+        }
+        for legacy_test, legacy_sha256 in legacy_template_tests.items():
+            if (
+                legacy_test.is_file()
+                and not legacy_test.is_symlink()
+                and hashlib.sha256(legacy_test.read_bytes()).hexdigest()
+                == legacy_sha256
+            ):
+                legacy_test.unlink()
+    when: "{{ _stage == 'before' }}"
+  - command:
       - "{{ _copier_python }}"
       - "-c"
       - "import hashlib, pathlib, shutil, sys; target = pathlib.Path('tests/test_spec_to_issue.py'); expected = 'cb936cab1f2e239b28c1f9d59edb714a7c8758633f95cbb98989571fa3b2a5fa'; current = hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else ''; shutil.copy2(sys.argv[1], target) if current == expected else None"
@@ -139,9 +176,8 @@ branch_strategy:
   type: str
   help: Choose how issue branches are integrated before promotion to main
   choices:
-    Milestone delivery branches and rolling dev/next: delivery
+    Main with short-lived Milestone delivery branches: delivery
     Short branch → pull request → main: main
-    Shared test environment → dev → main: dev
   default: delivery
 
 package_name:
