@@ -1,5 +1,7 @@
 """Regression tests for the minimal Journey 03 verification workflow."""
 
+import shlex
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -88,6 +90,66 @@ def test_template_smoke_reads_config_from_the_generated_repository() -> None:
         '(cd "$smoke_root/project" '
         "&& python3 scripts/csarc_config.py languages >/dev/null)" in source
     )
+
+
+def test_template_verification_reports_stage_timings() -> None:
+    """Keep the full entry point readable in local and Actions logs."""
+    entry = REPO_ROOT / "scripts/verify-template.sh"
+    source = entry.read_text(encoding="utf-8")
+    quoted_entry = shlex.quote(str(entry))
+    stage_names = (
+        "Repository contracts",
+        "Static assets and paired files",
+        "Python environment",
+        "Python quality",
+        "Regression tests",
+        "Package smoke test",
+        "GitHub Actions audit",
+    )
+    assert all(f'run_stage "{name}"' in source for name in stage_names)
+    success = subprocess.run(  # noqa: S603 - sources this repository's script
+        [
+            "/bin/bash",
+            "-c",
+            f"""
+source {quoted_entry}
+verification_started=$SECONDS
+sample_stage() {{ :; }}
+run_stage "Sample stage" sample_stage
+print_timing_summary
+""",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "[verify-template] START Sample stage" in success.stdout
+    assert "[verify-template] PASSED Sample stage (" in success.stdout
+    assert "[verify-template] Timing summary" in success.stdout
+    assert "TOTAL" in success.stdout
+
+    failure = subprocess.run(  # noqa: S603 - sources this repository's script
+        [
+            "/bin/bash",
+            "-c",
+            f"""
+source {quoted_entry}
+verification_started=$SECONDS
+trap report_failure ERR
+sample_failure() {{ return 7; }}
+run_stage "Broken stage" sample_failure
+""",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert failure.returncode == 7
+    assert "[verify-template] FAILED Broken stage (" in failure.stderr
+    assert "FAILED" in failure.stderr
+    assert "TOTAL" in failure.stderr
 
 
 def test_release_verification_contains_issue_pr_regressions() -> None:
