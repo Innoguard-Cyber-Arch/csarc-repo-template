@@ -2527,11 +2527,13 @@ html[data-detail-level="simple"] .detail-panel {
   <div class="markdown-body"><h3 id="our-choice">Our choice</h3>
 <ul>
 <li><strong>Overall:</strong> turn the request into one Issue that can be completed and verified independently.</li>
+<li><strong>Work branch:</strong> when implementation starts, create one short-lived <code>type/&lt;Issue&gt;-short-slug</code> branch per Issue and do not mix unrelated work into it.</li>
 <li><strong>Milestone:</strong> create one only when several Issues share an outcome, deadline, or delivery batch, and give it one lifecycle tracking Issue.
 <ul>
 <li>Title it <code>Milestone &lt;number&gt;: &lt;Milestone title&gt;</code>; the text after the colon must exactly match the Milestone title.</li>
 <li>Keep approvals, objections, and early termination in the body or comments, not the title.</li>
 <li>Work may start only after at least one person other than the proposer agrees and no objection remains unresolved.</li>
+<li>Under the default delivery-branch strategy, use exactly one active <code>dev/m&lt;Milestone&gt;-*</code> branch for the Milestone; all of its work branches merge there.</li>
 </ul>
 </li>
 <li><strong>Issue:</strong> choose the Feature, Task, Bug, or Documentation form, then state the problem, acceptance criteria, and verification.
@@ -3093,6 +3095,7 @@ html[data-detail-level="simple"] .detail-panel {
     <p class="subtitle">Verify the promotion source, then select a safe delivery mode from current platform capabilities.</p>
   </header>
   <div class="markdown-body"><p><strong>Milestone closure:</strong> after a successful release records its delivery evidence, close the lifecycle tracking Issue and the Milestone. To stop early, state why and move or cancel every unfinished Issue first.</p>
+<p><strong>Branch cleanup:</strong> delete a work branch after its PR merges. Delete the Milestone delivery branch only after release and after every unfinished Issue is moved or cancelled. Local worktrees with uncommitted changes are never removed automatically.</p>
 <table>
 	<thead>
 			<tr>

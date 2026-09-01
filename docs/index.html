@@ -2686,8 +2686,10 @@ html[data-detail-level="simple"] .detail-panel {
           <summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">先定義單項工作，需要時才組成里程碑</span></summary>
           <ul class="work-definition-list">
             <li><strong>單項工作：</strong>先建立 Issue，寫清楚問題、完成條件、驗證方式與負責人；內容足以開始實作就不增加其他文件。</li>
+            <li><strong>工作分支：</strong>開始實作時，一張 Issue 建立一個短期分支，以 <code>type/&lt;Issue&gt;-short-slug</code> 命名；同一分支不混入其他工作。</li>
             <li><strong>Issue 類型與拆分：</strong>先選工作類型，只在工作能獨立完成或超出原範圍時拆分。<details class="package-disclosure inline-disclosure"><summary><span class="tech-name">查看可用類型與拆分規則</span></summary><div class="package-health"><ul><li><strong>Feature：</strong>需要多項工作一起完成的成果。</li><li><strong>Task：</strong>可獨立完成與驗證的工作。</li><li><strong>Bug：</strong>結果不符合預期。</li><li><strong>Documentation：</strong>只修改文件或範例。</li><li><strong>拆分：</strong>同一個完成條件與同一份驗證能證明就不拆；能獨立完成或超出原範圍但必須補做，才建立 Sub-issue。Parent 表示未完成的共同成果，Dependency 表示先後順序。</li></ul></div></details></li>
             <li><strong>里程碑：</strong>多張 Issue 有共同目標、期限或交付批次時才建立，並指定一張生命週期追蹤 Issue。標題固定為 <code>Milestone &lt;編號&gt;: &lt;里程碑名稱&gt;</code>，冒號後須與里程碑名稱完全相同；核准、反駁與提前終止留在內文與留言。至少一位非提案者同意，且沒有尚未解決的反駁，才開始執行。</li>
+            <li><strong>里程碑分支：</strong>採本模板預設的交付分支模式時，一個進行中的里程碑只使用一個 <code>dev/m&lt;里程碑&gt;-*</code>；所屬工作分支都合入這裡，里程碑之間不共用。</li>
             <li><strong>例外：</strong>Duplicate 是 Issue 的重複結案方式；緊急工作仍先定義為 Bug，如何快速交付由「PR／合併」處理。</li>
           </ul>
         </details>
@@ -2700,11 +2702,13 @@ html[data-detail-level="simple"] .detail-panel {
 <div class="markdown-body basic-summary"><h3 id="我們的選擇">我們的選擇</h3>
 <ul>
 <li><strong>整體：</strong> 先把需求整理成一張可獨立完成與驗證的 Issue。</li>
+<li><strong>工作分支：</strong> 開始實作時，每張 Issue 建立一個 <code>type/&lt;Issue&gt;-short-slug</code> 短期分支，不混入其他工作。</li>
 <li><strong>里程碑：</strong> 多張工作有共同目標、期限或交付批次時才建立，並配一張生命週期追蹤 Issue。
 <ul>
 <li>標題使用 <code>Milestone &lt;編號&gt;: &lt;里程碑名稱&gt;</code>；冒號後須與里程碑名稱完全相同。</li>
 <li>核准、反駁與提前終止寫在內文或留言，不放進標題。</li>
 <li>至少一位非提案者同意，且沒有尚未解決的反駁，才開始執行。</li>
+<li>採預設交付分支模式時，一個進行中的里程碑只使用一個 <code>dev/m&lt;里程碑&gt;-*</code>；所屬工作分支都合入這裡。</li>
 </ul>
 </li>
 <li><strong>Issue：</strong> 選擇 Feature、Task、Bug 或 Documentation 表單，再寫清楚問題、完成條件與驗證。
@@ -3356,7 +3360,7 @@ html[data-detail-level="simple"] .detail-panel {
       <p class="context-line"><strong>設計流程｜</strong>Issue PR 只宣告 patch／minor／major／no-release 意圖；里程碑完成、<code>dev/next</code> 固定窗口、isolated canary 或 hotfix 才形成 release 邊界，整批取最高意圖，全部 no-release 就略過。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">不為版本號另加一套平台</span></summary><ul><li><strong>Changesets：</strong>適合 npm workspace；CI-only／Python 案會多背 Node 設定</li><li><strong>Nx release：</strong>適合既有 Nx 大型 workspace；本案只需一個 release unit</li><li><strong>profile 各自編號：</strong>會增加相依矩陣與升級對版成本</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">里程碑完成後，依能力選擇交付方式</span></summary><p><strong>里程碑結案：</strong>發版成功並補齊交付證據後，關閉生命週期追蹤 Issue 與里程碑；提前終止時先寫明原因，並移轉或取消未完成 Issue。</p><details class="package-disclosure"><summary><span><span class="tech-name">promotion-gated adaptive release</span>＋單一 SemVer</span></summary><div class="package-health release-policy-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜持續維護。</p><p><strong>來源證據：</strong>release-source 先核對 promotion 的 full <code>verify</code>、canary state、納入 PR 與 main tree identity；非 promotion／hotfix 的 main commit 只能 verification-only。</p><p><strong>三態能力：</strong><code>allowed</code>、<code>blocked</code>、<code>unknown</code> 分別記錄 Actions PR、contents、Release 與 dispatch；403、409、無 remote 或無管理權都不會被誤當 allowed。</p><table class="release-policy-matrix" aria-label="Release policy capability matrix"><thead><tr><th>前提</th><th>選擇</th><th>行為與保證</th><th>限制與 fallback</th></tr></thead><tbody><tr><td>來源有效且四項 allowed</td><td>Release PR</td><td>可審查版本／changelog；合併後帶 source run ID dispatch 成品</td><td>任一能力漂移就不再選用</td></tr><tr><td>來源有效；PR blocked／unknown；其餘 allowed</td><td>Direct</td><td>只為已版本化且含 CHANGELOG 的最新 main 配置 tag；亂序 run no-op</td><td>缺少版本 commit 時轉為 verification-only，需維護者先開 PR</td></tr><tr><td>來源無效或任一交付寫入非 allowed</td><td>Verification only</td><td>保存 machine-readable artifact</td><td>不建立 release；後續 run 重新判斷</td></tr></tbody></table><p class="reference">Ref. <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer">GitHub workflow trigger docs</a> and live workflow runs, accessed August 24, 2026.</p></div></details><p><strong>收斂：</strong>direct mode 重讀 default branch head，只有最新 main commit 且 source、tag、CHANGELOG、promotion evidence 一致時才能交付；concurrency 不必保證 FIFO。<br><strong>成品：</strong>workflow 不監聽任意 tag push，只接受 release-source run ID；tag checkout 產生 digest、SBOM／attestation，不重跑 promotion 已完成的 full runtime CI。</p></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">里程碑完成後，依能力選擇交付方式</span></summary><p><strong>里程碑結案：</strong>發版成功並補齊交付證據後，關閉生命週期追蹤 Issue 與里程碑；提前終止時先寫明原因，並移轉或取消未完成 Issue。</p><p><strong>分支清理：</strong>工作 PR 合併後刪除該工作分支；發版完成且未完成工作已移轉或取消後，才刪除里程碑交付分支。GitHub 自動刪除已合併的來源分支，本機只清理乾淨且可確認已合併的 worktree。</p><details class="package-disclosure"><summary><span><span class="tech-name">promotion-gated adaptive release</span>＋單一 SemVer</span></summary><div class="package-health release-policy-health"><p><a href="https://github.com/googleapis/release-please" target="_blank" rel="noreferrer">googleapis/release-please</a>｜Apache-2.0｜持續維護。</p><p><strong>來源證據：</strong>release-source 先核對 promotion 的 full <code>verify</code>、canary state、納入 PR 與 main tree identity；非 promotion／hotfix 的 main commit 只能 verification-only。</p><p><strong>三態能力：</strong><code>allowed</code>、<code>blocked</code>、<code>unknown</code> 分別記錄 Actions PR、contents、Release 與 dispatch；403、409、無 remote 或無管理權都不會被誤當 allowed。</p><table class="release-policy-matrix" aria-label="Release policy capability matrix"><thead><tr><th>前提</th><th>選擇</th><th>行為與保證</th><th>限制與 fallback</th></tr></thead><tbody><tr><td>來源有效且四項 allowed</td><td>Release PR</td><td>可審查版本／changelog；合併後帶 source run ID dispatch 成品</td><td>任一能力漂移就不再選用</td></tr><tr><td>來源有效；PR blocked／unknown；其餘 allowed</td><td>Direct</td><td>只為已版本化且含 CHANGELOG 的最新 main 配置 tag；亂序 run no-op</td><td>缺少版本 commit 時轉為 verification-only，需維護者先開 PR</td></tr><tr><td>來源無效或任一交付寫入非 allowed</td><td>Verification only</td><td>保存 machine-readable artifact</td><td>不建立 release；後續 run 重新判斷</td></tr></tbody></table><p class="reference">Ref. <a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer">GitHub workflow trigger docs</a> and live workflow runs, accessed August 24, 2026.</p></div></details><p><strong>收斂：</strong>direct mode 重讀 default branch head，只有最新 main commit 且 source、tag、CHANGELOG、promotion evidence 一致時才能交付；concurrency 不必保證 FIFO。<br><strong>成品：</strong>workflow 不監聽任意 tag push，只接受 release-source run ID；tag checkout 產生 digest、SBOM／attestation，不重跑 promotion 已完成的 full runtime CI。</p></details>
       </div>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>promotion 與 release-source：</strong><code>promotion.yml</code>＋<code>scripts/promotion_gate.py</code>＋<code>release-please.yml</code></li><li><strong>能力與版本配置：</strong><code>scripts/release_policy.py</code>；CLI 做唯讀 preflight，workflow 每次重新偵測</li><li><strong>查詢證據：</strong>promotion／release-source artifact 保留 90 天，PR、Issue、里程碑、commit 與 tag 作長期索引</li></ul></aside>
       <aside class="selection-note"><strong>目前邊界</strong><span>不要求導入者建立 PAT、GitHub App 或修改無權控制的組織政策；若 contents、Release 或 dispatch 無法確認，workflow 只完成驗證並明確告警，不宣稱已自動發版。Python 排程升版 App 仍是另一個選配身份。</span></aside>
@@ -3375,6 +3379,7 @@ html[data-detail-level="simple"] .detail-panel {
 
 <div class="markdown-body basic-summary"><ul>
 <li>**里程碑結案：**發版成功並補齊交付證據後，關閉生命週期追蹤 Issue 與里程碑；提前終止時先說明原因，並移轉或取消未完成 Issue。</li>
+<li>**分支清理：**工作 PR 合併後刪除工作分支；發版完成並處理完未完成工作後，才刪除該里程碑的交付分支。含未提交內容的本機工作區不會自動刪除。</li>
 </ul>
 <table>
 	<thead>

@@ -80,10 +80,12 @@ Workflows, policies, scripts, and documents shared by root and `template/` are k
 ### Our choice
 
 - **Overall:** turn the request into one Issue that can be completed and verified independently.
+- **Work branch:** when implementation starts, create one short-lived `type/<Issue>-short-slug` branch per Issue and do not mix unrelated work into it.
 - **Milestone:** create one only when several Issues share an outcome, deadline, or delivery batch, and give it one lifecycle tracking Issue.
   - Title it `Milestone <number>: <Milestone title>`; the text after the colon must exactly match the Milestone title.
   - Keep approvals, objections, and early termination in the body or comments, not the title.
   - Work may start only after at least one person other than the proposer agrees and no objection remains unresolved.
+  - Under the default delivery-branch strategy, use exactly one active `dev/m<Milestone>-*` branch for the Milestone; all of its work branches merge there.
 - **Issue:** choose the Feature, Task, Bug, or Documentation form, then state the problem, acceptance criteria, and verification.
   - Use a clear English title; the creator owns the Issue by default.
 - **Exceptions:** close repeated work as Duplicate. Define urgent work as a Bug first; the PR / merge section owns its delivery route.
@@ -191,6 +193,8 @@ Routine updates and security checks run automatically. People step in only for u
 
 {{< slide key="deploy" track="deploy" class="dense" eyebrow="Step 07" title="Connect version policy to artifacts" subtitle="Verify the promotion source, then select a safe delivery mode from current platform capabilities." legacy="false" >}}
 **Milestone closure:** after a successful release records its delivery evidence, close the lifecycle tracking Issue and the Milestone. To stop early, state why and move or cancel every unfinished Issue first.
+
+**Branch cleanup:** delete a work branch after its PR merges. Delete the Milestone delivery branch only after release and after every unfinished Issue is moved or cancelled. Local worktrees with uncommitted changes are never removed automatically.
 
 | Preconditions | Mode | Behavior and guarantee |
 | --- | --- | --- |
