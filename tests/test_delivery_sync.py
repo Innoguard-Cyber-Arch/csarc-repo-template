@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 import runpy
+import subprocess
+import sys
 import urllib.parse
 from pathlib import Path
 from typing import Any
@@ -576,6 +578,28 @@ jobs:
     for name in ("pr-policy.yml", "ci.yml"):
         source = (root / ".github/workflows" / name).read_text()
         assert "secrets.CSARC_SYNC_TOKEN" not in source
+
+
+def test_pr_policy_uses_supported_delivery_gate_arguments() -> None:
+    """Keep the thin workflow aligned with the repo-local command."""
+    root = Path(__file__).parents[1]
+    script = root / "scripts/delivery_sync.py"
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, str(script), "gate", "--help"],
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    supported = set(re.findall(r"--[a-z][a-z-]*", result.stdout))
+    root_workflow = (root / ".github/workflows/pr-policy.yml").read_text()
+    command = re.search(
+        r"python3 scripts/delivery_sync\.py gate"
+        r"(?P<arguments>(?:\n\s+--[^\n]+)+)",
+        root_workflow,
+    )
+    assert command is not None
+    used = set(re.findall(r"--[a-z][a-z-]*", command["arguments"]))
+    assert used <= supported
 
 
 def test_legacy_persistent_delivery_assets_are_removed() -> None:
