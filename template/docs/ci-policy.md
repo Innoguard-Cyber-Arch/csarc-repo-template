@@ -100,7 +100,7 @@ run，目的是設定成本預期，不是永久 SLA。
 | CI | docs／fast／full 依風險 | 一律 full | release workflow 對目前 `main` 跑一次 full | 候選只跑版本／檔案／可打包 focused check；正式發布前已在 main 跑 full |
 | 成品／checksum／SBOM | 不發布 | 不發布 | 版本 PR 合併後從精確 commit 建立 | draft Release 先上傳、下載重驗，成功才公開 |
 | tag／GitHub Release | 不建立 | 不建立 | 版本 PR 合併後由唯一 release workflow 建立 | 重跑只驗同一 tag；不移動 tag、不重寫成品 |
-| attestation／registry | 不建立 | 不建立 | 不自動啟用 | 由 #439 決定選配條件與 owner |
+| attestation／registry | 不建立 | 不建立 | 不提供 | 需要時由產品另案定義 owner 與 OIDC |
 | deployment | 不適用 | 不適用 | 不適用 | 由有真實 runtime target 的產品 repo 定義 |
 
 合併到 `main` 是 repository delivery，不等於 Release。公版本身與新生成 repo 使用 CSARC
@@ -113,7 +113,7 @@ token 或空 deployment environment。因 token 建立的 PR 不會再觸發另�
 
 `scripts/verify_release_consumption.py` 與其測試保留為 conditional 的消費端安全契約。
 checksum 與 SPDX SBOM 已由 `scripts/release_bundle.py` 納入 GitHub Release；attestation、
-registry publishing 與消費端門禁仍須由真實產品 owner 依 #439 接上。
+registry publishing 與消費端門禁不屬於公版；真實產品需要時由 owner 另案接上。
 
 歷史的 Release Please、artifact handoff 與 release follow-up 已由一支 `release.yml` 和兩個
 repo-local 入口取代；promotion、delivery maintenance、release consumption 與 live integration

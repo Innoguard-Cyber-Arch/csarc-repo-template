@@ -74,7 +74,7 @@ CSARC 採一條可審查、可重跑的自動發版路徑：
 | tag／GitHub Release | Active | `.github/workflows/release.yml` | 版本 PR 合併後才建立；draft 到 immutable 的 fail-closed flow |
 | source／語言成品 | Active | `scripts/release_bundle.py` | 選到的 Python、TypeScript、Rust 原生 package 加 source archive |
 | checksum／SBOM／release evidence | Active | `scripts/release_bundle.py`＋Syft | 缺檔、竄改、錯 tag、錯 commit 與重跑測試 |
-| registry／attestation | Conditional | #439 | 未核准前不取得 registry token、`id-token` 或 attestation 權限 |
+| registry／attestation | Product-owned | 產品 Issue／ADR | 公版不提供選項、token、`id-token` 或 publisher job |
 | artifact consumption | Conditional | `scripts/verify_release_consumption.py` | 真實消費者明確採用後才是門禁 |
 | repository delivery | Active | CI、PR policy、#429 branch model | 精確 PR head、review、分級驗證與 closing evidence |
 | production deployment | Not applicable | consuming product | 必須由有真實 runtime 的產品自行定義 |
@@ -102,4 +102,4 @@ CSARC 採一條可審查、可重跑的自動發版路徑：
 - GitHub Actions 暫時不可用時，可在本機跑相同 repo-local 驗證並保存輸出，但 required check 不因此略過。
 - 版本候選失敗時修正來源 commit 或重新產生版本 PR，不直接編輯 bot branch 來繞過 allowlist。
 - draft 發布失敗可安全重跑；若 Release 已 immutable，只能驗證既有內容，不能覆寫。
-- 需要 registry、attestation 或部署時，先由 #439 或產品自己的 Issue／ADR 定義 owner、權限、復原與消費端驗證，不擴張這支 baseline workflow。
+- 需要 registry、attestation 或部署時，由產品自己的 Issue／ADR 定義 owner、權限、復原與消費端驗證，不擴張這支 baseline workflow。

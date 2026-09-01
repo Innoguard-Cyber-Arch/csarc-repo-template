@@ -14,7 +14,7 @@ policy 驗證 repository、tag、digest 與 signer，並在不符時停止，才
 | 公版 GitHub Release | Active | `release.yml` 在受審查版本 PR 合併後發布 verified immutable Release |
 | checksum 與 SPDX SBOM | Active | `scripts/release_bundle.py` 建立、下載並重驗 exact-tag 成品 |
 | attestation consumption | Conditional | `scripts/verify_release_consumption.py` 及測試保留 fail-closed policy |
-| PyPI／npm／GHCR | Not configured | 模板不產生 publisher job，也不要求 token 或 GitHub environment |
+| PyPI／npm／GHCR | Product-owned | 模板不提供 publisher 選項或 job；需要 registry 時由產品另案設定 OIDC 與 environment |
 | production deployment | Not applicable | 由產品自行定義環境、健康檢查、核准與復原 |
 
 ## Historical evidence

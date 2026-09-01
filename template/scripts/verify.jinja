@@ -207,7 +207,7 @@ grep -q 'Test-Driven Development' docs/README.md
 grep -q 'Behavior-Driven Development' docs/README.md
 grep -q 'docs/decisions/' docs/README.md
 "${platform_python[@]}" - <<'PY'
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from scripts.csarc_config import load_config
 
@@ -219,26 +219,6 @@ if config.get("project_mode") not in {"new", "existing"}:
     raise SystemExit("project_mode must be new or existing")
 if config.get("branch_strategy") not in {"main", "delivery"}:
     raise SystemExit("branch_strategy must be main or delivery")
-mode = config.get("container_mode", "none")
-if mode not in {"none", "verify", "ghcr"}:
-    raise SystemExit(f"Invalid container mode: {mode!r}")
-enabled = mode != "none"
-if enabled:
-    containerfile = config.get("containerfile_path", "")
-    if not isinstance(containerfile, str):
-        raise SystemExit("Container file must be a string")
-    path = PurePosixPath(containerfile)
-    if not containerfile or path.is_absolute() or ".." in path.parts:
-        raise SystemExit("Container file must be a safe repository-relative path")
-    if not Path(containerfile).is_file():
-        raise SystemExit(f"Container file does not exist: {containerfile}")
-    smoke = config.get("container_smoke_command", "")
-    if (
-        not isinstance(smoke, str)
-        or "$IMAGE" not in smoke
-        or len(smoke.splitlines()) != 1
-    ):
-        raise SystemExit("Container smoke command must be one line using $IMAGE")
 PY
 "${platform_python[@]}" -m json.tool policies/repository.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/actions.json >/dev/null

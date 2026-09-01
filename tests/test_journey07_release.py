@@ -76,6 +76,23 @@ def test_template_only_adds_release_workflow_to_new_repositories() -> None:
     assert '{% if "rust" in languages %}' in template
 
 
+def test_template_only_offers_working_delivery_options() -> None:
+    """Do not expose settings that cannot change generated behavior."""
+    config = yaml.safe_load((ROOT / "copier.yml").read_text(encoding="utf-8"))
+
+    unsupported = {
+        "container_mode",
+        "containerfile_path",
+        "container_smoke_command",
+        "enable_release_attestations",
+        "enable_pypi_publishing",
+        "pypi_environment",
+        "enable_npm_publishing",
+        "npm_environment",
+    }
+    assert unsupported.isdisjoint(config)
+
+
 def test_retired_archive_has_no_release_workflow_copy() -> None:
     """Use Git history instead of keeping replaced release workflows."""
     archive = ROOT / "archive/ci-cd/2026-08-27"
