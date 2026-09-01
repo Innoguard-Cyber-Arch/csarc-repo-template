@@ -1807,8 +1807,8 @@ def print_capabilities(payload: dict[str, object]) -> None:
         for name, value in states.items()
         if isinstance(value, dict)
     )
-    print(f"GitHub release preflight: {summary or 'unknown'}")
-    print("Runtime workflows recheck capabilities before every release.")
+    print(f"GitHub release planning snapshot: {summary or 'unknown'}")
+    print("Planning only: this template does not enable a release workflow.")
     raw_integrations = payload.get("integrations")
     integrations = (
         raw_integrations if isinstance(raw_integrations, dict) else {}
@@ -2971,7 +2971,7 @@ def apply_milestone_description_plan(
 def capability_preflight(
     script: Path, target: Path, *, emit: bool = True
 ) -> dict[str, object]:
-    """Run the read-only release preflight without making it a prerequisite."""
+    """Inspect release-related capabilities for planning only."""
     repository = target_repository(target)
     if repository is None or not script.is_file():
         payload: dict[str, object] = {
@@ -3964,9 +3964,13 @@ def update_plan_answers(  # noqa: C901
         enabled = repository.visibility == "public" and bool(
             selected_languages(answers)
         )
-        for key in ("enable_codeql", "enable_release_attestations"):
-            if key in answers and key not in explicit_data:
-                update_data[key] = str(enabled).lower()
+        if "enable_codeql" in answers and "enable_codeql" not in explicit_data:
+            update_data["enable_codeql"] = str(enabled).lower()
+        if (
+            "enable_release_attestations" in answers
+            and "enable_release_attestations" not in explicit_data
+        ):
+            update_data["enable_release_attestations"] = str(enabled).lower()
     for key, value in update_data.items():
         previous_value = answers.get(key)
         if key == "languages":

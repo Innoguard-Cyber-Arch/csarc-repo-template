@@ -48,7 +48,6 @@ def test_dependabot_uses_three_day_cooldown() -> None:
         container_mode = container_match.group(1) if container_match else "none"
         if container_mode != "none":
             expected.add("docker")
-
     assert ecosystems == expected
     assert len(re.findall(r"^\s+default-days:\s*3\s*$", config, re.M)) == len(
         ecosystems
@@ -117,3 +116,25 @@ def test_restored_files_have_no_archive_copy() -> None:
         return
     assert not (archive / "root-dependabot.yml").exists()
     assert not (archive / "root-workflows/osv.yml").exists()
+
+    removed_delivery_workflows = {
+        "delivery-maintenance.yml",
+        "dev-next-close.yml",
+        "live-integration.yml",
+        "promotion-post-merge.yml",
+        "promotion.yml",
+        "python-version-policy.yml",
+        "release-consumption.yml",
+        "release-follow-up-policy.yml",
+        "release-please.yml",
+        "release-template.yml",
+    }
+    assert not removed_delivery_workflows.intersection(
+        path.name for path in (archive / "root-workflows").glob("*")
+    )
+    assert not (
+        archive / "template-workflows/delivery-maintenance.yml"
+    ).exists()
+    assert not (archive / "template-workflows/dev-next-close.yml").exists()
+    assert not (archive / "template-workflows/promotion.yml").exists()
+    assert not (archive / "template-workflows/release-please.yml").exists()

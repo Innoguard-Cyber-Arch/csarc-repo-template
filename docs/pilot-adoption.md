@@ -50,7 +50,7 @@
 
 直接採用 additive labels、squash-only merge、merge 後刪 branch、least-privilege Actions、CODEOWNERS、Issue／PR policy、OSV、Zizmor、Gitleaks、治理漂移、更新通知與 release capability detection。
 
-產品覆寫只有 profile 與驗證分工：公版使用 `ci` profile 管治理，產品專屬 `product-ci.yml` 執行既有 Docker evaluation 與 telemetry，避免為了公版改造產品封裝。GitHub Free private repo 無法強制 Ruleset，組織政策也禁止 Actions 建立或核准 PR；desired policy 留在 repo，runtime release 依能力降級，沒有假裝已受保護。
+產品覆寫只有 profile 與驗證分工：公版使用 `ci` profile 管治理，產品專屬 `product-ci.yml` 執行既有 Docker evaluation 與 telemetry，避免為了公版改造產品封裝。GitHub Free private repo 無法強制 Ruleset，組織政策也禁止 Actions 建立或核准 PR；desired policy 留在 repo，發版維持產品自行負責且目前未自動化，沒有假裝已受保護或已能發布。
 
 ## 試行發現
 

@@ -51,9 +51,9 @@
       <section id="workflow">
         <h2><span>開發流程</span></h2>
         <p>開 Issue／Milestone 前先搜尋 open／closed 歷史工作並摘要既有決策；Feature parent 保存 SDD story，Task／Bug subissues 保存可交付工作，Milestone 只管理有期限的 delivery。PR 保留 native Development link、Issue 連結與精簡清單，closing PR 的自身與 referenced Issue checklist 都必須完成。</p>
-{% if branch_strategy == "delivery" %}        <p class="notice"><strong>Delivery route：</strong><code>main</code> 是唯一永久 branch；並行 Milestone 各自使用短命 <code>dev/m*</code>，一般孤立 Issue 從最新 main 建立並直接回 main。只有獨立 soak／canary 才用一次性的 <code>dev/i*</code>。Milestone 到 final promotion 才同步最新 main；不得 fan out、直接 push、建立假 Milestone 或永久 isolated branch。</p>
+{% if branch_strategy == "delivery" %}        <p class="notice"><strong>Delivery route：</strong><code>main</code> 是唯一永久 branch；並行里程碑各自使用短命 <code>dev/m*</code>，一般孤立 Issue 從最新 main 建立並直接回 main。只有獨立 soak／canary 才用一次性的 <code>dev/i*</code>。里程碑到 final delivery 才同步最新 main；不得 fan out、直接 push、建立假里程碑或永久 isolated branch。</p>
 {% endif %}        <p class="notice"><strong>分層 CI：</strong>本機與 CI 共用 repo 內的驗證程式。Issue PR 依變更選擇 docs／fast／full；未知路徑、promotion、hotfix、release recovery、merge queue 或手動 dispatch 走 full。現行 <code>.github/workflows/ci.yml</code> 只有一個 <code>verify</code> job，timeout 為 30 分鐘；專用 release、安全、治理、部署與排程 workflows 仍封存。完整契約見 <code>docs/ci-policy.md</code>。</p>
-        <p class="notice"><strong>Actions 額度 fallback：</strong>zero-step billing block 被機械式確認、且 job 未執行任何 step 時，agent 對精確 PR SHA 執行 <code>./scripts/verify</code>、列出無法本機重現的 checks，一般 PR 可留下只對該 SHA 有效的 <code>Actions quota fallback note</code>；direct-main standalone 仍是 human-only merge。{% if branch_strategy == "delivery" %}Promotion 到 main 維持 human attestation/authorization 雙方確認，另須保存 candidate archive/tree、合併後核對 tree identity，且本機證據不可用於 release。{% endif %}錯誤 budget、平台事故、workflow／權限問題、原因不明或真正測試失敗都不得套用；額度重置後補跑正式 checks。</p>
+        <p class="notice"><strong>Actions 額度 fallback：</strong>zero-step billing block 被機械式確認、且 job 未執行任何 step 時，agent 對精確 PR SHA 執行 <code>./scripts/verify</code>、列出無法本機重現的 checks，一般 PR 留下只對該 SHA 有效的 <code>Actions quota fallback note</code> 即可合併，不需要即時人工確認。{% if branch_strategy in ["dev", "delivery"] %}Promotion 到 main 仍維持 human attestation/authorization 雙方確認，另須保存 candidate archive/tree、合併後核對 tree identity，且本機證據不可用於 release。{% endif %}錯誤 budget、平台事故、workflow／權限問題、原因不明或真正測試失敗都不得套用；額度重置後補跑正式 checks。</p>
         <div id="workflow-cards" class="cards"></div>
       </section>
 
@@ -81,14 +81,16 @@
       <section id="release">
         <h2><span>交付與更新</span></h2>
         <p id="release-current" class="notice"></p>
-{% if branch_strategy == "delivery" %}        <p class="notice"><strong>已落地的交付邊界：</strong>Milestone 完成時 promotion 一次，<code>dev/i*</code> 在獨立 canary 後單獨 promotion；standalone 與 bot PR 直接進 main 後保留 release intent，全部 no-release 就不建立空版本，hotfix 立即形成 release boundary。Artifact workflow 只接受已核對的 release-source run ID，不接受任意 tag push，也不重跑 full runtime CI。</p>
+{% if branch_strategy == "delivery" %}        <p class="notice"><strong>批次邊界：</strong>Milestone 或其他 delivery PR 只負責把已驗證內容合併到 <code>main</code>；它不會自動建立版本、tag、GitHub Release 或成品。</p>
 {% endif %}
         <table class="table">
-          <thead><tr><th>Runtime 實測政策</th><th>模式</th><th>保證</th><th>限制／fallback</th></tr></thead>
+          <thead><tr><th>能力</th><th>目前狀態</th><th>現在怎麼做</th></tr></thead>
           <tbody id="release-modes">
-            <tr><td>PR、contents、Release、dispatch 都是 allowed</td><td><strong>Release PR</strong></td><td>release-please 保留可審查的版本與 changelog PR；合併後明確 dispatch 成品 workflow。</td><td>必要能力漂移時自動降級；不要求 App 或 PAT。</td></tr>
-            <tr><td>PR blocked／unknown，其餘三項 allowed</td><td><strong>Direct</strong></td><td>只為已版本化且含 CHANGELOG 的最新 main 配置 tag；亂序 run 成為 no-op。</td><td>缺少版本 commit 時轉為 verification-only，需維護者先開 PR。</td></tr>
-            <tr><td>contents、Release 或 dispatch 任一非 allowed</td><td><strong>Verification only</strong></td><td>執行驗證並保存 machine-readable capability artifact，不建立 release。</td><td>不把未知權限當成功；後續 run 會依新政策重新判斷。</td></tr>
+            <tr><td>PR 的 SemVer 意圖</td><td><strong>Active</strong></td><td>PR 標題只表達 major／minor／patch／no-release。</td></tr>
+            <tr><td>正式版本與 CHANGELOG</td><td><strong>Manual</strong></td><td>產品 owner 以同一張受審查 PR 一起更新。</td></tr>
+            <tr><td>tag／GitHub Release</td><td><strong>Manual／未配置</strong></td><td>產品先決定唯一 release owner；模板沒有 active workflow。</td></tr>
+            <tr><td>checksum／SBOM／attestation</td><td><strong>Conditional</strong></td><td>本機 scripts／tests 保留安全契約，接上實際 publisher 後才執行。</td></tr>
+            <tr><td>production deployment</td><td><strong>Not applicable</strong></td><td>由產品另行定義環境、健康檢查、核准與復原。</td></tr>
           </tbody>
         </table>
         <p id="release-optional" class="notice optional"></p>

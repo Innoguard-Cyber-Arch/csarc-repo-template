@@ -342,7 +342,7 @@ PY
     elif [[ "$actions_pr_degraded" == "true" ]]; then
       [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
         echo "::warning title=Actions policy degraded::Actions cannot approve pull requests although policies/actions.json requests it."
-      echo "DEGRADED Actions PR policy: desired true, live false; an organization policy may block this capability. Runtime release workflows adapt."
+      echo "DEGRADED Actions PR policy: desired true, live false; an organization policy may block this capability. No release workflow is enabled by this script."
       check_degraded=$((check_degraded + 1))
     fi
     if [[ "$actions_default_drift" != "true" && "$actions_pr_degraded" != "true" && "$actions_pr_drift" != "true" ]]; then
@@ -527,7 +527,7 @@ if ! actions_policy_error="$(
   if [[ "$actions_policy_error" =~ (403|409|not\ permitted) ]]; then
     actions_policy_applied=false
     echo "DEGRADED Actions PR policy: $actions_policy_error"
-    echo "The release workflow will select direct or verification-only mode at runtime."
+    echo "No release workflow is enabled; record this degraded capability before designing one."
   else
     echo "Cannot apply Actions workflow permissions for $repo." >&2
     echo "$actions_policy_error" >&2

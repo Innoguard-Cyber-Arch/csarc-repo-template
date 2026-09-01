@@ -1,3 +1,3 @@
 # Changelog
 
-本檔案由 release-please 依合併到 `main` 的 Conventional Commits 維護。
+本檔案目前由產品 owner 在受審查的版本 PR 中維護；若日後啟用自動發版，必須先明確指定唯一 owner。

@@ -128,8 +128,10 @@ use_reusable_workflow:
           title: '共用生命週期與語言模組分開驗收',
           goal: '真實 repo 證明共用導入與線上邊界；語言模組以可重現的生命週期與原生工具驗收。',
           file: 'profiles/catalog.yaml',
-          code: `template_release_policy:
+          code: `template_version_policy:
   strategy: single_semver_for_all_compositions
+  materialization: manual_reviewed_pull_request
+  release_automation: blocked_pending_issue_369
 
 profiles:
   python:
@@ -422,10 +424,10 @@ trustPolicy: no-downgrade`
         {
           title: '固定基線｜OSV 共用本機、PR 與每週掃描',
           goal: '已公開漏洞立即處理，不和一般新版的三天觀察混在一起。',
-          summary: '依賴檔變更與發版候選執行同一支本機程式；每週排程只補沒有 PR 的期間。workflow 不自行重寫掃描條件。',
+          summary: '依賴檔變更與交付候選執行同一支本機程式；每週排程只補沒有 PR 的期間。workflow 不自行重寫掃描條件。',
           file: 'scripts/verify-dependencies＋.github/workflows/ci.yml＋.github/workflows/osv.yml',
           code: `Issue PR with dependency changes -> verify-dependencies
-Release PR -> verify-dependencies
+Delivery PR -> verify-dependencies
 Weekly schedule -> verify-dependencies`
         },
         {
@@ -437,9 +439,9 @@ Weekly schedule -> verify-dependencies`
 enable_codeql: true`
         },
         {
-          title: '固定基線｜真正成品的 SPDX SBOM 與 checksum',
+          title: '條件式契約｜真正成品的 SPDX SBOM 與 checksum',
           goal: '清冊必須來自精確 tag 的真正成品，不能只從原始碼猜測。',
-          summary: 'Syft 產生 SPDX 2.3 SBOM；repo 程式驗證 root package、dependency graph、checksum、來源與 provenance。發版流程只負責在成品出現時觸發，不另外定義規則。',
+          summary: '成品存在時可用 Syft 產生 SPDX 2.3 SBOM；repo 程式驗證 root package、dependency graph、checksum、來源與 provenance。目前沒有 active publisher，因此不宣稱已產生成品證據。',
           file: 'scripts/release_assets.py＋tests/test_release_assets.py',
           code: `syft <extracted-artifacts> -o spdx-json=sbom.spdx.json
 python scripts/release_assets.py build ...
@@ -466,12 +468,12 @@ acknowledgement window. -->`
       ],
       deploy: [
         {
-          title: '發版完成後結束里程碑',
-          goal: '發版成功並留下交付證據後，才關閉生命週期追蹤 Issue 與里程碑。',
-          summary: '正常完成要連回發版與驗證證據；提前終止要先說明原因，並移轉或取消所有未完成 Issue。',
+          title: '人工邊界｜交付與里程碑結案分開',
+          goal: '合併到 main 不等於發版；里程碑完成仍須由 owner 確認 outcome 與必要證據。',
+          summary: '#400 完成前，正常結案與提前終止都維持人工；不由 release workflow 推測完成。',
           file: 'docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/milestone-lifecycle.yml',
           code: `normal completion:
-  release evidence: recorded
+  delivery evidence: recorded
   unfinished Issues: none
   lifecycle Issue: completed
 
@@ -481,48 +483,25 @@ early termination:
   lifecycle Issue: not planned`
         },
         {
-          title: '待啟用｜GitHub App 只給 Python 排程升版用',
-          goal: 'Client ID 放 Variable、private key 放 Secret；App 只建立 PR，不取得 Ruleset bypass，也不把長期憑證寫進 repo 或 .env。',
-          summary: 'release-please 已改用 GITHUB_TOKEN，不再需要這個 App。目前尚未建立 App，python-version-policy.yml 的排程升版 job 會略過；啟用時只給 Contents、Pull requests 讀寫權限。',
-          file: 'Repository Settings／Secrets and variables／Actions',
-          code: `# Settings > Developer settings > GitHub Apps
-# Install App in this repo; generate a private-key PEM.
-gh variable set CSARC_VERSION_BOT_CLIENT_ID \
-  --body '<client-id>'
-gh secret set CSARC_VERSION_BOT_PRIVATE_KEY \
-  < ./private-key.pem
-
-# Local runtime secrets only:
-.env          # ignored; never commit
-.env.example  # placeholders only`
+          title: '目前狀態｜發版 automation 未啟用',
+          goal: '文件只宣稱目前 repository 能由 active file 與 current run 證明的能力。',
+          summary: 'Release Please、promotion、成品發布與 consumption workflows 都在 archive；#369 決定唯一 owner 前維持 manual／conditional。',
+          file: 'docs/adr/release-security-and-dependencies.md',
+          code: `version intent: active
+version + changelog: manual
+tag + GitHub Release: blocked (#369)
+artifact evidence: conditional
+deployment: not applicable`
         },
         {
-          title: '已配置｜每次依 GitHub capability 選 release mode',
-          goal: '不要求導入者提供長效憑證或修改無權控制的組織政策；未知能力一律 fail closed。',
-          summary: 'Actions PR、contents、Release、dispatch 各自輸出 allowed／blocked／unknown；四項都確認才用 release-please，否則交付能力完整才 direct release，再不行就 verification-only。',
-          file: 'scripts/release_policy.py＋release-please.yml',
-          code: `{
-  "mode": "release-pr | direct | verification-only",
-  "capabilities": {
-    "actions_pull_requests": {"state": "allowed | blocked | unknown"},
-    "contents": {"state": "allowed | blocked | unknown"},
-    "release": {"state": "allowed | blocked | unknown"},
-    "dispatch": {"state": "allowed | blocked | unknown"}
-  }
-}`
-        },
-        {
-          title: '已接通｜main 後配置版本並明確啟動成品 workflow',
-          goal: '版本、成品與來源沿用同一條可追溯鏈；並行或亂序 run 不能替舊 commit 配置新 tag。',
-          summary: 'PR 只顯示 SemVer 意圖；direct mode 重讀 main head 與可達 tags，只在版本與 CHANGELOG 已由 PR 寫入時建立 draft release 後 dispatch。判斷 JSON 保存 30 天。',
-          file: 'release_policy.py＋release-please.yml＋release.yml',
-          code: `if remote_main_sha != workflow_sha:
-    mode = "verification-only"
-    reason = "superseded"
-
-next_tag = bump(latest_reachable_tag, merged_commits)
-create_draft_release(next_tag)
-dispatch_artifacts(next_tag)`
+          title: '保留契約｜成品與消費驗證可在本機重跑',
+          goal: '保留 exact-tag、checksum、SBOM、provenance 與 consumption 的 fail-closed 邊界，不假裝已有 publisher。',
+          summary: 'scripts／tests 是 conditional contract；真正 workflow 必須另行定義 owner、trigger、最小權限、timeout、concurrency、成本與成功／受控失敗 evidence。',
+          file: 'scripts/release_assets.py＋scripts/verify_release_consumption.py',
+          code: `build exact-tag artifacts
+verify SHA-256 + SPDX 2.3 + source identity
+publish only after an owner is approved
+consumer verifies its own policy`
         }
       ],
       knowledge: [
@@ -558,7 +537,7 @@ go: {stage: future}`
         {
           title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
           goal: '設定檔可以先審查；實際 repo 建立後才查方案與 API，不能使用的能力會明確略過。',
-          summary: 'Free private 在 repo 保存 ACTIVE Ruleset policy；check 仍比對 repository、Actions 與政策標籤，再將 Ruleset 限制標示 DEGRADED，並在 PR、workflow log 與 annotation 留下具體紀錄。public／Pro／Team／Enterprise 以有效規則作為門禁，可修正設定對不上政策時 fail-closed。GitHub App 仍是另一項獨立條件。',
+          summary: 'Free private 在 repo 保存 ACTIVE Ruleset policy；check 仍比對 repository、Actions 與政策標籤，再將 Ruleset 限制標示 DEGRADED，並在 PR、workflow log 與 annotation 留下具體紀錄。public／Pro／Team／Enterprise 以有效規則作為門禁，可修正設定對不上政策時 fail-closed。',
           file: 'policies/＋scripts/apply-repository-settings.sh',
           code: `policies/repository.json
 policies/actions.json
@@ -594,7 +573,7 @@ Policy review:
         {
           title: 'Copier 只詢問會改變骨架或驗證行為的選項',
           goal: '不提供關閉型別或秘密掃描的開關；嚴格門檻是公版契約。',
-          summary: '語言與分支模式都在建立時明確選擇；delivery 模式只為 Milestone 建立短命整合 branch，standalone 直接回 main。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。',
+          summary: '語言與分支模式都在建立時明確選擇；main 是永久整合線，delivery 模式只為 Milestone 建立短期 dev/m*。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。',
           file: 'copier.yml',
           code: `languages: [python]
 branch_strategy: delivery  # delivery | main
@@ -630,18 +609,14 @@ uv run zizmor . --format plain
 # Paired root/template policies are diff-checked.`
         },
         {
-          title: 'Python 新功能版本滿三十天後，自動建立升版 PR',
-          goal: '不靠人記得升級，也不繞過 Ruff、ty、CI、人工審查或模板更新測試。',
-          summary: '排程讀取 Python 官方發布日期；專用 GitHub App 建立帶 enhancement label 的 PR，通過全部門禁與人工審查後再由維護者合併。',
-          file: 'python-version-policy.yml＋scripts/update_python_version.py',
+          title: 'Python 新功能版本觀察三十天後再人工升級',
+          goal: '保留穩定版觀察期與完整驗證，不假裝已有排程或 GitHub App。',
+          summary: 'profiles/catalog.yaml 保存三十天觀察規則；維護者以一般受審查 PR 更新支援版本。舊 python-version-policy workflow 留在 archive，沒有 active bot identity。',
+          file: 'profiles/catalog.yaml＋scripts/update_python_version.py',
           code: `version_policy:
   stable_release_observation_days: 30
-  update_method: scheduled_verified_pull_request
-  merge_after_full_verification: human
-
-# Required repository settings
-CSARC_VERSION_BOT_CLIENT_ID
-CSARC_VERSION_BOT_PRIVATE_KEY`
+  update_method: manual_reviewed_pull_request
+  merge_after_full_verification: manual`
         },
         {
           title: '共通基線與每個語言模組都要真的執行',
