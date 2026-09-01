@@ -20,8 +20,9 @@
 - 確認舊 CSARC Milestone description 已升級，custom description 仍列入人工審查；不可改動其狀態、期限或 Issue 關聯。
 - 將既有 README 內容放入公版要求的八個區段，不刪除產品操作資訊。
 - 先檢視 `apply-repository-settings.sh plan`，再套用可用政策；不可用能力須記為明確降級。
-- 執行 `./scripts/verify` 與產品原有驗證；本機無法執行的項目要記錄原因，並由 GitHub hosted runner 補足。
-- PR 全部檢查通過後才合併，並記錄耗時、衝突、人工步驟與採用／覆寫政策。
+- 執行 `./scripts/verify` 與產品原有驗證；本機無法執行的項目要記錄原因。若 base 已有可信任 verifier，再由 GitHub hosted runner 補足。
+- 第一張導入 PR 的 base 尚無 verifier 時，保留 repo 外的 machine plan、本機驗證結果與來源 Release／SHA，由非作者人工核對後才合併；不得改成執行 PR head script 或宣稱 hosted checks 已通過。
+- 記錄耗時、衝突、人工步驟與採用／覆寫政策；合併後的 PR 由 base 上的可信任 policy gate 與唯讀 CI 驗證 candidate。
 
 ### 後續更新
 
@@ -54,9 +55,15 @@
 
 ## 試行發現
 
-- 首次導入 PR 的 governance notice checkout base branch；base 尚未有 checker 時原本會以 `127` 失敗。現在明確記為 bootstrap degraded，後續有 checker 的分支仍維持 fail-closed。
+- 首次導入存在平台邊界：base 尚未有 checker，而 PR head 不受信任，不能拿它新增的 script 自我驗證。安全路徑是在 repo 外使用固定 Release／SHA 的 CLI 產生 machine plan、套用同一份未漂移 plan，再由人核對來源、diff 與本機證據；合併後才由 base 上的 policy gate 與唯讀 CI 分工。
 - 產品 evaluation container 固定非 root UID，Linux hosted runner 的 bind mount 原本不可寫。Pilot 將容器執行 UID 對齊 host，並只放寬模型 cache／report 目錄；兩次線上回歸都通過。
 - Copier `--pretend` 可能不輸出檔案明細，即使正式 update 仍會修改檔案。CLI 不再把空輸出宣稱為「no file changes」。
+
+### 2026-09-01 `csarc-ai-setup` 首次導入邊界
+
+- PR #35 的 base `00ad182764bedb7ece7087fefa57051ac7888fb1` 尚無 `scripts/delivery_sync.py`，因此從 trusted base 執行的 PR policy 以 `127` 停止；這不是產品測試失敗，也不能靠執行 head 程式規避。
+- 導入使用不可變來源 `v0.12.2@661b843c17730c5689c99e0e9012a1b425f0e192`，rollout head 為 `d0c5ace4ca18464b057a893587ddcfef2eaf2c8d`；local same-plan apply、`scripts/verify`、`scripts/verify-skills` 與 plan conformance 都有通過證據。
+- 結論是人工核准首次導入，不建立 repo 內自我 checksum 或永久 bypass。若 canonical template 為 private，也不把可讀取來源的廣域 PAT 暴露給 PR 程式碼。
 
 ## 成熟度結論
 

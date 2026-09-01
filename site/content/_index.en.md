@@ -242,23 +242,31 @@ Each check is a snapshot. A setting changed and restored between runs still requ
 
 {{< slide key="template-release" track="template-release" eyebrow="Step 09" title="Copier keeps repositories aligned, and the template dogfoods its rules" subtitle="A template defect affects many projects, so creation, adoption, and update all run as real tests." legacy="false"  class="candidate-slide" >}}
 - `template/` is the delivered source; root retains the template repository's own GitHub governance and dogfood configuration.
-- `.csarc/config.yml` is each repository's only template configuration. Languages, branch strategy, and optional capabilities read from it. Generated repositories also keep Copier source and revision metadata in that file; root does not store self-referential metadata that would immediately become stale.
-- The shared baseline and the Python, Rust, and TypeScript modules are verified independently. Selecting several languages combines modules without creating a combination-specific workflow.
-- An existing repository is adopted and then updated from the next Copier revision, proving product content is preserved.
+- `.csarc/config.yml` is both Copier's update record and the repository's only template configuration. Languages, branch strategy, and optional capabilities read from it; later extensions add settings here instead of creating another configuration file.
+- A new repository selects its languages and capabilities, then receives a baseline it can verify directly. Selecting several languages only combines their independent modules.
+- A first adoption uses a pinned CLI outside the repository to produce an external change plan, then applies that same plan. A person reviews the first PR because the old default branch does not yet contain a trusted verifier.
+- After that first merge, the default branch supplies the trusted PR policy and read-only CI verifies the candidate. Updates still begin with a preview; a conflict leaves the repository unchanged so it can be corrected and rerun.
 - The optional update notice checks weekly and only creates or refreshes one Issue; it never modifies the repository automatically.
 
 {{< disclosure key="copier-update" title="Copier + root dogfood + create/update regression" >}}
-[Copier](https://github.com/copier-org/copier) records source, language, and answers, then reapplies newer template revisions to an editable repository. Conflicts leave the repository unchanged; a person adjusts the affected files, reruns the update, and reviews the PR. GitHub Template copies only once, while PyScaffold would create a second update mechanism, so neither fits this requirement.
+[Copier](https://github.com/copier-org/copier) records source, language, and answers, then reapplies newer template revisions to an editable repository. A person approves the first adoption. A later update conflict leaves the repository unchanged so the affected files can be corrected, rerun, and reviewed in a PR. GitHub Template copies only once, while PyScaffold would create a second update mechanism, so neither fits this requirement.
 {{< /disclosure >}}
 
 {{< detail key="template-release-scope" title="Single source, runtime baselines, and the root-only boundary" >}}
-Root `.csarc/config.yml` records the capabilities selected by the template repository itself. A generated repository additionally records Copier's source and revision and writes changes through `csarc update --data`. The template source does not invent `_src_path` or `_commit` values that point back to itself or immediately become stale. A derived template should add namespaced settings to the same YAML instead of duplicating CSARC fields.
+A generated repository's `.csarc/config.yml` stores Copier's template source and revision together with its selected capabilities. Root uses the same public setting keys without inventing `_src_path` or `_commit` values that point back to itself. Change generated settings through `csarc update --data`; a derived template may add namespaced fields to the same YAML instead of duplicating CSARC settings.
 
 `enable_template_update_notifications` generates `template-update.yml` and `check-template-update` only when selected. Public sources need no secret; private sources use a repository secret limited to read-only access to that template source.
 
 `scripts/sync-paired-files.sh` makes root the source of paired files and verifies copied content and permissions with `--check`. `profiles/catalog.yaml` records runtime baselines and their evidence. Python and Node baselines advance only after their own thirty-day observation period.
 
-`scripts/verify-template.sh` runs create/adopt/update fixtures only in the template repository and is never delivered downstream. Generated repositories use the smaller `scripts/verify` entry point.
+`scripts/verify-template.sh` runs create/adopt/update fixtures only in the template repository and is never delivered downstream. Generated repositories use the smaller `scripts/verify` entry point. The first-adoption machine plan stays outside the target, so proposed files cannot rewrite their own evidence. After the first PR merges, its base supplies the trusted PR policy and read-only CI runs candidate verification.
+{{< /detail >}}
+
+{{< detail key="template-release-status" title="Current automation boundary" >}}
+- **Active:** the CLI creates, adopts, or updates and verifies a candidate before writing the target; template full verification reruns all three paths.
+- **Manual:** a person approves the external plan, source, and first adoption PR.
+- **Pending:** update notification currently has only a repository-local checker; no scheduled notification is claimed until its Action is restored.
+- **Retired:** former reviewer assignment, remote governance, and delivery orchestration do not return with this page.
 {{< /detail >}}
 {{< /slide >}}
 
