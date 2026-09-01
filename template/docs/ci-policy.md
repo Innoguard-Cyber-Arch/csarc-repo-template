@@ -59,17 +59,23 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
 
 ## Current automation
 
-| 能力 | 事件 | Repo-local 入口 | 權限／timeout | 產物與狀態 |
-| --- | --- | --- | --- | --- |
-| CI | `pull_request`、`merge_group`、`workflow_dispatch` | `scripts/ci_tier.py`，再呼叫 `scripts/verify-fast` 或 `scripts/verify-template.sh` | `contents: read`；30 分鐘；同一 PR 新 commit 取消舊 run | `verify` check、step summary；active |
-| PR policy | PR metadata 事件 | `scripts/validate-pr-policy` 與本機 regression | 只給需要的 Issue／PR metadata 權限；固定 timeout | title、Issue、route 與 review policy；active |
-| Dependency vulnerability | weekly、manual、相關變更 | `scripts/verify-dependencies` | `contents: read`；固定 timeout | OSV 結果；active，邏輯由依賴安全擁有 |
-| Issue triage | Issue 事件 | workflow 內的 bounded routing | 最小 Issue metadata write | label／milestone routing；active |
-| Spec to Issue | spec 事件／manual | checked-in spec conversion entrypoint | 最小 Issue metadata write | 可審查 Issue；active |
-| Milestone lifecycle | milestone／Issue 事件 | 現行 workflow | 最小 metadata write | 部分自動化；完整結案仍由 #400 擁有 |
-| Work Issue closure | 里程碑工作 PR 合併進 `dev/m*` | `scripts/pr_lifecycle.py close-work` | `contents: read`、Issue write；5 分鐘 | workflow 已啟用；closed event checkout 修正仍由 #401 驗收 |
-| Dependabot | schedule／manifest | `.github/dependabot.yml` | GitHub 原生 bot 邊界 | dependency PR；active |
-| Version／Release | `main` push、manual rerun | `scripts/release_policy.py`、`scripts/verify-release-candidate`、`scripts/release_bundle.py` | top-level read；單一 release job 才有 `contents`／PR／Issue／status write；30 分鐘 | Automatic 或 Guided 版本 PR；合併後由同一 workflow 發布；candidate／blocked，待 default branch live run |
+下表逐項列出 canonical file、owner、觸發（輸入）、權限／timeout、產物（輸出）、測試與
+最新 live evidence；檔案存在或舊 run 成功不單獨算 active——見 Dependency vulnerability
+與 Work Issue closure 兩列的落地與失敗證據。Live evidence 以 2026-09-01 對
+`Innoguard-Cyber-Arch/csarc-repo-template` 的 `gh api actions/workflows` 與
+`gh run list` 查詢結果為準；重跑本盤點請重新查詢，不沿用本表數字。
+
+| 能力 | Canonical file | Owner | 事件（輸入） | 權限／timeout | 產物（輸出） | 測試 | 最新 live evidence | 狀態 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428） | `pull_request`、`merge_group`、`workflow_dispatch` | `contents: read`；30 分鐘；同一 PR 新 commit 取消舊 run | `scripts/ci_tier.py` 分類後，中央模板呼叫 `scripts/verify-fast` 或 `scripts/verify-template.sh`，生成 repo 呼叫 `scripts/verify`；輸出 `verify` check 與 step summary | `tests/test_ci_tier.py` | run [33519320562](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320562)，2026-09-01，success | active |
+| PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | PR metadata 事件（opened／edited／synchronize／labeled） | 只給需要的 Issue／PR metadata 權限；固定 timeout | title、Issue、route 與 review policy 判定 | `scripts/test-pr-policy` | run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929)，2026-09-01，success；同日對 #448／#453／#457 等未完成 checklist 的候選 PR 正確擋下合併，證明門禁確實生效 | active |
+| Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**——本檔尚未落地 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待 main 落地＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
+| Issue triage | `.github/workflows/issue-triage.yml` | Issue 分流 | `issues` 事件 | 最小 Issue metadata write | label／milestone routing | `scripts/test-issue-triage` | run [33524318953](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33524318953)，2026-09-01，`main`，success | active |
+| Spec to Issue | `.github/workflows/spec-to-issue.yml` | Spec 轉換 | spec 檔案變更事件／manual dispatch | 最小 Issue metadata write | 可審查 Issue 草稿 | `tests/test_spec_to_issue.py` | run [33490382161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33490382161)，2026-09-01，success | active |
+| Milestone lifecycle | `.github/workflows/milestone-lifecycle.yml` | #400 | milestone／Issue 事件、核准 comment 偵測 | 最小 metadata write | lifecycle gate 狀態、closure 同步 | `tests/test_milestone_lifecycle.py`（本候選尚未含 #444 已拆分的 `test_milestone_approval.py`／`test_milestone_closure.py`，待 #444 併入才更新） | run [33524281794](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33524281794)，2026-09-01，`main`，success | active；完整結案契約仍由 #400／PR #444 擁有（尚未合併） |
+| Work Issue closure | `.github/workflows/work-item-closure.yml` | #401 | 里程碑工作 PR 合併進 `dev/m*`（`pull_request.closed`） | `contents: read`、Issue write；5 分鐘 | 對應 Issue 關閉 | `tests/test_work_pr_closure.py` | run [33502286588](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33502286588)，2026-09-01，**failure**（checkout 用 `pull_request.base.sha`，缺合併後才有的 `close-work` 指令） | active（workflow 已啟用並真的執行）；已知 live 失敗，修正候選見 #401／PR #453，尚未合併 |
+| Dependabot | `.github/dependabot.yml` | GitHub 原生＋依賴安全 | schedule／manifest 變更 | GitHub 原生 bot 邊界，無 repo workflow 權限 | dependency PR | GitHub 原生功能，無 repo-local 測試；設定格式由 `scripts/sync-paired-files.sh --check` 涵蓋 | GitHub 註冊為 `Dependabot Updates`（`dynamic/dependabot/dependabot-updates`），state active（原生排程不透過 `gh run list` 查詢單筆 run） | active |
+| Version／Release | `.github/workflows/release.yml` | #369／#430 | `main` push（post-merge）、manual rerun | top-level read；單一 release job 才有 `contents`／PR／Issue／status write；30 分鐘 | Automatic 或 Guided 版本 PR；合併後由同一 workflow 發布 tag／GitHub Release／成品／checksum／SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py` | 尚未落地 `main`，無 tag／Release live run；候選僅由本表 CI／PR policy 兩筆 run 驗證檔案與規則本身 | candidate／blocked，待 default branch 首次 live run |
 
 所有第三方 Actions 鎖定完整 commit SHA，旁註可讀 release tag。Workflow YAML 只負責
 event、權限、環境與呼叫；分類與驗證規則留在本機可測的 scripts。Repository 預設
@@ -86,7 +92,7 @@ run，目的是設定成本預期，不是永久 SLA。
 | --- | --- | --- | --- |
 | docs | 純文件與 site 內容 | `scripts/verify-fast`；來源檢查、render、雙語／glossary／llms 契約 | 與 fast 共用 bounded path |
 | fast | 一般工作 PR；依 scope 加 policy／template 檢查 | `scripts/verify-fast`；source fast 約 59 秒，policy／template scope 約 99 秒 | 約 1–4 分鐘的 PR feedback window |
-| full | Milestone／canary 交付、hotfix、merge queue、manual、未知高風險路徑 | `scripts/verify-template.sh`；完整 profiles、Copier create／adopt／update、runtime 與安全回歸 | verification 330 秒；整個 job 6 分 16 秒 |
+| full | Milestone／canary 交付、hotfix、merge queue、manual、未知高風險路徑 | 中央模板用 `scripts/verify-template.sh`；生成 repo 用 `scripts/verify full` | 中央模板 verification 330 秒；整個 job 6 分 16 秒 |
 
 相依 manifest／lockfile 變更加跑 `scripts/verify-dependencies`。CI 不建立 release asset，
 也不把測試 artifact 當成正式成品。#408 已把更細的 stage timing 輸出納入現行入口。

@@ -358,6 +358,33 @@ if [[ "$branch_strategy" == "delivery" ]]; then
       echo "A standalone promotion Issue must not belong to a Milestone."
       exit 1
     fi
+    if [[ -n "${promotion_milestone:-}" ]]; then
+      if [[ "${PR_POLICY_FIXTURE:-false}" == "true" ]]; then
+        included_titles="${PR_INCLUDED_TITLES_JSON:-$(jq -cn --arg title "$PR_TITLE" '[$title]')}"
+        python3 scripts/promotion_gate.py check-intent \
+          --title "$PR_TITLE" \
+          --titles-json "$included_titles"
+      else
+        if [[ -z "${PR_BASE_SHA:-}" || -z "${PR_HEAD_SHA:-}" ]]; then
+          echo "Promotion intent validation requires exact base and head SHAs."
+          exit 1
+        fi
+        delivery_branch="$PR_HEAD"
+        bridge_arguments=()
+        if [[ "$PR_HEAD" == promote/* ]]; then
+          delivery_branch="dev/${PR_HEAD#promote/}"
+          bridge_arguments=(--bridge-head-sha "$PR_HEAD_SHA")
+        fi
+        python3 scripts/promotion_gate.py check-intent \
+          --repo "$GITHUB_REPOSITORY" \
+          --base-sha "$PR_BASE_SHA" \
+          --head-sha "$PR_HEAD_SHA" \
+          --delivery-branch "$delivery_branch" \
+          --milestone "$promotion_milestone" \
+          --title "$PR_TITLE" \
+          "${bridge_arguments[@]}"
+      fi
+    fi
     exit 0
   fi
 

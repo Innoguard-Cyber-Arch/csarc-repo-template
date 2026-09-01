@@ -125,7 +125,7 @@ Coverage 是找出未測程式碼的訊號，不等於測試品質，也不取�
 
 ## 設定與密鑰
 
-GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。有管理權且希望啟用較強門禁時，可在推送遠端後執行 `./scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 唯讀比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset；這不是 portable release baseline 的必要步驟。可修正差異會失敗，Free private Ruleset、組織政策限制或 PR 的內建 `GITHUB_TOKEN` 看不到管理欄位時，則明確標為 `DEGRADED` 並保留具體差異。需要驗證全部管理欄位時，由管理員在可信任的 checkout 以具 repository Administration read 權限的 `gh` 憑證執行；不要把管理型 token 暴露給未受信任的 PR 程式碼。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。Copier 不在本機建檔階段猜測遠端方案。
+GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 repository settings。{% if project_mode == "new" %}新案必須在首次發布前由管理員於可信任的 checkout 執行 `./scripts/apply-repository-settings.sh plan`，確認後執行 `apply`，最後以 `check` 驗證 immutable Releases 與其餘必要設定；缺少這一步時 release workflow 會 fail-closed。{% else %}既有案是否套用發布設定由 product-owned release 流程決定；其餘 CSARC 治理可由管理員先執行 `plan`，確認後執行 `apply`，最後以 `check` 驗證。{% endif %}`check` 唯讀比對 CODEOWNERS、repository、immutable Releases、Actions、政策標籤與有效 Ruleset。可修正差異會失敗，Free private Ruleset或組織政策限制則明確標為 `DEGRADED` 並保留具體差異；無法讀取必要的 immutable Releases 狀態則會失敗，不會假設已啟用。需要驗證全部管理欄位時，使用具 repository Administration read 權限的 `gh` 憑證；不要把管理型 token 暴露給未受信任的 PR 程式碼。尚未設定 Git remote 時，明確指定 `GH_REPO=owner/repo`。標籤預設採 additive 更新並保留自訂項目；只有明確傳入 `--prune-labels` 才會刪除政策外標籤。Copier 不在本機建檔階段猜測遠端方案。
 
 | GitHub 方案與可見性 | `apply` 結果 | `check`／PR／CI/CD 行為 |
 | --- | --- | --- |

@@ -25,6 +25,7 @@ finalize_quota_fallback = MODULE["finalize_quota_fallback"]
 fallback_statement = MODULE["fallback_statement"]
 github_get = MODULE["github_get"]
 highest_release_intent = MODULE["highest_release_intent"]
+check_promotion_intent = MODULE["check_promotion_intent"]
 included_pull_requests = MODULE["included_pull_requests"]
 issue_number = MODULE["issue_number"]
 local_verification_command = MODULE["local_verification_command"]
@@ -181,6 +182,20 @@ def test_batch_uses_highest_included_pull_request_intent() -> None:
         highest_release_intent(["feat!: protocol", "feat: reports"]) == "major"
     )
     assert highest_release_intent(["docs: guide", "ci: tune"]) == "no-release"
+
+
+def test_promotion_title_cannot_downgrade_batch_intent() -> None:
+    """Keep a squashed delivery batch's highest SemVer intent on main."""
+    arguments = SimpleNamespace(
+        title="fix(delivery): promote milestone",
+        titles_json=json.dumps(["fix(api): retry", "feat(ui): add report"]),
+    )
+
+    with pytest.raises(RuntimeError, match=r"highest SemVer intent \(minor\)"):
+        check_promotion_intent(arguments)
+
+    arguments.title = "feat(delivery): promote milestone"
+    check_promotion_intent(arguments)
 
 
 def test_included_pull_requests_are_deduplicated_and_scoped(

@@ -1,7 +1,7 @@
 # Artifact consumption contract and historical evidence
 
 > [!IMPORTANT]
-> 現行 release workflow 會建立並驗證 GitHub Release 成品，但沒有 release consumption 或 registry publisher Action。
+> 候選 release workflow 預計建立並驗證 GitHub Release 成品，但沒有 release consumption 或 registry publisher Action。
 > 本頁區分仍保留的本機安全契約與 2026-08 的一次性線上證據。
 
 Attestation 只連結成品、來源與 build identity，不保證成品安全。只有真實消費者依核准
@@ -11,8 +11,8 @@ policy 驗證 repository、tag、digest 與 signer，並在不符時停止，才
 
 | 路徑 | 狀態 | 現在保留的契約 |
 | --- | --- | --- |
-| 公版 GitHub Release | Active | `release.yml` 在受審查版本 PR 合併後發布 verified immutable Release |
-| checksum 與 SPDX SBOM | Active | `scripts/release_bundle.py` 建立、下載並重驗 exact-tag 成品 |
+| 公版 GitHub Release | Candidate／Blocked | `release.yml` 預計在受審查版本 PR 合併後發布 verified immutable Release；待 default branch live run |
+| checksum 與 SPDX SBOM | Candidate | `scripts/release_bundle.py` 預計建立、下載並重驗 exact-tag 成品；待同一 live run |
 | attestation consumption | Conditional | `scripts/verify_release_consumption.py` 及測試保留 fail-closed policy |
 | PyPI／npm／GHCR | Not configured | 模板不產生 publisher job，也不要求 token 或 GitHub environment |
 | production deployment | Not applicable | 由產品自行定義環境、健康檢查、核准與復原 |

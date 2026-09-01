@@ -21,7 +21,7 @@ from typing import Any
 
 STATES = {"allowed", "blocked", "unknown"}
 SEMVER = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
-PUBLISH_CAPABILITIES = ("contents", "release")
+PUBLISH_CAPABILITIES = ("contents", "release", "immutable_releases")
 INTENT_RANK = {"no-release": 0, "patch": 1, "minor": 2, "major": 3}
 RENOVATE_INSTALL_URL = "https://github.com/apps/renovate/installations/new"
 DEPENDABOT_FALLBACK = (
@@ -598,6 +598,7 @@ def unknown_capabilities(reason: str) -> dict[str, Capability]:
         for name in (
             "actions_pull_requests",
             "contents",
+            "immutable_releases",
             "release",
         )
     }
@@ -639,6 +640,18 @@ def detect_runtime_capabilities(
     capabilities["release"] = classify_probe(
         status, validation_proves_access=True
     )
+
+    status, immutable = api.request("GET", f"repos/{repo}/immutable-releases")
+    if 200 <= status < 300 and isinstance(immutable, dict):
+        enabled = immutable.get("enabled")
+        capabilities["immutable_releases"] = Capability(
+            "allowed" if enabled is True else "blocked",
+            "immutable Releases are enabled"
+            if enabled is True
+            else "immutable Releases must be enabled before publication",
+        )
+    else:
+        capabilities["immutable_releases"] = classify_probe(status)
 
     return capabilities
 
@@ -1263,6 +1276,18 @@ def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
         else:
             raise ValueError(f"unsupported release extra-file: {value}")
 
+    cargo_manifest = root / "Cargo.toml"
+    cargo_lock = root / "Cargo.lock"
+    if cargo_manifest.is_file() and cargo_lock.is_file():
+        with cargo_manifest.open("rb") as source:
+            cargo_package = tomllib.load(source).get("package", {})
+        cargo_name = cargo_package.get("name")
+        if not isinstance(cargo_name, str) or not cargo_name:
+            raise ValueError("Cargo.toml has no package name")
+        _replace_toml_version(
+            cargo_lock, "package", version, package_name=cargo_name
+        )
+
 
 def _write_changelog(root: Path, sha: str, version: str) -> None:
     """Prepend deterministic notes for the same commits used by planning."""
@@ -1378,6 +1403,39 @@ def release_version_errors(  # noqa: C901
         package = json.loads(package_json.read_text(encoding="utf-8"))
         if isinstance(package.get("version"), str):
             versions["package.json"] = package["version"]
+
+    cargo_manifest = root / "Cargo.toml"
+    if cargo_manifest.is_file():
+        with cargo_manifest.open("rb") as source:
+            cargo_package = tomllib.load(source).get("package", {})
+        cargo_name = cargo_package.get("name")
+        cargo_version = cargo_package.get("version")
+        if not isinstance(cargo_name, str) or not cargo_name:
+            errors.append("Cargo.toml has no package name")
+        if isinstance(cargo_version, str):
+            versions["Cargo.toml"] = cargo_version
+        else:
+            errors.append("Cargo.toml has no package version")
+
+        cargo_lock = root / "Cargo.lock"
+        if not cargo_lock.is_file():
+            errors.append("Cargo.lock is missing")
+        elif isinstance(cargo_name, str) and cargo_name:
+            with cargo_lock.open("rb") as source:
+                cargo_packages = tomllib.load(source).get("package", [])
+            locked_version = next(
+                (
+                    package.get("version")
+                    for package in cargo_packages
+                    if package.get("name") == cargo_name
+                    and package.get("source") is None
+                ),
+                None,
+            )
+            if isinstance(locked_version, str):
+                versions["Cargo.lock"] = locked_version
+            else:
+                errors.append(f"Cargo.lock has no package {cargo_name}")
 
     marker_paths = [*root.glob("src/*/__init__.py")]
     required_markers: set[Path] = set()

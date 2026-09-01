@@ -422,6 +422,42 @@ def highest_release_intent(titles: list[str]) -> str:
     )
 
 
+def check_promotion_intent(args: argparse.Namespace) -> None:
+    """Require a promotion title to retain the batch's highest intent."""
+    if args.titles_json is not None:
+        titles = json.loads(args.titles_json)
+        if not isinstance(titles, list) or any(
+            not isinstance(title, str) for title in titles
+        ):
+            raise RuntimeError("Promotion title fixture must be a string list")
+    else:
+        token = os.environ.get("GH_TOKEN", "")
+        if not token:
+            raise RuntimeError("GH_TOKEN is required to inspect promotion work")
+        included = included_pull_requests(
+            args.repo,
+            args.base_sha,
+            args.head_sha,
+            args.delivery_branch,
+            token,
+            args.milestone,
+            args.bridge_head_sha,
+        )
+        titles = [str(item["title"]) for item in included]
+    if not titles:
+        raise RuntimeError(
+            "Delivery promotion contains no merged pull requests"
+        )
+    expected = highest_release_intent(titles)
+    actual = release_intent(args.title)
+    if actual != expected:
+        raise RuntimeError(
+            "Promotion pull-request title must declare the batch's highest "
+            f"SemVer intent ({expected})"
+        )
+    print(f"Promotion release intent is {expected}.")  # noqa: T201
+
+
 def included_pull_requests(  # noqa: C901
     repo: str,
     base_sha: str,
@@ -2227,6 +2263,16 @@ def parser() -> argparse.ArgumentParser:
     """Build the command line interface."""
     root = argparse.ArgumentParser()
     commands = root.add_subparsers(dest="command", required=True)
+    intent_command = commands.add_parser("check-intent")
+    intent_command.add_argument("--title", required=True)
+    intent_command.add_argument("--repo")
+    intent_command.add_argument("--base-sha")
+    intent_command.add_argument("--head-sha")
+    intent_command.add_argument("--delivery-branch")
+    intent_command.add_argument("--milestone", type=int)
+    intent_command.add_argument("--bridge-head-sha")
+    intent_command.add_argument("--titles-json")
+    intent_command.set_defaults(handler=check_promotion_intent)
     prepare_command = commands.add_parser("prepare")
     prepare_command.add_argument("--event", required=True)
     prepare_command.add_argument("--event-path", type=Path, required=True)

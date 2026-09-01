@@ -155,7 +155,7 @@ fit = "符合畫面"
 {{< legacy >}}
       <header>
         <h2>模板會把<span class="accent">必要設定放到正確位置</span></h2>
-        <p class="subtitle">共用規則與 8 條現行 GitHub Actions 每個新 repo 都有；語言工具與產品目錄才依未選語言、Python、Rust、TypeScript 或多語言模式產生。</p>
+        <p class="subtitle">共用規則與 8 條 GitHub Actions（7 條現行、1 條候選）每個新 repo 都有；語言工具與產品目錄才依未選語言、Python、Rust、TypeScript 或多語言模式產生。</p>
       </header>
       <div class="repo-map-window" aria-label="模板產生檔案的視覺對照">
         <div class="repo-map-toolbar">
@@ -725,7 +725,7 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
 | --- | --- | --- |
 | ![Copier logo](assets/copier.svg) [Copier](https://github.com/copier-org/copier) | 可更新模板 | 基本導入；差異走 PR |
 | ![zizmor logo](assets/zizmor.png) [zizmor](https://github.com/zizmorcore/zizmor) | GitHub Actions 安全 | 本機檢查契約保留；專用 workflow 仍封存 |
-| Dependabot、OSV、Syft | 依賴更新、漏洞與 SBOM | Dependabot 與 OSV 已啟用；SBOM 是已通過本機測試的 conditional contract |
+| Dependabot、OSV、Syft | 依賴更新、漏洞與 SBOM | Dependabot 已啟用；OSV 在新生成 repo 立即啟用，本 repository 因候選尚未落地 main 而仍是 candidate；SBOM 是已通過本機測試的 conditional contract |
 | ![GitHub Community Projects logo](assets/github-community-projects.png) [Safe Settings](https://github.com/github-community-projects/safe-settings) | 多 repo 設定治理 | 規模與漂移門檻成立後才評估 |
 | ![Renovate logo](assets/renovate.png) [Renovate](https://github.com/renovatebot/renovate) | 更彈性的更新 preset | 現階段不取代 Dependabot |
 | ![GitHub Actions logo](assets/github-actions.svg) ![PyScaffold logo](assets/pyscaffold.svg) Starter Workflows、PyScaffold | 官方 workflow 與 Python 結構範例 | 只作內容檢查表，不照抄政策 |

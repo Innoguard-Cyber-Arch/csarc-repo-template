@@ -309,11 +309,16 @@ def test_release_follow_up_accepts_rust_manifest_and_lockfile(
 
 
 def capabilities(
-    pull_requests: str, contents: str, release: str, dispatch: str
+    pull_requests: str,
+    contents: str,
+    release: str,
+    dispatch: str,
+    immutable_releases: str = "allowed",
 ) -> dict[str, object]:
     return {
         "actions_pull_requests": Capability(pull_requests, "test"),
         "contents": Capability(contents, "test"),
+        "immutable_releases": Capability(immutable_releases, "test"),
         "release": Capability(release, "test"),
         "dispatch": Capability(dispatch, "test"),
     }
@@ -402,6 +407,8 @@ def test_pr_policy_block_uses_guided_mode_without_publishing(
             self.calls.append((method, path, payload))
             if path.endswith("/pulls"):
                 return status, {}
+            if path.endswith("/immutable-releases"):
+                return 200, {"enabled": True}
             return 422, {}
 
     api = ProbeAPI()
@@ -434,6 +441,8 @@ def test_unproven_publication_capability_is_blocked(
             del method, payload
             if path.endswith("/pulls"):
                 return 403, {}
+            if path.endswith("/immutable-releases"):
+                return 200, {"enabled": True}
             if endpoint in path:
                 return status, {}
             return 422, {}
@@ -442,6 +451,31 @@ def test_unproven_publication_capability_is_blocked(
         ProbeAPI(), "owner/repo", "a" * 40, "main"
     )
 
+    assert report(observed, "test")["mode"] == "blocked"
+
+
+def test_disabled_immutable_releases_block_publication() -> None:
+    """Do not publish into a repository that cannot preserve a release."""
+
+    class ProbeAPI:
+        def request(
+            self,
+            method: str,
+            path: str,
+            payload: dict[str, object] | None = None,
+        ) -> tuple[int, object]:
+            del method, payload
+            if path.endswith("/pulls"):
+                return 422, {}
+            if path.endswith("/immutable-releases"):
+                return 200, {"enabled": False, "enforced_by_owner": False}
+            return 422, {}
+
+    observed = detect_runtime_capabilities(
+        ProbeAPI(), "owner/repo", "a" * 40, "main"
+    )
+
+    assert observed["immutable_releases"].state == "blocked"
     assert report(observed, "test")["mode"] == "blocked"
 
 
@@ -994,6 +1028,62 @@ def test_candidate_version_is_recomputed_from_base(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match=r"expected 0\.2\.0"):
         verify_candidate_version(tmp_path, base_sha)
+
+
+def test_guided_rust_candidate_updates_and_checks_cargo_lock(
+    tmp_path: Path,
+) -> None:
+    """Keep the Rust manifest and lockfile aligned for locked CI."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    (tmp_path / ".release-please-manifest.json").write_text(
+        '{".": "0.1.0"}\n', encoding="utf-8"
+    )
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "rust",
+                "packages": {".": {"component": "demo"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "Cargo.toml").write_text(
+        '[package]\nname = "demo"\nversion = "0.1.0"\n', encoding="utf-8"
+    )
+    (tmp_path / "Cargo.lock").write_text(
+        'version = 4\n\n[[package]]\nname = "demo"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [0.1.0]\n", encoding="utf-8"
+    )
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    git(tmp_path, "tag", "v0.1.0")
+    (tmp_path / "src.rs").write_text("// feature\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: add Rust support")
+
+    payload = prepare_release_candidate(tmp_path, "HEAD")
+
+    assert payload["version"] == "0.2.0"
+    assert 'version = "0.2.0"' in (tmp_path / "Cargo.toml").read_text(
+        encoding="utf-8"
+    )
+    assert 'version = "0.2.0"' in (tmp_path / "Cargo.lock").read_text(
+        encoding="utf-8"
+    )
+    assert release_version_errors(tmp_path, "0.2.0") == []
+
+    (tmp_path / "Cargo.lock").write_text(
+        'version = 4\n\n[[package]]\nname = "demo"\nversion = "0.1.0"\n',
+        encoding="utf-8",
+    )
+    assert "Cargo.lock is 0.1.0, expected 0.2.0" in release_version_errors(
+        tmp_path, "0.2.0"
+    )
 
 
 def test_prepare_requires_tag_version_without_mutating_files(

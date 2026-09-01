@@ -98,6 +98,30 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 
 舊 `scripts/test-release-follow-up-gates` 以 workflow YAML 作測試來源，會複製規則且維護成本高，已由 `release_policy.py`、`verify-release-candidate` 與 Python tests 取代。`delivery-maintenance.yml` 不恢復：只有明列真實依賴時才同步特定 delivery branch，不在每次 `main` 前進時 fan-out 寫入所有分支。
 
+## 歷史 Action 逐項複核（#64–#426）
+
+以下逐一回答：原問題是否仍存在、是否已由後續 Issue 解決、是否仍屬本產品責任、是否有更小的 native／repo-local 做法、權限與 secret 是否最小、是否 idempotent／fail closed、是否能在目前 GitHub 方案下驗證、維護成本是否合理。狀態只用 preserved（能力保留且仍是唯一實作）、superseded（被後繼設計取代）、one-time evidence（一次性事件，不是常駐能力）三類；沒有 issue 落在「still applicable 待辦」，因為 current-state 契約已把每項未解決缺口顯式標成 candidate／conditional／blocked，不留隱性 TODO。
+
+| Issue | 狀態 | 理由 |
+| --- | --- | --- |
+| [#64](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/64) Run release-please with the default token | superseded | 原問題（用哪個 token 建版本 PR）已不存在：`GITHUB_TOKEN` 建 PR 的假設先被 #123 的 adaptive release mode 取代，#142 再取代 ephemeral version materialization，現由本 ADR 的 Automatic／Guided 雙路徑取代整條決策鏈。單一 `release.yml`＋`release_policy.py` 是唯一 native repo-local 實作，權限維持短效 `GITHUB_TOKEN`，可由 `tests/test_release_policy.py` 驗證。 |
+| [#98](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/98) Complete Release Please artifact handoff | superseded | 「artifact handoff」是獨立 workflow 銜接 Release Please 產出的舊設計；已由單一 `release.yml`＋`scripts/release_bundle.py` 直接在同一 job 內完成建置與發布取代，見上方「Archive disposition」。仍屬本產品責任，但責任已收斂到單一 workflow，維護成本下降。 |
+| [#99](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/99) Add live workflow integration checks | superseded | `Live integration smoke` 已封存刪除（見 `docs/live-integration.md`），其驗證的 OSV／Release Please／handoff／governance drift 四項能力，現分別由各自 current-state 契約與 `tests/test_journey07_release.py` 承接；不再需要一支跨能力 smoke workflow，維護成本與權限面都更小。 |
+| [#104](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/104) Verify attestations at artifact consumption | preserved（conditional） | 原問題仍存在（消費端要驗證 provenance），但尚無真實消費者採用，因此 `scripts/verify_release_consumption.py` 與其測試保留為 conditional 契約而非 active workflow——不取得 attestation／`id-token` 權限直到 #439 或真實消費者確認 owner。fail closed：無 evidence 時判定失敗，不預設信任。 |
+| [#123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123) Select release behavior from GitHub Actions policy capabilities | preserved | 核心機制（依 organization policy／repository setting／token permission 分開回報並選擇 Automatic 或 Guided）直接是本 ADR 決策第 3–4 點的基礎，由 capability probe 延續實作，非重寫。 |
+| [#142](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/142) Synchronize release metadata and repair historical records | one-time evidence | 「repair historical records」是針對當時既有資料的一次性回補，不是常駐能力；往後的版本／CHANGELOG 一致性改由 `release_policy.py` 在每次執行時即時計算，不需要重跑歷史修復。 |
+| [#183](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/183) Batch releases at promotion boundaries | superseded | 「在 promotion 邊界批次發版」的前提（存在專屬 `promotion.yml`）已不成立：promotion 專用 workflow 判定不恢復（見 Archive disposition），現行模型是 #429 的 standalone／main-only 路徑加 #400 的 Milestone 交付批次，批次責任已轉移，不再需要獨立批次發版邊界。 |
+| [#321](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/321) Complete the missing release after promotion | one-time evidence | 是針對舊 `promotion.yml` 特定事故的一次性補救；該 workflow 本身已退役，問題不會再以同一形式發生，不是需要常駐防範的能力。 |
+| [#322](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/322) Enforce dependency cooldown and release SBOM evidence | superseded（部分） | GitHub 狀態為 `NOT_PLANNED`。SBOM 半部已由 #341 實作並保留（見下）；「dependency cooldown」半部從未實作且目前沒有 owner 認領，也沒有已知事故證明其必要性，維持 not planned，不在本次候選新增推測性能力。 |
+| [#341](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/341) Generate release SBOMs with pinned Syft | preserved | 直接對應 current-state 契約「checksum／SBOM／release evidence」列，由 `scripts/release_bundle.py`＋pinned Syft 實作，`tests/test_release_bundle.py` 驗證缺檔／竄改／重跑。 |
+| [#372](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/372) Suspend all CI and CD automation during Milestone 8 | one-time evidence | 是 Milestone 8 重建前的一次性封存動作，其結果（`archive/ci-cd/2026-08-27/` 快照）是本 ADR 與本表所有其他 disposition 判斷的既有基線，不是需要重跑的常駐流程。 |
+| [#373](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/373) Document the development loop design contradictions | superseded | 指出的分支／流程矛盾已由 #426（分支生命週期）與 #429（standalone 路由）解決，現行「現行交付路徑」章節即是矛盾解決後的單一敘述，不再有並存的舊路徑文件。 |
+| [#399](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/399) Separate work definition from merge guidance | preserved | 其責任分界（工作 PR 只關閉單項工作；版本／交付批次負責進入 `main`、正式版本與 Milestone 結案）直接寫入 `docs/ci-policy.md`「現行交付路徑」一節，是現行敘述的來源，不是待整合的舊決策。 |
+| [#403](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/403) Make staged verification sets responsibility complete | preserved | 「交付驗證是 Issue／PR 驗證的超集合」原則仍是現行驗證分級（見「驗證分級與實測成本」章節）與 #458 精簡設計的共同前提，未被取代。 |
+| [#406](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/406) Rewrite dependency security guidance and checks | preserved | 是 Dependency vulnerability 能力現行 owner；`scripts/verify-dependencies`、`tests/test_dependency_security.py` 與 `osv.yml` 都由其確立。狀態受限於 #407 同一則說明：候選尚未落地 `main`。 |
+| [#407](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407) Restore minimal dependency update and vulnerability automation | preserved | `osv.yml`＋`.github/dependabot.yml` 是其直接成果，見「Current automation」表；本 repository 因候選尚未落地 `main` 而標 candidate，新生成 repo 因 Copier 初始 commit 即落地而標 active——並非能力本身失效。 |
+| [#426](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/426) Define branch lifecycle and cleanup rules | preserved | 直接對應 `docs/ci-policy.md`「現行交付路徑」與 `scripts/cleanup-worktrees`；固定 `dev/next`／`promote/next` 退役即是其規則的現行結果。 |
+
 ## Fallback
 
 - GitHub 禁止 Actions 建 PR 時，在 `release/v<version>` 執行 `prepare-candidate` 並開 `chore(main): release <version>`；同一驗證仍不可略過。

@@ -15,6 +15,7 @@ permissions:
 jobs:
   release:
     name: version and publish
+    if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -69,7 +70,7 @@ jobs:
             --branch main \
             --github-output "$GITHUB_OUTPUT"
       - name: Stop when GitHub publication is blocked
-        if: ${{ (steps.plan.outputs.status == 'pending' || steps.plan.outputs.status == 'candidate') && steps.capability.outputs.mode == 'blocked' }}
+        if: ${{ (steps.plan.outputs.status == 'pending' || steps.plan.outputs.status == 'candidate' || steps.plan.outputs.status == 'released') && steps.capability.outputs.mode == 'blocked' }}
         env:
           BLOCK_REASON: ${{ steps.capability.outputs.reason }}
         run: |
@@ -108,7 +109,7 @@ jobs:
           } >>"$GITHUB_STEP_SUMMARY"
       - name: Validate and stage the merged version candidate
         id: candidate
-        if: ${{ steps.plan.outputs.status == 'candidate' && steps.plan.outputs.materialized == 'true' }}
+        if: ${{ (steps.plan.outputs.status == 'candidate' || steps.plan.outputs.status == 'released') && steps.plan.outputs.materialized == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.plan.outputs.tag }}
@@ -118,9 +119,10 @@ jobs:
           mapfile -t numbers < <(gh api \
             -H 'Accept: application/vnd.github+json' \
             "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" \
-            --jq '.[] | select(.merged_at != null and .base.ref == "main") | .number')
+            --jq ".[] | select(.merged_at != null and .base.ref == \"main\" and .merge_commit_sha == \"$GITHUB_SHA\") | .number")
           test "${#numbers[@]}" -eq 1
           pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/${numbers[0]}")"
+          test "$(jq -r .merge_commit_sha <<<"$pr")" = "$GITHUB_SHA"
           jq -n --argjson pr "$pr" '{
             number: $pr.number,
             sha: $pr.head.sha,

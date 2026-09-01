@@ -613,6 +613,22 @@ PR_ISSUE_LABELS="enhancement,promotion" \
   "$validator" >/dev/null
 
 case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="fix(delivery): downgrade milestone seven" \
+  PR_LABELS="enhancement,promotion" \
+  PR_BASE="main" \
+  PR_HEAD="dev/m7-staged-ci" \
+  PR_BODY="Closes #42" \
+  PR_ISSUE_STATE="open" \
+  PR_ISSUE_MILESTONE_NUMBER="7" \
+  PR_ISSUE_LABELS="enhancement,promotion" \
+  PR_INCLUDED_TITLES_JSON='["feat(api): add report","fix(api): retry"]' \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a promotion title below the batch intent."
+  exit 1
+fi
+
+case_count=$((case_count + 1))
 PR_BRANCH_STRATEGY="delivery" \
 PR_TITLE="feat!: promote milestone seven bridge" \
 PR_LABELS="enhancement,promotion" \
