@@ -30,6 +30,8 @@ report = MODULE["report"]
 select_release_mode = MODULE["select_release_mode"]
 simple_release_boundary = MODULE["simple_release_boundary"]
 verify_release_version = MODULE["verify_release_version"]
+verify_candidate_version = MODULE["verify_candidate_version"]
+workflow_policy_observations = MODULE["workflow_policy_observations"]
 optional_integration_preflight = MODULE["optional_integration_preflight"]
 
 
@@ -327,7 +329,7 @@ def capabilities(
         (("blocked", "allowed", "allowed", "allowed"), "guided"),
         (("unknown", "allowed", "allowed", "allowed"), "guided"),
         (("blocked", "blocked", "allowed", "allowed"), "blocked"),
-        (("unknown", "allowed", "unknown", "allowed"), "guided"),
+        (("unknown", "allowed", "unknown", "allowed"), "blocked"),
     ],
 )
 def test_release_mode_is_fail_closed(
@@ -344,10 +346,10 @@ def test_http_failures_are_never_allowed() -> None:
     assert classify_probe(422, validation_proves_access=True).state == "allowed"
 
 
-def test_repository_pr_setting_false_selects_guided(
+def test_repository_pr_setting_false_without_publish_proof_blocks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A parent policy block still permits a local version candidate."""
+    """Local candidacy cannot prove that GitHub publication is available."""
     monkeypatch.setattr(MODULE["shutil"], "which", lambda _: "/usr/bin/gh")
     monkeypatch.setattr(
         MODULE["subprocess"],
@@ -362,7 +364,7 @@ def test_repository_pr_setting_false_selects_guided(
 
     observed = preflight_capabilities("owner/repo")
 
-    assert select_release_mode(observed)[0] == "guided"
+    assert select_release_mode(observed)[0] == "blocked"
 
 
 @pytest.mark.parametrize("status", [403, 409])
@@ -397,6 +399,65 @@ def test_pr_policy_block_uses_guided_mode_without_publishing(
         for _, path, payload in api.calls
     )
     assert not any("/dispatches" in path for _, path, _ in api.calls)
+
+
+@pytest.mark.parametrize("status", [0, 403, 409])
+@pytest.mark.parametrize("endpoint", ["git/refs", "releases"])
+def test_unproven_publication_capability_is_blocked(
+    status: int, endpoint: str
+) -> None:
+    """Guided candidate creation never masks unavailable publication."""
+
+    class ProbeAPI:
+        def request(
+            self,
+            method: str,
+            path: str,
+            payload: dict[str, object] | None = None,
+        ) -> tuple[int, object]:
+            del method, payload
+            if path.endswith("/pulls"):
+                return 403, {}
+            if endpoint in path:
+                return status, {}
+            return 422, {}
+
+    observed = detect_runtime_capabilities(
+        ProbeAPI(), "owner/repo", "a" * 40, "main"
+    )
+
+    assert report(observed, "test")["mode"] == "blocked"
+
+
+def test_capability_report_separates_policy_token_and_effective_state() -> None:
+    """Do not collapse parent policy, repository setting, and token access."""
+
+    class ProbeAPI:
+        def request(
+            self,
+            method: str,
+            path: str,
+            payload: dict[str, object] | None = None,
+        ) -> tuple[int, object]:
+            del method, payload
+            if path.startswith("orgs/"):
+                return 200, {"can_approve_pull_request_reviews": False}
+            return 200, {"can_approve_pull_request_reviews": True}
+
+    policies = workflow_policy_observations(ProbeAPI(), "owner/repo")
+    payload = report(
+        capabilities("allowed", "allowed", "allowed", "unknown"),
+        "test",
+        policies=policies,
+    )
+
+    assert payload["organization_policy"]["state"] == "blocked"
+    assert payload["repository_setting"]["state"] == "allowed"
+    assert payload["token_permissions"]["actions_pull_requests"]["state"] == (
+        "allowed"
+    )
+    assert payload["effective"]["actions_pull_requests"]["state"] == "blocked"
+    assert payload["effective"]["mode"] == "guided"
 
 
 def integration_preflight(
@@ -880,6 +941,43 @@ def test_guided_candidate_only_materializes_local_release_files(
     report_payload = release_plan_report(tmp_path, "HEAD")
     assert report_payload["version"] == "0.2.0"
     assert report_payload["status"] == "candidate"
+
+
+def test_candidate_version_is_recomputed_from_base(tmp_path: Path) -> None:
+    """A self-consistent v99 candidate cannot override the base decision."""
+    git(tmp_path, "init", "-b", "main")
+    git(tmp_path, "config", "user.name", "Release Test")
+    git(tmp_path, "config", "user.email", "release@example.invalid")
+    write_release_surfaces(tmp_path, "0.1.0")
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "simple",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": [
+                            {"type": "generic", "path": "README.md"}
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore: baseline")
+    git(tmp_path, "tag", "v0.1.0")
+    (tmp_path / "feature").write_text("new\n", encoding="utf-8")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "feat: expected minor")
+    base_sha = git(tmp_path, "rev-parse", "HEAD")
+    write_release_surfaces(tmp_path, "99.0.0")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-m", "chore(main): release 99.0.0")
+
+    with pytest.raises(ValueError, match=r"expected 0\.2\.0"):
+        verify_candidate_version(tmp_path, base_sha)
 
 
 def test_prepare_requires_tag_version_without_mutating_files(

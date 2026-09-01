@@ -32,7 +32,7 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 
 | Repository 類型 | 唯一 release owner | 模板行為 |
 | --- | --- | --- |
-| `csarc-repo-template` root | CSARC | active `release.yml` 發布模板／CLI 的 GitHub Release 成品 |
+| `csarc-repo-template` root | CSARC | candidate `release.yml` 預計發布模板／CLI 的 GitHub Release 成品；待預設分支實跑證明後才算 active |
 | 新生成 repo | 該 repo 內的 CSARC baseline | Copier 產生同一個薄 workflow；版本從該 repo 的 `0.1.0` 獨立開始 |
 | 既有 repo | product owner | Copier 不產生 `release.yml`、不按檔名猜測、不 dispatch 或覆寫既有發布流程 |
 

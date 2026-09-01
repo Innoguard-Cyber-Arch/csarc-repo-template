@@ -152,8 +152,8 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 | --- | --- | --- |
 | PR 的 SemVer 意圖 | Active | `fix`／`revert` 為 patch、`feat` 為 minor、`!` 為 major，其餘 no-release |
 | 正式版本與 CHANGELOG | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}Automatic 或 Guided 建立同一種受審查 PR{% else %}沿用產品既有規則{% endif %}；已發布版本不改寫 |
-| tag／GitHub Release | {% if project_mode == "new" %}Active{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}版本 PR 合併並通過完整驗證後自動發布{% else %}模板不建立第二個 owner{% endif %} |
-| checksum／SBOM | {% if project_mode == "new" %}Active{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}與 exact-tag 成品同一次建立、下載並重驗{% else %}由產品 release workflow 決定{% endif %} |
+| tag／GitHub Release | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}版本 PR 合併並通過完整驗證後自動發布；首次成功實跑後才算 Active{% else %}模板不建立第二個 owner{% endif %} |
+| checksum／SBOM | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}與 exact-tag 成品同一次建立、下載並重驗；首次成功實跑後才算 Active{% else %}由產品 release workflow 決定{% endif %} |
 | attestation | Conditional | 由產品依 registry 與供應鏈需求另行啟用 |
 | PyPI／npm／GHCR | Not configured | 相關設定目前沒有 active publisher；不得當成已啟用 |
 | production deployment | Not applicable | 由產品自行定義環境、健康檢查、核准與復原 |

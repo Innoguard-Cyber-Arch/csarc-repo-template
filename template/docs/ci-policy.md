@@ -57,7 +57,7 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
 4. `fix` 預設表達 patch 意圖；破壞相容性時明列 `!`。Release Please 會據此更新版本 PR；
    版本 PR 尚未審查、合併且正式成品尚未發布前，hotfix 仍只算已交付、尚未發版。
 
-## Active automation
+## Current automation
 
 | 能力 | 事件 | Repo-local 入口 | 權限／timeout | 產物與狀態 |
 | --- | --- | --- | --- | --- |
@@ -73,8 +73,8 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
 
 所有第三方 Actions 鎖定完整 commit SHA，旁註可讀 release tag。Workflow YAML 只負責
 event、權限、環境與呼叫；分類與驗證規則留在本機可測的 scripts。Repository 預設
-`GITHUB_TOKEN` 為 read-only；release job 只在自己的 workflow 提升必要權限。Repository
-必須允許 Actions 建立 PR，但 workflow 不能自行核准版本 PR。
+`GITHUB_TOKEN` 為 read-only；release job 只在自己的 workflow 提升必要權限。Automatic
+模式必須允許 Actions 建立 PR；若上層政策禁止則使用 Guided，workflow 仍不能自行核准版本 PR。
 
 ## 驗證分級與實測成本
 

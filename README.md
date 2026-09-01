@@ -26,7 +26,7 @@ Cyber-Arch 的可更新 repo 公版，支援只使用共通流程，或獨立選
 
 本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。`template/` 是下發內容；根目錄則讓公版本身使用同一套規則。
 
-目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks、驗證、自動版本 PR、GitHub Release、打包、checksum 與 SBOM。容器驗證、registry publishing 與通用部署流程仍未啟用。GitHub 設定腳本會先辨識方案與實際 API 能力。
+目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks 與驗證。自動版本 PR、GitHub Release、打包、checksum 與 SBOM 已進入候選，須由預設分支實跑證明後才算啟用；容器驗證、registry publishing 與通用部署流程仍未啟用。GitHub 設定腳本會先辨識方案與實際 API 能力。
 
 ## 快速開始
 

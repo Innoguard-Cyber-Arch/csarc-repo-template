@@ -54,6 +54,8 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
         encoding="utf-8"
     )
     assert "release_bundle.py candidate" in candidate
+    assert "verify-candidate-version" in candidate
+    assert 'base_sha="$(jq -r' in candidate
     assert "./scripts/verify-template.sh" not in candidate
     assert "status=failure\nif (" in candidate
     assert 'publish_status "$status"' in candidate
@@ -83,6 +85,13 @@ def test_template_only_adds_release_workflow_to_new_repositories() -> None:
     assert "./scripts/verify-release-candidate" in template
     assert '{% if "typescript" in languages %}' in template
     assert '{% if "rust" in languages %}' in template
+
+    ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "CSARC_PUBLISH_CANDIDATE_STATUS" in ci
+    assert (
+        './scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"'
+        in ci
+    )
 
 
 def test_retired_archive_has_no_release_workflow_copy() -> None:

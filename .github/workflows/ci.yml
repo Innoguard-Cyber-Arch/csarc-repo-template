@@ -88,9 +88,22 @@ jobs:
         run: ./scripts/verify-template.sh
       - name: Validate the guided release candidate
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') }}
-        run: >-
-          python3 scripts/release_bundle.py candidate
-          --output "$RUNNER_TEMP/release-candidate-assets"
+        env:
+          CSARC_PUBLISH_CANDIDATE_STATUS: "false"
+          GH_TOKEN: ${{ github.token }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          jq -n \
+            --argjson number "$PR_NUMBER" \
+            --arg sha "$PR_HEAD_SHA" \
+            --arg head "$PR_HEAD" \
+            --arg base "$PR_BASE" \
+            '{number: $number, sha: $sha, headBranchName: $head, baseBranchName: $base}' \
+            >"$RUNNER_TEMP/release-pr.json"
+          ./scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"
       - name: Record result
         if: ${{ always() }}
         env:

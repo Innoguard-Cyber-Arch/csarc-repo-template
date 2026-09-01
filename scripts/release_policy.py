@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import tomllib
 import urllib.error
 import urllib.parse
@@ -114,13 +115,13 @@ def select_release_mode(capabilities: dict[str, Capability]) -> tuple[str, str]:
         for name in PUBLISH_CAPABILITIES
         if capabilities[name].state == "unknown"
     ]
-    if blocked:
+    if blocked or unknown:
         return (
             "blocked",
-            "GitHub tag or Release publication is unavailable: "
-            + ", ".join(blocked),
+            "GitHub tag or Release publication is unavailable or unproven: "
+            + ", ".join([*blocked, *unknown]),
         )
-    if pull_requests.state == "allowed" and not unknown:
+    if pull_requests.state == "allowed":
         return (
             "automatic",
             "Actions pull requests and the artifact handoff are allowed",
@@ -131,11 +132,7 @@ def select_release_mode(capabilities: dict[str, Capability]) -> tuple[str, str]:
             f"Actions pull requests are {pull_requests.state}; prepare a "
             "reviewed version candidate locally",
         )
-    return (
-        "blocked",
-        "GitHub tag or Release publication has not been proven: "
-        + ", ".join(unknown),
-    )
+    raise AssertionError("release mode selection is incomplete")
 
 
 def release_intent(title: str) -> str:
@@ -646,6 +643,42 @@ def detect_runtime_capabilities(
     return capabilities
 
 
+def workflow_policy_observations(
+    api: GitHubAPI, repo: str
+) -> dict[str, Capability]:
+    """Read organization and repository PR policy without inferring access."""
+
+    def observe(path: str, scope: str) -> Capability:
+        status, payload = api.request("GET", path)
+        allowed = (
+            payload.get("can_approve_pull_request_reviews")
+            if isinstance(payload, dict)
+            else None
+        )
+        if 200 <= status < 300 and isinstance(allowed, bool):
+            return Capability(
+                "allowed" if allowed else "blocked",
+                f"{scope} Actions policy "
+                + ("allows" if allowed else "blocks")
+                + " pull requests",
+            )
+        return Capability(
+            "unknown",
+            f"{scope} Actions policy could not be read (HTTP "
+            f"{status or 'unavailable'})",
+        )
+
+    owner = repo.split("/", 1)[0]
+    return {
+        "organization_policy": observe(
+            f"orgs/{owner}/actions/permissions/workflow", "organization"
+        ),
+        "repository_setting": observe(
+            f"repos/{repo}/actions/permissions/workflow", "repository"
+        ),
+    }
+
+
 def preflight_capabilities(repo: str) -> dict[str, Capability]:
     """Read the repository PR policy; defer token-write checks to runtime."""
     capabilities = unknown_capabilities("requires the runtime workflow token")
@@ -876,20 +909,51 @@ def optional_integration_preflight(repo: str) -> dict[str, dict[str, object]]:
 
 
 def report(
-    capabilities: dict[str, Capability], source: str, **extra: object
+    capabilities: dict[str, Capability],
+    source: str,
+    *,
+    policies: dict[str, Capability] | None = None,
+    **extra: object,
 ) -> dict[str, object]:
     """Build the machine-readable decision record."""
-    mode, reason = select_release_mode(capabilities)
+    policy = policies or {
+        "organization_policy": Capability("unknown", "not observed"),
+        "repository_setting": Capability("unknown", "not observed"),
+    }
+    effective_capabilities = dict(capabilities)
+    policy_blocks = [
+        name
+        for name in ("organization_policy", "repository_setting")
+        if policy[name].state == "blocked"
+    ]
+    if policy_blocks:
+        effective_capabilities["actions_pull_requests"] = Capability(
+            "blocked",
+            "Actions pull requests are blocked by " + ", ".join(policy_blocks),
+        )
+    mode, reason = select_release_mode(effective_capabilities)
+    token_permissions = {
+        name: asdict(capability)
+        for name, capability in sorted(capabilities.items())
+    }
     return {
         "schema_version": 1,
         "observed_at": datetime.now(UTC).isoformat(),
         "source": source,
         "mode": mode,
         "reason": reason,
-        "capabilities": {
-            name: asdict(capability)
-            for name, capability in sorted(capabilities.items())
+        "organization_policy": asdict(policy["organization_policy"]),
+        "repository_setting": asdict(policy["repository_setting"]),
+        "token_permissions": token_permissions,
+        "effective": {
+            "mode": mode,
+            "reason": reason,
+            "actions_pull_requests": asdict(
+                effective_capabilities["actions_pull_requests"]
+            ),
         },
+        # Compatibility alias for callers that predate the split evidence.
+        "capabilities": token_permissions,
         **extra,
     }
 
@@ -1042,6 +1106,51 @@ def release_plan_report(root: Path, sha: str) -> dict[str, object]:
         "materialized": materialized,
         "reason": reason,
     }
+
+
+def verify_candidate_version(root: Path, base_sha: str) -> str:
+    """Recompute the candidate version from its base commit."""
+    executable = shutil.which("git")
+    if executable is None:
+        raise RuntimeError("Git is required for release planning")
+    with tempfile.TemporaryDirectory(prefix="csarc-release-base-") as path:
+        worktree = Path(path) / "worktree"
+        subprocess.run(  # noqa: S603
+            [
+                executable,
+                "worktree",
+                "add",
+                "--detach",
+                "--force",
+                str(worktree),
+                base_sha,
+            ],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        try:
+            planned = release_plan(worktree, base_sha)
+        finally:
+            subprocess.run(  # noqa: S603
+                [
+                    executable,
+                    "worktree",
+                    "remove",
+                    "--force",
+                    str(worktree),
+                ],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+    if planned is None:
+        raise ValueError("candidate base has no release-worthy commits")
+    _, expected = planned
+    verify_release_version(root, expected)
+    return expected
 
 
 def _replace_toml_version(
@@ -1402,6 +1511,9 @@ def parser() -> argparse.ArgumentParser:
     verify = subparsers.add_parser("verify-version")
     verify.add_argument("--tag")
     verify.add_argument("--root", type=Path, default=Path.cwd())
+    verify_candidate = subparsers.add_parser("verify-candidate-version")
+    verify_candidate.add_argument("--base-sha", required=True)
+    verify_candidate.add_argument("--root", type=Path, default=Path.cwd())
     verify_follow_up = subparsers.add_parser("verify-release-follow-up")
     verify_follow_up.add_argument("--repo", required=True)
     verify_follow_up.add_argument("--head", required=True)
@@ -1489,6 +1601,22 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
             raise SystemExit(str(error)) from error
         write_plan_report(payload, None, None)
         return 0
+    if args.command == "verify-candidate-version":
+        try:
+            version = verify_candidate_version(
+                args.root.resolve(), args.base_sha
+            )
+        except (
+            ValueError,
+            json.JSONDecodeError,
+            subprocess.CalledProcessError,
+            tomllib.TOMLDecodeError,
+        ) as error:
+            raise SystemExit(str(error)) from error
+        print(  # noqa: T201
+            f"Release candidate matches base decision {version}."
+        )
+        return 0
     if args.command in {"prepare", "verify-version"}:
         tag = args.tag
         expected = None
@@ -1520,22 +1648,23 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         return 0
 
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    capabilities = (
-        unknown_capabilities("GitHub token is unavailable")
-        if not token
-        else detect_runtime_capabilities(
-            GitHubAPI(
-                token,
-                os.environ.get("GITHUB_API_URL", "https://api.github.com"),
-            ),
-            args.repo,
-            args.sha,
-            args.branch,
+    policies = None
+    if not token:
+        capabilities = unknown_capabilities("GitHub token is unavailable")
+    else:
+        api = GitHubAPI(
+            token,
+            os.environ.get("GITHUB_API_URL", "https://api.github.com"),
         )
-    )
+        capabilities = detect_runtime_capabilities(
+            api, args.repo, args.sha, args.branch
+        )
+        policies = workflow_policy_observations(api, args.repo)
     if args.command == "detect":
         write_report(
-            report(capabilities, "runtime"), args.output, args.github_output
+            report(capabilities, "runtime", policies=policies),
+            args.output,
+            args.github_output,
         )
         return 0
     raise SystemExit(f"unsupported command: {args.command}")
