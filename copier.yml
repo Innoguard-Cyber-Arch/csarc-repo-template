@@ -18,6 +18,7 @@ _exclude:
   - "{% if enable_template_update_notifications %}__keep_template_update_script__{% else %}scripts/check-template-update{% endif %}"
   - "{% if enable_governance_drift_check %}__keep_governance_drift_workflow__{% else %}.github/workflows/governance-drift.yml{% endif %}"
   - "{% if enable_governance_drift_check %}__keep_governance_drift_script__{% else %}scripts/check-governance-drift{% endif %}"
+  - "{% if project_mode == 'new' %}__keep_release_workflow__{% else %}.github/workflows/release.yml{% endif %}"
   - "{% if enable_codeql | default(false) %}__keep_codeql__{% else %}.github/workflows/codeql.yml{% endif %}"
   - "{% if 'python' in languages %}__keep_python_version__{% else %}.python-version{% endif %}"
   - "{% if 'python' in languages %}__keep_python_project__{% else %}pyproject.toml{% endif %}"
@@ -104,7 +105,7 @@ _migrations:
   - command: "uv run --no-project python scripts/render_site.py"
     when: "{{ _stage == 'after' }}"
 _message_after_copy: |
-  {% if project_mode == 'existing' %}Existing product files were preserved. Review .csarc/config.yml, merge the required tool settings described in README.md, run ./scripts/verify, then link the pull request to its Issue.{% else %}Project created. Confirm .csarc/config.yml, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request.{% endif %} GitHub template creation and Copier do not copy repository settings. Runtime workflows detect release capabilities automatically. Administrators may optionally run ./scripts/apply-repository-settings.sh plan, apply, and check to enable stronger repository controls; unsupported organization policy remains explicit and does not require adopters to change it. See README.md for the capability and visibility matrices.
+  {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in README.md, run ./scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% else %}Project created with the CSARC release workflow. Confirm .csarc/config.yml, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% endif %} GitHub template creation and Copier do not copy repository settings. See README.md for the capability and visibility matrices.
 
 project_mode:
   type: str

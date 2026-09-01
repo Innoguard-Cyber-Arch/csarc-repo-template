@@ -37,6 +37,7 @@ if [[ -z "$repo" ]]; then
   fi
 fi
 ruleset_payload="$repo_root/policies/rulesets.json"
+release_policy="$repo_root/policies/releases.json"
 ruleset_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["name"])' "$ruleset_payload")"
 legacy_ruleset_name="CSARC preserve dev next"
 code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"
@@ -298,6 +299,30 @@ PY
     fi
   fi
 
+  if ! release_state="$(gh api "repos/$repo/immutable-releases" 2>&1)"; then
+    echo "Cannot inspect the required immutable Releases setting for $repo." >&2
+    echo "$release_state" >&2
+    check_errors=$((check_errors + 1))
+  elif ! release_drift="$(python3 - "$release_policy" "$release_state" 2>&1 <<'PY'
+import json
+import sys
+
+desired = json.load(open(sys.argv[1], encoding="utf-8"))
+actual = json.loads(sys.argv[2])
+if actual.get("enabled") is not desired["enabled"]:
+    raise SystemExit(
+        "enabled: desired "
+        f"{desired['enabled']!r}, live {actual.get('enabled')!r}"
+    )
+PY
+  )"; then
+    echo "Release settings drift: $release_drift" >&2
+    echo "Immutable Releases are required before the release workflow can publish." >&2
+    check_errors=$((check_errors + 1))
+  else
+    echo "Immutable Releases match policies/releases.json."
+  fi
+
   if ! actions_state="$(gh api "repos/$repo/actions/permissions/workflow" 2>&1)"; then
     if [[ "$repo_admin" != "true" && "$actions_state" == *"Resource not accessible by integration"* ]]; then
       [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
@@ -342,7 +367,7 @@ PY
     elif [[ "$actions_pr_degraded" == "true" ]]; then
       [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
         echo "::warning title=Actions policy degraded::Actions cannot approve pull requests although policies/actions.json requests it."
-      echo "DEGRADED Actions PR policy: desired true, live false; an organization policy may block this capability. Runtime release workflows adapt."
+      echo "DEGRADED Actions PR policy: desired true, live false; an organization policy may block this capability. No release workflow is enabled by this script."
       check_degraded=$((check_degraded + 1))
     fi
     if [[ "$actions_default_drift" != "true" && "$actions_pr_degraded" != "true" && "$actions_pr_drift" != "true" ]]; then
@@ -469,6 +494,7 @@ echo "Account plan: $plan_label"
 echo "Repository visibility: $repo_visibility"
 echo "Deployment plan:"
 echo "- APPLY policies/repository.json"
+echo "- APPLY policies/releases.json (immutable Releases)"
 echo "- APPLY policies/actions.json when account policy permits it"
 echo "- APPLY policies/labels.json (create or update policy labels)"
 if [[ "$legacy_ruleset_id" != "-" ]]; then
@@ -519,6 +545,13 @@ if [[ "$mode" == "plan" ]]; then
   exit 0
 fi
 gh api --method PATCH "repos/$repo" --input "$repo_root/policies/repository.json" >/dev/null
+if ! release_policy_error="$(
+  gh api --method PUT "repos/$repo/immutable-releases" 2>&1
+)"; then
+  echo "Cannot enable required immutable Releases for $repo." >&2
+  echo "$release_policy_error" >&2
+  exit 1
+fi
 actions_policy_applied=true
 if ! actions_policy_error="$(
   gh api --method PUT "repos/$repo/actions/permissions/workflow" \
@@ -527,7 +560,7 @@ if ! actions_policy_error="$(
   if [[ "$actions_policy_error" =~ (403|409|not\ permitted) ]]; then
     actions_policy_applied=false
     echo "DEGRADED Actions PR policy: $actions_policy_error"
-    echo "The release workflow will select direct or verification-only mode at runtime."
+    echo "No release workflow is enabled; record this degraded capability before designing one."
   else
     echo "Cannot apply Actions workflow permissions for $repo." >&2
     echo "$actions_policy_error" >&2

@@ -87,7 +87,6 @@ run_regression_tests() {
   ./scripts/test-issue-triage
   ./scripts/test-worktree-cleanup
   ./scripts/test-pr-policy
-  ./scripts/test-release-follow-up-gates
 }
 
 verify_package() {

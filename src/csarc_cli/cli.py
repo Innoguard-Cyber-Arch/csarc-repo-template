@@ -1800,15 +1800,30 @@ def print_group(title: str, paths: tuple[str, ...]) -> None:
 
 def print_capabilities(payload: dict[str, object]) -> None:
     """Print capability results from a resolved plan."""
-    raw_states = payload.get("capabilities")
+    for name in ("organization_policy", "repository_setting"):
+        value = payload.get(name)
+        state = (
+            value.get("state", "unknown")
+            if isinstance(value, dict)
+            else "unknown"
+        )
+        print(f"GitHub release planning {name}={state}")
+    raw_states = payload.get("token_permissions", payload.get("capabilities"))
     states = raw_states if isinstance(raw_states, dict) else {}
-    summary = ", ".join(
-        f"{name}={value.get('state', 'unknown')}"
+    token_summary = ", ".join(
+        f"token {name}={value.get('state', 'unknown')}"
         for name, value in states.items()
         if isinstance(value, dict)
     )
-    print(f"GitHub release preflight: {summary or 'unknown'}")
-    print("Runtime workflows recheck capabilities before every release.")
+    print(f"GitHub release planning permissions: {token_summary or 'unknown'}")
+    effective = payload.get("effective")
+    mode = (
+        effective.get("mode", payload.get("mode", "blocked"))
+        if isinstance(effective, dict)
+        else payload.get("mode", "blocked")
+    )
+    print(f"GitHub release planning effective={mode}")
+    print("Planning only: this check neither enables nor publishes a release.")
     raw_integrations = payload.get("integrations")
     integrations = (
         raw_integrations if isinstance(raw_integrations, dict) else {}
@@ -2971,21 +2986,25 @@ def apply_milestone_description_plan(
 def capability_preflight(
     script: Path, target: Path, *, emit: bool = True
 ) -> dict[str, object]:
-    """Run the read-only release preflight without making it a prerequisite."""
+    """Inspect release-related capabilities for planning only."""
     repository = target_repository(target)
     if repository is None or not script.is_file():
+        unknown = {"state": "unknown", "reason": "runtime check required"}
+        token_permissions = {
+            name: dict(unknown)
+            for name in ("actions_pull_requests", "contents", "release")
+        }
         payload: dict[str, object] = {
-            "mode": "verification-only",
+            "mode": "blocked",
             "reason": "GitHub origin or capability script is unavailable",
-            "capabilities": {
-                name: {"state": "unknown", "reason": "runtime check required"}
-                for name in (
-                    "actions_pull_requests",
-                    "contents",
-                    "release",
-                    "dispatch",
-                )
+            "organization_policy": dict(unknown),
+            "repository_setting": dict(unknown),
+            "token_permissions": token_permissions,
+            "effective": {
+                "mode": "blocked",
+                "reason": "GitHub origin or capability script is unavailable",
             },
+            "capabilities": token_permissions,
             "integrations": {
                 "renovate": {
                     "state": "fallback",
@@ -3019,8 +3038,15 @@ def capability_preflight(
             cast(dict[str, object], parsed)
             if result.returncode == 0 and isinstance(parsed, dict)
             else {
-                "mode": "verification-only",
+                "mode": "blocked",
                 "reason": "GitHub capability preflight was unavailable",
+                "organization_policy": {},
+                "repository_setting": {},
+                "token_permissions": {},
+                "effective": {
+                    "mode": "blocked",
+                    "reason": "GitHub capability preflight was unavailable",
+                },
                 "capabilities": {},
             }
         )
@@ -3964,9 +3990,13 @@ def update_plan_answers(  # noqa: C901
         enabled = repository.visibility == "public" and bool(
             selected_languages(answers)
         )
-        for key in ("enable_codeql", "enable_release_attestations"):
-            if key in answers and key not in explicit_data:
-                update_data[key] = str(enabled).lower()
+        if "enable_codeql" in answers and "enable_codeql" not in explicit_data:
+            update_data["enable_codeql"] = str(enabled).lower()
+        if (
+            "enable_release_attestations" in answers
+            and "enable_release_attestations" not in explicit_data
+        ):
+            update_data["enable_release_attestations"] = str(enabled).lower()
     for key, value in update_data.items():
         previous_value = answers.get(key)
         if key == "languages":

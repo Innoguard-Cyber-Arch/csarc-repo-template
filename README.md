@@ -26,7 +26,7 @@ Cyber-Arch 的可更新 repo 公版，支援只使用共通流程，或獨立選
 
 本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。`template/` 是下發內容；根目錄則讓公版本身使用同一套規則。
 
-目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks、驗證、打包、checksum、SBOM、選配容器驗證／GHCR 交付與 capability-adaptive 自動升版。GitHub 設定腳本會先辨識方案與實際 API 能力。
+目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks 與驗證。自動版本 PR、GitHub Release、打包、checksum 與 SBOM 已進入候選，須由預設分支實跑證明後才算啟用；容器驗證、registry publishing 與通用部署流程仍未啟用。GitHub 設定腳本會先辨識方案與實際 API 能力。
 
 ## 快速開始
 
@@ -42,7 +42,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 `<approved-full-commit-sha>` 由核准 GitHub Release 的 pinned prompt 提供，不可直接輸入預留字樣。`init`／`adopt` 會要求 `project_description`、`project_run_command` 與 `security_reporting_channel`；前兩項可接受顯示的專案實值預設，安全通報管道預設使用該 repository 的公開 GitHub Issues。公開 Issue 不得張貼 secrets、credentials、personal data 或其他敏感內容，也不得猜測 email 或回應 SLA。GitHub origin 可辨識時，CLI 會用實際 repository URL 產生 badge、clone 指令與 package metadata。`project_run_command` 只是產品啟動方式，不會被當成驗證指令；既有 repo 可用 `project_verification_hook=scripts/verify-skills` 指定一個 repository-relative executable，未指定時才相容沿用 `scripts/verify-product`。
 
-建立或導入時選擇 Python、Rust、TypeScript 的任意組合；結果與分支、驗證、發布等公版選項都保存在 `.csarc/config.yml`。這同時是 Copier 的 answers file，也是 repo 唯一的公版設定來源；請用 `csarc update --data languages=python,rust` 等更新命令調整，不要再建立另一份 profile 設定。
+建立或導入時選擇 Python、Rust、TypeScript 的任意組合；結果與分支、驗證、發布等公版選項都保存在 `.csarc/config.yml`。這是每個 repo 唯一的公版設定來源；生成 repo 也在同一檔案保存 Copier 的來源與版本。請用 `csarc update --data languages=python,rust` 等更新命令調整生成 repo，不要再建立另一份 profile 設定。
 
 CLI 固定驗證 canonical repository numeric ID、immutable stable Release、release attestation、tag 指向與 commit signature，再把 GitHub Release 解析成完整 commit SHA 並顯示計畫；任何不一致都會在 Copier 寫檔前停止。互動模式等使用者確認，CI 或 agent 則要同時明確給 `--yes --non-interactive`。範本來源目前是 private repo，需先以 `gh auth login` 登入；root CLI 不發布到 PyPI。
 
@@ -51,7 +51,7 @@ CLI 固定驗證 canonical repository numeric ID、immutable stable Release、re
 | 路徑 | 用途 |
 | --- | --- |
 | `copier.yml`、`template/` | 問題、下發檔案與建立後任務 |
-| `.csarc/config.yml`（生成 repo） | Copier 來源／版本與公版選項的單一設定來源 |
+| `.csarc/config.yml` | root 與生成 repo 共用的公版設定；生成 repo 另含 Copier 來源／版本 |
 | `profiles/catalog.yaml` | 已支援語言與版本政策 |
 | `.github/`、`policies/` | 公版本身的 CI 與 GitHub 設定 |
 | `scripts/verify-template.sh` | 建立、更新、語言與供應鏈回歸 |
@@ -68,7 +68,7 @@ Python 目前以 3.14、uv、Ruff、ty、pytest 與 src layout 為基線；CI �
 
 工作模型是「SDD → Feature parent → Task／Bug subissues → 各自 PR」，交付時才把 leaf Issues 與 PR 放進有 due date 的 Milestone；一張 leaf Issue 對應一個原生 Development branch 與一個 PR，CI 與人工審查都通過才合併。GitHub Projects 預設關閉。完整規則（Issue／PR 內容格式、標題規範、關係、分支與 worktree 使用、closing keyword 限制等）以 [`AGENTS.md`](AGENTS.md) 為唯一權威來源，這裡不重複列出。
 
-本 repo 採 delivery 模式：`main` 是唯一永久 branch；Milestone 各自使用短命的 `dev/m*`，一般孤立 Issue 從最新 `main` 建立 topic branch 並直接以 PR 回到 `main`。只有文件化的獨立 soak／canary 才使用一次性的 `dev/i<Issue 編號>-<簡稱>` promotion；明確 hotfix 也直接 target `main`。CI 是可攜的 integration test layer，外部測試環境則屬 canary layer。
+本 repo 採 delivery 模式：`main` 是唯一永久 branch；里程碑各自使用短命的 `dev/m*`，一般孤立 Issue 從最新 `main` 建立 topic branch 並直接以 PR 回到 `main`。只有文件化的獨立 soak／canary 才使用一次性的 `dev/i<Issue 編號>-<簡稱>` promotion；明確 hotfix 也直接 target `main`。CI 是可攜的 integration test layer，外部測試環境則屬 canary layer。
 
 里程碑工作 PR 合併進 `dev/m*` 後，Action 會重新核對同號 Issue、精確來源 SHA、目的分支與里程碑再關單；一般孤立工作與 Hotfix 直接進 `main`，沿用 GitHub 原生關單。
 
@@ -87,45 +87,46 @@ flowchart LR
   MAIN -. "reviewed sync PR" .-> DI
 ```
 
-`main` 前進後，所有未合併的 delivery／stacked PR 都必須先納入最新 main；PR policy 會在既有 `title` runner 內 fail closed，`.github/workflows/delivery-maintenance.yml` 則在 trusted main push 摘要列出每條 active delivery branch 的 `sync/main-to-*` PR 指令並使過期 policy 失效。預設不自動寫入；只有明確設定 `CSARC_AUTO_SYNC=true`、提供會觸發 PR checks 的 `CSARC_SYNC_TOKEN`，且 branch／PR write probes 都為 allowed 時才自動開 PR，blocked／unknown 一律回到相同手動流程。
+`main` 前進不會讓無關的里程碑工作失效，也不會自動同步所有分支。各里程碑只在最終交付前以受審查的 `sync/main-to-m*` PR 納入當時最新 `main`；只有 owner 記錄真實 dependency 時才提前同步自己的分支。
 
 公版的完整入口是 `./scripts/verify-template.sh`；生成專案使用 `./scripts/verify`。現行 `.github/workflows/ci.yml` 只有一個 `verify` job，依變更選擇 docs／fast／full，再呼叫同一份 repo-local 程式；一般 PR 不會為 fast、full、安全與 aggregate 各啟動一個 runner。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 30 分鐘。詳細分級與目前封存邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
-Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用。專用的 promotion、release、Zizmor、remote governance、deployment 與其他 schedule workflows 仍在 `archive/ci-cd/2026-08-27/`；文件中的目標政策不代表尚未移出的 Action 已啟用。
+Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用；單一 release workflow 已設定為候選，待預設分支實跑後才算啟用。專用 promotion、release handoff、registry publisher 與 deployment workflows 不恢復，歷史由 Git／Issue／PR 保存；Zizmor、remote governance 與其他仍待各自 owner 決定的 workflow 才保留在 `archive/ci-cd/2026-08-27/`。
 
 ### Actions 額度耗盡的一次性驗證
 
-只有 GitHub Actions 的 zero-step billing block 被機械式確認、且本機驗證通過時，才可能使用本機 fallback；runner 註記本身不構成證據。一般 Issue PR 留一則說明留言即可合併，不需要即時人工確認；Promotion 到 `main` 仍維持 human attestation/authorization 雙方確認，另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#actions-額度-fallback)。
+只有 GitHub Actions 的 zero-step billing block 被機械式確認、且本機驗證通過時，才可能使用本機 fallback；runner 註記本身不構成證據。一般 Issue PR 留一則說明留言即可合併，不需要即時人工確認；Promotion 到 `main` 仍維持 human attestation/authorization 雙方確認，另須綁定 candidate tree、合併後核對 tree identity，且本機證據不可用於 release。完整流程只有一份，見 [`docs/ci-policy.md`](docs/ci-policy.md#failure-與-fallback)。
 
 `./scripts/scan-secrets` 會在已有 commit 時掃描完整可達 Git 歷史，並一律另掃目前工作樹，因此已刪除與尚未提交的機密都不會靜默略過；尚未 `git init` 的新專案仍可安全掃描工作樹。大型 repo 若已明確接受縮小歷史範圍，可傳入例如 `--log-opts='--since=2026-01-01'`，預設仍掃完整歷史。
 
 ## 設定與密鑰
 
-GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；有管理權時可依序執行 `./scripts/apply-repository-settings.sh plan`／`apply`／`check`。`check` 唯讀比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset，可修正差異會失敗，Free private Ruleset 或組織政策限制則明確標為 `DEGRADED`，不會誤稱為沒有 drift；`.github/workflows/governance-drift.yml` 每天重跑同一個 `check` 並在可修正的漂移出現時開立或更新追蹤 Issue。Free private 的非 draft PR 另會從設定名單輪派一位非作者 reviewer。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見[內部網站附錄](docs/index.html)「先辨識 GitHub 方案」章節。
+GitHub 建立或 Copier 導入只會複製檔案，不會複製 repository settings；新生成 repo 必須在首次發布前由管理員依序執行 `./scripts/apply-repository-settings.sh plan`／`apply`／`check`，啟用 immutable Releases 等發布前提。`check` 唯讀比對 CODEOWNERS、repository、immutable Releases、Actions、政策標籤與有效 Ruleset，可修正差異會失敗，Free private Ruleset 或組織政策限制則明確標為 `DEGRADED`，不會誤稱為沒有 drift；`.github/workflows/governance-drift.yml` 每天重跑同一個 `check` 並在可修正的漂移出現時開立或更新追蹤 Issue。Free private 的非 draft PR 另會從設定名單輪派一位非作者 reviewer。各 GitHub 方案下 `apply`／`check` 與審查能力的實際行為，見[內部網站附錄](docs/index.html)「先辨識 GitHub 方案」章節。
 
-Release 路徑、選配整合（Renovate）與 SAST 啟用都依偵測到的平台能力與方案自動選擇，不需要導入者建立 PAT 或額外 GitHub App；`csarc init`／`adopt`／`update` 會先顯示唯讀 preflight 結果。選配整合依目前權限引導，分成 `available`／`request-owner`／`fallback` 三種狀態，決定能否直接開啟 [Renovate App 安裝頁](https://github.com/apps/renovate/installations/new)。完整能力矩陣與 Fleet 治理觸發門檻見附錄。
+選配整合（Renovate）與 SAST 啟用依偵測到的平台能力與方案提供建議，不需要導入者建立 PAT 或額外 GitHub App；`csarc init`／`adopt`／`update` 會先顯示唯讀 preflight 結果。選配整合依目前權限引導，分成 `available`／`request-owner`／`fallback` 三種狀態，決定能否直接開啟 [Renovate App 安裝頁](https://github.com/apps/renovate/installations/new)。這個 preflight 不會啟用發版流程。完整能力矩陣與 Fleet 治理觸發門檻見附錄。
 
-Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`，不要把 token、私鑰或實際密碼寫進 repo。`./scripts/verify-template.sh` 只證明靜態與合成驗證；root-only `Live integration smoke` 才會實際 dispatch，取得線上整合證據，執行方式見 [`docs/live-integration.md`](docs/live-integration.md) 及 [`docs/artifact-consumption.md`](docs/artifact-consumption.md)。
+Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`，不要把 token、私鑰或實際密碼寫進 repo。`./scripts/verify-template.sh` 只證明靜態與合成驗證；歷史 live-integration 與 artifact-consumption run 只證明當時的 commit，不能當成現行能力。封存證據與未來恢復條件見 [`docs/live-integration.md`](docs/live-integration.md) 及 [`docs/artifact-consumption.md`](docs/artifact-consumption.md)。
 
 `docs/index.html` 目前沒有登入或其他實際存取限制，只有 `noindex`／`docs/robots.txt` 臨時防護；候選方案見附錄「存取控制決策」章節與 [Issue #79](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79)。
 
 ## 發布與維運
 
-公版的單一版本來源是 root `.release-please-manifest.json`；`version.txt`、`pyproject.toml`、`uv.lock`、README、docs、CHANGELOG、`v*` tag 與發布成品必須一致。`template/.release-please-manifest.json` 與模板內的 package/version 檔則是新生成專案自己的 `0.1.0` 起點，不跟隨公版 release number。Promotion 已完成完整驗證；release workflow 只接受綁定該 main SHA 的 source evidence，再從 exact tag 建置、以固定 Syft 版本產生 SPDX JSON SBOM，並把 artifact digest、manifest 與 provenance 綁定後驗證 immutable Release；不重跑完整模板與 runtime 矩陣，也不以 Syft 輸出 byte-identical 作為再現性假設。生成專案依所選語言模組驗證 wheel、npm tarball、Cargo package 或其組合；Rust 目前不發布 crates.io。所有 profile（含 CI/CD-only）都會把來源封存檔、`SHA256SUMS`、SPDX SBOM 與 tag／commit／workflow run metadata 附加至 GitHub Release；CI/CD-only 不假裝有語言成品。已有產品 Containerfile 的既有 repo 可另選 `verify` 或 `ghcr`：前者只在 PR build／smoke／scan，後者才從已驗證 release source 將相同映像 bytes 發布至 GHCR、附加 provenance 與 SPDX SBOM，並以 digest 再測一次。attestation 產生後，只有明確啟用的 registry 路徑會在發布時強制驗證；一般下載仍由消費者執行 `gh attestation verify`。這仍是持續交付，不包含通用 runtime 部署。
+先分清楚四件事：版本意圖描述相容性影響；正式版本把 manifest、package metadata 與 CHANGELOG 一起寫進受審查的 commit；發版建立不可變 tag、GitHub Release、成品與證據；交付則是把已驗證工作送進權威分支或交給使用者。部署到實際環境不在本模板範圍。
 
-GitHub Release 是所有 profile 的共同基線；PyPI／npm 依語言分開選配，GHCR 則只供已有 Containerfile 的既有 repo 選配，預設全部關閉，且不讀取長效 registry token。容器選項是 `none`、`verify`、`ghcr`；非容器專案不會取得 Docker job 或 `packages: write`。啟用條件、trusted publisher 登記步驟與 Node／npm 版本需求見附錄同一章節。
+合併到 `main` 先完成 repository delivery；`release.yml` 隨後執行完整驗證，並用同一份 repo-local 規則計算下一版。GitHub 允許 Action 建 PR 時，由 Release Please 自動建立版本 PR；若上層政策禁止，維護者或 agent 執行 `python3 scripts/release_policy.py prepare-candidate`，再依輸出的 branch／title 開一般 PR。兩路都驗證可信作者、允許檔案、版本／CHANGELOG 一致性與可打包性。版本 PR 經人審查合併後，唯一的 `release.yml` 建立 draft Release、成品、checksum 與 SPDX SBOM，下載重驗後才公開並確認 immutable；本機命令不建立 tag 或 Release。
 
-| Runtime 實測政策 | 模式與行為 | 保證、限制與 fallback |
+| 能力 | 目前狀態 | 現在怎麼做 |
 | --- | --- | --- |
-| PR、contents、Release、dispatch 都是 `allowed` | **Release PR：**release-please 維護可審查的版本／changelog PR；合併後建立 release 並明確 dispatch 成品 workflow | 保留最強的人類審查與來源 metadata 同步；任一必要能力漂移就不再選此模式 |
-| PR 是 `blocked`／`unknown`，其餘三項都是 `allowed` | **Direct：**只由最新 `main` 配置 tag 與 draft release，再 dispatch 成品 workflow | 最新 commit 必須已由人工 PR 寫入正確版本與 CHANGELOG；否則 fail closed 為 verification-only |
-| contents、Release 或 dispatch 任一不是 `allowed` | **Verification only：**保留測試與 machine-readable capability artifact，不建立 tag 或 release | 不會把不確定權限當成功；政策恢復後由後續 main run 重新計算並接續 |
+| PR 的 SemVer 意圖 | Active | `fix`／`revert` 為 patch、`feat` 為 minor、`!` 為 major，其餘 no-release |
+| 正式版本與 CHANGELOG | Candidate／Guided | 自動或本機候選共用同一版本決策；組織目前禁止 Actions 建 PR |
+| tag／GitHub Release | Candidate／Blocked | 版本 PR 合併後由唯一 workflow 發布；待 default branch live run |
+| checksum／SBOM | Candidate | `release_bundle.py` 在同一次 run 建立、下載並重驗 exact-tag 成品；待 live run |
+| production-side attestation | Removed | [#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439) 判定零 active 消費者並移除設定面，非留待選配 |
+| 消費端 attestation 驗證 | Conditional | 與上列產出端設定無關；消費端仍使用既有驗證契約 |
+| PyPI／npm／GHCR | Not applicable | root 不發布 registry；生成專案只發布 GitHub Release 成品，不要求長效 token |
+| production deployment | Not applicable | 由 consuming product 定義環境、健康檢查、核准與復原 |
 
-GitHub Release 是所有專案的共同基線；registry 則依所選語言模組分開選配：Python 可開 PyPI、TypeScript 可開 npm，同時選取時可分別啟用；Rust 目前只驗證 Cargo package，不發布 crates.io。Root `csarc-repo-cli` 只隨 GitHub Release 交付，不發布到 PyPI，也沒有 registry publishing job。生成專案啟用 PyPI／npm 前，package owner 必須在 registry 登記完全相符的 organization／repository、workflow `release.yml` 與 environment；兩者都使用 OIDC 短效憑證，不讀取長效 registry token。PyPI 首次發布可先建立 pending publisher；npm 則需由既有 package owner 建立 trusted publisher，並使用 GitHub-hosted runner、Node 22.14+ 與 npm 11.5.1+。
-
-整份公版只用一個 SemVer：`fix(scope)` 升 patch、`feat(scope)` 升 minor、`!` 升 major。scope 可標 `ci`、`python`、`typescript` 或 `template`；只要任何已支援 profile 不相容，就視為整份公版的破壞性變更。
-
-release workflow 用內建 `GITHUB_TOKEN` 重測能力：支援時由 release-please 自動開、更新 Release PR；目前組織政策禁止 Actions PR 時，由維護者先開版本／CHANGELOG PR，合併後 direct mode 才能在最新 `main` 建立 draft 與 tag。Milestone 原則上在完成時 promotion 一次；只有後續驗收明確依賴同一 Milestone 的 immutable Release，才使用受約束的 checkpoint promotion。Standalone 與 bot PR 直接進 `main` 後只留下各自的 release intent；`dev/i*` canary 與 hotfix 才立即形成獨立 release boundary。整批 SemVer 取納入 PR 的最高意圖，全部為 no-release 時不建立空版本。兩種 release 模式都只從已核對的 release-source run 明確 dispatch `release-template.yml`；任意 tag push 不會啟動發布。發布 workflow 不會再於 checkout 後暫時改寫版本；它會先驗證 tagged source、CHANGELOG、tag 與 promotion evidence 一致，再附加 wheel、sdist、release-specific prompt 與 provenance，最後發布並鎖定 immutable GitHub Release；任一步驟失敗都保留 draft。發布後會以 `gh release verify` 重新驗證 attestation。一般 main push 不會重複發版。完整批次與追溯規則見 [`docs/ci-policy.md`](docs/ci-policy.md)。
+完整 current-state、歷史 Action disposition、最佳實踐來源與重新啟用門檻見 [`docs/adr/release-security-and-dependencies.md`](docs/adr/release-security-and-dependencies.md)。
 
 ## 公版更新
 
@@ -200,7 +201,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 ### 驗證邊界
 
-本模板 repo 的 CI 執行 `./scripts/verify-template.sh`，用暫存 fixture 驗證上述三條生命週期；這支腳本、root 專用升版／同步工具與 template release workflows 都不會下發。生成 repo 的本機與 CI 唯一入口是 `./scripts/verify`；選用 reusable workflow 時也只會呼叫生成 repo 內的這支腳本。
+本模板 repo 的 CI 執行 `./scripts/verify-template.sh`，用暫存 fixture 驗證上述三條生命週期；這支腳本與 root 專用升版／同步工具都不會下發。生成 repo 的本機與 CI 唯一入口是 `./scripts/verify`；選用 reusable workflow 時也只會呼叫生成 repo 內的這支腳本。
 
 ## 負責人與支援
 
