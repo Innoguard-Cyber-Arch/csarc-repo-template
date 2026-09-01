@@ -10,12 +10,12 @@ CSARC 採一條可審查、可重跑的自動發版路徑：
 
 1. 工作 PR 以 Conventional Commits 表達 major／minor／patch／no-release 意圖。
 2. `main` 每次前進先跑一次完整驗證；Release Please 再建立或更新版本 PR，同步精確版本與 CHANGELOG。
-3. `GITHUB_TOKEN` 建立的 PR 不會觸發另一支 PR workflow，因此同一個 release run 直接驗證該 PR 的精確 SHA，並回寫 `Release / candidate` status。
+3. `GITHUB_TOKEN` 建立或更新 PR 時，GitHub 會將對應的 PR workflows 設為等待人工核准；同一個 release run 因此直接驗證該 PR 的精確 SHA，並回寫 `Release / candidate` status，不依賴另一輪 workflow。
 4. 候選驗證只接受 Release Please 的 branch、可信 actor／commits 與允許檔案，再檢查版本一致、CHANGELOG 與可打包性；不重跑已在 `main` 完成的整套語言測試。
 5. 人審查並合併版本 PR 後，workflow 從精確 tag 建立成品、checksum、SPDX SBOM 與 release evidence，先放入 draft GitHub Release。
 6. workflow 下載並重新驗證全部 assets，成功後才公開 Release，並在有限時間內確認 immutable；失敗且仍可變更時回到 draft。
 
-流程只使用短效 `GITHUB_TOKEN`，不要求 PAT、GitHub App、自架 runner 或付費 GitHub 方案。Repository 必須允許 GitHub Actions 建立 PR，但 workflow 不可自行核准版本 PR。
+流程只使用短效 `GITHUB_TOKEN`，不要求 PAT、GitHub App、自架 runner 或付費 GitHub 方案。Repository 及其上層 Organization 必須允許 GitHub Actions 建立 PR，但 workflow 不可自行核准版本 PR。
 
 ## 名詞邊界
 

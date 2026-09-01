@@ -158,7 +158,7 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 | PyPI／npm／GHCR | Not configured | 相關設定目前沒有 active publisher；不得當成已啟用 |
 | production deployment | Not applicable | 由產品自行定義環境、健康檢查、核准與復原 |
 
-`GITHUB_TOKEN` 建立的版本 PR 不會觸發另一支 PR workflow；release workflow 因此在同一次 run 取得候選 SHA，執行可信來源、版本同步與打包驗證並回寫狀態。版本 PR 仍需人工審查，不能由 workflow 自我核准。Registry 或部署若要加入，先在 Issue／ADR 確認 owner、權限、失敗復原與消費端驗證，再呼叫 repo-local 入口，不複製另一套發布邏輯。
+GitHub 會把 `GITHUB_TOKEN` 建立或更新版本 PR 所產生的 PR workflows 設為等待人工核准；release workflow 因此在同一次 run 取得候選 SHA，執行可信來源、版本同步與打包驗證並回寫狀態，不依賴另一輪 workflow。版本 PR 仍需人工審查，不能由 workflow 自我核准。Registry 或部署若要加入，先在 Issue／ADR 確認 owner、權限、失敗復原與消費端驗證，再呼叫 repo-local 入口，不複製另一套發布邏輯。
 
 ## 公版更新
 

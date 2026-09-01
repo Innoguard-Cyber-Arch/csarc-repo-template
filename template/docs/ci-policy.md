@@ -106,8 +106,9 @@ run，目的是設定成本預期，不是永久 SLA。
 合併到 `main` 是 repository delivery，不等於 Release。公版本身與新生成 repo 使用 CSARC
 提供的單一 workflow；既有 repo 保留 product-owned release workflow，Copier 不依檔名猜測、
 不覆寫也不重複 dispatch。流程只用短效 `GITHUB_TOKEN`，不要求 GitHub App、PAT、registry
-token 或空 deployment environment。因 token 建立的 PR 不會再觸發另一支 workflow，候選
-驗證與 status 回寫由建立版本 PR 的同一次 run 完成。
+token 或空 deployment environment。GitHub 會把 `GITHUB_TOKEN` 建立或更新版本 PR 所產生的
+PR workflows 設為等待人工核准；候選驗證與 status 回寫由建立版本 PR 的同一次 run 完成，
+不依賴另一輪 workflow。
 
 ## Conditional 與退役能力
 

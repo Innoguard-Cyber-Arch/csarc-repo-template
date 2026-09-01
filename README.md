@@ -113,7 +113,7 @@ Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交
 
 先分清楚四件事：版本意圖描述相容性影響；正式版本把 manifest、package metadata 與 CHANGELOG 一起寫進受審查的 commit；發版建立不可變 tag、GitHub Release、成品與證據；交付則是把已驗證工作送進權威分支或交給使用者。部署到實際環境不在本模板範圍。
 
-合併到 `main` 先完成 repository delivery；`release.yml` 隨後執行完整驗證，並由 Release Please 依 Conventional Commits 建立或更新可審查的版本 PR。因 `GITHUB_TOKEN` 建立的 PR 不會再觸發其他 workflow，同一支 release workflow 會直接驗證該 PR 的可信作者、允許檔案、版本／CHANGELOG 一致性與可打包性，並把結果綁在候選 SHA。版本 PR 經人審查合併後，同一流程重新驗證 `main`，建立 draft Release、上傳成品、checksum 與 SPDX SBOM，驗證下載內容後才公開並確認 immutable。失敗的 mutable Release 留在 draft，可安全重跑。生成專案從自己的 `0.1.0` 開始，版本不跟隨公版。
+合併到 `main` 先完成 repository delivery；`release.yml` 隨後執行完整驗證，並由 Release Please 依 Conventional Commits 建立或更新可審查的版本 PR。GitHub 會把 `GITHUB_TOKEN` 建立或更新版本 PR 所產生的 PR workflows 設為等待人工核准；同一支 release workflow 會直接驗證該 PR 的可信作者、允許檔案、版本／CHANGELOG 一致性與可打包性，並把結果綁在候選 SHA，不依賴另一輪 workflow。版本 PR 經人審查合併後，同一流程重新驗證 `main`，建立 draft Release、上傳成品、checksum 與 SPDX SBOM，驗證下載內容後才公開並確認 immutable。失敗的 mutable Release 留在 draft，可安全重跑。生成專案從自己的 `0.1.0` 開始，版本不跟隨公版。
 
 | 能力 | 目前狀態 | 現在怎麼做 |
 | --- | --- | --- |
