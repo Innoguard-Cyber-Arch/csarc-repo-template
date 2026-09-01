@@ -1,27 +1,27 @@
-# GitHub live integration smoke
+# Historical GitHub live-integration evidence
 
-`./scripts/verify-template.sh` 只代表靜態與合成驗證通過；它不證明 GitHub
-repository settings、事件觸發、`GITHUB_TOKEN` 或 reusable workflow 權限在
-線上可用。只有 `Live integration smoke` workflow 的成功 run 才算 GitHub
-整合驗證通過。
+> [!IMPORTANT]
+> `Live integration smoke` 已封存，現行 `.github/workflows/` 沒有這支 Action。
+> 本頁記錄 2026-08 的一次性證據，不是目前可執行的操作手冊。
 
-## 執行方式
+`./scripts/verify-template.sh` 只能證明靜態與合成驗證通過；GitHub repository
+settings、事件觸發、`GITHUB_TOKEN` 與 reusable workflow 權限，必須由當時實際存在的
+workflow run 證明。歷史 smoke 曾平行探測 OSV、Release Please、release handoff 與
+governance drift，並保存 30 天的 machine-readable artifact。
 
-從 Actions 頁面手動執行 `Live integration smoke`。它沿用本 repo 與既有
-`workflow_dispatch`，不建立測試 repo，並平行執行四個 probe：
+## 現行判斷
 
-| 能力 | 線上成功證據 | 副作用 | 失敗優先檢查 |
-| --- | --- | --- | --- |
-| OSV | `osv.yml` 的手動 run 成功 | 唯讀掃描 | reusable workflow 權限 |
-| Release Please | `release-please.yml` 在最新 main 成功 | 同一 commit 已發版時不建立新版 | Actions 建立 PR 設定與 token 權限 |
-| Release handoff | `release-template.yml` 對最新 immutable tag 成功 | 已發佈 immutable release 不變更成品 | event/ref、dispatch token 與 attestation 權限 |
-| Governance drift | `governance-drift.yml` 在最新 main 成功 | 沒有漂移時不建立或更新 Issue | repository setting 與 issues token 權限 |
+| 能力 | 2026-08 證據 | 2026-09-01 狀態 |
+| --- | --- | --- |
+| OSV | 手動與 main run 曾成功 | `osv.yml` 已恢復；以目前 workflow 與近期 run 判斷 |
+| Release Please | 曾驗證組織政策會阻擋 Actions PR | workflow 判定不恢復後已刪除；版本與 CHANGELOG 目前人工處理 |
+| Release handoff | 曾對 immutable Release 驗證 | workflow 判定不恢復後已刪除；本機安全契約為 conditional |
+| Governance drift | 曾在線上讀取 repository settings | live smoke 已退役並刪除；治理能力由各自 owner 評估 |
 
-每個 probe 會上傳保留 30 天的 `live-<capability>-<run-id>` JSON artifact，
-記錄 workflow、ref、child run URL、結論、時間與應檢查的權限層級。失敗時，
-先從 artifact 和錯誤 annotation 指定的 setting、token、event/ref 或 reusable
-workflow 權限層級開始排查。
+完整 disposition 位於 `docs/adr/release-security-and-dependencies.md`；#430 判定不恢復後，
+歷史 workflow YAML 已從 archive 移除，Git／Issue／PR 與既有 runs 保存稽核證據。任何能力
+要恢復，都必須透過新的 Issue 明列 owner、trigger、最小權限、timeout、concurrency、
+成本、失敗復原，以及目前 GitHub 方案上的正向與受控失敗證據；不得把舊 run 當成現行成功。
 
-這個 root-only workflow 是維護公版本身的 smoke，不會下發到 Copier 生成的
-專案。每次會重用最新已發佈且 immutable 的 release；如果找不到符合條件的
-release，測試會在 dispatch 前停止，避免把草稿或 prerelease 當成成功證據。
+版本、發版、交付與成品證據的 current-state 契約見
+[`adr/release-security-and-dependencies.md`](adr/release-security-and-dependencies.md)。

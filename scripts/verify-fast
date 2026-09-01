@@ -40,7 +40,6 @@ if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
   ./scripts/test-issue-triage
   ./scripts/test-worktree-cleanup
   ./scripts/test-pr-policy
-  ./scripts/test-release-follow-up-gates
 fi
 
 if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
@@ -59,6 +58,5 @@ if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
     "$smoke_root/project/scripts/lint-workflows-shell"
   fi
   "$smoke_root/project/scripts/test-pr-policy"
-  "$smoke_root/project/scripts/test-release-follow-up-gates"
   (cd "$smoke_root/project" && python3 scripts/csarc_config.py languages >/dev/null)
 fi

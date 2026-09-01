@@ -2313,7 +2313,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 	</tbody>
 </table>
-<p>Users do not need to memorize workflow or script names. Current automation focuses on work items, PR rules, and necessary verification; automated versioning and publishing are not enabled yet.</p>
+<p>Users do not need to memorize workflow or script names. Current automation covers work items, PR rules, necessary verification, and a reviewed automatic version-and-release path.</p>
 <aside class="technical-detail" data-content-key="flow-foundation">
   <h3>Four foundations across the whole flow</h3>
   <ul>
@@ -2417,7 +2417,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>Seven active flows: Issue triage, Milestone sync, spec sync, PR rules, work-Issue closure, verification, and scheduled vulnerability scanning</td>
+					<td>Seven active flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, and release</td>
 					<td>Template-led</td>
 			</tr>
 			<tr>
@@ -2450,7 +2450,7 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="technical-detail" data-content-key="files-update">
   <h3>How updates protect product content</h3>
   <p>Copier attempts updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged; adjust them, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.</p>
-<p>Workflows, policies, scripts, and documents shared by root and <code>template/</code> are kept in sync. Files that differ because of project choices are verified by generating a real project. Version and publishing configuration remains present, but its GitHub Actions are not enabled yet.</p>
+<p>Workflows, policies, scripts, and documents shared by root and <code>template/</code> are kept in sync. Files that differ because of project choices are verified by generating a real project. New repositories receive the release Action; adopted repositories keep their product-owned workflow.</p>
 </aside>
 </div>
 </section>
@@ -2721,13 +2721,13 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
   <div class="markdown-body"><ul>
 <li><strong>During development:</strong> run only the focused check that proves the current change, using fresh output before claiming completion.</li>
-<li><strong>Work PR (work branch → <code>dev/m*</code> or <code>main</code>):</strong> the system selects the appropriate checks from the change; when unsure, it runs full verification.</li>
-<li><strong>When full verification is needed:</strong> run it before a release, for an urgent fix, or whenever the system cannot safely narrow the test scope.</li>
+<li><strong>Work PR (topic → main or <code>dev/m*</code>):</strong> the system selects the appropriate checks from the change; when unsure, it runs full verification.</li>
+<li><strong>When full verification is needed:</strong> run it for a Milestone or canary delivery, an urgent fix, a merge queue, a manual run, or whenever the system cannot safely narrow the test scope.</li>
 <li><strong>One implementation:</strong> GitHub Actions has one <code>verify</code> job with a 30-minute timeout and only calls repository scripts.</li>
 <li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
 </ul>
-<p>Verification logic lives only in scripts and tests. This step restores only <code>.github/workflows/ci.yml</code>; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys.</p>
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>local and CI execution share scripts and tests; work PRs select fast or full by risk, while release and unknown changes run full.</li><li><strong>Adjustable:</strong><code>coverage_mode</code>, <code>coverage_threshold</code>, and <code>enable_precommit</code>; advanced teams may enable <code>use_reusable_workflow</code> with a full commit SHA.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>scripts/verify-fast</code>, <code>scripts/verify</code>, and <code>.github/workflows/ci.yml</code>.</li></ul></aside></div>
+<p>Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, OSV, Dependabot, and one release workflow are active. Dedicated promotion, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.</p>
+<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>local and CI execution share scripts and tests; work PRs select fast or full by risk, while Milestone or canary delivery, hotfix, merge queue, manual, and unknown high-risk changes run full.</li><li><strong>Adjustable:</strong><code>coverage_mode</code>, <code>coverage_threshold</code>, and <code>enable_precommit</code>; advanced teams may enable <code>use_reusable_workflow</code> with a full commit SHA.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>scripts/verify-fast</code>, <code>scripts/verify</code>, and <code>.github/workflows/ci.yml</code>.</li></ul></aside></div>
 </section>
 
 <section class="slide markdown-slide candidate-slide" id="languages" data-content-key="languages" data-track="languages" aria-label="Choose a language and receive the matching checks">
@@ -2878,7 +2878,7 @@ html[data-detail-level="simple"] .detail-panel {
   <header>
     <span class="selection-sequence">Step 06</span>
     <h2>Make completed changes reviewable and deliverable</h2>
-    <p class="subtitle">A work PR completes one work item; a release PR then carries the verified batch into main.</p>
+    <p class="subtitle">A work PR completes one work item; a delivery PR then carries the verified batch into main.</p>
   </header>
   <div class="markdown-body"><table>
 	<thead>
@@ -2890,14 +2890,19 @@ html[data-detail-level="simple"] .detail-panel {
 	</thead>
 	<tbody>
 			<tr>
-					<td>Work PR</td>
-					<td>Work branch → <code>dev/m*</code> or <code>main</code></td>
+					<td>Standalone work PR</td>
+					<td>Topic branch → main</td>
 					<td>Review one change and close its linked Issue after merge</td>
 			</tr>
 			<tr>
-					<td>Release PR</td>
-					<td><code>dev/m*</code> or <code>dev/i*</code> → <code>main</code></td>
-					<td>Fully verify and deliver the batch; Version / delivery then closes the Milestone</td>
+					<td>Milestone work PR</td>
+					<td>Topic branch → <code>dev/m*</code></td>
+					<td>Review one change inside a real delivery batch</td>
+			</tr>
+			<tr>
+					<td>Delivery PR</td>
+					<td><code>dev/m*</code> or explicit <code>dev/i*</code> → main</td>
+					<td>Fully verify and deliver the batch; maintainers then close the Milestone and clean up the delivery branch</td>
 			</tr>
 	</tbody>
 </table>
@@ -2907,14 +2912,13 @@ html[data-detail-level="simple"] .detail-panel {
 <li>Work branches use <code>type/&lt;Issue&gt;-short-slug</code>, and the PR links the matching open Issue.</li>
 <li>PR titles use the Angular / Conventional Commits form <code>type(scope)!: English summary</code>: <code>feat</code> adds a feature, <code>fix</code> corrects behavior, <code>docs</code> changes documentation, <code>refactor</code> restructures code, <code>test</code> changes tests, <code>build</code> changes builds or dependencies, <code>ci</code> changes automation, <code>chore</code> performs maintenance, and <code>revert</code> undoes a change. Scope and <code>!</code> are optional. Release intent is minor for <code>feat</code>, patch for <code>fix</code> / <code>revert</code>, major for <code>!</code>, and no release for the other types.</li>
 <li>The classification label and Milestone match the linked Issue; the PR author must be an assignee.</li>
-<li>Milestone work targets <code>dev/m&lt;Milestone&gt;-*</code>; ordinary standalone work starts from current <code>main</code> and targets <code>main</code> directly.</li>
-<li>After Milestone work merges, an Action rechecks the matching Issue, source revision, destination branch, and Milestone before closing it. Standalone work and hotfixes merged directly to <code>main</code> retain GitHub&rsquo;s native closing behavior.</li>
-<li>Main advances do not fan out synchronization. Each Milestone uses one reviewed <code>sync/main-to-m*</code> PR at final promotion; only an owner-recorded dependency permits an earlier sync.</li>
-<li>A documented standalone canary may use one short-lived <code>dev/i&lt;Issue&gt;-*</code>; an explicitly labeled hotfix may target main directly. Rules governance decides who may merge.</li>
+<li>Milestone work targets <code>dev/m&lt;Milestone&gt;-*</code>; ordinary standalone work targets <code>main</code> directly.</li>
+<li>A <code>sync/main-to-*</code> PR updates a Milestone or explicit canary branch before final delivery, or earlier only when its owner records a real dependency. It never fans out to every branch.</li>
+<li>Only an explicitly labeled standalone hotfix may target main directly. Rules governance decides who may merge.</li>
 </ul>
 </div>
 </details>
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>a PR links one work item, follows title and classification rules, and passes verification; work and release PRs keep separate responsibilities.</li><li><strong>Adjustable:</strong><code>branch_strategy</code> selects the branch model; <code>code_owner</code> and <code>reviewers</code> select ownership and review candidates.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, the PR template, <code>CODEOWNERS</code>, <code>REVIEWERS</code>, and PR policy.</li></ul></aside>
+<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>a PR links one work item, follows title and classification rules, and passes verification; work and delivery PRs keep separate responsibilities.</li><li><strong>Adjustable:</strong><code>branch_strategy</code> selects the branch model; <code>code_owner</code> and <code>reviewers</code> select ownership and review candidates.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, the PR template, <code>CODEOWNERS</code>, <code>REVIEWERS</code>, and PR policy.</li></ul></aside>
 </div>
 </section>
 
@@ -3006,7 +3010,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>A disclosed vulnerability goes unnoticed</td>
-					<td>The Open Source Vulnerabilities scan (OSV) checks dependency PRs and release candidates; a weekly scan covers periods without PRs</td>
+					<td>The Open Source Vulnerabilities scan (OSV) checks dependency changes and delivery candidates; a weekly scan covers periods without PRs</td>
 			</tr>
 			<tr>
 					<td>Nobody knows what a release contains</td>
@@ -3026,7 +3030,7 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>lockfile installs, Dependabot, OSV, and artifact SBOMs have separate jobs; ordinary releases wait three days while security updates do not.</li><li><strong>Adjustable:</strong><code>security_reporting_channel</code> names the private reporting path; <code>project_visibility</code> and <code>enable_codeql</code> decide whether CodeQL is generated.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, lockfiles, <code>dependabot.yml</code>, <code>osv.yml</code>, <code>codeql.yml</code>, and <code>SECURITY.md</code>.</li></ul></aside></div>
 </section>
 
-<section class="slide markdown-slide dense" id="deploy" data-content-key="deploy" data-track="deploy" aria-label="Connect version policy to artifacts">
+<section class="slide markdown-slide dense" id="deploy" data-content-key="deploy" data-track="deploy" aria-label="Separate version, release, delivery, and deployment">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -3092,45 +3096,71 @@ html[data-detail-level="simple"] .detail-panel {
 
   <header>
     <span class="selection-sequence">Step 07</span>
-    <h2>Connect version policy to artifacts</h2>
-    <p class="subtitle">Verify the promotion source, then select a safe delivery mode from current platform capabilities.</p>
+    <h2>Separate version, release, delivery, and deployment</h2>
+    <p class="subtitle">Work reaches main first; when a version is needed, the system opens a version PR for human review.</p>
   </header>
-  <div class="markdown-body"><p><strong>Milestone closure:</strong> after a successful release records its delivery evidence, close the lifecycle tracking Issue and the Milestone. To stop early, state why and move or cancel every unfinished Issue first.</p>
-<p><strong>Branch cleanup:</strong> delete a work branch after its PR merges. Delete the Milestone delivery branch only after release and after every unfinished Issue is moved or cancelled. Local worktrees with uncommitted changes are never removed automatically.</p>
+  <div class="markdown-body"><ul>
+<li><strong>Version intent:</strong> a PR title states major, minor, patch, or no-release impact without reserving an exact number.</li>
+<li><strong>Version materialization:</strong> Release Please opens one reviewed PR that updates version files, package metadata, and the changelog together. CI does not make a temporary version edit in its checkout.</li>
+<li><strong>Release:</strong> after that PR merges and full verification passes, the system creates the immutable tag, GitHub Release, explicit artifacts, checksums, and SBOM.</li>
+<li><strong>Delivery:</strong> merging to <code>main</code> is repository delivery and may happen without a new version. A work PR completes one item; a Milestone delivery PR carries the batch.</li>
+<li><strong>Standalone work:</strong> when one Issue can be reviewed and verified independently and has no shared deadline or cross-Issue dependency, it needs no Milestone and may target <code>main</code> directly.</li>
+<li><strong>Hotfix:</strong> only an urgent defect in <code>main</code> uses this route. It still needs a Bug Issue, another reviewer, and full verification; a reviewed version PR then materializes the patch release.</li>
+<li><strong>Deployment:</strong> operating the product in a real runtime with health checks and recovery belongs to the consuming product, not this template.</li>
+</ul>
 <table>
 	<thead>
 			<tr>
-					<th>Preconditions</th>
-					<th>Mode</th>
-					<th>Behavior and guarantee</th>
+					<th>Capability</th>
+					<th>Current status</th>
+					<th>Current behavior</th>
 			</tr>
 	</thead>
 	<tbody>
 			<tr>
-					<td>Valid source; PR, contents, Release, and dispatch are all <code>allowed</code></td>
-					<td>Release PR</td>
-					<td>Reviewable version and changelog; merge dispatches artifacts with the source run ID</td>
+					<td>SemVer intent in PRs</td>
+					<td>Active</td>
+					<td><code>fix</code> / <code>revert</code> means patch, <code>feat</code> means minor, <code>!</code> means major, and other types mean no release</td>
 			</tr>
 			<tr>
-					<td>Valid source; PR is <code>blocked/unknown</code>; all other writes are <code>allowed</code></td>
-					<td>Direct</td>
-					<td>Tag only the latest versioned <code>main</code> with a CHANGELOG; out-of-order runs no-op</td>
+					<td>Exact version and changelog</td>
+					<td>Active</td>
+					<td>Release Please opens one reviewed PR; published versions are never rewritten</td>
 			</tr>
 			<tr>
-					<td>Invalid source or any delivery write is not <code>allowed</code></td>
-					<td>Verification only</td>
-					<td>Preserve machine-readable evidence and create or claim no Release</td>
+					<td>Tag and GitHub Release</td>
+					<td>Active</td>
+					<td>Publish automatically only after the version PR, full verification, and downloaded artifact verification pass</td>
+			</tr>
+			<tr>
+					<td>Checksums and SBOM</td>
+					<td>Active</td>
+					<td>Build with the exact tag and verify again after downloading the Release assets</td>
+			</tr>
+			<tr>
+					<td>Attestations and consumption</td>
+					<td>Conditional</td>
+					<td>Products opt in when registry and supply-chain needs justify them</td>
+			</tr>
+			<tr>
+					<td>PyPI, npm, and GHCR</td>
+					<td>Conditional gap</td>
+					<td>The root publishes to no registry; generated projects expose settings but receive no publisher job, tracked by #439</td>
 			</tr>
 	</tbody>
 </table>
-<details class="package-disclosure" data-content-key="adaptive-release">
-  <summary><span class="tech-name">Promotion-gated adaptive release with one SemVer</span></summary>
-  <div class="package-health">The release source verifies full <code>verify</code>, canary state, included PRs, and main tree identity. Every profile shares one template SemVer: <code>fix(scope)</code> raises patch, <code>feat(scope)</code> raises minor, and <code>!</code> raises major. Incompatibility with any supported profile is a breaking change to the template.</div>
-</details>
-<aside class="technical-detail" data-content-key="deploy-ordering">
-  <h3>Delivery ordering, artifacts, and registry boundaries</h3>
-  <p>Direct mode rereads the default-branch head before writing and delivers only when the latest <code>main</code>, source, tag, CHANGELOG, and promotion evidence agree; workflow concurrency is not treated as FIFO. The artifact workflow accepts only a release-source run ID, creates a digest, SBOM, and attestation, ignores arbitrary tag pushes, and does not repeat full CI.</p>
-<p>GitHub Release is the baseline for every profile. PyPI and npm are separate opt-ins that default off and use a GitHub environment plus short-lived OIDC credentials, never stored registry tokens. <code>scripts/release_policy.py</code> detects capabilities and configures versions; <code>scripts/promotion_gate.py</code> validates promotion.</p>
+<aside class="technical-detail" data-content-key="standalone-delivery">
+  <h3>When standalone work must join a Milestone</h3>
+  An Issue may branch from the latest <code>main</code>, target <code>main</code>, and close through <code>Closes #N</code> when it can be accepted on its own and has no shared deadline, batch acceptance, cross-Issue dependency, or isolated test environment. If any of those needs appears, assign the Issue to the appropriate Milestone before implementation and use <code>dev/m*</code>; the standalone route cannot bypass batch review.
+</aside>
+<aside class="technical-detail" data-content-key="hotfix-delivery">
+  <h3>Hotfix review, verification, and evidence</h3>
+  A hotfix uses a Bug Issue without a Milestone, the <code>bug</code> and <code>hotfix</code> labels, <code>fix/&lt;Issue&gt;-*</code>, and a <code>fix(scope): summary</code> PR directly to <code>main</code>. Normal review and full verification still apply. Undisclosed security defects use a GitHub Security Advisory instead. After merge, retain the PR, commit SHA, full run, and rollback note. <code>fix</code> normally declares patch intent; the exact version is still reviewed in the Release Please version PR.
+</aside>
+<aside class="technical-detail" data-content-key="manual-release-boundary">
+  <h3>Automatic-release ownership</h3>
+  <p>The template root and each new repository publish through their own release workflow. An adopted repository keeps its product-owned workflow. Every path still needs one owner, least privileges, full-SHA pins, a timeout, concurrency behavior, failure recovery, and a runner-cost ceiling; historical runs remain reference evidence only.</p>
+<p>Milestone closure remains manual until #400 completes its lifecycle contract, and work-Issue closure remains owned by #401. Work branches are removed after merge; a Milestone delivery branch waits until closure and unfinished work are handled.</p>
 </aside>
 </div>
 </section>
@@ -3314,7 +3344,7 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
   <div class="markdown-body"><ul>
 <li><code>template/</code> is the delivered source; root retains the template repository&rsquo;s own GitHub governance and dogfood configuration.</li>
-<li><code>.csarc/config.yml</code> is both Copier&rsquo;s update record and the repository&rsquo;s only template configuration. Languages, branch strategy, and optional capabilities read from it; later extensions add settings here instead of creating another configuration file.</li>
+<li><code>.csarc/config.yml</code> is each repository&rsquo;s only template configuration. Languages, branch strategy, and optional capabilities read from it. Generated repositories also keep Copier source and revision metadata in that file; root does not store self-referential metadata that would immediately become stale.</li>
 <li>The shared baseline and the Python, Rust, and TypeScript modules are verified independently. Selecting several languages combines modules without creating a combination-specific workflow.</li>
 <li>An existing repository is adopted and then updated from the next Copier revision, proving product content is preserved.</li>
 </ul>
@@ -3324,7 +3354,7 @@ html[data-detail-level="simple"] .detail-panel {
 </details>
 <aside class="technical-detail" data-content-key="template-release-scope">
   <h3>Single source, runtime baselines, and the root-only boundary</h3>
-  <p><code>.csarc/config.yml</code> retains Copier&rsquo;s required template source and revision together with the capabilities selected for this repository. Change it through <code>csarc update --data</code> so manual edits cannot drift from Copier. A derived template should add its own settings to the same YAML instead of duplicating CSARC fields.</p>
+  <p>Root <code>.csarc/config.yml</code> records the capabilities selected by the template repository itself. A generated repository additionally records Copier&rsquo;s source and revision and writes changes through <code>csarc update --data</code>. The template source does not invent <code>_src_path</code> or <code>_commit</code> values that point back to itself or immediately become stale. A derived template should add namespaced settings to the same YAML instead of duplicating CSARC fields.</p>
 <p><code>scripts/sync-paired-files.sh</code> makes root the source of paired files and verifies copied content and permissions with <code>--check</code>. <code>profiles/catalog.yaml</code> records runtime baselines and their evidence. Python and Node baselines advance only after their own thirty-day observation period.</p>
 <p><code>scripts/verify-template.sh</code> runs create/adopt/update fixtures only in the template repository and is never delivered downstream. Generated repositories use the smaller <code>scripts/verify</code> entry point.</p>
 </aside>
@@ -3498,8 +3528,12 @@ html[data-detail-level="simple"] .detail-panel {
 					<td>The shared baseline and Python, Rust, and TypeScript modules, plus Issues/specs, PR/CI, local verification, lockfile policy, and the repository site have executable implementations</td>
 			</tr>
 			<tr>
-					<td>Verified online</td>
-					<td>Release handoff, traceable artifacts, consumer attestation, and the first CI-only downstream adoption and update</td>
+					<td>Current online evidence</td>
+					<td>Active CI／policy workflows and the first CI-only downstream adoption and update</td>
+			</tr>
+			<tr>
+					<td>Release evidence</td>
+					<td>The current workflow produces exact-tag artifacts, checksums, an SPDX SBOM, and immutable-release verification; older handoff and consumption runs remain historical evidence only</td>
 			</tr>
 			<tr>
 					<td>Verified language modules</td>
@@ -3617,7 +3651,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>CD management</td>
-					<td>Promotion forms the release boundary; without an environment, canary degrades to artifact-only</td>
+					<td>Delivery to main is distinct from Release; no deployment is claimed without a real runtime target</td>
 			</tr>
 			<tr>
 					<td>Observability</td>
@@ -3734,12 +3768,12 @@ html[data-detail-level="simple"] .detail-panel {
 			<tr>
 					<td><img src="data:image/png;base64,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" alt="zizmor logo"> <a href="https://github.com/zizmorcore/zizmor">zizmor</a></td>
 					<td>GitHub Actions security</td>
-					<td>Baseline; runs for workflow changes and on schedule</td>
+					<td>The local contract remains; its dedicated workflow is archived</td>
 			</tr>
 			<tr>
 					<td>Dependabot, OSV, Syft</td>
 					<td>Dependency updates, vulnerabilities, and SBOM</td>
-					<td>Dependabot and OSV are active; the SBOM contract is verified against real release artifacts</td>
+					<td>Dependabot and OSV are active; the SBOM contract is conditional and locally tested</td>
 			</tr>
 			<tr>
 					<td><img src="data:image/png;base64,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" alt="GitHub Community Projects logo"> <a href="https://github.com/github-community-projects/safe-settings">Safe Settings</a></td>
@@ -3854,13 +3888,14 @@ html[data-detail-level="simple"] .detail-panel {
   <button id="similar-tools-tab-languages" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-languages" data-similar-tools-tab="4"><small>Journey 04</small>Programming languages</button>
   <button id="similar-tools-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>Dependency security</button>
   <button id="similar-tools-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR / merge</button>
-  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="7"><small>Journey 09</small>Template upgrades</button>
+  <button id="similar-tools-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-delivery" data-similar-tools-tab="7"><small>Journey 07</small>Version / delivery</button>
+  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="8"><small>Journey 09</small>Template upgrades</button>
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
   <div class="similar-tools-legend">
     <span class="competitor">Similar overall purpose | covers at least five journeys and released within six months</span>
     <span class="coverage-key"><i class="coverage-tag full">Full match</i>　<i class="coverage-tag partial">Partial match</i></span>
-    <span class="capture-date">Stars captured｜2026-08-31</span>
+    <span class="capture-date">Stars captured｜2026-09-01</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Primary similar tools">
     <table class="similar-tools-matrix similar-tools-primary-matrix">
@@ -3908,7 +3943,7 @@ html[data-detail-level="simple"] .detail-panel {
   <p class="similar-tools-note"><strong>Classification rule: </strong>All listed tools must have a release within six months. Primary tools cover at least five journeys and sort by full, then partial matches; other tools also need at least 1,000 Stars. Journey tags run from 01 to 11.</p>
 </div>
 <div id="similar-tools-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-work" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares where a request is recorded, how individual and grouped work are represented, how a Milestone gains approval to start, and when larger work needs more documentation.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares where a request is recorded, how individual and grouped work are represented, how a Milestone gains approval to start, and when larger work needs more documentation.</span><span class="capture-date">Stars captured｜2026-09-01</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Work definition">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
@@ -3964,7 +3999,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
 </div>
 <div id="similar-tools-panel-agents" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-agents" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares only how repositories instruct agents, preserve context across sessions, isolate parallel changes, and keep human decision boundaries.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares only how repositories instruct agents, preserve context across sessions, isolate parallel changes, and keep human decision boundaries.</span><span class="capture-date">Stars captured｜2026-09-01</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="AI rules">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
@@ -4022,7 +4057,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
 </div>
 <div id="similar-tools-panel-contract" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-contract" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares only where verification logic lives, how each run is scoped, what proves completion, and who verifies generated projects.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares only where verification logic lives, how each run is scoped, what proves completion, and who verifies generated projects.</span><span class="capture-date">Stars captured｜2026-09-01</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Verification / CI">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
@@ -4071,7 +4106,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
 </div>
 <div id="similar-tools-panel-languages" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-languages" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares how languages are selected, whether native ecosystem tools remain visible, how multiple languages coexist, and whether configuration stays centralized and updatable.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares how languages are selected, whether native ecosystem tools remain visible, how multiple languages coexist, and whether configuration stays centralized and updatable.</span><span class="capture-date">Stars captured｜2026-09-01</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Programming languages">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
@@ -4121,7 +4156,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
 </div>
 <div id="similar-tools-panel-supply" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-supply" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares only how package updates enter a PR, how installs pin versions, when disclosed vulnerabilities are checked, and how releases retain an inventory.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares only how package updates enter a PR, how installs pin versions, when disclosed vulnerabilities are checked, and how releases retain an inventory.</span><span class="capture-date">Stars captured｜2026-09-01</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Dependency security">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
@@ -4147,7 +4182,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>When disclosed vulnerabilities are checked</strong><span>Compares update notifications, PR checks, and scheduled scans.<br><br><b>CSARC: </b>OSV is the single data source. Dependency PRs, release candidates, and weekly or manual schedules share one local program.</span></th>
+          <th scope="row"><strong>When disclosed vulnerabilities are checked</strong><span>Compares update notifications, PR checks, and scheduled scans.<br><br><b>CSARC: </b>OSV is the single data source. Dependency PRs, delivery candidates, and weekly or manual schedules share one local program.</span></th>
           <td><ul>
           </ul></td>
           <td><ul>
@@ -4168,7 +4203,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
 </div>
 <div id="similar-tools-panel-pr" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-pr" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares how much work one PR contains, how changes are staged into main, what makes a PR merge-ready, and how branches resynchronize after the base advances.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares how much work one PR contains, how changes are staged into main, what makes a PR merge-ready, and how branches resynchronize after the base advances.</span><span class="capture-date">Stars captured｜2026-09-01</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="PR / merge">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
@@ -4183,7 +4218,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>How work is staged into main</strong><span>Compares merging every PR directly into main, staging work on a long-lived integration branch, and preserving dependencies in a short-lived stack.<br><br><b>CSARC: </b>Milestone work PRs first enter their matching dev branch, while standalone work goes directly to main. After a Milestone batch is complete, a release PR carries the verified result into main.</span></th>
+          <th scope="row"><strong>How work is staged into main</strong><span>Compares merging every PR directly into main, staging work on a long-lived integration branch, and preserving dependencies in a short-lived stack.<br><br><b>CSARC: </b>Work that can be accepted independently and has no shared deadline or cross-Issue dependency goes directly to main. Shared integration, batch acceptance, or canary needs require a Milestone and its matching dev/m* branch.</span></th>
           <td><ul>
           </ul></td>
           <td><ul>
@@ -4210,7 +4245,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>How proposed work becomes authoritative</strong><span>Compares when a branch, change, or configuration PR is reviewed, merged, and archived.<br><br><b>CSARC: </b>A work PR links its scope with Closes #&lt;issue&gt; and closes that work when merged into dev. A release PR then carries the verified batch into main as the authoritative delivery.</span></th>
+          <th scope="row"><strong>How proposed work becomes authoritative</strong><span>Compares when a branch, change, or configuration PR is reviewed, merged, and archived.<br><br><b>CSARC: </b>A work PR links its scope with Closes #&lt;issue&gt; and completes that work. A delivery PR then carries the verified batch into main; the version and delivery owner creates a Release separately when needed.</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Anti-tamper build</a>：A PR changes .projenrc together with regenerated output; the state becomes authoritative after merge.</span></li>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Active / completed plans</a>：Work spanning sessions stays in an active plan and is archived only after completion.</span></li>
@@ -4228,8 +4263,55 @@ html[data-detail-level="simple"] .detail-panel {
     </table>
   </div>
 </div>
+<div id="similar-tools-panel-delivery" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-delivery" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">Compares when version intent is declared, when the exact version and changelog materialize, who creates the tag and Release, and how artifact evidence reaches consumers.</span><span class="capture-date">Stars captured｜2026-09-01</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Version / delivery">
+    <table class="similar-tools-matrix similar-tools-philosophy-matrix">
+      <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>When version impact is decided</strong><span>Compares deriving impact from PR or commit conventions, declaring it in changeset files, and deciding manually at release time.<br><br><b>CSARC: </b>The PR title declares only major, minor, patch, or no-release intent; a work PR never reserves an exact version.</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>Changesets<span class="tool-meta"><span>@changesets/cli@3.0.1 (2026-08-19)</span><span>★ 12,347</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/changesets/changesets/blob/main/docs/adding-a-changeset.md" target="_blank" rel="noreferrer">changeset files</a>：Contributors explicitly list affected packages, bump levels, and a human-readable summary in the PR.</span></li>
+              <li><strong>Release Please<span class="tool-meta"><span>v17.11.2 (2026-08-24)</span><span>★ 7,427</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/googleapis/release-please#how-should-i-write-my-commits" target="_blank" rel="noreferrer">Conventional Commits</a>：Derives the next version impact from commit types and breaking markers.</span></li>
+              <li><strong>semantic-release<span class="tool-meta"><span>v25.0.9 (2026-08-05)</span><span>★ 24,012</span></span></strong><span class="tool-comparison-detail"><a href="https://semantic-release.gitbook.io/semantic-release/#commit-message-format" target="_blank" rel="noreferrer">commit-analyzer</a>：Automatically derives consumer impact from commit messages on a release branch.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>When the exact version and changelog materialize</strong><span>Compares a reviewable version PR, fully automatic materialization after CI, and one manual change that synchronizes every version surface.<br><br><b>CSARC: </b>Release Please opens one reviewable version PR that synchronizes the manifest, package metadata, changelog, and markers; CI does not make a temporary version edit.</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>Changesets<span class="tool-meta"><span>@changesets/cli@3.0.1 (2026-08-19)</span><span>★ 12,347</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/changesets/changesets/blob/main/docs/command-line-options.md#version" target="_blank" rel="noreferrer">changeset version</a>：Consumes pending changesets together and updates package versions and changelogs.</span></li>
+              <li><strong>Release Please<span class="tool-meta"><span>v17.11.2 (2026-08-24)</span><span>★ 7,427</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/googleapis/release-please#whats-a-release-pr" target="_blank" rel="noreferrer">Release pull request</a>：First opens a version PR that updates changelogs and version files for human review.</span></li>
+              <li><strong>semantic-release<span class="tool-meta"><span>v25.0.9 (2026-08-05)</span><span>★ 24,012</span></span></strong><span class="tool-comparison-detail"><a href="https://semantic-release.gitbook.io/semantic-release/#release-steps" target="_blank" rel="noreferrer">CI release steps</a>：After a successful build, one automated flow analyzes commits, materializes the version, and generates notes.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Who creates the tag and GitHub Release</strong><span>Compares a tool owning the whole release, creating a Release after a version PR merges, publishing fixes from maintenance branches, and product-owned publishing.<br><br><b>CSARC: </b>A hotfix still reaches main through a Bug Issue, review, and full verification; Release Please then opens the patch version PR and one workflow publishes after merge.</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+              <li><strong>Changesets<span class="tool-meta"><span>@changesets/cli@3.0.1 (2026-08-19)</span><span>★ 12,347</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/changesets/action" target="_blank" rel="noreferrer">changesets/action</a>：The Action can maintain a version PR or publish packages when a publish command is configured.</span></li>
+              <li><strong>Release Please<span class="tool-meta"><span>v17.11.2 (2026-08-24)</span><span>★ 7,427</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/googleapis/release-please#how-do-i-change-the-version-number" target="_blank" rel="noreferrer">Release after merge</a>：Creates the tag and GitHub Release only after the version PR merges; package publishing remains a separate concern.</span></li>
+              <li><strong>semantic-release<span class="tool-meta"><span>v25.0.9 (2026-08-05)</span><span>★ 24,012</span></span></strong><span class="tool-comparison-detail"><a href="https://semantic-release.gitbook.io/semantic-release/usage/workflow-configuration#maintenance-branches" target="_blank" rel="noreferrer">maintenance release branches</a>：Maintenance branches can publish compatible fixes within an existing major or minor range before CI plugins create tags, Releases, or registry publications.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>How consumers verify release artifacts</strong><span>Compares release notes alone with binding checksums, an SBOM, source identity, and attestations.<br><br><b>CSARC: </b>Each GitHub Release includes exact-tag source, language packages, SHA-256, SPDX 2.3, and source evidence, then confirms immutability after publication; attestations and consumption remain optional.</span></th>
+          <td><ul>
+          </ul></td>
+          <td><ul>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 <div id="similar-tools-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-template-upgrade" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares only how existing repositories receive updated templates, policies, or recipes and who resolves conflicts.</span><span class="capture-date">Stars captured｜2026-08-31</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares only how existing repositories receive updated templates, policies, or recipes and who resolves conflicts.</span><span class="capture-date">Stars captured｜2026-09-01</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Template upgrades">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
@@ -4333,7 +4415,7 @@ html[data-detail-level="simple"] .detail-panel {
   <header class="basic-header">
     <span class="selection-sequence">Maintenance appendix | CI/CD settings</span>
     <h2>CI/CD settings | Checks by Journey</h2>
-    <p class="subtitle">Separates the tests and automation that normal repositories and repo-template need for work PRs (work branch → dev/m* or main) and release PRs (dev → main).</p>
+    <p class="subtitle">Separates the tests and automation that normal repositories and repo-template need for work and repository-delivery pull requests.</p>
   </header>
 
 <div class="legacy-content similar-tools-content testing-content">
@@ -4358,14 +4440,14 @@ html[data-detail-level="simple"] .detail-panel {
         <thead><tr><th scope="col">PR stage</th><th scope="col">Every repository using the template</th><th scope="col">repo-template</th></tr></thead>
         <tbody>
           <tr>
-            <th scope="row"><strong>Work PR (work branch → dev/m* or main)</strong></th>
+            <th scope="row"><strong>Work PR (topic → main or dev/m*)</strong></th>
             <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in fast: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; fast 2–5 min</li><li><strong>04 Programming languages：</strong>Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
             <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in fast: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; source fast about 1 min; policy/template changes about 2 min</li><li><strong>04 Programming languages：</strong>Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–4 min (fast measured at 59–99 sec)</p></td>
           </tr>
           <tr>
-            <th scope="row"><strong>Release PR (dev → main)</strong></th>
+            <th scope="row"><strong>Delivery PR (dev/m* or dev/i* → main)</strong></th>
             <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full 5–15 min</li><li><strong>04 Programming languages：</strong>Included in full: Python 3–6 min; Rust 2–5 min; TypeScript 3–7 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full measured at 5 min 41 sec</li><li><strong>04 Programming languages：</strong>Included in the full generated-module matrix: Python 1–3 min; Rust 1–3 min; TypeScript 1–4 min</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–8 min (measured at 6 min 19 sec)</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full verification measured at 5 min 30 sec</li><li><strong>04 Programming languages：</strong>Included in the full generated-module matrix: Python 1–3 min; Rust 1–3 min; TypeScript 1–4 min</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–8 min (complete job measured at 6 min 16 sec)</p></td>
           </tr>
         </tbody>
       </table>
@@ -4433,10 +4515,10 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
             </li>
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
             </li>
           </ul></td>
         </tr>
@@ -4444,10 +4526,10 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Parallel isolation and safe cleanup</strong><span>Writable tasks use separate branches and worktrees, and cleanup never removes unmerged or modified directories.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
             </li>
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4459,7 +4541,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-contract" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-contract" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 03 / Staged verification</strong><span>A normal repository verifies its own change. A repo-template release candidate also verifies generation, adoption, and updates. Actions only call the same local programs.</span>
+    <strong>Journey 03 / Staged verification</strong><span>A normal repository verifies its own change. A repo-template delivery candidate also verifies generation, adoption, and updates. Actions only call the same local programs.</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 03 / Staged verification">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
@@ -4469,10 +4551,10 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Decide how much to run</strong><span>Developers run focused checks directly. CI selects docs, fast, or full from changed paths and delivery stage, with unknown paths escalating to full.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Work PR (work branch → dev/m* or main) · Timeout：30 min</span></li></ul></div>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Work PR (topic → main or dev/m*) · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Promotion, merge group, hotfix, or manual dispatch · Timeout：30 min</span></li></ul></div>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Promotion, merge group, hotfix, or manual dispatch · Timeout：30 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4482,25 +4564,25 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Fast feedback for an Issue PR</strong><span>Run relevant formatting, static checks, ordinary tests, and necessary smoke checks without the full profile, adoption, or update matrix.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><span>When template, workflow, or shell files change, fast also generates one representative repository for a smoke check.</span>
+              <strong>Work PR (topic → main or dev/m*)</strong><span>When template, workflow, or shell files change, fast also generates one representative repository for a smoke check.</span>
             </li>
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Complete evidence for a release candidate</strong><span>Run full verification once on a fixed, unchanged candidate, then bind the merge to the same SHA and tree.</span></th>
+          <th scope="row"><strong>Complete evidence for a delivery candidate</strong><span>Run full verification once on a fixed, unchanged candidate, then bind the merge to the same SHA and tree.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Additionally verifies the template, generated output, and existing-repository adoption and update paths.</span>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Additionally verifies the template, generated output, and existing-repository adoption and update paths.</span>
             </li>
           </ul></td>
         </tr>
@@ -4520,15 +4602,15 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Configuration matches repository files</strong><span>Languages listed by the template configuration must match the Python, Rust, and TypeScript project files in the repository.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.csarc/config.yml</code></li><li><code>scripts/detect-language-profile</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing code, dependencies, or template settings · Timeout：30 min</span></li></ul></div>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.csarc/config.yml</code></li><li><code>scripts/detect-language-profile</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing code, dependencies, or template settings · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.csarc/config.yml</code></li><li><code>scripts/detect-language-profile</code></li></ul></div>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.csarc/config.yml</code></li><li><code>scripts/detect-language-profile</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_language_profiles.py</code></li></ul></div><span>Confirms that Copier creates one configuration file and composes the selected language modules correctly.</span>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_language_profiles.py</code></li></ul></div><span>Confirms that Copier creates one configuration file and composes the selected language modules correctly.</span>
             </li>
           </ul></td>
         </tr>
@@ -4536,15 +4618,15 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Each language runs its native checks</strong><span>Python, Rust, and TypeScript each run their own formatting, static checks, tests, and required builds while shared rules run once.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
             </li>
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Additionally creates single- and multi-language fixtures to confirm generation, updates, and lockfiles remain usable.</span>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Additionally creates single- and multi-language fixtures to confirm generation, updates, and lockfiles remain usable.</span>
             </li>
           </ul></td>
         </tr>
@@ -4554,7 +4636,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-supply" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-supply" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 05 / Dependency security</strong><span>Dependency changes first reproduce the locked install. Vulnerability checks run for dependency changes and release candidates, while a schedule covers periods without PRs.</span>
+    <strong>Journey 05 / Dependency security</strong><span>Dependency changes first reproduce the locked install. Vulnerability checks run for dependency changes and delivery candidates, while a schedule covers periods without PRs.</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 05 / Dependency security">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
@@ -4564,18 +4646,18 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Reproduce the locked dependency set</strong><span>Install from the lockfile and reject unrecorded resolution. TypeScript also enforces a three-day observation window and publisher trust policy.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing dependency files · Timeout：30 min</span></li></ul></div>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing dependency files · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Release PR, merge group, or manual full verification · Timeout：30 min</span></li></ul></div>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Delivery PR, merge group, or manual full verification · Timeout：30 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div><span>A dependency-setting change also generates one representative repository to verify the rendered result.</span>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div><span>A dependency-setting change also generates one representative repository to verify the rendered result.</span>
             </li>
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Fully tests generated profiles and their lockfile contract.</span>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Fully tests generated profiles and their lockfile contract.</span>
             </li>
           </ul></td>
         </tr>
@@ -4583,23 +4665,23 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Open routine update PRs</strong><span>Dependabot groups updates by ecosystem and waits three days for ordinary releases without delaying security fixes.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.github/dependabot.yml</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Opens weekly update PRs by ecosystem; generated PRs still use the same CI job.</span></div>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.github/dependabot.yml</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Opens weekly update PRs by ecosystem; generated PRs still use the same CI job.</span></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_dependency_security.py</code></li></ul></div><span>Confirms that each profile emits only its applicable update ecosystems.</span>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_dependency_security.py</code></li></ul></div><span>Confirms that each profile emits only its applicable update ecosystems.</span>
             </li>
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Check disclosed vulnerabilities immediately</strong><span>Dependency changes and release candidates share one local OSV entrypoint; a weekly schedule covers periods without PRs.</span></th>
+          <th scope="row"><strong>Check disclosed vulnerabilities immediately</strong><span>Dependency changes and delivery candidates share one local OSV entrypoint; a weekly schedule covers periods without PRs.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-dependencies</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing dependency files · Timeout：30 min</span></li></ul></div>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-dependencies</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing dependency files · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-dependencies</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Release PR, merge group, or manual full verification · Timeout：30 min</span></li><li><code>.github/workflows/osv.yml</code>／<code>scan</code><span>Trigger：Weekly Monday or manual scan · Timeout：10 min</span></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>A thin weekly and manual workflow calls the same entrypoint without duplicating scanning logic.</span></div>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-dependencies</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Delivery PR, merge group, or manual full verification · Timeout：30 min</span></li><li><code>.github/workflows/osv.yml</code>／<code>scan</code><span>Trigger：Weekly Monday or manual scan · Timeout：10 min</span></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>A thin weekly and manual workflow calls the same entrypoint without duplicating scanning logic.</span></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4609,7 +4691,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Release inventory and digests</strong><span>Build an SPDX SBOM, checksums, and mutually bound evidence from the real artifacts at the exact tag.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/release_assets.py</code></li><li><code>tests/test_release_assets.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Dependency security owns the SBOM contract and validation. The release flow triggers it when real artifacts exist without taking ownership of the rule.</span></div>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/release_assets.py</code></li><li><code>tests/test_release_assets.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Dependency security owns the SBOM contract and validation. The release flow triggers it when real artifacts exist without taking ownership of the rule.</span></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4631,15 +4713,15 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>PR metadata and destination</strong><span>Title, Issue, label, Milestone, and destination branch must agree.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR opened or its content, commits, or metadata changes · Timeout：10 min</span></li></ul></div>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR opened or its content, commits, or metadata changes · Timeout：10 min</span></li></ul></div>
             </li>
             <li>
-              <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><span>Uses the same validator; repo-template has no second PR policy.</span>
+              <strong>Work PR (topic → main or dev/m*)</strong><span>Uses the same validator; repo-template has no second PR policy.</span>
             </li>
           </ul></td>
         </tr>
@@ -4647,10 +4729,10 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Candidate contains the current base</strong><span>A work PR must trace through its dev chain to main; a sync PR may carry only the exact main update back to its target dev branch.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_delivery_sync.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：Every work-PR and sync-PR update · Timeout：10 min</span></li></ul></div>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_delivery_sync.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：Every work-PR and sync-PR update · Timeout：10 min</span></li></ul></div>
             </li>
             <li>
-              <strong>Release PR (dev → main)</strong><span>Release-PR creation and cross-branch synchronization after main advances remain manual PRs; their workflows are still archived.</span>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><span>Delivery-PR creation and required cross-branch synchronization after main advances remain manual PRs; #430 removed the old workflows after deciding not to restore them.</span>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4660,12 +4742,12 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Close the Issue after its work PR merges</strong><span>Close the matching Issue only after its work PR enters the correct dev branch. The release PR does not close it again.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_pr_closure.py</code></li><li><code>scripts/pr_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/work-item-closure.yml</code>／<code>close-work</code><span>Trigger：Milestone work PR merged into dev/m* · Timeout：5 min</span></li></ul></div><span>Standalone work and hotfixes merged directly to main retain GitHub-native closure and do not start this Action.</span>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_pr_closure.py</code></li><li><code>scripts/pr_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/work-item-closure.yml</code>／<code>close-work</code><span>Trigger：Milestone work PR merged into dev/m* · Timeout：5 min</span></li></ul></div><span>Standalone work and hotfixes merged directly to main retain GitHub-native closure and do not start this Action.</span>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR (work branch → dev/m* or main)</strong><span>Uses the same closure program; repo-template has no second rule.</span>
+              <strong>Work PR (topic → main or dev/m*)</strong><span>Uses the same closure program; repo-template has no second rule.</span>
             </li>
           </ul></td>
         </tr>
@@ -4675,20 +4757,65 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-delivery" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-delivery" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 07 / Delivery and closure</strong><span>A Milestone closes only after a successful release records delivery evidence. Early termination first disposes of unfinished work.</span>
+    <strong>Journey 07 / Delivery and closure</strong><span>A Milestone closes only after delivery records its evidence; a batch that requires a release also records Release evidence. Early termination first disposes of unfinished work.</span>
   </div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 07 / Delivery and closure">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
       <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
       <tbody>
         <tr>
-          <th scope="row"><strong>Release follow-up rules</strong><span>Keep the regression now so future release restoration cannot lose the existing safety boundary. No dedicated Action is active.</span></th>
+          <th scope="row"><strong>Deliver standalone work directly</strong><span>A single work PR without a Milestone targets main; after normal review and risk-based verification, Closes #N completes the Issue.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Before release</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-release-follow-up-gates</code></li></ul></div>
+              <strong>Before delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-pr-policy</code></li><li><code>tests/test_ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：Topic PR without a Milestone → main · Timeout：10 min</span></li><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：The same PR; selects docs, fast, or full by content · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
-              <strong>After release</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-release-follow-up-gates</code></li></ul></div>
+              <strong>After delivery</strong><span>Merge first completes repository delivery; the release workflow then decides whether a version PR is needed instead of combining both actions.</span>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Before delivery</strong><span>The root and generated projects use the same route and validator.</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Fully verify and evidence a hotfix</strong><span>An urgent fix still needs a Bug Issue, review, and full verification; after merge it retains the head SHA, run, rollback note, and release decision.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Before delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-pr-policy</code></li><li><code>tests/test_ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：bug &#43; hotfix on a fix/* PR → main · Timeout：10 min</span></li><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：The same hotfix PR; always full · Timeout：30 min</span></li></ul></div>
+            </li>
+            <li>
+              <strong>After delivery</strong><span>fix declares patch intent by default; Release Please creates the exact version PR, which still requires human review before publication.</span>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Before delivery</strong><span>The root and generated projects use the same route and validator.</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Version and Release ownership</strong><span>A PR declares only SemVer intent. Release Please centralizes the exact version and changelog, while one workflow owns the tag and GitHub Release.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Before delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>docs/adr/release-security-and-dependencies.md</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Release Please opens version PRs for the root and new repositories; adopted repositories retain their product-owned workflow.</span></div>
+            </li>
+            <li>
+              <strong>After delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/release_policy.py</code></li><li><code>scripts/release_bundle.py</code></li><li><code>tests/test_release_bundle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/release.yml</code>／<code>version and publish</code><span>Trigger：main advances or a manual rerun · Timeout：30 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Version candidate and release evidence</strong><span>The same workflow validates the bot version PR&#39;s exact SHA; after merge, draft staging, download verification, and the immutable check complete publication.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Before delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-release-candidate</code></li></ul></div>
+            </li>
+            <li>
+              <strong>After delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/release_bundle.py</code></li><li><code>tests/test_release_bundle.py</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4698,12 +4825,12 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Milestone closure</strong><span>Normal completion confirms release and delivery evidence. Early termination records a reason and first moves or cancels unfinished Issues.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>After release</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li><li><code>tests/test_milestone_closure.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/400" target="_blank" rel="noreferrer">Pending #400</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：Lifecycle Issue closed, reopened, or milestoned · Timeout：5 min</span></li></ul></div>
+              <strong>After delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li><li><code>tests/test_milestone_closure.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/400" target="_blank" rel="noreferrer">Pending #400</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：Lifecycle Issue closed, reopened, or milestoned · Timeout：5 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>After release</strong><span>Uses the same closure program; repo-template has no second Milestone rule.</span>
+              <strong>After delivery</strong><span>Uses the same closure program; repo-template has no second Milestone rule.</span>
             </li>
           </ul></td>
         </tr>
@@ -5003,7 +5130,7 @@ html[data-detail-level="simple"] .detail-panel {
   <header>
     <span class="selection-sequence">External benchmark and live evidence</span>
     <h2>A solid foundation, not a complete platform</h2>
-    <p class="subtitle">New projects, Copier updates, OSV, Release, and the first CI-only pilot have evidence; remaining boundaries stay explicit.</p>
+    <p class="subtitle">Active capabilities use current files and runs; historical release evidence remains explicitly archived.</p>
   </header>
   <div class="markdown-body"><table>
 	<thead>
@@ -5035,9 +5162,9 @@ html[data-detail-level="simple"] .detail-panel {
 					<td>Capability can be detected and reported, but the plan cannot enforce Rulesets</td>
 			</tr>
 			<tr>
-					<td>Release Please live runs</td>
-					<td>Online loop complete</td>
-					<td>Runtime capability selects Release PR, Direct, or Verification only</td>
+					<td>Historical Release Please runs</td>
+					<td>Archived evidence only</td>
+					<td>Earlier runs prove a retired design, not a current workflow; the manual baseline and restoration criteria are recorded in the release ADR</td>
 			</tr>
 			<tr>
 					<td>OSV reusable workflow</td>
@@ -5046,8 +5173,8 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>Artifact Attestations / SLSA</td>
-					<td>Consumer gate complete</td>
-					<td>Repository, tag, digest, and signer workflow are verified</td>
+					<td>Conditional contract</td>
+					<td>Local tests retain repository, tag, digest, and signer checks; no active consumer workflow exists</td>
 			</tr>
 			<tr>
 					<td>OpenSSF Scorecard</td>
@@ -5063,7 +5190,7 @@ html[data-detail-level="simple"] .detail-panel {
 </table>
 <aside class="technical-detail" data-content-key="benchmark-gap">
   <h3>Current gaps</h3>
-  There is no cross-repository catalog, comprehensive hosted governance, or generic deployment platform. The root-only <code>Live integration smoke</code> continues to exercise OSV, Release Please, release handoff, and governance drift. Production repositories will add operational evidence without serving as disposable language test fixtures.
+  There is no cross-repository catalog, comprehensive hosted governance, registry publisher, or generic deployment platform. Historical live-integration runs remain audit evidence only; active workflow claims must come from files under <code>.github/workflows/</code> and current runs. Production repositories will add operational evidence without serving as disposable language test fixtures.
 </aside>
 </div>
 </section>
@@ -5151,7 +5278,7 @@ html[data-detail-level="simple"] .detail-panel {
 					<td><code>csarc-repo-template</code></td>
 					<td><code>@Innoguard-Cyber-Arch/arch</code></td>
 					<td>Source repository</td>
-					<td>Live integration proves the drift check can run</td>
+					<td>Historical live integration proved one earlier design; no current drift sample is claimed</td>
 			</tr>
 			<tr>
 					<td><code>GRC</code></td>

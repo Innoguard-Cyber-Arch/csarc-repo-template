@@ -45,6 +45,7 @@ paired_files=(
   scripts/install-osv-scanner
   scripts/install-shellcheck
   scripts/lint-workflows-shell
+  scripts/release_bundle.py
   scripts/release_policy.py
   scripts/scan-secrets
   scripts/spec_to_issue.py
@@ -52,8 +53,8 @@ paired_files=(
   scripts/sync_work_item_metadata.py
   scripts/test-issue-triage
   scripts/test-pr-policy
-  scripts/test-release-follow-up-gates
   scripts/test-worktree-cleanup
+  scripts/verify-release-candidate
   scripts/validate-issue-policy
   scripts/validate-issue-title
   scripts/validate-pr-policy
@@ -66,6 +67,7 @@ paired_files=(
   tests/test_promotion_gate.py
   tests/test_milestone_lifecycle.py
   tests/test_release_policy.py
+  tests/test_release_bundle.py
   tests/test_work_item_metadata.py
   tests/test_work_pr_closure.py
   zizmor.yml
