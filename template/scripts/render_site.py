@@ -258,6 +258,14 @@ def _inject_markdown(html: str, *, root: Path) -> str:
         raise BundleError(f"Cannot read {content_path}: {error}") from error
     config = _load_config(root)
     content, navigation = _render_markdown(_substitute_config(markdown, config))
+    if (root / "docs/site-content.js").is_file():
+        content = (
+            '<aside class="notice"><strong>需要遷移舊網站內容：</strong>'  # noqa: RUF001
+            "既有 <code>docs/site-content.js</code> 仍保留但不再顯示；"  # noqa: RUF001
+            "請把要保留的文字移到 <code>docs/site-content.md</code>，"  # noqa: RUF001
+            "確認後再刪除舊檔。</aside>\n"
+            f"{content}"
+        )
     title = html_module.escape(
         f"{_config_text(config.get('project_name'))} — 內部專案網站"
     )

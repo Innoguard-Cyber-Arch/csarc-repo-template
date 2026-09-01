@@ -123,6 +123,17 @@ def test_render_rejects_unknown_markdown_config_key(tmp_path: Path) -> None:
         render(source, root=tmp_path)
 
 
+def test_render_surfaces_preserved_legacy_content(tmp_path: Path) -> None:
+    source = _write_markdown_site(tmp_path, "# [[project_name]]")
+    legacy = tmp_path / "docs/site-content.js"
+    legacy.write_text("window.CONTENT = {};", encoding="utf-8")
+
+    bundled = render(source, root=tmp_path)
+
+    assert "需要遷移舊網站內容" in bundled
+    assert legacy.read_text(encoding="utf-8") == "window.CONTENT = {};"
+
+
 def test_generated_site_uses_project_owned_markdown() -> None:
     root = Path(__file__).parents[1]
     copier = (root / "copier.yml").read_text(encoding="utf-8")

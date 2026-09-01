@@ -44,7 +44,7 @@ Issue #209 經維護者實際檢視後，Hugo source 收斂到通用的 `site/` 
 | `docs/index.html`、`docs/index.en.html` | renderer output | 由來源重建；CI 驗證沒有 stale 或人工修改 |
 | Decision records、specs 與產品實證 | owning repository | 專案擁有；公版只提供結構與規則 |
 
-舊版 `docs/site-content.js` 的 `schemaVersion: 1` 仍可由 renderer 驗證，供更新中的 repository 辨識舊來源；新內容不再建立 JavaScript schema。更新 PR 必須保留舊檔供人工對照，並以可審查的 Markdown 變更完成遷移，不能靜默覆寫 project-owned content。
+舊版 `docs/site-content.js` 的 `schemaVersion: 1` 仍可由 renderer 驗證，供更新中的 repository 辨識舊來源；新內容不再建立 JavaScript schema。更新時舊檔保持原樣，產物顯示遷移提示，直到維護者把要保留的文字移入 Markdown 並自行刪除舊檔；不能靠模板靜默覆寫 project-owned content。
 
 ## GitHub capability matrix
 
