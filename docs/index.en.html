@@ -3366,7 +3366,7 @@ html[data-detail-level="simple"] .detail-panel {
   <ul>
 <li><strong>Active:</strong> the CLI creates, adopts, or updates and verifies a candidate before writing the target; template full verification reruns all three paths.</li>
 <li><strong>Manual:</strong> a person approves the external plan, source, and first adoption PR.</li>
-<li><strong>Pending:</strong> update notification currently has only a repository-local checker; no scheduled notification is claimed until its Action is restored.</li>
+<li><strong>Pending:</strong> the update-notice workflow and checker script are restored, and a Copier fixture test verifies they are generated only when selected; the checker&rsquo;s own update-detection and Issue-notification logic has no dedicated regression test, and no hosted scheduled run has been observed, so live-schedule execution is not yet claimed.</li>
 <li><strong>Retired:</strong> former reviewer assignment, remote governance, and delivery orchestration do not return with this page.</li>
 </ul>
 </aside>

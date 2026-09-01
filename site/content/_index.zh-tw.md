@@ -569,7 +569,7 @@ Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<I
 {{< detail key="template-release-status" title="目前自動化邊界" >}}
 - **Active：**CLI 在 candidate 內完成建立、導入或更新與驗證，成功後才寫入 target；公版完整測試會重跑三條路徑。
 - **Manual：**首次導入的外部 plan、來源與第一張 PR 由人核准。
-- **Pending：**新版通知目前只有 repo-local checker；排程 Action 恢復前不宣稱會自動通知。
+- **Pending：**通知 workflow 與 checker script 已恢復，Copier fixture 測試也驗證只在選用時才會產生；但 checker 自身的更新判斷與 Issue 通知邏輯尚無專屬回歸測試，也尚未觀察到排程的 hosted 執行，因此不宣稱排程已能自動通知。
 - **Retired：**舊 reviewer assignment、remote governance 與 delivery orchestration 不隨本頁恢復。
 {{< /detail >}}
 {{< /basic >}}
