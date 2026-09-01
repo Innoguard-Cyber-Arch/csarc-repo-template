@@ -205,12 +205,12 @@ branch_strategy: delivery
         {
           title: '各語言保留自己的品質、測試與鎖定設定',
           goal: '共用治理不等於硬湊成同一套工具；每種語言使用其主流工具，再由同一驗證入口協調。',
-          summary: 'Python 使用 uv、Ruff、mypy、pytest；TypeScript 使用 pnpm、Biome、TypeScript strict、Vitest；Rust 使用 Cargo、rustfmt、Clippy 與 cargo test。',
+          summary: 'Python 使用 uv、Ruff、ty、pytest；TypeScript 使用 pnpm、Biome、TypeScript strict、Vitest；Rust 使用 Cargo、rustfmt、Clippy 與 cargo test。',
           file: '各語言 manifest＋lockfile',
           code: `# Python module
 uv sync --locked
 uv run ruff check .
-uv run mypy
+uv run ty check
 uv run pytest --cov --cov-fail-under=80
 
 # TypeScript module
@@ -600,13 +600,13 @@ _skip_if_exists:
         {
           title: '公版 root 鎖工具、跑 OSV，並檢查共用設定沒有漂移',
           goal: '中央模板不能要求下游做到自己做不到的事；PR 說明模板是唯一刻意差異。',
-          summary: 'root 以鎖定環境跑 Ruff、mypy、完整 Git 歷史、目前工作樹與 Actions 掃描；無 Git 歷史的新案仍掃工作樹，腳本也逐組 diff root／template 的共用政策。',
+          summary: 'root 以鎖定環境跑 Ruff、ty、完整 Git 歷史、目前工作樹與 Actions 掃描；無 Git 歷史的新案仍掃工作樹，腳本也逐組 diff root／template 的共用政策。',
           file: 'pyproject.toml＋uv.lock＋scripts/verify-template.sh',
           code: `uv sync --locked
 uv lock --check
 uv run ruff format --check
 uv run ruff check
-uv run mypy
+uv run ty check
 ./scripts/scan-secrets
 # Large repositories may explicitly narrow history:
 ./scripts/scan-secrets --log-opts='--since=2026-01-01'
@@ -616,7 +616,7 @@ uv run zizmor . --format plain
         },
         {
           title: 'Python 新功能版本滿三十天後，自動建立升版 PR',
-          goal: '不靠人記得升級，也不繞過 Ruff、mypy、CI、人工審查或模板更新測試。',
+          goal: '不靠人記得升級，也不繞過 Ruff、ty、CI、人工審查或模板更新測試。',
           summary: '排程讀取 Python 官方發布日期；專用 GitHub App 建立帶 enhancement label 的 PR，通過全部門禁與人工審查後再由維護者合併。',
           file: 'python-version-policy.yml＋scripts/update_python_version.py',
           code: `version_policy:

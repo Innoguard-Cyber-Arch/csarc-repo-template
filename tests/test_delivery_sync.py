@@ -1580,7 +1580,7 @@ def test_hosted_complete_checks_admin_write_before_restoring_checkpoint(
             return 403, {"message": "Forbidden"}
         return original_request(method, path, payload)
 
-    admin.request = reject_patch  # type: ignore[method-assign]
+    admin.request = reject_patch  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="HTTP 403"):
         complete_dev_next(
             reader,

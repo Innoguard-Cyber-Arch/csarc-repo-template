@@ -2951,7 +2951,7 @@ html[data-detail-level="simple"] .detail-panel {
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">語言工具可以集中，也可以交回各生態圈</span></summary><ul><li><strong>單一跨語言工具：</strong>入口一致，但需要另外維護抽象層。</li><li><strong>各語言原生工具：</strong>開發者容易理解，版本與輸出則要由模板統一管理。</li><li><strong>每種組合各寫一套：</strong>初期直觀，組合增加後很容易重複與漂移。</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">每種語言各自檢查需要的事情</span></summary><ul><li><strong>所有專案：</strong>檢查工作規則、文件、敏感資料與套件風險。</li><li><strong>Python：</strong>檢查程式格式、型別、測試，以及能否製作安裝包。</li><li><strong>TypeScript：</strong>檢查程式格式、型別、測試，以及能否製作安裝包。</li><li><strong>Rust：</strong>檢查程式格式、常見錯誤、測試，以及正式版本能否建置與打包。</li><li><strong>同時使用多種語言：</strong>合併各語言的檢查，共通項目只跑一次。</li></ul></details>
       </div>
-      <aside class="config-guidance"><strong>模板功能與客製化</strong><ul><li><strong>單一設定來源：</strong><code>.csarc/config.yml</code> 同時是 repo 的公版設定與 Copier answers file；建立、導入與更新都由 Copier 寫入，不再另存 profile JSON。</li><li><strong>變更方式：</strong><code>copier.yml</code> 定義可選項；使用 <code>csarc update --data</code> 變更，不直接編輯生成設定。</li><li><strong>共通入口：</strong><code>scripts/verify-fast</code> 與 <code>scripts/verify</code>；GitHub Actions 只呼叫相同的本機檢查。</li><li><strong>Python：</strong><code>.python-version</code>、<code>pyproject.toml</code>、<code>uv.lock</code>；Python 3.14、uv、Ruff、mypy、pytest、wheel。</li><li><strong>TypeScript：</strong><code>.node-version</code>、<code>package.json</code>、<code>pnpm-lock.yaml</code>；Node 24、pnpm、Biome、TypeScript、Vitest、npm package。</li><li><strong>Rust：</strong><code>rust-toolchain.toml</code>、<code>Cargo.toml</code>、<code>Cargo.lock</code>；Rust 1.98、rustfmt、Clippy、cargo test、release build、Cargo package。</li><li><strong>版本基線：</strong><code>profiles/catalog.yaml</code>；各語言各自維護，不定義組合專屬版本。</li></ul></aside>
+      <aside class="config-guidance"><strong>模板功能與客製化</strong><ul><li><strong>單一設定來源：</strong><code>.csarc/config.yml</code> 同時是 repo 的公版設定與 Copier answers file；建立、導入與更新都由 Copier 寫入，不再另存 profile JSON。</li><li><strong>變更方式：</strong><code>copier.yml</code> 定義可選項；使用 <code>csarc update --data</code> 變更，不直接編輯生成設定。</li><li><strong>共通入口：</strong><code>scripts/verify-fast</code> 與 <code>scripts/verify</code>；GitHub Actions 只呼叫相同的本機檢查。</li><li><strong>Python：</strong><code>.python-version</code>、<code>pyproject.toml</code>、<code>uv.lock</code>；Python 3.14、uv、Ruff、ty、pytest、wheel。</li><li><strong>TypeScript：</strong><code>.node-version</code>、<code>package.json</code>、<code>pnpm-lock.yaml</code>；Node 24、pnpm、Biome、TypeScript、Vitest、npm package。</li><li><strong>Rust：</strong><code>rust-toolchain.toml</code>、<code>Cargo.toml</code>、<code>Cargo.lock</code>；Rust 1.98、rustfmt、Clippy、cargo test、release build、Cargo package。</li><li><strong>版本基線：</strong><code>profiles/catalog.yaml</code>；各語言各自維護，不定義組合專屬版本。</li></ul></aside>
 </div>
 
 
@@ -4419,13 +4419,14 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>各語言具體檢查什麼</strong><span>比較共用抽象工具與各生態圈原生的格式、型別、測試、建置及打包工具。<br><br><b>CSARC：</b>Python 使用 Ruff、mypy、pytest 與 wheel；TypeScript 使用 Biome、TypeScript、Vitest 與 npm package；Rust 使用 rustfmt、Clippy、cargo test、release build 與 Cargo package。</span></th>
+          <th scope="row"><strong>各語言具體檢查什麼</strong><span>比較共用抽象工具與各生態圈原生的格式、型別、測試、建置及打包工具。<br><br><b>CSARC：</b>Python 使用 uv、Ruff、ty、pytest 與 wheel；TypeScript 使用 Biome、TypeScript、Vitest 與 npm package；Rust 使用 rustfmt、Clippy、cargo test、release build 與 Cargo package。</span></th>
           <td><ul>
           </ul></td>
           <td><ul>
               <li><strong>pnpm<span class="tool-meta"><span>v11.25.0 (2026-08-29)</span><span>★ 36,332</span></span></strong><span class="tool-comparison-detail"><a href="https://pnpm.io/workspaces" target="_blank" rel="noreferrer">Scripts &#43; workspace</a>：以 package scripts 與 workspace 執行 TypeScript／JavaScript 生態圈原生的 build、test 與 package；不處理其他語言。</span></li>
               <li><strong>Rust / Cargo<span class="tool-meta"><span>1.98.0 (2026-08-20)</span><span>★ 116,688</span></span></strong><span class="tool-comparison-detail"><a href="https://doc.rust-lang.org/cargo/commands/index.html" target="_blank" rel="noreferrer">cargo fmt / clippy / test / build / package</a>：同一個官方工具鏈完成格式、常見錯誤、測試、正式建置與套件驗證。</span></li>
-              <li><strong>uv<span class="tool-meta"><span>0.12.7 (2026-08-27)</span><span>★ 89,282</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.astral.sh/uv/guides/projects/" target="_blank" rel="noreferrer">uv run &#43; build</a>：依 pyproject 與 lockfile 建立環境、執行 Python 工具並建置套件；格式、型別與測試仍由 Ruff、mypy、pytest 負責。</span></li>
+              <li><strong>uv<span class="tool-meta"><span>0.12.7 (2026-08-27)</span><span>★ 89,282</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.astral.sh/uv/guides/projects/" target="_blank" rel="noreferrer">uv run &#43; build</a>：依 pyproject 與 lockfile 建立環境、執行 Python 工具並建置套件；格式、型別與測試由同為 Astral 工具鏈的 Ruff、ty，加上 pytest 負責。</span></li>
+              <li><strong>ty<span class="tool-meta"><span>0.0.76 (2026-08-31)</span><span>★ 19,595</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.astral.sh/ty/" target="_blank" rel="noreferrer">ty check</a>：從 pyproject.toml 與 uv 環境讀取 Python 版本和相依，執行快速型別檢查；0.x 期間需固定版本避免診斷規則漂移。</span></li>
           </ul></td>
         </tr>
         <tr>
@@ -5235,7 +5236,7 @@ html[data-detail-level="simple"] .detail-panel {
           <tr><td>方案與 <code>main</code> 保護</td><td>Free private 會套基本設定並保存 Ruleset policy，但公開 API 無法建立 Ruleset，<code>main</code> 仍未受強制保護；至少升 Team 並建立 CODEOWNERS team，或經核准改為 public，核准與必要檢查才成為 merge gate。</td></tr>
           <tr><td>工作範圍與責任</td><td>Issue-first；標題用 12–80 字元英文摘要成果，內文可用中文；開單者自動成為負責人。新增需求超出完成條件就另開 Issue。</td></tr>
           <tr><td>公版更新邊界</td><td><code>template/</code> 是下發來源，root 讓公版自我治理；Copier 更新政策但保護產品程式與規格，成對設定由驗證腳本防止漂移。</td></tr>
-          <tr><td>語言與程式品質</td><td>Python、TypeScript、Rust 為獨立模組，可任意複選；Python 採 Ruff、mypy、pytest，TypeScript 採 Node 24、pnpm、Biome、Vitest，Rust 採 Rust 1.98、rustfmt、Clippy 與 Cargo。</td></tr>
+          <tr><td>語言與程式品質</td><td>Python、TypeScript、Rust 為獨立模組，可任意複選；Python 採 uv、Ruff、ty、pytest，TypeScript 採 Node 24、pnpm、Biome、Vitest，Rust 採 Rust 1.98、rustfmt、Clippy 與 Cargo。</td></tr>
           <tr><td>CI、版本與交付</td><td>本機與 CI 共用 <code>scripts/verify</code>，PR policy 回歸案例證明錯誤 route 會被拒絕；日常 fast、promotion full，release-please 只在已驗證的批次邊界維護單一 SemVer。</td></tr>
           <tr><td>依賴與供應鏈</td><td>三天等待觀察未知惡意新版；OSV 查已公開漏洞；hash 驗內容一致；SBOM 列出成品套件；resolver 另證明版本上下界可安裝，五者互不取代。</td></tr>
           <tr><td>AI、文件與未來能力</td><td><code>AGENTS.md</code> 是 AI 規範，README 與 repo 網站服務人類；Hugo／託管登入、部署、監控、RAG、Go 都要有 owner、使用情境與驗證後才導入。</td></tr>
@@ -5268,7 +5269,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>語言品質</td>
-					<td>Python 用 src layout、Ruff、strict mypy；TypeScript 用 Node 24、pnpm 11、Biome、Vitest</td>
+					<td>Python 用 src layout、uv、Ruff、ty、pytest；TypeScript 用 Node 24、pnpm 11、Biome、Vitest</td>
 			</tr>
 			<tr>
 					<td>CI 與版本</td>
@@ -6184,12 +6185,12 @@ branch_strategy: delivery
         {
           title: '各語言保留自己的品質、測試與鎖定設定',
           goal: '共用治理不等於硬湊成同一套工具；每種語言使用其主流工具，再由同一驗證入口協調。',
-          summary: 'Python 使用 uv、Ruff、mypy、pytest；TypeScript 使用 pnpm、Biome、TypeScript strict、Vitest；Rust 使用 Cargo、rustfmt、Clippy 與 cargo test。',
+          summary: 'Python 使用 uv、Ruff、ty、pytest；TypeScript 使用 pnpm、Biome、TypeScript strict、Vitest；Rust 使用 Cargo、rustfmt、Clippy 與 cargo test。',
           file: '各語言 manifest＋lockfile',
           code: `# Python module
 uv sync --locked
 uv run ruff check .
-uv run mypy
+uv run ty check
 uv run pytest --cov --cov-fail-under=80
 
 # TypeScript module
@@ -6579,13 +6580,13 @@ _skip_if_exists:
         {
           title: '公版 root 鎖工具、跑 OSV，並檢查共用設定沒有漂移',
           goal: '中央模板不能要求下游做到自己做不到的事；PR 說明模板是唯一刻意差異。',
-          summary: 'root 以鎖定環境跑 Ruff、mypy、完整 Git 歷史、目前工作樹與 Actions 掃描；無 Git 歷史的新案仍掃工作樹，腳本也逐組 diff root／template 的共用政策。',
+          summary: 'root 以鎖定環境跑 Ruff、ty、完整 Git 歷史、目前工作樹與 Actions 掃描；無 Git 歷史的新案仍掃工作樹，腳本也逐組 diff root／template 的共用政策。',
           file: 'pyproject.toml＋uv.lock＋scripts/verify-template.sh',
           code: `uv sync --locked
 uv lock --check
 uv run ruff format --check
 uv run ruff check
-uv run mypy
+uv run ty check
 ./scripts/scan-secrets
 # Large repositories may explicitly narrow history:
 ./scripts/scan-secrets --log-opts='--since=2026-01-01'
@@ -6595,7 +6596,7 @@ uv run zizmor . --format plain
         },
         {
           title: 'Python 新功能版本滿三十天後，自動建立升版 PR',
-          goal: '不靠人記得升級，也不繞過 Ruff、mypy、CI、人工審查或模板更新測試。',
+          goal: '不靠人記得升級，也不繞過 Ruff、ty、CI、人工審查或模板更新測試。',
           summary: '排程讀取 Python 官方發布日期；專用 GitHub App 建立帶 enhancement label 的 PR，通過全部門禁與人工審查後再由維護者合併。',
           file: 'python-version-policy.yml＋scripts/update_python_version.py',
           code: `version_policy:

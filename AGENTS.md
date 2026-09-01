@@ -45,7 +45,7 @@ Duplicate triage may close an Issue without code changes when it links the canon
 ## Commands
 
 - Environment setup: `uv sync --locked --python 3.14`.
-- Python iteration: `uv run ruff check <paths>`, `uv run mypy <paths>`, and `uv run pytest <test-path>`.
+- Python iteration: `uv run ruff check <paths>`, `uv run ty check <paths>`, and `uv run pytest <test-path>`.
 - Site source check: `./scripts/build-decision-site --check`.
 - Final template candidate: `./scripts/verify-template.sh` once by the pull request owner or integrator.
 

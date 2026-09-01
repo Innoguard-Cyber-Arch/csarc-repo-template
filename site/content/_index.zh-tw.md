@@ -332,7 +332,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">語言工具可以集中，也可以交回各生態圈</span></summary><ul><li><strong>單一跨語言工具：</strong>入口一致，但需要另外維護抽象層。</li><li><strong>各語言原生工具：</strong>開發者容易理解，版本與輸出則要由模板統一管理。</li><li><strong>每種組合各寫一套：</strong>初期直觀，組合增加後很容易重複與漂移。</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">每種語言各自檢查需要的事情</span></summary><ul><li><strong>所有專案：</strong>檢查工作規則、文件、敏感資料與套件風險。</li><li><strong>Python：</strong>檢查程式格式、型別、測試，以及能否製作安裝包。</li><li><strong>TypeScript：</strong>檢查程式格式、型別、測試，以及能否製作安裝包。</li><li><strong>Rust：</strong>檢查程式格式、常見錯誤、測試，以及正式版本能否建置與打包。</li><li><strong>同時使用多種語言：</strong>合併各語言的檢查，共通項目只跑一次。</li></ul></details>
       </div>
-      <aside class="config-guidance"><strong>模板功能與客製化</strong><ul><li><strong>單一設定來源：</strong><code>.csarc/config.yml</code> 同時是 repo 的公版設定與 Copier answers file；建立、導入與更新都由 Copier 寫入，不再另存 profile JSON。</li><li><strong>變更方式：</strong><code>copier.yml</code> 定義可選項；使用 <code>csarc update --data</code> 變更，不直接編輯生成設定。</li><li><strong>共通入口：</strong><code>scripts/verify-fast</code> 與 <code>scripts/verify</code>；GitHub Actions 只呼叫相同的本機檢查。</li><li><strong>Python：</strong><code>.python-version</code>、<code>pyproject.toml</code>、<code>uv.lock</code>；Python 3.14、uv、Ruff、mypy、pytest、wheel。</li><li><strong>TypeScript：</strong><code>.node-version</code>、<code>package.json</code>、<code>pnpm-lock.yaml</code>；Node 24、pnpm、Biome、TypeScript、Vitest、npm package。</li><li><strong>Rust：</strong><code>rust-toolchain.toml</code>、<code>Cargo.toml</code>、<code>Cargo.lock</code>；Rust 1.98、rustfmt、Clippy、cargo test、release build、Cargo package。</li><li><strong>版本基線：</strong><code>profiles/catalog.yaml</code>；各語言各自維護，不定義組合專屬版本。</li></ul></aside>
+      <aside class="config-guidance"><strong>模板功能與客製化</strong><ul><li><strong>單一設定來源：</strong><code>.csarc/config.yml</code> 同時是 repo 的公版設定與 Copier answers file；建立、導入與更新都由 Copier 寫入，不再另存 profile JSON。</li><li><strong>變更方式：</strong><code>copier.yml</code> 定義可選項；使用 <code>csarc update --data</code> 變更，不直接編輯生成設定。</li><li><strong>共通入口：</strong><code>scripts/verify-fast</code> 與 <code>scripts/verify</code>；GitHub Actions 只呼叫相同的本機檢查。</li><li><strong>Python：</strong><code>.python-version</code>、<code>pyproject.toml</code>、<code>uv.lock</code>；Python 3.14、uv、Ruff、ty、pytest、wheel。</li><li><strong>TypeScript：</strong><code>.node-version</code>、<code>package.json</code>、<code>pnpm-lock.yaml</code>；Node 24、pnpm、Biome、TypeScript、Vitest、npm package。</li><li><strong>Rust：</strong><code>rust-toolchain.toml</code>、<code>Cargo.toml</code>、<code>Cargo.lock</code>；Rust 1.98、rustfmt、Clippy、cargo test、release build、Cargo package。</li><li><strong>版本基線：</strong><code>profiles/catalog.yaml</code>；各語言各自維護，不定義組合專屬版本。</li></ul></aside>
 {{< /legacy >}}
 
 {{< basic >}}
@@ -756,7 +756,7 @@ Go、Scorecard、Harden-Runner、網站託管與登入、RAG、通用部署與�
           <tr><td>方案與 <code>main</code> 保護</td><td>Free private 會套基本設定並保存 Ruleset policy，但公開 API 無法建立 Ruleset，<code>main</code> 仍未受強制保護；至少升 Team 並建立 CODEOWNERS team，或經核准改為 public，核准與必要檢查才成為 merge gate。</td></tr>
           <tr><td>工作範圍與責任</td><td>Issue-first；標題用 12–80 字元英文摘要成果，內文可用中文；開單者自動成為負責人。新增需求超出完成條件就另開 Issue。</td></tr>
           <tr><td>公版更新邊界</td><td><code>template/</code> 是下發來源，root 讓公版自我治理；Copier 更新政策但保護產品程式與規格，成對設定由驗證腳本防止漂移。</td></tr>
-          <tr><td>語言與程式品質</td><td>Python、TypeScript、Rust 為獨立模組，可任意複選；Python 採 Ruff、mypy、pytest，TypeScript 採 Node 24、pnpm、Biome、Vitest，Rust 採 Rust 1.98、rustfmt、Clippy 與 Cargo。</td></tr>
+          <tr><td>語言與程式品質</td><td>Python、TypeScript、Rust 為獨立模組，可任意複選；Python 採 uv、Ruff、ty、pytest，TypeScript 採 Node 24、pnpm、Biome、Vitest，Rust 採 Rust 1.98、rustfmt、Clippy 與 Cargo。</td></tr>
           <tr><td>CI、版本與交付</td><td>本機與 CI 共用 <code>scripts/verify</code>，PR policy 回歸案例證明錯誤 route 會被拒絕；日常 fast、promotion full，release-please 只在已驗證的批次邊界維護單一 SemVer。</td></tr>
           <tr><td>依賴與供應鏈</td><td>三天等待觀察未知惡意新版；OSV 查已公開漏洞；hash 驗內容一致；SBOM 列出成品套件；resolver 另證明版本上下界可安裝，五者互不取代。</td></tr>
           <tr><td>AI、文件與未來能力</td><td><code>AGENTS.md</code> 是 AI 規範，README 與 repo 網站服務人類；Hugo／託管登入、部署、監控、RAG、Go 都要有 owner、使用情境與驗證後才導入。</td></tr>
@@ -772,7 +772,7 @@ Go、Scorecard、Harden-Runner、網站託管與登入、RAG、通用部署與�
 | Free private 的 `main` 保護 | 保存 Ruleset policy 並回報 `DEGRADED`，不宣稱已有 merge gate |
 | 工作範圍 | Issue-first；新增需求超出完成條件就另開 Issue |
 | 公版更新邊界 | `template/` 下發基礎設施；Copier 保護產品程式與規格 |
-| 語言品質 | Python 用 src layout、Ruff、strict mypy；TypeScript 用 Node 24、pnpm 11、Biome、Vitest |
+| 語言品質 | Python 用 src layout、uv、Ruff、ty、pytest；TypeScript 用 Node 24、pnpm 11、Biome、Vitest |
 | CI 與版本 | 本機／CI 共用入口；日常 fast、promotion full、單一 SemVer |
 | 供應鏈 | 等待、OSV、hash、SBOM 與 resolver 各解決不同問題 |
 | AI 與文件 | `AGENTS.md` 是工作契約；README 與網站服務人類 |

@@ -50,7 +50,7 @@ Existing-repository history changes start read-only: propose semantic story grou
 {% endif %}{% if "rust" in languages %}- Rust setup: `rustup show && cargo fetch --locked`.
 {% endif %}{% if not languages %}- Environment setup: no language toolchain install is required.
 {% endif %}- Site source check: `uv run --no-project python scripts/render_site.py --check`.
-{% if "python" in languages %}- Python iteration: `uv run ruff check <paths>`, `uv run mypy`, and `uv run pytest <test-path>`.
+{% if "python" in languages %}- Python iteration: `uv run ruff check <paths>`, `uv run ty check`, and `uv run pytest <test-path>`.
 {% endif %}{% if "typescript" in languages %}- TypeScript iteration: `pnpm exec biome check <paths>`, `pnpm exec tsc --noEmit`, and `pnpm exec vitest run <test-path>`.
 {% endif %}{% if "rust" in languages %}- Rust iteration: `cargo fmt --all -- --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, and `cargo test --locked`.
 {% endif %}- Final candidate: `./scripts/verify` once by the pull request owner or integrator.

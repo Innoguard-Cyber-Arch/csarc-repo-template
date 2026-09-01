@@ -3016,7 +3016,7 @@ def capability_preflight(
         except json.JSONDecodeError:
             parsed = None
         payload = (
-            parsed
+            cast(dict[str, object], parsed)
             if result.returncode == 0 and isinstance(parsed, dict)
             else {
                 "mode": "verification-only",

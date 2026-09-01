@@ -49,12 +49,12 @@ class RejectRedirects(urllib.request.HTTPRedirectHandler):
 
     def redirect_request(
         self,
-        _request: urllib.request.Request,
-        _file: object,
-        _code: int,
-        _message: str,
-        _headers: object,
-        _new_url: str,
+        req: urllib.request.Request,
+        fp: object,
+        code: int,
+        msg: str,
+        headers: object,
+        newurl: str,
     ) -> None:
         """Reject every redirect."""
         return None

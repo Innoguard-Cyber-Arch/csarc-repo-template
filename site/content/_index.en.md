@@ -321,7 +321,7 @@ Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, gene
 | `main` protection on Free private | Preserve Ruleset policy and report `DEGRADED`; never claim an enforced merge gate |
 | Work scope | Issue-first; open a separate Issue for requirements outside acceptance criteria |
 | Template update boundary | `template/` delivers infrastructure; Copier preserves product code and specs |
-| Language quality | Python uses src layout, Ruff, strict mypy; TypeScript uses Node 24, pnpm 11, Biome, Vitest |
+| Language quality | Python uses src layout, uv, Ruff, ty, and pytest; TypeScript uses Node 24, pnpm 11, Biome, and Vitest |
 | CI and versioning | Local and CI share entry points; daily fast, promotion full, one SemVer |
 | Supply chain | Delay, OSV, hashes, SBOM, and resolver checks address different risks |
 | AI and docs | `AGENTS.md` is the working contract; README and the site serve people |

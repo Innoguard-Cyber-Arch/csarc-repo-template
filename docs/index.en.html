@@ -3966,13 +3966,14 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>What each language actually checks</strong><span>Compares one abstract tool with each ecosystem&#39;s native formatting, type, test, build, and packaging tools.<br><br><b>CSARC: </b>Python uses Ruff, mypy, pytest, and wheel; TypeScript uses Biome, TypeScript, Vitest, and npm package; Rust uses rustfmt, Clippy, cargo test, release builds, and Cargo package.</span></th>
+          <th scope="row"><strong>What each language actually checks</strong><span>Compares one abstract tool with each ecosystem&#39;s native formatting, type, test, build, and packaging tools.<br><br><b>CSARC: </b>Python uses uv, Ruff, ty, pytest, and wheel; TypeScript uses Biome, TypeScript, Vitest, and npm package; Rust uses rustfmt, Clippy, cargo test, release builds, and Cargo package.</span></th>
           <td><ul>
           </ul></td>
           <td><ul>
               <li><strong>pnpm<span class="tool-meta"><span>v11.25.0 (2026-08-29)</span><span>★ 36,332</span></span></strong><span class="tool-comparison-detail"><a href="https://pnpm.io/workspaces" target="_blank" rel="noreferrer">Scripts &#43; workspace</a>：Package scripts and workspaces run native TypeScript and JavaScript build, test, and package commands; other languages are outside its scope.</span></li>
               <li><strong>Rust / Cargo<span class="tool-meta"><span>1.98.0 (2026-08-20)</span><span>★ 116,688</span></span></strong><span class="tool-comparison-detail"><a href="https://doc.rust-lang.org/cargo/commands/index.html" target="_blank" rel="noreferrer">cargo fmt / clippy / test / build / package</a>：One official toolchain handles formatting, common mistakes, tests, release builds, and package verification.</span></li>
-              <li><strong>uv<span class="tool-meta"><span>0.12.7 (2026-08-27)</span><span>★ 89,282</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.astral.sh/uv/guides/projects/" target="_blank" rel="noreferrer">uv run &#43; build</a>：Creates the environment from pyproject and its lockfile, runs Python tools, and builds packages; Ruff, mypy, and pytest still own formatting, typing, and tests.</span></li>
+              <li><strong>uv<span class="tool-meta"><span>0.12.7 (2026-08-27)</span><span>★ 89,282</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.astral.sh/uv/guides/projects/" target="_blank" rel="noreferrer">uv run &#43; build</a>：Creates the environment from pyproject and its lockfile, runs Python tools, and builds packages; Ruff and ty from the same Astral toolchain handle quality and typing, while pytest runs tests.</span></li>
+              <li><strong>ty<span class="tool-meta"><span>0.0.76 (2026-08-31)</span><span>★ 19,595</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.astral.sh/ty/" target="_blank" rel="noreferrer">ty check</a>：Reads the Python version and dependencies from pyproject.toml and the uv environment for fast type checking; pinning is required during 0.x to avoid diagnostic drift.</span></li>
           </ul></td>
         </tr>
         <tr>
@@ -4772,7 +4773,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>Language quality</td>
-					<td>Python uses src layout, Ruff, strict mypy; TypeScript uses Node 24, pnpm 11, Biome, Vitest</td>
+					<td>Python uses src layout, uv, Ruff, ty, and pytest; TypeScript uses Node 24, pnpm 11, Biome, and Vitest</td>
 			</tr>
 			<tr>
 					<td>CI and versioning</td>

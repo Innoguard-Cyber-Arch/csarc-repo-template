@@ -680,7 +680,7 @@
       "key": "nativeLanguageChecks",
       "title": {"zh-tw": "各語言具體檢查什麼", "en": "What each language actually checks"},
       "description": {"zh-tw": "比較共用抽象工具與各生態圈原生的格式、型別、測試、建置及打包工具。", "en": "Compares one abstract tool with each ecosystem's native formatting, type, test, build, and packaging tools."},
-      "csarc": {"zh-tw": "Python 使用 Ruff、mypy、pytest 與 wheel；TypeScript 使用 Biome、TypeScript、Vitest 與 npm package；Rust 使用 rustfmt、Clippy、cargo test、release build 與 Cargo package。", "en": "Python uses Ruff, mypy, pytest, and wheel; TypeScript uses Biome, TypeScript, Vitest, and npm package; Rust uses rustfmt, Clippy, cargo test, release builds, and Cargo package."}
+      "csarc": {"zh-tw": "Python 使用 uv、Ruff、ty、pytest 與 wheel；TypeScript 使用 Biome、TypeScript、Vitest 與 npm package；Rust 使用 rustfmt、Clippy、cargo test、release build 與 Cargo package。", "en": "Python uses uv, Ruff, ty, pytest, and wheel; TypeScript uses Biome, TypeScript, Vitest, and npm package; Rust uses rustfmt, Clippy, cargo test, release builds, and Cargo package."}
     },
     {
       "key": "composableLanguageModules",
@@ -1064,9 +1064,22 @@
       "position": {"zh-tw": "Python 專案與套件管理器：管理 Python 版本、環境、lockfile、執行命令與建置。", "en": "A Python project and package manager for Python versions, environments, lockfiles, command execution, and builds."},
       "difference": {"zh-tw": ["uv 專注 Python 開發與相依解析，不定義其他語言或 GitHub 工作治理。", "CSARC 使用 uv 作為 Python 模組的原生入口，再與其他語言模組及共通規則組合。"], "en": ["uv focuses on Python development and dependency resolution rather than other languages or GitHub work governance.", "CSARC uses uv as the native Python entrypoint and composes it with other language modules and shared rules."]},
       "comparisons": [
-        {"key": "nativeLanguageChecks", "feature": "uv run + build", "docs": "https://docs.astral.sh/uv/guides/projects/", "description": {"zh-tw": "依 pyproject 與 lockfile 建立環境、執行 Python 工具並建置套件；格式、型別與測試仍由 Ruff、mypy、pytest 負責。", "en": "Creates the environment from pyproject and its lockfile, runs Python tools, and builds packages; Ruff, mypy, and pytest still own formatting, typing, and tests."}},
+        {"key": "nativeLanguageChecks", "feature": "uv run + build", "docs": "https://docs.astral.sh/uv/guides/projects/", "description": {"zh-tw": "依 pyproject 與 lockfile 建立環境、執行 Python 工具並建置套件；格式、型別與測試由同為 Astral 工具鏈的 Ruff、ty，加上 pytest 負責。", "en": "Creates the environment from pyproject and its lockfile, runs Python tools, and builds packages; Ruff and ty from the same Astral toolchain handle quality and typing, while pytest runs tests."}},
         {"key": "languageConfiguration", "feature": "pyproject.toml + uv.lock", "docs": "https://docs.astral.sh/uv/concepts/projects/layout/", "description": {"zh-tw": "以 Python 標準專案資料加 uv.lock 固定環境；不保存 CSARC 的分支與治理選項。", "en": "Uses standard Python project metadata plus uv.lock for the environment; it does not store CSARC branch or governance selections."}},
         {"key": "lockedDependencyResolution", "feature": "Universal lockfile", "docs": "https://docs.astral.sh/uv/concepts/projects/layout/#the-lockfile", "description": {"zh-tw": "uv.lock 保存跨平台解析結果，安裝時可拒絕鎖檔漂移。", "en": "uv.lock records cross-platform resolution and installation can reject lockfile drift."}}
+      ]
+    },
+    {
+      "name": "ty",
+      "url": "https://github.com/astral-sh/ty",
+      "version": "0.0.76",
+      "released": "2026-08-31",
+      "stars": "19,595",
+      "coverage": {"full": [], "partial": ["04"]},
+      "position": {"zh-tw": "Astral 的 Python 型別檢查器：直接理解 Python 專案環境，提供快速的型別診斷與編輯器支援。", "en": "Astral's Python type checker, providing fast type diagnostics and editor support with direct awareness of Python project environments."},
+      "difference": {"zh-tw": ["ty 只負責 Python 型別分析，不管理測試、打包或 repository 工作流程。", "CSARC 固定 ty 版本並由 uv 執行，再與 Ruff、pytest、打包及共通治理組成完整 Python 模組。"], "en": ["ty focuses on Python type analysis rather than tests, packaging, or repository workflow.", "CSARC pins ty and runs it through uv, then combines it with Ruff, pytest, packaging, and shared governance."]},
+      "comparisons": [
+        {"key": "nativeLanguageChecks", "feature": "ty check", "docs": "https://docs.astral.sh/ty/", "description": {"zh-tw": "從 pyproject.toml 與 uv 環境讀取 Python 版本和相依，執行快速型別檢查；0.x 期間需固定版本避免診斷規則漂移。", "en": "Reads the Python version and dependencies from pyproject.toml and the uv environment for fast type checking; pinning is required during 0.x to avoid diagnostic drift."}}
       ]
     },
     {

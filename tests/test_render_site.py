@@ -524,8 +524,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "archived" not in data["testing"]["labels"]["zh-tw"]
     assert "archived" not in testing_shortcode
 
-    assert len(data["tools"]) == 24
-    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 96
+    assert len(data["tools"]) == 25
+    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 97
     assert data["comparisonDate"] == "2026-08-31"
     assert data["releaseCutoff"] == "2026-02-28"
     assert data["threshold"] == 5
@@ -584,6 +584,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "Dependabot",
         "Renovate",
         "pnpm",
+        "ty",
         "uv",
         "Rust / Cargo",
         "OSV-Scanner",

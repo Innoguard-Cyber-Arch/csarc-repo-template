@@ -113,6 +113,13 @@ def test_copier_uses_one_yaml_config_for_language_modules(
     assert (project / "Cargo.toml").is_file()
     assert not (project / "package.json").exists()
     assert not (project / "version.txt").exists()
+    python_config = (project / "pyproject.toml").read_text(encoding="utf-8")
+    assert '"ty==0.0.76"' in python_config
+    assert "[tool.ty.src]" in python_config
+    assert "mypy" not in python_config
+    verifier = (project / "scripts/verify").read_text(encoding="utf-8")
+    assert "uv run ty check" in verifier
+    assert "mypy" not in verifier
     configured = cli.run(
         [sys.executable, "scripts/csarc_config.py", "languages"],
         cwd=project,

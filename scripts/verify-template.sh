@@ -22,7 +22,7 @@ uv sync --locked --python "$UV_PYTHON"
 uv lock --check
 uv run ruff format --check src scripts tests
 uv run ruff check src scripts tests
-uv run mypy
+uv run ty check
 uv run pytest --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80
 ./scripts/test-issue-triage
 ./scripts/test-worktree-cleanup

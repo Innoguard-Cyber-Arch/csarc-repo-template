@@ -17,6 +17,7 @@
 - `csarc init/adopt/update` 先解析 immutable release 與完整 SHA，dry-run 不改 target；正式操作仍不自動 push、開 PR 或套遠端 settings。
 - 任何 conflict marker 或 `.rej` 使驗證失敗；不能把 Copier 完成等同產品語意已整合。
 - 成熟度證據分兩層：真實 consuming repo 證明共用導入、更新與線上 CI 邊界；各語言模組以建立、既有 repo 導入、更新與原生工具鏈的可重現測試取得 beta，不為每種語言建立專用測試 repo。
+- Python 模組採用 Astral 工具鏈：uv 管理環境、鎖檔與執行，Ruff 負責格式與 lint，ty 負責型別檢查；ty 在 0.x 期間固定精確版本以避免規則漂移。
 
 ## 歷史 disposition
 
