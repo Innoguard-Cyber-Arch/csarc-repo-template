@@ -3292,6 +3292,8 @@ def test_update_check_dry_run_apply_and_conflict(
     commit(project, "test: customize managed file")
     managed.write_text("template version three\n", encoding="utf-8")
     third_sha = commit(source, "test: template version three")
+    expected_head, expected_changes, _ = cli.target_state(project)
+    expected_files = cli.target_file_snapshot(project)
 
     assert (
         main(
@@ -3307,7 +3309,57 @@ def test_update_check_dry_run_apply_and_conflict(
         )
         == 2
     )
-    assert "<<<<<<<" in (project / "managed.txt").read_text(encoding="utf-8")
+    actual_head, actual_changes, _ = cli.target_state(project)
+    assert (actual_head, actual_changes) == (expected_head, expected_changes)
+    assert cli.target_file_snapshot(project) == expected_files
+
+
+def test_legacy_update_conflict_leaves_target_unchanged(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Keep a legacy target byte-identical when Copier finds a conflict."""
+    source, project, _ = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated project")
+
+    (project / cli.PROVENANCE_FILE).unlink()
+    (project / "managed.txt").write_text(
+        "legacy customization\n", encoding="utf-8"
+    )
+    commit(project, "test: legacy customized project")
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    target_sha = commit(source, "test: conflicting template update")
+    expected_head, expected_changes, _ = cli.target_state(project)
+    expected_files = cli.target_file_snapshot(project)
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--from-release",
+                "v0.2.4",
+                "--accept-legacy",
+                "--to",
+                target_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
+    )
+
+    error = capsys.readouterr().err
+    assert "managed.txt" in error
+    assert "the target was not changed" in error
+    actual_head, actual_changes, _ = cli.target_state(project)
+    assert (actual_head, actual_changes) == (expected_head, expected_changes)
+    assert cli.target_file_snapshot(project) == expected_files
 
 
 def test_update_migrates_legacy_copier_answers_to_single_config(

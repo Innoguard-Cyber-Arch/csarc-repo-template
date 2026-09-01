@@ -2588,7 +2588,7 @@ html[data-detail-level="simple"] .detail-panel {
 </table>
 <aside class="technical-detail" data-content-key="files-update">
   <h3>更新時怎麼保護產品內容</h3>
-  <p>Copier 把更新帶進短分支，衝突留在 PR 由人檢視。建立、既有 repo 導入與同一 repo 後續 update 都有 fixture；回歸測試會刻意加入產品檔案，再確認更新後內容沒有被覆寫。</p>
+  <p>Copier 在短分支嘗試更新；若有衝突，只列出檔案且不修改 repo，調整後重跑，再由 PR 審查。建立、既有 repo 導入與同一 repo 後續 update 都有 fixture；回歸測試會刻意加入產品檔案，再確認更新後內容沒有被覆寫。</p>
 <p>Root 與 <code>template/</code> 同時使用的 workflow、policy、script 與文件由同步程式維持一致；只因專案選項而不同的檔案則以實際生成專案驗證。目前版本與發佈設定檔仍保留，但對應 GitHub Actions 尚未啟用。</p>
 </aside>
 </div>
@@ -3628,7 +3628,7 @@ html[data-detail-level="simple"] .detail-panel {
       <p class="context-line"><strong>問題與目的｜</strong>模板錯誤會一次影響多個專案；每次修改都要真的建立新案、導入既有案，再讓已導入的 repo 接收更新並通過完整驗證。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">這次不選，因為無法持續同步或驗證</span></summary><ul><li><strong>GitHub Template：</strong>只複製一次，不記得來源與答案</li><li><strong>PyScaffold：</strong>可參考 Python 結構，但會形成第二套更新機制</li><li><strong>只驗 YAML：</strong>無法證明新案、既有案與更新真的能跑</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">Copier＋建立／更新回歸</span></summary><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；衝突留給 PR 由人處理。</p></div></details><p><strong>建立：</strong>共通基線與 Python、Rust、TypeScript 模組各自實跑驗證；多選時合併模組，不建立組合專屬流程。<br><strong>導入與更新：</strong>adopt／update dry-run 先預覽，確認後只遷移舊 CSARC 結構；接著對同一 repo 執行下一版 Copier update、確認產品目錄未被覆寫，最後執行生成專案的完整驗證。<br><strong>版本：</strong>公版與所有語言模組共用一個 SemVer；各語言基線則依自己的穩定版政策前進。</p></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">Copier＋建立／更新回歸</span></summary><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；衝突時保持 repo 不變，調整後重跑再由 PR 審查。</p></div></details><p><strong>建立：</strong>共通基線與 Python、Rust、TypeScript 模組各自實跑驗證；多選時合併模組，不建立組合專屬流程。<br><strong>導入與更新：</strong>adopt／update dry-run 先預覽，確認後只遷移舊 CSARC 結構；接著對同一 repo 執行下一版 Copier update、確認產品目錄未被覆寫，最後執行生成專案的完整驗證。<br><strong>版本：</strong>公版與所有語言模組共用一個 SemVer；各語言基線則依自己的穩定版政策前進。</p></details>
       </div>
       <p class="context-line"><strong>root／template 配對檔案｜</strong>43 對 workflow、policy、文件、script 與 test（例如 <code>promotion.yml</code>、<code>docs/ci-policy.md</code>、<code>scripts/promotion_gate.py</code>）在 root 與 <code>template/</code> 之間逐位元組相同；過去只靠 <code>verify-template.sh</code> 在 CI 用 <code>diff</code> 事後比對，任何一邊漏改要等驗證跑完才被抓到。現在 <code>scripts/sync-paired-files.sh</code> 把 root 當成唯一來源：本機執行它會立即重新產生每個 <code>template/</code> 副本；加 <code>--check</code> 則不寫檔，只驗證每個副本是否符合產生腳本的確定性輸出（內容與可執行位元），任何一對不一致就印出差異並失敗。<code>verify-template.sh</code> 已改成呼叫 <code>--check</code>，並用一段複製到暫存目錄、蓄意注入內容與權限落差、確認失敗、重新產生、確認通過的回歸測試證明這個機制會擋下漂移。<code>dependabot.yml</code>、<code>.gitignore</code> 等僅因 Jinja 變數不同的檔案不在此列，仍由既有的「產生一個實案並與 root 比對」測試把關；<code>AGENTS.md</code>／<code>README.md</code> 等文件因 root 與下游專案的治理內容本來就不同，不屬於重複維護，故未強行合併。</p>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>下發來源、所選語言模組、保留路徑與功能開關：</strong><code>template/</code>＋<code>copier.yml</code></li><li><strong>root-only CI 與建立／導入／更新驗證：</strong><code>.github/</code>＋<code>scripts/verify-template.sh</code>；生成 repo 不會收到這支腳本或 template release workflows</li><li><strong>語言基線與三十天觀察：</strong><code>profiles/catalog.yaml</code>；<strong>Python 自動升版：</strong><code>python-version-policy.yml</code></li><li><strong>root／template 配對檔案的單一來源與漂移檢查：</strong><code>scripts/sync-paired-files.sh</code></li></ul></aside>
@@ -3643,7 +3643,7 @@ html[data-detail-level="simple"] .detail-panel {
 </ul>
 <details class="package-disclosure" data-content-key="copier-update">
   <summary><span class="tech-name">Copier＋root dogfood＋建立／更新回歸</span></summary>
-  <div class="package-health"><a href="https://github.com/copier-org/copier">Copier</a> 記錄來源、語言與答案，能把新版公版套回可自行修改的既有 repo；衝突保留在短分支與 PR 由人處理。GitHub Template 只複製一次，PyScaffold 則會形成第二套更新機制，因此不採用。</div>
+  <div class="package-health"><a href="https://github.com/copier-org/copier">Copier</a> 記錄來源、語言與答案，能把新版公版套回可自行修改的既有 repo；衝突時不修改 repo，由人調整後重跑，再以 PR 審查。GitHub Template 只複製一次，PyScaffold 則會形成第二套更新機制，因此不採用。</div>
 </details>
 <aside class="technical-detail" data-content-key="template-release-scope">
   <h3>單一來源、版本基線與 root-only 邊界</h3>
