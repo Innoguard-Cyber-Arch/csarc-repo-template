@@ -387,7 +387,10 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
             ] == ["01", "02", "03", "04", "05", "06"]
     assert duration_rows[0]["shared"]["total"]["zh-tw"] == "約 1\u20137 分鐘"
     assert duration_rows[1]["templateOnly"]["total"]["zh-tw"] == (
-        "約 9\u201314 分鐘"
+        "約 6\u20138 分鐘（實測 6 分 19 秒）"  # noqa: RUF001
+    )
+    assert (
+        "2026-09-01" in data["testing"]["duration"]["labels"]["zh-tw"]["scope"]
     )
     assert "不另計" not in json.dumps(
         data["testing"]["duration"], ensure_ascii=False
