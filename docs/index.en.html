@@ -4342,7 +4342,7 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
     <div class="similar-tools-testing-intro">
-      <strong>Expected runtime for both PR stages</strong><span>Each cell totals the runner minutes expected for one PR. Work inside the same job is marked as included and is not added twice. Queue time is excluded; first-time dependency downloads and cache misses may take longer.</span>
+      <strong>Expected runtime for both PR stages</strong><span>Each cell totals the runner minutes expected for one PR. Work inside the same job is marked as included and is not added twice. Queue time is excluded; first-time dependency downloads and cache misses may take longer. The repo-template full estimate is calibrated against a GitHub-hosted runner measurement from 2026-09-01.</span>
       <p>Runner | Zero steps means repository code never ran; check the runner, billing, and GitHub status first.</p>
       <p>Archive | archive/ci-cd/ is reference only; verify purpose, triggers, permissions, timeout, and the local entry point before restoring one workflow.</p>
     </div>
@@ -4358,7 +4358,7 @@ html[data-detail-level="simple"] .detail-panel {
           <tr>
             <th scope="row"><strong>Release PR (dev → main)</strong></th>
             <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full 5–15 min</li><li><strong>04 Programming languages：</strong>Included in full: Python 3–6 min; Rust 2–5 min; TypeScript 3–7 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full 8–12 min</li><li><strong>04 Programming languages：</strong>Included in the full generated-module matrix: Python 1–3 min; Rust 1–3 min; TypeScript 1–4 min</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 9–14 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full measured at 5 min 41 sec</li><li><strong>04 Programming languages：</strong>Included in the full generated-module matrix: Python 1–3 min; Rust 1–3 min; TypeScript 1–4 min</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–8 min (measured at 6 min 19 sec)</p></td>
           </tr>
         </tbody>
       </table>
