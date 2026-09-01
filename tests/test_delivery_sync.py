@@ -315,7 +315,7 @@ def test_second_main_advance_invalidates_previous_success() -> None:
             (200, []),
         ]
     )
-    with pytest.raises(RuntimeError, match="exactly one reviewed sync action"):
+    with pytest.raises(RuntimeError, match="exactly one reviewed sync PR"):
         gate(
             second,
             "acme/repo",
@@ -334,7 +334,7 @@ def test_stale_bridge_points_to_its_single_delivery_sync() -> None:
             (200, {"status": "diverged"}),
         ]
     )
-    with pytest.raises(RuntimeError, match="delivery_branch=dev/m7-ci"):
+    with pytest.raises(RuntimeError, match="gh pr create --base dev/m7-ci"):
         gate(
             api,
             "acme/repo",
@@ -399,19 +399,32 @@ def test_explicit_dependency_sync_requires_the_requesting_pr_owner() -> None:
         )
 
 
-def test_delivery_maintenance_is_single_branch_and_not_main_push() -> None:
-    """Routine main movement never fans out writes across Milestones."""
+def test_archived_delivery_maintenance_uses_reviewed_manual_fallback() -> None:
+    """An unavailable workflow is replaced by exact reviewed PR commands."""
     root = Path(__file__).parents[1]
     workflow = root / ".github/workflows/delivery-maintenance.yml"
-    if not workflow.is_file():
-        pytest.skip("Trusted delivery maintenance remains archived")
-    source = workflow.read_text()
-    assert "  push:" not in source
-    assert "delivery_branch:" in source
-    assert "pr_number:" in source
-    assert "options: [promotion, explicit-dependency]" in source
-    assert "statuses: write" not in source
-    assert "cancel-in-progress: false" in source
+    assert not workflow.exists()
+
+    main_sha = "a" * 40
+    api = FakeAPI(
+        [
+            (200, {"object": {"sha": main_sha}}),
+            (200, {"status": "diverged"}),
+            (200, []),
+        ]
+    )
+    with pytest.raises(RuntimeError) as error:
+        gate(
+            api,
+            "acme/repo",
+            "main",
+            "proposed-head",
+            head_ref="dev/m7-ci",
+            pr_number=42,
+        )
+    message = str(error.value)
+    assert manual_commands("dev/m7-ci", main_sha) in message
+    assert "delivery-maintenance.yml" not in message
 
 
 def test_merge_group_revalidates_one_exact_pull_request() -> None:

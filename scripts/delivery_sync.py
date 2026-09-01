@@ -268,9 +268,7 @@ def gate(
     raise RuntimeError(
         f"Final promotion does not contain current main {main_sha} or its "
         "verified reviewed sync squash. Request exactly one reviewed sync "
-        f"action: gh workflow run delivery-maintenance.yml -f "
-        f"delivery_branch={source} -f reason=promotion -f "
-        f"pr_number={pr_number}"
+        f"PR with this manual fallback:\n{manual_commands(source, main_sha)}"
     )
 
 
