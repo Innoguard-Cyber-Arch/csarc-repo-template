@@ -69,6 +69,10 @@ jobs:
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "24"
+      - if: ${{ steps.plan.outputs.tier == 'full' }}
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
+          rustup default 1.98.0
       - name: Run bounded verification
         if: ${{ steps.plan.outputs.tier == 'docs' || steps.plan.outputs.tier == 'fast' }}
         env:

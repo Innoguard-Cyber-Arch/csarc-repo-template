@@ -645,7 +645,15 @@
     .journey-bookend.active-files { background: var(--best-soft); color: #0b6540; }
     .journey-bookend.active-selection { background: var(--ink); color: white; }
     .journey-bookend.active-bridge { background: var(--optional-soft); color: #174f8b; }
+    /* Legacy aliases remain until the frozen fidelity fixture is removed. */
+    .journey-bookend.human,
+    .journey-bookend.appendix:not(.maintainer-bookend):not(.automated):not(.maintainer) { border-color: #d6c900; background: #fffbea; color: #655900; }
+    .journey-bookend.automated { border-color: #6db091; background: var(--best-soft); color: #0b6540; }
+    .journey-bookend.maintainer,
     .journey-bookend.maintainer-bookend { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
+    .journey-bookend.human.active-selection { background: var(--yellow); color: var(--ink); }
+    .journey-bookend.automated.active-selection { background: var(--best); color: white; }
+    .journey-bookend.maintainer.active-selection,
     .journey-bookend.maintainer-bookend.active-selection { background: var(--optional); color: white; }
     .journey-bookend:hover, .journey-bookend:focus-visible { background: #fffbea; outline: 3px solid var(--yellow); outline-offset: 1px; }
     .overview-slide .journey-rail, .repo-explorer-slide .journey-rail, .responsibility-slide .journey-rail, .quickstart-slide .journey-rail { width: 9.7%; }
@@ -675,9 +683,10 @@
       font-weight: 700;
       line-height: 1.05;
     }
+    .journey-item.human,
     .journey-item.priority { border-color: #d6c900; background: #fffbea; color: #655900; }
+    .journey-item.automated,
     .journey-item.best { border-color: #6db091; background: var(--best-soft); color: #0b6540; }
-    .journey-item.optional { border-color: #7ba4d1; background: var(--optional-soft); color: #174f8b; }
     .journey-item a {
       display: flex;
       width: 100%;
@@ -705,11 +714,25 @@
     .journey-bookend { gap: 4px; }
     .journey-item a:hover, .journey-item a:focus-visible { color: var(--ink); outline: 3px solid var(--yellow); outline-offset: -3px; }
     .journey-item.active { color: var(--ink); font-weight: 900; }
+    .journey-item.active.human,
     .journey-item.active.priority { border-color: #b9a700; background: var(--yellow); }
-    .journey-item.active.best { border-color: var(--best); background: var(--best-soft); color: #0b6540; }
-    .journey-item.active.optional { border-color: var(--optional); background: var(--optional-soft); color: #174f8b; }
-    .journey-bookend.appendix:not(.maintainer-bookend) { border-color: #d6c900; background: #fffbea; color: #655900; }
-    .journey-bookend.appendix.active-selection:not(.maintainer-bookend) { background: var(--yellow); color: var(--ink); }
+    .journey-item.active.automated,
+    .journey-item.active.best { border-color: var(--best); background: var(--best); color: white; }
+    .journey-legend {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2px;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 750;
+      line-height: 1.15;
+    }
+    .journey-legend span { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .journey-legend i { width: 11px; height: 11px; border: 1px solid; }
+    .journey-legend i.human { border-color: #b9a700; background: var(--yellow); }
+    .journey-legend i.automated { border-color: var(--best); background: var(--best); }
+    .journey-legend i.maintainer { border-color: var(--optional); background: var(--optional); }
     .decision-tier-tag {
       display: inline-block;
       margin-right: 7px;
@@ -1597,12 +1620,12 @@
 
     .journey-rail { left: 1.45%; width: 8.35%; }
     .journey-rail h3 { margin-top: 5px; font-size: 17.5px; white-space: nowrap; }
-    .journey-rail .journey-use { flex: 0 0 auto; grid-template-rows: repeat(3, 36px); }
-    .journey-rail .journey-main { flex: 0 0 auto; grid-template-rows: repeat(7, 38px); }
-    .journey-rail .journey-support { flex: 0 0 auto; grid-template-rows: repeat(3, 38px); }
+    .journey-rail .journey-use { flex: 0 0 auto; grid-template-rows: repeat(3, 32px); }
+    .journey-rail .journey-main { flex: 0 0 auto; grid-template-rows: repeat(8, 34px); }
+    .journey-rail .journey-support { flex: 0 0 auto; grid-template-rows: repeat(3, 34px); }
     .journey-rail .journey-item + .journey-item { margin-top: 0; }
     .journey-item { font-size: 17.5px; white-space: nowrap; }
-    .journey-bookend { padding: 4px 5px; font-size: 17.5px; }
+    .journey-bookend { flex-basis: 31px; padding: 3px 5px; font-size: 17.5px; }
     .journey-bookend.appendix { margin-top: 3px; border-left: 6px solid var(--optional); }
     .journey-rail > .journey-bookend:first-of-type { margin-top: 8px; }
 

@@ -211,7 +211,7 @@ def release_follow_up_errors(  # noqa: C901
         release_type = package.get("release-type", config.get("release-type"))
         if not isinstance(component, str) or not component:
             raise ValueError("release component is missing")
-        if release_type not in {"simple", "python", "node"}:
+        if release_type not in {"simple", "python", "node", "rust"}:
             raise ValueError("release type is unsupported")
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
         errors.append(f"release-please configuration is invalid: {error}")
@@ -226,6 +226,7 @@ def release_follow_up_errors(  # noqa: C901
         "simple": "version.txt",
         "python": "pyproject.toml",
         "node": "package.json",
+        "rust": "Cargo.toml",
     }[release_type]
     allowed.add(release_file)
     for item in package.get("extra-files", []):
@@ -244,7 +245,7 @@ def release_follow_up_errors(  # noqa: C901
             errors.append(f"release-please extra-files path is unsafe: {value}")
             continue
         allowed.add(path.as_posix())
-    for lockfile in ("uv.lock", "pnpm-lock.yaml"):
+    for lockfile in ("uv.lock", "pnpm-lock.yaml", "Cargo.lock"):
         if (root / lockfile).is_file():
             allowed.add(lockfile)
 

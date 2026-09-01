@@ -1030,6 +1030,7 @@ def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
     [
         ("python", "pyproject.toml", "uv.lock"),
         ("typescript", "package.json", "pnpm-lock.yaml"),
+        ("rust", "Cargo.toml", "Cargo.lock"),
     ],
 )
 @pytest.mark.large
@@ -1039,7 +1040,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
     manifest_name: str,
     lock_name: str,
 ) -> None:
-    """Finalize real Python and TypeScript adoptions without prior locks."""
+    """Finalize each language adoption without a pre-existing lockfile."""
     revision_sha = git(ROOT, "rev-parse", "HEAD")
     project = tmp_path / f"existing-{language}"
     reference = tmp_path / f"reference-{language}"
@@ -1067,7 +1068,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
             '[project]\nname = "existing-python"\nversion = "0.1.0"\n'
             'requires-python = ">=3.14,<3.15"\n'
         )
-    else:
+    elif language == "typescript":
         initial_manifest = (
             json.dumps(
                 {
@@ -1079,6 +1080,11 @@ def test_real_template_adoption_resumes_after_manifest_merge(
                 indent=2,
             )
             + "\n"
+        )
+    else:
+        initial_manifest = (
+            '[package]\nname = "existing-rust"\nversion = "0.1.0"\n'
+            'edition = "2024"\n\n[lib]\npath = "src/lib.rs"\n'
         )
     (project / "README.md").write_text("# Existing product\n", encoding="utf-8")
     (project / manifest_name).write_text(initial_manifest, encoding="utf-8")
@@ -1131,13 +1137,19 @@ def test_real_template_adoption_resumes_after_manifest_merge(
             + "\n[tool.product]\npreserved = true\n",
             encoding="utf-8",
         )
-    else:
+    elif language == "typescript":
         merged = json.loads(
             (reference / manifest_name).read_text(encoding="utf-8")
         )
         merged["productSetting"] = True
         manifest.write_text(
             json.dumps(merged, indent=2) + "\n", encoding="utf-8"
+        )
+    else:
+        manifest.write_text(
+            (reference / manifest_name).read_text(encoding="utf-8")
+            + "\n[package.metadata.product]\npreserved = true\n",
+            encoding="utf-8",
         )
 
     before = git(project, "status", "--porcelain")
@@ -3298,6 +3310,53 @@ def test_update_check_dry_run_apply_and_conflict(
     assert "<<<<<<<" in (project / "managed.txt").read_text(encoding="utf-8")
 
 
+def test_update_migrates_legacy_copier_answers_to_single_config(
+    tmp_path: Path,
+) -> None:
+    """Move legacy Copier tracking into the canonical repository config."""
+    source, project, _ = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated legacy project")
+
+    copier_config = source / "copier.yml"
+    copier_config.write_text(
+        copier_config.read_text(encoding="utf-8").replace(
+            "_answers_file: .copier-answers.yml",
+            "_answers_file: .csarc/config.yml",
+        ),
+        encoding="utf-8",
+    )
+    verify = source / "template/scripts/verify"
+    verify.write_text(
+        verify.read_text(encoding="utf-8").replace(
+            ".copier-answers.yml", ".csarc/config.yml"
+        ),
+        encoding="utf-8",
+    )
+    second_sha = commit(source, "test: use one repository config")
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                second_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    config = project / ".csarc/config.yml"
+    assert config.is_file()
+    assert f"_commit: {second_sha}" in config.read_text(encoding="utf-8")
+    assert not (project / ".copier-answers.yml").exists()
+
+
 def test_update_check_validates_hook_without_running_it(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -4294,8 +4353,8 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
 
     template_commands = pytest_commands(ROOT / "template/scripts/verify.jinja")
     assert len(template_commands) > 1
-    assert excludes_large(template_commands[0])
-    assert not any(excludes_large(command) for command in template_commands[1:])
+    assert any(excludes_large(command) for command in template_commands)
+    assert any(not excludes_large(command) for command in template_commands)
 
     marked_large = {
         name

@@ -2,55 +2,73 @@
 
 from __future__ import annotations
 
-import json
 import os
+import re
 import stat
 import subprocess
+import sys
 from pathlib import Path
-
-import yaml
 
 REPO_ROOT = Path(__file__).parents[1]
 
 
 def test_dependabot_uses_three_day_cooldown() -> None:
     """Keep routine updates observable without delaying security updates."""
-    config = yaml.safe_load(
-        (REPO_ROOT / ".github/dependabot.yml").read_text(encoding="utf-8")
+    config = (REPO_ROOT / ".github/dependabot.yml").read_text(encoding="utf-8")
+    ecosystems = set(
+        re.findall(r"^\s*- package-ecosystem:\s*(\S+)\s*$", config, re.M)
     )
-    updates = config["updates"]
 
-    profile_path = REPO_ROOT / ".csarc/profile.json"
+    config_path = REPO_ROOT / ".csarc/config.yml"
     expected = {"github-actions", "uv"}
-    if profile_path.exists():
-        profile = json.loads(profile_path.read_text(encoding="utf-8"))
-        language = profile["language"]
+    if config_path.exists():
+        languages = set(
+            subprocess.run(
+                [sys.executable, "scripts/csarc_config.py", "languages"],
+                cwd=REPO_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            .stdout.strip()
+            .split(",")
+        )
         expected = {"github-actions"}
-        if language in {"python", "python-typescript"}:
+        if "python" in languages:
             expected.add("uv")
-        if language in {"typescript", "python-typescript"}:
+        if "typescript" in languages:
             expected.add("npm")
-        if profile.get("container", {}).get("mode") != "none":
+        if "rust" in languages:
+            expected.add("cargo")
+        container_match = re.search(
+            r"^container_mode:\s*(\S+)\s*$",
+            config_path.read_text(encoding="utf-8"),
+            re.M,
+        )
+        container_mode = container_match.group(1) if container_match else "none"
+        if container_mode != "none":
             expected.add("docker")
 
-    assert {update["package-ecosystem"] for update in updates} == expected
-    assert all(update["cooldown"]["default-days"] == 3 for update in updates)
-    assert all(update["schedule"]["interval"] == "weekly" for update in updates)
+    assert ecosystems == expected
+    assert len(re.findall(r"^\s+default-days:\s*3\s*$", config, re.M)) == len(
+        ecosystems
+    )
+    assert len(re.findall(r"^\s+interval:\s*weekly\s*$", config, re.M)) == len(
+        ecosystems
+    )
 
 
 def test_scheduled_scan_is_a_thin_local_wrapper() -> None:
     """Keep schedules and permissions in YAML while scan logic stays local."""
-    workflow = yaml.safe_load(
-        (REPO_ROOT / ".github/workflows/osv.yml").read_text(encoding="utf-8")
+    workflow = (REPO_ROOT / ".github/workflows/osv.yml").read_text(
+        encoding="utf-8"
     )
-    triggers = workflow.get("on", workflow.get(True))
-    scan = workflow["jobs"]["scan"]
 
-    assert set(triggers) == {"workflow_dispatch", "schedule"}
-    assert workflow["permissions"] == {"contents": "read"}
-    assert scan["timeout-minutes"] == 10
-    assert set(scan) >= {"runs-on", "steps"}
-    assert scan["steps"][-1]["run"] == "./scripts/verify-dependencies"
+    assert "on:\n  workflow_dispatch:\n  schedule:" in workflow
+    assert "permissions:\n  contents: read" in workflow
+    assert "    runs-on: ubuntu-latest" in workflow
+    assert "    timeout-minutes: 10" in workflow
+    assert workflow.rstrip().endswith("- run: ./scripts/verify-dependencies")
 
 
 def test_local_scan_calls_the_pinned_tool_contract(tmp_path: Path) -> None:

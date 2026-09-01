@@ -1408,7 +1408,9 @@ def test_note_quota_fallback_prints_note_for_zero_step_block(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """A routine PR gets an automatic note once every failure is zero-step."""
-    jobs = [{"id": 7, "runner_id": 0, "steps": [], "conclusion": "failure"}]
+    jobs: list[dict[str, object]] = [
+        {"id": 7, "runner_id": 0, "steps": [], "conclusion": "failure"}
+    ]
     monkeypatch.setitem(
         note_quota_fallback.__globals__, "github_get", _routine_pr_get(jobs)
     )
@@ -1428,7 +1430,7 @@ def test_note_quota_fallback_rejects_a_real_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A job that actually ran a step cannot be waved through as quota."""
-    jobs = [
+    jobs: list[dict[str, object]] = [
         {"runner_id": 7, "steps": [{"name": "tests"}], "conclusion": "failure"}
     ]
     monkeypatch.setitem(

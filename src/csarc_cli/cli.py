@@ -33,6 +33,8 @@ CANONICAL_SOURCE = (
 CANONICAL_REPOSITORY = "Innoguard-Cyber-Arch/csarc-repo-template"
 CANONICAL_REPOSITORY_ID = 1_340_899_393
 DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"
+CONFIG_FILE = Path(".csarc/config.yml")
+LEGACY_ANSWERS_FILE = Path(".copier-answers.yml")
 PROVENANCE_FILE = Path(".csarc/provenance.json")
 PENDING_ADOPTION_FILE = Path(".csarc/adoption-pending.json")
 ADOPTION_REPORT_BASENAME = "csarc-adoption-dry-run"
@@ -535,17 +537,32 @@ def slugify(value: str) -> str:
     return slug or "csarc-project"
 
 
+def detect_languages(target: Path) -> list[str]:
+    """Return enabled language modules in their canonical order."""
+    manifests = (
+        ("python", "pyproject.toml"),
+        ("typescript", "package.json"),
+        ("rust", "Cargo.toml"),
+    )
+    return [
+        name for name, manifest in manifests if (target / manifest).is_file()
+    ]
+
+
 def detect_language(target: Path) -> str:
-    """Infer the narrowest supported language profile."""
-    has_python = (target / "pyproject.toml").is_file()
-    has_typescript = (target / "package.json").is_file()
-    if has_python and has_typescript:
-        return "python-typescript"
-    if has_python:
-        return "python"
-    if has_typescript:
-        return "typescript"
-    return "ci"
+    """Return the legacy profile label for compatibility."""
+    return "-".join(detect_languages(target)) or "ci"
+
+
+def selected_languages(answers: dict[str, object]) -> set[str]:
+    """Read new module answers with a legacy profile fallback."""
+    selected = answers.get("languages")
+    if isinstance(selected, list):
+        return {str(item) for item in selected}
+    legacy = answers.get("language")
+    if isinstance(legacy, str) and legacy != "ci":
+        return set(legacy.split("-"))
+    return set()
 
 
 def is_text(content: bytes) -> bool:
@@ -620,11 +637,16 @@ def copier_copy(
     ]
     if skip_tasks:
         command.append("--skip-tasks")
-    for key, value in sorted(data.items()):
-        serialized = str(value).lower() if isinstance(value, bool) else value
-        command.extend(["--data", f"{key}={serialized}"])
+    data_file = stage.parent / f".{stage.name}-copier-data.yml"
+    data_file.write_text(
+        yaml.safe_dump(dict(data), sort_keys=True), encoding="utf-8"
+    )
+    command.extend(["--data-file", str(data_file)])
     command.extend([source, str(stage)])
-    result = run(command, capture=True, check=False)
+    try:
+        result = run(command, capture=True, check=False)
+    finally:
+        data_file.unlink(missing_ok=True)
     if result.returncode != 0:
         raise CliError(
             result.stderr.strip() or result.stdout.strip() or "Copier failed."
@@ -634,9 +656,9 @@ def copier_copy(
 
 def pin_answer_commit(target: Path, commit: str) -> None:
     """Replace Copier's abbreviated revision with the reviewed full SHA."""
-    answers = target / ".copier-answers.yml"
+    answers = config_path(target)
     if not answers.is_file():
-        raise CliError("Template did not create .copier-answers.yml.")
+        raise CliError(f"Template did not create {CONFIG_FILE}.")
     lines = answers.read_text(encoding="utf-8").splitlines()
     matches = sum(line.startswith("_commit:") for line in lines)
     if matches != 1:
@@ -646,6 +668,14 @@ def pin_answer_commit(target: Path, commit: str) -> None:
         for line in lines
     ]
     answers.write_text("\n".join(pinned) + "\n", encoding="utf-8")
+
+
+def config_path(target: Path) -> Path:
+    """Return the current config, falling back to pre-migration answers."""
+    current = target / CONFIG_FILE
+    if current.is_file():
+        return current
+    return target / LEGACY_ANSWERS_FILE
 
 
 def read_copier_answers(path: Path) -> dict[str, object]:
@@ -668,7 +698,7 @@ def project_verification_configuration(
 ) -> dict[str, object]:
     """Describe the explicit project hook or the legacy fallback."""
     if answers is None:
-        answers_path = target / ".copier-answers.yml"
+        answers_path = config_path(target)
         answers = (
             read_copier_answers(answers_path) if answers_path.is_file() else {}
         )
@@ -786,7 +816,8 @@ def pending_adoption_data(
         "managed_files": [
             {"fingerprint": file_fingerprint(target / name), "path": name}
             for name in managed_files
-            if name != ".copier-answers.yml"
+            if name
+            not in {CONFIG_FILE.as_posix(), LEGACY_ANSWERS_FILE.as_posix()}
         ],
         "manual_files": list(manual_files),
         "repository": repository.as_dict(),
@@ -1132,6 +1163,7 @@ def report_settings(data: dict[str, object]) -> str:
         "enable_release_attestations",
         "enable_template_update_notifications",
         "language",
+        "languages",
         "npm_environment",
         "package_name",
         "project_description",
@@ -1385,7 +1417,7 @@ def draw_adoption_pdf(
             "Verification",
             "verified immutable release" if revision.verified else "UNVERIFIED",
         ),
-        ("Profile", data.get("language", "unknown")),
+        ("Languages", data.get("languages", "unknown")),
         ("Project hook", hook_path),
         ("Hook configured", str(hook.get("configured") is True).lower()),
         ("Hook result", hook_result),
@@ -2034,7 +2066,8 @@ def validate_pending_file_sets(
 ) -> None:
     """Derive pending paths from the template and reject unrelated changes."""
     expected_managed = set(pending_managed_paths(stage, planned)) - {
-        ".copier-answers.yml"
+        CONFIG_FILE.as_posix(),
+        LEGACY_ANSWERS_FILE.as_posix(),
     }
     raw_managed = pending.get("managed_files")
     managed = (
@@ -2073,7 +2106,8 @@ def validate_pending_file_sets(
         managed
         | manual
         | {
-            ".copier-answers.yml",
+            CONFIG_FILE.as_posix(),
+            LEGACY_ANSWERS_FILE.as_posix(),
             PENDING_ADOPTION_FILE.as_posix(),
         }
     )
@@ -2277,7 +2311,7 @@ def prepare_adoption_candidate(
                     candidate,
                     revision,
                     repository,
-                    candidate / ".copier-answers.yml",
+                    config_path(candidate),
                     pending_managed_paths(stage, planned),
                     (*planned.manual, *planned.unknown),
                 ),
@@ -2406,10 +2440,12 @@ def write_candidate_patch(
             raise CliError(detail)
 
 
-def create_adoption_lockfiles(target: Path, answers: dict[str, object]) -> None:
+def create_adoption_lockfiles(  # noqa: C901
+    target: Path, answers: dict[str, object]
+) -> None:
     """Create language lockfiles after an adoption is ready to finalize."""
-    language = answers.get("language")
-    if language in {"python", "python-typescript"}:
+    languages = selected_languages(answers)
+    if "python" in languages:
         python_version = target / ".python-version"
         if not python_version.is_file():
             raise CliError(
@@ -2439,7 +2475,7 @@ def create_adoption_lockfiles(target: Path, answers: dict[str, object]) -> None:
                 "Cannot create uv.lock after the manifest merge; fix "
                 f"pyproject.toml, then rerun csarc adopt --finalize. {detail}"
             )
-    if language in {"typescript", "python-typescript"}:
+    if "typescript" in languages:
         try:
             result = run(
                 ["pnpm", "install", "--lockfile-only", "--ignore-scripts"],
@@ -2457,6 +2493,25 @@ def create_adoption_lockfiles(target: Path, answers: dict[str, object]) -> None:
             raise CliError(
                 "Cannot create pnpm-lock.yaml after the manifest merge; fix "
                 f"package.json, then rerun csarc adopt --finalize. {detail}"
+            )
+    if "rust" in languages:
+        try:
+            result = run(
+                ["cargo", "generate-lockfile"],
+                cwd=target,
+                capture=True,
+                check=False,
+            )
+        except FileNotFoundError as error:
+            raise CliError(
+                "Cargo is required to create Cargo.lock; install the Rust "
+                "toolchain, then rerun csarc adopt --finalize."
+            ) from error
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            raise CliError(
+                "Cannot create Cargo.lock after the manifest merge; fix "
+                f"Cargo.toml, then rerun csarc adopt --finalize. {detail}"
             )
 
 
@@ -2961,7 +3016,7 @@ def capability_preflight(
         except json.JSONDecodeError:
             parsed = None
         payload = (
-            parsed
+            cast(dict[str, object], parsed)
             if result.returncode == 0 and isinstance(parsed, dict)
             else {
                 "mode": "verification-only",
@@ -2974,22 +3029,47 @@ def capability_preflight(
     return payload
 
 
+def parse_languages(value: str) -> list[str]:
+    """Parse a CLI language selection without defining combinations."""
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        parsed = [part.strip() for part in value.split(",") if part.strip()]
+    if not isinstance(parsed, list) or not all(
+        isinstance(item, str) for item in parsed
+    ):
+        raise CliError("languages must be a JSON list or comma-separated list.")
+    unknown = sorted(set(parsed) - {"python", "typescript", "rust"})
+    if unknown:
+        raise CliError(f"Unsupported language modules: {', '.join(unknown)}")
+    return list(dict.fromkeys(parsed))
+
+
 def base_data(
     target: Path, mode: str, values: dict[str, str]
-) -> dict[str, str]:
+) -> dict[str, object]:
     """Build stable defaults while allowing explicit Copier answers."""
     slug = slugify(target.name)
-    data = {
+    detected_languages = (
+        detect_languages(target) if mode == "adopt" else ["python"]
+    )
+    data: dict[str, object] = {
         "project_mode": "existing" if mode == "adopt" else "new",
         "project_name": target.name.replace("-", " ").replace("_", " ").title(),
         "project_slug": slug,
         "package_name": slug.replace("-", "_").replace(".", "_"),
-        "language": detect_language(target) if mode == "adopt" else "python",
+        "language": "-".join(detected_languages) or "ci",
+        "languages": detected_languages,
         "code_owner": DEFAULT_OWNER,
     }
     if mode == "adopt":
         data["coverage_mode"] = "diff"
     data.update(values)
+    if "languages" in values:
+        data["languages"] = parse_languages(values["languages"])
+    if "language" in values and "languages" not in values:
+        legacy = values["language"]
+        data["languages"] = [] if legacy == "ci" else legacy.split("-")
     if "package_name" not in values:
         data["package_name"] = (
             str(data["project_slug"]).replace("-", "_").replace(".", "_")
@@ -3051,9 +3131,9 @@ def validate_copy_target(
             "Adoption is pending; complete the manual merge, then run "
             "csarc adopt --finalize."
         )
-    if (target / ".copier-answers.yml").exists():
+    if config_path(target).exists():
         raise CliError(
-            "Repository already has Copier answers; use csarc update."
+            "Repository already has CSARC configuration; use csarc update."
         )
     if require_clean:
         require_clean_repository(target)
@@ -3139,17 +3219,19 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "restart adoption from a clean commit."
         )
 
-    answers_path = checked_destination(target, ".copier-answers.yml")
+    answers_path = checked_destination(
+        target, config_path(target).relative_to(target).as_posix()
+    )
     if answers_path.is_symlink() or not answers_path.is_file():
         raise CliError(
-            "Pending adoption is missing .copier-answers.yml; restore the "
+            "Pending adoption is missing the CSARC configuration; restore the "
             "managed file, then rerun csarc adopt --finalize."
         )
     actual_answers_hash = hashlib.sha256(answers_path.read_bytes()).hexdigest()
     if actual_answers_hash != pending["answers_sha256"]:
         raise CliError(
             "Copier answers changed after adoption started; restore "
-            ".copier-answers.yml or restart adoption from a clean commit."
+            "configuration or restart adoption from a clean commit."
         )
     if read_answer(answers_path, "_src_path") != source:
         raise CliError(
@@ -3652,7 +3734,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         stage.mkdir()
         copier_copy(revision.source, revision, stage, data)
         answers: dict[str, object] = dict(data)
-        answers.update(read_copier_answers(stage / ".copier-answers.yml"))
+        answers.update(read_copier_answers(config_path(stage)))
         capabilities = capability_preflight(
             stage / "scripts" / "release_policy.py", target, emit=False
         )
@@ -3811,9 +3893,9 @@ def update_status(
     client: ReleaseClient | None = None,
 ) -> tuple[dict[str, object], Revision, dict[str, object] | None]:
     """Return stable status plus verified current and target state."""
-    answers = target / ".copier-answers.yml"
+    answers = config_path(target)
     if not answers.is_file():
-        raise CliError("Missing .copier-answers.yml; use csarc adopt first.")
+        raise CliError(f"Missing {CONFIG_FILE}; use csarc adopt first.")
     source = read_answer(answers, "_src_path")
     current = read_answer(answers, "_commit")
     previous_revision, previous = current_revision(
@@ -3858,10 +3940,10 @@ def update_plan_answers(  # noqa: C901
     answers: dict[str, object],
     explicit_data: dict[str, str],
     repository: RepositoryContext,
-) -> tuple[dict[str, object], dict[str, str]]:
+) -> tuple[dict[str, object], dict[str, object]]:
     """Resolve update answers and Copier overrides from repository facts."""
     result = dict(answers)
-    update_data = dict(explicit_data)
+    update_data: dict[str, object] = dict(explicit_data)
     saved_visibility = answers.get("project_visibility")
     update_data["project_visibility"] = repository.visibility
     if repository.repository is not None:
@@ -3879,17 +3961,19 @@ def update_plan_answers(  # noqa: C901
                 default_security_reporting_channel(repository_url)
             )
     if saved_visibility != repository.visibility:
-        enabled = (
-            repository.visibility == "public"
-            and answers.get("language") != "ci"
+        enabled = repository.visibility == "public" and bool(
+            selected_languages(answers)
         )
         for key in ("enable_codeql", "enable_release_attestations"):
             if key in answers and key not in explicit_data:
                 update_data[key] = str(enabled).lower()
     for key, value in update_data.items():
         previous_value = answers.get(key)
-        if isinstance(previous_value, bool):
-            normalized = value.casefold()
+        if key == "languages":
+            result[key] = parse_languages(str(value))
+            update_data[key] = result[key]
+        elif isinstance(previous_value, bool):
+            normalized = str(value).casefold()
             if normalized in {"1", "true", "yes", "on"}:
                 result[key] = True
             elif normalized in {"0", "false", "no", "off"}:
@@ -3898,7 +3982,7 @@ def update_plan_answers(  # noqa: C901
                 raise CliError(f"{key} must be a boolean value.")
         elif isinstance(previous_value, int):
             try:
-                result[key] = int(value)
+                result[key] = int(str(value))
             except ValueError as error:
                 raise CliError(f"{key} must be an integer value.") from error
         else:
@@ -3914,9 +3998,9 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             "Adoption is pending; complete the manual merge and run "
             "csarc adopt --finalize before update."
         )
-    answers_path = target / ".copier-answers.yml"
+    answers_path = config_path(target)
     if not answers_path.is_file():
-        raise CliError("Missing .copier-answers.yml; use csarc adopt first.")
+        raise CliError(f"Missing {CONFIG_FILE}; use csarc adopt first.")
     saved_answers = read_copier_answers(answers_path)
     explicit_data = parse_data(args.data)
     saved_visibility = saved_answers.get("project_visibility")
@@ -3956,7 +4040,8 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             candidate_answers,
             skip_tasks=True,
         )
-        answers = read_copier_answers(stage / ".copier-answers.yml")
+        target_uses_current_config = (stage / CONFIG_FILE).is_file()
+        answers = read_copier_answers(config_path(stage))
         preflight = capability_preflight(
             stage / "scripts" / "release_policy.py",
             target,
@@ -4017,28 +4102,33 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             print_plan(plan)
         return 1 if status["update_available"] else 0
 
-    copier_data = [
-        part
-        for key, value in sorted(update_data.items())
-        for part in ("--data", f"{key}={value}")
-    ]
-    preview = run(
-        [
-            sys.executable,
-            "-m",
-            "copier",
-            "update",
-            "--trust",
-            "--defaults",
-            "--pretend",
-            "--vcs-ref",
-            str(status["target_sha"]),
-            *copier_data,
-            str(target),
-        ],
-        capture=True,
-        check=False,
-    )
+    with tempfile.TemporaryDirectory(
+        prefix="csarc-update-preview-"
+    ) as temporary:
+        data_file = Path(temporary) / "data.yml"
+        data_file.write_text(
+            yaml.safe_dump(update_data, sort_keys=True), encoding="utf-8"
+        )
+        preview = run(
+            [
+                sys.executable,
+                "-m",
+                "copier",
+                "update",
+                "--trust",
+                "--defaults",
+                "--pretend",
+                "--vcs-ref",
+                str(status["target_sha"]),
+                "--answers-file",
+                answers_path.relative_to(target).as_posix(),
+                "--data-file",
+                str(data_file),
+                str(target),
+            ],
+            capture=True,
+            check=False,
+        )
     if preview.returncode != 0:
         raise CliError(preview.stderr.strip() or preview.stdout.strip())
     print_plan(plan)
@@ -4064,6 +4154,11 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         temporary_root = Path(temporary).resolve()
         candidate = temporary_root / "candidate"
         clone_target(target, candidate)
+        candidate_config_path = config_path(candidate)
+        data_file = temporary_root / "data.yml"
+        data_file.write_text(
+            yaml.safe_dump(update_data, sort_keys=True), encoding="utf-8"
+        )
         result = run(
             [
                 sys.executable,
@@ -4076,7 +4171,10 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
                 "inline",
                 "--vcs-ref",
                 str(status["target_sha"]),
-                *copier_data,
+                "--answers-file",
+                candidate_config_path.relative_to(candidate).as_posix(),
+                "--data-file",
+                str(data_file),
                 str(candidate),
             ],
             check=False,
@@ -4103,6 +4201,13 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
                 f"Update needs manual conflict resolution ({detail}); "
                 "differences were preserved."
             )
+        if (
+            target_uses_current_config
+            and candidate_config_path == candidate / LEGACY_ANSWERS_FILE
+        ):
+            migrated = candidate / CONFIG_FILE
+            migrated.parent.mkdir(parents=True, exist_ok=True)
+            candidate_config_path.replace(migrated)
         pin_answer_commit(candidate, str(status["target_sha"]))
         verify_project(candidate)
         write_provenance(candidate, target_revision, previous)

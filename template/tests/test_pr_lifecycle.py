@@ -914,7 +914,7 @@ def test_remote_lease_must_reuse_the_exact_head_commit(
                 payload["tree"] = {"sha": "9" * 40}
         return payload
 
-    github.get = tampered_get  # type: ignore[assignment]
+    github.get = tampered_get  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="canonical evidence"):
         require_lease(github, canonical, "owner/repo", 42, "a" * 40)
 
@@ -1013,7 +1013,7 @@ def test_remote_audit_comment_is_refetched(
             return {**payload, "body": "edited"}
         return payload
 
-    github.get = edited_comment  # type: ignore[assignment]
+    github.get = edited_comment  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="audit comment"):
         require_lease(github, canonical, "owner/repo", 42, "a" * 40)
 
@@ -1160,7 +1160,7 @@ def test_required_check_must_succeed_on_the_exact_head() -> None:
             ]
         return []
 
-    github.collection = stale_collection  # type: ignore[assignment]
+    github.collection = stale_collection  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="exact head: verify"):
         require_successful_checks(
             github, "owner/repo", "a" * 40, {("verify", None)}
@@ -1201,7 +1201,7 @@ def test_pinned_check_rejects_malformed_github_app_id(app_id: object) -> None:
             return []
         raise AssertionError(path)
 
-    github.collection = malformed_collection  # type: ignore[assignment]
+    github.collection = malformed_collection  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="Check run identity is malformed"):
         require_successful_checks(
             github, "owner/repo", github.head, {("verify", 1)}
@@ -1238,7 +1238,7 @@ def test_quota_fallback_rejects_malformed_github_app_id(
             return []
         raise AssertionError(path)
 
-    github.collection = malformed_collection  # type: ignore[assignment]
+    github.collection = malformed_collection  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="Check run identity is malformed"):
         require_successful_checks(
             github,
@@ -1505,7 +1505,7 @@ def test_alpha_marker_rejects_non_routine_routes(
     elif invalid_route == "branch":
         github.head_ref = "promote/m10-release-backed-adoption"
     else:
-        github.pull = lambda number=42: {  # type: ignore[method-assign]
+        github.pull = lambda number=42: {  # ty: ignore[invalid-assignment]
             **FakeGitHub.pull(github, number),
             "head": {
                 "ref": github.head_ref,
@@ -2681,7 +2681,10 @@ def test_merge_does_not_release_a_lease_for_an_unconfirmed_result(
     )
     monkeypatch.setitem(merge.__globals__, "confirm_refs", lambda _lease: None)
     github = FakeGitHub("a" * 40)
-    github.merge = lambda *_: {"merged": False, "sha": None}  # type: ignore[method-assign]
+    github.merge = lambda *_: {  # ty: ignore[invalid-assignment]
+        "merged": False,
+        "sha": None,
+    }
     with pytest.raises(RuntimeError, match="synchronously merge"):
         merge(
             SimpleNamespace(

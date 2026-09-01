@@ -32,7 +32,7 @@ fi
 uv sync --locked --python "$UV_PYTHON"
 uv run ruff format --check src scripts tests
 uv run ruff check src scripts tests
-uv run mypy
+uv run ty check
 uv run pytest -m "not large"
 ./scripts/test-issue-triage
 ./scripts/test-worktree-cleanup
@@ -56,5 +56,5 @@ if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
   fi
   "$smoke_root/project/scripts/test-pr-policy"
   "$smoke_root/project/scripts/test-release-follow-up-gates"
-  python3 -m json.tool "$smoke_root/project/.csarc/profile.json" >/dev/null
+  python3 "$smoke_root/project/scripts/csarc_config.py" languages >/dev/null
 fi

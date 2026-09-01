@@ -69,7 +69,7 @@ shared:
 
 profiles:
   python:
-    stage: alpha
+    stage: beta
     latest_reviewed_stable: "3.14"
     default_support_mode: latest
     support_modes:
@@ -96,7 +96,7 @@ profiles:
     verification: ./scripts/verify
 
   typescript:
-    stage: alpha
+    stage: beta
     latest_reviewed_active_lts: "24"
     stable_channel: node_active_lts
     stable_release_observation_days: 30
@@ -123,8 +123,23 @@ profiles:
     reason: Add only after a real consuming repository defines its stable toolchain and compatibility policy, then passes create and update tests.
 
   rust:
-    stage: future
-    reason: Add only after a real consuming repository defines its stable toolchain and MSRV policy, then passes create and update tests.
+    stage: beta
+    latest_reviewed_stable: "1.98.0"
+    stable_channel: rust_stable
+    stable_release_observation_days: 12
+    msrv: "1.98"
+    edition: "2024"
+    package_manager: cargo
+    configuration:
+      - Cargo.toml
+      - rust-toolchain.toml
+    lockfile: Cargo.lock
+    source_directory: src
+    verification: ./scripts/verify
+    tools:
+      format: rustfmt
+      lint: clippy
+      test_and_build: cargo
 
 compositions:
   ci:
@@ -133,21 +148,11 @@ compositions:
     profiles: []
     release_output: github_release_source_archive
 
-  python:
-    stage: alpha
-    profiles:
-      - python
-
-  python_typescript:
-    stage: alpha
-    profiles:
-      - python
-      - typescript
-
-  typescript:
-    stage: alpha
-    profiles:
-      - typescript
+  language_modules:
+    stage: beta
+    selectable_profiles: [python, rust, typescript]
+    selection: any_subset
+    verification: selected_modules_plus_shared_checks_once
 
 optional_modules:
   container_delivery:
@@ -165,11 +170,17 @@ optional_modules:
     deployment: project_specific
 
 promotion_requirements:
-  - real_consuming_repository
-  - documented_owner
-  - copier_create_test
-  - copier_update_test
-  - complete_local_and_ci_verification
+  shared_lifecycle:
+    - real_consuming_repository
+    - documented_owner
+    - copier_adoption_and_update
+    - complete_local_and_ci_verification
+  language_module:
+    - copier_create_test
+    - existing_repository_adoption_test
+    - copier_update_test
+    - native_toolchain_verification
+    - included_in_full_template_verification
 
 promotion_evidence:
   shared:
@@ -185,11 +196,24 @@ promotion_evidence:
     profile: ci
     result: docs/pilot-adoption.md
   python:
-    status: pending_real_consuming_repository
+    status: satisfied
+    method: executable_template_lifecycle
+    evidence:
+      - tests/test_cli.py::test_real_template_adoption_resumes_after_manifest_merge
+      - scripts/verify-template.sh
   typescript:
-    status: pending_real_consuming_repository
-  python_typescript:
-    status: pending_real_consuming_repository
+    status: satisfied
+    method: executable_template_lifecycle
+    evidence:
+      - tests/test_cli.py::test_real_template_adoption_resumes_after_manifest_merge
+      - scripts/verify-template.sh
+  rust:
+    status: satisfied
+    method: executable_template_lifecycle
+    evidence:
+      - tests/test_cli.py::test_real_template_adoption_resumes_after_manifest_merge
+      - tests/test_language_profiles.py::test_generated_language_module_runs_its_own_verifier
+      - scripts/verify-template.sh
   container_delivery:
     status: pilot_candidate_identified
     repository: Innoguard-Cyber-Arch/ai-guardrail

@@ -29,7 +29,7 @@
 - 先執行 `csarc update --dry-run`，確認 working tree 未改變，再計時執行正式 update。
 - 檢查 conflict marker、`.rej`、產品專屬檔案與 `.csarc/provenance.json`。
 - 重跑本機與 GitHub 驗證，以第二支 PR 合併更新。
-- 依真實 profile 證據調整 maturity；合成 fixture 只能證明機制，不足以把未試行 profile 升為 beta。
+- 依證據類型調整 maturity：真實 consuming repo 證明共用導入、更新與線上 CI 邊界；語言模組則以可重現的建立、既有 repo 導入、更新與原生工具鏈驗證判定。
 
 ## 2026-08-24 `ai-guardrail` 結果
 
@@ -60,4 +60,4 @@
 
 ## 成熟度結論
 
-共用治理與 `ci` composition 已具備一個真實 consuming repo、owner、導入、更新及完整線上驗證證據，維持 beta。Python、TypeScript 與混合 composition 的合成建立／更新測試雖完整，但仍缺各自的真實 consuming repo，因此調整為 alpha；個別 profile 完成同一份 checklist 後才能升為 beta。
+共用治理與 CI/CD-only 基線已具備一個真實 consuming repo、owner、導入、更新及完整線上驗證證據，維持 beta。這份真實試行驗證共用生命週期，不要求為每種語言另外維護專用測試 repo。Python、TypeScript 與 Rust 各自具備可執行的建立、既有 repo 導入、Copier 更新、鎖檔、測試、建置與封裝驗證，因此語言模組也升為 beta。真實產品採用仍會累積營運證據，但不是重複驗證模板機制的第二道 beta 門檻；同時選取多個模組不形成另一種 composition。

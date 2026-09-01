@@ -27,11 +27,11 @@ packages = ["src/csarc_cli"]
 dev = [
   "coverage[toml]>=7.10,<8",
   "diff-cover>=9.7,<11",
-  "mypy>=1.17,<3",
   "pypdf>=6,<7",
   "pytest>=8.4,<10",
   "pytest-cov>=6.2,<8",
   "ruff>=0.12,<1",
+  "ty==0.0.76",
   "zizmor==1.29.0",
 ]
 
@@ -59,11 +59,11 @@ known-first-party = ["csarc_cli", "scripts"]
 "tests/**" = ["D", "S101"]
 "template/tests/**" = ["D", "S101"]
 
-[tool.mypy]
-python_version = "3.14"
-strict = true
-files = ["src/csarc_cli", "scripts", "tests/test_spec_to_issue.py"]
-exclude = [".*\\.jinja$"]
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.ty.src]
+include = ["src/csarc_cli", "scripts", "tests/test_spec_to_issue.py"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

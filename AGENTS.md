@@ -6,8 +6,8 @@
 - `AGENTS.md` is the single source for AI working instructions; `CLAUDE.md` only imports it.
 - One writable task uses one Git branch and one worktree so concurrent changes stay isolated.
 - Reusable validation lives in `scripts/` and tests. Run `./scripts/verify-template.sh` for the final template candidate; checked-in files under `.github/workflows/` are the only active GitHub Actions. See [CI/CD settings](docs/index.html#testing) for stage ownership.
-- [Journey 07](docs/index.html#governance) and the [`docs/ci-policy.md` quota fallback](docs/ci-policy.md#actions-額度-fallback) own review requirements, merge eligibility, Alpha self-merge, and quota fallback. Do not restate or invent exceptions here.
-- Copier owns template creation and updates. Follow [Journey 08](docs/index.html#template-upgrade) and [`docs/agent-install.md`](docs/agent-install.md) for existing-repository behavior.
+- [Journey 08](docs/index.html#governance) and the [`docs/ci-policy.md` quota fallback](docs/ci-policy.md#actions-額度-fallback) own review requirements, merge eligibility, Alpha self-merge, and quota fallback. Do not restate or invent exceptions here.
+- Copier owns template creation and updates. Follow [Journey 09](docs/index.html#template-upgrade) and [`docs/agent-install.md`](docs/agent-install.md) for existing-repository behavior.
 
 ## Scope and sources of truth
 
@@ -32,7 +32,7 @@
 8. Inspect the existing implementation, make the smallest coherent change, and preserve unrelated user work.
 9. Add or update the narrowest regression check that proves non-trivial behavior.
 10. Delegates run scoped checks; only the pull request owner or integrator runs `./scripts/verify-template.sh` once per final candidate tree.
-11. Before any automated PR Ready/Draft, authorization, metadata, or merge write, acquire the remote lease and use `scripts/pr_lifecycle.py`; otherwise remain read-only. Follow Journey 07 rather than duplicating merge rules here.
+11. Before any automated PR Ready/Draft, authorization, metadata, or merge write, acquire the remote lease and use `scripts/pr_lifecycle.py`; otherwise remain read-only. Follow Journey 08 rather than duplicating merge rules here.
 12. After merge, leave the task worktree and run `./scripts/cleanup-worktrees --apply --worktree <path> origin/<delivery-branch>` from another checkout. Never remove another task's worktree or any dirty, locked, detached, unmerged, or unverifiable worktree.
 13. Report what changed, which verification ran, and any remaining limitation.
 
@@ -45,7 +45,7 @@ Duplicate triage may close an Issue without code changes when it links the canon
 ## Commands
 
 - Environment setup: `uv sync --locked --python 3.14`.
-- Python iteration: `uv run ruff check <paths>`, `uv run mypy <paths>`, and `uv run pytest <test-path>`.
+- Python iteration: `uv run ruff check <paths>`, `uv run ty check <paths>`, and `uv run pytest <test-path>`.
 - Site source check: `./scripts/build-decision-site --check`.
 - Final template candidate: `./scripts/verify-template.sh` once by the pull request owner or integrator.
 
@@ -56,7 +56,7 @@ Duplicate triage may close an Issue without code changes when it links the canon
 - Keep GitHub Actions pinned to full commit SHAs and retain the readable release tag in a comment.
 - Do not hand-edit generated lockfiles; use uv or pnpm so integrity metadata stays valid.
 - Do not create a separate GitHub repository for testing or validation. Use local temporary projects or this repository's Issues, branches, pull requests, and Actions.
-- Do not add a language, deployment target, platform integration, or placeholder configuration without a real consuming repository.
+- Do not add a language without executable create, existing-repository adoption, update, and native-toolchain verification. Deployment targets and platform integrations still require a real consuming repository.
 - Comments in source code must be written in English. Leave formatting and lint details in their executable configuration instead of duplicating them here.
 
 ## Platform capability and automation
@@ -69,7 +69,7 @@ Duplicate triage may close an Issue without code changes when it links the canon
 
 - Never commit secrets, tokens, private keys, or populated `.env` files.
 - Review the plan output before applying repository settings; do not operate production or external infrastructure without explicit authorization.
-- Do not bypass required checks, review, CODEOWNER approval, or supply-chain verification. Journey 07 is the only source for any merge exception or Alpha self-merge authorization.
+- Do not bypass required checks, review, CODEOWNER approval, or supply-chain verification. Journey 08 is the only source for any merge exception or Alpha self-merge authorization.
 
 ## Code Review Rules
 

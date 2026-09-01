@@ -1141,6 +1141,7 @@ def test_bridge_manual_restoration_uses_the_pr_head(
 
 def test_terminal_bridge_cleanup_deletes_only_the_expected_ref(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The owner cleanup uses a deletion-only explicit force-with-lease."""
     source, remote, _expected_sha, bridge_sha, git_env = bridge_git_fixture(
@@ -1160,6 +1161,7 @@ def test_terminal_bridge_cleanup_deletes_only_the_expected_ref(
         text=True,
     )
     record = terminal_bridge_record(bridge_sha)
+    monkeypatch.chdir(source)
     result = delete_promotion_bridge(record, str(remote), git_env=git_env)
     assert f"--force-with-lease=refs/heads/promote/next:{bridge_sha}" in result
     assert f"--head-sha {bridge_sha}" in bridge_cleanup_command(record)
@@ -1578,7 +1580,7 @@ def test_hosted_complete_checks_admin_write_before_restoring_checkpoint(
             return 403, {"message": "Forbidden"}
         return original_request(method, path, payload)
 
-    admin.request = reject_patch  # type: ignore[method-assign]
+    admin.request = reject_patch  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="HTTP 403"):
         complete_dev_next(
             reader,

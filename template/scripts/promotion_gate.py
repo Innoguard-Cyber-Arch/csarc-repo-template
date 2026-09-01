@@ -127,12 +127,12 @@ class RejectRedirects(urllib.request.HTTPRedirectHandler):
 
     def redirect_request(
         self,
-        _request: urllib.request.Request,
-        _file: object,
-        _code: int,
-        _message: str,
-        _headers: object,
-        _new_url: str,
+        req: urllib.request.Request,
+        fp: object,
+        code: int,
+        msg: str,
+        headers: object,
+        newurl: str,
     ) -> None:
         """Reject every redirect."""
         return None
@@ -1537,6 +1537,7 @@ def prepare(args: argparse.Namespace) -> None:  # noqa: C901
     """Validate promotion prerequisites and create the candidate bundle."""
     require_distinct_paths(args.archive, args.output)
     event = json.loads(args.event_path.read_text(encoding="utf-8"))
+    evidence: dict[str, object]
     if args.event != "pull_request":
         route = Route("merge-queue", False)
         canary = classify_canary("", "")

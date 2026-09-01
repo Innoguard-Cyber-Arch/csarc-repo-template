@@ -39,6 +39,7 @@ paired_files=(
   scripts/promotion_gate.py
   scripts/check-update-conflicts
   scripts/cleanup-worktrees
+  scripts/csarc_config.py
   scripts/install-actionlint
   scripts/install-gitleaks
   scripts/install-osv-scanner

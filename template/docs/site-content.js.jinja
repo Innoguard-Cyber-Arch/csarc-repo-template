@@ -4,16 +4,17 @@ window.CSARC_SITE_CONTENT = {
   project: {
     name: {{ project_name | tojson }},
     description: {{ project_description | tojson }},
-    language: {{ language | tojson }},
+    language: {{ languages | join(" + ") | tojson }},
     branch: {{ branch_strategy | tojson }},
     owner: {{ code_owner | tojson }},
-    stage: {% if language == "ci" %}"beta"{% else %}"alpha"{% endif %}
+    stage: {% if languages %}"alpha"{% else %}"beta"{% endif %}
   },
   start: {
     prerequisites: [
       "Git",
       "GitHub CLI",
-      "uv"{% if language in ["typescript", "python-typescript"] %},
+      "uv"{% if "rust" in languages %},
+      "Rust 1.98"{% endif %}{% if "typescript" in languages %},
       "Node 24+",
       "pnpm 11"{% endif %}
     ],
@@ -28,9 +29,11 @@ window.CSARC_SITE_CONTENT = {
     { path: "policies/", purpose: "可審查的 GitHub 設定", owner: "公版主導" },
     { path: "docs/adr/", purpose: "架構決策紀錄（ADR）與取捨歷史", owner: "專案維護" },
     { path: "docs/specs/", purpose: "Spec-Driven Development（SDD）的 living specifications", owner: "專案維護" },
-{% if language in ["python", "python-typescript"] %}
+{% if "python" in languages %}
     { path: "src/＋tests/", purpose: "Python 產品與測試", owner: "專案維護" },
-{% endif %}{% if language in ["typescript", "python-typescript"] %}
+{% endif %}{% if "rust" in languages %}
+    { path: "src/＋Cargo.toml", purpose: "Rust 產品、相依與測試", owner: "專案維護" },
+{% endif %}{% if "typescript" in languages %}
     { path: "typescript/", purpose: "TypeScript 產品與測試", owner: "專案維護" },
 {% endif %}{% if has_container %}
     { path: {{ containerfile_path | tojson }}, purpose: "產品容器建置、啟動與漏洞掃描", owner: "專案維護" },
@@ -46,13 +49,13 @@ window.CSARC_SITE_CONTENT = {
     { title: "5｜交付", detail: "{% if branch_strategy == 'delivery' %}Milestone 完成與 dev/next 固定窗口才形成批次 release 邊界，全部 no-release 就略過，hotfix 才立即發布；{% endif %}成品 workflow 只接受 release-source evidence，再建立可追溯成品、SHA-256 與非空 SBOM；部署依專案另訂。" }
   ],
   safeguards: [
-{% if language != "ci" %}
+{% if "python" in languages or "typescript" in languages %}
     "Coverage 是未測程式碼的訊號，不等於品質；新案看全域、既有案先看 changed lines，門檻依缺陷與模組風險調整。",
 {% endif %}
     "一般相依新版等待三天；pnpm 另拒絕 publisher trust 降級，OSV 在相依變更、promotion 與每週排程掃描已知漏洞。",
     "lockfile 保存下載內容雜湊；第三方 Actions 固定完整 commit SHA。",
     "PR 政策包含合法／不合法回歸測資，避免門禁只會顯示綠燈。",
-{% if language in ["python", "python-typescript"] %}
+{% if "python" in languages %}
     "Python CI 會驗證所宣告的精確 .0 下界，以及支援範圍內每個 feature release 的最新 patch；目前支援範圍從 3.12 起。",
 {% endif %}
     "token 與私鑰放 GitHub Secrets／Variables，不提交到 repo 或 .env。",
@@ -65,8 +68,8 @@ window.CSARC_SITE_CONTENT = {
 {% endif %}
   ],
   release: {
-    current: {% if (container_mode | default("none")) == "ghcr" %}"已驗證的 release-source 才能發布 GHCR；workflow 保存已 smoke／scan 的 image bytes，附加 provenance 與 SPDX SBOM，再以 digest 重跑 smoke test。這不是 runtime 部署。"{% elif language == "ci" %}"已驗證的 release-source 會建立 GitHub Release、來源封存檔與 exact-tag SPDX SBOM；沒有語言套件，但仍保存可驗證的來源清冊。任意 tag push 不會啟動發布。"{% else %}"已驗證的 release-source 才能 dispatch 成品 workflow；checksum、exact-tag SPDX SBOM 與來源 metadata 會附加到 GitHub Release，不重跑完整 runtime CI。沒有通用部署流程。"{% endif %},
-    optional: {% if (container_mode | default("none")) == "verify" %}"容器只做 CI build／smoke／scan，不發布 registry；portable baseline 不要求長效 token。"{% elif (container_mode | default("none")) == "ghcr" %}"只有 GHCR 發布 job 取得 packages、id-token 與 attestations write；PR CI 維持唯讀且不 push。"{% elif language == "ci" %}"CI/CD-only 沒有語言套件或 registry 發布；portable baseline 不要求導入者建立長效 token 或修改組織政策。"{% elif language == "python" %}"Artifact attestation 與 PyPI OIDC 發布都是選配；本 profile 不會產生 npm 套件，portable baseline 不要求長效 token 或組織政策變更。"{% elif language == "typescript" %}"Artifact attestation 與 npm OIDC 發布都是選配；本 profile 不會產生 PyPI 套件，portable baseline 不要求長效 token 或組織政策變更。"{% else %}"Artifact attestation、PyPI 與 npm OIDC 發布各自選配；portable baseline 不要求導入者建立長效 token 或修改組織政策。"{% endif %},
+    current: {% if (container_mode | default("none")) == "ghcr" %}"已驗證的 release-source 才能發布 GHCR；workflow 保存已 smoke／scan 的 image bytes，附加 provenance 與 SPDX SBOM，再以 digest 重跑 smoke test。這不是 runtime 部署。"{% elif not languages %}"已驗證的 release-source 會建立 GitHub Release、來源封存檔與 exact-tag SPDX SBOM；沒有語言套件，但仍保存可驗證的來源清冊。任意 tag push 不會啟動發布。"{% else %}"已驗證的 release-source 才能 dispatch 成品 workflow；checksum、exact-tag SPDX SBOM 與來源 metadata 會附加到 GitHub Release，不重跑完整 runtime CI。沒有通用部署流程。"{% endif %},
+    optional: {% if (container_mode | default("none")) == "verify" %}"容器只做 CI build／smoke／scan，不發布 registry；portable baseline 不要求長效 token。"{% elif (container_mode | default("none")) == "ghcr" %}"只有 GHCR 發布 job 取得 packages、id-token 與 attestations write；PR CI 維持唯讀且不 push。"{% elif not languages %}"CI/CD-only 沒有語言套件或 registry 發布；portable baseline 不要求導入者建立長效 token 或修改組織政策。"{% else %}"Artifact attestation 與選取語言的 registry 發布能力分開設定；portable baseline 不要求導入者建立長效 token 或修改組織政策。"{% endif %},
     update: "Copier 從 {{ branch_strategy }} 的工作分支套用已審查的完整 commit SHA，再執行 ./scripts/verify。"
   }
 };

@@ -12,7 +12,7 @@ updates:
       official-actions:
         patterns: ["actions/*"]
         update-types: [minor, patch]
-{%- if language in ["python", "python-typescript"] %}
+{%- if "python" in languages %}
   - package-ecosystem: uv
     directory: /
     target-branch: {% if branch_strategy == "delivery" %}dev/next{% else %}{{ branch_strategy }}{% endif %}
@@ -26,8 +26,22 @@ updates:
         patterns: ["*"]
         update-types: [minor, patch]
 {%- endif %}
-{%- if language in ["typescript", "python-typescript"] %}
+{%- if "typescript" in languages %}
   - package-ecosystem: npm
+    directory: /
+    target-branch: {% if branch_strategy == "delivery" %}dev/next{% else %}{{ branch_strategy }}{% endif %}
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    labels: [enhancement]
+    groups:
+      routine-updates:
+        patterns: ["*"]
+        update-types: [minor, patch]
+{%- endif %}
+{%- if "rust" in languages %}
+  - package-ecosystem: cargo
     directory: /
     target-branch: {% if branch_strategy == "delivery" %}dev/next{% else %}{{ branch_strategy }}{% endif %}
     schedule:
