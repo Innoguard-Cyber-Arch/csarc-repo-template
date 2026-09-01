@@ -168,6 +168,8 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     assert "does not assume an engineering or CI/CD operations background" in (
         english_home
     )
+    assert "Milestone <編號>: <里程碑名稱>" in chinese
+    assert "Milestone <number>: <Milestone title>" in english
     for explanation in (
         "鎖定版本清單（lockfile）",  # noqa: RUF001
         "自動更新服務（Dependabot）",  # noqa: RUF001

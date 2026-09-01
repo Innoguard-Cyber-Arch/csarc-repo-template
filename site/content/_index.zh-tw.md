@@ -233,7 +233,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
           <ul class="work-definition-list">
             <li><strong>單項工作：</strong>先建立 Issue，寫清楚問題、完成條件、驗證方式與負責人；內容足以開始實作就不增加其他文件。</li>
             <li><strong>Issue 類型與拆分：</strong>先選工作類型，只在工作能獨立完成或超出原範圍時拆分。<details class="package-disclosure inline-disclosure"><summary><span class="tech-name">查看可用類型與拆分規則</span></summary><div class="package-health"><ul><li><strong>Feature：</strong>需要多項工作一起完成的成果。</li><li><strong>Task：</strong>可獨立完成與驗證的工作。</li><li><strong>Bug：</strong>結果不符合預期。</li><li><strong>Documentation：</strong>只修改文件或範例。</li><li><strong>拆分：</strong>同一個完成條件與同一份驗證能證明就不拆；能獨立完成或超出原範圍但必須補做，才建立 Sub-issue。Parent 表示未完成的共同成果，Dependency 表示先後順序。</li></ul></div></details></li>
-            <li><strong>里程碑：</strong>多張 Issue 有共同目標、期限或交付批次時才建立，並指定一張生命週期追蹤 Issue。至少一位非提案者同意，且沒有尚未解決的反駁，才開始執行。</li>
+            <li><strong>里程碑：</strong>多張 Issue 有共同目標、期限或交付批次時才建立，並指定一張生命週期追蹤 Issue。標題固定為 <code>Milestone &lt;編號&gt;: &lt;里程碑名稱&gt;</code>，冒號後須與里程碑名稱完全相同；核准、反駁與提前終止留在內文與留言。至少一位非提案者同意，且沒有尚未解決的反駁，才開始執行。</li>
             <li><strong>例外：</strong>Duplicate 是 Issue 的重複結案方式；緊急工作仍先定義為 Bug，如何快速交付由「PR／合併」處理。</li>
           </ul>
         </details>
@@ -247,6 +247,8 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 
 - **整體：** 先把需求整理成一張可獨立完成與驗證的 Issue。
 - **里程碑：** 多張工作有共同目標、期限或交付批次時才建立，並配一張生命週期追蹤 Issue。
+  - 標題使用 `Milestone <編號>: <里程碑名稱>`；冒號後須與里程碑名稱完全相同。
+  - 核准、反駁與提前終止寫在內文或留言，不放進標題。
   - 至少一位非提案者同意，且沒有尚未解決的反駁，才開始執行。
 - **Issue：** 選擇 Feature、Task、Bug 或 Documentation 表單，再寫清楚問題、完成條件與驗證。
   - 標題使用清楚的英文；建立者預設負責這張 Issue。

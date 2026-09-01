@@ -5,6 +5,11 @@
 story；Milestone 只保留足以理解、排程與驗收一次 delivery／release 的內容，
 完整設計細節請連回 Feature、spec 或決策紀錄。建立時必須填入真實 due date。
 
+每個 Milestone 另建一張生命週期追蹤 Issue，標題固定為
+`Milestone <編號>: <里程碑名稱>`，例如
+`Milestone 8: Interactive docs and policy alignment`。冒號後的文字必須與 GitHub
+Milestone 名稱完全相同；核准、反駁與提前終止等狀態只寫在 Issue 內文與留言。
+
 ```markdown
 ## Problem
 

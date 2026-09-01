@@ -49,6 +49,14 @@ def test_acceptance_requires_a_complete_section() -> None:
     assert not acceptance_complete("No acceptance criteria")
 
 
+def test_tracking_issue_title_rule_is_shipped_to_users() -> None:
+    """Ship the lifecycle title rule with generated repositories."""
+    root = Path(__file__).parents[1]
+    assert "Milestone <編號>: <里程碑名稱>" in (
+        root / "docs/milestone-description.md"
+    ).read_text(encoding="utf-8")
+
+
 def test_sync_rereads_remote_state_before_transition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
