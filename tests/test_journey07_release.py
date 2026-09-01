@@ -22,6 +22,9 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
         "workflow_dispatch": None,
     }
     assert workflow["concurrency"]["cancel-in-progress"] is False
+    assert workflow["jobs"]["release"]["if"] == (
+        "${{ github.ref == 'refs/heads/main' }}"
+    )
     assert workflow["permissions"] == {"contents": "read"}
     assert set(workflow["jobs"]["release"]["permissions"]) == {
         "contents",
@@ -49,6 +52,19 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert "create-github-app-token" not in source
     assert "release_policy.py release" not in source
     assert "/actions/workflows/" not in source
+    # A shell double-quoted --jq argument must escape its own literal quotes,
+    # so the merged-commit comparison reads as \"$GITHUB_SHA\" in source.
+    assert r".merge_commit_sha == \"$GITHUB_SHA\"" in source
+    assert 'jq -r .merge_commit_sha <<<"$pr"' in source
+
+    settings = (ROOT / "scripts/apply-repository-settings.sh").read_text(
+        encoding="utf-8"
+    )
+    assert 'gh api "repos/$repo/immutable-releases"' in settings
+    assert '--method PUT "repos/$repo/immutable-releases"' in settings
+    assert json.loads(
+        (ROOT / "policies/releases.json").read_text(encoding="utf-8")
+    ) == {"enabled": True}
 
     candidate = (ROOT / "scripts/verify-release-candidate").read_text(
         encoding="utf-8"
@@ -72,6 +88,16 @@ def test_release_please_always_stages_a_draft() -> None:
     ).read_text(encoding="utf-8")
 
 
+def test_release_rerun_recovers_a_tag_without_a_release() -> None:
+    """Revalidate and restage when a prior run stopped after tag creation."""
+    source = (ROOT / ".github/workflows/release.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "steps.plan.outputs.status == 'released'" in source
+    assert "gh release create" in source
+
+
 def test_template_only_adds_release_workflow_to_new_repositories() -> None:
     """Leave an existing repository's product-owned release workflow alone."""
     copier = (ROOT / "copier.yml").read_text(encoding="utf-8")
@@ -85,6 +111,9 @@ def test_template_only_adds_release_workflow_to_new_repositories() -> None:
     assert "./scripts/verify-release-candidate" in template
     assert '{% if "typescript" in languages %}' in template
     assert '{% if "rust" in languages %}' in template
+    assert '"path": "Cargo.lock"' in (
+        ROOT / "template/release-please-config.json.jinja"
+    ).read_text(encoding="utf-8")
 
     ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "CSARC_PUBLISH_CANDIDATE_STATUS" in ci
@@ -135,3 +164,11 @@ def test_release_status_stays_candidate_until_default_branch_evidence() -> None:
     assert "| Tag and GitHub Release | Active |" not in english
     assert "release workflow are active" not in english
     assert "Action 尚未啟用" not in chinese
+
+
+def test_shared_ci_policy_names_the_generated_verifier() -> None:
+    """Do not send generated repositories to a root-only command."""
+    policy = (ROOT / "docs/ci-policy.md").read_text(encoding="utf-8")
+
+    assert "生成 repo 呼叫 `scripts/verify`" in policy
+    assert "生成 repo 用 `scripts/verify full`" in policy

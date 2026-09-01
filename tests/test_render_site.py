@@ -350,7 +350,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "可調整｜選用語言與 Python 支援範圍" in active_components  # noqa: RUF001
     assert "固定基線｜各語言使用原生工具" in active_components  # noqa: RUF001
     assert "只列公版主要政策、可調選項與設定位置" in active_components
-    assert english.count('data-audience="maintainer"') == 6
+    assert english.count('data-audience="maintainer"') == 7
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english

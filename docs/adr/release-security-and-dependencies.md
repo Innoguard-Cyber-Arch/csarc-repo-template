@@ -36,7 +36,7 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | 新生成 repo | 該 repo 內的 CSARC baseline | Copier 產生同一個薄 workflow；版本從該 repo 的 `0.1.0` 獨立開始 |
 | 既有 repo | product owner | Copier 不產生 `release.yml`、不按檔名猜測、不 dispatch 或覆寫既有發布流程 |
 
-這個界線解決 #369 的重複 tag／Release owner 問題。Registry publishing 與 artifact attestation 是 #439 的選配能力，不因 GitHub Release 啟用就自動取得 token 或 OIDC 權限。
+這個界線解決 #369 的重複 tag／Release owner 問題。Registry publishing 與 production-side artifact attestation 由 #439 判定零 active 消費者後移除設定面，不因 GitHub Release 啟用就自動取得 token 或 OIDC 權限。
 
 ## Standalone 與 Hotfix
 
@@ -75,8 +75,8 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | tag／GitHub Release | Candidate／Blocked | `.github/workflows/release.yml` | 版本 PR 合併後才建立；待 default branch live run 才能標 Active |
 | source／語言成品 | Candidate | `scripts/release_bundle.py` | 選到的 Python、TypeScript、Rust 原生 package 加 source archive |
 | checksum／SBOM／release evidence | Candidate | `scripts/release_bundle.py`＋Syft | 缺檔、竄改、錯 tag、錯 commit 與重跑測試；待 live run |
-| registry／attestation | Conditional | #439 | 未核准前不取得 registry token、`id-token` 或 attestation 權限 |
-| artifact consumption | Conditional | `scripts/verify_release_consumption.py` | 真實消費者明確採用後才是門禁 |
+| registry publishing／production-side attestation | Removed | #439 | `container_mode`、`enable_release_attestations`、`enable_pypi_publishing`、`enable_npm_publishing` 已由 #439 移除設定面：零 active workflow 消費這些值，不留下承諾不了結果的選項；需要真實 registry 或 attestation 時另開 Issue 明列 owner、權限與執行者 |
+| artifact consumption（消費端 attestation 驗證） | Conditional | `scripts/verify_release_consumption.py` | 與上列產出端設定無關；真實消費者明確採用後才是門禁 |
 | repository delivery | Active | CI、PR policy、#429 branch model | 精確 PR head、review、分級驗證與 closing evidence |
 | production deployment | Not applicable | consuming product | 必須由有真實 runtime 的產品自行定義 |
 
@@ -98,9 +98,4 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 
 舊 `scripts/test-release-follow-up-gates` 以 workflow YAML 作測試來源，會複製規則且維護成本高，已由 `release_policy.py`、`verify-release-candidate` 與 Python tests 取代。`delivery-maintenance.yml` 不恢復：只有明列真實依賴時才同步特定 delivery branch，不在每次 `main` 前進時 fan-out 寫入所有分支。
 
-## Fallback
-
-- GitHub 禁止 Actions 建 PR 時，在 `release/v<version>` 執行 `prepare-candidate` 並開 `chore(main): release <version>`；同一驗證仍不可略過。
-- 版本候選失敗時修正來源 commit 並重新產生；不直接編輯 bot branch，也不由本機命令建立 tag／Release。
-- draft 發布失敗可安全重跑；若 Release 已 immutable，只能驗證既有內容，不能覆寫。
-- 需要 registry、attestation 或部署時，先由 #439 或產品自己的 Issue／ADR 定義 owner、權限、復原與消費端驗證，不擴張這支 baseline workflow。
+- 需要 registry、production-side attestation 或部署時，#439 已移除設定面而非保留 conditional 選項；先開新 Issue／ADR 定義 owner、權限、復原與消費端驗證，不擴張這支 baseline workflow。
