@@ -62,7 +62,7 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 | --- | --- | --- |
 | `.csarc/config.yml` | Template source, languages, branch strategy, and optional capabilities | Template-led |
 | `.github/ISSUE_TEMPLATE/`, `pull_request_template.md` | Work definition and PR contract | Template-led |
-| `.github/workflows/` | Seven active flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, and release | Template-led |
+| `.github/workflows/` | Seven active flows for Issue, Milestone, spec, PR, closure, verification, and vulnerability handling; plus one candidate release flow | Template-led |
 | `AGENTS.md`, `README.md`, `CLAUDE.md` | Agent working rules and user entry point | Shared |
 | `policies/`, `CODEOWNERS`, `.github/REVIEWERS` | Desired settings, owners, and reviewers | Shared |
 | `scripts/` | Local verification, work synchronization, and repository settings | Template-led |
@@ -135,7 +135,9 @@ Workflows, policies, scripts, and documents shared by root and `template/` are k
 - **One implementation:** GitHub Actions has one `verify` job with a 30-minute timeout and only calls repository scripts.
 - **Repository scope:** a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.
 
-Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, OSV, Dependabot, and one release workflow are active. Dedicated promotion, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.
+Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, Work Issue closure, and Dependabot are active in a newly generated repository from its first commit. One release workflow is configured as a candidate pending a successful default-branch run. Dedicated promotion, release-handoff, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.
+
+<aside class="config-guidance" data-audience="maintainer"><strong>Root repository state</strong><p>In <code>csarc-repo-template</code> itself, OSV is also candidate: its workflow has not yet landed on this repository's own <code>main</code>, and its trigger set does not include <code>pull_request</code>, so it cannot pre-register from a candidate branch. See the CI/CD settings page's current-automation table for the exact live-registration check and timestamp.</p></aside>
 
 <aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>local and CI execution share scripts and tests; work PRs select fast or full by risk, while Milestone or canary delivery, hotfix, merge queue, manual, and unknown high-risk changes run full.</li><li><strong>Adjustable:</strong><code>coverage_mode</code>, <code>coverage_threshold</code>, and <code>enable_precommit</code>; advanced teams may enable <code>use_reusable_workflow</code> with a full commit SHA.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>scripts/verify-fast</code>, <code>scripts/verify</code>, and <code>.github/workflows/ci.yml</code>.</li></ul></aside>
 {{< /slide >}}
@@ -204,9 +206,9 @@ Routine updates and security checks run automatically. People step in only for u
 | Capability | Current status | Current behavior |
 | --- | --- | --- |
 | SemVer intent in PRs | Active | `fix` / `revert` means patch, `feat` means minor, `!` means major, and other types mean no release |
-| Exact version and changelog | Active | Release Please opens one reviewed PR; published versions are never rewritten |
-| Tag and GitHub Release | Active | Publish automatically only after the version PR, full verification, and downloaded artifact verification pass |
-| Checksums and SBOM | Active | Build with the exact tag and verify again after downloading the Release assets |
+| Exact version and changelog | Candidate / Guided | Automatic uses a reviewed Release Please PR; when platform policy blocks it, Guided uses a normal PR opened by a person or agent |
+| Tag and GitHub Release | Candidate / Blocked | The sole workflow publishes after the version PR; activation awaits a default-branch run |
+| Checksums and SBOM | Configured | Included in the same candidate path; Active only after its first successful run |
 | Attestations and consumption | Conditional | Products opt in when registry and supply-chain needs justify them |
 | PyPI, npm, and GHCR | Conditional gap | The root publishes to no registry; generated projects expose settings but receive no publisher job, tracked by #439 |
 
@@ -219,7 +221,7 @@ A hotfix uses a Bug Issue without a Milestone, the `bug` and `hotfix` labels, `f
 {{< /detail >}}
 
 {{< detail key="manual-release-boundary" title="Automatic-release ownership" >}}
-The template root and each new repository publish through their own release workflow. An adopted repository keeps its product-owned workflow. Every path still needs one owner, least privileges, full-SHA pins, a timeout, concurrency behavior, failure recovery, and a runner-cost ceiling; historical runs remain reference evidence only.
+The template root and each new repository are configured to publish through their own release workflow. An adopted repository keeps its product-owned workflow. Every path still needs one owner, least privileges, full-SHA pins, a timeout, concurrency behavior, failure recovery, and a runner-cost ceiling; historical runs remain reference evidence only.
 
 Milestone closure remains manual until #400 completes its lifecycle contract, and work-Issue closure remains owned by #401. Work branches are removed after merge; a Milestone delivery branch waits until closure and unfinished work are handled.
 {{< /detail >}}
@@ -253,7 +255,7 @@ Each check is a snapshot. A setting changed and restored between runs still requ
 {{< /disclosure >}}
 
 {{< detail key="template-release-scope" title="Single source, runtime baselines, and the root-only boundary" >}}
-A generated repository's `.csarc/config.yml` stores Copier's template source and revision together with its selected capabilities. Root uses the same public setting keys without inventing `_src_path` or `_commit` values that point back to itself. Change generated settings through `csarc update --data`; a derived template may add namespaced fields to the same YAML instead of duplicating CSARC settings.
+Root `.csarc/config.yml` records the capabilities selected by the template repository itself. A generated repository additionally records Copier's source and revision and writes changes through `csarc update --data`. The template source does not invent `_src_path` or `_commit` values that point back to itself or immediately become stale. A derived template should add namespaced settings to the same YAML instead of duplicating CSARC fields.
 
 `enable_template_update_notifications` generates `template-update.yml` and `check-template-update` only when selected. Public sources need no secret; private sources use a repository secret limited to read-only access to that template source.
 
@@ -291,7 +293,7 @@ A generated repository's `.csarc/config.yml` stores Copier's template source and
 | --- | --- |
 | Baseline capability | The shared baseline and Python, Rust, and TypeScript modules, plus Issues/specs, PR/CI, local verification, lockfile policy, and the repository site have executable implementations |
 | Current online evidence | Active CI／policy workflows and the first CI-only downstream adoption and update |
-| Release evidence | The current workflow produces exact-tag artifacts, checksums, an SPDX SBOM, and immutable-release verification; older handoff and consumption runs remain historical evidence only |
+| Release evidence | The candidate workflow is configured to produce exact-tag artifacts, checksums, an SPDX SBOM, and immutable-release verification; activation awaits a default-branch run, and older handoff and consumption runs remain historical evidence only |
 | Verified language modules | Python, Rust, and TypeScript each pass create, existing-repository adoption, update, lockfile, test, build, and package checks |
 | Future/optional | Central catalog or governance, Go, authenticated hosting, deployment, monitoring, RAG, and autonomous agents |
 
@@ -327,7 +329,7 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 | --- | --- | --- |
 | ![Copier logo](../assets/copier.svg) [Copier](https://github.com/copier-org/copier) | Updatable templates | Baseline; changes arrive through PRs |
 | ![zizmor logo](../assets/zizmor.png) [zizmor](https://github.com/zizmorcore/zizmor) | GitHub Actions security | The local contract remains; its dedicated workflow is archived |
-| Dependabot, OSV, Syft | Dependency updates, vulnerabilities, and SBOM | Dependabot and OSV are active; the SBOM contract is conditional and locally tested |
+| Dependabot, OSV, Syft | Dependency updates, vulnerabilities, and SBOM | Dependabot is active; OSV is active in a new repository and candidate here pending this repository's own `main` landing; the SBOM contract is conditional and locally tested |
 | ![GitHub Community Projects logo](../assets/github-community-projects.png) [Safe Settings](https://github.com/github-community-projects/safe-settings) | Cross-repository settings | Evaluate after fleet and drift thresholds are met |
 | ![Renovate logo](../assets/renovate.png) [Renovate](https://github.com/renovatebot/renovate) | Flexible update presets | Do not replace Dependabot today |
 | ![GitHub Actions logo](../assets/github-actions.svg) ![PyScaffold logo](../assets/pyscaffold.svg) Starter Workflows, PyScaffold | Official workflow and Python structure examples | Content checklists only; do not copy policy blindly |
