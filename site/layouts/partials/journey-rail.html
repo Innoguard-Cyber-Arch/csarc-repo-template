@@ -1,48 +1,36 @@
-{{- $english := eq .Page.Lang "en" -}}
-{{- $labelKey := cond $english "en" "zh" -}}
-{{- $items := slice
-  (dict "key" "capability" "tier" "priority" "group" "use" "zh" "能力／導入" "en" "Capability")
-  (dict "key" "flow" "tier" "priority" "group" "use" "zh" "CI/CD 流程" "en" "CI/CD flow")
-  (dict "key" "files" "tier" "priority" "group" "use" "zh" "檔案地圖" "en" "File map")
-  (dict "key" "method" "code" "01" "tier" "priority" "group" "main" "zh" "工作定義" "en" "Work")
-  (dict "key" "agents" "code" "02" "tier" "priority" "group" "main" "zh" "AI 規範" "en" "AI rules")
-  (dict "key" "contract" "code" "03" "tier" "priority" "group" "main" "zh" "驗證／CI" "en" "Verify")
-  (dict "key" "languages" "code" "04" "tier" "priority" "group" "main" "zh" "程式語言" "en" "Languages")
-  (dict "key" "supply" "code" "05" "tier" "priority" "group" "main" "zh" "依賴安全" "en" "Supply")
-  (dict "key" "pr" "code" "06" "tier" "priority" "group" "main" "zh" "PR／合併" "en" "PR merge")
-  (dict "key" "deploy" "code" "07" "tier" "best" "group" "main" "zh" "版本／交付" "en" "Delivery")
-  (dict "key" "governance" "code" "08" "tier" "priority" "group" "main" "zh" "規則治理" "en" "Governance")
-  (dict "key" "template-release" "code" "09" "tier" "priority" "group" "support" "zh" "模板升級" "en" "Updates")
-  (dict "key" "docs-site" "code" "10" "tier" "priority" "group" "support" "zh" "內部網站" "en" "Docs site")
-  (dict "key" "rollout" "code" "11" "tier" "best" "group" "support" "zh" "導入層級" "en" "Rollout")
--}}
-<aside class="journey-rail" aria-label="{{ cond $english "Presentation outline" "簡報目錄" }}">
-  <h3>{{ cond $english "Use template" "使用公版" }}</h3>
+{{- $navigation := .Page.Site.Data.navigation -}}
+{{- $labels := index $navigation.labels .Page.Lang -}}
+<aside class="journey-rail" aria-label="{{ $labels.ariaLabel }}">
+  <h3>{{ $labels.use }}</h3>
   <ol class="journey-use">
-    {{- range where $items "group" "use" }}
-    <li class="journey-item {{ .tier }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
-      <a href="#{{ .key }}"><span>{{ index . $labelKey }}</span></a>
+    {{- range where $navigation.items "group" "use" }}
+    <li class="journey-item {{ .participation }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+      <a href="#{{ .key }}"><span>{{ index .labels $.Page.Lang }}</span></a>
     </li>
     {{- end }}
   </ol>
-  <h3>{{ cond $english "Workflow" "開發與維護" }}</h3>
+  <h3>{{ $labels.workflow }}</h3>
   <ol class="journey-main">
-    {{- range where $items "group" "main" }}
-    <li class="journey-item {{ .tier }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
-      <a href="#{{ .key }}"><span class="journey-code">{{ .code }}</span><span>{{ index . $labelKey }}</span></a>
+    {{- range where $navigation.items "group" "workflow" }}
+    <li class="journey-item {{ .participation }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+      <a href="#{{ .key }}"><span class="journey-code">{{ .code }}</span><span>{{ index .labels $.Page.Lang }}</span></a>
     </li>
     {{- end }}
   </ol>
-  <h3>{{ cond $english "Maintenance" "公版管理" }}</h3>
+  <h3>{{ $labels.support }}</h3>
   <ol class="journey-support">
-    {{- range where $items "group" "support" }}
-    <li class="journey-item {{ .tier }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
-      <a href="#{{ .key }}"><span class="journey-code">{{ .code }}</span><span>{{ index . $labelKey }}</span></a>
+    {{- range where $navigation.items "group" "support" }}
+    <li class="journey-item {{ .participation }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+      <a href="#{{ .key }}"><span class="journey-code">{{ .code }}</span><span>{{ index .labels $.Page.Lang }}</span></a>
     </li>
     {{- end }}
   </ol>
-  <a class="journey-bookend appendix{{ if eq .Key "ecosystem" }} active-selection{{ end }}" href="#ecosystem"{{ if eq .Key "ecosystem" }} aria-current="page"{{ end }}>{{ cond $english "Tools" "工具附錄" }}</a>
-  <a class="journey-bookend appendix{{ if eq .Key "similar-tools" }} active-selection{{ end }}" href="#similar-tools"{{ if eq .Key "similar-tools" }} aria-current="page"{{ end }}>{{ cond $english "Similar" "相似工具" }}</a>
-  <a class="journey-bookend appendix maintainer-bookend{{ if eq .Key "testing" }} active-selection{{ end }}" data-audience="maintainer" href="#testing"{{ if eq .Key "testing" }} aria-current="page"{{ end }}>{{ cond $english "CI/CD" "CI/CD 設定" }}</a>
-  <a class="journey-bookend appendix maintainer-bookend{{ if eq .Key "bridge" }} active-selection{{ end }}" data-audience="maintainer" href="#bridge"{{ if eq .Key "bridge" }} aria-current="page"{{ end }}>{{ cond $english "May review" "五月盤點" }}</a>
+  {{- range $navigation.appendices }}
+  <a class="journey-bookend appendix {{ .participation }}{{ if eq $.Key .key }} active-selection{{ end }}"{{ with .audience }} data-audience="{{ . }}"{{ end }} href="#{{ .key }}"{{ if eq $.Key .key }} aria-current="page"{{ end }}>{{ index .labels $.Page.Lang }}</a>
+  {{- end }}
+  <div class="journey-legend" aria-label="{{ $labels.legend }}">
+    <span><i class="human" aria-hidden="true"></i>{{ $labels.human }}</span>
+    <span><i class="automated" aria-hidden="true"></i>{{ $labels.automated }}</span>
+    <span data-audience="maintainer"><i class="maintainer" aria-hidden="true"></i>{{ $labels.maintainer }}</span>
+  </div>
 </aside>

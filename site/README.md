@@ -13,6 +13,8 @@ portable renderer then writes the committed deliverables. Do not edit
 | `layouts/` | Hugo page, partial, shortcode, and `llms.txt` templates |
 | `static/` | Presentation styles, interactions, and bundled local assets |
 | `data/glossary.toml` | Shared glossary and `llms.txt` source |
+| `data/navigation.json` | Bilingual rail labels, grouping, participation colours, and legend copy |
+| `data/similar_tools.json` | Similar-tool comparisons and CI/CD appendix data |
 | `legacy/index.html` | Replaced hand-authored page kept only as a fidelity fixture |
 | `hugo.toml` | Pinned Hugo inputs and output formats |
 
@@ -65,3 +67,8 @@ technical ability:
 Use the existing maintenance selectors in `static/detail-toggle.js` for
 implementation-only blocks. Long setting lists and maintenance appendices use
 the paged in-slide overlay instead of making the presentation itself scroll.
+
+The rail uses yellow for steps that require a human decision, green for work
+the template or CI can complete, and blue for maintainer-only appendices. Edit
+the labels and classifications in `data/navigation.json`; do not duplicate
+them in the Hugo partial.

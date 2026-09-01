@@ -210,6 +210,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     journey_rail = (root / "site/layouts/partials/journey-rail.html").read_text(
         encoding="utf-8"
     )
+    navigation = json.loads(
+        (root / "site/data/navigation.json").read_text(encoding="utf-8")
+    )
     presentation = (root / "site/layouts/home.presentation.html").read_text(
         encoding="utf-8"
     )
@@ -238,13 +241,31 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "statusLabel" not in data["testing"]["labels"]["zh-tw"]
     assert "statusLabel" not in data["testing"]["labels"]["en"]
     assert (
-        'appendix maintainer-bookend{{ if eq .Key "testing" }}' in journey_rail
+        'class="journey-bookend appendix {{ .participation }}' in journey_rail
     )
-    assert journey_rail.index('href="#testing"') < journey_rail.index(
-        'href="#bridge"'
-    )
-    assert journey_rail.count('class="journey-item {{ .tier }}') == 3
-    assert "五月盤點" in journey_rail
+    assert 'class="journey-item {{ .participation }}' in journey_rail
+    assert navigation["appendices"][-2]["key"] == "testing"
+    assert navigation["appendices"][-1]["key"] == "bridge"
+    assert navigation["appendices"][-2]["audience"] == "maintainer"
+    assert navigation["labels"]["zh-tw"]["human"] == "需人判斷"
+    assert navigation["labels"]["zh-tw"]["automated"] == "可自動完成"
+    assert navigation["labels"]["zh-tw"]["maintainer"] == "僅維運可見"
+    workflow_participation = {
+        item["key"]: item["participation"]
+        for item in navigation["items"]
+        if item["group"] == "workflow"
+    }
+    assert workflow_participation == {
+        "method": "human",
+        "agents": "human",
+        "contract": "automated",
+        "languages": "automated",
+        "supply": "human",
+        "pr": "human",
+        "deploy": "human",
+        "governance": "human",
+    }
+    assert 'class="journey-legend"' in journey_rail
     assert "決策附錄" not in journey_rail
     assert 'href="#glossary"' not in journey_rail
     for source in (chinese, english):
@@ -277,10 +298,10 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
             "spec-format",
         ):
             assert f'key="{key}" audience="archive"' in source
-    assert ".journey-bookend.maintainer-bookend.active-selection" in styles
-    assert ".journey-item.priority" in styles
-    assert ".journey-item.best" in styles
-    assert ".journey-bookend.appendix:not(.maintainer-bookend)" in styles
+    assert ".journey-bookend.maintainer.active-selection" in styles
+    assert ".journey-item.human" in styles
+    assert ".journey-item.automated" in styles
+    assert ".journey-legend" in styles
     assert '.detail-level-control button[aria-pressed="true"]' in controls
     assert "background: var(--yellow);" in controls
     assert "overflow-y: auto;" in styles
