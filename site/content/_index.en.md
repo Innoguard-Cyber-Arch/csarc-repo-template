@@ -62,7 +62,7 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 | --- | --- | --- |
 | `.csarc/config.yml` | Template source, languages, branch strategy, and optional capabilities | Template-led |
 | `.github/ISSUE_TEMPLATE/`, `pull_request_template.md` | Work definition and PR contract | Template-led |
-| `.github/workflows/` | Six active flows: Issue triage, Milestone sync, spec sync, PR rules, verification, and scheduled vulnerability scanning | Template-led |
+| `.github/workflows/` | Seven active flows: Issue triage, Milestone sync, spec sync, PR rules, work-Issue closure, verification, and scheduled vulnerability scanning | Template-led |
 | `AGENTS.md`, `README.md`, `CLAUDE.md` | Agent working rules and user entry point | Shared |
 | `policies/`, `CODEOWNERS`, `.github/REVIEWERS` | Desired settings, owners, and reviewers | Shared |
 | `scripts/` | Local verification, work synchronization, and repository settings | Template-led |
@@ -130,14 +130,14 @@ Workflows, policies, scripts, and documents shared by root and `template/` are k
 
 {{< slide key="contract" track="contract" eyebrow="Step 03" title="Verify the change, then let CI rerun the same rules" subtitle="Issue PRs are tiered by change scope; full verification is reserved for high-risk boundaries." legacy="false"  class="candidate-slide" >}}
 - **During development:** run only the focused check that proves the current change, using fresh output before claiming completion.
-- **Issue PR (work branch → dev):** the system selects the appropriate checks from the change; when unsure, it runs full verification.
+- **Work PR (work branch → `dev/m*` or `main`):** the system selects the appropriate checks from the change; when unsure, it runs full verification.
 - **When full verification is needed:** run it before a release, for an urgent fix, or whenever the system cannot safely narrow the test scope.
 - **One implementation:** GitHub Actions has one `verify` job with a 30-minute timeout and only calls repository scripts.
 - **Repository scope:** a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.
 
 Verification logic lives only in scripts and tests. This step restores only `.github/workflows/ci.yml`; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys.
 
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>local and CI execution share scripts and tests; Issue PRs select fast or full by risk, while release and unknown changes run full.</li><li><strong>Adjustable:</strong><code>coverage_mode</code>, <code>coverage_threshold</code>, and <code>enable_precommit</code>; advanced teams may enable <code>use_reusable_workflow</code> with a full commit SHA.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>scripts/verify-fast</code>, <code>scripts/verify</code>, and <code>.github/workflows/ci.yml</code>.</li></ul></aside>
+<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>local and CI execution share scripts and tests; work PRs select fast or full by risk, while release and unknown changes run full.</li><li><strong>Adjustable:</strong><code>coverage_mode</code>, <code>coverage_threshold</code>, and <code>enable_precommit</code>; advanced teams may enable <code>use_reusable_workflow</code> with a full commit SHA.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>scripts/verify-fast</code>, <code>scripts/verify</code>, and <code>.github/workflows/ci.yml</code>.</li></ul></aside>
 {{< /slide >}}
 
 {{< slide key="languages" track="languages" eyebrow="Step 04" title="Choose a language and receive the matching checks" subtitle="Each language owns its tools and tests; shared rules run once." legacy="false" class="candidate-slide" >}}
@@ -156,7 +156,7 @@ Each language is selected independently. Selecting several languages combines th
 {{< slide key="pr" track="pr" eyebrow="Step 06" title="Make completed changes reviewable and deliverable" subtitle="A work PR completes one work item; a release PR then carries the verified batch into main." legacy="false"  class="candidate-slide" >}}
 | PR stage | Destination | What this stage completes |
 | --- | --- | --- |
-| Issue PR | Work branch → `dev/m*` or `main` | Review one change and close its linked Issue after merge |
+| Work PR | Work branch → `dev/m*` or `main` | Review one change and close its linked Issue after merge |
 | Release PR | `dev/m*` or `dev/i*` → `main` | Fully verify and deliver the batch; Version / delivery then closes the Milestone |
 
 {{< disclosure key="pr-version-intent" title="PR titles, branches, and exceptions" >}}
@@ -164,6 +164,7 @@ Each language is selected independently. Selecting several languages combines th
 - PR titles use the Angular / Conventional Commits form `type(scope)!: English summary`: `feat` adds a feature, `fix` corrects behavior, `docs` changes documentation, `refactor` restructures code, `test` changes tests, `build` changes builds or dependencies, `ci` changes automation, `chore` performs maintenance, and `revert` undoes a change. Scope and `!` are optional. Release intent is minor for `feat`, patch for `fix` / `revert`, major for `!`, and no release for the other types.
 - The classification label and Milestone match the linked Issue; the PR author must be an assignee.
 - Milestone work targets `dev/m<Milestone>-*`; ordinary standalone work starts from current `main` and targets `main` directly.
+- After Milestone work merges, an Action rechecks the matching Issue, source revision, destination branch, and Milestone before closing it. Standalone work and hotfixes merged directly to `main` retain GitHub's native closing behavior.
 - Main advances do not fan out synchronization. Each Milestone uses one reviewed `sync/main-to-m*` PR at final promotion; only an owner-recorded dependency permits an earlier sync.
 - A documented standalone canary may use one short-lived `dev/i<Issue>-*`; an explicitly labeled hotfix may target main directly. Rules governance decides who may merge.
 {{< /disclosure >}}
@@ -319,7 +320,7 @@ Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, gene
 {{< similar-tools >}}
 {{< /slide >}}
 
-{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | CI/CD settings" title="CI/CD settings | Checks by Journey" subtitle="Separates the tests and automation that normal repositories and repo-template need for Issue PR (work branch → dev) and Release PR (dev → main)." class="similar-tools-slide testing-slide" legacy="true" >}}
+{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | CI/CD settings" title="CI/CD settings | Checks by Journey" subtitle="Separates the tests and automation that normal repositories and repo-template need for work PRs (work branch → dev/m* or main) and release PRs (dev → main)." class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
 {{< /slide >}}
 

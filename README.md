@@ -70,6 +70,8 @@ Python 目前以 3.14、uv、Ruff、ty、pytest 與 src layout 為基線；CI �
 
 本 repo 採 delivery 模式：`main` 是唯一永久 branch；Milestone 各自使用短命的 `dev/m*`，一般孤立 Issue 從最新 `main` 建立 topic branch 並直接以 PR 回到 `main`。只有文件化的獨立 soak／canary 才使用一次性的 `dev/i<Issue 編號>-<簡稱>` promotion；明確 hotfix 也直接 target `main`。CI 是可攜的 integration test layer，外部測試環境則屬 canary layer。
 
+里程碑工作 PR 合併進 `dev/m*` 後，Action 會重新核對同號 Issue、精確來源 SHA、目的分支與里程碑再關單；一般孤立工作與 Hotfix 直接進 `main`，沿用 GitHub 原生關單。
+
 ```mermaid
 flowchart LR
   A1["Milestone A Issues"] --> MA["dev/m7-delivery"]

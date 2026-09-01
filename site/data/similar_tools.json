@@ -118,7 +118,7 @@
         "purpose": "測試目的",
         "shared": "任何使用本模板的 repo",
         "templateOnly": "repo-template 額外",
-        "milestone": "Issue PR（工作分支 → dev）",
+        "milestone": "工作 PR（工作分支 → dev/m* 或 main）",
         "release": "發版 PR（dev → main）",
         "tests": "測試檔／入口",
         "automation": "CI/CD／GitHub Action",
@@ -131,7 +131,7 @@
         "purpose": "Test purpose",
         "shared": "Every repository using the template",
         "templateOnly": "Additional repo-template checks",
-        "milestone": "Issue PR (work branch → dev)",
+        "milestone": "Work PR (work branch → dev/m* or main)",
         "release": "Release PR (dev → main)",
         "tests": "Test file / entrypoint",
         "automation": "CI/CD / GitHub Action",
@@ -170,7 +170,7 @@
       "rows": [
         {
           "key": "issue",
-          "stage": {"zh-tw": "Issue PR（工作分支 → dev）", "en": "Issue PR (work branch → dev)"},
+          "stage": {"zh-tw": "工作 PR（工作分支 → dev/m* 或 main）", "en": "Work PR (work branch → dev/m* or main)"},
           "shared": {
             "items": [
               {"label": {"zh-tw": "01 工作定義", "en": "01 Work definition"}, "value": {"zh-tw": "fast 已包含：< 1 分鐘", "en": "Included in fast: <1 min"}},
@@ -334,7 +334,7 @@
               "en": {"title": "Decide how much to run", "description": "Developers run focused checks directly. CI selects docs, fast, or full from changed paths and delivery stage, with unknown paths escalating to full."}
             },
             "shared": {
-              "milestone": {"files": [{"path": "scripts/ci_tier.py"}], "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "Issue PR（工作分支 → dev）", "en": "Issue PR (work branch → dev)"}, "timeout": "30 min"}]},
+              "milestone": {"files": [{"path": "scripts/ci_tier.py"}], "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "工作 PR（工作分支 → dev/m* 或 main）", "en": "Work PR (work branch → dev/m* or main)"}, "timeout": "30 min"}]},
               "release": {"files": [{"path": "scripts/ci_tier.py"}], "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "promotion／merge group／hotfix／手動執行", "en": "Promotion, merge group, hotfix, or manual dispatch"}, "timeout": "30 min"}]}
             },
             "templateOnly": {}
@@ -524,8 +524,9 @@
             },
             "shared": {
               "milestone": {
-                "files": [{"path": "tests/test_work_pr_closure.py", "pending": true, "issue": 401}],
-                "automation": [{"path": ".github/workflows/pr-policy.yml", "job": "close-work", "trigger": {"zh-tw": "工作 PR merged／closed", "en": "Work PR merged or closed"}, "timeout": "5 min", "pending": true, "issue": 401}]
+                "files": [{"path": "tests/test_work_pr_closure.py"}, {"path": "scripts/pr_lifecycle.py"}],
+                "automation": [{"path": ".github/workflows/work-item-closure.yml", "job": "close-work", "trigger": {"zh-tw": "里程碑工作 PR 合併進 dev/m*", "en": "Milestone work PR merged into dev/m*"}, "timeout": "5 min"}],
+                "note": {"zh-tw": "直接進 main 的一般工作與 Hotfix 沿用 GitHub 原生關單，不啟動這支 Action。", "en": "Standalone work and hotfixes merged directly to main retain GitHub-native closure and do not start this Action."}
               }
             },
             "templateOnly": {
@@ -728,7 +729,7 @@
       "key": "integrationRoute",
       "title": {"zh-tw": "工作如何分批進 main", "en": "How work is staged into main"},
       "description": {"zh-tw": "比較每張 PR 直接進 main、先進長期整合分支，或以短期堆疊維持相依順序。", "en": "Compares merging every PR directly into main, staging work on a long-lived integration branch, and preserving dependencies in a short-lived stack."},
-      "csarc": {"zh-tw": "Issue PR 先進對應 dev 分支；一批工作完成後，發版 PR 才把已驗證結果送進 main。", "en": "Work PRs first enter their matching dev branch. After a batch is complete, a release PR carries the verified result into main."}
+      "csarc": {"zh-tw": "里程碑工作 PR 先進對應 dev 分支；一般獨立工作直接進 main。一批里程碑工作完成後，發版 PR 才把已驗證結果送進 main。", "en": "Milestone work PRs first enter their matching dev branch, while standalone work goes directly to main. After a Milestone batch is complete, a release PR carries the verified result into main."}
     },
     {
       "key": "mergeReadiness",

@@ -2417,7 +2417,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>Six active flows: Issue triage, Milestone sync, spec sync, PR rules, verification, and scheduled vulnerability scanning</td>
+					<td>Seven active flows: Issue triage, Milestone sync, spec sync, PR rules, work-Issue closure, verification, and scheduled vulnerability scanning</td>
 					<td>Template-led</td>
 			</tr>
 			<tr>
@@ -2721,13 +2721,13 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
   <div class="markdown-body"><ul>
 <li><strong>During development:</strong> run only the focused check that proves the current change, using fresh output before claiming completion.</li>
-<li><strong>Issue PR (work branch → dev):</strong> the system selects the appropriate checks from the change; when unsure, it runs full verification.</li>
+<li><strong>Work PR (work branch → <code>dev/m*</code> or <code>main</code>):</strong> the system selects the appropriate checks from the change; when unsure, it runs full verification.</li>
 <li><strong>When full verification is needed:</strong> run it before a release, for an urgent fix, or whenever the system cannot safely narrow the test scope.</li>
 <li><strong>One implementation:</strong> GitHub Actions has one <code>verify</code> job with a 30-minute timeout and only calls repository scripts.</li>
 <li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
 </ul>
 <p>Verification logic lives only in scripts and tests. This step restores only <code>.github/workflows/ci.yml</code>; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys.</p>
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>local and CI execution share scripts and tests; Issue PRs select fast or full by risk, while release and unknown changes run full.</li><li><strong>Adjustable:</strong><code>coverage_mode</code>, <code>coverage_threshold</code>, and <code>enable_precommit</code>; advanced teams may enable <code>use_reusable_workflow</code> with a full commit SHA.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>scripts/verify-fast</code>, <code>scripts/verify</code>, and <code>.github/workflows/ci.yml</code>.</li></ul></aside></div>
+<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>local and CI execution share scripts and tests; work PRs select fast or full by risk, while release and unknown changes run full.</li><li><strong>Adjustable:</strong><code>coverage_mode</code>, <code>coverage_threshold</code>, and <code>enable_precommit</code>; advanced teams may enable <code>use_reusable_workflow</code> with a full commit SHA.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>scripts/verify-fast</code>, <code>scripts/verify</code>, and <code>.github/workflows/ci.yml</code>.</li></ul></aside></div>
 </section>
 
 <section class="slide markdown-slide candidate-slide" id="languages" data-content-key="languages" data-track="languages" aria-label="Choose a language and receive the matching checks">
@@ -2890,7 +2890,7 @@ html[data-detail-level="simple"] .detail-panel {
 	</thead>
 	<tbody>
 			<tr>
-					<td>Issue PR</td>
+					<td>Work PR</td>
 					<td>Work branch → <code>dev/m*</code> or <code>main</code></td>
 					<td>Review one change and close its linked Issue after merge</td>
 			</tr>
@@ -2908,6 +2908,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li>PR titles use the Angular / Conventional Commits form <code>type(scope)!: English summary</code>: <code>feat</code> adds a feature, <code>fix</code> corrects behavior, <code>docs</code> changes documentation, <code>refactor</code> restructures code, <code>test</code> changes tests, <code>build</code> changes builds or dependencies, <code>ci</code> changes automation, <code>chore</code> performs maintenance, and <code>revert</code> undoes a change. Scope and <code>!</code> are optional. Release intent is minor for <code>feat</code>, patch for <code>fix</code> / <code>revert</code>, major for <code>!</code>, and no release for the other types.</li>
 <li>The classification label and Milestone match the linked Issue; the PR author must be an assignee.</li>
 <li>Milestone work targets <code>dev/m&lt;Milestone&gt;-*</code>; ordinary standalone work starts from current <code>main</code> and targets <code>main</code> directly.</li>
+<li>After Milestone work merges, an Action rechecks the matching Issue, source revision, destination branch, and Milestone before closing it. Standalone work and hotfixes merged directly to <code>main</code> retain GitHub&rsquo;s native closing behavior.</li>
 <li>Main advances do not fan out synchronization. Each Milestone uses one reviewed <code>sync/main-to-m*</code> PR at final promotion; only an owner-recorded dependency permits an earlier sync.</li>
 <li>A documented standalone canary may use one short-lived <code>dev/i&lt;Issue&gt;-*</code>; an explicitly labeled hotfix may target main directly. Rules governance decides who may merge.</li>
 </ul>
@@ -4182,7 +4183,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>How work is staged into main</strong><span>Compares merging every PR directly into main, staging work on a long-lived integration branch, and preserving dependencies in a short-lived stack.<br><br><b>CSARC: </b>Work PRs first enter their matching dev branch. After a batch is complete, a release PR carries the verified result into main.</span></th>
+          <th scope="row"><strong>How work is staged into main</strong><span>Compares merging every PR directly into main, staging work on a long-lived integration branch, and preserving dependencies in a short-lived stack.<br><br><b>CSARC: </b>Milestone work PRs first enter their matching dev branch, while standalone work goes directly to main. After a Milestone batch is complete, a release PR carries the verified result into main.</span></th>
           <td><ul>
           </ul></td>
           <td><ul>
@@ -4332,7 +4333,7 @@ html[data-detail-level="simple"] .detail-panel {
   <header class="basic-header">
     <span class="selection-sequence">Maintenance appendix | CI/CD settings</span>
     <h2>CI/CD settings | Checks by Journey</h2>
-    <p class="subtitle">Separates the tests and automation that normal repositories and repo-template need for Issue PR (work branch → dev) and Release PR (dev → main).</p>
+    <p class="subtitle">Separates the tests and automation that normal repositories and repo-template need for work PRs (work branch → dev/m* or main) and release PRs (dev → main).</p>
   </header>
 
 <div class="legacy-content similar-tools-content testing-content">
@@ -4357,7 +4358,7 @@ html[data-detail-level="simple"] .detail-panel {
         <thead><tr><th scope="col">PR stage</th><th scope="col">Every repository using the template</th><th scope="col">repo-template</th></tr></thead>
         <tbody>
           <tr>
-            <th scope="row"><strong>Issue PR (work branch → dev)</strong></th>
+            <th scope="row"><strong>Work PR (work branch → dev/m* or main)</strong></th>
             <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in fast: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; fast 2–5 min</li><li><strong>04 Programming languages：</strong>Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
             <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in fast: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; source fast about 1 min; policy/template changes about 2 min</li><li><strong>04 Programming languages：</strong>Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–4 min (fast measured at 59–99 sec)</p></td>
           </tr>
@@ -4432,7 +4433,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
+              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
             </li>
             <li>
               <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div>
@@ -4443,7 +4444,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Parallel isolation and safe cleanup</strong><span>Writable tasks use separate branches and worktrees, and cleanup never removes unmerged or modified directories.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
+              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
             </li>
             <li>
               <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div>
@@ -4468,7 +4469,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Decide how much to run</strong><span>Developers run focused checks directly. CI selects docs, fast, or full from changed paths and delivery stage, with unknown paths escalating to full.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR (work branch → dev) · Timeout：30 min</span></li></ul></div>
+              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Work PR (work branch → dev/m* or main) · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
               <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Promotion, merge group, hotfix, or manual dispatch · Timeout：30 min</span></li></ul></div>
@@ -4481,12 +4482,12 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Fast feedback for an Issue PR</strong><span>Run relevant formatting, static checks, ordinary tests, and necessary smoke checks without the full profile, adoption, or update matrix.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
+              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><span>When template, workflow, or shell files change, fast also generates one representative repository for a smoke check.</span>
+              <strong>Work PR (work branch → dev/m* or main)</strong><span>When template, workflow, or shell files change, fast also generates one representative repository for a smoke check.</span>
             </li>
           </ul></td>
         </tr>
@@ -4519,7 +4520,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Configuration matches repository files</strong><span>Languages listed by the template configuration must match the Python, Rust, and TypeScript project files in the repository.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.csarc/config.yml</code></li><li><code>scripts/detect-language-profile</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing code, dependencies, or template settings · Timeout：30 min</span></li></ul></div>
+              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.csarc/config.yml</code></li><li><code>scripts/detect-language-profile</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing code, dependencies, or template settings · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
               <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.csarc/config.yml</code></li><li><code>scripts/detect-language-profile</code></li></ul></div>
@@ -4535,7 +4536,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Each language runs its native checks</strong><span>Python, Rust, and TypeScript each run their own formatting, static checks, tests, and required builds while shared rules run once.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
+              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
             </li>
             <li>
               <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div>
@@ -4563,7 +4564,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Reproduce the locked dependency set</strong><span>Install from the lockfile and reject unrecorded resolution. TypeScript also enforces a three-day observation window and publisher trust policy.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing dependency files · Timeout：30 min</span></li></ul></div>
+              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing dependency files · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
               <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Release PR, merge group, or manual full verification · Timeout：30 min</span></li></ul></div>
@@ -4571,7 +4572,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div><span>A dependency-setting change also generates one representative repository to verify the rendered result.</span>
+              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div><span>A dependency-setting change also generates one representative repository to verify the rendered result.</span>
             </li>
             <li>
               <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Fully tests generated profiles and their lockfile contract.</span>
@@ -4582,7 +4583,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Open routine update PRs</strong><span>Dependabot groups updates by ecosystem and waits three days for ordinary releases without delaying security fixes.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.github/dependabot.yml</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Opens weekly update PRs by ecosystem; generated PRs still use the same CI job.</span></div>
+              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.github/dependabot.yml</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Opens weekly update PRs by ecosystem; generated PRs still use the same CI job.</span></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4595,7 +4596,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Check disclosed vulnerabilities immediately</strong><span>Dependency changes and release candidates share one local OSV entrypoint; a weekly schedule covers periods without PRs.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-dependencies</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing dependency files · Timeout：30 min</span></li></ul></div>
+              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-dependencies</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing dependency files · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
               <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-dependencies</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Release PR, merge group, or manual full verification · Timeout：30 min</span></li><li><code>.github/workflows/osv.yml</code>／<code>scan</code><span>Trigger：Weekly Monday or manual scan · Timeout：10 min</span></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>A thin weekly and manual workflow calls the same entrypoint without duplicating scanning logic.</span></div>
@@ -4630,7 +4631,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>PR metadata and destination</strong><span>Title, Issue, label, Milestone, and destination branch must agree.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR opened or its content, commits, or metadata changes · Timeout：10 min</span></li></ul></div>
+              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR opened or its content, commits, or metadata changes · Timeout：10 min</span></li></ul></div>
             </li>
             <li>
               <strong>Release PR (dev → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div>
@@ -4638,7 +4639,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><span>Uses the same validator; repo-template has no second PR policy.</span>
+              <strong>Work PR (work branch → dev/m* or main)</strong><span>Uses the same validator; repo-template has no second PR policy.</span>
             </li>
           </ul></td>
         </tr>
@@ -4646,7 +4647,7 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Candidate contains the current base</strong><span>A work PR must trace through its dev chain to main; a sync PR may carry only the exact main update back to its target dev branch.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_delivery_sync.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：Every work-PR and sync-PR update · Timeout：10 min</span></li></ul></div>
+              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_delivery_sync.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：Every work-PR and sync-PR update · Timeout：10 min</span></li></ul></div>
             </li>
             <li>
               <strong>Release PR (dev → main)</strong><span>Release-PR creation and cross-branch synchronization after main advances remain manual PRs; their workflows are still archived.</span>
@@ -4659,12 +4660,12 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>Close the Issue after its work PR merges</strong><span>Close the matching Issue only after its work PR enters the correct dev branch. The release PR does not close it again.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_pr_closure.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/401" target="_blank" rel="noreferrer">Pending #401</a></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>close-work</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/401" target="_blank" rel="noreferrer">Pending #401</a><span>Trigger：Work PR merged or closed · Timeout：5 min</span></li></ul></div>
+              <strong>Work PR (work branch → dev/m* or main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_work_pr_closure.py</code></li><li><code>scripts/pr_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/work-item-closure.yml</code>／<code>close-work</code><span>Trigger：Milestone work PR merged into dev/m* · Timeout：5 min</span></li></ul></div><span>Standalone work and hotfixes merged directly to main retain GitHub-native closure and do not start this Action.</span>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Issue PR (work branch → dev)</strong><span>Uses the same closure program; repo-template has no second rule.</span>
+              <strong>Work PR (work branch → dev/m* or main)</strong><span>Uses the same closure program; repo-template has no second rule.</span>
             </li>
           </ul></td>
         </tr>

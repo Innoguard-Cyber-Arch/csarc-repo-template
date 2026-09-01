@@ -154,8 +154,9 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         "osv.yml",
         "pr-policy.yml",
         "spec-to-issue.yml",
+        "work-item-closure.yml",
     }
-    assert "6 條現行自動流程" in file_map
+    assert "7 條現行自動流程" in file_map
     for workflow in workflows:
         assert workflow in file_map
     for inactive in ("release-please.yml", "release.yml"):
@@ -535,8 +536,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
             "path": ".github/workflows/ci.yml",
             "job": "verify",
             "trigger": {
-                "zh-tw": "Issue PR\uff08工作分支 → dev\uff09",
-                "en": "Issue PR (work branch → dev)",
+                "zh-tw": "工作 PR\uff08工作分支 → dev/m* 或 main\uff09",
+                "en": "Work PR (work branch → dev/m* or main)",
             },
             "timeout": "30 min",
         }
@@ -553,8 +554,21 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         merge_rows[0]["shared"]["milestone"]["automation"][0]["path"]
         == ".github/workflows/pr-policy.yml"
     )
-    assert merge_rows[2]["shared"]["milestone"]["automation"][0]["pending"]
-    assert merge_rows[2]["shared"]["milestone"]["automation"][0]["issue"] == 401
+    assert merge_rows[2]["shared"]["milestone"]["files"] == [
+        {"path": "tests/test_work_pr_closure.py"},
+        {"path": "scripts/pr_lifecycle.py"},
+    ]
+    assert merge_rows[2]["shared"]["milestone"]["automation"] == [
+        {
+            "path": ".github/workflows/work-item-closure.yml",
+            "job": "close-work",
+            "trigger": {
+                "zh-tw": "里程碑工作 PR 合併進 dev/m*",
+                "en": "Milestone work PR merged into dev/m*",
+            },
+            "timeout": "5 min",
+        }
+    ]
     assert data["testing"]["labels"]["zh-tw"]["release"] == (
         "發版 PR\uff08dev → main\uff09"
     )

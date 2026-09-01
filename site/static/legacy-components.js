@@ -297,9 +297,9 @@ python scripts/spec_to_issue.py validate`
       pr: [
         {
           title: '固定基線｜PR 格式與工作關聯',
-          goal: '一張工作 PR 完成一張 Issue，合併後由 GitHub 關閉同一項工作。',
+          goal: '一張工作 PR 完成一張 Issue；里程碑工作由 Action 核對後關單，直接進 main 則沿用 GitHub 原生關單。',
           summary: '標題與目的分支符合規則；分類 Label 與里程碑必須和 Issue 相同，PR 作者必須列為 Assignee，內文使用 Closes #N 連回同號未結案 Issue。',
-          file: 'pull_request_template.md＋.github/workflows/pr-policy.yml＋scripts/validate-pr-policy',
+          file: 'pull_request_template.md＋.github/workflows/pr-policy.yml＋.github/workflows/work-item-closure.yml＋scripts/pr_lifecycle.py',
           code: `title: feat(scope): English summary
 branch: feat/123-short-slug
 body: Closes #123
@@ -309,7 +309,7 @@ milestone: same as Issue #123`
         },
         {
           title: '可調整｜工作 PR 的分支模型',
-          goal: '工作先進 dev，完整批次再進 main；main 更新後以 PR 同步，不直接改寫開發分支。',
+          goal: '里程碑工作先進 dev/m*，一般獨立工作直接進 main；main 更新後以 PR 同步，不直接改寫開發分支。',
           summary: '`branch_strategy` 可選 delivery 或 main；validator 依所選模型檢查目的分支與同步鏈。',
           file: 'copier.yml＋.csarc/config.yml＋scripts/delivery_sync.py',
           code: `branch_strategy: delivery  # delivery | main
