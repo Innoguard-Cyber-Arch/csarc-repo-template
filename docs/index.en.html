@@ -2449,7 +2449,7 @@ html[data-detail-level="simple"] .detail-panel {
 </table>
 <aside class="technical-detail" data-content-key="files-update">
   <h3>How updates protect product content</h3>
-  <p>Copier carries updates into a short branch and leaves conflicts in the PR for human review. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.</p>
+  <p>Copier attempts updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged; adjust them, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.</p>
 <p>Workflows, policies, scripts, and documents shared by root and <code>template/</code> are kept in sync. Files that differ because of project choices are verified by generating a real project. Version and publishing configuration remains present, but its GitHub Actions are not enabled yet.</p>
 </aside>
 </div>
@@ -3313,7 +3313,7 @@ html[data-detail-level="simple"] .detail-panel {
 </ul>
 <details class="package-disclosure" data-content-key="copier-update">
   <summary><span class="tech-name">Copier &#43; root dogfood &#43; create/update regression</span></summary>
-  <div class="package-health"><a href="https://github.com/copier-org/copier">Copier</a> records source, language, and answers, then reapplies newer template revisions to an editable repository. Conflicts remain in a short branch and PR for human review. GitHub Template copies only once, while PyScaffold would create a second update mechanism, so neither fits this requirement.</div>
+  <div class="package-health"><a href="https://github.com/copier-org/copier">Copier</a> records source, language, and answers, then reapplies newer template revisions to an editable repository. Conflicts leave the repository unchanged; a person adjusts the affected files, reruns the update, and reviews the PR. GitHub Template copies only once, while PyScaffold would create a second update mechanism, so neither fits this requirement.</div>
 </details>
 <aside class="technical-detail" data-content-key="template-release-scope">
   <h3>Single source, runtime baselines, and the root-only boundary</h3>
