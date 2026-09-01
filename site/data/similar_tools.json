@@ -375,8 +375,8 @@
         "rows": [
           {
             "purpose": {
-              "zh-tw": {"title": "設定與實際檔案一致", "description": "公版設定列出的語言必須和 repo 內的 Python、TypeScript、Rust 專案檔一致。"},
-              "en": {"title": "Configuration matches repository files", "description": "Languages listed by the template configuration must match the Python, TypeScript, and Rust project files in the repository."}
+              "zh-tw": {"title": "設定與實際檔案一致", "description": "公版設定列出的語言必須和 repo 內的 Python、Rust、TypeScript 專案檔一致。"},
+              "en": {"title": "Configuration matches repository files", "description": "Languages listed by the template configuration must match the Python, Rust, and TypeScript project files in the repository."}
             },
             "shared": {
               "milestone": {"files": [{"path": ".csarc/config.yml"}, {"path": "scripts/detect-language-profile"}], "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "修改程式、套件或公版設定的 Issue PR", "en": "Issue PR changing code, dependencies, or template settings"}, "timeout": "30 min"}]},
@@ -388,8 +388,8 @@
           },
           {
             "purpose": {
-              "zh-tw": {"title": "各語言使用自己的檢查", "description": "Python、TypeScript、Rust 各自執行格式、靜態檢查、測試與必要的建置；共通規則只跑一次。"},
-              "en": {"title": "Each language runs its native checks", "description": "Python, TypeScript, and Rust each run their own formatting, static checks, tests, and required builds while shared rules run once."}
+              "zh-tw": {"title": "各語言使用自己的檢查", "description": "Python、Rust、TypeScript 各自執行格式、靜態檢查、測試與必要的建置；共通規則只跑一次。"},
+              "en": {"title": "Each language runs its native checks", "description": "Python, Rust, and TypeScript each run their own formatting, static checks, tests, and required builds while shared rules run once."}
             },
             "shared": {
               "milestone": {"files": [{"path": "scripts/verify-fast"}]},
@@ -668,19 +668,19 @@
       "key": "generatedProjectVerification",
       "title": {"zh-tw": "模板產物由誰驗證", "en": "Who verifies generated projects"},
       "description": {"zh-tw": "比較只測產生器、測輸出快照，或真的建立／導入／更新候選 repo 再執行驗證。", "en": "Compares testing only the generator, snapshotting output, and creating, adopting, or updating candidate repositories before running their checks."},
-      "csarc": {"zh-tw": "一般 repo 只測自己的產品；repo-template 的 full 入口執行完整 pytest，實際涵蓋 Python／TypeScript／Rust 的生成與既有 repo 導入，不維護整棵輸出的 snapshot。", "en": "A normal repository tests only its product. The repo-template full entrypoint runs the complete pytest suite, covering Python, TypeScript, and Rust generation plus existing-repository adoption without maintaining whole-tree snapshots."}
+      "csarc": {"zh-tw": "一般 repo 只測自己的產品；repo-template 的 full 入口執行完整 pytest，實際涵蓋 Python／Rust／TypeScript 的生成與既有 repo 導入，不維護整棵輸出的 snapshot。", "en": "A normal repository tests only its product. The repo-template full entrypoint runs the complete pytest suite, covering Python, Rust, and TypeScript generation plus existing-repository adoption without maintaining whole-tree snapshots."}
     },
     {
       "key": "languageSelection",
       "title": {"zh-tw": "建立時如何選擇程式語言", "en": "How languages are selected at creation"},
       "description": {"zh-tw": "比較固定專案類型、可複選語言模組，以及完全交由使用者事後設定。", "en": "Compares fixed project types, independently selectable language modules, and leaving all setup to users after creation."},
-      "csarc": {"zh-tw": "建立或導入時可獨立選擇 Python、TypeScript、Rust；沒有選取的語言不產生相關檔案或 CI 步驟。", "en": "Creation and adoption select Python, TypeScript, and Rust independently. Unselected languages produce neither files nor CI steps."}
+      "csarc": {"zh-tw": "建立或導入時可獨立選擇 Python、Rust、TypeScript；沒有選取的語言不產生相關檔案或 CI 步驟。", "en": "Creation and adoption select Python, Rust, and TypeScript independently. Unselected languages produce neither files nor CI steps."}
     },
     {
       "key": "nativeLanguageChecks",
       "title": {"zh-tw": "各語言具體檢查什麼", "en": "What each language actually checks"},
       "description": {"zh-tw": "比較共用抽象工具與各生態圈原生的格式、型別、測試、建置及打包工具。", "en": "Compares one abstract tool with each ecosystem's native formatting, type, test, build, and packaging tools."},
-      "csarc": {"zh-tw": "Python 使用 uv、Ruff、ty、pytest 與 wheel；TypeScript 使用 Biome、TypeScript、Vitest 與 npm package；Rust 使用 rustfmt、Clippy、cargo test、release build 與 Cargo package。", "en": "Python uses uv, Ruff, ty, pytest, and wheel; TypeScript uses Biome, TypeScript, Vitest, and npm package; Rust uses rustfmt, Clippy, cargo test, release builds, and Cargo package."}
+      "csarc": {"zh-tw": "Python 使用 uv、Ruff、ty、pytest 與 wheel；Rust 使用 rustfmt、Clippy、cargo test、release build 與 Cargo package；TypeScript 使用 Biome、TypeScript、Vitest 與 npm package。", "en": "Python uses uv, Ruff, ty, pytest, and wheel; Rust uses rustfmt, Clippy, cargo test, release builds, and Cargo package; TypeScript uses Biome, TypeScript, Vitest, and npm package."}
     },
     {
       "key": "composableLanguageModules",
@@ -704,7 +704,7 @@
       "key": "lockedDependencyResolution",
       "title": {"zh-tw": "安裝時如何固定套件", "en": "How installs pin the package set"},
       "description": {"zh-tw": "比較最新版、lockfile 與 resolver 限制。", "en": "Compares latest versions, lockfiles, and resolver policies."},
-      "csarc": {"zh-tw": "Python、TypeScript、Rust 都依 lockfile 安裝；pnpm 另拒絕未滿三天或 publisher trust 降級的版本。本機與 CI 都執行。", "en": "Python, TypeScript, and Rust install from lockfiles. pnpm also rejects releases younger than three days or publisher-trust downgrades. Local and CI runs both enforce it."}
+      "csarc": {"zh-tw": "Python、Rust、TypeScript 都依 lockfile 安裝；pnpm 另拒絕未滿三天或 publisher trust 降級的版本。本機與 CI 都執行。", "en": "Python, Rust, and TypeScript install from lockfiles. pnpm also rejects releases younger than three days or publisher-trust downgrades. Local and CI runs both enforce it."}
     },
     {
       "key": "knownVulnerabilityDetection",

@@ -2185,7 +2185,7 @@ html[data-detail-level="simple"] .detail-panel {
 	<tbody>
 			<tr>
 					<td>Programming languages</td>
-					<td>Select Python, TypeScript, and Rust independently; select none for the shared workflow only</td>
+					<td>Select Python, Rust, and TypeScript independently; select none for the shared workflow only</td>
 			</tr>
 			<tr>
 					<td>Branch approach</td>
@@ -2207,7 +2207,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>New repository:</strong> choose a project type and branch approach; split only larger outcomes into independently verifiable sub-items.</li>
 <li><strong>Existing repository:</strong> the template detects current languages and creates <code>.csarc/config.yml</code>, then previews the adoption diff while preserving product content.</li>
 <li><strong>Repository already using the template:</strong> change options or upgrade through <code>csarc update</code>; the template updates the configuration and managed files together.</li>
-<li><strong>Prerequisites:</strong> Git, GitHub CLI, and uv; TypeScript needs Node 24+ and pnpm 11, while Rust needs rustup. Local verification needs no token.</li>
+<li><strong>Prerequisites:</strong> Git, GitHub CLI, and uv; Rust needs rustup, while TypeScript needs Node 24+ and pnpm 11. Local verification needs no token.</li>
 </ul>
 <p>The template promises only capabilities that are implemented and tested. Go, generic deployment, monitoring, AI knowledge retrieval, and hosted documentation remain future or optional work.</p>
 </aside>
@@ -2795,10 +2795,11 @@ html[data-detail-level="simple"] .detail-panel {
 <ul>
 <li><strong>Every project:</strong> checks work rules, documentation, secrets, and dependency safety.</li>
 <li><strong>Python:</strong> checks formatting, types, tests, and the installable package.</li>
-<li><strong>TypeScript:</strong> checks formatting, types, tests, and the installable package.</li>
 <li><strong>Rust:</strong> checks formatting, common mistakes, tests, the release build, and the installable package.</li>
+<li><strong>TypeScript:</strong> checks formatting, types, tests, and the installable package.</li>
 </ul>
 <p>Each language is selected independently. Selecting several languages combines their modules while each shared check still runs once; the documentation does not enumerate combinations.</p>
+<aside class="config-guidance"><strong>Template configuration and customization</strong><ul><li><strong>One template configuration:</strong><code>.csarc/config.yml</code> stores selected languages, Python support, coverage threshold, pre-commit, and other common choices. Change them through <code>csarc update --data</code>; the template updates the native files.</li><li><strong>Advanced settings:</strong>tool-specific options stay in native configuration instead of being duplicated into the template schema.</li><li><strong>Python:</strong><code>uv</code> installs from <code>uv.lock</code>; <code>Ruff</code> formats and lints (currently 80 columns and Google docstrings); <code>ty</code> checks types; <code>pytest</code> runs tests; <code>coverage.py</code> applies the configured threshold; Hatch verifies the wheel. These settings live in <code>pyproject.toml</code>.</li><li><strong>Rust:</strong><code>rustfmt</code> checks formatting; <code>Clippy</code> treats lint warnings as failures; <code>Cargo</code> installs from <code>Cargo.lock</code>, tests, builds a release, and verifies the package. Settings live in <code>rust-toolchain.toml</code> and <code>Cargo.toml</code>.</li><li><strong>TypeScript:</strong><code>pnpm</code> installs from <code>pnpm-lock.yaml</code>; <code>Biome</code> formats and lints; TypeScript checks types and builds; <code>Vitest</code> tests and measures coverage; <code>npm pack</code> verifies the package. Settings live in <code>package.json</code>, <code>biome.json</code>, and <code>tsconfig.json</code>.</li></ul></aside>
 </div>
 </section>
 
@@ -3302,7 +3303,7 @@ html[data-detail-level="simple"] .detail-panel {
   <div class="markdown-body"><ul>
 <li><code>template/</code> is the delivered source; root retains the template repository&rsquo;s own GitHub governance and dogfood configuration.</li>
 <li><code>.csarc/config.yml</code> is both Copier&rsquo;s update record and the repository&rsquo;s only template configuration. Languages, branch strategy, and optional capabilities read from it; later extensions add settings here instead of creating another configuration file.</li>
-<li>The shared baseline and the Python, TypeScript, and Rust modules are verified independently. Selecting several languages combines modules without creating a combination-specific workflow.</li>
+<li>The shared baseline and the Python, Rust, and TypeScript modules are verified independently. Selecting several languages combines modules without creating a combination-specific workflow.</li>
 <li>An existing repository is adopted and then updated from the next Copier revision, proving product content is preserved.</li>
 </ul>
 <details class="package-disclosure" data-content-key="copier-update">
@@ -3482,7 +3483,7 @@ html[data-detail-level="simple"] .detail-panel {
 	<tbody>
 			<tr>
 					<td>Baseline capability</td>
-					<td>The shared baseline and Python, TypeScript, and Rust modules, plus Issues/specs, PR/CI, local verification, lockfile policy, and the repository site have executable implementations</td>
+					<td>The shared baseline and Python, Rust, and TypeScript modules, plus Issues/specs, PR/CI, local verification, lockfile policy, and the repository site have executable implementations</td>
 			</tr>
 			<tr>
 					<td>Verified online</td>
@@ -3490,7 +3491,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>Verified language modules</td>
-					<td>Python, TypeScript, and Rust each pass create, existing-repository adoption, update, lockfile, test, build, and package checks</td>
+					<td>Python, Rust, and TypeScript each pass create, existing-repository adoption, update, lockfile, test, build, and package checks</td>
 			</tr>
 			<tr>
 					<td>Future/optional</td>
@@ -4045,7 +4046,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Who verifies generated projects</strong><span>Compares testing only the generator, snapshotting output, and creating, adopting, or updating candidate repositories before running their checks.<br><br><b>CSARC: </b>A normal repository tests only its product. The repo-template full entrypoint runs the complete pytest suite, covering Python, TypeScript, and Rust generation plus existing-repository adoption without maintaining whole-tree snapshots.</span></th>
+          <th scope="row"><strong>Who verifies generated projects</strong><span>Compares testing only the generator, snapshotting output, and creating, adopting, or updating candidate repositories before running their checks.<br><br><b>CSARC: </b>A normal repository tests only its product. The repo-template full entrypoint runs the complete pytest suite, covering Python, Rust, and TypeScript generation plus existing-repository adoption without maintaining whole-tree snapshots.</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/custom/testing/" target="_blank" rel="noreferrer">Testing.synth</a>：Tests synthesize a project and inspect generated files; the guide also warns that whole-tree snapshots are unwieldy and should be narrowed to meaningful output.</span></li>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/tests/README.md" target="_blank" rel="noreferrer">Test Suite Map</a>：Installer, workflow, documentation, and release tests are mapped to observable invariants; removed historical capabilities no longer stay in the current pre-merge suite.</span></li>
@@ -4064,7 +4065,7 @@ html[data-detail-level="simple"] .detail-panel {
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
       <tbody>
         <tr>
-          <th scope="row"><strong>How languages are selected at creation</strong><span>Compares fixed project types, independently selectable language modules, and leaving all setup to users after creation.<br><br><b>CSARC: </b>Creation and adoption select Python, TypeScript, and Rust independently. Unselected languages produce neither files nor CI steps.</span></th>
+          <th scope="row"><strong>How languages are selected at creation</strong><span>Compares fixed project types, independently selectable language modules, and leaving all setup to users after creation.<br><br><b>CSARC: </b>Creation and adoption select Python, Rust, and TypeScript independently. Unselected languages produce neither files nor CI steps.</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Project types &#43; components</a>：A language or framework project type establishes the base and components add capabilities; unlike CSARC, it does not compose one repository from independent language selections.</span></li>
               <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/input-examples" target="_blank" rel="noreferrer">Template parameters &#43; conditional steps</a>：Component creation can ask for a language or framework and run conditional steps, which suits a portal; existing repositories still need a separate update mechanism.</span></li>
@@ -4074,7 +4075,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>What each language actually checks</strong><span>Compares one abstract tool with each ecosystem&#39;s native formatting, type, test, build, and packaging tools.<br><br><b>CSARC: </b>Python uses uv, Ruff, ty, pytest, and wheel; TypeScript uses Biome, TypeScript, Vitest, and npm package; Rust uses rustfmt, Clippy, cargo test, release builds, and Cargo package.</span></th>
+          <th scope="row"><strong>What each language actually checks</strong><span>Compares one abstract tool with each ecosystem&#39;s native formatting, type, test, build, and packaging tools.<br><br><b>CSARC: </b>Python uses uv, Ruff, ty, pytest, and wheel; Rust uses rustfmt, Clippy, cargo test, release builds, and Cargo package; TypeScript uses Biome, TypeScript, Vitest, and npm package.</span></th>
           <td><ul>
           </ul></td>
           <td><ul>
@@ -4124,7 +4125,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>How installs pin the package set</strong><span>Compares latest versions, lockfiles, and resolver policies.<br><br><b>CSARC: </b>Python, TypeScript, and Rust install from lockfiles. pnpm also rejects releases younger than three days or publisher-trust downgrades. Local and CI runs both enforce it.</span></th>
+          <th scope="row"><strong>How installs pin the package set</strong><span>Compares latest versions, lockfiles, and resolver policies.<br><br><b>CSARC: </b>Python, Rust, and TypeScript install from lockfiles. pnpm also rejects releases younger than three days or publisher-trust downgrades. Local and CI runs both enforce it.</span></th>
           <td><ul>
           </ul></td>
           <td><ul>
@@ -4504,7 +4505,7 @@ html[data-detail-level="simple"] .detail-panel {
       <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
       <tbody>
         <tr>
-          <th scope="row"><strong>Configuration matches repository files</strong><span>Languages listed by the template configuration must match the Python, TypeScript, and Rust project files in the repository.</span></th>
+          <th scope="row"><strong>Configuration matches repository files</strong><span>Languages listed by the template configuration must match the Python, Rust, and TypeScript project files in the repository.</span></th>
           <td><ul class="testing-stage-list">
             <li>
               <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>.csarc/config.yml</code></li><li><code>scripts/detect-language-profile</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Issue PR changing code, dependencies, or template settings · Timeout：30 min</span></li></ul></div>
@@ -4520,7 +4521,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Each language runs its native checks</strong><span>Python, TypeScript, and Rust each run their own formatting, static checks, tests, and required builds while shared rules run once.</span></th>
+          <th scope="row"><strong>Each language runs its native checks</strong><span>Python, Rust, and TypeScript each run their own formatting, static checks, tests, and required builds while shared rules run once.</span></th>
           <td><ul class="testing-stage-list">
             <li>
               <strong>Issue PR (work branch → dev)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div>
@@ -4896,7 +4897,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>Language quality</td>
-					<td>Python uses src layout, uv, Ruff, ty, and pytest; TypeScript uses Node 24, pnpm 11, Biome, and Vitest</td>
+					<td>Python uses src layout, uv, Ruff, ty, and pytest; Rust uses rustfmt, Clippy, and Cargo; TypeScript uses Node 24, pnpm 11, Biome, and Vitest</td>
 			</tr>
 			<tr>
 					<td>CI and versioning</td>

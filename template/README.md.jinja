@@ -85,8 +85,8 @@ flowchart LR
 | --- | --- |
 | 共用 | `.github/`、`policies/`、`docs/adr/`、`docs/specs/`、`scripts/verify` |
 {% if has_python %}| Python | `src/`、`tests/`、uv、Ruff、ty、pytest；CI 驗證 {% if python_support_mode == "latest" %}3.14.0 與最新 3.14.x{% else %}{{ python_min_version }}.0，以及 {{ python_min_version }}～3.14 每個 feature release 的最新 patch{% endif %} |
-{% endif %}{% if has_typescript %}| TypeScript | `typescript/`、pnpm 11、Biome、strict TypeScript、Vitest；Node 24+ |
 {% endif %}{% if has_rust %}| Rust | `src/`、Cargo、rustfmt、Clippy、內建測試；Rust 1.98 |
+{% endif %}{% if has_typescript %}| TypeScript | `typescript/`、pnpm 11、Biome、strict TypeScript、Vitest；Node 24+ |
 {% endif %}{% if has_container %}| 容器 | `{{ containerfile_path }}`、Buildx cache、smoke test 與 Trivy；build context 固定為 repo root |
 {% endif %}| 內部網站 | `site/` 公版來源；`docs/site-content.js` 與 `docs/site-theme.css` 專案內容；`docs/index.html` portable bundle |
 
@@ -125,7 +125,7 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 `./scripts/verify-template.sh`、root 專用升版／同步工具與 template release workflows 只屬於中央模板 repo，不會下發到本專案；本專案的本機與 CI 驗證入口都是 `./scripts/verify`。
 
 {% if not languages %}目前驗證 spec、README、JSON、workflow 與機密字串；沒有語言模組，因此不執行語言測試或打包。
-{% else %}目前驗證包含{% if has_python %} Ruff、ty、pytest、{{ coverage_threshold }}% coverage、wheel 與相依下界{% endif %}{% if has_python and (has_typescript or has_rust) %}，以及{% endif %}{% if has_typescript %} Biome、TypeScript、Vitest {{ coverage_threshold }}% coverage 與 npm tarball{% endif %}{% if has_typescript and has_rust %}，以及{% endif %}{% if has_rust %} rustfmt、Clippy、測試、release build 與 Cargo package{% endif %}，最後再檢查 spec、機密字串與 lockfile。
+{% else %}目前驗證包含{% if has_python %} Ruff、ty、pytest、{{ coverage_threshold }}% coverage、wheel 與相依下界{% endif %}{% if has_python and (has_rust or has_typescript) %}，以及{% endif %}{% if has_rust %} rustfmt、Clippy、測試、release build 與 Cargo package{% endif %}{% if has_rust and has_typescript %}，以及{% endif %}{% if has_typescript %} Biome、TypeScript、Vitest {{ coverage_threshold }}% coverage 與 npm tarball{% endif %}，最後再檢查 spec、機密字串與 lockfile。
 
 {% if has_python or has_typescript %}
 Coverage 是找出未測程式碼的訊號，不等於測試品質，也不取代風險分析與人工 review。新案以 global coverage 建立基線；既有案先用 diff coverage 約束本次變更。只有缺陷紀錄、關鍵模組或風險改變時才調整 {{ coverage_threshold }}% 門檻，不要只為提高百分比加入沒有驗證行為的測試。

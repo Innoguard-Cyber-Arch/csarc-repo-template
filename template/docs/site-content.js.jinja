@@ -13,10 +13,10 @@ window.CSARC_SITE_CONTENT = {
     prerequisites: [
       "Git",
       "GitHub CLI",
-      "uv"{% if "typescript" in languages %},
+      "uv"{% if "rust" in languages %},
+      "Rust 1.98"{% endif %}{% if "typescript" in languages %},
       "Node 24+",
-      "pnpm 11"{% endif %}{% if "rust" in languages %},
-      "Rust 1.98"{% endif %}
+      "pnpm 11"{% endif %}
     ],
     commands: [
       "git clone {{ repository_url }}",
@@ -31,10 +31,10 @@ window.CSARC_SITE_CONTENT = {
     { path: "docs/specs/", purpose: "Spec-Driven Development（SDD）的 living specifications", owner: "專案維護" },
 {% if "python" in languages %}
     { path: "src/＋tests/", purpose: "Python 產品與測試", owner: "專案維護" },
-{% endif %}{% if "typescript" in languages %}
-    { path: "typescript/", purpose: "TypeScript 產品與測試", owner: "專案維護" },
 {% endif %}{% if "rust" in languages %}
     { path: "src/＋Cargo.toml", purpose: "Rust 產品、相依與測試", owner: "專案維護" },
+{% endif %}{% if "typescript" in languages %}
+    { path: "typescript/", purpose: "TypeScript 產品與測試", owner: "專案維護" },
 {% endif %}{% if has_container %}
     { path: {{ containerfile_path | tojson }}, purpose: "產品容器建置、啟動與漏洞掃描", owner: "專案維護" },
 {% endif %}

@@ -21,7 +21,7 @@ Standard mode is for general AI-assisted or vibe-coding developers; it does not 
 
 | Choice | Production capability available today |
 | --- | --- |
-| Programming languages | Select Python, TypeScript, and Rust independently; select none for the shared workflow only |
+| Programming languages | Select Python, Rust, and TypeScript independently; select none for the shared workflow only |
 | Branch approach | One development branch per delivery batch, all changes directly into `main`, or one shared `dev` branch |
 | Template settings | Creation or adoption writes choices to `.csarc/config.yml`; template updates maintain this single repository configuration |
 | Shared capability | Work-item (Issue) and change-proposal (PR) forms, AI working rules, automated checks, dependency safety, version records, and template updates |
@@ -30,7 +30,7 @@ Standard mode is for general AI-assisted or vibe-coding developers; it does not 
 - **New repository:** choose a project type and branch approach; split only larger outcomes into independently verifiable sub-items.
 - **Existing repository:** the template detects current languages and creates `.csarc/config.yml`, then previews the adoption diff while preserving product content.
 - **Repository already using the template:** change options or upgrade through `csarc update`; the template updates the configuration and managed files together.
-- **Prerequisites:** Git, GitHub CLI, and uv; TypeScript needs Node 24+ and pnpm 11, while Rust needs rustup. Local verification needs no token.
+- **Prerequisites:** Git, GitHub CLI, and uv; Rust needs rustup, while TypeScript needs Node 24+ and pnpm 11. Local verification needs no token.
 
 The template promises only capabilities that are implemented and tested. Go, generic deployment, monitoring, AI knowledge retrieval, and hosted documentation remain future or optional work.
 {{< /detail >}}
@@ -135,10 +135,12 @@ Choose a project language and the template prepares the matching checks:
 
 - **Every project:** checks work rules, documentation, secrets, and dependency safety.
 - **Python:** checks formatting, types, tests, and the installable package.
-- **TypeScript:** checks formatting, types, tests, and the installable package.
 - **Rust:** checks formatting, common mistakes, tests, the release build, and the installable package.
+- **TypeScript:** checks formatting, types, tests, and the installable package.
 
 Each language is selected independently. Selecting several languages combines their modules while each shared check still runs once; the documentation does not enumerate combinations.
+
+<aside class="config-guidance"><strong>Template configuration and customization</strong><ul><li><strong>One template configuration:</strong><code>.csarc/config.yml</code> stores selected languages, Python support, coverage threshold, pre-commit, and other common choices. Change them through <code>csarc update --data</code>; the template updates the native files.</li><li><strong>Advanced settings:</strong>tool-specific options stay in native configuration instead of being duplicated into the template schema.</li><li><strong>Python:</strong><code>uv</code> installs from <code>uv.lock</code>; <code>Ruff</code> formats and lints (currently 80 columns and Google docstrings); <code>ty</code> checks types; <code>pytest</code> runs tests; <code>coverage.py</code> applies the configured threshold; Hatch verifies the wheel. These settings live in <code>pyproject.toml</code>.</li><li><strong>Rust:</strong><code>rustfmt</code> checks formatting; <code>Clippy</code> treats lint warnings as failures; <code>Cargo</code> installs from <code>Cargo.lock</code>, tests, builds a release, and verifies the package. Settings live in <code>rust-toolchain.toml</code> and <code>Cargo.toml</code>.</li><li><strong>TypeScript:</strong><code>pnpm</code> installs from <code>pnpm-lock.yaml</code>; <code>Biome</code> formats and lints; TypeScript checks types and builds; <code>Vitest</code> tests and measures coverage; <code>npm pack</code> verifies the package. Settings live in <code>package.json</code>, <code>biome.json</code>, and <code>tsconfig.json</code>.</li></ul></aside>
 {{< /slide >}}
 
 {{< slide key="pr" track="pr" eyebrow="Step 06" title="Make completed changes reviewable and deliverable" subtitle="A work PR completes one work item; a release PR then carries the verified batch into main." legacy="false"  class="candidate-slide" >}}
@@ -211,7 +213,7 @@ Each check is a snapshot. A setting changed and restored between runs still requ
 {{< slide key="template-release" track="template-release" eyebrow="Step 09" title="Copier keeps repositories aligned, and the template dogfoods its rules" subtitle="A template defect affects many projects, so creation, adoption, and update all run as real tests." legacy="false"  class="candidate-slide" >}}
 - `template/` is the delivered source; root retains the template repository's own GitHub governance and dogfood configuration.
 - `.csarc/config.yml` is both Copier's update record and the repository's only template configuration. Languages, branch strategy, and optional capabilities read from it; later extensions add settings here instead of creating another configuration file.
-- The shared baseline and the Python, TypeScript, and Rust modules are verified independently. Selecting several languages combines modules without creating a combination-specific workflow.
+- The shared baseline and the Python, Rust, and TypeScript modules are verified independently. Selecting several languages combines modules without creating a combination-specific workflow.
 - An existing repository is adopted and then updated from the next Copier revision, proving product content is preserved.
 
 {{< disclosure key="copier-update" title="Copier + root dogfood + create/update regression" >}}
@@ -246,9 +248,9 @@ Each check is a snapshot. A setting changed and restored between runs still requ
 {{< slide key="rollout" track="rollout" eyebrow="Step 11" title="Adopt in stages, with a stop after every step" subtitle="Maturity follows operational evidence, not a date or the mere presence of files." legacy="false"  class="candidate-slide" >}}
 | Level | Current state |
 | --- | --- |
-| Baseline capability | The shared baseline and Python, TypeScript, and Rust modules, plus Issues/specs, PR/CI, local verification, lockfile policy, and the repository site have executable implementations |
+| Baseline capability | The shared baseline and Python, Rust, and TypeScript modules, plus Issues/specs, PR/CI, local verification, lockfile policy, and the repository site have executable implementations |
 | Verified online | Release handoff, traceable artifacts, consumer attestation, and the first CI-only downstream adoption and update |
-| Verified language modules | Python, TypeScript, and Rust each pass create, existing-repository adoption, update, lockfile, test, build, and package checks |
+| Verified language modules | Python, Rust, and TypeScript each pass create, existing-repository adoption, update, lockfile, test, build, and package checks |
 | Future/optional | Central catalog or governance, Go, authenticated hosting, deployment, monitoring, RAG, and autonomous agents |
 
 {{< detail key="rollout-evidence" title="Why capabilities are not enabled all at once" >}}
@@ -321,7 +323,7 @@ Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, gene
 | `main` protection on Free private | Preserve Ruleset policy and report `DEGRADED`; never claim an enforced merge gate |
 | Work scope | Issue-first; open a separate Issue for requirements outside acceptance criteria |
 | Template update boundary | `template/` delivers infrastructure; Copier preserves product code and specs |
-| Language quality | Python uses src layout, uv, Ruff, ty, and pytest; TypeScript uses Node 24, pnpm 11, Biome, and Vitest |
+| Language quality | Python uses src layout, uv, Ruff, ty, and pytest; Rust uses rustfmt, Clippy, and Cargo; TypeScript uses Node 24, pnpm 11, Biome, and Vitest |
 | CI and versioning | Local and CI share entry points; daily fast, promotion full, one SemVer |
 | Supply chain | Delay, OSV, hashes, SBOM, and resolver checks address different risks |
 | AI and docs | `AGENTS.md` is the working contract; README and the site serve people |

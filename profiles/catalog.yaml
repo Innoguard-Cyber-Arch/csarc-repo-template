@@ -150,7 +150,7 @@ compositions:
 
   language_modules:
     stage: beta
-    selectable_profiles: [python, typescript, rust]
+    selectable_profiles: [python, rust, typescript]
     selection: any_subset
     verification: selected_modules_plus_shared_checks_once
 

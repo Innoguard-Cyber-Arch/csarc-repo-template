@@ -107,8 +107,8 @@ languages:
   multiselect: true
   choices:
     Python: python
-    TypeScript: typescript
     Rust: rust
+    TypeScript: typescript
   default: "{{ [] if language == 'ci' else language.split('-') }}"
 
 container_mode:

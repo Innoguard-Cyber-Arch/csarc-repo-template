@@ -36,7 +36,7 @@ def test_supported_language_modules_have_executable_beta_evidence() -> None:
     assert catalog["compositions"]["language_modules"]["stage"] == "beta"
     assert "real_consuming_repository" in requirements["shared_lifecycle"]
     assert "real_consuming_repository" not in requirements["language_module"]
-    for language in ("python", "typescript", "rust"):
+    for language in ("python", "rust", "typescript"):
         assert catalog["profiles"][language]["stage"] == "beta"
         evidence = catalog["promotion_evidence"][language]
         assert evidence["status"] == "satisfied"
