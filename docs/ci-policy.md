@@ -2,12 +2,13 @@
 
 ## 現行 Journey 03 自動化
 
-目前只啟用 `.github/workflows/ci.yml`：`pull_request`、`merge_group` 與手動執行都進入同一個 `verify` job，timeout 為 30 分鐘。`scripts/ci_tier.py` 依事件與變更路徑選擇 docs、fast 或 full；Action 本身不重寫測試規則。
+目前的驗證由 `.github/workflows/ci.yml` 執行：`pull_request`、`merge_group` 與手動執行都進入同一個 `verify` job，timeout 為 30 分鐘。`scripts/ci_tier.py` 依事件與變更路徑選擇 docs、fast 或 full；Action 本身不重寫測試規則。
 
 - docs／fast 呼叫 `scripts/verify-fast`。
 - 一般 repo 的 full 呼叫 `scripts/verify`；repo-template 的 full 呼叫 `scripts/verify-template.sh`。
 - 未知路徑、promotion、hotfix、release recovery、merge queue 與手動執行採 full。
 - 依賴檔案變更與 full 驗證會呼叫 `scripts/verify-dependencies`；`.github/workflows/osv.yml` 每週與手動呼叫同一入口。
+- `.github/workflows/work-item-closure.yml` 只在里程碑工作 PR 合併進 `dev/m*` 後呼叫 repo-local lifecycle 程式關閉同號 Issue。
 - release、promotion、Zizmor、remote governance、deployment 與其他 schedule workflows 仍在 `archive/ci-cd/2026-08-27/`，尚未恢復。
 
 下列分支、promotion、release、quota fallback 與治理內容保留為跨 Journey 的政策設計；其中提到的專用 workflow 只有移回 `.github/workflows/` 後才算現行自動化，不能只因文件存在就宣稱已執行。
@@ -64,6 +65,18 @@ CI 是沒有獨立測試環境時的可攜式 integration layer；外部環境�
 `dev/i*` 不是讓普通 Issue 規避批次的捷徑；Issue 必須寫出為什麼不能與
 一般 standalone PR 一起驗證、canary 目標與停止條件。Hotfix 也不是快速通道：
 它仍跑 full tier、保留 promotion evidence 並立即形成 release 邊界。
+
+### 工作 Issue 結案
+
+里程碑工作 PR 合併進 `dev/m*` 後，`work-item-closure.yml` 呼叫
+`scripts/pr_lifecycle.py close-work`。程式會重新讀取 GitHub，確認 PR 已合併、事件中的
+head SHA 仍完全一致、來源與目的 repo／branch 正確、內文只用一個 closing keyword
+連回同號 Issue，且 Issue、PR、`dev/m*` 的里程碑編號一致，才留下綁定版本的證據並以
+completed 關單。相同事件可安全重跑；缺漏、漂移或既有證據不一致都 fail closed。
+
+一般獨立工作與 Hotfix 直接合併進 `main`，沿用 GitHub 原生 closing behavior，這支
+Action 不重複留言或關單。這裡只處理工作 Issue；生命週期追蹤 Issue 與里程碑何時結束
+由版本／交付流程負責。
 
 ## 四層執行契約
 

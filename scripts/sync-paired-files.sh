@@ -23,6 +23,7 @@ paired_files=(
   .github/workflows/osv.yml
   .github/workflows/pr-policy.yml
   .github/workflows/spec-to-issue.yml
+  .github/workflows/work-item-closure.yml
   policies/actions.json
   policies/labels.json
   policies/repository.json
@@ -66,6 +67,7 @@ paired_files=(
   tests/test_milestone_lifecycle.py
   tests/test_release_policy.py
   tests/test_work_item_metadata.py
+  tests/test_work_pr_closure.py
   zizmor.yml
 )
 
