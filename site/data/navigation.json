@@ -34,8 +34,7 @@
     {"key": "deploy", "code": "07", "group": "workflow", "participation": "human", "labels": {"zh-tw": "版本／交付", "en": "Delivery"}},
     {"key": "governance", "code": "08", "group": "workflow", "participation": "human", "labels": {"zh-tw": "規則治理", "en": "Governance"}},
     {"key": "template-release", "code": "09", "group": "support", "participation": "human", "labels": {"zh-tw": "模板升級", "en": "Updates"}},
-    {"key": "docs-site", "code": "10", "group": "support", "participation": "automated", "labels": {"zh-tw": "內部網站", "en": "Docs site"}},
-    {"key": "rollout", "code": "11", "group": "support", "participation": "human", "labels": {"zh-tw": "導入層級", "en": "Rollout"}}
+    {"key": "docs-site", "code": "10", "group": "support", "participation": "automated", "labels": {"zh-tw": "內部網站", "en": "Docs site"}}
   ],
   "appendices": [
     {"key": "ecosystem", "participation": "human", "labels": {"zh-tw": "工具附錄", "en": "Tools"}},

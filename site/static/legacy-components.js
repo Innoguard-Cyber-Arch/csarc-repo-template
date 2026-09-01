@@ -52,6 +52,17 @@ policies/rulesets.json`
       ],
       governance: [
         {
+          title: '單一來源｜治理只保存高價值選項',
+          goal: 'root、生成 repo 與衍生公版共用同一份公開設定，不再維護 profile 或網站專用設定檔。',
+          summary: '分支、owner、reviewer、可見性與治理漂移選配存在 `.csarc/config.yml`；低頻 GitHub 原生細節仍留在 `policies/`。生成 repo 才另含 Copier 來源 metadata。',
+          file: '.csarc/config.yml＋policies/',
+          code: `branch_strategy: delivery  # delivery | main
+code_owner: "@organization/team"
+reviewers: "@alice,@bob"
+project_visibility: private  # public | private | internal
+enable_governance_drift_check: false`
+        },
+        {
           title: '分開檢查 Ruleset policy、遠端儲存與實際強制能力',
           goal: 'Copier 建檔時可能還沒有遠端 repo；真正套用前再向 GitHub 查詢，避免依使用者手填的方案猜測。',
           summary: '先確認登入者具有 repo admin；REST endpoint 判斷 GitHub 是否會強制規則。Free private 的 REST 與 GraphQL mutation 都會回 403；GraphQL query 僅用來偵測管理員是否曾從 Web UI 人工預建。其他未知錯誤會停止。',
@@ -98,6 +109,17 @@ required checks:
           code: `./scripts/check-governance-drift
 
 # The scheduled workflow is archived and does not run.`
+        },
+        {
+          title: '暫時例外｜用 Issue 保存完整責任',
+          goal: '方案限制與事故復原可以暫時改走人工，但不能把缺少的門禁寫成已啟用。',
+          summary: '每張例外 Issue 都要有提出者、另一位核准者、到期日、證據與復原方式；復原驗證後才關單，延期需重新核准。',
+          file: 'GitHub Issue＋scripts/apply-repository-settings.sh check',
+          code: `Proposer: @alice
+Approver: @bob
+Expires: YYYY-MM-DD
+Evidence: <exact check or platform limitation>
+Recovery: <command and expected result>`
         }
       ],
       template: [
@@ -536,58 +558,17 @@ dispatch_artifacts(next_tag)`
         {
           title: '來源分工、輸出維持單檔',
           goal: 'Copier 更新公版版型時，不能覆寫每個專案自行補充的內容。',
-          summary: '`site/` 與 renderer 由公版更新；專案內容與 theme overrides 保留，再重建 `docs/index.html`。',
-          file: 'template/site/＋template/docs/＋copier.yml',
-          code: `_skip_if_exists:
+          summary: '既有 identity／governance keys 產生網站預設；`site/` 與 renderer 由公版更新，專案內容與 theme overrides 保留。只有證明為高價值且跨檔的選項才在同一 YAML 加 namespaced key。',
+          file: '.csarc/config.yml＋template/site/＋template/docs/',
+          code: `project_name: Example
+project_description: Example repository
+repository_url: https://github.com/example/repo
+code_owner: "@example/maintainers"
+branch_strategy: delivery
+
+_skip_if_exists:
   - docs/site-content.js
   - docs/site-theme.css`
-        }
-      ],
-      rollout: [
-        {
-          title: '語言模組依可重現證據分級',
-          goal: '基本、未來與可選不是口號，而是對可用能力的承諾。',
-          summary: '真實 consuming repo 已證明共用生命週期；Python、Rust 與 TypeScript 各自通過建立、導入、更新與原生工具鏈，列為 `beta`；Go 保持 `future`。',
-          file: 'profiles/catalog.yaml',
-          code: `ci: {stage: beta, profiles: []}
-python: {stage: beta}
-rust: {stage: beta}
-typescript: {stage: beta}
-go: {stage: future}`
-        },
-        {
-          title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
-          goal: '設定檔可以先審查；實際 repo 建立後才查方案與 API，不能使用的能力會明確略過。',
-          summary: 'Free private 在 repo 保存 ACTIVE Ruleset policy；check 仍比對 repository、Actions 與政策標籤，再將 Ruleset 限制標示 DEGRADED，並在 PR、workflow log 與 annotation 留下具體紀錄。public／Pro／Team／Enterprise 以有效規則作為門禁，可修正設定對不上政策時 fail-closed。GitHub App 仍是另一項獨立條件。',
-          file: 'policies/＋scripts/apply-repository-settings.sh',
-          code: `policies/repository.json
-policies/actions.json
-policies/labels.json
-policies/rulesets.json
-scripts/apply-repository-settings.sh`
-        },
-        {
-          title: '每次修改都測新案、既有案導入與後續更新',
-          goal: '可導入的條件是三條生命週期都通過，不是只看檔案存在。',
-          summary: '測試會真的執行 CLI init、adopt dry-run／報告／apply、update check／dry-run／apply 與衝突 fail-closed；adopt 報告會以同一份分析輸出 Markdown 與一頁 PDF，且不修改 target repo。CLI 內部仍以 Copier 產生與 smart update。root-only 測試資產若混入生成 repo 也會失敗。',
-          file: 'src/csarc_cli/＋tests/test_cli.py＋scripts/verify-template.sh',
-          code: `csarc init ./my-project
-csarc adopt . --dry-run --report-dir ../csarc-adoption-report
-csarc update --check --json
-csarc update`
-        },
-        {
-          title: 'Fleet 盤點與平台門檻',
-          goal: '目前只有一個真實 consuming repo，先累積採用與漂移證據，不預先部署中央平台。',
-          summary: '10 個活躍 consuming repo，或至少 3 個且反覆發生 owner／服務查找問題時才評估 catalog；至少 5 個且出現跨 repo 漂移或人工修正成本時才評估中央 policy enforcement。',
-          file: 'profiles/catalog.yaml＋governance-drift runs',
-          code: `Catalog review:
-  - 10 active consuming repositories; or
-  - 3+ repositories and repeated owner/service lookup delays
-
-Policy review:
-  - 5+ consuming repositories; and
-  - repeated cross-repository drift or measurable manual repair cost`
         }
       ],
       'template-release': [

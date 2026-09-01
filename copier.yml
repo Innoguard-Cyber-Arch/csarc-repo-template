@@ -220,7 +220,7 @@ security_reporting_channel:
 
 reviewers:
   type: str
-  help: Comma-separated GitHub usernames eligible for automatic pull request review
+  help: Comma-separated GitHub usernames eligible for review assignment; assign manually until the Action is active
   default: "@jachline28"
   validator: "{% if not reviewers | regex_search('^@[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:\\s*,\\s*@[A-Za-z0-9][A-Za-z0-9-]{0,38})*$') %}Use one or more @username values separated by commas.{% endif %}"
 
@@ -284,7 +284,7 @@ enable_codeql:
 
 enable_governance_drift_check:
   type: bool
-  help: Check daily for repository governance drift (for example, branch protection disabled between CI runs) and maintain one tracking Issue
+  help: Reserve the optional scheduled governance drift check; keep disabled until its GitHub Action is active
   default: false
 
 enable_release_attestations:

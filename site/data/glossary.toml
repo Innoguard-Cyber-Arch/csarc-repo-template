@@ -76,6 +76,22 @@ title_en = "Verification and capability"
   path = "docs/adr/portable-decision-site.md"
 
   [[groups.terms]]
+  key = "degraded-governance"
+  term_zh_tw = "DEGRADED（能力降級）"
+  term_en = "DEGRADED governance"
+  summary_zh_tw = "GitHub 方案或權限不支援某項強制功能；公版保留期望政策並要求人工補足，不把未執行誤寫成通過。"
+  summary_en = "A GitHub plan or permission cannot enforce a control; the template retains the desired policy and requires a human fallback without reporting an unrun control as passed."
+  path = "README.md#設定與密鑰"
+
+  [[groups.terms]]
+  key = "governance-exception"
+  term_zh_tw = "治理例外"
+  term_en = "Governance exception"
+  summary_zh_tw = "有期限的替代做法，必須記錄提出者、另一位核准者、到期日、證據與恢復方式。"
+  summary_en = "A time-bounded fallback that records its proposer, a different approver, expiry, evidence, and recovery path."
+  path = "README.md#設定與密鑰"
+
+  [[groups.terms]]
   key = "portable-artifact"
   term_zh_tw = "可攜式產物"
   term_en = "Portable artifact"
