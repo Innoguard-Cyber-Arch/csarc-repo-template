@@ -80,6 +80,16 @@ def test_documentation_tier_validates_the_generated_site() -> None:
     assert "python3 scripts/render_site.py --check" in template_fast
 
 
+def test_template_smoke_reads_config_from_the_generated_repository() -> None:
+    """Resolve the generated config relative to the generated repository."""
+    source = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
+
+    assert (
+        '(cd "$smoke_root/project" '
+        "&& python3 scripts/csarc_config.py languages >/dev/null)" in source
+    )
+
+
 def test_release_verification_contains_issue_pr_regressions() -> None:
     """Keep each release set a provable superset of its Issue PR set."""
     root_issue = direct_regression_commands("scripts/verify-fast")
