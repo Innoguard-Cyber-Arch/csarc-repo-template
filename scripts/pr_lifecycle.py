@@ -41,6 +41,7 @@ ISSUE_WORK_BRANCH = re.compile(
     r"([1-9][0-9]*)-[a-z0-9][a-z0-9-]*$"
 )
 ALPHA_SELF_MERGE_MARKER = "Alpha 自行合併 / self-merged"
+WORK_CLOSURE_MARKER = "Work Issue closure evidence"
 UNCHECKED = re.compile(r"(?m)^\s*[-*+]\s+\[\s*\]")
 CLOSING_ISSUE = re.compile(
     r"(?<!\w)(?:Closes|Fixes|Resolves)[ \t]+#([1-9][0-9]*)(?!\w)"
@@ -250,6 +251,27 @@ class GitHub:
         result = json.loads(payload)
         if not isinstance(result, dict):
             raise RuntimeError("GitHub comment response is invalid")
+        return result
+
+    def close_issue(self, repo: str, issue_number: int) -> dict[str, Any]:
+        """Close one validated work Issue as completed."""
+        payload = run(
+            [
+                "gh",
+                "api",
+                "--method",
+                "PATCH",
+                f"repos/{repo}/issues/{issue_number}",
+                "--input",
+                "-",
+            ],
+            input_text=json.dumps(
+                {"state": "closed", "state_reason": "completed"}
+            ),
+        )
+        result = json.loads(payload)
+        if not isinstance(result, dict):
+            raise RuntimeError("GitHub Issue close response is invalid")
         return result
 
 
@@ -1829,6 +1851,132 @@ def edit_standalone_issue(args: argparse.Namespace, github: GitHub) -> None:
     run(command)
 
 
+def work_closure_message(binding: dict[str, object]) -> str:
+    """Return exact, replay-safe evidence for one work Issue closure."""
+    return f"{WORK_CLOSURE_MARKER}\n\n`{canonical_json(binding)}`"
+
+
+def close_work_issue(  # noqa: C901
+    args: argparse.Namespace, github: GitHub
+) -> None:
+    """Close one Issue only after its exact work PR reaches its dev branch."""
+    if (
+        REPOSITORY.fullmatch(args.repo) is None
+        or args.pr_number < 1
+        or SHA.fullmatch(args.head_sha) is None
+    ):
+        raise RuntimeError("Work Issue closure input is invalid")
+    repository = github.get(args.repo, "")
+    pull = github.get(args.repo, f"pulls/{args.pr_number}")
+    if not isinstance(repository, dict) or not isinstance(pull, dict):
+        raise RuntimeError("Work Issue closure state is unavailable")
+    head = pull.get("head") or {}
+    base = pull.get("base") or {}
+    head_repo = head.get("repo") or {} if isinstance(head, dict) else {}
+    merge_sha = pull.get("merge_commit_sha")
+    if (
+        pull.get("number") != args.pr_number
+        or pull.get("state") != "closed"
+        or pull.get("merged") is not True
+        or not isinstance(pull.get("merged_at"), str)
+        or not isinstance(head, dict)
+        or head.get("sha") != args.head_sha
+        or not isinstance(head_repo, dict)
+        or str(head_repo.get("full_name", "")).casefold()
+        != args.repo.casefold()
+        or not isinstance(base, dict)
+        or not isinstance(merge_sha, str)
+        or SHA.fullmatch(merge_sha) is None
+    ):
+        raise RuntimeError(
+            "Merged pull request identity or head SHA is invalid"
+        )
+    parse_time(pull["merged_at"], "Pull request merge")
+    default_branch = repository.get("default_branch")
+    base_ref = base.get("ref")
+    head_ref = head.get("ref")
+    if not isinstance(default_branch, str) or not isinstance(base_ref, str):
+        raise RuntimeError("Pull request destination is unavailable")
+    if base_ref == default_branch:
+        sys.stdout.write(
+            f"PR #{args.pr_number}: default-branch closing remains "
+            "GitHub-native\n"
+        )
+        return
+    delivery = DELIVERY_BRANCH.fullmatch(base_ref)
+    work = ISSUE_WORK_BRANCH.fullmatch(str(head_ref or ""))
+    if delivery is None or work is None:
+        raise RuntimeError("Merged pull request is not a Milestone work route")
+    issue_number = int(work.group(1))
+    closing_issues = [
+        int(value)
+        for value in CLOSING_ISSUE.findall(str(pull.get("body") or ""))
+    ]
+    if closing_issues != [issue_number]:
+        raise RuntimeError(
+            "Work pull request must close its matching Issue exactly"
+        )
+    issue = github.get(args.repo, f"issues/{issue_number}")
+    if (
+        not isinstance(issue, dict)
+        or issue.get("number") != issue_number
+        or issue.get("pull_request") is not None
+    ):
+        raise RuntimeError("Work Issue identity is invalid")
+    expected_milestone = int(delivery.group(1))
+    issue_milestone = issue.get("milestone") or {}
+    pull_milestone = pull.get("milestone") or {}
+    if (
+        not isinstance(issue_milestone, dict)
+        or not isinstance(pull_milestone, dict)
+        or issue_milestone.get("number") != expected_milestone
+        or pull_milestone.get("number") != expected_milestone
+    ):
+        raise RuntimeError("Work Issue, pull request, and dev branch disagree")
+    binding: dict[str, object] = {
+        "base_ref": base_ref,
+        "head_sha": args.head_sha,
+        "issue": issue_number,
+        "merge_commit_sha": merge_sha,
+        "pull_request": args.pr_number,
+        "repository": args.repo,
+        "schema_version": 1,
+    }
+    message = work_closure_message(binding)
+    comments = github.pages(args.repo, f"issues/{issue_number}/comments")
+    evidence = [
+        str(comment.get("body") or "")
+        for comment in comments
+        if str(comment.get("body") or "").startswith(WORK_CLOSURE_MARKER)
+    ]
+    if len(evidence) > 1 or (evidence and evidence != [message]):
+        raise RuntimeError("Work Issue has conflicting closure evidence")
+    state = issue.get("state")
+    if state == "closed":
+        if issue.get("state_reason") != "completed" or evidence != [message]:
+            raise RuntimeError(
+                "Work Issue was closed without matching evidence"
+            )
+        sys.stdout.write(
+            f"Issue #{issue_number}: already closed by PR #{args.pr_number}\n"
+        )
+        return
+    if state != "open":
+        raise RuntimeError("Work Issue state is invalid")
+    if not evidence:
+        github.comment(args.repo, issue_number, message)
+    result = github.close_issue(args.repo, issue_number)
+    if (
+        result.get("number") != issue_number
+        or result.get("state") != "closed"
+        or result.get("state_reason") != "completed"
+    ):
+        raise RuntimeError("GitHub did not confirm completed Issue closure")
+    sys.stdout.write(
+        f"Issue #{issue_number}: closed by merged PR #{args.pr_number}\n"
+    )
+
+
 def compact_tokens(text: str) -> str:
     """Remove source-language separators without hiding command tokens."""
     return re.sub(r"[^a-z0-9_./@-]+", "", text.casefold())
@@ -2250,6 +2398,11 @@ def parser() -> argparse.ArgumentParser:
     issue_type.add_argument("--type", dest="issue_type")
     issue_type.add_argument("--remove-type", action="store_true")
     issue_edit.set_defaults(handler=edit_standalone_issue)
+    close_work = commands.add_parser("close-work")
+    close_work.add_argument("--repo", required=True)
+    close_work.add_argument("--pr-number", required=True, type=int)
+    close_work.add_argument("--head-sha", required=True)
+    close_work.set_defaults(handler=close_work_issue)
 
     for name in (
         "state",

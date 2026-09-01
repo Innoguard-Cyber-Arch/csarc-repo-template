@@ -173,7 +173,6 @@ def test_issue_pr_policy_regressions_run_only_for_relevant_scopes() -> None:
     expected = {
         "./scripts/test-issue-triage",
         "./scripts/test-pr-policy",
-        "./scripts/test-release-follow-up-gates",
         "./scripts/test-worktree-cleanup",
     }
     for path in (

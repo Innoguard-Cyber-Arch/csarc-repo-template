@@ -27,7 +27,7 @@ Generic prompt 需要保持穩定且不硬編工作路徑，但不能因此移�
 - `README.md`、`CHANGELOG.md` 由產品擁有，existing mode 不產生同名檔案。
 - `.gitignore` 保留產品順序，再附加模板尚未存在的行。
 - `AGENTS.md` 只替換 `BEGIN/END CSARC MANAGED BLOCK` 之間內容；沒有 marker 時附加管理區塊，marker 不合法時停止。
-- 產品 `.github/workflows/release.yml` 保留；existing mode 另產生 `.github/workflows/csarc-release.yml`。
+- 產品 `.github/workflows/release.yml` 保留；existing mode 不產生第二支 CSARC release workflow，也不從檔名推測其 owner 或功能。
 - 其他無固定語意的碰撞維持明確人工處理與 resumable checkpoint，不導入通用三方合併引擎。
 
 Release prompt 以 exact commit 從 canonical GitHub repository 執行 CLI；`uvx --python 3.14` 逐次取得隔離 runtime，不要求預先安裝全域 Python，也不修改 shell profile、`PATH` 或全域環境。Ubuntu 與 macOS 跑完整 adoption 測試；Windows 使用 WSL2，native Windows 明確 fail closed。

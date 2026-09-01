@@ -31,6 +31,18 @@ def test_supported_language_modules_have_executable_beta_evidence() -> None:
     catalog = yaml.safe_load(
         (ROOT / "profiles/catalog.yaml").read_text(encoding="utf-8")
     )
+    assert catalog["version_policy"]["update_method"] == (
+        "manual_reviewed_pull_request"
+    )
+    assert (
+        catalog["version_policy"]["merge_after_full_verification"] == "manual"
+    )
+    assert catalog["template_version_policy"]["materialization"] == (
+        "release_please_reviewed_pull_request"
+    )
+    assert catalog["template_version_policy"]["release_automation"] == (
+        "verified_immutable_github_release"
+    )
     requirements = catalog["promotion_requirements"]
 
     assert catalog["compositions"]["language_modules"]["stage"] == "beta"
