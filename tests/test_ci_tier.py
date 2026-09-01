@@ -61,6 +61,7 @@ def test_docs_only_uses_docs_tier() -> None:
     [
         "site/app.js",
         "docs/site-content.js",
+        "docs/site-content.md",
         "scripts/render_site.py",
         "template/site/index.html.jinja",
         "template/docs/site-theme.css.jinja",

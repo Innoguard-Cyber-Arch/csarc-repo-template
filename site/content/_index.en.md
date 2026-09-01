@@ -206,9 +206,9 @@ The release source verifies full `verify`, canary state, included PRs, and main 
 {{< /disclosure >}}
 
 {{< detail key="deploy-ordering" title="Delivery ordering, artifacts, and registry boundaries" >}}
-Direct mode rereads the default-branch head before writing and delivers only when the latest `main`, source, tag, CHANGELOG, and promotion evidence agree; workflow concurrency is not treated as FIFO. The artifact workflow accepts only a release-source run ID, creates a digest, SBOM, and attestation, ignores arbitrary tag pushes, and does not repeat full CI.
+Direct mode rereads the default-branch head before writing and delivers only when the latest `main`, source, tag, CHANGELOG, and promotion evidence agree; workflow concurrency is not treated as FIFO. The artifact workflow accepts only a release-source run ID, creates a digest and SBOM, ignores arbitrary tag pushes, and does not repeat full CI.
 
-GitHub Release is the baseline for every profile. PyPI and npm are separate opt-ins that default off and use a GitHub environment plus short-lived OIDC credentials, never stored registry tokens. `scripts/release_policy.py` detects capabilities and configures versions; `scripts/promotion_gate.py` validates promotion.
+GitHub Release is the portable baseline for every profile. Registry publishing and container delivery are product-owned extensions because the template does not ship an active publisher for them. `scripts/release_policy.py` detects GitHub release capabilities and configures versions; `scripts/promotion_gate.py` validates promotion.
 {{< /detail >}}
 {{< /slide >}}
 
@@ -240,7 +240,7 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 
 The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier `_src_path` and `_commit` metadata. Derived templates may add namespaced keys to this same YAML; they do not create another profile. Low-frequency GitHub details stay in native repository settings or `policies/` instead of expanding the CSARC schema.
 
-The internal site consumes existing `project_name`, `project_description`, `repository_url`, `code_owner`, and `branch_strategy` for its defaults. Project content and theme remain in `docs/site-content.js` and `docs/site-theme.css`. Add a namespaced site key only after a concrete implementation proves that the value is high-value and repeated across files.
+The internal site renders `docs/site-content.md` and resolves its explicit `[[key]]` tokens from the existing `project_name`, `project_description`, `repository_url`, `code_owner`, `languages`, and `branch_strategy` settings. Project content and theme remain in `docs/site-content.md` and `docs/site-theme.css`; the site does not create another configuration schema.
 {{< /detail >}}
 
 {{< detail key="governance-exceptions" title="How to record a temporary exception" >}}
@@ -279,7 +279,7 @@ Use a linked Issue to record the proposer, a different approver, expiry, evidenc
 {{< detail key="docs-site-access" title="Access and maintenance boundaries" >}}
 `noindex` and `robots.txt` reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
 
-The site receives its initial identity, owner, repository URL, and branch guidance from the existing `.csarc/config.yml` keys. Product-specific content and theme remain project-owned files; the site does not create a second configuration source. A later Markdown-first implementation may add a namespaced key only after proving it is a high-value cross-file setting.
+The renderer reads project identity, owner, languages, repository URL, and branch guidance from the existing `.csarc/config.yml`. Product-specific prose lives in `docs/site-content.md`, theme overrides remain in `docs/site-theme.css`, and the generated `docs/index.html` is never edited directly.
 {{< /detail >}}
 
 <aside class="config-guidance"><strong>Website access</strong><p>If reader restrictions become necessary, evaluate Cloudflare Pages + Access first. The host, identity provider, data policy, and organization owner still require separate approval.</p></aside>

@@ -503,7 +503,7 @@ matrix:
         {
           title: '缺失版本用受審查的 release recovery 補齊',
           goal: '已合併但沒有 Release 的版本不繞過主線門禁，也不重跑或偽造舊證據。',
-          summary: '同號 `fix/*`、`fix` title 與 `release-recovery` label 才能直接進 main；候選仍跑 full 與 promotion。Root 發布先產生精確綁定 tag、commit、artifact digest 的 SPDX 2.3 SBOM、manifest 與 provenance，下載重驗成功後才解除 draft，發布後再驗 immutable state 與 attestation。',
+          summary: '同號 `fix/*`、`fix` title 與 `release-recovery` label 才能直接進 main；候選仍跑 full 與 promotion。Root 發布先產生精確綁定 tag、commit、artifact digest 的 SPDX 2.3 SBOM 與 manifest，下載重驗成功後才解除 draft，發布後再驗 immutable state。',
           file: '.github/workflows/release-template.yml＋scripts/release_assets.py',
           code: `release-recovery -> full verify + promotion
 draft assets -> SPDX + manifest + provenance
@@ -512,7 +512,7 @@ download + verify -> publish immutable -> verify again`
         {
           title: 'exact tag 發布時建立交付成品、SHA-256 與 SPDX SBOM',
           goal: 'anchore/sbom-action 以固定 Syft 版本盤點內容；manifest 將成品、SBOM 與來源身分綁定。',
-          summary: '依 profile 打包並計算 SHA-256；Python／TypeScript 先建立不含開發工具的隔離 runtime，CI-only 則使用 exact-tag source，再由 Syft v1.50.0 產生 SPDX JSON。成品先上傳 mutable draft、下載至全新空目錄驗證，發布後再從 immutable Release 全新下載驗證；再現性依 digest／manifest，不要求 Syft JSON byte-identical。Copier 的 `project_visibility` 選 public 時，`enable_release_attestations` 預設開啟，並使用專用的 build provenance 與 SBOM attestation actions；private／internal 維持明確 opt-in、預設關閉。',
+          summary: '依 profile 打包並計算 SHA-256；Python／TypeScript 先建立不含開發工具的隔離 runtime，CI-only 則使用 exact-tag source，再由 Syft v1.50.0 產生 SPDX JSON。成品先上傳 mutable draft、下載至全新空目錄驗證，發布後再從 immutable Release 全新下載驗證；再現性依 digest／manifest，不要求 Syft JSON byte-identical。Registry、容器發布與 artifact attestation 需由有真實交付目標的產品另案實作。',
           file: '.github/workflows/release.yml',
           code: `- run: uv build               # Python
 - run: pnpm run build && pnpm pack --pack-destination dist # TypeScript
@@ -530,15 +530,12 @@ download + verify -> publish immutable -> verify again`
     syft-version: v1.50.0`
         },
         {
-          title: '有 Containerfile 才啟用容器驗證與 GHCR 交付',
-          goal: '讓已有容器的產品取得一致門禁，同時讓非容器 repo 維持零 Docker job 與零 registry write 權限。',
-          summary: '`none` 不產生工作；`verify` 在 PR 使用 Buildx cache、smoke test 與 Trivy HIGH／CRITICAL scan，但不 push；`ghcr` 才從已驗證 release source 建置一次並保存相同 image bytes，推送版本與 commit SHA tag、附加 provenance／SPDX SBOM，再以 digest pull 與 smoke。Runtime 部署仍由產品另訂。',
-          file: 'copier.yml＋ci.yml＋csarc-release.yml＋profiles/catalog.yaml',
-          code: `container_mode: none | verify | ghcr
-containerfile_path: path/to/Containerfile
-container_smoke_command: docker run --rm "$IMAGE" --help
-
-# Only the release publishing job receives packages: write.`
+          title: '容器驗證與 registry 交付由產品自行定義',
+          goal: '公版不提供沒有執行者的容器或 publisher 開關；需要這些能力的產品以自己的交付 Issue 定義。',
+          summary: '產品要先有真實 Containerfile、registry owner、OIDC 信任、smoke test 與復原方式，再新增最小 workflow；非容器 repo 維持零 Docker job 與零 registry write 權限。',
+          file: '產品自行維護的 container 與 delivery files',
+          code: `# Product-owned extension
+# Define build, scan, publish, smoke, and recovery together.`
         },
         {
           title: '決定｜保留 Dependabot 與 pnpm 的原生門禁',
@@ -631,7 +628,7 @@ dispatch_artifacts(next_tag)`
           summary: '`site/` 與 renderer 由公版更新；專案內容與 theme overrides 保留，再重建 `docs/index.html`。',
           file: 'template/site/＋template/docs/＋copier.yml',
           code: `_skip_if_exists:
-  - docs/site-content.js
+  - docs/site-content.md
   - docs/site-theme.css`
         }
       ],

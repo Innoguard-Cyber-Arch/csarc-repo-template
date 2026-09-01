@@ -42,7 +42,7 @@ _skip_if_exists:
   - "typescript/tests/**/*.ts"
   - "docs/specs/**/*.md"
   - "docs/adr/**/*.md"
-  - "docs/site-content.js"
+  - "docs/site-content.md"
   - "docs/site-theme.css"
   - "{% if project_mode == 'existing' %}/README.md{% else %}__overwrite_readme__{% endif %}"
   - "{% if project_mode == 'existing' %}/SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"

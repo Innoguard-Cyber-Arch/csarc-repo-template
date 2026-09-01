@@ -81,7 +81,7 @@ flowchart LR
 {% endif %}{% if has_rust %}| Rust | `src/`、Cargo、rustfmt、Clippy、內建測試；Rust 1.98 |
 {% endif %}{% if has_typescript %}| TypeScript | `typescript/`、pnpm 11、Biome、strict TypeScript、Vitest；Node 24+ |
 {% endif %}{% if has_container %}| 容器 | `{{ containerfile_path }}`、Buildx cache、smoke test 與 Trivy；build context 固定為 repo root |
-{% endif %}| 內部網站 | `site/` 公版來源；`docs/site-content.js` 與 `docs/site-theme.css` 專案內容；`docs/index.html` portable bundle |
+{% endif %}| 內部網站 | `site/` 公版來源；`docs/site-content.md` 與 `docs/site-theme.css` 專案內容；`docs/index.html` portable bundle |
 
 公版設定記在 `.csarc/config.yml`；建立或導入時選擇語言，`scripts/detect-language-profile --suggest` 會檢查實際檔案是否一致。請透過 `csarc update --data` 變更公版選項，不要直接修改設定檔。
 {% if has_python %}Python minimum 選項目前從 3.12 起，未宣告支援 3.11；所選 feature release 的 `.0` 就是 `requires-python` 的實際下界，CI 不會只測較新的 patch。{% endif %}
@@ -179,7 +179,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
   --expected-sha <reviewed-full-commit-sha> --yes --non-interactive
 ```
 
-CLI 會先預覽 Copier smart diff、conflict risk 與 Milestone description migration；確認後才執行 update、`./scripts/verify` 與 repository settings plan。若有衝突，CLI 會列出檔案但不修改 repo；請在目前分支調整衝突內容後重跑。它會更新 `site/` 版型並重建單檔，但不覆寫 `docs/site-content.js` 或 `docs/site-theme.css`，也不會自行 apply settings、push 或開 PR。相依更新一般等待三天；{% if has_typescript %}pnpm 遇到 publisher trust 降級時會停止安裝，先確認套件發布者與 provenance，不要直接停用 policy；{% endif %}OSV 對已公開漏洞立即通知。
+CLI 會先預覽 Copier smart diff、conflict risk 與 Milestone description migration；確認後才執行 update、`./scripts/verify` 與 repository settings plan。若有衝突，CLI 會列出檔案但不修改 repo；請在目前分支調整衝突內容後重跑。它會更新 `site/` 版型並重建單檔，但不覆寫 `docs/site-content.md` 或 `docs/site-theme.css`，也不會自行 apply settings、push 或開 PR。相依更新一般等待三天；{% if has_typescript %}pnpm 遇到 publisher trust 降級時會停止安裝，先確認套件發布者與 provenance，不要直接停用 policy；{% endif %}OSV 對已公開漏洞立即通知。
 {% if enable_template_update_notifications %}
 每週 template update workflow 只會建立或更新一張通知 Issue，不會自動套用或合併變更。若 `_src_path` 指向 private GitHub repository，請設定只有來源 repository Contents read 權限的 `CSARC_TEMPLATE_READ_TOKEN`；公開來源不需要這個 secret。
 {% endif %}

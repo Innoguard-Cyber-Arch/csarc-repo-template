@@ -567,7 +567,7 @@ code_owner: "@example/maintainers"
 branch_strategy: delivery
 
 _skip_if_exists:
-  - docs/site-content.js
+  - docs/site-content.md
   - docs/site-theme.css`
         }
       ],

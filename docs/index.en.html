@@ -3097,8 +3097,8 @@ html[data-detail-level="simple"] .detail-panel {
 </details>
 <aside class="technical-detail" data-content-key="deploy-ordering">
   <h3>Delivery ordering, artifacts, and registry boundaries</h3>
-  <p>Direct mode rereads the default-branch head before writing and delivers only when the latest <code>main</code>, source, tag, CHANGELOG, and promotion evidence agree; workflow concurrency is not treated as FIFO. The artifact workflow accepts only a release-source run ID, creates a digest, SBOM, and attestation, ignores arbitrary tag pushes, and does not repeat full CI.</p>
-<p>GitHub Release is the baseline for every profile. PyPI and npm are separate opt-ins that default off and use a GitHub environment plus short-lived OIDC credentials, never stored registry tokens. <code>scripts/release_policy.py</code> detects capabilities and configures versions; <code>scripts/promotion_gate.py</code> validates promotion.</p>
+  <p>Direct mode rereads the default-branch head before writing and delivers only when the latest <code>main</code>, source, tag, CHANGELOG, and promotion evidence agree; workflow concurrency is not treated as FIFO. The artifact workflow accepts only a release-source run ID, creates a digest and SBOM, ignores arbitrary tag pushes, and does not repeat full CI.</p>
+<p>GitHub Release is the portable baseline for every profile. Registry publishing and container delivery are product-owned extensions because the template does not ship an active publisher for them. <code>scripts/release_policy.py</code> detects GitHub release capabilities and configures versions; <code>scripts/promotion_gate.py</code> validates promotion.</p>
 </aside>
 </div>
 </section>
@@ -3250,7 +3250,7 @@ html[data-detail-level="simple"] .detail-panel {
 	</tbody>
 </table>
 <p>The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier <code>_src_path</code> and <code>_commit</code> metadata. Derived templates may add namespaced keys to this same YAML; they do not create another profile. Low-frequency GitHub details stay in native repository settings or <code>policies/</code> instead of expanding the CSARC schema.</p>
-<p>The internal site consumes existing <code>project_name</code>, <code>project_description</code>, <code>repository_url</code>, <code>code_owner</code>, and <code>branch_strategy</code> for its defaults. Project content and theme remain in <code>docs/site-content.js</code> and <code>docs/site-theme.css</code>. Add a namespaced site key only after a concrete implementation proves that the value is high-value and repeated across files.</p>
+<p>The internal site renders <code>docs/site-content.md</code> and resolves its explicit <code>[[key]]</code> tokens from the existing <code>project_name</code>, <code>project_description</code>, <code>repository_url</code>, <code>code_owner</code>, <code>languages</code>, and <code>branch_strategy</code> settings. Project content and theme remain in <code>docs/site-content.md</code> and <code>docs/site-theme.css</code>; the site does not create another configuration schema.</p>
 </aside>
 <aside class="technical-detail" data-content-key="governance-exceptions">
   <h3>How to record a temporary exception</h3>
@@ -3422,7 +3422,7 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="technical-detail" data-content-key="docs-site-access">
   <h3>Access and maintenance boundaries</h3>
   <p><code>noindex</code> and <code>robots.txt</code> reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.</p>
-<p>The site receives its initial identity, owner, repository URL, and branch guidance from the existing <code>.csarc/config.yml</code> keys. Product-specific content and theme remain project-owned files; the site does not create a second configuration source. A later Markdown-first implementation may add a namespaced key only after proving it is a high-value cross-file setting.</p>
+<p>The renderer reads project identity, owner, languages, repository URL, and branch guidance from the existing <code>.csarc/config.yml</code>. Product-specific prose lives in <code>docs/site-content.md</code>, theme overrides remain in <code>docs/site-theme.css</code>, and the generated <code>docs/index.html</code> is never edited directly.</p>
 </aside>
 <aside class="config-guidance"><strong>Website access</strong><p>If reader restrictions become necessary, evaluate Cloudflare Pages + Access first. The host, identity provider, data policy, and organization owner still require separate approval.</p></aside>
 </div>

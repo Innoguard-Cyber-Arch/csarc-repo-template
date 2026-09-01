@@ -18,6 +18,18 @@ portable renderer then writes the committed deliverables. Do not edit
 | `legacy/index.html` | Replaced hand-authored page kept only as a fidelity fixture |
 | `hugo.toml` | Pinned Hugo inputs and output formats |
 
+The generated-repository handbook has a separate, smaller source map:
+
+| Path | Responsibility |
+| --- | --- |
+| `template/docs/site-content.md.jinja` | Initial project-owned Markdown; Copier preserves later edits |
+| `template/site/index.html.jinja` | Template-owned accessible shell and render markers |
+| `template/site/styles.css` | Template-owned default presentation |
+| `template/docs/site-theme.css.jinja` | Project-owned narrow theme overrides |
+| `template/scripts/render_site.py` | Reads `.csarc/config.yml`, renders Markdown, and produces the offline bundle |
+
+The root presentation and generated handbook intentionally use different layouts, but both keep authored content outside generated HTML and both produce deterministic, self-contained files.
+
 The legacy fixture is not an authoring source. Its CSS, images, and retained
 behaviour remain under `static/` while the parity check still needs them; do not
 remove those files until repository search and the parity check prove they are

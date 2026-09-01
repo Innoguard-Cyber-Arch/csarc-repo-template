@@ -1,0 +1,57 @@
+# [[project_name]]
+
+[[project_description]]
+
+使用語言：**[[languages]]**。主要負責人：**[[code_owner]]**。
+
+## 開始使用
+
+1. 安裝 Git、GitHub CLI 與 uv。
+2. 複製 `[[repository_url]]`，進入 `[[project_slug]]`。
+3. 執行 `./scripts/verify`，在送出變更前完成相同驗證。
+
+## 檔案地圖
+
+- `.github/`：工作單、合併申請與 GitHub Actions。
+- `policies/`：可以審查的 GitHub 設定。
+- `docs/specs/`：目前系統必須做到的事。
+- `docs/adr/`：已確認的技術選擇與理由。
+- `scripts/verify`：本機與 CI 共用的驗證入口。
+- `docs/site-content.md`：你正在閱讀的網站內容。
+
+## 開發流程
+
+1. 先用 GitHub Issue 說清楚問題與完成條件。
+2. 從目前工作所屬的分支建立有 Issue 編號的短期分支。
+3. 完成修改並執行 `./scripts/verify`。
+4. 開 Pull Request，連回 Issue，讓另一位成員審查後再合併。
+
+### 進階: 分支與自動檢查
+
+- 目前分支策略是 `[[branch_strategy]]`；實際路徑以 repo 的工作定義與 GitHub 保護規則為準。
+- 一般修改先跑較快的必要檢查；發版、hotfix 或高風險修改再跑完整檢查。
+- 本機與 GitHub Actions 呼叫同一組 repo 內測試，不維護兩份驗證邏輯。
+
+## 安全與相依套件
+
+- 密鑰只放 GitHub Secrets／Variables，不提交到 repo。
+- 相依套件使用鎖定檔，第三方 GitHub Actions 固定到完整 commit SHA。
+- 自動更新、已知漏洞掃描與軟體成分清單依 repo 的現行 workflow 執行。
+
+### 進階: GitHub 權限
+
+- `noindex` 只能降低搜尋引擎收錄，不是存取控制。
+- Ruleset、CODEOWNERS 與必要檢查能否強制執行，取決於 repo 可用的 GitHub 方案與權限。
+- 要調整組織政策時，先預覽設定差異，再由管理員套用。
+
+## 交付與模板更新
+
+- 合併到正式分支前，先完成審查與該階段要求的驗證。
+- Copier 以可審查的 Pull Request 更新公版；專案內容與樣式不會被靜默覆寫。
+- `docs/index.html` 是自動產物。請修改本 Markdown，再執行 `uv run --no-project python scripts/render_site.py`。
+
+### 進階: 責任邊界
+
+- `.csarc/config.yml` 是名稱、語言、負責人與分支策略的單一設定來源。
+- `site/`、renderer 與預設樣式由公版維護。
+- `docs/site-content.md` 與 `docs/site-theme.css` 由專案維護。
