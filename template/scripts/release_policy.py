@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Select and execute a release path from observable GitHub capabilities."""
+"""Plan and verify one release path from observable GitHub capabilities."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import tomllib
 import urllib.error
 import urllib.parse
@@ -20,7 +21,7 @@ from typing import Any
 
 STATES = {"allowed", "blocked", "unknown"}
 SEMVER = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
-DIRECT_CAPABILITIES = ("contents", "release", "dispatch")
+PUBLISH_CAPABILITIES = ("contents", "release", "immutable_releases")
 INTENT_RANK = {"no-release": 0, "patch": 1, "minor": 2, "major": 3}
 RENOVATE_INSTALL_URL = "https://github.com/apps/renovate/installations/new"
 DEPENDABOT_FALLBACK = (
@@ -102,29 +103,36 @@ def classify_probe(
 
 
 def select_release_mode(capabilities: dict[str, Capability]) -> tuple[str, str]:
-    """Choose Release Please, direct release, or verification-only."""
+    """Choose Automatic, Guided, or Blocked without a second publisher."""
     pull_requests = capabilities["actions_pull_requests"]
-    unavailable = [
+    blocked = [
         name
-        for name in DIRECT_CAPABILITIES
-        if capabilities[name].state != "allowed"
+        for name in PUBLISH_CAPABILITIES
+        if capabilities[name].state == "blocked"
     ]
-    if pull_requests.state == "allowed" and not unavailable:
+    unknown = [
+        name
+        for name in PUBLISH_CAPABILITIES
+        if capabilities[name].state == "unknown"
+    ]
+    if blocked or unknown:
         return (
-            "release-pr",
+            "blocked",
+            "GitHub tag or Release publication is unavailable or unproven: "
+            + ", ".join([*blocked, *unknown]),
+        )
+    if pull_requests.state == "allowed":
+        return (
+            "automatic",
             "Actions pull requests and the artifact handoff are allowed",
         )
-    if not unavailable:
+    if pull_requests.state != "allowed":
         return (
-            "direct",
-            f"Actions pull requests are {pull_requests.state}; "
-            "direct release is allowed",
+            "guided",
+            f"Actions pull requests are {pull_requests.state}; prepare a "
+            "reviewed version candidate locally",
         )
-    return (
-        "verification-only",
-        f"Actions pull requests are {pull_requests.state}; "
-        f"artifact handoff unavailable: {', '.join(unavailable)}",
-    )
+    raise AssertionError("release mode selection is incomplete")
 
 
 def release_intent(title: str) -> str:
@@ -180,24 +188,29 @@ def release_follow_up_errors(  # noqa: C901
             if isinstance(commit_data, dict)
             else None
         )
-        expected_author = RELEASE_PLEASE_ACTOR if automation_actor else actor
-        allowed_committers = (
-            {RELEASE_PLEASE_COMMITTER}
-            if automation_actor
-            else {actor, RELEASE_PLEASE_COMMITTER}
+        author_login = author.get("login") if isinstance(author, dict) else None
+        committer_login = (
+            committer.get("login") if isinstance(committer, dict) else None
         )
-        if (
-            not isinstance(author, dict)
-            or author.get("login") != expected_author
-            or not isinstance(committer, dict)
-            or committer.get("login") not in allowed_committers
-            or not isinstance(verification, dict)
-            or verification.get("verified") is not True
-            or verification.get("reason") != "valid"
+        automation_commit = (
+            author_login == RELEASE_PLEASE_ACTOR
+            and committer_login == RELEASE_PLEASE_COMMITTER
+            and isinstance(verification, dict)
+            and verification.get("verified") is True
+            and verification.get("reason") == "valid"
+        )
+        maintainer_commit = (
+            maintainer_actor
+            and actor in {author_login, committer_login}
+            and committer_login in {actor, RELEASE_PLEASE_COMMITTER}
+        )
+        if not (
+            (automation_actor and automation_commit)
+            or (not automation_actor and maintainer_commit)
         ):
             errors.append(
-                "release follow-up commits must be verified GitHub commits "
-                "owned by the trusted release actor"
+                "release follow-up commits must be owned by the trusted "
+                "release actor; automation commits must also be GitHub-verified"
             )
             break
 
@@ -218,8 +231,13 @@ def release_follow_up_errors(  # noqa: C901
         return errors
 
     expected_head = f"release-please--branches--main--components--{component}"
-    if head != expected_head:
+    guided_head = re.fullmatch(r"release/v\d+\.\d+\.\d+", head)
+    if automation_actor and head != expected_head:
         errors.append(f"release follow-up branch must be {expected_head}")
+    elif maintainer_actor and guided_head is None:
+        errors.append(
+            "guided release branch must use release/v<major>.<minor>.<patch>"
+        )
 
     allowed = {".release-please-manifest.json", "CHANGELOG.md"}
     release_file = {
@@ -580,14 +598,14 @@ def unknown_capabilities(reason: str) -> dict[str, Capability]:
         for name in (
             "actions_pull_requests",
             "contents",
+            "immutable_releases",
             "release",
-            "dispatch",
         )
     }
 
 
 def detect_runtime_capabilities(
-    api: GitHubAPI, repo: str, sha: str, branch: str, workflow: str
+    api: GitHubAPI, repo: str, sha: str, branch: str
 ) -> dict[str, Capability]:
     """Probe current workflow-token behavior without creating resources."""
     capabilities = unknown_capabilities("probe did not run")
@@ -623,56 +641,115 @@ def detect_runtime_capabilities(
         status, validation_proves_access=True
     )
 
-    encoded_workflow = urllib.parse.quote(workflow, safe="")
-    status, _ = api.request(
-        "POST",
-        f"repos/{repo}/actions/workflows/{encoded_workflow}/dispatches",
-        {"ref": f"__csarc_capability_probe_{sha[:12]}__"},
-    )
-    capabilities["dispatch"] = classify_probe(
-        status, validation_proves_access=True
-    )
+    status, immutable = api.request("GET", f"repos/{repo}/immutable-releases")
+    if 200 <= status < 300 and isinstance(immutable, dict):
+        enabled = immutable.get("enabled")
+        capabilities["immutable_releases"] = Capability(
+            "allowed" if enabled is True else "blocked",
+            "immutable Releases are enabled"
+            if enabled is True
+            else "immutable Releases must be enabled before publication",
+        )
+    else:
+        capabilities["immutable_releases"] = classify_probe(status)
+
     return capabilities
 
 
+def workflow_policy_observations(
+    api: GitHubAPI, repo: str
+) -> dict[str, Capability]:
+    """Read organization and repository PR policy without inferring access."""
+
+    def observe(path: str, scope: str) -> Capability:
+        status, payload = api.request("GET", path)
+        allowed = (
+            payload.get("can_approve_pull_request_reviews")
+            if isinstance(payload, dict)
+            else None
+        )
+        if 200 <= status < 300 and isinstance(allowed, bool):
+            return Capability(
+                "allowed" if allowed else "blocked",
+                f"{scope} Actions policy "
+                + ("allows" if allowed else "blocks")
+                + " pull requests",
+            )
+        return Capability(
+            "unknown",
+            f"{scope} Actions policy could not be read (HTTP "
+            f"{status or 'unavailable'})",
+        )
+
+    owner = repo.split("/", 1)[0]
+    return {
+        "organization_policy": observe(
+            f"orgs/{owner}/actions/permissions/workflow", "organization"
+        ),
+        "repository_setting": observe(
+            f"repos/{repo}/actions/permissions/workflow", "repository"
+        ),
+    }
+
+
 def preflight_capabilities(repo: str) -> dict[str, Capability]:
-    """Read the repository PR policy; defer token-write checks to runtime."""
-    capabilities = unknown_capabilities("requires the runtime workflow token")
+    """Leave token permissions unknown until the workflow runs."""
+    del repo
+    return unknown_capabilities("requires the runtime workflow token")
+
+
+def preflight_policy_observations(repo: str) -> dict[str, Capability]:
+    """Read org/repository settings without treating them as token access."""
+    unknown = {
+        name: Capability("unknown", "GitHub CLI is unavailable")
+        for name in ("organization_policy", "repository_setting")
+    }
     executable = shutil.which("gh")
     if executable is None:
-        capabilities["actions_pull_requests"] = Capability(
-            "unknown", "GitHub CLI is unavailable"
+        return unknown
+
+    def observe(endpoint: str, scope: str) -> Capability:
+        result = subprocess.run(  # noqa: S603
+            [executable, "api", endpoint],
+            check=False,
+            capture_output=True,
+            text=True,
         )
-        return capabilities
-    result = subprocess.run(  # noqa: S603
-        [executable, "api", f"repos/{repo}/actions/permissions/workflow"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        capabilities["actions_pull_requests"] = Capability(
-            "unknown",
-            "Actions policy is not readable with the current identity",
-        )
-        return capabilities
-    try:
-        response = json.loads(result.stdout)
+        if result.returncode != 0:
+            return Capability(
+                "unknown",
+                f"{scope} Actions policy is not readable with the current "
+                "identity",
+            )
+        try:
+            response = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            response = None
         allowed = (
             response.get("can_approve_pull_request_reviews")
             if isinstance(response, dict)
             else None
         )
-    except json.JSONDecodeError:
-        allowed = None
-    if isinstance(allowed, bool):
-        capabilities["actions_pull_requests"] = Capability(
+        if not isinstance(allowed, bool):
+            return Capability(
+                "unknown", f"{scope} Actions policy response is incomplete"
+            )
+        return Capability(
             "allowed" if allowed else "blocked",
-            "repository Actions policy allows pull requests"
-            if allowed
-            else "repository Actions policy blocks pull requests",
+            f"{scope} Actions policy "
+            + ("allows" if allowed else "blocks")
+            + " pull requests",
         )
-    return capabilities
+
+    owner = repo.split("/", 1)[0]
+    return {
+        "organization_policy": observe(
+            f"orgs/{owner}/actions/permissions/workflow", "organization"
+        ),
+        "repository_setting": observe(
+            f"repos/{repo}/actions/permissions/workflow", "repository"
+        ),
+    }
 
 
 def gh_json(executable: str, endpoint: str) -> dict[str, object] | None:
@@ -865,20 +942,51 @@ def optional_integration_preflight(repo: str) -> dict[str, dict[str, object]]:
 
 
 def report(
-    capabilities: dict[str, Capability], source: str, **extra: object
+    capabilities: dict[str, Capability],
+    source: str,
+    *,
+    policies: dict[str, Capability] | None = None,
+    **extra: object,
 ) -> dict[str, object]:
     """Build the machine-readable decision record."""
-    mode, reason = select_release_mode(capabilities)
+    policy = policies or {
+        "organization_policy": Capability("unknown", "not observed"),
+        "repository_setting": Capability("unknown", "not observed"),
+    }
+    effective_capabilities = dict(capabilities)
+    policy_blocks = [
+        name
+        for name in ("organization_policy", "repository_setting")
+        if policy[name].state == "blocked"
+    ]
+    if policy_blocks:
+        effective_capabilities["actions_pull_requests"] = Capability(
+            "blocked",
+            "Actions pull requests are blocked by " + ", ".join(policy_blocks),
+        )
+    mode, reason = select_release_mode(effective_capabilities)
+    token_permissions = {
+        name: asdict(capability)
+        for name, capability in sorted(capabilities.items())
+    }
     return {
         "schema_version": 1,
         "observed_at": datetime.now(UTC).isoformat(),
         "source": source,
         "mode": mode,
         "reason": reason,
-        "capabilities": {
-            name: asdict(capability)
-            for name, capability in sorted(capabilities.items())
+        "organization_policy": asdict(policy["organization_policy"]),
+        "repository_setting": asdict(policy["repository_setting"]),
+        "token_permissions": token_permissions,
+        "effective": {
+            "mode": mode,
+            "reason": reason,
+            "actions_pull_requests": asdict(
+                effective_capabilities["actions_pull_requests"]
+            ),
         },
+        # Compatibility alias for callers that predate the split evidence.
+        "capabilities": token_permissions,
         **extra,
     }
 
@@ -896,6 +1004,23 @@ def write_report(
             handle.write(f"reason={payload['reason']}\n")
             if payload.get("tag"):
                 handle.write(f"tag={payload['tag']}\n")
+    print(rendered, end="")  # noqa: T201
+
+
+def write_plan_report(
+    payload: dict[str, object], output: Path | None, github_output: Path | None
+) -> None:
+    """Write the local version decision and stable workflow outputs."""
+    rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if output is not None:
+        output.write_text(rendered, encoding="utf-8")
+    if github_output is not None:
+        with github_output.open("a", encoding="utf-8") as handle:
+            for name in ("status", "tag", "version", "materialized"):
+                value = payload.get(name, "")
+                if isinstance(value, bool):
+                    value = str(value).lower()
+                handle.write(f"{name}={value}\n")
     print(rendered, end="")  # noqa: T201
 
 
@@ -948,6 +1073,32 @@ def release_plan(root: Path, sha: str) -> tuple[str, str] | None:
         )
         base = str(manifest["."])
         revision_range = sha
+        try:
+            parent = git_output(["rev-parse", f"{sha}^"], root)
+            parent_manifest = json.loads(
+                git_output(
+                    ["show", f"{parent}:.release-please-manifest.json"], root
+                )
+            )
+            parent_version = str(parent_manifest["."])
+        except subprocess.CalledProcessError, json.JSONDecodeError, KeyError:
+            parent = ""
+            parent_version = base
+        if (
+            parent
+            and parent_version != base
+            and not release_version_errors(root, base)
+        ):
+            parent_log = git_output(
+                ["log", "--format=%s%x1f%b%x1e", parent], root
+            )
+            parent_messages = [
+                message.strip("\n").replace("\x1f", "\n")
+                for message in parent_log.split("\x1e")
+                if message.strip("\n")
+            ]
+            if bump_version(parent_version, parent_messages) == base:
+                return f"v{base}", base
     raw = git_output(["log", "--format=%s%x1f%b%x1e", revision_range], root)
     messages = [
         message.strip("\n").replace("\x1f", "\n")
@@ -956,6 +1107,252 @@ def release_plan(root: Path, sha: str) -> tuple[str, str] | None:
     ]
     version = bump_version(base, messages)
     return None if version is None else (f"v{version}", version)
+
+
+def release_plan_report(root: Path, sha: str) -> dict[str, object]:
+    """Describe the one local release decision without changing the repo."""
+    planned = release_plan(root, sha)
+    if planned is None:
+        return {
+            "status": "no-release",
+            "materialized": False,
+            "reason": "no release-worthy Conventional Commits",
+        }
+    tag, version = planned
+    pointed = set(git_output(["tag", "--points-at", sha], root).splitlines())
+    if tag in pointed:
+        status = "released"
+        materialized = True
+        reason = f"{tag} already identifies this commit"
+    else:
+        materialized = not release_version_errors(root, version)
+        status = "candidate" if materialized else "pending"
+        reason = (
+            "reviewed version candidate is ready"
+            if materialized
+            else "version and CHANGELOG candidate must be prepared"
+        )
+    return {
+        "status": status,
+        "tag": tag,
+        "version": version,
+        "materialized": materialized,
+        "reason": reason,
+    }
+
+
+def verify_candidate_version(root: Path, base_sha: str) -> str:
+    """Recompute the candidate version from its base commit."""
+    executable = shutil.which("git")
+    if executable is None:
+        raise RuntimeError("Git is required for release planning")
+    with tempfile.TemporaryDirectory(prefix="csarc-release-base-") as path:
+        worktree = Path(path) / "worktree"
+        subprocess.run(  # noqa: S603
+            [
+                executable,
+                "worktree",
+                "add",
+                "--detach",
+                "--force",
+                str(worktree),
+                base_sha,
+            ],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        try:
+            planned = release_plan(worktree, base_sha)
+        finally:
+            subprocess.run(  # noqa: S603
+                [
+                    executable,
+                    "worktree",
+                    "remove",
+                    "--force",
+                    str(worktree),
+                ],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+    if planned is None:
+        raise ValueError("candidate base has no release-worthy commits")
+    _, expected = planned
+    verify_release_version(root, expected)
+    return expected
+
+
+def _replace_toml_version(
+    path: Path, table: str, version: str, *, package_name: str = ""
+) -> None:
+    """Replace one simple TOML version owned by Release Please."""
+    source = path.read_text(encoding="utf-8")
+    if package_name:
+        block = re.compile(
+            rf"(?ms)(^\[\[{re.escape(table)}\]\]\s*\n"
+            rf"(?:(?!^\[\[).)*?^name\s*=\s*\"{re.escape(package_name)}\"\s*$"
+            rf"(?:(?!^\[\[).)*?^version\s*=\s*\")[^\"]+(\")"
+        )
+    else:
+        block = re.compile(
+            rf"(?ms)(^\[{re.escape(table)}\]\s*\n"
+            rf"(?:(?!^\[).)*?^version\s*=\s*\")[^\"]+(\")"
+        )
+    updated, count = block.subn(rf"\g<1>{version}\g<2>", source, count=1)
+    if count != 1:
+        raise ValueError(f"cannot locate governed version in {path.name}")
+    path.write_text(updated, encoding="utf-8")
+
+
+def _write_release_version(root: Path, version: str) -> None:  # noqa: C901
+    """Materialize only version surfaces declared by release configuration."""
+    config = json.loads(
+        (root / "release-please-config.json").read_text(encoding="utf-8")
+    )
+    package = config["packages"]["."]
+    release_type = package.get("release-type", config.get("release-type"))
+    manifest = root / ".release-please-manifest.json"
+    manifest.write_text(
+        json.dumps({".": version}, indent=2) + "\n", encoding="utf-8"
+    )
+    if release_type == "simple":
+        (root / "version.txt").write_text(f"{version}\n", encoding="utf-8")
+    elif release_type == "python":
+        _replace_toml_version(root / "pyproject.toml", "project", version)
+    elif release_type == "node":
+        path = root / "package.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["version"] = version
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    elif release_type == "rust":
+        _replace_toml_version(root / "Cargo.toml", "package", version)
+    else:
+        raise ValueError(f"unsupported release type: {release_type}")
+
+    for item in package.get("extra-files", []):
+        if isinstance(item, str):
+            kind, value, jsonpath = "generic", item, ""
+        elif isinstance(item, dict):
+            kind = str(item.get("type", "generic"))
+            value = item.get("path")
+            jsonpath = str(item.get("jsonpath", ""))
+        else:
+            raise ValueError("release extra-file entry is invalid")
+        if not isinstance(value, str):
+            raise ValueError("release extra-file path is invalid")
+        path = root / value
+        if kind == "generic":
+            source = path.read_text(encoding="utf-8")
+            lines = []
+            changed = False
+            for line in source.splitlines(keepends=True):
+                if "x-release-please-version" in line:
+                    line, count = re.subn(
+                        r"(?P<prefix>v?)\d+\.\d+\.\d+",
+                        rf"\g<prefix>{version}",
+                        line,
+                        count=1,
+                    )
+                    changed = changed or count == 1
+                lines.append(line)
+            if not changed:
+                raise ValueError(f"{value} has no release version marker")
+            path.write_text("".join(lines), encoding="utf-8")
+        elif kind == "toml" and jsonpath == "$.project.version":
+            _replace_toml_version(path, "project", version)
+        elif kind == "toml" and jsonpath == "$.package.version":
+            _replace_toml_version(path, "package", version)
+        elif kind == "toml" and jsonpath.startswith("$.package["):
+            match = re.search(r'name\.value=="([^"]+)"', jsonpath)
+            if match is None:
+                raise ValueError(f"unsupported release jsonpath: {jsonpath}")
+            _replace_toml_version(
+                path, "package", version, package_name=match.group(1)
+            )
+        else:
+            raise ValueError(f"unsupported release extra-file: {value}")
+
+    cargo_manifest = root / "Cargo.toml"
+    cargo_lock = root / "Cargo.lock"
+    if cargo_manifest.is_file() and cargo_lock.is_file():
+        with cargo_manifest.open("rb") as source:
+            cargo_package = tomllib.load(source).get("package", {})
+        cargo_name = cargo_package.get("name")
+        if not isinstance(cargo_name, str) or not cargo_name:
+            raise ValueError("Cargo.toml has no package name")
+        _replace_toml_version(
+            cargo_lock, "package", version, package_name=cargo_name
+        )
+
+
+def _write_changelog(root: Path, sha: str, version: str) -> None:
+    """Prepend deterministic notes for the same commits used by planning."""
+    changelog = root / "CHANGELOG.md"
+    source = changelog.read_text(encoding="utf-8")
+    if re.search(rf"(?m)^## (?:\[)?v?{re.escape(version)}(?:\]|\s|\()", source):
+        return
+    tags = git_output(["tag", "--merged", sha], root).splitlines()
+    versions = [tag for tag in tags if SEMVER.fullmatch(tag)]
+    latest = max(versions, key=semver_key) if versions else ""
+    revision = f"{latest}..{sha}" if latest else sha
+    raw = git_output(
+        ["log", "--reverse", "--format=%h%x1f%s%x1e", revision], root
+    )
+    notes: dict[str, list[str]] = {
+        "Breaking Changes": [],
+        "Features": [],
+        "Bug Fixes": [],
+    }
+    for record in raw.split("\x1e"):
+        if not record.strip():
+            continue
+        short_sha, subject = record.strip().split("\x1f", 1)
+        intent = release_intent(subject)
+        heading = {
+            "major": "Breaking Changes",
+            "minor": "Features",
+            "patch": "Bug Fixes",
+        }.get(intent)
+        if heading:
+            notes[heading].append(f"* {subject} ({short_sha})")
+    date = git_output(["show", "-s", "--format=%cs", sha], root)
+    sections = [f"## [{version}] - {date}"]
+    for heading, entries in notes.items():
+        if entries:
+            sections.extend(["", f"### {heading}", "", *entries])
+    entry = "\n".join(sections) + "\n\n"
+    marker = source.find("\n## ")
+    if marker == -1:
+        updated = source.rstrip() + "\n\n" + entry
+    else:
+        updated = source[: marker + 1] + entry + source[marker + 1 :]
+    changelog.write_text(updated, encoding="utf-8")
+
+
+def prepare_release_candidate(root: Path, sha: str) -> dict[str, object]:
+    """Write a local candidate; never create a PR, tag, or GitHub Release."""
+    planned = release_plan(root, sha)
+    if planned is None:
+        raise ValueError("no release-worthy Conventional Commits")
+    tag, version = planned
+    if tag in git_output(["tag", "--points-at", sha], root).splitlines():
+        raise ValueError(f"{tag} already identifies this commit")
+    _write_release_version(root, version)
+    _write_changelog(root, sha, version)
+    errors = release_version_errors(root, version)
+    if errors:
+        raise ValueError("; ".join(errors))
+    return {
+        "status": "candidate",
+        "tag": tag,
+        "version": version,
+        "branch": f"release/v{version}",
+        "title": f"chore(main): release {version}",
+    }
 
 
 def release_version_errors(  # noqa: C901
@@ -1006,6 +1403,39 @@ def release_version_errors(  # noqa: C901
         package = json.loads(package_json.read_text(encoding="utf-8"))
         if isinstance(package.get("version"), str):
             versions["package.json"] = package["version"]
+
+    cargo_manifest = root / "Cargo.toml"
+    if cargo_manifest.is_file():
+        with cargo_manifest.open("rb") as source:
+            cargo_package = tomllib.load(source).get("package", {})
+        cargo_name = cargo_package.get("name")
+        cargo_version = cargo_package.get("version")
+        if not isinstance(cargo_name, str) or not cargo_name:
+            errors.append("Cargo.toml has no package name")
+        if isinstance(cargo_version, str):
+            versions["Cargo.toml"] = cargo_version
+        else:
+            errors.append("Cargo.toml has no package version")
+
+        cargo_lock = root / "Cargo.lock"
+        if not cargo_lock.is_file():
+            errors.append("Cargo.lock is missing")
+        elif isinstance(cargo_name, str) and cargo_name:
+            with cargo_lock.open("rb") as source:
+                cargo_packages = tomllib.load(source).get("package", [])
+            locked_version = next(
+                (
+                    package.get("version")
+                    for package in cargo_packages
+                    if package.get("name") == cargo_name
+                    and package.get("source") is None
+                ),
+                None,
+            )
+            if isinstance(locked_version, str):
+                versions["Cargo.lock"] = locked_version
+            else:
+                errors.append(f"Cargo.lock has no package {cargo_name}")
 
     marker_paths = [*root.glob("src/*/__init__.py")]
     required_markers: set[Path] = set()
@@ -1102,159 +1532,6 @@ def verify_release_version(
     return str(manifest["."])
 
 
-def direct_release(  # noqa: C901
-    api: GitHubAPI,
-    repo: str,
-    sha: str,
-    branch: str,
-    workflow: str,
-    root: Path,
-    source_run_id: str = "",
-) -> tuple[dict[str, object], bool]:
-    """Allocate one release from the current remote default-branch head."""
-    capabilities = detect_runtime_capabilities(api, repo, sha, branch, workflow)
-    payload = report(capabilities, "runtime-recheck")
-    if payload["mode"] != "direct":
-        return payload, False
-
-    encoded_branch = urllib.parse.quote(branch, safe="")
-    status, remote_ref = api.request(
-        "GET", f"repos/{repo}/git/ref/heads/{encoded_branch}"
-    )
-    remote_sha = (
-        remote_ref.get("object", {}).get("sha")
-        if isinstance(remote_ref, dict)
-        else None
-    )
-    if status != 200 or remote_sha != sha:
-        payload.update(
-            mode="verification-only",
-            reason="workflow commit is no longer the default-branch head",
-            status="superseded",
-        )
-        return payload, False
-
-    planned = release_plan(root, sha)
-    if planned is None:
-        payload.update(status="no-release", reason="no release-worthy commits")
-        return payload, False
-    tag, version = planned
-    version_errors = release_version_errors(root, version)
-    if version_errors:
-        payload.update(
-            mode="verification-only",
-            reason="release commit is not materialized: "
-            + "; ".join(version_errors),
-            status="version-not-materialized",
-            tag=tag,
-            version=version,
-        )
-        return payload, False
-    status, existing_ref = api.request(
-        "GET", f"repos/{repo}/git/ref/tags/{tag}"
-    )
-    if status == 200:
-        existing_sha = (
-            existing_ref.get("object", {}).get("sha")
-            if isinstance(existing_ref, dict)
-            else None
-        )
-        if existing_sha != sha:
-            payload.update(
-                mode="verification-only",
-                reason=f"tag {tag} already identifies another commit",
-                status="tag-conflict",
-                tag=tag,
-            )
-            return payload, True
-    elif status == 404:
-        create_status, _ = api.request(
-            "POST",
-            f"repos/{repo}/git/refs",
-            {"ref": f"refs/tags/{tag}", "sha": sha},
-        )
-        if create_status != 201:
-            payload.update(
-                mode="verification-only",
-                reason=f"tag creation failed with HTTP {create_status}",
-                status="tag-create-failed",
-                tag=tag,
-            )
-            return payload, True
-    else:
-        payload.update(
-            mode="verification-only",
-            reason=f"tag state is unknown (HTTP {status or 'unavailable'})",
-            status="tag-unknown",
-            tag=tag,
-        )
-        return payload, True
-
-    encoded_tag = urllib.parse.quote(tag, safe="")
-    status, release = api.request(
-        "GET", f"repos/{repo}/releases/tags/{encoded_tag}"
-    )
-    if status == 404:
-        status, release = api.request(
-            "POST",
-            f"repos/{repo}/releases",
-            {
-                "tag_name": tag,
-                "target_commitish": sha,
-                "name": tag,
-                "draft": True,
-                "generate_release_notes": True,
-            },
-        )
-    if status not in {200, 201} or not isinstance(release, dict):
-        payload.update(
-            mode="verification-only",
-            reason=f"draft release creation failed with HTTP {status}",
-            status="release-create-failed",
-            tag=tag,
-        )
-        return payload, True
-    if release.get("draft") is not True:
-        payload.update(status="already-released", tag=tag, version=version)
-        return payload, False
-
-    encoded_workflow = urllib.parse.quote(workflow, safe="")
-    status, runs = api.request(
-        "GET",
-        f"repos/{repo}/actions/workflows/{encoded_workflow}/runs?event=workflow_dispatch&branch={encoded_tag}&per_page=20",
-    )
-    active_or_successful = False
-    if status == 200 and isinstance(runs, dict):
-        active_or_successful = any(
-            item.get("head_sha") == sha
-            and (
-                item.get("status") != "completed"
-                or item.get("conclusion") == "success"
-            )
-            for item in runs.get("workflow_runs", [])
-            if isinstance(item, dict)
-        )
-    if not active_or_successful:
-        dispatch: dict[str, object] = {"ref": tag}
-        if source_run_id:
-            dispatch["inputs"] = {"source_run_id": source_run_id}
-        status, _ = api.request(
-            "POST",
-            f"repos/{repo}/actions/workflows/{encoded_workflow}/dispatches",
-            dispatch,
-        )
-        if status != 204:
-            payload.update(
-                mode="verification-only",
-                reason=f"artifact dispatch failed with HTTP {status}",
-                status="dispatch-failed",
-                tag=tag,
-            )
-            return payload, True
-    payload.update(status="dispatched", tag=tag, version=version)
-    return payload, False
-
-
 def parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     result = argparse.ArgumentParser()
@@ -1267,19 +1544,8 @@ def parser() -> argparse.ArgumentParser:
     detect.add_argument("--repo", required=True)
     detect.add_argument("--sha", required=True)
     detect.add_argument("--branch", required=True)
-    detect.add_argument("--workflow", required=True)
     detect.add_argument("--output", type=Path)
     detect.add_argument("--github-output", type=Path)
-
-    release = subparsers.add_parser("release")
-    release.add_argument("--repo", required=True)
-    release.add_argument("--sha", required=True)
-    release.add_argument("--branch", required=True)
-    release.add_argument("--workflow", required=True)
-    release.add_argument("--root", type=Path, default=Path.cwd())
-    release.add_argument("--output", type=Path)
-    release.add_argument("--github-output", type=Path)
-    release.add_argument("--source-run-id", default="")
 
     boundary = subparsers.add_parser("boundary")
     boundary.add_argument(
@@ -1312,9 +1578,20 @@ def parser() -> argparse.ArgumentParser:
     prepare = subparsers.add_parser("prepare")
     prepare.add_argument("--tag", required=True)
     prepare.add_argument("--root", type=Path, default=Path.cwd())
+    plan = subparsers.add_parser("plan")
+    plan.add_argument("--sha", default="HEAD")
+    plan.add_argument("--root", type=Path, default=Path.cwd())
+    plan.add_argument("--output", type=Path)
+    plan.add_argument("--github-output", type=Path)
+    candidate = subparsers.add_parser("prepare-candidate")
+    candidate.add_argument("--sha", default="HEAD")
+    candidate.add_argument("--root", type=Path, default=Path.cwd())
     verify = subparsers.add_parser("verify-version")
     verify.add_argument("--tag")
     verify.add_argument("--root", type=Path, default=Path.cwd())
+    verify_candidate = subparsers.add_parser("verify-candidate-version")
+    verify_candidate.add_argument("--base-sha", required=True)
+    verify_candidate.add_argument("--root", type=Path, default=Path.cwd())
     verify_follow_up = subparsers.add_parser("verify-release-follow-up")
     verify_follow_up.add_argument("--repo", required=True)
     verify_follow_up.add_argument("--head", required=True)
@@ -1329,7 +1606,7 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(arguments: list[str] | None = None) -> int:  # noqa: C901
-    """Run capability detection, direct release, or build preparation."""
+    """Run capability detection, local planning, or verification."""
     args = parser().parse_args(arguments)
     if args.command == "verify-release-follow-up":
         commit_pages = json.loads(args.commits.read_text(encoding="utf-8"))
@@ -1388,6 +1665,36 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
             raise SystemExit("; ".join(errors))
         print("Release source boundary is verified.")  # noqa: T201
         return 0
+    if args.command == "plan":
+        try:
+            payload = release_plan_report(args.root.resolve(), args.sha)
+        except (ValueError, json.JSONDecodeError) as error:
+            raise SystemExit(str(error)) from error
+        write_plan_report(payload, args.output, args.github_output)
+        return 0
+    if args.command == "prepare-candidate":
+        try:
+            payload = prepare_release_candidate(args.root.resolve(), args.sha)
+        except (ValueError, json.JSONDecodeError) as error:
+            raise SystemExit(str(error)) from error
+        write_plan_report(payload, None, None)
+        return 0
+    if args.command == "verify-candidate-version":
+        try:
+            version = verify_candidate_version(
+                args.root.resolve(), args.base_sha
+            )
+        except (
+            ValueError,
+            json.JSONDecodeError,
+            subprocess.CalledProcessError,
+            tomllib.TOMLDecodeError,
+        ) as error:
+            raise SystemExit(str(error)) from error
+        print(  # noqa: T201
+            f"Release candidate matches base decision {version}."
+        )
+        return 0
     if args.command in {"prepare", "verify-version"}:
         tag = args.tag
         expected = None
@@ -1407,10 +1714,12 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         print(f"Release version {version} is consistent.")  # noqa: T201
         return 0
     if args.command == "preflight":
+        policies = preflight_policy_observations(args.repo)
         write_report(
             report(
                 preflight_capabilities(args.repo),
                 "cli-preflight",
+                policies=policies,
                 integrations=optional_integration_preflight(args.repo),
             ),
             None,
@@ -1419,45 +1728,26 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         return 0
 
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    capabilities = (
-        unknown_capabilities("GitHub token is unavailable")
-        if not token
-        else detect_runtime_capabilities(
-            GitHubAPI(
-                token,
-                os.environ.get("GITHUB_API_URL", "https://api.github.com"),
-            ),
-            args.repo,
-            args.sha,
-            args.branch,
-            args.workflow,
+    policies = None
+    if not token:
+        capabilities = unknown_capabilities("GitHub token is unavailable")
+    else:
+        api = GitHubAPI(
+            token,
+            os.environ.get("GITHUB_API_URL", "https://api.github.com"),
         )
-    )
+        capabilities = detect_runtime_capabilities(
+            api, args.repo, args.sha, args.branch
+        )
+        policies = workflow_policy_observations(api, args.repo)
     if args.command == "detect":
         write_report(
-            report(capabilities, "runtime"), args.output, args.github_output
-        )
-        return 0
-    if not token:
-        write_report(
-            report(capabilities, "runtime-recheck"),
+            report(capabilities, "runtime", policies=policies),
             args.output,
             args.github_output,
         )
         return 0
-    payload, failed = direct_release(
-        GitHubAPI(
-            token, os.environ.get("GITHUB_API_URL", "https://api.github.com")
-        ),
-        args.repo,
-        args.sha,
-        args.branch,
-        args.workflow,
-        args.root.resolve(),
-        args.source_run_id,
-    )
-    write_report(payload, args.output, args.github_output)
-    return 1 if failed else 0
+    raise SystemExit(f"unsupported command: {args.command}")
 
 
 if __name__ == "__main__":
