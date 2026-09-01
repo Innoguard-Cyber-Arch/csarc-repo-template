@@ -76,6 +76,14 @@ event、權限、環境與呼叫；分類與驗證規則留在本機可測的 sc
 `GITHUB_TOKEN` 為 read-only；release job 只在自己的 workflow 提升必要權限。Repository
 必須允許 Actions 建立 PR，但 workflow 不能自行核准版本 PR。
 
+上表只列本 repo 自己的 active automation。生成 repo 另有一個選用能力：開啟
+`enable_template_update_notifications` 才產生 `template-update.yml`
+（`schedule`／`workflow_dispatch`、`contents: read`＋`issues: write`、10 分鐘
+timeout，只呼叫 `scripts/check-template-update`）。公開模板來源不需要 secret；
+來源為 private repository 時，才由唯讀的 `CSARC_TEMPLATE_READ_TOKEN` repository
+secret 提供存取，且只有 `schedule`／`workflow_dispatch` 路徑讀得到，不會流向
+`pull_request` workflow。本 repo 是模板來源本身，不消費也不排程這個 workflow。
+
 ## 驗證分級與實測成本
 
 `scripts/ci_tier.py` 依事件、base／head、labels 與 changed paths 做 fail-closed 分類；
