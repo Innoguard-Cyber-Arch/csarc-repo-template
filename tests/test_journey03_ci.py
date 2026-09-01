@@ -1,5 +1,6 @@
 """Regression tests for the minimal Journey 03 verification workflow."""
 
+import os
 import shlex
 import subprocess
 from pathlib import Path
@@ -25,6 +26,103 @@ def load_yaml(path: Path) -> dict[str, Any]:
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert isinstance(document, dict)
     return document
+
+
+def test_shared_cache_root_is_explicit_and_worktree_independent(
+    tmp_path: Path,
+) -> None:
+    """Reuse downloads only when the caller names one absolute location."""
+    resolver = REPO_ROOT / "scripts/resolve-cache-root"
+    shared_cache = tmp_path / "shared-cache"
+    environment = os.environ.copy()
+    environment["CSARC_CACHE_ROOT"] = str(shared_cache)
+
+    first = subprocess.run(  # noqa: S603 - repository-owned helper
+        [resolver],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    second = subprocess.run(  # noqa: S603 - repository-owned helper
+        [resolver],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert first.stdout.strip() == str(shared_cache)
+    assert second.stdout == first.stdout
+    assert shared_cache.is_dir()
+
+    environment["CSARC_CACHE_ROOT"] = "relative-cache"
+    rejected = subprocess.run(  # noqa: S603 - repository-owned helper
+        [resolver],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+    assert rejected.returncode == 2
+    assert "must be an absolute path" in rejected.stderr
+
+
+def test_verification_reuses_downloads_without_sharing_environments() -> None:
+    """Share package stores and pinned tools, not installed environments."""
+    root_fast = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
+    root_full = (REPO_ROOT / "scripts/verify-template.sh").read_text(
+        encoding="utf-8"
+    )
+    generated_fast = (
+        REPO_ROOT / "template/scripts/verify-fast.jinja"
+    ).read_text(encoding="utf-8")
+    generated_full = (REPO_ROOT / "template/scripts/verify.jinja").read_text(
+        encoding="utf-8"
+    )
+
+    assert all(
+        "scripts/resolve-cache-root" in source
+        for source in (root_fast, root_full, generated_fast, generated_full)
+    )
+    assert all(
+        'export UV_CACHE_DIR="$cache_root/uv"' in source
+        and 'UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"' in source
+        for source in (root_fast, root_full, generated_fast, generated_full)
+    )
+    assert all(
+        '--store-dir "$pnpm_store_dir"' in source
+        for source in (generated_fast, generated_full)
+    )
+    assert all(
+        "$cache_root/.venv" not in source
+        and "$cache_root/node_modules" not in source
+        for source in (root_fast, root_full, generated_fast, generated_full)
+    )
+
+
+def test_pinned_tool_caches_are_platform_scoped_and_revalidated() -> None:
+    """Avoid cross-platform binaries and repair a corrupt cached download."""
+    installers = (
+        "install-actionlint",
+        "install-gitleaks",
+        "install-hugo",
+        "install-osv-scanner",
+        "install-shellcheck",
+    )
+    for name in installers:
+        source = (REPO_ROOT / f"scripts/{name}").read_text(encoding="utf-8")
+        assert "scripts/resolve-cache-root" in source
+        assert "$(shasum -a 256 " in source
+        assert ".tmp.$$" in source
+        assert "$version/" in source
+
+    assert "$version/$asset" in (
+        REPO_ROOT / "scripts/install-actionlint"
+    ).read_text(encoding="utf-8")
+    assert "$version/$platform" in (
+        REPO_ROOT / "scripts/install-shellcheck"
+    ).read_text(encoding="utf-8")
 
 
 def test_root_ci_is_one_bounded_verification_job() -> None:

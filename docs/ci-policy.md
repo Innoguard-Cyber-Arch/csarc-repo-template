@@ -11,6 +11,14 @@
 - `.github/workflows/work-item-closure.yml` 只在里程碑工作 PR 合併進 `dev/m*` 後呼叫 repo-local lifecycle 程式關閉同號 Issue。
 - release、promotion、Zizmor、remote governance、deployment 與其他 schedule workflows 仍在 `archive/ci-cd/2026-08-27/`，尚未恢復。
 
+本機在不同 worktree 重跑驗證時，可把 `CSARC_CACHE_ROOT` 設為同一個絕對路徑；
+`uv`、`pnpm` 與固定版本工具會共用已驗證的下載內容。`.venv`、`node_modules`、
+生成 fixture 與測試結果仍留在各 worktree，快取命中不會略過任何測試。例如：
+
+```bash
+CSARC_CACHE_ROOT="$HOME/.cache/csarc" ./scripts/verify-template.sh
+```
+
 下列分支、promotion、release、quota fallback 與治理內容保留為跨 Journey 的政策設計；其中提到的專用 workflow 只有移回 `.github/workflows/` 後才算現行自動化，不能只因文件存在就宣稱已執行。
 
 CI 是沒有獨立測試環境時的可攜式 integration layer；外部環境與 canary

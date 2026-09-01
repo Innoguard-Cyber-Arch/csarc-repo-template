@@ -106,7 +106,13 @@ audit_github_actions() {
 main() {
   local repo_root
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-  export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"
+  local cache_root
+  cache_root="$("$repo_root/scripts/resolve-cache-root")"
+  if [[ -n "${CSARC_CACHE_ROOT:-}" ]]; then
+    export UV_CACHE_DIR="$cache_root/uv"
+  else
+    export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
+  fi
   export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
   cd "$repo_root"
 

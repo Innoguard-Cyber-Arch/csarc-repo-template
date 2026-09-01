@@ -46,6 +46,7 @@ paired_files=(
   scripts/install-shellcheck
   scripts/lint-workflows-shell
   scripts/release_policy.py
+  scripts/resolve-cache-root
   scripts/scan-secrets
   scripts/spec_to_issue.py
   scripts/sync_milestone_state.py
