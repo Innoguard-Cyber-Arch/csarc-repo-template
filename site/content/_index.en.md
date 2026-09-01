@@ -81,6 +81,8 @@ Workflows, policies, scripts, and documents shared by root and `template/` are k
 
 - **Overall:** turn the request into one Issue that can be completed and verified independently.
 - **Milestone:** create one only when several Issues share an outcome, deadline, or delivery batch, and give it one lifecycle tracking Issue.
+  - Title it `Milestone <number>: <Milestone title>`; the text after the colon must exactly match the Milestone title.
+  - Keep approvals, objections, and early termination in the body or comments, not the title.
   - Work may start only after at least one person other than the proposer agrees and no objection remains unresolved.
 - **Issue:** choose the Feature, Task, Bug, or Documentation form, then state the problem, acceptance criteria, and verification.
   - Use a clear English title; the creator owns the Issue by default.
