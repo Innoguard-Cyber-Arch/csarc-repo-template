@@ -121,7 +121,7 @@ Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交
 | 正式版本與 CHANGELOG | Active | Release Please 產生同一張受審查 PR；已發布版本不改寫 |
 | tag／GitHub Release | Active | 版本 PR 合併且完整驗證通過後，自動建立 draft、驗證成品再公開 |
 | checksum／SBOM | Active | `release_bundle.py` 在同一次 run 建立、下載並重驗 exact-tag 成品 |
-| attestation／消費驗證 | Conditional | 由 [#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439) 決定選配 registry 與 attestation；消費端仍使用既有驗證契約 |
+| attestation／消費驗證 | Conditional | 公版不提供 attestation 或 registry publisher；消費端驗證沿用 `scripts/verify_release_consumption.py` 既有 fail-closed 契約 |
 | PyPI／npm／GHCR | Not applicable | root 不發布 registry；生成專案只發布 GitHub Release 成品，不要求長效 token |
 | production deployment | Not applicable | 由 consuming product 定義環境、健康檢查、核准與復原 |
 
