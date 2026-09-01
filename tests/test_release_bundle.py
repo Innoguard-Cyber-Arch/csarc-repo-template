@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -13,6 +14,16 @@ import pytest
 ROOT = Path(__file__).parents[1]
 
 
+def clean_environment() -> dict[str, str]:
+    """Keep fixture subprocesses out of the parent coverage session."""
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("COV_CORE_")
+        and key not in {"COVERAGE_FILE", "COVERAGE_PROCESS_START"}
+    }
+
+
 def run(*arguments: str, cwd: Path) -> subprocess.CompletedProcess[str]:
     """Run one fixture command."""
     return subprocess.run(  # noqa: S603
@@ -20,6 +31,7 @@ def run(*arguments: str, cwd: Path) -> subprocess.CompletedProcess[str]:
         cwd=cwd,
         check=True,
         capture_output=True,
+        env=clean_environment(),
         text=True,
     )
 
@@ -128,6 +140,7 @@ def test_bundle_fails_closed(tmp_path: Path, failure: str) -> None:
         cwd=root,
         check=False,
         capture_output=True,
+        env=clean_environment(),
         text=True,
     )
     assert result.returncode != 0

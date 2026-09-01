@@ -343,6 +343,8 @@ if $verify_python; then
     --no-deps \
     --editable .
   uv pip check --python "$lower_bounds_root/.venv/bin/python"
+  # Keep the lower-bound run independent from the primary coverage database.
+  rm -f .coverage .coverage.* coverage.xml
 {% if coverage_mode == "global" %}
   if ! "$lower_bounds_root/.venv/bin/python" -m pytest \
     --cov \

@@ -547,7 +547,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "獨立工作直接交付",
         "Hotfix 完整驗證與證據",
         "版本與 Release ownership",
-        "發版後續規則",
+        "版本候選與發布證據",
         "里程碑結案",
     ]
     assert delivery_rows[0]["shared"]["milestone"]["files"] == [
@@ -563,13 +563,15 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     ]
     assert delivery_rows[2]["shared"]["release"]["files"] == [
         {"path": "scripts/release_policy.py"},
-        {"path": "tests/test_release_policy.py"},
+        {"path": "scripts/release_bundle.py"},
+        {"path": "tests/test_release_bundle.py"},
     ]
     assert delivery_rows[3]["shared"]["milestone"]["files"] == [
-        {"path": "scripts/test-release-follow-up-gates"}
+        {"path": "scripts/verify-release-candidate"}
     ]
     assert delivery_rows[3]["shared"]["release"]["files"] == [
-        {"path": "scripts/test-release-follow-up-gates"}
+        {"path": "scripts/release_bundle.py"},
+        {"path": "tests/test_release_bundle.py"},
     ]
     assert delivery_rows[4]["shared"]["release"]["files"] == [
         {"path": "tests/test_milestone_lifecycle.py"},
