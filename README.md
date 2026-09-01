@@ -121,7 +121,8 @@ Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交
 | 正式版本與 CHANGELOG | Candidate／Guided | 自動或本機候選共用同一版本決策；組織目前禁止 Actions 建 PR |
 | tag／GitHub Release | Candidate／Blocked | 版本 PR 合併後由唯一 workflow 發布；待 default branch live run |
 | checksum／SBOM | Candidate | `release_bundle.py` 在同一次 run 建立、下載並重驗 exact-tag 成品；待 live run |
-| attestation／消費驗證 | Conditional | 由 [#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439) 決定選配 registry 與 attestation；消費端仍使用既有驗證契約 |
+| production-side attestation | Removed | [#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439) 判定零 active 消費者並移除設定面，非留待選配 |
+| 消費端 attestation 驗證 | Conditional | 與上列產出端設定無關；消費端仍使用既有驗證契約 |
 | PyPI／npm／GHCR | Not applicable | root 不發布 registry；生成專案只發布 GitHub Release 成品，不要求長效 token |
 | production deployment | Not applicable | 由 consuming product 定義環境、健康檢查、核准與復原 |
 
