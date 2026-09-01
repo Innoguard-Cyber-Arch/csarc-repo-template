@@ -568,6 +568,7 @@ def test_init_json_uses_one_complete_resolved_plan(
     assert payload["answers"]["enable_codeql"] is enabled
     assert payload["answers"]["enable_release_attestations"] is enabled
     assert payload["answers"]["reviewers"] == "@default-reviewer"
+    assert payload["release_ownership"] == "csarc-owned"
     assert payload["release_capabilities"]["mode"] == "verification-only"
     assert not target.exists()
 
@@ -1635,7 +1636,7 @@ def test_adoption_markdown_reports_repository_context(
         tmp_path,
         cli.Revision("v1.0.0", "a" * 40, source),
         context,
-        {"language": "ci"},
+        {"language": "ci", "project_mode": "existing"},
         cli.Plan((), (), (), (), (), ()),
         "2026-08-24T00:00:00+00:00",
     )
@@ -2137,6 +2138,11 @@ def test_adopt_rejects_plan_tampering_and_target_drift(
         / cli.ADOPTION_PLAN_BASENAME
     )
     original = plan_path.read_text(encoding="utf-8")
+    assert json.loads(original)["release_ownership"] == "product-owned"
+    report_path = plan_path.with_name(f"{cli.ADOPTION_REPORT_BASENAME}.md")
+    assert "Release ownership: `product-owned`" in report_path.read_text(
+        encoding="utf-8"
+    )
     plan_path.write_text(
         original.replace('"mode": "adopt"', '"mode": "init"'),
         encoding="utf-8",
@@ -3771,6 +3777,7 @@ def test_update_repository_rename_preserves_custom_security_channel(
     """Only move a repository-derived reporting channel to the new URL."""
     answers: dict[str, object] = {
         "language": "python",
+        "project_mode": "new",
         "project_visibility": "private",
         "repository_url": "https://github.com/old/repository",
         "security_reporting_channel": saved_channel,
@@ -3797,6 +3804,33 @@ def test_update_repository_rename_preserves_custom_security_channel(
     assert result["security_reporting_channel"] == expected_channel
     if saved_channel == expected_channel and explicit_channel is None:
         assert "security_reporting_channel" not in update_data
+
+
+def test_update_cannot_change_release_ownership() -> None:
+    """Keep the persisted lifecycle mode as the only release owner input."""
+    repository = cli.RepositoryContext(
+        "owner/repository",
+        "owner",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+
+    with pytest.raises(CliError, match="owns the release boundary"):
+        cli.update_plan_answers(
+            {"project_mode": "existing", "project_visibility": "private"},
+            {"project_mode": "new"},
+            repository,
+        )
+
+    answers, update_data = cli.update_plan_answers(
+        {"project_mode": "existing", "project_visibility": "private"},
+        {"project_mode": "existing"},
+        repository,
+    )
+    assert cli.release_ownership(answers) == "product-owned"
+    assert update_data["project_mode"] == "existing"
 
 
 @pytest.mark.large
@@ -4119,6 +4153,25 @@ def test_release_metadata_fails_closed(
     client.release_values[field] = value
     with pytest.raises(CliError, match=message):
         cli.resolve_revision(cli.CANONICAL_SOURCE, None, client=client)
+
+
+def test_unreleased_revision_requires_a_local_git_source(
+    tmp_path: Path,
+) -> None:
+    """Never turn a remote SHA into a first-adoption trust assertion."""
+    with pytest.raises(CliError, match="use a local Git repository"):
+        cli.resolve_revision(
+            "https://example.invalid/untrusted/template.git",
+            "a" * 40,
+            allow_unreleased=True,
+        )
+
+    source, revision = make_template(tmp_path)
+    resolved = cli.resolve_revision(
+        str(source), revision, allow_unreleased=True
+    )
+    assert resolved.sha == revision
+    assert not resolved.verified
 
 
 def test_release_trust_failures_stop_before_copy(
