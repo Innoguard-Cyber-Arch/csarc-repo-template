@@ -1007,11 +1007,8 @@ def release_version_errors(  # noqa: C901
         if isinstance(package.get("version"), str):
             versions["package.json"] = package["version"]
 
-    marker_paths = [
-        root / "README.md",
-        root / "docs" / "index.html",
-        *root.glob("src/*/__init__.py"),
-    ]
+    marker_paths = [*root.glob("src/*/__init__.py")]
+    required_markers: set[Path] = set()
     release_config = root / "release-please-config.json"
     if release_config.is_file():
         config = json.loads(release_config.read_text(encoding="utf-8"))
@@ -1021,15 +1018,28 @@ def release_version_errors(  # noqa: C901
         extra_paths = {
             item if isinstance(item, str) else item.get("path")
             for item in extra_files
-            if isinstance(item, (str, dict))
+            if isinstance(item, str)
+            or (
+                isinstance(item, dict) and item.get("type") in {None, "generic"}
+            )
         }
-        if "site/index.html" in extra_paths:
-            marker_paths.append(root / "site" / "index.html")
-    required_markers = {
-        root / "README.md",
-        root / "docs" / "index.html",
-        root / "site" / "index.html",
-    }
+        required_markers = {
+            root / path
+            for path in extra_paths
+            if isinstance(path, str) and path and (root / path).is_file()
+        }
+        marker_paths.extend(required_markers)
+    else:
+        required_markers = {
+            path
+            for path in (
+                root / "README.md",
+                root / "docs" / "index.html",
+                root / "site" / "index.html",
+            )
+            if path.is_file()
+        }
+        marker_paths.extend(required_markers)
     for path in marker_paths:
         if not path.is_file():
             continue

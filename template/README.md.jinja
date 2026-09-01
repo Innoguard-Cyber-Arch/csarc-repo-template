@@ -136,9 +136,9 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 
 `policies/rulesets.json` 是所有方案共用的期望狀態。設定腳本在所有方案都透過 repository teams API 驗證 PR 內設定的 team 存在且對 repo 有 write access；這項檢查與是否能強制 Ruleset 分開，也不依賴預設分支尚未更新的 CODEOWNERS。`.github/workflows/governance-comment.yml` 另在非 draft PR 開啟、重開或轉為 ready 時，從 `.github/REVIEWERS` 排除作者後輪派一位個別 reviewer，並用短效 `GITHUB_TOKEN` 提出 request，不需 PAT 或 GitHub App。Copier 的 `reviewers` 可用逗號設定一到多位候選人。Free private 不支援 team review request 或多位同時 reviewer；GitHub Team 以上才提供這些能力。Free organization private repo 的設定頁雖提供 Ruleset 編輯器，但 GitHub REST 與 GraphQL 對建立／更新（包含 `disabled`）都回覆需升級或公開；因此 `gh` 無法自動預存。管理員可選擇在 Web UI 人工建立 disabled Ruleset，`check` 會將它顯示為 `STAGED`，但仍只代表已儲存，不代表 `main` 受保護。repo 改成 public 或組織升級後，請重新執行 `plan`／`apply`／`check`，由腳本套用 `active` 政策並驗證有效規則。腳本不會自行變更可見性。
 
-{% if languages %}本機打包與 release evidence 測試不等於已啟用發版。Artifact attestation、SBOM 上傳與消費端驗證只有在產品 owner 另外建立並核准 release workflow 後才會執行；目前不宣稱 active。{% endif %}
+{% if languages %}本機與 release workflow 會以相同原生工具建立已選語言的套件；GitHub Release 另附 checksum 與 SPDX SBOM。Registry publishing、artifact attestation 與消費端門禁仍是選配，不會因產生 GitHub Release 就自動啟用。{% endif %}
 
-目前模板不產生 release workflow，也不要求 GitHub App、PAT 或 registry token。`csarc init`／`adopt`／`update` 顯示的 capability preflight 只供規劃；它不會自行開啟 Release PR、建立 tag、發布成品或證明遠端能力可用。`plan`／`apply`／`check` 是有管理權時啟用較強門禁的選配，不會啟用發版。Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。請在這裡列出產品設定的名稱、用途與取得位置，但不要填入真實值。
+新建專案會取得 `release.yml`，以短效 `GITHUB_TOKEN` 建立版本 PR、驗證其精確 SHA，並在版本 PR 合併後發布 GitHub Release；不要求 GitHub App、PAT 或 registry token。管理員需用 repository settings `apply` 開啟 GitHub Actions 建立 PR 的原生權限。既有專案保留自己的 product-owned release workflow，Copier 不覆寫或重複發布。Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交的 `.env`。
 
 同一個唯讀 preflight 也會依 personal／organization owner、repo admin 與 organization owner 狀態，把選配 Renovate App 標成 `available`、`request-owner` 或 `fallback`。`available` 只提供 [安裝入口](https://github.com/apps/renovate/installations/new)，仍須在 GitHub 同意權限並只選本 repo；organization member 即使有 repo admin，仍需 organization owner 核准。未知權限、API 失敗或無 admin 時不猜測，直接保留 Dependabot 與既有 CI/CD。CLI 不會靜默安裝 App，也不要求長效廣域 PAT。新 repo 尚未有 origin 時，先設定 `GH_REPO=owner/repo` 可讓 `csarc init` 檢查預定目標；推送後也能執行 `python scripts/release_policy.py preflight --repo owner/repo` 重查。
 
@@ -146,18 +146,19 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 
 版本意圖、正式版本、發版、交付與部署是不同階段：PR title 只表達 major／minor／patch／no-release；精確版本與 CHANGELOG 要在同一張受審查 PR 一起寫入；合併到 `main` 是 repository delivery；只有不可變 tag、GitHub Release、明列成品與可驗證證據都存在才叫發版。部署到真實 runtime 不在本模板範圍。
 
-目前 `.github/workflows/` 沒有版本配置、Release Please、成品發布、release consumption 或 registry publisher Action。{% if not languages %}此專案沒有語言成品；若未來建立 Release，只能明列來源封存檔與實際產生的證據。{% else %}本機驗證會確認已選語言能建立{% if has_python %} wheel{% endif %}{% if has_python and has_typescript %}、{% endif %}{% if has_typescript %} npm tarball{% endif %}{% if (has_python or has_typescript) and has_rust %}、{% endif %}{% if has_rust %} Cargo package{% endif %}，但不會自動發布；現有 registry／attestation 設定在 #439 對齊前只代表 conditional 選項。{% endif %}
+{% if project_mode == "new" %}`release.yml` 會依 Conventional Commits 建立可審查的版本 PR；合併後先完整驗證，再建立 draft Release，附上來源封存{% if has_python %}、wheel／sdist{% endif %}{% if has_typescript %}、npm tarball{% endif %}{% if has_rust %}、Cargo package{% endif %}、checksum 與 SPDX SBOM，驗證完成才公開。{% else %}此為既有專案導入；原本的 product-owned release workflow 與成品定義會保留，CSARC 不用檔名猜測或建立第二個 release owner。{% endif %}
 
 | 能力 | 目前狀態 | 現在怎麼做 |
 | --- | --- | --- |
 | PR 的 SemVer 意圖 | Active | `fix`／`revert` 為 patch、`feat` 為 minor、`!` 為 major，其餘 no-release |
-| 正式版本與 CHANGELOG | Manual | 由產品 owner 在同一張受審查 PR 一起更新；已發布版本不改寫 |
-| tag／GitHub Release | Manual／未配置 | 產品先決定唯一 release owner；不得同時讓產品 workflow 與 CSARC 建 tag 或 Release |
-| checksum／SBOM／attestation | Conditional | repo 內的 scripts／tests 只保存安全契約；真正接上發版前不得宣稱 active |
+| 正式版本與 CHANGELOG | {% if project_mode == "new" %}Active{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}Release Please 建立同一張受審查 PR{% else %}沿用產品既有規則{% endif %}；已發布版本不改寫 |
+| tag／GitHub Release | {% if project_mode == "new" %}Active{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}版本 PR 合併並通過完整驗證後自動發布{% else %}模板不建立第二個 owner{% endif %} |
+| checksum／SBOM | {% if project_mode == "new" %}Active{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}與 exact-tag 成品同一次建立、下載並重驗{% else %}由產品 release workflow 決定{% endif %} |
+| attestation | Conditional | 由產品依 registry 與供應鏈需求另行啟用 |
 | PyPI／npm／GHCR | Not configured | 相關設定目前沒有 active publisher；不得當成已啟用 |
 | production deployment | Not applicable | 由產品自行定義環境、健康檢查、核准與復原 |
 
-若產品日後要自動發版，先在 Issue／ADR 確認 owner、成品、trigger、最小權限、OIDC／environment approval、timeout、concurrency、失敗復原與消費端驗證，再新增一支薄 workflow 呼叫可在本機測試的入口；不要直接複製公版的歷史 workflow。
+`GITHUB_TOKEN` 建立的版本 PR 不會觸發另一支 PR workflow；release workflow 因此在同一次 run 取得候選 SHA，執行可信來源、版本同步與打包驗證並回寫狀態。版本 PR 仍需人工審查，不能由 workflow 自我核准。Registry 或部署若要加入，先在 Issue／ADR 確認 owner、權限、失敗復原與消費端驗證，再呼叫 repo-local 入口，不複製另一套發布邏輯。
 
 ## 公版更新
 

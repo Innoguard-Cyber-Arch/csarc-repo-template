@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+candidate_json="${1:?Usage: verify-release-candidate PR_JSON_FILE}"
+status_url="${STATUS_URL:-$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID}"
+
+pr_number="$(jq -r '.number' "$candidate_json")"
+candidate_sha="$(jq -r '.sha' "$candidate_json")"
+head_ref="$(jq -r '.headBranchName' "$candidate_json")"
+base_ref="$(jq -r '.baseBranchName' "$candidate_json")"
+component="$(jq -r '.packages["."].component' "$repo_root/release-please-config.json")"
+expected_head="release-please--branches--main--components--$component"
+[[ "$pr_number" =~ ^[0-9]+$ && "$candidate_sha" =~ ^[0-9a-f]{40}$ ]]
+test "$base_ref" = main
+test "$head_ref" = "$expected_head"
+
+publish_status() {
+  gh api --method POST \
+    "repos/$GITHUB_REPOSITORY/statuses/$candidate_sha" \
+    -f state="$1" -f context='Release / candidate' \
+    -f description="$2" -f target_url="$status_url" >/dev/null
+}
+
+publish_status pending 'Validating the generated version commit'
+status=failure
+if (
+  set -euo pipefail
+  pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr_number")"
+  files="$RUNNER_TEMP/release-candidate-files"
+  commits="$RUNNER_TEMP/release-candidate-commits.json"
+  gh api --paginate --slurp \
+    "repos/$GITHUB_REPOSITORY/pulls/$pr_number/files?per_page=100" \
+    | jq -r '.[][] | .filename, (.previous_filename // empty)' >"$files"
+  gh api --paginate --slurp \
+    "repos/$GITHUB_REPOSITORY/pulls/$pr_number/commits?per_page=100" \
+    >"$commits"
+  python3 "$repo_root/scripts/release_policy.py" verify-release-follow-up \
+    --repo "$GITHUB_REPOSITORY" \
+    --head "$head_ref" \
+    --head-repo "$(jq -r '.head.repo.full_name' <<<"$pr")" \
+    --head-sha "$candidate_sha" \
+    --actor "$(jq -r '.user.login' <<<"$pr")" \
+    --changed-files "$files" \
+    --commits "$commits" \
+    --root "$repo_root"
+
+  git -C "$repo_root" fetch --no-tags origin "$candidate_sha"
+  git -C "$repo_root" checkout --detach "$candidate_sha"
+  cd "$repo_root"
+  python3 scripts/release_bundle.py candidate \
+    --output "$RUNNER_TEMP/release-candidate-assets"
+); then
+  status=success
+fi
+publish_status "$status" "Generated version commit: $status"
+test "$status" = success

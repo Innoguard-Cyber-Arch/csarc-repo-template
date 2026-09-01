@@ -1,0 +1,173 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  release:
+    name: version and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          version: "11.22.0"
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Install the pinned Rust toolchain
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
+          rustup default 1.98.0
+      - name: Verify the current main commit
+        run: |
+          if [[ -x scripts/verify-template.sh && -f copier.yml ]]; then
+            ./scripts/verify-template.sh
+          else
+            ./scripts/verify full
+          fi
+      - name: Create or update the version pull request
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      - name: Validate the exact version pull request commit
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PR: ${{ steps.release.outputs.pr }}
+          STATUS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          printf '%s\n' "$RELEASE_PR" >"$RUNNER_TEMP/release-pr.json"
+          ./scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"
+      - name: Resolve the exact release state
+        id: state
+        env:
+          CREATED: ${{ steps.release.outputs.release_created }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          tag="$RELEASE_TAG"
+          if [[ -z "$tag" ]]; then
+            mapfile -t tags < <(git tag --points-at "$GITHUB_SHA" | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || true)
+            [[ "${#tags[@]}" -le 1 ]]
+            tag="${tags[0]:-}"
+          fi
+          state=none
+          if [[ -n "$tag" ]]; then
+            test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"
+            release="$(gh release view "$tag" --json isDraft,isImmutable,tagName)"
+            test "$(jq -r .tagName <<<"$release")" = "$tag"
+            if [[ "$(jq -r .isDraft <<<"$release")" == true ]]; then
+              state=draft
+            else
+              state=published
+            fi
+          fi
+          if [[ "$CREATED" == true ]]; then
+            test "$state" = draft
+          fi
+          printf 'state=%s\ntag=%s\n' "$state" "$tag" >>"$GITHUB_OUTPUT"
+      - name: Prepare release assets
+        if: ${{ steps.state.outputs.state == 'draft' }}
+        env:
+          RELEASE_TAG: ${{ steps.state.outputs.tag }}
+        run: python3 scripts/release_bundle.py prepare --tag "$RELEASE_TAG" --output "$RUNNER_TEMP/release-assets"
+      - name: Generate the SPDX SBOM
+        if: ${{ steps.state.outputs.state == 'draft' }}
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: .
+          format: spdx-json
+          output-file: ${{ runner.temp }}/release-assets/sbom.spdx.json
+          syft-version: v1.50.0
+          upload-artifact: false
+          upload-release-assets: false
+          dependency-snapshot: false
+      - name: Bind, upload, and publish the release
+        if: ${{ steps.state.outputs.state == 'draft' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.state.outputs.tag }}
+        run: |
+          set -euo pipefail
+          assets="$RUNNER_TEMP/release-assets"
+          python3 scripts/release_bundle.py finalize --tag "$RELEASE_TAG" --output "$assets"
+          python3 scripts/release_bundle.py verify --tag "$RELEASE_TAG" --output "$assets"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+            --jq '.assets[].id' | while read -r asset_id; do
+              gh api --method DELETE \
+                "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
+            done
+          gh release upload "$RELEASE_TAG" "$assets"/* --clobber
+          downloaded="$(mktemp -d "$RUNNER_TEMP/release-download.XXXXXX")"
+          gh release download "$RELEASE_TAG" --dir "$downloaded"
+          python3 scripts/release_bundle.py verify --tag "$RELEASE_TAG" --output "$downloaded"
+          gh release edit "$RELEASE_TAG" --draft=false --latest
+          for attempt in $(seq 1 12); do
+            immutable="$(gh release view "$RELEASE_TAG" --json isImmutable --jq .isImmutable || true)"
+            if [[ "$immutable" == true ]] &&
+              gh release verify "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"; then
+              break
+            fi
+            if [[ "$attempt" == 12 ]]; then
+              echo "Release did not become immutable and verifiable within 60 seconds." >&2
+              exit 1
+            fi
+            sleep 5
+          done
+      - name: Verify an already-published rerun
+        if: ${{ steps.state.outputs.state == 'published' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.state.outputs.tag }}
+        run: |
+          downloaded="$(mktemp -d "$RUNNER_TEMP/release-download.XXXXXX")"
+          gh release download "$RELEASE_TAG" --dir "$downloaded"
+          python3 scripts/release_bundle.py verify --tag "$RELEASE_TAG" --output "$downloaded"
+          for attempt in $(seq 1 12); do
+            immutable="$(gh release view "$RELEASE_TAG" --json isImmutable --jq .isImmutable || true)"
+            if [[ "$immutable" == true ]] &&
+              gh release verify "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"; then
+              break
+            fi
+            if [[ "$attempt" == 12 ]]; then
+              echo "Release did not become immutable and verifiable within 60 seconds." >&2
+              exit 1
+            fi
+            sleep 5
+          done
+      - name: Keep a failed mutable release in draft
+        if: ${{ failure() && steps.state.outputs.state == 'draft' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.state.outputs.tag }}
+        run: |
+          if [[ "$(gh release view "$RELEASE_TAG" --json isImmutable --jq .isImmutable)" == false ]]; then
+            gh release edit "$RELEASE_TAG" --draft
+          fi

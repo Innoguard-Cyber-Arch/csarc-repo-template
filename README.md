@@ -26,7 +26,7 @@ Cyber-Arch 的可更新 repo 公版，支援只使用共通流程，或獨立選
 
 本 repo 維護 Copier 模板、共用 CI、安全檢查與 GitHub 設定草案。`template/` 是下發內容；根目錄則讓公版本身使用同一套規則。
 
-目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks、驗證、打包、checksum 與 SBOM 的本機契約。版本與 GitHub Release 目前由維護者人工處理；沒有 active 的自動發版、容器驗證、registry publishing 或通用部署流程。GitHub 設定腳本會先辨識方案與實際 API 能力。
+目前可用：共通 CI/CD 與可獨立勾選的 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR checks、驗證、自動版本 PR、GitHub Release、打包、checksum 與 SBOM。容器驗證、registry publishing 與通用部署流程仍未啟用。GitHub 設定腳本會先辨識方案與實際 API 能力。
 
 ## 快速開始
 
@@ -91,7 +91,7 @@ flowchart LR
 
 公版的完整入口是 `./scripts/verify-template.sh`；生成專案使用 `./scripts/verify`。現行 `.github/workflows/ci.yml` 只有一個 `verify` job，依變更選擇 docs／fast／full，再呼叫同一份 repo-local 程式；一般 PR 不會為 fast、full、安全與 aggregate 各啟動一個 runner。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 30 分鐘。詳細分級與目前封存邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
-Dependabot、PR 條件式 OSV 與每週／手動 OSV 掃描已啟用。專用的 promotion、release 與 deployment workflows 沒有啟用，已判定不恢復的歷史 YAML 也已從 archive 移除；Zizmor、remote governance 與其他仍待各自 owner 決定的 workflow 才保留在 `archive/ci-cd/2026-08-27/`。
+Dependabot、PR 條件式 OSV、每週／手動 OSV 掃描與單一 release workflow 已啟用。專用 promotion、release handoff、registry publisher 與 deployment workflows 不恢復，歷史由 Git／Issue／PR 保存；Zizmor、remote governance 與其他仍待各自 owner 決定的 workflow 才保留在 `archive/ci-cd/2026-08-27/`。
 
 ### Actions 額度耗盡的一次性驗證
 
@@ -113,15 +113,16 @@ Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交
 
 先分清楚四件事：版本意圖描述相容性影響；正式版本把 manifest、package metadata 與 CHANGELOG 一起寫進受審查的 commit；發版建立不可變 tag、GitHub Release、成品與證據；交付則是把已驗證工作送進權威分支或交給使用者。部署到實際環境不在本模板範圍。
 
-目前 `.github/workflows/` **沒有**版本配置、Release Please、成品發布、release consumption 或 live-integration Action。合併到 `main` 只代表 repository delivery，不代表已發版。維護者若需要新版本，必須以同一張人工 PR 同步 `.release-please-manifest.json`、`version.txt`、`pyproject.toml`、`uv.lock`、README marker 與 CHANGELOG，再依核准流程建立 tag／Release；不得在 CI checkout 內暫時改版本。生成專案從自己的 `0.1.0` 開始，版本與 release owner 不跟隨公版。
+合併到 `main` 先完成 repository delivery；`release.yml` 隨後執行完整驗證，並由 Release Please 依 Conventional Commits 建立或更新可審查的版本 PR。因 `GITHUB_TOKEN` 建立的 PR 不會再觸發其他 workflow，同一支 release workflow 會直接驗證該 PR 的可信作者、允許檔案、版本／CHANGELOG 一致性與可打包性，並把結果綁在候選 SHA。版本 PR 經人審查合併後，同一流程重新驗證 `main`，建立 draft Release、上傳成品、checksum 與 SPDX SBOM，驗證下載內容後才公開並確認 immutable。失敗的 mutable Release 留在 draft，可安全重跑。生成專案從自己的 `0.1.0` 開始，版本不跟隨公版。
 
 | 能力 | 目前狀態 | 現在怎麼做 |
 | --- | --- | --- |
 | PR 的 SemVer 意圖 | Active | `fix`／`revert` 為 patch、`feat` 為 minor、`!` 為 major，其餘 no-release |
-| 正式版本與 CHANGELOG | Manual | 同一張受審查 PR 一起更新；已發布版本不改寫 |
-| tag／GitHub Release | Blocked | 等 [#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369) 決定 CSARC-owned 與 product-owned 邊界；不把歷史成功 run 當現行能力 |
-| checksum／SBOM／attestation／消費驗證 | Conditional | 本機 scripts 與 tests 保留安全契約；有真實 owner、成品與 workflow 後才接上 |
-| PyPI／npm／GHCR | Not applicable | root 不發布 registry；生成專案未產生 publisher workflow，也不要求長效 token |
+| 正式版本與 CHANGELOG | Active | Release Please 產生同一張受審查 PR；已發布版本不改寫 |
+| tag／GitHub Release | Active | 版本 PR 合併且完整驗證通過後，自動建立 draft、驗證成品再公開 |
+| checksum／SBOM | Active | `release_bundle.py` 在同一次 run 建立、下載並重驗 exact-tag 成品 |
+| attestation／消費驗證 | Conditional | 由 [#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439) 決定選配 registry 與 attestation；消費端仍使用既有驗證契約 |
+| PyPI／npm／GHCR | Not applicable | root 不發布 registry；生成專案只發布 GitHub Release 成品，不要求長效 token |
 | production deployment | Not applicable | 由 consuming product 定義環境、健康檢查、核准與復原 |
 
 完整 current-state、歷史 Action disposition、最佳實踐來源與重新啟用門檻見 [`docs/adr/release-security-and-dependencies.md`](docs/adr/release-security-and-dependencies.md)。
