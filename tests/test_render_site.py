@@ -315,6 +315,20 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     ).read_text(encoding="utf-8")
     assert "規則治理單獨定義合併資格、權限與例外" in active_components
     assert "AI 能執行工作，但不能自行合併" not in active_components  # noqa: RUF001
+    for track in ("method", "agents", "contract", "languages", "supply", "pr"):
+        assert f"\n      {track}: [" in active_components
+        track_config = active_components.split(f"\n      {track}: [", 1)[
+            1
+        ].split("\n      ],", 1)[0]
+        assert "固定基線｜" in track_config  # noqa: RUF001
+        assert any(
+            label in track_config
+            for label in ("可調整｜", "專案選擇｜", "專案選配｜")  # noqa: RUF001
+        )
+    assert "可調整｜選用語言與 Python 支援範圍" in active_components  # noqa: RUF001
+    assert "固定基線｜各語言使用原生工具" in active_components  # noqa: RUF001
+    assert "只列公版主要政策、可調選項與設定位置" in active_components
+    assert english.count('data-audience="maintainer"') == 6
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english

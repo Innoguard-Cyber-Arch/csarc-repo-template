@@ -2558,7 +2558,8 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>Change proposal:</strong> review a proposed change separately, then merge it into the official specification after acceptance.</li>
 <li><strong>Complexity-based workflow:</strong> use a short path for small work and add discovery, design, roles, and review only for larger work.</li>
 </ul>
-<aside class="config-guidance"><strong>Specification format</strong><p>Keep the current lightweight Issue and spec format. Reconsider a separate Spec Kit workflow only when approved requirements routinely need a full spec, plan, and task breakdown.</p></aside></div>
+<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>Issues require a problem and acceptance criteria, blank Issues are disabled, and the template owns title, classification, hierarchy, and Milestone-start rules.</li><li><strong>Project choice:</strong><code>docs/specs/</code> may use <code>tracking: issue</code>, <code>story</code>, or <code>none</code> to control work-item synchronization.</li><li><strong>Locations:</strong><code>.github/ISSUE_TEMPLATE/</code>, <code>AGENTS.md</code>, <code>docs/milestone-description.md</code>, and <code>docs/specs/</code>.</li></ul></aside>
+</div>
 </section>
 
 <section class="slide markdown-slide candidate-slide" id="agents" data-content-key="agents" data-track="agents" aria-label="Define AI rules before implementation">
@@ -2640,6 +2641,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>Template creation and updates:</strong> Copier generates and updates the shared baseline; the Template upgrades section defines existing-repository updates.</li>
 </ul>
 <p><code>README.md</code> serves people, <code>AGENTS.md</code> serves every agent, and <code>template/AGENTS.md.jinja</code> plus <code>copier.yml</code> emit only commands the selected profile can run. <code>scripts/cleanup-worktrees</code> and <code>scripts/test-worktree-cleanup</code> handle safe cleanup; <code>scripts/verify</code>, <code>.github/workflows/</code>, and <code>policies/</code> keep rules, evidence, automation, and governance separate.</p>
+<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong><code>AGENTS.md</code> is the only AI-rules source; writable tasks use branches and worktrees, while prompts do not duplicate verification or governance logic.</li><li><strong>Adjustable:</strong><code>project_run_command</code> names how to invoke the product; existing repositories may set one repository-relative <code>project_verification_hook</code>.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>AGENTS.md</code>, <code>CLAUDE.md</code>, and <code>scripts/cleanup-worktrees</code>.</li></ul></aside>
 </div>
 </section>
 
@@ -2719,7 +2721,8 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>One implementation:</strong> GitHub Actions has one <code>verify</code> job with a 30-minute timeout and only calls repository scripts.</li>
 <li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
 </ul>
-<p>Verification logic lives only in scripts and tests. This step restores only <code>.github/workflows/ci.yml</code>; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys.</p></div>
+<p>Verification logic lives only in scripts and tests. This step restores only <code>.github/workflows/ci.yml</code>; release, promotion, security scanning, remote governance, deployment, and scheduled workflows remain decisions for their own Journeys.</p>
+<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>local and CI execution share scripts and tests; Issue PRs select fast or full by risk, while release and unknown changes run full.</li><li><strong>Adjustable:</strong><code>coverage_mode</code>, <code>coverage_threshold</code>, and <code>enable_precommit</code>; advanced teams may enable <code>use_reusable_workflow</code> with a full commit SHA.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>scripts/verify-fast</code>, <code>scripts/verify</code>, and <code>.github/workflows/ci.yml</code>.</li></ul></aside></div>
 </section>
 
 <section class="slide markdown-slide candidate-slide" id="languages" data-content-key="languages" data-track="languages" aria-label="Choose a language and receive the matching checks">
@@ -2799,7 +2802,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>TypeScript:</strong> checks formatting, types, tests, and the installable package.</li>
 </ul>
 <p>Each language is selected independently. Selecting several languages combines their modules while each shared check still runs once; the documentation does not enumerate combinations.</p>
-<aside class="config-guidance"><strong>Template configuration and customization</strong><ul><li><strong>One template configuration:</strong><code>.csarc/config.yml</code> stores selected languages, Python support, coverage threshold, pre-commit, and other common choices. Change them through <code>csarc update --data</code>; the template updates the native files.</li><li><strong>Advanced settings:</strong>tool-specific options stay in native configuration instead of being duplicated into the template schema.</li><li><strong>Python:</strong><code>uv</code> installs from <code>uv.lock</code>; <code>Ruff</code> formats and lints (currently 80 columns and Google docstrings); <code>ty</code> checks types; <code>pytest</code> runs tests; <code>coverage.py</code> applies the configured threshold; Hatch verifies the wheel. These settings live in <code>pyproject.toml</code>.</li><li><strong>Rust:</strong><code>rustfmt</code> checks formatting; <code>Clippy</code> treats lint warnings as failures; <code>Cargo</code> installs from <code>Cargo.lock</code>, tests, builds a release, and verifies the package. Settings live in <code>rust-toolchain.toml</code> and <code>Cargo.toml</code>.</li><li><strong>TypeScript:</strong><code>pnpm</code> installs from <code>pnpm-lock.yaml</code>; <code>Biome</code> formats and lints; TypeScript checks types and builds; <code>Vitest</code> tests and measures coverage; <code>npm pack</code> verifies the package. Settings live in <code>package.json</code>, <code>biome.json</code>, and <code>tsconfig.json</code>.</li></ul></aside>
+<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>each language uses its native tools behind one verification entry point; combinations do not create separate workflows.</li><li><strong>Adjustable:</strong><code>languages</code>, <code>python_support_mode</code>, and <code>python_min_version</code>; advanced options remain in each language's native configuration.</li><li><strong>Python:</strong><code>uv</code> installs from <code>uv.lock</code>; <code>Ruff</code> formats and lints (currently 80 columns and Google docstrings); <code>ty</code> checks types; <code>pytest</code> runs tests; <code>coverage.py</code> checks coverage; Hatch verifies the wheel. These settings live in <code>pyproject.toml</code>.</li><li><strong>Rust:</strong><code>rustfmt</code> checks formatting; <code>Clippy</code> treats lint warnings as failures; <code>Cargo</code> installs from <code>Cargo.lock</code>, tests, builds a release, and verifies the package. Settings live in <code>rust-toolchain.toml</code> and <code>Cargo.toml</code>.</li><li><strong>TypeScript:</strong><code>pnpm</code> installs from <code>pnpm-lock.yaml</code>; <code>Biome</code> formats and lints; TypeScript checks types and builds; <code>Vitest</code> tests and measures coverage; <code>npm pack</code> verifies the package. Settings live in <code>package.json</code>, <code>biome.json</code>, and <code>tsconfig.json</code>.</li></ul></aside>
 </div>
 </section>
 
@@ -2905,6 +2908,7 @@ html[data-detail-level="simple"] .detail-panel {
 </ul>
 </div>
 </details>
+<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>a PR links one work item, follows title and classification rules, and passes verification; work and release PRs keep separate responsibilities.</li><li><strong>Adjustable:</strong><code>branch_strategy</code> selects the branch model; <code>code_owner</code> and <code>reviewers</code> select ownership and review candidates.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, the PR template, <code>CODEOWNERS</code>, <code>REVIEWERS</code>, and PR policy.</li></ul></aside>
 </div>
 </section>
 
@@ -3012,6 +3016,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>Software bill of materials (SBOM):</strong> list packages present in the released artifact for investigation; it does not block vulnerabilities by itself.</li>
 </ul>
 </aside>
+<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>lockfile installs, Dependabot, OSV, and artifact SBOMs have separate jobs; ordinary releases wait three days while security updates do not.</li><li><strong>Adjustable:</strong><code>security_reporting_channel</code> names the private reporting path; <code>project_visibility</code> and <code>enable_codeql</code> decide whether CodeQL is generated.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, lockfiles, <code>dependabot.yml</code>, <code>osv.yml</code>, <code>codeql.yml</code>, and <code>SECURITY.md</code>.</li></ul></aside>
 </div>
 </section>
 

@@ -4,7 +4,7 @@
     Object.assign(configExamples, {
       agents: [
         {
-          title: '人與 AI 各看一個清楚入口',
+          title: '固定基線｜人與 AI 各看一個清楚入口',
           goal: 'README 服務人；根目錄 AGENTS.md 是 AI 規範唯一來源，CLAUDE.md 只薄匯入。',
           summary: '子目錄只有命令或安全界線真的不同時才增加 AGENTS.md，避免多份規範漂移。',
           file: 'README.md＋AGENTS.md＋CLAUDE.md',
@@ -21,23 +21,15 @@
 ## Safety`
         },
         {
-          title: '依專案語言只產生真的可執行的指令',
-          goal: '沒有選語言時只保留共通規則；選了哪些語言，就只產生那些語言的指令。',
-          summary: 'Copier 依 `languages` 複選結果渲染模組；同時選取多個語言時合併執行，共通檢查仍只跑一次。',
-          file: 'template/AGENTS.md.jinja＋scripts/verify-template.sh',
-          code: `{% if "python" in languages %}
-- Python iteration: uv run ruff check <paths>
-{% endif %}
-{% if "typescript" in languages %}
-- TypeScript iteration: pnpm exec biome check <paths>
-{% endif %}
-{% if "rust" in languages %}
-- Rust iteration: cargo clippy --all-targets --all-features -- -D warnings
-{% endif %}
-- Required final check: ./scripts/verify`
+          title: '可調整｜產品啟動與額外驗證命令',
+          goal: '讓 agent 知道怎麼啟動產品，以及共通驗證完成後還要執行哪一支專案檢查。',
+          summary: '`project_run_command` 必填；既有 repo 可選填一支安全的 repository-relative 驗證程式。',
+          file: '.csarc/config.yml＋AGENTS.md',
+          code: `project_run_command: uv run my-product
+project_verification_hook: scripts/verify-product`
         },
         {
-          title: '平行可寫工作各自隔離',
+          title: '固定基線｜平行可寫工作各自隔離',
           goal: '一項可寫工作對應一個 branch 與 worktree，只平行處理互不依賴的範圍。',
           summary: '唯讀工作不需另開 worktree；清理程式只回收已合併且乾淨的目錄。',
           file: 'AGENTS.md＋scripts/cleanup-worktrees＋scripts/test-worktree-cleanup',
@@ -46,7 +38,7 @@
 ./scripts/cleanup-worktrees`
         },
         {
-          title: 'AI 規範、驗證與治理各有唯一責任',
+          title: '固定基線｜規範、驗證與治理各有唯一責任',
           goal: 'AGENTS.md 說明怎麼做；scripts 提供證據；Action 只包裝執行；規則治理單獨定義合併資格、權限與例外。',
           summary: '人保留需求、重大取捨、外部影響與不可逆操作；本頁不重複定義合併權限。',
           file: 'AGENTS.md＋scripts/verify＋.github/workflows/＋policies/',
@@ -111,12 +103,12 @@ required checks:
       template: [
         {
           title: '獨立勾選語言，只產生需要的工具鏈',
-          goal: 'Python、TypeScript、Rust 都是獨立模組；全不選時只產生共通 CI/CD 基線。',
+          goal: 'Python、Rust、TypeScript 都是獨立模組；全不選時只產生共通 CI/CD 基線。',
           summary: '答案寫入 `.csarc/config.yml`；它同時是 repo 的公版設定與 Copier 更新依據，不再另存 profile JSON。',
           file: 'copier.yml',
           code: `languages:
   multiselect: true
-  choices: [python, typescript, rust]
+  choices: [python, rust, typescript]
   default: [python]
 python_support_mode:
   type: str
@@ -152,21 +144,21 @@ profiles:
     style_guide:
       name: Google Python Style Guide
       line_length: 80
-  typescript:
-    stage: beta
-    latest_reviewed_active_lts: "24"
-    package_manager: pnpm
   rust:
     stage: beta
     latest_reviewed_stable: "1.98.0"
     package_manager: cargo
+  typescript:
+    stage: beta
+    latest_reviewed_active_lts: "24"
+    package_manager: pnpm
   go: {stage: future}
 
 compositions:
   ci: {stage: beta, profiles: []}
   language_modules:
     stage: beta
-    selectable_profiles: [python, typescript, rust]
+    selectable_profiles: [python, rust, typescript]
     selection: any_subset
 
 version_policy:
@@ -187,31 +179,39 @@ uvx --from copier copier update --trust \
 ./scripts/verify`
         }
       ],
-      contract: [
+      languages: [
         {
-          title: '宣告 repo 使用哪些語言模組',
+          title: '可調整｜選用語言與 Python 支援範圍',
           goal: 'Copier 將選擇寫進 repo；偵測器只負責提醒實際檔案與宣告不一致，不擅自改設定。',
-          summary: '`languages` 是唯一依據；`--suggest` 可依根目錄的 manifest 提示應勾選哪些語言。',
+          summary: '`languages` 決定要產生哪些語言模組；Python 另可選最新穩定版或最低支援版本。',
           file: '.csarc/config.yml＋scripts/detect-language-profile',
           code: `languages:
 - python
-- typescript
 - rust
-branch_strategy: delivery
-
+- typescript
+python_support_mode: latest  # latest | minimum
+python_min_version: "3.12"  # minimum only
 ./scripts/detect-language-profile --suggest
 ./scripts/detect-language-profile`
         },
         {
-          title: '各語言保留自己的品質、測試與鎖定設定',
+          title: '固定基線｜各語言使用原生工具',
           goal: '共用治理不等於硬湊成同一套工具；每種語言使用其主流工具，再由同一驗證入口協調。',
-          summary: 'Python 使用 uv、Ruff、ty、pytest；TypeScript 使用 pnpm、Biome、TypeScript strict、Vitest；Rust 使用 Cargo、rustfmt、Clippy 與 cargo test。',
+          summary: 'Ruff／Biome／rustfmt 負責格式，Ruff／Biome／Clippy 負責 lint；ty／TypeScript 檢查型別，各語言再使用自己的測試與打包工具。',
           file: '各語言 manifest＋lockfile',
           code: `# Python module
 uv sync --locked
+uv run ruff format --check .
 uv run ruff check .
 uv run ty check
 uv run pytest --cov --cov-fail-under=80
+
+# Rust module
+cargo fmt --all -- --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-features
+cargo build --release --locked
+cargo package --locked --allow-dirty
 
 # TypeScript module
 pnpm install --frozen-lockfile --ignore-scripts
@@ -220,30 +220,19 @@ pnpm exec tsc --noEmit
 pnpm exec vitest run --coverage`
         },
         {
-          title: '一個入口驗證、打包，也證明錯誤會被拒絕',
-          goal: '本機、AI 與 GitHub 執行同一入口；正向測試證明可交付，負向測資證明門禁不是永遠綠燈。',
-          summary: 'Issue 標題與 PR policy 回歸案例檢查標籤、標題、stack base、Issue，以及 main／dev／delivery routes；公版再注入錯誤 Python／TypeScript 檔。',
-          file: 'scripts/verify＋scripts/test-pr-policy＋.github/workflows/ci.yml',
-          code: `./scripts/test-pr-policy
-./scripts/verify
-
-on:
-  pull_request:
-  merge_group:
-    types: [checks_requested]
-  workflow_dispatch:
-
-uses: Cyber-Arch/csarc-repo-template/
-  .github/workflows/reusable-ci.yml@<full-commit-sha>
-with:
-  language-profile: python`
+          title: '固定基線｜一個入口驗證與打包',
+          goal: '本機、AI 與 GitHub 執行同一入口；各語言只持有自己的檢查。',
+          summary: 'fast 選必要子集，full 是其超集合，不為不同 PR 階段複製測試。',
+          file: 'scripts/verify-fast＋scripts/verify＋.github/workflows/ci.yml',
+          code: `./scripts/verify-fast
+./scripts/verify`
         }
       ],
       method: [
         {
-          title: '四種 Issue 表單與必填內容',
+          title: '固定基線｜四種 Issue 表單與必填內容',
           goal: '提供 Feature、Task、Bug、Documentation 四個入口；都要求問題與完成條件，並關閉空白 Issue。',
-          summary: '調整表單說明、必填內容，以及是否允許沒有結構的空白 Issue。',
+          summary: '問題與完成條件必填，空白 Issue 關閉；這些是公版工作契約，不提供停用開關。',
           file: '.github/ISSUE_TEMPLATE/{feature,task,bug,documentation}.yml＋config.yml',
           code: `Feature       -> Type: Feature; label: enhancement
 Task          -> Type: Task; label: enhancement
@@ -259,9 +248,9 @@ blank_issues_enabled: false
 contact_links: []`
         },
         {
-          title: '標題、Label、負責人與工作層級',
+          title: '固定基線｜標題、Label、負責人與工作層級',
           goal: '標題使用 12–80 個英文 ASCII 字元及至少三個詞；建立者自我指派，agent／CLI 使用 @me。',
-          summary: '調整精確欄位限制，以及 duplicate、hotfix、promotion、Parent 與 Dependency 的使用規則。',
+          summary: '標題、分類與工作關係採同一套規則；組織若要改契約，應由公版政策變更而不是各 repo 自行關閉。',
           file: '.github/ISSUE_TEMPLATE/*.yml＋AGENTS.md＋policies/labels.json＋docs/adr/spec-story-and-work-items.md',
           code: `Title: 12-80 ASCII characters; at least 3 words
 Assignee: creator; agent/CLI uses @me
@@ -276,7 +265,7 @@ Parent     -> shared outcome still incomplete
 Dependency -> actual execution order`
         },
         {
-          title: '規格要不要建立追蹤工作',
+          title: '專案選擇｜規格要不要建立追蹤工作',
           goal: '各專案在 `docs/specs/` 寫長期規格；front matter 決定同步 Task、Feature，或只保存文件。',
           summary: '現階段沿用單一輕量格式，不另導入 Spec Kit；需求真的需要完整 spec／plan／tasks 流程時再評估。',
           file: 'docs/specs/＋scripts/spec_to_issue.py',
@@ -287,7 +276,7 @@ tracking: none   # Keep the current contract only
 python scripts/spec_to_issue.py validate`
         },
         {
-          title: '里程碑的啟動門檻',
+          title: '固定基線｜里程碑的啟動門檻',
           goal: '每個里程碑使用一張生命週期追蹤 Issue，集中保存同意與反駁。',
           summary: '至少一位非提案者同意，且沒有尚未解決的反駁，工作才開始；里程碑結案方式由「版本／交付」定義。',
           file: 'docs/milestone-description.md',
@@ -307,7 +296,7 @@ python scripts/spec_to_issue.py validate`
       ],
       pr: [
         {
-          title: 'PR 格式與工作關聯',
+          title: '固定基線｜PR 格式與工作關聯',
           goal: '一張工作 PR 完成一張 Issue，合併後由 GitHub 關閉同一項工作。',
           summary: '標題與目的分支符合規則；分類 Label 與里程碑必須和 Issue 相同，PR 作者必須列為 Assignee，內文使用 Closes #N 連回同號未結案 Issue。',
           file: 'pull_request_template.md＋.github/workflows/pr-policy.yml＋scripts/validate-pr-policy',
@@ -319,20 +308,25 @@ assignee: PR author
 milestone: same as Issue #123`
         },
         {
-          title: '工作 PR、發版 PR 與同步 PR',
+          title: '可調整｜工作 PR 的分支模型',
           goal: '工作先進 dev，完整批次再進 main；main 更新後以 PR 同步，不直接改寫開發分支。',
-          summary: 'validator 會檢查工作 PR 的目的分支與堆疊鏈；發版 PR 建立及 main-to-dev 同步目前仍由維運者手動發起。',
+          summary: '`branch_strategy` 可選 delivery、main 或 dev；validator 依所選模型檢查目的分支與同步鏈。',
           file: 'copier.yml＋.csarc/config.yml＋scripts/delivery_sync.py',
-          code: `work:    type/123-short-slug -> dev/m8-*
+          code: `branch_strategy: delivery  # delivery | main | dev
+
+work:    type/123-short-slug -> dev/m8-*
 release: dev/m8-* -> main
 sync:    sync/main-to-m8-*-<sha> -> dev/m8-*`
         },
         {
-          title: '審查與合併門檻',
-          goal: 'PR policy 與 CI 提供證據；誰可以合併及哪些例外只由規則治理定義。',
-          summary: 'CODEOWNERS、REVIEWERS 與 Ruleset policy 保存在 repo；目前 Free private 無法強制 Ruleset，自動輪派與合併工具也尚未恢復，維運者須人工指定審查者與合併。',
-          file: '.github/CODEOWNERS＋.github/REVIEWERS＋policies/rulesets.json',
-          code: `desired reviews: 1
+          title: '可調整｜程式碼擁有者與審查人選',
+          goal: '公版產生 CODEOWNERS 與可輪派名單；誰可以合併及例外仍只由規則治理定義。',
+          summary: '`code_owner` 指定 GitHub team；`reviewers` 是可輪派的帳號名單。平台無法強制時仍需人工指定與確認。',
+          file: '.csarc/config.yml＋.github/CODEOWNERS＋.github/REVIEWERS',
+          code: `code_owner: "@organization/team"
+reviewers: "@alice,@bob"
+
+desired reviews: 1
 require CODEOWNER: true
 dismiss stale reviews: true
 resolve review threads: true
@@ -341,9 +335,9 @@ resolve review threads: true
 ./scripts/apply-repository-settings.sh check`
         }
       ],
-      ci: [
+      contract: [
         {
-          title: 'CI 在 PR 依風險執行 fast 或 full，main 不重跑同一套測試',
+          title: '固定基線｜CI 依風險執行 fast 或 full',
           goal: '預設路徑不依賴中央 workflow；穩定 aggregate context 兼顧成本與 required checks。',
           file: '.github/workflows/ci.yml',
           code: `on:
@@ -360,7 +354,16 @@ jobs:
   verify: # always-present aggregate context`
         },
         {
-          title: '流程穩定後，可改用完整 SHA 呼叫 reusable workflow',
+          title: '可調整｜覆蓋率與本機便利功能',
+          goal: '組織可以調整共用覆蓋率政策與 pre-commit，不需要修改每支驗證腳本。',
+          summary: '覆蓋率可選全專案或只看本次差異，門檻預設 80%；pre-commit 預設關閉，CI 仍是必要證據。',
+          file: '.csarc/config.yml',
+          code: `coverage_mode: global  # global | diff
+coverage_threshold: 80  # 1..100
+enable_precommit: false`
+        },
+        {
+          title: '專案選配｜改用固定版本的 reusable workflow',
           goal: 'Copier 預設關閉；啟用時必須輸入 40 字元 commit SHA，中央 private repo 另須允許 organization 存取。',
           file: 'copier.yml＋.github/workflows/reusable-ci.yml',
           code: `use_reusable_workflow: true
@@ -375,7 +378,7 @@ gh api --method PUT \\
   -f access_level=organization`
         },
         {
-          title: 'zizmor 依 workflow 風險與週期排程執行',
+          title: '固定基線｜zizmor 只在相關變更與排程執行',
           goal: 'workflow／action 變更與 promotion 由 CI 條件式掃描；每週另掃一次，普通 source／docs PR 不重複付費。',
           file: '.github/workflows/ci.yml＋.github/workflows/zizmor.yml',
           code: `name: Zizmor scheduled audit
@@ -394,11 +397,12 @@ jobs:
       ],
       supply: [
         {
-          title: '已啟用｜依鎖檔重裝，TypeScript 另等三天',
+          title: '固定基線｜依鎖檔重裝，TypeScript 另等三天',
           goal: '先證明已提交的套件集合可以重現，不把「安裝成功」誤當成「沒有漏洞」。',
-          summary: 'Python 使用 uv 的 locked install；TypeScript 使用 pnpm frozen lockfile，並在解析時拒絕發布未滿三天或 publisher trust 降級的版本。',
+          summary: 'Python、Rust、TypeScript 都依 lockfile 重裝；pnpm 另拒絕發布未滿三天或 publisher trust 降級的版本。',
           file: 'template/scripts/verify-fast.jinja＋template/scripts/verify.jinja＋template/pnpm-workspace.yaml',
           code: `uv sync --locked
+cargo test --locked
 pnpm install --frozen-lockfile --ignore-scripts
 
 minimumReleaseAge: 4320
@@ -406,7 +410,7 @@ minimumReleaseAgeStrict: true
 trustPolicy: no-downgrade`
         },
         {
-          title: '已啟用｜Dependabot 提出一般與安全更新 PR',
+          title: '固定基線｜Dependabot 提出一般與安全更新 PR',
           goal: '一般新版先觀察三天；已知安全修補不等待，且更新 PR 繼續走相同 CI。',
           summary: '使用 GitHub 原生 automation identity，不要求每個 repo 安裝高權限 App；一般更新與安全更新 PR 都走相同審查與 CI。',
           file: '.github/dependabot.yml＋template/.github/dependabot.yml.jinja',
@@ -416,7 +420,7 @@ trustPolicy: no-downgrade`
 # Security updates are not delayed by the cooldown.`
         },
         {
-          title: '已啟用｜OSV 共用本機、PR 與每週掃描',
+          title: '固定基線｜OSV 共用本機、PR 與每週掃描',
           goal: '已公開漏洞立即處理，不和一般新版的三天觀察混在一起。',
           summary: '依賴檔變更與發版候選執行同一支本機程式；每週排程只補沒有 PR 的期間。workflow 不自行重寫掃描條件。',
           file: 'scripts/verify-dependencies＋.github/workflows/ci.yml＋.github/workflows/osv.yml',
@@ -425,7 +429,15 @@ Release PR -> verify-dependencies
 Weekly schedule -> verify-dependencies`
         },
         {
-          title: '依賴安全擁有｜真正成品的 SPDX SBOM 與 checksum',
+          title: '專案選配｜依 GitHub 方案啟用 CodeQL',
+          goal: '需要跨函式資料流分析時啟用 SAST；不能把 lint 或套件漏洞掃描誤當成 CodeQL。',
+          summary: 'public repo 預設開啟；private／internal repo 先確認 GitHub Code Security 授權，未選 Python 或 TypeScript 時不產生。',
+          file: '.csarc/config.yml＋.github/workflows/codeql.yml',
+          code: `project_visibility: public
+enable_codeql: true`
+        },
+        {
+          title: '固定基線｜真正成品的 SPDX SBOM 與 checksum',
           goal: '清冊必須來自精確 tag 的真正成品，不能只從原始碼猜測。',
           summary: 'Syft 產生 SPDX 2.3 SBOM；repo 程式驗證 root package、dependency graph、checksum、來源與 provenance。發版流程只負責在成品出現時觸發，不另外定義規則。',
           file: 'scripts/release_assets.py＋tests/test_release_assets.py',
@@ -434,11 +446,14 @@ python scripts/release_assets.py build ...
 python scripts/release_assets.py verify ...`
         },
         {
-          title: '已啟用｜回報本專案自身的漏洞',
+          title: '可調整｜回報本專案自身的漏洞',
           goal: '掃描工具只看得到已知模式；有人主動回報才補得到掃描漏抓的問題。Issue 是公開索引的，通報流程要先把人導離開 Issue。',
           summary: '不寫死聯絡信箱或 SLA：模板不知道下游專案的實際通報管道，假造一個反而誤導回報者。專案 owner 必須在 `SECURITY.md` 填入實際管道與回應期待後，這份政策才算生效。',
-          file: 'SECURITY.md',
-          code: `## Reporting a vulnerability
+          file: '.csarc/config.yml＋SECURITY.md',
+          code: `security_reporting_channel: >-
+  Use the approved private reporting channel.
+
+## Reporting a vulnerability
 
 Do not open a public GitHub Issue for a
 suspected vulnerability, exploit code,
@@ -532,13 +547,13 @@ dispatch_artifacts(next_tag)`
         {
           title: '語言模組依可重現證據分級',
           goal: '基本、未來與可選不是口號，而是對可用能力的承諾。',
-          summary: '真實 consuming repo 已證明共用生命週期；Python、TypeScript 與 Rust 各自通過建立、導入、更新與原生工具鏈，列為 `beta`；Go 保持 `future`。',
+          summary: '真實 consuming repo 已證明共用生命週期；Python、Rust 與 TypeScript 各自通過建立、導入、更新與原生工具鏈，列為 `beta`；Go 保持 `future`。',
           file: 'profiles/catalog.yaml',
           code: `ci: {stage: beta, profiles: []}
 python: {stage: beta}
+rust: {stage: beta}
 typescript: {stage: beta}
-go: {stage: future}
-rust: {stage: beta}`
+go: {stage: future}`
         },
         {
           title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
@@ -785,9 +800,9 @@ gh auth status`
 
       const direct = guidance.dataset.configDirect === 'true';
       const heading = document.createElement('strong');
-      heading.textContent = direct ? '模板功能與客製化' : '需要設定的項目';
+      heading.textContent = '固定與可調政策';
       const intro = document.createElement('p');
-      intro.textContent = '設定內容與對應檔案如下。';
+      intro.textContent = '只列公版主要政策、可調選項與設定位置。';
       const actions = document.createElement('div');
       actions.className = 'config-actions';
 
