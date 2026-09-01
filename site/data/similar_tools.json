@@ -568,7 +568,7 @@
                 {"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "同一 PR；依內容選 docs／fast／full", "en": "The same PR; selects docs, fast, or full by content"}, "timeout": "30 min"}
               ]
             },
-            "release": {"note": {"zh-tw": "合併代表 repository delivery，不會因此建立版本或 Release。", "en": "Merge means repository delivery; it does not create a version or Release."}}
+            "release": {"note": {"zh-tw": "合併先完成 repository delivery；release workflow 再判斷是否需要版本 PR，不把兩個動作混成一次。", "en": "Merge first completes repository delivery; the release workflow then decides whether a version PR is needed instead of combining both actions."}}
           },
           "templateOnly": {"milestone": {"note": {"zh-tw": "root 與生成專案使用同一條 route 與 validator。", "en": "The root and generated projects use the same route and validator."}}}
         },
@@ -585,35 +585,35 @@
                 {"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "同一 hotfix PR；固定 full", "en": "The same hotfix PR; always full"}, "timeout": "30 min"}
               ]
             },
-            "release": {"note": {"zh-tw": "fix 預設是 patch 意圖；目前精確版本、tag 與 Release 仍由維護者人工核准。", "en": "fix declares patch intent by default; the exact version, tag, and Release still require manual maintainer approval."}}
+            "release": {"note": {"zh-tw": "fix 預設是 patch 意圖；Release Please 產生精確版本 PR，仍須人審查後才發布。", "en": "fix declares patch intent by default; Release Please creates the exact version PR, which still requires human review before publication."}}
           },
           "templateOnly": {"milestone": {"note": {"zh-tw": "root 與生成專案使用同一條 route 與 validator。", "en": "The root and generated projects use the same route and validator."}}}
         },
         {
           "purpose": {
-            "zh-tw": {"title": "版本與 Release ownership", "description": "PR 只宣告 SemVer 意圖；精確版本、CHANGELOG、tag 與 GitHub Release 必須有一個 owner。目前沒有專用 Action。"},
-            "en": {"title": "Version and Release ownership", "description": "A PR declares only SemVer intent. The exact version, changelog, tag, and GitHub Release need one owner. No dedicated Action is active."}
+            "zh-tw": {"title": "版本與 Release ownership", "description": "PR 只宣告 SemVer 意圖；Release Please 集中更新精確版本與 CHANGELOG，單一 workflow 負責 tag 與 GitHub Release。"},
+            "en": {"title": "Version and Release ownership", "description": "A PR declares only SemVer intent. Release Please centralizes the exact version and changelog, while one workflow owns the tag and GitHub Release."}
           },
           "shared": {
             "milestone": {
               "files": [{"path": "docs/adr/release-security-and-dependencies.md"}],
-              "automationNote": {"zh-tw": "版本與 CHANGELOG 目前由人工 PR 一起配置；#369 決定 CSARC-owned 與 product-owned 發版邊界。", "en": "One manual PR currently materializes the version and changelog together; #369 decides the CSARC-owned and product-owned release boundary."}
+              "automationNote": {"zh-tw": "root 與新 repo 由 Release Please 建版本 PR；既有 repo 保留 product-owned workflow。", "en": "Release Please opens version PRs for the root and new repositories; adopted repositories retain their product-owned workflow."}
             },
             "release": {
-              "files": [{"path": "scripts/release_policy.py"}, {"path": "tests/test_release_policy.py"}],
-              "automationNote": {"zh-tw": "本機規則與回歸保留為 conditional contract；沒有 tag／Release 寫入 workflow。", "en": "Local rules and regressions remain a conditional contract; no workflow writes a tag or Release."}
+              "files": [{"path": "scripts/release_policy.py"}, {"path": "scripts/release_bundle.py"}, {"path": "tests/test_release_bundle.py"}],
+              "automation": [{"path": ".github/workflows/release.yml", "job": "version and publish", "trigger": {"zh-tw": "main 前進或人工重跑", "en": "main advances or a manual rerun"}, "timeout": "30 min"}]
             }
           },
           "templateOnly": {}
         },
         {
             "purpose": {
-              "zh-tw": {"title": "發版後續規則", "description": "先保留回歸測試，避免未來恢復發版流程時遺失既有安全邊界；目前沒有專用 Action。"},
-              "en": {"title": "Release follow-up rules", "description": "Keep the regression now so future release restoration cannot lose the existing safety boundary. No dedicated Action is active."}
+              "zh-tw": {"title": "版本候選與發布證據", "description": "同一 workflow 驗證 bot 版本 PR 的精確 SHA；合併後以 draft、下載重驗與 immutable check 完成發布。"},
+              "en": {"title": "Version candidate and release evidence", "description": "The same workflow validates the bot version PR's exact SHA; after merge, draft staging, download verification, and the immutable check complete publication."}
             },
             "shared": {
-              "milestone": {"files": [{"path": "scripts/test-release-follow-up-gates"}]},
-              "release": {"files": [{"path": "scripts/test-release-follow-up-gates"}]}
+              "milestone": {"files": [{"path": "scripts/verify-release-candidate"}]},
+              "release": {"files": [{"path": "scripts/release_bundle.py"}, {"path": "tests/test_release_bundle.py"}]}
             },
             "templateOnly": {}
           },
@@ -812,19 +812,19 @@
       "key": "versionMaterialization",
       "title": {"zh-tw": "何時形成精確版本與 CHANGELOG", "en": "When the exact version and changelog materialize"},
       "description": {"zh-tw": "比較可審查的版本 PR、成功 CI 後全自動配置，以及人工一次同步所有版本面。", "en": "Compares a reviewable version PR, fully automatic materialization after CI, and one manual change that synchronizes every version surface."},
-      "csarc": {"zh-tw": "目前由同一張人工 PR 更新 manifest、package metadata、CHANGELOG 與 README marker；CI checkout 不暫時改版本。", "en": "One manual PR currently updates the manifest, package metadata, changelog, and README marker; CI does not make a temporary version edit."}
+      "csarc": {"zh-tw": "Release Please 建立一張可審查的版本 PR，同步 manifest、package metadata、CHANGELOG 與 marker；CI checkout 不暫時改版本。", "en": "Release Please opens one reviewable version PR that synchronizes the manifest, package metadata, changelog, and markers; CI does not make a temporary version edit."}
     },
     {
       "key": "releaseOwnership",
       "title": {"zh-tw": "誰建立 tag 與 GitHub Release", "en": "Who creates the tag and GitHub Release"},
       "description": {"zh-tw": "比較工具自動擁有整條發版、版本 PR 合併後建立 Release、維護分支如何發布修補，以及產品自行持有發布流程。", "en": "Compares a tool owning the whole release, creating a Release after a version PR merges, publishing fixes from maintenance branches, and product-owned publishing."},
-      "csarc": {"zh-tw": "Hotfix 仍先經 Bug Issue、review 與 full verification 進 main，再由唯一 release owner 決定 patch Release；#369 定稿前 tag／Release 維持 manual／blocked。", "en": "A hotfix still reaches main through a Bug Issue, review, and full verification before the sole release owner decides on a patch Release. Tags and Releases remain manual and blocked until #369 decides ownership."}
+      "csarc": {"zh-tw": "Hotfix 仍先經 Bug Issue、review 與 full verification 進 main；Release Please 再建立 patch 版本 PR，合併後由單一 workflow 發布。", "en": "A hotfix still reaches main through a Bug Issue, review, and full verification; Release Please then opens the patch version PR and one workflow publishes after merge."}
     },
     {
       "key": "releaseEvidence",
       "title": {"zh-tw": "使用者怎麼驗證發版成品", "en": "How consumers verify release artifacts"},
       "description": {"zh-tw": "比較只提供 release notes，以及另外綁定 checksum、SBOM、來源與 attestation。", "en": "Compares release notes alone with binding checksums, an SBOM, source identity, and attestations."},
-      "csarc": {"zh-tw": "本機 scripts／tests 保留 exact tag、SHA-256、SPDX 2.3、provenance 與 consumption 契約；沒有 active publisher 前只標 conditional。", "en": "Local scripts and tests retain exact-tag, SHA-256, SPDX 2.3, provenance, and consumption contracts; they remain conditional without an active publisher."}
+      "csarc": {"zh-tw": "GitHub Release 會附 exact-tag source、語言成品、SHA-256、SPDX 2.3 與來源證據，並在公開後確認 immutable；attestation 與 consumption 仍是選配。", "en": "Each GitHub Release includes exact-tag source, language packages, SHA-256, SPDX 2.3, and source evidence, then confirms immutability after publication; attestations and consumption remain optional."}
     }
   ],
   "tools": [
@@ -1229,7 +1229,7 @@
       "stars": "7,427",
       "coverage": {"full": [], "partial": ["07"]},
       "position": {"zh-tw": "以 Conventional Commits 維護可審查版本 PR，合併後建立 GitHub Release。", "en": "Maintains a reviewable version PR from Conventional Commits and creates a GitHub Release after merge."},
-      "difference": {"zh-tw": ["Release Please 把版本與 CHANGELOG 變更集中在可審查 PR。", "CSARC 認同這個人類核准邊界，但在 #369 定稿 owner 與目前權限驗證前不啟用 Action。"], "en": ["Release Please concentrates version and changelog changes in a reviewable PR.", "CSARC agrees with that human approval boundary but does not enable the Action before #369 chooses the owner and current permissions are verified."]},
+      "difference": {"zh-tw": ["Release Please 把版本與 CHANGELOG 變更集中在可審查 PR。", "CSARC 採用這個人類核准邊界，並在同一 workflow 補上候選 SHA、成品、SBOM 與 immutable Release 驗證。"], "en": ["Release Please concentrates version and changelog changes in a reviewable PR.", "CSARC adopts that human approval boundary and adds exact-candidate, artifact, SBOM, and immutable-Release verification in the same workflow."]},
       "comparisons": [
         {"key": "versionIntent", "feature": "Conventional Commits", "docs": "https://github.com/googleapis/release-please#how-should-i-write-my-commits", "description": {"zh-tw": "依 commit type 與 breaking marker 推導下一次版本影響。", "en": "Derives the next version impact from commit types and breaking markers."}},
         {"key": "versionMaterialization", "feature": "Release pull request", "docs": "https://github.com/googleapis/release-please#whats-a-release-pr", "description": {"zh-tw": "先開版本 PR 更新 CHANGELOG 與版本檔，讓人審查後再合併。", "en": "First opens a version PR that updates changelogs and version files for human review."}},
@@ -1244,7 +1244,7 @@
       "stars": "24,012",
       "coverage": {"full": [], "partial": ["07"]},
       "position": {"zh-tw": "成功 CI 後依 commit 慣例全自動決定版本、產生 release notes 並發布。", "en": "Fully automates version selection, release notes, and publishing after successful CI from commit conventions."},
-      "difference": {"zh-tw": ["semantic-release 可把 maintenance branch 上的修補直接交給自動發布。", "CSARC 把修正合併與 patch Release 拆成兩個決策：hotfix 仍要 review／full verification，精確版本與 CHANGELOG 另經人工 PR 核准。"], "en": ["semantic-release can hand fixes on maintenance branches directly to automated publishing.", "CSARC separates merging a fix from deciding a patch Release: the hotfix still needs review and full verification, while the exact version and changelog receive separate human PR approval."]},
+      "difference": {"zh-tw": ["semantic-release 可把 maintenance branch 上的修補直接交給自動發布。", "CSARC 把修正合併與 patch Release 拆成兩個決策：hotfix 先 review／full verification，精確版本與 CHANGELOG 再由 Release Please PR 供人核准。"], "en": ["semantic-release can hand fixes on maintenance branches directly to automated publishing.", "CSARC separates merging a fix from a patch Release: the hotfix first passes review and full verification, then a Release Please PR presents the exact version and changelog for approval."]},
       "comparisons": [
         {"key": "versionIntent", "feature": "commit-analyzer", "docs": "https://semantic-release.gitbook.io/semantic-release/#commit-message-format", "description": {"zh-tw": "從 release branch 上的 commit messages 自動判斷 consumer impact。", "en": "Automatically derives consumer impact from commit messages on a release branch."}},
         {"key": "versionMaterialization", "feature": "CI release steps", "docs": "https://semantic-release.gitbook.io/semantic-release/#release-steps", "description": {"zh-tw": "成功 build 後在同一套自動流程分析 commits、配置版本並產生 notes。", "en": "After a successful build, one automated flow analyzes commits, materializes the version, and generates notes."}},

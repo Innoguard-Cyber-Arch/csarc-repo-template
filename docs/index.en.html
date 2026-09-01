@@ -2313,7 +2313,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 	</tbody>
 </table>
-<p>Users do not need to memorize workflow or script names. Current automation focuses on work items, PR rules, and necessary verification; automated versioning and publishing are not enabled yet.</p>
+<p>Users do not need to memorize workflow or script names. Current automation covers work items, PR rules, necessary verification, and a reviewed automatic version-and-release path.</p>
 <aside class="technical-detail" data-content-key="flow-foundation">
   <h3>Four foundations across the whole flow</h3>
   <ul>
@@ -2417,7 +2417,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>Seven active flows: Issue triage, Milestone sync, spec sync, PR rules, work-Issue closure, verification, and scheduled vulnerability scanning</td>
+					<td>Seven active flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, and release</td>
 					<td>Template-led</td>
 			</tr>
 			<tr>
@@ -2450,7 +2450,7 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="technical-detail" data-content-key="files-update">
   <h3>How updates protect product content</h3>
   <p>Copier attempts updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged; adjust them, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.</p>
-<p>Workflows, policies, scripts, and documents shared by root and <code>template/</code> are kept in sync. Files that differ because of project choices are verified by generating a real project. Version and publishing configuration remains present, but its GitHub Actions are not enabled yet.</p>
+<p>Workflows, policies, scripts, and documents shared by root and <code>template/</code> are kept in sync. Files that differ because of project choices are verified by generating a real project. New repositories receive the release Action; adopted repositories keep their product-owned workflow.</p>
 </aside>
 </div>
 </section>
@@ -2726,7 +2726,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>One implementation:</strong> GitHub Actions has one <code>verify</code> job with a 30-minute timeout and only calls repository scripts.</li>
 <li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
 </ul>
-<p>Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, OSV, and Dependabot are active. Dedicated release, promotion, artifact publication, consumption, live-integration, remote-governance, and deployment workflows are not active.</p>
+<p>Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, OSV, Dependabot, and one release workflow are active. Dedicated promotion, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.</p>
 <aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>local and CI execution share scripts and tests; work PRs select fast or full by risk, while Milestone or canary delivery, hotfix, merge queue, manual, and unknown high-risk changes run full.</li><li><strong>Adjustable:</strong><code>coverage_mode</code>, <code>coverage_threshold</code>, and <code>enable_precommit</code>; advanced teams may enable <code>use_reusable_workflow</code> with a full commit SHA.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>scripts/verify-fast</code>, <code>scripts/verify</code>, and <code>.github/workflows/ci.yml</code>.</li></ul></aside></div>
 </section>
 
@@ -3097,15 +3097,15 @@ html[data-detail-level="simple"] .detail-panel {
   <header>
     <span class="selection-sequence">Step 07</span>
     <h2>Separate version, release, delivery, and deployment</h2>
-    <p class="subtitle">A PR delivers repository changes to main; versions and GitHub Releases are currently maintained manually.</p>
+    <p class="subtitle">Work reaches main first; when a version is needed, the system opens a version PR for human review.</p>
   </header>
   <div class="markdown-body"><ul>
 <li><strong>Version intent:</strong> a PR title states major, minor, patch, or no-release impact without reserving an exact number.</li>
-<li><strong>Version materialization:</strong> one reviewed PR updates version files, package metadata, the changelog, and the README marker together. CI does not make a temporary version edit in its checkout.</li>
-<li><strong>Release:</strong> an immutable tag, GitHub Release, explicit artifacts, and verifiable evidence must all exist. Historical Releases do not prove current automation.</li>
+<li><strong>Version materialization:</strong> Release Please opens one reviewed PR that updates version files, package metadata, and the changelog together. CI does not make a temporary version edit in its checkout.</li>
+<li><strong>Release:</strong> after that PR merges and full verification passes, the system creates the immutable tag, GitHub Release, explicit artifacts, checksums, and SBOM.</li>
 <li><strong>Delivery:</strong> merging to <code>main</code> is repository delivery and may happen without a new version. A work PR completes one item; a Milestone delivery PR carries the batch.</li>
 <li><strong>Standalone work:</strong> when one Issue can be reviewed and verified independently and has no shared deadline or cross-Issue dependency, it needs no Milestone and may target <code>main</code> directly.</li>
-<li><strong>Hotfix:</strong> only an urgent defect in <code>main</code> uses this route. It still needs a Bug Issue, another reviewer, and full verification; release remains a separate decision after merge.</li>
+<li><strong>Hotfix:</strong> only an urgent defect in <code>main</code> uses this route. It still needs a Bug Issue, another reviewer, and full verification; a reviewed version PR then materializes the patch release.</li>
 <li><strong>Deployment:</strong> operating the product in a real runtime with health checks and recovery belongs to the consuming product, not this template.</li>
 </ul>
 <table>
@@ -3124,18 +3124,23 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>Exact version and changelog</td>
-					<td>Manual</td>
-					<td>One reviewed PR updates them together; published versions are never rewritten</td>
+					<td>Active</td>
+					<td>Release Please opens one reviewed PR; published versions are never rewritten</td>
 			</tr>
 			<tr>
 					<td>Tag and GitHub Release</td>
-					<td>Blocked</td>
-					<td>Issue #369 must choose the CSARC-owned and product-owned boundary before any old Action returns</td>
+					<td>Active</td>
+					<td>Publish automatically only after the version PR, full verification, and downloaded artifact verification pass</td>
 			</tr>
 			<tr>
-					<td>Checksums, SBOMs, attestations, and consumption</td>
+					<td>Checksums and SBOM</td>
+					<td>Active</td>
+					<td>Build with the exact tag and verify again after downloading the Release assets</td>
+			</tr>
+			<tr>
+					<td>Attestations and consumption</td>
 					<td>Conditional</td>
-					<td>Scripts and tests retain the safety contract; a real owner, artifact, and workflow must connect it</td>
+					<td>Products opt in when registry and supply-chain needs justify them</td>
 			</tr>
 			<tr>
 					<td>PyPI, npm, and GHCR</td>
@@ -3150,11 +3155,11 @@ html[data-detail-level="simple"] .detail-panel {
 </aside>
 <aside class="technical-detail" data-content-key="hotfix-delivery">
   <h3>Hotfix review, verification, and evidence</h3>
-  A hotfix uses a Bug Issue without a Milestone, the <code>bug</code> and <code>hotfix</code> labels, <code>fix/&lt;Issue&gt;-*</code>, and a <code>fix(scope): summary</code> PR directly to <code>main</code>. Normal review and full verification still apply. Undisclosed security defects use a GitHub Security Advisory instead. After merge, retain the PR, commit SHA, full run, rollback note, and release decision. <code>fix</code> normally declares patch intent, but the exact version, tag, and Release still require the sole release owner&rsquo;s approval.
+  A hotfix uses a Bug Issue without a Milestone, the <code>bug</code> and <code>hotfix</code> labels, <code>fix/&lt;Issue&gt;-*</code>, and a <code>fix(scope): summary</code> PR directly to <code>main</code>. Normal review and full verification still apply. Undisclosed security defects use a GitHub Security Advisory instead. After merge, retain the PR, commit SHA, full run, and rollback note. <code>fix</code> normally declares patch intent; the exact version is still reviewed in the Release Please version PR.
 </aside>
 <aside class="technical-detail" data-content-key="manual-release-boundary">
-  <h3>When release automation may return</h3>
-  <p>First identify one release owner, a real artifact, and a consumer. Each Action then needs a trigger, least privileges, full-SHA pins, a timeout, concurrency behavior, failure recovery, and a runner-cost ceiling. It becomes active only after current-candidate success and controlled-failure runs; Git history and historical runs are reference evidence only.</p>
+  <h3>Automatic-release ownership</h3>
+  <p>The template root and each new repository publish through their own release workflow. An adopted repository keeps its product-owned workflow. Every path still needs one owner, least privileges, full-SHA pins, a timeout, concurrency behavior, failure recovery, and a runner-cost ceiling; historical runs remain reference evidence only.</p>
 <p>Milestone closure remains manual until #400 completes its lifecycle contract, and work-Issue closure remains owned by #401. Work branches are removed after merge; a Milestone delivery branch waits until closure and unfinished work are handled.</p>
 </aside>
 </div>
@@ -3527,8 +3532,8 @@ html[data-detail-level="simple"] .detail-panel {
 					<td>Active CI／policy workflows and the first CI-only downstream adoption and update</td>
 			</tr>
 			<tr>
-					<td>Historical release evidence</td>
-					<td>Earlier release handoff, artifacts, and consumption runs remain audit evidence only; no release workflow is active</td>
+					<td>Release evidence</td>
+					<td>The current workflow produces exact-tag artifacts, checksums, an SPDX SBOM, and immutable-release verification; older handoff and consumption runs remain historical evidence only</td>
 			</tr>
 			<tr>
 					<td>Verified language modules</td>
@@ -4275,7 +4280,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>When the exact version and changelog materialize</strong><span>Compares a reviewable version PR, fully automatic materialization after CI, and one manual change that synchronizes every version surface.<br><br><b>CSARC: </b>One manual PR currently updates the manifest, package metadata, changelog, and README marker; CI does not make a temporary version edit.</span></th>
+          <th scope="row"><strong>When the exact version and changelog materialize</strong><span>Compares a reviewable version PR, fully automatic materialization after CI, and one manual change that synchronizes every version surface.<br><br><b>CSARC: </b>Release Please opens one reviewable version PR that synchronizes the manifest, package metadata, changelog, and markers; CI does not make a temporary version edit.</span></th>
           <td><ul>
           </ul></td>
           <td><ul>
@@ -4285,7 +4290,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Who creates the tag and GitHub Release</strong><span>Compares a tool owning the whole release, creating a Release after a version PR merges, publishing fixes from maintenance branches, and product-owned publishing.<br><br><b>CSARC: </b>A hotfix still reaches main through a Bug Issue, review, and full verification before the sole release owner decides on a patch Release. Tags and Releases remain manual and blocked until #369 decides ownership.</span></th>
+          <th scope="row"><strong>Who creates the tag and GitHub Release</strong><span>Compares a tool owning the whole release, creating a Release after a version PR merges, publishing fixes from maintenance branches, and product-owned publishing.<br><br><b>CSARC: </b>A hotfix still reaches main through a Bug Issue, review, and full verification; Release Please then opens the patch version PR and one workflow publishes after merge.</span></th>
           <td><ul>
           </ul></td>
           <td><ul>
@@ -4295,7 +4300,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>How consumers verify release artifacts</strong><span>Compares release notes alone with binding checksums, an SBOM, source identity, and attestations.<br><br><b>CSARC: </b>Local scripts and tests retain exact-tag, SHA-256, SPDX 2.3, provenance, and consumption contracts; they remain conditional without an active publisher.</span></th>
+          <th scope="row"><strong>How consumers verify release artifacts</strong><span>Compares release notes alone with binding checksums, an SBOM, source identity, and attestations.<br><br><b>CSARC: </b>Each GitHub Release includes exact-tag source, language packages, SHA-256, SPDX 2.3, and source evidence, then confirms immutability after publication; attestations and consumption remain optional.</span></th>
           <td><ul>
           </ul></td>
           <td><ul>
@@ -4765,7 +4770,7 @@ html[data-detail-level="simple"] .detail-panel {
               <strong>Before delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-pr-policy</code></li><li><code>tests/test_ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：Topic PR without a Milestone → main · Timeout：10 min</span></li><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：The same PR; selects docs, fast, or full by content · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
-              <strong>After delivery</strong><span>Merge means repository delivery; it does not create a version or Release.</span>
+              <strong>After delivery</strong><span>Merge first completes repository delivery; the release workflow then decides whether a version PR is needed instead of combining both actions.</span>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4781,7 +4786,7 @@ html[data-detail-level="simple"] .detail-panel {
               <strong>Before delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-pr-policy</code></li><li><code>tests/test_ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：bug &#43; hotfix on a fix/* PR → main · Timeout：10 min</span></li><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：The same hotfix PR; always full · Timeout：30 min</span></li></ul></div>
             </li>
             <li>
-              <strong>After delivery</strong><span>fix declares patch intent by default; the exact version, tag, and Release still require manual maintainer approval.</span>
+              <strong>After delivery</strong><span>fix declares patch intent by default; Release Please creates the exact version PR, which still requires human review before publication.</span>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -4791,26 +4796,26 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Version and Release ownership</strong><span>A PR declares only SemVer intent. The exact version, changelog, tag, and GitHub Release need one owner. No dedicated Action is active.</span></th>
+          <th scope="row"><strong>Version and Release ownership</strong><span>A PR declares only SemVer intent. Release Please centralizes the exact version and changelog, while one workflow owns the tag and GitHub Release.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Before delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>docs/adr/release-security-and-dependencies.md</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>One manual PR currently materializes the version and changelog together; #369 decides the CSARC-owned and product-owned release boundary.</span></div>
+              <strong>Before delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>docs/adr/release-security-and-dependencies.md</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Release Please opens version PRs for the root and new repositories; adopted repositories retain their product-owned workflow.</span></div>
             </li>
             <li>
-              <strong>After delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/release_policy.py</code></li><li><code>tests/test_release_policy.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Local rules and regressions remain a conditional contract; no workflow writes a tag or Release.</span></div>
+              <strong>After delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/release_policy.py</code></li><li><code>scripts/release_bundle.py</code></li><li><code>tests/test_release_bundle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/release.yml</code>／<code>version and publish</code><span>Trigger：main advances or a manual rerun · Timeout：30 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Release follow-up rules</strong><span>Keep the regression now so future release restoration cannot lose the existing safety boundary. No dedicated Action is active.</span></th>
+          <th scope="row"><strong>Version candidate and release evidence</strong><span>The same workflow validates the bot version PR&#39;s exact SHA; after merge, draft staging, download verification, and the immutable check complete publication.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Before delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-release-follow-up-gates</code></li></ul></div>
+              <strong>Before delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-release-candidate</code></li></ul></div>
             </li>
             <li>
-              <strong>After delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/test-release-follow-up-gates</code></li></ul></div>
+              <strong>After delivery</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/release_bundle.py</code></li><li><code>tests/test_release_bundle.py</code></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
@@ -5185,7 +5190,7 @@ html[data-detail-level="simple"] .detail-panel {
 </table>
 <aside class="technical-detail" data-content-key="benchmark-gap">
   <h3>Current gaps</h3>
-  There is no cross-repository catalog, comprehensive hosted governance, automated release owner, or generic deployment platform. Historical live-integration runs remain audit evidence only; active workflow claims must come from files under <code>.github/workflows/</code> and current runs. Production repositories will add operational evidence without serving as disposable language test fixtures.
+  There is no cross-repository catalog, comprehensive hosted governance, registry publisher, or generic deployment platform. Historical live-integration runs remain audit evidence only; active workflow claims must come from files under <code>.github/workflows/</code> and current runs. Production repositories will add operational evidence without serving as disposable language test fixtures.
 </aside>
 </div>
 </section>

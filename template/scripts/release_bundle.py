@@ -10,9 +10,13 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
-from release_policy import verify_release_version
+if __package__ is None:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.release_policy import verify_release_version
 
 SEMVER_TAG = re.compile(r"v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)")
 

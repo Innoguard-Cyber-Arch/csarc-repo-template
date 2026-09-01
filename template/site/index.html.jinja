@@ -81,14 +81,14 @@
       <section id="release">
         <h2><span>交付與更新</span></h2>
         <p id="release-current" class="notice"></p>
-{% if branch_strategy == "delivery" %}        <p class="notice"><strong>批次邊界：</strong>Milestone 或其他 delivery PR 只負責把已驗證內容合併到 <code>main</code>；它不會自動建立版本、tag、GitHub Release 或成品。</p>
+{% if branch_strategy == "delivery" %}        <p class="notice"><strong>批次邊界：</strong>Milestone 或其他 delivery PR 只負責把已驗證內容合併到 <code>main</code>；之後由版本 PR 分開審查版本與 CHANGELOG。</p>
 {% endif %}
         <table class="table">
           <thead><tr><th>能力</th><th>目前狀態</th><th>現在怎麼做</th></tr></thead>
           <tbody id="release-modes">
             <tr><td>PR 的 SemVer 意圖</td><td><strong>Active</strong></td><td>PR 標題只表達 major／minor／patch／no-release。</td></tr>
-            <tr><td>正式版本與 CHANGELOG</td><td><strong>Manual</strong></td><td>產品 owner 以同一張受審查 PR 一起更新。</td></tr>
-            <tr><td>tag／GitHub Release</td><td><strong>Manual／未配置</strong></td><td>產品先決定唯一 release owner；模板沒有 active workflow。</td></tr>
+            <tr><td>正式版本與 CHANGELOG</td><td><strong>{% if project_mode == "new" %}Active{% else %}Product-owned{% endif %}</strong></td><td>{% if project_mode == "new" %}Release Please 建立同一張受審查 PR。{% else %}沿用產品既有規則。{% endif %}</td></tr>
+            <tr><td>tag／GitHub Release</td><td><strong>{% if project_mode == "new" %}Active{% else %}Product-owned{% endif %}</strong></td><td>{% if project_mode == "new" %}版本 PR 合併並通過完整驗證後自動發布。{% else %}模板不建立第二個 release owner。{% endif %}</td></tr>
             <tr><td>checksum／SBOM／attestation</td><td><strong>Conditional</strong></td><td>本機 scripts／tests 保留安全契約，接上實際 publisher 後才執行。</td></tr>
             <tr><td>production deployment</td><td><strong>Not applicable</strong></td><td>由產品另行定義環境、健康檢查、核准與復原。</td></tr>
           </tbody>

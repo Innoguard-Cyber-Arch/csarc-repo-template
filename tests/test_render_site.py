@@ -159,24 +159,23 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         "milestone-lifecycle.yml",
         "osv.yml",
         "pr-policy.yml",
+        "release.yml",
         "spec-to-issue.yml",
         "work-item-closure.yml",
     }
     assert "7 條現行自動流程" in file_map
     for workflow in workflows:
         assert workflow in file_map
-    for inactive in ("release-please.yml", "release.yml"):
+    for inactive in ("release-please.yml",):
         assert inactive not in file_map
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
-    assert "版本與發佈流程尚未啟用" in flow
-    assert ".github/workflows/" in chinese_delivery
-    assert "沒有版本配置、Release Please、成品發布" in chinese_delivery
+    assert "需人審查版本 PR 的自動發版" in flow
+    assert "一支 release workflow" in chinese_delivery
+    assert "版本 PR 合併、完整驗證與成品重驗後自動發布" in chinese_delivery
     assert "promotion-gated adaptive release" not in chinese_delivery
     assert "下方 technical view 保留 2026-08" not in chinese_delivery
-    assert "versions and GitHub Releases are currently maintained manually" in (
-        english_delivery
-    )
-    assert "Historical Releases do not prove current automation" in (
+    assert "the system opens a version PR for human review" in english_delivery
+    assert "full verification, and downloaded artifact verification" in (
         english_delivery
     )
     assert "使用 AI／vibe coding 的一般開發者" in chinese_home  # noqa: RUF001

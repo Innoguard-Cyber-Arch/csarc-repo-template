@@ -39,7 +39,7 @@ lease，並透過 `scripts/pr_lifecycle.py` 執行；`scripts/verify` 會拒絕�
 一張 Issue 若能獨立審查、驗證與交付，且沒有共同期限、跨 Issue 相依、整批驗收或
 soak／canary 需求，就不必加入里程碑。它從最新 `main` 建立 topic branch，PR 直接回
 `main`，接受一般 review 與風險分級驗證，並以 `Closes #N` 在合併後結案。合併只代表
-repository delivery，不會自動建立新版本或 Release。
+repository delivery；後續由 release workflow 判斷是否需要建立版本 PR。
 
 若工作開始需要多張互相依賴的 Issue、共同交付日期、整批驗收、獨立環境或正式發版
 決策，必須在實作前加入適當里程碑，改走 `dev/m*`；不能用 standalone 路徑繞過批次治理。
@@ -54,8 +54,8 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
    `main`。它仍須正常 review，且 CI 一律執行 full；不得以緊急為由跳過。
 3. PR 以 `Fixes #N`／`Closes #N` 連結 Issue。合併後保留 PR、commit SHA、full run、
    rollback 說明與是否發版的決策；#401 負責一般 GitHub native 關單契約。
-4. `fix` 預設只表達 patch 意圖；破壞相容性時明列 `!`。精確版本、tag 與 Release 仍由
-   唯一 release owner 另行核准，不能把 hotfix 合併冒充已發版。
+4. `fix` 預設表達 patch 意圖；破壞相容性時明列 `!`。Release Please 會據此更新版本 PR；
+   版本 PR 尚未審查、合併且正式成品尚未發布前，hotfix 仍只算已交付、尚未發版。
 
 ## Active automation
 
@@ -68,10 +68,12 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
 | Spec to Issue | spec 事件／manual | checked-in spec conversion entrypoint | 最小 Issue metadata write | 可審查 Issue；active |
 | Milestone lifecycle | milestone／Issue 事件 | 現行 workflow | 最小 metadata write | 部分自動化；完整結案仍由 #400 擁有 |
 | Dependabot | schedule／manifest | `.github/dependabot.yml` | GitHub 原生 bot 邊界 | dependency PR；active |
+| Version／Release | `main` push、manual rerun | `scripts/verify-release-candidate`、`scripts/release_bundle.py` | `contents`／PR／Issue／status write；30 分鐘；同 repo 不取消舊 run | 受審查版本 PR；合併後產生 verified immutable GitHub Release；active |
 
 所有第三方 Actions 鎖定完整 commit SHA，旁註可讀 release tag。Workflow YAML 只負責
 event、權限、環境與呼叫；分類與驗證規則留在本機可測的 scripts。Repository 預設
-`GITHUB_TOKEN` 為 read-only，Actions 不可自行核准 PR。
+`GITHUB_TOKEN` 為 read-only；release job 只在自己的 workflow 提升必要權限。Repository
+必須允許 Actions 建立 PR，但 workflow 不能自行核准版本 PR。
 
 ## 驗證分級與實測成本
 
@@ -93,34 +95,37 @@ run，目的是設定成本預期，不是永久 SLA。
 | 邊界 | Issue／工作 PR | Milestone／canary 交付 PR | `main` | tag／manual event |
 | --- | --- | --- | --- | --- |
 | 版本意圖 | PR title 表達 major／minor／patch／no-release | 彙整已核准意圖，不自行配置版本 | 保留已審查內容 | 不從 tag 反推或改寫 source |
-| 正式版本與 CHANGELOG | 一般工作不直接決定精確版本 | 若本批確實發版，以單一人工 PR 同步全部版本來源與 CHANGELOG | 合併只代表 repository delivery | 目前沒有自動 materialization |
-| CI | docs／fast／full 依風險 | 一律 full | 不重跑同一 source tree 的第二套 release suite | manual dispatch 一律 full |
-| 成品／checksum／SBOM | 不發布 | 不發布 | 不發布 | repo-local builder 只屬 conditional contract，沒有 active workflow |
-| tag／GitHub Release／attestation | 不建立 | 不建立 | 不建立 | blocked by #369；無 current writer 或成功 run |
+| 正式版本與 CHANGELOG | 一般工作不直接決定精確版本 | 交付 PR 不手改版本 | Release Please 建立或更新一張受審查的版本 PR | manual 只重跑同一流程，不另開版本來源 |
+| CI | docs／fast／full 依風險 | 一律 full | release workflow 對目前 `main` 跑一次 full | 候選只跑版本／檔案／可打包 focused check；正式發布前已在 main 跑 full |
+| 成品／checksum／SBOM | 不發布 | 不發布 | 版本 PR 合併後從精確 commit 建立 | draft Release 先上傳、下載重驗，成功才公開 |
+| tag／GitHub Release | 不建立 | 不建立 | 版本 PR 合併後由唯一 release workflow 建立 | 重跑只驗同一 tag；不移動 tag、不重寫成品 |
+| attestation／registry | 不建立 | 不建立 | 不自動啟用 | 由 #439 決定選配條件與 owner |
 | deployment | 不適用 | 不適用 | 不適用 | 由有真實 runtime target 的產品 repo 定義 |
 
-合併到 `main` 是 repository delivery，不等於 Release。精確版本、CHANGELOG、tag、成品與
-GitHub Release 必須有唯一 owner；#369 定稿前保持 manual／blocked。生成或既有產品的
-release workflow 屬 product owner，Copier 不依檔名猜測、不重複 dispatch，也不要求
-GitHub App、PAT、registry token 或空 deployment environment。
+合併到 `main` 是 repository delivery，不等於 Release。公版本身與新生成 repo 使用 CSARC
+提供的單一 workflow；既有 repo 保留 product-owned release workflow，Copier 不依檔名猜測、
+不覆寫也不重複 dispatch。流程只用短效 `GITHUB_TOKEN`，不要求 GitHub App、PAT、registry
+token 或空 deployment environment。因 token 建立的 PR 不會再觸發另一支 workflow，候選
+驗證與 status 回寫由建立版本 PR 的同一次 run 完成。
 
 ## Conditional 與退役能力
 
-`scripts/release_assets.py`、`scripts/verify_release_consumption.py` 與其測試保留為
-conditional 的 repo-local 安全契約。只有真實產品 owner 接上明確成品與核准 workflow
-後，checksum、SPDX SBOM、attestation 或 consumption 才能成為交付證據。
+`scripts/verify_release_consumption.py` 與其測試保留為 conditional 的消費端安全契約。
+checksum 與 SPDX SBOM 已由 `scripts/release_bundle.py` 納入 GitHub Release；attestation、
+registry publishing 與消費端門禁仍須由真實產品 owner 依 #439 接上。
 
-Release Please、artifact handoff、release consumption、promotion、delivery maintenance、
-release follow-up 與 live integration 專用 workflow 目前都不在 active `.github/workflows/`，
-且 #430 判定不恢復後已移除 archived YAML。需要重建時必須逐支重新確認 owner、最小權限、
-timeout、concurrency、冪等／fail-closed、成本與目前候選上的正反向 live evidence；不得從
-Git history 整批復活。Zizmor 與 remote-governance 的舊 workflow 由各自 Journey 另行決定。
+歷史的 Release Please、artifact handoff 與 release follow-up 已由一支 `release.yml` 和兩個
+repo-local 入口取代；promotion、delivery maintenance、release consumption 與 live integration
+專用 workflow 不恢復。已決定的 archive copy 已刪除，歷史由 Git／Issue／PR 保存。Zizmor
+與 remote-governance 的舊 workflow 由各自 Journey 另行決定。
 
 ## Failure 與 fallback
 
 - 分類器無法判斷時升級 full，不以 skipped 或 zero-step 當成功證據。
 - Hosted Actions 不可用時，維護者執行相同 repo-local 入口並附上 commit、命令與結果；
   required check 仍不得被繞過。
+- 版本候選驗證失敗時，候選 SHA 明確收到 failure status；發布失敗時 Release 保持 draft。
+  重跑會先清掉 draft 的舊 assets，再建立並驗證同一精確 bundle。
 - Milestone delivery branch 只在 final delivery 前同步當時最新 `main`；只有明列真實相依
   才提前同步，不對所有 branch fan-out。
 - 合併後自動刪除一般來源 branch；Milestone／canary branch 等人工確認結案與 evidence 後

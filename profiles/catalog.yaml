@@ -12,8 +12,8 @@ version_policy:
 template_version_policy:
   version_source: version.txt
   strategy: single_semver_for_all_compositions
-  materialization: manual_reviewed_pull_request
-  release_automation: blocked_pending_issue_369
+  materialization: release_please_reviewed_pull_request
+  release_automation: verified_immutable_github_release
   tag_format: vX.Y.Z
   breaking_change_in_any_beta_composition_bumps_major: true
 
