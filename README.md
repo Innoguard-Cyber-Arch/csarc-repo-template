@@ -113,14 +113,14 @@ Actions 憑證放 GitHub Secrets／Variables；本機 runtime 才使用未提交
 
 先分清楚四件事：版本意圖描述相容性影響；正式版本把 manifest、package metadata 與 CHANGELOG 一起寫進受審查的 commit；發版建立不可變 tag、GitHub Release、成品與證據；交付則是把已驗證工作送進權威分支或交給使用者。部署到實際環境不在本模板範圍。
 
-合併到 `main` 先完成 repository delivery；`release.yml` 隨後執行完整驗證，並由 Release Please 依 Conventional Commits 建立或更新可審查的版本 PR。GitHub 會把 `GITHUB_TOKEN` 建立或更新版本 PR 所產生的 PR workflows 設為等待人工核准；同一支 release workflow 會直接驗證該 PR 的可信作者、允許檔案、版本／CHANGELOG 一致性與可打包性，並把結果綁在候選 SHA，不依賴另一輪 workflow。版本 PR 經人審查合併後，同一流程重新驗證 `main`，建立 draft Release、上傳成品、checksum 與 SPDX SBOM，驗證下載內容後才公開並確認 immutable。失敗的 mutable Release 留在 draft，可安全重跑。生成專案從自己的 `0.1.0` 開始，版本不跟隨公版。
+合併到 `main` 先完成 repository delivery；`release.yml` 隨後執行完整驗證，並用同一份 repo-local 規則計算下一版。GitHub 允許 Action 建 PR 時，由 Release Please 自動建立版本 PR；若上層政策禁止，維護者或 agent 執行 `python3 scripts/release_policy.py prepare-candidate`，再依輸出的 branch／title 開一般 PR。兩路都驗證可信作者、允許檔案、版本／CHANGELOG 一致性與可打包性。版本 PR 經人審查合併後，唯一的 `release.yml` 建立 draft Release、成品、checksum 與 SPDX SBOM，下載重驗後才公開並確認 immutable；本機命令不建立 tag 或 Release。
 
 | 能力 | 目前狀態 | 現在怎麼做 |
 | --- | --- | --- |
 | PR 的 SemVer 意圖 | Active | `fix`／`revert` 為 patch、`feat` 為 minor、`!` 為 major，其餘 no-release |
-| 正式版本與 CHANGELOG | Active | Release Please 產生同一張受審查 PR；已發布版本不改寫 |
-| tag／GitHub Release | Active | 版本 PR 合併且完整驗證通過後，自動建立 draft、驗證成品再公開 |
-| checksum／SBOM | Active | `release_bundle.py` 在同一次 run 建立、下載並重驗 exact-tag 成品 |
+| 正式版本與 CHANGELOG | Candidate／Guided | 自動或本機候選共用同一版本決策；組織目前禁止 Actions 建 PR |
+| tag／GitHub Release | Candidate／Blocked | 版本 PR 合併後由唯一 workflow 發布；待 default branch live run |
+| checksum／SBOM | Candidate | `release_bundle.py` 在同一次 run 建立、下載並重驗 exact-tag 成品；待 live run |
 | attestation／消費驗證 | Conditional | 由 [#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439) 決定選配 registry 與 attestation；消費端仍使用既有驗證契約 |
 | PyPI／npm／GHCR | Not applicable | root 不發布 registry；生成專案只發布 GitHub Release 成品，不要求長效 token |
 | production deployment | Not applicable | 由 consuming product 定義環境、健康檢查、核准與復原 |

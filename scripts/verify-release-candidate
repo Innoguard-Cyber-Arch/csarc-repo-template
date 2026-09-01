@@ -9,11 +9,8 @@ pr_number="$(jq -r '.number' "$candidate_json")"
 candidate_sha="$(jq -r '.sha' "$candidate_json")"
 head_ref="$(jq -r '.headBranchName' "$candidate_json")"
 base_ref="$(jq -r '.baseBranchName' "$candidate_json")"
-component="$(jq -r '.packages["."].component' "$repo_root/release-please-config.json")"
-expected_head="release-please--branches--main--components--$component"
 [[ "$pr_number" =~ ^[0-9]+$ && "$candidate_sha" =~ ^[0-9a-f]{40}$ ]]
 test "$base_ref" = main
-test "$head_ref" = "$expected_head"
 
 publish_status() {
   gh api --method POST \
@@ -27,6 +24,13 @@ status=failure
 if (
   set -euo pipefail
   pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr_number")"
+  actor="$(jq -r '.user.login' <<<"$pr")"
+  actor_permission=''
+  if [[ "$actor" != 'github-actions[bot]' ]]; then
+    actor_permission="$(gh api \
+      "repos/$GITHUB_REPOSITORY/collaborators/$actor/permission" \
+      --jq .permission)"
+  fi
   files="$RUNNER_TEMP/release-candidate-files"
   commits="$RUNNER_TEMP/release-candidate-commits.json"
   gh api --paginate --slurp \
@@ -40,7 +44,8 @@ if (
     --head "$head_ref" \
     --head-repo "$(jq -r '.head.repo.full_name' <<<"$pr")" \
     --head-sha "$candidate_sha" \
-    --actor "$(jq -r '.user.login' <<<"$pr")" \
+    --actor "$actor" \
+    --actor-permission "$actor_permission" \
     --changed-files "$files" \
     --commits "$commits" \
     --root "$repo_root"
@@ -48,6 +53,11 @@ if (
   git -C "$repo_root" fetch --no-tags origin "$candidate_sha"
   git -C "$repo_root" checkout --detach "$candidate_sha"
   cd "$repo_root"
+  version="$(jq -r '.["."]' .release-please-manifest.json)"
+  if [[ "$actor" != 'github-actions[bot]' ]]; then
+    test "$head_ref" = "release/v$version"
+    test "$(jq -r .title <<<"$pr")" = "chore(main): release $version"
+  fi
   python3 scripts/release_bundle.py candidate \
     --output "$RUNNER_TEMP/release-candidate-assets"
 ); then

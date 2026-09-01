@@ -2975,7 +2975,7 @@ def capability_preflight(
     repository = target_repository(target)
     if repository is None or not script.is_file():
         payload: dict[str, object] = {
-            "mode": "verification-only",
+            "mode": "blocked",
             "reason": "GitHub origin or capability script is unavailable",
             "capabilities": {
                 name: {"state": "unknown", "reason": "runtime check required"}
@@ -2983,7 +2983,6 @@ def capability_preflight(
                     "actions_pull_requests",
                     "contents",
                     "release",
-                    "dispatch",
                 )
             },
             "integrations": {
@@ -3019,7 +3018,7 @@ def capability_preflight(
             cast(dict[str, object], parsed)
             if result.returncode == 0 and isinstance(parsed, dict)
             else {
-                "mode": "verification-only",
+                "mode": "blocked",
                 "reason": "GitHub capability preflight was unavailable",
                 "capabilities": {},
             }

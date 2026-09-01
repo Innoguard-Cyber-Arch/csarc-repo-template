@@ -97,6 +97,11 @@ jobs:
       - name: Run full verification
         if: {% raw %}${{ steps.plan.outputs.tier == 'full' }}{% endraw %}
         run: ./scripts/verify
+      - name: Validate the guided release candidate
+        if: {% raw %}${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') }}{% endraw %}
+        run: >-
+          python3 scripts/release_bundle.py candidate
+          --output "$RUNNER_TEMP/release-candidate-assets"
       - name: Record result
         if: {% raw %}${{ always() }}{% endraw %}
         env:

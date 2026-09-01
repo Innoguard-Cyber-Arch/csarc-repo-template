@@ -111,7 +111,16 @@ if [[ ",${PR_LABELS:-}," == *,hotfix,* ]] && \
   exit 1
 fi
 
-if [[ "$PR_BASE" == "main" && "$PR_HEAD" == release-please--* ]]; then
+if [[ "$PR_BASE" == "main" ]] &&
+  [[ "$PR_HEAD" == release-please--* || "$PR_HEAD" == release/v* ]]; then
+  if [[ "$PR_HEAD" == release/v* ]]; then
+    guided_version="${PR_HEAD#release/v}"
+    if [[ ! "$guided_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+      [[ "$PR_TITLE" != "chore(main): release $guided_version" ]]; then
+      echo "A guided release must use release/v<version> and the matching chore(main) title."
+      exit 1
+    fi
+  fi
   release_files="${RUNNER_TEMP:-/tmp}/release-follow-up-files-${GITHUB_RUN_ID:-$$}.txt"
   gh api --paginate \
     "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \

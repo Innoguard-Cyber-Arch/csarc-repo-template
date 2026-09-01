@@ -137,7 +137,7 @@ def route_for(  # noqa: C901
     """Classify a pull request without accepting arbitrary main PRs."""
     if base != "main":
         return Route("not-applicable", False)
-    if head.startswith("release-please--"):
+    if head.startswith(("release-please--", "release/v")):
         return Route("release-follow-up", False)
     if "release-recovery" in labels:
         recovery = RECOVERY_BRANCH.fullmatch(head)
@@ -1892,7 +1892,7 @@ def note_quota_fallback(args: argparse.Namespace) -> None:
         and (
             MILESTONE_BRANCH.fullmatch(head_ref)
             or PROMOTION_BRIDGE.fullmatch(head_ref)
-            or head_ref.startswith("release-please--")
+            or head_ref.startswith(("release-please--", "release/v"))
             or bool(labels & {"promotion", "hotfix", "release-recovery"})
         )
     ):

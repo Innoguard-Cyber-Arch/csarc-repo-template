@@ -351,7 +351,7 @@ def test_capability_preflight_uses_readable_github_origin(
     script = tmp_path / "release_policy.py"
     script.touch()
     response = {
-        "mode": "direct",
+        "mode": "guided",
         "capabilities": {
             "actions_pull_requests": {"state": "blocked"},
             "contents": {"state": "unknown"},
@@ -568,7 +568,7 @@ def test_init_json_uses_one_complete_resolved_plan(
     assert payload["answers"]["enable_codeql"] is enabled
     assert payload["answers"]["enable_release_attestations"] is enabled
     assert payload["answers"]["reviewers"] == "@default-reviewer"
-    assert payload["release_capabilities"]["mode"] == "verification-only"
+    assert payload["release_capabilities"]["mode"] == "blocked"
     assert not target.exists()
 
 

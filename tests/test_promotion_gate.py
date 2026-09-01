@@ -108,6 +108,14 @@ GIT: str = _GIT
             "release-follow-up",
             None,
         ),
+        (
+            "main",
+            "release/v1.2.3",
+            set(),
+            "delivery",
+            "release-follow-up",
+            None,
+        ),
         ("main", "feat/42-work", set(), "delivery", "not-applicable", None),
         (
             "main",

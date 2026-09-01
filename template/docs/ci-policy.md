@@ -69,7 +69,7 @@ Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優�
 | Milestone lifecycle | milestone／Issue 事件 | 現行 workflow | 最小 metadata write | 部分自動化；完整結案仍由 #400 擁有 |
 | Work Issue closure | 里程碑工作 PR 合併進 `dev/m*` | `scripts/pr_lifecycle.py close-work` | `contents: read`、Issue write；5 分鐘 | workflow 已啟用；closed event checkout 修正仍由 #401 驗收 |
 | Dependabot | schedule／manifest | `.github/dependabot.yml` | GitHub 原生 bot 邊界 | dependency PR；active |
-| Version／Release | `main` push、manual rerun | `scripts/verify-release-candidate`、`scripts/release_bundle.py` | `contents`／PR／Issue／status write；30 分鐘；同 repo 不取消舊 run | 受審查版本 PR；合併後產生 verified immutable GitHub Release；active |
+| Version／Release | `main` push、manual rerun | `scripts/release_policy.py`、`scripts/verify-release-candidate`、`scripts/release_bundle.py` | top-level read；單一 release job 才有 `contents`／PR／Issue／status write；30 分鐘 | Automatic 或 Guided 版本 PR；合併後由同一 workflow 發布；candidate／blocked，待 default branch live run |
 
 所有第三方 Actions 鎖定完整 commit SHA，旁註可讀 release tag。Workflow YAML 只負責
 event、權限、環境與呼叫；分類與驗證規則留在本機可測的 scripts。Repository 預設
@@ -96,7 +96,7 @@ run，目的是設定成本預期，不是永久 SLA。
 | 邊界 | Issue／工作 PR | Milestone／canary 交付 PR | `main` | tag／manual event |
 | --- | --- | --- | --- | --- |
 | 版本意圖 | PR title 表達 major／minor／patch／no-release | 彙整已核准意圖，不自行配置版本 | 保留已審查內容 | 不從 tag 反推或改寫 source |
-| 正式版本與 CHANGELOG | 一般工作不直接決定精確版本 | 交付 PR 不手改版本 | Release Please 建立或更新一張受審查的版本 PR | manual 只重跑同一流程，不另開版本來源 |
+| 正式版本與 CHANGELOG | 一般工作不直接決定精確版本 | 交付 PR 不手改版本 | Automatic 由 Release Please 開版本 PR；受組織政策阻擋時，Guided 用同一規則在本機產生候選並開一般 PR | manual 只重跑同一流程，不另開版本來源 |
 | CI | docs／fast／full 依風險 | 一律 full | release workflow 對目前 `main` 跑一次 full | 候選只跑版本／檔案／可打包 focused check；正式發布前已在 main 跑 full |
 | 成品／checksum／SBOM | 不發布 | 不發布 | 版本 PR 合併後從精確 commit 建立 | draft Release 先上傳、下載重驗，成功才公開 |
 | tag／GitHub Release | 不建立 | 不建立 | 版本 PR 合併後由唯一 release workflow 建立 | 重跑只驗同一 tag；不移動 tag、不重寫成品 |
@@ -107,8 +107,9 @@ run，目的是設定成本預期，不是永久 SLA。
 提供的單一 workflow；既有 repo 保留 product-owned release workflow，Copier 不依檔名猜測、
 不覆寫也不重複 dispatch。流程只用短效 `GITHUB_TOKEN`，不要求 GitHub App、PAT、registry
 token 或空 deployment environment。GitHub 會把 `GITHUB_TOKEN` 建立或更新版本 PR 所產生的
-PR workflows 設為等待人工核准；候選驗證與 status 回寫由建立版本 PR 的同一次 run 完成，
-不依賴另一輪 workflow。
+PR workflows 設為等待人工核准；Automatic 由原 release run 驗證候選 SHA。若組織政策禁止
+Action 建 PR，Guided 只在本機執行 `python3 scripts/release_policy.py prepare-candidate` 並由人
+或 agent 開一般 PR；兩路共用版本計算、候選驗證與唯一 `release.yml` publisher。
 
 ## Conditional 與退役能力
 
@@ -126,7 +127,8 @@ repo-local 入口取代；promotion、delivery maintenance、release consumption
 - 分類器無法判斷時升級 full，不以 skipped 或 zero-step 當成功證據。
 - Hosted Actions 不可用時，維護者執行相同 repo-local 入口並附上 commit、命令與結果；
   required check 仍不得被繞過。
-- 版本候選驗證失敗時，候選 SHA 明確收到 failure status；發布失敗時 Release 保持 draft。
+- 版本候選驗證失敗時，候選 SHA 明確收到 failure status；GitHub 拒絕 tag／Release write 時
+  明確標示 Blocked，不改走本機直接發布；發布失敗時 Release 保持 draft。
   重跑會先清掉 draft 的舊 assets，再建立並驗證同一精確 bundle。
 - Milestone delivery branch 只在 final delivery 前同步當時最新 `main`；只有明列真實相依
   才提前同步，不對所有 branch fan-out。

@@ -10,8 +10,8 @@ import yaml
 ROOT = Path(__file__).parents[1]
 
 
-def test_release_workflow_is_one_bounded_pipeline() -> None:
-    """Keep version PR validation and publication in one thin workflow."""
+def test_release_workflow_is_one_capability_aware_pipeline() -> None:
+    """Keep candidate creation and publication in one workflow owner."""
     path = ROOT / ".github/workflows/release.yml"
     source = path.read_text(encoding="utf-8")
     workflow = yaml.safe_load(source)
@@ -22,7 +22,8 @@ def test_release_workflow_is_one_bounded_pipeline() -> None:
         "workflow_dispatch": None,
     }
     assert workflow["concurrency"]["cancel-in-progress"] is False
-    assert set(workflow["permissions"]) == {
+    assert workflow["permissions"] == {"contents": "read"}
+    assert set(workflow["jobs"]["release"]["permissions"]) == {
         "contents",
         "issues",
         "pull-requests",
@@ -30,6 +31,12 @@ def test_release_workflow_is_one_bounded_pipeline() -> None:
     }
     assert workflow["jobs"]["release"]["timeout-minutes"] == 30
     assert "googleapis/release-please-action@45996ed1" in source
+    assert "release_policy.py plan" in source
+    assert "release_policy.py detect" in source
+    assert "mode == 'automatic'" in source
+    assert "mode == 'guided'" in source
+    assert "mode == 'blocked'" in source
+    assert "release_policy.py prepare-candidate" in source
     assert "./scripts/verify-release-candidate" in source
     assert "scripts/release_bundle.py prepare" in source
     assert "scripts/release_bundle.py verify" in source
@@ -40,6 +47,8 @@ def test_release_workflow_is_one_bounded_pipeline() -> None:
     assert "secrets.GITHUB_TOKEN" in source
     assert "PAT" not in source
     assert "create-github-app-token" not in source
+    assert "release_policy.py release" not in source
+    assert "/actions/workflows/" not in source
 
     candidate = (ROOT / "scripts/verify-release-candidate").read_text(
         encoding="utf-8"
@@ -81,3 +90,13 @@ def test_retired_archive_has_no_release_workflow_copy() -> None:
     archive = ROOT / "archive/ci-cd/2026-08-27"
     assert not list((archive / "root-workflows").glob("*release*"))
     assert not list((archive / "template-workflows").glob("*release*"))
+
+
+def test_guided_path_has_no_repo_local_publisher() -> None:
+    """Only release.yml may create tags or GitHub Releases."""
+    source = (ROOT / "scripts/release_policy.py").read_text(encoding="utf-8")
+
+    assert "def direct_release" not in source
+    assert 'add_parser("release")' not in source
+    assert '"tag_name"' not in source
+    assert '"/dispatches"' not in source

@@ -17,12 +17,16 @@ Capability = MODULE["Capability"]
 aggregate_release_boundaries = MODULE["aggregate_release_boundaries"]
 bump_version = MODULE["bump_version"]
 classify_probe = MODULE["classify_probe"]
-direct_release = MODULE["direct_release"]
+detect_runtime_capabilities = MODULE["detect_runtime_capabilities"]
+prepare_release_candidate = MODULE["prepare_release_candidate"]
+preflight_capabilities = MODULE["preflight_capabilities"]
 release_intent = MODULE["release_intent"]
 release_follow_up_errors = MODULE["release_follow_up_errors"]
 release_boundary_errors = MODULE["release_boundary_errors"]
 release_plan = MODULE["release_plan"]
+release_plan_report = MODULE["release_plan_report"]
 release_version_errors = MODULE["release_version_errors"]
+report = MODULE["report"]
 select_release_mode = MODULE["select_release_mode"]
 simple_release_boundary = MODULE["simple_release_boundary"]
 verify_release_version = MODULE["verify_release_version"]
@@ -120,6 +124,7 @@ def test_release_follow_up_accepts_only_automation_owned_changes(
 
     maintainer = dict(valid)
     maintainer.update(
+        head="release/v1.2.3",
         actor="maintainer",
         actor_permission="maintain",
         commits=[
@@ -128,7 +133,10 @@ def test_release_follow_up_accepts_only_automation_owned_changes(
                 "author": {"login": "maintainer"},
                 "committer": {"login": "web-flow"},
                 "commit": {
-                    "verification": {"verified": True, "reason": "valid"}
+                    "verification": {
+                        "verified": False,
+                        "reason": "unsigned",
+                    }
                 },
             }
         ],
@@ -311,15 +319,15 @@ def capabilities(
 @pytest.mark.parametrize(
     ("states", "expected"),
     [
-        (("allowed", "allowed", "allowed", "allowed"), "release-pr"),
+        (("allowed", "allowed", "allowed", "allowed"), "automatic"),
         (
             ("allowed", "unknown", "unknown", "unknown"),
-            "verification-only",
+            "blocked",
         ),
-        (("blocked", "allowed", "allowed", "allowed"), "direct"),
-        (("unknown", "allowed", "allowed", "allowed"), "direct"),
-        (("blocked", "blocked", "allowed", "allowed"), "verification-only"),
-        (("unknown", "allowed", "unknown", "allowed"), "verification-only"),
+        (("blocked", "allowed", "allowed", "allowed"), "guided"),
+        (("unknown", "allowed", "allowed", "allowed"), "guided"),
+        (("blocked", "blocked", "allowed", "allowed"), "blocked"),
+        (("unknown", "allowed", "unknown", "allowed"), "guided"),
     ],
 )
 def test_release_mode_is_fail_closed(
@@ -334,6 +342,61 @@ def test_http_failures_are_never_allowed() -> None:
     assert classify_probe(0).state == "unknown"
     assert classify_probe(422).state == "unknown"
     assert classify_probe(422, validation_proves_access=True).state == "allowed"
+
+
+def test_repository_pr_setting_false_selects_guided(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A parent policy block still permits a local version candidate."""
+    monkeypatch.setattr(MODULE["shutil"], "which", lambda _: "/usr/bin/gh")
+    monkeypatch.setattr(
+        MODULE["subprocess"],
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0],
+            0,
+            stdout='{"can_approve_pull_request_reviews": false}',
+            stderr="",
+        ),
+    )
+
+    observed = preflight_capabilities("owner/repo")
+
+    assert select_release_mode(observed)[0] == "guided"
+
+
+@pytest.mark.parametrize("status", [403, 409])
+def test_pr_policy_block_uses_guided_mode_without_publishing(
+    status: int,
+) -> None:
+    """A blocked bot PR is not permission to create tags or Releases."""
+
+    class ProbeAPI:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, dict[str, object] | None]] = []
+
+        def request(
+            self,
+            method: str,
+            path: str,
+            payload: dict[str, object] | None = None,
+        ) -> tuple[int, object]:
+            self.calls.append((method, path, payload))
+            if path.endswith("/pulls"):
+                return status, {}
+            return 422, {}
+
+    api = ProbeAPI()
+    capabilities = detect_runtime_capabilities(
+        api, "owner/repo", "a" * 40, "main"
+    )
+
+    assert report(capabilities, "test")["mode"] == "guided"
+    assert not any(
+        path.endswith("/releases") and bool(payload and payload.get("tag_name"))
+        for _, path, payload in api.calls
+    )
+    assert not any("/dispatches" in path for _, path, _ in api.calls)
 
 
 def integration_preflight(
@@ -768,171 +831,55 @@ def test_release_plan_parses_every_git_log_record(tmp_path: Path) -> None:
     )
 
 
-class FakeAPI:
-    def __init__(self, remote_sha: str, pr_status: int = 409) -> None:
-        self.remote_sha = remote_sha
-        self.pr_status = pr_status
-        self.calls: list[tuple[str, str]] = []
-
-    def request(
-        self, method: str, path: str, payload: dict[str, object] | None = None
-    ) -> tuple[int, object]:
-        del payload
-        self.calls.append((method, path))
-        if method == "POST" and path.endswith("/pulls"):
-            return self.pr_status, {}
-        if method == "POST" and path.endswith("/git/refs"):
-            return 422, {}
-        if method == "POST" and path.endswith("/releases"):
-            return 422, {}
-        if method == "POST" and path.endswith("/dispatches"):
-            return 422, {}
-        if method == "GET" and "/git/ref/heads/" in path:
-            return 200, {"object": {"sha": self.remote_sha}}
-        raise AssertionError((method, path))
-
-
-def test_out_of_order_push_is_superseded(tmp_path: Path) -> None:
-    expected = "a" * 40
-    newer = "b" * 40
-    payload, failed = direct_release(
-        FakeAPI(newer),
-        "owner/repo",
-        expected,
-        "main",
-        "release.yml",
-        tmp_path,
-    )
-    assert not failed
-    assert payload["mode"] == "verification-only"
-    assert payload["status"] == "superseded"
-
-
-def test_runtime_policy_drift_changes_the_selected_path(tmp_path: Path) -> None:
-    payload, failed = direct_release(
-        FakeAPI("a" * 40, pr_status=422),
-        "owner/repo",
-        "a" * 40,
-        "main",
-        "release.yml",
-        tmp_path,
-    )
-    assert not failed
-    assert payload["mode"] == "release-pr"
-    assert "status" not in payload
-
-
-class DirectReleaseAPI:
-    def __init__(self, sha: str) -> None:
-        self.sha = sha
-        self.calls: list[tuple[str, str, dict[str, object] | None]] = []
-
-    def request(
-        self, method: str, path: str, payload: dict[str, object] | None = None
-    ) -> tuple[int, object]:
-        self.calls.append((method, path, payload))
-        if method == "POST" and path.endswith("/pulls"):
-            return 409, {}
-        if method == "POST" and path.endswith("/git/refs"):
-            ref = payload.get("ref") if payload else None
-            return (
-                (201, {})
-                if isinstance(ref, str) and ref.startswith("refs/")
-                else (422, {})
-            )
-        if method == "POST" and path.endswith("/releases"):
-            return (
-                (201, {"draft": True})
-                if payload and payload.get("tag_name")
-                else (422, {})
-            )
-        if method == "POST" and path.endswith("/dispatches"):
-            return (
-                (204, None)
-                if payload and str(payload.get("ref", "")).startswith("v")
-                else (422, {})
-            )
-        if method == "GET" and "/git/ref/heads/" in path:
-            return 200, {"object": {"sha": self.sha}}
-        if method == "GET" and "/git/ref/tags/" in path:
-            return 404, {}
-        if method == "GET" and "/releases/tags/" in path:
-            return 404, {}
-        if method == "GET" and "/actions/workflows/" in path:
-            return 200, {"workflow_runs": []}
-        raise AssertionError((method, path, payload))
-
-
-def test_direct_release_creates_one_tag_draft_and_dispatch(
+def test_guided_candidate_only_materializes_local_release_files(
     tmp_path: Path,
 ) -> None:
+    """The fallback never calls GitHub or creates a tag itself."""
     git(tmp_path, "init", "-b", "main")
     git(tmp_path, "config", "user.name", "Release Test")
     git(tmp_path, "config", "user.email", "release@example.invalid")
     write_release_surfaces(tmp_path, "0.1.0")
-    (tmp_path / "file").write_text("baseline\n", encoding="utf-8")
+    (tmp_path / "release-please-config.json").write_text(
+        json.dumps(
+            {
+                "release-type": "simple",
+                "packages": {
+                    ".": {
+                        "component": "demo",
+                        "extra-files": [
+                            {"type": "generic", "path": "README.md"}
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-m", "chore: baseline")
     git(tmp_path, "tag", "v0.1.0")
-    write_release_surfaces(tmp_path, "0.2.0")
-    (tmp_path / "file").write_text("content\n", encoding="utf-8")
+    (tmp_path / "feature").write_text("new\n", encoding="utf-8")
     git(tmp_path, "add", ".")
-    git(tmp_path, "commit", "-m", "feat: direct release")
+    git(tmp_path, "commit", "-m", "feat: guided release")
     sha = git(tmp_path, "rev-parse", "HEAD")
-    api = DirectReleaseAPI(sha)
 
-    payload, failed = direct_release(
-        api,
-        "owner/repo",
-        sha,
-        "main",
-        "release.yml",
-        tmp_path,
-        "12345",
-    )
+    payload = prepare_release_candidate(tmp_path, sha)
 
-    assert not failed
-    assert payload["status"] == "dispatched"
     assert payload["tag"] == "v0.2.0"
-    assert any(
-        method == "POST"
-        and path.endswith("/git/refs")
-        and body == {"ref": "refs/tags/v0.2.0", "sha": sha}
-        for method, path, body in api.calls
+    assert payload["branch"] == "release/v0.2.0"
+    assert json.loads(
+        (tmp_path / ".release-please-manifest.json").read_text(encoding="utf-8")
+    ) == {".": "0.2.0"}
+    assert (tmp_path / "version.txt").read_text(encoding="utf-8") == "0.2.0\n"
+    assert "## [0.2.0]" in (tmp_path / "CHANGELOG.md").read_text(
+        encoding="utf-8"
     )
-    assert any(
-        method == "POST"
-        and path.endswith("/dispatches")
-        and body == {"ref": "v0.2.0", "inputs": {"source_run_id": "12345"}}
-        for method, path, body in api.calls
-    )
-
-
-def test_direct_release_refuses_an_unmaterialized_version(
-    tmp_path: Path,
-) -> None:
-    git(tmp_path, "init", "-b", "main")
-    git(tmp_path, "config", "user.name", "Release Test")
-    git(tmp_path, "config", "user.email", "release@example.invalid")
-    write_release_surfaces(tmp_path, "0.1.0")
-    (tmp_path / "file").write_text("baseline\n", encoding="utf-8")
+    assert git(tmp_path, "tag", "--points-at", sha) == ""
     git(tmp_path, "add", ".")
-    git(tmp_path, "commit", "-m", "chore: baseline")
-    git(tmp_path, "tag", "v0.1.0")
-    (tmp_path / "file").write_text("fix\n", encoding="utf-8")
-    git(tmp_path, "commit", "-am", "fix: direct release")
-    sha = git(tmp_path, "rev-parse", "HEAD")
-    api = DirectReleaseAPI(sha)
-
-    payload, failed = direct_release(
-        api, "owner/repo", sha, "main", "release.yml", tmp_path
-    )
-
-    assert not failed
-    assert payload["mode"] == "verification-only"
-    assert payload["status"] == "version-not-materialized"
-    assert payload["tag"] == "v0.1.1"
-    assert not any("/git/ref/tags/" in path for _, path, _ in api.calls)
+    git(tmp_path, "commit", "-m", "chore(main): release 0.2.0")
+    report_payload = release_plan_report(tmp_path, "HEAD")
+    assert report_payload["version"] == "0.2.0"
+    assert report_payload["status"] == "candidate"
 
 
 def test_prepare_requires_tag_version_without_mutating_files(

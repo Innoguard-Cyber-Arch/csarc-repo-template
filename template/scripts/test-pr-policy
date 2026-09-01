@@ -526,13 +526,29 @@ PR_BRANCH_STRATEGY="delivery" \
 PR_TITLE="chore(main): release 0.2.0" \
 PR_LABELS="enhancement" \
 PR_BASE="main" \
-PR_HEAD="$release_branch" \
+PR_HEAD="release/v0.2.0" \
 PR_AUTHOR="maintainer" \
 PR_COMMIT_AUTHOR="maintainer" \
 PR_ACTOR_PERMISSION="maintain" \
 PR_BODY="" \
 PR_ISSUE_STATE="" \
   "$validator" >/dev/null
+
+case_count=$((case_count + 1))
+if PR_BRANCH_STRATEGY="delivery" \
+  PR_TITLE="chore(main): release 0.2.0" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="release/v0.2.1" \
+  PR_AUTHOR="maintainer" \
+  PR_COMMIT_AUTHOR="maintainer" \
+  PR_ACTOR_PERMISSION="maintain" \
+  PR_BODY="" \
+  PR_ISSUE_STATE="" \
+    "$validator" >/dev/null 2>&1; then
+  echo "PR policy accepted a guided release title that disagrees with its branch."
+  exit 1
+fi
 
 while IFS='|' read -r name actor head_repo changed_files head; do
   case_count=$((case_count + 1))
