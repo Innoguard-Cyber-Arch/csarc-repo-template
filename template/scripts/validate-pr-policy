@@ -152,9 +152,6 @@ if [[ "$branch_strategy" == "delivery" ]]; then
 
   if [[ "$PR_HEAD" == dependabot/* || "$PR_HEAD" == automation/* ]]; then
     if [[ "$PR_BASE" == "main" ]]; then
-      if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-        echo "delivery_base=$PR_BASE" >> "$GITHUB_OUTPUT"
-      fi
       exit 0
     fi
     echo "Automated maintenance must target main in delivery mode."
@@ -425,6 +422,3 @@ while true; do
   fi
   base_branch="${parent_bases[0]}"
 done
-if [[ "$branch_strategy" == "delivery" && -n "${GITHUB_OUTPUT:-}" ]]; then
-  echo "delivery_base=$base_branch" >> "$GITHUB_OUTPUT"
-fi
