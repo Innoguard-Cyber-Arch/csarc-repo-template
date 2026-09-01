@@ -6260,13 +6260,15 @@ required checks:
 # Enterprise organization controls are report-only here.`
         },
         {
-          title: '治理漂移檢查保留本機入口，排程尚未恢復',
-          goal: '先用同一支腳本檢查設定差異；需要持續監測時，再逐條恢復觸發、權限、timeout 與 Issue 通知。',
+          title: '治理漂移排程隨生成 repo 選配開啟，本模板 source 不自跑',
+          goal: '本機與生成 repo 都重複使用同一支腳本；需要持續監測時，Copier 選項開啟每日排程、least-privilege 權限、timeout 與 Issue 通知，不必個別重建。',
           summary: '`scripts/check-governance-drift` 會呼叫 `apply-repository-settings.sh check`，可在可信任的本機 checkout 執行。生成 repo 開啟 enable_governance_drift_check 時，薄 Action 每日呼叫同一支程式並開立或更新一張追蹤 Issue；本模板 source repo 不排程。',
           file: 'scripts/check-governance-drift＋template/.github/workflows/governance-drift.yml',
           code: `./scripts/check-governance-drift
 
-# The scheduled workflow is archived and does not run.`
+# enable_governance_drift_check=true generates the daily workflow and
+# script together; false generates neither. This template's own source
+# repo keeps the script for local verification but does not schedule it.`
         }
       ],
       template: [

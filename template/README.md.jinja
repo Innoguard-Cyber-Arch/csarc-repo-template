@@ -105,7 +105,7 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 
 `./scripts/verify` 是本機與 CI 共用的完整入口。現行 `.github/workflows/ci.yml` 只有一個 `verify` job，依變更選擇 docs／fast／full，再呼叫 repo-local 程式；一般 PR 不會為 fast、full、安全與 aggregate 各啟動一個 runner。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 30 分鐘。詳細分級與目前封存邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
-{% if branch_strategy == "delivery" %}專用的 promotion、release、OSV、Zizmor、remote governance、deployment 與 schedule workflows 目前仍封存。這些能力要等各自 Journey 重新核准後才恢復；文件中的目標政策不代表 Action 已啟用。{% endif %}
+{% if branch_strategy == "delivery" %}專用的 promotion、release、OSV、Zizmor、deployment 與 schedule workflows 目前仍封存。這些能力要等各自 Journey 重新核准後才恢復；文件中的目標政策不代表 Action 已啟用。Reviewer assignment 與選配的治理漂移排程不在此列，詳見下方「設定與密鑰」段落。{% endif %}
 
 ### Actions 額度耗盡的一次性驗證
 

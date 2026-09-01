@@ -8,7 +8,8 @@
 - 一般 repo 的 full 呼叫 `scripts/verify`；repo-template 的 full 呼叫 `scripts/verify-template.sh`。
 - 未知路徑、promotion、hotfix、release recovery、merge queue 與手動執行採 full。
 - 依賴檔案變更與 full 驗證會呼叫 `scripts/verify-dependencies`；`.github/workflows/osv.yml` 每週與手動呼叫同一入口。
-- release、promotion、Zizmor、remote governance、deployment 與其他 schedule workflows 仍在 `archive/ci-cd/2026-08-27/`，尚未恢復。
+- release、promotion、Zizmor、deployment 與其他 schedule workflows 仍在 `archive/ci-cd/2026-08-27/`，尚未恢復。
+- Reviewer assignment（`.github/workflows/governance-comment.yml`）已在本 repo 與所有生成 repo 啟用；治理漂移排程（`governance-drift.yml`）只在生成 repo 開啟 `enable_governance_drift_check` 時產生並每日執行，本模板 source repo 保留同一支 `scripts/check-governance-drift` 供本機驗證，不另外啟用排程。
 
 下列分支、promotion、release、quota fallback 與治理內容保留為跨 Journey 的政策設計；其中提到的專用 workflow 只有移回 `.github/workflows/` 後才算現行自動化，不能只因文件存在就宣稱已執行。
 

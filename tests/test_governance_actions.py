@@ -157,3 +157,25 @@ def test_governance_workflows_are_thin_and_least_privilege() -> None:
     assert "pull-requests: write" not in drift
     assert "run: ./scripts/check-governance-drift" in drift
     assert "timeout-minutes: 5" in drift
+
+
+def test_docs_reflect_restored_governance_actions() -> None:
+    """Docs must not claim restored governance Actions are still archived."""
+    stale_archived_list = "Zizmor、remote governance、deployment"
+    for relative in (
+        "README.md",
+        "docs/ci-policy.md",
+        "template/README.md.jinja",
+    ):
+        text = (ROOT / relative).read_text(encoding="utf-8")
+        assert stale_archived_list not in text, relative
+        assert "governance-comment.yml" in text, relative
+
+    widget = (ROOT / "site/static/legacy-components.js").read_text(
+        encoding="utf-8"
+    )
+    assert "The scheduled workflow is archived and does not run" not in widget
+    assert (
+        "enable_governance_drift_check=true generates the daily workflow"
+        in widget
+    )
