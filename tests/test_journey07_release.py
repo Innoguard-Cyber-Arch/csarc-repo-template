@@ -38,6 +38,8 @@ def test_release_workflow_is_one_bounded_pipeline() -> None:
     assert "for attempt in $(seq 1 12)" in source
     assert "gh release verify" in source
     assert "secrets.GITHUB_TOKEN" in source
+    assert "/actions/workflows/" not in source
+    assert "source_run_id" not in source
     assert "PAT" not in source
     assert "create-github-app-token" not in source
 
@@ -74,6 +76,25 @@ def test_template_only_adds_release_workflow_to_new_repositories() -> None:
     assert "./scripts/verify-release-candidate" in template
     assert '{% if "typescript" in languages %}' in template
     assert '{% if "rust" in languages %}' in template
+
+
+def test_guided_candidate_validation_is_csarc_owned_only() -> None:
+    """Do not apply the CSARC release contract to product release branches."""
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["verify"]["steps"]
+    candidate = next(
+        step
+        for step in steps
+        if step.get("name") == "Validate the guided release candidate"
+    )
+
+    assert "steps.release.outputs.ownership == 'csarc-owned'" in candidate["if"]
+    template = (ROOT / "template/.github/workflows/ci.yml.jinja").read_text(
+        encoding="utf-8"
+    )
+    assert "steps.release.outputs.ownership == 'csarc-owned'" in template
 
 
 def test_retired_archive_has_no_release_workflow_copy() -> None:

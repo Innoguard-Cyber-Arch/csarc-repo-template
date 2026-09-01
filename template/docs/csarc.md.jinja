@@ -13,6 +13,7 @@
 
 - 唯一完整驗證入口是 `./scripts/verify`；`project_run_command` 只負責啟動產品。產品額外檢查由 `project_verification_hook` 指定 repo 內的可執行檔案，未指定時才使用 project-owned `scripts/verify-product` fallback；公版驗證會在最後只呼叫一次。
 - 產品原有 release workflow 保留；CSARC 不產生第二支 release workflow，也不從檔名推測其 owner 或功能。
+- `.csarc/config.yml` 會記錄 `release_ownership`、明確選定的 `release_workflow`、必要 inputs、repository-settings owner、immutable Releases 要求與判定原因；`verification-only` 不會選取或 dispatch workflow。
 - Copier answers 與 `.csarc/provenance.json` 記錄已套用的 template Release 與完整 commit SHA。
 
 ## 公版更新

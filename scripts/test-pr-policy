@@ -138,6 +138,23 @@ if [[ -n "${PR_BASE_GRAPH:-}" ]]; then
 fi
 SH
 chmod +x "$fixture/gh"
+
+while IFS='|' read -r owner head; do
+  case_count=$((case_count + 1))
+  PR_RELEASE_OWNERSHIP="$owner" \
+  PR_TITLE="chore(release): publish product artifacts" \
+  PR_LABELS="enhancement" \
+  PR_BASE="main" \
+  PR_HEAD="$head" \
+  PR_AUTHOR="product-bot" \
+  PR_BODY="" \
+  PR_ISSUE_STATE="" \
+    "$validator" >/dev/null
+done <<CASES
+product-owned|release/v1.2.3
+product-owned|$release_branch
+verification-only|release/v1.2.3
+CASES
 export GITHUB_REPOSITORY="acme/project"
 export PATH="$fixture:$PATH"
 

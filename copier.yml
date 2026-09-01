@@ -115,6 +115,54 @@ project_mode:
     Adopt an existing repository: existing
   default: new
 
+release_ownership:
+  type: str
+  help: Single owner allowed to create release tags, Releases, and assets
+  choices:
+    CSARC release workflow: csarc-owned
+    Existing product release workflow: product-owned
+    Verification without release writes: verification-only
+  default: "{{ 'csarc-owned' if project_mode == 'new' else 'verification-only' }}"
+  when: false
+
+release_workflow:
+  type: str
+  help: Explicit repository-relative workflow selected by the release owner
+  default: "{{ '.github/workflows/release.yml' if release_ownership == 'csarc-owned' else '' }}"
+  when: false
+
+release_required_inputs:
+  type: yaml
+  help: Required workflow_dispatch inputs declared by the selected workflow
+  default: []
+  when: false
+
+release_ownership_reason:
+  type: str
+  help: Auditable reason for the selected release ownership
+  default: "{{ 'CSARC owns the only version and GitHub Release workflow.' if release_ownership == 'csarc-owned' else 'No release workflow is selected; CSARC verifies only.' }}"
+  when: false
+
+release_settings_owner:
+  type: str
+  help: Owner responsible for release-related repository settings
+  choices:
+    CSARC bootstrap administrator: csarc-admin
+    Product administrator: product-admin
+    No release settings owner: none
+  default: "{{ 'csarc-admin' if release_ownership == 'csarc-owned' else 'product-admin' if release_ownership == 'product-owned' else 'none' }}"
+  when: false
+
+release_immutable_releases:
+  type: str
+  help: Whether immutable GitHub Releases are required by this ownership mode
+  choices:
+    Required during CSARC bootstrap: required
+    Defined by the product release contract: product-defined
+    Not required for verification-only: not-required
+  default: "{{ 'required' if release_ownership == 'csarc-owned' else 'product-defined' if release_ownership == 'product-owned' else 'not-required' }}"
+  when: false
+
 project_name:
   type: str
   help: Human-readable project name

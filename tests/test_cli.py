@@ -525,6 +525,120 @@ def test_repository_context_without_remote_uses_safe_or_explicit_value(
     assert explicit.source == "explicit"
 
 
+def write_product_release_workflow(
+    root: Path,
+    name: str = "release.yml",
+    *,
+    input_name: str = "version",
+) -> Path:
+    """Create the release-significant shape used by the pilot product."""
+    path = root / ".github" / "workflows" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "name: Product release\n"
+        "on:\n"
+        '  push:\n    tags: ["v*"]\n'
+        "  workflow_dispatch:\n"
+        "    inputs:\n"
+        f"      {input_name}:\n"
+        "        description: Exact product release input.\n"
+        "        required: true\n"
+        "permissions:\n"
+        "  contents: read\n"
+        "jobs:\n"
+        "  bundle:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    permissions:\n"
+        "      contents: write\n"
+        "    steps:\n"
+        "      - run: ./scripts/verify-skills\n"
+        '      - run: ./scripts/build-bundle --version "$VERSION"\n'
+        "      - env:\n"
+        "          GH_TOKEN: ${{ github.token }}\n"
+        '        run: gh release create "$VERSION" dist/*\n',
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_release_ownership_matrix_uses_explicit_workflow_contracts(
+    tmp_path: Path,
+) -> None:
+    """Resolve all ownership modes without relying on a workflow filename."""
+    root_answers = yaml.safe_load(
+        (ROOT / cli.CONFIG_FILE).read_text(encoding="utf-8")
+    )
+    root_contract = cli.release_contract(
+        cli.resolve_release_answers(ROOT, root_answers)
+    )
+    assert root_contract["ownership"] == "csarc-owned"
+    assert root_contract["immutable_releases"] == "required"
+
+    new = cli.base_data(tmp_path / "new", "init", {})
+    assert cli.release_contract(new) == {
+        "immutable_releases": "required",
+        "ownership": "csarc-owned",
+        "reason": "CSARC owns the only version and GitHub Release workflow.",
+        "required_inputs": [],
+        "selected_workflow": ".github/workflows/release.yml",
+        "settings_owner": "csarc-admin",
+    }
+
+    empty = tmp_path / "empty-existing"
+    empty.mkdir()
+    assert cli.release_contract(cli.base_data(empty, "adopt", {})) == {
+        "immutable_releases": "not-required",
+        "ownership": "verification-only",
+        "reason": (
+            "No product release writer was detected; CSARC verifies only."
+        ),
+        "required_inputs": [],
+        "selected_workflow": None,
+        "settings_owner": "none",
+    }
+
+    product = tmp_path / "product"
+    workflow = write_product_release_workflow(
+        product, "publish-product.yml", input_name="source_run_id"
+    )
+    contract = cli.release_contract(cli.base_data(product, "adopt", {}))
+    assert contract["ownership"] == "product-owned"
+    assert contract["selected_workflow"] == (
+        ".github/workflows/publish-product.yml"
+    )
+    assert contract["required_inputs"] == ["source_run_id"]
+
+    write_product_release_workflow(product, "second-writer.yml")
+    degraded = cli.release_contract(cli.base_data(product, "adopt", {}))
+    assert degraded["ownership"] == "verification-only"
+    assert "Multiple product release writers" in str(degraded["reason"])
+    with pytest.raises(CliError, match="exactly one release-writing workflow"):
+        cli.base_data(
+            product,
+            "adopt",
+            {
+                "release_ownership": "product-owned",
+                "release_workflow": workflow.relative_to(product).as_posix(),
+            },
+        )
+
+
+def test_release_workflow_input_drift_fails_closed(tmp_path: Path) -> None:
+    """Reject a selected workflow whose required input contract drifted."""
+    write_product_release_workflow(tmp_path)
+    with pytest.raises(CliError, match="input contract drifted"):
+        cli.resolve_release_answers(
+            tmp_path,
+            {
+                "project_mode": "existing",
+                "release_ownership": "product-owned",
+                "release_ownership_reason": "Previously observed contract.",
+                "release_required_inputs": ["source_run_id"],
+                "release_workflow": ".github/workflows/release.yml",
+            },
+        )
+
+
 @pytest.mark.parametrize(
     ("visibility", "enabled"),
     [("public", True), ("private", False), ("internal", False)],
@@ -1241,20 +1355,10 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         encoding="utf-8",
     )
     (project / ".gitignore").write_bytes(b"product-cache/\r\n.env\r\n")
-    product_release = project / ".github" / "workflows" / "release.yml"
-    product_release.write_text(
-        "name: Product release\n"
-        "on: workflow_dispatch\n"
-        "permissions: {}\n"
-        "jobs:\n"
-        "  release:\n"
-        "    runs-on: ubuntu-latest\n"
-        "    steps:\n"
-        '      - run: "true"\n',
-        encoding="utf-8",
-    )
+    product_release = write_product_release_workflow(project)
+    product_release_source = product_release.read_bytes()
     write_executable(
-        project / "scripts" / "verify-product",
+        project / "scripts" / "verify-skills",
         "#!/usr/bin/env bash\nset -euo pipefail\n"
         "grep -q '^# Product README$' README.md\n"
         "grep -q '^name: Product release$' .github/workflows/release.yml\n",
@@ -1280,6 +1384,8 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "project_name=Product Identity",
         "--data",
         "project_slug=product-identity",
+        "--data",
+        "project_verification_hook=scripts/verify-skills",
     ]
 
     assert main(arguments) == 0
@@ -1297,15 +1403,44 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert ".github/workflows/release.yml" in payload["files"]["preserve"]
     assert ".github/workflows/csarc-release.yml" not in payload["files"]["add"]
     assert cli.PROVENANCE_FILE.as_posix() in payload["files"]["add"]
+    assert payload["release"] == {
+        "immutable_releases": "product-defined",
+        "ownership": "product-owned",
+        "reason": (
+            "The existing product workflow remains the only Release writer; "
+            "CSARC never dispatches it."
+        ),
+        "required_inputs": ["version"],
+        "selected_workflow": ".github/workflows/release.yml",
+        "settings_owner": "product-admin",
+    }
     assert payload["adoption"]["project_verification_hook"] == {
         "configured": True,
-        "path": "scripts/verify-product",
+        "path": "scripts/verify-skills",
         "reason": "Project verification hook completed successfully.",
         "result": "passed",
-        "source": "fallback",
+        "source": "explicit",
     }
     assert payload["adoption"]["verification"] == "passed"
     assert payload["answers"]["package_name"] == "product_identity"
+    markdown = plan_path.with_name(
+        f"{cli.ADOPTION_REPORT_BASENAME}.md"
+    ).read_text(encoding="utf-8")
+    assert "Release ownership: `product-owned`" in markdown
+    assert (
+        "Selected release workflow: `.github/workflows/release.yml`" in markdown
+    )
+    assert "Required release inputs: `version`" in markdown
+    pdf = "\n".join(
+        page.extract_text() or ""
+        for page in PdfReader(
+            plan_path.with_name(f"{cli.ADOPTION_REPORT_BASENAME}.pdf")
+        ).pages
+    )
+    assert "Release workflow" in pdf
+    assert ".github/workflows/release.yml" in pdf
+    assert "Release inputs" in pdf
+    assert "version" in pdf
 
     assert (
         main(
@@ -1326,12 +1461,23 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert (project / "CHANGELOG.md").read_text(encoding="utf-8") == (
         "# Product changes\n"
     )
-    assert product_release.read_text(encoding="utf-8").startswith(
-        "name: Product release"
-    )
+    assert product_release.read_bytes() == product_release_source
     assert not (
         project / ".github" / "workflows" / "csarc-release.yml"
     ).is_file()
+    config = yaml.safe_load(
+        (project / cli.CONFIG_FILE).read_text(encoding="utf-8")
+    )
+    assert config["release_ownership"] == "product-owned"
+    assert config["release_workflow"] == ".github/workflows/release.yml"
+    assert config["release_required_inputs"] == ["version"]
+    assert config["release_settings_owner"] == "product-admin"
+    assert config["release_immutable_releases"] == "product-defined"
+    provenance = json.loads(
+        (project / cli.PROVENANCE_FILE).read_text(encoding="utf-8")
+    )
+    assert provenance["release"] == payload["release"]
+    assert (project / "scripts" / "verify-skills").is_file()
     assert "Keep this rule." in (project / "AGENTS.md").read_text(
         encoding="utf-8"
     )
@@ -1636,7 +1782,9 @@ def test_adoption_markdown_reports_repository_context(
         tmp_path,
         cli.Revision("v1.0.0", "a" * 40, source),
         context,
-        {"language": "ci", "project_mode": "existing"},
+        cli.resolve_release_answers(
+            tmp_path, {"language": "ci", "project_mode": "existing"}
+        ),
         cli.Plan((), (), (), (), (), ()),
         "2026-08-24T00:00:00+00:00",
     )
@@ -2138,9 +2286,9 @@ def test_adopt_rejects_plan_tampering_and_target_drift(
         / cli.ADOPTION_PLAN_BASENAME
     )
     original = plan_path.read_text(encoding="utf-8")
-    assert json.loads(original)["release_ownership"] == "product-owned"
+    assert json.loads(original)["release_ownership"] == "verification-only"
     report_path = plan_path.with_name(f"{cli.ADOPTION_REPORT_BASENAME}.md")
-    assert "Release ownership: `product-owned`" in report_path.read_text(
+    assert "Release ownership: `verification-only`" in report_path.read_text(
         encoding="utf-8"
     )
     plan_path.write_text(
@@ -3821,6 +3969,17 @@ def test_update_cannot_change_release_ownership() -> None:
         cli.update_plan_answers(
             {"project_mode": "existing", "project_visibility": "private"},
             {"project_mode": "new"},
+            repository,
+        )
+
+    with pytest.raises(CliError, match="Release ownership contract"):
+        cli.update_plan_answers(
+            {
+                "project_mode": "existing",
+                "project_visibility": "private",
+                "release_ownership": "verification-only",
+            },
+            {"release_ownership": "product-owned"},
             repository,
         )
 

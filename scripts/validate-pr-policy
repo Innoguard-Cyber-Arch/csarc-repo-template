@@ -90,6 +90,16 @@ if [[ "$branch_strategy" != "main" && "$branch_strategy" != "delivery" ]]; then
   echo "branch_strategy must be main or delivery."
   exit 1
 fi
+release_ownership="${PR_RELEASE_OWNERSHIP:-}"
+if [[ -z "$release_ownership" ]]; then
+  release_ownership="$(python3 scripts/csarc_config.py release_ownership)"
+fi
+if [[ "$release_ownership" != "csarc-owned" &&
+  "$release_ownership" != "product-owned" &&
+  "$release_ownership" != "verification-only" ]]; then
+  echo "release_ownership must be csarc-owned, product-owned, or verification-only."
+  exit 1
+fi
 delivery_cutover_issue="${PR_DELIVERY_CUTOVER_ISSUE:-0}"
 if [[ ! "$delivery_cutover_issue" =~ ^[0-9]+$ ]]; then
   echo "PR_DELIVERY_CUTOVER_ISSUE must be a non-negative integer."
@@ -111,7 +121,20 @@ if [[ ",${PR_LABELS:-}," == *,hotfix,* ]] && \
   exit 1
 fi
 
-if [[ "$PR_BASE" == "main" && "$PR_HEAD" == release-please--* ]]; then
+if [[ "$PR_BASE" == "main" ]] &&
+  [[ "$PR_HEAD" == release-please--* || "$PR_HEAD" == release/v* ]]; then
+  if [[ "$release_ownership" != "csarc-owned" ]]; then
+    echo "Release ownership is $release_ownership; CSARC release follow-up policy is not applicable."
+    exit 0
+  fi
+  if [[ "$PR_HEAD" == release/v* ]]; then
+    guided_version="${PR_HEAD#release/v}"
+    if [[ ! "$guided_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+      [[ "$PR_TITLE" != "chore(main): release $guided_version" ]]; then
+      echo "A guided release must use release/v<version> and the matching chore(main) title."
+      exit 1
+    fi
+  fi
   release_files="${RUNNER_TEMP:-/tmp}/release-follow-up-files-${GITHUB_RUN_ID:-$$}.txt"
   gh api --paginate \
     "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
