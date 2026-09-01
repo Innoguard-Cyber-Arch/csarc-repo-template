@@ -34,10 +34,14 @@ uv run ruff format --check src scripts tests
 uv run ruff check src scripts tests
 uv run ty check
 uv run pytest -m "not large"
-./scripts/test-issue-triage
-./scripts/test-worktree-cleanup
-./scripts/test-pr-policy
-./scripts/test-release-follow-up-gates
+
+if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
+  "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
+  ./scripts/test-issue-triage
+  ./scripts/test-worktree-cleanup
+  ./scripts/test-pr-policy
+  ./scripts/test-release-follow-up-gates
+fi
 
 if [[ "$scopes" == *,template,* || "$scopes" == *,workflow,* ||
   "$scopes" == *,shell,* ||

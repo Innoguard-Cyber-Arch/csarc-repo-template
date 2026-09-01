@@ -146,7 +146,7 @@
           "overline": "總覽",
           "title": "預計執行時間",
           "heading": "兩種 PR 的預計執行時間",
-          "scope": "每格加總一次 PR 預計使用的 runner minutes；同一個 job 內的項目會標示已計入，不重複相加。不含排隊，首次下載相依或 cache miss 可能較久。repo-template full 以 2026-09-01 GitHub-hosted runner 實測校準。",
+          "scope": "每格加總一次 PR 預計使用的 runner minutes；同一個 job 內的項目會標示已計入，不重複相加。不含排隊，首次下載相依或 cache miss 可能較久。2026-09-01 同機暖快取實測：repo-template 的 source fast 由約 201 秒降至 59 秒；同時修改 policy／template 時為 99 秒。full 仍以 GitHub-hosted runner 實測校準。",
           "runnerNote": "Runner｜0 steps 表示程式尚未執行，先檢查 runner、帳務與 GitHub 狀態。",
           "archiveNote": "封存｜archive/ci-cd/ 只供參考；恢復前逐條確認目的、觸發、權限、timeout 與本機入口。",
           "stage": "PR 階段",
@@ -158,7 +158,7 @@
           "overline": "Overview",
           "title": "Expected runtime",
           "heading": "Expected runtime for both PR stages",
-          "scope": "Each cell totals the runner minutes expected for one PR. Work inside the same job is marked as included and is not added twice. Queue time is excluded; first-time dependency downloads and cache misses may take longer. The repo-template full estimate is calibrated against a GitHub-hosted runner measurement from 2026-09-01.",
+          "scope": "Each cell totals the runner minutes expected for one PR. Work inside the same job is marked as included and is not added twice. Queue time is excluded; first-time dependency downloads and cache misses may take longer. On 2026-09-01 with the same machine and warm cache, repo-template source fast fell from about 201 seconds to 59 seconds; a policy/template change took 99 seconds. Full remains calibrated against a GitHub-hosted runner measurement.",
           "runnerNote": "Runner | Zero steps means repository code never ran; check the runner, billing, and GitHub status first.",
           "archiveNote": "Archive | archive/ci-cd/ is reference only; verify purpose, triggers, permissions, timeout, and the local entry point before restoring one workflow.",
           "stage": "PR stage",
@@ -186,12 +186,12 @@
             "items": [
               {"label": {"zh-tw": "01 工作定義", "en": "01 Work definition"}, "value": {"zh-tw": "fast 已包含：< 1 分鐘", "en": "Included in fast: <1 min"}},
               {"label": {"zh-tw": "02 AI 規範", "en": "02 AI rules"}, "value": {"zh-tw": "驗證／CI 其中 < 1 分鐘", "en": "Under 1 min within Verification / CI"}},
-              {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 3–6 分鐘", "en": "docs <1 min; fast 3–6 min"}},
+              {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；source fast 約 1 分鐘；policy／template 變更約 2 分鐘", "en": "docs <1 min; source fast about 1 min; policy/template changes about 2 min"}},
               {"label": {"zh-tw": "04 程式語言", "en": "04 Programming languages"}, "value": {"zh-tw": "fast 已包含：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–5 分鐘（只執行已選語言）", "en": "Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)"}},
               {"label": {"zh-tw": "05 依賴安全", "en": "05 Dependency security"}, "value": {"zh-tw": "通常少於 1 分鐘", "en": "Typically under 1 min"}},
               {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}}
             ],
-            "total": {"zh-tw": "約 1–8 分鐘", "en": "About 1–8 min"}
+            "total": {"zh-tw": "約 1–4 分鐘（fast 實測 59–99 秒）", "en": "About 1–4 min (fast measured at 59–99 sec)"}
           }
         },
         {
