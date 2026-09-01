@@ -140,11 +140,10 @@ fit = "符合畫面"
 
 一般使用者不必記 workflow 或 script 名稱；依畫面提示操作即可。目前自動化涵蓋工作單、PR 規則、必要驗證，以及需人審查版本 PR 的自動發版。
 
-{{< detail key="flow-foundation" title="橫跨全流程的四項基礎" >}}
-- **07 規則治理：** 權限、分支、審查與合併規則一致。
-- **08 模板升級：** Copier 將新政策帶回既有 repo，差異仍經 PR。
-- **09 內部網站：** 讓做法、限制、證據與決策容易查找。
-- **10 導入層級：** 基本能力先做；需求與平台條件成熟後才加進階能力。
+{{< detail key="flow-foundation" title="橫跨全流程的三項基礎" >}}
+- **08 規則治理：** 先準備 repo 政策，再依 GitHub 實際方案套用能生效的管制。
+- **09 模板升級：** Copier 將新政策帶回既有 repo，差異仍經 PR。
+- **10 內部網站：** 讓做法、限制、證據與決策容易查找。
 
 檢查失敗就修正同一張 PR；合併後的新問題則另外建立 Issue。
 {{< /detail >}}
@@ -486,7 +485,7 @@ Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<I
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="governance" track="governance" eyebrow="步驟 08" title="先辨識 GitHub 能力，再套用真的管制" subtitle="目前組織實測是 Free＋private，因此 main 尚未受 Ruleset 強制保護。" class="legacy-slide decision-slide" legacy="true" >}}
+{{< slide key="governance" track="governance" eyebrow="步驟 08" title="只套用 GitHub 真正能強制的管制" subtitle="公版先準備同一套政策，維運者再依實際方案確認哪些會生效。" class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <h2>先辨識 GitHub 方案，<span class="accent">再套用真的能生效的管制</span></h2>
@@ -498,8 +497,8 @@ Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<I
         <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches、強制核准、CODEOWNER 與必要檢查。</p><ul><li>同一個 CODEOWNERS team 必須存在並有 repo write access</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
         <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
       </div>
-      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性、repository teams 與 Ruleset API；team 不存在、不可見或沒有 repo write access 時直接停止，不能再被 Free private 的降級路徑掩蓋。導入時可設定一到多位 reviewers；目前由人工指定，自動輪派 Action 尚未恢復。Free private 不支援 team request，也無法強制核准。Web UI 可供管理員人工預建 disabled Ruleset，但公開 REST／GraphQL API 無法自動建立。腳本本身不會改可見性。依序執行 <code>plan</code>、<code>apply</code>、<code>check</code>；可修正差異 fail-closed，不支援的 Ruleset 或受限制的管理欄位回報具體 DEGRADED。完整管理欄位驗證應由管理員在可信任 checkout 使用 Administration read 憑證，不把該 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更都需組織 owner 另案核准；模板不會自行執行。</span></aside>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用支援的設定：</strong><code>scripts/apply-repository-settings.sh apply</code></li><li><strong>比對全部可觀察設定：</strong><code>scripts/apply-repository-settings.sh check</code> 比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset</li><li><strong>檢查治理漂移：</strong><code>scripts/check-governance-drift</code> 可在本機執行；原本的 daily Action 位於 <code>archive/ci-cd/</code>，目前不會排程或自動開 Issue</li></ul></aside>
+      <aside class="selection-note"><strong>部署與例外原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性、repository teams 與 Ruleset API；team 不存在、不可見或沒有 repo write access 時直接停止，不能被 Free private 的降級路徑掩蓋。能力只在 live check 證明可用後啟用，不以預設成熟度或日期判斷。Free private 不支援 team request，也無法強制核准；目前由人工指定 reviewer。每個暫時例外都用 Issue 記錄提出者、另一位核准者、到期日、證據與復原方式，不能把未執行的檢查寫成通過。完整管理欄位驗證由管理員在可信任 checkout 使用 Administration read 憑證，不把 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更都需 organization owner 另案核准。</span></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>唯一來源：</strong><code>.csarc/config.yml</code> 保存 <code>branch_strategy</code>、<code>code_owner</code>、<code>reviewers</code>、<code>project_visibility</code> 與選配的 <code>enable_governance_drift_check</code></li><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用與核對：</strong><code>apply</code> 套用支援項目；<code>check</code> 比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset</li><li><strong>目前自動化：</strong><code>scripts/check-governance-drift</code> 可在本機執行；reviewer 輪派與 daily drift Action 尚未恢復，不能寫成已自動執行</li><li><strong>網站邊界：</strong>既有 identity／governance keys 產生預設；<code>docs/site-content.js</code> 與 <code>docs/site-theme.css</code> 仍由專案維護</li></ul></aside>
       <table class="decision-register" aria-label="GitHub 方案與 apply／check 行為對照">
         <thead><tr><th>GitHub 方案與可見性</th><th><code>apply</code> 結果</th><th><code>check</code>／PR／CI/CD 行為</th></tr></thead>
         <tbody>
@@ -513,17 +512,38 @@ Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<I
 {{< /legacy >}}
 
 {{< basic >}}
-| GitHub 狀態 | `apply` 結果 | 實際門禁 |
+公版會準備負責人、審查人、repo 基本設定與預期的分支規則。維運者檢查 GitHub 實際方案後：
+
+- 支援的管制才套用並驗證。
+- 付費方案才有的功能若不可用，會標成 `DEGRADED` 並改由人工處理，不會假裝已強制。
+- 原本可以套用、但目前設定不一致的項目會停止，修正後才能繼續。
+
+{{< detail key="governance-capability" title="方案能力、啟用與升級條件" >}}
+| GitHub 狀態 | 公版能做什麼 | 需要人處理什麼 |
 | --- | --- | --- |
-| Free＋public | 透過 REST 套用 Ruleset | 缺少或不符即失敗 |
-| Free organization＋private | 套基本設定，期望 Ruleset 留在 `policies/rulesets.json` | 標示 `DEGRADED`，人工指定 reviewer；無 merge gate |
-| Pro 個人＋private | 套用 Ruleset | 與 Free public 相同 |
-| Team／Enterprise organization＋private | 確認 CODEOWNERS team 後套用 Ruleset | 審查、CODEOWNER 與 status checks 成為 merge gate |
+| Free＋public，或 Pro 個人＋private | 套用並檢查 repo Ruleset | 套用前先審查變更內容 |
+| Free organization＋private | 套基本設定，期望 Ruleset 留在 `policies/rulesets.json` | 人工指定並留下審查紀錄；沒有強制合併門禁 |
+| Team／Enterprise organization＋private | 確認 CODEOWNERS team 後套用並檢查 Ruleset | 組織身分、網路、稽核或不可逆變更另由 organization owner 核准 |
 
-{{< detail key="governance-observation" title="實際操作與觀察限制" >}}
-依序執行 `scripts/apply-repository-settings.sh plan`、`apply`、`check`。`check` 比對 CODEOWNERS、repository、Actions、政策 labels 與有效 Ruleset；`scripts/check-governance-drift` 可在本機執行，但原本的每日 Action 仍在 `archive/ci-cd/`，不會排程或自動開 Issue。
+能力以實際證據啟用，不以預設成熟度或日期判定。Repo 可見性或方案變更後重跑 `plan`、`apply`、`check`；真的不支援就保留 `DEGRADED`，非預期的 API 或設定錯誤則停止。
+{{< /detail >}}
 
-每次檢查都是快照：兩次執行之間曾變更又復原的事件仍需 GitHub audit log 或組織層監控。完整管理欄位應由管理員在可信任 checkout 使用 Administration read 憑證，不把 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更需組織 owner 另案核准。
+{{< detail key="governance-config" title="單一設定來源與責任層級" >}}
+| 層級 | `.csarc/config.yml` key | 預設／允許值 | 產生或驗證位置 |
+| --- | --- | --- | --- |
+| 必要基線 | `branch_strategy` | 預設 `delivery`；可選 `delivery`、`main` | 分支指引與 `policies/rulesets.json` |
+| 組織政策 | `code_owner` | 一個存在且有 repo write access 的 `@organization/team` | `.github/CODEOWNERS`；由 repository settings plan／apply／check 驗證 |
+| 組織政策 | `reviewers` | 一個或多個 GitHub 使用者名稱 | `.github/REVIEWERS`；目前人工指定，自動輪派尚未啟用 |
+| 專案選擇 | `project_visibility` | 預設 `private`；可選 `public`、`private`、Enterprise `internal` | 能力偵測與選配安全預設 |
+| 專案選配 | `enable_governance_drift_check` | 維持 `false`；`true` 保留到 Action 啟用後使用 | 本機 drift checker 可執行；目前沒有排程 Action |
+
+公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier `_src_path`、`_commit`。衍生公版可在同一份 YAML 增加 namespaced keys，不另建 profile。低頻 GitHub 細節留在原生 repository settings 或 `policies/`，不擴張 CSARC schema。
+
+內部網站先沿用 `project_name`、`project_description`、`repository_url`、`code_owner`、`branch_strategy` 產生預設內容；專案文字與樣式留在 `docs/site-content.js`、`docs/site-theme.css`。只有後續證明是高價值且跨檔的網站設定，才在同一 YAML 增加 namespaced key。
+{{< /detail >}}
+
+{{< detail key="governance-exceptions" title="暫時例外怎麼留下紀錄" >}}
+每個例外使用一張連結的 Issue，寫明提出者、另一位核准者、到期日、證據與復原方式。只有平台確實無法提供功能，或限時事故復原時可以縮小管制；不能把未執行的檢查寫成通過、不能把高權限 token 暴露給 PR 程式，也不能默默變成永久做法。確認復原後才關單；延期必須再次明確核准。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
@@ -600,36 +620,8 @@ Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<I
 
 {{< detail key="docs-site-access" title="存取與維護邊界" >}}
 `noindex` 與 `robots.txt` 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。
-{{< /detail >}}
-{{< /basic >}}
-{{< /slide >}}
 
-{{< slide key="rollout" track="rollout" eyebrow="步驟 11" title="分階段導入，每一步都能停" subtitle="成熟度看實際證據，不以日期或檔案存在假裝完成。" class="legacy-slide decision-slide" legacy="true" >}}
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 的舊 release handoff／attestation 敘述是 2026-08 歷史證據；現行已改為單一 release workflow，attestation 與 consumption 仍是選配。</span></aside>
-{{< legacy >}}
-      <header>
-        <h2>分階段導入，<span class="accent">每一步都能驗證，也能停下來</span></h2>
-        <p class="subtitle"><strong>三層導入｜</strong>基本能力現在就隨模板產生；未來與可選能力先寫清楚觸發門檻，不用空檔案假裝完成。</p>
-      </header>
-      <p class="context-line"><strong>問題與目的｜</strong>一次導入模板、CI、部署、監控與 AI，團隊很難判斷哪裡出錯；分期後每一步都有完成條件。</p>
-      <div class="decision-strip">
-        <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">不按聲量或日期一次把功能全打開</span></summary><ul><li><strong>一次切換：</strong>錯誤會同時擴散到所有專案</li><li><strong>固定日期解鎖：</strong>時間到了不代表使用條件已成熟</li><li><strong>所有語言同時上：</strong>未驗證的 profile 只是空承諾</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">三層不是日期，而是導入條件</span></summary><p><strong>基本導入：</strong>共通基線與 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已有可執行實作。Free 會先查能力並套可用設定；private repo 不宣稱有 Ruleset 強制保護。<br><strong>已完成線上驗證：</strong>release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier 更新。<br><strong>語言模組已驗收：</strong>Python、Rust 與 TypeScript 都會實際建立、導入既有 repo、更新、測試、建置與封裝，因此列為 beta。<br><strong>未來／可選：</strong>中央 catalog／治理平台、多 repo、Go、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></details>
-      </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>哪些 profile 已可用或仍在規劃：</strong><code>profiles/catalog.yaml</code></li><li><strong>先查方案再套可用設定：</strong><code>scripts/apply-repository-settings.sh</code>；Ruleset／App 條件備妥後再啟用</li><li><strong>建立與更新路徑是否都能通過：</strong><code>scripts/verify-template.sh</code></li></ul></aside>
-{{< /legacy >}}
-
-{{< basic >}}
-| 層級 | 目前狀態 |
-| --- | --- |
-| 基本能力 | 共通基線與 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 網站已有可執行檔案 |
-| 現行線上證據 | active CI／policy workflows，以及第一個 CI-only 下游導入與更新 |
-| 發版證據 | 現行 release workflow 建立 exact-tag 成品、checksum、SPDX SBOM 與 immutable Release；舊 handoff／consumption run 只供稽核 |
-| 語言模組已驗收 | Python、Rust、TypeScript 都通過建立、既有 repo 導入、更新、鎖檔、測試、建置與封裝 |
-| 未來／選配 | 中央 catalog／治理平台、Go、託管登入、部署、監控、RAG、自主 Agent |
-
-{{< detail key="rollout-evidence" title="為什麼不一次全部打開" >}}
-一次切換會讓錯誤同時擴散，固定日期也不代表使用條件成熟。一個真實 consuming repo 證明共用導入、更新與線上 CI 邊界；各語言再用可重現的建立、既有 repo 導入、更新與原生工具鏈測試取得 beta，不另外建立重複的專用試行 repo。
+網站以既有 `.csarc/config.yml` 的 `project_name`、`project_description`、`repository_url`、`code_owner`、`branch_strategy` 產生初始名稱、說明、連結、負責人與分支指引。專案內容與樣式仍由 `docs/site-content.js`、`docs/site-theme.css` 管理，不另建設定來源；後續只有具體實作證明為高價值且跨檔的網站選項，才在同一 YAML 增加 namespaced key。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
@@ -639,7 +631,7 @@ Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<I
 {{< legacy >}}
       <header>
         <h2>2026/05 內部分享簡報｜<span class="accent">SDLC 盤點</span></h2>
-        <p class="subtitle">回顧 2026 年 5 月內部分享的構想：保留方法，修正實作與導入層級；點選每列可看三句判斷。</p>
+        <p class="subtitle">回顧 2026 年 5 月內部分享的構想：保留方法，修正實作與平台能力假設；點選每列可看三句判斷。</p>
       </header>
       <table class="bridge-table" aria-label="五月版簡報與目前設計的逐頁對照">
         <colgroup><col class="page-col"><col class="topic-col"><col class="status-col"><col class="decision-col"></colgroup>

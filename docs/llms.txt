@@ -14,6 +14,8 @@
 - [Fast checks / 快速驗證](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md): Short feedback checks selected by change risk; they do not replace full pre-delivery verification. / 依變更風險執行的短回饋檢查，不取代交付前完整驗證。
 - [Full verification / 完整驗證](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/AGENTS.md#commands): The repository-wide pre-delivery contract for code, policy, and artifacts. / 交付前執行的 repository 級契約，統一檢查程式、政策與產物。
 - [Platform capability state / 平台能力狀態](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md): Observed capability recorded as allowed, blocked, or unknown instead of inferred from plan names. / 以 allowed、blocked 或 unknown 記錄實測能力，不從方案名稱猜測。
+- [DEGRADED governance / DEGRADED（能力降級）](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/README.md#設定與密鑰): A GitHub plan or permission cannot enforce a control; the template retains the desired policy and requires a human fallback without reporting an unrun control as passed. / GitHub 方案或權限不支援某項強制功能；公版保留期望政策並要求人工補足，不把未執行誤寫成通過。
+- [Governance exception / 治理例外](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/README.md#設定與密鑰): A time-bounded fallback that records its proposer, a different approver, expiry, evidence, and recovery path. / 有期限的替代做法，必須記錄提出者、另一位核准者、到期日、證據與恢復方式。
 - [Portable artifact / 可攜式產物](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/portable-decision-site.md): A single-file deliverable with no external runtime assets that remains usable through file://. / 沒有 runtime 外部資產、可下載並以 file:// 離線使用的單檔交付物。
 
 ## Integration and delivery / 整合與交付
