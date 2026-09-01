@@ -62,7 +62,7 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 | --- | --- | --- |
 | `.csarc/config.yml` | Template source, languages, branch strategy, and optional capabilities | Template-led |
 | `.github/ISSUE_TEMPLATE/`, `pull_request_template.md` | Work definition and PR contract | Template-led |
-| `.github/workflows/` | Six active flows: Issue triage, Milestone sync, spec sync, PR rules, verification, and scheduled vulnerability scanning | Template-led |
+| `.github/workflows/` | Seven shared flows, plus the optional governance-drift schedule | Template-led |
 | `AGENTS.md`, `README.md`, `CLAUDE.md` | Agent working rules and user entry point | Shared |
 | `policies/`, `CODEOWNERS`, `.github/REVIEWERS` | Desired settings, owners, and reviewers | Shared |
 | `scripts/` | Local verification, work synchronization, and repository settings | Template-led |
@@ -217,12 +217,12 @@ GitHub Release is the baseline for every profile. PyPI and npm are separate opt-
 | GitHub state | `apply` result | Actual gate |
 | --- | --- | --- |
 | Free + public | Apply a Ruleset through REST | Missing or mismatched rules fail |
-| Free organization + private | Apply baseline settings and retain desired Ruleset in `policies/rulesets.json` | Report `DEGRADED`, assign a reviewer manually, and provide no merge gate |
+| Free organization + private | Apply baseline settings and retain desired Ruleset in `policies/rulesets.json` | Report `DEGRADED`, request one individual reviewer automatically, and provide no merge gate |
 | Pro personal + private | Apply a Ruleset | Same as Free public |
 | Team/Enterprise organization + private | Verify the CODEOWNERS team, then apply a Ruleset | Review, CODEOWNER, and status checks become merge gates |
 
 {{< detail key="governance-observation" title="Concrete operations and observation limits" >}}
-Run `scripts/apply-repository-settings.sh plan`, `apply`, then `check`. The check compares CODEOWNERS, repository settings, Actions, policy labels, and effective Rulesets. `scripts/check-governance-drift` can run locally, but its former daily Action remains under `archive/ci-cd/`; it neither runs on a schedule nor opens Issues automatically.
+Run `scripts/apply-repository-settings.sh plan`, `apply`, then `check`. The check compares CODEOWNERS, repository settings, Actions, policy labels, and effective Rulesets. Every repository requests one non-author reviewer from the base branch's `.github/REVIEWERS`; this is not a merge gate. When `enable_governance_drift_check` is on, a generated repository runs the same local `scripts/check-governance-drift` daily and can open or update one tracking Issue. Turning it off generates neither file. The template source keeps the script for generation and local verification but does not schedule its own daily run.
 
 Each check is a snapshot. A setting changed and restored between runs still requires the GitHub audit log or organization monitoring. Complete administration fields should be checked from a trusted checkout with Administration read credentials, never by exposing that token to PR code. GitHub plan upgrades, irreversible operations, and organization-wide permission changes require separate approval from an organization owner.
 {{< /detail >}}

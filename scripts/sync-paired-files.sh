@@ -19,6 +19,7 @@ paired_files=(
   .github/ISSUE_TEMPLATE/feature.yml
   .github/ISSUE_TEMPLATE/task.yml
   .github/workflows/issue-triage.yml
+  .github/workflows/governance-comment.yml
   .github/workflows/milestone-lifecycle.yml
   .github/workflows/osv.yml
   .github/workflows/pr-policy.yml
@@ -32,6 +33,7 @@ paired_files=(
   scripts/render_site.py
   scripts/apply-repository-settings.sh
   scripts/check-governance-drift
+  scripts/request-reviewer
   scripts/ci_tier.py
   scripts/delivery_sync.py
   scripts/pr_lifecycle.py

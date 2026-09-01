@@ -149,13 +149,15 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
 
     assert workflows == {
         "ci.yml",
+        "governance-comment.yml",
+        "governance-drift.yml",
         "issue-triage.yml",
         "milestone-lifecycle.yml",
         "osv.yml",
         "pr-policy.yml",
         "spec-to-issue.yml",
     }
-    assert "6 條現行自動流程" in file_map
+    assert "7 條共用流程＋1 條選配排程" in file_map  # noqa: RUF001
     for workflow in workflows:
         assert workflow in file_map
     for inactive in ("release-please.yml", "release.yml"):
@@ -377,7 +379,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "declarativeState",
         "templateLifecycle",
     ]
-    assert len(data["testing"]["groups"]) == 7
+    assert len(data["testing"]["groups"]) == 8
     duration_rows = data["testing"]["duration"]["rows"]
     assert [row["key"] for row in duration_rows] == ["issue", "release"]
     assert all(len(row["shared"]["items"]) == 6 for row in duration_rows)
