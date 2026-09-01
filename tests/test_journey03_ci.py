@@ -168,6 +168,36 @@ def test_release_verification_contains_issue_pr_regressions() -> None:
     assert generated_issue <= generated_release
 
 
+def test_issue_pr_policy_regressions_run_only_for_relevant_scopes() -> None:
+    """Avoid rerunning policy fixtures for unrelated source changes."""
+    expected = {
+        "./scripts/test-issue-triage",
+        "./scripts/test-pr-policy",
+        "./scripts/test-release-follow-up-gates",
+        "./scripts/test-worktree-cleanup",
+    }
+    for path in (
+        "scripts/verify-fast",
+        "template/scripts/verify-fast.jinja",
+    ):
+        source = (REPO_ROOT / path).read_text(encoding="utf-8")
+        gate_start = source.index('if [[ "$scopes" == *,governance,*')
+        gate_end = source.index("\nfi", gate_start)
+        gate = source[gate_start:gate_end]
+
+        assert expected <= {
+            line.strip()
+            for line in gate.splitlines()
+            if line.strip().startswith("./scripts/test-")
+        }
+        assert all(
+            scope in gate
+            for scope in ("governance", "template", "workflow", "shell")
+        )
+        assert "source" not in gate
+        assert "dependency" not in gate
+
+
 def test_full_pytest_includes_the_issue_pr_ai_contract() -> None:
     """Run the unmarked AI-guidance tests in both repo-template stages."""
     issue_entry = (REPO_ROOT / "scripts/verify-fast").read_text(

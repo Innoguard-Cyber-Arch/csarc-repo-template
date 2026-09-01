@@ -273,6 +273,7 @@ class FakeReleaseClient:
             raise self.commit_error
 
 
+@pytest.mark.large
 def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
     """Init previews without writes, then creates and verifies the project."""
     source, first_sha = make_template(tmp_path)
@@ -795,6 +796,7 @@ def test_adopt_finalize_rejects_answer_drift(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_rejects_source_and_managed_file_drift(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -816,6 +818,7 @@ def test_adopt_finalize_rejects_source_and_managed_file_drift(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_rejects_preserved_managed_file_drift(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -834,6 +837,7 @@ def test_adopt_finalize_rejects_preserved_managed_file_drift(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_rejects_repository_drift(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -859,6 +863,7 @@ def test_adopt_finalize_rejects_repository_drift(
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
 
 
+@pytest.mark.large
 def test_adopt_finalize_rechecks_repository_context_after_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -910,6 +915,7 @@ def test_adopt_finalize_rechecks_repository_context_after_confirmation(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_failure_keeps_actionable_pending_state(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -929,6 +935,7 @@ def test_adopt_finalize_failure_keeps_actionable_pending_state(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_requires_matching_second_stage_plan(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -973,6 +980,7 @@ def test_adopt_finalize_requires_matching_second_stage_plan(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_rejects_unexpected_worktree_state(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1001,6 +1009,7 @@ def test_adopt_finalize_rejects_unexpected_worktree_state(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1413,6 +1422,7 @@ def test_adoption_report_classifies_unknown_content(
     assert git(project, "status", "--porcelain") == before
 
 
+@pytest.mark.large
 def test_adoption_report_failure_keeps_markdown(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1610,6 +1620,7 @@ def test_adopt_help_describes_report_directory(
     assert "plan without writing (the default for adopt)" in help_text
 
 
+@pytest.mark.large
 def test_adopt_applies_exact_plan_over_preserved_dirty_file(
     tmp_path: Path,
 ) -> None:
@@ -2006,6 +2017,7 @@ def test_adopt_rejects_race_between_comparison_and_snapshot(
     ).exists()
 
 
+@pytest.mark.large
 def test_adopt_infers_unicode_repository_and_applies_exact_plan(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -2056,6 +2068,7 @@ def test_adopt_infers_unicode_repository_and_applies_exact_plan(
     assert (project / cli.PROVENANCE_FILE).is_file()
 
 
+@pytest.mark.large
 def test_adopt_rejects_plan_tampering_and_target_drift(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -2114,6 +2127,7 @@ def test_json_differences_reports_paths_and_values() -> None:
     )
 
 
+@pytest.mark.large
 def test_adopt_rechecks_target_after_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2166,6 +2180,7 @@ def test_adopt_rechecks_target_after_confirmation(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_rechecks_repository_context_after_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2464,6 +2479,7 @@ def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
     assert not (project / "managed.txt").exists()
 
 
+@pytest.mark.large
 def test_invalid_project_hook_blocks_pending_adoption_without_writes(
     tmp_path: Path,
 ) -> None:
@@ -2519,6 +2535,7 @@ def test_invalid_project_hook_blocks_pending_adoption_without_writes(
     assert not (project / "managed.txt").exists()
 
 
+@pytest.mark.large
 def test_adoption_records_and_replays_explicit_project_hook(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -2854,6 +2871,7 @@ def test_generated_verifier_status_descriptor_cannot_open_caller_path(
         ("scripts/not-executable", "not executable"),
     ],
 )
+@pytest.mark.large
 def test_project_hook_rejects_unsafe_or_unusable_paths(
     tmp_path: Path, path: str, error: str
 ) -> None:
@@ -3127,6 +3145,7 @@ def test_code_owner_verification_distinguishes_team_states(
     assert unknown["reason"] == "not authorized"
 
 
+@pytest.mark.large
 def test_adoption_preserves_executable_and_checked_patch_symlink(
     tmp_path: Path,
 ) -> None:
@@ -3205,6 +3224,7 @@ def test_adoption_preserves_executable_and_checked_patch_symlink(
     assert (project / "portable-link").readlink() == Path("product.txt")
 
 
+@pytest.mark.large
 def test_update_check_dry_run_apply_and_conflict(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -3314,6 +3334,7 @@ def test_update_check_dry_run_apply_and_conflict(
     assert cli.target_file_snapshot(project) == expected_files
 
 
+@pytest.mark.large
 def test_legacy_update_conflict_leaves_target_unchanged(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -3362,6 +3383,7 @@ def test_legacy_update_conflict_leaves_target_unchanged(
     assert cli.target_file_snapshot(project) == expected_files
 
 
+@pytest.mark.large
 def test_update_migrates_legacy_copier_answers_to_single_config(
     tmp_path: Path,
 ) -> None:
@@ -3474,6 +3496,7 @@ def test_update_check_validates_hook_without_running_it(
         ("../verify", "safe repository-relative"),
     ],
 )
+@pytest.mark.large
 def test_update_check_rejects_invalid_hook_without_writes(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -3524,6 +3547,7 @@ def test_update_check_rejects_invalid_hook_without_writes(
     assert cli.target_file_snapshot(project) == before_files
 
 
+@pytest.mark.large
 def test_update_hook_failure_leaves_target_unchanged(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -3576,6 +3600,7 @@ def test_update_hook_failure_leaves_target_unchanged(
     assert not (project / "hook-ran").exists()
 
 
+@pytest.mark.large
 def test_update_rechecks_committed_head_after_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3617,6 +3642,7 @@ def test_update_rechecks_committed_head_after_confirmation(
     )
 
 
+@pytest.mark.large
 def test_update_rechecks_repository_context_after_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3734,6 +3760,7 @@ def test_update_repository_rename_preserves_custom_security_channel(
         assert "security_reporting_channel" not in update_data
 
 
+@pytest.mark.large
 def test_update_rechecks_snapshot_after_repository_context(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3791,6 +3818,7 @@ def test_update_rechecks_snapshot_after_repository_context(
     )
 
 
+@pytest.mark.large
 def test_update_recomputes_visibility_defaults_from_github(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3858,6 +3886,7 @@ def test_update_recomputes_visibility_defaults_from_github(
     assert payload["answers"]["enable_release_attestations"] is True
 
 
+@pytest.mark.large
 def test_update_plan_resolves_target_answers_and_capabilities(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3923,6 +3952,7 @@ def test_update_plan_resolves_target_answers_and_capabilities(
     assert payload["capabilities_changed"] is True
 
 
+@pytest.mark.large
 def test_update_check_reports_capability_drift_at_same_revision(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -4418,7 +4448,37 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         )
     }
     assert marked_large == {
+        "test_adopt_applies_exact_plan_over_preserved_dirty_file",
         "test_adopt_defaults_to_dry_run_and_preserves_product_files",
+        "test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints",
+        "test_adopt_finalize_failure_keeps_actionable_pending_state",
+        "test_adopt_finalize_rechecks_repository_context_after_confirmation",
+        "test_adopt_finalize_rejects_preserved_managed_file_drift",
+        "test_adopt_finalize_rejects_repository_drift",
+        "test_adopt_finalize_rejects_source_and_managed_file_drift",
+        "test_adopt_finalize_rejects_unexpected_worktree_state",
+        "test_adopt_finalize_requires_matching_second_stage_plan",
+        "test_adopt_infers_unicode_repository_and_applies_exact_plan",
+        "test_adopt_rechecks_repository_context_after_confirmation",
+        "test_adopt_rechecks_target_after_confirmation",
+        "test_adopt_rejects_plan_tampering_and_target_drift",
+        "test_adoption_preserves_executable_and_checked_patch_symlink",
+        "test_adoption_records_and_replays_explicit_project_hook",
+        "test_adoption_report_failure_keeps_markdown",
+        "test_init_dry_run_and_apply_pin_full_sha",
+        "test_invalid_project_hook_blocks_pending_adoption_without_writes",
+        "test_legacy_update_conflict_leaves_target_unchanged",
+        "test_project_hook_rejects_unsafe_or_unusable_paths",
         "test_real_existing_adoption_uses_fixed_ownership_policies",
         "test_real_template_adoption_resumes_after_manifest_merge",
+        "test_update_check_dry_run_apply_and_conflict",
+        "test_update_check_rejects_invalid_hook_without_writes",
+        "test_update_check_reports_capability_drift_at_same_revision",
+        "test_update_hook_failure_leaves_target_unchanged",
+        "test_update_migrates_legacy_copier_answers_to_single_config",
+        "test_update_plan_resolves_target_answers_and_capabilities",
+        "test_update_rechecks_committed_head_after_confirmation",
+        "test_update_rechecks_repository_context_after_confirmation",
+        "test_update_rechecks_snapshot_after_repository_context",
+        "test_update_recomputes_visibility_defaults_from_github",
     }
