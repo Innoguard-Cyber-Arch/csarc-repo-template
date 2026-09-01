@@ -4181,25 +4181,13 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         )
         conflicts = find_conflicts(candidate)
         if result.returncode != 0 or conflicts:
-            artifacts, delete_paths = candidate_patch_effects(
-                candidate, include_paths=conflicts
-            )
-            if artifacts or delete_paths:
-                write_candidate_patch(
-                    candidate,
-                    target,
-                    temporary_root / "conflict.patch",
-                    artifacts=artifacts,
-                    target_snapshot=target_snapshot,
-                    delete_paths=delete_paths,
-                    include_paths=conflicts,
-                )
             detail = (
                 ", ".join(conflicts) if conflicts else "Copier exited non-zero"
             )
             raise CliError(
                 f"Update needs manual conflict resolution ({detail}); "
-                "differences were preserved."
+                "the target was not changed. Resolve the listed files in "
+                "the target or template, then rerun the update."
             )
         if (
             target_uses_current_config
