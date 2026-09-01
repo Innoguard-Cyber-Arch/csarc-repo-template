@@ -240,7 +240,7 @@ pnpm exec vitest run --coverage`
         {
           title: '一個入口驗證、打包，也證明錯誤會被拒絕',
           goal: '本機、AI 與 GitHub 執行同一入口；正向測試證明可交付，負向測資證明門禁不是永遠綠燈。',
-          summary: 'Issue 標題與 PR policy 回歸案例檢查標籤、標題、stack base、Issue，以及 main／dev／delivery routes；公版再注入錯誤 Python／TypeScript 檔。',
+          summary: 'Issue 標題與 PR policy 回歸案例檢查標籤、標題、stack base、Issue，以及 main／delivery routes；公版再注入錯誤 Python／TypeScript 檔。',
           file: 'scripts/verify＋scripts/test-pr-policy＋.github/workflows/ci.yml',
           code: `./scripts/test-pr-policy
 ./scripts/verify
@@ -350,7 +350,7 @@ python scripts/spec_to_issue.py validate`
         {
           title: 'PR 同時核對標籤、Issue 編號、stack 來源與版本標題',
           goal: '先有工作紀錄再改程式；標題仍是版本計算依據，內文可以用中文。',
-          summary: 'PR 至少選一個工作標籤；分支須為 `type/123-short-slug`，base 的 open PR 鏈須回到 main／dev，且連結 Issue 必須未結案、標題合格。',
+          summary: 'PR 至少選一個工作標籤；分支須為 `type/123-short-slug`，base 的 open PR 鏈須回到 main 或 Issue 所屬的 `dev/m*`，且連結 Issue 必須未結案、標題合格。',
           file: '.github/workflows/pr-policy.yml＋scripts/test-pr-policy＋pull_request_template.md',
           code: `^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+
 
@@ -676,10 +676,10 @@ csarc update`
         {
           title: 'Copier 只詢問會改變骨架或驗證行為的選項',
           goal: '不提供關閉型別或秘密掃描的開關；嚴格門檻是公版契約。',
-          summary: '語言與分支模式都在建立時明確選擇；delivery 模式把 CI 當整合層，main／dev 仍保留給適合的 repo。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。',
+          summary: '語言與分支模式都在建立時明確選擇；delivery 模式只為 Milestone 建立短命整合 branch，standalone 直接回 main。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。',
           file: 'copier.yml',
           code: `languages: [python]
-branch_strategy: delivery  # delivery | main | dev
+branch_strategy: delivery  # delivery | main
 python_support_mode: latest  # latest | minimum
 python_min_version: "3.12"  # Used only in minimum mode
 coverage_mode: global  # global | diff

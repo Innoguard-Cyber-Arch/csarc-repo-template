@@ -24,7 +24,6 @@ paired_files=(
   .github/workflows/pr-policy.yml
   .github/workflows/spec-to-issue.yml
   policies/actions.json
-  policies/dev-next-ruleset.json
   policies/labels.json
   policies/repository.json
   docs/ci-policy.md

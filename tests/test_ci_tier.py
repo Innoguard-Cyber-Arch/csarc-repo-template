@@ -37,9 +37,7 @@ scope_for = MODULE["scope_for"]
         ("template/.github/dependabot.yml.jinja", "dependency"),
         ("template/pnpm-workspace.yaml", "dependency"),
         ("policies/rulesets.json", "governance"),
-        ("policies/dev-next-ruleset.json", "governance"),
         ("template/policies/rulesets.json.jinja", "governance"),
-        ("template/policies/dev-next-ruleset.json", "governance"),
         ("unexpected.bin", "unknown"),
     ],
 )
@@ -51,7 +49,7 @@ def test_scope_for(path: str, scope: str) -> None:
 def test_docs_only_uses_docs_tier() -> None:
     """Documentation does not start language or generator matrices."""
     plan = classify(
-        "pull_request", "dev/next", "docs/9-guide", set(), ["README.md"]
+        "pull_request", "main", "docs/9-guide", set(), ["README.md"]
     )
     assert plan.tier == "docs"
     assert not plan.run_osv
@@ -70,14 +68,14 @@ def test_docs_only_uses_docs_tier() -> None:
 )
 def test_site_changes_publish_the_decision_artifact(path: str) -> None:
     """Publish the bundle only when its source or project content changes."""
-    plan = classify("pull_request", "dev/next", "docs/9-site", set(), [path])
+    plan = classify("pull_request", "main", "docs/9-site", set(), [path])
     assert plan.upload_site
 
 
 def test_unrelated_documentation_does_not_publish_the_site() -> None:
     """Ordinary documentation keeps the fast runner artifact-free."""
     plan = classify(
-        "pull_request", "dev/next", "docs/9-guide", set(), ["README.md"]
+        "pull_request", "main", "docs/9-guide", set(), ["README.md"]
     )
     assert not plan.upload_site
 
@@ -86,14 +84,14 @@ def test_issue_form_and_gitignore_do_not_fall_through_to_full() -> None:
     """Known low-risk repository metadata receives an explicit cheap tier."""
     issue_form = classify(
         "pull_request",
-        "dev/next",
+        "main",
         "docs/9-form",
         set(),
         [".github/ISSUE_TEMPLATE/feature.yml"],
     )
     gitignore = classify(
         "pull_request",
-        "dev/next",
+        "main",
         "chore/9-ignore",
         set(),
         [".gitignore"],
@@ -117,14 +115,13 @@ def test_source_uses_fast_canonical_runtime() -> None:
         (".github/workflows/ci.yml", "run_zizmor"),
         ("uv.lock", "run_osv"),
         ("policies/rulesets.json", "run_governance"),
-        ("policies/dev-next-ruleset.json", "run_governance"),
     ],
 )
 def test_risk_scopes_enable_only_their_expensive_check(
     path: str, flag: str
 ) -> None:
     """Keep unrelated security and remote checks out of ordinary PRs."""
-    plan = classify("pull_request", "dev/next", "chore/9-change", set(), [path])
+    plan = classify("pull_request", "main", "chore/9-change", set(), [path])
     assert plan.tier == "fast"
     assert getattr(plan, flag)
 
@@ -138,7 +135,7 @@ def test_risk_scopes_enable_only_their_expensive_check(
 )
 def test_governance_checkers_run_only_remote_governance(path: str) -> None:
     """Route governance checkers without unrelated security scans."""
-    plan = classify("pull_request", "dev/next", "fix/276-route", set(), [path])
+    plan = classify("pull_request", "main", "fix/276-route", set(), [path])
     assert plan.tier == "fast"
     assert plan.scopes == ("governance",)
     assert plan.run_governance
@@ -154,7 +151,7 @@ def test_osv_scripts_trigger_their_own_check_and_shell_validation(
     path: str,
 ) -> None:
     """Scan and lint changes to the local vulnerability entrypoint."""
-    plan = classify("pull_request", "dev/next", "fix/407-osv", set(), [path])
+    plan = classify("pull_request", "main", "fix/407-osv", set(), [path])
     assert plan.scopes == ("shell",)
     assert plan.run_osv
 
@@ -163,7 +160,6 @@ def test_osv_scripts_trigger_their_own_check_and_shell_validation(
     ("base", "head", "labels", "reason"),
     [
         ("main", "dev/m7-ci", set(), "delivery promotion"),
-        ("main", "dev/i42-soak", {"promotion"}, "delivery promotion"),
         ("main", "fix/9-outage", {"hotfix"}, "hotfix to main"),
         (
             "main",
@@ -188,12 +184,12 @@ def test_unknown_and_missing_paths_fail_safe_to_full() -> None:
     """Do not treat an unclassified non-trivial change as cheap."""
     assert (
         classify(
-            "pull_request", "dev/next", "feat/9-change", set(), ["unknown.bin"]
+            "pull_request", "main", "feat/9-change", set(), ["unknown.bin"]
         ).tier
         == "full"
     )
     assert (
-        classify("pull_request", "dev/next", "feat/9-change", set(), []).tier
+        classify("pull_request", "main", "feat/9-change", set(), []).tier
         == "full"
     )
 
@@ -211,9 +207,7 @@ def test_unknown_and_missing_paths_fail_safe_to_full() -> None:
 )
 def test_release_version_metadata_stays_fail_closed(path: str) -> None:
     """Do not downgrade unclassified release state to a routine tier."""
-    plan = classify(
-        "pull_request", "dev/next", "chore/9-release", set(), [path]
-    )
+    plan = classify("pull_request", "main", "chore/9-release", set(), [path])
     assert plan.tier == "full"
     assert not plan.upload_site
 

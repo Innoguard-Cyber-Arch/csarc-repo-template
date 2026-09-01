@@ -218,8 +218,8 @@ if set(config.get("languages", [])) != expected_languages:
     raise SystemExit("Configured languages do not match the rendered template")
 if config.get("project_mode") not in {"new", "existing"}:
     raise SystemExit("project_mode must be new or existing")
-if config.get("branch_strategy") not in {"main", "dev", "delivery"}:
-    raise SystemExit("branch_strategy must be main, dev, or delivery")
+if config.get("branch_strategy") not in {"main", "delivery"}:
+    raise SystemExit("branch_strategy must be main or delivery")
 mode = config.get("container_mode", "none")
 if mode not in {"none", "verify", "ghcr"}:
     raise SystemExit(f"Invalid container mode: {mode!r}")

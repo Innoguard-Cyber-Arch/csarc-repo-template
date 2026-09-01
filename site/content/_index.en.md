@@ -156,16 +156,16 @@ Each language is selected independently. Selecting several languages combines th
 {{< slide key="pr" track="pr" eyebrow="Step 06" title="Make completed changes reviewable and deliverable" subtitle="A work PR completes one work item; a release PR then carries the verified batch into main." legacy="false"  class="candidate-slide" >}}
 | PR stage | Destination | What this stage completes |
 | --- | --- | --- |
-| Issue PR | Work branch → dev | Review one change and close its linked Issue after merge |
-| Release PR | dev → main | Fully verify and deliver the batch; Version / delivery then closes the Milestone |
+| Issue PR | Work branch → `dev/m*` or `main` | Review one change and close its linked Issue after merge |
+| Release PR | `dev/m*` or `dev/i*` → `main` | Fully verify and deliver the batch; Version / delivery then closes the Milestone |
 
 {{< disclosure key="pr-version-intent" title="PR titles, branches, and exceptions" >}}
 - Work branches use `type/<Issue>-short-slug`, and the PR links the matching open Issue.
 - PR titles use the Angular / Conventional Commits form `type(scope)!: English summary`: `feat` adds a feature, `fix` corrects behavior, `docs` changes documentation, `refactor` restructures code, `test` changes tests, `build` changes builds or dependencies, `ci` changes automation, `chore` performs maintenance, and `revert` undoes a change. Scope and `!` are optional. Release intent is minor for `feat`, patch for `fix` / `revert`, major for `!`, and no release for the other types.
 - The classification label and Milestone match the linked Issue; the PR author must be an assignee.
-- Milestone work targets `dev/m<Milestone>-*`; ordinary standalone work targets `dev/next`.
-- When main advances, a `sync/main-to-*` PR updates active dev branches without direct pushes or history rewrites.
-- Only an explicitly labeled standalone hotfix may target main directly. Rules governance decides who may merge.
+- Milestone work targets `dev/m<Milestone>-*`; ordinary standalone work starts from current `main` and targets `main` directly.
+- Main advances do not fan out synchronization. Each Milestone uses one reviewed `sync/main-to-m*` PR at final promotion; only an owner-recorded dependency permits an earlier sync.
+- A documented standalone canary may use one short-lived `dev/i<Issue>-*`; an explicitly labeled hotfix may target main directly. Rules governance decides who may merge.
 {{< /disclosure >}}
 
 <aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>a PR links one work item, follows title and classification rules, and passes verification; work and release PRs keep separate responsibilities.</li><li><strong>Adjustable:</strong><code>branch_strategy</code> selects the branch model; <code>code_owner</code> and <code>reviewers</code> select ownership and review candidates.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, the PR template, <code>CODEOWNERS</code>, <code>REVIEWERS</code>, and PR policy.</li></ul></aside>

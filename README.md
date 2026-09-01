@@ -68,22 +68,20 @@ Python 目前以 3.14、uv、Ruff、ty、pytest 與 src layout 為基線；CI �
 
 工作模型是「SDD → Feature parent → Task／Bug subissues → 各自 PR」，交付時才把 leaf Issues 與 PR 放進有 due date 的 Milestone；一張 leaf Issue 對應一個原生 Development branch 與一個 PR，CI 與人工審查都通過才合併。GitHub Projects 預設關閉。完整規則（Issue／PR 內容格式、標題規範、關係、分支與 worktree 使用、closing keyword 限制等）以 [`AGENTS.md`](AGENTS.md) 為唯一權威來源，這裡不重複列出。
 
-本 repo 採 delivery 模式：可同時有多條 Milestone delivery branch；一般孤立 Issue 進入 `dev/next`，確實需要獨立 soak／canary 時才使用一次性的 `dev/i<Issue 編號>-<簡稱>`。它們都以受審查的 promotion PR 進入 `main`；只有明確 hotfix 可直接 target main。CI 是可攜的 integration test layer，外部測試環境則屬 canary layer。
+本 repo 採 delivery 模式：`main` 是唯一永久 branch；Milestone 各自使用短命的 `dev/m*`，一般孤立 Issue 從最新 `main` 建立 topic branch 並直接以 PR 回到 `main`。只有文件化的獨立 soak／canary 才使用一次性的 `dev/i<Issue 編號>-<簡稱>` promotion；明確 hotfix 也直接 target `main`。CI 是可攜的 integration test layer，外部測試環境則屬 canary layer。
 
 ```mermaid
 flowchart LR
   A1["Milestone A Issues"] --> MA["dev/m7-delivery"]
   B1["Milestone B Issues"] --> MB["dev/m8-auth"]
-  S["一般孤立 Issues"] --> N["dev/next"]
+  S["一般孤立 Issues"] --> MAIN
   I["需獨立 canary 的 Issue #42"] --> DI["dev/i42-canary"]
   H["緊急 fix/* + hotfix"] --> MAIN["main"]
   MA -->|promotion: full + canary| MAIN
   MB -->|promotion: full + canary| MAIN
-  N -->|批次 promotion| MAIN
   DI -->|單獨 promotion| MAIN
   MAIN -. "reviewed sync PR" .-> MA
   MAIN -. "reviewed sync PR" .-> MB
-  MAIN -. "reviewed sync PR" .-> N
   MAIN -. "reviewed sync PR" .-> DI
 ```
 
@@ -125,7 +123,7 @@ GitHub Release 是所有專案的共同基線；registry 則依所選語言模�
 
 整份公版只用一個 SemVer：`fix(scope)` 升 patch、`feat(scope)` 升 minor、`!` 升 major。scope 可標 `ci`、`python`、`typescript` 或 `template`；只要任何已支援 profile 不相容，就視為整份公版的破壞性變更。
 
-release workflow 用內建 `GITHUB_TOKEN` 重測能力：支援時由 release-please 自動開、更新 Release PR；目前組織政策禁止 Actions PR 時，由維護者先開版本／CHANGELOG PR，合併後 direct mode 才能在最新 `main` 建立 draft 與 tag。Milestone 原則上在完成時 promotion 一次；只有後續驗收明確依賴同一 Milestone 的 immutable Release，才使用受約束的 checkpoint promotion。`dev/next` 預設由維護團隊每週固定一個 release window 批次 promotion，沒有 release-worthy 變更就略過；hotfix 才立即發版。整批 SemVer 取納入 PR 的最高意圖，全部為 no-release 時不建立空版本。兩種 release 模式都只從已核對的 release-source run 明確 dispatch `release-template.yml`；任意 tag push 不會啟動發布。發布 workflow 不會再於 checkout 後暫時改寫版本；它會先驗證 tagged source、CHANGELOG、tag 與 promotion evidence 一致，再附加 wheel、sdist、release-specific prompt 與 provenance，最後發布並鎖定 immutable GitHub Release；任一步驟失敗都保留 draft。發布後會以 `gh release verify` 重新驗證 attestation。一般 main push 不會重複發版。完整批次與追溯規則見 [`docs/ci-policy.md`](docs/ci-policy.md)。
+release workflow 用內建 `GITHUB_TOKEN` 重測能力：支援時由 release-please 自動開、更新 Release PR；目前組織政策禁止 Actions PR 時，由維護者先開版本／CHANGELOG PR，合併後 direct mode 才能在最新 `main` 建立 draft 與 tag。Milestone 原則上在完成時 promotion 一次；只有後續驗收明確依賴同一 Milestone 的 immutable Release，才使用受約束的 checkpoint promotion。Standalone 與 bot PR 直接進 `main` 後只留下各自的 release intent；`dev/i*` canary 與 hotfix 才立即形成獨立 release boundary。整批 SemVer 取納入 PR 的最高意圖，全部為 no-release 時不建立空版本。兩種 release 模式都只從已核對的 release-source run 明確 dispatch `release-template.yml`；任意 tag push 不會啟動發布。發布 workflow 不會再於 checkout 後暫時改寫版本；它會先驗證 tagged source、CHANGELOG、tag 與 promotion evidence 一致，再附加 wheel、sdist、release-specific prompt 與 provenance，最後發布並鎖定 immutable GitHub Release；任一步驟失敗都保留 draft。發布後會以 `gh release verify` 重新驗證 attestation。一般 main push 不會重複發版。完整批次與追溯規則見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
 ## 公版更新
 

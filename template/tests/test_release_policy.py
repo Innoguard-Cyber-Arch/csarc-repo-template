@@ -485,7 +485,9 @@ def promotion_evidence(
             "kind": kind,
             "milestone": 7 if kind == "milestone" else None,
         },
-        "head_ref": "dev/m7-staged-ci" if kind == "milestone" else "dev/next",
+        "head_ref": (
+            "dev/m7-staged-ci" if kind == "milestone" else "fix/42-outage"
+        ),
         "pull_request": number + 100,
         "workflow_run": f"https://example.test/runs/{number}",
         "included_issues": [{"number": number, "title": "Work"}],
@@ -515,12 +517,9 @@ def promotion_evidence(
     return evidence
 
 
-@pytest.mark.parametrize(
-    "kind",
-    ["milestone", "standalone-batch", "isolated", "hotfix", "release-recovery"],
-)
+@pytest.mark.parametrize("kind", ["milestone", "hotfix"])
 def test_release_boundary_traces_each_delivery_route(kind: str) -> None:
-    """Milestone, standalone, and hotfix batches retain promotion provenance."""
+    """Milestone and hotfix batches retain promotion provenance."""
     result = aggregate_release_boundaries(
         [promotion_evidence(kind, "patch", 10)], "main", "promotion"
     )
@@ -596,7 +595,7 @@ def test_final_milestone_release_boundary_keeps_canonical_scope() -> None:
 
 def test_non_milestone_boundary_rejects_milestone_scope() -> None:
     """Standalone evidence cannot smuggle a milestone checkpoint."""
-    evidence = promotion_evidence("standalone-batch", "patch", 10)
+    evidence = promotion_evidence("isolated", "patch", 10)
     evidence["milestone_promotion"] = None
     with pytest.raises(ValueError, match="non-milestone"):
         aggregate_release_boundaries([evidence], "main", "promotion")
@@ -606,7 +605,7 @@ def test_release_boundary_uses_highest_intent_and_is_idempotent() -> None:
     """Retries converge on the same audited batch and highest SemVer intent."""
     boundaries = [
         promotion_evidence("milestone", "patch", 10),
-        promotion_evidence("standalone-batch", "minor", 11),
+        promotion_evidence("hotfix", "minor", 11),
     ]
     first = aggregate_release_boundaries(
         boundaries, "main", "release-follow-up"
@@ -622,6 +621,48 @@ def test_release_boundary_uses_highest_intent_and_is_idempotent() -> None:
         10,
         11,
     ]
+
+
+def test_release_boundary_aggregates_direct_main_and_promotion_history() -> (
+    None
+):
+    """Standalone and bot changes retain intent beside promotion evidence."""
+    standalone = simple_release_boundary(
+        "main-strategy", "sha-20", title="feat: standalone", pull_request=20
+    )
+    bot = simple_release_boundary(
+        "main-strategy", "sha-21", title="fix: dependency", pull_request=21
+    )
+    result = aggregate_release_boundaries(
+        [standalone, bot, promotion_evidence("milestone", "patch", 10)],
+        "main",
+        "release-follow-up",
+    )
+    assert result["release"]["intent"] == "minor"
+    assert [
+        item["number"] for item in result["release"]["included_pull_requests"]
+    ] == [10, 20, 21]
+    assert {item["kind"] for item in result["boundaries"]} == {
+        "main-strategy",
+        "milestone",
+    }
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("release_eligible", False),
+        ("post_merge", {"tree_identity": "failed"}),
+    ],
+)
+def test_release_boundary_rejects_ineligible_historical_evidence(
+    field: str, value: object
+) -> None:
+    """A later release follow-up cannot launder a failed promotion."""
+    evidence = promotion_evidence("milestone", "patch", 10)
+    evidence[field] = value
+    with pytest.raises(ValueError, match="invalid promotion evidence"):
+        aggregate_release_boundaries([evidence], "main", "release-follow-up")
 
 
 def test_no_release_boundary_stops_empty_versions() -> None:
