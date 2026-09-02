@@ -380,7 +380,7 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 | Backstage, Confluence, or another internal portal | Can govern several internal documents together | One site does not justify an IT/platform-operated service today |
 
 {{< detail key="access-control-limit" title="What exists and what it cannot do" >}}
-`docs/index.html` contains `noindex,nofollow`, while `docs/robots.txt` asks crawlers to stay away. Neither authenticates a reader, and anyone with the offline file can forward it. Maintainers must separately approve a host, identity provider, data policy, and audit policy. Issue #79 tracks that decision.
+`docs/index.html` contains `noindex,nofollow`, while `docs/robots.txt` asks crawlers to stay away. Neither authenticates a reader, and anyone with the offline file can forward it. Issue #79 recorded this interim protection and closed as completed; selecting the actual host, identity provider, data policy, and audit policy has no open Issue yet and needs a new one once that decision is ready.
 {{< /detail >}}
 {{< /slide >}}
 
@@ -452,6 +452,6 @@ Open an evaluation Issue that names a platform owner, cost ceiling, trial scope,
 | GitHub Spec Kit | `/specify → /plan → /tasks → /implement`; requires another CLI and supported AI tool, with no built-in one-spec-to-one-Issue synchronization |
 
 {{< detail key="spec-format-cost" title="Why migration is deferred and what would trigger it" >}}
-Adopting Spec Kit requires rewriting `scripts/spec_to_issue.py`, converting existing specs, updating verification assertions, and designing an equivalent Issue sync. Supporting both formats adds cognitive and maintenance cost. Reevaluate when approved specifications regularly need reliable AI decomposition into several work items and the team accepts an additional CLI/agent workflow. Issue #77 tracks the decision.
+Adopting Spec Kit requires rewriting `scripts/spec_to_issue.py`, converting existing specs, updating verification assertions, and designing an equivalent Issue sync. Supporting both formats adds cognitive and maintenance cost. Reevaluate when approved specifications regularly need reliable AI decomposition into several work items and the team accepts an additional CLI/agent workflow. Issue #77 closed with this decision recorded; open a new Issue if the reevaluation conditions above are met.
 {{< /detail >}}
 {{< /slide >}}
