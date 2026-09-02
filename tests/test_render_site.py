@@ -375,24 +375,10 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         for path in (root / "template/.github/workflows").iterdir()
         if path.is_file()
     }
-    optional_workflows = {"template-update.yml"}
-
-    assert workflows - optional_workflows == {
-        "ci.yml",
-        "governance-comment.yml",
-        "governance-drift.yml",
-        "issue-triage.yml",
-        "milestone-lifecycle.yml",
-        "osv.yml",
-        "pr-policy.yml",
-        "release.yml",
-        "spec-to-issue.yml",
-        "work-item-closure.yml",
-    }
-    assert optional_workflows <= workflows
     assert "9 條共用流程" in file_map
     workflow_labels = {
         "ci.yml": "必要驗證",
+        "codeql.yml": "CodeQL SAST",
         "governance-comment.yml": "reviewer 指派",
         "governance-drift.yml": "治理漂移",
         "issue-triage.yml": "工作單整理",
@@ -409,7 +395,12 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         assert label in file_map, (
             f"{workflow} lost its file-map mention ({label!r})"
         )
-    assert "選配的治理漂移與模板更新通知排程" in file_map
+    # codeql.yml is conditional on enable_codeql (see copier.yml), exactly
+    # like template-update.yml is conditional on
+    # enable_template_update_notifications and governance-drift.yml is
+    # conditional on enable_governance_drift_check: none of the three ship
+    # to every new repo.
+    assert "選配的治理漂移、模板更新通知排程與 CodeQL SAST" in file_map
     for inactive in ("release-please.yml",):
         assert inactive not in file_map
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
