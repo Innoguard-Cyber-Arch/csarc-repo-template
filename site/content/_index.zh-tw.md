@@ -469,7 +469,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 | tag／GitHub Release | Candidate／Blocked | 版本 PR 合併後由唯一 workflow 發布；待預設分支實跑證明 |
 | checksum／SBOM | Configured | 已納入同一候選流程；首次成功實跑後才算 Active |
 | attestation／消費驗證 | Conditional | 由產品依 registry 與供應鏈需求選配 |
-| PyPI／npm／GHCR | Conditional gap | root 不發布 registry；生成專案仍有設定但沒有 publisher job，由 #439 對齊 |
+| PyPI／npm／GHCR | Not applicable | root 不發布 registry；#439 已移除閒置的 PyPI／npm／GHCR 設定項，因為沒有任何 workflow 消費它們，生成專案現在也不再提供這些設定。有真實需求的產品另開 Issue／ADR 自行加入 OIDC publisher |
 
 {{< detail key="standalone-delivery" title="獨立工作何時必須改掛里程碑" >}}
 一張 Issue 能自己驗收、沒有共同期限、整批驗收、跨 Issue 相依或獨立測試環境時，從最新 `main` 建立工作分支，PR 直接回 `main`，用 `Closes #N` 在合併後結案。若出現上述任一批次需求，必須在實作前加入適當里程碑並改走 `dev/m*`；不能用獨立工作路徑繞過共同驗收。
