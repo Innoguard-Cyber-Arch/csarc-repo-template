@@ -88,8 +88,8 @@ gh api "repos/$repo/rulesets"
         {
           title: '方案決定 Ruleset 是否成為真正門禁',
           goal: 'Free private 先在 repo 保存相同政策；public、Pro、Team 或 Enterprise 可強制 PR、一位核准、CODEOWNER 與必要檢查。Enterprise 的組織規則仍另審。',
-          summary: '所有方案都先用 repository teams API 驗證 PR 內設定的 team 與 write access；Free private 的 REVIEWERS 名單仍保留，但目前由人工指定 reviewer，自動輪派 Action 尚未恢復。Ruleset 只保留 STAGED／MISSING 與 DEGRADED 紀錄。',
-          file: 'policies/rulesets.json＋.github/CODEOWNERS＋.github/REVIEWERS',
+          summary: '所有方案都先用 repository teams API 驗證 PR 內設定的 team 與 write access；Action 從 base branch 的 REVIEWERS 排除作者後輪派一位個別 reviewer。Free private 仍沒有 team request 或 merge gate。Ruleset 只保留 STAGED／MISSING 與 DEGRADED 紀錄。',
+          file: 'policies/rulesets.json＋.github/CODEOWNERS＋.github/REVIEWERS＋governance-comment.yml',
           code: `# The same policy is stored in every repository and enforced when supported.
 required reviews: 1
 require CODEOWNER review: true
@@ -102,13 +102,15 @@ required checks:
 # Enterprise organization controls are report-only here.`
         },
         {
-          title: '治理漂移檢查保留本機入口，排程尚未恢復',
-          goal: '先用同一支腳本檢查設定差異；需要持續監測時，再逐條恢復觸發、權限、timeout 與 Issue 通知。',
-          summary: '`scripts/check-governance-drift` 會呼叫 `apply-repository-settings.sh check`，可在可信任的本機 checkout 執行。原本的 `governance-drift.yml` 位於 `archive/ci-cd/`，目前不會每日執行或自動開立追蹤 Issue。',
-          file: 'scripts/check-governance-drift＋archive/ci-cd/2026-08-27/root-workflows/governance-drift.yml',
+          title: '治理漂移排程隨生成 repo 選配開啟，本模板 source 不自跑',
+          goal: '本機與生成 repo 都重複使用同一支腳本；需要持續監測時，Copier 選項開啟每日排程、least-privilege 權限、timeout 與 Issue 通知，不必個別重建。',
+          summary: '`scripts/check-governance-drift` 會呼叫 `apply-repository-settings.sh check`，可在可信任的本機 checkout 執行。生成 repo 開啟 enable_governance_drift_check 時，薄 Action 每日呼叫同一支程式並開立或更新一張追蹤 Issue；本模板 source repo 不排程。',
+          file: 'scripts/check-governance-drift＋template/.github/workflows/governance-drift.yml',
           code: `./scripts/check-governance-drift
 
-# The scheduled workflow is archived and does not run.`
+# enable_governance_drift_check=true generates the daily workflow and
+# script together; false generates neither. This template's own source
+# repo keeps the script for local verification but does not schedule it.`
         },
         {
           title: '暫時例外｜用 Issue 保存完整責任',

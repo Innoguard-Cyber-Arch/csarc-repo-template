@@ -3,3 +3,13 @@ rules:
     ignore:
       # Team policy deliberately uses a three-day observation window.
       - dependabot.yml
+  dangerous-triggers:
+    ignore:
+      # pull_request_target is required to request a reviewer without granting
+      # a fork PR write access to secrets. The job only checks out
+      # `pull_request.base.sha` (never the untrusted head), sets
+      # persist-credentials: false, and scripts/request-reviewer validates
+      # PR_AUTHOR/PR_NUMBER against strict allowlist regexes before using them
+      # in a `gh api` call, so untrusted PR content is never executed or
+      # interpolated unsanitized.
+      - governance-comment.yml

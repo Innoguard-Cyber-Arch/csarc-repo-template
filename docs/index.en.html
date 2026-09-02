@@ -4365,7 +4365,7 @@ html[data-detail-level="simple"] .detail-panel {
     <button id="testing-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>Dependency security</button>
     <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR / merge</button>
     <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="7"><small>Journey 07</small>Version / delivery</button>
-    <button id="testing-tab-governance" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-governance" data-similar-tools-tab="8"><small>Journey 08</small>Rules governance</button>
+    <button id="testing-tab-governance" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-governance" data-similar-tools-tab="8"><small>Journey 08</small>Governance</button>
     <button id="testing-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-template-upgrade" data-similar-tools-tab="9"><small>Journey 09</small>Template upgrades</button>
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
@@ -4779,36 +4779,33 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-governance" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-governance" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 08 / Rules governance</strong><span>Validate repository configuration and governance programs while separating GitHub-supported enforcement from human-managed exceptions.</span>
+    <strong>Journey 08 / Review and settings drift</strong><span>Each PR requests one non-author reviewer. The optional schedule reuses the local check and is never described as a merge gate.</span>
   </div>
-  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 08 / Rules governance">
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 08 / Review and settings drift">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
       <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
       <tbody>
         <tr>
-          <th scope="row"><strong>Configuration and governance programs</strong><span>Every relevant change validates the single configuration source, desired policies, and application programs. A maintainer separately runs the live GitHub check that needs administration access.</span></th>
+          <th scope="row"><strong>Assign a reviewer</strong><span>Read REVIEWERS only from the base branch, exclude the PR author, and request one individual review.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li><li><code>scripts/apply-repository-settings.sh</code></li><li><code>policies/repository.json</code></li><li><code>policies/actions.json</code></li><li><code>policies/rulesets.json</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Work PRs that change governance configuration or programs · Timeout：30 min</span></li></ul></div><span>CI runs only reproducible file and program checks. A maintainer runs plan, apply, and check from a trusted checkout to read or change live GitHub settings.</span>
-            </li>
-            <li>
-              <strong>Release PR</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Release PRs · Timeout：30 min</span></li></ul></div><span>A release PR reruns the full local contract. A maintainer still confirms live GitHub settings with check.</span>
+              <strong>Every non-draft PR</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/request-reviewer</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/governance-comment.yml</code>／<code>request-reviewer</code><span>Trigger：PR opened, reopened, or marked ready · Timeout：5 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
-            <li>
-              <strong>Release PR</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Also confirms that root and generated repositories use the same public keys and only generated repositories retain Copier source metadata.</span>
-            </li>
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>Governance drift and reviewers</strong><span>The local drift checker, the scheduled drift check, and automatic reviewer assignment are all active; the scheduled drift Action is generated and runs only when a generated repository enables enable_governance_drift_check.</span></th>
+          <th scope="row"><strong>Detect governance drift</strong><span>Compare live repository settings with policy. Fixable drift updates one Issue, while plan limits retain DEGRADED evidence.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Work PR</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/check-governance-drift</code></li><li><code>scripts/request-reviewer</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/governance-drift.yml</code>／<code>check</code><span>Trigger：Scheduled or manual · Timeout：10 min</span></li><li><code>.github/workflows/governance-comment.yml</code>／<code>request-reviewer</code><span>Trigger：PR opened, reopened, or ready for review · Timeout：5 min</span></li></ul></div>
+              <strong>Daily / manual maintenance</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/check-governance-drift</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/governance-drift.yml</code>／<code>check</code><span>Trigger：Daily or manual when enable_governance_drift_check is on · Timeout：5 min</span></li></ul></div>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
+            <li>
+              <strong>Daily / manual maintenance</strong><span>The source repository retains the same program for generation and local verification but does not enable its own schedule.</span>
+            </li>
           </ul></td>
         </tr>
       </tbody>

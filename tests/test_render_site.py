@@ -156,6 +156,8 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
 
     assert workflows - optional_workflows == {
         "ci.yml",
+        "governance-comment.yml",
+        "governance-drift.yml",
         "issue-triage.yml",
         "milestone-lifecycle.yml",
         "osv.yml",
@@ -600,27 +602,23 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     governance_rows = data["testing"]["groups"][7]["rows"]
     assert data["testing"]["groups"][7]["journey"] == "08"
     assert [row["purpose"]["zh-tw"]["title"] for row in governance_rows] == [
-        "設定與治理程式",
-        "治理漂移與 reviewer",
+        "輪派審查人",
+        "偵測治理設定漂移",
     ]
     assert governance_rows[0]["shared"]["milestone"]["automation"] == [
         {
-            "path": ".github/workflows/ci.yml",
-            "job": "verify",
+            "path": ".github/workflows/governance-comment.yml",
+            "job": "request-reviewer",
             "trigger": {
-                "zh-tw": "治理設定或程式的工作 PR",
-                "en": (
-                    "Work PRs that change governance configuration or programs"
-                ),
+                "zh-tw": "PR 開啟、重開或轉為 ready",
+                "en": "PR opened, reopened, or marked ready",
             },
-            "timeout": "30 min",
+            "timeout": "5 min",
         }
     ]
     assert all(
         "pending" not in automation
-        for automation in governance_rows[1]["shared"]["milestone"][
-            "automation"
-        ]
+        for automation in governance_rows[1]["shared"]["release"]["automation"]
     )
     template_rows = data["testing"]["groups"][8]["rows"]
     assert data["testing"]["groups"][8]["journey"] == "09"
