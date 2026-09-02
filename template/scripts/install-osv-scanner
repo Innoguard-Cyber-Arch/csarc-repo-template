@@ -24,7 +24,8 @@ base_url="https://github.com/google/osv-scanner/releases/download/v${version}"
 if [[ ! -f "$cache_dir/checksums.txt" ]] ||
   [[ "$(shasum -a 256 "$cache_dir/checksums.txt" | awk '{print $1}')" != \
     "$checksums_sha256" ]]; then
-  curl -fsSL "$base_url/osv-scanner_SHA256SUMS" \
+  curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused \
+    "$base_url/osv-scanner_SHA256SUMS" \
     -o "$cache_dir/checksums.txt.tmp.$$"
   mv "$cache_dir/checksums.txt.tmp.$$" "$cache_dir/checksums.txt"
 fi
@@ -42,7 +43,8 @@ fi
 if [[ ! -f "$binary" ]] ||
   [[ "$(shasum -a 256 "$binary" | awk '{print $1}')" != \
     "$expected_asset_sha256" ]]; then
-  curl -fsSL "$base_url/$asset" -o "$binary.tmp.$$"
+  curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused \
+    "$base_url/$asset" -o "$binary.tmp.$$"
   mv "$binary.tmp.$$" "$binary"
 fi
 actual_asset_sha256="$(shasum -a 256 "$binary" | awk '{print $1}')"
