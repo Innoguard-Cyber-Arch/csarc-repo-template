@@ -546,7 +546,15 @@ def write_product_release_workflow(
     *,
     input_name: str = "version",
 ) -> Path:
-    """Create the release-significant shape used by the pilot product."""
+    """Create the release-significant shape preserved from csarc-ai-setup.
+
+    Mirrors the real, publicly preserved
+    ``Innoguard-Cyber-Arch/csarc-ai-setup`` workflow: a tag push publishes,
+    a manual ``workflow_dispatch`` only builds an artifact, and
+    ``scripts/verify-skills`` gates the bundle build. The release-writer
+    marker (``gh release create``) sits behind a tag-only ``if:`` guard so
+    detection must work from source text alone, not from trigger shape.
+    """
     path = root / ".github" / "workflows" / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
@@ -562,13 +570,17 @@ def write_product_release_workflow(
         "  contents: read\n"
         "jobs:\n"
         "  bundle:\n"
+        "    name: Build the member bundle\n"
         "    runs-on: ubuntu-latest\n"
         "    permissions:\n"
         "      contents: write\n"
         "    steps:\n"
-        "      - run: ./scripts/verify-skills\n"
+        "      - name: Enforce the promotion contract\n"
+        "        run: ./scripts/verify-skills\n"
         '      - run: ./scripts/build-bundle --version "$VERSION"\n'
-        "      - env:\n"
+        "      - name: Publish the release\n"
+        "        if: startsWith(github.ref, 'refs/tags/')\n"
+        "        env:\n"
         "          GH_TOKEN: ${{ github.token }}\n"
         '        run: gh release create "$VERSION" dist/*\n',
         encoding="utf-8",
@@ -636,6 +648,82 @@ def test_release_ownership_matrix_uses_explicit_workflow_contracts(
                 "release_workflow": workflow.relative_to(product).as_posix(),
             },
         )
+
+
+def test_tag_only_product_workflow_has_no_required_inputs(
+    tmp_path: Path,
+) -> None:
+    """Resolve a tag-triggered writer that declares no workflow_dispatch."""
+    product = tmp_path / "tag-only-product"
+    path = product / ".github" / "workflows" / "release.yml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "name: Product release\n"
+        "on:\n"
+        '  push:\n    tags: ["v*"]\n'
+        "permissions:\n"
+        "  contents: read\n"
+        "jobs:\n"
+        "  bundle:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    permissions:\n"
+        "      contents: write\n"
+        "    steps:\n"
+        "      - env:\n"
+        "          GH_TOKEN: ${{ github.token }}\n"
+        '        run: gh release create "$GITHUB_REF_NAME" dist/*\n',
+        encoding="utf-8",
+    )
+    contract = cli.release_contract(cli.base_data(product, "adopt", {}))
+    assert contract["ownership"] == "product-owned"
+    assert contract["selected_workflow"] == ".github/workflows/release.yml"
+    assert contract["required_inputs"] == []
+
+
+def test_release_capability_degrades_closed_when_writer_disappears(
+    tmp_path: Path,
+) -> None:
+    """Fail closed instead of silently downgrading a previously bound owner."""
+    now_empty = tmp_path / "now-empty-product"
+    now_empty.mkdir()
+    with pytest.raises(
+        CliError, match="exactly one release-writing workflow"
+    ):
+        cli.resolve_release_answers(
+            now_empty,
+            {
+                "project_mode": "existing",
+                "release_ownership": "product-owned",
+                "release_ownership_reason": "Previously observed contract.",
+                "release_required_inputs": ["version"],
+                "release_workflow": ".github/workflows/release.yml",
+            },
+        )
+
+    now_empty_csarc = tmp_path / "now-empty-csarc"
+    now_empty_csarc.mkdir()
+    with pytest.raises(
+        CliError, match="CSARC-owned release workflow does not exist"
+    ):
+        cli.resolve_release_answers(
+            now_empty_csarc,
+            {
+                "project_mode": "existing",
+                "release_ownership": "csarc-owned",
+                "release_ownership_reason": "Previously observed contract.",
+                "release_required_inputs": [],
+                "release_workflow": ".github/workflows/release.yml",
+            },
+        )
+
+
+def test_release_orchestration_never_calls_the_dispatch_api() -> None:
+    """Prove no CSARC code path can duplicate-dispatch a product workflow."""
+    source = (ROOT / "src/csarc_cli/cli.py").read_text(encoding="utf-8")
+    assert "/dispatches" not in source
+    assert "workflow_dispatches" not in source
+    assert "gh workflow run" not in source
+    assert "gh api --method POST" not in source
 
 
 def test_release_workflow_input_drift_fails_closed(tmp_path: Path) -> None:

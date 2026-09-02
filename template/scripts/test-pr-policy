@@ -527,6 +527,7 @@ fi
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
+  PR_RELEASE_OWNERSHIP="csarc-owned" \
   PR_TITLE="chore(main): release 0.2.0" \
   PR_LABELS="enhancement" \
   PR_BASE="main" \
@@ -541,6 +542,7 @@ fi
 
 case_count=$((case_count + 1))
 PR_BRANCH_STRATEGY="delivery" \
+PR_RELEASE_OWNERSHIP="csarc-owned" \
 PR_TITLE="chore(main): release 0.2.0" \
 PR_LABELS="enhancement" \
 PR_BASE="main" \
@@ -554,6 +556,7 @@ PR_ISSUE_STATE="" \
 
 case_count=$((case_count + 1))
 if PR_BRANCH_STRATEGY="delivery" \
+  PR_RELEASE_OWNERSHIP="csarc-owned" \
   PR_TITLE="chore(main): release 0.2.0" \
   PR_LABELS="enhancement" \
   PR_BASE="main" \
@@ -572,6 +575,7 @@ while IFS='|' read -r name actor head_repo changed_files head; do
   case_count=$((case_count + 1))
   [[ "$head" == "@release-please" ]] && head="$release_branch"
   if PR_BRANCH_STRATEGY="delivery" \
+    PR_RELEASE_OWNERSHIP="csarc-owned" \
     PR_TITLE="chore(main): release 0.2.0" \
     PR_LABELS="enhancement" \
     PR_BASE="main" \
