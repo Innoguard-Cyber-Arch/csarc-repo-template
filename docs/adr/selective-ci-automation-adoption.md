@@ -1,7 +1,8 @@
 # Selective CI/CD automation adoption ADR
 
-- **狀態：**Partially superseded by #430；只保留 official Actions 更新分組
+- **狀態：**Superseded
 - **日期：**2026-08-25
+- **備註：**由 #430 部分取代；只保留 official Actions 更新分組
 - **來源 Issue：**[#255](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/255)
 - **保留的實作 Issues：**[#242](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/242), [#245](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/245)
 - **實作 PRs：**[#247](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/247), [#248](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/248)

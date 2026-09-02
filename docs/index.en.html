@@ -3115,8 +3115,8 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>PyPI, npm, and GHCR</td>
-					<td>Conditional gap</td>
-					<td>The root publishes to no registry; generated projects expose settings but receive no publisher job, tracked by #439</td>
+					<td>Not applicable</td>
+					<td>The root publishes to no registry; #439 removed the dormant PyPI/npm/GHCR prompts because zero workflow consumed them, so generated projects no longer expose these settings either. A consuming product adds its own OIDC publisher through a separate Issue/ADR</td>
 			</tr>
 	</tbody>
 </table>
