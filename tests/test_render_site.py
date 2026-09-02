@@ -394,9 +394,26 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         "work-item-closure.yml",
     }
     assert optional_workflows <= workflows
-    assert "9 條共用流程（其中 1 條候選）＋1 條選配排程" in file_map  # noqa: RUF001
-    for workflow in workflows - optional_workflows:
-        assert workflow in file_map
+    assert "9 條共用流程" in file_map
+    workflow_labels = {
+        "ci.yml": "必要驗證",
+        "governance-comment.yml": "reviewer 指派",
+        "governance-drift.yml": "治理漂移",
+        "issue-triage.yml": "工作單整理",
+        "milestone-lifecycle.yml": "里程碑同步",
+        "osv.yml": "漏洞排程",
+        "pr-policy.yml": "PR 規則",
+        "release.yml": "候選發版",
+        "spec-to-issue.yml": "規格開單",
+        "template-update.yml": "模板更新通知",
+        "work-item-closure.yml": "工作關單",
+    }
+    assert workflows == set(workflow_labels)
+    for workflow, label in workflow_labels.items():
+        assert label in file_map, (
+            f"{workflow} lost its file-map mention ({label!r})"
+        )
+    assert "選配的治理漂移與模板更新通知排程" in file_map
     for inactive in ("release-please.yml",):
         assert inactive not in file_map
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
@@ -423,7 +440,7 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     ):
         assert explanation in supply
     journey_decisions = chinese.split('{{< slide key="method"', 1)[1].split(
-        '{{< slide key="ecosystem"', 1
+        '{{< slide key="similar-tools"', 1
     )[0]
     assert '<article class="decision-step' not in journey_decisions
     assert journey_decisions.count('class="decision-step decision-fold') == 18
