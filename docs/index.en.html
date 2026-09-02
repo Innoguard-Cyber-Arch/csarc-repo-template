@@ -3124,6 +3124,11 @@ html[data-detail-level="simple"] .detail-panel {
   <h3>When standalone work must join a Milestone</h3>
   An Issue may branch from the latest <code>main</code>, target <code>main</code>, and close through <code>Closes #N</code> when it can be accepted on its own and has no shared deadline, batch acceptance, cross-Issue dependency, or isolated test environment. If any of those needs appears, assign the Issue to the appropriate Milestone before implementation and use <code>dev/m*</code>; the standalone route cannot bypass batch review.
 </aside>
+<aside class="technical-detail" data-content-key="deploy-ordering">
+  <h3>Delivery ordering, artifacts, and registry boundaries</h3>
+  <p>Direct mode rereads the default-branch head before writing and delivers only when the latest <code>main</code>, source, tag, CHANGELOG, and promotion evidence agree; workflow concurrency is not treated as FIFO. The artifact workflow accepts only a release-source run ID, creates a digest and SBOM, ignores arbitrary tag pushes, and does not repeat full CI.</p>
+<p>GitHub Release is the portable baseline for every profile. Registry publishing and container delivery are product-owned extensions because the template does not ship an active publisher for them. <code>scripts/release_policy.py</code> detects GitHub release capabilities and configures versions; <code>scripts/promotion_gate.py</code> validates promotion.</p>
+</aside>
 <aside class="technical-detail" data-content-key="hotfix-delivery">
   <h3>Hotfix review, verification, and evidence</h3>
   A hotfix uses a Bug Issue without a Milestone, the <code>bug</code> and <code>hotfix</code> labels, <code>fix/&lt;Issue&gt;-*</code>, and a <code>fix(scope): summary</code> PR directly to <code>main</code>. Normal review and full verification still apply. Undisclosed security defects use a GitHub Security Advisory instead. After merge, retain the PR, commit SHA, full run, and rollback note. <code>fix</code> normally declares patch intent; the exact version is still reviewed in the Release Please version PR.
@@ -3284,7 +3289,7 @@ html[data-detail-level="simple"] .detail-panel {
 	</tbody>
 </table>
 <p>The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier <code>_src_path</code> and <code>_commit</code> metadata. Derived templates may add namespaced keys to this same YAML; they do not create another profile. Low-frequency GitHub details stay in native repository settings or <code>policies/</code> instead of expanding the CSARC schema.</p>
-<p>The internal site consumes existing <code>project_name</code>, <code>project_description</code>, <code>repository_url</code>, <code>code_owner</code>, and <code>branch_strategy</code> for its defaults. Project content and theme remain in <code>docs/site-content.js</code> and <code>docs/site-theme.css</code>. Add a namespaced site key only after a concrete implementation proves that the value is high-value and repeated across files.</p>
+<p>The internal site renders <code>docs/site-content.md</code> and resolves its explicit <code>[[key]]</code> tokens from the existing <code>project_name</code>, <code>project_description</code>, <code>repository_url</code>, <code>code_owner</code>, <code>languages</code>, and <code>branch_strategy</code> settings. Project content and theme remain in <code>docs/site-content.md</code> and <code>docs/site-theme.css</code>; the site does not create another configuration schema.</p>
 </aside>
 <aside class="technical-detail" data-content-key="governance-exceptions">
   <h3>How to record a temporary exception</h3>
@@ -3468,7 +3473,7 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="technical-detail" data-content-key="docs-site-access">
   <h3>Access and maintenance boundaries</h3>
   <p><code>noindex</code> and <code>robots.txt</code> reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.</p>
-<p>The site receives its initial identity, owner, repository URL, and branch guidance from the existing <code>.csarc/config.yml</code> keys. Product-specific content and theme remain project-owned files; the site does not create a second configuration source. A later Markdown-first implementation may add a namespaced key only after proving it is a high-value cross-file setting.</p>
+<p>The renderer reads project identity, owner, languages, repository URL, and branch guidance from the existing <code>.csarc/config.yml</code>. Product-specific prose lives in <code>docs/site-content.md</code>, theme overrides remain in <code>docs/site-theme.css</code>, and the generated <code>docs/index.html</code> is never edited directly.</p>
 </aside>
 <aside class="config-guidance"><strong>Website access</strong><p>If reader restrictions become necessary, evaluate Cloudflare Pages + Access first. The host, identity provider, data policy, and organization owner still require separate approval.</p></aside>
 </div>
@@ -4366,7 +4371,7 @@ html[data-detail-level="simple"] .detail-panel {
     <button id="testing-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>Dependency security</button>
     <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR / merge</button>
     <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="7"><small>Journey 07</small>Version / delivery</button>
-    <button id="testing-tab-governance" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-governance" data-similar-tools-tab="8"><small>Journey 08</small>Governance</button>
+    <button id="testing-tab-governance" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-governance" data-similar-tools-tab="8"><small>Journey 08</small>Rules governance</button>
     <button id="testing-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-template-upgrade" data-similar-tools-tab="9"><small>Journey 09</small>Template upgrades</button>
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>

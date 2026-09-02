@@ -658,7 +658,7 @@
         "journey": "08",
         "labels": {
           "zh-tw": {"title": "規則治理", "heading": "Journey 08／審查與設定漂移", "scope": "每張 PR 只自動請一位非作者 reviewer；選配排程重用本機檢查，不能把通知誤稱為合併門禁。"},
-          "en": {"title": "Governance", "heading": "Journey 08 / Review and settings drift", "scope": "Each PR requests one non-author reviewer. The optional schedule reuses the local check and is never described as a merge gate."}
+          "en": {"title": "Rules governance", "heading": "Journey 08 / Review and settings drift", "scope": "Each PR requests one non-author reviewer. The optional schedule reuses the local check and is never described as a merge gate."}
         },
         "stageLabels": {
           "zh-tw": {"milestone": "每張非 draft PR", "release": "每日／手動維運"},

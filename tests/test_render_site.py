@@ -15,6 +15,40 @@ render = SITE_MODULE["render"]
 parse_parity = PARITY_MODULE["parse"]
 
 
+def _write_markdown_site(tmp_path: Path, markdown: str) -> Path:
+    """Create the managed shell and its single configuration source."""
+    site = tmp_path / "site"
+    docs = tmp_path / "docs"
+    scripts = tmp_path / "scripts"
+    config = tmp_path / ".csarc"
+    site.mkdir()
+    docs.mkdir()
+    scripts.mkdir()
+    config.mkdir()
+    root = Path(__file__).parents[1]
+    (scripts / "csarc_config.py").write_text(
+        (root / "scripts/csarc_config.py").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (config / "config.yml").write_text(
+        "project_name: Demo\n"
+        "project_description: Safe <demo>\n"
+        "languages:\n"
+        "- python\n"
+        "- rust\n",
+        encoding="utf-8",
+    )
+    (docs / "site-content.md").write_text(markdown, encoding="utf-8")
+    source = site / "index.html"
+    source.write_text(
+        "<title><!-- CSARC_SITE_TITLE --></title>"
+        "<nav><!-- CSARC_SITE_NAV --></nav>"
+        "<main><!-- CSARC_SITE_CONTENT --></main>",
+        encoding="utf-8",
+    )
+    return source
+
+
 def test_render_inlines_local_runtime_assets(tmp_path: Path) -> None:
     site = tmp_path / "site"
     docs = tmp_path / "docs"
@@ -50,6 +84,82 @@ def test_render_inlines_local_runtime_assets(tmp_path: Path) -> None:
     assert 'href="https://example.com/reference"' in bundled
     assert "stylesheet" not in bundled
     assert "<script src=" not in bundled
+
+
+def test_render_injects_markdown_and_existing_config(tmp_path: Path) -> None:
+    source = _write_markdown_site(
+        tmp_path,
+        """# [[project_name]]
+
+[[project_description]]
+
+## Start here
+
+- Languages: **[[languages]]**
+- Run `./scripts/verify`
+
+### 進階: Details
+
+Read [reference](https://example.com/docs).
+""",
+    )
+
+    bundled = render(source, root=tmp_path)
+
+    assert "<title>Demo — 內部專案網站</title>" in bundled
+    assert '<a href="#start-here">Start here</a>' in bundled
+    assert "Safe &lt;demo&gt;" in bundled
+    assert "<strong>python、rust</strong>" in bundled
+    assert (
+        '<details class="advanced"><summary>進階: Details</summary>' in bundled
+    )
+    assert 'target="_blank" rel="noreferrer"' in bundled
+
+
+def test_render_rejects_unknown_markdown_config_key(tmp_path: Path) -> None:
+    source = _write_markdown_site(tmp_path, "# [[unknown_setting]]")
+
+    with pytest.raises(BundleError, match="Unknown site content setting"):
+        render(source, root=tmp_path)
+
+
+def test_render_surfaces_preserved_legacy_content(tmp_path: Path) -> None:
+    source = _write_markdown_site(tmp_path, "# [[project_name]]")
+    legacy = tmp_path / "docs/site-content.js"
+    legacy.write_text("window.CONTENT = {};", encoding="utf-8")
+
+    bundled = render(source, root=tmp_path)
+
+    assert "需要遷移舊網站內容" in bundled
+    assert legacy.read_text(encoding="utf-8") == "window.CONTENT = {};"
+
+
+def test_generated_site_uses_project_owned_markdown() -> None:
+    root = Path(__file__).parents[1]
+    copier = (root / "copier.yml").read_text(encoding="utf-8")
+    shell = (root / "template/site/index.html.jinja").read_text(
+        encoding="utf-8"
+    )
+    content = (root / "template/docs/site-content.md.jinja").read_text(
+        encoding="utf-8"
+    )
+
+    assert '  - "docs/site-content.md"' in copier
+    assert "site-content.js" not in copier
+    assert "CSARC_SITE_CONTENT" in shell
+    assert "site-content.js" not in shell
+    assert "[[project_name]]" in content
+    assert "[[languages]]" in content
+    assert not (root / "template/site/app.js").exists()
+    assert not (root / "template/docs/site-content.js.jinja").exists()
+
+
+def test_render_rejects_incomplete_markdown_shell(tmp_path: Path) -> None:
+    source = tmp_path / "index.html"
+    source.write_text("<!-- CSARC_SITE_CONTENT -->", encoding="utf-8")
+
+    with pytest.raises(BundleError, match="incomplete Markdown marker"):
+        render(source, root=tmp_path)
 
 
 @pytest.mark.parametrize(

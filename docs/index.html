@@ -3354,7 +3354,7 @@ html[data-detail-level="simple"] .detail-panel {
         </tbody>
       </table>
       <p class="context-line"><strong>SemVer scope｜</strong>整份公版只用一個 SemVer：<code>fix(scope)</code> 升 patch、<code>feat(scope)</code> 升 minor、<code>!</code> 升 major；scope 可標 <code>ci</code>、<code>python</code>、<code>typescript</code> 或 <code>template</code>，只要任何已支援 profile 不相容，就視為整份公版的破壞性變更。</p>
-      <aside class="selection-note"><strong>Registry 設定缺口</strong><span>生成專案仍保留 PyPI／npm／GHCR 與 attestation 選項，但目前沒有 publisher job；#439 會決定移除設定面或以真實產品需求補上執行者。在此之前不得宣稱已啟用。</span></aside>
+      <aside class="selection-note"><strong>產品自行擴充：套件與容器發布</strong><span>GitHub Release 是公版共同基線。PyPI、npm、GHCR 與 artifact attestation 沒有現行公版 publisher，不能只靠設定開關宣稱已啟用；有真實 registry、owner 與部署需求的產品，另以短效 OIDC、專用 environment、驗證與復原流程實作。</span></aside>
 </div>
 
 
@@ -3411,6 +3411,11 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="technical-detail" data-content-key="standalone-delivery">
   <h3>獨立工作何時必須改掛里程碑</h3>
   一張 Issue 能自己驗收、沒有共同期限、整批驗收、跨 Issue 相依或獨立測試環境時，從最新 <code>main</code> 建立工作分支，PR 直接回 <code>main</code>，用 <code>Closes #N</code> 在合併後結案。若出現上述任一批次需求，必須在實作前加入適當里程碑並改走 <code>dev/m*</code>；不能用獨立工作路徑繞過共同驗收。
+</aside>
+<aside class="technical-detail" data-content-key="deploy-ordering">
+  <h3>交付順序、成品與 registry 邊界</h3>
+  <p>Direct mode 在寫入前重讀 default branch head，只有最新 <code>main</code> 且 source、tag、CHANGELOG、promotion evidence 一致才交付，不假設 workflow concurrency 提供 FIFO。成品 workflow 只接受 release-source run ID，產生 digest 與 SBOM，不監聽任意 tag push，也不重跑已完成的 full CI。</p>
+<p>GitHub Release 是所有 profile 的共同基線。PyPI、npm、GHCR 與 artifact attestation 屬產品自行實作的交付擴充，公版不提供只有設定、沒有執行者的假選項。能力偵測與版本配置在 <code>scripts/release_policy.py</code>，promotion gate 在 <code>scripts/promotion_gate.py</code>。</p>
 </aside>
 <aside class="technical-detail" data-content-key="hotfix-delivery">
   <h3>Hotfix 的審查、驗證與證據</h3>
@@ -3506,7 +3511,7 @@ html[data-detail-level="simple"] .detail-panel {
         <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
       </div>
       <aside class="selection-note"><strong>部署與例外原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性、repository teams 與 Ruleset API；team 不存在、不可見或沒有 repo write access 時直接停止，不能被 Free private 的降級路徑掩蓋。能力只在 live check 證明可用後啟用，不以預設成熟度或日期判斷。Free private 不支援 team request，也無法強制核准；`governance-comment.yml` 自動輪派一位非作者 reviewer，僅提出 review request，不構成 merge gate。每個暫時例外都用 Issue 記錄提出者、另一位核准者、到期日、證據與復原方式，不能把未執行的檢查寫成通過。完整管理欄位驗證由管理員在可信任 checkout 使用 Administration read 憑證，不把 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更都需 organization owner 另案核准。</span></aside>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>唯一來源：</strong><code>.csarc/config.yml</code> 保存 <code>branch_strategy</code>、<code>code_owner</code>、<code>reviewers</code>、<code>project_visibility</code> 與選配的 <code>enable_governance_drift_check</code></li><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用與核對：</strong><code>apply</code> 套用支援項目；<code>check</code> 比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset</li><li><strong>目前自動化：</strong><code>governance-comment.yml</code> 自動輪派 reviewer；<code>scripts/check-governance-drift</code> 可在本機執行，開啟 <code>enable_governance_drift_check</code> 後生成 repo 另有每日排程 Action</li><li><strong>網站邊界：</strong>既有 identity／governance keys 產生預設；<code>docs/site-content.js</code> 與 <code>docs/site-theme.css</code> 仍由專案維護</li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>唯一來源：</strong><code>.csarc/config.yml</code> 保存 <code>branch_strategy</code>、<code>code_owner</code>、<code>reviewers</code>、<code>project_visibility</code> 與選配的 <code>enable_governance_drift_check</code></li><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用與核對：</strong><code>apply</code> 套用支援項目；<code>check</code> 比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset</li><li><strong>目前自動化：</strong><code>governance-comment.yml</code> 自動輪派 reviewer；<code>scripts/check-governance-drift</code> 可在本機執行，開啟 <code>enable_governance_drift_check</code> 後生成 repo 另有每日排程 Action</li><li><strong>網站邊界：</strong>既有 identity／governance keys 產生預設；<code>docs/site-content.md</code> 與 <code>docs/site-theme.css</code> 仍由專案維護</li></ul></aside>
       <table class="decision-register" aria-label="GitHub 方案與 apply／check 行為對照">
         <thead><tr><th>GitHub 方案與可見性</th><th><code>apply</code> 結果</th><th><code>check</code>／PR／CI/CD 行為</th></tr></thead>
         <tbody>
@@ -3601,7 +3606,7 @@ html[data-detail-level="simple"] .detail-panel {
 	</tbody>
 </table>
 <p>公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier <code>_src_path</code>、<code>_commit</code>。衍生公版可在同一份 YAML 增加 namespaced keys，不另建 profile。低頻 GitHub 細節留在原生 repository settings 或 <code>policies/</code>，不擴張 CSARC schema。</p>
-<p>內部網站先沿用 <code>project_name</code>、<code>project_description</code>、<code>repository_url</code>、<code>code_owner</code>、<code>branch_strategy</code> 產生預設內容；專案文字與樣式留在 <code>docs/site-content.js</code>、<code>docs/site-theme.css</code>。只有後續證明是高價值且跨檔的網站設定，才在同一 YAML 增加 namespaced key。</p>
+<p>內部網站直接讀取 <code>docs/site-content.md</code>，其中明確的 <code>[[key]]</code> 由 <code>.csarc/config.yml</code> 既有的 <code>project_name</code>、<code>project_description</code>、<code>repository_url</code>、<code>code_owner</code>、<code>languages</code>、<code>branch_strategy</code> 帶入。專案文字與樣式留在 <code>docs/site-content.md</code>、<code>docs/site-theme.css</code>，不另建網站設定格式。</p>
 </aside>
 <aside class="technical-detail" data-content-key="governance-exceptions">
   <h3>暫時例外怎麼留下紀錄</h3>
@@ -3805,7 +3810,7 @@ html[data-detail-level="simple"] .detail-panel {
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">不把交付限制誤當維護方式</span></summary><ul><li><strong>直接手改單檔：</strong>可以離線，但來源、呈現與測試高度耦合</li><li><strong>runtime 多檔載入：</strong>轉寄容易漏檔，<code>file://</code> 行為也受瀏覽器限制</li><li><strong>立刻導入文件平台：</strong>目前沒有多頁搜尋、翻譯或跨 repo catalog 的實證需求</li><li><strong>自動保存完整聊天：</strong>會混入未確認假設、敏感脈絡與噪音</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">可維護來源產生可離線單檔</span></summary><details class="package-disclosure"><summary><span><span class="tech-name">可維護來源 → self-contained HTML</span></span></summary><div class="package-health"><p><strong>交付契約：</strong>CSS、JavaScript、font、SVG 與圖片全部內嵌；外部連結可保留，但離線時不影響內容與操作。</p><p><strong>來源契約：</strong><code>docs/adr/</code> 保存 canonical Architecture Decision Records（ADR）；renderer、基礎設計與驗證由公版維護，專案內容與允許的 theme overrides 由 consuming repo 維護。</p><p><strong>互動收納：</strong>agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 ADR；不保存完整逐字稿。</p></div></details><p><strong>所有環境：</strong>產生並驗證 committed bundle。<br><strong>Actions allowed：</strong>再增加重建比對與 artifact。<br><strong>核准 host 與寫入權限 allowed：</strong>再增加 preview／publish／access control。<br><strong>blocked／unknown：</strong>回退單檔交付，不宣稱已部署。</p></details>
       </div>
-      <aside class="config-guidance"><strong>決策與落地</strong><ul><li><strong>Canonical ADR：</strong><code>docs/adr/portable-decision-site.md</code></li><li><strong>可維護來源：</strong><code>site/</code> 分開內容、樣式、互動與原始圖片；renderer 產生 <code>docs/index.html</code> 並拒絕外部 runtime asset</li><li><strong>生成專案：</strong>公版更新 <code>site/</code> 與 renderer，專案保有 <code>docs/site-content.js</code> 與 <code>docs/site-theme.css</code></li><li><strong>網站存取：</strong><code>noindex</code>／<code>robots.txt</code> 只能降低誤分享，不是登入保護；需要限制讀者時，優先評估 Cloudflare Pages＋Access，host、身分提供者、資料政策與組織 owner 另案核准</li><li><strong>追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">存取 #79</a>／<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178" target="_blank" rel="noreferrer">網站 #178</a></li></ul></aside>
+      <aside class="config-guidance"><strong>決策與落地</strong><ul><li><strong>Canonical ADR：</strong><code>docs/adr/portable-decision-site.md</code></li><li><strong>可維護來源：</strong><code>site/</code> 分開內容、樣式、互動與原始圖片；renderer 產生 <code>docs/index.html</code> 並拒絕外部 runtime asset</li><li><strong>生成專案：</strong>公版更新 <code>site/</code> 與 renderer，專案保有 <code>docs/site-content.md</code> 與 <code>docs/site-theme.css</code></li><li><strong>網站存取：</strong><code>noindex</code>／<code>robots.txt</code> 只能降低誤分享，不是登入保護；需要限制讀者時，優先評估 Cloudflare Pages＋Access，host、身分提供者、資料政策與組織 owner 另案核准</li><li><strong>追蹤：</strong><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">存取 #79</a>／<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/178" target="_blank" rel="noreferrer">網站 #178</a></li></ul></aside>
 </div>
 
 
@@ -3821,7 +3826,7 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="technical-detail" data-content-key="docs-site-access">
   <h3>存取與維護邊界</h3>
   <p><code>noindex</code> 與 <code>robots.txt</code> 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。</p>
-<p>網站以既有 <code>.csarc/config.yml</code> 的 <code>project_name</code>、<code>project_description</code>、<code>repository_url</code>、<code>code_owner</code>、<code>branch_strategy</code> 產生初始名稱、說明、連結、負責人與分支指引。專案內容與樣式仍由 <code>docs/site-content.js</code>、<code>docs/site-theme.css</code> 管理，不另建設定來源；後續只有具體實作證明為高價值且跨檔的網站選項，才在同一 YAML 增加 namespaced key。</p>
+<p>renderer 從既有 <code>.csarc/config.yml</code> 讀取專案名稱、說明、語言、負責人、repository URL 與分支策略；專案文字寫在 <code>docs/site-content.md</code>，樣式覆寫留在 <code>docs/site-theme.css</code>，產生的 <code>docs/index.html</code> 不直接編輯。</p>
 </aside>
 </div>
 
@@ -5673,7 +5678,7 @@ html[data-detail-level="simple"] .detail-panel {
           <tr><td><a href="https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets" target="_blank" rel="noreferrer">GitHub Rulesets</a>／Free private</td><td><span class="tier-chip priority">部分解決</span></td><td>能查出平台能力並告警，但 Free private 無法強制 Ruleset；<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87" target="_blank" rel="noreferrer">#87</a> 已把未受保護狀態寫入 policy，平台方案限制仍明確保留。</td></tr>
           <tr><td>Release Please 線上執行＋<a href="https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow" target="_blank" rel="noreferrer"><code>GITHUB_TOKEN</code> 觸發規則</a></td><td><span class="tier-chip best">線上閉環完成</span></td><td><a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32645380139" target="_blank" rel="noreferrer">既有 run</a> 證明 Actions PR 會被組織政策阻擋，因此流程會依當下能力選 release-please、direct 或 verification-only；<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32662029395" target="_blank" rel="noreferrer">v0.2.4 run</a> 已完成治理、完整驗證、immutable release 發佈與 trust-chain 驗證。</td></tr>
           <tr><td>OSV reusable workflow＋<a href="https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows" target="_blank" rel="noreferrer">權限傳遞</a></td><td><span class="tier-chip best">已修正</span></td><td>呼叫端權限只能維持或縮小，不能替被呼叫 workflow 補權限；<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/92" target="_blank" rel="noreferrer">PR #92</a> 補回必要權限後，<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/32646097257" target="_blank" rel="noreferrer">main 線上 run</a> 已成功。</td></tr>
-          <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a>＋<a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip best">消費端門禁完成</span></td><td>生成專案的 PyPI／npm 再發布路徑會在啟用 attestation 時，強制比對 repository、tag、artifact digest 與 signer workflow；CI-only 不產生空 job。公版另以真實 immutable Release wheel 完成線上成功與受控 digest mismatch 驗證，細節見 <a href="artifact-consumption.md">artifact consumption evidence</a>。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/104" target="_blank" rel="noreferrer">#104</a></td></tr>
+          <tr><td><a href="https://docs.github.com/en/actions/concepts/security/artifact-attestations" target="_blank" rel="noreferrer">Artifact Attestations</a>＋<a href="https://slsa.dev/spec/v1.2/build-track-basics" target="_blank" rel="noreferrer">SLSA Build</a></td><td><span class="tier-chip partial">產品擴充</span></td><td>公版目前以 immutable GitHub Release、checksum、SBOM 與消費端驗證作共同基線；需要 registry 或 artifact attestation 的產品，應另案建立真實 publisher、OIDC 信任與驗證，不只提供無執行者的設定開關。</td></tr>
           <tr><td><a href="https://github.com/ossf/scorecard" target="_blank" rel="noreferrer">OpenSSF Scorecard</a> 安全基線</td><td><span class="tier-chip optional">方案感知</span></td><td>已有 pinned Actions、OSV、<code>SECURITY.md</code>、完整 Git 歷史與工作樹 secret scan；public repo 預設啟用 CodeQL，private／internal 則依 GitHub Code Security 授權明確 opt-in。</td></tr>
           <tr><td>真實 consuming repo 與採用證據</td><td><span class="tier-chip best">共用生命週期已證明</span></td><td><code>ai-guardrail</code> 已透過 Issue、兩支 PR 完成 v0.2.4 導入、產品客製化保留、v0.3.1 Copier update 與兩次完整線上檢查；Python、Rust 與 TypeScript 另有各自可執行的 beta 驗收證據。→ <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/100" target="_blank" rel="noreferrer">#100</a>／<a href="pilot-adoption.md">證據</a></td></tr>
         </tbody>
@@ -6829,7 +6834,7 @@ code_owner: "@example/maintainers"
 branch_strategy: delivery
 
 _skip_if_exists:
-  - docs/site-content.js
+  - docs/site-content.md
   - docs/site-theme.css`
         }
       ],

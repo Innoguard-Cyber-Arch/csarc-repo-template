@@ -88,9 +88,10 @@ def affects_decision_site(path: str) -> bool:
     return path.startswith(("site/", "template/site/")) or path in {
         "docs/index.html",
         "docs/site-content.js",
+        "docs/site-content.md",
         "docs/site-theme.css",
         "scripts/render_site.py",
-        "template/docs/site-content.js.jinja",
+        "template/docs/site-content.md.jinja",
         "template/docs/site-theme.css.jinja",
         "template/scripts/render_site.py",
     }
