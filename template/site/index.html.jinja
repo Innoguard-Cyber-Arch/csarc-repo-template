@@ -76,6 +76,7 @@
           </tbody>
         </table>
         <p class="notice"><strong>Free private 的下一步：</strong>導入時用逗號設定一到多位 <code>reviewers</code>，workflow 會從生成的 <code>.github/REVIEWERS</code> 排除作者後輪派一位，並用短效 <code>GITHUB_TOKEN</code> 提出 request；設定腳本另在所有方案驗證 CODEOWNERS team 與 repo write access。Free private 不支援 team review request 或多位同時 reviewer；需要把核准變成 merge gate 時，請 owner 升級至 GitHub Team 以上。Ruleset 不可用時仍標示 <code>DEGRADED</code>；完整管理欄位驗證應由管理員在可信任 checkout 使用 Administration read 憑證，不把該 token 暴露給 PR 程式碼。這些紀錄與 review request 不能阻止有權限者直接 push 或忽略未核准合併。</p>
+        <p class="notice"><strong>設定漂移：</strong>{% if enable_governance_drift_check %}每日與手動 Action 會執行同一支本機檢查程式；發現可修正差異時維護一張追蹤 Issue。{% else %}目前未選用排程檢查，因此不會產生 Action 或檢查程式；需要時用 Copier 更新開啟。{% endif %}每次執行只代表當下快照，不能取代 GitHub audit log。</p>
       </section>
 
       <section id="release">

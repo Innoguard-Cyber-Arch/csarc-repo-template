@@ -13,6 +13,11 @@ active。版本、發版與成品責任的完整盤點見中央模板的
 `dev/m<編號>-<簡稱>`；Milestone 內每張 Issue 仍以自己的 `type/<Issue>-*` PR 進入該
 branch，最後由一張受審查的交付 PR 送回 `main`。
 
+Reviewer assignment（`.github/workflows/governance-comment.yml`）已在本 repo 與所有生成
+repo 啟用；治理漂移排程（`governance-drift.yml`）只在生成 repo 開啟
+`enable_governance_drift_check` 時產生並每日執行，本模板 source repo 保留同一支
+`scripts/check-governance-drift` 供本機驗證，不另外啟用排程。
+
 `dev/i<Issue>-*` 只適用於 Issue 已寫明獨立環境、soak／canary 目標與停止條件的例外。
 Hotfix 可由 `fix/<Issue>-*` 直接進 `main`，但仍須 Issue、review 與 full verification。
 固定 `dev/next` 與 `promote/next` 已退役，不是一般工作路徑。

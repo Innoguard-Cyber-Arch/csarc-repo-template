@@ -156,6 +156,8 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
 
     assert workflows - optional_workflows == {
         "ci.yml",
+        "governance-comment.yml",
+        "governance-drift.yml",
         "issue-triage.yml",
         "milestone-lifecycle.yml",
         "osv.yml",
@@ -165,7 +167,7 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         "work-item-closure.yml",
     }
     assert optional_workflows <= workflows
-    assert "7 條 Active＋1 條 Candidate" in file_map  # noqa: RUF001
+    assert "9 條共用流程（其中 1 條候選）＋1 條選配排程" in file_map  # noqa: RUF001
     for workflow in workflows - optional_workflows:
         assert workflow in file_map
     for inactive in ("release-please.yml",):
@@ -413,6 +415,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "05",
         "06",
         "07",
+        "08",
         "09",
     ]
     duration_rows = data["testing"]["duration"]["rows"]
@@ -590,8 +593,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
             "issue": 400,
         },
     ]
-    template_rows = data["testing"]["groups"][7]["rows"]
-    assert data["testing"]["groups"][7]["journey"] == "09"
+    assert data["testing"]["groups"][7]["journey"] == "08"
+    template_rows = data["testing"]["groups"][8]["rows"]
+    assert data["testing"]["groups"][8]["journey"] == "09"
     assert [row["purpose"]["zh-tw"]["title"] for row in template_rows] == [
         "建立新 repo",
         "首次導入既有 repo",
