@@ -129,16 +129,7 @@ jobs:
           }' >"$RUNNER_TEMP/release-pr.json"
           ./scripts/verify-release-candidate "$RUNNER_TEMP/release-pr.json"
           git checkout --detach "$GITHUB_SHA"
-          if tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq .object.sha 2>/dev/null)"; then
-            test "$tag_sha" = "$GITHUB_SHA"
-          else
-            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
-              -f ref="refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA" >/dev/null
-          fi
-          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" \
-              --title "$RELEASE_TAG" --draft --generate-notes
-          fi
+          ./scripts/converge-release-tag --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --tag "$RELEASE_TAG"
           printf 'tag=%s\n' "$RELEASE_TAG" >>"$GITHUB_OUTPUT"
       - name: Resolve the exact release state
         id: state

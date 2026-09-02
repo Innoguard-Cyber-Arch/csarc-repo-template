@@ -28,6 +28,9 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Read release ownership
+        id: release
+        run: echo "ownership=$(python3 scripts/csarc_config.py release_ownership)" >> "$GITHUB_OUTPUT"
       - name: Select verification tier
         id: plan
         env:
@@ -98,7 +101,7 @@ jobs:
         if: {% raw %}${{ steps.plan.outputs.tier == 'full' }}{% endraw %}
         run: ./scripts/verify
       - name: Validate the guided release candidate
-        if: {% raw %}${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') }}{% endraw %}
+        if: {% raw %}${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && startsWith(github.event.pull_request.head.ref, 'release/v') && steps.release.outputs.ownership == 'csarc-owned' }}{% endraw %}
         env:
           CSARC_PUBLISH_CANDIDATE_STATUS: "false"
           GH_TOKEN: {% raw %}${{ github.token }}{% endraw %}

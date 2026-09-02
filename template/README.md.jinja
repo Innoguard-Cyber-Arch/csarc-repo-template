@@ -150,7 +150,7 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 
 版本意圖、正式版本、發版、交付與部署是不同階段：PR title 只表達 major／minor／patch／no-release；精確版本與 CHANGELOG 要在同一張受審查 PR 一起寫入；合併到 `main` 是 repository delivery；只有不可變 tag、GitHub Release、明列成品與可驗證證據都存在才叫發版。部署到真實 runtime 不在本模板範圍。
 
-{% if project_mode == "new" %}`release.yml` 會依 Conventional Commits 建立可審查的版本 PR；合併後先完整驗證，再建立 draft Release，附上來源封存{% if has_python %}、wheel／sdist{% endif %}{% if has_typescript %}、npm tarball{% endif %}{% if has_rust %}、Cargo package{% endif %}、checksum 與 SPDX SBOM，驗證完成才公開。{% else %}此為既有專案導入；原本的 product-owned release workflow 與成品定義會保留，CSARC 不用檔名猜測或建立第二個 release owner。{% endif %}
+{% if project_mode == "new" %}`release.yml` 會依 Conventional Commits 建立可審查的版本 PR；合併後先完整驗證，再建立 draft Release，附上來源封存{% if has_python %}、wheel／sdist{% endif %}{% if has_typescript %}、npm tarball{% endif %}{% if has_rust %}、Cargo package{% endif %}、checksum 與 SPDX SBOM，驗證完成才公開。{% else %}此為既有專案導入；原本的 product-owned release workflow 與成品定義會保留，CSARC 不用檔名猜測或建立第二個 release owner。`.csarc/config.yml` 明列 ownership、選定 workflow、required inputs、settings owner、immutable Releases 要求與 verification-only 原因；CSARC 不會 dispatch 產品 workflow。{% endif %}
 
 | 能力 | 目前狀態 | 現在怎麼做 |
 | --- | --- | --- |

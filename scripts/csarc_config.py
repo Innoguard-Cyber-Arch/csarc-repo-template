@@ -8,6 +8,12 @@ from pathlib import Path
 
 CONFIG_FILE = Path(".csarc/config.yml")
 LANGUAGES = {"python", "rust", "typescript"}
+RELEASE_OWNERSHIPS = {"csarc-owned", "product-owned", "verification-only"}
+RELEASE_SETTINGS = {
+    "csarc-owned": ("csarc-admin", "required"),
+    "product-owned": ("product-admin", "product-defined"),
+    "verification-only": ("none", "not-required"),
+}
 
 
 def _scalar(value: str) -> object:
@@ -59,6 +65,38 @@ def load_config(path: Path = CONFIG_FILE) -> dict[str, object]:
     return result
 
 
+def validate_release_config(config: dict[str, object]) -> None:
+    """Validate the flat release ownership contract."""
+    ownership = config.get("release_ownership")
+    if ownership is None:
+        return
+    if not isinstance(ownership, str) or ownership not in RELEASE_OWNERSHIPS:
+        raise ValueError(f"Invalid release_ownership: {ownership!r}")
+    workflow = config.get("release_workflow")
+    inputs = config.get("release_required_inputs")
+    reason = config.get("release_ownership_reason")
+    settings = (
+        config.get("release_settings_owner"),
+        config.get("release_immutable_releases"),
+    )
+    if ownership == "verification-only" and workflow:
+        raise ValueError(
+            "verification-only release ownership cannot select a workflow"
+        )
+    if ownership != "verification-only" and not workflow:
+        raise ValueError(f"{ownership} release ownership needs a workflow")
+    if not isinstance(reason, str) or not reason:
+        raise ValueError("release ownership needs a non-empty reason")
+    if not isinstance(inputs, list) or any(
+        not isinstance(item, str) or not item for item in inputs
+    ):
+        raise ValueError("release_required_inputs must contain strings")
+    if len(inputs) != len(set(inputs)):
+        raise ValueError("Duplicate release_required_inputs")
+    if settings != RELEASE_SETTINGS[ownership]:
+        raise ValueError("Release repository settings do not match ownership")
+
+
 def validate_config(
     config: dict[str, object], path: Path = CONFIG_FILE
 ) -> None:
@@ -70,6 +108,7 @@ def validate_config(
         "project_mode": {"existing", "new"},
         "project_visibility": {"internal", "private", "public"},
         "python_support_mode": {"latest", "minimum"},
+        "release_ownership": RELEASE_OWNERSHIPS,
     }
     for key, allowed in choices.items():
         value = config.get(key)
@@ -92,6 +131,8 @@ def validate_config(
             )
         if len(languages) != len(set(languages)):
             raise ValueError(f"Duplicate languages in {path}")
+
+    validate_release_config(config)
 
     threshold = config.get("coverage_threshold")
     if threshold is not None and (

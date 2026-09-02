@@ -30,6 +30,9 @@ def test_root_uses_public_copier_setting_names() -> None:
     assert repository_url.endswith("/csarc-repo-template")
     assert config["languages"] == ["python"]
     assert config["package_name"] == "csarc_cli"
+    assert config["release_ownership"] == "csarc-owned"
+    assert config["release_settings_owner"] == "csarc-admin"
+    assert config["release_immutable_releases"] == "required"
 
 
 @pytest.mark.parametrize(
@@ -39,6 +42,21 @@ def test_root_uses_public_copier_setting_names() -> None:
         ("languages:\n- go\n", "Invalid languages"),
         ("languages:\n- python\n- python\n", "Duplicate languages"),
         ("coverage_threshold: 0\n", "Invalid coverage_threshold"),
+        ("release_ownership: somebody\n", "Invalid release_ownership"),
+        (
+            "release_ownership: verification-only\n"
+            "release_workflow: .github/workflows/release.yml\n",
+            "cannot select a workflow",
+        ),
+        (
+            "release_ownership: csarc-owned\n"
+            "release_workflow: .github/workflows/release.yml\n"
+            "release_required_inputs: []\n"
+            "release_ownership_reason: CSARC owns release.\n"
+            "release_settings_owner: product-admin\n"
+            "release_immutable_releases: product-defined\n",
+            "settings do not match ownership",
+        ),
     ],
 )
 def test_managed_setting_errors_are_diagnostic(
