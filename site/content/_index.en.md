@@ -223,6 +223,8 @@ A hotfix uses a Bug Issue without a Milestone, the `bug` and `hotfix` labels, `f
 {{< detail key="manual-release-boundary" title="Automatic-release ownership" >}}
 The template root and each new repository are configured to publish through their own release workflow. An adopted repository keeps its product-owned workflow. Every path still needs one owner, least privileges, full-SHA pins, a timeout, concurrency behavior, failure recovery, and a runner-cost ceiling; historical runs remain reference evidence only.
 
+Adoption and update never infer this from a workflow filename. `.csarc/config.yml`, the adoption plan, the Markdown/PDF report, and `.csarc/provenance.json` all disclose the same explicit `release_ownership` — `csarc-owned`, `product-owned`, or `verification-only` — plus the selected workflow path, its required `workflow_dispatch` inputs, the settings owner, whether immutable Releases are required, and the reason a repository degrades to `verification-only` (no writer found, or more than one). CSARC never dispatches a product-owned workflow or infers its input contract from a name; it only reads what the workflow itself declares.
+
 Milestone closure remains manual until #400 completes its lifecycle contract, and work-Issue closure remains owned by #401. Work branches are removed after merge; a Milestone delivery branch waits until closure and unfinished work are handled.
 {{< /detail >}}
 {{< /slide >}}
