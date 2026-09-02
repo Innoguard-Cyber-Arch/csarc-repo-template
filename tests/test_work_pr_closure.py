@@ -9,6 +9,12 @@ from typing import Any
 import pytest
 
 MODULE_PATH = Path(__file__).parents[1] / "scripts" / "pr_lifecycle.py"
+WORKFLOW_PATH = (
+    Path(__file__).parents[1]
+    / ".github"
+    / "workflows"
+    / "work-item-closure.yml"
+)
 SPEC = importlib.util.spec_from_file_location("work_pr_closure", MODULE_PATH)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -75,6 +81,13 @@ class FakeGitHub:
 
 def arguments() -> argparse.Namespace:
     return argparse.Namespace(repo="owner/repo", pr_number=44, head_sha=HEAD)
+
+
+def test_closed_event_checks_out_the_merge_commit() -> None:
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+    assert "ref: ${{ github.event.pull_request.merge_commit_sha }}" in workflow
+    assert "ref: ${{ github.event.pull_request.base.sha }}" not in workflow
 
 
 def test_exact_merged_work_pr_closes_once_and_can_rerun(

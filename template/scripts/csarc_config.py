@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 CONFIG_FILE = Path(".csarc/config.yml")
+LANGUAGES = {"python", "rust", "typescript"}
 
 
 def _scalar(value: str) -> object:
@@ -54,7 +55,54 @@ def load_config(path: Path = CONFIG_FILE) -> dict[str, object]:
         raw_value = raw_value.strip()
         result[key] = _scalar(raw_value) if raw_value else []
         active_key = key
+    validate_config(result, path)
     return result
+
+
+def validate_config(
+    config: dict[str, object], path: Path = CONFIG_FILE
+) -> None:
+    """Validate the managed settings consumed by repository automation."""
+    choices = {
+        "branch_strategy": {"delivery", "main"},
+        "container_mode": {"none", "verify", "ghcr"},
+        "coverage_mode": {"diff", "global"},
+        "project_mode": {"existing", "new"},
+        "project_visibility": {"internal", "private", "public"},
+        "python_support_mode": {"latest", "minimum"},
+    }
+    for key, allowed in choices.items():
+        value = config.get(key)
+        if value is not None and value not in allowed:
+            expected = ", ".join(sorted(allowed))
+            raise ValueError(
+                f"Invalid {key} in {path}: {value!r}; expected {expected}"
+            )
+
+    languages = config.get("languages")
+    if languages is not None:
+        if not isinstance(languages, list) or any(
+            not isinstance(language, str) or language not in LANGUAGES
+            for language in languages
+        ):
+            expected = ", ".join(sorted(LANGUAGES))
+            raise ValueError(
+                f"Invalid languages in {path}; expected a list containing "
+                f"only {expected}"
+            )
+        if len(languages) != len(set(languages)):
+            raise ValueError(f"Duplicate languages in {path}")
+
+    threshold = config.get("coverage_threshold")
+    if threshold is not None and (
+        isinstance(threshold, bool)
+        or not isinstance(threshold, int)
+        or not 1 <= threshold <= 100
+    ):
+        raise ValueError(
+            f"Invalid coverage_threshold in {path}: {threshold!r}; "
+            "expected an integer from 1 to 100"
+        )
 
 
 def main(argv: list[str] | None = None) -> int:

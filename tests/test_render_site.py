@@ -152,8 +152,9 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         for path in (root / "template/.github/workflows").iterdir()
         if path.is_file()
     }
+    optional_workflows = {"template-update.yml"}
 
-    assert workflows == {
+    assert workflows - optional_workflows == {
         "ci.yml",
         "issue-triage.yml",
         "milestone-lifecycle.yml",
@@ -163,21 +164,20 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         "spec-to-issue.yml",
         "work-item-closure.yml",
     }
-    assert "8 條現行自動流程" in file_map
-    for workflow in workflows:
+    assert optional_workflows <= workflows
+    assert "7 條 Active＋1 條 Candidate" in file_map  # noqa: RUF001
+    for workflow in workflows - optional_workflows:
         assert workflow in file_map
     for inactive in ("release-please.yml",):
         assert inactive not in file_map
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
-    assert "需人審查版本 PR 的自動發版" in flow
-    assert "一支 release workflow" in chinese_delivery
-    assert "版本 PR 合併、完整驗證與成品重驗後自動發布" in chinese_delivery
+    assert "需人審查版本 PR 的發版流程仍是候選" in flow
+    assert "一支候選 release workflow" in chinese_delivery
+    assert "Candidate／Blocked" in chinese_delivery  # noqa: RUF001
     assert "promotion-gated adaptive release" not in chinese_delivery
     assert "下方 technical view 保留 2026-08" not in chinese_delivery
     assert "the system opens a version PR for human review" in english_delivery
-    assert "full verification, and downloaded artifact verification" in (
-        english_delivery
-    )
+    assert "Candidate / Blocked" in english_delivery
     assert "使用 AI／vibe coding 的一般開發者" in chinese_home  # noqa: RUF001
     assert "不要求具備工程或 CI/CD 維運背景" in chinese_home
     assert "general AI-assisted or vibe-coding developers" in english_home
@@ -352,7 +352,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "可調整｜選用語言與 Python 支援範圍" in active_components  # noqa: RUF001
     assert "固定基線｜各語言使用原生工具" in active_components  # noqa: RUF001
     assert "只列公版主要政策、可調選項與設定位置" in active_components
-    assert english.count('data-audience="maintainer"') == 6
+    assert english.count('data-audience="maintainer"') == 7
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
@@ -405,16 +405,25 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "declarativeState",
         "templateLifecycle",
     ]
-    assert len(data["testing"]["groups"]) == 7
+    assert [group["journey"] for group in data["testing"]["groups"]] == [
+        "01",
+        "02",
+        "03",
+        "04",
+        "05",
+        "06",
+        "07",
+        "09",
+    ]
     duration_rows = data["testing"]["duration"]["rows"]
     assert [row["key"] for row in duration_rows] == ["issue", "release"]
-    assert all(len(row["shared"]["items"]) == 6 for row in duration_rows)
-    assert all(len(row["templateOnly"]["items"]) == 6 for row in duration_rows)
+    assert all(len(row["shared"]["items"]) == 7 for row in duration_rows)
+    assert all(len(row["templateOnly"]["items"]) == 7 for row in duration_rows)
     for row in duration_rows:
         for scope in ("shared", "templateOnly"):
             assert [
                 item["label"]["zh-tw"][:2] for item in row[scope]["items"]
-            ] == ["01", "02", "03", "04", "05", "06"]
+            ] == ["01", "02", "03", "04", "05", "06", "09"]
     assert duration_rows[0]["shared"]["total"]["zh-tw"] == "約 1\u20137 分鐘"
     assert duration_rows[0]["templateOnly"]["total"]["zh-tw"] == (
         "約 1\u20134 分鐘（fast 實測 59\u201399 秒）"  # noqa: RUF001
@@ -581,6 +590,31 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
             "issue": 400,
         },
     ]
+    template_rows = data["testing"]["groups"][7]["rows"]
+    assert data["testing"]["groups"][7]["journey"] == "09"
+    assert [row["purpose"]["zh-tw"]["title"] for row in template_rows] == [
+        "建立新 repo",
+        "首次導入既有 repo",
+        "後續更新與衝突",
+        "通知有新版公版",
+    ]
+    assert template_rows[1]["shared"]["milestone"]["automationNote"][
+        "zh-tw"
+    ].startswith("人工門檻")
+    assert "automation" not in template_rows[1]["shared"]["milestone"]
+    assert all(
+        "verify-template.sh" not in item.get("path", "")
+        for row in template_rows
+        for stage in row["shared"].values()
+        for item in stage.get("files", [])
+    )
+    update_notification = template_rows[3]["shared"]["milestone"]["automation"][
+        0
+    ]
+    assert update_notification["path"] == (
+        ".github/workflows/template-update.yml"
+    )
+    assert "pending" not in update_notification
     assert verification_rows[0]["shared"]["milestone"]["automation"] == [
         {
             "path": ".github/workflows/ci.yml",
