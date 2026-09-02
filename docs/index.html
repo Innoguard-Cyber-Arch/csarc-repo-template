@@ -2373,7 +2373,7 @@ html[data-detail-level="simple"] .detail-panel {
           <article class="pipeline-foundation-card"><h3>工作格式</h3><p>Issue 與 PR 表單提示必要內容。</p></article>
           <article class="pipeline-foundation-card"><h3>驗證與安全規則</h3><p>依變更內容選擇必要檢查，並辨識相依風險。</p></article>
           <article class="pipeline-foundation-card"><h3>合併設定</h3><p>依 GitHub 方案套用可用保護。</p></article>
-          <article class="pipeline-foundation-card best"><h3>版本發佈</h3><p>設定仍保留；Action 尚未啟用。</p></article>
+          <article class="pipeline-foundation-card best"><h3>版本發佈</h3><p>流程已設定為候選；預設分支實跑成功後才算啟用。</p></article>
         </div>
       </div>
 </div>
@@ -2409,7 +2409,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 	</tbody>
 </table>
-<p>一般使用者不必記 workflow 或 script 名稱；依畫面提示操作即可。目前自動化涵蓋工作單、PR 規則、必要驗證，以及需人審查版本 PR 的自動發版。</p>
+<p>一般使用者不必記 workflow 或 script 名稱；依畫面提示操作即可。目前自動化涵蓋工作單、PR 規則與必要驗證；需人審查版本 PR 的發版流程仍是候選。</p>
 <aside class="technical-detail" data-content-key="flow-foundation">
   <h3>橫跨全流程的四項基礎</h3>
   <ul>
@@ -2498,7 +2498,7 @@ html[data-detail-level="simple"] .detail-panel {
 <div class="legacy-content">
       <header>
         <h2>模板會把<span class="accent">必要設定放到正確位置</span></h2>
-        <p class="subtitle">共用規則與 8 條現行 GitHub Actions 每個新 repo 都有；語言工具與產品目錄才依未選語言、Python、Rust、TypeScript 或多語言模式產生。</p>
+        <p class="subtitle">共用規則與 8 條 GitHub Actions（7 條現行、1 條候選）每個新 repo 都有；語言工具與產品目錄才依未選語言、Python、Rust、TypeScript 或多語言模式產生。</p>
       </header>
       <div class="repo-map-window" aria-label="模板產生檔案的視覺對照">
         <div class="repo-map-toolbar">
@@ -2514,13 +2514,13 @@ html[data-detail-level="simple"] .detail-panel {
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">CODEOWNERS＋REVIEWERS</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">指定 owner 與 reviewer 候選</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">ISSUE_TEMPLATE/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">工作單欄位／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">pull_request_template.md</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">PR 必填內容</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04／05／06／07</span><span class="purpose-copy">8 條現行自動流程</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04／05／06／07</span><span class="purpose-copy">7 條 Active＋1 條 Candidate</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">ci.yml</span><span class="repo-tree-purpose"><span class="journey-code">03</span><span class="purpose-copy">執行已宣告模組</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">issue-triage.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">檢查並整理工作單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">milestone-lifecycle.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">同步交付批次狀態</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">osv.yml</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">每週與手動漏洞掃描</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">pr-policy.yml</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">Issue／分支／PR 規則</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">release.yml</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">版本 PR 與 verified GitHub Release</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">release.yml</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">候選版本 PR 與 GitHub Release</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">spec-to-issue.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">規格自動開單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">work-item-closure.yml</span><span class="repo-tree-purpose"><span class="journey-code">06</span><span class="purpose-copy">里程碑工作合併後關單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">docs/specs/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">功能規格／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge project">專案持有</span></div>
@@ -2558,7 +2558,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>8 條現行流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、工作關單與發版</td>
+					<td>7 條 active 流程處理工作單、里程碑、規格、PR、驗證與漏洞；另有 1 條候選發版流程</td>
 					<td>公版主導</td>
 			</tr>
 			<tr>
@@ -2934,7 +2934,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li>**Action：**只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li>
 <li>**專案範圍：**一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li>
 </ul>
-<p>測試邏輯只寫在 scripts／tests。目前 active 的自動化是 CI、PR policy、Issue triage、spec-to-Issue、Milestone lifecycle、OSV 與 Dependabot；專用 release／promotion／成品發布／消費／live-integration／deployment workflow 未啟用。</p></div>
+<p>測試邏輯只寫在 scripts／tests。目前 active 的自動化是 CI、PR policy、Issue triage、spec-to-Issue、Milestone lifecycle、OSV 與 Dependabot；單一 release workflow 已設定為候選，另行的 promotion／release handoff／registry publisher／消費／live-integration／deployment workflow 未啟用。</p></div>
 
 
 </section>
@@ -3361,7 +3361,7 @@ html[data-detail-level="simple"] .detail-panel {
     <p class="subtitle">工作先交付到 main；需要新版本時，系統建立一張仍須人工審查的版本 PR。</p>
   </header>
 
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>一支 release workflow 負責版本 PR 與 verified immutable GitHub Release；registry、attestation 與部署仍未自動啟用。</span></aside>
+<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>一支候選 release workflow 預計負責版本 PR 與 verified immutable GitHub Release；待預設分支實跑後才算啟用。Registry、attestation 與部署仍未自動啟用。</span></aside>
 <div class="legacy-content">
       <header>
         <h2>步驟 7｜<span class="accent">版本規則與成品接續</span></h2>
@@ -3412,18 +3412,18 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>正式版本與 CHANGELOG</td>
-					<td>Active</td>
-					<td>Release Please 建立同一張受審查 PR；已發布版本不改寫</td>
+					<td>Candidate／Guided</td>
+					<td>Automatic 由 Release Please 建立受審查 PR；受平台政策限制時，Guided 由人或 agent 開一般 PR</td>
 			</tr>
 			<tr>
 					<td>tag／GitHub Release</td>
-					<td>Active</td>
-					<td>版本 PR 合併、完整驗證與成品重驗後自動發布</td>
+					<td>Candidate／Blocked</td>
+					<td>版本 PR 合併後由唯一 workflow 發布；待預設分支實跑證明</td>
 			</tr>
 			<tr>
 					<td>checksum／SBOM</td>
-					<td>Active</td>
-					<td>與 exact-tag 成品一起建立，下載後重新驗證</td>
+					<td>Configured</td>
+					<td>已納入同一候選流程；首次成功實跑後才算 Active</td>
 			</tr>
 			<tr>
 					<td>attestation／消費驗證</td>
@@ -3671,18 +3671,19 @@ html[data-detail-level="simple"] .detail-panel {
       <p class="context-line"><strong>問題與目的｜</strong>模板錯誤會一次影響多個專案；每次修改都要真的建立新案、導入既有案，再讓已導入的 repo 接收更新並通過完整驗證。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">這次不選，因為無法持續同步或驗證</span></summary><ul><li><strong>GitHub Template：</strong>只複製一次，不記得來源與答案</li><li><strong>PyScaffold：</strong>可參考 Python 結構，但會形成第二套更新機制</li><li><strong>只驗 YAML：</strong>無法證明新案、既有案與更新真的能跑</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">Copier＋建立／更新回歸</span></summary><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；衝突時保持 repo 不變，調整後重跑再由 PR 審查。</p></div></details><p><strong>建立：</strong>共通基線與 Python、Rust、TypeScript 模組各自實跑驗證；多選時合併模組，不建立組合專屬流程。<br><strong>導入與更新：</strong>adopt／update dry-run 先預覽，確認後只遷移舊 CSARC 結構；接著對同一 repo 執行下一版 Copier update、確認產品目錄未被覆寫，最後執行生成專案的完整驗證。<br><strong>版本：</strong>公版與所有語言模組共用一個 SemVer；各語言基線則依自己的穩定版政策前進。</p></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">Copier＋建立／更新回歸</span></summary><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；衝突時保持 repo 不變，調整後重跑再由 PR 審查。</p></div></details><p><strong>建立：</strong>共通基線與 Python、Rust、TypeScript 模組各自實跑驗證；多選時合併模組，不建立組合專屬流程。<br><strong>導入與更新：</strong>adopt／update dry-run 先預覽，確認後只遷移舊 CSARC 結構；接著對同一 repo 執行下一版 Copier update、確認產品目錄未被覆寫，最後執行生成專案的完整驗證。<br><strong>更新通知：</strong>選用後每週檢查一次；有新版只建立或更新一張 Issue，不會自動修改 repo。<br><strong>版本：</strong>公版與所有語言模組共用一個 SemVer；各語言基線則依自己的穩定版政策前進。</p></details>
       </div>
       <p class="context-line"><strong>root／template 配對檔案｜</strong>43 對 workflow、policy、文件、script 與 test（例如 <code>promotion.yml</code>、<code>docs/ci-policy.md</code>、<code>scripts/promotion_gate.py</code>）在 root 與 <code>template/</code> 之間逐位元組相同；過去只靠 <code>verify-template.sh</code> 在 CI 用 <code>diff</code> 事後比對，任何一邊漏改要等驗證跑完才被抓到。現在 <code>scripts/sync-paired-files.sh</code> 把 root 當成唯一來源：本機執行它會立即重新產生每個 <code>template/</code> 副本；加 <code>--check</code> 則不寫檔，只驗證每個副本是否符合產生腳本的確定性輸出（內容與可執行位元），任何一對不一致就印出差異並失敗。<code>verify-template.sh</code> 已改成呼叫 <code>--check</code>，並用一段複製到暫存目錄、蓄意注入內容與權限落差、確認失敗、重新產生、確認通過的回歸測試證明這個機制會擋下漂移。<code>dependabot.yml</code>、<code>.gitignore</code> 等僅因 Jinja 變數不同的檔案不在此列，仍由既有的「產生一個實案並與 root 比對」測試把關；<code>AGENTS.md</code>／<code>README.md</code> 等文件因 root 與下游專案的治理內容本來就不同，不屬於重複維護，故未強行合併。</p>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>下發來源、所選語言模組、保留路徑與功能開關：</strong><code>template/</code>＋<code>copier.yml</code></li><li><strong>root-only CI 與建立／導入／更新驗證：</strong><code>.github/</code>＋<code>scripts/verify-template.sh</code>；生成 repo 不會收到這支腳本或 template release workflows</li><li><strong>語言基線與三十天觀察：</strong><code>profiles/catalog.yaml</code>；<strong>Python 自動升版：</strong><code>python-version-policy.yml</code></li><li><strong>root／template 配對檔案的單一來源與漂移檢查：</strong><code>scripts/sync-paired-files.sh</code></li></ul></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>下發來源、所選語言模組、保留路徑與功能開關：</strong><code>template/</code>＋<code>copier.yml</code></li><li><strong>更新通知：</strong><code>enable_template_update_notifications</code> 開啟時才產生 <code>template-update.yml</code> 與 <code>check-template-update</code>；公開來源不需 secret，private 來源才使用唯讀 token</li><li><strong>root-only CI 與建立／導入／更新驗證：</strong><code>.github/</code>＋<code>scripts/verify-template.sh</code>；生成 repo 不會收到這支腳本或 template release workflows</li><li><strong>語言基線與三十天觀察：</strong><code>profiles/catalog.yaml</code>；<strong>Python 自動升版：</strong><code>python-version-policy.yml</code></li><li><strong>root／template 配對檔案的單一來源與漂移檢查：</strong><code>scripts/sync-paired-files.sh</code></li></ul></aside>
 </div>
 
 
 <div class="markdown-body basic-summary"><ul>
 <li><code>template/</code> 是下發內容來源；root 保留公版本身的 GitHub 治理與 dogfood 設定。</li>
-<li><code>.csarc/config.yml</code> 同時是 Copier 的更新紀錄與 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取，後續擴充也增加設定項目，不另建第二份設定檔。</li>
+<li><code>.csarc/config.yml</code> 是每個 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取。生成 repo 另在同一檔案保存 Copier 來源與版本，root 不保存會立即過期的自我指向資訊。</li>
 <li>共通基線與 Python、Rust、TypeScript 模組各自驗證；同時選取多個語言時合併執行，不建立組合專屬流程。</li>
 <li>既有 repo 先用 adopt／update dry-run 預覽；確認後只遷移舊 CSARC 結構，再執行下一版 Copier update 並確認產品內容未被覆寫。</li>
+<li>可選的更新通知每週檢查新版；只建立或更新一張 Issue，不會自動修改 repo。</li>
 </ul>
 <details class="package-disclosure" data-content-key="copier-update">
   <summary><span class="tech-name">Copier＋root dogfood＋建立／更新回歸</span></summary>
@@ -3690,7 +3691,7 @@ html[data-detail-level="simple"] .detail-panel {
 </details>
 <aside class="technical-detail" data-content-key="template-release-scope">
   <h3>單一來源、版本基線與 root-only 邊界</h3>
-  <p><code>.csarc/config.yml</code> 保留 Copier 必要的模板來源與版本，並保存這個 repo 選用的公版能力；設定變更透過 <code>csarc update --data</code> 寫回，避免手動修改後與 Copier 不同步。未來的繼承公版應在同一份 YAML 增加自己的設定，不複製 CSARC 已有欄位。</p>
+  <p><code>.csarc/config.yml</code> 在 root 保存公版本身選用的能力；生成 repo 另保存 Copier 必要的來源與版本，並透過 <code>csarc update --data</code> 寫回。模板來源不偽造 <code>_src_path</code> 或 <code>_commit</code>，避免指向自己或留下立刻過期的版本。未來的繼承公版應在同一份 YAML 增加具命名空間的設定，不複製 CSARC 已有欄位。</p>
 <p><code>scripts/sync-paired-files.sh</code> 讓 root 成為成對檔案的單一來源，<code>--check</code> 驗證副本內容與權限。<code>profiles/catalog.yaml</code> 保存語言基線與驗收證據；Python 與 Node 基線各自觀察三十天後才前進。</p>
 <p><code>scripts/verify-template.sh</code> 只在公版 repo 實跑建立／導入／更新 fixture，不會下發到 consuming repository；生成 repo 使用較小的 <code>scripts/verify</code>。</p>
 </aside>
@@ -3904,7 +3905,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>發版證據</td>
-					<td>現行 release workflow 建立 exact-tag 成品、checksum、SPDX SBOM 與 immutable Release；舊 handoff／consumption run 只供稽核</td>
+					<td>候選 release workflow 預計建立 exact-tag 成品、checksum、SPDX SBOM 與 immutable Release；待預設分支實跑，舊 handoff／consumption run 只供稽核</td>
 			</tr>
 			<tr>
 					<td>語言模組已驗收</td>
@@ -4226,7 +4227,7 @@ html[data-detail-level="simple"] .detail-panel {
 			<tr>
 					<td>Dependabot、OSV、Syft</td>
 					<td>依賴更新、漏洞與 SBOM</td>
-					<td>Dependabot 與 OSV 已啟用；SBOM 是已通過本機測試的 conditional contract</td>
+					<td>Dependabot 已啟用；OSV 在新生成 repo 立即啟用，本 repository 因候選尚未落地 main 而仍是 candidate；SBOM 是已通過本機測試的 conditional contract</td>
 			</tr>
 			<tr>
 					<td><img src="data:image/png;base64,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" alt="GitHub Community Projects logo"> <a href="https://github.com/github-community-projects/safe-settings">Safe Settings</a></td>
@@ -4883,6 +4884,7 @@ html[data-detail-level="simple"] .detail-panel {
     <button id="testing-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>依賴安全</button>
     <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR／合併</button>
     <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="7"><small>Journey 07</small>版本／交付</button>
+    <button id="testing-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-template-upgrade" data-similar-tools-tab="8"><small>Journey 09</small>模板升級</button>
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
     <div class="similar-tools-testing-intro">
@@ -5293,6 +5295,31 @@ html[data-detail-level="simple"] .detail-panel {
     </table>
   </div>
   </div>
+  <div id="testing-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-template-upgrade" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 09／更新通知</strong><span>選用通知的 repo 每週或手動檢查一次；有新版只維護一張 Issue，不會自動修改或合併。</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 09／更新通知">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>發現新版但不自動套用</strong><span>讀取 Copier 保存的來源與版本；有新版時建立或更新同一張追蹤 Issue，交由人審查後另開更新 PR。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>每週排程／手動執行</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/check-template-update</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/template-update.yml</code>／<code>check</code><span>Trigger：每週一／手動執行；只有設定開啟才產生 · Timeout：10 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>公版發版候選</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_template_update_notifications.py</code></li></ul></div><span>確認開啟時 workflow 與 checker 同時產生，關閉時兩者都不存在，而且 root 不會誤執行。</span>
+            </li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
 </div>
 
 
@@ -5489,7 +5516,7 @@ html[data-detail-level="simple"] .detail-panel {
     <p class="subtitle">這些是目前可由檔案與測試證明的決定。</p>
   </header>
 
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 的 promotion／兩段式 release handoff 是歷史設計。現行 CI 依風險分級；Release Please 版本 PR 與單一 release workflow 分別負責審查與發布。</span></aside>
+<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 的 promotion／兩段式 release handoff 是歷史設計。現行 CI 依風險分級；候選 Release Please 版本 PR 與單一 release workflow 預計分別負責審查與發布。</span></aside>
 <div class="legacy-content">
       <header>
         <span class="selection-sequence">決策附錄</span>
@@ -5634,7 +5661,7 @@ html[data-detail-level="simple"] .detail-panel {
     <p class="subtitle">新 repo、Copier 更新、OSV、Release 與第一個 CI-only pilot 已有證據；其餘邊界仍明列。</p>
   </header>
 
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 保留舊 run 與當時判斷供稽核；Release Please 已由單一 release workflow 採用，release consumption 與 live-integration 專用 workflows 仍未恢復。</span></aside>
+<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 保留舊 run 與當時判斷供稽核；Release Please 已納入單一候選 release workflow，待預設分支實跑；release consumption 與 live-integration 專用 workflows 仍未恢復。</span></aside>
 <div class="legacy-content">
       <header>
         <span class="selection-sequence">決策附錄</span>
