@@ -199,16 +199,15 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         '{{< slide key="ecosystem"', 1
     )[0]
     assert '<article class="decision-step' not in journey_decisions
-    assert journey_decisions.count('class="decision-step decision-fold') == 20
+    assert journey_decisions.count('class="decision-step decision-fold') == 18
     assert (
-        journey_decisions.count('class="decision-step decision-fold" open')
-        == 10
+        journey_decisions.count('class="decision-step decision-fold" open') == 9
     )
     assert (
         journey_decisions.count(
             'class="decision-step decision-fold recommended" open'
         )
-        == 10
+        == 9
     )
 
 
@@ -310,9 +309,11 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "Cloudflare Pages" in chinese
     assert "存取 #79" in chinese
     assert "不另導入 Spec Kit" in active_components
-    assert "Fleet 盤點與平台門檻" in active_components
     assert "沒有 active bot identity" in active_components
     assert "CSARC_VERSION_BOT_CLIENT_ID" not in active_components
+    assert "單一來源｜治理只保存高價值選項" in active_components  # noqa: RUF001
+    assert "提出者、另一位核准者、到期日、證據與復原方式" in (active_components)
+    assert "rollout:" not in active_components
     for source in (chinese, english):
         assert 'key="bridge" audience="maintainer"' in source
         for key in (
@@ -358,8 +359,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
-    assert len(data["features"]) == 31
-    assert len(data["featureGroups"]) == 8
+    assert len(data["features"]) == 34
+    assert len(data["featureGroups"]) == 9
     assert data["featureGroups"][0]["features"] == [
         "repositoryTruth",
         "workItemStructure",
@@ -404,6 +405,11 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "releaseEvidence",
     ]
     assert data["featureGroups"][7]["features"] == [
+        "governancePolicyLocation",
+        "governanceCapabilityBoundary",
+        "governanceExceptionRecord",
+    ]
+    assert data["featureGroups"][8]["features"] == [
         "declarativeState",
         "templateLifecycle",
     ]
@@ -420,13 +426,13 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     ]
     duration_rows = data["testing"]["duration"]["rows"]
     assert [row["key"] for row in duration_rows] == ["issue", "release"]
-    assert all(len(row["shared"]["items"]) == 7 for row in duration_rows)
-    assert all(len(row["templateOnly"]["items"]) == 7 for row in duration_rows)
+    assert all(len(row["shared"]["items"]) == 8 for row in duration_rows)
+    assert all(len(row["templateOnly"]["items"]) == 8 for row in duration_rows)
     for row in duration_rows:
         for scope in ("shared", "templateOnly"):
             assert [
                 item["label"]["zh-tw"][:2] for item in row[scope]["items"]
-            ] == ["01", "02", "03", "04", "05", "06", "09"]
+            ] == ["01", "02", "03", "04", "05", "06", "08", "09"]
     assert duration_rows[0]["shared"]["total"]["zh-tw"] == "約 1\u20137 分鐘"
     assert duration_rows[0]["templateOnly"]["total"]["zh-tw"] == (
         "約 1\u20134 分鐘（fast 實測 59\u201399 秒）"  # noqa: RUF001
@@ -593,7 +599,27 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
             "issue": 400,
         },
     ]
+    governance_rows = data["testing"]["groups"][7]["rows"]
     assert data["testing"]["groups"][7]["journey"] == "08"
+    assert [row["purpose"]["zh-tw"]["title"] for row in governance_rows] == [
+        "輪派審查人",
+        "偵測治理設定漂移",
+    ]
+    assert governance_rows[0]["shared"]["milestone"]["automation"] == [
+        {
+            "path": ".github/workflows/governance-comment.yml",
+            "job": "request-reviewer",
+            "trigger": {
+                "zh-tw": "PR 開啟、重開或轉為 ready",
+                "en": "PR opened, reopened, or marked ready",
+            },
+            "timeout": "5 min",
+        }
+    ]
+    assert all(
+        "pending" not in automation
+        for automation in governance_rows[1]["shared"]["release"]["automation"]
+    )
     template_rows = data["testing"]["groups"][8]["rows"]
     assert data["testing"]["groups"][8]["journey"] == "09"
     assert [row["purpose"]["zh-tw"]["title"] for row in template_rows] == [
@@ -667,7 +693,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "archived" not in testing_shortcode
 
     assert len(data["tools"]) == 28
-    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 106
+    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 113
     assert data["comparisonDate"] == "2026-09-01"
     assert data["releaseCutoff"] == "2026-03-01"
     assert data["threshold"] == 5
@@ -701,7 +727,6 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert [tool["name"] for tool in primary] == [
         "projen",
         "Repository Harness",
-        "Backstage",
     ]
 
     ecosystem = {
@@ -713,6 +738,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     }
     assert ecosystem == {
         "Backlog.md",
+        "Backstage",
         "BMAD",
         "Copier",
         "OpenRewrite",

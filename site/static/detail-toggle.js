@@ -159,7 +159,7 @@
 
   const supplementalGuides = {
     deploy: '版本範圍、SemVer 與發布邊界',
-    governance: '部署原則、方案行為與參考資料'
+    governance: '方案能力、治理設定與例外處理'
   };
 
   Object.entries(supplementalGuides).forEach(([track, summary]) => {

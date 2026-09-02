@@ -2154,9 +2154,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
@@ -2310,9 +2307,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
@@ -2411,12 +2405,11 @@ html[data-detail-level="simple"] .detail-panel {
 </table>
 <p>一般使用者不必記 workflow 或 script 名稱；依畫面提示操作即可。目前自動化涵蓋工作單、PR 規則與必要驗證；需人審查版本 PR 的發版流程仍是候選。</p>
 <aside class="technical-detail" data-content-key="flow-foundation">
-  <h3>橫跨全流程的四項基礎</h3>
+  <h3>橫跨全流程的三項基礎</h3>
   <ul>
-<li><strong>07 規則治理：</strong> 權限、分支、審查與合併規則一致。</li>
-<li><strong>08 模板升級：</strong> Copier 將新政策帶回既有 repo，差異仍經 PR。</li>
-<li><strong>09 內部網站：</strong> 讓做法、限制、證據與決策容易查找。</li>
-<li><strong>10 導入層級：</strong> 基本能力先做；需求與平台條件成熟後才加進階能力。</li>
+<li><strong>08 規則治理：</strong> 先準備 repo 政策，再依 GitHub 實際方案套用能生效的管制。</li>
+<li><strong>09 模板升級：</strong> Copier 將新政策帶回既有 repo，差異仍經 PR。</li>
+<li><strong>10 內部網站：</strong> 讓做法、限制、證據與決策容易查找。</li>
 </ul>
 <p>檢查失敗就修正同一張 PR；合併後的新問題則另外建立 Issue。</p>
 </aside>
@@ -2473,9 +2466,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
@@ -2649,9 +2639,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
@@ -2795,9 +2782,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
@@ -2893,9 +2877,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
@@ -2936,7 +2917,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li>**Action：**只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li>
 <li>**專案範圍：**一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li>
 </ul>
-<p>測試邏輯只寫在 scripts／tests。目前 active 的自動化是 CI、PR policy、Issue triage、spec-to-Issue、Milestone lifecycle、OSV 與 Dependabot；單一 release workflow 已設定為候選，另行的 promotion／release handoff／registry publisher／消費／live-integration／deployment workflow 未啟用。</p></div>
+<p>測試邏輯只寫在 scripts／tests。目前 active 的自動化是 CI、PR policy、Issue triage、spec-to-Issue、Milestone lifecycle、reviewer 指派、OSV 與 Dependabot；單一 release workflow 已設定為候選，另行的 promotion／release handoff／registry publisher／消費／live-integration／deployment workflow 未啟用。</p></div>
 
 
 </section>
@@ -2989,9 +2970,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
@@ -3086,9 +3064,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
@@ -3215,9 +3190,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
@@ -3342,9 +3314,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
@@ -3457,7 +3426,7 @@ html[data-detail-level="simple"] .detail-panel {
 
 </section>
 
-<section class="slide markdown-slide legacy-slide decision-slide" id="governance" data-content-key="governance" data-track="governance" aria-label="先辨識 GitHub 能力，再套用真的管制">
+<section class="slide markdown-slide legacy-slide decision-slide" id="governance" data-content-key="governance" data-track="governance" aria-label="只套用 GitHub 真正能強制的管制">
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
@@ -3506,9 +3475,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
@@ -3523,8 +3489,8 @@ html[data-detail-level="simple"] .detail-panel {
 
   <header class="basic-header">
     <span class="selection-sequence">步驟 08</span>
-    <h2>先辨識 GitHub 能力，再套用真的管制</h2>
-    <p class="subtitle">目前組織實測是 Free＋private，因此 main 尚未受 Ruleset 強制保護。</p>
+    <h2>只套用 GitHub 真正能強制的管制</h2>
+    <p class="subtitle">公版先準備同一套政策，維運者再依實際方案確認哪些會生效。</p>
   </header>
 
 <div class="legacy-content">
@@ -3534,17 +3500,17 @@ html[data-detail-level="simple"] .detail-panel {
       </header>
       <p class="context-line"><strong>目前實測｜</strong><code>Innoguard-Cyber-Arch</code> API 回報 Free＋private；因此 <code>main</code> 現在確實沒有強制保護，CI 紅燈仍可能被有權限者繞過。</p>
       <div class="plan-grid">
-        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保留審查設定，強制能力降級：</strong><code>.github/REVIEWERS</code> 保存 reviewer 名單；private repo 只把期望 Ruleset 保留在 <code>policies/rulesets.json</code>，因為 REST 與 GraphQL 建立 API 都會拒絕。check 標示 DEGRADED。</p><ul><li>Action 會排除 PR 作者並輪派一位個別 reviewer</li><li>這不是 team request 或 merge gate，審查仍需由人完成</li></ul></article>
+        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保留審查設定，強制能力降級：</strong><code>.github/REVIEWERS</code> 保存 reviewer 名單；private repo 只把期望 Ruleset 保留在 <code>policies/rulesets.json</code>，因為 REST 與 GraphQL 建立 API 都會拒絕。check 標示 DEGRADED。</p><ul><li><code>governance-comment.yml</code> 自動輪派一位非作者 reviewer</li><li>沒有 team request 或 merge gate，審查紀錄不能取代強制門禁</li></ul></article>
         <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches、強制核准、CODEOWNER 與必要檢查。</p><ul><li>同一個 CODEOWNERS team 必須存在並有 repo write access</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
         <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
       </div>
-      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性、repository teams 與 Ruleset API；team 不存在、不可見或沒有 repo write access 時直接停止，不能再被 Free private 的降級路徑掩蓋。導入時可設定一到多位 reviewers；Action 只從 base branch 讀取名單，排除作者後提出一位個別 review request。Free private 不支援 team request，也無法強制核准，因此這項自動化不等於 merge gate。Web UI 可供管理員人工預建 disabled Ruleset，但公開 REST／GraphQL API 無法自動建立。腳本本身不會改可見性。依序執行 <code>plan</code>、<code>apply</code>、<code>check</code>；可修正差異 fail-closed，不支援的 Ruleset 或受限制的管理欄位回報具體 DEGRADED。完整管理欄位驗證應由管理員在可信任 checkout 使用 Administration read 憑證，不把該 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更都需組織 owner 另案核准；模板不會自行執行。</span></aside>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用支援的設定：</strong><code>scripts/apply-repository-settings.sh apply</code></li><li><strong>比對全部可觀察設定：</strong><code>scripts/apply-repository-settings.sh check</code> 比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset</li><li><strong>指定 reviewer：</strong><code>reviewers</code> 產生 <code>.github/REVIEWERS</code>；Action 呼叫 <code>scripts/request-reviewer</code></li><li><strong>檢查治理漂移：</strong><code>enable_governance_drift_check</code> 開啟時，生成 repo 每日與手動呼叫 <code>scripts/check-governance-drift</code>；本模板 source repo 不啟用排程</li></ul></aside>
+      <aside class="selection-note"><strong>部署與例外原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性、repository teams 與 Ruleset API；team 不存在、不可見或沒有 repo write access 時直接停止，不能被 Free private 的降級路徑掩蓋。能力只在 live check 證明可用後啟用，不以預設成熟度或日期判斷。Free private 不支援 team request，也無法強制核准；`governance-comment.yml` 自動輪派一位非作者 reviewer，僅提出 review request，不構成 merge gate。每個暫時例外都用 Issue 記錄提出者、另一位核准者、到期日、證據與復原方式，不能把未執行的檢查寫成通過。完整管理欄位驗證由管理員在可信任 checkout 使用 Administration read 憑證，不把 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更都需 organization owner 另案核准。</span></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>唯一來源：</strong><code>.csarc/config.yml</code> 保存 <code>branch_strategy</code>、<code>code_owner</code>、<code>reviewers</code>、<code>project_visibility</code> 與選配的 <code>enable_governance_drift_check</code></li><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用與核對：</strong><code>apply</code> 套用支援項目；<code>check</code> 比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset</li><li><strong>目前自動化：</strong><code>governance-comment.yml</code> 自動輪派 reviewer；<code>scripts/check-governance-drift</code> 可在本機執行，開啟 <code>enable_governance_drift_check</code> 後生成 repo 另有每日排程 Action</li><li><strong>網站邊界：</strong>既有 identity／governance keys 產生預設；<code>docs/site-content.js</code> 與 <code>docs/site-theme.css</code> 仍由專案維護</li></ul></aside>
       <table class="decision-register" aria-label="GitHub 方案與 apply／check 行為對照">
         <thead><tr><th>GitHub 方案與可見性</th><th><code>apply</code> 結果</th><th><code>check</code>／PR／CI/CD 行為</th></tr></thead>
         <tbody>
           <tr><td>Free＋public</td><td>透過 REST 套用並啟用 Ruleset</td><td>驗證 <code>main</code> 的有效規則；缺少或不符即失敗</td></tr>
-          <tr><td>Free organization＋private</td><td>套用基本設定，並把期望 Ruleset 保留在 <code>policies/rulesets.json</code>；公開 API 無法建立 Ruleset</td><td>標示 <code>DEGRADED</code>，Action 提出一位個別 review request；team request、紅燈或未核准都不能成為 merge gate</td></tr>
+          <tr><td>Free organization＋private</td><td>套用基本設定，並把期望 Ruleset 保留在 <code>policies/rulesets.json</code>；公開 API 無法建立 Ruleset</td><td>標示 <code>DEGRADED</code>；workflow 自動輪派一位個別 reviewer，team request、紅燈或未核准都不能成為 merge gate</td></tr>
           <tr><td>Pro 個人帳號＋private</td><td>套用並啟用 Ruleset</td><td>與 Free public 相同</td></tr>
           <tr><td>Team／Enterprise organization＋private</td><td>確認 CODEOWNERS team 後套用並啟用 Ruleset</td><td>必要審查、CODEOWNER 與 status checks 成為 merge gate；不符政策時 fail-closed</td></tr>
         </tbody>
@@ -3553,41 +3519,92 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 
 
-<div class="markdown-body basic-summary"><table>
+<div class="markdown-body basic-summary"><p>公版會準備負責人、審查人、repo 基本設定與預期的分支規則。維運者檢查 GitHub 實際方案後：</p>
+<ul>
+<li>支援的管制才套用並驗證。</li>
+<li>付費方案才有的功能若不可用，會標成 <code>DEGRADED</code> 並改由人工處理，不會假裝已強制。</li>
+<li>原本可以套用、但目前設定不一致的項目會停止，修正後才能繼續。</li>
+</ul>
+<aside class="technical-detail" data-content-key="governance-capability">
+  <h3>方案能力、啟用與升級條件</h3>
+  <table>
 	<thead>
 			<tr>
 					<th>GitHub 狀態</th>
-					<th><code>apply</code> 結果</th>
-					<th>實際門禁</th>
+					<th>公版能做什麼</th>
+					<th>需要人處理什麼</th>
 			</tr>
 	</thead>
 	<tbody>
 			<tr>
-					<td>Free＋public</td>
-					<td>透過 REST 套用 Ruleset</td>
-					<td>缺少或不符即失敗</td>
+					<td>Free＋public，或 Pro 個人＋private</td>
+					<td>套用並檢查 repo Ruleset</td>
+					<td>套用前先審查變更內容</td>
 			</tr>
 			<tr>
 					<td>Free organization＋private</td>
 					<td>套基本設定，期望 Ruleset 留在 <code>policies/rulesets.json</code></td>
-					<td>標示 <code>DEGRADED</code>，自動請一位同事 review；無 merge gate</td>
-			</tr>
-			<tr>
-					<td>Pro 個人＋private</td>
-					<td>套用 Ruleset</td>
-					<td>與 Free public 相同</td>
+					<td>workflow 自動輪派 reviewer 並留下審查紀錄；沒有強制合併門禁</td>
 			</tr>
 			<tr>
 					<td>Team／Enterprise organization＋private</td>
-					<td>確認 CODEOWNERS team 後套用 Ruleset</td>
-					<td>審查、CODEOWNER 與 status checks 成為 merge gate</td>
+					<td>確認 CODEOWNERS team 後套用並檢查 Ruleset</td>
+					<td>組織身分、網路、稽核或不可逆變更另由 organization owner 核准</td>
 			</tr>
 	</tbody>
 </table>
-<aside class="technical-detail" data-content-key="governance-observation">
-  <h3>實際操作與觀察限制</h3>
-  <p>依序執行 <code>scripts/apply-repository-settings.sh plan</code>、<code>apply</code>、<code>check</code>。<code>check</code> 比對 CODEOWNERS、repository、Actions、政策 labels 與有效 Ruleset。所有 repo 都從 base branch 的 <code>.github/REVIEWERS</code> 排除作者後請一位同事 review；這不是 merge gate。<code>enable_governance_drift_check</code> 開啟時，生成 repo 每日重跑本機可用的 <code>scripts/check-governance-drift</code>，可修正偏離會開立或更新一張追蹤 Issue；關閉時不產生兩個檔案。本模板 source repo 只保留程式供下發與本機驗證，不另跑每日排程。</p>
-<p>每次檢查都是快照：兩次執行之間曾變更又復原的事件仍需 GitHub audit log 或組織層監控。完整管理欄位應由管理員在可信任 checkout 使用 Administration read 憑證，不把 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更需組織 owner 另案核准。</p>
+<p>能力以實際證據啟用，不以預設成熟度或日期判定。Repo 可見性或方案變更後重跑 <code>plan</code>、<code>apply</code>、<code>check</code>；真的不支援就保留 <code>DEGRADED</code>，非預期的 API 或設定錯誤則停止。</p>
+</aside>
+<aside class="technical-detail" data-content-key="governance-config">
+  <h3>單一設定來源與責任層級</h3>
+  <table>
+	<thead>
+			<tr>
+					<th>層級</th>
+					<th><code>.csarc/config.yml</code> key</th>
+					<th>預設／允許值</th>
+					<th>產生或驗證位置</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>必要基線</td>
+					<td><code>branch_strategy</code></td>
+					<td>預設 <code>delivery</code>；可選 <code>delivery</code>、<code>main</code></td>
+					<td>分支指引與 <code>policies/rulesets.json</code></td>
+			</tr>
+			<tr>
+					<td>組織政策</td>
+					<td><code>code_owner</code></td>
+					<td>一個存在且有 repo write access 的 <code>@organization/team</code></td>
+					<td><code>.github/CODEOWNERS</code>；由 repository settings plan／apply／check 驗證</td>
+			</tr>
+			<tr>
+					<td>組織政策</td>
+					<td><code>reviewers</code></td>
+					<td>一個或多個 GitHub 使用者名稱</td>
+					<td><code>.github/REVIEWERS</code>；<code>governance-comment.yml</code> 在每張非 draft PR 自動輪派</td>
+			</tr>
+			<tr>
+					<td>專案選擇</td>
+					<td><code>project_visibility</code></td>
+					<td>預設 <code>private</code>；可選 <code>public</code>、<code>private</code>、Enterprise <code>internal</code></td>
+					<td>能力偵測與選配安全預設</td>
+			</tr>
+			<tr>
+					<td>專案選配</td>
+					<td><code>enable_governance_drift_check</code></td>
+					<td>預設 <code>false</code>；設為 <code>true</code> 產生每日排程 Action</td>
+					<td><code>false</code> 只保留本機 drift checker；<code>true</code> 另生成 <code>governance-drift.yml</code></td>
+			</tr>
+	</tbody>
+</table>
+<p>公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier <code>_src_path</code>、<code>_commit</code>。衍生公版可在同一份 YAML 增加 namespaced keys，不另建 profile。低頻 GitHub 細節留在原生 repository settings 或 <code>policies/</code>，不擴張 CSARC schema。</p>
+<p>內部網站先沿用 <code>project_name</code>、<code>project_description</code>、<code>repository_url</code>、<code>code_owner</code>、<code>branch_strategy</code> 產生預設內容；專案文字與樣式留在 <code>docs/site-content.js</code>、<code>docs/site-theme.css</code>。只有後續證明是高價值且跨檔的網站設定，才在同一 YAML 增加 namespaced key。</p>
+</aside>
+<aside class="technical-detail" data-content-key="governance-exceptions">
+  <h3>暫時例外怎麼留下紀錄</h3>
+  每個例外使用一張連結的 Issue，寫明提出者、另一位核准者、到期日、證據與復原方式。只有平台確實無法提供功能，或限時事故復原時可以縮小管制；不能把未執行的檢查寫成通過、不能把高權限 token 暴露給 PR 程式，也不能默默變成永久做法。確認復原後才關單；延期必須再次明確核准。
 </aside>
 </div>
 
@@ -3642,9 +3659,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
@@ -3705,7 +3719,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li>**Active：**CLI 在 candidate 內完成建立、導入或更新與驗證，成功後才寫入 target；公版完整測試會重跑三條路徑。</li>
 <li>**Manual：**首次導入的外部 plan、來源與第一張 PR 由人核准。</li>
 <li>**Pending：**通知 workflow 與 checker script 已恢復，Copier fixture 測試也驗證只在選用時才會產生；但 checker 自身的更新判斷與 Issue 通知邏輯尚無專屬回歸測試，也尚未觀察到排程的 hosted 執行，因此不宣稱排程已能自動通知。</li>
-<li>**Retired：**舊 reviewer assignment、remote governance 與 delivery orchestration 不隨本頁恢復。</li>
+<li>**Retired：**remote governance 與 delivery orchestration 不隨本頁恢復；reviewer assignment 已恢復，改由「規則治理」頁說明。</li>
 </ul>
 </aside>
 </div>
@@ -3762,9 +3776,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated active" aria-current="step">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
@@ -3808,131 +3819,8 @@ html[data-detail-level="simple"] .detail-panel {
 </details>
 <aside class="technical-detail" data-content-key="docs-site-access">
   <h3>存取與維護邊界</h3>
-  <code>noindex</code> 與 <code>robots.txt</code> 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。
-</aside>
-</div>
-
-
-</section>
-
-<section class="slide markdown-slide legacy-slide decision-slide" id="rollout" data-content-key="rollout" data-track="rollout" aria-label="分階段導入，每一步都能停">
-  <aside class="journey-rail" aria-label="簡報目錄">
-  <h3>使用公版</h3>
-  <ol class="journey-use">
-    <li class="journey-item human">
-      <a href="#capability"><span>能力／導入</span></a>
-    </li>
-    <li class="journey-item automated">
-      <a href="#flow"><span>CI/CD 流程</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#files"><span>檔案地圖</span></a>
-    </li>
-  </ol>
-  <h3>開發與維護</h3>
-  <ol class="journey-main">
-    <li class="journey-item human">
-      <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
-    </li>
-    <li class="journey-item automated">
-      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
-    </li>
-    <li class="journey-item automated">
-      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
-    </li>
-    <li class="journey-item automated">
-      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
-    </li>
-    <li class="journey-item automated">
-      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
-    </li>
-  </ol>
-  <h3>公版管理</h3>
-  <ol class="journey-support">
-    <li class="journey-item human">
-      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
-    </li>
-    <li class="journey-item automated">
-      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
-    </li>
-    <li class="journey-item human active" aria-current="step">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
-  </ol>
-  <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
-  <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
-  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
-  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
-  <div class="journey-legend" aria-label="顏色說明">
-    <span><i class="human" aria-hidden="true"></i>需要人決策</span>
-    <span><i class="automated" aria-hidden="true"></i>預設自動完成</span>
-    <span data-audience="maintainer"><i class="maintainer" aria-hidden="true"></i>僅維運可見</span>
-  </div>
-</aside>
-
-  <header class="basic-header">
-    <span class="selection-sequence">步驟 11</span>
-    <h2>分階段導入，每一步都能停</h2>
-    <p class="subtitle">成熟度看實際證據，不以日期或檔案存在假裝完成。</p>
-  </header>
-
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 的舊 release handoff／attestation 敘述是 2026-08 歷史證據；現行已改為單一 release workflow，attestation 與 consumption 仍是選配。</span></aside>
-<div class="legacy-content">
-      <header>
-        <h2>分階段導入，<span class="accent">每一步都能驗證，也能停下來</span></h2>
-        <p class="subtitle"><strong>三層導入｜</strong>基本能力現在就隨模板產生；未來與可選能力先寫清楚觸發門檻，不用空檔案假裝完成。</p>
-      </header>
-      <p class="context-line"><strong>問題與目的｜</strong>一次導入模板、CI、部署、監控與 AI，團隊很難判斷哪裡出錯；分期後每一步都有完成條件。</p>
-      <div class="decision-strip">
-        <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">不按聲量或日期一次把功能全打開</span></summary><ul><li><strong>一次切換：</strong>錯誤會同時擴散到所有專案</li><li><strong>固定日期解鎖：</strong>時間到了不代表使用條件已成熟</li><li><strong>所有語言同時上：</strong>未驗證的 profile 只是空承諾</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">三層不是日期，而是導入條件</span></summary><p><strong>基本導入：</strong>共通基線與 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已有可執行實作。Free 會先查能力並套可用設定；private repo 不宣稱有 Ruleset 強制保護。<br><strong>已完成線上驗證：</strong>release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier 更新。<br><strong>語言模組已驗收：</strong>Python、Rust 與 TypeScript 都會實際建立、導入既有 repo、更新、測試、建置與封裝，因此列為 beta。<br><strong>未來／可選：</strong>中央 catalog／治理平台、多 repo、Go、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></details>
-      </div>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>哪些 profile 已可用或仍在規劃：</strong><code>profiles/catalog.yaml</code></li><li><strong>先查方案再套可用設定：</strong><code>scripts/apply-repository-settings.sh</code>；Ruleset／App 條件備妥後再啟用</li><li><strong>建立與更新路徑是否都能通過：</strong><code>scripts/verify-template.sh</code></li></ul></aside>
-</div>
-
-
-<div class="markdown-body basic-summary"><table>
-	<thead>
-			<tr>
-					<th>層級</th>
-					<th>目前狀態</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>基本能力</td>
-					<td>共通基線與 Python、Rust、TypeScript 語言模組，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 網站已有可執行檔案</td>
-			</tr>
-			<tr>
-					<td>現行線上證據</td>
-					<td>active CI／policy workflows，以及第一個 CI-only 下游導入與更新</td>
-			</tr>
-			<tr>
-					<td>發版證據</td>
-					<td>候選 release workflow 預計建立 exact-tag 成品、checksum、SPDX SBOM 與 immutable Release；待預設分支實跑，舊 handoff／consumption run 只供稽核</td>
-			</tr>
-			<tr>
-					<td>語言模組已驗收</td>
-					<td>Python、Rust、TypeScript 都通過建立、既有 repo 導入、更新、鎖檔、測試、建置與封裝</td>
-			</tr>
-			<tr>
-					<td>未來／選配</td>
-					<td>中央 catalog／治理平台、Go、託管登入、部署、監控、RAG、自主 Agent</td>
-			</tr>
-	</tbody>
-</table>
-<aside class="technical-detail" data-content-key="rollout-evidence">
-  <h3>為什麼不一次全部打開</h3>
-  一次切換會讓錯誤同時擴散，固定日期也不代表使用條件成熟。一個真實 consuming repo 證明共用導入、更新與線上 CI 邊界；各語言再用可重現的建立、既有 repo 導入、更新與原生工具鏈測試取得 beta，不另外建立重複的專用試行 repo。
+  <p><code>noindex</code> 與 <code>robots.txt</code> 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。</p>
+<p>網站以既有 <code>.csarc/config.yml</code> 的 <code>project_name</code>、<code>project_description</code>、<code>repository_url</code>、<code>code_owner</code>、<code>branch_strategy</code> 產生初始名稱、說明、連結、負責人與分支指引。專案內容與樣式仍由 <code>docs/site-content.js</code>、<code>docs/site-theme.css</code> 管理，不另建設定來源；後續只有具體實作證明為高價值且跨檔的網站選項，才在同一 YAML 增加 namespaced key。</p>
 </aside>
 </div>
 
@@ -3988,9 +3876,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
@@ -4013,7 +3898,7 @@ html[data-detail-level="simple"] .detail-panel {
 <div class="legacy-content">
       <header>
         <h2>2026/05 內部分享簡報｜<span class="accent">SDLC 盤點</span></h2>
-        <p class="subtitle">回顧 2026 年 5 月內部分享的構想：保留方法，修正實作與導入層級；點選每列可看三句判斷。</p>
+        <p class="subtitle">回顧 2026 年 5 月內部分享的構想：保留方法，修正實作與平台能力假設；點選每列可看三句判斷。</p>
       </header>
       <table class="bridge-table" aria-label="五月版簡報與目前設計的逐頁對照">
         <colgroup><col class="page-col"><col class="topic-col"><col class="status-col"><col class="decision-col"></colgroup>
@@ -4022,7 +3907,7 @@ html[data-detail-level="simple"] .detail-panel {
           <tr><td>p.3</td><td>SDLC 核心階段</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>把計畫到監控集中在 GitHub</summary><div class="bridge-popover"><p><strong>五月版｜</strong>計畫、開發、測試、部署、監控的核心順序保留。</p><p><strong>本次判斷｜</strong>工作單、模板、合併申請、自動檢查與交付設定都放在 GitHub，方便持續維護。</p><p><strong>落地方式｜</strong>不是每個專案都要部署與監控，但都先遵守工作規劃、變更審查與驗證規則。</p></div></details></td></tr>
           <tr><td>p.4</td><td>Jira Ticket</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>每次改動先有最小 GitHub Issue</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本用 Jira 的 Epic → Story → Task 分工；本次只保留必要的 GitHub Issue、里程碑與 spec。</p><p><strong>本次判斷｜</strong>一次性工作選一種類型、寫問題與完成條件；複雜需求先開規劃 Issue，再由核准 spec 建立實作 Issue。新增範圍另開 Issue。</p><p><strong>落地方式｜</strong><code>work-item.yml</code> 有類型、問題與完成條件兩個必填欄位，另加一個選填補充；<code>issue-triage.yml</code> 指派開單者；PR workflow 核對標籤、分支與同號未結案 Issue。</p></div></details></td></tr>
           <tr><td>p.5</td><td>版本控制</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>delivery branch 是 CI 整合邊界，不假裝成實體環境</summary><div class="bridge-popover"><p><strong>五月版｜</strong>保留平行分支，但不要求每案具備實體 DEV 環境。</p><p><strong>本次判斷｜</strong>獨立工作從最新 <code>main</code> 建立並直接回 <code>main</code>；只有需共同驗收的里程碑使用 <code>dev/m*</code>，獨立 canary 才用暫時 <code>dev/i*</code>，hotfix 也直接修正 main。</p><p><strong>落地方式｜</strong>一般 PR 依變更風險執行必要檢查，里程碑／canary 交付與 hotfix 執行完整檢查；只在 final delivery 或明列 dependency 時同步最新 main。</p></div></details></td></tr>
-          <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>Issue、編號分支與 PR 形成固定鏈</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是保護分支的唯一入口，方向保留；三層審查改成依風險增加審查者。</p><p><strong>本次判斷｜</strong>一般 PR 要有同編號 Issue、CI 與一位同事；高風險架構變更另附決策紀錄。</p><p><strong>落地方式｜</strong>分支固定 <code>type/123-short-slug</code>，PR 內文固定 <code>Closes #123</code>；Action 會輪派一位非作者 reviewer，但 Free private 仍無法把核准強制成 merge gate。</p></div></details></td></tr>
+          <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>Issue、編號分支與 PR 形成固定鏈</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是保護分支的唯一入口，方向保留；三層審查改成依風險增加審查者。</p><p><strong>本次判斷｜</strong>一般 PR 要有同編號 Issue、CI 與一位同事；高風險架構變更另附決策紀錄。</p><p><strong>落地方式｜</strong>分支固定 <code>type/123-short-slug</code>，PR 內文固定 <code>Closes #123</code>；<code>governance-comment.yml</code> 在每張非 draft PR 自動輪派一位非作者 reviewer；GitHub Team 以上才支援 team request 與強制核准。</p></div></details></td></tr>
           <tr><td>p.7</td><td>CI 自動化管線</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>本機與 CI 共用入口，依風險分層執行</summary><div class="bridge-popover"><p><strong>五月版｜</strong>自動觸發、測試、格式與靜態錯誤檢查全部保留。</p><p><strong>本次判斷｜</strong>一般 Issue PR 跑 fast；promotion、hotfix、merge queue 與未知高風險路徑跑 full；OSV、Zizmor 與 remote governance 另依 scope／schedule 執行。</p><p><strong>落地方式｜</strong>固定 <code>verify</code> aggregate 避免 skipped workflow 留下 Pending；delivery sync 併入 <code>title</code> policy，候選 full run 不取消，普通 PR 新 commit 則取消舊 run。Ruleset 可用時強制 <code>title</code>、<code>verify</code> 與 <code>promotion</code>。</p></div></details></td></tr>
           <tr><td>p.8</td><td>CD 專案管理</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>先完成 repository delivery，再審查版本與發版</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本預設 DEV → STAGING → Canary → PROD；本次不要求每個專案照搬四層。</p><p><strong>本次判斷｜</strong>里程碑、獨立工作與 hotfix 合併到 <code>main</code> 都先算 repository delivery；需要新版本時再建立一張可審查版本 PR。</p><p><strong>落地方式｜</strong>Release Please 同步版本與 CHANGELOG；版本 PR 合併後，單一 workflow 建立 checksum、SBOM、成品與 immutable GitHub Release。Attestation 與消費端門禁仍是選配。</p></div></details></td></tr>
           <tr><td>p.9</td><td>可觀測性</td><td><span class="bridge-status defer">第二階段</span></td><td><details class="bridge-detail"><summary>只有上線服務才做監控和值班</summary><div class="bridge-popover"><p><strong>五月版｜</strong>操作手冊、日誌、指標、追蹤、復原與值班流程保留為第二階段。</p><p><strong>本次判斷｜</strong>只對持續運行的服務導入；先依使用的雲端、環境與負責人選工具，不先綁定 Datadog 或 PagerDuty。</p><p><strong>落地方式｜</strong>測試資料另外管理成不含個資、可建立、可清除的範例，不把測資管理混成線上監控。</p></div></details></td></tr>
@@ -4148,9 +4033,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human active-selection" href="#ecosystem" aria-current="page">工具附錄</a>
@@ -4327,9 +4209,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human active-selection" href="#similar-tools" aria-current="page">相似工具</a>
@@ -4358,7 +4237,8 @@ html[data-detail-level="simple"] .detail-panel {
   <button id="similar-tools-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>依賴安全</button>
   <button id="similar-tools-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR／合併</button>
   <button id="similar-tools-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-delivery" data-similar-tools-tab="7"><small>Journey 07</small>版本／交付</button>
-  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="8"><small>Journey 09</small>模板升級</button>
+  <button id="similar-tools-tab-governance" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-governance" data-similar-tools-tab="8"><small>Journey 08</small>規則治理</button>
+  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="9"><small>Journey 09</small>模板升級</button>
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
   <div class="similar-tools-legend">
@@ -4385,7 +4265,7 @@ html[data-detail-level="simple"] .detail-panel {
           <td>2,952</td>
           <td>Project generator：用一般程式語言宣告專案，持續 synth 出受管設定與工作流程。</td>
           <td><ul><li>projen 把 .projenrc 當唯一來源，大量生成檔不允許直接修改。</li><li>CSARC 用 Copier 發布可更新基線，並保留產品檔案與政策檔案的責任邊界。</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="03: 完全符合">03</span><span class="coverage-tag full" title="07: 完全符合">07</span><span class="coverage-tag full" title="09: 完全符合">09</span><span class="coverage-tag partial" title="01: 部分符合">01</span><span class="coverage-tag partial" title="04: 部分符合">04</span><span class="coverage-tag partial" title="05: 部分符合">05</span><span class="coverage-tag partial" title="06: 部分符合">06</span><span class="coverage-tag partial" title="08: 部分符合">08</span><span class="coverage-tag partial" title="11: 部分符合">11</span>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="03: 完全符合">03</span><span class="coverage-tag full" title="07: 完全符合">07</span><span class="coverage-tag full" title="09: 完全符合">09</span><span class="coverage-tag partial" title="01: 部分符合">01</span><span class="coverage-tag partial" title="04: 部分符合">04</span><span class="coverage-tag partial" title="05: 部分符合">05</span><span class="coverage-tag partial" title="06: 部分符合">06</span><span class="coverage-tag partial" title="08: 部分符合">08</span>
           </div></td>
         </tr>
         <tr>
@@ -4394,22 +4274,13 @@ html[data-detail-level="simple"] .detail-panel {
           <td>1,207</td>
           <td>Agent-ready repository framework：把 AI 工作規則、持久計畫、驗證與安全更新放進 repo。</td>
           <td><ul><li>Repository Harness 偏向替既有 repo 加上 agent 工作框架與安全更新機制。</li><li>CSARC 另外提供可生成的技術 profile、GitHub 治理、交付與版本政策。</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag full" title="09: 完全符合">09</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="06: 部分符合">06</span><span class="coverage-tag partial" title="08: 部分符合">08</span><span class="coverage-tag partial" title="11: 部分符合">11</span>
-          </div></td>
-        </tr>
-        <tr>
-          <th scope="row"><a href="https://github.com/backstage/backstage" target="_blank" rel="noreferrer">Backstage</a></th>
-          <td>v1.54.6<br>(2026-08-28)</td>
-          <td>34,277</td>
-          <td>Developer portal framework：以 Software Catalog、Software Templates 與 TechDocs 統一軟體生態系入口。</td>
-          <td><ul><li>Backstage 是需要持續維運的中央 portal，強項是服務探索、owner 與 scaffolding。</li><li>CSARC 是可攜的 repo-local 公版，直接把治理、驗證與交付基線放進每個 repo。</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="10: 完全符合">10</span><span class="coverage-tag full" title="11: 完全符合">11</span><span class="coverage-tag partial" title="04: 部分符合">04</span><span class="coverage-tag partial" title="08: 部分符合">08</span><span class="coverage-tag partial" title="09: 部分符合">09</span>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: 完全符合">01</span><span class="coverage-tag full" title="02: 完全符合">02</span><span class="coverage-tag full" title="09: 完全符合">09</span><span class="coverage-tag partial" title="03: 部分符合">03</span><span class="coverage-tag partial" title="06: 部分符合">06</span><span class="coverage-tag partial" title="08: 部分符合">08</span>
           </div></td>
         </tr>
       </tbody>
     </table>
   </div>
-  <p class="similar-tools-note"><strong>判斷標準：</strong>所有工具都須在擷取日前 6 個月內有發版；主要工具至少涵蓋 5 個 Journey，依完全、部分符合數量排序；其他工具至少 1,000 Stars。Journey tag 依 01–11 排列。</p>
+  <p class="similar-tools-note"><strong>判斷標準：</strong>所有工具都須在擷取日前 6 個月內有發版；主要工具至少涵蓋 5 個 Journey，依完全、部分符合數量排序；其他工具至少 1,000 Stars。Journey tag 依 01–10 排列。</p>
 </div>
 <div id="similar-tools-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-work" data-similar-tools-panel hidden>
   <div class="similar-tools-legend"><span class="reference">只比較需求記在哪裡、單項與群組如何表示、里程碑如何取得開工同意，以及工作變大時何時增加文件</span><span class="capture-date">Stars 擷取日｜2026-09-01</span></div>
@@ -4422,12 +4293,12 @@ html[data-detail-level="simple"] .detail-panel {
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">.projenrc project model</a>：.projenrc 是唯一手寫真相，其他專案檔由 synth 產生。</span></li>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：repo 同時保存產品文件、決策、plan、程式與驗證證據。</span></li>
-              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entity 保存服務、owner 與關係的中央真相。</span></li>
           </ul></td>
           <td><ul>
               <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：brief、spec、architecture 依複雜度累積成持久工作脈絡。</span></li>
               <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Specs / Changes</a>：specs 保存 current truth，changes 保存尚未接受的 delta。</span></li>
               <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：spec、plan、tasks 與 constitution 在 repo 形成 feature 脈絡。</span></li>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entity 保存服務、owner 與關係的中央真相。</span></li>
               <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Plans and task records</a>：把已確認的設計與實作計畫寫進 repo，再依計畫逐項執行。</span></li>
               <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,581</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Git-native backlog</a>：任務、狀態與決策以 Markdown 留在 Git history。</span></li>
           </ul></td>
@@ -4584,9 +4455,9 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>建立時如何選擇程式語言</strong><span>比較固定專案類型、可複選語言模組，以及完全交由使用者事後設定。<br><br><b>CSARC：</b>建立或導入時可獨立選擇 Python、Rust、TypeScript；沒有選取的語言不產生相關檔案或 CI 步驟。</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Project types &#43; components</a>：先選語言／框架的 project type，再以 components 加入能力；不像 CSARC 以獨立語言勾選組合同一個 repo。</span></li>
-              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/input-examples" target="_blank" rel="noreferrer">Template parameters &#43; conditional steps</a>：建立元件時可詢問語言／框架並條件式執行步驟，適合入口網站；既有 repo 仍要另接更新機制。</span></li>
           </ul></td>
           <td><ul>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/input-examples" target="_blank" rel="noreferrer">Template parameters &#43; conditional steps</a>：建立元件時可詢問語言／框架並條件式執行步驟，適合入口網站；既有 repo 仍要另接更新機制。</span></li>
               <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Multiselect questions &#43; conditional files</a>：模板可用複選答案決定產生哪些語言檔案；Copier 提供機制，但不替模板決定要用哪些測試工具。</span></li>
           </ul></td>
         </tr>
@@ -4779,6 +4650,42 @@ html[data-detail-level="simple"] .detail-panel {
     </table>
   </div>
 </div>
+<div id="similar-tools-panel-governance" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-governance" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">只比較治理規則放在哪裡、平台能力不足時如何降級，以及暫時例外如何留下責任與復原路徑</span><span class="capture-date">Stars 擷取日｜2026-09-01</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="規則治理">
+    <table class="similar-tools-matrix similar-tools-philosophy-matrix">
+      <thead><tr><th scope="col">功能分野／具體做法</th><th scope="col">主要相似工具</th><th scope="col">其他生態圈工具</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>治理規則放在哪裡</strong><span>比較 repo 內宣告、產生器設定與中央平台政策，並區分期望狀態和 GitHub 實際狀態。<br><br><b>CSARC：</b>`.csarc/config.yml` 保存高價值選項，`policies/` 保存低頻 GitHub 期望狀態；`plan`／`apply`／`check` 再核對 live repository。</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/integrations/github/" target="_blank" rel="noreferrer">.projenrc &#43; GitHub components</a>：在 .projenrc 宣告 repository 與 workflow 設定後由 synth 產生檔案；平台實際是否強制仍交給 GitHub。</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/permissions/overview/" target="_blank" rel="noreferrer">Permission framework</a>：權限政策在中央 Backstage backend 評估，適合 portal；不像 CSARC 將可攜政策與期望 GitHub 狀態保存在每個 repo。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>平台能力不足時怎麼辦</strong><span>比較假設所有方案都能強制、完全略過治理，以及明確降級並保留人工責任。<br><br><b>CSARC：</b>先查方案與 Ruleset API；不支援的能力標示 `DEGRADED` 並指定人工步驟，可修正的不一致則停止。</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/integrations/github/" target="_blank" rel="noreferrer">GitHub integration</a>：可以產生 GitHub 設定與 workflow，但不以 CSARC 的 plan／apply／check 模型回報每個 repo 的方案降級。</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/permissions/overview/" target="_blank" rel="noreferrer">Permission decisions</a>：權限框架回傳授權決策，但不負責偵測 GitHub 方案是否能建立 Ruleset；repo 門禁仍需另接 GitHub 設定。</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>暫時例外如何收回</strong><span>比較口頭放寬、永久 bypass 與有提出者、核准者、期限、證據和復原方式的限時例外。<br><br><b>CSARC：</b>例外使用連結 Issue 留下五項欄位；另一位人員核准，復原驗證後才關閉，延期必須重新核准。</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Human checkpoints</a>：高風險或不可逆操作可要求人類檢查點；它沒有另訂 CSARC 的提出者、核准者、期限、證據與復原五欄。</span></li>
+          </ul></td>
+          <td><ul>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 <div id="similar-tools-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-template-upgrade" data-similar-tools-panel hidden>
   <div class="similar-tools-legend"><span class="reference">只比較工具如何建立新 repo、首次導入既有 repo、套用後續更新，以及衝突由誰處理</span><span class="capture-date">Stars 擷取日｜2026-09-01</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="模板升級">
@@ -4789,11 +4696,11 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>定義如何變成 repo 狀態</strong><span>比較人直接改檔、由設定產生檔案，或由服務持續修正遠端狀態。<br><br><b>CSARC：</b>copier.yml、template/ 與 profiles/catalog.yaml 宣告生成基線；同一份 .csarc/config.yml 保存 repo 選項，配對檔由 root 產生 template 副本，產品檔仍由下游 repo 持有。</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：用 typed components 宣告期望專案，再由 synth 收斂檔案。</span></li>
-              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entity 與 Software Template 宣告 portal 中的元件和建立流程。</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。</span></li>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entity 與 Software Template 宣告 portal 中的元件和建立流程。</span></li>
               <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：Recipe 宣告 semantic transformation，再由 parser／visitor 套用。</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。</span></li>
           </ul></td>
         </tr>
         <tr>
@@ -4801,11 +4708,11 @@ html[data-detail-level="simple"] .detail-panel {
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen upgrade &#43; synth</a>：專案以程式定義；建立與升級都重新 synth 受管檔，手改會被 anti-tamper 攔下，衝突不是逐檔三方合併。</span></li>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：保存 exact upstream base，以三方合併更新；重疊衝突時不改 managed files，保留 BASE／LOCAL／UPSTREAM 讓人 continue 或 abort。</span></li>
-              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：擅長建立新元件；既有 repo 遷移仍要另接工具。</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：answers file 保存來源與上次答案；update 以三方差異套新版，inline marker 或 .rej 衝突由人處理。CSARC 再包一層 candidate-first，未通過前不改 target。</span></li>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：擅長建立新元件；既有 repo 遷移仍要另接工具。</span></li>
               <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：不用文字模板覆蓋檔案，而是直接執行跨版本語意遷移。</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：answers file 保存來源與上次答案；update 以三方差異套新版，inline marker 或 .rej 衝突由人處理。CSARC 再包一層 candidate-first，未通過前不改 target。</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -4866,9 +4773,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
@@ -4912,13 +4816,13 @@ html[data-detail-level="simple"] .detail-panel {
         <tbody>
           <tr>
             <th scope="row"><strong>工作 PR（topic → main 或 dev/m*）</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>fast 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>docs &lt; 1 分鐘；fast 2–5 分鐘</li><li><strong>04 程式語言：</strong>fast 已包含：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–5 分鐘（只執行已選語言）</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>09 模板升級：</strong>首次導入 0 runner 分鐘（本機＋人工）；後續更新驗證已包含在 fast 的 2–5 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–7 分鐘</p></td>
-            <td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>fast 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>docs &lt; 1 分鐘；source fast 約 1 分鐘；policy／template 變更約 2 分鐘</li><li><strong>04 程式語言：</strong>fast 已包含：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–5 分鐘（只執行已選語言）</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>09 模板升級：</strong>fast 已包含代表性建立 smoke：&lt; 1 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–4 分鐘（fast 實測 59–99 秒）</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>fast 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>docs &lt; 1 分鐘；fast 2–5 分鐘</li><li><strong>04 程式語言：</strong>fast 已包含：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–5 分鐘（只執行已選語言）</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>08 規則治理：</strong>fast 已包含：&lt; 1 分鐘；不含人工遠端核對</li><li><strong>09 模板升級：</strong>首次導入 0 runner 分鐘（本機＋人工）；後續更新驗證已包含在 fast 的 2–5 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–7 分鐘</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>fast 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>docs &lt; 1 分鐘；source fast 約 1 分鐘；policy／template 變更約 2 分鐘</li><li><strong>04 程式語言：</strong>fast 已包含：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–5 分鐘（只執行已選語言）</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>08 規則治理：</strong>fast 已包含：&lt; 1 分鐘；不含人工遠端核對</li><li><strong>09 模板升級：</strong>fast 已包含代表性建立 smoke：&lt; 1 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–4 分鐘（fast 實測 59–99 秒）</p></td>
           </tr>
           <tr>
             <th scope="row"><strong>交付 PR（dev/m*／dev/i* → main）</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>full 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>full 5–15 分鐘</li><li><strong>04 程式語言：</strong>full 已包含：Python 3–6 分鐘；Rust 2–5 分鐘；TypeScript 3–7 分鐘（只執行已選語言）</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>09 模板升級：</strong>後續更新驗證已包含在 full 的 5–15 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–17 分鐘</p></td>
-            <td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>full 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>full verification 實測 8 分 22 秒（獨占環境，#458）</li><li><strong>04 程式語言：</strong>full 已包含生成矩陣：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–4 分鐘</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>09 模板升級：</strong>full 已包含建立／導入／更新回歸：約 1–3 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–8 分鐘（完整 job 實測 6 分 16 秒）</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>full 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>full 5–15 分鐘</li><li><strong>04 程式語言：</strong>full 已包含：Python 3–6 分鐘；Rust 2–5 分鐘；TypeScript 3–7 分鐘（只執行已選語言）</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>08 規則治理：</strong>full 已包含：&lt; 1 分鐘；不含人工遠端核對</li><li><strong>09 模板升級：</strong>後續更新驗證已包含在 full 的 5–15 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–17 分鐘</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>full 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>full verification 實測 8 分 22 秒（獨占環境，#458）</li><li><strong>04 程式語言：</strong>full 已包含生成矩陣：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–4 分鐘</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>08 規則治理：</strong>full 已包含：&lt; 1 分鐘；不含人工遠端核對</li><li><strong>09 模板升級：</strong>full 已包含建立／導入／更新回歸：約 1–3 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–8 分鐘（完整 job 實測 6 分 16 秒）</p></td>
           </tr>
         </tbody>
       </table>
@@ -5474,9 +5378,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
@@ -5594,9 +5495,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
@@ -5739,9 +5637,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
@@ -5900,9 +5795,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
@@ -6049,9 +5941,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
   <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
@@ -6169,9 +6058,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>導入層級</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">工具附錄</a>
@@ -6446,6 +6332,17 @@ policies/rulesets.json`
       ],
       governance: [
         {
+          title: '單一來源｜治理只保存高價值選項',
+          goal: 'root、生成 repo 與衍生公版共用同一份公開設定，不再維護 profile 或網站專用設定檔。',
+          summary: '分支、owner、reviewer、可見性與治理漂移選配存在 `.csarc/config.yml`；低頻 GitHub 原生細節仍留在 `policies/`。生成 repo 才另含 Copier 來源 metadata。',
+          file: '.csarc/config.yml＋policies/',
+          code: `branch_strategy: delivery  # delivery | main
+code_owner: "@organization/team"
+reviewers: "@alice,@bob"
+project_visibility: private  # public | private | internal
+enable_governance_drift_check: false`
+        },
+        {
           title: '分開檢查 Ruleset policy、遠端儲存與實際強制能力',
           goal: 'Copier 建檔時可能還沒有遠端 repo；真正套用前再向 GitHub 查詢，避免依使用者手填的方案猜測。',
           summary: '先確認登入者具有 repo admin；REST endpoint 判斷 GitHub 是否會強制規則。Free private 的 REST 與 GraphQL mutation 都會回 403；GraphQL query 僅用來偵測管理員是否曾從 Web UI 人工預建。其他未知錯誤會停止。',
@@ -6494,6 +6391,17 @@ required checks:
 # enable_governance_drift_check=true generates the daily workflow and
 # script together; false generates neither. This template's own source
 # repo keeps the script for local verification but does not schedule it.`
+        },
+        {
+          title: '暫時例外｜用 Issue 保存完整責任',
+          goal: '方案限制與事故復原可以暫時改走人工，但不能把缺少的門禁寫成已啟用。',
+          summary: '每張例外 Issue 都要有提出者、另一位核准者、到期日、證據與復原方式；復原驗證後才關單，延期需重新核准。',
+          file: 'GitHub Issue＋scripts/apply-repository-settings.sh check',
+          code: `Proposer: @alice
+Approver: @bob
+Expires: YYYY-MM-DD
+Evidence: <exact check or platform limitation>
+Recovery: <command and expected result>`
         }
       ],
       template: [
@@ -6911,58 +6819,17 @@ consumer verifies its own policy`
         {
           title: '來源分工、輸出維持單檔',
           goal: 'Copier 更新公版版型時，不能覆寫每個專案自行補充的內容。',
-          summary: '`site/` 與 renderer 由公版更新；專案內容與 theme overrides 保留，再重建 `docs/index.html`。',
-          file: 'template/site/＋template/docs/＋copier.yml',
-          code: `_skip_if_exists:
+          summary: '既有 identity／governance keys 產生網站預設；`site/` 與 renderer 由公版更新，專案內容與 theme overrides 保留。只有證明為高價值且跨檔的選項才在同一 YAML 加 namespaced key。',
+          file: '.csarc/config.yml＋template/site/＋template/docs/',
+          code: `project_name: Example
+project_description: Example repository
+repository_url: https://github.com/example/repo
+code_owner: "@example/maintainers"
+branch_strategy: delivery
+
+_skip_if_exists:
   - docs/site-content.js
   - docs/site-theme.css`
-        }
-      ],
-      rollout: [
-        {
-          title: '語言模組依可重現證據分級',
-          goal: '基本、未來與可選不是口號，而是對可用能力的承諾。',
-          summary: '真實 consuming repo 已證明共用生命週期；Python、Rust 與 TypeScript 各自通過建立、導入、更新與原生工具鏈，列為 `beta`；Go 保持 `future`。',
-          file: 'profiles/catalog.yaml',
-          code: `ci: {stage: beta, profiles: []}
-python: {stage: beta}
-rust: {stage: beta}
-typescript: {stage: beta}
-go: {stage: future}`
-        },
-        {
-          title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
-          goal: '設定檔可以先審查；實際 repo 建立後才查方案與 API，不能使用的能力會明確略過。',
-          summary: 'Free private 在 repo 保存 ACTIVE Ruleset policy；check 仍比對 repository、Actions 與政策標籤，再將 Ruleset 限制標示 DEGRADED，並在 PR、workflow log 與 annotation 留下具體紀錄。public／Pro／Team／Enterprise 以有效規則作為門禁，可修正設定對不上政策時 fail-closed。',
-          file: 'policies/＋scripts/apply-repository-settings.sh',
-          code: `policies/repository.json
-policies/actions.json
-policies/labels.json
-policies/rulesets.json
-scripts/apply-repository-settings.sh`
-        },
-        {
-          title: '每次修改都測新案、既有案導入與後續更新',
-          goal: '可導入的條件是三條生命週期都通過，不是只看檔案存在。',
-          summary: '測試會真的執行 CLI init、adopt dry-run／報告／apply、update check／dry-run／apply 與衝突 fail-closed；adopt 報告會以同一份分析輸出 Markdown 與一頁 PDF，且不修改 target repo。CLI 內部仍以 Copier 產生與 smart update。root-only 測試資產若混入生成 repo 也會失敗。',
-          file: 'src/csarc_cli/＋tests/test_cli.py＋scripts/verify-template.sh',
-          code: `csarc init ./my-project
-csarc adopt . --dry-run --report-dir ../csarc-adoption-report
-csarc update --check --json
-csarc update`
-        },
-        {
-          title: 'Fleet 盤點與平台門檻',
-          goal: '目前只有一個真實 consuming repo，先累積採用與漂移證據，不預先部署中央平台。',
-          summary: '10 個活躍 consuming repo，或至少 3 個且反覆發生 owner／服務查找問題時才評估 catalog；至少 5 個且出現跨 repo 漂移或人工修正成本時才評估中央 policy enforcement。',
-          file: 'profiles/catalog.yaml＋governance-drift runs',
-          code: `Catalog review:
-  - 10 active consuming repositories; or
-  - 3+ repositories and repeated owner/service lookup delays
-
-Policy review:
-  - 5+ consuming repositories; and
-  - repeated cross-repository drift or measurable manual repair cost`
         }
       ],
       'template-release': [
@@ -7435,7 +7302,7 @@ gh auth status`
 
   const supplementalGuides = {
     deploy: '版本範圍、SemVer 與發布邊界',
-    governance: '部署原則、方案行為與參考資料'
+    governance: '方案能力、治理設定與例外處理'
   };
 
   Object.entries(supplementalGuides).forEach(([track, summary]) => {
