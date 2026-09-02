@@ -13,6 +13,7 @@ set -euo pipefail
 #                                         each pair that has drifted.
 paired_files=(
   CLAUDE.md
+  .gitleaks.toml
   .github/ISSUE_TEMPLATE/config.yml
   .github/ISSUE_TEMPLATE/bug.yml
   .github/ISSUE_TEMPLATE/documentation.yml
