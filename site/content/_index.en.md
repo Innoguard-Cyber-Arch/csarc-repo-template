@@ -262,7 +262,7 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 | Project choice | `project_visibility` | `private` by default; `public`, `private`, or Enterprise `internal` | capability detection, optional security defaults, and the internal site's visible-audience line |
 | Project choice | `project_name` | required non-empty string; defaults to `CSARC Project` | the internal site's title and heading |
 | Project choice | `project_description` | required one-sentence purpose; rejects placeholder text | the internal site's introduction paragraph |
-| Project choice | `languages` | zero or more of `python`, `rust`, `typescript` | the internal site's "languages used" line |
+| Project choice | `languages` | zero or more of `python`, `rust`, `typescript` | the internal site's stated-languages line |
 | Project choice | `repository_url`, `project_slug` | derived from `code_owner`/`project_name` unless overridden | the internal site's clone instructions |
 | Project opt-in | `enable_governance_drift_check` | `false` by default; set `true` to generate the daily scheduled Action | `false` keeps only the local drift checker; `true` also generates `governance-drift.yml` |
 

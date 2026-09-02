@@ -3,6 +3,7 @@ import runpy
 from pathlib import Path
 
 import pytest
+from jinja2 import Environment, StrictUndefined
 
 SITE_MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "render_site.py")
@@ -184,13 +185,11 @@ def test_branch_strategy_switches_generated_site_content() -> None:
     handbook's standard-vs-delivery guidance at Copier generation time,
     proving that "mode switching" is config-driven rather than a second,
     site-only setting."""
-    import jinja2
-
     root = Path(__file__).parents[1]
     template = (root / "template/docs/site-content.md.jinja").read_text(
         encoding="utf-8"
     )
-    environment = jinja2.Environment()
+    environment = Environment(autoescape=True, undefined=StrictUndefined)
 
     def render_for(branch_strategy: str) -> str:
         return environment.from_string(template).render(
