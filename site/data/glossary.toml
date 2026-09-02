@@ -89,7 +89,7 @@ title_en = "Verification and capability"
   term_en = "Governance exception"
   summary_zh_tw = "有期限的替代做法，必須記錄提出者、另一位核准者、到期日、證據與恢復方式。"
   summary_en = "A time-bounded fallback that records its proposer, a different approver, expiry, evidence, and recovery path."
-  path = "README.md#設定與密鑰"
+  path = "docs/index.html#governance"
 
   [[groups.terms]]
   key = "portable-artifact"
