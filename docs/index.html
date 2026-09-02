@@ -3658,8 +3658,8 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>PyPI／npm／GHCR</td>
-					<td>Conditional gap</td>
-					<td>root 不發布 registry；生成專案仍有設定但沒有 publisher job，由 #439 對齊</td>
+					<td>Not applicable</td>
+					<td>root 不發布 registry；#439 已移除閒置的 PyPI／npm／GHCR 設定項，因為沒有任何 workflow 消費它們，生成專案現在也不再提供這些設定。有真實需求的產品另開 Issue／ADR 自行加入 OIDC publisher</td>
 			</tr>
 	</tbody>
 </table>
