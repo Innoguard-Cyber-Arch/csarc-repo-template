@@ -3870,13 +3870,13 @@ html[data-detail-level="simple"] .detail-panel {
 					<td>必要基線</td>
 					<td><code>branch_strategy</code></td>
 					<td>預設 <code>delivery</code>；可選 <code>delivery</code>、<code>main</code></td>
-					<td>分支指引與 <code>policies/rulesets.json</code></td>
+					<td>分支指引、<code>policies/rulesets.json</code>，以及內部網站的交付路線段落</td>
 			</tr>
 			<tr>
 					<td>組織政策</td>
 					<td><code>code_owner</code></td>
 					<td>一個存在且有 repo write access 的 <code>@organization/team</code></td>
-					<td><code>.github/CODEOWNERS</code>；由 repository settings plan／apply／check 驗證</td>
+					<td><code>.github/CODEOWNERS</code>；由 repository settings plan／apply／check 驗證；內部網站的主要負責人欄位</td>
 			</tr>
 			<tr>
 					<td>組織政策</td>
@@ -3888,7 +3888,31 @@ html[data-detail-level="simple"] .detail-panel {
 					<td>專案選擇</td>
 					<td><code>project_visibility</code></td>
 					<td>預設 <code>private</code>；可選 <code>public</code>、<code>private</code>、Enterprise <code>internal</code></td>
-					<td>能力偵測與選配安全預設</td>
+					<td>能力偵測、選配安全預設，以及內部網站的可見受眾欄位</td>
+			</tr>
+			<tr>
+					<td>專案選擇</td>
+					<td><code>project_name</code></td>
+					<td>必填非空字串；預設 <code>CSARC Project</code></td>
+					<td>內部網站的標題與頁首</td>
+			</tr>
+			<tr>
+					<td>專案選擇</td>
+					<td><code>project_description</code></td>
+					<td>必填一句話用途說明，拒絕佔位文字</td>
+					<td>內部網站的簡介段落</td>
+			</tr>
+			<tr>
+					<td>專案選擇</td>
+					<td><code>languages</code></td>
+					<td>零到多個 <code>python</code>、<code>rust</code>、<code>typescript</code></td>
+					<td>內部網站的「使用語言」欄位</td>
+			</tr>
+			<tr>
+					<td>專案選擇</td>
+					<td><code>repository_url</code>、<code>project_slug</code></td>
+					<td>未覆寫時由 <code>code_owner</code>／<code>project_name</code> 推導</td>
+					<td>內部網站的複製（clone）指引</td>
 			</tr>
 			<tr>
 					<td>專案選配</td>
@@ -3899,7 +3923,7 @@ html[data-detail-level="simple"] .detail-panel {
 	</tbody>
 </table>
 <p>公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier <code>_src_path</code>、<code>_commit</code>。衍生公版可在同一份 YAML 增加 namespaced keys，不另建 profile。低頻 GitHub 細節留在原生 repository settings 或 <code>policies/</code>，不擴張 CSARC schema。</p>
-<p>內部網站直接讀取 <code>docs/site-content.md</code>，其中明確的 <code>[[key]]</code> 由 <code>.csarc/config.yml</code> 既有的 <code>project_name</code>、<code>project_description</code>、<code>repository_url</code>、<code>code_owner</code>、<code>languages</code>、<code>branch_strategy</code> 帶入。專案文字與樣式留在 <code>docs/site-content.md</code>、<code>docs/site-theme.css</code>，不另建網站設定格式。</p>
+<p>內部網站（由 project-owned <code>docs/site-content.md</code> 渲染出的生成專案手冊）只從上表 key 讀取明確的 <code>[[key]]</code> token；未知 key 會讓建置直接失敗，因此網站不會另建第二份設定 schema。上表以外的專案文字與樣式選擇，留在 <code>docs/site-content.md</code>、<code>docs/site-theme.css</code>，由專案自行維護。</p>
 </aside>
 <aside class="technical-detail" data-content-key="governance-exceptions">
   <h3>暫時例外怎麼留下紀錄</h3>
@@ -4149,7 +4173,7 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="technical-detail" data-content-key="docs-site-access">
   <h3>存取與維護邊界</h3>
   <p><code>noindex</code> 與 <code>robots.txt</code> 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。</p>
-<p>renderer 從既有 <code>.csarc/config.yml</code> 讀取專案名稱、說明、語言、負責人、repository URL 與分支策略；專案文字寫在 <code>docs/site-content.md</code>，樣式覆寫留在 <code>docs/site-theme.css</code>，產生的 <code>docs/index.html</code> 不直接編輯。</p>
+<p>renderer 讀取的是上方「規則治理」設定表核准的同一批 <code>.csarc/config.yml</code> key，不另定義第二份網站專用清單。專案文字寫在 <code>docs/site-content.md</code>，樣式覆寫留在 <code>docs/site-theme.css</code>，產生的 <code>docs/index.html</code> 不直接編輯。</p>
 </aside>
 </div>
 

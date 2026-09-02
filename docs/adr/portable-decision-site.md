@@ -29,6 +29,12 @@ Issue #436 將生成專案的內容來源從 JavaScript object 改為 `docs/site
 
 Markdown 中的明確 `[[key]]` token 直接從 `.csarc/config.yml` 讀取；未知 key 會停止建置。這讓名稱、說明、語言、負責人與分支策略維持同一設定來源，同時讓其餘專案文字仍可由 consuming repository 直接編輯。
 
+## 2026-09-02 內部網站設定與「規則治理」核准清單對齊
+
+Issue #436 盤點時發現：內部網站（`docs/site-content.md` 生成的手冊）已經在讀 `project_name`、`project_description`、`languages`、`repository_url`、`project_slug` 等 `.csarc/config.yml` key，但「規則治理」頁的 `governance-config` 核准清單只列出 `branch_strategy`、`code_owner`、`reviewers`、`project_visibility`、`enable_governance_drift_check`，兩邊已經走樣。Issue #474 把這些既有、已被消費、卻未核准登記的 key 一併補進同一份 `governance-config` 表格，不建立第二份平行 schema；`branch_strategy` 的 delivery／main 分流本來就已經切換手冊內容（標準／維運模式切換），只是先前沒有對應測試證明。
+
+`project_visibility`（可見受眾）原本已核准卻完全沒被內部網站讀取；本次在 `template/docs/site-content.md.jinja` 的「責任邊界」段落加入 `[[project_visibility]]`，讓手冊明確標示目前設定的儲存庫可見度。「規則治理」與「內部網站」（`docs-site-access`）兩處說明過去各自重複列出同一批 key，現在只有 `governance-config` 表格是唯一列表，`docs-site-access` 改為指回該表格，避免兩份定義各自漂移；`tests/test_render_site.py` 的 `test_internal_site_keys_are_documented_once` 把這個「只定義一次」的要求變成可執行的回歸測試。
+
 ## 2026-08-25 Hugo 正式切換
 
 Issue #205 以兩次真實 spike 重新檢查第 3 點。mdBook 的書本導覽與現有卡片式簡報衝突；Hugo 0.165.0 的自訂單頁 output format 則能保留既有視覺，並把輸出直接交給未修改的 `scripts/render_site.py`。因此只局部取代「不導入 Hugo」的限制，保留單檔、離線 `file://`、零外部 runtime asset 與 checked-in output 的全部契約。
