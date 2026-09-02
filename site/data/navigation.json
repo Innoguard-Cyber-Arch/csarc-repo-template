@@ -37,7 +37,6 @@
     {"key": "docs-site", "code": "10", "group": "support", "participation": "automated", "labels": {"zh-tw": "內部網站", "en": "Docs site"}}
   ],
   "appendices": [
-    {"key": "ecosystem", "participation": "human", "labels": {"zh-tw": "工具附錄", "en": "Tools"}},
     {"key": "similar-tools", "participation": "human", "labels": {"zh-tw": "相似工具", "en": "Similar"}},
     {"key": "testing", "participation": "maintainer", "audience": "maintainer", "labels": {"zh-tw": "CI/CD 設定", "en": "CI/CD"}},
     {"key": "bridge", "participation": "maintainer", "audience": "maintainer", "labels": {"zh-tw": "五月盤點", "en": "May review"}}
