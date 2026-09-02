@@ -2827,16 +2827,6 @@ html[data-detail-level="simple"] .detail-panel {
         </div>
       </details><details class="config-inline-detail">
         <summary>
-          <span class="config-trigger-title">Project opt-in | Switch to a pinned reusable workflow</span>
-          <span class="config-trigger-summary">Copier keeps this off by default; enabling it requires a 40-character commit SHA, and the central private repository must also allow organization-level access.</span>
-        </summary>
-        <div class="config-inline-body">
-          <p>Copier keeps this off by default; enabling it requires a 40-character commit SHA, and the central private repository must also allow organization-level access.</p>
-          <p class="config-inline-path">Config file: <code>copier.yml＋.github/workflows/reusable-ci.yml</code></p>
-          <pre class="code">use_reusable_workflow: true&#10;workflow_ref: &lt;40-character-commit-sha&gt;&#10;&#10;uses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@&lt;40-character-commit-sha&gt;&#10;with:&#10;  language-profile: python&#10;&#10;gh api --method PUT \&#10;  repos/Innoguard-Cyber-Arch/csarc-repo-template/actions/permissions/access \&#10;  -f access_level=organization</pre>
-        </div>
-      </details><details class="config-inline-detail">
-        <summary>
           <span class="config-trigger-title">Fixed baseline | zizmor runs only on relevant changes and on schedule</span>
           <span class="config-trigger-summary">CI conditionally scans workflow/action changes and promotions; a weekly run covers the rest, so an ordinary source or docs PR never pays for it twice.</span>
         </summary>
@@ -3708,7 +3698,7 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="config-guidance">
   <strong>Fixed and adjustable policy</strong>
   <p>Only the template&#39;s main policy, adjustable options, and setting locations are listed.</p>
-  <div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-template-release" data-config-index="0" data-config-title="Copier asks only about options that change the skeleton or verification behavior" data-config-goal="There is no switch to turn off type checking or secret scanning; the strict threshold is part of the template&#39;s contract." data-config-file="copier.yml" data-config-code="languages: [python]&#10;branch_strategy: delivery  # delivery | main&#10;python_support_mode: latest  # latest | minimum&#10;python_min_version: &#34;3.12&#34;  # Used only in minimum mode&#10;coverage_mode: global  # global | diff&#10;coverage_threshold: 80&#10;enable_precommit: false&#10;project_visibility: private  # public defaults CodeQL on&#10;enable_codeql: false         # private/internal require GitHub Code Security&#10;use_reusable_workflow: false&#10;&#10;_skip_if_exists:&#10;  - &#34;src/**&#34;&#10;  - &#34;tests/**&#34;&#10;  - &#34;docs/specs/**&#34;">
+  <div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-template-release" data-config-index="0" data-config-title="Copier asks only about options that change the skeleton or verification behavior" data-config-goal="There is no switch to turn off type checking or secret scanning; the strict threshold is part of the template&#39;s contract." data-config-file="copier.yml" data-config-code="languages: [python]&#10;branch_strategy: delivery  # delivery | main&#10;python_support_mode: latest  # latest | minimum&#10;python_min_version: &#34;3.12&#34;  # Used only in minimum mode&#10;coverage_mode: global  # global | diff&#10;coverage_threshold: 80&#10;enable_precommit: false&#10;project_visibility: private  # public defaults CodeQL on&#10;enable_codeql: false         # private/internal require GitHub Code Security&#10;&#10;_skip_if_exists:&#10;  - &#34;src/**&#34;&#10;  - &#34;tests/**&#34;&#10;  - &#34;docs/specs/**&#34;">
       <span class="config-trigger-title">Copier asks only about options that change the skeleton or verification behavior</span>
       <span class="config-trigger-file">copier.yml</span>
       <span class="config-trigger-summary">Language and branch model are both chosen explicitly at creation time; main is the permanent integration line, and delivery mode creates a short-lived dev/m* only for a Milestone. _skip_if_exists protects src, tests, and specs from being overwritten by an update.</span>

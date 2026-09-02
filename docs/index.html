@@ -2977,16 +2977,6 @@ html[data-detail-level="simple"] .detail-panel {
               </div>
             </details><details class="config-inline-detail">
               <summary>
-                <span class="config-trigger-title">專案選配｜改用固定版本的 reusable workflow</span>
-                <span class="config-trigger-summary">Copier 預設關閉；啟用時必須輸入 40 字元 commit SHA，中央 private repo 另須允許 organization 存取。</span>
-              </summary>
-              <div class="config-inline-body">
-                <p>Copier 預設關閉；啟用時必須輸入 40 字元 commit SHA，中央 private repo 另須允許 organization 存取。</p>
-                <p class="config-inline-path">設定檔：<code>copier.yml＋.github/workflows/reusable-ci.yml</code></p>
-                <pre class="code">use_reusable_workflow: true&#10;workflow_ref: &lt;40-character-commit-sha&gt;&#10;&#10;uses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@&lt;40-character-commit-sha&gt;&#10;with:&#10;  language-profile: python&#10;&#10;gh api --method PUT \&#10;  repos/Innoguard-Cyber-Arch/csarc-repo-template/actions/permissions/access \&#10;  -f access_level=organization</pre>
-              </div>
-            </details><details class="config-inline-detail">
-              <summary>
                 <span class="config-trigger-title">固定基線｜zizmor 只在相關變更與排程執行</span>
                 <span class="config-trigger-summary">workflow／action 變更與 promotion 由 CI 條件式掃描；每週另掃一次，普通 source／docs PR 不重複付費。</span>
               </summary>
@@ -3963,7 +3953,7 @@ html[data-detail-level="simple"] .detail-panel {
       <aside class="config-guidance">
         <strong>固定與可調政策</strong>
         <p>只列公版主要政策、可調選項與設定位置。</p>
-        <div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-template-release" data-config-index="0" data-config-title="Copier 只詢問會改變骨架或驗證行為的選項" data-config-goal="不提供關閉型別或秘密掃描的開關；嚴格門檻是公版契約。" data-config-file="copier.yml" data-config-code="languages: [python]&#10;branch_strategy: delivery  # delivery | main&#10;python_support_mode: latest  # latest | minimum&#10;python_min_version: &#34;3.12&#34;  # Used only in minimum mode&#10;coverage_mode: global  # global | diff&#10;coverage_threshold: 80&#10;enable_precommit: false&#10;project_visibility: private  # public defaults CodeQL on&#10;enable_codeql: false         # private/internal require GitHub Code Security&#10;use_reusable_workflow: false&#10;&#10;_skip_if_exists:&#10;  - &#34;src/**&#34;&#10;  - &#34;tests/**&#34;&#10;  - &#34;docs/specs/**&#34;">
+        <div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-template-release" data-config-index="0" data-config-title="Copier 只詢問會改變骨架或驗證行為的選項" data-config-goal="不提供關閉型別或秘密掃描的開關；嚴格門檻是公版契約。" data-config-file="copier.yml" data-config-code="languages: [python]&#10;branch_strategy: delivery  # delivery | main&#10;python_support_mode: latest  # latest | minimum&#10;python_min_version: &#34;3.12&#34;  # Used only in minimum mode&#10;coverage_mode: global  # global | diff&#10;coverage_threshold: 80&#10;enable_precommit: false&#10;project_visibility: private  # public defaults CodeQL on&#10;enable_codeql: false         # private/internal require GitHub Code Security&#10;&#10;_skip_if_exists:&#10;  - &#34;src/**&#34;&#10;  - &#34;tests/**&#34;&#10;  - &#34;docs/specs/**&#34;">
             <span class="config-trigger-title">Copier 只詢問會改變骨架或驗證行為的選項</span>
             <span class="config-trigger-file">copier.yml</span>
             <span class="config-trigger-summary">語言與分支模式都在建立時明確選擇；main 是永久整合線，delivery 模式只為 Milestone 建立短期 dev/m*。_skip_if_exists 保護 src、tests、spec 不被更新覆寫。</span>

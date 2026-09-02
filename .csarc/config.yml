@@ -27,4 +27,3 @@ release_workflow: .github/workflows/release.yml
 repository_url: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template
 reviewers: '@jachline28'
 security_reporting_channel: Use this private repository's GitHub Issues.
-use_reusable_workflow: false

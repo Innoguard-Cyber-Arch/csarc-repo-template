@@ -247,24 +247,6 @@
         },
         {
           "file": {
-            "zh-tw": "copier.yml＋.github/workflows/reusable-ci.yml",
-            "en": "copier.yml＋.github/workflows/reusable-ci.yml"
-          },
-          "title": {
-            "zh-tw": "專案選配｜改用固定版本的 reusable workflow",
-            "en": "Project opt-in | Switch to a pinned reusable workflow"
-          },
-          "goal": {
-            "zh-tw": "Copier 預設關閉；啟用時必須輸入 40 字元 commit SHA，中央 private repo 另須允許 organization 存取。",
-            "en": "Copier keeps this off by default; enabling it requires a 40-character commit SHA, and the central private repository must also allow organization-level access."
-          },
-          "code": {
-            "zh-tw": "use_reusable_workflow: true\nworkflow_ref: <40-character-commit-sha>\n\nuses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@<40-character-commit-sha>\nwith:\n  language-profile: python\n\ngh api --method PUT \\\n  repos/Innoguard-Cyber-Arch/csarc-repo-template/actions/permissions/access \\\n  -f access_level=organization",
-            "en": "use_reusable_workflow: true\nworkflow_ref: <40-character-commit-sha>\n\nuses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@<40-character-commit-sha>\nwith:\n  language-profile: python\n\ngh api --method PUT \\\n  repos/Innoguard-Cyber-Arch/csarc-repo-template/actions/permissions/access \\\n  -f access_level=organization"
-          }
-        },
-        {
-          "file": {
             "zh-tw": ".github/workflows/ci.yml＋.github/workflows/zizmor.yml",
             "en": ".github/workflows/ci.yml＋.github/workflows/zizmor.yml"
           },
@@ -787,8 +769,8 @@
             "en": "There is no switch to turn off type checking or secret scanning; the strict threshold is part of the template's contract."
           },
           "code": {
-            "zh-tw": "languages: [python]\nbranch_strategy: delivery  # delivery | main\npython_support_mode: latest  # latest | minimum\npython_min_version: \"3.12\"  # Used only in minimum mode\ncoverage_mode: global  # global | diff\ncoverage_threshold: 80\nenable_precommit: false\nproject_visibility: private  # public defaults CodeQL on\nenable_codeql: false         # private/internal require GitHub Code Security\nuse_reusable_workflow: false\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\"",
-            "en": "languages: [python]\nbranch_strategy: delivery  # delivery | main\npython_support_mode: latest  # latest | minimum\npython_min_version: \"3.12\"  # Used only in minimum mode\ncoverage_mode: global  # global | diff\ncoverage_threshold: 80\nenable_precommit: false\nproject_visibility: private  # public defaults CodeQL on\nenable_codeql: false         # private/internal require GitHub Code Security\nuse_reusable_workflow: false\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\""
+            "zh-tw": "languages: [python]\nbranch_strategy: delivery  # delivery | main\npython_support_mode: latest  # latest | minimum\npython_min_version: \"3.12\"  # Used only in minimum mode\ncoverage_mode: global  # global | diff\ncoverage_threshold: 80\nenable_precommit: false\nproject_visibility: private  # public defaults CodeQL on\nenable_codeql: false         # private/internal require GitHub Code Security\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\"",
+            "en": "languages: [python]\nbranch_strategy: delivery  # delivery | main\npython_support_mode: latest  # latest | minimum\npython_min_version: \"3.12\"  # Used only in minimum mode\ncoverage_mode: global  # global | diff\ncoverage_threshold: 80\nenable_precommit: false\nproject_visibility: private  # public defaults CodeQL on\nenable_codeql: false         # private/internal require GitHub Code Security\n\n_skip_if_exists:\n  - \"src/**\"\n  - \"tests/**\"\n  - \"docs/specs/**\""
           },
           "summary": {
             "zh-tw": "語言與分支模式都在建立時明確選擇；main 是永久整合線，delivery 模式只為 Milestone 建立短期 dev/m*。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。",
