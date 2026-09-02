@@ -223,7 +223,7 @@
             "items": [
               {"label": {"zh-tw": "01 工作定義", "en": "01 Work definition"}, "value": {"zh-tw": "full 已包含：< 1 分鐘", "en": "Included in full: <1 min"}},
               {"label": {"zh-tw": "02 AI 規範", "en": "02 AI rules"}, "value": {"zh-tw": "full 其中 < 1 分鐘", "en": "Under 1 min within full"}},
-              {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "full verification 實測 5 分 30 秒", "en": "full verification measured at 5 min 30 sec"}},
+              {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "full verification 實測 8 分 22 秒（獨占環境，#458）", "en": "full verification measured at 8 min 22 sec (uncontended environment, #458)"}},
               {"label": {"zh-tw": "04 程式語言", "en": "04 Programming languages"}, "value": {"zh-tw": "full 已包含生成矩陣：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–4 分鐘", "en": "Included in the full generated-module matrix: Python 1–3 min; Rust 1–3 min; TypeScript 1–4 min"}},
               {"label": {"zh-tw": "05 依賴安全", "en": "05 Dependency security"}, "value": {"zh-tw": "通常少於 1 分鐘", "en": "Typically under 1 min"}},
               {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
@@ -372,7 +372,7 @@
               "release": {"files": [{"path": "scripts/verify"}]}
             },
             "templateOnly": {
-              "release": {"files": [{"path": "scripts/verify-template.sh"}], "note": {"zh-tw": "額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑。", "en": "Additionally verifies the template, generated output, and existing-repository adoption and update paths."}}
+              "release": {"files": [{"path": "scripts/verify-template.sh"}], "note": {"zh-tw": "額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑；每個 `scripts/verify-stage-*` 都能單獨重跑一個階段，`scripts/verify-template.sh` 仍是唯一必要的最終聚合入口。", "en": "Additionally verifies the template, generated output, and existing-repository adoption and update paths; each scripts/verify-stage-* script can rerun one stage on its own, while scripts/verify-template.sh remains the one required final aggregate entry point."}}
             }
           }
         ]

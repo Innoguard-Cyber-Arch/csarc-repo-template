@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# "Package smoke test" stage of scripts/verify-template.sh: the root CLI
+# package builds and its published entry point runs from the built wheel.
+# Runnable standalone to re-check just this stage without paying for the
+# full run; aggregated in order by scripts/verify-template.sh. See
+# docs/ci-policy.md.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cache_root="$("$repo_root/scripts/resolve-cache-root")"
+if [[ -n "${CSARC_CACHE_ROOT:-}" ]]; then
+  export UV_CACHE_DIR="$cache_root/uv"
+else
+  export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
+fi
+export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
+cd "$repo_root"
+
+uv build
+
+wheel="$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
+test -n "$wheel"
+uvx --from "$wheel" csarc --help >/dev/null

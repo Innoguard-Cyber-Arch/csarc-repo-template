@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# "Python environment" stage of scripts/verify-template.sh: the locked
+# environment installs from uv.lock, and the lockfile stays consistent with
+# pyproject.toml. Later stages (python-quality, regression-tests,
+# package-smoke) rely on `uv run` resolving against this same environment;
+# `uv run` re-syncs on demand, so each of those scripts also works when run
+# standalone without this stage having run first. Runnable standalone to
+# re-check just this stage without paying for the full run; aggregated in
+# order by scripts/verify-template.sh. See docs/ci-policy.md.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cache_root="$("$repo_root/scripts/resolve-cache-root")"
+if [[ -n "${CSARC_CACHE_ROOT:-}" ]]; then
+  export UV_CACHE_DIR="$cache_root/uv"
+else
+  export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
+fi
+export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
+cd "$repo_root"
+
+unset VIRTUAL_ENV
+uv sync --locked --python "$UV_PYTHON"
+uv lock --check

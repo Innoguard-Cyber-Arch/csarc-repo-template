@@ -101,7 +101,7 @@ flowchart LR
 
 GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktree 的 agent 也負責在 PR 合併後回收：先離開該 worktree 並更新 integration ref，再從另一個 checkout 執行 `./scripts/cleanup-worktrees --apply --worktree <path> origin/{% if branch_strategy == "delivery" %}<delivery-branch>{% else %}{{ branch_strategy }}{% endif %}`。腳本預設只列出候選項目，且只接受有 GitHub merged PR 證據、已進入 integration ref、乾淨且未鎖定的 branch worktree；維護者要清理全 repo 時，先執行不含 `--apply` 的 dry run，再省略 `--worktree` 套用全部候選項目。
 
-`./scripts/verify` 是本機與 CI 共用的完整入口。現行 `.github/workflows/ci.yml` 只有一個 `verify` job，依變更選擇 docs／fast／full，再呼叫 repo-local 程式；一般 PR 不會為 fast、full、安全與 aggregate 各啟動一個 runner。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 30 分鐘。詳細分級與目前封存邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
+`./scripts/verify` 是本機與 CI 共用的完整入口。現行 `.github/workflows/ci.yml` 只有一個 `verify` job，依變更選擇 docs／fast／full，再呼叫 repo-local 程式；一般 PR 不會為 fast、full、安全與 aggregate 各啟動一個 runner。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 30 分鐘。開發中可直接跑最窄的 focused check；日常 PR 的 gate 是 CI 自動選的 docs／fast（`./scripts/verify-fast`）；只有 PR 本身就落在 full 邊界時，owner／integrator 才需要在本機另外執行一次 `./scripts/verify`。詳細分級與目前封存邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
 {% if branch_strategy == "delivery" %}另行的 promotion、release handoff、registry publisher 與 deployment workflows 沒有啟用；單一 `release.yml` 已設定為候選，首次成功實跑後才算 Active。已判定不恢復的版本／交付 archived YAML 已移除。OSV 已啟用；Zizmor、remote governance 與其他仍待 owner 決定的舊 workflow 留在中央模板 archive，不會下發。{% endif %}
 
