@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Decide whether a required re-merge of an advanced shared base branch
+# qualifies for the "base-only re-merge" exception documented in
+# docs/ci-policy.md (Issue #468): once a branch has already had one genuine
+# local full green run of ./scripts/verify-template.sh for its own actual
+# content, a *subsequent* required re-merge that brings in only upstream
+# base movement does not need another full local rerun -- push and trust
+# the hosted `verify` CI check (which reruns the exact same
+# verify-template.sh / verify-stage-* scripts on a clean runner) instead.
+#
+# This script only evaluates the condition; it never runs, skips, or
+# replaces verification itself, and it never mutates the working tree,
+# index, or any ref. Run it before (to decide) or after (to confirm) a
+# re-merge.
+#
+# Qualifies (exit 0) only when ALL of the following hold:
+#   1. Clean merge: merging new-base-tip into own-verified-head would
+#      produce no conflicts (checked with `git merge-tree`, without
+#      touching the working tree).
+#   2. Zero file overlap: no file changed by the incoming base movement
+#      (old-base-tip..new-base-tip) is also a file this branch's own
+#      commits (old-base-tip..own-verified-head) changed.
+#   3. No verification-infrastructure movement: the incoming base movement
+#      does not touch the verification entry points themselves, CI/workflow
+#      wiring, or repository policy (see high_risk_pattern below) -- if the
+#      base changed what "verified" means, trust in the prior local run
+#      does not carry over even without file overlap.
+#
+# Does NOT qualify (exit 1), even partially: a real merge conflict; any
+# file overlap between the incoming base movement and this branch's own
+# changes; or any incoming change to verification/CI/policy
+# infrastructure. When genuinely uncertain, this script errs toward
+# REQUIRES-FULL-RERUN.
+#
+# Usage:
+#   scripts/check-base-only-remerge <own-verified-head> <new-base-tip> [<old-base-tip>]
+#
+#   own-verified-head  Commit this branch was at during its last genuine
+#                       local `./scripts/verify-template.sh` full green run.
+#   new-base-tip        Tip of the shared base/integration branch being
+#                       merged in (e.g. origin/dev/m8-hugo-docs after it
+#                       advanced).
+#   old-base-tip         Optional. The shared base commit own-verified-head
+#                       was last synced to. Defaults to
+#                       `git merge-base own-verified-head new-base-tip`.
+
+# Operates on the current working directory's repository (like
+# scripts/cleanup-worktrees), not on this script's own checkout, so it can
+# run against any branch's worktree -- and so its regression test can run
+# it against an isolated fixture repository.
+if [[ $# -lt 2 || $# -gt 3 ]]; then
+  echo "usage: $(basename "$0") <own-verified-head> <new-base-tip> [<old-base-tip>]" >&2
+  exit 2
+fi
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "REQUIRES-FULL-RERUN: not inside a Git working tree" >&2
+  exit 2
+fi
+
+own_head="$(git rev-parse "$1")"
+new_base="$(git rev-parse "$2")"
+if [[ $# -eq 3 ]]; then
+  old_base="$(git rev-parse "$3")"
+else
+  old_base="$(git merge-base "$own_head" "$new_base")"
+fi
+
+if ! git merge-base --is-ancestor "$old_base" "$own_head"; then
+  echo "REQUIRES-FULL-RERUN: old-base-tip $old_base is not an ancestor of own-verified-head $own_head" >&2
+  exit 1
+fi
+if ! git merge-base --is-ancestor "$old_base" "$new_base"; then
+  echo "REQUIRES-FULL-RERUN: old-base-tip $old_base is not an ancestor of new-base-tip $new_base" >&2
+  exit 1
+fi
+
+own_files="$(git diff --name-only "$old_base" "$own_head")"
+incoming_files="$(git diff --name-only "$old_base" "$new_base")"
+
+if [[ -z "$incoming_files" ]]; then
+  echo "QUALIFIES: new-base-tip has no changes beyond old-base-tip; nothing to re-verify"
+  exit 0
+fi
+
+overlap="$(comm -12 <(sort -u <<<"$own_files") <(sort -u <<<"$incoming_files"))"
+if [[ -n "$overlap" ]]; then
+  echo "REQUIRES-FULL-RERUN: incoming base changes touch files this branch's own commits also changed:" >&2
+  printf '%s\n' "$overlap" >&2
+  exit 1
+fi
+
+# Paths whose upstream movement can change what "verified" means regardless
+# of overlap with this branch's own work: the verification entry points,
+# CI/workflow wiring, and repository policy. Touching any of these
+# disqualifies the exception even with zero file overlap. Keep this in
+# sync with docs/ci-policy.md if the verification entry points move.
+high_risk_pattern='^(scripts/verify|scripts/ci_tier\.py$|scripts/pr_lifecycle\.py$|scripts/validate-pr-policy$|scripts/validate-issue-policy$|scripts/test-pr-policy$|scripts/test-issue-triage$|scripts/test-worktree-cleanup$|scripts/check-base-only-remerge$|scripts/sync-paired-files\.sh$|\.github/workflows/|policies/)'
+high_risk="$(grep -E "$high_risk_pattern" <<<"$incoming_files" || true)"
+if [[ -n "$high_risk" ]]; then
+  echo "REQUIRES-FULL-RERUN: incoming base changes touch verification/CI/policy infrastructure:" >&2
+  printf '%s\n' "$high_risk" >&2
+  exit 1
+fi
+
+if ! git merge-tree --write-tree --merge-base "$old_base" "$own_head" "$new_base" >/dev/null; then
+  echo "REQUIRES-FULL-RERUN: merging new-base-tip into own-verified-head would conflict" >&2
+  exit 1
+fi
+
+incoming_count="$(grep -c . <<<"$incoming_files")"
+echo "QUALIFIES: clean merge, zero file overlap with own-verified-head's changes, no verification-infrastructure movement, ${incoming_count} incoming file(s) will be reverified by hosted CI"
+exit 0
