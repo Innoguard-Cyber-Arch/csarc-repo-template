@@ -1,0 +1,18 @@
+title = "csarc gitleaks config"
+
+# Extend, not replace, the default ruleset: keep every upstream detector and
+# only add local exceptions below.
+[extend]
+useDefault = true
+
+[allowlist]
+# `scripts/scan-secrets` runs `gitleaks dir` against the full working tree,
+# which does not honor .gitignore. `.cache/` holds third-party package
+# content pulled in by `pnpm install --store-dir` / `uv` (see
+# scripts/resolve-cache-root); that content is not something this
+# repository authored and can contain high-entropy strings that trip
+# generic detectors. Excluding it here mirrors what .gitignore already
+# says about `.cache/` not being repository content.
+paths = [
+  '''(^|/)\.cache/''',
+]

@@ -2,8 +2,8 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-24
-- **來源 Issues：**[#7](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/7), [#31](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/31), [#76](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/76), [#113](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/113), [#116](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/116), [#157](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/157), [#411](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/411)
-- **實作 PRs：**[#8](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/8), [#53](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/53), [#88](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/88), [#115](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/115), [#124](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/124), [#160](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/160), [#412](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/412)
+- **來源 Issues：**[#7](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/7), [#31](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/31), [#76](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/76), [#113](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/113), [#116](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/116), [#157](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/157), [#196](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/196), [#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219), [#368](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/368), [#411](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/411), [#433](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/433)
+- **實作 PRs：**[#8](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/8), [#53](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/53), [#88](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/88), [#115](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/115), [#124](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/124), [#160](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/160), [#217](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/217), [#231](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/231), [#412](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/412)
 
 ## 問題與限制
 
@@ -26,7 +26,7 @@
 | Preserved | 四種 profile、單一公版與 generated-project verification | [#7](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/7)／[#8](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/8) |
 | Preserved | 更新衝突 fail closed | [#31](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/31)／[#53](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/53) |
 | Superseded | 人工雙改 byte-identical root／template 檔案 | [#76](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/76)／[#88](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/88) |
-| Unresolved | 現有 adopt 在 manual merge 後的 resumability 與 transaction boundary | [#196](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/196)／[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219) |
+| Preserved | adopt 在 manual merge 後的 resumability 與 transaction boundary（same-plan 重建、target／plan 漂移偵測、失敗時 target 不變） | [#196](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/196)／[#217](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/217)／[#219](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/219)／[#231](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/231) |
 
 ## Ownership 與驗證
 
@@ -43,4 +43,4 @@
 
 ## 重新評估條件
 
-Open adoption Issues 完成後，依實際 transaction、plan replay 與 metadata contract 更新本紀錄；在它們合併前不得把候選行為寫成 active。
+[#368](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/368)（首次導入不信任 PR head 的 bootstrap 邊界）完成條件已全部打勾，但保持 open 直到 [#433](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/433) 的整合候選證明 release-ownership 綁定、更新通知與文件對齊；#433 合併並關閉 #368 後可將本節精簡為單純的重新評估提醒。在此之前不得把候選行為寫成 active。

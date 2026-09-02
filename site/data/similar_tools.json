@@ -114,8 +114,8 @@
       "key": "template-upgrade",
       "features": ["declarativeState", "templateLifecycle"],
       "labels": {
-        "zh-tw": {"overline": "Journey 09", "title": "模板升級", "legend": "只比較既有 repo 如何接收新版模板、規則或 recipe，以及衝突由誰處理"},
-        "en": {"overline": "Journey 09", "title": "Template upgrades", "legend": "Compares only how existing repositories receive updated templates, policies, or recipes and who resolves conflicts."}
+        "zh-tw": {"overline": "Journey 09", "title": "模板升級", "legend": "只比較工具如何建立新 repo、首次導入既有 repo、套用後續更新，以及衝突由誰處理"},
+        "en": {"overline": "Journey 09", "title": "Template upgrades", "legend": "Compares only how tools create repositories, first adopt existing repositories, apply later updates, and assign conflict ownership."}
       }
     }
   ],
@@ -186,7 +186,8 @@
               {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 2–5 分鐘", "en": "docs <1 min; fast 2–5 min"}},
               {"label": {"zh-tw": "04 程式語言", "en": "04 Programming languages"}, "value": {"zh-tw": "fast 已包含：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–5 分鐘（只執行已選語言）", "en": "Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)"}},
               {"label": {"zh-tw": "05 依賴安全", "en": "05 Dependency security"}, "value": {"zh-tw": "通常少於 1 分鐘", "en": "Typically under 1 min"}},
-              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}}
+              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
+              {"label": {"zh-tw": "09 模板升級", "en": "09 Template upgrades"}, "value": {"zh-tw": "首次導入 0 runner 分鐘（本機＋人工）；後續更新驗證已包含在 fast 的 2–5 分鐘", "en": "First adoption uses 0 runner minutes (local + manual); later-update checks are included in the 2–5 min fast run"}}
             ],
             "total": {"zh-tw": "約 1–7 分鐘", "en": "About 1–7 min"}
           },
@@ -197,7 +198,8 @@
               {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；source fast 約 1 分鐘；policy／template 變更約 2 分鐘", "en": "docs <1 min; source fast about 1 min; policy/template changes about 2 min"}},
               {"label": {"zh-tw": "04 程式語言", "en": "04 Programming languages"}, "value": {"zh-tw": "fast 已包含：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–5 分鐘（只執行已選語言）", "en": "Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)"}},
               {"label": {"zh-tw": "05 依賴安全", "en": "05 Dependency security"}, "value": {"zh-tw": "通常少於 1 分鐘", "en": "Typically under 1 min"}},
-              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}}
+              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
+              {"label": {"zh-tw": "09 模板升級", "en": "09 Template upgrades"}, "value": {"zh-tw": "fast 已包含代表性建立 smoke：< 1 分鐘", "en": "Representative creation smoke included in fast: <1 min"}}
             ],
             "total": {"zh-tw": "約 1–4 分鐘（fast 實測 59–99 秒）", "en": "About 1–4 min (fast measured at 59–99 sec)"}
           }
@@ -212,7 +214,8 @@
               {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "full 5–15 分鐘", "en": "full 5–15 min"}},
               {"label": {"zh-tw": "04 程式語言", "en": "04 Programming languages"}, "value": {"zh-tw": "full 已包含：Python 3–6 分鐘；Rust 2–5 分鐘；TypeScript 3–7 分鐘（只執行已選語言）", "en": "Included in full: Python 3–6 min; Rust 2–5 min; TypeScript 3–7 min (selected modules only)"}},
               {"label": {"zh-tw": "05 依賴安全", "en": "05 Dependency security"}, "value": {"zh-tw": "通常少於 1 分鐘", "en": "Typically under 1 min"}},
-              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}}
+              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
+              {"label": {"zh-tw": "09 模板升級", "en": "09 Template upgrades"}, "value": {"zh-tw": "後續更新驗證已包含在 full 的 5–15 分鐘", "en": "Later-update checks are included in the 5–15 min full run"}}
             ],
             "total": {"zh-tw": "約 6–17 分鐘", "en": "About 6–17 min"}
           },
@@ -223,7 +226,8 @@
               {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "full verification 實測 5 分 30 秒", "en": "full verification measured at 5 min 30 sec"}},
               {"label": {"zh-tw": "04 程式語言", "en": "04 Programming languages"}, "value": {"zh-tw": "full 已包含生成矩陣：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–4 分鐘", "en": "Included in the full generated-module matrix: Python 1–3 min; Rust 1–3 min; TypeScript 1–4 min"}},
               {"label": {"zh-tw": "05 依賴安全", "en": "05 Dependency security"}, "value": {"zh-tw": "通常少於 1 分鐘", "en": "Typically under 1 min"}},
-              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}}
+              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
+              {"label": {"zh-tw": "09 模板升級", "en": "09 Template upgrades"}, "value": {"zh-tw": "full 已包含建立／導入／更新回歸：約 1–3 分鐘", "en": "Create/adopt/update regressions included in full: about 1–3 min"}}
             ],
             "total": {"zh-tw": "約 6–8 分鐘（完整 job 實測 6 分 16 秒）", "en": "About 6–8 min (complete job measured at 6 min 16 sec)"}
           }
@@ -641,18 +645,62 @@
         "key": "template-upgrade",
         "journey": "09",
         "labels": {
-          "zh-tw": {"title": "模板升級", "heading": "Journey 09／更新通知", "scope": "選用通知的 repo 每週或手動檢查一次；有新版只維護一張 Issue，不會自動修改或合併。"},
-          "en": {"title": "Template upgrades", "heading": "Journey 09 / Update notices", "scope": "An opted-in repository checks weekly or on demand. A newer version only creates or refreshes one Issue; it never applies or merges an update."}
-        },
-        "stageLabels": {
-          "zh-tw": {"milestone": "每週排程／手動執行", "release": "公版發版候選"},
-          "en": {"milestone": "Weekly schedule / manual run", "release": "Template release candidate"}
+          "zh-tw": {"title": "模板升級", "heading": "Journey 09／建立、導入與更新", "scope": "公版 repo 驗證建立、既有 repo 首次導入與後續更新；生成 repo 只保留自己的驗證入口與選用的更新通知。首次導入沒有可信任 base 時由人核准，不執行 PR head 新增的程式。"},
+          "en": {"title": "Template upgrades", "heading": "Journey 09 / Create, adopt, and update", "scope": "The template repository verifies creation, first adoption, and later updates. Generated repositories keep only their own verification entrypoint and optional update notice. A person approves a first adoption whose base has no trusted verifier; PR-head programs are not executed."}
         },
         "rows": [
           {
             "purpose": {
-              "zh-tw": {"title": "發現新版但不自動套用", "description": "讀取 Copier 保存的來源與版本；有新版時建立或更新同一張追蹤 Issue，交由人審查後另開更新 PR。"},
-              "en": {"title": "Detect updates without applying them", "description": "Read Copier's recorded source and version, then create or refresh one tracking Issue for human review and a separate update PR."}
+              "zh-tw": {"title": "建立新 repo", "description": "由固定公版版本產生所選設定與語言模組，再執行生成 repo 自己的驗證。"},
+              "en": {"title": "Create a new repository", "description": "Generate the selected settings and language modules from a pinned template revision, then run the generated repository's own verification."}
+            },
+            "shared": {
+              "milestone": {"files": [{"path": "scripts/verify"}], "note": {"zh-tw": "生成完成後只執行自己的驗證；不下發公版專用測試。", "en": "After creation, the generated repository runs only its own verification; template-only tests are not delivered."}}
+            },
+            "templateOnly": {
+              "milestone": {"files": [{"path": "scripts/verify-fast"}], "note": {"zh-tw": "建立一個代表性 repo 做 smoke；不在每張 Issue PR 跑完整矩陣。", "en": "Creates one representative repository for a smoke check without running the complete matrix on every Issue PR."}},
+              "release": {"files": [{"path": "tests/test_cli.py"}, {"path": "scripts/verify-template.sh"}], "note": {"zh-tw": "完整重跑建立矩陣。", "en": "Reruns the complete creation matrix."}}
+            }
+          },
+          {
+            "purpose": {
+              "zh-tw": {"title": "首次導入既有 repo", "description": "repo 外的固定 CLI 產生 machine plan 並套用同一份 plan；第一張 PR 由人核對來源、diff 與本機證據。"},
+              "en": {"title": "First adoption of an existing repository", "description": "A pinned CLI outside the repository creates a machine plan and applies that same plan. A person reviews the source, diff, and local evidence in the first PR."}
+            },
+            "shared": {
+              "milestone": {"automationNote": {"zh-tw": "人工門檻：base 尚無可信任 verifier 時不執行 PR head 程式；合併後才啟用一般自動檢查。", "en": "Manual gate: when the base has no trusted verifier, no PR-head program runs. Normal automation starts after merge."}}
+            },
+            "templateOnly": {
+              "milestone": {"files": [{"path": "tests/test_cli.py"}], "note": {"zh-tw": "修改導入邏輯時在本機跑受影響的 focused case；大型導入矩陣不放進 fast。", "en": "Changes to adoption logic run the affected focused case locally; the large adoption matrix stays out of fast."}},
+              "release": {"files": [{"path": "tests/test_cli.py"}, {"path": "scripts/verify-template.sh"}], "note": {"zh-tw": "完整重跑導入、人工衝突與失敗不改 target。", "en": "Fully reruns adoption, manual conflicts, and leaving the target untouched on failure."}}
+            }
+          },
+          {
+            "purpose": {
+              "zh-tw": {"title": "後續更新與衝突", "description": "先在 candidate 完成 Copier update 與驗證；通過後才修改 target，失敗或衝突可修正後重跑。"},
+              "en": {"title": "Later updates and conflicts", "description": "Complete the Copier update and verification in a candidate first. Change the target only after success; failures and conflicts can be corrected and rerun."}
+            },
+            "shared": {
+              "milestone": {
+                "files": [{"path": "scripts/verify"}],
+                "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "首次導入已合併後的更新 Issue PR", "en": "Update Issue PRs after the first adoption has merged"}, "timeout": "30 min"}],
+                "automationNote": {"zh-tw": "base 上的 PR policy 先驗證規則，唯讀 CI 再執行候選內容。", "en": "The PR policy from the base validates rules first, then read-only CI runs the candidate."}
+              },
+              "release": {
+                "files": [{"path": "scripts/verify"}],
+                "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "含模板更新的發版 PR", "en": "Release PRs containing a template update"}, "timeout": "30 min"}],
+                "automationNote": {"zh-tw": "沿用唯讀 contents 權限的 CI；Action 只選擇並呼叫 repo-local 驗證。", "en": "Uses CI with read-only contents permission; the Action only selects and calls repository-local verification."}
+              }
+            },
+            "templateOnly": {
+              "milestone": {"files": [{"path": "tests/test_cli.py"}], "note": {"zh-tw": "修改更新邏輯時在本機跑受影響的 focused case；大型 update 矩陣不放進 fast。", "en": "Changes to update logic run the affected focused case locally; the large update matrix stays out of fast."}},
+              "release": {"files": [{"path": "tests/test_cli.py"}, {"path": "scripts/verify-template.sh"}], "note": {"zh-tw": "完整驗證同一 repo 的 update、legacy conflict 與原子失敗。", "en": "Fully verifies updates on the same repository, legacy conflicts, and atomic failure."}}
+            }
+          },
+          {
+            "purpose": {
+              "zh-tw": {"title": "通知有新版公版", "description": "通知只提示維護者評估新版，不會自動套用或合併。"},
+              "en": {"title": "Notify maintainers about a new template", "description": "A notification only asks maintainers to evaluate a new revision; it never applies or merges one automatically."}
             },
             "shared": {
               "milestone": {
@@ -694,13 +742,13 @@
       "key": "declarativeState",
       "title": {"zh-tw": "定義如何變成 repo 狀態", "en": "How definitions become repository state"},
       "description": {"zh-tw": "比較人直接改檔、由設定產生檔案，或由服務持續修正遠端狀態。", "en": "Compares direct file edits, generated files, and services that continuously reconcile remote state."},
-      "csarc": {"zh-tw": "copier.yml、template/ 與 profiles/catalog.yaml 宣告生成基線；scripts/sync-paired-files.sh 同步 root／template 配對檔，產品檔仍由下游 repo 持有。", "en": "copier.yml, template/, and profiles/catalog.yaml define the generated baseline. scripts/sync-paired-files.sh synchronizes paired root/template files, while downstream repositories retain ownership of product files."}
+      "csarc": {"zh-tw": "copier.yml、template/ 與 profiles/catalog.yaml 宣告生成基線；同一份 .csarc/config.yml 保存 repo 選項，配對檔由 root 產生 template 副本，產品檔仍由下游 repo 持有。", "en": "copier.yml, template/, and profiles/catalog.yaml define the generated baseline. One .csarc/config.yml stores repository choices, paired files are generated from root into template, and downstream repositories retain product-owned files."}
     },
     {
       "key": "templateLifecycle",
-      "title": {"zh-tw": "既有 repo 如何接收新版", "en": "How existing repositories receive updates"},
-      "description": {"zh-tw": "比較新版模板、規則或 recipe 如何進入既有 repo，以及衝突由誰處理。", "en": "Compares how updated templates, policies, or recipes enter an existing repository and who resolves conflicts."},
-      "csarc": {"zh-tw": "Copier answers 記錄來源與版本；既有案執行更新後以 PR 審查 diff／衝突，並驗證產品路徑未被覆寫。", "en": "Copier answers record the source and version. Existing projects review update diffs and conflicts in a PR and verify that product-owned paths were not overwritten."}
+      "title": {"zh-tw": "建立、導入與更新如何銜接", "en": "How creation, adoption, and updates connect"},
+      "description": {"zh-tw": "比較新 repo 如何建立、既有 repo 如何首次導入、後續版本如何更新，以及衝突由誰處理。", "en": "Compares how new repositories are created, existing repositories are first adopted, later revisions are applied, and conflicts are resolved."},
+      "csarc": {"zh-tw": "Copier 建立新 repo；既有 repo 由固定版本 CLI 在本機產生外部 plan，人工核准首次 PR。合併後由 base 上的 PR policy 與唯讀 CI 驗證後續更新；更新候選先完整驗證，失敗或衝突不修改 target。", "en": "Copier creates new repositories. A pinned CLI creates an external local plan for an existing repository and a person approves its first PR. After merge, the PR policy from the base and read-only CI validate later updates. An update candidate is fully verified before target files change, so failure or conflict leaves the target untouched."}
     },
     {
       "key": "proposalLifecycle",
@@ -873,7 +921,7 @@
         {"key": "repositoryTruth", "feature": "Repository protocol", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "repo 同時保存產品文件、決策、plan、程式與驗證證據。", "en": "The repository keeps product documents, decisions, plans, code, and verification evidence together."}},
         {"key": "workItemStructure", "feature": "Active plan", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "跨 session、有依賴或高風險的工作才建立 active plan；它管理執行步驟，但不另外定義 GitHub Issue Type、Parent 或里程碑。", "en": "Only cross-session, dependent, or high-risk work receives an active plan. It organizes execution steps without defining GitHub Issue Types, parents, or Milestones."}},
         {"key": "milestoneKickoff", "feature": "Human checkpoints", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "高風險決策可設人類檢查點，但沒有要求另一位非提案者先留言同意的里程碑門檻。", "en": "High-risk decisions may use human checkpoints, but there is no Milestone gate requiring prior agreement from a non-proposer."}},
-        {"key": "templateLifecycle", "feature": "harness update", "docs": "https://github.com/hoangnb24/repository-harness#maintain-an-installation", "description": {"zh-tw": "updater 保留 upstream base，用三方合併安全更新既有 repo。", "en": "The updater retains the upstream base and safely updates an existing repository through a three-way merge."}},
+        {"key": "templateLifecycle", "feature": "harness update", "docs": "https://github.com/hoangnb24/repository-harness#maintain-an-installation", "description": {"zh-tw": "保存 exact upstream base，以三方合併更新；重疊衝突時不改 managed files，保留 BASE／LOCAL／UPSTREAM 讓人 continue 或 abort。", "en": "It stores the exact upstream base and performs a three-way update. Overlapping conflicts leave managed files untouched and retain BASE, LOCAL, and UPSTREAM for a person to continue or abort."}},
         {"key": "proposalLifecycle", "feature": "Active / completed plans", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "跨 session 工作先進 active plan，完成後才歸檔。", "en": "Work spanning sessions stays in an active plan and is archived only after completion."}},
         {"key": "rightSizedWork", "feature": "Durable-plan threshold", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "小 typo 不建 plan；高風險或長工作才增加持久文件。", "en": "A small typo needs no plan; risky or long-running work receives a durable record."}},
         {"key": "agentInstructions", "feature": "Repository instructions", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "把 agent 的固定工作規則與驗證命令保存在 repo 內。", "en": "Persistent agent working rules and verification commands live in the repository."}},
@@ -900,7 +948,7 @@
         {"key": "languageSelection", "feature": "Project types + components", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "先選語言／框架的 project type，再以 components 加入能力；不像 CSARC 以獨立語言勾選組合同一個 repo。", "en": "A language or framework project type establishes the base and components add capabilities; unlike CSARC, it does not compose one repository from independent language selections."}},
         {"key": "languageConfiguration", "feature": ".projenrc + synth", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": ".projenrc 是單一宣告來源，synth 重建受管檔；一致性強，但手改生成檔會被覆寫。", "en": ".projenrc is the single declaration source and synth regenerates managed files. This is strongly consistent, but direct edits to generated files are overwritten."}},
         {"key": "declarativeState", "feature": "Components + synth", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "用 typed components 宣告期望專案，再由 synth 收斂檔案。", "en": "Typed components declare the desired project and synth reconciles the files."}},
-        {"key": "templateLifecycle", "feature": "projen upgrade + synth", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "升級 library 後重建；受管檔的手改會被 anti-tamper 攔下。", "en": "The project is regenerated after a library upgrade, and anti-tamper checks reject manual edits to managed files."}},
+        {"key": "templateLifecycle", "feature": "projen upgrade + synth", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "專案以程式定義；建立與升級都重新 synth 受管檔，手改會被 anti-tamper 攔下，衝突不是逐檔三方合併。", "en": "A project is defined in code. Creation and upgrades re-synthesize managed files, anti-tamper rejects manual edits, and conflicts are not resolved as per-file three-way merges."}},
         {"key": "proposalLifecycle", "feature": "Anti-tamper build", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "PR 同時修改 .projenrc 與重建結果，合併後才成為正式狀態。", "en": "A PR changes .projenrc together with regenerated output; the state becomes authoritative after merge."}},
         {"key": "sharedVerificationEntry", "feature": "Tasks", "docs": "https://projen.io/docs/concepts/tasks/", "description": {"zh-tw": "把 build、test 等步驟定義成可由本機 CLI 與生成 workflow 共用的 task graph。", "en": "Build and test steps are defined as a task graph shared by the local CLI and generated workflows."}},
         {"key": "riskBasedSelection", "feature": "Task conditions", "docs": "https://projen.io/docs/concepts/tasks/#conditions", "description": {"zh-tw": "task 或 step 可用 condition 決定是否執行；適合條件分流，但條件本身仍要維護正確。", "en": "A task or step can use a condition to decide whether it runs; this supports routing but the conditions still need correct maintenance."}},
@@ -920,7 +968,7 @@
         {"key": "languageSelection", "feature": "Multiselect questions + conditional files", "docs": "https://copier.readthedocs.io/en/stable/configuring/", "description": {"zh-tw": "模板可用複選答案決定產生哪些語言檔案；Copier 提供機制，但不替模板決定要用哪些測試工具。", "en": "A template can use multiselect answers to choose language files. Copier supplies the mechanism but does not choose the testing tools."}},
         {"key": "languageConfiguration", "feature": "Answers file", "docs": "https://copier.readthedocs.io/en/stable/configuring/#the-copier-answers-file", "description": {"zh-tw": "answers file 保存來源、版本與選項，可供 smart update 重用；CSARC 直接把它當唯一公版設定，避免再同步另一份 profile。", "en": "The answers file retains source, revision, and selections for smart updates. CSARC also uses it as the sole template configuration so no second profile can drift."}},
         {"key": "declarativeState", "feature": "Answers file + Jinja templates", "docs": "https://copier.readthedocs.io/en/stable/configuring/", "description": {"zh-tw": "answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。", "en": "Answers and Jinja templates declare generation inputs without continuously controlling remote state."}},
-        {"key": "templateLifecycle", "feature": "Smart Update", "docs": "https://copier.readthedocs.io/en/stable/updating/", "description": {"zh-tw": "記住模板來源與 answers，讓既有 repo 接收新版模板。", "en": "The recorded template source and answers let an existing repository receive template updates."}},
+        {"key": "templateLifecycle", "feature": "Smart Update", "docs": "https://copier.readthedocs.io/en/stable/updating/", "description": {"zh-tw": "answers file 保存來源與上次答案；update 以三方差異套新版，inline marker 或 .rej 衝突由人處理。CSARC 再包一層 candidate-first，未通過前不改 target。", "en": "The answers file retains the source and prior answers. Update applies a three-way diff, leaving inline markers or .rej conflicts for a person. CSARC adds a candidate-first wrapper so the target is unchanged until verification passes."}},
         {"key": "proposalLifecycle", "feature": "Update diff", "docs": "https://copier.readthedocs.io/en/stable/updating/", "description": {"zh-tw": "更新先產生 Git diff，解衝突並合併後才接受。", "en": "An update first produces a Git diff and is accepted only after conflicts are resolved and the change is merged."}}
       ]
     },

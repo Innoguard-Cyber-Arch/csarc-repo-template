@@ -533,34 +533,44 @@ Hotfix 建立不屬於里程碑的 Bug Issue，使用 `bug`＋`hotfix`、`fix/<I
 {{< legacy >}}
       <header>
         <h2>Copier 保持同步，<span class="accent">公版本身也吃自己的規則</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong><code>template/</code> 是下發內容唯一來源；root 只因 GitHub 讀取慣例保留公版自己的治理設定，43 對逐位元組相同的檔案由產生腳本從 root 生成 <code>template/</code> 副本。</p>
+        <p class="subtitle"><strong>基本導入。</strong><code>template/</code> 是下發內容唯一來源；root 只因 GitHub 讀取慣例保留公版自己的治理設定，配對檔案由產生腳本從 root 生成 <code>template/</code> 副本。</p>
       </header>
       <p class="context-line"><strong>問題與目的｜</strong>模板錯誤會一次影響多個專案；每次修改都要真的建立新案、導入既有案，再讓已導入的 repo 接收更新並通過完整驗證。</p>
       <div class="decision-strip">
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">這次不選，因為無法持續同步或驗證</span></summary><ul><li><strong>GitHub Template：</strong>只複製一次，不記得來源與答案</li><li><strong>PyScaffold：</strong>可參考 Python 結構，但會形成第二套更新機制</li><li><strong>只驗 YAML：</strong>無法證明新案、既有案與更新真的能跑</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">Copier＋建立／更新回歸</span></summary><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；衝突時保持 repo 不變，調整後重跑再由 PR 審查。</p></div></details><p><strong>建立：</strong>共通基線與 Python、Rust、TypeScript 模組各自實跑驗證；多選時合併模組，不建立組合專屬流程。<br><strong>導入與更新：</strong>adopt／update dry-run 先預覽，確認後只遷移舊 CSARC 結構；接著對同一 repo 執行下一版 Copier update、確認產品目錄未被覆寫，最後執行生成專案的完整驗證。<br><strong>更新通知：</strong>選用後每週檢查一次；有新版只建立或更新一張 Issue，不會自動修改 repo。<br><strong>版本：</strong>公版與所有語言模組共用一個 SemVer；各語言基線則依自己的穩定版政策前進。</p></details>
+        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">Copier＋建立／導入／更新回歸</span></summary><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／導入／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；更新衝突時保持 repo 不變，調整後重跑再由 PR 審查。</p></div></details><p><strong>建立：</strong>共通基線與 Python、Rust、TypeScript 模組各自實跑驗證；多選時合併模組，不建立組合專屬流程。<br><strong>首次導入：</strong>在 repo 外以固定 Release 與完整 SHA 的 CLI 產生 machine plan，再只套用同一份未漂移 plan。第一張 PR 由人核對來源、plan、diff 與本機結果；base 尚無可信任 verifier 時，不執行 PR head 新增的 script，也不宣稱已自動驗證。<br><strong>後續更新：</strong>update dry-run 先預覽；候選內容與衝突全部驗證完成後才修改 target，接著由一般 PR 與 trusted-base checks 審查。<br><strong>更新通知：</strong>選用後每週檢查一次；有新版只建立或更新一張 Issue，不會自動修改 repo。<br><strong>版本：</strong>公版與所有語言模組共用一個 SemVer；各語言基線依自己的穩定版政策前進。</p></details>
       </div>
-      <p class="context-line"><strong>root／template 配對檔案｜</strong>43 對 workflow、policy、文件、script 與 test（例如 <code>promotion.yml</code>、<code>docs/ci-policy.md</code>、<code>scripts/promotion_gate.py</code>）在 root 與 <code>template/</code> 之間逐位元組相同；過去只靠 <code>verify-template.sh</code> 在 CI 用 <code>diff</code> 事後比對，任何一邊漏改要等驗證跑完才被抓到。現在 <code>scripts/sync-paired-files.sh</code> 把 root 當成唯一來源：本機執行它會立即重新產生每個 <code>template/</code> 副本；加 <code>--check</code> 則不寫檔，只驗證每個副本是否符合產生腳本的確定性輸出（內容與可執行位元），任何一對不一致就印出差異並失敗。<code>verify-template.sh</code> 已改成呼叫 <code>--check</code>，並用一段複製到暫存目錄、蓄意注入內容與權限落差、確認失敗、重新產生、確認通過的回歸測試證明這個機制會擋下漂移。<code>dependabot.yml</code>、<code>.gitignore</code> 等僅因 Jinja 變數不同的檔案不在此列，仍由既有的「產生一個實案並與 root 比對」測試把關；<code>AGENTS.md</code>／<code>README.md</code> 等文件因 root 與下游專案的治理內容本來就不同，不屬於重複維護，故未強行合併。</p>
+      <p class="context-line"><strong>root／template 配對檔案｜</strong>逐位元組相同的 workflow、policy、文件、script 與 test 由 <code>scripts/sync-paired-files.sh</code> 以 root 為唯一來源產生；<code>--check</code> 驗證內容與可執行位元。含 Jinja 變數的檔案改由實際生成 repo 的回歸測試確認；<code>AGENTS.md</code>／<code>README.md</code> 等責任不同的內容不強行配對。</p>
       <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>下發來源、所選語言模組、保留路徑與功能開關：</strong><code>template/</code>＋<code>copier.yml</code></li><li><strong>更新通知：</strong><code>enable_template_update_notifications</code> 開啟時才產生 <code>template-update.yml</code> 與 <code>check-template-update</code>；公開來源不需 secret，private 來源才使用唯讀 token</li><li><strong>root-only CI 與建立／導入／更新驗證：</strong><code>.github/</code>＋<code>scripts/verify-template.sh</code>；生成 repo 不會收到這支腳本或 template release workflows</li><li><strong>語言基線與三十天觀察：</strong><code>profiles/catalog.yaml</code>；<strong>Python 自動升版：</strong><code>python-version-policy.yml</code></li><li><strong>root／template 配對檔案的單一來源與漂移檢查：</strong><code>scripts/sync-paired-files.sh</code></li></ul></aside>
 {{< /legacy >}}
 
 {{< basic >}}
 - `template/` 是下發內容來源；root 保留公版本身的 GitHub 治理與 dogfood 設定。
-- `.csarc/config.yml` 是每個 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取。生成 repo 另在同一檔案保存 Copier 來源與版本，root 不保存會立即過期的自我指向資訊。
-- 共通基線與 Python、Rust、TypeScript 模組各自驗證；同時選取多個語言時合併執行，不建立組合專屬流程。
-- 既有 repo 先用 adopt／update dry-run 預覽；確認後只遷移舊 CSARC 結構，再執行下一版 Copier update 並確認產品內容未被覆寫。
+- `.csarc/config.yml` 同時是 Copier 的更新紀錄與 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取，後續擴充也增加設定項目，不另建第二份設定檔。
+- 新 repo 先選語言與功能，再產生可直接驗證的基線；多個語言只是合併各自模組。
+- 既有 repo 首次導入時，先用固定版本的 CLI 在本機產生 repo 外的變更清單，再套用同一份清單。第一張 PR 由人確認，因為舊的預設分支還沒有可信任的檢查程式。
+- 第一次導入合併後，預設分支已有可信任的 PR policy，唯讀 CI 再驗證候選內容；升級仍先預覽，若有衝突就保持 repo 不變，修正後重跑。
 - 可選的更新通知每週檢查新版；只建立或更新一張 Issue，不會自動修改 repo。
 
 {{< disclosure key="copier-update" title="Copier＋root dogfood＋建立／更新回歸" >}}
-[Copier](https://github.com/copier-org/copier) 記錄來源、語言與答案，能把新版公版套回可自行修改的既有 repo；衝突時不修改 repo，由人調整後重跑，再以 PR 審查。GitHub Template 只複製一次，PyScaffold 則會形成第二套更新機制，因此不採用。
+[Copier](https://github.com/copier-org/copier) 記錄來源、語言與答案，能把新版公版套回可自行修改的既有 repo。首次導入先由人確認；後續更新若衝突就不修改 repo，調整後重跑，再以 PR 審查。GitHub Template 只複製一次，PyScaffold 則會形成第二套更新機制，因此不採用。
 {{< /disclosure >}}
 
 {{< detail key="template-release-scope" title="單一來源、版本基線與 root-only 邊界" >}}
-`.csarc/config.yml` 在 root 保存公版本身選用的能力；生成 repo 另保存 Copier 必要的來源與版本，並透過 `csarc update --data` 寫回。模板來源不偽造 `_src_path` 或 `_commit`，避免指向自己或留下立刻過期的版本。未來的繼承公版應在同一份 YAML 增加具命名空間的設定，不複製 CSARC 已有欄位。
+生成 repo 的 `.csarc/config.yml` 保存 Copier 所需的模板來源、版本與公版選項；root 使用同一批公開選項，但不偽造指回自己的 `_src_path`／`_commit`。設定變更透過 `csarc update --data` 寫回；繼承公版可在同一份 YAML 加 namespaced 欄位，不複製 CSARC 已有設定。
+
+`enable_template_update_notifications` 開啟時才產生 `template-update.yml` 與 `check-template-update`；公開來源不需 secret，private 來源才使用限於唯讀模板存取的 token。
 
 `scripts/sync-paired-files.sh` 讓 root 成為成對檔案的單一來源，`--check` 驗證副本內容與權限。`profiles/catalog.yaml` 保存語言基線與驗收證據；Python 與 Node 基線各自觀察三十天後才前進。
 
-`scripts/verify-template.sh` 只在公版 repo 實跑建立／導入／更新 fixture，不會下發到 consuming repository；生成 repo 使用較小的 `scripts/verify`。
+`scripts/verify-template.sh` 只在公版 repo 實跑建立／導入／更新 fixture，不會下發到 consuming repository；生成 repo 使用較小的 `scripts/verify`。首次導入的 machine plan 留在 target 外，不能和待審內容一起被改寫成假證據；第一張 PR 合併後，base 才有可信任的 PR policy，唯讀 CI 再執行候選內容的驗證。
+{{< /detail >}}
+
+{{< detail key="template-release-status" title="目前自動化邊界" >}}
+- **Active：**CLI 在 candidate 內完成建立、導入或更新與驗證，成功後才寫入 target；公版完整測試會重跑三條路徑。
+- **Manual：**首次導入的外部 plan、來源與第一張 PR 由人核准。
+- **Pending：**通知 workflow 與 checker script 已恢復，Copier fixture 測試也驗證只在選用時才會產生；但 checker 自身的更新判斷與 Issue 通知邏輯尚無專屬回歸測試，也尚未觀察到排程的 hosted 執行，因此不宣稱排程已能自動通知。
+- **Retired：**舊 reviewer assignment、remote governance 與 delivery orchestration 不隨本頁恢復。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
