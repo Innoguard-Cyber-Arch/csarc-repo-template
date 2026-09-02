@@ -155,7 +155,7 @@ fit = "符合畫面"
 | --- | --- | --- |
 | `.csarc/config.yml` | 記錄公版來源、語言、分支與選用能力 | 公版主導 |
 | `.github/ISSUE_TEMPLATE/`、`pull_request_template.md` | 工作定義與 PR 契約 | 公版主導 |
-| `.github/workflows/` | 9 條共用流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單與候選發版，加上選配的治理漂移與模板更新通知排程 | 公版主導 |
+| `.github/workflows/` | 9 條共用流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單與候選發版，加上選配的治理漂移、模板更新通知排程與 CodeQL SAST | 公版主導 |
 | `AGENTS.md`、`README.md`、`CLAUDE.md` | Agent 工作方式與使用者入口 | 共同維護 |
 | `policies/`、`CODEOWNERS`、`.github/REVIEWERS` | 期望設定、owner 與 reviewer | 共同維護 |
 | `scripts/` | 本機驗證、工作同步與套用設定 | 公版主導 |
