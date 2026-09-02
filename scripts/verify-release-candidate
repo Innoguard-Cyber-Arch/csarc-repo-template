@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+candidate_json="${1:?Usage: verify-release-candidate PR_JSON_FILE}"
+status_url="${STATUS_URL:-$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID}"
+publish_candidate_status="${CSARC_PUBLISH_CANDIDATE_STATUS:-true}"
+
+pr_number="$(jq -r '.number' "$candidate_json")"
+candidate_sha="$(jq -r '.sha' "$candidate_json")"
+head_ref="$(jq -r '.headBranchName' "$candidate_json")"
+base_ref="$(jq -r '.baseBranchName' "$candidate_json")"
+[[ "$pr_number" =~ ^[0-9]+$ && "$candidate_sha" =~ ^[0-9a-f]{40}$ ]]
+test "$base_ref" = main
+
+publish_status() {
+  if [[ "$publish_candidate_status" != true ]]; then
+    return
+  fi
+  gh api --method POST \
+    "repos/$GITHUB_REPOSITORY/statuses/$candidate_sha" \
+    -f state="$1" -f context='Release / candidate' \
+    -f description="$2" -f target_url="$status_url" >/dev/null
+}
+
+publish_status pending 'Validating the generated version commit'
+status=failure
+if (
+  set -euo pipefail
+  pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr_number")"
+  base_sha="$(jq -r '.base.sha' <<<"$pr")"
+  [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]]
+  actor="$(jq -r '.user.login' <<<"$pr")"
+  actor_permission=''
+  if [[ "$actor" != 'github-actions[bot]' ]]; then
+    actor_permission="$(gh api \
+      "repos/$GITHUB_REPOSITORY/collaborators/$actor/permission" \
+      --jq .permission)"
+  fi
+  files="$RUNNER_TEMP/release-candidate-files"
+  commits="$RUNNER_TEMP/release-candidate-commits.json"
+  gh api --paginate --slurp \
+    "repos/$GITHUB_REPOSITORY/pulls/$pr_number/files?per_page=100" \
+    | jq -r '.[][] | .filename, (.previous_filename // empty)' >"$files"
+  gh api --paginate --slurp \
+    "repos/$GITHUB_REPOSITORY/pulls/$pr_number/commits?per_page=100" \
+    >"$commits"
+  python3 "$repo_root/scripts/release_policy.py" verify-release-follow-up \
+    --repo "$GITHUB_REPOSITORY" \
+    --head "$head_ref" \
+    --head-repo "$(jq -r '.head.repo.full_name' <<<"$pr")" \
+    --head-sha "$candidate_sha" \
+    --actor "$actor" \
+    --actor-permission "$actor_permission" \
+    --changed-files "$files" \
+    --commits "$commits" \
+    --root "$repo_root"
+
+  git -C "$repo_root" fetch --no-tags origin "$base_sha" "$candidate_sha"
+  git -C "$repo_root" checkout --detach "$candidate_sha"
+  cd "$repo_root"
+  python3 scripts/release_policy.py verify-candidate-version \
+    --base-sha "$base_sha"
+  version="$(jq -r '.["."]' .release-please-manifest.json)"
+  if [[ "$actor" != 'github-actions[bot]' ]]; then
+    test "$head_ref" = "release/v$version"
+    test "$(jq -r .title <<<"$pr")" = "chore(main): release $version"
+  fi
+  python3 scripts/release_bundle.py candidate \
+    --output "$RUNNER_TEMP/release-candidate-assets"
+); then
+  status=success
+fi
+publish_status "$status" "Generated version commit: $status"
+test "$status" = success

@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+reviewers_file="${REVIEWERS_FILE:-$repo_root/.github/REVIEWERS}"
+repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
+author="${PR_AUTHOR:?PR_AUTHOR is required}"
+pr_number="${PR_NUMBER:?PR_NUMBER is required}"
+
+if [[ ! "$pr_number" =~ ^[1-9][0-9]*$ ]]; then
+  echo "PR_NUMBER must be a positive integer." >&2
+  exit 2
+fi
+if [[ ! "$author" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}$ ]]; then
+  echo "PR_AUTHOR must be a GitHub username without @." >&2
+  exit 2
+fi
+if [[ ! -f "$reviewers_file" ]]; then
+  echo "Reviewer configuration is missing: $reviewers_file" >&2
+  exit 1
+fi
+command -v gh >/dev/null || {
+  echo "GitHub CLI is required to request a reviewer." >&2
+  exit 1
+}
+
+eligible_reviewers=()
+author_folded="$(printf '%s' "$author" | tr '[:upper:]' '[:lower:]')"
+while IFS= read -r account; do
+  account="${account%%#*}"
+  account="${account//[[:space:]]/}"
+  [[ -z "$account" ]] && continue
+  if [[ ! "$account" =~ ^@([A-Za-z0-9][A-Za-z0-9-]{0,38})$ ]]; then
+    echo "Invalid reviewer in $reviewers_file: $account" >&2
+    exit 1
+  fi
+  reviewer="${BASH_REMATCH[1]}"
+  reviewer_folded="$(printf '%s' "$reviewer" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$reviewer_folded" != "$author_folded" ]]; then
+    eligible_reviewers+=("$reviewer")
+  fi
+done < "$reviewers_file"
+
+if ((${#eligible_reviewers[@]} == 0)); then
+  echo "::notice title=Reviewer assignment skipped::No configured reviewer remains after excluding the pull request author."
+  exit 0
+fi
+
+reviewer="${eligible_reviewers[$((pr_number % ${#eligible_reviewers[@]}))]}"
+gh api --method POST \
+  "repos/$repo/pulls/$pr_number/requested_reviewers" \
+  -f "reviewers[]=$reviewer" >/dev/null
+echo "Requested review from @$reviewer."

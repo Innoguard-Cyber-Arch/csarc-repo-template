@@ -13,18 +13,22 @@ set -euo pipefail
 #                                         each pair that has drifted.
 paired_files=(
   CLAUDE.md
+  .gitleaks.toml
   .github/ISSUE_TEMPLATE/config.yml
   .github/ISSUE_TEMPLATE/bug.yml
   .github/ISSUE_TEMPLATE/documentation.yml
   .github/ISSUE_TEMPLATE/feature.yml
   .github/ISSUE_TEMPLATE/task.yml
   .github/workflows/issue-triage.yml
+  .github/workflows/governance-comment.yml
   .github/workflows/milestone-lifecycle.yml
   .github/workflows/osv.yml
   .github/workflows/pr-policy.yml
   .github/workflows/spec-to-issue.yml
+  .github/workflows/work-item-closure.yml
   policies/actions.json
   policies/labels.json
+  policies/releases.json
   policies/repository.json
   docs/ci-policy.md
   docs/milestone-description.md
@@ -32,6 +36,7 @@ paired_files=(
   scripts/render_site.py
   scripts/apply-repository-settings.sh
   scripts/check-governance-drift
+  scripts/request-reviewer
   scripts/ci_tier.py
   scripts/delivery_sync.py
   scripts/pr_lifecycle.py
@@ -44,15 +49,17 @@ paired_files=(
   scripts/install-osv-scanner
   scripts/install-shellcheck
   scripts/lint-workflows-shell
+  scripts/release_bundle.py
   scripts/release_policy.py
+  scripts/resolve-cache-root
   scripts/scan-secrets
   scripts/spec_to_issue.py
   scripts/sync_milestone_state.py
   scripts/sync_work_item_metadata.py
   scripts/test-issue-triage
   scripts/test-pr-policy
-  scripts/test-release-follow-up-gates
   scripts/test-worktree-cleanup
+  scripts/verify-release-candidate
   scripts/validate-issue-policy
   scripts/validate-issue-title
   scripts/validate-pr-policy
@@ -65,7 +72,9 @@ paired_files=(
   tests/test_promotion_gate.py
   tests/test_milestone_lifecycle.py
   tests/test_release_policy.py
+  tests/test_release_bundle.py
   tests/test_work_item_metadata.py
+  tests/test_work_pr_closure.py
   zizmor.yml
 )
 

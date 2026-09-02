@@ -248,6 +248,12 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     supply = chinese.split('{{< slide key="supply"', 1)[1].split(
         "{{< /slide >}}", 1
     )[0]
+    chinese_delivery = chinese.split('{{< slide key="deploy"', 1)[1].split(
+        "{{< /slide >}}", 1
+    )[0]
+    english_delivery = english.split('{{< slide key="deploy"', 1)[1].split(
+        "{{< /slide >}}", 1
+    )[0]
     file_map = chinese.split('{{< slide key="files"', 1)[1].split(
         "{{< /slide >}}", 1
     )[0]
@@ -256,22 +262,34 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         for path in (root / "template/.github/workflows").iterdir()
         if path.is_file()
     }
+    optional_workflows = {"template-update.yml"}
 
-    assert workflows == {
+    assert workflows - optional_workflows == {
         "ci.yml",
+        "governance-comment.yml",
+        "governance-drift.yml",
         "issue-triage.yml",
         "milestone-lifecycle.yml",
         "osv.yml",
         "pr-policy.yml",
+        "release.yml",
         "spec-to-issue.yml",
+        "work-item-closure.yml",
     }
-    assert "6 條現行自動流程" in file_map
-    for workflow in workflows:
+    assert optional_workflows <= workflows
+    assert "9 條共用流程（其中 1 條候選）＋1 條選配排程" in file_map  # noqa: RUF001
+    for workflow in workflows - optional_workflows:
         assert workflow in file_map
-    for inactive in ("release-please.yml", "release.yml"):
+    for inactive in ("release-please.yml",):
         assert inactive not in file_map
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
-    assert "版本與發佈流程尚未啟用" in flow
+    assert "需人審查版本 PR 的發版流程仍是候選" in flow
+    assert "一支候選 release workflow" in chinese_delivery
+    assert "Candidate／Blocked" in chinese_delivery  # noqa: RUF001
+    assert "promotion-gated adaptive release" not in chinese_delivery
+    assert "下方 technical view 保留 2026-08" not in chinese_delivery
+    assert "the system opens a version PR for human review" in english_delivery
+    assert "Candidate / Blocked" in english_delivery
     assert "使用 AI／vibe coding 的一般開發者" in chinese_home  # noqa: RUF001
     assert "不要求具備工程或 CI/CD 維運背景" in chinese_home
     assert "general AI-assisted or vibe-coding developers" in english_home
@@ -335,6 +353,10 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     active_components = (root / "site/static/legacy-components.js").read_text(
         encoding="utf-8"
     )
+    template_verify = (root / "template/scripts/verify.jinja").read_text(
+        encoding="utf-8"
+    )
+    assert "policies/dev-next-ruleset.json" not in template_verify
 
     for source in (chinese, english):
         assert 'key="similar-tools" parity="supplemental"' in source
@@ -397,6 +419,8 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "Cloudflare Pages" in chinese
     assert "存取 #79" in chinese
     assert "不另導入 Spec Kit" in active_components
+    assert "沒有 active bot identity" in active_components
+    assert "CSARC_VERSION_BOT_CLIENT_ID" not in active_components
     assert "單一來源｜治理只保存高價值選項" in active_components  # noqa: RUF001
     assert "提出者、另一位核准者、到期日、證據與復原方式" in (active_components)
     assert "rollout:" not in active_components
@@ -441,12 +465,12 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "可調整｜選用語言與 Python 支援範圍" in active_components  # noqa: RUF001
     assert "固定基線｜各語言使用原生工具" in active_components  # noqa: RUF001
     assert "只列公版主要政策、可調選項與設定位置" in active_components
-    assert english.count('data-audience="maintainer"') == 6
+    assert english.count('data-audience="maintainer"') == 7
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
-    assert len(data["features"]) == 30
-    assert len(data["featureGroups"]) == 8
+    assert len(data["features"]) == 34
+    assert len(data["featureGroups"]) == 9
     assert data["featureGroups"][0]["features"] == [
         "repositoryTruth",
         "workItemStructure",
@@ -485,27 +509,46 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "proposalLifecycle",
     ]
     assert data["featureGroups"][6]["features"] == [
+        "versionIntent",
+        "versionMaterialization",
+        "releaseOwnership",
+        "releaseEvidence",
+    ]
+    assert data["featureGroups"][7]["features"] == [
         "governancePolicyLocation",
         "governanceCapabilityBoundary",
         "governanceExceptionRecord",
     ]
-    assert data["featureGroups"][7]["features"] == [
+    assert data["featureGroups"][8]["features"] == [
         "declarativeState",
         "templateLifecycle",
     ]
-    assert len(data["testing"]["groups"]) == 8
+    assert [group["journey"] for group in data["testing"]["groups"]] == [
+        "01",
+        "02",
+        "03",
+        "04",
+        "05",
+        "06",
+        "07",
+        "08",
+        "09",
+    ]
     duration_rows = data["testing"]["duration"]["rows"]
     assert [row["key"] for row in duration_rows] == ["issue", "release"]
-    assert all(len(row["shared"]["items"]) == 7 for row in duration_rows)
-    assert all(len(row["templateOnly"]["items"]) == 7 for row in duration_rows)
+    assert all(len(row["shared"]["items"]) == 8 for row in duration_rows)
+    assert all(len(row["templateOnly"]["items"]) == 8 for row in duration_rows)
     for row in duration_rows:
         for scope in ("shared", "templateOnly"):
             assert [
                 item["label"]["zh-tw"][:2] for item in row[scope]["items"]
-            ] == ["01", "02", "03", "04", "05", "06", "08"]
+            ] == ["01", "02", "03", "04", "05", "06", "08", "09"]
     assert duration_rows[0]["shared"]["total"]["zh-tw"] == "約 1\u20137 分鐘"
+    assert duration_rows[0]["templateOnly"]["total"]["zh-tw"] == (
+        "約 1\u20134 分鐘（fast 實測 59\u201399 秒）"  # noqa: RUF001
+    )
     assert duration_rows[1]["templateOnly"]["total"]["zh-tw"] == (
-        "約 6\u20138 分鐘（實測 6 分 19 秒）"  # noqa: RUF001
+        "約 6\u20138 分鐘（完整 job 實測 6 分 16 秒）"  # noqa: RUF001
     )
     assert (
         "2026-09-01" in data["testing"]["duration"]["labels"]["zh-tw"]["scope"]
@@ -595,7 +638,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert [row["purpose"]["zh-tw"]["title"] for row in verification_rows] == [
         "判斷這次要跑多少",
         "Issue PR 的快速回饋",
-        "發版候選的完整證據",
+        "交付候選的完整證據",
     ]
     assert verification_rows[0]["shared"]["milestone"]["files"] == [
         {"path": "scripts/ci_tier.py"}
@@ -629,16 +672,36 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert data["testing"]["groups"][6]["journey"] == "07"
     delivery_rows = data["testing"]["groups"][6]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in delivery_rows] == [
-        "發版後續規則",
+        "獨立工作直接交付",
+        "Hotfix 完整驗證與證據",
+        "版本與 Release ownership",
+        "版本候選與發布證據",
         "里程碑結案",
     ]
     assert delivery_rows[0]["shared"]["milestone"]["files"] == [
-        {"path": "scripts/test-release-follow-up-gates"}
+        {"path": "scripts/test-pr-policy"},
+        {"path": "tests/test_ci_tier.py"},
     ]
-    assert delivery_rows[0]["shared"]["release"]["files"] == [
-        {"path": "scripts/test-release-follow-up-gates"}
+    assert delivery_rows[1]["shared"]["milestone"]["files"] == [
+        {"path": "scripts/test-pr-policy"},
+        {"path": "tests/test_ci_tier.py"},
     ]
-    assert delivery_rows[1]["shared"]["release"]["files"] == [
+    assert delivery_rows[2]["shared"]["milestone"]["files"] == [
+        {"path": "docs/adr/release-security-and-dependencies.md"}
+    ]
+    assert delivery_rows[2]["shared"]["release"]["files"] == [
+        {"path": "scripts/release_policy.py"},
+        {"path": "scripts/release_bundle.py"},
+        {"path": "tests/test_release_bundle.py"},
+    ]
+    assert delivery_rows[3]["shared"]["milestone"]["files"] == [
+        {"path": "scripts/verify-release-candidate"}
+    ]
+    assert delivery_rows[3]["shared"]["release"]["files"] == [
+        {"path": "scripts/release_bundle.py"},
+        {"path": "tests/test_release_bundle.py"},
+    ]
+    assert delivery_rows[4]["shared"]["release"]["files"] == [
         {"path": "tests/test_milestone_lifecycle.py"},
         {
             "path": "tests/test_milestone_closure.py",
@@ -649,35 +712,56 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     governance_rows = data["testing"]["groups"][7]["rows"]
     assert data["testing"]["groups"][7]["journey"] == "08"
     assert [row["purpose"]["zh-tw"]["title"] for row in governance_rows] == [
-        "設定與治理程式",
-        "治理漂移與 reviewer",
+        "輪派審查人",
+        "偵測治理設定漂移",
     ]
     assert governance_rows[0]["shared"]["milestone"]["automation"] == [
         {
-            "path": ".github/workflows/ci.yml",
-            "job": "verify",
+            "path": ".github/workflows/governance-comment.yml",
+            "job": "request-reviewer",
             "trigger": {
-                "zh-tw": "治理設定或程式的工作 PR",
-                "en": (
-                    "Work PRs that change governance configuration or programs"
-                ),
+                "zh-tw": "PR 開啟、重開或轉為 ready",
+                "en": "PR opened, reopened, or marked ready",
             },
-            "timeout": "30 min",
+            "timeout": "5 min",
         }
     ]
     assert all(
-        automation["pending"] and automation["issue"] == 450
-        for automation in governance_rows[1]["shared"]["milestone"][
-            "automation"
-        ]
+        "pending" not in automation
+        for automation in governance_rows[1]["shared"]["release"]["automation"]
     )
+    template_rows = data["testing"]["groups"][8]["rows"]
+    assert data["testing"]["groups"][8]["journey"] == "09"
+    assert [row["purpose"]["zh-tw"]["title"] for row in template_rows] == [
+        "建立新 repo",
+        "首次導入既有 repo",
+        "後續更新與衝突",
+        "通知有新版公版",
+    ]
+    assert template_rows[1]["shared"]["milestone"]["automationNote"][
+        "zh-tw"
+    ].startswith("人工門檻")
+    assert "automation" not in template_rows[1]["shared"]["milestone"]
+    assert all(
+        "verify-template.sh" not in item.get("path", "")
+        for row in template_rows
+        for stage in row["shared"].values()
+        for item in stage.get("files", [])
+    )
+    update_notification = template_rows[3]["shared"]["milestone"]["automation"][
+        0
+    ]
+    assert update_notification["path"] == (
+        ".github/workflows/template-update.yml"
+    )
+    assert "pending" not in update_notification
     assert verification_rows[0]["shared"]["milestone"]["automation"] == [
         {
             "path": ".github/workflows/ci.yml",
             "job": "verify",
             "trigger": {
-                "zh-tw": "Issue PR\uff08工作分支 → dev\uff09",
-                "en": "Issue PR (work branch → dev)",
+                "zh-tw": "工作 PR\uff08topic → main 或 dev/m*\uff09",
+                "en": "Work PR (topic → main or dev/m*)",
             },
             "timeout": "30 min",
         }
@@ -694,21 +778,34 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         merge_rows[0]["shared"]["milestone"]["automation"][0]["path"]
         == ".github/workflows/pr-policy.yml"
     )
-    assert merge_rows[2]["shared"]["milestone"]["automation"][0]["pending"]
-    assert merge_rows[2]["shared"]["milestone"]["automation"][0]["issue"] == 401
+    assert merge_rows[2]["shared"]["milestone"]["files"] == [
+        {"path": "tests/test_work_pr_closure.py"},
+        {"path": "scripts/pr_lifecycle.py"},
+    ]
+    assert merge_rows[2]["shared"]["milestone"]["automation"] == [
+        {
+            "path": ".github/workflows/work-item-closure.yml",
+            "job": "close-work",
+            "trigger": {
+                "zh-tw": "里程碑工作 PR 合併進 dev/m*",
+                "en": "Milestone work PR merged into dev/m*",
+            },
+            "timeout": "5 min",
+        }
+    ]
     assert data["testing"]["labels"]["zh-tw"]["release"] == (
-        "發版 PR\uff08dev → main\uff09"
+        "交付 PR\uff08dev/m*\uff0fdev/i* → main\uff09"
     )
     assert data["testing"]["labels"]["en"]["release"] == (
-        "Release PR (dev → main)"
+        "Delivery PR (dev/m* or dev/i* → main)"
     )
     assert "archived" not in data["testing"]["labels"]["zh-tw"]
     assert "archived" not in testing_shortcode
 
-    assert len(data["tools"]) == 25
-    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 104
-    assert data["comparisonDate"] == "2026-08-31"
-    assert data["releaseCutoff"] == "2026-02-28"
+    assert len(data["tools"]) == 28
+    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 113
+    assert data["comparisonDate"] == "2026-09-01"
+    assert data["releaseCutoff"] == "2026-03-01"
     assert data["threshold"] == 5
     assert data["starThreshold"] == 1000
     assert 'class="tool-meta"' in shortcode
@@ -771,6 +868,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "OSV-Scanner",
         "Syft",
         "Sapling",
+        "Release Please",
+        "semantic-release",
+        "Changesets",
     }
     assert {tool["name"] for tool in data["tools"]} - {
         tool["name"] for tool in primary
@@ -788,6 +888,21 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     }
     assert comparison_keys["AGENTS.md"] == {"agentInstructions"}
     assert comparison_keys["Ruler"] == {"agentInstructions"}
+    assert comparison_keys["Release Please"] == {
+        "versionIntent",
+        "versionMaterialization",
+        "releaseOwnership",
+    }
+    assert comparison_keys["semantic-release"] == {
+        "versionIntent",
+        "versionMaterialization",
+        "releaseOwnership",
+    }
+    assert comparison_keys["Changesets"] == {
+        "versionIntent",
+        "versionMaterialization",
+        "releaseOwnership",
+    }
     for tool in data["tools"]:
         for comparison in tool["comparisons"]:
             assert comparison["feature"]

@@ -2,6 +2,13 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cache_root="$("$repo_root/scripts/resolve-cache-root")"
+if [[ -n "${CSARC_CACHE_ROOT:-}" ]]; then
+  export UV_CACHE_DIR="$cache_root/uv"
+else
+  export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
+fi
+pnpm_store_dir="$cache_root/pnpm/store"
 cd "$repo_root"
 
 if [[ -n "${_CSARC_PROJECT_VERIFICATION_ACTIVE:-}" ]]; then
@@ -55,7 +62,7 @@ verify_typescript_module() {
   command -v pnpm >/dev/null
   test "$(node -p 'Number(process.versions.node.split(".")[0]) >= 24')" = "true"
   test "$(pnpm --version | cut -d. -f1)" = "11"
-  pnpm install --frozen-lockfile --ignore-scripts
+  pnpm install --store-dir "$pnpm_store_dir" --frozen-lockfile --ignore-scripts
   pnpm exec biome ci .
   pnpm exec tsc --noEmit
   pnpm exec vitest run --coverage
@@ -69,7 +76,8 @@ verify_typescript_module() {
   typescript_install_root="$(mktemp -d)"
   temporary_paths+=("$typescript_install_root")
   pnpm --dir "$typescript_install_root" add \
-    "$repo_root/$typescript_tarball" --ignore-scripts --silent
+    "$repo_root/$typescript_tarball" --store-dir "$pnpm_store_dir" \
+    --ignore-scripts --silent
   (
     cd "$typescript_install_root"
     node --input-type=module -e "import('{{ project_slug }}')"
@@ -178,7 +186,6 @@ uv run --no-project python scripts/render_site.py --check
 ./scripts/test-issue-triage
 ./scripts/test-worktree-cleanup
 ./scripts/test-pr-policy
-./scripts/test-release-follow-up-gates
 ./scripts/lint-workflows-shell
 
 if $verify_python; then
@@ -208,7 +215,7 @@ grep -q 'Test-Driven Development' docs/README.md
 grep -q 'Behavior-Driven Development' docs/README.md
 grep -q 'docs/decisions/' docs/README.md
 "${platform_python[@]}" - <<'PY'
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from scripts.csarc_config import load_config
 
@@ -220,32 +227,11 @@ if config.get("project_mode") not in {"new", "existing"}:
     raise SystemExit("project_mode must be new or existing")
 if config.get("branch_strategy") not in {"main", "delivery"}:
     raise SystemExit("branch_strategy must be main or delivery")
-mode = config.get("container_mode", "none")
-if mode not in {"none", "verify", "ghcr"}:
-    raise SystemExit(f"Invalid container mode: {mode!r}")
-enabled = mode != "none"
-if enabled:
-    containerfile = config.get("containerfile_path", "")
-    if not isinstance(containerfile, str):
-        raise SystemExit("Container file must be a string")
-    path = PurePosixPath(containerfile)
-    if not containerfile or path.is_absolute() or ".." in path.parts:
-        raise SystemExit("Container file must be a safe repository-relative path")
-    if not Path(containerfile).is_file():
-        raise SystemExit(f"Container file does not exist: {containerfile}")
-    smoke = config.get("container_smoke_command", "")
-    if (
-        not isinstance(smoke, str)
-        or "$IMAGE" not in smoke
-        or len(smoke.splitlines()) != 1
-    ):
-        raise SystemExit("Container smoke command must be one line using $IMAGE")
 PY
 "${platform_python[@]}" -m json.tool policies/repository.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/actions.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/labels.json >/dev/null
 "${platform_python[@]}" -m json.tool policies/rulesets.json >/dev/null
-"${platform_python[@]}" -m json.tool policies/dev-next-ruleset.json >/dev/null
 "${platform_python[@]}" -m json.tool release-please-config.json >/dev/null
 "${platform_python[@]}" -m json.tool .release-please-manifest.json >/dev/null
 "${platform_python[@]}" - <<'PY'
@@ -281,7 +267,7 @@ test -x scripts/detect-language-profile
 test -x scripts/pr_lifecycle.py
 grep -q 'scripts/pr_lifecycle.py' AGENTS.md
 grep -q '^## PR lifecycle single-writer$' docs/ci-policy.md
-grep -q 'release pull request (human-only)' docs/ci-policy.md
+grep -q '^## 版本、發版、交付與部署矩陣$' docs/ci-policy.md
 "${platform_python[@]}" scripts/pr_lifecycle.py scan-writers --root .
 
 test -f AGENTS.md
@@ -345,6 +331,8 @@ if $verify_python; then
     --no-deps \
     --editable .
   uv pip check --python "$lower_bounds_root/.venv/bin/python"
+  # Keep the lower-bound run independent from the primary coverage database.
+  rm -f .coverage .coverage.* coverage.xml
 {% if coverage_mode == "global" %}
   if ! "$lower_bounds_root/.venv/bin/python" -m pytest \
     --cov \

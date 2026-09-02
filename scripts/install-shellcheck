@@ -3,13 +3,7 @@ set -euo pipefail
 
 version="0.11.0"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cache_dir="$repo_root/.cache/shellcheck/$version"
-binary="$cache_dir/shellcheck"
-
-if [[ -x "$binary" ]]; then
-  printf '%s\n' "$binary"
-  exit 0
-fi
+cache_root="$("$repo_root/scripts/resolve-cache-root")"
 
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64)
@@ -34,18 +28,27 @@ case "$(uname -s)-$(uname -m)" in
     ;;
 esac
 
+cache_dir="$cache_root/shellcheck/$version/$platform"
+binary="$cache_dir/shellcheck"
 mkdir -p "$cache_dir"
 asset="shellcheck-v${version}.${platform}.tar.gz"
-curl -fsSL \
-  "https://github.com/koalaman/shellcheck/releases/download/v${version}/$asset" \
-  -o "$cache_dir/$asset"
+if [[ ! -f "$cache_dir/$asset" ]] ||
+  [[ "$(shasum -a 256 "$cache_dir/$asset" | awk '{print $1}')" != \
+    "$expected_sha256" ]]; then
+  curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused \
+    "https://github.com/koalaman/shellcheck/releases/download/v${version}/$asset" \
+    -o "$cache_dir/$asset.tmp.$$"
+  mv "$cache_dir/$asset.tmp.$$" "$cache_dir/$asset"
+fi
 actual_sha256="$(shasum -a 256 "$cache_dir/$asset" | awk '{print $1}')"
 if [[ "$actual_sha256" != "$expected_sha256" ]]; then
   echo "ShellCheck archive does not match the pinned digest." >&2
   exit 1
 fi
 
-tar -xzf "$cache_dir/$asset" -C "$cache_dir" \
+extract_dir="$(mktemp -d "$cache_dir/.extract.XXXXXX")"
+trap 'rm -rf "$extract_dir"' EXIT
+tar -xzf "$cache_dir/$asset" -C "$extract_dir" \
   --strip-components 1 "shellcheck-v${version}/shellcheck"
-chmod +x "$binary"
+install -m 0755 "$extract_dir/shellcheck" "$binary"
 printf '%s\n' "$binary"

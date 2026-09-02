@@ -124,9 +124,6 @@ project_visibility:
 enable_codeql:
   type: bool
   default: "{{ project_visibility == 'public' and language != 'ci' }}"
-enable_release_attestations:
-  type: bool
-  default: "{{ project_visibility == 'public' and language != 'ci' }}"
 """,
         encoding="utf-8",
     )
@@ -351,10 +348,25 @@ def test_capability_preflight_uses_readable_github_origin(
     script = tmp_path / "release_policy.py"
     script.touch()
     response = {
-        "mode": "direct",
-        "capabilities": {
-            "actions_pull_requests": {"state": "blocked"},
+        "mode": "blocked",
+        "organization_policy": {
+            "state": "blocked",
+            "reason": "organization policy blocks pull requests",
+        },
+        "repository_setting": {
+            "state": "allowed",
+            "reason": "repository setting allows pull requests",
+        },
+        "token_permissions": {
+            "actions_pull_requests": {"state": "unknown"},
             "contents": {"state": "unknown"},
+            "release": {"state": "unknown"},
+        },
+        "effective": {"mode": "blocked", "reason": "publication unproven"},
+        "capabilities": {
+            "actions_pull_requests": {"state": "unknown"},
+            "contents": {"state": "unknown"},
+            "release": {"state": "unknown"},
         },
         "integrations": {
             "renovate": {
@@ -390,7 +402,10 @@ def test_capability_preflight_uses_readable_github_origin(
     monkeypatch.setattr(cli, "run", fake_run)
     assert cli.capability_preflight(script, tmp_path) == response
     output = capsys.readouterr().out
-    assert "actions_pull_requests=blocked" in output
+    assert "organization_policy=blocked" in output
+    assert "repository_setting=allowed" in output
+    assert "token actions_pull_requests=unknown" in output
+    assert "effective=blocked" in output
     assert "Optional integration renovate: request-owner" in output
     assert "Next: Ask the organization owner." in output
 
@@ -566,9 +581,9 @@ def test_init_json_uses_one_complete_resolved_plan(
     assert payload["repository"]["visibility"] == visibility
     assert payload["answers"]["project_visibility"] == visibility
     assert payload["answers"]["enable_codeql"] is enabled
-    assert payload["answers"]["enable_release_attestations"] is enabled
     assert payload["answers"]["reviewers"] == "@default-reviewer"
-    assert payload["release_capabilities"]["mode"] == "verification-only"
+    assert payload["release_ownership"] == "csarc-owned"
+    assert payload["release_capabilities"]["mode"] == "blocked"
     assert not target.exists()
 
 
@@ -1574,10 +1589,16 @@ def test_adoption_report_path_and_settings_are_safe(tmp_path: Path) -> None:
     with pytest.raises(CliError, match="outside the target repo"):
         cli.adoption_report_directory(project, project / "reports")
     settings = cli.report_settings(
-        {"language": "python", "coverage_mode": "diff", "api_token": "secret"}
+        {
+            "language": "python",
+            "coverage_mode": "diff",
+            "enable_pypi_publishing": True,
+            "api_token": "secret",
+        }
     )
     assert "language=python" in settings
     assert "coverage_mode=diff" in settings
+    assert "enable_pypi_publishing" not in settings
     assert "api_token" not in settings
     assert "secret" not in settings
 
@@ -1635,7 +1656,7 @@ def test_adoption_markdown_reports_repository_context(
         tmp_path,
         cli.Revision("v1.0.0", "a" * 40, source),
         context,
-        {"language": "ci"},
+        {"language": "ci", "project_mode": "existing"},
         cli.Plan((), (), (), (), (), ()),
         "2026-08-24T00:00:00+00:00",
     )
@@ -2137,6 +2158,11 @@ def test_adopt_rejects_plan_tampering_and_target_drift(
         / cli.ADOPTION_PLAN_BASENAME
     )
     original = plan_path.read_text(encoding="utf-8")
+    assert json.loads(original)["release_ownership"] == "product-owned"
+    report_path = plan_path.with_name(f"{cli.ADOPTION_REPORT_BASENAME}.md")
+    assert "Release ownership: `product-owned`" in report_path.read_text(
+        encoding="utf-8"
+    )
     plan_path.write_text(
         original.replace('"mode": "adopt"', '"mode": "init"'),
         encoding="utf-8",
@@ -3771,6 +3797,7 @@ def test_update_repository_rename_preserves_custom_security_channel(
     """Only move a repository-derived reporting channel to the new URL."""
     answers: dict[str, object] = {
         "language": "python",
+        "project_mode": "new",
         "project_visibility": "private",
         "repository_url": "https://github.com/old/repository",
         "security_reporting_channel": saved_channel,
@@ -3797,6 +3824,33 @@ def test_update_repository_rename_preserves_custom_security_channel(
     assert result["security_reporting_channel"] == expected_channel
     if saved_channel == expected_channel and explicit_channel is None:
         assert "security_reporting_channel" not in update_data
+
+
+def test_update_cannot_change_release_ownership() -> None:
+    """Keep the persisted lifecycle mode as the only release owner input."""
+    repository = cli.RepositoryContext(
+        "owner/repository",
+        "owner",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+
+    with pytest.raises(CliError, match="owns the release boundary"):
+        cli.update_plan_answers(
+            {"project_mode": "existing", "project_visibility": "private"},
+            {"project_mode": "new"},
+            repository,
+        )
+
+    answers, update_data = cli.update_plan_answers(
+        {"project_mode": "existing", "project_visibility": "private"},
+        {"project_mode": "existing"},
+        repository,
+    )
+    assert cli.release_ownership(answers) == "product-owned"
+    assert update_data["project_mode"] == "existing"
 
 
 @pytest.mark.large
@@ -3922,7 +3976,6 @@ def test_update_recomputes_visibility_defaults_from_github(
     assert payload["answers_changed"] is True
     assert payload["answers"]["project_visibility"] == "public"
     assert payload["answers"]["enable_codeql"] is True
-    assert payload["answers"]["enable_release_attestations"] is True
 
 
 @pytest.mark.large
@@ -4119,6 +4172,25 @@ def test_release_metadata_fails_closed(
     client.release_values[field] = value
     with pytest.raises(CliError, match=message):
         cli.resolve_revision(cli.CANONICAL_SOURCE, None, client=client)
+
+
+def test_unreleased_revision_requires_a_local_git_source(
+    tmp_path: Path,
+) -> None:
+    """Never turn a remote SHA into a first-adoption trust assertion."""
+    with pytest.raises(CliError, match="use a local Git repository"):
+        cli.resolve_revision(
+            "https://example.invalid/untrusted/template.git",
+            "a" * 40,
+            allow_unreleased=True,
+        )
+
+    source, revision = make_template(tmp_path)
+    resolved = cli.resolve_revision(
+        str(source), revision, allow_unreleased=True
+    )
+    assert resolved.sha == revision
+    assert not resolved.verified
 
 
 def test_release_trust_failures_stop_before_copy(
@@ -4468,7 +4540,11 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         assert commands
         assert all(excludes_large(command) for command in commands)
 
-    root_full_commands = pytest_commands(ROOT / "scripts/verify-template.sh")
+    # scripts/verify-template.sh is a thin aggregator (Issue #458); its own
+    # full-tier pytest invocation lives in the Regression tests stage script.
+    root_full_commands = pytest_commands(
+        ROOT / "scripts/verify-stage-regression-tests"
+    )
     assert root_full_commands
     assert not any(excludes_large(command) for command in root_full_commands)
 

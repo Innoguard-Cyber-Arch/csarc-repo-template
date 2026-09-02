@@ -18,6 +18,7 @@ _exclude:
   - "{% if enable_template_update_notifications %}__keep_template_update_script__{% else %}scripts/check-template-update{% endif %}"
   - "{% if enable_governance_drift_check %}__keep_governance_drift_workflow__{% else %}.github/workflows/governance-drift.yml{% endif %}"
   - "{% if enable_governance_drift_check %}__keep_governance_drift_script__{% else %}scripts/check-governance-drift{% endif %}"
+  - "{% if project_mode == 'new' %}__keep_release_workflow__{% else %}.github/workflows/release.yml{% endif %}"
   - "{% if enable_codeql | default(false) %}__keep_codeql__{% else %}.github/workflows/codeql.yml{% endif %}"
   - "{% if 'python' in languages %}__keep_python_version__{% else %}.python-version{% endif %}"
   - "{% if 'python' in languages %}__keep_python_project__{% else %}pyproject.toml{% endif %}"
@@ -104,7 +105,7 @@ _migrations:
   - command: "uv run --no-project python scripts/render_site.py"
     when: "{{ _stage == 'after' }}"
 _message_after_copy: |
-  {% if project_mode == 'existing' %}Existing product files were preserved. Review .csarc/config.yml, merge the required tool settings described in README.md, run ./scripts/verify, then link the pull request to its Issue.{% else %}Project created. Confirm .csarc/config.yml, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request.{% endif %} GitHub template creation and Copier do not copy repository settings. Runtime workflows detect release capabilities automatically. Administrators may optionally run ./scripts/apply-repository-settings.sh plan, apply, and check to enable stronger repository controls; unsupported organization policy remains explicit and does not require adopters to change it. See README.md for the capability and visibility matrices.
+  {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in README.md, run ./scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% else %}Project created with the CSARC release workflow. Confirm .csarc/config.yml, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% endif %} GitHub template creation and Copier do not copy repository settings. See README.md for the capability and visibility matrices.
 
 project_mode:
   type: str
@@ -147,30 +148,6 @@ languages:
     Rust: rust
     TypeScript: typescript
   default: "{{ [] if language == 'ci' else language.split('-') }}"
-
-container_mode:
-  type: str
-  help: Verify an existing container image in CI, and optionally publish it to GHCR from verified releases
-  choices:
-    Disabled: none
-    Build, smoke-test, and scan only: verify
-    Build, verify, and publish to GHCR: ghcr
-  default: none
-  when: "{{ project_mode == 'existing' }}"
-
-containerfile_path:
-  type: str
-  help: Repository-relative Dockerfile or Containerfile used with the repository root as build context
-  default: Dockerfile
-  when: "{{ (container_mode | default('none')) != 'none' }}"
-  validator: "{% if containerfile_path.startswith('/') or '..' in containerfile_path.split('/') or not (containerfile_path | regex_search('^[A-Za-z0-9._/-]+$')) %}Use a safe repository-relative path without spaces or parent traversal.{% endif %}"
-
-container_smoke_command:
-  type: str
-  help: One-line shell command that smoke-tests the built image through the IMAGE environment variable
-  default: ""
-  when: "{{ (container_mode | default('none')) != 'none' }}"
-  validator: "{% if not container_smoke_command.strip() or '$IMAGE' not in container_smoke_command or '\n' in container_smoke_command %}Use one non-empty line that references $IMAGE, for example docker run --rm \"$IMAGE\" --help.{% endif %}"
 
 branch_strategy:
   type: str
@@ -286,38 +263,6 @@ enable_governance_drift_check:
   type: bool
   help: Reserve the optional scheduled governance drift check; keep disabled until its GitHub Action is active
   default: false
-
-enable_release_attestations:
-  type: bool
-  help: Sign release provenance and SBOM attestations on supported GitHub plans; public projects default on, private/internal stay explicit opt-in
-  default: "{{ project_visibility == 'public' }}"
-  when: "{{ languages }}"
-
-enable_pypi_publishing:
-  type: bool
-  help: Publish Python distributions through PyPI Trusted Publishing
-  default: false
-  when: "{{ 'python' in languages }}"
-
-pypi_environment:
-  type: str
-  help: Protected GitHub environment configured in the PyPI trusted publisher
-  default: pypi
-  when: "{{ enable_pypi_publishing }}"
-  validator: "{% if not pypi_environment.strip() %}Use a non-empty GitHub environment name.{% endif %}"
-
-enable_npm_publishing:
-  type: bool
-  help: Publish the npm tarball through npm Trusted Publishing
-  default: false
-  when: "{{ 'typescript' in languages }}"
-
-npm_environment:
-  type: str
-  help: Protected GitHub environment configured in the npm trusted publisher
-  default: npm
-  when: "{{ enable_npm_publishing }}"
-  validator: "{% if not npm_environment.strip() %}Use a non-empty GitHub environment name.{% endif %}"
 
 use_reusable_workflow:
   type: bool

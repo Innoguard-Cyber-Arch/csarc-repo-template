@@ -56,57 +56,16 @@ run_stage() {
   current_stage=""
 }
 
-verify_repository_contracts() {
-  git diff --check
-  ./scripts/check-update-conflicts
-  ./scripts/scan-secrets
-  ./scripts/verify-dependencies
-}
-
-verify_static_assets() {
-  ./scripts/build-decision-site --check
-  ./scripts/lint-workflows-shell
-  ./scripts/test-static-validation
-  ./scripts/sync-paired-files.sh --check
-}
-
-prepare_python_environment() {
-  unset VIRTUAL_ENV
-  uv sync --locked --python "$UV_PYTHON"
-  uv lock --check
-}
-
-verify_python_quality() {
-  uv run ruff format --check src scripts tests
-  uv run ruff check src scripts tests
-  uv run ty check
-}
-
-run_regression_tests() {
-  uv run pytest --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80
-  ./scripts/test-issue-triage
-  ./scripts/test-worktree-cleanup
-  ./scripts/test-pr-policy
-  ./scripts/test-release-follow-up-gates
-}
-
-verify_package() {
-  uv build
-
-  local wheel
-  wheel="$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
-  test -n "$wheel"
-  uvx --from "$wheel" csarc --help >/dev/null
-}
-
-audit_github_actions() {
-  uv run zizmor . --format plain
-}
-
 main() {
   local repo_root
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-  export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"
+  local cache_root
+  cache_root="$("$repo_root/scripts/resolve-cache-root")"
+  if [[ -n "${CSARC_CACHE_ROOT:-}" ]]; then
+    export UV_CACHE_DIR="$cache_root/uv"
+  else
+    export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
+  fi
   export UV_PYTHON="${CSARC_PYTHON_VERSION:-3.14}"
   cd "$repo_root"
 
@@ -114,14 +73,19 @@ main() {
   trap report_failure ERR
 
   # This is the template repository's single full-verification entry point.
-  # GitHub Actions only selects when to call it; the checks stay runnable here.
-  run_stage "Repository contracts" verify_repository_contracts
-  run_stage "Static assets and paired files" verify_static_assets
-  run_stage "Python environment" prepare_python_environment
-  run_stage "Python quality" verify_python_quality
-  run_stage "Regression tests" run_regression_tests
-  run_stage "Package smoke test" verify_package
-  run_stage "GitHub Actions audit" audit_github_actions
+  # GitHub Actions only selects when to call it; the checks stay runnable
+  # here. Each stage is also an independently runnable script under
+  # scripts/verify-stage-*, so a single stage can be re-checked without
+  # paying for the full run; this aggregator calls the same files in the
+  # same order and keeps the pass/fail and timing-summary contract below
+  # unchanged. See docs/ci-policy.md for the stage inventory and rationale.
+  run_stage "Repository contracts" ./scripts/verify-stage-repository-contracts
+  run_stage "Static assets and paired files" ./scripts/verify-stage-static-assets
+  run_stage "Python environment" ./scripts/verify-stage-python-environment
+  run_stage "Python quality" ./scripts/verify-stage-python-quality
+  run_stage "Regression tests" ./scripts/verify-stage-regression-tests
+  run_stage "Package smoke test" ./scripts/verify-stage-package-smoke
+  run_stage "GitHub Actions audit" ./scripts/verify-stage-github-actions-audit
 
   print_timing_summary
   trap - ERR

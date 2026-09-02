@@ -31,12 +31,14 @@ scope_for = MODULE["scope_for"]
         ("scripts/verify-fast", "shell"),
         ("scripts/apply-repository-settings.sh", "governance"),
         ("scripts/check-governance-drift", "governance"),
+        ("scripts/request-reviewer", "governance"),
         ("template/scripts/verify.jinja", "shell"),
         ("uv.lock", "dependency"),
         ("template/pyproject.toml.jinja", "dependency"),
         ("template/.github/dependabot.yml.jinja", "dependency"),
         ("template/pnpm-workspace.yaml", "dependency"),
         ("policies/rulesets.json", "governance"),
+        ("policies/releases.json", "governance"),
         ("template/policies/rulesets.json.jinja", "governance"),
         ("unexpected.bin", "unknown"),
     ],
@@ -132,6 +134,7 @@ def test_risk_scopes_enable_only_their_expensive_check(
     [
         "scripts/apply-repository-settings.sh",
         "scripts/check-governance-drift",
+        "scripts/request-reviewer",
     ],
 )
 def test_governance_checkers_run_only_remote_governance(path: str) -> None:

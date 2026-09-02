@@ -43,6 +43,7 @@ def scope_for(path: str) -> str:
         path.startswith(("policies/", "template/policies/"))
         or path.startswith("scripts/apply-repository-settings")
         or path.startswith("scripts/check-governance-drift")
+        or path.startswith("scripts/request-reviewer")
     ):
         return "governance"
     if path.endswith(".sh") or (

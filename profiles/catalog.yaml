@@ -5,14 +5,15 @@ version_policy:
   compatibility_override: explicit_minimum_version
   stable_release_observation_days: 30
   release_source: https://www.python.org/api/v2/downloads/release/
-  update_method: scheduled_verified_pull_request
-  merge_after_full_verification: automatic
+  update_method: manual_reviewed_pull_request
+  merge_after_full_verification: manual
   future_profiles_must_define_their_own_stable_channel: true
 
-template_release_policy:
+template_version_policy:
   version_source: version.txt
   strategy: single_semver_for_all_compositions
-  release_tool: release-please
+  materialization: release_please_reviewed_pull_request
+  release_automation: verified_immutable_github_release
   tag_format: vX.Y.Z
   breaking_change_in_any_beta_composition_bumps_major: true
 

@@ -199,6 +199,7 @@ class ResolvedPlan:
             "answers": dict(sorted(self.answers.items())),
             "mode": self.mode,
             "release_capabilities": self.capabilities,
+            "release_ownership": release_ownership(self.answers),
             "repository": self.repository.as_dict(),
             "schema_version": 1,
             "target": str(self.target),
@@ -417,12 +418,15 @@ class GhReleaseClient:
 
 def resolve_unreleased_revision(source: str, requested: str | None) -> Revision:
     """Resolve an explicitly allowed development-only revision."""
-    if requested is not None and FULL_SHA.fullmatch(requested):
-        return Revision(requested.lower(), requested.lower(), source)
     source_path = Path(source).expanduser()
-    if not source_path.exists():
+    if not source_path.is_dir():
         raise CliError(
-            "--allow-unreleased requires a full commit SHA or local Git source."
+            "--allow-unreleased template source is unavailable; use a local "
+            "Git repository."
+        )
+    if requested is not None and FULL_SHA.fullmatch(requested):
+        return Revision(
+            requested.lower(), git_commit(source_path, requested), source
         )
     label = requested or "latest-local-tag"
     reference = requested
@@ -1150,21 +1154,14 @@ def report_settings(data: dict[str, object]) -> str:
     allowed = {
         "branch_strategy",
         "code_owner",
-        "container_mode",
-        "container_smoke_command",
-        "containerfile_path",
         "coverage_mode",
         "coverage_threshold",
         "enable_codeql",
         "enable_governance_drift_check",
-        "enable_npm_publishing",
         "enable_precommit",
-        "enable_pypi_publishing",
-        "enable_release_attestations",
         "enable_template_update_notifications",
         "language",
         "languages",
-        "npm_environment",
         "package_name",
         "project_description",
         "project_mode",
@@ -1172,7 +1169,6 @@ def report_settings(data: dict[str, object]) -> str:
         "project_slug",
         "project_verification_hook",
         "project_visibility",
-        "pypi_environment",
         "python_min_version",
         "python_support_mode",
         "reviewers",
@@ -1221,6 +1217,7 @@ def adoption_report_markdown(
         f"- Template: `{markdown_code(revision.label)}` / `{revision.sha}`",
         "- Release verification: "
         + ("verified immutable release" if revision.verified else "UNVERIFIED"),
+        f"- Release ownership: `{release_ownership(data)}`",
         f"- Settings: {report_settings(data)}",
         f"- Generated: `{generated_at}`",
         "",
@@ -1417,6 +1414,7 @@ def draw_adoption_pdf(
             "Verification",
             "verified immutable release" if revision.verified else "UNVERIFIED",
         ),
+        ("Release ownership", release_ownership(data)),
         ("Languages", data.get("languages", "unknown")),
         ("Project hook", hook_path),
         ("Hook configured", str(hook.get("configured") is True).lower()),
@@ -1602,6 +1600,7 @@ def adoption_binding(payload: dict[str, object]) -> dict[str, object]:
         "adoption": adoption,
         "files": payload.get("files"),
         "mode": payload.get("mode"),
+        "release_ownership": payload.get("release_ownership"),
         "repository": payload.get("repository"),
         "target": payload.get("target"),
         "template": payload.get("template"),
@@ -1800,15 +1799,30 @@ def print_group(title: str, paths: tuple[str, ...]) -> None:
 
 def print_capabilities(payload: dict[str, object]) -> None:
     """Print capability results from a resolved plan."""
-    raw_states = payload.get("capabilities")
+    for name in ("organization_policy", "repository_setting"):
+        value = payload.get(name)
+        state = (
+            value.get("state", "unknown")
+            if isinstance(value, dict)
+            else "unknown"
+        )
+        print(f"GitHub release planning {name}={state}")
+    raw_states = payload.get("token_permissions", payload.get("capabilities"))
     states = raw_states if isinstance(raw_states, dict) else {}
-    summary = ", ".join(
-        f"{name}={value.get('state', 'unknown')}"
+    token_summary = ", ".join(
+        f"token {name}={value.get('state', 'unknown')}"
         for name, value in states.items()
         if isinstance(value, dict)
     )
-    print(f"GitHub release preflight: {summary or 'unknown'}")
-    print("Runtime workflows recheck capabilities before every release.")
+    print(f"GitHub release planning permissions: {token_summary or 'unknown'}")
+    effective = payload.get("effective")
+    mode = (
+        effective.get("mode", payload.get("mode", "blocked"))
+        if isinstance(effective, dict)
+        else payload.get("mode", "blocked")
+    )
+    print(f"GitHub release planning effective={mode}")
+    print("Planning only: this check neither enables nor publishes a release.")
     raw_integrations = payload.get("integrations")
     integrations = (
         raw_integrations if isinstance(raw_integrations, dict) else {}
@@ -1846,6 +1860,7 @@ def print_plan(plan: ResolvedPlan) -> None:
             else "UNVERIFIED"
         )
     )
+    print(f"Release ownership: {release_ownership(plan.answers)}")
     print(f"Repository: {plan.repository.repository or '(none)'}")
     print(f"Repository owner: {plan.repository.owner or '(unknown)'}")
     print(f"Repository owner type: {plan.repository.owner_type or 'unknown'}")
@@ -2971,21 +2986,25 @@ def apply_milestone_description_plan(
 def capability_preflight(
     script: Path, target: Path, *, emit: bool = True
 ) -> dict[str, object]:
-    """Run the read-only release preflight without making it a prerequisite."""
+    """Inspect release-related capabilities for planning only."""
     repository = target_repository(target)
     if repository is None or not script.is_file():
+        unknown = {"state": "unknown", "reason": "runtime check required"}
+        token_permissions = {
+            name: dict(unknown)
+            for name in ("actions_pull_requests", "contents", "release")
+        }
         payload: dict[str, object] = {
-            "mode": "verification-only",
+            "mode": "blocked",
             "reason": "GitHub origin or capability script is unavailable",
-            "capabilities": {
-                name: {"state": "unknown", "reason": "runtime check required"}
-                for name in (
-                    "actions_pull_requests",
-                    "contents",
-                    "release",
-                    "dispatch",
-                )
+            "organization_policy": dict(unknown),
+            "repository_setting": dict(unknown),
+            "token_permissions": token_permissions,
+            "effective": {
+                "mode": "blocked",
+                "reason": "GitHub origin or capability script is unavailable",
             },
+            "capabilities": token_permissions,
             "integrations": {
                 "renovate": {
                     "state": "fallback",
@@ -3019,8 +3038,15 @@ def capability_preflight(
             cast(dict[str, object], parsed)
             if result.returncode == 0 and isinstance(parsed, dict)
             else {
-                "mode": "verification-only",
+                "mode": "blocked",
                 "reason": "GitHub capability preflight was unavailable",
+                "organization_policy": {},
+                "repository_setting": {},
+                "token_permissions": {},
+                "effective": {
+                    "mode": "blocked",
+                    "reason": "GitHub capability preflight was unavailable",
+                },
                 "capabilities": {},
             }
         )
@@ -3043,6 +3069,16 @@ def parse_languages(value: str) -> list[str]:
     if unknown:
         raise CliError(f"Unsupported language modules: {', '.join(unknown)}")
     return list(dict.fromkeys(parsed))
+
+
+def release_ownership(answers: Mapping[str, object]) -> str:
+    """Resolve release ownership from the persisted lifecycle setting."""
+    project_mode = answers.get("project_mode")
+    if project_mode == "new":
+        return "csarc-owned"
+    if project_mode == "existing":
+        return "product-owned"
+    raise CliError("project_mode must be new or existing.")
 
 
 def base_data(
@@ -3944,6 +3980,13 @@ def update_plan_answers(  # noqa: C901
     """Resolve update answers and Copier overrides from repository facts."""
     result = dict(answers)
     update_data: dict[str, object] = dict(explicit_data)
+    release_ownership(answers)
+    requested_mode = explicit_data.get("project_mode")
+    if requested_mode is not None and requested_mode != answers["project_mode"]:
+        raise CliError(
+            "project_mode cannot change during update because it owns the "
+            "release boundary."
+        )
     saved_visibility = answers.get("project_visibility")
     update_data["project_visibility"] = repository.visibility
     if repository.repository is not None:
@@ -3964,9 +4007,8 @@ def update_plan_answers(  # noqa: C901
         enabled = repository.visibility == "public" and bool(
             selected_languages(answers)
         )
-        for key in ("enable_codeql", "enable_release_attestations"):
-            if key in answers and key not in explicit_data:
-                update_data[key] = str(enabled).lower()
+        if "enable_codeql" in answers and "enable_codeql" not in explicit_data:
+            update_data["enable_codeql"] = str(enabled).lower()
     for key, value in update_data.items():
         previous_value = answers.get(key)
         if key == "languages":

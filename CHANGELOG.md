@@ -1,7 +1,7 @@
 # Changelog
 
-本檔案由 release-please 依合併到 `main` 的 Conventional Commits 維護。2026-08-24
-以前的版本依既有 tags、合併紀錄與 GitHub Release notes 回填；`v0.1.0`、
+目前由維護者在受審查的版本 PR 中更新；2026-08-27 前曾由 release-please 維護。
+2026-08-24 以前的版本依既有 tags、合併紀錄與 GitHub Release notes 回填；`v0.1.0`、
 `v0.2.0`、`v0.2.1` 是 tag-only 歷史版本，沒有可驗證的正式 Release 成品。
 `v0.2.2`～`v0.10.0` 的正式成品版本與 tag 一致，但 tagged source 的版本欄位
 仍停在 `0.1.0`；從 `v0.10.1` 起改為只發布已在 source commit 完整寫入版本與
