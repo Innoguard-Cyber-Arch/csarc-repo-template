@@ -686,9 +686,7 @@ def test_release_capability_degrades_closed_when_writer_disappears(
     """Fail closed instead of silently downgrading a previously bound owner."""
     now_empty = tmp_path / "now-empty-product"
     now_empty.mkdir()
-    with pytest.raises(
-        CliError, match="exactly one release-writing workflow"
-    ):
+    with pytest.raises(CliError, match="exactly one release-writing workflow"):
         cli.resolve_release_answers(
             now_empty,
             {

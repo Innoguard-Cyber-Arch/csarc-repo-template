@@ -102,7 +102,10 @@ def test_release_converges_a_repeated_or_concurrent_run_to_one_release() -> (
     assert 'if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then' in source
     # The exact release state is always re-derived from GitHub after any
     # candidate or rerun path, not assumed from a prior step's local output.
-    assert 'release="$(gh release view "$tag" --json isDraft,isImmutable,tagName)"' in source
+    assert (
+        'release="$(gh release view "$tag" --json isDraft,isImmutable,tagName)"'
+        in source
+    )
     assert 'test "$(jq -r .tagName <<<"$release")" = "$tag"' in source
     assert 'test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"' in source
 
