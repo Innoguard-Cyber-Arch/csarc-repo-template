@@ -297,6 +297,10 @@ def test_enable_codeql_generates_a_working_workflow(tmp_path: Path) -> None:
         },
         defaults=True,
         unsafe=True,
+        # Only the rendered files are under test here; skip the pnpm/uv
+        # post-generation tasks so this stays runnable without a Node
+        # toolchain (e.g. on the docs/fast CI tier).
+        skip_tasks=True,
     )
 
     workflow_path = project / ".github/workflows/codeql.yml"
@@ -374,6 +378,7 @@ def test_disabling_codeql_omits_the_workflow(tmp_path: Path) -> None:
         },
         defaults=True,
         unsafe=True,
+        skip_tasks=True,
     )
 
     assert not (project / ".github/workflows/codeql.yml").exists()

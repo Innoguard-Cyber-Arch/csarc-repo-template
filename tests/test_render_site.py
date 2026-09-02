@@ -375,7 +375,11 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         for path in (root / "template/.github/workflows").iterdir()
         if path.is_file()
     }
-    optional_workflows = {"template-update.yml"}
+    # codeql.yml is conditional on enable_codeql (see copier.yml), like
+    # template-update.yml is conditional on
+    # enable_template_update_notifications: neither ships to every new
+    # repo, so neither is enumerated in this always-present file map.
+    optional_workflows = {"template-update.yml", "codeql.yml"}
 
     assert workflows - optional_workflows == {
         "ci.yml",
