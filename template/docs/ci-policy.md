@@ -151,6 +151,42 @@ PASSED／FAILED／TOTAL 回報）做回歸測試，並同時掛在 `scripts/veri
 | Package smoke test | `scripts/verify-stage-package-smoke` | wheel 可建置、已發布入口可從建置產物執行 | fast 不跑這個階段；改用範圍較窄的 Copier smoke copy（見下方 Journey 03 的 PR 級別 render/smoke） |
 | GitHub Actions audit | `scripts/verify-stage-github-actions-audit` | workflow 權限與注入稽核（zizmor） | fast 不跑；workflow scope 的一般 PR 由 full 邊界（promotion／hotfix／merge queue／manual）覆蓋，不會被跳過 |
 
+#### 逐階段耗時量測（#465）
+
+上表只記錄涵蓋範圍與取捨依據，沒有留下逐階段秒數；聚合器本身每次執行都會印出
+timing summary（`PASSED/FAILED <秒數> <階段名>`），但這份資料原本只存在單次終端機
+輸出裡，Regression tests 這種本身就重（完整 pytest＋`large` 標記的 Copier
+create／adopt／update 矩陣）的階段沒有可查證據，只能自己跑一次全部七階段才知道量級。
+下表把一次完整 run 的 timing summary 轉存成文件，補上這個缺口。
+
+量測日期：2026-09-02；環境：本機（不是 hosted runner），與上方 full/fast 實測欄位
+同一台機器。本次量測**不是**獨占環境：同一次任務裡先後跑了三次
+`./scripts/verify-template.sh`，前兩次都不能當作乾淨樣本——第一次在 Repository
+contracts 階段因暫時性網路錯誤（`curl: (92) HTTP/2 stream 1 was not closed
+cleanly: PROTOCOL_ERROR`）於 212 秒處中止；第三次（跑之前已確認沒有其他
+pytest／verify／copier 程序在跑）前四個階段各只花 5s／5s／0s／1s，但 Regression
+tests 內一個需要對外連線的 adoption 保存測試又踩到同一種暫時性網路錯誤，於 1107 秒
+處失敗，同樣沒有跑完七個階段。下表數字取自第二次、七個階段全部 PASSED 的那次執行；
+量測期間偵測到另一個 worktree（`csarc-repo-template-issue-472`）同時開始執行自己的
+`uv run pytest`，系統 load average 從量測開始時約 3.5 上升到量測結束後約 5.5，因此
+TOTAL（4002 秒／66 分 42 秒，尤其是 Regression tests 一階段的 3971 秒）明顯高於
+#458 記錄的 502 秒獨占基準，不代表典型耗時，只保留為「同機器有其他背景負載時」的
+量測示例；三次嘗試合計已重試兩次，之後沒有再重跑，若需要乾淨的獨占基準，需在確認
+沒有其他 worktree／verify 活動、且網路連線穩定時重新量測，不宣稱本次數字為恆定 SLA。
+
+| 階段（`run_stage` 名稱） | 獨立入口 | 秒數（本次量測，非獨占） |
+| --- | --- | --- |
+| Repository contracts | `scripts/verify-stage-repository-contracts` | 10 |
+| Static assets and paired files | `scripts/verify-stage-static-assets` | 10 |
+| Python environment | `scripts/verify-stage-python-environment` | 2 |
+| Python quality | `scripts/verify-stage-python-quality` | 2 |
+| Regression tests | `scripts/verify-stage-regression-tests` | 3971 |
+| Package smoke test | `scripts/verify-stage-package-smoke` | 6 |
+| GitHub Actions audit | `scripts/verify-stage-github-actions-audit` | 1 |
+| TOTAL | — | 4002 |
+
+七個階段秒數總和（10+10+2+2+3971+6+1）等於同次執行回報的 TOTAL 4002 秒。
+
 `scripts/ci_tier.py` 另外輸出 `run_governance`／`run_osv`／`run_zizmor`／`upload_site`
 四個欄位；除了 `run_osv`（餵給 `scripts/verify-fast` 決定是否跑 `verify-dependencies`）
 外，其餘三個目前只出現在 `GITHUB_STEP_SUMMARY` 的 routing evidence，沒有 workflow 依它
