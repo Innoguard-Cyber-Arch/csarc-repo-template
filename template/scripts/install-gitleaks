@@ -4,13 +4,7 @@ set -euo pipefail
 version="8.30.1"
 checksums_sha256="061476c21adaf5441516f96f185c1a4706a83cd6329b9b38762271b3d4a52fae"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cache_dir="$repo_root/.cache/gitleaks/$version"
-binary="$cache_dir/gitleaks"
-
-if [[ -x "$binary" ]]; then
-  printf '%s\n' "$binary"
-  exit 0
-fi
+cache_root="$("$repo_root/scripts/resolve-cache-root")"
 
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) asset="gitleaks_${version}_darwin_arm64.tar.gz" ;;
@@ -23,23 +17,42 @@ case "$(uname -s)-$(uname -m)" in
     ;;
 esac
 
+cache_dir="$cache_root/gitleaks/$version/$asset"
+binary="$cache_dir/gitleaks"
 mkdir -p "$cache_dir"
 base_url="https://github.com/gitleaks/gitleaks/releases/download/v${version}"
-curl -fsSL "$base_url/gitleaks_${version}_checksums.txt" -o "$cache_dir/checksums.txt"
+if [[ ! -f "$cache_dir/checksums.txt" ]] ||
+  [[ "$(shasum -a 256 "$cache_dir/checksums.txt" | awk '{print $1}')" != \
+    "$checksums_sha256" ]]; then
+  curl -fsSL "$base_url/gitleaks_${version}_checksums.txt" \
+    -o "$cache_dir/checksums.txt.tmp.$$"
+  mv "$cache_dir/checksums.txt.tmp.$$" "$cache_dir/checksums.txt"
+fi
 actual_checksums_sha256="$(shasum -a 256 "$cache_dir/checksums.txt" | awk '{print $1}')"
 if [[ "$actual_checksums_sha256" != "$checksums_sha256" ]]; then
   printf 'Gitleaks checksum manifest does not match the pinned digest.\n' >&2
   exit 1
 fi
 
-curl -fsSL "$base_url/$asset" -o "$cache_dir/$asset"
 expected_asset_sha256="$(awk -v name="$asset" '$2 == name {print $1}' "$cache_dir/checksums.txt")"
+if [[ -z "$expected_asset_sha256" ]]; then
+  printf 'Gitleaks release manifest does not contain the selected asset.\n' >&2
+  exit 1
+fi
+if [[ ! -f "$cache_dir/$asset" ]] ||
+  [[ "$(shasum -a 256 "$cache_dir/$asset" | awk '{print $1}')" != \
+    "$expected_asset_sha256" ]]; then
+  curl -fsSL "$base_url/$asset" -o "$cache_dir/$asset.tmp.$$"
+  mv "$cache_dir/$asset.tmp.$$" "$cache_dir/$asset"
+fi
 actual_asset_sha256="$(shasum -a 256 "$cache_dir/$asset" | awk '{print $1}')"
 if [[ -z "$expected_asset_sha256" || "$actual_asset_sha256" != "$expected_asset_sha256" ]]; then
   printf 'Gitleaks archive does not match the pinned release manifest.\n' >&2
   exit 1
 fi
 
-tar -xzf "$cache_dir/$asset" -C "$cache_dir" gitleaks
-chmod +x "$binary"
+extract_dir="$(mktemp -d "$cache_dir/.extract.XXXXXX")"
+trap 'rm -rf "$extract_dir"' EXIT
+tar -xzf "$cache_dir/$asset" -C "$extract_dir" gitleaks
+install -m 0755 "$extract_dir/gitleaks" "$binary"
 printf '%s\n' "$binary"

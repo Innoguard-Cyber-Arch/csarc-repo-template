@@ -2,15 +2,11 @@
 # Copier source metadata belongs only to repositories generated from this source.
 branch_strategy: delivery
 code_owner: '@Innoguard-Cyber-Arch/arch'
-container_mode: none
 coverage_mode: global
 coverage_threshold: 80
 enable_codeql: false
 enable_governance_drift_check: false
-enable_npm_publishing: false
 enable_precommit: false
-enable_pypi_publishing: false
-enable_release_attestations: false
 enable_template_update_notifications: false
 languages:
 - python

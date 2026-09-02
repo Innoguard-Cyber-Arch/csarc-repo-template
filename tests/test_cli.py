@@ -124,9 +124,6 @@ project_visibility:
 enable_codeql:
   type: bool
   default: "{{ project_visibility == 'public' and language != 'ci' }}"
-enable_release_attestations:
-  type: bool
-  default: "{{ project_visibility == 'public' and language != 'ci' }}"
 """,
         encoding="utf-8",
     )
@@ -351,10 +348,25 @@ def test_capability_preflight_uses_readable_github_origin(
     script = tmp_path / "release_policy.py"
     script.touch()
     response = {
-        "mode": "direct",
-        "capabilities": {
-            "actions_pull_requests": {"state": "blocked"},
+        "mode": "blocked",
+        "organization_policy": {
+            "state": "blocked",
+            "reason": "organization policy blocks pull requests",
+        },
+        "repository_setting": {
+            "state": "allowed",
+            "reason": "repository setting allows pull requests",
+        },
+        "token_permissions": {
+            "actions_pull_requests": {"state": "unknown"},
             "contents": {"state": "unknown"},
+            "release": {"state": "unknown"},
+        },
+        "effective": {"mode": "blocked", "reason": "publication unproven"},
+        "capabilities": {
+            "actions_pull_requests": {"state": "unknown"},
+            "contents": {"state": "unknown"},
+            "release": {"state": "unknown"},
         },
         "integrations": {
             "renovate": {
@@ -390,7 +402,10 @@ def test_capability_preflight_uses_readable_github_origin(
     monkeypatch.setattr(cli, "run", fake_run)
     assert cli.capability_preflight(script, tmp_path) == response
     output = capsys.readouterr().out
-    assert "actions_pull_requests=blocked" in output
+    assert "organization_policy=blocked" in output
+    assert "repository_setting=allowed" in output
+    assert "token actions_pull_requests=unknown" in output
+    assert "effective=blocked" in output
     assert "Optional integration renovate: request-owner" in output
     assert "Next: Ask the organization owner." in output
 
@@ -680,10 +695,9 @@ def test_init_json_uses_one_complete_resolved_plan(
     assert payload["repository"]["visibility"] == visibility
     assert payload["answers"]["project_visibility"] == visibility
     assert payload["answers"]["enable_codeql"] is enabled
-    assert payload["answers"]["enable_release_attestations"] is enabled
     assert payload["answers"]["reviewers"] == "@default-reviewer"
     assert payload["release_ownership"] == "csarc-owned"
-    assert payload["release_capabilities"]["mode"] == "verification-only"
+    assert payload["release_capabilities"]["mode"] == "blocked"
     assert not target.exists()
 
 
@@ -1721,10 +1735,16 @@ def test_adoption_report_path_and_settings_are_safe(tmp_path: Path) -> None:
     with pytest.raises(CliError, match="outside the target repo"):
         cli.adoption_report_directory(project, project / "reports")
     settings = cli.report_settings(
-        {"language": "python", "coverage_mode": "diff", "api_token": "secret"}
+        {
+            "language": "python",
+            "coverage_mode": "diff",
+            "enable_pypi_publishing": True,
+            "api_token": "secret",
+        }
     )
     assert "language=python" in settings
     assert "coverage_mode=diff" in settings
+    assert "enable_pypi_publishing" not in settings
     assert "api_token" not in settings
     assert "secret" not in settings
 
@@ -4115,7 +4135,6 @@ def test_update_recomputes_visibility_defaults_from_github(
     assert payload["answers_changed"] is True
     assert payload["answers"]["project_visibility"] == "public"
     assert payload["answers"]["enable_codeql"] is True
-    assert payload["answers"]["enable_release_attestations"] is True
 
 
 @pytest.mark.large
