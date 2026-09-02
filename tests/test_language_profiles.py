@@ -262,3 +262,118 @@ def test_generated_language_module_runs_its_own_verifier(
     subprocess.run(  # noqa: S603
         [project / "scripts/verify", verify_mode], cwd=project, check=True
     )
+
+
+def test_enable_codeql_generates_a_working_workflow(tmp_path: Path) -> None:
+    """Prove enable_codeql=true actually renders a usable CodeQL workflow.
+
+    Regression for #494: the generator source used to be missing entirely,
+    so `enable_codeql: true` silently produced no workflow at all despite
+    copier.yml and the README both describing it as active.
+
+    Copies copier.yml/template/ into a plain (non-git) source directory
+    first, like test_generated_language_module_runs_its_own_verifier does:
+    running run_copy() straight against ROOT would let Copier default to
+    ROOT's latest release git tag instead of the working tree, silently
+    testing stale, already-released template content.
+    """
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "codeql-fixture"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": ["python", "typescript"],
+            "project_name": "CodeQL Fixture",
+            "project_slug": "codeql-fixture",
+            "project_description": "Exercises the CodeQL workflow generator.",
+            "repository_url": "https://github.com/example/codeql-fixture",
+            "security_reporting_channel": "Use the private security contact.",
+            "project_visibility": "public",
+            "enable_codeql": True,
+        },
+        defaults=True,
+        unsafe=True,
+    )
+
+    workflow_path = project / ".github/workflows/codeql.yml"
+    assert workflow_path.is_file()
+    raw = workflow_path.read_text(encoding="utf-8")
+    # Guards the exact escaping bug found in the archived generator, where
+    # `${{ "${{ matrix.language }}" }}` rendered as a broken `$${{ ... }}`.
+    assert "$$" not in raw
+    # No unrendered Jinja block/statement syntax should survive rendering.
+    assert "{%" not in raw
+
+    workflow = yaml.safe_load(raw)
+    # PyYAML parses the bare `on:` key as boolean True (YAML 1.1).
+    triggers = workflow.get("on", workflow.get(True))
+    assert triggers["pull_request"]["types"] == [
+        "opened",
+        "reopened",
+        "synchronize",
+    ]
+    assert "workflow_dispatch" in triggers
+    assert "push" not in triggers
+
+    assert workflow["permissions"] == {}
+
+    job = workflow["jobs"]["analyze"]
+    assert job["timeout-minutes"] == 20
+    assert job["permissions"] == {
+        "contents": "read",
+        "security-events": "write",
+    }
+    assert job["strategy"]["matrix"]["language"] == [
+        "python",
+        "javascript-typescript",
+    ]
+
+    steps = job["steps"]
+    uses = [step["uses"] for step in steps]
+    assert uses == [
+        "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938",
+        "github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938",
+    ]
+    # Every third-party Action is pinned to a full commit SHA with a
+    # readable version-tag comment, matching this session's house style.
+    for line in raw.splitlines():
+        if "uses:" in line and "actions/checkout" in line:
+            assert "# v7.0.1" in line
+        if "uses:" in line and "codeql-action" in line:
+            assert "# v4.37.9" in line
+
+    init_step = steps[1]
+    assert init_step["with"]["languages"] == "${{ matrix.language }}"
+    assert init_step["with"]["build-mode"] == "none"
+
+
+def test_disabling_codeql_omits_the_workflow(tmp_path: Path) -> None:
+    """Keep the exclude-list branch honest when CodeQL stays off."""
+    source = tmp_path / "source"
+    source.mkdir()
+    shutil.copy2(ROOT / "copier.yml", source / "copier.yml")
+    shutil.copytree(ROOT / "template", source / "template")
+    project = tmp_path / "no-codeql-fixture"
+    run_copy(
+        str(source),
+        project,
+        data={
+            "languages": ["python"],
+            "project_name": "No CodeQL Fixture",
+            "project_slug": "no-codeql-fixture",
+            "project_description": "Exercises the disabled CodeQL path.",
+            "repository_url": "https://github.com/example/no-codeql-fixture",
+            "security_reporting_channel": "Use the private security contact.",
+            "project_visibility": "private",
+            "enable_codeql": False,
+        },
+        defaults=True,
+        unsafe=True,
+    )
+
+    assert not (project / ".github/workflows/codeql.yml").exists()
