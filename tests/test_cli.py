@@ -124,9 +124,6 @@ project_visibility:
 enable_codeql:
   type: bool
   default: "{{ project_visibility == 'public' and language != 'ci' }}"
-enable_release_attestations:
-  type: bool
-  default: "{{ project_visibility == 'public' and language != 'ci' }}"
 """,
         encoding="utf-8",
     )
@@ -584,7 +581,6 @@ def test_init_json_uses_one_complete_resolved_plan(
     assert payload["repository"]["visibility"] == visibility
     assert payload["answers"]["project_visibility"] == visibility
     assert payload["answers"]["enable_codeql"] is enabled
-    assert payload["answers"]["enable_release_attestations"] is enabled
     assert payload["answers"]["reviewers"] == "@default-reviewer"
     assert payload["release_ownership"] == "csarc-owned"
     assert payload["release_capabilities"]["mode"] == "blocked"
@@ -1593,10 +1589,16 @@ def test_adoption_report_path_and_settings_are_safe(tmp_path: Path) -> None:
     with pytest.raises(CliError, match="outside the target repo"):
         cli.adoption_report_directory(project, project / "reports")
     settings = cli.report_settings(
-        {"language": "python", "coverage_mode": "diff", "api_token": "secret"}
+        {
+            "language": "python",
+            "coverage_mode": "diff",
+            "enable_pypi_publishing": True,
+            "api_token": "secret",
+        }
     )
     assert "language=python" in settings
     assert "coverage_mode=diff" in settings
+    assert "enable_pypi_publishing" not in settings
     assert "api_token" not in settings
     assert "secret" not in settings
 
@@ -3974,7 +3976,6 @@ def test_update_recomputes_visibility_defaults_from_github(
     assert payload["answers_changed"] is True
     assert payload["answers"]["project_visibility"] == "public"
     assert payload["answers"]["enable_codeql"] is True
-    assert payload["answers"]["enable_release_attestations"] is True
 
 
 @pytest.mark.large
