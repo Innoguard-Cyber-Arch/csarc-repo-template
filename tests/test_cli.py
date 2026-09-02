@@ -1835,6 +1835,29 @@ def test_adoption_report_path_and_settings_are_safe(tmp_path: Path) -> None:
     assert "secret" not in settings
 
 
+def test_dangling_reusable_workflow_option_stays_removed() -> None:
+    """Issue #495: leave no trace of the caller-less reusable-workflow option.
+
+    ``use_reusable_workflow``/``workflow_ref`` never gained ``_exclude``
+    wiring and no template caller file ever existed, so the questions were
+    removed rather than restored. Guard against silently reintroducing a
+    Copier question, or a settings-report entry, that changes nothing about
+    what gets generated.
+    """
+    copier_config = yaml.safe_load(
+        (ROOT / "copier.yml").read_text(encoding="utf-8")
+    )
+    question_names = {key for key in copier_config if not key.startswith("_")}
+    assert "use_reusable_workflow" not in question_names
+    assert "workflow_ref" not in question_names
+
+    settings = cli.report_settings(
+        {"use_reusable_workflow": True, "workflow_ref": "a" * 40}
+    )
+    assert "use_reusable_workflow" not in settings
+    assert "workflow_ref" not in settings
+
+
 @pytest.mark.parametrize(
     ("context", "repository_line", "visibility_line"),
     [

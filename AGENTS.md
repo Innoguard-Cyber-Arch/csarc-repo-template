@@ -7,7 +7,7 @@
 - One writable task uses one Git branch and one worktree so concurrent changes stay isolated.
 - Reusable validation lives in `scripts/` and tests. `./scripts/verify-fast` is the daily PR gate CI selects by risk (docs or fast); `./scripts/verify-template.sh` is full delivery verification, reserved for Milestone/canary delivery, hotfix, merge queue, manual dispatch, and unknown-risk paths — do not run it locally for an ordinary fast- or docs-tier PR, and after that one genuine local run, a later base-only re-merge of the same PR may skip a repeat local run under the narrow condition in `docs/ci-policy.md` (see working loop step 10). Checked-in files under `.github/workflows/` are the only active GitHub Actions. See [CI/CD settings](docs/index.html#testing) and [`docs/ci-policy.md`](docs/ci-policy.md) for the tier boundary and stage ownership.
 - [Journey 08](docs/index.html#governance) and the [`docs/ci-policy.md` quota fallback](docs/ci-policy.md#failure-與-fallback) own review requirements, merge eligibility, Alpha self-merge, and quota fallback. Do not restate or invent exceptions here.
-- Copier owns template creation and updates. Follow [Journey 09](docs/index.html#template-upgrade) and [`docs/agent-install.md`](docs/agent-install.md) for existing-repository behavior.
+- Copier owns template creation and updates. Follow [Journey 09](docs/index.html#template-release) and [`docs/agent-install.md`](docs/agent-install.md) for existing-repository behavior.
 
 ## Scope and sources of truth
 

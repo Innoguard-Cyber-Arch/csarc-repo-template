@@ -1218,8 +1218,6 @@ def report_settings(data: dict[str, object]) -> str:
         "python_min_version",
         "python_support_mode",
         "reviewers",
-        "use_reusable_workflow",
-        "workflow_ref",
     }
     return ", ".join(
         f"`{key}={markdown_code(value)}`"
