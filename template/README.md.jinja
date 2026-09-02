@@ -31,6 +31,8 @@
 
 共同需求是 Git、GitHub CLI、uv；{% if has_typescript %}本案另需 Node 24+ 與 pnpm 11。{% endif %}{% if has_rust %}本案另需 Rust 1.98。{% endif %}
 
+建議每位開發者在自己 shell 的 profile 檔（例如 `~/.zshrc`、`~/.bashrc`、`~/.config/fish/config.fish`，依實際使用的 shell 而定）加入 `export CSARC_CACHE_ROOT="$HOME/.cache/csarc"`（或團隊約定的其他持久路徑）。這會讓 `uv`{% if has_typescript %}、`pnpm`{% endif %}，以及透過 `scripts/resolve-cache-root` 取得快取位置的固定版本工具安裝腳本（`scripts/install-gitleaks`／`install-actionlint`／`install-shellcheck`／`install-osv-scanner`）跨 worktree 共用已驗證的下載內容。這純粹是本機效能最佳化：未設定時，`scripts/resolve-cache-root` 會退回 repo-local 的 `.cache/`，驗證正確性與結果完全不受影響，只是不同 worktree 之間不共用快取，需要各自重新下載，速度較慢。
+
 請從實際 Git root 開啟 Codex／agent workspace；從 repo 上層開啟時，子目錄的 `AGENTS.md` 不一定會自動載入。開始前先在工作目錄執行 `test "$(git rev-parse --show-toplevel)" = "$(pwd -P)"`，失敗就切換到輸出的 Git root，不要複製另一份指引到父目錄。
 
 ```bash
@@ -101,9 +103,9 @@ flowchart LR
 
 GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktree 的 agent 也負責在 PR 合併後回收：先離開該 worktree 並更新 integration ref，再從另一個 checkout 執行 `./scripts/cleanup-worktrees --apply --worktree <path> origin/{% if branch_strategy == "delivery" %}<delivery-branch>{% else %}{{ branch_strategy }}{% endif %}`。腳本預設只列出候選項目，且只接受有 GitHub merged PR 證據、已進入 integration ref、乾淨且未鎖定的 branch worktree；維護者要清理全 repo 時，先執行不含 `--apply` 的 dry run，再省略 `--worktree` 套用全部候選項目。
 
-`./scripts/verify` 是本機與 CI 共用的完整入口。現行 `.github/workflows/ci.yml` 只有一個 `verify` job，依變更選擇 docs／fast／full，再呼叫 repo-local 程式；一般 PR 不會為 fast、full、安全與 aggregate 各啟動一個 runner。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 30 分鐘。詳細分級與目前封存邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
+`./scripts/verify` 是本機與 CI 共用的完整入口。現行 `.github/workflows/ci.yml` 只有一個 `verify` job，依變更選擇 docs／fast／full，再呼叫 repo-local 程式；一般 PR 不會為 fast、full、安全與 aggregate 各啟動一個 runner。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 30 分鐘。開發中可直接跑最窄的 focused check；日常 PR 的 gate 是 CI 自動選的 docs／fast（`./scripts/verify-fast`）；只有 PR 本身就落在 full 邊界時，owner／integrator 才需要在本機另外執行一次 `./scripts/verify`。詳細分級與目前封存邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
-{% if branch_strategy == "delivery" %}另行的 promotion、release handoff、registry publisher 與 deployment workflows 沒有啟用；單一 `release.yml` 已設定為候選，首次成功實跑後才算 Active。已判定不恢復的版本／交付 archived YAML 已移除。OSV 已啟用；Zizmor、remote governance 與其他仍待 owner 決定的舊 workflow 留在中央模板 archive，不會下發。{% endif %}
+{% if branch_strategy == "delivery" %}另行的 promotion、release handoff、registry publisher 與 deployment workflows 沒有啟用；單一 `release.yml` 已設定為候選，首次成功實跑後才算 Active。已判定不恢復的版本／交付 archived YAML 已移除。OSV 已啟用；Zizmor、remote governance 與其他仍待 owner 決定的舊 workflow 留在中央模板 archive，不會下發。Reviewer assignment 與選配的治理漂移排程不在此列，詳見下方「設定與密鑰」段落。{% endif %}
 
 ### Actions 額度耗盡的一次性驗證
 
@@ -136,7 +138,9 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 
 `policies/rulesets.json` 是所有方案共用的期望狀態。設定腳本在所有方案都透過 repository teams API 驗證 PR 內設定的 team 存在且對 repo 有 write access；這項檢查與是否能強制 Ruleset 分開，也不依賴預設分支尚未更新的 CODEOWNERS。`.github/workflows/governance-comment.yml` 另在非 draft PR 開啟、重開或轉為 ready 時，從 `.github/REVIEWERS` 排除作者後輪派一位個別 reviewer，並用短效 `GITHUB_TOKEN` 提出 request，不需 PAT 或 GitHub App。Copier 的 `reviewers` 可用逗號設定一到多位候選人。Free private 不支援 team review request 或多位同時 reviewer；GitHub Team 以上才提供這些能力。Free organization private repo 的設定頁雖提供 Ruleset 編輯器，但 GitHub REST 與 GraphQL 對建立／更新（包含 `disabled`）都回覆需升級或公開；因此 `gh` 無法自動預存。管理員可選擇在 Web UI 人工建立 disabled Ruleset，`check` 會將它顯示為 `STAGED`，但仍只代表已儲存，不代表 `main` 受保護。repo 改成 public 或組織升級後，請重新執行 `plan`／`apply`／`check`，由腳本套用 `active` 政策並驗證有效規則。腳本不會自行變更可見性。
 
-{% if languages %}本機與 release workflow 會以相同原生工具建立已選語言的套件；GitHub Release 另附 checksum 與 SPDX SBOM。Registry publishing、artifact attestation 與消費端門禁仍是選配，不會因產生 GitHub Release 就自動啟用。{% endif %}
+{% if enable_governance_drift_check %}`enable_governance_drift_check` 已啟用：每日與手動 Action 會呼叫同一支 `scripts/check-governance-drift`；可修正的偏離會開立或更新一張追蹤 Issue。{% else %}`enable_governance_drift_check` 未啟用：不產生排程 Action 與檢查程式；需要時先透過 Copier 更新開啟選項。{% endif %}每次檢查都是快照，無法取代 GitHub audit log。
+
+{% if languages %}本機與 release workflow 會以相同原生工具建立已選語言的套件；GitHub Release 另附 checksum 與 SPDX SBOM。Registry publishing、artifact attestation 與消費端門禁由有實際需求的產品自行設定，不屬於公版選項。{% endif %}
 
 新建專案會取得 `release.yml`。GitHub 允許 Action 建 PR 時，由 Release Please 自動建立版本 PR；若上層政策禁止，執行 `python3 scripts/release_policy.py prepare-candidate`，再依輸出的 branch／title 開一般 PR。兩路都在版本 PR 合併後由同一 workflow 發布 GitHub Release；不要求 GitHub App、PAT 或 registry token，本機命令也不建立 tag／Release。既有專案保留自己的 product-owned release workflow，Copier 不覆寫或重複發布。
 
@@ -146,7 +150,7 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 
 版本意圖、正式版本、發版、交付與部署是不同階段：PR title 只表達 major／minor／patch／no-release；精確版本與 CHANGELOG 要在同一張受審查 PR 一起寫入；合併到 `main` 是 repository delivery；只有不可變 tag、GitHub Release、明列成品與可驗證證據都存在才叫發版。部署到真實 runtime 不在本模板範圍。
 
-{% if project_mode == "new" %}`release.yml` 會依 Conventional Commits 建立可審查的版本 PR；合併後先完整驗證，再建立 draft Release，附上來源封存{% if has_python %}、wheel／sdist{% endif %}{% if has_typescript %}、npm tarball{% endif %}{% if has_rust %}、Cargo package{% endif %}、checksum 與 SPDX SBOM，驗證完成才公開。{% else %}此為既有專案導入；原本的 product-owned release workflow 與成品定義會保留，CSARC 不用檔名猜測或建立第二個 release owner。{% endif %}
+{% if project_mode == "new" %}`release.yml` 會依 Conventional Commits 建立可審查的版本 PR；合併後先完整驗證，再建立 draft Release，附上來源封存{% if has_python %}、wheel／sdist{% endif %}{% if has_typescript %}、npm tarball{% endif %}{% if has_rust %}、Cargo package{% endif %}、checksum 與 SPDX SBOM，驗證完成才公開。{% else %}此為既有專案導入；原本的 product-owned release workflow 與成品定義會保留，CSARC 不用檔名猜測或建立第二個 release owner。`.csarc/config.yml` 明列 ownership、選定 workflow、required inputs、settings owner、immutable Releases 要求與 verification-only 原因；CSARC 不會 dispatch 產品 workflow。{% endif %}
 
 | 能力 | 目前狀態 | 現在怎麼做 |
 | --- | --- | --- |
@@ -154,8 +158,8 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 | 正式版本與 CHANGELOG | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}Automatic 或 Guided 建立同一種受審查 PR{% else %}沿用產品既有規則{% endif %}；已發布版本不改寫 |
 | tag／GitHub Release | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}版本 PR 合併並通過完整驗證後自動發布；首次成功實跑後才算 Active{% else %}模板不建立第二個 owner{% endif %} |
 | checksum／SBOM | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}與 exact-tag 成品同一次建立、下載並重驗；首次成功實跑後才算 Active{% else %}由產品 release workflow 決定{% endif %} |
-| attestation | Conditional | 由產品依 registry 與供應鏈需求另行啟用 |
-| PyPI／npm／GHCR | Not configured | 相關設定目前沒有 active publisher；不得當成已啟用 |
+| attestation | Product-owned | 由產品依 registry 與供應鏈需求另案設定 |
+| PyPI／npm／GHCR | Product-owned | 公版不提供 publisher 選項或 job |
 | production deployment | Not applicable | 由產品自行定義環境、健康檢查、核准與復原 |
 
 Automatic 模式下，`GITHUB_TOKEN` 建立的版本 PR workflows 可能等待人工核准，因此原 release run 會驗證候選 SHA。Guided 模式只把版本 PR 的建立交給人或 agent；版本決策、候選驗證與合併後發布仍共用同一套入口。版本 PR 一律需要人工審查，workflow 不會自我核准；GitHub 拒絕 tag／Release write 時則標示 Blocked，不改用本機直接發布。
@@ -175,7 +179,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 CLI 會先預覽 Copier smart diff、conflict risk 與 Milestone description migration；確認後才執行 update、`./scripts/verify` 與 repository settings plan。若有衝突，CLI 會列出檔案但不修改 repo；請在目前分支調整衝突內容後重跑。它會更新 `site/` 版型並重建單檔，但不覆寫 `docs/site-content.js` 或 `docs/site-theme.css`，也不會自行 apply settings、push 或開 PR。相依更新一般等待三天；{% if has_typescript %}pnpm 遇到 publisher trust 降級時會停止安裝，先確認套件發布者與 provenance，不要直接停用 policy；{% endif %}OSV 對已公開漏洞立即通知。
 {% if enable_template_update_notifications %}
-每週 template update workflow 只會建立或更新一張通知 Issue，不會自動套用或合併變更。若 `_src_path` 指向 private GitHub repository，請設定只有來源 repository Contents read 權限的 `CSARC_TEMPLATE_READ_TOKEN`；公開來源不需要這個 secret。
+每週一或手動執行 template update workflow 時，只會建立或更新一張通知 Issue，不會自動套用或合併變更。公開模板來源不需要 secret；若 `_src_path` 指向 private GitHub repository，才設定只有來源 repository Contents read 權限的 `CSARC_TEMPLATE_READ_TOKEN`。
 {% endif %}
 
 ## 負責人與支援

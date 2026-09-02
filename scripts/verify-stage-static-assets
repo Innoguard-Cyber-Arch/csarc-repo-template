@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# "Static assets and paired files" stage of scripts/verify-template.sh: the
+# decision site renders reproducibly, workflow/shell static analysis passes,
+# the static-validation fixtures reject known-bad inputs, and root/template
+# paired files stay byte-identical. Runnable standalone to re-check just this
+# stage without paying for the full run; aggregated in order by
+# scripts/verify-template.sh. See docs/ci-policy.md.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+./scripts/build-decision-site --check
+./scripts/lint-workflows-shell
+./scripts/test-static-validation
+./scripts/sync-paired-files.sh --check

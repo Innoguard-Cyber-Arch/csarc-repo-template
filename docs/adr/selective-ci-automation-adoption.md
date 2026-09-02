@@ -1,7 +1,8 @@
 # Selective CI/CD automation adoption ADR
 
-- **狀態：**Partially superseded by #430；只保留 official Actions 更新分組
+- **狀態：**Superseded
 - **日期：**2026-08-25
+- **備註：**由 #430 部分取代；只保留 official Actions 更新分組
 - **來源 Issue：**[#255](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/255)
 - **保留的實作 Issues：**[#242](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/242), [#245](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/245)
 - **實作 PRs：**[#247](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/247), [#248](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/248)
@@ -17,16 +18,16 @@ CI/CD 設定不能因為別處存在就整批搬入。每多一項 workflow 都�
 | 類別 | 決定 | 邊界與理由 |
 | --- | --- | --- |
 | 立即採用 | 將官方 `actions/*` 的 minor／patch 更新合併為一組 | 這些更新具有共同 owner 與相近審查風險，可降低例行 PR 噪音；major 及第三方 Actions 仍各自成 PR，避免擴大審查與回退範圍。 |
-| 待對齊 | 容器 profile 的 `none`、`verify`、`ghcr` 三種模式 | Copier 仍保留選項，但盤點後沒有 active build／scan／publish workflow；#439 負責決定移除設定面或補上真實執行者。 |
+| 不採用 | 公版容器驗證／發布與 registry attestation 選項 | 目前沒有 active build、scan 或 publisher；移除無執行者的設定，避免產生錯誤保證。 |
 | 目前不採用 | 通用 Containerfile、雲端 runtime、Kubernetes、多架構 placeholder、長效 token、`workflow_run` 發布鏈與第二套相依更新身分 | 尚無跨 repository 的實際需求足以負擔額外權限、供應鏈與維護成本；需要時另開 Issue 以真實使用情境重新評估。 |
 
-原容器設計的 Buildx、smoke、Trivy、GHCR 與 attestation 路徑只保留在 Git／Issue 歷史，不能當成現行能力。模板目前只依選項調整設定檢查與 Docker Dependabot，不生成容器 build／publish job 或 registry 權限。
+原容器設計的 Buildx、smoke、Trivy、GHCR 與 attestation 路徑只保留在 Git／Issue 歷史，不能當成現行能力。模板不再詢問或保存這些無執行者的選項，也不生成容器 build／publish job 或 registry 權限。
 
 ## Ownership 與驗證
 
 Dependency owner 審查官方 Actions 分組是否仍維持共同來源與相近風險。`.github/dependabot.yml` 與回歸測試是這項保留決策的 executable evidence；decision site 只摘要同一決策，不取代設定與測試。
 
-回退官方 Actions 分組只需移除 `groups.official-actions`，個別更新仍會繼續提出。既有產品的 Containerfile、workflow 與部署仍由產品擁有；#439 定案前，Copier 不接管、覆寫或宣稱已驗證這些能力。
+回退官方 Actions 分組只需移除 `groups.official-actions`，個別更新仍會繼續提出。既有產品的 Containerfile、workflow 與部署仍由產品擁有；Copier 不接管、覆寫或宣稱已驗證這些能力。
 
 ## 評估過的替代方案
 

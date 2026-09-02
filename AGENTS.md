@@ -5,7 +5,7 @@
 - GitHub Issues and pull requests define work, progress, and evidence. Approved specs and ADRs preserve durable context; add a plan only for cross-session, high-risk, or hard-to-recover work, and never store raw chat transcripts. Follow [Journey 01](docs/index.html#method) for work-item relationships and fields.
 - `AGENTS.md` is the single source for AI working instructions; `CLAUDE.md` only imports it.
 - One writable task uses one Git branch and one worktree so concurrent changes stay isolated.
-- Reusable validation lives in `scripts/` and tests. Run `./scripts/verify-template.sh` for the final template candidate; checked-in files under `.github/workflows/` are the only active GitHub Actions. See [CI/CD settings](docs/index.html#testing) for stage ownership.
+- Reusable validation lives in `scripts/` and tests. `./scripts/verify-fast` is the daily PR gate CI selects by risk (docs or fast); `./scripts/verify-template.sh` is full delivery verification, reserved for Milestone/canary delivery, hotfix, merge queue, manual dispatch, and unknown-risk paths — do not run it locally for an ordinary fast- or docs-tier PR. Checked-in files under `.github/workflows/` are the only active GitHub Actions. See [CI/CD settings](docs/index.html#testing) and [`docs/ci-policy.md`](docs/ci-policy.md) for the tier boundary and stage ownership.
 - [Journey 08](docs/index.html#governance) and the [`docs/ci-policy.md` quota fallback](docs/ci-policy.md#failure-與-fallback) own review requirements, merge eligibility, Alpha self-merge, and quota fallback. Do not restate or invent exceptions here.
 - Copier owns template creation and updates. Follow [Journey 09](docs/index.html#template-upgrade) and [`docs/agent-install.md`](docs/agent-install.md) for existing-repository behavior.
 
@@ -31,7 +31,7 @@
 7. For a Milestone Issue, start from its one short-lived `dev/m<milestone>-short-slug` delivery branch. For an Issue without a Milestone, start from current `main`; if independent changes must soak or ship together, create a real Milestone instead of a catch-all branch. Use `gh issue develop <issue> --base <base> --name type/<issue-number>-short-slug` for the native Development link. Follow `docs/ci-policy.md` for the explicitly authorized `dev/i*` canary, synchronization, promotion, hotfix, and release-recovery routes. When a pull request is stacked on another work branch, retarget it to the shared integration branch as soon as the base pull request is ready to merge, before that branch is squash-merged and deleted. GitHub auto-closes (does not auto-retarget) a pull request whose base branch no longer exists; recovering it means opening a new pull request from the same head branch, which loses the original PR's number, reviews, and comment history.
 8. Inspect the existing implementation, make the smallest coherent change, and preserve unrelated user work.
 9. Add or update the narrowest regression check that proves non-trivial behavior.
-10. Delegates run scoped checks; only the pull request owner or integrator runs `./scripts/verify-template.sh` once per final candidate tree.
+10. Delegates run scoped or focused checks while iterating. CI selects docs, fast, or full automatically by changed paths and delivery stage (`docs/ci-policy.md`); an ordinary fast- or docs-tier PR relies on that gate and needs no local full run. Only when the PR itself is a full-tier delivery boundary (Milestone/canary delivery, hotfix, merge queue, manual dispatch, or an unknown-risk path) does the pull request owner or integrator run `./scripts/verify-template.sh` once, locally, on the final candidate tree.
 11. Before any automated PR Ready/Draft, authorization, metadata, or merge write, acquire the remote lease and use `scripts/pr_lifecycle.py`; otherwise remain read-only. Follow Journey 08 rather than duplicating merge rules here.
 12. After merge, leave the task worktree and run `./scripts/cleanup-worktrees --apply --worktree <path> origin/<pull-request-base>` from another checkout. Never remove another task's worktree or any dirty, locked, detached, unmerged, or unverifiable worktree.
 13. Report what changed, which verification ran, and any remaining limitation.
@@ -47,7 +47,8 @@ Duplicate triage may close an Issue without code changes when it links the canon
 - Environment setup: `uv sync --locked --python 3.14`.
 - Python iteration: `uv run ruff check <paths>`, `uv run ty check <paths>`, and `uv run pytest <test-path>`.
 - Site source check: `./scripts/build-decision-site --check`.
-- Final template candidate: `./scripts/verify-template.sh` once by the pull request owner or integrator.
+- Daily PR gate: `./scripts/verify-fast` (same tiered entry point CI runs).
+- Full delivery verification: `./scripts/verify-template.sh` once by the pull request owner or integrator, only for a full-tier delivery boundary (see `docs/ci-policy.md`); a single `scripts/verify-stage-*` script reruns one of its stages without paying for the full run.
 
 ## Editing boundaries
 

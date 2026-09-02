@@ -124,9 +124,6 @@ project_visibility:
 enable_codeql:
   type: bool
   default: "{{ project_visibility == 'public' and language != 'ci' }}"
-enable_release_attestations:
-  type: bool
-  default: "{{ project_visibility == 'public' and language != 'ci' }}"
 """,
         encoding="utf-8",
     )
@@ -543,6 +540,206 @@ def test_repository_context_without_remote_uses_safe_or_explicit_value(
     assert explicit.source == "explicit"
 
 
+def write_product_release_workflow(
+    root: Path,
+    name: str = "release.yml",
+    *,
+    input_name: str = "version",
+) -> Path:
+    """Create the release-significant shape preserved from csarc-ai-setup.
+
+    Mirrors the real, publicly preserved
+    ``Innoguard-Cyber-Arch/csarc-ai-setup`` workflow: a tag push publishes,
+    a manual ``workflow_dispatch`` only builds an artifact, and
+    ``scripts/verify-skills`` gates the bundle build. The release-writer
+    marker (``gh release create``) sits behind a tag-only ``if:`` guard so
+    detection must work from source text alone, not from trigger shape.
+    """
+    path = root / ".github" / "workflows" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "name: Product release\n"
+        "on:\n"
+        '  push:\n    tags: ["v*"]\n'
+        "  workflow_dispatch:\n"
+        "    inputs:\n"
+        f"      {input_name}:\n"
+        "        description: Exact product release input.\n"
+        "        required: true\n"
+        "permissions:\n"
+        "  contents: read\n"
+        "jobs:\n"
+        "  bundle:\n"
+        "    name: Build the member bundle\n"
+        "    runs-on: ubuntu-latest\n"
+        "    permissions:\n"
+        "      contents: write\n"
+        "    steps:\n"
+        "      - name: Enforce the promotion contract\n"
+        "        run: ./scripts/verify-skills\n"
+        '      - run: ./scripts/build-bundle --version "$VERSION"\n'
+        "      - name: Publish the release\n"
+        "        if: startsWith(github.ref, 'refs/tags/')\n"
+        "        env:\n"
+        "          GH_TOKEN: ${{ github.token }}\n"
+        '        run: gh release create "$VERSION" dist/*\n',
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_release_ownership_matrix_uses_explicit_workflow_contracts(
+    tmp_path: Path,
+) -> None:
+    """Resolve all ownership modes without relying on a workflow filename."""
+    root_answers = yaml.safe_load(
+        (ROOT / cli.CONFIG_FILE).read_text(encoding="utf-8")
+    )
+    root_contract = cli.release_contract(
+        cli.resolve_release_answers(ROOT, root_answers)
+    )
+    assert root_contract["ownership"] == "csarc-owned"
+    assert root_contract["immutable_releases"] == "required"
+
+    new = cli.base_data(tmp_path / "new", "init", {})
+    assert cli.release_contract(new) == {
+        "immutable_releases": "required",
+        "ownership": "csarc-owned",
+        "reason": "CSARC owns the only version and GitHub Release workflow.",
+        "required_inputs": [],
+        "selected_workflow": ".github/workflows/release.yml",
+        "settings_owner": "csarc-admin",
+    }
+
+    empty = tmp_path / "empty-existing"
+    empty.mkdir()
+    assert cli.release_contract(cli.base_data(empty, "adopt", {})) == {
+        "immutable_releases": "not-required",
+        "ownership": "verification-only",
+        "reason": (
+            "No product release writer was detected; CSARC verifies only."
+        ),
+        "required_inputs": [],
+        "selected_workflow": None,
+        "settings_owner": "none",
+    }
+
+    product = tmp_path / "product"
+    workflow = write_product_release_workflow(
+        product, "publish-product.yml", input_name="source_run_id"
+    )
+    contract = cli.release_contract(cli.base_data(product, "adopt", {}))
+    assert contract["ownership"] == "product-owned"
+    assert contract["selected_workflow"] == (
+        ".github/workflows/publish-product.yml"
+    )
+    assert contract["required_inputs"] == ["source_run_id"]
+
+    write_product_release_workflow(product, "second-writer.yml")
+    degraded = cli.release_contract(cli.base_data(product, "adopt", {}))
+    assert degraded["ownership"] == "verification-only"
+    assert "Multiple product release writers" in str(degraded["reason"])
+    with pytest.raises(CliError, match="exactly one release-writing workflow"):
+        cli.base_data(
+            product,
+            "adopt",
+            {
+                "release_ownership": "product-owned",
+                "release_workflow": workflow.relative_to(product).as_posix(),
+            },
+        )
+
+
+def test_tag_only_product_workflow_has_no_required_inputs(
+    tmp_path: Path,
+) -> None:
+    """Resolve a tag-triggered writer that declares no workflow_dispatch."""
+    product = tmp_path / "tag-only-product"
+    path = product / ".github" / "workflows" / "release.yml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "name: Product release\n"
+        "on:\n"
+        '  push:\n    tags: ["v*"]\n'
+        "permissions:\n"
+        "  contents: read\n"
+        "jobs:\n"
+        "  bundle:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    permissions:\n"
+        "      contents: write\n"
+        "    steps:\n"
+        "      - env:\n"
+        "          GH_TOKEN: ${{ github.token }}\n"
+        '        run: gh release create "$GITHUB_REF_NAME" dist/*\n',
+        encoding="utf-8",
+    )
+    contract = cli.release_contract(cli.base_data(product, "adopt", {}))
+    assert contract["ownership"] == "product-owned"
+    assert contract["selected_workflow"] == ".github/workflows/release.yml"
+    assert contract["required_inputs"] == []
+
+
+def test_release_capability_degrades_closed_when_writer_disappears(
+    tmp_path: Path,
+) -> None:
+    """Fail closed instead of silently downgrading a previously bound owner."""
+    now_empty = tmp_path / "now-empty-product"
+    now_empty.mkdir()
+    with pytest.raises(CliError, match="exactly one release-writing workflow"):
+        cli.resolve_release_answers(
+            now_empty,
+            {
+                "project_mode": "existing",
+                "release_ownership": "product-owned",
+                "release_ownership_reason": "Previously observed contract.",
+                "release_required_inputs": ["version"],
+                "release_workflow": ".github/workflows/release.yml",
+            },
+        )
+
+    now_empty_csarc = tmp_path / "now-empty-csarc"
+    now_empty_csarc.mkdir()
+    with pytest.raises(
+        CliError, match="CSARC-owned release workflow does not exist"
+    ):
+        cli.resolve_release_answers(
+            now_empty_csarc,
+            {
+                "project_mode": "existing",
+                "release_ownership": "csarc-owned",
+                "release_ownership_reason": "Previously observed contract.",
+                "release_required_inputs": [],
+                "release_workflow": ".github/workflows/release.yml",
+            },
+        )
+
+
+def test_release_orchestration_never_calls_the_dispatch_api() -> None:
+    """Prove no CSARC code path can duplicate-dispatch a product workflow."""
+    source = (ROOT / "src/csarc_cli/cli.py").read_text(encoding="utf-8")
+    assert "/dispatches" not in source
+    assert "workflow_dispatches" not in source
+    assert "gh workflow run" not in source
+    assert "gh api --method POST" not in source
+
+
+def test_release_workflow_input_drift_fails_closed(tmp_path: Path) -> None:
+    """Reject a selected workflow whose required input contract drifted."""
+    write_product_release_workflow(tmp_path)
+    with pytest.raises(CliError, match="input contract drifted"):
+        cli.resolve_release_answers(
+            tmp_path,
+            {
+                "project_mode": "existing",
+                "release_ownership": "product-owned",
+                "release_ownership_reason": "Previously observed contract.",
+                "release_required_inputs": ["source_run_id"],
+                "release_workflow": ".github/workflows/release.yml",
+            },
+        )
+
+
 @pytest.mark.parametrize(
     ("visibility", "enabled"),
     [("public", True), ("private", False), ("internal", False)],
@@ -584,8 +781,8 @@ def test_init_json_uses_one_complete_resolved_plan(
     assert payload["repository"]["visibility"] == visibility
     assert payload["answers"]["project_visibility"] == visibility
     assert payload["answers"]["enable_codeql"] is enabled
-    assert payload["answers"]["enable_release_attestations"] is enabled
     assert payload["answers"]["reviewers"] == "@default-reviewer"
+    assert payload["release_ownership"] == "csarc-owned"
     assert payload["release_capabilities"]["mode"] == "blocked"
     assert not target.exists()
 
@@ -1258,20 +1455,10 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         encoding="utf-8",
     )
     (project / ".gitignore").write_bytes(b"product-cache/\r\n.env\r\n")
-    product_release = project / ".github" / "workflows" / "release.yml"
-    product_release.write_text(
-        "name: Product release\n"
-        "on: workflow_dispatch\n"
-        "permissions: {}\n"
-        "jobs:\n"
-        "  release:\n"
-        "    runs-on: ubuntu-latest\n"
-        "    steps:\n"
-        '      - run: "true"\n',
-        encoding="utf-8",
-    )
+    product_release = write_product_release_workflow(project)
+    product_release_source = product_release.read_bytes()
     write_executable(
-        project / "scripts" / "verify-product",
+        project / "scripts" / "verify-skills",
         "#!/usr/bin/env bash\nset -euo pipefail\n"
         "grep -q '^# Product README$' README.md\n"
         "grep -q '^name: Product release$' .github/workflows/release.yml\n",
@@ -1297,6 +1484,8 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "project_name=Product Identity",
         "--data",
         "project_slug=product-identity",
+        "--data",
+        "project_verification_hook=scripts/verify-skills",
     ]
 
     assert main(arguments) == 0
@@ -1314,15 +1503,44 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert ".github/workflows/release.yml" in payload["files"]["preserve"]
     assert ".github/workflows/csarc-release.yml" not in payload["files"]["add"]
     assert cli.PROVENANCE_FILE.as_posix() in payload["files"]["add"]
+    assert payload["release"] == {
+        "immutable_releases": "product-defined",
+        "ownership": "product-owned",
+        "reason": (
+            "The existing product workflow remains the only Release writer; "
+            "CSARC never dispatches it."
+        ),
+        "required_inputs": ["version"],
+        "selected_workflow": ".github/workflows/release.yml",
+        "settings_owner": "product-admin",
+    }
     assert payload["adoption"]["project_verification_hook"] == {
         "configured": True,
-        "path": "scripts/verify-product",
+        "path": "scripts/verify-skills",
         "reason": "Project verification hook completed successfully.",
         "result": "passed",
-        "source": "fallback",
+        "source": "explicit",
     }
     assert payload["adoption"]["verification"] == "passed"
     assert payload["answers"]["package_name"] == "product_identity"
+    markdown = plan_path.with_name(
+        f"{cli.ADOPTION_REPORT_BASENAME}.md"
+    ).read_text(encoding="utf-8")
+    assert "Release ownership: `product-owned`" in markdown
+    assert (
+        "Selected release workflow: `.github/workflows/release.yml`" in markdown
+    )
+    assert "Required release inputs: `version`" in markdown
+    pdf = "\n".join(
+        page.extract_text() or ""
+        for page in PdfReader(
+            plan_path.with_name(f"{cli.ADOPTION_REPORT_BASENAME}.pdf")
+        ).pages
+    )
+    assert "Release workflow" in pdf
+    assert ".github/workflows/release.yml" in pdf
+    assert "Release inputs" in pdf
+    assert "version" in pdf
 
     assert (
         main(
@@ -1343,12 +1561,23 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert (project / "CHANGELOG.md").read_text(encoding="utf-8") == (
         "# Product changes\n"
     )
-    assert product_release.read_text(encoding="utf-8").startswith(
-        "name: Product release"
-    )
+    assert product_release.read_bytes() == product_release_source
     assert not (
         project / ".github" / "workflows" / "csarc-release.yml"
     ).is_file()
+    config = yaml.safe_load(
+        (project / cli.CONFIG_FILE).read_text(encoding="utf-8")
+    )
+    assert config["release_ownership"] == "product-owned"
+    assert config["release_workflow"] == ".github/workflows/release.yml"
+    assert config["release_required_inputs"] == ["version"]
+    assert config["release_settings_owner"] == "product-admin"
+    assert config["release_immutable_releases"] == "product-defined"
+    provenance = json.loads(
+        (project / cli.PROVENANCE_FILE).read_text(encoding="utf-8")
+    )
+    assert provenance["release"] == payload["release"]
+    assert (project / "scripts" / "verify-skills").is_file()
     assert "Keep this rule." in (project / "AGENTS.md").read_text(
         encoding="utf-8"
     )
@@ -1592,10 +1821,16 @@ def test_adoption_report_path_and_settings_are_safe(tmp_path: Path) -> None:
     with pytest.raises(CliError, match="outside the target repo"):
         cli.adoption_report_directory(project, project / "reports")
     settings = cli.report_settings(
-        {"language": "python", "coverage_mode": "diff", "api_token": "secret"}
+        {
+            "language": "python",
+            "coverage_mode": "diff",
+            "enable_pypi_publishing": True,
+            "api_token": "secret",
+        }
     )
     assert "language=python" in settings
     assert "coverage_mode=diff" in settings
+    assert "enable_pypi_publishing" not in settings
     assert "api_token" not in settings
     assert "secret" not in settings
 
@@ -1653,7 +1888,9 @@ def test_adoption_markdown_reports_repository_context(
         tmp_path,
         cli.Revision("v1.0.0", "a" * 40, source),
         context,
-        {"language": "ci"},
+        cli.resolve_release_answers(
+            tmp_path, {"language": "ci", "project_mode": "existing"}
+        ),
         cli.Plan((), (), (), (), (), ()),
         "2026-08-24T00:00:00+00:00",
     )
@@ -2155,6 +2392,11 @@ def test_adopt_rejects_plan_tampering_and_target_drift(
         / cli.ADOPTION_PLAN_BASENAME
     )
     original = plan_path.read_text(encoding="utf-8")
+    assert json.loads(original)["release_ownership"] == "verification-only"
+    report_path = plan_path.with_name(f"{cli.ADOPTION_REPORT_BASENAME}.md")
+    assert "Release ownership: `verification-only`" in report_path.read_text(
+        encoding="utf-8"
+    )
     plan_path.write_text(
         original.replace('"mode": "adopt"', '"mode": "init"'),
         encoding="utf-8",
@@ -3789,6 +4031,7 @@ def test_update_repository_rename_preserves_custom_security_channel(
     """Only move a repository-derived reporting channel to the new URL."""
     answers: dict[str, object] = {
         "language": "python",
+        "project_mode": "new",
         "project_visibility": "private",
         "repository_url": "https://github.com/old/repository",
         "security_reporting_channel": saved_channel,
@@ -3815,6 +4058,44 @@ def test_update_repository_rename_preserves_custom_security_channel(
     assert result["security_reporting_channel"] == expected_channel
     if saved_channel == expected_channel and explicit_channel is None:
         assert "security_reporting_channel" not in update_data
+
+
+def test_update_cannot_change_release_ownership() -> None:
+    """Keep the persisted lifecycle mode as the only release owner input."""
+    repository = cli.RepositoryContext(
+        "owner/repository",
+        "owner",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+
+    with pytest.raises(CliError, match="owns the release boundary"):
+        cli.update_plan_answers(
+            {"project_mode": "existing", "project_visibility": "private"},
+            {"project_mode": "new"},
+            repository,
+        )
+
+    with pytest.raises(CliError, match="Release ownership contract"):
+        cli.update_plan_answers(
+            {
+                "project_mode": "existing",
+                "project_visibility": "private",
+                "release_ownership": "verification-only",
+            },
+            {"release_ownership": "product-owned"},
+            repository,
+        )
+
+    answers, update_data = cli.update_plan_answers(
+        {"project_mode": "existing", "project_visibility": "private"},
+        {"project_mode": "existing"},
+        repository,
+    )
+    assert cli.release_ownership(answers) == "product-owned"
+    assert update_data["project_mode"] == "existing"
 
 
 @pytest.mark.large
@@ -3940,7 +4221,6 @@ def test_update_recomputes_visibility_defaults_from_github(
     assert payload["answers_changed"] is True
     assert payload["answers"]["project_visibility"] == "public"
     assert payload["answers"]["enable_codeql"] is True
-    assert payload["answers"]["enable_release_attestations"] is True
 
 
 @pytest.mark.large
@@ -4137,6 +4417,25 @@ def test_release_metadata_fails_closed(
     client.release_values[field] = value
     with pytest.raises(CliError, match=message):
         cli.resolve_revision(cli.CANONICAL_SOURCE, None, client=client)
+
+
+def test_unreleased_revision_requires_a_local_git_source(
+    tmp_path: Path,
+) -> None:
+    """Never turn a remote SHA into a first-adoption trust assertion."""
+    with pytest.raises(CliError, match="use a local Git repository"):
+        cli.resolve_revision(
+            "https://example.invalid/untrusted/template.git",
+            "a" * 40,
+            allow_unreleased=True,
+        )
+
+    source, revision = make_template(tmp_path)
+    resolved = cli.resolve_revision(
+        str(source), revision, allow_unreleased=True
+    )
+    assert resolved.sha == revision
+    assert not resolved.verified
 
 
 def test_release_trust_failures_stop_before_copy(
@@ -4486,7 +4785,11 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         assert commands
         assert all(excludes_large(command) for command in commands)
 
-    root_full_commands = pytest_commands(ROOT / "scripts/verify-template.sh")
+    # scripts/verify-template.sh is a thin aggregator (Issue #458); its own
+    # full-tier pytest invocation lives in the Regression tests stage script.
+    root_full_commands = pytest_commands(
+        ROOT / "scripts/verify-stage-regression-tests"
+    )
     assert root_full_commands
     assert not any(excludes_large(command) for command in root_full_commands)
 

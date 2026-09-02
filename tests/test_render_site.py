@@ -15,6 +15,40 @@ render = SITE_MODULE["render"]
 parse_parity = PARITY_MODULE["parse"]
 
 
+def _write_markdown_site(tmp_path: Path, markdown: str) -> Path:
+    """Create the managed shell and its single configuration source."""
+    site = tmp_path / "site"
+    docs = tmp_path / "docs"
+    scripts = tmp_path / "scripts"
+    config = tmp_path / ".csarc"
+    site.mkdir()
+    docs.mkdir()
+    scripts.mkdir()
+    config.mkdir()
+    root = Path(__file__).parents[1]
+    (scripts / "csarc_config.py").write_text(
+        (root / "scripts/csarc_config.py").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (config / "config.yml").write_text(
+        "project_name: Demo\n"
+        "project_description: Safe <demo>\n"
+        "languages:\n"
+        "- python\n"
+        "- rust\n",
+        encoding="utf-8",
+    )
+    (docs / "site-content.md").write_text(markdown, encoding="utf-8")
+    source = site / "index.html"
+    source.write_text(
+        "<title><!-- CSARC_SITE_TITLE --></title>"
+        "<nav><!-- CSARC_SITE_NAV --></nav>"
+        "<main><!-- CSARC_SITE_CONTENT --></main>",
+        encoding="utf-8",
+    )
+    return source
+
+
 def test_render_inlines_local_runtime_assets(tmp_path: Path) -> None:
     site = tmp_path / "site"
     docs = tmp_path / "docs"
@@ -50,6 +84,82 @@ def test_render_inlines_local_runtime_assets(tmp_path: Path) -> None:
     assert 'href="https://example.com/reference"' in bundled
     assert "stylesheet" not in bundled
     assert "<script src=" not in bundled
+
+
+def test_render_injects_markdown_and_existing_config(tmp_path: Path) -> None:
+    source = _write_markdown_site(
+        tmp_path,
+        """# [[project_name]]
+
+[[project_description]]
+
+## Start here
+
+- Languages: **[[languages]]**
+- Run `./scripts/verify`
+
+### 進階: Details
+
+Read [reference](https://example.com/docs).
+""",
+    )
+
+    bundled = render(source, root=tmp_path)
+
+    assert "<title>Demo — 內部專案網站</title>" in bundled
+    assert '<a href="#start-here">Start here</a>' in bundled
+    assert "Safe &lt;demo&gt;" in bundled
+    assert "<strong>python、rust</strong>" in bundled
+    assert (
+        '<details class="advanced"><summary>進階: Details</summary>' in bundled
+    )
+    assert 'target="_blank" rel="noreferrer"' in bundled
+
+
+def test_render_rejects_unknown_markdown_config_key(tmp_path: Path) -> None:
+    source = _write_markdown_site(tmp_path, "# [[unknown_setting]]")
+
+    with pytest.raises(BundleError, match="Unknown site content setting"):
+        render(source, root=tmp_path)
+
+
+def test_render_surfaces_preserved_legacy_content(tmp_path: Path) -> None:
+    source = _write_markdown_site(tmp_path, "# [[project_name]]")
+    legacy = tmp_path / "docs/site-content.js"
+    legacy.write_text("window.CONTENT = {};", encoding="utf-8")
+
+    bundled = render(source, root=tmp_path)
+
+    assert "需要遷移舊網站內容" in bundled
+    assert legacy.read_text(encoding="utf-8") == "window.CONTENT = {};"
+
+
+def test_generated_site_uses_project_owned_markdown() -> None:
+    root = Path(__file__).parents[1]
+    copier = (root / "copier.yml").read_text(encoding="utf-8")
+    shell = (root / "template/site/index.html.jinja").read_text(
+        encoding="utf-8"
+    )
+    content = (root / "template/docs/site-content.md.jinja").read_text(
+        encoding="utf-8"
+    )
+
+    assert '  - "docs/site-content.md"' in copier
+    assert "site-content.js" not in copier
+    assert "CSARC_SITE_CONTENT" in shell
+    assert "site-content.js" not in shell
+    assert "[[project_name]]" in content
+    assert "[[languages]]" in content
+    assert not (root / "template/site/app.js").exists()
+    assert not (root / "template/docs/site-content.js.jinja").exists()
+
+
+def test_render_rejects_incomplete_markdown_shell(tmp_path: Path) -> None:
+    source = tmp_path / "index.html"
+    source.write_text("<!-- CSARC_SITE_CONTENT -->", encoding="utf-8")
+
+    with pytest.raises(BundleError, match="incomplete Markdown marker"):
+        render(source, root=tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -152,9 +262,12 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         for path in (root / "template/.github/workflows").iterdir()
         if path.is_file()
     }
+    optional_workflows = {"template-update.yml"}
 
-    assert workflows == {
+    assert workflows - optional_workflows == {
         "ci.yml",
+        "governance-comment.yml",
+        "governance-drift.yml",
         "issue-triage.yml",
         "milestone-lifecycle.yml",
         "osv.yml",
@@ -163,8 +276,9 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         "spec-to-issue.yml",
         "work-item-closure.yml",
     }
-    assert "7 條 Active＋1 條 Candidate" in file_map  # noqa: RUF001
-    for workflow in workflows:
+    assert optional_workflows <= workflows
+    assert "9 條共用流程（其中 1 條候選）＋1 條選配排程" in file_map  # noqa: RUF001
+    for workflow in workflows - optional_workflows:
         assert workflow in file_map
     for inactive in ("release-please.yml",):
         assert inactive not in file_map
@@ -195,16 +309,15 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         '{{< slide key="ecosystem"', 1
     )[0]
     assert '<article class="decision-step' not in journey_decisions
-    assert journey_decisions.count('class="decision-step decision-fold') == 20
+    assert journey_decisions.count('class="decision-step decision-fold') == 18
     assert (
-        journey_decisions.count('class="decision-step decision-fold" open')
-        == 10
+        journey_decisions.count('class="decision-step decision-fold" open') == 9
     )
     assert (
         journey_decisions.count(
             'class="decision-step decision-fold recommended" open'
         )
-        == 10
+        == 9
     )
 
 
@@ -236,6 +349,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     styles = (root / "site/static/styles.css").read_text(encoding="utf-8")
     controls = (root / "site/static/detail-toggle.css").read_text(
         encoding="utf-8"
+    )
+    config_examples = json.loads(
+        (root / "site/data/config_examples.json").read_text(encoding="utf-8")
     )
     active_components = (root / "site/static/legacy-components.js").read_text(
         encoding="utf-8"
@@ -305,10 +421,38 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "slide.dataset.audience !== 'archive'" in deck
     assert "Cloudflare Pages" in chinese
     assert "存取 #79" in chinese
-    assert "不另導入 Spec Kit" in active_components
-    assert "Fleet 盤點與平台門檻" in active_components
-    assert "沒有 active bot identity" in active_components
+    # Issue #472: this content used to be a hardcoded, zh-tw-only
+    # `configExamples` object inside legacy-components.js; it now lives in
+    # site/data/config_examples.json (bilingual) and is server-rendered by
+    # the config-guidance shortcode, so legacy-components.js no longer
+    # contains any of this prose at all.
+    method_summaries = " ".join(
+        item.get("summary", {}).get("zh-tw", "")
+        for item in config_examples["tracks"]["method"]["items"]
+    )
+    assert "不另導入 Spec Kit" in method_summaries
+    template_release_summaries = " ".join(
+        item.get("summary", {}).get("zh-tw", "")
+        for item in config_examples["tracks"]["template-release"]["items"]
+    )
+    assert "沒有 active bot identity" in template_release_summaries
     assert "CSARC_VERSION_BOT_CLIENT_ID" not in active_components
+    assert (
+        config_examples["tracks"]["governance"]["items"][0]["title"]["zh-tw"]
+        == "單一來源｜治理只保存高價值選項"  # noqa: RUF001
+    )
+    assert (
+        "提出者、另一位核准者、到期日、證據與復原方式"
+        in (
+            config_examples["tracks"]["governance"]["items"][-1]["summary"][
+                "zh-tw"
+            ]
+        )
+    )
+    assert "template" not in config_examples["tracks"]
+    assert "knowledge" not in config_examples["tracks"]
+    assert "rollout" not in config_examples["tracks"]
+    assert "rollout:" not in active_components
     for source in (chinese, english):
         assert 'key="bridge" audience="maintainer"' in source
         for key in (
@@ -331,31 +475,68 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert ".slide.active > .legacy-content > * { flex-shrink: 0; }" in styles
     assert ".similar-tools-tabs button {\n      flex: 0 0 auto;" in styles
     assert "min-width: 210px;" not in styles
-    assert chinese.count('data-config-direct="true"') == 3
+    direct_tracks = {
+        track
+        for track, spec in config_examples["tracks"].items()
+        if spec["direct"]
+    }
+    assert direct_tracks == {"method", "agents", "contract"}
+    for source in (chinese, english):
+        for track in direct_tracks:
+            assert f'{{{{< config-guidance track="{track}" >}}}}' in source
+    guidance_shortcode = (
+        root / "site/layouts/shortcodes/config-guidance.html"
+    ).read_text(encoding="utf-8")
+    assert 'data-config-direct="true"' in guidance_shortcode
+    assert "guidance.dataset.configDirect === 'true'" not in active_components
+    assert (
+        'not([data-config-direct="true"]) .config-trigger'
+    ) in active_components
     assert "guidance.dataset.configDirect === 'true'" in (
         root / "site/static/detail-toggle.js"
     ).read_text(encoding="utf-8")
-    assert "規則治理單獨定義合併資格、權限與例外" in active_components
+    assert (
+        "規則治理單獨定義合併資格、權限與例外"
+        in config_examples["tracks"]["agents"]["items"][-1]["goal"]["zh-tw"]
+    )
     assert "AI 能執行工作，但不能自行合併" not in active_components  # noqa: RUF001
     for track in ("method", "agents", "contract", "languages", "supply", "pr"):
-        assert f"\n      {track}: [" in active_components
-        track_config = active_components.split(f"\n      {track}: [", 1)[
-            1
-        ].split("\n      ],", 1)[0]
-        assert "固定基線｜" in track_config  # noqa: RUF001
+        titles = " ".join(
+            item["title"]["zh-tw"]
+            for item in config_examples["tracks"][track]["items"]
+        )
+        assert "固定基線｜" in titles  # noqa: RUF001
         assert any(
-            label in track_config
+            label in titles
             for label in ("可調整｜", "專案選擇｜", "專案選配｜")  # noqa: RUF001
         )
-    assert "可調整｜選用語言與 Python 支援範圍" in active_components  # noqa: RUF001
-    assert "固定基線｜各語言使用原生工具" in active_components  # noqa: RUF001
-    assert "只列公版主要政策、可調選項與設定位置" in active_components
-    assert english.count('data-audience="maintainer"') == 7
+    assert (
+        config_examples["tracks"]["languages"]["items"][0]["title"]["zh-tw"]
+        == "可調整｜選用語言與 Python 支援範圍"  # noqa: RUF001
+    )
+    assert (
+        config_examples["tracks"]["languages"]["items"][1]["title"]["zh-tw"]
+        == "固定基線｜各語言使用原生工具"  # noqa: RUF001
+    )
+    assert (
+        config_examples["labels"]["zh-tw"]["intro"]
+        == "只列公版主要政策、可調選項與設定位置。"
+    )
+    # Issue #472: the 6 removed hand-authored EN <aside class="config-guidance"
+    # data-audience="maintainer"> placeholders (method, agents, contract,
+    # languages, pr, supply) used to hide this content behind the
+    # simple/technical detail toggle even though the equivalent zh-tw content
+    # was always visible. The config-guidance shortcode's output carries no
+    # data-audience attribute, so English readers now see the same
+    # config-trigger content zh-tw readers always saw, without an extra
+    # click; only the one unrelated "Root repository state" maintainer note
+    # keeps that gating.
+    assert english.count('data-audience="maintainer"') == 1
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english
-    assert len(data["features"]) == 31
-    assert len(data["featureGroups"]) == 8
+    assert len(data["features"]) == 34
+    assert len(data["featureGroups"]) == 9
     assert data["featureGroups"][0]["features"] == [
         "repositoryTruth",
         "workItemStructure",
@@ -400,19 +581,34 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "releaseEvidence",
     ]
     assert data["featureGroups"][7]["features"] == [
+        "governancePolicyLocation",
+        "governanceCapabilityBoundary",
+        "governanceExceptionRecord",
+    ]
+    assert data["featureGroups"][8]["features"] == [
         "declarativeState",
         "templateLifecycle",
     ]
-    assert len(data["testing"]["groups"]) == 7
+    assert [group["journey"] for group in data["testing"]["groups"]] == [
+        "01",
+        "02",
+        "03",
+        "04",
+        "05",
+        "06",
+        "07",
+        "08",
+        "09",
+    ]
     duration_rows = data["testing"]["duration"]["rows"]
     assert [row["key"] for row in duration_rows] == ["issue", "release"]
-    assert all(len(row["shared"]["items"]) == 6 for row in duration_rows)
-    assert all(len(row["templateOnly"]["items"]) == 6 for row in duration_rows)
+    assert all(len(row["shared"]["items"]) == 8 for row in duration_rows)
+    assert all(len(row["templateOnly"]["items"]) == 8 for row in duration_rows)
     for row in duration_rows:
         for scope in ("shared", "templateOnly"):
             assert [
                 item["label"]["zh-tw"][:2] for item in row[scope]["items"]
-            ] == ["01", "02", "03", "04", "05", "06"]
+            ] == ["01", "02", "03", "04", "05", "06", "08", "09"]
     assert duration_rows[0]["shared"]["total"]["zh-tw"] == "約 1\u20137 分鐘"
     assert duration_rows[0]["templateOnly"]["total"]["zh-tw"] == (
         "約 1\u20134 分鐘（fast 實測 59\u201399 秒）"  # noqa: RUF001
@@ -579,6 +775,52 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
             "issue": 400,
         },
     ]
+    governance_rows = data["testing"]["groups"][7]["rows"]
+    assert data["testing"]["groups"][7]["journey"] == "08"
+    assert [row["purpose"]["zh-tw"]["title"] for row in governance_rows] == [
+        "輪派審查人",
+        "偵測治理設定漂移",
+    ]
+    assert governance_rows[0]["shared"]["milestone"]["automation"] == [
+        {
+            "path": ".github/workflows/governance-comment.yml",
+            "job": "request-reviewer",
+            "trigger": {
+                "zh-tw": "PR 開啟、重開或轉為 ready",
+                "en": "PR opened, reopened, or marked ready",
+            },
+            "timeout": "5 min",
+        }
+    ]
+    assert all(
+        "pending" not in automation
+        for automation in governance_rows[1]["shared"]["release"]["automation"]
+    )
+    template_rows = data["testing"]["groups"][8]["rows"]
+    assert data["testing"]["groups"][8]["journey"] == "09"
+    assert [row["purpose"]["zh-tw"]["title"] for row in template_rows] == [
+        "建立新 repo",
+        "首次導入既有 repo",
+        "後續更新與衝突",
+        "通知有新版公版",
+    ]
+    assert template_rows[1]["shared"]["milestone"]["automationNote"][
+        "zh-tw"
+    ].startswith("人工門檻")
+    assert "automation" not in template_rows[1]["shared"]["milestone"]
+    assert all(
+        "verify-template.sh" not in item.get("path", "")
+        for row in template_rows
+        for stage in row["shared"].values()
+        for item in stage.get("files", [])
+    )
+    update_notification = template_rows[3]["shared"]["milestone"]["automation"][
+        0
+    ]
+    assert update_notification["path"] == (
+        ".github/workflows/template-update.yml"
+    )
+    assert "pending" not in update_notification
     assert verification_rows[0]["shared"]["milestone"]["automation"] == [
         {
             "path": ".github/workflows/ci.yml",
@@ -627,7 +869,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "archived" not in testing_shortcode
 
     assert len(data["tools"]) == 28
-    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 106
+    assert sum(len(tool["comparisons"]) for tool in data["tools"]) == 113
     assert data["comparisonDate"] == "2026-09-01"
     assert data["releaseCutoff"] == "2026-03-01"
     assert data["threshold"] == 5
@@ -661,7 +903,6 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert [tool["name"] for tool in primary] == [
         "projen",
         "Repository Harness",
-        "Backstage",
     ]
 
     ecosystem = {
@@ -673,6 +914,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     }
     assert ecosystem == {
         "Backlog.md",
+        "Backstage",
         "BMAD",
         "Copier",
         "OpenRewrite",

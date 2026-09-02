@@ -17,6 +17,27 @@ template_version_policy:
   tag_format: vX.Y.Z
   breaking_change_in_any_beta_composition_bumps_major: true
 
+release_ownership_policy:
+  schema:
+    ownership: [csarc-owned, product-owned, verification-only]
+    selected_workflow: repository_relative_path_or_empty
+    required_inputs: sorted_string_list
+    reason: non_empty_string
+    settings_owner: [csarc-admin, product-admin, none]
+    immutable_releases: [required, product-defined, not-required]
+  csarc-owned:
+    behavior: creates_the_only_release
+    settings_owner: csarc-admin
+    immutable_releases: required
+  product-owned:
+    behavior: preserves_and_never_dispatches_the_product_workflow
+    settings_owner: product-admin
+    immutable_releases: product-defined
+  verification-only:
+    behavior: performs_no_release_writes
+    settings_owner: none
+    immutable_releases: not-required
+
 branching_policy:
   default: main
   dev_mode_requires_shared_test_environment: true

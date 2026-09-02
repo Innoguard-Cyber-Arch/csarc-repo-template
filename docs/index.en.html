@@ -1002,6 +1002,7 @@
     .config-trigger:hover, .config-trigger:focus-visible { outline: 3px solid var(--yellow); outline-offset: 1px; }
     .config-trigger-title { grid-area: title; font-size: 18px; font-weight: 750; line-height: 1.18; }
     .config-trigger-title::after { content: "："; }
+    :lang(en) .config-trigger-title::after { content: ": "; }
     .config-trigger-file {
       grid-area: file;
       min-width: 0;
@@ -2154,9 +2155,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
@@ -2263,9 +2261,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
@@ -2315,12 +2310,11 @@ html[data-detail-level="simple"] .detail-panel {
 </table>
 <p>Users do not need to memorize workflow or script names. Current automation covers work items, PR rules, necessary verification, and a reviewed automatic version-and-release path.</p>
 <aside class="technical-detail" data-content-key="flow-foundation">
-  <h3>Four foundations across the whole flow</h3>
+  <h3>Three foundations across the whole flow</h3>
   <ul>
-<li><strong>07 Governance:</strong> consistent permissions, branch, review, and merge rules.</li>
-<li><strong>08 Template updates:</strong> Copier carries policy changes back through reviewable PRs.</li>
-<li><strong>09 Internal site:</strong> keeps practices, limits, evidence, and decisions discoverable.</li>
-<li><strong>10 Adoption levels:</strong> start with the baseline and add platform capability only after conditions are met.</li>
+<li><strong>08 Governance:</strong> prepares repository policy, then applies only the controls the live GitHub plan supports.</li>
+<li><strong>09 Template updates:</strong> Copier carries policy changes back through reviewable PRs.</li>
+<li><strong>10 Internal site:</strong> keeps practices, limits, evidence, and decisions discoverable.</li>
 </ul>
 <p>A failed check is fixed in the same PR. A new problem found after merge becomes a separate, bounded Issue.</p>
 </aside>
@@ -2376,9 +2370,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
@@ -2417,7 +2408,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>Seven active flows for Issue, Milestone, spec, PR, closure, verification, and vulnerability handling; plus one candidate release flow</td>
+					<td>Nine shared flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, reviewer assignment, work item closure, and a candidate release flow, plus the optional governance-drift schedule</td>
 					<td>Template-led</td>
 			</tr>
 			<tr>
@@ -2504,9 +2495,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
@@ -2562,7 +2550,53 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>Change proposal:</strong> review a proposed change separately, then merge it into the official specification after acceptance.</li>
 <li><strong>Complexity-based workflow:</strong> use a short path for small work and add discovery, design, roles, and review only for larger work.</li>
 </ul>
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>Issues require a problem and acceptance criteria, blank Issues are disabled, and the template owns title, classification, hierarchy, and Milestone-start rules.</li><li><strong>Project choice:</strong><code>docs/specs/</code> may use <code>tracking: issue</code>, <code>story</code>, or <code>none</code> to control work-item synchronization.</li><li><strong>Locations:</strong><code>.github/ISSUE_TEMPLATE/</code>, <code>AGENTS.md</code>, <code>docs/milestone-description.md</code>, and <code>docs/specs/</code>.</li></ul></aside>
+<aside class="config-guidance" data-config-direct="true">
+  <details class="config-guidance-fold" open>
+    <summary>Fixed and adjustable policy</summary>
+    <div class="config-actions"><details class="config-inline-detail">
+        <summary>
+          <span class="config-trigger-title">Fixed baseline | Four Issue forms and their required fields</span>
+          <span class="config-trigger-summary">The problem and acceptance criteria are required and blank Issues stay disabled; these are template work-item contracts with no opt-out switch.</span>
+        </summary>
+        <div class="config-inline-body">
+          <p>Four entry points are provided: Feature, Task, Bug, and Documentation; all require a problem statement and acceptance criteria, and blank Issues are disabled.</p>
+          <p class="config-inline-path">Config file: <code>.github/ISSUE_TEMPLATE/{feature,task,bug,documentation}.yml＋config.yml</code></p>
+          <pre class="code">Feature       -&gt; Type: Feature; label: enhancement&#10;Task          -&gt; Type: Task; label: enhancement&#10;Bug           -&gt; Type: Bug; label: bug&#10;Documentation -&gt; Type: Task; label: documentation&#10;&#10;Required fields:&#10;  - problem&#10;  - acceptance&#10;&#10;# config.yml&#10;blank_issues_enabled: false&#10;contact_links: []</pre>
+        </div>
+      </details><details class="config-inline-detail">
+        <summary>
+          <span class="config-trigger-title">Fixed baseline | Title, label, assignee, and work hierarchy</span>
+          <span class="config-trigger-summary">Title, classification, and work-item relationships follow one shared rule set; an organization that wants to change the contract should change the template policy, not disable the rule in individual repositories.</span>
+        </summary>
+        <div class="config-inline-body">
+          <p>A title uses 12-80 ASCII characters and at least three words; the creator self-assigns, and an agent or the CLI uses @me.</p>
+          <p class="config-inline-path">Config file: <code>.github/ISSUE_TEMPLATE/*.yml＋AGENTS.md＋policies/labels.json＋docs/adr/spec-story-and-work-items.md</code></p>
+          <pre class="code">Title: 12-80 ASCII characters; at least 3 words&#10;Assignee: creator; agent/CLI uses @me&#10;&#10;Other classifications:&#10;  documentation -&gt; Task + documentation label&#10;  duplicate     -&gt; duplicate close reason&#10;  hotfix        -&gt; Bug + hotfix label + fix/&lt;Issue&gt;-* -&gt; main&#10;  promotion     -&gt; delivery tracking only&#10;&#10;Parent     -&gt; shared outcome still incomplete&#10;Dependency -&gt; actual execution order</pre>
+        </div>
+      </details><details class="config-inline-detail">
+        <summary>
+          <span class="config-trigger-title">Project choice | Whether a spec creates a tracking work item</span>
+          <span class="config-trigger-summary">The current stage keeps one lightweight format instead of adopting a separate Spec Kit; a full spec/plan/tasks workflow is evaluated only once the need is real.</span>
+        </summary>
+        <div class="config-inline-body">
+          <p>Each project writes long-lived specs under `docs/specs/`; front matter decides whether it syncs to a Task, a Feature, or stays a document only.</p>
+          <p class="config-inline-path">Config file: <code>docs/specs/＋scripts/spec_to_issue.py</code></p>
+          <pre class="code">tracking: issue  # Sync one Task&#10;tracking: story  # Sync one Feature parent&#10;tracking: none   # Keep the current contract only&#10;&#10;python scripts/spec_to_issue.py validate</pre>
+        </div>
+      </details><details class="config-inline-detail">
+        <summary>
+          <span class="config-trigger-title">Fixed baseline | A Milestone&#39;s kickoff threshold</span>
+          <span class="config-trigger-summary">Work starts only after at least one person other than the proposer agrees and no objection remains unresolved; how a Milestone closes is defined under Version / Delivery.</span>
+        </summary>
+        <div class="config-inline-body">
+          <p>Every Milestone uses one lifecycle tracking Issue that keeps agreement and objections in one place.</p>
+          <p class="config-inline-path">Config file: <code>docs/milestone-description.md</code></p>
+          <pre class="code">## Problem&#10;## Outcome&#10;## Acceptance criteria&#10;- [ ] Observable result&#10;## Plan&#10;- #123 — Independently deliverable work&#10;## Kickoff decision&#10;- Approval: one non-proposer agreement&#10;- Objections: none unresolved&#10;## Out of scope&#10;## Verification&#10;## References</pre>
+        </div>
+      </details>
+    </div>
+  </details>
+</aside>
 </div>
 </section>
 
@@ -2615,9 +2649,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
@@ -2646,7 +2677,53 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>Template creation and updates:</strong> Copier generates and updates the shared baseline; the Template upgrades section defines existing-repository updates.</li>
 </ul>
 <p><code>README.md</code> serves people, <code>AGENTS.md</code> serves every agent, and <code>template/AGENTS.md.jinja</code> plus <code>copier.yml</code> emit only commands the selected profile can run. <code>scripts/cleanup-worktrees</code> and <code>scripts/test-worktree-cleanup</code> handle safe cleanup; <code>scripts/verify</code>, <code>.github/workflows/</code>, and <code>policies/</code> keep rules, evidence, automation, and governance separate.</p>
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong><code>AGENTS.md</code> is the only AI-rules source; writable tasks use branches and worktrees, while prompts do not duplicate verification or governance logic.</li><li><strong>Adjustable:</strong><code>project_run_command</code> names how to invoke the product; existing repositories may set one repository-relative <code>project_verification_hook</code>.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>AGENTS.md</code>, <code>CLAUDE.md</code>, and <code>scripts/cleanup-worktrees</code>.</li></ul></aside>
+<aside class="config-guidance" data-config-direct="true">
+  <details class="config-guidance-fold" open>
+    <summary>Fixed and adjustable policy</summary>
+    <div class="config-actions"><details class="config-inline-detail">
+        <summary>
+          <span class="config-trigger-title">Fixed baseline | People and AI each get one clear entry point</span>
+          <span class="config-trigger-summary">A subdirectory gets its own AGENTS.md only when its commands or safety boundaries genuinely differ, so multiple rule files never drift apart.</span>
+        </summary>
+        <div class="config-inline-body">
+          <p>README serves people; the root AGENTS.md is the single source of AI rules, and CLAUDE.md is only a thin import.</p>
+          <p class="config-inline-path">Config file: <code>README.md＋AGENTS.md＋CLAUDE.md</code></p>
+          <pre class="code"># README.md&#10;## Quick start&#10;## Verification&#10;## Support&#10;&#10;# AGENTS.md&#10;## Scope and sources of truth&#10;## Working loop&#10;## Commands&#10;## Editing boundaries&#10;## Safety</pre>
+        </div>
+      </details><details class="config-inline-detail">
+        <summary>
+          <span class="config-trigger-title">Adjustable | Product startup and extra verification commands</span>
+          <span class="config-trigger-summary">project_run_command is required; an existing repository may also set one safe, repository-relative verification program.</span>
+        </summary>
+        <div class="config-inline-body">
+          <p>Tells the agent how to start the product, and which project-specific check to run after the shared verification finishes.</p>
+          <p class="config-inline-path">Config file: <code>.csarc/config.yml＋AGENTS.md</code></p>
+          <pre class="code">project_run_command: uv run my-product&#10;project_verification_hook: scripts/verify-product</pre>
+        </div>
+      </details><details class="config-inline-detail">
+        <summary>
+          <span class="config-trigger-title">Fixed baseline | Parallel writable tasks stay isolated</span>
+          <span class="config-trigger-summary">A read-only task needs no extra worktree; the cleanup program reclaims only merged, clean directories.</span>
+        </summary>
+        <div class="config-inline-body">
+          <p>One writable task maps to one branch and one worktree; only independent scopes run in parallel.</p>
+          <p class="config-inline-path">Config file: <code>AGENTS.md＋scripts/cleanup-worktrees＋scripts/test-worktree-cleanup</code></p>
+          <pre class="code">git worktree add ../task-388 -b feat/388-align-ai-guidelines&#10;./scripts/test-worktree-cleanup&#10;./scripts/cleanup-worktrees</pre>
+        </div>
+      </details><details class="config-inline-detail">
+        <summary>
+          <span class="config-trigger-title">Fixed baseline | Rules, verification, and governance each own one responsibility</span>
+          <span class="config-trigger-summary">People retain requirements, major trade-offs, external impact, and irreversible operations; this page does not redefine merge permissions.</span>
+        </summary>
+        <div class="config-inline-body">
+          <p>AGENTS.md explains how to work; scripts supply evidence; Actions only wrap execution; rules governance separately defines merge eligibility, permissions, and exceptions.</p>
+          <p class="config-inline-path">Config file: <code>AGENTS.md＋scripts/verify＋.github/workflows/＋policies/</code></p>
+          <pre class="code"># Local and Action use the same logic&#10;./scripts/verify&#10;&#10;# Governance and merge eligibility live under Rules governance&#10;policies/actions.json&#10;policies/rulesets.json</pre>
+        </div>
+      </details>
+    </div>
+  </details>
+</aside>
 </div>
 </section>
 
@@ -2699,9 +2776,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
@@ -2726,9 +2800,55 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>One implementation:</strong> GitHub Actions has one <code>verify</code> job with a 30-minute timeout and only calls repository scripts.</li>
 <li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
 </ul>
-<p>Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, Work Issue closure, and Dependabot are active in a newly generated repository from its first commit. One release workflow is configured as a candidate pending a successful default-branch run. Dedicated promotion, release-handoff, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.</p>
+<p>Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, Work Issue closure, reviewer assignment, and Dependabot are active in a newly generated repository from its first commit. One release workflow is configured as a candidate pending a successful default-branch run. Dedicated promotion, release-handoff, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.</p>
 <aside class="config-guidance" data-audience="maintainer"><strong>Root repository state</strong><p>In <code>csarc-repo-template</code> itself, OSV is also candidate: its workflow has not yet landed on this repository's own <code>main</code>, and its trigger set does not include <code>pull_request</code>, so it cannot pre-register from a candidate branch. See the CI/CD settings page's current-automation table for the exact live-registration check and timestamp.</p></aside>
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>local and CI execution share scripts and tests; work PRs select fast or full by risk, while Milestone or canary delivery, hotfix, merge queue, manual, and unknown high-risk changes run full.</li><li><strong>Adjustable:</strong><code>coverage_mode</code>, <code>coverage_threshold</code>, and <code>enable_precommit</code>; advanced teams may enable <code>use_reusable_workflow</code> with a full commit SHA.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>scripts/verify-fast</code>, <code>scripts/verify</code>, and <code>.github/workflows/ci.yml</code>.</li></ul></aside>
+<aside class="config-guidance" data-config-direct="true">
+  <details class="config-guidance-fold" open>
+    <summary>Fixed and adjustable policy</summary>
+    <div class="config-actions"><details class="config-inline-detail">
+        <summary>
+          <span class="config-trigger-title">Fixed baseline | CI runs fast or full by risk</span>
+          <span class="config-trigger-summary">The default path does not depend on a central workflow; a stable aggregate context balances cost against required checks.</span>
+        </summary>
+        <div class="config-inline-body">
+          <p>The default path does not depend on a central workflow; a stable aggregate context balances cost against required checks.</p>
+          <p class="config-inline-path">Config file: <code>.github/workflows/ci.yml</code></p>
+          <pre class="code">on:&#10;  pull_request:&#10;  merge_group:&#10;    types: [checks_requested]&#10;  workflow_dispatch:&#10;permissions:&#10;  actions: read&#10;  contents: read&#10;jobs:&#10;  fast: # docs/fast routing&#10;  full: # promotion/hotfix/merge queue/manual&#10;  verify: # always-present aggregate context</pre>
+        </div>
+      </details><details class="config-inline-detail">
+        <summary>
+          <span class="config-trigger-title">Adjustable | Coverage and local convenience features</span>
+          <span class="config-trigger-summary">Coverage can target the whole project or only the current diff, with an 80% default threshold; pre-commit defaults to off, and CI remains the required evidence.</span>
+        </summary>
+        <div class="config-inline-body">
+          <p>An organization can adjust the shared coverage policy and pre-commit without editing every verification script.</p>
+          <p class="config-inline-path">Config file: <code>.csarc/config.yml</code></p>
+          <pre class="code">coverage_mode: global  # global | diff&#10;coverage_threshold: 80  # 1..100&#10;enable_precommit: false</pre>
+        </div>
+      </details><details class="config-inline-detail">
+        <summary>
+          <span class="config-trigger-title">Project opt-in | Switch to a pinned reusable workflow</span>
+          <span class="config-trigger-summary">Copier keeps this off by default; enabling it requires a 40-character commit SHA, and the central private repository must also allow organization-level access.</span>
+        </summary>
+        <div class="config-inline-body">
+          <p>Copier keeps this off by default; enabling it requires a 40-character commit SHA, and the central private repository must also allow organization-level access.</p>
+          <p class="config-inline-path">Config file: <code>copier.yml＋.github/workflows/reusable-ci.yml</code></p>
+          <pre class="code">use_reusable_workflow: true&#10;workflow_ref: &lt;40-character-commit-sha&gt;&#10;&#10;uses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@&lt;40-character-commit-sha&gt;&#10;with:&#10;  language-profile: python&#10;&#10;gh api --method PUT \&#10;  repos/Innoguard-Cyber-Arch/csarc-repo-template/actions/permissions/access \&#10;  -f access_level=organization</pre>
+        </div>
+      </details><details class="config-inline-detail">
+        <summary>
+          <span class="config-trigger-title">Fixed baseline | zizmor runs only on relevant changes and on schedule</span>
+          <span class="config-trigger-summary">CI conditionally scans workflow/action changes and promotions; a weekly run covers the rest, so an ordinary source or docs PR never pays for it twice.</span>
+        </summary>
+        <div class="config-inline-body">
+          <p>CI conditionally scans workflow/action changes and promotions; a weekly run covers the rest, so an ordinary source or docs PR never pays for it twice.</p>
+          <p class="config-inline-path">Config file: <code>.github/workflows/ci.yml＋.github/workflows/zizmor.yml</code></p>
+          <pre class="code">name: Zizmor scheduled audit&#10;on:&#10;  workflow_dispatch:&#10;  schedule:&#10;    - cron: &#34;43 3 * * 1&#34;&#10;permissions:&#10;  contents: read&#10;jobs:&#10;  audit:&#10;    steps:&#10;      - run: uvx --from zizmor==1.29.0 zizmor . --format plain&#10;# PR workflow changes are routed to the same audit by the CI tier rules.</pre>
+        </div>
+      </details>
+    </div>
+  </details>
+</aside>
 </div>
 </section>
 
@@ -2781,9 +2901,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
@@ -2809,7 +2926,33 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>TypeScript:</strong> checks formatting, types, tests, and the installable package.</li>
 </ul>
 <p>Each language is selected independently. Selecting several languages combines their modules while each shared check still runs once; the documentation does not enumerate combinations.</p>
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>each language uses its native tools behind one verification entry point; combinations do not create separate workflows.</li><li><strong>Adjustable:</strong><code>languages</code>, <code>python_support_mode</code>, and <code>python_min_version</code>; advanced options remain in each language's native configuration.</li><li><strong>Python:</strong><code>uv</code> installs from <code>uv.lock</code>; <code>Ruff</code> formats and lints (currently 80 columns and Google docstrings); <code>ty</code> checks types; <code>pytest</code> runs tests; <code>coverage.py</code> checks coverage; Hatch verifies the wheel. These settings live in <code>pyproject.toml</code>.</li><li><strong>Rust:</strong><code>rustfmt</code> checks formatting; <code>Clippy</code> treats lint warnings as failures; <code>Cargo</code> installs from <code>Cargo.lock</code>, tests, builds a release, and verifies the package. Settings live in <code>rust-toolchain.toml</code> and <code>Cargo.toml</code>.</li><li><strong>TypeScript:</strong><code>pnpm</code> installs from <code>pnpm-lock.yaml</code>; <code>Biome</code> formats and lints; TypeScript checks types and builds; <code>Vitest</code> tests and measures coverage; <code>npm pack</code> verifies the package. Settings live in <code>package.json</code>, <code>biome.json</code>, and <code>tsconfig.json</code>.</li></ul></aside>
+<aside class="config-guidance">
+  <strong>Fixed and adjustable policy</strong>
+  <p>Only the template&#39;s main policy, adjustable options, and setting locations are listed.</p>
+  <div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-languages" data-config-index="0" data-config-title="Adjustable | Selected languages and Python support range" data-config-goal="Copier writes the selection into the repository; the detector only flags when the actual files disagree with the declaration, and never changes the setting on its own." data-config-file=".csarc/config.yml＋scripts/detect-language-profile" data-config-code="languages:&#10;- python&#10;- rust&#10;- typescript&#10;python_support_mode: latest  # latest | minimum&#10;python_min_version: &#34;3.12&#34;  # minimum only&#10;./scripts/detect-language-profile --suggest&#10;./scripts/detect-language-profile">
+      <span class="config-trigger-title">Adjustable | Selected languages and Python support range</span>
+      <span class="config-trigger-file">.csarc/config.yml＋scripts/detect-language-profile</span>
+      <span class="config-trigger-summary">languages decides which language modules are generated; Python can additionally target the latest stable release or the lowest supported version.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-languages" data-config-index="1" data-config-title="Fixed baseline | Each language uses its native tools" data-config-goal="Shared governance does not mean forcing every language into the same toolchain; each language uses its mainstream tools, coordinated behind one verification entry point." data-config-file="Each language&#39;s manifest &#43; lockfile" data-config-code="# Python module&#10;uv sync --locked&#10;uv run ruff format --check .&#10;uv run ruff check .&#10;uv run ty check&#10;uv run pytest --cov --cov-fail-under=80&#10;&#10;# Rust module&#10;cargo fmt --all -- --check&#10;cargo clippy --locked --all-targets --all-features -- -D warnings&#10;cargo test --locked --all-features&#10;cargo build --release --locked&#10;cargo package --locked --allow-dirty&#10;&#10;# TypeScript module&#10;pnpm install --frozen-lockfile --ignore-scripts&#10;pnpm exec biome ci .&#10;pnpm exec tsc --noEmit&#10;pnpm exec vitest run --coverage">
+      <span class="config-trigger-title">Fixed baseline | Each language uses its native tools</span>
+      <span class="config-trigger-file">Each language&#39;s manifest &#43; lockfile</span>
+      <span class="config-trigger-summary">Ruff, Biome, and rustfmt own formatting; Ruff, Biome, and Clippy own linting; ty and TypeScript check types; each language then uses its own testing and packaging tools.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-languages" data-config-index="2" data-config-title="Fixed baseline | One entry point verifies and packages" data-config-goal="Local runs, AI, and GitHub all execute the same entry point; each language owns only its own checks." data-config-file="scripts/verify-fast＋scripts/verify＋.github/workflows/ci.yml" data-config-code="./scripts/verify-fast&#10;./scripts/verify">
+      <span class="config-trigger-title">Fixed baseline | One entry point verifies and packages</span>
+      <span class="config-trigger-file">scripts/verify-fast＋scripts/verify＋.github/workflows/ci.yml</span>
+      <span class="config-trigger-summary">fast selects the required subset and full is its superset; no test is duplicated for a different PR stage.</span>
+    </button>
+  </div>
+</aside>
+<aside id="config-overlay-languages" class="config-overlay" hidden role="region" aria-label="Configuration implementation card">
+  <div class="config-overlay-card">
+    <button class="config-overlay-close" type="button" aria-label="Close configuration detail">×</button>
+    <h3></h3>
+    <p class="config-overlay-goal"></p>
+    <p class="config-overlay-path">Config file: <code></code></p>
+    <pre class="code"></pre>
+  </div>
+</aside>
 </div>
 </section>
 
@@ -2861,9 +3004,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
@@ -2920,8 +3060,33 @@ html[data-detail-level="simple"] .detail-panel {
 </ul>
 </div>
 </details>
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>a PR links one work item, follows title and classification rules, and passes verification; work and delivery PRs keep separate responsibilities.</li><li><strong>Adjustable:</strong><code>branch_strategy</code> selects the branch model; <code>code_owner</code> and <code>reviewers</code> select ownership and review candidates.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, the PR template, <code>CODEOWNERS</code>, <code>REVIEWERS</code>, and PR policy.</li></ul></aside>
-</div>
+<aside class="config-guidance">
+  <strong>Fixed and adjustable policy</strong>
+  <p>Only the template&#39;s main policy, adjustable options, and setting locations are listed.</p>
+  <div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-pr" data-config-index="0" data-config-title="Fixed baseline | PR format and its work-item link" data-config-goal="One work PR completes one Issue; an Action verifies and closes Milestone work, while work that lands directly on main relies on GitHub&#39;s native closing keywords." data-config-file="pull_request_template.md＋.github/workflows/pr-policy.yml＋.github/workflows/work-item-closure.yml＋scripts/pr_lifecycle.py" data-config-code="title: feat(scope): English summary&#10;branch: feat/123-short-slug&#10;body: Closes #123&#10;label: enhancement&#10;assignee: PR author&#10;milestone: same as Issue #123">
+      <span class="config-trigger-title">Fixed baseline | PR format and its work-item link</span>
+      <span class="config-trigger-file">pull_request_template.md＋.github/workflows/pr-policy.yml＋.github/workflows/work-item-closure.yml＋scripts/pr_lifecycle.py</span>
+      <span class="config-trigger-summary">The title and base branch must follow the rules; the classification label and Milestone must match the Issue, the PR author must be listed as Assignee, and the body must use Closes #N to link back to the matching open Issue.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-pr" data-config-index="1" data-config-title="Adjustable | The work PR&#39;s branch model" data-config-goal="Milestone work lands on `dev/m*` first, while an ordinary independent task goes straight to main; once main moves forward, a PR syncs it back instead of rewriting the delivery branch directly." data-config-file="copier.yml＋.csarc/config.yml＋scripts/delivery_sync.py" data-config-code="branch_strategy: delivery  # delivery | main&#10;&#10;work:    type/123-short-slug -&gt; dev/m8-*&#10;release: dev/m8-* -&gt; main&#10;sync:    sync/main-to-m8-*-&lt;sha&gt; -&gt; dev/m8-*">
+      <span class="config-trigger-title">Adjustable | The work PR&#39;s branch model</span>
+      <span class="config-trigger-file">copier.yml＋.csarc/config.yml＋scripts/delivery_sync.py</span>
+      <span class="config-trigger-summary">branch_strategy selects delivery or main; the validator checks the base branch and sync chain against the selected model.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-pr" data-config-index="2" data-config-title="Adjustable | Code owners and review candidates" data-config-goal="The template generates CODEOWNERS and an assignable reviewer list; who may merge and any exception are still defined only by rules governance." data-config-file=".csarc/config.yml＋.github/CODEOWNERS＋.github/REVIEWERS" data-config-code="code_owner: &#34;@organization/team&#34;&#10;reviewers: &#34;@alice,@bob&#34;&#10;&#10;desired reviews: 1&#10;require CODEOWNER: true&#10;dismiss stale reviews: true&#10;resolve review threads: true&#10;&#10;# Run before relying on enforcement&#10;./scripts/apply-repository-settings.sh check">
+      <span class="config-trigger-title">Adjustable | Code owners and review candidates</span>
+      <span class="config-trigger-file">.csarc/config.yml＋.github/CODEOWNERS＋.github/REVIEWERS</span>
+      <span class="config-trigger-summary">code_owner names a GitHub team; reviewers is the list of accounts that can be assigned. When the platform cannot enforce this, a human must still assign and confirm it.</span>
+    </button>
+  </div>
+</aside>
+<aside id="config-overlay-pr" class="config-overlay" hidden role="region" aria-label="Configuration implementation card">
+  <div class="config-overlay-card">
+    <button class="config-overlay-close" type="button" aria-label="Close configuration detail">×</button>
+    <h3></h3>
+    <p class="config-overlay-goal"></p>
+    <p class="config-overlay-path">Config file: <code></code></p>
+    <pre class="code"></pre>
+  </div>
+</aside></div>
 </section>
 
 <section class="slide markdown-slide candidate-slide" id="supply" data-content-key="supply" data-track="supply" aria-label="Update, check, and record third-party packages separately">
@@ -2972,9 +3137,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
@@ -3029,7 +3191,46 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>Software bill of materials (SBOM):</strong> list packages present in the released artifact for investigation; it does not block vulnerabilities by itself.</li>
 </ul>
 </aside>
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>lockfile installs, Dependabot, OSV, and artifact SBOMs have separate jobs; ordinary releases wait three days while security updates do not.</li><li><strong>Adjustable:</strong><code>security_reporting_channel</code> names the private reporting path; <code>project_visibility</code> and <code>enable_codeql</code> decide whether CodeQL is generated.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, lockfiles, <code>dependabot.yml</code>, <code>osv.yml</code>, <code>codeql.yml</code>, and <code>SECURITY.md</code>.</li></ul></aside></div>
+<aside class="config-guidance">
+  <strong>Fixed and adjustable policy</strong>
+  <p>Only the template&#39;s main policy, adjustable options, and setting locations are listed.</p>
+  <div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-supply" data-config-index="0" data-config-title="Fixed baseline | Reinstall from the lockfile; TypeScript also waits three days" data-config-goal="First prove the committed package set is reproducible; a successful install is never mistaken for the absence of vulnerabilities." data-config-file="template/scripts/verify-fast.jinja＋template/scripts/verify.jinja＋template/pnpm-workspace.yaml" data-config-code="uv sync --locked&#10;cargo test --locked&#10;pnpm install --frozen-lockfile --ignore-scripts&#10;&#10;minimumReleaseAge: 4320&#10;minimumReleaseAgeStrict: true&#10;trustPolicy: no-downgrade">
+      <span class="config-trigger-title">Fixed baseline | Reinstall from the lockfile; TypeScript also waits three days</span>
+      <span class="config-trigger-file">template/scripts/verify-fast.jinja＋template/scripts/verify.jinja＋template/pnpm-workspace.yaml</span>
+      <span class="config-trigger-summary">Python, Rust, and TypeScript all reinstall from their lockfile; pnpm additionally refuses a release published under three days ago or with a downgraded publisher trust level.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-supply" data-config-index="1" data-config-title="Fixed baseline | Dependabot opens both routine and security update PRs" data-config-goal="An ordinary new release is observed for three days first; a known security fix does not wait, and update PRs still go through the same CI." data-config-file=".github/dependabot.yml＋template/.github/dependabot.yml.jinja" data-config-code="cooldown:&#10;  default-days: 3&#10;&#10;# Security updates are not delayed by the cooldown.">
+      <span class="config-trigger-title">Fixed baseline | Dependabot opens both routine and security update PRs</span>
+      <span class="config-trigger-file">.github/dependabot.yml＋template/.github/dependabot.yml.jinja</span>
+      <span class="config-trigger-summary">This uses GitHub&#39;s native automation identity instead of requiring a high-privilege App on every repository; both routine and security update PRs go through the same review and CI.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-supply" data-config-index="2" data-config-title="Fixed baseline | OSV shares one scan across local runs, PRs, and the weekly schedule" data-config-goal="A publicly disclosed vulnerability is handled immediately, kept separate from the three-day observation window for ordinary releases." data-config-file="scripts/verify-dependencies＋.github/workflows/ci.yml＋.github/workflows/osv.yml" data-config-code="Issue PR with dependency changes -&gt; verify-dependencies&#10;Delivery PR -&gt; verify-dependencies&#10;Weekly schedule -&gt; verify-dependencies">
+      <span class="config-trigger-title">Fixed baseline | OSV shares one scan across local runs, PRs, and the weekly schedule</span>
+      <span class="config-trigger-file">scripts/verify-dependencies＋.github/workflows/ci.yml＋.github/workflows/osv.yml</span>
+      <span class="config-trigger-summary">A dependency-file change and a delivery candidate both run the same local program; the weekly schedule only covers periods without a PR. No workflow redefines the scan conditions on its own.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-supply" data-config-index="3" data-config-title="Project opt-in | Enable CodeQL by GitHub plan" data-config-goal="SAST is enabled when cross-function data-flow analysis is actually needed; lint or dependency-vulnerability scanning is never mistaken for CodeQL." data-config-file=".csarc/config.yml＋.github/workflows/codeql.yml" data-config-code="project_visibility: public&#10;enable_codeql: true">
+      <span class="config-trigger-title">Project opt-in | Enable CodeQL by GitHub plan</span>
+      <span class="config-trigger-file">.csarc/config.yml＋.github/workflows/codeql.yml</span>
+      <span class="config-trigger-summary">A public repository turns this on by default; a private or internal repository first confirms GitHub Code Security authorization, and nothing is generated unless Python or TypeScript is selected.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-supply" data-config-index="4" data-config-title="Conditional contract | SPDX SBOM and checksums for real artifacts" data-config-goal="The inventory must come from the real artifact at an exact tag; it is never guessed from source code alone." data-config-file="scripts/release_assets.py＋tests/test_release_assets.py" data-config-code="syft &lt;extracted-artifacts&gt; -o spdx-json=sbom.spdx.json&#10;python scripts/release_assets.py build ...&#10;python scripts/release_assets.py verify ...">
+      <span class="config-trigger-title">Conditional contract | SPDX SBOM and checksums for real artifacts</span>
+      <span class="config-trigger-file">scripts/release_assets.py＋tests/test_release_assets.py</span>
+      <span class="config-trigger-summary">When an artifact exists, Syft can generate an SPDX 2.3 SBOM; repository scripts verify the root package, dependency graph, checksum, source identity, and provenance. There is currently no active publisher, so no artifact evidence is claimed to exist yet.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-supply" data-config-index="5" data-config-title="Adjustable | Reporting a vulnerability in this project itself" data-config-goal="Scanning tools can only see known patterns; a human report is what catches what scanning misses. Issues are publicly indexed, so the reporting process first routes people away from the Issue tracker." data-config-file=".csarc/config.yml＋SECURITY.md" data-config-code="security_reporting_channel: &gt;-&#10;  Use the approved private reporting channel.&#10;&#10;## Reporting a vulnerability&#10;&#10;Do not open a public GitHub Issue for a&#10;suspected vulnerability, exploit code,&#10;credentials, tokens, or customer data.&#10;&#10;&lt;!-- Project owner: replace with the actual&#10;private reporting channel and expected&#10;acknowledgement window. --&gt;">
+      <span class="config-trigger-title">Adjustable | Reporting a vulnerability in this project itself</span>
+      <span class="config-trigger-file">.csarc/config.yml＋SECURITY.md</span>
+      <span class="config-trigger-summary">No contact address or SLA is hard-coded: the template does not know a downstream project&#39;s real reporting channel, and inventing one would only mislead reporters. This policy takes effect only after the project owner fills in the real channel and response expectations in SECURITY.md.</span>
+    </button>
+  </div>
+</aside>
+<aside id="config-overlay-supply" class="config-overlay" hidden role="region" aria-label="Configuration implementation card">
+  <div class="config-overlay-card">
+    <button class="config-overlay-close" type="button" aria-label="Close configuration detail">×</button>
+    <h3></h3>
+    <p class="config-overlay-goal"></p>
+    <p class="config-overlay-path">Config file: <code></code></p>
+    <pre class="code"></pre>
+  </div>
+</aside>
+</div>
 </section>
 
 <section class="slide markdown-slide dense" id="deploy" data-content-key="deploy" data-track="deploy" aria-label="Separate version, release, delivery, and deployment">
@@ -3080,9 +3281,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
@@ -3146,14 +3344,19 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td>PyPI, npm, and GHCR</td>
-					<td>Conditional gap</td>
-					<td>The root publishes to no registry; generated projects expose settings but receive no publisher job, tracked by #439</td>
+					<td>Not applicable</td>
+					<td>The root publishes to no registry; #439 removed the dormant PyPI/npm/GHCR prompts because zero workflow consumed them, so generated projects no longer expose these settings either. A consuming product adds its own OIDC publisher through a separate Issue/ADR</td>
 			</tr>
 	</tbody>
 </table>
 <aside class="technical-detail" data-content-key="standalone-delivery">
   <h3>When standalone work must join a Milestone</h3>
   An Issue may branch from the latest <code>main</code>, target <code>main</code>, and close through <code>Closes #N</code> when it can be accepted on its own and has no shared deadline, batch acceptance, cross-Issue dependency, or isolated test environment. If any of those needs appears, assign the Issue to the appropriate Milestone before implementation and use <code>dev/m*</code>; the standalone route cannot bypass batch review.
+</aside>
+<aside class="technical-detail" data-content-key="deploy-ordering">
+  <h3>Delivery ordering, artifacts, and registry boundaries</h3>
+  <p>Direct mode rereads the default-branch head before writing and delivers only when the latest <code>main</code>, source, tag, CHANGELOG, and promotion evidence agree; workflow concurrency is not treated as FIFO. The artifact workflow accepts only a release-source run ID, creates a digest and SBOM, ignores arbitrary tag pushes, and does not repeat full CI.</p>
+<p>GitHub Release is the portable baseline for every profile. Registry publishing and container delivery are product-owned extensions because the template does not ship an active publisher for them. <code>scripts/release_policy.py</code> detects GitHub release capabilities and configures versions; <code>scripts/promotion_gate.py</code> validates promotion.</p>
 </aside>
 <aside class="technical-detail" data-content-key="hotfix-delivery">
   <h3>Hotfix review, verification, and evidence</h3>
@@ -3162,12 +3365,40 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="technical-detail" data-content-key="manual-release-boundary">
   <h3>Automatic-release ownership</h3>
   <p>The template root and each new repository are configured to publish through their own release workflow. An adopted repository keeps its product-owned workflow. Every path still needs one owner, least privileges, full-SHA pins, a timeout, concurrency behavior, failure recovery, and a runner-cost ceiling; historical runs remain reference evidence only.</p>
+<p>Adoption and update never infer this from a workflow filename. <code>.csarc/config.yml</code>, the adoption plan, the Markdown/PDF report, and <code>.csarc/provenance.json</code> all disclose the same explicit <code>release_ownership</code> — <code>csarc-owned</code>, <code>product-owned</code>, or <code>verification-only</code> — plus the selected workflow path, its required <code>workflow_dispatch</code> inputs, the settings owner, whether immutable Releases are required, and the reason a repository degrades to <code>verification-only</code> (no writer found, or more than one). CSARC never dispatches a product-owned workflow or infers its input contract from a name; it only reads what the workflow itself declares.</p>
 <p>Milestone closure remains manual until #400 completes its lifecycle contract, and work-Issue closure remains owned by #401. Work branches are removed after merge; a Milestone delivery branch waits until closure and unfinished work are handled.</p>
+</aside>
+<aside class="config-guidance">
+  <strong>Fixed and adjustable policy</strong>
+  <p>Only the template&#39;s main policy, adjustable options, and setting locations are listed.</p>
+  <div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-deploy" data-config-index="0" data-config-title="Human boundary | Delivery and Milestone closure stay separate" data-config-goal="Merging into main is not a release; a Milestone still needs its owner to confirm the outcome and the required evidence." data-config-file="docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/milestone-lifecycle.yml" data-config-code="normal completion:&#10;  delivery evidence: recorded&#10;  unfinished Issues: none&#10;  lifecycle Issue: completed&#10;&#10;early termination:&#10;  reason: recorded&#10;  unfinished Issues: moved or not planned&#10;  lifecycle Issue: not planned">
+      <span class="config-trigger-title">Human boundary | Delivery and Milestone closure stay separate</span>
+      <span class="config-trigger-file">docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/milestone-lifecycle.yml</span>
+      <span class="config-trigger-summary">Until #400 is complete, both normal closure and early termination stay manual; a release workflow never infers completion on its own.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-deploy" data-config-index="1" data-config-title="Current state | Release automation is not enabled" data-config-goal="Documentation claims only the capability that the repository&#39;s current active files and current runs can actually prove." data-config-file="docs/adr/release-security-and-dependencies.md" data-config-code="version intent: active&#10;version &#43; changelog: manual&#10;tag &#43; GitHub Release: blocked (#369)&#10;artifact evidence: conditional&#10;deployment: not applicable">
+      <span class="config-trigger-title">Current state | Release automation is not enabled</span>
+      <span class="config-trigger-file">docs/adr/release-security-and-dependencies.md</span>
+      <span class="config-trigger-summary">Release Please, promotion, artifact publication, and consumption workflows all sit in the archive; they stay manual or conditional until #369 decides on a single owner.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-deploy" data-config-index="2" data-config-title="Retained contract | Artifact and consumption verification can rerun locally" data-config-goal="The exact-tag, checksum, SBOM, provenance, and consumption fail-closed boundaries are kept in place, without pretending a publisher already exists." data-config-file="scripts/release_assets.py＋scripts/verify_release_consumption.py" data-config-code="build exact-tag artifacts&#10;verify SHA-256 &#43; SPDX 2.3 &#43; source identity&#10;publish only after an owner is approved&#10;consumer verifies its own policy">
+      <span class="config-trigger-title">Retained contract | Artifact and consumption verification can rerun locally</span>
+      <span class="config-trigger-file">scripts/release_assets.py＋scripts/verify_release_consumption.py</span>
+      <span class="config-trigger-summary">The scripts and tests form a conditional contract; an actual workflow would still need to separately define an owner, trigger, least-privilege permissions, timeout, concurrency, cost, and success/controlled-failure evidence.</span>
+    </button>
+  </div>
+</aside>
+<aside id="config-overlay-deploy" class="config-overlay" hidden role="region" aria-label="Configuration implementation card">
+  <div class="config-overlay-card">
+    <button class="config-overlay-close" type="button" aria-label="Close configuration detail">×</button>
+    <h3></h3>
+    <p class="config-overlay-goal"></p>
+    <p class="config-overlay-path">Config file: <code></code></p>
+    <pre class="code"></pre>
+  </div>
 </aside>
 </div>
 </section>
 
-<section class="slide markdown-slide dense" id="governance" data-content-key="governance" data-track="governance" aria-label="Detect GitHub capability before applying controls">
+<section class="slide markdown-slide dense" id="governance" data-content-key="governance" data-track="governance" aria-label="Apply only the controls GitHub can enforce">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -3216,9 +3447,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
@@ -3233,44 +3461,134 @@ html[data-detail-level="simple"] .detail-panel {
 
   <header>
     <span class="selection-sequence">Step 08</span>
-    <h2>Detect GitHub capability before applying controls</h2>
-    <p class="subtitle">The organization currently probes as Free plus private, so main is not protected by an enforced Ruleset.</p>
+    <h2>Apply only the controls GitHub can enforce</h2>
+    <p class="subtitle">The template prepares one policy; a maintainer checks the live plan before relying on it.</p>
   </header>
-  <div class="markdown-body"><table>
+  <div class="markdown-body"><p>The template always prepares owners, reviewers, repository defaults, and the desired branch rules. A maintainer then checks the live repository:</p>
+<ul>
+<li>supported controls are applied and verified;</li>
+<li>an unavailable paid control is reported as <code>DEGRADED</code> and replaced with an explicit human step, never described as enforced;</li>
+<li>a fixable mismatch fails until corrected.</li>
+</ul>
+<aside class="technical-detail" data-content-key="governance-capability">
+  <h3>Plan capability, activation, and upgrade conditions</h3>
+  <table>
 	<thead>
 			<tr>
 					<th>GitHub state</th>
-					<th><code>apply</code> result</th>
-					<th>Actual gate</th>
+					<th>What the template can do</th>
+					<th>Human responsibility</th>
 			</tr>
 	</thead>
 	<tbody>
 			<tr>
-					<td>Free + public</td>
-					<td>Apply a Ruleset through REST</td>
-					<td>Missing or mismatched rules fail</td>
+					<td>Free + public, or Pro personal + private</td>
+					<td>Apply and check the repository Ruleset</td>
+					<td>Review the planned change before applying it</td>
 			</tr>
 			<tr>
 					<td>Free organization + private</td>
-					<td>Apply baseline settings and retain desired Ruleset in <code>policies/rulesets.json</code></td>
-					<td>Report <code>DEGRADED</code>, assign a reviewer manually, and provide no merge gate</td>
+					<td>Apply baseline settings and retain the desired Ruleset in <code>policies/rulesets.json</code></td>
+					<td>A workflow assigns and records review automatically; there is no enforced merge gate</td>
 			</tr>
 			<tr>
-					<td>Pro personal + private</td>
-					<td>Apply a Ruleset</td>
-					<td>Same as Free public</td>
-			</tr>
-			<tr>
-					<td>Team/Enterprise organization + private</td>
-					<td>Verify the CODEOWNERS team, then apply a Ruleset</td>
-					<td>Review, CODEOWNER, and status checks become merge gates</td>
+					<td>Team / Enterprise organization + private</td>
+					<td>Validate the CODEOWNERS team, then apply and check the Ruleset</td>
+					<td>Approve organization-level identity, network, audit, or irreversible changes separately</td>
 			</tr>
 	</tbody>
 </table>
-<aside class="technical-detail" data-content-key="governance-observation">
-  <h3>Concrete operations and observation limits</h3>
-  <p>Run <code>scripts/apply-repository-settings.sh plan</code>, <code>apply</code>, then <code>check</code>. The check compares CODEOWNERS, repository settings, Actions, policy labels, and effective Rulesets. <code>scripts/check-governance-drift</code> can run locally, but its former daily Action remains under <code>archive/ci-cd/</code>; it neither runs on a schedule nor opens Issues automatically.</p>
-<p>Each check is a snapshot. A setting changed and restored between runs still requires the GitHub audit log or organization monitoring. Complete administration fields should be checked from a trusted checkout with Administration read credentials, never by exposing that token to PR code. GitHub plan upgrades, irreversible operations, and organization-wide permission changes require separate approval from an organization owner.</p>
+<p>Capability is enabled by evidence, not by a predefined maturity label or calendar date. Re-run <code>plan</code>, <code>apply</code>, and <code>check</code> after a visibility or plan change. A real unsupported capability stays <code>DEGRADED</code>; an unexpected API or configuration error stops.</p>
+</aside>
+<aside class="technical-detail" data-content-key="governance-config">
+  <h3>One configuration source and its ownership layers</h3>
+  <table>
+	<thead>
+			<tr>
+					<th>Layer</th>
+					<th><code>.csarc/config.yml</code> key</th>
+					<th>Default / allowed values</th>
+					<th>Generated or checked at</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td>Required baseline</td>
+					<td><code>branch_strategy</code></td>
+					<td><code>delivery</code> by default; <code>delivery</code> or <code>main</code></td>
+					<td>branch guidance and <code>policies/rulesets.json</code></td>
+			</tr>
+			<tr>
+					<td>Organization policy</td>
+					<td><code>code_owner</code></td>
+					<td>one existing <code>@organization/team</code> with repository write access</td>
+					<td><code>.github/CODEOWNERS</code>; checked by repository-settings plan/apply/check</td>
+			</tr>
+			<tr>
+					<td>Organization policy</td>
+					<td><code>reviewers</code></td>
+					<td>one or more GitHub usernames</td>
+					<td><code>.github/REVIEWERS</code>; <code>governance-comment.yml</code> assigns automatically on every non-draft pull request</td>
+			</tr>
+			<tr>
+					<td>Project choice</td>
+					<td><code>project_visibility</code></td>
+					<td><code>private</code> by default; <code>public</code>, <code>private</code>, or Enterprise <code>internal</code></td>
+					<td>capability detection and optional security defaults</td>
+			</tr>
+			<tr>
+					<td>Project opt-in</td>
+					<td><code>enable_governance_drift_check</code></td>
+					<td><code>false</code> by default; set <code>true</code> to generate the daily scheduled Action</td>
+					<td><code>false</code> keeps only the local drift checker; <code>true</code> also generates <code>governance-drift.yml</code></td>
+			</tr>
+	</tbody>
+</table>
+<p>The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier <code>_src_path</code> and <code>_commit</code> metadata. Derived templates may add namespaced keys to this same YAML; they do not create another profile. Low-frequency GitHub details stay in native repository settings or <code>policies/</code> instead of expanding the CSARC schema.</p>
+<p>The internal site renders <code>docs/site-content.md</code> and resolves its explicit <code>[[key]]</code> tokens from the existing <code>project_name</code>, <code>project_description</code>, <code>repository_url</code>, <code>code_owner</code>, <code>languages</code>, and <code>branch_strategy</code> settings. Project content and theme remain in <code>docs/site-content.md</code> and <code>docs/site-theme.css</code>; the site does not create another configuration schema.</p>
+</aside>
+<aside class="technical-detail" data-content-key="governance-exceptions">
+  <h3>How to record a temporary exception</h3>
+  Use a linked Issue to record the proposer, a different approver, expiry, evidence, and recovery action. The exception may narrow a control only when the platform cannot provide it or a time-bounded incident requires recovery. It cannot claim a missing check passed, expose a privileged token to pull-request code, or silently become permanent. Close the exception only after recovery is verified; renew it through another explicit approval.
+</aside>
+<aside class="config-guidance">
+  <strong>Fixed and adjustable policy</strong>
+  <p>Only the template&#39;s main policy, adjustable options, and setting locations are listed.</p>
+  <div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-governance" data-config-index="0" data-config-title="Single source | Governance keeps only high-value options" data-config-goal="The root, generated repositories, and derived templates share one public configuration; there is no separate profile or site-only settings file to maintain." data-config-file=".csarc/config.yml＋policies/" data-config-code="branch_strategy: delivery  # delivery | main&#10;code_owner: &#34;@organization/team&#34;&#10;reviewers: &#34;@alice,@bob&#34;&#10;project_visibility: private  # public | private | internal&#10;enable_governance_drift_check: false">
+      <span class="config-trigger-title">Single source | Governance keeps only high-value options</span>
+      <span class="config-trigger-file">.csarc/config.yml＋policies/</span>
+      <span class="config-trigger-summary">Branch model, owner, reviewers, visibility, and the optional governance-drift check live in .csarc/config.yml; low-frequency native GitHub detail stays in policies/. Only a generated repository also carries Copier source metadata.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-governance" data-config-index="1" data-config-title="Check Ruleset policy, remote storage, and actual enforcement separately" data-config-goal="A remote repository may not exist yet when Copier generates files; the actual apply step queries GitHub instead of guessing the plan from a user-filled answer." data-config-file="scripts/apply-repository-settings.sh" data-config-code="gh api &#34;repos/$repo&#34;   --jq &#39;[.owner.login, .owner.type, .visibility, .permissions.admin] | @tsv&#39;&#10;gh api &#34;orgs/$owner&#34; --jq &#39;.plan.name&#39;&#10;gh api &#34;repos/$repo/rulesets&#34;&#10;# Free private keeps the desired policy in the repository.&#10;&#10;./scripts/apply-repository-settings.sh plan">
+      <span class="config-trigger-title">Check Ruleset policy, remote storage, and actual enforcement separately</span>
+      <span class="config-trigger-file">scripts/apply-repository-settings.sh</span>
+      <span class="config-trigger-summary">First confirm the signed-in user has repo admin; a REST endpoint then tells whether GitHub will actually enforce the rule. Both the REST and GraphQL mutation return 403 on a free private repository; the GraphQL query only detects whether an admin already pre-built the ruleset by hand in the web UI. Any other unknown error stops the run.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-governance" data-config-index="2" data-config-title="Every plan applies the baseline settings and keeps the policy source" data-config-goal="A free private repository is never fully skipped; the merge method, default Actions permissions, labels, and the Ruleset to enable later all follow the shared template." data-config-file="policies/repository.json＋policies/actions.json＋policies/labels.json" data-config-code="./scripts/apply-repository-settings.sh plan&#10;# Review the APPLY and PRESERVE list first.&#10;./scripts/apply-repository-settings.sh apply&#10;./scripts/apply-repository-settings.sh check">
+      <span class="config-trigger-title">Every plan applies the baseline settings and keeps the policy source</span>
+      <span class="config-trigger-file">policies/repository.json＋policies/actions.json＋policies/labels.json</span>
+      <span class="config-trigger-summary">A free private repository directly applies squash-only merges, deletes merged branches, sets Actions to read-only by default, and applies labels, while keeping the Ruleset policy recorded as ACTIVE in the repository. The public API cannot create that Ruleset, so the output is reported as DEGRADED.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-governance" data-config-index="3" data-config-title="The plan decides whether the Ruleset becomes a real gate" data-config-goal="A free private repository first keeps the same policy stored in the repository; public, Pro, Team, or Enterprise plans can actually enforce a PR, one approval, a CODEOWNER review, and required checks. Enterprise organization rules are still reviewed separately." data-config-file="policies/rulesets.json＋.github/CODEOWNERS＋.github/REVIEWERS＋governance-comment.yml" data-config-code="# The same policy is stored in every repository and enforced when supported.&#10;required reviews: 1&#10;require CODEOWNER review: true&#10;required checks:&#10;  - verify&#10;  - title&#10;  - scan-pr / osv-scan&#10;  - audit&#10;&#10;# Enterprise organization controls are report-only here.">
+      <span class="config-trigger-title">The plan decides whether the Ruleset becomes a real gate</span>
+      <span class="config-trigger-file">policies/rulesets.json＋.github/CODEOWNERS＋.github/REVIEWERS＋governance-comment.yml</span>
+      <span class="config-trigger-summary">Every plan first uses the repository teams API to verify the team and write access configured in the PR; an Action then excludes the author from the base branch&#39;s REVIEWERS list and assigns one individual reviewer. A free private repository still gets no team request or merge gate. The Ruleset only records STAGED/MISSING and DEGRADED states.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-governance" data-config-index="4" data-config-title="The drift schedule is opt-in per generated repository; this template&#39;s own source repo does not self-run it" data-config-goal="Both the local checkout and a generated repository reuse the same script; when continuous monitoring is needed, a Copier option turns on the daily schedule, least-privilege permissions, a timeout, and Issue notification, with nothing to rebuild by hand." data-config-file="scripts/check-governance-drift＋template/.github/workflows/governance-drift.yml" data-config-code="./scripts/check-governance-drift&#10;&#10;# enable_governance_drift_check=true generates the daily workflow and&#10;# script together; false generates neither. This template&#39;s own source&#10;# repo keeps the script for local verification but does not schedule it.">
+      <span class="config-trigger-title">The drift schedule is opt-in per generated repository; this template&#39;s own source repo does not self-run it</span>
+      <span class="config-trigger-file">scripts/check-governance-drift＋template/.github/workflows/governance-drift.yml</span>
+      <span class="config-trigger-summary">scripts/check-governance-drift calls apply-repository-settings.sh check and can run from a trusted local checkout. When a generated repository turns on enable_governance_drift_check, a thin Action calls the same program daily and opens or updates one tracking Issue; this template&#39;s own source repository keeps the script for local use but never schedules it.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-governance" data-config-index="5" data-config-title="Temporary exception | An Issue keeps full accountability" data-config-goal="A plan limitation or incident recovery may temporarily fall back to a manual process, but a missing gate may never be recorded as enabled." data-config-file="GitHub Issue＋scripts/apply-repository-settings.sh check" data-config-code="Proposer: @alice&#10;Approver: @bob&#10;Expires: YYYY-MM-DD&#10;Evidence: &lt;exact check or platform limitation&gt;&#10;Recovery: &lt;command and expected result&gt;">
+      <span class="config-trigger-title">Temporary exception | An Issue keeps full accountability</span>
+      <span class="config-trigger-file">GitHub Issue＋scripts/apply-repository-settings.sh check</span>
+      <span class="config-trigger-summary">Every exception Issue records a proposer, a separate approver, an expiry date, evidence, and a recovery path; it closes only after recovery is verified, and any extension needs re-approval.</span>
+    </button>
+  </div>
+</aside>
+<aside id="config-overlay-governance" class="config-overlay" hidden role="region" aria-label="Configuration implementation card">
+  <div class="config-overlay-card">
+    <button class="config-overlay-close" type="button" aria-label="Close configuration detail">×</button>
+    <h3></h3>
+    <p class="config-overlay-goal"></p>
+    <p class="config-overlay-path">Config file: <code></code></p>
+    <pre class="code"></pre>
+  </div>
 </aside>
 </div>
 </section>
@@ -3324,9 +3642,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
@@ -3346,19 +3661,62 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
   <div class="markdown-body"><ul>
 <li><code>template/</code> is the delivered source; root retains the template repository&rsquo;s own GitHub governance and dogfood configuration.</li>
-<li><code>.csarc/config.yml</code> is each repository&rsquo;s only template configuration. Languages, branch strategy, and optional capabilities read from it. Generated repositories also keep Copier source and revision metadata in that file; root does not store self-referential metadata that would immediately become stale.</li>
-<li>The shared baseline and the Python, Rust, and TypeScript modules are verified independently. Selecting several languages combines modules without creating a combination-specific workflow.</li>
-<li>An existing repository is adopted and then updated from the next Copier revision, proving product content is preserved.</li>
+<li><code>.csarc/config.yml</code> is both Copier&rsquo;s update record and the repository&rsquo;s only template configuration. Languages, branch strategy, and optional capabilities read from it; later extensions add settings here instead of creating another configuration file.</li>
+<li>A new repository selects its languages and capabilities, then receives a baseline it can verify directly. Selecting several languages only combines their independent modules.</li>
+<li>A first adoption uses a pinned CLI outside the repository to produce an external change plan, then applies that same plan. A person reviews the first PR because the old default branch does not yet contain a trusted verifier.</li>
+<li>After that first merge, the default branch supplies the trusted PR policy and read-only CI verifies the candidate. Updates still begin with a preview; a conflict leaves the repository unchanged so it can be corrected and rerun.</li>
+<li>The optional update notice checks weekly and only creates or refreshes one Issue; it never modifies the repository automatically.</li>
 </ul>
 <details class="package-disclosure" data-content-key="copier-update">
   <summary><span class="tech-name">Copier &#43; root dogfood &#43; create/update regression</span></summary>
-  <div class="package-health"><a href="https://github.com/copier-org/copier">Copier</a> records source, language, and answers, then reapplies newer template revisions to an editable repository. Conflicts leave the repository unchanged; a person adjusts the affected files, reruns the update, and reviews the PR. GitHub Template copies only once, while PyScaffold would create a second update mechanism, so neither fits this requirement.</div>
+  <div class="package-health"><a href="https://github.com/copier-org/copier">Copier</a> records source, language, and answers, then reapplies newer template revisions to an editable repository. A person approves the first adoption. A later update conflict leaves the repository unchanged so the affected files can be corrected, rerun, and reviewed in a PR. GitHub Template copies only once, while PyScaffold would create a second update mechanism, so neither fits this requirement.</div>
 </details>
 <aside class="technical-detail" data-content-key="template-release-scope">
   <h3>Single source, runtime baselines, and the root-only boundary</h3>
   <p>Root <code>.csarc/config.yml</code> records the capabilities selected by the template repository itself. A generated repository additionally records Copier&rsquo;s source and revision and writes changes through <code>csarc update --data</code>. The template source does not invent <code>_src_path</code> or <code>_commit</code> values that point back to itself or immediately become stale. A derived template should add namespaced settings to the same YAML instead of duplicating CSARC fields.</p>
+<p><code>enable_template_update_notifications</code> generates <code>template-update.yml</code> and <code>check-template-update</code> only when selected. Public sources need no secret; private sources use a repository secret limited to read-only access to that template source.</p>
 <p><code>scripts/sync-paired-files.sh</code> makes root the source of paired files and verifies copied content and permissions with <code>--check</code>. <code>profiles/catalog.yaml</code> records runtime baselines and their evidence. Python and Node baselines advance only after their own thirty-day observation period.</p>
-<p><code>scripts/verify-template.sh</code> runs create/adopt/update fixtures only in the template repository and is never delivered downstream. Generated repositories use the smaller <code>scripts/verify</code> entry point.</p>
+<p><code>scripts/verify-template.sh</code> runs create/adopt/update fixtures only in the template repository and is never delivered downstream. Generated repositories use the smaller <code>scripts/verify</code> entry point. The first-adoption machine plan stays outside the target, so proposed files cannot rewrite their own evidence. After the first PR merges, its base supplies the trusted PR policy and read-only CI runs candidate verification.</p>
+</aside>
+<aside class="technical-detail" data-content-key="template-release-status">
+  <h3>Current automation boundary</h3>
+  <ul>
+<li><strong>Active:</strong> the CLI creates, adopts, or updates and verifies a candidate before writing the target; template full verification reruns all three paths.</li>
+<li><strong>Manual:</strong> a person approves the external plan, source, and first adoption PR.</li>
+<li><strong>Pending:</strong> the update-notice workflow and checker script are restored, and a Copier fixture test verifies they are generated only when selected; the checker&rsquo;s own update-detection and Issue-notification logic has no dedicated regression test, and no hosted scheduled run has been observed, so live-schedule execution is not yet claimed.</li>
+<li><strong>Retired:</strong> remote governance and delivery orchestration do not return with this page; reviewer assignment is restored and covered under Rules governance instead.</li>
+</ul>
+</aside>
+<aside class="config-guidance">
+  <strong>Fixed and adjustable policy</strong>
+  <p>Only the template&#39;s main policy, adjustable options, and setting locations are listed.</p>
+  <div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-template-release" data-config-index="0" data-config-title="Copier asks only about options that change the skeleton or verification behavior" data-config-goal="There is no switch to turn off type checking or secret scanning; the strict threshold is part of the template&#39;s contract." data-config-file="copier.yml" data-config-code="languages: [python]&#10;branch_strategy: delivery  # delivery | main&#10;python_support_mode: latest  # latest | minimum&#10;python_min_version: &#34;3.12&#34;  # Used only in minimum mode&#10;coverage_mode: global  # global | diff&#10;coverage_threshold: 80&#10;enable_precommit: false&#10;project_visibility: private  # public defaults CodeQL on&#10;enable_codeql: false         # private/internal require GitHub Code Security&#10;use_reusable_workflow: false&#10;&#10;_skip_if_exists:&#10;  - &#34;src/**&#34;&#10;  - &#34;tests/**&#34;&#10;  - &#34;docs/specs/**&#34;">
+      <span class="config-trigger-title">Copier asks only about options that change the skeleton or verification behavior</span>
+      <span class="config-trigger-file">copier.yml</span>
+      <span class="config-trigger-summary">Language and branch model are both chosen explicitly at creation time; main is the permanent integration line, and delivery mode creates a short-lived dev/m* only for a Milestone. _skip_if_exists protects src, tests, and specs from being overwritten by an update.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-template-release" data-config-index="1" data-config-title="The template root pins its tools, runs OSV, and checks shared settings for drift" data-config-goal="A central template may not require downstream repositories to do what it cannot do itself; the PR description template is the only deliberate difference." data-config-file="pyproject.toml＋uv.lock＋scripts/verify-template.sh" data-config-code="uv sync --locked&#10;uv lock --check&#10;uv run ruff format --check&#10;uv run ruff check&#10;uv run ty check&#10;./scripts/scan-secrets&#10;# Large repositories may explicitly narrow history:&#10;./scripts/scan-secrets --log-opts=&#39;--since=2026-01-01&#39;&#10;uv run zizmor . --format plain&#10;&#10;# Paired root/template policies are diff-checked.">
+      <span class="config-trigger-title">The template root pins its tools, runs OSV, and checks shared settings for drift</span>
+      <span class="config-trigger-file">pyproject.toml＋uv.lock＋scripts/verify-template.sh</span>
+      <span class="config-trigger-summary">The root runs Ruff, ty, a full Git-history scan, a working-tree scan, and an Actions scan from a locked environment; a new project with no Git history still scans its working tree, and the script also diffs each paired root/template policy.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-template-release" data-config-index="2" data-config-title="A new Python feature release is observed for thirty days before a manual upgrade" data-config-goal="The stable-release observation window and full verification stay in place, without pretending a schedule or GitHub App already exists." data-config-file="profiles/catalog.yaml＋scripts/update_python_version.py" data-config-code="version_policy:&#10;  stable_release_observation_days: 30&#10;  update_method: manual_reviewed_pull_request&#10;  merge_after_full_verification: manual">
+      <span class="config-trigger-title">A new Python feature release is observed for thirty days before a manual upgrade</span>
+      <span class="config-trigger-file">profiles/catalog.yaml＋scripts/update_python_version.py</span>
+      <span class="config-trigger-summary">profiles/catalog.yaml records the thirty-day observation rule; a maintainer updates the supported version through an ordinary reviewed PR. The old python-version-policy workflow stays in the archive, with no active bot identity.</span>
+    </button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-template-release" data-config-index="3" data-config-title="The shared baseline and every language module must actually run" data-config-goal="Every beta-stage language must actually be created, adopted, updated, and run through its own native tools." data-config-file="scripts/verify-template.sh＋profiles/catalog.yaml" data-config-code="./scripts/verify-template.sh&#10;&#10;# Covers global coverage, diff coverage, optional features,&#10;# reusable workflow and copier update.&#10;&#10;ci: {stage: beta, profiles: []}&#10;python: {stage: beta}&#10;typescript: {stage: beta}&#10;go: {stage: future}&#10;rust: {stage: beta}">
+      <span class="config-trigger-title">The shared baseline and every language module must actually run</span>
+      <span class="config-trigger-file">scripts/verify-template.sh＋profiles/catalog.yaml</span>
+      <span class="config-trigger-summary">The shared lifecycle is proven by a real repository; each language module is accepted through a reproducible test, and selecting several together runs them combined instead of maintaining separate combination tests.</span>
+    </button>
+  </div>
+</aside>
+<aside id="config-overlay-template-release" class="config-overlay" hidden role="region" aria-label="Configuration implementation card">
+  <div class="config-overlay-card">
+    <button class="config-overlay-close" type="button" aria-label="Close configuration detail">×</button>
+    <h3></h3>
+    <p class="config-overlay-goal"></p>
+    <p class="config-overlay-path">Config file: <code></code></p>
+    <pre class="code"></pre>
+  </div>
 </aside>
 </div>
 </section>
@@ -3412,9 +3770,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated active" aria-current="step">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
@@ -3443,115 +3798,11 @@ html[data-detail-level="simple"] .detail-panel {
 </details>
 <aside class="technical-detail" data-content-key="docs-site-access">
   <h3>Access and maintenance boundaries</h3>
-  <code>noindex</code> and <code>robots.txt</code> reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
+  <p><code>noindex</code> and <code>robots.txt</code> reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.</p>
+<p>The renderer reads project identity, owner, languages, repository URL, and branch guidance from the existing <code>.csarc/config.yml</code>. Product-specific prose lives in <code>docs/site-content.md</code>, theme overrides remain in <code>docs/site-theme.css</code>, and the generated <code>docs/index.html</code> is never edited directly.</p>
 </aside>
-<aside class="config-guidance"><strong>Website access</strong><p>If reader restrictions become necessary, evaluate Cloudflare Pages + Access first. The host, identity provider, data policy, and organization owner still require separate approval.</p></aside></div>
-</section>
-
-<section class="slide markdown-slide candidate-slide" id="rollout" data-content-key="rollout" data-track="rollout" aria-label="Adopt in stages, with a stop after every step">
-  <aside class="journey-rail" aria-label="Presentation outline">
-  <h3>Use template</h3>
-  <ol class="journey-use">
-    <li class="journey-item human">
-      <a href="#capability"><span>Capability</span></a>
-    </li>
-    <li class="journey-item automated">
-      <a href="#flow"><span>CI/CD flow</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#files"><span>File map</span></a>
-    </li>
-  </ol>
-  <h3>Workflow</h3>
-  <ol class="journey-main">
-    <li class="journey-item human">
-      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
-    </li>
-    <li class="journey-item automated">
-      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
-    </li>
-    <li class="journey-item automated">
-      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
-    </li>
-    <li class="journey-item automated">
-      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
-    </li>
-    <li class="journey-item automated">
-      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
-    </li>
-  </ol>
-  <h3>Maintenance</h3>
-  <ol class="journey-support">
-    <li class="journey-item human">
-      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
-    </li>
-    <li class="journey-item automated">
-      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item human active" aria-current="step">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
-  </ol>
-  <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
-  <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
-  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
-  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
-  <div class="journey-legend" aria-label="Color key">
-    <span><i class="human" aria-hidden="true"></i>Human decision</span>
-    <span><i class="automated" aria-hidden="true"></i>Automated by default</span>
-    <span data-audience="maintainer"><i class="maintainer" aria-hidden="true"></i>Maintainers only</span>
-  </div>
-</aside>
-
-  <header>
-    <span class="selection-sequence">Step 11</span>
-    <h2>Adopt in stages, with a stop after every step</h2>
-    <p class="subtitle">Maturity follows operational evidence, not a date or the mere presence of files.</p>
-  </header>
-  <div class="markdown-body"><table>
-	<thead>
-			<tr>
-					<th>Level</th>
-					<th>Current state</th>
-			</tr>
-	</thead>
-	<tbody>
-			<tr>
-					<td>Baseline capability</td>
-					<td>The shared baseline and Python, Rust, and TypeScript modules, plus Issues/specs, PR/CI, local verification, lockfile policy, and the repository site have executable implementations</td>
-			</tr>
-			<tr>
-					<td>Current online evidence</td>
-					<td>Active CI／policy workflows and the first CI-only downstream adoption and update</td>
-			</tr>
-			<tr>
-					<td>Release evidence</td>
-					<td>The candidate workflow is configured to produce exact-tag artifacts, checksums, an SPDX SBOM, and immutable-release verification; activation awaits a default-branch run, and older handoff and consumption runs remain historical evidence only</td>
-			</tr>
-			<tr>
-					<td>Verified language modules</td>
-					<td>Python, Rust, and TypeScript each pass create, existing-repository adoption, update, lockfile, test, build, and package checks</td>
-			</tr>
-			<tr>
-					<td>Future/optional</td>
-					<td>Central catalog or governance, Go, authenticated hosting, deployment, monitoring, RAG, and autonomous agents</td>
-			</tr>
-	</tbody>
-</table>
-<aside class="technical-detail" data-content-key="rollout-evidence">
-  <h3>Why capabilities are not enabled all at once</h3>
-  A big-bang switch spreads defects across every project, and a calendar date does not prove readiness. One real consuming repository proves the shared adoption, update, and hosted-CI boundary. Each language module then earns beta through repeatable create, existing-repository adoption, update, and native-toolchain checks; separate disposable pilot repositories would only duplicate the shared mechanism.
-</aside>
-<aside class="config-guidance"><strong>Fleet platform thresholds</strong><p>Evaluate a catalog at ten active consuming repositories, or at three or more with repeated owner or service lookup delays. Evaluate central policy enforcement at five or more only after repeated cross-repository drift or measurable manual repair cost.</p></aside></div>
+<aside class="config-guidance"><strong>Website access</strong><p>If reader restrictions become necessary, evaluate Cloudflare Pages + Access first. The host, identity provider, data policy, and organization owner still require separate approval.</p></aside>
+</div>
 </section>
 
 <section class="slide markdown-slide dense" id="bridge" data-content-key="bridge" data-audience="maintainer" aria-label="Review the original principles against today&#39;s implementation">
@@ -3602,9 +3853,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
@@ -3733,9 +3981,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human active-selection" href="#ecosystem" aria-current="page">Tools</a>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
@@ -3860,9 +4105,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix human active-selection" href="#similar-tools" aria-current="page">Similar</a>
@@ -3891,7 +4133,8 @@ html[data-detail-level="simple"] .detail-panel {
   <button id="similar-tools-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>Dependency security</button>
   <button id="similar-tools-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR / merge</button>
   <button id="similar-tools-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-delivery" data-similar-tools-tab="7"><small>Journey 07</small>Version / delivery</button>
-  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="8"><small>Journey 09</small>Template upgrades</button>
+  <button id="similar-tools-tab-governance" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-governance" data-similar-tools-tab="8"><small>Journey 08</small>Rules governance</button>
+  <button id="similar-tools-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="similar-tools-panel-template-upgrade" data-similar-tools-tab="9"><small>Journey 09</small>Template upgrades</button>
 </div>
 <div id="similar-tools-panel-primary" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-primary" data-similar-tools-panel>
   <div class="similar-tools-legend">
@@ -3918,7 +4161,7 @@ html[data-detail-level="simple"] .detail-panel {
           <td>2,952</td>
           <td>A project generator that declares a project in a general-purpose language and continuously synthesizes managed configuration and workflows.</td>
           <td><ul><li>projen treats .projenrc as the only source and prevents direct edits to many generated files.</li><li>CSARC distributes an updatable Copier baseline while preserving ownership boundaries for product and policy files.</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="03: Full match">03</span><span class="coverage-tag full" title="07: Full match">07</span><span class="coverage-tag full" title="09: Full match">09</span><span class="coverage-tag partial" title="01: Partial match">01</span><span class="coverage-tag partial" title="04: Partial match">04</span><span class="coverage-tag partial" title="05: Partial match">05</span><span class="coverage-tag partial" title="06: Partial match">06</span><span class="coverage-tag partial" title="08: Partial match">08</span><span class="coverage-tag partial" title="11: Partial match">11</span>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="03: Full match">03</span><span class="coverage-tag full" title="07: Full match">07</span><span class="coverage-tag full" title="09: Full match">09</span><span class="coverage-tag partial" title="01: Partial match">01</span><span class="coverage-tag partial" title="04: Partial match">04</span><span class="coverage-tag partial" title="05: Partial match">05</span><span class="coverage-tag partial" title="06: Partial match">06</span><span class="coverage-tag partial" title="08: Partial match">08</span>
           </div></td>
         </tr>
         <tr>
@@ -3927,22 +4170,13 @@ html[data-detail-level="simple"] .detail-panel {
           <td>1,207</td>
           <td>An agent-ready repository framework that puts AI working rules, durable plans, verification, and safe updates in the repository.</td>
           <td><ul><li>Repository Harness primarily adds an agent working framework and safe update mechanism to an existing repository.</li><li>CSARC also supplies generated technology profiles, GitHub governance, delivery, and version policy.</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag full" title="09: Full match">09</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="06: Partial match">06</span><span class="coverage-tag partial" title="08: Partial match">08</span><span class="coverage-tag partial" title="11: Partial match">11</span>
-          </div></td>
-        </tr>
-        <tr>
-          <th scope="row"><a href="https://github.com/backstage/backstage" target="_blank" rel="noreferrer">Backstage</a></th>
-          <td>v1.54.6<br>(2026-08-28)</td>
-          <td>34,277</td>
-          <td>A developer portal framework that unifies a software ecosystem through Software Catalog, Software Templates, and TechDocs.</td>
-          <td><ul><li>Backstage is a centrally operated portal focused on service discovery, ownership, and scaffolding.</li><li>CSARC is a portable repository-local baseline that places governance, verification, and delivery in each repository.</li></ul></td>
-          <td><div class="coverage-tags"><span class="coverage-tag full" title="10: Full match">10</span><span class="coverage-tag full" title="11: Full match">11</span><span class="coverage-tag partial" title="04: Partial match">04</span><span class="coverage-tag partial" title="08: Partial match">08</span><span class="coverage-tag partial" title="09: Partial match">09</span>
+          <td><div class="coverage-tags"><span class="coverage-tag full" title="01: Full match">01</span><span class="coverage-tag full" title="02: Full match">02</span><span class="coverage-tag full" title="09: Full match">09</span><span class="coverage-tag partial" title="03: Partial match">03</span><span class="coverage-tag partial" title="06: Partial match">06</span><span class="coverage-tag partial" title="08: Partial match">08</span>
           </div></td>
         </tr>
       </tbody>
     </table>
   </div>
-  <p class="similar-tools-note"><strong>Classification rule: </strong>All listed tools must have a release within six months. Primary tools cover at least five journeys and sort by full, then partial matches; other tools also need at least 1,000 Stars. Journey tags run from 01 to 11.</p>
+  <p class="similar-tools-note"><strong>Classification rule: </strong>All listed tools must have a release within six months. Primary tools cover at least five journeys and sort by full, then partial matches; other tools also need at least 1,000 Stars. Journey tags run from 01 to 10.</p>
 </div>
 <div id="similar-tools-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-work" data-similar-tools-panel hidden>
   <div class="similar-tools-legend"><span class="reference">Compares where a request is recorded, how individual and grouped work are represented, how a Milestone gains approval to start, and when larger work needs more documentation.</span><span class="capture-date">Stars captured｜2026-09-01</span></div>
@@ -3955,12 +4189,12 @@ html[data-detail-level="simple"] .detail-panel {
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">.projenrc project model</a>：.projenrc is the only hand-written source of truth; synth generates the other project files.</span></li>
               <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Repository protocol</a>：The repository keeps product documents, decisions, plans, code, and verification evidence together.</span></li>
-              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entities provide a central source of truth for services, owners, and relationships.</span></li>
           </ul></td>
           <td><ul>
               <li><strong>BMAD<span class="tool-meta"><span>v6.11.0 (2026-08-10)</span><span>★ 52,478</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/bmad-code-org/BMAD-METHOD/blob/main/docs/reference/workflow-map.md" target="_blank" rel="noreferrer">Planning artifacts</a>：Briefs, specifications, and architecture records accumulate durable context according to complexity.</span></li>
               <li><strong>OpenSpec<span class="tool-meta"><span>v1.11.0 (2026-08-26)</span><span>★ 66,720</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/Fission-AI/OpenSpec/blob/main/docs/editing-changes.md" target="_blank" rel="noreferrer">Specs / Changes</a>：Specs preserve current truth, while changes hold deltas that have not yet been accepted.</span></li>
               <li><strong>Spec Kit<span class="tool-meta"><span>v1.0.1 (2026-08-21)</span><span>★ 132,351</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/github/spec-kit/blob/main/docs/reference/workflows.md" target="_blank" rel="noreferrer">spec.md → plan.md → tasks.md</a>：A spec, plan, tasks, and constitution form the feature context inside the repository.</span></li>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Software Catalog</a>：Catalog entities provide a central source of truth for services, owners, and relationships.</span></li>
               <li><strong>Superpowers<span class="tool-meta"><span>v6.3.0 (2026-08-12)</span><span>★ 279,672</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/obra/superpowers" target="_blank" rel="noreferrer">Plans and task records</a>：Confirmed designs and implementation plans are written into the repository and then executed step by step.</span></li>
               <li><strong>Backlog.md<span class="tool-meta"><span>v1.50.1 (2026-08-10)</span><span>★ 6,581</span></span></strong><span class="tool-comparison-detail"><a href="https://github.com/MrLesk/Backlog.md" target="_blank" rel="noreferrer">Git-native backlog</a>：Tasks, status, and decisions remain as Markdown in Git history.</span></li>
           </ul></td>
@@ -4117,9 +4351,9 @@ html[data-detail-level="simple"] .detail-panel {
           <th scope="row"><strong>How languages are selected at creation</strong><span>Compares fixed project types, independently selectable language modules, and leaving all setup to users after creation.<br><br><b>CSARC: </b>Creation and adoption select Python, Rust, and TypeScript independently. Unselected languages produce neither files nor CI steps.</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Project types &#43; components</a>：A language or framework project type establishes the base and components add capabilities; unlike CSARC, it does not compose one repository from independent language selections.</span></li>
-              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/input-examples" target="_blank" rel="noreferrer">Template parameters &#43; conditional steps</a>：Component creation can ask for a language or framework and run conditional steps, which suits a portal; existing repositories still need a separate update mechanism.</span></li>
           </ul></td>
           <td><ul>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/input-examples" target="_blank" rel="noreferrer">Template parameters &#43; conditional steps</a>：Component creation can ask for a language or framework and run conditional steps, which suits a portal; existing repositories still need a separate update mechanism.</span></li>
               <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Multiselect questions &#43; conditional files</a>：A template can use multiselect answers to choose language files. Copier supplies the mechanism but does not choose the testing tools.</span></li>
           </ul></td>
         </tr>
@@ -4312,33 +4546,69 @@ html[data-detail-level="simple"] .detail-panel {
     </table>
   </div>
 </div>
+<div id="similar-tools-panel-governance" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-governance" data-similar-tools-panel hidden>
+  <div class="similar-tools-legend"><span class="reference">Compares where governance policy lives, how enforcement degrades when platform capability is missing, and how temporary exceptions retain ownership and recovery.</span><span class="capture-date">Stars captured｜2026-09-01</span></div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Rules governance">
+    <table class="similar-tools-matrix similar-tools-philosophy-matrix">
+      <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>Where governance policy lives</strong><span>Compares repository declarations, generator configuration, and central policy while separating desired state from live GitHub state.<br><br><b>CSARC: </b>`.csarc/config.yml` holds high-value choices and `policies/` holds low-frequency desired GitHub state; `plan`, `apply`, and `check` then compare the live repository.</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/integrations/github/" target="_blank" rel="noreferrer">.projenrc &#43; GitHub components</a>：Repository and workflow settings are declared in .projenrc and synthesized into files, while actual platform enforcement remains GitHub&#39;s responsibility.</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/permissions/overview/" target="_blank" rel="noreferrer">Permission framework</a>：Permission policy is evaluated by the central Backstage backend, which suits a portal; unlike CSARC, it does not keep portable policy and desired GitHub state in each repository.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>What happens when platform capability is missing</strong><span>Compares assuming every plan can enforce, skipping governance entirely, and explicitly degrading while retaining a human responsibility.<br><br><b>CSARC: </b>The plan and Ruleset API are probed first. Unsupported capability is marked `DEGRADED` with a human step, while fixable mismatch stops.</span></th>
+          <td><ul>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/integrations/github/" target="_blank" rel="noreferrer">GitHub integration</a>：It can generate GitHub configuration and workflows, but it does not report per-repository plan degradation through CSARC&#39;s plan/apply/check model.</span></li>
+          </ul></td>
+          <td><ul>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/permissions/overview/" target="_blank" rel="noreferrer">Permission decisions</a>：The framework returns authorization decisions but does not detect whether a GitHub plan can create a Ruleset; repository merge gates still need separate GitHub configuration.</span></li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>How temporary exceptions are retired</strong><span>Compares an informal waiver, a permanent bypass, and a time-bounded exception with proposer, approver, expiry, evidence, and recovery.<br><br><b>CSARC: </b>A linked Issue records all five fields; a different person approves it, recovery is verified before closure, and extensions require renewed approval.</span></th>
+          <td><ul>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md" target="_blank" rel="noreferrer">Human checkpoints</a>：High-risk or irreversible operations can require human checkpoints, but it does not define CSARC&#39;s five exception fields: proposer, approver, expiry, evidence, and recovery.</span></li>
+          </ul></td>
+          <td><ul>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 <div id="similar-tools-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-template-upgrade" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares only how existing repositories receive updated templates, policies, or recipes and who resolves conflicts.</span><span class="capture-date">Stars captured｜2026-09-01</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares only how tools create repositories, first adopt existing repositories, apply later updates, and assign conflict ownership.</span><span class="capture-date">Stars captured｜2026-09-01</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Template upgrades">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
       <tbody>
         <tr>
-          <th scope="row"><strong>How definitions become repository state</strong><span>Compares direct file edits, generated files, and services that continuously reconcile remote state.<br><br><b>CSARC: </b>copier.yml, template/, and profiles/catalog.yaml define the generated baseline. scripts/sync-paired-files.sh synchronizes paired root/template files, while downstream repositories retain ownership of product files.</span></th>
+          <th scope="row"><strong>How definitions become repository state</strong><span>Compares direct file edits, generated files, and services that continuously reconcile remote state.<br><br><b>CSARC: </b>copier.yml, template/, and profiles/catalog.yaml define the generated baseline. One .csarc/config.yml stores repository choices, paired files are generated from root into template, and downstream repositories retain product-owned files.</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：Typed components declare the desired project and synth reconciles the files.</span></li>
-              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entities and Software Templates declare portal components and creation workflows.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：Answers and Jinja templates declare generation inputs without continuously controlling remote state.</span></li>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entities and Software Templates declare portal components and creation workflows.</span></li>
               <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/concepts-and-explanations/recipes" target="_blank" rel="noreferrer">Recipes</a>：A Recipe declares a semantic transformation that parsers and visitors apply.</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/configuring/" target="_blank" rel="noreferrer">Answers file &#43; Jinja templates</a>：Answers and Jinja templates declare generation inputs without continuously controlling remote state.</span></li>
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>How existing repositories receive updates</strong><span>Compares how updated templates, policies, or recipes enter an existing repository and who resolves conflicts.<br><br><b>CSARC: </b>Copier answers record the source and version. Existing projects review update diffs and conflicts in a PR and verify that product-owned paths were not overwritten.</span></th>
+          <th scope="row"><strong>How creation, adoption, and updates connect</strong><span>Compares how new repositories are created, existing repositories are first adopted, later revisions are applied, and conflicts are resolved.<br><br><b>CSARC: </b>Copier creates new repositories. A pinned CLI creates an external local plan for an existing repository and a person approves its first PR. After merge, the PR policy from the base and read-only CI validate later updates. An update candidate is fully verified before target files change, so failure or conflict leaves the target untouched.</span></th>
           <td><ul>
-              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen upgrade &#43; synth</a>：The project is regenerated after a library upgrade, and anti-tamper checks reject manual edits to managed files.</span></li>
-              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：The updater retains the upstream base and safely updates an existing repository through a three-way merge.</span></li>
-              <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：It excels at creating new components; existing-repository migration still needs another tool.</span></li>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen upgrade &#43; synth</a>：A project is defined in code. Creation and upgrades re-synthesize managed files, anti-tamper rejects manual edits, and conflicts are not resolved as per-file three-way merges.</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：It stores the exact upstream base and performs a three-way update. Overlapping conflicts leave managed files untouched and retain BASE, LOCAL, and UPSTREAM for a person to continue or abort.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：The recorded template source and answers let an existing repository receive template updates.</span></li>
+              <li><strong>Backstage<span class="tool-meta"><span>v1.54.6 (2026-08-28)</span><span>★ 34,277</span></span></strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：It excels at creating new components; existing-repository migration still needs another tool.</span></li>
               <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：Instead of overwriting files from a text template, it performs semantic migration across versions.</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：The answers file retains the source and prior answers. Update applies a three-way diff, leaving inline markers or .rej conflicts for a person. CSARC adds a candidate-first wrapper so the target is unchanged until verification passes.</span></li>
           </ul></td>
         </tr>
       </tbody>
@@ -4399,9 +4669,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
@@ -4430,6 +4697,8 @@ html[data-detail-level="simple"] .detail-panel {
     <button id="testing-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>Dependency security</button>
     <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR / merge</button>
     <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="7"><small>Journey 07</small>Version / delivery</button>
+    <button id="testing-tab-governance" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-governance" data-similar-tools-tab="8"><small>Journey 08</small>Rules governance</button>
+    <button id="testing-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-template-upgrade" data-similar-tools-tab="9"><small>Journey 09</small>Template upgrades</button>
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
     <div class="similar-tools-testing-intro">
@@ -4443,13 +4712,13 @@ html[data-detail-level="simple"] .detail-panel {
         <tbody>
           <tr>
             <th scope="row"><strong>Work PR (topic → main or dev/m*)</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in fast: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; fast 2–5 min</li><li><strong>04 Programming languages：</strong>Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in fast: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; source fast about 1 min; policy/template changes about 2 min</li><li><strong>04 Programming languages：</strong>Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–4 min (fast measured at 59–99 sec)</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in fast: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; fast 2–5 min</li><li><strong>04 Programming languages：</strong>Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li><li><strong>08 Rules governance：</strong>Included in fast: &lt;1 min; excludes the manual live check</li><li><strong>09 Template upgrades：</strong>First adoption uses 0 runner minutes (local &#43; manual); later-update checks are included in the 2–5 min fast run</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in fast: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; source fast about 1 min; policy/template changes about 2 min</li><li><strong>04 Programming languages：</strong>Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li><li><strong>08 Rules governance：</strong>Included in fast: &lt;1 min; excludes the manual live check</li><li><strong>09 Template upgrades：</strong>Representative creation smoke included in fast: &lt;1 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–4 min (fast measured at 59–99 sec)</p></td>
           </tr>
           <tr>
             <th scope="row"><strong>Delivery PR (dev/m* or dev/i* → main)</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full 5–15 min</li><li><strong>04 Programming languages：</strong>Included in full: Python 3–6 min; Rust 2–5 min; TypeScript 3–7 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full verification measured at 5 min 30 sec</li><li><strong>04 Programming languages：</strong>Included in the full generated-module matrix: Python 1–3 min; Rust 1–3 min; TypeScript 1–4 min</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–8 min (complete job measured at 6 min 16 sec)</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full 5–15 min</li><li><strong>04 Programming languages：</strong>Included in full: Python 3–6 min; Rust 2–5 min; TypeScript 3–7 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li><li><strong>08 Rules governance：</strong>Included in full: &lt;1 min; excludes the manual live check</li><li><strong>09 Template upgrades：</strong>Later-update checks are included in the 5–15 min full run</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full verification measured at 8 min 22 sec (uncontended environment, #458)</li><li><strong>04 Programming languages：</strong>Included in the full generated-module matrix: Python 1–3 min; Rust 1–3 min; TypeScript 1–4 min</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li><li><strong>08 Rules governance：</strong>Included in full: &lt;1 min; excludes the manual live check</li><li><strong>09 Template upgrades：</strong>Create/adopt/update regressions included in full: about 1–3 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–8 min (complete job measured at 6 min 16 sec)</p></td>
           </tr>
         </tbody>
       </table>
@@ -4584,7 +4853,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Additionally verifies the template, generated output, and existing-repository adoption and update paths.</span>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Additionally verifies the template, generated output, and existing-repository adoption and update paths; each scripts/verify-stage-* script can rerun one stage on its own, while scripts/verify-template.sh remains the one required final aggregate entry point.</span>
             </li>
           </ul></td>
         </tr>
@@ -4840,6 +5109,117 @@ html[data-detail-level="simple"] .detail-panel {
     </table>
   </div>
   </div>
+  <div id="testing-panel-governance" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-governance" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 08 / Review and settings drift</strong><span>Each PR requests one non-author reviewer. The optional schedule reuses the local check and is never described as a merge gate.</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 08 / Review and settings drift">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>Assign a reviewer</strong><span>Read REVIEWERS only from the base branch, exclude the PR author, and request one individual review.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Every non-draft PR</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/request-reviewer</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/governance-comment.yml</code>／<code>request-reviewer</code><span>Trigger：PR opened, reopened, or marked ready · Timeout：5 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Detect governance drift</strong><span>Compare live repository settings with policy. Fixable drift updates one Issue, while plan limits retain DEGRADED evidence.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Daily / manual maintenance</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/check-governance-drift</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/governance-drift.yml</code>／<code>check</code><span>Trigger：Daily or manual when enable_governance_drift_check is on · Timeout：5 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Daily / manual maintenance</strong><span>The source repository retains the same program for generation and local verification but does not enable its own schedule.</span>
+            </li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
+  <div id="testing-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-template-upgrade" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 09 / Create, adopt, and update</strong><span>The template repository verifies creation, first adoption, and later updates. Generated repositories keep only their own verification entrypoint and optional update notice. A person approves a first adoption whose base has no trusted verifier; PR-head programs are not executed.</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 09 / Create, adopt, and update">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>Create a new repository</strong><span>Generate the selected settings and language modules from a pinned template revision, then run the generated repository&#39;s own verification.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div><span>After creation, the generated repository runs only its own verification; template-only tests are not delivered.</span>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div><span>Creates one representative repository for a smoke check without running the complete matrix on every Issue PR.</span>
+            </li>
+            <li>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_cli.py</code></li><li><code>scripts/verify-template.sh</code></li></ul></div><span>Reruns the complete creation matrix.</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>First adoption of an existing repository</strong><span>A pinned CLI outside the repository creates a machine plan and applies that same plan. A person reviews the source, diff, and local evidence in the first PR.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Manual gate: when the base has no trusted verifier, no PR-head program runs. Normal automation starts after merge.</span></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_cli.py</code></li></ul></div><span>Changes to adoption logic run the affected focused case locally; the large adoption matrix stays out of fast.</span>
+            </li>
+            <li>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_cli.py</code></li><li><code>scripts/verify-template.sh</code></li></ul></div><span>Fully reruns adoption, manual conflicts, and leaving the target untouched on failure.</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Later updates and conflicts</strong><span>Complete the Copier update and verification in a candidate first. Change the target only after success; failures and conflicts can be corrected and rerun.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Update Issue PRs after the first adoption has merged · Timeout：30 min</span></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>The PR policy from the base validates rules first, then read-only CI runs the candidate.</span></div>
+            </li>
+            <li>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Release PRs containing a template update · Timeout：30 min</span></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Uses CI with read-only contents permission; the Action only selects and calls repository-local verification.</span></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_cli.py</code></li></ul></div><span>Changes to update logic run the affected focused case locally; the large update matrix stays out of fast.</span>
+            </li>
+            <li>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_cli.py</code></li><li><code>scripts/verify-template.sh</code></li></ul></div><span>Fully verifies updates on the same repository, legacy conflicts, and atomic failure.</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Notify maintainers about a new template</strong><span>A notification only asks maintainers to evaluate a new revision; it never applies or merges one automatically.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/check-template-update</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/template-update.yml</code>／<code>check</code><span>Trigger：Every Monday or manual dispatch; generated only when enabled · Timeout：10 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_template_update_notifications.py</code></li></ul></div><span>Confirms that the workflow and checker are both generated when enabled, both absent when disabled, and never run in the template root.</span>
+            </li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
 </div>
 
 
@@ -4893,9 +5273,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
@@ -4995,9 +5372,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
@@ -5113,9 +5487,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
@@ -5246,9 +5617,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
@@ -5370,9 +5738,6 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
     </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
-    </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
   <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
@@ -5463,9 +5828,6 @@ html[data-detail-level="simple"] .detail-panel {
     </li>
     <li class="journey-item automated">
       <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
-    </li>
-    <li class="journey-item human">
-      <a href="#rollout"><span class="journey-code">11</span><span>Rollout</span></a>
     </li>
   </ol>
   <a class="journey-bookend appendix human" href="#ecosystem">Tools</a>
@@ -5652,6 +6014,186 @@ html[data-detail-level="simple"] .detail-panel {
   progress.hidden = false;
 })();
 </script>
+  <script data-bundled-from="../legacy-components.js">
+(() => {
+    const setupExamples = {
+      new: {
+        title: '建立新 repo',
+        goal: 'CLI 會選取核准 release、解析完整 commit SHA、顯示計畫，確認後才以 Copier 建立與驗證。',
+        location: 'Terminal',
+        code: `uvx --from csarc-repo-cli csarc init ./my-project
+
+# CI or an explicitly authorized agent:
+uvx --from csarc-repo-cli csarc init ./my-project \\
+  --yes --non-interactive`
+      },
+      existing: {
+        title: '把公版導入既有 repo',
+        goal: '先用 --dry-run 在 repo 外產生短版 Markdown 與一頁 PDF，預覽新增、覆寫、保留、人工合併與無法判定項目；必須是乾淨 Git working tree，預設保留產品內容。報告只描述已知風險，不保證沒有語意或執行期衝突。',
+        location: '既有 repo 根目錄',
+        code: `git switch -c chore/<issue-number>-adopt-csarc-template
+uvx --from csarc-repo-cli csarc adopt . --dry-run \\
+  --report-dir ../csarc-adoption-report
+uvx --from csarc-repo-cli csarc adopt .`
+      },
+      update: {
+        title: '更新已使用公版的 repo',
+        goal: 'CLI 讀取 .csarc/config.yml，解析核准 release，以 Copier smart update 顯示新版差異；衝突時保留差異並 fail closed。',
+        location: '專案 repo 根目錄',
+        code: `git switch -c chore/<issue-number>-update-repo-template
+uvx --from csarc-repo-cli csarc update --check --json
+uvx --from csarc-repo-cli csarc update`
+      },
+      mac: {
+        title: 'macOS 本機需求',
+        goal: '共同安裝 Git、GitHub CLI、uv；選 TypeScript 再使用 Node 與 pnpm，選 Rust 再使用 rustup 與 Cargo。只有 GitHub 連線操作需要登入。',
+        location: 'Terminal',
+        code: `brew install git gh uv node pnpm
+
+# Only for repository settings and GitHub end-to-end tests.
+gh auth login -h github.com
+gh auth status`
+      },
+      windows: {
+        title: 'Windows 本機需求',
+        goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；選 TypeScript 再安裝 Node 24 與 pnpm 11，選 Rust 再安裝 rustup。',
+        location: 'PowerShell（管理員）→ Ubuntu',
+        code: `# PowerShell (Administrator)
+wsl --install -d Ubuntu
+
+# Ubuntu in WSL2
+sudo apt update
+sudo apt install -y git gh curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+sudo apt install -y nodejs
+sudo npm install -g pnpm@11.22.0
+
+# Only for repository settings and GitHub end-to-end tests.
+gh auth login -h github.com
+gh auth status`
+      }
+    };
+
+    const capabilitySlide = document.querySelector('.capability-slide');
+    if (!capabilitySlide) return;
+
+    function closeConfigOverlays() {
+      document.querySelectorAll('.config-overlay').forEach(overlay => {
+        overlay.hidden = true;
+        overlay.removeAttribute('data-item-index');
+      });
+      document.querySelectorAll('.config-trigger[aria-expanded="true"], .setup-trigger[aria-expanded="true"], .term-trigger[aria-expanded="true"]').forEach(trigger => {
+        trigger.setAttribute('aria-expanded', 'false');
+      });
+    }
+
+    function closePackageDisclosures(except = null) {
+      document.querySelectorAll('.package-disclosure[open]').forEach(detail => {
+        if (detail !== except) detail.open = false;
+      });
+    }
+
+    function closeBridgeDetails(except = null) {
+      document.querySelectorAll('.bridge-detail[open]').forEach(detail => {
+        if (detail !== except) detail.open = false;
+      });
+    }
+
+    document.querySelectorAll('.package-disclosure').forEach(detail => {
+      detail.addEventListener('toggle', () => {
+        if (detail.open) closePackageDisclosures(detail);
+      });
+    });
+
+    const setupOverlay = document.createElement('aside');
+    setupOverlay.id = 'setup-overlay';
+    setupOverlay.className = 'config-overlay';
+    setupOverlay.hidden = true;
+    setupOverlay.setAttribute('role', 'region');
+    setupOverlay.setAttribute('aria-label', '導入與安裝指令');
+    setupOverlay.innerHTML = `<div class="config-overlay-card"><button class="config-overlay-close" type="button" aria-label="關閉指令">×</button><h3></h3><p class="config-overlay-goal"></p><p class="config-overlay-path">執行位置：<code></code></p><pre class="code"></pre></div>`;
+    capabilitySlide.append(setupOverlay);
+    capabilitySlide.querySelectorAll('.setup-trigger').forEach(trigger => {
+      trigger.setAttribute('aria-controls', setupOverlay.id);
+      trigger.addEventListener('click', () => {
+        const key = trigger.dataset.setup;
+        const setting = setupExamples[key];
+        const isSameOpen = !setupOverlay.hidden && setupOverlay.dataset.itemIndex === key;
+        closeConfigOverlays();
+        if (!setting || isSameOpen) return;
+        setupOverlay.querySelector('h3').textContent = setting.title;
+        setupOverlay.querySelector('.config-overlay-goal').textContent = setting.goal;
+        setupOverlay.querySelector('.config-overlay-path code').textContent = setting.location;
+        setupOverlay.querySelector('pre').textContent = setting.code;
+        setupOverlay.dataset.itemIndex = key;
+        setupOverlay.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+      });
+    });
+    setupOverlay.querySelector('.config-overlay-close').addEventListener('click', closeConfigOverlays);
+
+    document.querySelectorAll('.term-trigger').forEach(trigger => {
+      const overlay = document.querySelector(`#${trigger.getAttribute('aria-controls')}`);
+      if (!overlay) return;
+      trigger.addEventListener('click', () => {
+        const isOpen = !overlay.hidden;
+        closeConfigOverlays();
+        if (isOpen) return;
+        overlay.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+      });
+      overlay.querySelector('.config-overlay-close').addEventListener('click', closeConfigOverlays);
+    });
+
+    // Config-trigger / overlay content is now server-rendered by the
+    // config-guidance Hugo shortcode (site/layouts/shortcodes/config-guidance.html)
+    // from site/data/config_examples.json, in the page's own language. This
+    // only wires open/close interaction on top of the data-* attributes that
+    // shortcode already emitted; it no longer builds DOM from an in-memory
+    // JS object. A `data-config-direct="true"` guidance block renders native
+    // <details>/<summary> and needs no JS at all.
+    document.querySelectorAll('.decision-slide .config-guidance:not([data-config-direct="true"]) .config-trigger').forEach(trigger => {
+      const overlay = document.getElementById(trigger.getAttribute('aria-controls'));
+      if (!overlay) return;
+      const card = overlay.querySelector('.config-overlay-card');
+      const heading = card.querySelector('h3');
+      const goalField = card.querySelector('.config-overlay-goal');
+      const fileField = card.querySelector('.config-overlay-path code');
+      const codeField = card.querySelector('pre');
+
+      trigger.addEventListener('click', () => {
+        const index = trigger.dataset.configIndex;
+        const isSameOpen = !overlay.hidden && overlay.dataset.itemIndex === index;
+        closeConfigOverlays();
+        if (isSameOpen) return;
+        heading.textContent = trigger.dataset.configTitle;
+        goalField.textContent = trigger.dataset.configGoal;
+        fileField.textContent = trigger.dataset.configFile;
+        // The shortcode HTML-escapes code and uses "&#10;" for newlines
+        // (see config-guidance.html); the browser decodes that entity back
+        // to a real newline when reading the attribute, so no JS unescaping
+        // is needed here.
+        codeField.textContent = trigger.dataset.configCode;
+        overlay.dataset.itemIndex = index;
+        overlay.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+      });
+    });
+
+    document.querySelectorAll('.decision-slide .config-overlay .config-overlay-close').forEach(closeButton => {
+      closeButton.addEventListener('click', closeConfigOverlays);
+    });
+
+    addEventListener('click', event => {
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest('.package-disclosure')) closePackageDisclosures();
+      if (!event.target.closest('.bridge-detail')) closeBridgeDetails();
+      if (event.target.closest('.config-overlay-card, .config-trigger, .setup-trigger, .term-trigger')) return;
+      closeConfigOverlays();
+    });
+})();
+</script>
   <script data-bundled-from="../detail-toggle.js">
 (() => {
   const storageKey = 'csarc-detail-level';
@@ -5814,7 +6356,7 @@ html[data-detail-level="simple"] .detail-panel {
 
   const supplementalGuides = {
     deploy: '版本範圍、SemVer 與發布邊界',
-    governance: '部署原則、方案行為與參考資料'
+    governance: '方案能力、治理設定與例外處理'
   };
 
   Object.entries(supplementalGuides).forEach(([track, summary]) => {

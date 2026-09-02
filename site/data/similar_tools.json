@@ -20,7 +20,7 @@
       "difference": "與本套件的差異",
       "coverage": "涵蓋旅程",
       "criterionLabel": "判斷標準：",
-      "criterion": "所有工具都須在擷取日前 6 個月內有發版；主要工具至少涵蓋 5 個 Journey，依完全、部分符合數量排序；其他工具至少 1,000 Stars。Journey tag 依 01–11 排列。",
+      "criterion": "所有工具都須在擷取日前 6 個月內有發版；主要工具至少涵蓋 5 個 Journey，依完全、部分符合數量排序；其他工具至少 1,000 Stars。Journey tag 依 01–10 排列。",
       "feature": "功能分野／具體做法",
       "primaryTools": "主要相似工具",
       "otherTools": "其他生態圈工具",
@@ -44,7 +44,7 @@
       "difference": "Difference from CSARC",
       "coverage": "Journey coverage",
       "criterionLabel": "Classification rule: ",
-      "criterion": "All listed tools must have a release within six months. Primary tools cover at least five journeys and sort by full, then partial matches; other tools also need at least 1,000 Stars. Journey tags run from 01 to 11.",
+      "criterion": "All listed tools must have a release within six months. Primary tools cover at least five journeys and sort by full, then partial matches; other tools also need at least 1,000 Stars. Journey tags run from 01 to 10.",
       "feature": "Functional boundary / concrete approach",
       "primaryTools": "Primary similar tools",
       "otherTools": "Other ecosystem tools",
@@ -111,11 +111,19 @@
       }
     },
     {
+      "key": "governance",
+      "features": ["governancePolicyLocation", "governanceCapabilityBoundary", "governanceExceptionRecord"],
+      "labels": {
+        "zh-tw": {"overline": "Journey 08", "title": "規則治理", "legend": "只比較治理規則放在哪裡、平台能力不足時如何降級，以及暫時例外如何留下責任與復原路徑"},
+        "en": {"overline": "Journey 08", "title": "Rules governance", "legend": "Compares where governance policy lives, how enforcement degrades when platform capability is missing, and how temporary exceptions retain ownership and recovery."}
+      }
+    },
+    {
       "key": "template-upgrade",
       "features": ["declarativeState", "templateLifecycle"],
       "labels": {
-        "zh-tw": {"overline": "Journey 09", "title": "模板升級", "legend": "只比較既有 repo 如何接收新版模板、規則或 recipe，以及衝突由誰處理"},
-        "en": {"overline": "Journey 09", "title": "Template upgrades", "legend": "Compares only how existing repositories receive updated templates, policies, or recipes and who resolves conflicts."}
+        "zh-tw": {"overline": "Journey 09", "title": "模板升級", "legend": "只比較工具如何建立新 repo、首次導入既有 repo、套用後續更新，以及衝突由誰處理"},
+        "en": {"overline": "Journey 09", "title": "Template upgrades", "legend": "Compares only how tools create repositories, first adopt existing repositories, apply later updates, and assign conflict ownership."}
       }
     }
   ],
@@ -186,7 +194,9 @@
               {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；fast 2–5 分鐘", "en": "docs <1 min; fast 2–5 min"}},
               {"label": {"zh-tw": "04 程式語言", "en": "04 Programming languages"}, "value": {"zh-tw": "fast 已包含：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–5 分鐘（只執行已選語言）", "en": "Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)"}},
               {"label": {"zh-tw": "05 依賴安全", "en": "05 Dependency security"}, "value": {"zh-tw": "通常少於 1 分鐘", "en": "Typically under 1 min"}},
-              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}}
+              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
+              {"label": {"zh-tw": "08 規則治理", "en": "08 Rules governance"}, "value": {"zh-tw": "fast 已包含：< 1 分鐘；不含人工遠端核對", "en": "Included in fast: <1 min; excludes the manual live check"}},
+              {"label": {"zh-tw": "09 模板升級", "en": "09 Template upgrades"}, "value": {"zh-tw": "首次導入 0 runner 分鐘（本機＋人工）；後續更新驗證已包含在 fast 的 2–5 分鐘", "en": "First adoption uses 0 runner minutes (local + manual); later-update checks are included in the 2–5 min fast run"}}
             ],
             "total": {"zh-tw": "約 1–7 分鐘", "en": "About 1–7 min"}
           },
@@ -197,7 +207,9 @@
               {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "docs < 1 分鐘；source fast 約 1 分鐘；policy／template 變更約 2 分鐘", "en": "docs <1 min; source fast about 1 min; policy/template changes about 2 min"}},
               {"label": {"zh-tw": "04 程式語言", "en": "04 Programming languages"}, "value": {"zh-tw": "fast 已包含：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–5 分鐘（只執行已選語言）", "en": "Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)"}},
               {"label": {"zh-tw": "05 依賴安全", "en": "05 Dependency security"}, "value": {"zh-tw": "通常少於 1 分鐘", "en": "Typically under 1 min"}},
-              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}}
+              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
+              {"label": {"zh-tw": "08 規則治理", "en": "08 Rules governance"}, "value": {"zh-tw": "fast 已包含：< 1 分鐘；不含人工遠端核對", "en": "Included in fast: <1 min; excludes the manual live check"}},
+              {"label": {"zh-tw": "09 模板升級", "en": "09 Template upgrades"}, "value": {"zh-tw": "fast 已包含代表性建立 smoke：< 1 分鐘", "en": "Representative creation smoke included in fast: <1 min"}}
             ],
             "total": {"zh-tw": "約 1–4 分鐘（fast 實測 59–99 秒）", "en": "About 1–4 min (fast measured at 59–99 sec)"}
           }
@@ -212,7 +224,9 @@
               {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "full 5–15 分鐘", "en": "full 5–15 min"}},
               {"label": {"zh-tw": "04 程式語言", "en": "04 Programming languages"}, "value": {"zh-tw": "full 已包含：Python 3–6 分鐘；Rust 2–5 分鐘；TypeScript 3–7 分鐘（只執行已選語言）", "en": "Included in full: Python 3–6 min; Rust 2–5 min; TypeScript 3–7 min (selected modules only)"}},
               {"label": {"zh-tw": "05 依賴安全", "en": "05 Dependency security"}, "value": {"zh-tw": "通常少於 1 分鐘", "en": "Typically under 1 min"}},
-              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}}
+              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
+              {"label": {"zh-tw": "08 規則治理", "en": "08 Rules governance"}, "value": {"zh-tw": "full 已包含：< 1 分鐘；不含人工遠端核對", "en": "Included in full: <1 min; excludes the manual live check"}},
+              {"label": {"zh-tw": "09 模板升級", "en": "09 Template upgrades"}, "value": {"zh-tw": "後續更新驗證已包含在 full 的 5–15 分鐘", "en": "Later-update checks are included in the 5–15 min full run"}}
             ],
             "total": {"zh-tw": "約 6–17 分鐘", "en": "About 6–17 min"}
           },
@@ -220,10 +234,12 @@
             "items": [
               {"label": {"zh-tw": "01 工作定義", "en": "01 Work definition"}, "value": {"zh-tw": "full 已包含：< 1 分鐘", "en": "Included in full: <1 min"}},
               {"label": {"zh-tw": "02 AI 規範", "en": "02 AI rules"}, "value": {"zh-tw": "full 其中 < 1 分鐘", "en": "Under 1 min within full"}},
-              {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "full verification 實測 5 分 30 秒", "en": "full verification measured at 5 min 30 sec"}},
+              {"label": {"zh-tw": "03 驗證／CI", "en": "03 Verification / CI"}, "value": {"zh-tw": "full verification 實測 8 分 22 秒（獨占環境，#458）", "en": "full verification measured at 8 min 22 sec (uncontended environment, #458)"}},
               {"label": {"zh-tw": "04 程式語言", "en": "04 Programming languages"}, "value": {"zh-tw": "full 已包含生成矩陣：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–4 分鐘", "en": "Included in the full generated-module matrix: Python 1–3 min; Rust 1–3 min; TypeScript 1–4 min"}},
               {"label": {"zh-tw": "05 依賴安全", "en": "05 Dependency security"}, "value": {"zh-tw": "通常少於 1 分鐘", "en": "Typically under 1 min"}},
-              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}}
+              {"label": {"zh-tw": "06 PR／合併", "en": "06 PR / merge"}, "value": {"zh-tw": "約 1–2 分鐘", "en": "About 1–2 min"}},
+              {"label": {"zh-tw": "08 規則治理", "en": "08 Rules governance"}, "value": {"zh-tw": "full 已包含：< 1 分鐘；不含人工遠端核對", "en": "Included in full: <1 min; excludes the manual live check"}},
+              {"label": {"zh-tw": "09 模板升級", "en": "09 Template upgrades"}, "value": {"zh-tw": "full 已包含建立／導入／更新回歸：約 1–3 分鐘", "en": "Create/adopt/update regressions included in full: about 1–3 min"}}
             ],
             "total": {"zh-tw": "約 6–8 分鐘（完整 job 實測 6 分 16 秒）", "en": "About 6–8 min (complete job measured at 6 min 16 sec)"}
           }
@@ -368,7 +384,7 @@
               "release": {"files": [{"path": "scripts/verify"}]}
             },
             "templateOnly": {
-              "release": {"files": [{"path": "scripts/verify-template.sh"}], "note": {"zh-tw": "額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑。", "en": "Additionally verifies the template, generated output, and existing-repository adoption and update paths."}}
+              "release": {"files": [{"path": "scripts/verify-template.sh"}], "note": {"zh-tw": "額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑；每個 `scripts/verify-stage-*` 都能單獨重跑一個階段，`scripts/verify-template.sh` 仍是唯一必要的最終聚合入口。", "en": "Additionally verifies the template, generated output, and existing-repository adoption and update paths; each scripts/verify-stage-* script can rerun one stage on its own, while scripts/verify-template.sh remains the one required final aggregate entry point."}}
             }
           }
         ]
@@ -636,6 +652,124 @@
             }
           }
         ]
+      },
+      {
+        "key": "governance",
+        "journey": "08",
+        "labels": {
+          "zh-tw": {"title": "規則治理", "heading": "Journey 08／審查與設定漂移", "scope": "每張 PR 只自動請一位非作者 reviewer；選配排程重用本機檢查，不能把通知誤稱為合併門禁。"},
+          "en": {"title": "Rules governance", "heading": "Journey 08 / Review and settings drift", "scope": "Each PR requests one non-author reviewer. The optional schedule reuses the local check and is never described as a merge gate."}
+        },
+        "stageLabels": {
+          "zh-tw": {"milestone": "每張非 draft PR", "release": "每日／手動維運"},
+          "en": {"milestone": "Every non-draft PR", "release": "Daily / manual maintenance"}
+        },
+        "rows": [
+          {
+            "purpose": {
+              "zh-tw": {"title": "輪派審查人", "description": "只讀取 base branch 的 REVIEWERS，排除 PR 作者後提出一位個別 review request。"},
+              "en": {"title": "Assign a reviewer", "description": "Read REVIEWERS only from the base branch, exclude the PR author, and request one individual review."}
+            },
+            "shared": {
+              "milestone": {
+                "files": [{"path": "scripts/request-reviewer"}],
+                "automation": [{"path": ".github/workflows/governance-comment.yml", "job": "request-reviewer", "trigger": {"zh-tw": "PR 開啟、重開或轉為 ready", "en": "PR opened, reopened, or marked ready"}, "timeout": "5 min"}]
+              }
+            },
+            "templateOnly": {}
+          },
+          {
+            "purpose": {
+              "zh-tw": {"title": "偵測治理設定漂移", "description": "比較 repo 現況與政策；可修正差異會更新一張 Issue，方案限制只留下 DEGRADED 證據。"},
+              "en": {"title": "Detect governance drift", "description": "Compare live repository settings with policy. Fixable drift updates one Issue, while plan limits retain DEGRADED evidence."}
+            },
+            "shared": {
+              "release": {
+                "files": [{"path": "scripts/check-governance-drift"}],
+                "automation": [{"path": ".github/workflows/governance-drift.yml", "job": "check", "trigger": {"zh-tw": "enable_governance_drift_check 開啟後，每日或手動", "en": "Daily or manual when enable_governance_drift_check is on"}, "timeout": "5 min"}]
+              }
+            },
+            "templateOnly": {
+              "release": {"note": {"zh-tw": "source repo 保留同一支程式供下發與本機驗證，但目前不啟用自己的排程。", "en": "The source repository retains the same program for generation and local verification but does not enable its own schedule."}}
+            }
+          }
+        ]
+      },
+      {
+        "key": "template-upgrade",
+        "journey": "09",
+        "labels": {
+          "zh-tw": {"title": "模板升級", "heading": "Journey 09／建立、導入與更新", "scope": "公版 repo 驗證建立、既有 repo 首次導入與後續更新；生成 repo 只保留自己的驗證入口與選用的更新通知。首次導入沒有可信任 base 時由人核准，不執行 PR head 新增的程式。"},
+          "en": {"title": "Template upgrades", "heading": "Journey 09 / Create, adopt, and update", "scope": "The template repository verifies creation, first adoption, and later updates. Generated repositories keep only their own verification entrypoint and optional update notice. A person approves a first adoption whose base has no trusted verifier; PR-head programs are not executed."}
+        },
+        "rows": [
+          {
+            "purpose": {
+              "zh-tw": {"title": "建立新 repo", "description": "由固定公版版本產生所選設定與語言模組，再執行生成 repo 自己的驗證。"},
+              "en": {"title": "Create a new repository", "description": "Generate the selected settings and language modules from a pinned template revision, then run the generated repository's own verification."}
+            },
+            "shared": {
+              "milestone": {"files": [{"path": "scripts/verify"}], "note": {"zh-tw": "生成完成後只執行自己的驗證；不下發公版專用測試。", "en": "After creation, the generated repository runs only its own verification; template-only tests are not delivered."}}
+            },
+            "templateOnly": {
+              "milestone": {"files": [{"path": "scripts/verify-fast"}], "note": {"zh-tw": "建立一個代表性 repo 做 smoke；不在每張 Issue PR 跑完整矩陣。", "en": "Creates one representative repository for a smoke check without running the complete matrix on every Issue PR."}},
+              "release": {"files": [{"path": "tests/test_cli.py"}, {"path": "scripts/verify-template.sh"}], "note": {"zh-tw": "完整重跑建立矩陣。", "en": "Reruns the complete creation matrix."}}
+            }
+          },
+          {
+            "purpose": {
+              "zh-tw": {"title": "首次導入既有 repo", "description": "repo 外的固定 CLI 產生 machine plan 並套用同一份 plan；第一張 PR 由人核對來源、diff 與本機證據。"},
+              "en": {"title": "First adoption of an existing repository", "description": "A pinned CLI outside the repository creates a machine plan and applies that same plan. A person reviews the source, diff, and local evidence in the first PR."}
+            },
+            "shared": {
+              "milestone": {"automationNote": {"zh-tw": "人工門檻：base 尚無可信任 verifier 時不執行 PR head 程式；合併後才啟用一般自動檢查。", "en": "Manual gate: when the base has no trusted verifier, no PR-head program runs. Normal automation starts after merge."}}
+            },
+            "templateOnly": {
+              "milestone": {"files": [{"path": "tests/test_cli.py"}], "note": {"zh-tw": "修改導入邏輯時在本機跑受影響的 focused case；大型導入矩陣不放進 fast。", "en": "Changes to adoption logic run the affected focused case locally; the large adoption matrix stays out of fast."}},
+              "release": {"files": [{"path": "tests/test_cli.py"}, {"path": "scripts/verify-template.sh"}], "note": {"zh-tw": "完整重跑導入、人工衝突與失敗不改 target。", "en": "Fully reruns adoption, manual conflicts, and leaving the target untouched on failure."}}
+            }
+          },
+          {
+            "purpose": {
+              "zh-tw": {"title": "後續更新與衝突", "description": "先在 candidate 完成 Copier update 與驗證；通過後才修改 target，失敗或衝突可修正後重跑。"},
+              "en": {"title": "Later updates and conflicts", "description": "Complete the Copier update and verification in a candidate first. Change the target only after success; failures and conflicts can be corrected and rerun."}
+            },
+            "shared": {
+              "milestone": {
+                "files": [{"path": "scripts/verify"}],
+                "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "首次導入已合併後的更新 Issue PR", "en": "Update Issue PRs after the first adoption has merged"}, "timeout": "30 min"}],
+                "automationNote": {"zh-tw": "base 上的 PR policy 先驗證規則，唯讀 CI 再執行候選內容。", "en": "The PR policy from the base validates rules first, then read-only CI runs the candidate."}
+              },
+              "release": {
+                "files": [{"path": "scripts/verify"}],
+                "automation": [{"path": ".github/workflows/ci.yml", "job": "verify", "trigger": {"zh-tw": "含模板更新的發版 PR", "en": "Release PRs containing a template update"}, "timeout": "30 min"}],
+                "automationNote": {"zh-tw": "沿用唯讀 contents 權限的 CI；Action 只選擇並呼叫 repo-local 驗證。", "en": "Uses CI with read-only contents permission; the Action only selects and calls repository-local verification."}
+              }
+            },
+            "templateOnly": {
+              "milestone": {"files": [{"path": "tests/test_cli.py"}], "note": {"zh-tw": "修改更新邏輯時在本機跑受影響的 focused case；大型 update 矩陣不放進 fast。", "en": "Changes to update logic run the affected focused case locally; the large update matrix stays out of fast."}},
+              "release": {"files": [{"path": "tests/test_cli.py"}, {"path": "scripts/verify-template.sh"}], "note": {"zh-tw": "完整驗證同一 repo 的 update、legacy conflict 與原子失敗。", "en": "Fully verifies updates on the same repository, legacy conflicts, and atomic failure."}}
+            }
+          },
+          {
+            "purpose": {
+              "zh-tw": {"title": "通知有新版公版", "description": "通知只提示維護者評估新版，不會自動套用或合併。"},
+              "en": {"title": "Notify maintainers about a new template", "description": "A notification only asks maintainers to evaluate a new revision; it never applies or merges one automatically."}
+            },
+            "shared": {
+              "milestone": {
+                "files": [{"path": "scripts/check-template-update"}],
+                "automation": [{"path": ".github/workflows/template-update.yml", "job": "check", "trigger": {"zh-tw": "每週一／手動執行；只有設定開啟才產生", "en": "Every Monday or manual dispatch; generated only when enabled"}, "timeout": "10 min"}]
+              }
+            },
+            "templateOnly": {
+              "release": {
+                "files": [{"path": "tests/test_template_update_notifications.py"}],
+                "note": {"zh-tw": "確認開啟時 workflow 與 checker 同時產生，關閉時兩者都不存在，而且 root 不會誤執行。", "en": "Confirms that the workflow and checker are both generated when enabled, both absent when disabled, and never run in the template root."}
+              }
+            }
+          }
+        ]
       }
     ]
   },
@@ -662,13 +796,13 @@
       "key": "declarativeState",
       "title": {"zh-tw": "定義如何變成 repo 狀態", "en": "How definitions become repository state"},
       "description": {"zh-tw": "比較人直接改檔、由設定產生檔案，或由服務持續修正遠端狀態。", "en": "Compares direct file edits, generated files, and services that continuously reconcile remote state."},
-      "csarc": {"zh-tw": "copier.yml、template/ 與 profiles/catalog.yaml 宣告生成基線；scripts/sync-paired-files.sh 同步 root／template 配對檔，產品檔仍由下游 repo 持有。", "en": "copier.yml, template/, and profiles/catalog.yaml define the generated baseline. scripts/sync-paired-files.sh synchronizes paired root/template files, while downstream repositories retain ownership of product files."}
+      "csarc": {"zh-tw": "copier.yml、template/ 與 profiles/catalog.yaml 宣告生成基線；同一份 .csarc/config.yml 保存 repo 選項，配對檔由 root 產生 template 副本，產品檔仍由下游 repo 持有。", "en": "copier.yml, template/, and profiles/catalog.yaml define the generated baseline. One .csarc/config.yml stores repository choices, paired files are generated from root into template, and downstream repositories retain product-owned files."}
     },
     {
       "key": "templateLifecycle",
-      "title": {"zh-tw": "既有 repo 如何接收新版", "en": "How existing repositories receive updates"},
-      "description": {"zh-tw": "比較新版模板、規則或 recipe 如何進入既有 repo，以及衝突由誰處理。", "en": "Compares how updated templates, policies, or recipes enter an existing repository and who resolves conflicts."},
-      "csarc": {"zh-tw": "Copier answers 記錄來源與版本；既有案執行更新後以 PR 審查 diff／衝突，並驗證產品路徑未被覆寫。", "en": "Copier answers record the source and version. Existing projects review update diffs and conflicts in a PR and verify that product-owned paths were not overwritten."}
+      "title": {"zh-tw": "建立、導入與更新如何銜接", "en": "How creation, adoption, and updates connect"},
+      "description": {"zh-tw": "比較新 repo 如何建立、既有 repo 如何首次導入、後續版本如何更新，以及衝突由誰處理。", "en": "Compares how new repositories are created, existing repositories are first adopted, later revisions are applied, and conflicts are resolved."},
+      "csarc": {"zh-tw": "Copier 建立新 repo；既有 repo 由固定版本 CLI 在本機產生外部 plan，人工核准首次 PR。合併後由 base 上的 PR policy 與唯讀 CI 驗證後續更新；更新候選先完整驗證，失敗或衝突不修改 target。", "en": "Copier creates new repositories. A pinned CLI creates an external local plan for an existing repository and a person approves its first PR. After merge, the PR policy from the base and read-only CI validate later updates. An update candidate is fully verified before target files change, so failure or conflict leaves the target untouched."}
     },
     {
       "key": "proposalLifecycle",
@@ -825,6 +959,24 @@
       "title": {"zh-tw": "使用者怎麼驗證發版成品", "en": "How consumers verify release artifacts"},
       "description": {"zh-tw": "比較只提供 release notes，以及另外綁定 checksum、SBOM、來源與 attestation。", "en": "Compares release notes alone with binding checksums, an SBOM, source identity, and attestations."},
       "csarc": {"zh-tw": "GitHub Release 會附 exact-tag source、語言成品、SHA-256、SPDX 2.3 與來源證據，並在公開後確認 immutable；attestation 與 consumption 仍是選配。", "en": "Each GitHub Release includes exact-tag source, language packages, SHA-256, SPDX 2.3, and source evidence, then confirms immutability after publication; attestations and consumption remain optional."}
+    },
+    {
+      "key": "governancePolicyLocation",
+      "title": {"zh-tw": "治理規則放在哪裡", "en": "Where governance policy lives"},
+      "description": {"zh-tw": "比較 repo 內宣告、產生器設定與中央平台政策，並區分期望狀態和 GitHub 實際狀態。", "en": "Compares repository declarations, generator configuration, and central policy while separating desired state from live GitHub state."},
+      "csarc": {"zh-tw": "`.csarc/config.yml` 保存高價值選項，`policies/` 保存低頻 GitHub 期望狀態；`plan`／`apply`／`check` 再核對 live repository。", "en": "`.csarc/config.yml` holds high-value choices and `policies/` holds low-frequency desired GitHub state; `plan`, `apply`, and `check` then compare the live repository."}
+    },
+    {
+      "key": "governanceCapabilityBoundary",
+      "title": {"zh-tw": "平台能力不足時怎麼辦", "en": "What happens when platform capability is missing"},
+      "description": {"zh-tw": "比較假設所有方案都能強制、完全略過治理，以及明確降級並保留人工責任。", "en": "Compares assuming every plan can enforce, skipping governance entirely, and explicitly degrading while retaining a human responsibility."},
+      "csarc": {"zh-tw": "先查方案與 Ruleset API；不支援的能力標示 `DEGRADED` 並指定人工步驟，可修正的不一致則停止。", "en": "The plan and Ruleset API are probed first. Unsupported capability is marked `DEGRADED` with a human step, while fixable mismatch stops."}
+    },
+    {
+      "key": "governanceExceptionRecord",
+      "title": {"zh-tw": "暫時例外如何收回", "en": "How temporary exceptions are retired"},
+      "description": {"zh-tw": "比較口頭放寬、永久 bypass 與有提出者、核准者、期限、證據和復原方式的限時例外。", "en": "Compares an informal waiver, a permanent bypass, and a time-bounded exception with proposer, approver, expiry, evidence, and recovery."},
+      "csarc": {"zh-tw": "例外使用連結 Issue 留下五項欄位；另一位人員核准，復原驗證後才關閉，延期必須重新核准。", "en": "A linked Issue records all five fields; a different person approves it, recovery is verified before closure, and extensions require renewed approval."}
     }
   ],
   "tools": [
@@ -834,20 +986,21 @@
       "version": "harness-v0.1.10",
       "released": "2026-08-13",
       "stars": "1,207",
-      "coverage": {"full": ["01", "02", "09"], "partial": ["03", "06", "08", "11"]},
+      "coverage": {"full": ["01", "02", "09"], "partial": ["03", "06", "08"]},
       "position": {"zh-tw": "Agent-ready repository framework：把 AI 工作規則、持久計畫、驗證與安全更新放進 repo。", "en": "An agent-ready repository framework that puts AI working rules, durable plans, verification, and safe updates in the repository."},
       "difference": {"zh-tw": ["Repository Harness 偏向替既有 repo 加上 agent 工作框架與安全更新機制。", "CSARC 另外提供可生成的技術 profile、GitHub 治理、交付與版本政策。"], "en": ["Repository Harness primarily adds an agent working framework and safe update mechanism to an existing repository.", "CSARC also supplies generated technology profiles, GitHub governance, delivery, and version policy."]},
       "comparisons": [
         {"key": "repositoryTruth", "feature": "Repository protocol", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "repo 同時保存產品文件、決策、plan、程式與驗證證據。", "en": "The repository keeps product documents, decisions, plans, code, and verification evidence together."}},
         {"key": "workItemStructure", "feature": "Active plan", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "跨 session、有依賴或高風險的工作才建立 active plan；它管理執行步驟，但不另外定義 GitHub Issue Type、Parent 或里程碑。", "en": "Only cross-session, dependent, or high-risk work receives an active plan. It organizes execution steps without defining GitHub Issue Types, parents, or Milestones."}},
         {"key": "milestoneKickoff", "feature": "Human checkpoints", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "高風險決策可設人類檢查點，但沒有要求另一位非提案者先留言同意的里程碑門檻。", "en": "High-risk decisions may use human checkpoints, but there is no Milestone gate requiring prior agreement from a non-proposer."}},
-        {"key": "templateLifecycle", "feature": "harness update", "docs": "https://github.com/hoangnb24/repository-harness#maintain-an-installation", "description": {"zh-tw": "updater 保留 upstream base，用三方合併安全更新既有 repo。", "en": "The updater retains the upstream base and safely updates an existing repository through a three-way merge."}},
+        {"key": "templateLifecycle", "feature": "harness update", "docs": "https://github.com/hoangnb24/repository-harness#maintain-an-installation", "description": {"zh-tw": "保存 exact upstream base，以三方合併更新；重疊衝突時不改 managed files，保留 BASE／LOCAL／UPSTREAM 讓人 continue 或 abort。", "en": "It stores the exact upstream base and performs a three-way update. Overlapping conflicts leave managed files untouched and retain BASE, LOCAL, and UPSTREAM for a person to continue or abort."}},
         {"key": "proposalLifecycle", "feature": "Active / completed plans", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "跨 session 工作先進 active plan，完成後才歸檔。", "en": "Work spanning sessions stays in an active plan and is archived only after completion."}},
         {"key": "rightSizedWork", "feature": "Durable-plan threshold", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "小 typo 不建 plan；高風險或長工作才增加持久文件。", "en": "A small typo needs no plan; risky or long-running work receives a durable record."}},
         {"key": "agentInstructions", "feature": "Repository instructions", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "把 agent 的固定工作規則與驗證命令保存在 repo 內。", "en": "Persistent agent working rules and verification commands live in the repository."}},
         {"key": "durableAgentContext", "feature": "Durable plans", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "跨 session、有依賴或高風險工作使用 active plan，完成後歸檔。", "en": "Cross-session, dependent, or high-risk work uses an active plan that is archived after completion."}},
         {"key": "parallelAgentIsolation", "feature": "Isolated work", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "以獨立分支與工作目錄避免多項修改互相覆蓋。", "en": "Separate branches and working directories keep concurrent changes from overwriting one another."}},
         {"key": "humanDecisionBoundary", "feature": "Human checkpoints", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "風險、方向與不可逆步驟在計畫中留下明確的人類檢查點。", "en": "Plans retain explicit human checkpoints for risk, direction, and irreversible steps."}},
+        {"key": "governanceExceptionRecord", "feature": "Human checkpoints", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "高風險或不可逆操作可要求人類檢查點；它沒有另訂 CSARC 的提出者、核准者、期限、證據與復原五欄。", "en": "High-risk or irreversible operations can require human checkpoints, but it does not define CSARC's five exception fields: proposer, approver, expiry, evidence, and recovery."}},
         {"key": "sharedVerificationEntry", "feature": "scripts/validate-premerge.sh", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/scripts/validate-premerge.sh", "description": {"zh-tw": "本機與 Pre-Merge Contract workflow 執行同一支驗證程式，不在 YAML 重寫測試邏輯。", "en": "Local runs and the Pre-Merge Contract workflow execute the same validation script instead of rewriting test logic in YAML."}},
         {"key": "pullRequestUnit", "feature": "Active plan + branch", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/docs/WORKFLOW.md", "description": {"zh-tw": "一項 active plan 使用一條隔離分支；小改則可不建立持久 plan，避免每張 PR 都背負完整規格。", "en": "One active plan uses one isolated branch, while small changes can omit a durable plan so every PR does not carry a full specification."}},
         {"key": "mergeReadiness", "feature": "Pre-Merge Contract", "docs": "https://github.com/hoangnb24/repository-harness/blob/main/scripts/validate-premerge.sh", "description": {"zh-tw": "合併前以同一支本機腳本驗證必要契約；它提供證據，但不另外定義多層 delivery branch。", "en": "The same local script validates the required contract before merge. It produces evidence without defining a separate multi-layer delivery-branch model."}},
@@ -860,7 +1013,7 @@
       "version": "v0.103.11",
       "released": "2026-08-29",
       "stars": "2,952",
-      "coverage": {"full": ["03", "07", "09"], "partial": ["01", "04", "05", "06", "08", "11"]},
+      "coverage": {"full": ["03", "07", "09"], "partial": ["01", "04", "05", "06", "08"]},
       "position": {"zh-tw": "Project generator：用一般程式語言宣告專案，持續 synth 出受管設定與工作流程。", "en": "A project generator that declares a project in a general-purpose language and continuously synthesizes managed configuration and workflows."},
       "difference": {"zh-tw": ["projen 把 .projenrc 當唯一來源，大量生成檔不允許直接修改。", "CSARC 用 Copier 發布可更新基線，並保留產品檔案與政策檔案的責任邊界。"], "en": ["projen treats .projenrc as the only source and prevents direct edits to many generated files.", "CSARC distributes an updatable Copier baseline while preserving ownership boundaries for product and policy files."]},
       "comparisons": [
@@ -868,7 +1021,9 @@
         {"key": "languageSelection", "feature": "Project types + components", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "先選語言／框架的 project type，再以 components 加入能力；不像 CSARC 以獨立語言勾選組合同一個 repo。", "en": "A language or framework project type establishes the base and components add capabilities; unlike CSARC, it does not compose one repository from independent language selections."}},
         {"key": "languageConfiguration", "feature": ".projenrc + synth", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": ".projenrc 是單一宣告來源，synth 重建受管檔；一致性強，但手改生成檔會被覆寫。", "en": ".projenrc is the single declaration source and synth regenerates managed files. This is strongly consistent, but direct edits to generated files are overwritten."}},
         {"key": "declarativeState", "feature": "Components + synth", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "用 typed components 宣告期望專案，再由 synth 收斂檔案。", "en": "Typed components declare the desired project and synth reconciles the files."}},
-        {"key": "templateLifecycle", "feature": "projen upgrade + synth", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "升級 library 後重建；受管檔的手改會被 anti-tamper 攔下。", "en": "The project is regenerated after a library upgrade, and anti-tamper checks reject manual edits to managed files."}},
+        {"key": "governancePolicyLocation", "feature": ".projenrc + GitHub components", "docs": "https://projen.io/docs/integrations/github/", "description": {"zh-tw": "在 .projenrc 宣告 repository 與 workflow 設定後由 synth 產生檔案；平台實際是否強制仍交給 GitHub。", "en": "Repository and workflow settings are declared in .projenrc and synthesized into files, while actual platform enforcement remains GitHub's responsibility."}},
+        {"key": "governanceCapabilityBoundary", "feature": "GitHub integration", "docs": "https://projen.io/docs/integrations/github/", "description": {"zh-tw": "可以產生 GitHub 設定與 workflow，但不以 CSARC 的 plan／apply／check 模型回報每個 repo 的方案降級。", "en": "It can generate GitHub configuration and workflows, but it does not report per-repository plan degradation through CSARC's plan/apply/check model."}},
+        {"key": "templateLifecycle", "feature": "projen upgrade + synth", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "專案以程式定義；建立與升級都重新 synth 受管檔，手改會被 anti-tamper 攔下，衝突不是逐檔三方合併。", "en": "A project is defined in code. Creation and upgrades re-synthesize managed files, anti-tamper rejects manual edits, and conflicts are not resolved as per-file three-way merges."}},
         {"key": "proposalLifecycle", "feature": "Anti-tamper build", "docs": "https://projen.io/docs/introduction/", "description": {"zh-tw": "PR 同時修改 .projenrc 與重建結果，合併後才成為正式狀態。", "en": "A PR changes .projenrc together with regenerated output; the state becomes authoritative after merge."}},
         {"key": "sharedVerificationEntry", "feature": "Tasks", "docs": "https://projen.io/docs/concepts/tasks/", "description": {"zh-tw": "把 build、test 等步驟定義成可由本機 CLI 與生成 workflow 共用的 task graph。", "en": "Build and test steps are defined as a task graph shared by the local CLI and generated workflows."}},
         {"key": "riskBasedSelection", "feature": "Task conditions", "docs": "https://projen.io/docs/concepts/tasks/#conditions", "description": {"zh-tw": "task 或 step 可用 condition 決定是否執行；適合條件分流，但條件本身仍要維護正確。", "en": "A task or step can use a condition to decide whether it runs; this supports routing but the conditions still need correct maintenance."}},
@@ -883,12 +1038,12 @@
       "version": "v9.17.2",
       "released": "2026-08-19",
       "stars": "3,550",
-      "coverage": {"full": ["09"], "partial": ["04", "11"]},
+      "coverage": {"full": ["09"], "partial": ["04"]},
       "comparisons": [
         {"key": "languageSelection", "feature": "Multiselect questions + conditional files", "docs": "https://copier.readthedocs.io/en/stable/configuring/", "description": {"zh-tw": "模板可用複選答案決定產生哪些語言檔案；Copier 提供機制，但不替模板決定要用哪些測試工具。", "en": "A template can use multiselect answers to choose language files. Copier supplies the mechanism but does not choose the testing tools."}},
         {"key": "languageConfiguration", "feature": "Answers file", "docs": "https://copier.readthedocs.io/en/stable/configuring/#the-copier-answers-file", "description": {"zh-tw": "answers file 保存來源、版本與選項，可供 smart update 重用；CSARC 直接把它當唯一公版設定，避免再同步另一份 profile。", "en": "The answers file retains source, revision, and selections for smart updates. CSARC also uses it as the sole template configuration so no second profile can drift."}},
         {"key": "declarativeState", "feature": "Answers file + Jinja templates", "docs": "https://copier.readthedocs.io/en/stable/configuring/", "description": {"zh-tw": "answers 與 Jinja 宣告生成輸入，但不持續控制遠端狀態。", "en": "Answers and Jinja templates declare generation inputs without continuously controlling remote state."}},
-        {"key": "templateLifecycle", "feature": "Smart Update", "docs": "https://copier.readthedocs.io/en/stable/updating/", "description": {"zh-tw": "記住模板來源與 answers，讓既有 repo 接收新版模板。", "en": "The recorded template source and answers let an existing repository receive template updates."}},
+        {"key": "templateLifecycle", "feature": "Smart Update", "docs": "https://copier.readthedocs.io/en/stable/updating/", "description": {"zh-tw": "answers file 保存來源與上次答案；update 以三方差異套新版，inline marker 或 .rej 衝突由人處理。CSARC 再包一層 candidate-first，未通過前不改 target。", "en": "The answers file retains the source and prior answers. Update applies a three-way diff, leaving inline markers or .rej conflicts for a person. CSARC adds a candidate-first wrapper so the target is unchanged until verification passes."}},
         {"key": "proposalLifecycle", "feature": "Update diff", "docs": "https://copier.readthedocs.io/en/stable/updating/", "description": {"zh-tw": "更新先產生 Git diff，解衝突並合併後才接受。", "en": "An update first produces a Git diff and is accepted only after conflicts are resolved and the change is merged."}}
       ]
     },
@@ -898,13 +1053,15 @@
       "version": "v1.54.6",
       "released": "2026-08-28",
       "stars": "34,277",
-      "coverage": {"full": ["10", "11"], "partial": ["04", "08", "09"]},
+      "coverage": {"full": ["10"], "partial": ["04", "08", "09"]},
       "position": {"zh-tw": "Developer portal framework：以 Software Catalog、Software Templates 與 TechDocs 統一軟體生態系入口。", "en": "A developer portal framework that unifies a software ecosystem through Software Catalog, Software Templates, and TechDocs."},
       "difference": {"zh-tw": ["Backstage 是需要持續維運的中央 portal，強項是服務探索、owner 與 scaffolding。", "CSARC 是可攜的 repo-local 公版，直接把治理、驗證與交付基線放進每個 repo。"], "en": ["Backstage is a centrally operated portal focused on service discovery, ownership, and scaffolding.", "CSARC is a portable repository-local baseline that places governance, verification, and delivery in each repository."]},
       "comparisons": [
         {"key": "repositoryTruth", "feature": "Software Catalog", "docs": "https://backstage.io/docs/features/software-catalog/", "description": {"zh-tw": "Catalog entity 保存服務、owner 與關係的中央真相。", "en": "Catalog entities provide a central source of truth for services, owners, and relationships."}},
         {"key": "languageSelection", "feature": "Template parameters + conditional steps", "docs": "https://backstage.io/docs/features/software-templates/input-examples", "description": {"zh-tw": "建立元件時可詢問語言／框架並條件式執行步驟，適合入口網站；既有 repo 仍要另接更新機制。", "en": "Component creation can ask for a language or framework and run conditional steps, which suits a portal; existing repositories still need a separate update mechanism."}},
         {"key": "declarativeState", "feature": "Software Templates", "docs": "https://backstage.io/docs/features/software-templates/", "description": {"zh-tw": "YAML entity 與 Software Template 宣告 portal 中的元件和建立流程。", "en": "YAML entities and Software Templates declare portal components and creation workflows."}},
+        {"key": "governancePolicyLocation", "feature": "Permission framework", "docs": "https://backstage.io/docs/permissions/overview/", "description": {"zh-tw": "權限政策在中央 Backstage backend 評估，適合 portal；不像 CSARC 將可攜政策與期望 GitHub 狀態保存在每個 repo。", "en": "Permission policy is evaluated by the central Backstage backend, which suits a portal; unlike CSARC, it does not keep portable policy and desired GitHub state in each repository."}},
+        {"key": "governanceCapabilityBoundary", "feature": "Permission decisions", "docs": "https://backstage.io/docs/permissions/overview/", "description": {"zh-tw": "權限框架回傳授權決策，但不負責偵測 GitHub 方案是否能建立 Ruleset；repo 門禁仍需另接 GitHub 設定。", "en": "The framework returns authorization decisions but does not detect whether a GitHub plan can create a Ruleset; repository merge gates still need separate GitHub configuration."}},
         {"key": "templateLifecycle", "feature": "Software Templates", "docs": "https://backstage.io/docs/features/software-templates/", "description": {"zh-tw": "擅長建立新元件；既有 repo 遷移仍要另接工具。", "en": "It excels at creating new components; existing-repository migration still needs another tool."}}
       ]
     },
@@ -914,11 +1071,13 @@
       "version": "v0.3.1",
       "released": "2026-08-10",
       "stars": "419",
-      "coverage": {"full": ["05", "08"], "partial": ["03", "11"]},
+      "coverage": {"full": ["05", "08"], "partial": ["03"]},
       "position": {"zh-tw": "Software supply chain security platform：集中評估 repository 與 artifact，並依 policy 告警或修正。", "en": "A software supply-chain security platform that centrally evaluates repositories and artifacts and alerts or remediates according to policy."},
       "difference": {"zh-tw": ["Minder 專注中央安全姿態與持續 policy enforcement，需要常駐服務。", "CSARC 涵蓋完整 repo 開發生命週期，目前以可攜政策與本機驗證為基線。"], "en": ["Minder focuses on centralized security posture and continuous policy enforcement and requires an operating service.", "CSARC spans the repository development lifecycle and currently uses portable policy plus local verification as its baseline."]},
       "comparisons": [
-        {"key": "declarativeState", "feature": "Profiles", "docs": "https://github.com/mindersec/minder/blob/main/docs/docs/understand/profiles.md", "description": {"zh-tw": "Profile 宣告安全期望，服務持續評估並可自動修正。", "en": "Profiles declare security expectations; the service continuously evaluates them and can remediate findings."}}
+        {"key": "declarativeState", "feature": "Profiles", "docs": "https://github.com/mindersec/minder/blob/main/docs/docs/understand/profiles.md", "description": {"zh-tw": "Profile 宣告安全期望，服務持續評估並可自動修正。", "en": "Profiles declare security expectations; the service continuously evaluates them and can remediate findings."}},
+        {"key": "governancePolicyLocation", "feature": "Profiles", "docs": "https://github.com/mindersec/minder/blob/main/docs/docs/understand/profiles.md", "description": {"zh-tw": "Profile 在中央服務宣告 repository 與 artifact 規則，再持續評估綁定的 repo。", "en": "Profiles declare repository and artifact rules in a central service, which continuously evaluates bound repositories."}},
+        {"key": "governanceCapabilityBoundary", "feature": "Rule evaluation", "docs": "https://github.com/mindersec/minder/blob/main/docs/docs/understand/rule_evaluation.md", "description": {"zh-tw": "規則評估輸出成功、失敗或錯誤並可接 remediation；需要常駐服務，不是 repo-local 的 GitHub 方案降級。", "en": "Rule evaluation reports success, failure, or error and can connect remediation. It requires an operating service rather than repository-local GitHub-plan degradation."}}
       ]
     },
     {

@@ -5,10 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23f4dc00'/%3E%3Cpath d='M8 9h16v4H8zm0 10h16v4H8z' fill='%23171717'/%3E%3C/svg%3E">
-  <title>{{ project_name | e }}｜內部專案網站</title>
-  <link rel="stylesheet" href="styles.css">\n  <link rel="stylesheet" href="../docs/site-theme.css">
-  <script src="../docs/site-content.js"></script>
-  <script src="app.js"></script>
+  <title><!-- CSARC_SITE_TITLE --></title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="../docs/site-theme.css">
 </head>
 <body>
   <a class="skip-link" href="#content">跳到主要內容</a>
@@ -16,88 +15,13 @@
     <aside class="sidebar">
       <p class="brand">CSARC INTERNAL</p>
       <nav aria-label="網站目錄">
-        <a href="#start">開始使用</a>
-        <a href="#structure">檔案地圖</a>
-        <a href="#workflow">開發流程</a>
-        <a href="#security">安全基線</a>
-        <a href="#github-plan">GitHub 方案</a>
-        <a href="#release">交付更新</a>
+        <!-- CSARC_SITE_NAV -->
       </nav>
-      <small>內容：site-content.js<br>版型：CSARC 公版</small>
+      <small>內容：site-content.md<br>版型：CSARC 公版</small>
     </aside>
     <main id="content">
-      <header class="hero">
-        <p class="eyebrow">Cyber-Arch / repository handbook</p>
-        <h1 id="project-name">{{ project_name | e }}</h1>
-        <p id="project-description" class="lead">{{ project_description | e }}</p>
-        <div id="project-badges" class="badges" aria-label="專案標籤"></div>
-      </header>
-
-      <section id="start">
-        <h2><span>開始使用</span></h2>
-        <p>先安裝必要工具，再執行 repo 的共同驗證入口。</p>
-        <div id="prerequisites" class="badges" aria-label="本機需求"></div>
-        <pre id="commands" class="command"></pre>
-      </section>
-
-      <section id="structure">
-        <h2><span>檔案地圖</span></h2>
-        <table class="table">
-          <thead><tr><th>路徑</th><th>用途</th><th>維護責任</th></tr></thead>
-          <tbody id="structure-body"></tbody>
-        </table>
-      </section>
-
-      <section id="workflow">
-        <h2><span>開發流程</span></h2>
-        <p>開 Issue／Milestone 前先搜尋 open／closed 歷史工作並摘要既有決策；Feature parent 保存 SDD story，Task／Bug subissues 保存可交付工作，Milestone 只管理有期限的 delivery。PR 保留 native Development link、Issue 連結與精簡清單，closing PR 的自身與 referenced Issue checklist 都必須完成。</p>
-{% if branch_strategy == "delivery" %}        <p class="notice"><strong>Delivery route：</strong><code>main</code> 是唯一永久 branch；並行里程碑各自使用短命 <code>dev/m*</code>，一般孤立 Issue 從最新 main 建立並直接回 main。只有獨立 soak／canary 才用一次性的 <code>dev/i*</code>。里程碑到 final delivery 才同步最新 main；不得 fan out、直接 push、建立假里程碑或永久 isolated branch。</p>
-{% endif %}        <p class="notice"><strong>分層 CI：</strong>本機與 CI 共用 repo 內的驗證程式。Issue PR 依變更選擇 docs／fast／full；未知路徑、promotion、hotfix、release recovery、merge queue 或手動 dispatch 走 full。現行 <code>.github/workflows/ci.yml</code> 只有一個 <code>verify</code> job，timeout 為 30 分鐘；專用 release、安全、治理、部署與排程 workflows 仍封存。完整契約見 <code>docs/ci-policy.md</code>。</p>
-        <p class="notice"><strong>Actions 額度 fallback：</strong>zero-step billing block 被機械式確認、且 job 未執行任何 step 時，agent 對精確 PR SHA 執行 <code>./scripts/verify</code>、列出無法本機重現的 checks，一般 PR 留下只對該 SHA 有效的 <code>Actions quota fallback note</code> 即可合併，不需要即時人工確認。{% if branch_strategy in ["dev", "delivery"] %}Promotion 到 main 仍維持 human attestation/authorization 雙方確認，另須保存 candidate archive/tree、合併後核對 tree identity，且本機證據不可用於 release。{% endif %}錯誤 budget、平台事故、workflow／權限問題、原因不明或真正測試失敗都不得套用；額度重置後補跑正式 checks。</p>
-        <div id="workflow-cards" class="cards"></div>
-      </section>
-
-      <section id="security">
-        <h2><span>安全基線</span></h2>
-        <ul id="safeguards"></ul>
-      </section>
-
-      <section id="github-plan">
-        <h2><span>GitHub 方案與門禁</span></h2>
-        <p>repo 推送後會由 CI 讀取實際能力。有管理權且要啟用較強門禁時，可再執行 <code>./scripts/apply-repository-settings.sh plan</code>、<code>apply</code> 與 <code>check</code>；check 會唯讀比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset。這不是 portable release baseline 的必要步驟。</p>
-        <table class="table">
-          <thead><tr><th>方案</th><th>公版會套用</th><th>方案邊界</th></tr></thead>
-          <tbody>
-            <tr><td><strong>Free＋public</strong></td><td>套用並強制 Ruleset</td><td>缺少或不符政策時，governance check fail-closed</td></tr>
-            <tr><td><strong>Free organization＋private</strong></td><td>從設定名單輪派一位個別 reviewer；期望 Ruleset 保留在 repo policy</td><td>不支援 team request；review request 不等於強制核准</td></tr>
-            <tr><td><strong>Pro 個人帳號＋private</strong></td><td>套用並強制 Ruleset</td><td>個人 private repo 的付費路徑</td></tr>
-            <tr><td><strong>Team organization＋private</strong></td><td>Ruleset、必要審查、CODEOWNERS 與必要檢查</td><td>要先建立真實 CODEOWNERS team</td></tr>
-            <tr><td><strong>Enterprise</strong></td><td>沿用 Team 的 repo 設定</td><td>SSO／SCIM、稽核串流、IP 限制與組織 Ruleset 屬組織層，不由本 repo 腳本自動修改</td></tr>
-          </tbody>
-        </table>
-        <p class="notice"><strong>Free private 的下一步：</strong>導入時用逗號設定一到多位 <code>reviewers</code>，workflow 會從生成的 <code>.github/REVIEWERS</code> 排除作者後輪派一位，並用短效 <code>GITHUB_TOKEN</code> 提出 request；設定腳本另在所有方案驗證 CODEOWNERS team 與 repo write access。Free private 不支援 team review request 或多位同時 reviewer；需要把核准變成 merge gate 時，請 owner 升級至 GitHub Team 以上。Ruleset 不可用時仍標示 <code>DEGRADED</code>；完整管理欄位驗證應由管理員在可信任 checkout 使用 Administration read 憑證，不把該 token 暴露給 PR 程式碼。這些紀錄與 review request 不能阻止有權限者直接 push 或忽略未核准合併。</p>
-      </section>
-
-      <section id="release">
-        <h2><span>交付與更新</span></h2>
-        <p id="release-current" class="notice"></p>
-{% if branch_strategy == "delivery" %}        <p class="notice"><strong>批次邊界：</strong>Milestone 或其他 delivery PR 只負責把已驗證內容合併到 <code>main</code>；之後由版本 PR 分開審查版本與 CHANGELOG。</p>
-{% endif %}
-        <table class="table">
-          <thead><tr><th>能力</th><th>目前狀態</th><th>現在怎麼做</th></tr></thead>
-          <tbody id="release-modes">
-            <tr><td>PR 的 SemVer 意圖</td><td><strong>Active</strong></td><td>PR 標題只表達 major／minor／patch／no-release。</td></tr>
-            <tr><td>正式版本與 CHANGELOG</td><td><strong>{% if project_mode == "new" %}Active{% else %}Product-owned{% endif %}</strong></td><td>{% if project_mode == "new" %}Release Please 建立同一張受審查 PR。{% else %}沿用產品既有規則。{% endif %}</td></tr>
-            <tr><td>tag／GitHub Release</td><td><strong>{% if project_mode == "new" %}Active{% else %}Product-owned{% endif %}</strong></td><td>{% if project_mode == "new" %}版本 PR 合併並通過完整驗證後自動發布。{% else %}模板不建立第二個 release owner。{% endif %}</td></tr>
-            <tr><td>checksum／SBOM／attestation</td><td><strong>Conditional</strong></td><td>本機 scripts／tests 保留安全契約，接上實際 publisher 後才執行。</td></tr>
-            <tr><td>production deployment</td><td><strong>Not applicable</strong></td><td>由產品另行定義環境、健康檢查、核准與復原。</td></tr>
-          </tbody>
-        </table>
-        <p id="release-optional" class="notice optional"></p>
-        <p id="update"></p>
-      </section>
-
-      <footer>這是內部說明頁，不是存取控制；發布時仍須由託管平台限制可見範圍。</footer>
+      <!-- CSARC_SITE_CONTENT -->
+      <footer>此頁可離線閱讀；是否限制讀者仍由實際託管平台決定。</footer>
     </main>
   </div>
 </body>

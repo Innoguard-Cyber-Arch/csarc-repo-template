@@ -13,12 +13,14 @@ set -euo pipefail
 #                                         each pair that has drifted.
 paired_files=(
   CLAUDE.md
+  .gitleaks.toml
   .github/ISSUE_TEMPLATE/config.yml
   .github/ISSUE_TEMPLATE/bug.yml
   .github/ISSUE_TEMPLATE/documentation.yml
   .github/ISSUE_TEMPLATE/feature.yml
   .github/ISSUE_TEMPLATE/task.yml
   .github/workflows/issue-triage.yml
+  .github/workflows/governance-comment.yml
   .github/workflows/milestone-lifecycle.yml
   .github/workflows/osv.yml
   .github/workflows/pr-policy.yml
@@ -34,12 +36,14 @@ paired_files=(
   scripts/render_site.py
   scripts/apply-repository-settings.sh
   scripts/check-governance-drift
+  scripts/request-reviewer
   scripts/ci_tier.py
   scripts/delivery_sync.py
   scripts/pr_lifecycle.py
   scripts/promotion_gate.py
   scripts/check-update-conflicts
   scripts/cleanup-worktrees
+  scripts/converge-release-tag
   scripts/csarc_config.py
   scripts/install-actionlint
   scripts/install-gitleaks
@@ -48,6 +52,7 @@ paired_files=(
   scripts/lint-workflows-shell
   scripts/release_bundle.py
   scripts/release_policy.py
+  scripts/resolve-cache-root
   scripts/scan-secrets
   scripts/spec_to_issue.py
   scripts/sync_milestone_state.py

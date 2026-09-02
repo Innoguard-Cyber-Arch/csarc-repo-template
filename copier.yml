@@ -43,7 +43,7 @@ _skip_if_exists:
   - "typescript/tests/**/*.ts"
   - "docs/specs/**/*.md"
   - "docs/adr/**/*.md"
-  - "docs/site-content.js"
+  - "docs/site-content.md"
   - "docs/site-theme.css"
   - "{% if project_mode == 'existing' %}/README.md{% else %}__overwrite_readme__{% endif %}"
   - "{% if project_mode == 'existing' %}/SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"
@@ -115,6 +115,54 @@ project_mode:
     Adopt an existing repository: existing
   default: new
 
+release_ownership:
+  type: str
+  help: Single owner allowed to create release tags, Releases, and assets
+  choices:
+    CSARC release workflow: csarc-owned
+    Existing product release workflow: product-owned
+    Verification without release writes: verification-only
+  default: "{{ 'csarc-owned' if project_mode == 'new' else 'verification-only' }}"
+  when: false
+
+release_workflow:
+  type: str
+  help: Explicit repository-relative workflow selected by the release owner
+  default: "{{ '.github/workflows/release.yml' if release_ownership == 'csarc-owned' else '' }}"
+  when: false
+
+release_required_inputs:
+  type: yaml
+  help: Required workflow_dispatch inputs declared by the selected workflow
+  default: []
+  when: false
+
+release_ownership_reason:
+  type: str
+  help: Auditable reason for the selected release ownership
+  default: "{{ 'CSARC owns the only version and GitHub Release workflow.' if release_ownership == 'csarc-owned' else 'No release workflow is selected; CSARC verifies only.' }}"
+  when: false
+
+release_settings_owner:
+  type: str
+  help: Owner responsible for release-related repository settings
+  choices:
+    CSARC bootstrap administrator: csarc-admin
+    Product administrator: product-admin
+    No release settings owner: none
+  default: "{{ 'csarc-admin' if release_ownership == 'csarc-owned' else 'product-admin' if release_ownership == 'product-owned' else 'none' }}"
+  when: false
+
+release_immutable_releases:
+  type: str
+  help: Whether immutable GitHub Releases are required by this ownership mode
+  choices:
+    Required during CSARC bootstrap: required
+    Defined by the product release contract: product-defined
+    Not required for verification-only: not-required
+  default: "{{ 'required' if release_ownership == 'csarc-owned' else 'product-defined' if release_ownership == 'product-owned' else 'not-required' }}"
+  when: false
+
 project_name:
   type: str
   help: Human-readable project name
@@ -148,30 +196,6 @@ languages:
     Rust: rust
     TypeScript: typescript
   default: "{{ [] if language == 'ci' else language.split('-') }}"
-
-container_mode:
-  type: str
-  help: Verify an existing container image in CI, and optionally publish it to GHCR from verified releases
-  choices:
-    Disabled: none
-    Build, smoke-test, and scan only: verify
-    Build, verify, and publish to GHCR: ghcr
-  default: none
-  when: "{{ project_mode == 'existing' }}"
-
-containerfile_path:
-  type: str
-  help: Repository-relative Dockerfile or Containerfile used with the repository root as build context
-  default: Dockerfile
-  when: "{{ (container_mode | default('none')) != 'none' }}"
-  validator: "{% if containerfile_path.startswith('/') or '..' in containerfile_path.split('/') or not (containerfile_path | regex_search('^[A-Za-z0-9._/-]+$')) %}Use a safe repository-relative path without spaces or parent traversal.{% endif %}"
-
-container_smoke_command:
-  type: str
-  help: One-line shell command that smoke-tests the built image through the IMAGE environment variable
-  default: ""
-  when: "{{ (container_mode | default('none')) != 'none' }}"
-  validator: "{% if not container_smoke_command.strip() or '$IMAGE' not in container_smoke_command or '\n' in container_smoke_command %}Use one non-empty line that references $IMAGE, for example docker run --rm \"$IMAGE\" --help.{% endif %}"
 
 branch_strategy:
   type: str
@@ -221,7 +245,7 @@ security_reporting_channel:
 
 reviewers:
   type: str
-  help: Comma-separated GitHub usernames eligible for automatic pull request review
+  help: Comma-separated GitHub usernames eligible for review assignment; assign manually until the Action is active
   default: "@jachline28"
   validator: "{% if not reviewers | regex_search('^@[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:\\s*,\\s*@[A-Za-z0-9][A-Za-z0-9-]{0,38})*$') %}Use one or more @username values separated by commas.{% endif %}"
 
@@ -285,40 +309,8 @@ enable_codeql:
 
 enable_governance_drift_check:
   type: bool
-  help: Check daily for repository governance drift (for example, branch protection disabled between CI runs) and maintain one tracking Issue
+  help: Reserve the optional scheduled governance drift check; keep disabled until its GitHub Action is active
   default: false
-
-enable_release_attestations:
-  type: bool
-  help: Sign release provenance and SBOM attestations on supported GitHub plans; public projects default on, private/internal stay explicit opt-in
-  default: "{{ project_visibility == 'public' }}"
-  when: "{{ languages }}"
-
-enable_pypi_publishing:
-  type: bool
-  help: Publish Python distributions through PyPI Trusted Publishing
-  default: false
-  when: "{{ 'python' in languages }}"
-
-pypi_environment:
-  type: str
-  help: Protected GitHub environment configured in the PyPI trusted publisher
-  default: pypi
-  when: "{{ enable_pypi_publishing }}"
-  validator: "{% if not pypi_environment.strip() %}Use a non-empty GitHub environment name.{% endif %}"
-
-enable_npm_publishing:
-  type: bool
-  help: Publish the npm tarball through npm Trusted Publishing
-  default: false
-  when: "{{ 'typescript' in languages }}"
-
-npm_environment:
-  type: str
-  help: Protected GitHub environment configured in the npm trusted publisher
-  default: npm
-  when: "{{ enable_npm_publishing }}"
-  validator: "{% if not npm_environment.strip() %}Use a non-empty GitHub environment name.{% endif %}"
 
 use_reusable_workflow:
   type: bool

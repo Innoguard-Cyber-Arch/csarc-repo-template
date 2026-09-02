@@ -9,7 +9,7 @@
 
 使用者不一定能啟用 GitHub Pages、建立外部託管帳號，或取得 organization／enterprise 管理權。內部決策網站同時需要保留特殊簡報設計、支援討論與交付，而且下載後仍能離線開啟。因此 Pages、CDN、web font、外部 JavaScript 與分離圖片都不能成為 portable baseline。
 
-原本 root `docs/index.html` 把內容、樣式、互動與決策來源放在同一檔案；Copier 下發網站則在 runtime 載入 `docs/site-content.js`，方便更新但失去單檔交付。現在兩者都由 repository 內來源重建同一路徑的單檔交付物。
+原本 root `docs/index.html` 把內容、樣式、互動與決策來源放在同一檔案；Copier 下發網站則在 runtime 載入 `docs/site-content.js`，讓非前端維護者必須編輯 JavaScript。現在 root 由 Hugo 讀取雙語 Markdown，生成專案則由輕量 renderer 讀取 `docs/site-content.md`；兩者都從 repository 內來源重建同一路徑的單檔交付物。
 
 聊天也不是 repository source of truth。現有 Spec → Issue 流程不會擷取對話；若無條件保存完整逐字稿，會把未確認假設、敏感脈絡與噪音寫進版本歷史。
 
@@ -23,6 +23,12 @@
 4. canonical Architecture Decision Records（ADR）放在 `docs/adr/`。簡報呈現決策摘要與連結，但不再是唯一可編輯來源；runbook、實證與 spec 各自維持不同生命週期。
 5. root 與 Copier 下發專案遵守相同 portable contract，但可以有不同 presentation layout。共用設計基礎由公版維護，root 可以增加 deck-specific 呈現，生成專案則使用 handbook layout。
 
+## 2026-09-01 生成專案改用 Markdown
+
+Issue #436 將生成專案的內容來源從 JavaScript object 改為 `docs/site-content.md`。renderer 只支援標題、段落、清單、粗體、連結與程式碼等文件需要的 Markdown 子集，不加入前端框架或 runtime dependency；二級標題建立導覽，三級標題收納進階內容。
+
+Markdown 中的明確 `[[key]]` token 直接從 `.csarc/config.yml` 讀取；未知 key 會停止建置。這讓名稱、說明、語言、負責人與分支策略維持同一設定來源，同時讓其餘專案文字仍可由 consuming repository 直接編輯。
+
 ## 2026-08-25 Hugo 正式切換
 
 Issue #205 以兩次真實 spike 重新檢查第 3 點。mdBook 的書本導覽與現有卡片式簡報衝突；Hugo 0.165.0 的自訂單頁 output format 則能保留既有視覺，並把輸出直接交給未修改的 `scripts/render_site.py`。因此只局部取代「不導入 Hugo」的限制，保留單檔、離線 `file://`、零外部 runtime asset 與 checked-in output 的全部契約。
@@ -34,13 +40,11 @@ Issue #209 經維護者實際檢視後，Hugo source 收斂到通用的 `site/` 
 | 內容 | Owner | Copier update 行為 |
 | --- | --- | --- |
 | Renderer、基礎設計 tokens、共用元件與驗證 | 公版 | 隨公版更新，產生可審查差異 |
-| 專案內容與允許的 theme overrides | consuming project | 首次建立後保留，不靜默覆寫 |
+| `docs/site-content.md` 與允許的 theme overrides | consuming project | 首次建立後保留，不靜默覆寫 |
 | `docs/index.html`、`docs/index.en.html` | renderer output | 由來源重建；CI 驗證沒有 stale 或人工修改 |
 | Decision records、specs 與產品實證 | owning repository | 專案擁有；公版只提供結構與規則 |
 
-專案內容契約必須宣告 `schemaVersion`。同一 major 版本新增欄位時提供相容預設；移除或改變語意時提供明確 migration 與可審查報告，不能靠覆寫 project-owned content 解決。
-
-目前 renderer 支援 `schemaVersion: 1`；沒有欄位的既有內容視為 legacy v1，讓舊專案更新後可先保留原內容。明確宣告其他版本時 fail closed。
+舊版 `docs/site-content.js` 的 `schemaVersion: 1` 仍可由 renderer 驗證，供更新中的 repository 辨識舊來源；新內容不再建立 JavaScript schema。更新時舊檔保持原樣，產物顯示遷移提示，直到維護者把要保留的文字移入 Markdown 並自行刪除舊檔；不能靠模板靜默覆寫 project-owned content。
 
 ## GitHub capability matrix
 
@@ -97,7 +101,7 @@ Issue #209 經維護者實際檢視後，Hugo source 收斂到通用的 `site/` 
 - HTML 不含 runtime 外部 stylesheet、script、font 或 image；外部超連結可以存在。
 - `file://` 開啟時簡報內容、鍵盤操作與內嵌媒體可用。
 - 常用窄螢幕與簡報尺寸維持可讀；不為此先加入大型視覺測試平台。
-- Copier create／adopt／update fixture 證明模板檔可更新、project-owned content 與 overrides 保留、schema 不相容時 fail closed。
+- Copier create／adopt／update fixture 證明模板檔可更新、project-owned Markdown 與 overrides 保留，且未知設定 key、舊 schema 不相容時 fail closed。
 
 ## 重新評估條件
 
