@@ -19,9 +19,8 @@ def test_dependabot_uses_three_day_cooldown() -> None:
         re.findall(r"^\s*- package-ecosystem:\s*(\S+)\s*$", config, re.M)
     )
 
-    config_path = REPO_ROOT / ".csarc/config.yml"
     expected = {"github-actions", "uv"}
-    if config_path.exists():
+    if (REPO_ROOT / ".csarc/config.yml").exists():
         languages = set(
             subprocess.run(
                 [sys.executable, "scripts/csarc_config.py", "languages"],
@@ -40,14 +39,6 @@ def test_dependabot_uses_three_day_cooldown() -> None:
             expected.add("npm")
         if "rust" in languages:
             expected.add("cargo")
-        container_match = re.search(
-            r"^container_mode:\s*(\S+)\s*$",
-            config_path.read_text(encoding="utf-8"),
-            re.M,
-        )
-        container_mode = container_match.group(1) if container_match else "none"
-        if container_mode != "none":
-            expected.add("docker")
     assert ecosystems == expected
     assert len(re.findall(r"^\s+default-days:\s*3\s*$", config, re.M)) == len(
         ecosystems

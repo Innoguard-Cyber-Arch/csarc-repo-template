@@ -1154,21 +1154,14 @@ def report_settings(data: dict[str, object]) -> str:
     allowed = {
         "branch_strategy",
         "code_owner",
-        "container_mode",
-        "container_smoke_command",
-        "containerfile_path",
         "coverage_mode",
         "coverage_threshold",
         "enable_codeql",
         "enable_governance_drift_check",
-        "enable_npm_publishing",
         "enable_precommit",
-        "enable_pypi_publishing",
-        "enable_release_attestations",
         "enable_template_update_notifications",
         "language",
         "languages",
-        "npm_environment",
         "package_name",
         "project_description",
         "project_mode",
@@ -1176,7 +1169,6 @@ def report_settings(data: dict[str, object]) -> str:
         "project_slug",
         "project_verification_hook",
         "project_visibility",
-        "pypi_environment",
         "python_min_version",
         "python_support_mode",
         "reviewers",
@@ -4017,11 +4009,6 @@ def update_plan_answers(  # noqa: C901
         )
         if "enable_codeql" in answers and "enable_codeql" not in explicit_data:
             update_data["enable_codeql"] = str(enabled).lower()
-        if (
-            "enable_release_attestations" in answers
-            and "enable_release_attestations" not in explicit_data
-        ):
-            update_data["enable_release_attestations"] = str(enabled).lower()
     for key, value in update_data.items():
         previous_value = answers.get(key)
         if key == "languages":
