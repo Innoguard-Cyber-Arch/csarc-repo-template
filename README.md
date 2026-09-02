@@ -204,7 +204,7 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 ### 驗證邊界
 
-本模板 repo 的 CI 執行 `./scripts/verify-template.sh`，用暫存 fixture 驗證上述三條生命週期；這支腳本與 root 專用升版／同步工具都不會下發。生成 repo 的本機與 CI 唯一入口是 `./scripts/verify`；選用 reusable workflow 時也只會呼叫生成 repo 內的這支腳本。
+本模板 repo 的 CI 執行 `./scripts/verify-template.sh`，用暫存 fixture 驗證上述三條生命週期；這支腳本與 root 專用升版／同步工具都不會下發。生成 repo 的本機與 CI 唯一入口是 `./scripts/verify`，由生成 repo 自己的 `.github/workflows/ci.yml` 依變更範圍分級呼叫。
 
 ## 負責人與支援
 

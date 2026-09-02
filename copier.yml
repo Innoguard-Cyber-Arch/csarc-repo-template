@@ -311,15 +311,3 @@ enable_governance_drift_check:
   type: bool
   help: Reserve the optional scheduled governance drift check; keep disabled until its GitHub Action is active
   default: false
-
-use_reusable_workflow:
-  type: bool
-  help: Call the reusable multi-language workflow from this repository
-  default: false
-
-workflow_ref:
-  type: str
-  help: Full commit SHA for the reusable workflow
-  default: ""
-  when: "{{ use_reusable_workflow }}"
-  validator: "{% if not workflow_ref | regex_search('^[0-9a-fA-F]{40}$') %}Use a full 40-character hexadecimal commit SHA.{% endif %}"
