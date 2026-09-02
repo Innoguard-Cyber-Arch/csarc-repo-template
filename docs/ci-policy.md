@@ -126,6 +126,83 @@ before／after 紀錄）。
 相依 manifest／lockfile 變更加跑 `scripts/verify-dependencies`。CI 不建立 release asset，
 也不把測試 artifact 當成正式成品。#408 已把更細的 stage timing 輸出納入現行入口。
 
+### Base-only re-merge 例外（#468）
+
+上表「full」列與 #458 規則只回答「這張 PR 要不要跑 full」：只有 PR 本身落在 full 邊界
+時，owner／integrator 才需要在最終候選樹本機執行一次 `./scripts/verify-template.sh`
+（生成 repo 是 `./scripts/verify`）。這條規則沒回答的是另一個問題：**同一張已經跑過
+這一次本機全綠的 PR，之後因為共用整合分支（例如本 Milestone 的 `dev/m8-hugo-docs`）
+持續前進、被迫重新合併 base 時，是不是每次都要重跑同一套完整驗證。** 本節是 #458 規
+則的窄範圍例外，回答「同一張 PR 內，什麼時候可以不用每次都重跑」——**不是**放寬「full
+-tier PR 永遠不用本機跑」，也不代表任何 PR 的第一次本機全綠可以省略。
+
+一次重新合併（re-merge）只在下列四個條件**同時**成立時，才算「base-only re-merge」、
+才可以直接 push 並信任 hosted `verify` check，不必再本機重跑：
+
+1. **這個 branch 已經對自己這一輪真正的內容，跑過一次全綠的本機
+   `./scripts/verify-template.sh`（或生成 repo 的 `./scripts/verify`）。** own-verified-
+   head 必須是那次全綠時的 commit；如果那之後這個 branch 又有新的自有 commit（不是單純
+   重新合併 base），own-verified-head 就不等於目前 tip，這條例外不適用，仍照 #458 規則
+   本機重跑。
+2. **這次重新合併乾淨、不會產生任何衝突**——用 `git merge-tree` 在不動 working
+   tree／index／任何 ref 的前提下確認（三個引數版本：`--merge-base <old-base-tip>
+   <own-verified-head> <new-base-tip>`），不是只看實際合併當下有沒有手動解過衝突。
+3. **上游帶進來的檔案，跟這個 branch 自己這一輪已驗證的檔案完全沒有重疊**——即「incoming
+   diff 的檔案」（`git diff --stat <old-base-tip> <new-base-tip>`，`old-base-tip` 是
+   own-verified-head 當初同步到的那個共用 base commit）與「這個 branch 自己這一輪的檔
+   案」（`git diff --stat <old-base-tip> <own-verified-head>`）交集為空。
+4. **上游帶進來的變更沒有觸碰驗證／CI／政策基礎設施本身**——`scripts/verify*`、
+   `.github/workflows/`、`scripts/ci_tier.py`、`scripts/pr_lifecycle.py`、
+   `scripts/validate-*-policy`、`scripts/test-issue-triage`、
+   `scripts/test-worktree-cleanup`、`scripts/test-pr-policy`、`policies/` 等。就算與這
+   個 branch 自己的檔案完全沒有重疊，上游一旦動到「驗證本身的定義」（例如新增或修改一
+   個 verify-stage、調整 CI tier 分類邏輯、放寬 PR policy），先前的本機全綠就不能直接
+   沿用其涵蓋範圍，仍要求本機重跑。
+
+四項同時成立時，PR owner／integrator 可以直接 push 這次重新合併的結果，不必再本機重跑
+`./scripts/verify-template.sh`，改為信任 hosted `verify` check 作為這次重新合併後的最
+終驗證。這**不代表**降低驗證涵蓋範圍：hosted CI 對這次合併結果執行的仍是同一支
+`scripts/verify-template.sh`／`scripts/verify-stage-*`（生成 repo 是同一支
+`scripts/verify`），差別只在「誰的環境跑」從本機換成乾淨、不受本機 worktree 並行負載或
+網路瞬斷（#466）影響的 hosted runner，而且只在合併沒有引入新風險（條件 2–4）時才適用。
+`own-verified-head` 本身不會因為用了這條例外 push 過就往前移——只有真的又在本機重跑過
+一次全綠，才把它往前移；因此同一張 PR 即使因為 base 連續前進被迫重新合併多次，也可以連
+續套用本節例外，只要每次都用同一個原始 own-verified-head 重新檢查最新的
+`new-base-tip`。
+
+以下情況**明確不符合**本節例外，一律仍要求本機重跑，不確定時也一律視為不符合：
+
+- 重新合併產生真實衝突（無論是否已手動解決）。
+- 上游變更觸及這個 branch 自己這一輪已驗證的任何檔案，即使只是同一檔案的不同行、不會
+  造成文字衝突。
+- 上游變更觸及上方條件 4 列出的驗證／CI／政策基礎設施。
+- 這個 branch 在上次本機全綠之後，又有新的自有 commit（不是單純的 base 重新合併）。
+- 這次 push 本身就是新的 full-tier 邊界起點（例如這是這張 PR 第一次落入 full 邊界，或
+  是另一條獨立的 hotfix／canary／manual 路徑），而不是同一張已驗證 PR 的後續重新合併。
+
+`scripts/check-base-only-remerge <own-verified-head> <new-base-tip> [<old-base-tip>]`
+提供上述四項判斷的可執行版本：省略 `<old-base-tip>` 時預設為
+`git merge-base <own-verified-head> <new-base-tip>`；符合條件印出 `QUALIFIES` 並以
+exit 0 結束，任何一項不符合印出 `REQUIRES-FULL-RERUN` 與具體原因並以非 0 結束。它只讀
+取 refs 並用 `git merge-tree` 做唯讀的三方合併模擬，從不修改 working tree、index 或任
+何 ref，也從不自己執行或略過驗證——只回答「這次重新合併符不符合條件」。
+`scripts/test-check-base-only-remerge` 對合格案例與三種不合格案例（檔案重疊、觸及驗證
+基礎設施、檔名不重疊但仍衝突）做回歸測試，掛在 `scripts/verify-template.sh` 的
+Regression tests 階段下（與 `test-issue-triage`／`test-worktree-cleanup`／
+`test-pr-policy` 同一組 self-test）。它不掛在 `scripts/verify-fast`：`verify-fast` 的
+governance／template／workflow／shell scope 自我測試集合與生成 repo 的
+`template/scripts/verify-fast.jinja` 必須逐項相等（`tests/test_journey03_ci.py::
+test_release_verification_contains_issue_pr_regressions` 對此做回歸測試），而
+`scripts/check-base-only-remerge` 只存在於中央模板 repo、不會下發到生成 repo（生成
+repo 的 full 入口是單一 `scripts/verify`，沒有本模板這種多階段重新合併場景），所以只加
+在 full 專屬的 Regression tests 階段，不加進 fast／docs 都會執行的 `verify-fast`。
+
+沒有先跑這支腳本，也可以用等價的手動程序判斷：對照 `git diff --stat <old-base-tip>
+<own-verified-head>` 與 `git diff --stat <old-base-tip> <new-base-tip>` 兩份檔案清單有
+沒有交集，人工確認合併乾淨（沒有留下 `<<<<<<<`／`=======`／`>>>>>>>` 標記，`git diff
+--check` 與 `scripts/check-update-conflicts` 兩者都乾淨），並確認上游變更沒有觸及上方
+條件 4 列出的路徑。
+
 ### `scripts/verify-template.sh` 階段盤點（#458）
 
 `scripts/verify-template.sh` 是一個薄聚合器：七個階段各自是 `scripts/verify-stage-*`
@@ -147,7 +224,7 @@ PASSED／FAILED／TOTAL 回報）做回歸測試，並同時掛在 `scripts/veri
 | Static assets and paired files | `scripts/verify-stage-static-assets` | decision site 可重現 render、workflow／shell 靜態分析、static-validation fixture 的正／反向覆蓋、root／template 配對檔案漂移 | fast 只在對應 scope 才跑其中個別項目（`docs` tier 跑 render 檢查；`workflow`／`shell` scope 才跑 lint）；full 一律跑全部四項，是唯一同時驗證全部四種風險的入口 |
 | Python environment | `scripts/verify-stage-python-environment` | `uv.lock` 與 `pyproject.toml` 一致、環境可從鎖定版本安裝 | fast 的 `uv sync --locked` 是同一份鎖定契約；`uv lock --check` 只在 full 額外執行 |
 | Python quality | `scripts/verify-stage-python-quality` | 格式、lint、靜態型別 | fast 對相同原始碼跑相同三個命令，兩者呼叫同一份工具鏈設定，無額外邏輯 |
-| Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`），且只在 governance／template／workflow／shell scope 才跑三個 shell 自我測試；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
+| Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／base-only-remerge／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`），且只在 governance／template／workflow／shell scope 才跑 Issue-triage／worktree-cleanup／PR-policy 三個 shell 自我測試；base-only-remerge 自我測試只在這個 full 專屬階段跑，不進 `verify-fast`（見上方 Base-only re-merge 例外一節）；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
 | Package smoke test | `scripts/verify-stage-package-smoke` | wheel 可建置、已發布入口可從建置產物執行 | fast 不跑這個階段；改用範圍較窄的 Copier smoke copy（見下方 Journey 03 的 PR 級別 render/smoke） |
 | GitHub Actions audit | `scripts/verify-stage-github-actions-audit` | workflow 權限與注入稽核（zizmor） | fast 不跑；workflow scope 的一般 PR 由 full 邊界（promotion／hotfix／merge queue／manual）覆蓋，不會被跳過 |
 
