@@ -2,34 +2,60 @@ name: Milestone lifecycle
 
 on:
   issues:
-    types: [closed, reopened, milestoned]
+    types: [opened, edited, closed, reopened, labeled, unlabeled, milestoned, demilestoned]
+  issue_comment:
+    types: [created, edited, deleted]
+  milestone:
+    types: [created, edited, opened, closed]
 
-permissions:
-  contents: read
-  issues: write
+permissions: {}
 
 concurrency:
-  group: milestone-${{ github.repository }}-${{ github.event.issue.milestone.number || 'none' }}
+  group: milestone-${{ github.repository }}-${{ github.event.issue.milestone.number || github.event.changes.milestone.from.number || github.event.milestone.number || 'none' }}
   cancel-in-progress: false
 
 jobs:
   sync:
     name: sync
-    if: ${{ github.event.issue.milestone.number != null }}
+    if: ${{ github.event.issue.milestone.number != null || github.event.milestone.number != null }}
+    permissions:
+      checks: write
+      contents: read
+      issues: write
+      pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          enable-cache: false
-      - name: Reconcile Milestone from current GitHub state
+      - name: Reconcile lifecycle and refresh PR checks
         env:
           GH_TOKEN: ${{ github.token }}
-          MILESTONE_NUMBER: ${{ github.event.issue.milestone.number }}
+          MILESTONE_NUMBER: ${{ github.event.issue.milestone.number || github.event.milestone.number }}
         run: >-
-          uv run --no-project python scripts/sync_milestone_state.py
+          python3 scripts/sync_milestone_state.py reconcile
+          --repo "$GITHUB_REPOSITORY"
+          --milestone "$MILESTONE_NUMBER"
+  sync-previous:
+    name: sync previous
+    if: ${{ github.event.changes.milestone.from.number != null && github.event.changes.milestone.from.number != github.event.issue.milestone.number }}
+    permissions:
+      checks: write
+      contents: read
+      issues: write
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Reconcile the previous Milestone
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MILESTONE_NUMBER: ${{ github.event.changes.milestone.from.number }}
+        run: >-
+          python3 scripts/sync_milestone_state.py reconcile
           --repo "$GITHUB_REPOSITORY"
           --milestone "$MILESTONE_NUMBER"

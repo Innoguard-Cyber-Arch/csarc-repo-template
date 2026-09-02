@@ -10,14 +10,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  issues: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   title:
     name: title
+    permissions:
+      checks: write
+      contents: read
+      issues: write
+      pull-requests: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -77,6 +79,32 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: ./scripts/validate-pr-policy
+      - name: Validate Milestone approval
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if python3 scripts/sync_milestone_state.py --help | grep -q check-pr; then
+            python3 scripts/sync_milestone_state.py check-pr \
+              --repo "$GITHUB_REPOSITORY" \
+              --pr "$PR_NUMBER"
+          else
+            echo "::notice::Milestone approval starts after the rollout PR reaches its base branch."
+          fi
+      - name: Revalidate queued Milestone approval
+        if: ${{ github.event_name == 'merge_group' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGE_GROUP_HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: |
+          if python3 scripts/sync_milestone_state.py --help | grep -q check-merge-group; then
+            python3 scripts/sync_milestone_state.py check-merge-group \
+              --repo "$GITHUB_REPOSITORY" \
+              --head-sha "$MERGE_GROUP_HEAD_SHA"
+          else
+            echo "::notice::Milestone approval starts after the rollout PR reaches its base branch."
+          fi
       - name: Require the proposed head to contain current main
         if: ${{ github.event_name == 'pull_request' }}
         env:

@@ -26,10 +26,31 @@ def test_milestone_lifecycle_is_paired_and_bounded() -> None:
     workflow = load_yaml(root_path)
     triggers = workflow.get("on", workflow.get(True))
     assert triggers == {
-        "issues": {"types": ["closed", "reopened", "milestoned"]}
+        "issues": {
+            "types": [
+                "opened",
+                "edited",
+                "closed",
+                "reopened",
+                "labeled",
+                "unlabeled",
+                "milestoned",
+                "demilestoned",
+            ]
+        },
+        "issue_comment": {"types": ["created", "edited", "deleted"]},
+        "milestone": {"types": ["created", "edited", "opened", "closed"]},
     }
+    assert workflow["permissions"] == {}
     assert "schedule" not in triggers
+    assert set(workflow["jobs"]) == {"sync", "sync-previous"}
     for job in workflow["jobs"].values():
+        assert job["permissions"] == {
+            "checks": "write",
+            "contents": "read",
+            "issues": "write",
+            "pull-requests": "read",
+        }
         assert job["timeout-minutes"] == 5
         assert "matrix" not in job.get("strategy", {})
 
@@ -41,3 +62,15 @@ def test_milestone_lifecycle_delegates_to_repository_script() -> None:
     )
 
     assert "scripts/sync_milestone_state.py" in source
+    assert " reconcile" in source
+
+
+def test_pr_policy_uses_the_same_milestone_validator() -> None:
+    """Keep the PR gate and comment refresh on one implementation."""
+    source = (REPO_ROOT / ".github/workflows/pr-policy.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "scripts/sync_milestone_state.py check-pr" in source
+    assert "scripts/sync_milestone_state.py check-merge-group" in source
+    assert "starts after the rollout PR reaches its base branch" in source

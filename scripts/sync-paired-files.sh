@@ -71,7 +71,8 @@ paired_files=(
   tests/test_delivery_sync.py
   tests/test_pr_lifecycle.py
   tests/test_promotion_gate.py
-  tests/test_milestone_lifecycle.py
+  tests/test_milestone_approval.py
+  tests/test_milestone_closure.py
   tests/test_release_policy.py
   tests/test_release_bundle.py
   tests/test_work_item_metadata.py
