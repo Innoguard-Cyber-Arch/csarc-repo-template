@@ -3346,21 +3346,31 @@ html[data-detail-level="simple"] .detail-panel {
   </header>
   <div class="markdown-body"><ul>
 <li><code>template/</code> is the delivered source; root retains the template repository&rsquo;s own GitHub governance and dogfood configuration.</li>
-<li><code>.csarc/config.yml</code> is each repository&rsquo;s only template configuration. Languages, branch strategy, and optional capabilities read from it. Generated repositories also keep Copier source and revision metadata in that file; root does not store self-referential metadata that would immediately become stale.</li>
-<li>The shared baseline and the Python, Rust, and TypeScript modules are verified independently. Selecting several languages combines modules without creating a combination-specific workflow.</li>
-<li>An existing repository is adopted and then updated from the next Copier revision, proving product content is preserved.</li>
+<li><code>.csarc/config.yml</code> is both Copier&rsquo;s update record and the repository&rsquo;s only template configuration. Languages, branch strategy, and optional capabilities read from it; later extensions add settings here instead of creating another configuration file.</li>
+<li>A new repository selects its languages and capabilities, then receives a baseline it can verify directly. Selecting several languages only combines their independent modules.</li>
+<li>A first adoption uses a pinned CLI outside the repository to produce an external change plan, then applies that same plan. A person reviews the first PR because the old default branch does not yet contain a trusted verifier.</li>
+<li>After that first merge, the default branch supplies the trusted PR policy and read-only CI verifies the candidate. Updates still begin with a preview; a conflict leaves the repository unchanged so it can be corrected and rerun.</li>
 <li>The optional update notice checks weekly and only creates or refreshes one Issue; it never modifies the repository automatically.</li>
 </ul>
 <details class="package-disclosure" data-content-key="copier-update">
   <summary><span class="tech-name">Copier &#43; root dogfood &#43; create/update regression</span></summary>
-  <div class="package-health"><a href="https://github.com/copier-org/copier">Copier</a> records source, language, and answers, then reapplies newer template revisions to an editable repository. Conflicts leave the repository unchanged; a person adjusts the affected files, reruns the update, and reviews the PR. GitHub Template copies only once, while PyScaffold would create a second update mechanism, so neither fits this requirement.</div>
+  <div class="package-health"><a href="https://github.com/copier-org/copier">Copier</a> records source, language, and answers, then reapplies newer template revisions to an editable repository. A person approves the first adoption. A later update conflict leaves the repository unchanged so the affected files can be corrected, rerun, and reviewed in a PR. GitHub Template copies only once, while PyScaffold would create a second update mechanism, so neither fits this requirement.</div>
 </details>
 <aside class="technical-detail" data-content-key="template-release-scope">
   <h3>Single source, runtime baselines, and the root-only boundary</h3>
   <p>Root <code>.csarc/config.yml</code> records the capabilities selected by the template repository itself. A generated repository additionally records Copier&rsquo;s source and revision and writes changes through <code>csarc update --data</code>. The template source does not invent <code>_src_path</code> or <code>_commit</code> values that point back to itself or immediately become stale. A derived template should add namespaced settings to the same YAML instead of duplicating CSARC fields.</p>
 <p><code>enable_template_update_notifications</code> generates <code>template-update.yml</code> and <code>check-template-update</code> only when selected. Public sources need no secret; private sources use a repository secret limited to read-only access to that template source.</p>
 <p><code>scripts/sync-paired-files.sh</code> makes root the source of paired files and verifies copied content and permissions with <code>--check</code>. <code>profiles/catalog.yaml</code> records runtime baselines and their evidence. Python and Node baselines advance only after their own thirty-day observation period.</p>
-<p><code>scripts/verify-template.sh</code> runs create/adopt/update fixtures only in the template repository and is never delivered downstream. Generated repositories use the smaller <code>scripts/verify</code> entry point.</p>
+<p><code>scripts/verify-template.sh</code> runs create/adopt/update fixtures only in the template repository and is never delivered downstream. Generated repositories use the smaller <code>scripts/verify</code> entry point. The first-adoption machine plan stays outside the target, so proposed files cannot rewrite their own evidence. After the first PR merges, its base supplies the trusted PR policy and read-only CI runs candidate verification.</p>
+</aside>
+<aside class="technical-detail" data-content-key="template-release-status">
+  <h3>Current automation boundary</h3>
+  <ul>
+<li><strong>Active:</strong> the CLI creates, adopts, or updates and verifies a candidate before writing the target; template full verification reruns all three paths.</li>
+<li><strong>Manual:</strong> a person approves the external plan, source, and first adoption PR.</li>
+<li><strong>Pending:</strong> the update-notice workflow and checker script are restored, and a Copier fixture test verifies they are generated only when selected; the checker&rsquo;s own update-detection and Issue-notification logic has no dedicated regression test, and no hosted scheduled run has been observed, so live-schedule execution is not yet claimed.</li>
+<li><strong>Retired:</strong> former reviewer assignment, remote governance, and delivery orchestration do not return with this page.</li>
+</ul>
 </aside>
 </div>
 </section>
@@ -4315,13 +4325,13 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
 </div>
 <div id="similar-tools-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="similar-tools-tab-template-upgrade" data-similar-tools-panel hidden>
-  <div class="similar-tools-legend"><span class="reference">Compares only how existing repositories receive updated templates, policies, or recipes and who resolves conflicts.</span><span class="capture-date">Stars captured｜2026-09-01</span></div>
+  <div class="similar-tools-legend"><span class="reference">Compares only how tools create repositories, first adopt existing repositories, apply later updates, and assign conflict ownership.</span><span class="capture-date">Stars captured｜2026-09-01</span></div>
   <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Template upgrades">
     <table class="similar-tools-matrix similar-tools-philosophy-matrix">
       <thead><tr><th scope="col">Functional boundary / concrete approach</th><th scope="col">Primary similar tools</th><th scope="col">Other ecosystem tools</th></tr></thead>
       <tbody>
         <tr>
-          <th scope="row"><strong>How definitions become repository state</strong><span>Compares direct file edits, generated files, and services that continuously reconcile remote state.<br><br><b>CSARC: </b>copier.yml, template/, and profiles/catalog.yaml define the generated baseline. scripts/sync-paired-files.sh synchronizes paired root/template files, while downstream repositories retain ownership of product files.</span></th>
+          <th scope="row"><strong>How definitions become repository state</strong><span>Compares direct file edits, generated files, and services that continuously reconcile remote state.<br><br><b>CSARC: </b>copier.yml, template/, and profiles/catalog.yaml define the generated baseline. One .csarc/config.yml stores repository choices, paired files are generated from root into template, and downstream repositories retain product-owned files.</span></th>
           <td><ul>
               <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">Components &#43; synth</a>：Typed components declare the desired project and synth reconciles the files.</span></li>
               <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：YAML entities and Software Templates declare portal components and creation workflows.</span></li>
@@ -4332,14 +4342,14 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
         </tr>
         <tr>
-          <th scope="row"><strong>How existing repositories receive updates</strong><span>Compares how updated templates, policies, or recipes enter an existing repository and who resolves conflicts.<br><br><b>CSARC: </b>Copier answers record the source and version. Existing projects review update diffs and conflicts in a PR and verify that product-owned paths were not overwritten.</span></th>
+          <th scope="row"><strong>How creation, adoption, and updates connect</strong><span>Compares how new repositories are created, existing repositories are first adopted, later revisions are applied, and conflicts are resolved.<br><br><b>CSARC: </b>Copier creates new repositories. A pinned CLI creates an external local plan for an existing repository and a person approves its first PR. After merge, the PR policy from the base and read-only CI validate later updates. An update candidate is fully verified before target files change, so failure or conflict leaves the target untouched.</span></th>
           <td><ul>
-              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen upgrade &#43; synth</a>：The project is regenerated after a library upgrade, and anti-tamper checks reject manual edits to managed files.</span></li>
-              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：The updater retains the upstream base and safely updates an existing repository through a three-way merge.</span></li>
+              <li><strong>projen</strong><span class="tool-comparison-detail"><a href="https://projen.io/docs/introduction/" target="_blank" rel="noreferrer">projen upgrade &#43; synth</a>：A project is defined in code. Creation and upgrades re-synthesize managed files, anti-tamper rejects manual edits, and conflicts are not resolved as per-file three-way merges.</span></li>
+              <li><strong>Repository Harness</strong><span class="tool-comparison-detail"><a href="https://github.com/hoangnb24/repository-harness#maintain-an-installation" target="_blank" rel="noreferrer">harness update</a>：It stores the exact upstream base and performs a three-way update. Overlapping conflicts leave managed files untouched and retain BASE, LOCAL, and UPSTREAM for a person to continue or abort.</span></li>
               <li><strong>Backstage</strong><span class="tool-comparison-detail"><a href="https://backstage.io/docs/features/software-templates/" target="_blank" rel="noreferrer">Software Templates</a>：It excels at creating new components; existing-repository migration still needs another tool.</span></li>
           </ul></td>
           <td><ul>
-              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：The recorded template source and answers let an existing repository receive template updates.</span></li>
+              <li><strong>Copier<span class="tool-meta"><span>v9.17.2 (2026-08-19)</span><span>★ 3,550</span></span></strong><span class="tool-comparison-detail"><a href="https://copier.readthedocs.io/en/stable/updating/" target="_blank" rel="noreferrer">Smart Update</a>：The answers file retains the source and prior answers. Update applies a three-way diff, leaving inline markers or .rej conflicts for a person. CSARC adds a candidate-first wrapper so the target is unchanged until verification passes.</span></li>
               <li><strong>OpenRewrite<span class="tool-meta"><span>v8.91.2 (2026-08-28)</span><span>★ 3,683</span></span></strong><span class="tool-comparison-detail"><a href="https://docs.openrewrite.org/running-recipes/getting-started" target="_blank" rel="noreferrer">Running Recipes</a>：Instead of overwriting files from a text template, it performs semantic migration across versions.</span></li>
           </ul></td>
         </tr>
@@ -4447,13 +4457,13 @@ html[data-detail-level="simple"] .detail-panel {
         <tbody>
           <tr>
             <th scope="row"><strong>Work PR (topic → main or dev/m*)</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in fast: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; fast 2–5 min</li><li><strong>04 Programming languages：</strong>Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in fast: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; source fast about 1 min; policy/template changes about 2 min</li><li><strong>04 Programming languages：</strong>Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–4 min (fast measured at 59–99 sec)</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in fast: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; fast 2–5 min</li><li><strong>04 Programming languages：</strong>Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li><li><strong>09 Template upgrades：</strong>First adoption uses 0 runner minutes (local &#43; manual); later-update checks are included in the 2–5 min fast run</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–7 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in fast: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within Verification / CI</li><li><strong>03 Verification / CI：</strong>docs &lt;1 min; source fast about 1 min; policy/template changes about 2 min</li><li><strong>04 Programming languages：</strong>Included in fast: Python 1–3 min; Rust 1–3 min; TypeScript 1–5 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li><li><strong>09 Template upgrades：</strong>Representative creation smoke included in fast: &lt;1 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 1–4 min (fast measured at 59–99 sec)</p></td>
           </tr>
           <tr>
             <th scope="row"><strong>Delivery PR (dev/m* or dev/i* → main)</strong></th>
-            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full 5–15 min</li><li><strong>04 Programming languages：</strong>Included in full: Python 3–6 min; Rust 2–5 min; TypeScript 3–7 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full verification measured at 5 min 30 sec</li><li><strong>04 Programming languages：</strong>Included in the full generated-module matrix: Python 1–3 min; Rust 1–3 min; TypeScript 1–4 min</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–8 min (complete job measured at 6 min 16 sec)</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full 5–15 min</li><li><strong>04 Programming languages：</strong>Included in full: Python 3–6 min; Rust 2–5 min; TypeScript 3–7 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li><li><strong>09 Template upgrades：</strong>Later-update checks are included in the 5–15 min full run</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full verification measured at 5 min 30 sec</li><li><strong>04 Programming languages：</strong>Included in the full generated-module matrix: Python 1–3 min; Rust 1–3 min; TypeScript 1–4 min</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li><li><strong>09 Template upgrades：</strong>Create/adopt/update regressions included in full: about 1–3 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–8 min (complete job measured at 6 min 16 sec)</p></td>
           </tr>
         </tbody>
       </table>
@@ -4881,22 +4891,73 @@ html[data-detail-level="simple"] .detail-panel {
   </div>
   <div id="testing-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-template-upgrade" data-similar-tools-panel hidden>
   <div class="similar-tools-testing-intro">
-    <strong>Journey 09 / Update notices</strong><span>An opted-in repository checks weekly or on demand. A newer version only creates or refreshes one Issue; it never applies or merges an update.</span>
+    <strong>Journey 09 / Create, adopt, and update</strong><span>The template repository verifies creation, first adoption, and later updates. Generated repositories keep only their own verification entrypoint and optional update notice. A person approves a first adoption whose base has no trusted verifier; PR-head programs are not executed.</span>
   </div>
-  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 09 / Update notices">
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 09 / Create, adopt, and update">
     <table class="similar-tools-matrix similar-tools-testing-matrix">
       <thead><tr><th scope="col">Test purpose</th><th scope="col">Every repository using the template</th><th scope="col">Additional repo-template checks</th></tr></thead>
       <tbody>
         <tr>
-          <th scope="row"><strong>Detect updates without applying them</strong><span>Read Copier&#39;s recorded source and version, then create or refresh one tracking Issue for human review and a separate update PR.</span></th>
+          <th scope="row"><strong>Create a new repository</strong><span>Generate the selected settings and language modules from a pinned template revision, then run the generated repository&#39;s own verification.</span></th>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Weekly schedule / manual run</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/check-template-update</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/template-update.yml</code>／<code>check</code><span>Trigger：Every Monday or manual dispatch; generated only when enabled · Timeout：10 min</span></li></ul></div>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div><span>After creation, the generated repository runs only its own verification; template-only tests are not delivered.</span>
             </li>
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Template release candidate</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_template_update_notifications.py</code></li></ul></div><span>Confirms that the workflow and checker are both generated when enabled, both absent when disabled, and never run in the template root.</span>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-fast</code></li></ul></div><span>Creates one representative repository for a smoke check without running the complete matrix on every Issue PR.</span>
+            </li>
+            <li>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_cli.py</code></li><li><code>scripts/verify-template.sh</code></li></ul></div><span>Reruns the complete creation matrix.</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>First adoption of an existing repository</strong><span>A pinned CLI outside the repository creates a machine plan and applies that same plan. A person reviews the source, diff, and local evidence in the first PR.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Manual gate: when the base has no trusted verifier, no PR-head program runs. Normal automation starts after merge.</span></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_cli.py</code></li></ul></div><span>Changes to adoption logic run the affected focused case locally; the large adoption matrix stays out of fast.</span>
+            </li>
+            <li>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_cli.py</code></li><li><code>scripts/verify-template.sh</code></li></ul></div><span>Fully reruns adoption, manual conflicts, and leaving the target untouched on failure.</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Later updates and conflicts</strong><span>Complete the Copier update and verification in a candidate first. Change the target only after success; failures and conflicts can be corrected and rerun.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Update Issue PRs after the first adoption has merged · Timeout：30 min</span></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>The PR policy from the base validates rules first, then read-only CI runs the candidate.</span></div>
+            </li>
+            <li>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：Release PRs containing a template update · Timeout：30 min</span></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><span>Uses CI with read-only contents permission; the Action only selects and calls repository-local verification.</span></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_cli.py</code></li></ul></div><span>Changes to update logic run the affected focused case locally; the large update matrix stays out of fast.</span>
+            </li>
+            <li>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_cli.py</code></li><li><code>scripts/verify-template.sh</code></li></ul></div><span>Fully verifies updates on the same repository, legacy conflicts, and atomic failure.</span>
+            </li>
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>Notify maintainers about a new template</strong><span>A notification only asks maintainers to evaluate a new revision; it never applies or merges one automatically.</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Work PR (topic → main or dev/m*)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/check-template-update</code></li></ul></div><div class="testing-kind"><b>CI/CD / GitHub Action</b><ul><li><code>.github/workflows/template-update.yml</code>／<code>check</code><span>Trigger：Every Monday or manual dispatch; generated only when enabled · Timeout：10 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>tests/test_template_update_notifications.py</code></li></ul></div><span>Confirms that the workflow and checker are both generated when enabled, both absent when disabled, and never run in the template root.</span>
             </li>
           </ul></td>
         </tr>

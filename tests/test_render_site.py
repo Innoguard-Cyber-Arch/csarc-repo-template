@@ -420,13 +420,13 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     ]
     duration_rows = data["testing"]["duration"]["rows"]
     assert [row["key"] for row in duration_rows] == ["issue", "release"]
-    assert all(len(row["shared"]["items"]) == 6 for row in duration_rows)
-    assert all(len(row["templateOnly"]["items"]) == 6 for row in duration_rows)
+    assert all(len(row["shared"]["items"]) == 7 for row in duration_rows)
+    assert all(len(row["templateOnly"]["items"]) == 7 for row in duration_rows)
     for row in duration_rows:
         for scope in ("shared", "templateOnly"):
             assert [
                 item["label"]["zh-tw"][:2] for item in row[scope]["items"]
-            ] == ["01", "02", "03", "04", "05", "06"]
+            ] == ["01", "02", "03", "04", "05", "06", "09"]
     assert duration_rows[0]["shared"]["total"]["zh-tw"] == "約 1\u20137 分鐘"
     assert duration_rows[0]["templateOnly"]["total"]["zh-tw"] == (
         "約 1\u20134 分鐘（fast 實測 59\u201399 秒）"  # noqa: RUF001
@@ -593,6 +593,31 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
             "issue": 400,
         },
     ]
+    template_rows = data["testing"]["groups"][7]["rows"]
+    assert data["testing"]["groups"][7]["journey"] == "09"
+    assert [row["purpose"]["zh-tw"]["title"] for row in template_rows] == [
+        "建立新 repo",
+        "首次導入既有 repo",
+        "後續更新與衝突",
+        "通知有新版公版",
+    ]
+    assert template_rows[1]["shared"]["milestone"]["automationNote"][
+        "zh-tw"
+    ].startswith("人工門檻")
+    assert "automation" not in template_rows[1]["shared"]["milestone"]
+    assert all(
+        "verify-template.sh" not in item.get("path", "")
+        for row in template_rows
+        for stage in row["shared"].values()
+        for item in stage.get("files", [])
+    )
+    update_notification = template_rows[3]["shared"]["milestone"]["automation"][
+        0
+    ]
+    assert update_notification["path"] == (
+        ".github/workflows/template-update.yml"
+    )
+    assert "pending" not in update_notification
     assert verification_rows[0]["shared"]["milestone"]["automation"] == [
         {
             "path": ".github/workflows/ci.yml",

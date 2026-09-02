@@ -199,6 +199,7 @@ class ResolvedPlan:
             "answers": dict(sorted(self.answers.items())),
             "mode": self.mode,
             "release_capabilities": self.capabilities,
+            "release_ownership": release_ownership(self.answers),
             "repository": self.repository.as_dict(),
             "schema_version": 1,
             "target": str(self.target),
@@ -417,12 +418,15 @@ class GhReleaseClient:
 
 def resolve_unreleased_revision(source: str, requested: str | None) -> Revision:
     """Resolve an explicitly allowed development-only revision."""
-    if requested is not None and FULL_SHA.fullmatch(requested):
-        return Revision(requested.lower(), requested.lower(), source)
     source_path = Path(source).expanduser()
-    if not source_path.exists():
+    if not source_path.is_dir():
         raise CliError(
-            "--allow-unreleased requires a full commit SHA or local Git source."
+            "--allow-unreleased template source is unavailable; use a local "
+            "Git repository."
+        )
+    if requested is not None and FULL_SHA.fullmatch(requested):
+        return Revision(
+            requested.lower(), git_commit(source_path, requested), source
         )
     label = requested or "latest-local-tag"
     reference = requested
@@ -1221,6 +1225,7 @@ def adoption_report_markdown(
         f"- Template: `{markdown_code(revision.label)}` / `{revision.sha}`",
         "- Release verification: "
         + ("verified immutable release" if revision.verified else "UNVERIFIED"),
+        f"- Release ownership: `{release_ownership(data)}`",
         f"- Settings: {report_settings(data)}",
         f"- Generated: `{generated_at}`",
         "",
@@ -1417,6 +1422,7 @@ def draw_adoption_pdf(
             "Verification",
             "verified immutable release" if revision.verified else "UNVERIFIED",
         ),
+        ("Release ownership", release_ownership(data)),
         ("Languages", data.get("languages", "unknown")),
         ("Project hook", hook_path),
         ("Hook configured", str(hook.get("configured") is True).lower()),
@@ -1602,6 +1608,7 @@ def adoption_binding(payload: dict[str, object]) -> dict[str, object]:
         "adoption": adoption,
         "files": payload.get("files"),
         "mode": payload.get("mode"),
+        "release_ownership": payload.get("release_ownership"),
         "repository": payload.get("repository"),
         "target": payload.get("target"),
         "template": payload.get("template"),
@@ -1861,6 +1868,7 @@ def print_plan(plan: ResolvedPlan) -> None:
             else "UNVERIFIED"
         )
     )
+    print(f"Release ownership: {release_ownership(plan.answers)}")
     print(f"Repository: {plan.repository.repository or '(none)'}")
     print(f"Repository owner: {plan.repository.owner or '(unknown)'}")
     print(f"Repository owner type: {plan.repository.owner_type or 'unknown'}")
@@ -3071,6 +3079,16 @@ def parse_languages(value: str) -> list[str]:
     return list(dict.fromkeys(parsed))
 
 
+def release_ownership(answers: Mapping[str, object]) -> str:
+    """Resolve release ownership from the persisted lifecycle setting."""
+    project_mode = answers.get("project_mode")
+    if project_mode == "new":
+        return "csarc-owned"
+    if project_mode == "existing":
+        return "product-owned"
+    raise CliError("project_mode must be new or existing.")
+
+
 def base_data(
     target: Path, mode: str, values: dict[str, str]
 ) -> dict[str, object]:
@@ -3970,6 +3988,13 @@ def update_plan_answers(  # noqa: C901
     """Resolve update answers and Copier overrides from repository facts."""
     result = dict(answers)
     update_data: dict[str, object] = dict(explicit_data)
+    release_ownership(answers)
+    requested_mode = explicit_data.get("project_mode")
+    if requested_mode is not None and requested_mode != answers["project_mode"]:
+        raise CliError(
+            "project_mode cannot change during update because it owns the "
+            "release boundary."
+        )
     saved_visibility = answers.get("project_visibility")
     update_data["project_visibility"] = repository.visibility
     if repository.repository is not None:

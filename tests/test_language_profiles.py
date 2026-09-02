@@ -152,7 +152,11 @@ def test_update_language_selection_stays_a_list() -> None:
     )
 
     answers, update_data = cli.update_plan_answers(
-        {"languages": ["python"], "project_visibility": "private"},
+        {
+            "languages": ["python"],
+            "project_mode": "new",
+            "project_visibility": "private",
+        },
         {"languages": '["typescript", "rust"]'},
         repository,
     )
