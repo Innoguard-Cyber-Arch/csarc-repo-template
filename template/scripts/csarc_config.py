@@ -25,7 +25,9 @@ def _scalar(value: str) -> object:
     if value.startswith(("'", '"', "[")):
         try:
             return ast.literal_eval(value)
-        except SyntaxError, ValueError:
+        except SyntaxError:
+            pass
+        except ValueError:
             pass
     try:
         return int(value)
