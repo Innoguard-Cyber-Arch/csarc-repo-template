@@ -4919,7 +4919,7 @@ html[data-detail-level="simple"] .detail-panel {
           <tr>
             <th scope="row"><strong>交付 PR（dev/m*／dev/i* → main）</strong></th>
             <td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>full 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>full 5–15 分鐘</li><li><strong>04 程式語言：</strong>full 已包含：Python 3–6 分鐘；Rust 2–5 分鐘；TypeScript 3–7 分鐘（只執行已選語言）</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>09 模板升級：</strong>後續更新驗證已包含在 full 的 5–15 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–17 分鐘</p></td>
-            <td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>full 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>full verification 實測 5 分 30 秒</li><li><strong>04 程式語言：</strong>full 已包含生成矩陣：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–4 分鐘</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>09 模板升級：</strong>full 已包含建立／導入／更新回歸：約 1–3 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–8 分鐘（完整 job 實測 6 分 16 秒）</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>full 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>full verification 實測 8 分 22 秒（獨占環境，#458）</li><li><strong>04 程式語言：</strong>full 已包含生成矩陣：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–4 分鐘</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>09 模板升級：</strong>full 已包含建立／導入／更新回歸：約 1–3 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–8 分鐘（完整 job 實測 6 分 16 秒）</p></td>
           </tr>
         </tbody>
       </table>
@@ -5054,7 +5054,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑。</span>
+              <strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑；每個 `scripts/verify-stage-*` 都能單獨重跑一個階段，`scripts/verify-template.sh` 仍是唯一必要的最終聚合入口。</span>
             </li>
           </ul></td>
         </tr>
