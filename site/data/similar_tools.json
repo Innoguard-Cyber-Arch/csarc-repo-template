@@ -697,15 +697,15 @@
           },
           {
             "purpose": {
-              "zh-tw": {"title": "治理漂移與 reviewer", "description": "本機 drift checker 已存在；排程檢查與自動輪派 reviewer 尚未啟用，不能算成 CI 已執行。"},
-              "en": {"title": "Governance drift and reviewers", "description": "The local drift checker exists. Scheduled checks and automatic reviewer assignment are not active and therefore do not count as CI execution."}
+              "zh-tw": {"title": "治理漂移與 reviewer", "description": "本機 drift checker、排程漂移檢查與自動輪派 reviewer 均已啟用；drift 排程只在生成 repo 開啟 enable_governance_drift_check 時產生並執行。"},
+              "en": {"title": "Governance drift and reviewers", "description": "The local drift checker, the scheduled drift check, and automatic reviewer assignment are all active; the scheduled drift Action is generated and runs only when a generated repository enables enable_governance_drift_check."}
             },
             "shared": {
               "milestone": {
-                "files": [{"path": "scripts/check-governance-drift"}],
+                "files": [{"path": "scripts/check-governance-drift"}, {"path": "scripts/request-reviewer"}],
                 "automation": [
-                  {"path": ".github/workflows/governance-drift.yml", "job": "check", "trigger": {"zh-tw": "排程或手動", "en": "Scheduled or manual"}, "timeout": "10 min", "pending": true, "issue": 450},
-                  {"path": ".github/workflows/governance-comment.yml", "job": "request", "trigger": {"zh-tw": "PR ready for review", "en": "PR ready for review"}, "timeout": "5 min", "pending": true, "issue": 450}
+                  {"path": ".github/workflows/governance-drift.yml", "job": "check", "trigger": {"zh-tw": "排程或手動", "en": "Scheduled or manual"}, "timeout": "10 min"},
+                  {"path": ".github/workflows/governance-comment.yml", "job": "request-reviewer", "trigger": {"zh-tw": "PR opened, reopened, or ready for review", "en": "PR opened, reopened, or ready for review"}, "timeout": "5 min"}
                 ]
               }
             },

@@ -2,6 +2,13 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cache_root="$("$repo_root/scripts/resolve-cache-root")"
+if [[ -n "${CSARC_CACHE_ROOT:-}" ]]; then
+  export UV_CACHE_DIR="$cache_root/uv"
+else
+  export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
+fi
+pnpm_store_dir="$cache_root/pnpm/store"
 cd "$repo_root"
 
 if [[ -n "${_CSARC_PROJECT_VERIFICATION_ACTIVE:-}" ]]; then
@@ -55,7 +62,7 @@ verify_typescript_module() {
   command -v pnpm >/dev/null
   test "$(node -p 'Number(process.versions.node.split(".")[0]) >= 24')" = "true"
   test "$(pnpm --version | cut -d. -f1)" = "11"
-  pnpm install --frozen-lockfile --ignore-scripts
+  pnpm install --store-dir "$pnpm_store_dir" --frozen-lockfile --ignore-scripts
   pnpm exec biome ci .
   pnpm exec tsc --noEmit
   pnpm exec vitest run --coverage
@@ -69,7 +76,8 @@ verify_typescript_module() {
   typescript_install_root="$(mktemp -d)"
   temporary_paths+=("$typescript_install_root")
   pnpm --dir "$typescript_install_root" add \
-    "$repo_root/$typescript_tarball" --ignore-scripts --silent
+    "$repo_root/$typescript_tarball" --store-dir "$pnpm_store_dir" \
+    --ignore-scripts --silent
   (
     cd "$typescript_install_root"
     node --input-type=module -e "import('{{ project_slug }}')"
