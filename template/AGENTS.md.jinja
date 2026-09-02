@@ -7,7 +7,7 @@
 - `AGENTS.md` is the single source for AI working instructions; `CLAUDE.md` only imports it.
 - One writable task uses one Git branch and one worktree so concurrent changes stay isolated.
 - Reusable validation lives in `scripts/` and tests. Run `./scripts/verify` for the final candidate; checked-in files under `.github/workflows/` are the only active GitHub Actions. See [CI/CD settings](docs/index.html#testing) for stage ownership.
-- [Journey 08](docs/index.html#governance) and the [`docs/ci-policy.md` quota fallback](docs/ci-policy.md#actions-額度-fallback) own review requirements, merge eligibility, Alpha self-merge, and quota fallback. Do not restate or invent exceptions here.
+- [Journey 08](docs/index.html#governance) and the [`docs/ci-policy.md` quota fallback](docs/ci-policy.md#failure-與-fallback) own review requirements, merge eligibility, Alpha self-merge, and quota fallback. Do not restate or invent exceptions here.
 - Copier owns template updates. Follow [Journey 09](docs/index.html#template-upgrade) for the update contract.
 
 ## Scope and sources of truth

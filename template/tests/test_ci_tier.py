@@ -38,6 +38,7 @@ scope_for = MODULE["scope_for"]
         ("template/.github/dependabot.yml.jinja", "dependency"),
         ("template/pnpm-workspace.yaml", "dependency"),
         ("policies/rulesets.json", "governance"),
+        ("policies/releases.json", "governance"),
         ("template/policies/rulesets.json.jinja", "governance"),
         ("unexpected.bin", "unknown"),
     ],

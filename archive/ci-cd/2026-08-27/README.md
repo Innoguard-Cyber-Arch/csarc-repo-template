@@ -32,3 +32,5 @@ milestone lifecycle (#400), CI and Zizmor, governance, CodeQL, and template
 updates. Their owner must either restore/rewrite the capability and remove its
 archive copy, or retire the copy after a scoped decision. This README is an
 index for that bounded follow-up, not permission to reuse the old YAML.
+The template update notice is active only as an opt-in generated workflow
+under `template/`; its archived copy has therefore been removed.

@@ -678,6 +678,38 @@
             }
           }
         ]
+      },
+      {
+        "key": "template-upgrade",
+        "journey": "09",
+        "labels": {
+          "zh-tw": {"title": "模板升級", "heading": "Journey 09／更新通知", "scope": "選用通知的 repo 每週或手動檢查一次；有新版只維護一張 Issue，不會自動修改或合併。"},
+          "en": {"title": "Template upgrades", "heading": "Journey 09 / Update notices", "scope": "An opted-in repository checks weekly or on demand. A newer version only creates or refreshes one Issue; it never applies or merges an update."}
+        },
+        "stageLabels": {
+          "zh-tw": {"milestone": "每週排程／手動執行", "release": "公版發版候選"},
+          "en": {"milestone": "Weekly schedule / manual run", "release": "Template release candidate"}
+        },
+        "rows": [
+          {
+            "purpose": {
+              "zh-tw": {"title": "發現新版但不自動套用", "description": "讀取 Copier 保存的來源與版本；有新版時建立或更新同一張追蹤 Issue，交由人審查後另開更新 PR。"},
+              "en": {"title": "Detect updates without applying them", "description": "Read Copier's recorded source and version, then create or refresh one tracking Issue for human review and a separate update PR."}
+            },
+            "shared": {
+              "milestone": {
+                "files": [{"path": "scripts/check-template-update"}],
+                "automation": [{"path": ".github/workflows/template-update.yml", "job": "check", "trigger": {"zh-tw": "每週一／手動執行；只有設定開啟才產生", "en": "Every Monday or manual dispatch; generated only when enabled"}, "timeout": "10 min"}]
+              }
+            },
+            "templateOnly": {
+              "release": {
+                "files": [{"path": "tests/test_template_update_notifications.py"}],
+                "note": {"zh-tw": "確認開啟時 workflow 與 checker 同時產生，關閉時兩者都不存在，而且 root 不會誤執行。", "en": "Confirms that the workflow and checker are both generated when enabled, both absent when disabled, and never run in the template root."}
+              }
+            }
+          }
+        ]
       }
     ]
   },

@@ -1800,15 +1800,30 @@ def print_group(title: str, paths: tuple[str, ...]) -> None:
 
 def print_capabilities(payload: dict[str, object]) -> None:
     """Print capability results from a resolved plan."""
-    raw_states = payload.get("capabilities")
+    for name in ("organization_policy", "repository_setting"):
+        value = payload.get(name)
+        state = (
+            value.get("state", "unknown")
+            if isinstance(value, dict)
+            else "unknown"
+        )
+        print(f"GitHub release planning {name}={state}")
+    raw_states = payload.get("token_permissions", payload.get("capabilities"))
     states = raw_states if isinstance(raw_states, dict) else {}
-    summary = ", ".join(
-        f"{name}={value.get('state', 'unknown')}"
+    token_summary = ", ".join(
+        f"token {name}={value.get('state', 'unknown')}"
         for name, value in states.items()
         if isinstance(value, dict)
     )
-    print(f"GitHub release planning snapshot: {summary or 'unknown'}")
-    print("Planning only: this template does not enable a release workflow.")
+    print(f"GitHub release planning permissions: {token_summary or 'unknown'}")
+    effective = payload.get("effective")
+    mode = (
+        effective.get("mode", payload.get("mode", "blocked"))
+        if isinstance(effective, dict)
+        else payload.get("mode", "blocked")
+    )
+    print(f"GitHub release planning effective={mode}")
+    print("Planning only: this check neither enables nor publishes a release.")
     raw_integrations = payload.get("integrations")
     integrations = (
         raw_integrations if isinstance(raw_integrations, dict) else {}
@@ -2974,18 +2989,22 @@ def capability_preflight(
     """Inspect release-related capabilities for planning only."""
     repository = target_repository(target)
     if repository is None or not script.is_file():
+        unknown = {"state": "unknown", "reason": "runtime check required"}
+        token_permissions = {
+            name: dict(unknown)
+            for name in ("actions_pull_requests", "contents", "release")
+        }
         payload: dict[str, object] = {
-            "mode": "verification-only",
+            "mode": "blocked",
             "reason": "GitHub origin or capability script is unavailable",
-            "capabilities": {
-                name: {"state": "unknown", "reason": "runtime check required"}
-                for name in (
-                    "actions_pull_requests",
-                    "contents",
-                    "release",
-                    "dispatch",
-                )
+            "organization_policy": dict(unknown),
+            "repository_setting": dict(unknown),
+            "token_permissions": token_permissions,
+            "effective": {
+                "mode": "blocked",
+                "reason": "GitHub origin or capability script is unavailable",
             },
+            "capabilities": token_permissions,
             "integrations": {
                 "renovate": {
                     "state": "fallback",
@@ -3019,8 +3038,15 @@ def capability_preflight(
             cast(dict[str, object], parsed)
             if result.returncode == 0 and isinstance(parsed, dict)
             else {
-                "mode": "verification-only",
+                "mode": "blocked",
                 "reason": "GitHub capability preflight was unavailable",
+                "organization_policy": {},
+                "repository_setting": {},
+                "token_permissions": {},
+                "effective": {
+                    "mode": "blocked",
+                    "reason": "GitHub capability preflight was unavailable",
+                },
                 "capabilities": {},
             }
         )
