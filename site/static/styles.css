@@ -987,6 +987,7 @@
     .config-trigger:hover, .config-trigger:focus-visible { outline: 3px solid var(--yellow); outline-offset: 1px; }
     .config-trigger-title { grid-area: title; font-size: 18px; font-weight: 750; line-height: 1.18; }
     .config-trigger-title::after { content: "："; }
+    :lang(en) .config-trigger-title::after { content: ": "; }
     .config-trigger-file {
       grid-area: file;
       min-width: 0;

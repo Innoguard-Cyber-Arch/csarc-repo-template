@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -175,7 +176,21 @@ def test_docs_reflect_restored_governance_actions() -> None:
         encoding="utf-8"
     )
     assert "The scheduled workflow is archived and does not run" not in widget
+    # Issue #472 moved this code sample out of legacy-components.js into
+    # site/data/config_examples.json (governance track, drift-schedule item),
+    # server-rendered by the config-guidance shortcode; the underlying claim
+    # this test protects (no stale "archived" wording) still applies there.
+    config_examples = json.loads(
+        (ROOT / "site/data/config_examples.json").read_text(encoding="utf-8")
+    )
+    drift_codes = " ".join(
+        item["code"]["zh-tw"] + item["code"]["en"]
+        for item in config_examples["tracks"]["governance"]["items"]
+    )
+    assert "The scheduled workflow is archived and does not run" not in (
+        drift_codes
+    )
     assert (
         "enable_governance_drift_check=true generates the daily workflow"
-        in widget
+        in drift_codes
     )
