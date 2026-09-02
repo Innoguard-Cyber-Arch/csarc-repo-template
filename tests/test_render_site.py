@@ -267,6 +267,31 @@ def test_generated_site_uses_project_owned_markdown() -> None:
     assert not (root / "template/docs/site-content.js.jinja").exists()
 
 
+def test_readme_describes_markdown_site_source() -> None:
+    """README.md and template/README.md.jinja must name the current,
+    maintained site source (docs/site-content.md), not the retired
+    docs/site-content.js. Any remaining docs/site-content.js mention in the
+    downstream-facing template README must be a legacy-migration hint,
+    matching docs/adr/portable-decision-site.md.
+    """
+    root = Path(__file__).parents[1]
+    root_readme = (root / "README.md").read_text(encoding="utf-8")
+    template_readme = (root / "template/README.md.jinja").read_text(
+        encoding="utf-8"
+    )
+
+    assert "docs/site-content.md" in root_readme
+    assert "docs/site-content.md" in template_readme
+    assert "site-content.js" not in root_readme
+
+    for line in template_readme.splitlines():
+        if "site-content.js" in line:
+            assert "遷移" in line, (
+                "docs/site-content.js may only appear in "
+                "template/README.md.jinja as a legacy-migration hint"
+            )
+
+
 def test_render_rejects_incomplete_markdown_shell(tmp_path: Path) -> None:
     source = tmp_path / "index.html"
     source.write_text("<!-- CSARC_SITE_CONTENT -->", encoding="utf-8")
