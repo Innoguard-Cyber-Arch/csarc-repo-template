@@ -4463,7 +4463,7 @@ html[data-detail-level="simple"] .detail-panel {
           <tr>
             <th scope="row"><strong>Delivery PR (dev/m* or dev/i* → main)</strong></th>
             <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full 5–15 min</li><li><strong>04 Programming languages：</strong>Included in full: Python 3–6 min; Rust 2–5 min; TypeScript 3–7 min (selected modules only)</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li><li><strong>09 Template upgrades：</strong>Later-update checks are included in the 5–15 min full run</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–17 min</p></td>
-            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full verification measured at 5 min 30 sec</li><li><strong>04 Programming languages：</strong>Included in the full generated-module matrix: Python 1–3 min; Rust 1–3 min; TypeScript 1–4 min</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li><li><strong>09 Template upgrades：</strong>Create/adopt/update regressions included in full: about 1–3 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–8 min (complete job measured at 6 min 16 sec)</p></td>
+            <td><ul class="testing-duration-list"><li><strong>01 Work definition：</strong>Included in full: &lt;1 min</li><li><strong>02 AI rules：</strong>Under 1 min within full</li><li><strong>03 Verification / CI：</strong>full verification measured at 8 min 22 sec (uncontended environment, #458)</li><li><strong>04 Programming languages：</strong>Included in the full generated-module matrix: Python 1–3 min; Rust 1–3 min; TypeScript 1–4 min</li><li><strong>05 Dependency security：</strong>Typically under 1 min</li><li><strong>06 PR / merge：</strong>About 1–2 min</li><li><strong>09 Template upgrades：</strong>Create/adopt/update regressions included in full: about 1–3 min</li></ul><p class="testing-duration-total"><strong>Runner total:</strong>About 6–8 min (complete job measured at 6 min 16 sec)</p></td>
           </tr>
         </tbody>
       </table>
@@ -4598,7 +4598,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul></td>
           <td><ul class="testing-stage-list">
             <li>
-              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Additionally verifies the template, generated output, and existing-repository adoption and update paths.</span>
+              <strong>Delivery PR (dev/m* or dev/i* → main)</strong><div class="testing-kind"><b>Test file / entrypoint</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>Additionally verifies the template, generated output, and existing-repository adoption and update paths; each scripts/verify-stage-* script can rerun one stage on its own, while scripts/verify-template.sh remains the one required final aggregate entry point.</span>
             </li>
           </ul></td>
         </tr>
