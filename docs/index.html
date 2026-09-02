@@ -2498,7 +2498,7 @@ html[data-detail-level="simple"] .detail-panel {
 <div class="legacy-content">
       <header>
         <h2>模板會把<span class="accent">必要設定放到正確位置</span></h2>
-        <p class="subtitle">共用規則與 8 條 GitHub Actions（7 條現行、1 條候選）每個新 repo 都有；語言工具與產品目錄才依未選語言、Python、Rust、TypeScript 或多語言模式產生。</p>
+        <p class="subtitle">共用規則與 9 條 GitHub Actions（其中 1 條候選）每個新 repo 都有；治理漂移排程依 <code>enable_governance_drift_check</code> 產生，語言工具與產品目錄則依未選語言、Python、Rust、TypeScript 或多語言模式產生。</p>
       </header>
       <div class="repo-map-window" aria-label="模板產生檔案的視覺對照">
         <div class="repo-map-toolbar">
@@ -2514,7 +2514,7 @@ html[data-detail-level="simple"] .detail-panel {
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">CODEOWNERS＋REVIEWERS</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">指定 owner 與 reviewer 候選</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">ISSUE_TEMPLATE/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">工作單欄位／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-1">pull_request_template.md</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">PR 必填內容</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04／05／06／07</span><span class="purpose-copy">7 條 Active＋1 條 Candidate</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04／05／06／07／08</span><span class="purpose-copy">9 條共用流程（其中 1 條候選）＋1 條選配排程</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">ci.yml</span><span class="repo-tree-purpose"><span class="journey-code">03</span><span class="purpose-copy">執行已宣告模組</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">issue-triage.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">檢查並整理工作單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">milestone-lifecycle.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">同步交付批次狀態</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
@@ -2522,6 +2522,8 @@ html[data-detail-level="simple"] .detail-panel {
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">pr-policy.yml</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">Issue／分支／PR 規則</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">release.yml</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">候選版本 PR 與 GitHub Release</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">spec-to-issue.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">規格自動開單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">governance-comment.yml</span><span class="repo-tree-purpose"><span class="journey-code">08</span><span class="purpose-copy">輪派一位非作者 reviewer</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
+          <div class="repo-tree-row"><span class="repo-tree-path depth-2">governance-drift.yml</span><span class="repo-tree-purpose"><span class="journey-code">08</span><span class="purpose-copy">選配的每日治理漂移檢查</span></span><span class="scope-badge mixed">依設定</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row"><span class="repo-tree-path depth-2">work-item-closure.yml</span><span class="repo-tree-purpose"><span class="journey-code">06</span><span class="purpose-copy">里程碑工作合併後關單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
           <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">docs/specs/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">功能規格／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge project">專案持有</span></div>
           <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">docs/＋site/</span><span class="repo-tree-purpose"><span class="journey-code">09</span><span class="purpose-copy">專案說明、決策與內部網站</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
@@ -2558,7 +2560,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>7 條 active 流程處理工作單、里程碑、規格、PR、驗證與漏洞；另有 1 條候選發版流程</td>
+					<td>9 條流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單與候選發版，加上選配的治理漂移排程</td>
 					<td>公版主導</td>
 			</tr>
 			<tr>
@@ -3533,17 +3535,17 @@ html[data-detail-level="simple"] .detail-panel {
       </header>
       <p class="context-line"><strong>目前實測｜</strong><code>Innoguard-Cyber-Arch</code> API 回報 Free＋private；因此 <code>main</code> 現在確實沒有強制保護，CI 紅燈仍可能被有權限者繞過。</p>
       <div class="plan-grid">
-        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保留審查設定，強制能力降級：</strong><code>.github/REVIEWERS</code> 保存 reviewer 名單；private repo 只把期望 Ruleset 保留在 <code>policies/rulesets.json</code>，因為 REST 與 GraphQL 建立 API 都會拒絕。check 標示 DEGRADED。</p><ul><li>目前由人工指定 reviewer；自動輪派 Action 仍在封存區</li><li>沒有 team request 或 merge gate，審查紀錄不能取代強制門禁</li></ul></article>
+        <article class="plan-card current"><h3>Free <span class="plan-state">目前</span></h3><p><strong>保留審查設定，強制能力降級：</strong><code>.github/REVIEWERS</code> 保存 reviewer 名單；private repo 只把期望 Ruleset 保留在 <code>policies/rulesets.json</code>，因為 REST 與 GraphQL 建立 API 都會拒絕。check 標示 DEGRADED。</p><ul><li>Action 會排除 PR 作者並輪派一位個別 reviewer</li><li>這不是 team request 或 merge gate，審查仍需由人完成</li></ul></article>
         <article class="plan-card team"><h3>Team <span class="plan-state">最低建議</span></h3><p><strong>再加上：</strong>private repo Ruleset、protected branches、強制核准、CODEOWNER 與必要檢查。</p><ul><li>同一個 CODEOWNERS team 必須存在並有 repo write access</li><li>公版即可套用現有 repo Ruleset</li></ul></article>
         <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
       </div>
-      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性、repository teams 與 Ruleset API；team 不存在、不可見或沒有 repo write access 時直接停止，不能再被 Free private 的降級路徑掩蓋。導入時可設定一到多位 reviewers；目前由人工指定，自動輪派 Action 尚未恢復。Free private 不支援 team request，也無法強制核准。Web UI 可供管理員人工預建 disabled Ruleset，但公開 REST／GraphQL API 無法自動建立。腳本本身不會改可見性。依序執行 <code>plan</code>、<code>apply</code>、<code>check</code>；可修正差異 fail-closed，不支援的 Ruleset 或受限制的管理欄位回報具體 DEGRADED。完整管理欄位驗證應由管理員在可信任 checkout 使用 Administration read 憑證，不把該 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更都需組織 owner 另案核准；模板不會自行執行。</span></aside>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用支援的設定：</strong><code>scripts/apply-repository-settings.sh apply</code></li><li><strong>比對全部可觀察設定：</strong><code>scripts/apply-repository-settings.sh check</code> 比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset</li><li><strong>檢查治理漂移：</strong><code>scripts/check-governance-drift</code> 可在本機執行；原本的 daily Action 位於 <code>archive/ci-cd/</code>，目前不會排程或自動開 Issue</li></ul></aside>
+      <aside class="selection-note"><strong>部署原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性、repository teams 與 Ruleset API；team 不存在、不可見或沒有 repo write access 時直接停止，不能再被 Free private 的降級路徑掩蓋。導入時可設定一到多位 reviewers；Action 只從 base branch 讀取名單，排除作者後提出一位個別 review request。Free private 不支援 team request，也無法強制核准，因此這項自動化不等於 merge gate。Web UI 可供管理員人工預建 disabled Ruleset，但公開 REST／GraphQL API 無法自動建立。腳本本身不會改可見性。依序執行 <code>plan</code>、<code>apply</code>、<code>check</code>；可修正差異 fail-closed，不支援的 Ruleset 或受限制的管理欄位回報具體 DEGRADED。完整管理欄位驗證應由管理員在可信任 checkout 使用 Administration read 憑證，不把該 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更都需組織 owner 另案核准；模板不會自行執行。</span></aside>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用支援的設定：</strong><code>scripts/apply-repository-settings.sh apply</code></li><li><strong>比對全部可觀察設定：</strong><code>scripts/apply-repository-settings.sh check</code> 比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset</li><li><strong>指定 reviewer：</strong><code>reviewers</code> 產生 <code>.github/REVIEWERS</code>；Action 呼叫 <code>scripts/request-reviewer</code></li><li><strong>檢查治理漂移：</strong><code>enable_governance_drift_check</code> 開啟時，生成 repo 每日與手動呼叫 <code>scripts/check-governance-drift</code>；本模板 source repo 不啟用排程</li></ul></aside>
       <table class="decision-register" aria-label="GitHub 方案與 apply／check 行為對照">
         <thead><tr><th>GitHub 方案與可見性</th><th><code>apply</code> 結果</th><th><code>check</code>／PR／CI/CD 行為</th></tr></thead>
         <tbody>
           <tr><td>Free＋public</td><td>透過 REST 套用並啟用 Ruleset</td><td>驗證 <code>main</code> 的有效規則；缺少或不符即失敗</td></tr>
-          <tr><td>Free organization＋private</td><td>套用基本設定，並把期望 Ruleset 保留在 <code>policies/rulesets.json</code>；公開 API 無法建立 Ruleset</td><td>標示 <code>DEGRADED</code>，由人工指定 reviewer；team request、紅燈或未核准都不能成為 merge gate</td></tr>
+          <tr><td>Free organization＋private</td><td>套用基本設定，並把期望 Ruleset 保留在 <code>policies/rulesets.json</code>；公開 API 無法建立 Ruleset</td><td>標示 <code>DEGRADED</code>，Action 提出一位個別 review request；team request、紅燈或未核准都不能成為 merge gate</td></tr>
           <tr><td>Pro 個人帳號＋private</td><td>套用並啟用 Ruleset</td><td>與 Free public 相同</td></tr>
           <tr><td>Team／Enterprise organization＋private</td><td>確認 CODEOWNERS team 後套用並啟用 Ruleset</td><td>必要審查、CODEOWNER 與 status checks 成為 merge gate；不符政策時 fail-closed</td></tr>
         </tbody>
@@ -3569,7 +3571,7 @@ html[data-detail-level="simple"] .detail-panel {
 			<tr>
 					<td>Free organization＋private</td>
 					<td>套基本設定，期望 Ruleset 留在 <code>policies/rulesets.json</code></td>
-					<td>標示 <code>DEGRADED</code>，人工指定 reviewer；無 merge gate</td>
+					<td>標示 <code>DEGRADED</code>，自動請一位同事 review；無 merge gate</td>
 			</tr>
 			<tr>
 					<td>Pro 個人＋private</td>
@@ -3585,7 +3587,7 @@ html[data-detail-level="simple"] .detail-panel {
 </table>
 <aside class="technical-detail" data-content-key="governance-observation">
   <h3>實際操作與觀察限制</h3>
-  <p>依序執行 <code>scripts/apply-repository-settings.sh plan</code>、<code>apply</code>、<code>check</code>。<code>check</code> 比對 CODEOWNERS、repository、Actions、政策 labels 與有效 Ruleset；<code>scripts/check-governance-drift</code> 可在本機執行，但原本的每日 Action 仍在 <code>archive/ci-cd/</code>，不會排程或自動開 Issue。</p>
+  <p>依序執行 <code>scripts/apply-repository-settings.sh plan</code>、<code>apply</code>、<code>check</code>。<code>check</code> 比對 CODEOWNERS、repository、Actions、政策 labels 與有效 Ruleset。所有 repo 都從 base branch 的 <code>.github/REVIEWERS</code> 排除作者後請一位同事 review；這不是 merge gate。<code>enable_governance_drift_check</code> 開啟時，生成 repo 每日重跑本機可用的 <code>scripts/check-governance-drift</code>，可修正偏離會開立或更新一張追蹤 Issue；關閉時不產生兩個檔案。本模板 source repo 只保留程式供下發與本機驗證，不另跑每日排程。</p>
 <p>每次檢查都是快照：兩次執行之間曾變更又復原的事件仍需 GitHub audit log 或組織層監控。完整管理欄位應由管理員在可信任 checkout 使用 Administration read 憑證，不把 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更需組織 owner 另案核准。</p>
 </aside>
 </div>
@@ -4021,7 +4023,7 @@ html[data-detail-level="simple"] .detail-panel {
           <tr><td>p.3</td><td>SDLC 核心階段</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>把計畫到監控集中在 GitHub</summary><div class="bridge-popover"><p><strong>五月版｜</strong>計畫、開發、測試、部署、監控的核心順序保留。</p><p><strong>本次判斷｜</strong>工作單、模板、合併申請、自動檢查與交付設定都放在 GitHub，方便持續維護。</p><p><strong>落地方式｜</strong>不是每個專案都要部署與監控，但都先遵守工作規劃、變更審查與驗證規則。</p></div></details></td></tr>
           <tr><td>p.4</td><td>Jira Ticket</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>每次改動先有最小 GitHub Issue</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本用 Jira 的 Epic → Story → Task 分工；本次只保留必要的 GitHub Issue、里程碑與 spec。</p><p><strong>本次判斷｜</strong>一次性工作選一種類型、寫問題與完成條件；複雜需求先開規劃 Issue，再由核准 spec 建立實作 Issue。新增範圍另開 Issue。</p><p><strong>落地方式｜</strong><code>work-item.yml</code> 有類型、問題與完成條件兩個必填欄位，另加一個選填補充；<code>issue-triage.yml</code> 指派開單者；PR workflow 核對標籤、分支與同號未結案 Issue。</p></div></details></td></tr>
           <tr><td>p.5</td><td>版本控制</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>delivery branch 是 CI 整合邊界，不假裝成實體環境</summary><div class="bridge-popover"><p><strong>五月版｜</strong>保留平行分支，但不要求每案具備實體 DEV 環境。</p><p><strong>本次判斷｜</strong>獨立工作從最新 <code>main</code> 建立並直接回 <code>main</code>；只有需共同驗收的里程碑使用 <code>dev/m*</code>，獨立 canary 才用暫時 <code>dev/i*</code>，hotfix 也直接修正 main。</p><p><strong>落地方式｜</strong>一般 PR 依變更風險執行必要檢查，里程碑／canary 交付與 hotfix 執行完整檢查；只在 final delivery 或明列 dependency 時同步最新 main。</p></div></details></td></tr>
-          <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>Issue、編號分支與 PR 形成固定鏈</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是保護分支的唯一入口，方向保留；三層審查改成依風險增加審查者。</p><p><strong>本次判斷｜</strong>一般 PR 要有同編號 Issue、CI 與一位同事；高風險架構變更另附決策紀錄。</p><p><strong>落地方式｜</strong>分支固定 <code>type/123-short-slug</code>，PR 內文固定 <code>Closes #123</code>；Free private 目前由人工指定 reviewer，自動輪派 Action 尚未恢復；GitHub Team 以上才支援 team request 與強制核准。</p></div></details></td></tr>
+          <tr><td>p.6</td><td>PR 與審查</td><td><span class="bridge-status adjust">強化</span></td><td><details class="bridge-detail drop-down"><summary>Issue、編號分支與 PR 形成固定鏈</summary><div class="bridge-popover"><p><strong>五月版｜</strong>PR 是保護分支的唯一入口，方向保留；三層審查改成依風險增加審查者。</p><p><strong>本次判斷｜</strong>一般 PR 要有同編號 Issue、CI 與一位同事；高風險架構變更另附決策紀錄。</p><p><strong>落地方式｜</strong>分支固定 <code>type/123-short-slug</code>，PR 內文固定 <code>Closes #123</code>；Action 會輪派一位非作者 reviewer，但 Free private 仍無法把核准強制成 merge gate。</p></div></details></td></tr>
           <tr><td>p.7</td><td>CI 自動化管線</td><td><span class="bridge-status keep">保留</span></td><td><details class="bridge-detail drop-down"><summary>本機與 CI 共用入口，依風險分層執行</summary><div class="bridge-popover"><p><strong>五月版｜</strong>自動觸發、測試、格式與靜態錯誤檢查全部保留。</p><p><strong>本次判斷｜</strong>一般 Issue PR 跑 fast；promotion、hotfix、merge queue 與未知高風險路徑跑 full；OSV、Zizmor 與 remote governance 另依 scope／schedule 執行。</p><p><strong>落地方式｜</strong>固定 <code>verify</code> aggregate 避免 skipped workflow 留下 Pending；delivery sync 併入 <code>title</code> policy，候選 full run 不取消，普通 PR 新 commit 則取消舊 run。Ruleset 可用時強制 <code>title</code>、<code>verify</code> 與 <code>promotion</code>。</p></div></details></td></tr>
           <tr><td>p.8</td><td>CD 專案管理</td><td><span class="bridge-status adjust">調整</span></td><td><details class="bridge-detail drop-down"><summary>先完成 repository delivery，再審查版本與發版</summary><div class="bridge-popover"><p><strong>五月版｜</strong>原本預設 DEV → STAGING → Canary → PROD；本次不要求每個專案照搬四層。</p><p><strong>本次判斷｜</strong>里程碑、獨立工作與 hotfix 合併到 <code>main</code> 都先算 repository delivery；需要新版本時再建立一張可審查版本 PR。</p><p><strong>落地方式｜</strong>Release Please 同步版本與 CHANGELOG；版本 PR 合併後，單一 workflow 建立 checksum、SBOM、成品與 immutable GitHub Release。Attestation 與消費端門禁仍是選配。</p></div></details></td></tr>
           <tr><td>p.9</td><td>可觀測性</td><td><span class="bridge-status defer">第二階段</span></td><td><details class="bridge-detail"><summary>只有上線服務才做監控和值班</summary><div class="bridge-popover"><p><strong>五月版｜</strong>操作手冊、日誌、指標、追蹤、復原與值班流程保留為第二階段。</p><p><strong>本次判斷｜</strong>只對持續運行的服務導入；先依使用的雲端、環境與負責人選工具，不先綁定 Datadog 或 PagerDuty。</p><p><strong>落地方式｜</strong>測試資料另外管理成不含個資、可建立、可清除的範例，不把測資管理混成線上監控。</p></div></details></td></tr>
@@ -4896,7 +4898,8 @@ html[data-detail-level="simple"] .detail-panel {
     <button id="testing-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>依賴安全</button>
     <button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR／合併</button>
     <button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="7"><small>Journey 07</small>版本／交付</button>
-    <button id="testing-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-template-upgrade" data-similar-tools-tab="8"><small>Journey 09</small>模板升級</button>
+    <button id="testing-tab-governance" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-governance" data-similar-tools-tab="8"><small>Journey 08</small>規則治理</button>
+    <button id="testing-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-template-upgrade" data-similar-tools-tab="9"><small>Journey 09</small>模板升級</button>
   </div>
   <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
     <div class="similar-tools-testing-intro">
@@ -5300,6 +5303,41 @@ html[data-detail-level="simple"] .detail-panel {
           <td><ul class="testing-stage-list">
             <li>
               <strong>交付後</strong><span>使用相同結案程式；repo-template 不維護另一套里程碑規則。</span>
+            </li>
+          </ul></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  </div>
+  <div id="testing-panel-governance" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-governance" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>Journey 08／審查與設定漂移</strong><span>每張 PR 只自動請一位非作者 reviewer；選配排程重用本機檢查，不能把通知誤稱為合併門禁。</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 08／審查與設定漂移">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead>
+      <tbody>
+        <tr>
+          <th scope="row"><strong>輪派審查人</strong><span>只讀取 base branch 的 REVIEWERS，排除 PR 作者後提出一位個別 review request。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>每張非 draft PR</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/request-reviewer</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/governance-comment.yml</code>／<code>request-reviewer</code><span>Trigger：PR 開啟、重開或轉為 ready · Timeout：5 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+          </ul></td>
+        </tr>
+        <tr>
+          <th scope="row"><strong>偵測治理設定漂移</strong><span>比較 repo 現況與政策；可修正差異會更新一張 Issue，方案限制只留下 DEGRADED 證據。</span></th>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>每日／手動維運</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/check-governance-drift</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/governance-drift.yml</code>／<code>check</code><span>Trigger：enable_governance_drift_check 開啟後，每日或手動 · Timeout：5 min</span></li></ul></div>
+            </li>
+          </ul></td>
+          <td><ul class="testing-stage-list">
+            <li>
+              <strong>每日／手動維運</strong><span>source repo 保留同一支程式供下發與本機驗證，但目前不啟用自己的排程。</span>
             </li>
           </ul></td>
         </tr>
@@ -6434,8 +6472,8 @@ gh api "repos/$repo/rulesets"
         {
           title: '方案決定 Ruleset 是否成為真正門禁',
           goal: 'Free private 先在 repo 保存相同政策；public、Pro、Team 或 Enterprise 可強制 PR、一位核准、CODEOWNER 與必要檢查。Enterprise 的組織規則仍另審。',
-          summary: '所有方案都先用 repository teams API 驗證 PR 內設定的 team 與 write access；Free private 的 REVIEWERS 名單仍保留，但目前由人工指定 reviewer，自動輪派 Action 尚未恢復。Ruleset 只保留 STAGED／MISSING 與 DEGRADED 紀錄。',
-          file: 'policies/rulesets.json＋.github/CODEOWNERS＋.github/REVIEWERS',
+          summary: '所有方案都先用 repository teams API 驗證 PR 內設定的 team 與 write access；Action 從 base branch 的 REVIEWERS 排除作者後輪派一位個別 reviewer。Free private 仍沒有 team request 或 merge gate。Ruleset 只保留 STAGED／MISSING 與 DEGRADED 紀錄。',
+          file: 'policies/rulesets.json＋.github/CODEOWNERS＋.github/REVIEWERS＋governance-comment.yml',
           code: `# The same policy is stored in every repository and enforced when supported.
 required reviews: 1
 require CODEOWNER review: true
@@ -6448,13 +6486,15 @@ required checks:
 # Enterprise organization controls are report-only here.`
         },
         {
-          title: '治理漂移檢查保留本機入口，排程尚未恢復',
-          goal: '先用同一支腳本檢查設定差異；需要持續監測時，再逐條恢復觸發、權限、timeout 與 Issue 通知。',
-          summary: '`scripts/check-governance-drift` 會呼叫 `apply-repository-settings.sh check`，可在可信任的本機 checkout 執行。原本的 `governance-drift.yml` 位於 `archive/ci-cd/`，目前不會每日執行或自動開立追蹤 Issue。',
-          file: 'scripts/check-governance-drift＋archive/ci-cd/2026-08-27/root-workflows/governance-drift.yml',
+          title: '治理漂移排程隨生成 repo 選配開啟，本模板 source 不自跑',
+          goal: '本機與生成 repo 都重複使用同一支腳本；需要持續監測時，Copier 選項開啟每日排程、least-privilege 權限、timeout 與 Issue 通知，不必個別重建。',
+          summary: '`scripts/check-governance-drift` 會呼叫 `apply-repository-settings.sh check`，可在可信任的本機 checkout 執行。生成 repo 開啟 enable_governance_drift_check 時，薄 Action 每日呼叫同一支程式並開立或更新一張追蹤 Issue；本模板 source repo 不排程。',
+          file: 'scripts/check-governance-drift＋template/.github/workflows/governance-drift.yml',
           code: `./scripts/check-governance-drift
 
-# The scheduled workflow is archived and does not run.`
+# enable_governance_drift_check=true generates the daily workflow and
+# script together; false generates neither. This template's own source
+# repo keeps the script for local verification but does not schedule it.`
         }
       ],
       template: [

@@ -9,7 +9,6 @@ permissions:
   actions: read
   contents: read
   issues: write
-  pull-requests: read
 
 concurrency:
   group: governance-drift-${{ github.repository }}
@@ -19,12 +18,12 @@ jobs:
   check:
     name: check
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Check for repository governance drift
+      - name: Check repository governance
         env:
           GH_TOKEN: ${{ github.token }}
         run: ./scripts/check-governance-drift

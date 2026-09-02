@@ -103,7 +103,7 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 
 `./scripts/verify` 是本機與 CI 共用的完整入口。現行 `.github/workflows/ci.yml` 只有一個 `verify` job，依變更選擇 docs／fast／full，再呼叫 repo-local 程式；一般 PR 不會為 fast、full、安全與 aggregate 各啟動一個 runner。promotion、hotfix、release recovery、merge queue 與手動執行採 full，單一 job timeout 為 30 分鐘。詳細分級與目前封存邊界見 [`docs/ci-policy.md`](docs/ci-policy.md)。
 
-{% if branch_strategy == "delivery" %}另行的 promotion、release handoff、registry publisher 與 deployment workflows 沒有啟用；單一 `release.yml` 已設定為候選，首次成功實跑後才算 Active。已判定不恢復的版本／交付 archived YAML 已移除。OSV 已啟用；Zizmor、remote governance 與其他仍待 owner 決定的舊 workflow 留在中央模板 archive，不會下發。{% endif %}
+{% if branch_strategy == "delivery" %}另行的 promotion、release handoff、registry publisher 與 deployment workflows 沒有啟用；單一 `release.yml` 已設定為候選，首次成功實跑後才算 Active。已判定不恢復的版本／交付 archived YAML 已移除。OSV 已啟用；Zizmor、remote governance 與其他仍待 owner 決定的舊 workflow 留在中央模板 archive，不會下發。Reviewer assignment 與選配的治理漂移排程不在此列，詳見下方「設定與密鑰」段落。{% endif %}
 
 ### Actions 額度耗盡的一次性驗證
 
@@ -135,6 +135,8 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 | Team／Enterprise organization＋private | 確認 CODEOWNERS team 後套用並啟用 Ruleset | 必要審查、CODEOWNER 與 status checks 成為 merge gate；不符政策時 fail-closed |
 
 `policies/rulesets.json` 是所有方案共用的期望狀態。設定腳本在所有方案都透過 repository teams API 驗證 PR 內設定的 team 存在且對 repo 有 write access；這項檢查與是否能強制 Ruleset 分開，也不依賴預設分支尚未更新的 CODEOWNERS。`.github/workflows/governance-comment.yml` 另在非 draft PR 開啟、重開或轉為 ready 時，從 `.github/REVIEWERS` 排除作者後輪派一位個別 reviewer，並用短效 `GITHUB_TOKEN` 提出 request，不需 PAT 或 GitHub App。Copier 的 `reviewers` 可用逗號設定一到多位候選人。Free private 不支援 team review request 或多位同時 reviewer；GitHub Team 以上才提供這些能力。Free organization private repo 的設定頁雖提供 Ruleset 編輯器，但 GitHub REST 與 GraphQL 對建立／更新（包含 `disabled`）都回覆需升級或公開；因此 `gh` 無法自動預存。管理員可選擇在 Web UI 人工建立 disabled Ruleset，`check` 會將它顯示為 `STAGED`，但仍只代表已儲存，不代表 `main` 受保護。repo 改成 public 或組織升級後，請重新執行 `plan`／`apply`／`check`，由腳本套用 `active` 政策並驗證有效規則。腳本不會自行變更可見性。
+
+{% if enable_governance_drift_check %}`enable_governance_drift_check` 已啟用：每日與手動 Action 會呼叫同一支 `scripts/check-governance-drift`；可修正的偏離會開立或更新一張追蹤 Issue。{% else %}`enable_governance_drift_check` 未啟用：不產生排程 Action 與檢查程式；需要時先透過 Copier 更新開啟選項。{% endif %}每次檢查都是快照，無法取代 GitHub audit log。
 
 {% if languages %}本機與 release workflow 會以相同原生工具建立已選語言的套件；GitHub Release 另附 checksum 與 SPDX SBOM。Registry publishing、artifact attestation 與消費端門禁由有實際需求的產品自行設定，不屬於公版選項。{% endif %}
 
