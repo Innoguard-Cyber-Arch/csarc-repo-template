@@ -243,7 +243,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
           </ul>
         </details>
       </div>
-      <aside class="config-guidance" data-config-direct="true"><strong>固定與可調政策</strong><ul><li><strong>固定基線：</strong>Issue 必須有問題與完成條件、空白 Issue 關閉；標題、分類、工作層級與里程碑啟動門檻由公版統一，不提供停用開關。</li><li><strong>專案選擇：</strong><code>docs/specs/</code> 的 <code>tracking</code> 可選 <code>issue</code>、<code>story</code> 或 <code>none</code>，決定規格是否同步成追蹤工作。</li><li><strong>設定位置：</strong><code>.github/ISSUE_TEMPLATE/</code>、<code>AGENTS.md</code>、<code>docs/milestone-description.md</code> 與 <code>docs/specs/</code>。</li></ul></aside>
+      {{< config-guidance track="method" >}}
       <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues" target="_blank" rel="noreferrer">GitHub sub-issues</a>。</p>
 {{< /legacy >}}
 
@@ -291,7 +291,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">常見的 AI 協作設計</span></summary><ul><li><strong>Repo 內指引：</strong>把固定命令與界線放在版本控制中，讓不同 agent 讀同一份規則。</li><li><strong>規格產物接力：</strong>大型工作先產生 spec、plan、tasks，再逐步交給 agent 執行。</li><li><strong>角色與調度：</strong>用專門角色、skills 或佇列安排多個 agent；適合工作量已大到需要額外協調時。</li><li><strong>人類檢查點：</strong>在需求、重大取捨、外部影響與不可逆操作前停下來取得決定。</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">六項責任各有唯一位置</span></summary><ul class="work-definition-list"><li><strong>工作與脈絡：</strong>GitHub Issue／PR 記錄範圍、進度與證據；核准的 spec／ADR 保存長期決策，跨 session、高風險或難復原工作才增加 plan，不保存聊天逐字稿。</li><li><strong>AI 規範：</strong>根目錄 <code>AGENTS.md</code> 是唯一來源；<code>CLAUDE.md</code> 只做薄匯入，子目錄只有規則真的不同時才覆寫。</li><li><strong>修改隔離：</strong>每項可寫工作各用 branch／worktree，只平行處理互不依賴的範圍；唯讀工作不必另開 worktree。</li><li><strong>驗證證據：</strong>執行最小且相關的本機程式；Action 只負責事件、權限與呼叫同一程式，不複製邏輯。</li><li><strong>決策與授權：</strong>人負責需求、重大取捨、外部影響與不可逆操作；審查、合併資格與例外由「規則治理」定義。</li><li><strong>模板建立與更新：</strong>Copier 負責產生與更新共用基線；既有 repo 的更新契約由「模板升級」定義。</li></ul></details>
       </div>
-      <aside class="config-guidance" data-config-direct="true"><strong>固定與可調政策</strong><ul><li><strong>固定基線：</strong><code>AGENTS.md</code> 是 AI 規範唯一來源；可寫工作使用 branch／worktree，驗證與治理不重複寫進提示詞。</li><li><strong>可以調整：</strong><code>.csarc/config.yml</code> 的 <code>project_run_command</code> 指定產品啟動方式；既有 repo 可用 <code>project_verification_hook</code> 增加一支專案驗證程式。</li><li><strong>設定位置：</strong><code>.csarc/config.yml</code>、<code>AGENTS.md</code>、<code>CLAUDE.md</code> 與 <code>scripts/cleanup-worktrees</code>。</li></ul></aside>
+      {{< config-guidance track="agents" >}}
 {{< /legacy >}}
 
 {{< basic >}}
@@ -318,7 +318,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">依 repo 規模與風險選擇驗證範圍</span></summary><ul><li><strong>每次全跑：</strong>每張 PR 都取得完整信心，適合測試很小、執行很快的 repo。</li><li><strong>只跑受影響項目：</strong>依 dependency graph 或路徑縮小範圍，回饋快，但分流規則必須可測。</li><li><strong>獨立 pipeline runtime：</strong>本機與不同 CI 平台執行相同 pipeline，換來額外引擎與環境成本。</li><li><strong>分階段驗證：</strong>日常快速、整合候選完整；需要清楚定義何時升級與哪一份結果有效。</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一份邏輯、一支 Action、兩種 repo 範圍</span></summary><ul class="work-definition-list"><li><strong>開發中：</strong>人或 agent 只跑能證明這次修改的 focused check，先取得新鮮輸出再宣稱完成。</li><li><strong>工作 PR（工作分支 → dev/m* 或 main）：</strong>系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li><li><strong>需要完整檢查時：</strong>準備發版、緊急修正，或系統無法安全縮小測試範圍時，執行完整檢查。</li><li><strong>同一套邏輯：</strong>GitHub Actions 只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li><li><strong>專案範圍：</strong>一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li></ul></details>
       </div>
-      <aside class="config-guidance" data-config-direct="true"><strong>固定與可調政策</strong><ul><li><strong>固定基線：</strong>本機與 CI 共用同一份 scripts／tests；工作 PR 依風險選 fast 或 full，發版與無法判斷的變更一定跑 full。</li><li><strong>可以調整：</strong><code>coverage_mode</code>、<code>coverage_threshold</code> 與 <code>enable_precommit</code>；進階團隊可用 <code>use_reusable_workflow</code> 搭配固定 SHA。</li><li><strong>設定位置：</strong><code>.csarc/config.yml</code>；執行入口是 <code>scripts/verify-fast</code>、<code>scripts/verify</code> 與 <code>.github/workflows/ci.yml</code>。</li></ul></aside>
+      {{< config-guidance track="contract" >}}
 {{< /legacy >}}
 
 {{< basic >}}
@@ -343,7 +343,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">語言工具可以集中，也可以交回各生態圈</span></summary><ul><li><strong>單一跨語言工具：</strong>入口一致，但需要另外維護抽象層。</li><li><strong>各語言原生工具：</strong>開發者容易理解，版本與輸出則要由模板統一管理。</li><li><strong>每種組合各寫一套：</strong>初期直觀，組合增加後很容易重複與漂移。</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">每種語言各自檢查需要的事情</span></summary><ul><li><strong>所有專案：</strong>檢查工作規則、文件、敏感資料與套件風險。</li><li><strong>Python：</strong>檢查程式格式、型別、測試，以及能否製作安裝包。</li><li><strong>Rust：</strong>檢查程式格式、常見錯誤、測試，以及正式版本能否建置與打包。</li><li><strong>TypeScript：</strong>檢查程式格式、型別、測試，以及能否製作安裝包。</li><li><strong>同時使用多種語言：</strong>合併各語言的檢查，共通項目只跑一次。</li></ul></details>
       </div>
-      <aside class="config-guidance"><strong>固定與可調政策</strong><ul><li><strong>固定基線：</strong>每種語言使用自己的主流工具並由同一入口協調；不建立組合專屬流程。</li><li><strong>可以調整：</strong><code>languages</code>、<code>python_support_mode</code> 與 <code>python_min_version</code>；其餘進階參數直接使用各語言原生設定檔。</li><li><strong>Python：</strong><code>uv</code> 依 <code>uv.lock</code> 安裝；<code>Ruff</code> 負責格式與 lint（目前 80 字寬、Google docstring）；<code>ty</code> 檢查型別；<code>pytest</code> 執行測試；<code>coverage.py</code> 檢查覆蓋率；Hatch 驗證 wheel。集中在 <code>pyproject.toml</code>。</li><li><strong>Rust：</strong><code>rustfmt</code> 檢查格式；<code>Clippy</code> 將 lint 警告視為失敗；<code>Cargo</code> 依 <code>Cargo.lock</code> 執行測試、正式建置與打包。設定在 <code>rust-toolchain.toml</code> 與 <code>Cargo.toml</code>。</li><li><strong>TypeScript：</strong><code>pnpm</code> 依 <code>pnpm-lock.yaml</code> 安裝；<code>Biome</code> 負責格式與 lint；<code>TypeScript</code> 檢查型別並建置；<code>Vitest</code> 執行測試與覆蓋率；<code>npm pack</code> 驗證套件。設定在 <code>package.json</code>、<code>biome.json</code> 與 <code>tsconfig.json</code>。</li></ul></aside>
+      {{< config-guidance track="languages" >}}
 {{< /legacy >}}
 
 {{< basic >}}
@@ -370,7 +370,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">依團隊規模選擇不同合併模型</span></summary><ul><li><strong>GitHub Flow：</strong>每張完成的 PR 直接進 main，路徑最短，適合可持續交付的團隊。</li><li><strong>長期整合分支：</strong>多項工作先在 dev／release branch 集中驗收，代價是要處理同步。</li><li><strong>Stacked PR：</strong>把大型改動拆成相依的小 PR，審查較聚焦，但需要維護堆疊順序。</li><li><strong>Merge queue：</strong>把已核准 PR 依最新 main 重新驗證後排序合併，需要平台門禁支援。</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">工作 PR 完成單項工作，發版 PR 完成交付批次</span></summary><ul><li><strong>工作 PR：</strong>一張 PR 只完成一張可驗收 Issue；內文以 <code>Closes #N</code> 連回同號未結案 Issue。進入里程碑分支時，系統確認分支、版本與工作關係後關單；直接進 main 的一般工作與 Hotfix 則由 GitHub 關單。</li><li><strong>PR 標題：</strong>採用 Angular／Conventional Commits 格式，簡短說明這次改動與版本影響。<details class="package-disclosure inline-disclosure"><summary><span class="tech-name">查看可用格式與版本影響</span></summary><div class="package-health"><p><strong>格式：</strong><code>type(scope)!: English summary</code></p><ul><li><strong>type：</strong><code>feat</code> 新功能、<code>fix</code> 修錯、<code>docs</code> 文件、<code>refactor</code> 重構、<code>test</code> 測試、<code>build</code> 建置／相依、<code>ci</code> 自動化、<code>chore</code> 維護、<code>revert</code> 撤回。</li><li><strong>scope：</strong>可省略；使用小寫指出影響範圍。</li><li><strong>!</strong>：可省略；只在破壞相容性時使用。</li><li><strong>版本影響：</strong><code>feat</code>＝minor、<code>fix</code>／<code>revert</code>＝patch、<code>!</code>＝major；其餘不主動升版。</li></ul></div></details></li><li><strong>PR 資料：</strong>分類、里程碑與負責人都要完整。<details class="package-disclosure inline-disclosure"><summary><span class="tech-name">查看 Label、里程碑與負責人規則</span></summary><div class="package-health"><ul><li><strong>Label：</strong><code>enhancement</code>、<code>bug</code>、<code>documentation</code> 擇一，且必須和連結的 Issue 相同。</li><li><strong>里程碑：</strong>必須和連結的 Issue 相同；Issue 未加入里程碑時，PR 也不加入。</li><li><strong>負責人：</strong>PR 作者必須列為 Assignee；正式交接時可再加入其他負責人。</li></ul></div></details></li><li><strong>發版 PR（dev → main）：</strong>里程碑工作完成後才執行完整驗證，確認整批內容與證據；里程碑的結案仍由生命週期追蹤 Issue 控制。</li><li><strong>同步：</strong>main 前進後，以另一張 PR 把變更帶回仍在開發的 dev 分支；不直接推送或改寫歷史。</li><li><strong>例外與授權：</strong>Hotfix 可從 <code>fix/*</code> 直接進 main，但仍需 Issue、驗證與審查；審查者、Alpha 例外與平台門禁都由「規則治理」定義。</li></ul></details>
       </div>
-      <aside class="config-guidance"><strong>固定與可調政策</strong><ul><li><strong>固定基線：</strong>PR 必須連回一張工作、符合標題與分類規則、通過驗證；工作 PR 與發版 PR 的責任不可混用。</li><li><strong>可以調整：</strong><code>branch_strategy</code> 選分支模型，<code>code_owner</code> 與 <code>reviewers</code> 指定擁有者和審查人選。</li><li><strong>設定位置：</strong><code>.csarc/config.yml</code>；產生到 <code>pull_request_template.md</code>、<code>CODEOWNERS</code>、<code>REVIEWERS</code> 與 PR policy。</li></ul></aside>
+      {{< config-guidance track="pr" >}}
 {{< /legacy >}}
 
 {{< basic >}}
@@ -405,7 +405,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
           <ul><li><strong>安裝：</strong>Python 與 TypeScript 都依鎖定版本清單（lockfile）重裝；TypeScript 另拒絕未滿三天的一般新版。</li><li><strong>更新：</strong>自動更新服務（Dependabot）每週依套件來源分組提出 PR；一般新版等三天，已知安全修補不等待。</li><li><strong>漏洞：</strong>已知漏洞掃描（OSV）檢查依賴變更與發版候選；每週與手動掃描補上沒有 PR 的期間。</li><li><strong>成品：</strong>軟體成分清單（SBOM）列出真正成品包含的套件，由清單工具 Syft 產生並接受同一套驗證。</li><li><strong>工具邊界：</strong>鎖定版本只證明每次安裝內容一致；漏洞掃描只認已公開資料；成分清單用來追查，不會主動阻擋漏洞。</li></ul>
         </details>
       </div>
-      <aside class="config-guidance"><strong>固定與可調政策</strong><ul><li><strong>固定基線：</strong>lockfile 重裝、Dependabot、OSV 與成品 SBOM 各自負責，不能互相取代；一般新版觀察三天，安全更新不等待。</li><li><strong>可以調整：</strong><code>security_reporting_channel</code> 設定私密回報管道；<code>project_visibility</code> 與 <code>enable_codeql</code> 決定是否產生 CodeQL。</li><li><strong>設定位置：</strong><code>.csarc/config.yml</code>；產生到 lockfile、<code>dependabot.yml</code>、<code>osv.yml</code>、<code>codeql.yml</code> 與 <code>SECURITY.md</code>。</li></ul></aside>
+      {{< config-guidance track="supply" >}}
 {{< /legacy >}}
 
 {{< basic >}}
@@ -439,7 +439,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">依產品型態選擇版本工具</span></summary><ul><li><strong>Release Please：</strong>以可審查 PR 集中更新版本與 CHANGELOG。</li><li><strong>semantic-release：</strong>成功 CI 後依 commit 慣例全自動發版。</li><li><strong>Changesets：</strong>以 changeset 檔管理多套件與 workspace 的版本影響。</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">自動準備版本，人審查後才發布</span></summary><ul><li><strong>獨立工作：</strong>能自己驗收且沒有共同期限或相依時，受審查 PR 可直接進 main。</li><li><strong>里程碑：</strong>需要共同整合或整批驗收時才使用 dev/m*；交付後再結案並清理分支。</li><li><strong>Hotfix：</strong>Bug Issue 與 fix/* PR 直接修正 main，但仍需另一人審查與 full verification。</li><li><strong>正式版本：</strong>Release Please 依 PR 標題建立版本 PR，同步版本與 CHANGELOG。</li><li><strong>Release：</strong>版本 PR 合併後，系統驗證成品、checksum 與 SBOM，成功才公開不可變 GitHub Release。</li></ul></details>
       </div>
-      <aside class="config-guidance"><strong>設定與證據</strong><ul><li><strong>版本來源：</strong><code>.release-please-manifest.json</code>、package metadata、CHANGELOG 與 marker 必須在同一張 PR 對齊。</li><li><strong>本機契約：</strong><code>release_policy.py</code> 驗候選，<code>release_bundle.py</code> 建立並重驗成品。</li><li><strong>交付證據：</strong>PR、commit SHA、full run、tag、checksum、SPDX SBOM 與 immutable Release。</li></ul></aside>
+      {{< config-guidance track="deploy" >}}
       <aside class="selection-note"><strong>目前邊界</strong><span>不要求 PAT、GitHub App、registry token 或空 deployment environment。新 repo 使用 CSARC workflow；既有 repo 保留自己的發布流程。Registry 與 attestation 仍是選配。</span></aside>
       <table class="decision-register" aria-label="版本來源與同步範圍">
         <thead><tr><th>版本範圍</th><th>單一來源</th><th>必須同步</th><th>獨立狀態</th></tr></thead>
@@ -469,7 +469,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 | tag／GitHub Release | Candidate／Blocked | 版本 PR 合併後由唯一 workflow 發布；待預設分支實跑證明 |
 | checksum／SBOM | Configured | 已納入同一候選流程；首次成功實跑後才算 Active |
 | attestation／消費驗證 | Conditional | 由產品依 registry 與供應鏈需求選配 |
-| PyPI／npm／GHCR | Conditional gap | root 不發布 registry；生成專案仍有設定但沒有 publisher job，由 #439 對齊 |
+| PyPI／npm／GHCR | Not applicable | root 不發布 registry；#439 已移除閒置的 PyPI／npm／GHCR 設定項，因為沒有任何 workflow 消費它們，生成專案現在也不再提供這些設定。有真實需求的產品另開 Issue／ADR 自行加入 OIDC publisher |
 
 {{< detail key="standalone-delivery" title="獨立工作何時必須改掛里程碑" >}}
 一張 Issue 能自己驗收、沒有共同期限、整批驗收、跨 Issue 相依或獨立測試環境時，從最新 `main` 建立工作分支，PR 直接回 `main`，用 `Closes #N` 在合併後結案。若出現上述任一批次需求，必須在實作前加入適當里程碑並改走 `dev/m*`；不能用獨立工作路徑繞過共同驗收。
@@ -508,7 +508,7 @@ Adoption 與 update 不從 workflow 檔名推測 ownership。`.csarc/config.yml`
         <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
       </div>
       <aside class="selection-note"><strong>部署與例外原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性、repository teams 與 Ruleset API；team 不存在、不可見或沒有 repo write access 時直接停止，不能被 Free private 的降級路徑掩蓋。能力只在 live check 證明可用後啟用，不以預設成熟度或日期判斷。Free private 不支援 team request，也無法強制核准；`governance-comment.yml` 自動輪派一位非作者 reviewer，僅提出 review request，不構成 merge gate。每個暫時例外都用 Issue 記錄提出者、另一位核准者、到期日、證據與復原方式，不能把未執行的檢查寫成通過。完整管理欄位驗證由管理員在可信任 checkout 使用 Administration read 憑證，不把 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更都需 organization owner 另案核准。</span></aside>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>唯一來源：</strong><code>.csarc/config.yml</code> 保存 <code>branch_strategy</code>、<code>code_owner</code>、<code>reviewers</code>、<code>project_visibility</code> 與選配的 <code>enable_governance_drift_check</code></li><li><strong>查方案與 API：</strong><code>scripts/apply-repository-settings.sh plan</code></li><li><strong>套用與核對：</strong><code>apply</code> 套用支援項目；<code>check</code> 比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset</li><li><strong>目前自動化：</strong><code>governance-comment.yml</code> 自動輪派 reviewer；<code>scripts/check-governance-drift</code> 可在本機執行，開啟 <code>enable_governance_drift_check</code> 後生成 repo 另有每日排程 Action</li><li><strong>網站邊界：</strong>既有 identity／governance keys 產生預設；<code>docs/site-content.md</code> 與 <code>docs/site-theme.css</code> 仍由專案維護</li></ul></aside>
+      {{< config-guidance track="governance" >}}
       <table class="decision-register" aria-label="GitHub 方案與 apply／check 行為對照">
         <thead><tr><th>GitHub 方案與可見性</th><th><code>apply</code> 結果</th><th><code>check</code>／PR／CI/CD 行為</th></tr></thead>
         <tbody>
@@ -575,7 +575,7 @@ Adoption 與 update 不從 workflow 檔名推測 ownership。`.csarc/config.yml`
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">Copier＋建立／導入／更新回歸</span></summary><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／導入／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；更新衝突時保持 repo 不變，調整後重跑再由 PR 審查。</p></div></details><p><strong>建立：</strong>共通基線與 Python、Rust、TypeScript 模組各自實跑驗證；多選時合併模組，不建立組合專屬流程。<br><strong>首次導入：</strong>在 repo 外以固定 Release 與完整 SHA 的 CLI 產生 machine plan，再只套用同一份未漂移 plan。第一張 PR 由人核對來源、plan、diff 與本機結果；base 尚無可信任 verifier 時，不執行 PR head 新增的 script，也不宣稱已自動驗證。<br><strong>後續更新：</strong>update dry-run 先預覽；候選內容與衝突全部驗證完成後才修改 target，接著由一般 PR 與 trusted-base checks 審查。<br><strong>更新通知：</strong>選用後每週檢查一次；有新版只建立或更新一張 Issue，不會自動修改 repo。<br><strong>版本：</strong>公版與所有語言模組共用一個 SemVer；各語言基線依自己的穩定版政策前進。</p></details>
       </div>
       <p class="context-line"><strong>root／template 配對檔案｜</strong>逐位元組相同的 workflow、policy、文件、script 與 test 由 <code>scripts/sync-paired-files.sh</code> 以 root 為唯一來源產生；<code>--check</code> 驗證內容與可執行位元。含 Jinja 變數的檔案改由實際生成 repo 的回歸測試確認；<code>AGENTS.md</code>／<code>README.md</code> 等責任不同的內容不強行配對。</p>
-      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>下發來源、所選語言模組、保留路徑與功能開關：</strong><code>template/</code>＋<code>copier.yml</code></li><li><strong>更新通知：</strong><code>enable_template_update_notifications</code> 開啟時才產生 <code>template-update.yml</code> 與 <code>check-template-update</code>；公開來源不需 secret，private 來源才使用唯讀 token</li><li><strong>root-only CI 與建立／導入／更新驗證：</strong><code>.github/</code>＋<code>scripts/verify-template.sh</code>；生成 repo 不會收到這支腳本或 template release workflows</li><li><strong>語言基線與三十天觀察：</strong><code>profiles/catalog.yaml</code>；<strong>Python 自動升版：</strong><code>python-version-policy.yml</code></li><li><strong>root／template 配對檔案的單一來源與漂移檢查：</strong><code>scripts/sync-paired-files.sh</code></li></ul></aside>
+      {{< config-guidance track="template-release" >}}
 {{< /legacy >}}
 
 {{< basic >}}

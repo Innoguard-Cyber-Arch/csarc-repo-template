@@ -464,6 +464,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     controls = (root / "site/static/detail-toggle.css").read_text(
         encoding="utf-8"
     )
+    config_examples = json.loads(
+        (root / "site/data/config_examples.json").read_text(encoding="utf-8")
+    )
     active_components = (root / "site/static/legacy-components.js").read_text(
         encoding="utf-8"
     )
@@ -532,11 +535,37 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert "slide.dataset.audience !== 'archive'" in deck
     assert "Cloudflare Pages" in chinese
     assert "存取 #79" in chinese
-    assert "不另導入 Spec Kit" in active_components
-    assert "沒有 active bot identity" in active_components
+    # Issue #472: this content used to be a hardcoded, zh-tw-only
+    # `configExamples` object inside legacy-components.js; it now lives in
+    # site/data/config_examples.json (bilingual) and is server-rendered by
+    # the config-guidance shortcode, so legacy-components.js no longer
+    # contains any of this prose at all.
+    method_summaries = " ".join(
+        item.get("summary", {}).get("zh-tw", "")
+        for item in config_examples["tracks"]["method"]["items"]
+    )
+    assert "不另導入 Spec Kit" in method_summaries
+    template_release_summaries = " ".join(
+        item.get("summary", {}).get("zh-tw", "")
+        for item in config_examples["tracks"]["template-release"]["items"]
+    )
+    assert "沒有 active bot identity" in template_release_summaries
     assert "CSARC_VERSION_BOT_CLIENT_ID" not in active_components
-    assert "單一來源｜治理只保存高價值選項" in active_components  # noqa: RUF001
-    assert "提出者、另一位核准者、到期日、證據與復原方式" in (active_components)
+    assert (
+        config_examples["tracks"]["governance"]["items"][0]["title"]["zh-tw"]
+        == "單一來源｜治理只保存高價值選項"  # noqa: RUF001
+    )
+    assert (
+        "提出者、另一位核准者、到期日、證據與復原方式"
+        in (
+            config_examples["tracks"]["governance"]["items"][-1]["summary"][
+                "zh-tw"
+            ]
+        )
+    )
+    assert "template" not in config_examples["tracks"]
+    assert "knowledge" not in config_examples["tracks"]
+    assert "rollout" not in config_examples["tracks"]
     assert "rollout:" not in active_components
     for source in (chinese, english):
         assert 'key="bridge" audience="maintainer"' in source
@@ -560,26 +589,63 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert ".slide.active > .legacy-content > * { flex-shrink: 0; }" in styles
     assert ".similar-tools-tabs button {\n      flex: 0 0 auto;" in styles
     assert "min-width: 210px;" not in styles
-    assert chinese.count('data-config-direct="true"') == 3
+    direct_tracks = {
+        track
+        for track, spec in config_examples["tracks"].items()
+        if spec["direct"]
+    }
+    assert direct_tracks == {"method", "agents", "contract"}
+    for source in (chinese, english):
+        for track in direct_tracks:
+            assert f'{{{{< config-guidance track="{track}" >}}}}' in source
+    guidance_shortcode = (
+        root / "site/layouts/shortcodes/config-guidance.html"
+    ).read_text(encoding="utf-8")
+    assert 'data-config-direct="true"' in guidance_shortcode
+    assert "guidance.dataset.configDirect === 'true'" not in active_components
+    assert (
+        'not([data-config-direct="true"]) .config-trigger'
+    ) in active_components
     assert "guidance.dataset.configDirect === 'true'" in (
         root / "site/static/detail-toggle.js"
     ).read_text(encoding="utf-8")
-    assert "規則治理單獨定義合併資格、權限與例外" in active_components
+    assert (
+        "規則治理單獨定義合併資格、權限與例外"
+        in config_examples["tracks"]["agents"]["items"][-1]["goal"]["zh-tw"]
+    )
     assert "AI 能執行工作，但不能自行合併" not in active_components  # noqa: RUF001
     for track in ("method", "agents", "contract", "languages", "supply", "pr"):
-        assert f"\n      {track}: [" in active_components
-        track_config = active_components.split(f"\n      {track}: [", 1)[
-            1
-        ].split("\n      ],", 1)[0]
-        assert "固定基線｜" in track_config  # noqa: RUF001
+        titles = " ".join(
+            item["title"]["zh-tw"]
+            for item in config_examples["tracks"][track]["items"]
+        )
+        assert "固定基線｜" in titles  # noqa: RUF001
         assert any(
-            label in track_config
+            label in titles
             for label in ("可調整｜", "專案選擇｜", "專案選配｜")  # noqa: RUF001
         )
-    assert "可調整｜選用語言與 Python 支援範圍" in active_components  # noqa: RUF001
-    assert "固定基線｜各語言使用原生工具" in active_components  # noqa: RUF001
-    assert "只列公版主要政策、可調選項與設定位置" in active_components
-    assert english.count('data-audience="maintainer"') == 7
+    assert (
+        config_examples["tracks"]["languages"]["items"][0]["title"]["zh-tw"]
+        == "可調整｜選用語言與 Python 支援範圍"  # noqa: RUF001
+    )
+    assert (
+        config_examples["tracks"]["languages"]["items"][1]["title"]["zh-tw"]
+        == "固定基線｜各語言使用原生工具"  # noqa: RUF001
+    )
+    assert (
+        config_examples["labels"]["zh-tw"]["intro"]
+        == "只列公版主要政策、可調選項與設定位置。"
+    )
+    # Issue #472: the 6 removed hand-authored EN <aside class="config-guidance"
+    # data-audience="maintainer"> placeholders (method, agents, contract,
+    # languages, pr, supply) used to hide this content behind the
+    # simple/technical detail toggle even though the equivalent zh-tw content
+    # was always visible. The config-guidance shortcode's output carries no
+    # data-audience attribute, so English readers now see the same
+    # config-trigger content zh-tw readers always saw, without an extra
+    # click; only the one unrelated "Root repository state" maintainer note
+    # keeps that gating.
+    assert english.count('data-audience="maintainer"') == 1
 
     assert 'simple = "標準"' in chinese
     assert 'simple = "Standard"' in english

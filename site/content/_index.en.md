@@ -105,7 +105,7 @@ Workflows, policies, scripts, and documents shared by root and `template/` are k
 - **Change proposal:** review a proposed change separately, then merge it into the official specification after acceptance.
 - **Complexity-based workflow:** use a short path for small work and add discovery, design, roles, and review only for larger work.
 
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>Issues require a problem and acceptance criteria, blank Issues are disabled, and the template owns title, classification, hierarchy, and Milestone-start rules.</li><li><strong>Project choice:</strong><code>docs/specs/</code> may use <code>tracking: issue</code>, <code>story</code>, or <code>none</code> to control work-item synchronization.</li><li><strong>Locations:</strong><code>.github/ISSUE_TEMPLATE/</code>, <code>AGENTS.md</code>, <code>docs/milestone-description.md</code>, and <code>docs/specs/</code>.</li></ul></aside>
+{{< config-guidance track="method" >}}
 
 {{< /slide >}}
 
@@ -123,7 +123,7 @@ Workflows, policies, scripts, and documents shared by root and `template/` are k
 
 `README.md` serves people, `AGENTS.md` serves every agent, and `template/AGENTS.md.jinja` plus `copier.yml` emit only commands the selected profile can run. `scripts/cleanup-worktrees` and `scripts/test-worktree-cleanup` handle safe cleanup; `scripts/verify`, `.github/workflows/`, and `policies/` keep rules, evidence, automation, and governance separate.
 
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong><code>AGENTS.md</code> is the only AI-rules source; writable tasks use branches and worktrees, while prompts do not duplicate verification or governance logic.</li><li><strong>Adjustable:</strong><code>project_run_command</code> names how to invoke the product; existing repositories may set one repository-relative <code>project_verification_hook</code>.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>AGENTS.md</code>, <code>CLAUDE.md</code>, and <code>scripts/cleanup-worktrees</code>.</li></ul></aside>
+{{< config-guidance track="agents" >}}
 
 {{< /slide >}}
 
@@ -138,7 +138,7 @@ Verification logic lives only in scripts and tests. CI, PR policy, Issue triage,
 
 <aside class="config-guidance" data-audience="maintainer"><strong>Root repository state</strong><p>In <code>csarc-repo-template</code> itself, OSV is also candidate: its workflow has not yet landed on this repository's own <code>main</code>, and its trigger set does not include <code>pull_request</code>, so it cannot pre-register from a candidate branch. See the CI/CD settings page's current-automation table for the exact live-registration check and timestamp.</p></aside>
 
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>local and CI execution share scripts and tests; work PRs select fast or full by risk, while Milestone or canary delivery, hotfix, merge queue, manual, and unknown high-risk changes run full.</li><li><strong>Adjustable:</strong><code>coverage_mode</code>, <code>coverage_threshold</code>, and <code>enable_precommit</code>; advanced teams may enable <code>use_reusable_workflow</code> with a full commit SHA.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, <code>scripts/verify-fast</code>, <code>scripts/verify</code>, and <code>.github/workflows/ci.yml</code>.</li></ul></aside>
+{{< config-guidance track="contract" >}}
 {{< /slide >}}
 
 {{< slide key="languages" track="languages" eyebrow="Step 04" title="Choose a language and receive the matching checks" subtitle="Each language owns its tools and tests; shared rules run once." legacy="false" class="candidate-slide" >}}
@@ -151,7 +151,7 @@ Choose a project language and the template prepares the matching checks:
 
 Each language is selected independently. Selecting several languages combines their modules while each shared check still runs once; the documentation does not enumerate combinations.
 
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>each language uses its native tools behind one verification entry point; combinations do not create separate workflows.</li><li><strong>Adjustable:</strong><code>languages</code>, <code>python_support_mode</code>, and <code>python_min_version</code>; advanced options remain in each language's native configuration.</li><li><strong>Python:</strong><code>uv</code> installs from <code>uv.lock</code>; <code>Ruff</code> formats and lints (currently 80 columns and Google docstrings); <code>ty</code> checks types; <code>pytest</code> runs tests; <code>coverage.py</code> checks coverage; Hatch verifies the wheel. These settings live in <code>pyproject.toml</code>.</li><li><strong>Rust:</strong><code>rustfmt</code> checks formatting; <code>Clippy</code> treats lint warnings as failures; <code>Cargo</code> installs from <code>Cargo.lock</code>, tests, builds a release, and verifies the package. Settings live in <code>rust-toolchain.toml</code> and <code>Cargo.toml</code>.</li><li><strong>TypeScript:</strong><code>pnpm</code> installs from <code>pnpm-lock.yaml</code>; <code>Biome</code> formats and lints; TypeScript checks types and builds; <code>Vitest</code> tests and measures coverage; <code>npm pack</code> verifies the package. Settings live in <code>package.json</code>, <code>biome.json</code>, and <code>tsconfig.json</code>.</li></ul></aside>
+{{< config-guidance track="languages" >}}
 {{< /slide >}}
 
 {{< slide key="pr" track="pr" eyebrow="Step 06" title="Make completed changes reviewable and deliverable" subtitle="A work PR completes one work item; a delivery PR then carries the verified batch into main." legacy="false"  class="candidate-slide" >}}
@@ -170,7 +170,7 @@ Each language is selected independently. Selecting several languages combines th
 - Only an explicitly labeled standalone hotfix may target main directly. Rules governance decides who may merge.
 {{< /disclosure >}}
 
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>a PR links one work item, follows title and classification rules, and passes verification; work and delivery PRs keep separate responsibilities.</li><li><strong>Adjustable:</strong><code>branch_strategy</code> selects the branch model; <code>code_owner</code> and <code>reviewers</code> select ownership and review candidates.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, the PR template, <code>CODEOWNERS</code>, <code>REVIEWERS</code>, and PR policy.</li></ul></aside>
+{{< config-guidance track="pr" >}}
 {{< /slide >}}
 
 {{< slide key="supply" track="supply" eyebrow="Step 05" title="Update, check, and record third-party packages separately" subtitle="Observe ordinary releases, act on known vulnerabilities immediately, and retain a traceable release inventory." legacy="false"  class="candidate-slide" >}}
@@ -190,7 +190,7 @@ Routine updates and security checks run automatically. People step in only for u
 - **Software bill of materials (SBOM):** list packages present in the released artifact for investigation; it does not block vulnerabilities by itself.
 {{< /detail >}}
 
-<aside class="config-guidance" data-audience="maintainer"><strong>Fixed and adjustable policy</strong><ul><li><strong>Fixed baseline:</strong>lockfile installs, Dependabot, OSV, and artifact SBOMs have separate jobs; ordinary releases wait three days while security updates do not.</li><li><strong>Adjustable:</strong><code>security_reporting_channel</code> names the private reporting path; <code>project_visibility</code> and <code>enable_codeql</code> decide whether CodeQL is generated.</li><li><strong>Locations:</strong><code>.csarc/config.yml</code>, lockfiles, <code>dependabot.yml</code>, <code>osv.yml</code>, <code>codeql.yml</code>, and <code>SECURITY.md</code>.</li></ul></aside>
+{{< config-guidance track="supply" >}}
 {{< /slide >}}
 
 {{< slide key="deploy" track="deploy" class="dense" eyebrow="Step 07" title="Separate version, release, delivery, and deployment" subtitle="Work reaches main first; when a version is needed, the system opens a version PR for human review." legacy="false" >}}
@@ -209,7 +209,7 @@ Routine updates and security checks run automatically. People step in only for u
 | Tag and GitHub Release | Candidate / Blocked | The sole workflow publishes after the version PR; activation awaits a default-branch run |
 | Checksums and SBOM | Configured | Included in the same candidate path; Active only after its first successful run |
 | Attestations and consumption | Conditional | Products opt in when registry and supply-chain needs justify them |
-| PyPI, npm, and GHCR | Conditional gap | The root publishes to no registry; generated projects expose settings but receive no publisher job, tracked by #439 |
+| PyPI, npm, and GHCR | Not applicable | The root publishes to no registry; #439 removed the dormant PyPI/npm/GHCR prompts because zero workflow consumed them, so generated projects no longer expose these settings either. A consuming product adds its own OIDC publisher through a separate Issue/ADR |
 
 {{< detail key="standalone-delivery" title="When standalone work must join a Milestone" >}}
 An Issue may branch from the latest `main`, target `main`, and close through `Closes #N` when it can be accepted on its own and has no shared deadline, batch acceptance, cross-Issue dependency, or isolated test environment. If any of those needs appears, assign the Issue to the appropriate Milestone before implementation and use `dev/m*`; the standalone route cannot bypass batch review.
@@ -232,6 +232,8 @@ Adoption and update never infer this from a workflow filename. `.csarc/config.ym
 
 Milestone closure remains manual until #400 completes its lifecycle contract, and work-Issue closure remains owned by #401. Work branches are removed after merge; a Milestone delivery branch waits until closure and unfinished work are handled.
 {{< /detail >}}
+
+{{< config-guidance track="deploy" >}}
 {{< /slide >}}
 
 {{< slide key="governance" track="governance" class="dense" eyebrow="Step 08" title="Apply only the controls GitHub can enforce" subtitle="The template prepares one policy; a maintainer checks the live plan before relying on it." legacy="false" >}}
@@ -272,6 +274,8 @@ The internal site (the generated-repository handbook rendered from project-owned
 {{< detail key="governance-exceptions" title="How to record a temporary exception" >}}
 Use a linked Issue to record the proposer, a different approver, expiry, evidence, and recovery action. The exception may narrow a control only when the platform cannot provide it or a time-bounded incident requires recovery. It cannot claim a missing check passed, expose a privileged token to pull-request code, or silently become permanent. Close the exception only after recovery is verified; renew it through another explicit approval.
 {{< /detail >}}
+
+{{< config-guidance track="governance" >}}
 {{< /slide >}}
 
 {{< slide key="template-release" track="template-release" eyebrow="Step 09" title="Copier keeps repositories aligned, and the template dogfoods its rules" subtitle="A template defect affects many projects, so creation, adoption, and update all run as real tests." legacy="false"  class="candidate-slide" >}}
@@ -302,6 +306,8 @@ Root `.csarc/config.yml` records the capabilities selected by the template repos
 - **Pending:** the update-notice workflow and checker script are restored, and a Copier fixture test verifies they are generated only when selected; the checker's own update-detection and Issue-notification logic has no dedicated regression test, and no hosted scheduled run has been observed, so live-schedule execution is not yet claimed.
 - **Retired:** remote governance and delivery orchestration do not return with this page; reviewer assignment is restored and covered under Rules governance instead.
 {{< /detail >}}
+
+{{< config-guidance track="template-release" >}}
 {{< /slide >}}
 
 {{< slide key="docs-site" track="docs-site" eyebrow="Step 10" title="A portable single file remains the baseline" subtitle="Hugo owns content structure; the existing renderer produces an offline, forwardable HTML file." legacy="false"  class="candidate-slide" >}}
