@@ -68,6 +68,8 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 | `docs/`, `site/` | Project guidance, specifications, decisions, and internal site | Shared |
 | `src/`, product tests, and product specifications | Product behavior | Project-owned |
 
+This table stays at three columns on purpose: the side navigation already links each row's area to its page, and the maintainer-only CI/CD settings appendix already lists verification entry points per Journey in more detail than a column could. Adding page-name and verification-entry columns here would just duplicate both instead of adding information.
+
 {{< detail key="files-update" title="How updates protect product content" >}}
 Copier attempts updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged; adjust them, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.
 
