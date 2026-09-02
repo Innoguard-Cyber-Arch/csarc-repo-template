@@ -1,7 +1,8 @@
 # Version, release, delivery, and supply-chain posture ADR
 
-- **狀態：**Accepted；#430 candidate 實作
-- **最近複核：**2026-09-01
+- **狀態：**Accepted
+- **日期：**2026-09-01
+- **備註：**#430 candidate 實作
 - **主要決策：**[#369](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/369)、[#429](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/429)、[#430](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/430)、[#439](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/439)
 
 ## 決策
