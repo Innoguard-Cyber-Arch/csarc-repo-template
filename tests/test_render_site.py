@@ -593,8 +593,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
             "issue": 400,
         },
     ]
-    template_rows = data["testing"]["groups"][7]["rows"]
-    assert data["testing"]["groups"][7]["journey"] == "09"
+    assert data["testing"]["groups"][7]["journey"] == "08"
+    template_rows = data["testing"]["groups"][8]["rows"]
+    assert data["testing"]["groups"][8]["journey"] == "09"
     assert [row["purpose"]["zh-tw"]["title"] for row in template_rows] == [
         "建立新 repo",
         "首次導入既有 repo",
