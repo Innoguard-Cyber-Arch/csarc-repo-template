@@ -209,7 +209,7 @@ Routine updates and security checks run automatically. People step in only for u
 | Tag and GitHub Release | Candidate / Blocked | The sole workflow publishes after the version PR; activation awaits a default-branch run |
 | Checksums and SBOM | Configured | Included in the same candidate path; Active only after its first successful run |
 | Attestations and consumption | Conditional | Products opt in when registry and supply-chain needs justify them |
-| PyPI, npm, and GHCR | Conditional gap | The root publishes to no registry; generated projects expose settings but receive no publisher job, tracked by #439 |
+| PyPI, npm, and GHCR | Not applicable | The root publishes to no registry; #439 removed the dormant PyPI/npm/GHCR prompts because zero workflow consumed them, so generated projects no longer expose these settings either. A consuming product adds its own OIDC publisher through a separate Issue/ADR |
 
 {{< detail key="standalone-delivery" title="When standalone work must join a Milestone" >}}
 An Issue may branch from the latest `main`, target `main`, and close through `Closes #N` when it can be accepted on its own and has no shared deadline, batch acceptance, cross-Issue dependency, or isolated test environment. If any of those needs appears, assign the Issue to the appropriate Milestone before implementation and use `dev/m*`; the standalone route cannot bypass batch review.

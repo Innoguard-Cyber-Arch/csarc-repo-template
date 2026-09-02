@@ -92,7 +92,26 @@ if [[ "$branch_strategy" != "main" && "$branch_strategy" != "delivery" ]]; then
 fi
 release_ownership="${PR_RELEASE_OWNERSHIP:-}"
 if [[ -z "$release_ownership" ]]; then
-  release_ownership="$(python3 scripts/csarc_config.py release_ownership)"
+  # release_ownership is a hidden (when: false) Copier question: its computed
+  # default is used while rendering but Copier never persists it to the
+  # answers file, so it is absent from every generated .csarc/config.yml
+  # unless an adoption flow explicitly wrote it. Fall back to the same
+  # project_mode-based formula copier.yml's own default expression uses.
+  if [[ -f .csarc/config.yml ]] &&
+    release_ownership="$(python3 scripts/csarc_config.py release_ownership 2>/dev/null)" &&
+    [[ -n "$release_ownership" ]]; then
+    :
+  else
+    project_mode="new"
+    if [[ -f .csarc/config.yml ]]; then
+      project_mode="$(python3 scripts/csarc_config.py project_mode 2>/dev/null || echo new)"
+    fi
+    if [[ "$project_mode" != "existing" ]]; then
+      release_ownership="csarc-owned"
+    else
+      release_ownership="verification-only"
+    fi
+  fi
 fi
 if [[ "$release_ownership" != "csarc-owned" &&
   "$release_ownership" != "product-owned" &&
