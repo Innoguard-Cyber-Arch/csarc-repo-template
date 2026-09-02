@@ -319,7 +319,7 @@ Root `.csarc/config.yml` records the capabilities selected by the template repos
 {{< detail key="template-release-status" title="Current automation boundary" >}}
 - **Active:** the CLI creates, adopts, or updates and verifies a candidate before writing the target; template full verification reruns all three paths.
 - **Manual:** a person approves the external plan, source, and first adoption PR.
-- **Pending:** the update-notice workflow and checker script are restored, and a Copier fixture test verifies they are generated only when selected; the checker's own update-detection and Issue-notification logic has no dedicated regression test, and no hosted scheduled run has been observed, so live-schedule execution is not yet claimed.
+- **Pending:** the update-notice workflow and checker script are restored, and a Copier fixture test verifies they are generated only when selected; `tests/test_template_update_notifications.py` covers the checker's own update-detection and Issue create/edit logic, including its fail-closed behavior on a check error, but no hosted scheduled run has been observed, so live-schedule execution is not yet claimed.
 - **Retired:** remote governance and delivery orchestration do not return with this page; reviewer assignment is restored and covered under Rules governance instead.
 {{< /detail >}}
 
