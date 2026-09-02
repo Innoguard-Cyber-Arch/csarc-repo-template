@@ -105,6 +105,15 @@ run，目的是設定成本預期，不是永久 SLA。
 相依 manifest／lockfile 變更加跑 `scripts/verify-dependencies`。CI 不建立 release asset，
 也不把測試 artifact 當成正式成品。#408 已把更細的 stage timing 輸出納入現行入口。
 
+本機在不同 worktree 重跑驗證時，可把 `CSARC_CACHE_ROOT` 設為同一個絕對路徑；`uv`、
+`pnpm` 與固定版本工具會共用已驗證的下載內容並依版本與平台分隔。`.venv`、
+`node_modules`、生成 fixture、checkout 與測試結果仍逐 worktree 隔離，快取命中不代表
+測試通過；損壞內容依固定 checksum 重新下載或失敗。例如：
+
+```bash
+CSARC_CACHE_ROOT="$HOME/.cache/csarc" ./scripts/verify-template.sh
+```
+
 ## 版本、發版、交付與部署矩陣
 
 | 邊界 | Issue／工作 PR | Milestone／canary 交付 PR | `main` | tag／manual event |

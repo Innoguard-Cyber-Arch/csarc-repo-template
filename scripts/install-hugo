@@ -4,16 +4,10 @@ set -euo pipefail
 version="0.165.0"
 checksums_sha256="f167bf5c6263099ab5a5228245bc645461a0c2b85b0fc08d18eed5ac1f58ec70"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cache_dir="$repo_root/.cache/hugo/$version"
-binary="$cache_dir/hugo"
 
 if command -v hugo >/dev/null 2>&1 \
   && hugo version | grep -q "hugo v${version}"; then
   command -v hugo
-  exit 0
-fi
-if [[ -x "$binary" ]] && "$binary" version | grep -q "hugo v${version}"; then
-  printf '%s\n' "$binary"
   exit 0
 fi
 
@@ -32,10 +26,18 @@ case "$(uname -s)-$(uname -m)" in
     ;;
 esac
 
+cache_root="$("$repo_root/scripts/resolve-cache-root")"
+cache_dir="$cache_root/hugo/$version/$asset"
+binary="$cache_dir/hugo"
 mkdir -p "$cache_dir"
 base_url="https://github.com/gohugoio/hugo/releases/download/v${version}"
-curl -fsSL "$base_url/hugo_${version}_checksums.txt" \
-  -o "$cache_dir/checksums.txt"
+if [[ ! -f "$cache_dir/checksums.txt" ]] ||
+  [[ "$(shasum -a 256 "$cache_dir/checksums.txt" | awk '{print $1}')" != \
+    "$checksums_sha256" ]]; then
+  curl -fsSL "$base_url/hugo_${version}_checksums.txt" \
+    -o "$cache_dir/checksums.txt.tmp.$$"
+  mv "$cache_dir/checksums.txt.tmp.$$" "$cache_dir/checksums.txt"
+fi
 actual_checksums_sha256="$(
   shasum -a 256 "$cache_dir/checksums.txt" | awk '{print $1}'
 )"
@@ -44,10 +46,19 @@ if [[ "$actual_checksums_sha256" != "$checksums_sha256" ]]; then
   exit 1
 fi
 
-curl -fsSL "$base_url/$asset" -o "$cache_dir/$asset"
 expected_asset_sha256="$(
   awk -v name="$asset" '$2 == name {print $1}' "$cache_dir/checksums.txt"
 )"
+if [[ -z "$expected_asset_sha256" ]]; then
+  printf 'Hugo release manifest does not contain the selected asset.\n' >&2
+  exit 1
+fi
+if [[ ! -f "$cache_dir/$asset" ]] ||
+  [[ "$(shasum -a 256 "$cache_dir/$asset" | awk '{print $1}')" != \
+    "$expected_asset_sha256" ]]; then
+  curl -fsSL "$base_url/$asset" -o "$cache_dir/$asset.tmp.$$"
+  mv "$cache_dir/$asset.tmp.$$" "$cache_dir/$asset"
+fi
 actual_asset_sha256="$(shasum -a 256 "$cache_dir/$asset" | awk '{print $1}')"
 if [[ -z "$expected_asset_sha256" \
   || "$actual_asset_sha256" != "$expected_asset_sha256" ]]; then
@@ -55,6 +66,8 @@ if [[ -z "$expected_asset_sha256" \
   exit 1
 fi
 
-tar -xzf "$cache_dir/$asset" -C "$cache_dir" hugo
-chmod +x "$binary"
+extract_dir="$(mktemp -d "$cache_dir/.extract.XXXXXX")"
+trap 'rm -rf "$extract_dir"' EXIT
+tar -xzf "$cache_dir/$asset" -C "$extract_dir" hugo
+install -m 0755 "$extract_dir/hugo" "$binary"
 printf '%s\n' "$binary"
