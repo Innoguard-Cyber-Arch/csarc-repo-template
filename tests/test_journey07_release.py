@@ -78,6 +78,35 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert 'publish_status "$status"' in candidate
 
 
+def test_release_converges_a_repeated_or_concurrent_run_to_one_release() -> (
+    None
+):
+    """Never trust a blind already-exists shortcut for tag or Release state."""
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    )
+    source = (ROOT / ".github/workflows/release.yml").read_text(
+        encoding="utf-8"
+    )
+
+    # A same-repo concurrency group with cancel-in-progress disabled queues
+    # concurrent or resent runs instead of racing them.
+    assert workflow["concurrency"] == {
+        "group": "release-${{ github.repository }}",
+        "cancel-in-progress": False,
+    }
+    # A rerun that finds the tag already pointing at this commit reuses it;
+    # a tag at any other commit fails closed instead of moving or ignoring it.
+    assert 'test "$tag_sha" = "$GITHUB_SHA"' in source
+    # A Release is only created when none exists yet for the tag.
+    assert 'if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then' in source
+    # The exact release state is always re-derived from GitHub after any
+    # candidate or rerun path, not assumed from a prior step's local output.
+    assert 'release="$(gh release view "$tag" --json isDraft,isImmutable,tagName)"' in source
+    assert 'test "$(jq -r .tagName <<<"$release")" = "$tag"' in source
+    assert 'test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"' in source
+
+
 def test_release_please_always_stages_a_draft() -> None:
     """Never expose a GitHub Release before its assets are verified."""
     config = json.loads(
