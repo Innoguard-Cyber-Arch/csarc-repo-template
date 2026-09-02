@@ -3260,13 +3260,13 @@ html[data-detail-level="simple"] .detail-panel {
 					<td>Required baseline</td>
 					<td><code>branch_strategy</code></td>
 					<td><code>delivery</code> by default; <code>delivery</code> or <code>main</code></td>
-					<td>branch guidance and <code>policies/rulesets.json</code></td>
+					<td>branch guidance, <code>policies/rulesets.json</code>, and the internal site&rsquo;s delivery-route section</td>
 			</tr>
 			<tr>
 					<td>Organization policy</td>
 					<td><code>code_owner</code></td>
 					<td>one existing <code>@organization/team</code> with repository write access</td>
-					<td><code>.github/CODEOWNERS</code>; checked by repository-settings plan/apply/check</td>
+					<td><code>.github/CODEOWNERS</code>; checked by repository-settings plan/apply/check; the internal site&rsquo;s primary-owner line</td>
 			</tr>
 			<tr>
 					<td>Organization policy</td>
@@ -3278,7 +3278,31 @@ html[data-detail-level="simple"] .detail-panel {
 					<td>Project choice</td>
 					<td><code>project_visibility</code></td>
 					<td><code>private</code> by default; <code>public</code>, <code>private</code>, or Enterprise <code>internal</code></td>
-					<td>capability detection and optional security defaults</td>
+					<td>capability detection, optional security defaults, and the internal site&rsquo;s visible-audience line</td>
+			</tr>
+			<tr>
+					<td>Project choice</td>
+					<td><code>project_name</code></td>
+					<td>required non-empty string; defaults to <code>CSARC Project</code></td>
+					<td>the internal site&rsquo;s title and heading</td>
+			</tr>
+			<tr>
+					<td>Project choice</td>
+					<td><code>project_description</code></td>
+					<td>required one-sentence purpose; rejects placeholder text</td>
+					<td>the internal site&rsquo;s introduction paragraph</td>
+			</tr>
+			<tr>
+					<td>Project choice</td>
+					<td><code>languages</code></td>
+					<td>zero or more of <code>python</code>, <code>rust</code>, <code>typescript</code></td>
+					<td>the internal site&rsquo;s &ldquo;languages used&rdquo; line</td>
+			</tr>
+			<tr>
+					<td>Project choice</td>
+					<td><code>repository_url</code>, <code>project_slug</code></td>
+					<td>derived from <code>code_owner</code>/<code>project_name</code> unless overridden</td>
+					<td>the internal site&rsquo;s clone instructions</td>
 			</tr>
 			<tr>
 					<td>Project opt-in</td>
@@ -3289,7 +3313,7 @@ html[data-detail-level="simple"] .detail-panel {
 	</tbody>
 </table>
 <p>The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier <code>_src_path</code> and <code>_commit</code> metadata. Derived templates may add namespaced keys to this same YAML; they do not create another profile. Low-frequency GitHub details stay in native repository settings or <code>policies/</code> instead of expanding the CSARC schema.</p>
-<p>The internal site renders <code>docs/site-content.md</code> and resolves its explicit <code>[[key]]</code> tokens from the existing <code>project_name</code>, <code>project_description</code>, <code>repository_url</code>, <code>code_owner</code>, <code>languages</code>, and <code>branch_strategy</code> settings. Project content and theme remain in <code>docs/site-content.md</code> and <code>docs/site-theme.css</code>; the site does not create another configuration schema.</p>
+<p>The internal site (the generated-repository handbook rendered from project-owned <code>docs/site-content.md</code>) resolves its explicit <code>[[key]]</code> tokens only from the keys listed above; an unknown key stops the build, so the site cannot invent a second settings schema. Project content and theme choices outside these keys stay in <code>docs/site-content.md</code> and <code>docs/site-theme.css</code>, owned by the consuming project.</p>
 </aside>
 <aside class="technical-detail" data-content-key="governance-exceptions">
   <h3>How to record a temporary exception</h3>
@@ -3473,7 +3497,7 @@ html[data-detail-level="simple"] .detail-panel {
 <aside class="technical-detail" data-content-key="docs-site-access">
   <h3>Access and maintenance boundaries</h3>
   <p><code>noindex</code> and <code>robots.txt</code> reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.</p>
-<p>The renderer reads project identity, owner, languages, repository URL, and branch guidance from the existing <code>.csarc/config.yml</code>. Product-specific prose lives in <code>docs/site-content.md</code>, theme overrides remain in <code>docs/site-theme.css</code>, and the generated <code>docs/index.html</code> is never edited directly.</p>
+<p>The renderer resolves the same Rules-governance-approved <code>.csarc/config.yml</code> keys documented in the governance configuration table above; it does not define a second, site-only list. Product-specific prose lives in <code>docs/site-content.md</code>, theme overrides remain in <code>docs/site-theme.css</code>, and the generated <code>docs/index.html</code> is never edited directly.</p>
 </aside>
 <aside class="config-guidance"><strong>Website access</strong><p>If reader restrictions become necessary, evaluate Cloudflare Pages + Access first. The host, identity provider, data policy, and organization owner still require separate approval.</p></aside>
 </div>

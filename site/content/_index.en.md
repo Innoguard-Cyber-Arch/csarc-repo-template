@@ -254,15 +254,19 @@ Capability is enabled by evidence, not by a predefined maturity label or calenda
 {{< detail key="governance-config" title="One configuration source and its ownership layers" >}}
 | Layer | `.csarc/config.yml` key | Default / allowed values | Generated or checked at |
 | --- | --- | --- | --- |
-| Required baseline | `branch_strategy` | `delivery` by default; `delivery` or `main` | branch guidance and `policies/rulesets.json` |
-| Organization policy | `code_owner` | one existing `@organization/team` with repository write access | `.github/CODEOWNERS`; checked by repository-settings plan/apply/check |
+| Required baseline | `branch_strategy` | `delivery` by default; `delivery` or `main` | branch guidance, `policies/rulesets.json`, and the internal site's delivery-route section |
+| Organization policy | `code_owner` | one existing `@organization/team` with repository write access | `.github/CODEOWNERS`; checked by repository-settings plan/apply/check; the internal site's primary-owner line |
 | Organization policy | `reviewers` | one or more GitHub usernames | `.github/REVIEWERS`; `governance-comment.yml` assigns automatically on every non-draft pull request |
-| Project choice | `project_visibility` | `private` by default; `public`, `private`, or Enterprise `internal` | capability detection and optional security defaults |
+| Project choice | `project_visibility` | `private` by default; `public`, `private`, or Enterprise `internal` | capability detection, optional security defaults, and the internal site's visible-audience line |
+| Project choice | `project_name` | required non-empty string; defaults to `CSARC Project` | the internal site's title and heading |
+| Project choice | `project_description` | required one-sentence purpose; rejects placeholder text | the internal site's introduction paragraph |
+| Project choice | `languages` | zero or more of `python`, `rust`, `typescript` | the internal site's "languages used" line |
+| Project choice | `repository_url`, `project_slug` | derived from `code_owner`/`project_name` unless overridden | the internal site's clone instructions |
 | Project opt-in | `enable_governance_drift_check` | `false` by default; set `true` to generate the daily scheduled Action | `false` keeps only the local drift checker; `true` also generates `governance-drift.yml` |
 
 The template repository uses the same public keys and validation as generated repositories. Only generated repositories add Copier `_src_path` and `_commit` metadata. Derived templates may add namespaced keys to this same YAML; they do not create another profile. Low-frequency GitHub details stay in native repository settings or `policies/` instead of expanding the CSARC schema.
 
-The internal site renders `docs/site-content.md` and resolves its explicit `[[key]]` tokens from the existing `project_name`, `project_description`, `repository_url`, `code_owner`, `languages`, and `branch_strategy` settings. Project content and theme remain in `docs/site-content.md` and `docs/site-theme.css`; the site does not create another configuration schema.
+The internal site (the generated-repository handbook rendered from project-owned `docs/site-content.md`) resolves its explicit `[[key]]` tokens only from the keys listed above; an unknown key stops the build, so the site cannot invent a second settings schema. Project content and theme choices outside these keys stay in `docs/site-content.md` and `docs/site-theme.css`, owned by the consuming project.
 {{< /detail >}}
 
 {{< detail key="governance-exceptions" title="How to record a temporary exception" >}}
@@ -312,7 +316,7 @@ Root `.csarc/config.yml` records the capabilities selected by the template repos
 {{< detail key="docs-site-access" title="Access and maintenance boundaries" >}}
 `noindex` and `robots.txt` reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
 
-The renderer reads project identity, owner, languages, repository URL, and branch guidance from the existing `.csarc/config.yml`. Product-specific prose lives in `docs/site-content.md`, theme overrides remain in `docs/site-theme.css`, and the generated `docs/index.html` is never edited directly.
+The renderer resolves the same Rules-governance-approved `.csarc/config.yml` keys documented in the governance configuration table above; it does not define a second, site-only list. Product-specific prose lives in `docs/site-content.md`, theme overrides remain in `docs/site-theme.css`, and the generated `docs/index.html` is never edited directly.
 {{< /detail >}}
 
 <aside class="config-guidance"><strong>Website access</strong><p>If reader restrictions become necessary, evaluate Cloudflare Pages + Access first. The host, identity provider, data policy, and organization owner still require separate approval.</p></aside>

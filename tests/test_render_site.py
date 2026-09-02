@@ -15,7 +15,14 @@ render = SITE_MODULE["render"]
 parse_parity = PARITY_MODULE["parse"]
 
 
-def _write_markdown_site(tmp_path: Path, markdown: str) -> Path:
+def _write_markdown_site(
+    tmp_path: Path,
+    markdown: str,
+    *,
+    name: str = "Demo",
+    description: str = "Safe <demo>",
+    visibility: str = "private",
+) -> Path:
     """Create the managed shell and its single configuration source."""
     site = tmp_path / "site"
     docs = tmp_path / "docs"
@@ -31,8 +38,9 @@ def _write_markdown_site(tmp_path: Path, markdown: str) -> Path:
         encoding="utf-8",
     )
     (config / "config.yml").write_text(
-        "project_name: Demo\n"
-        "project_description: Safe <demo>\n"
+        f"project_name: {name}\n"
+        f"project_description: {description}\n"
+        f"project_visibility: {visibility}\n"
         "languages:\n"
         "- python\n"
         "- rust\n",
@@ -123,6 +131,111 @@ def test_render_rejects_unknown_markdown_config_key(tmp_path: Path) -> None:
         render(source, root=tmp_path)
 
 
+def test_render_reflects_different_project_visibility_values(
+    tmp_path: Path,
+) -> None:
+    """The internal site's visible-audience line must change with the
+    Rules-governance-approved `project_visibility` key, not stay hardcoded."""
+    markdown = "# [[project_name]]\n\nVisibility: **[[project_visibility]]**\n"
+    private_root = tmp_path / "private"
+    public_root = tmp_path / "public"
+    private_root.mkdir()
+    public_root.mkdir()
+
+    private_source = _write_markdown_site(
+        private_root, markdown, visibility="private"
+    )
+    public_source = _write_markdown_site(
+        public_root, markdown, visibility="public"
+    )
+
+    private_bundle = render(private_source, root=private_root)
+    public_bundle = render(public_source, root=public_root)
+
+    assert "Visibility: <strong>private</strong>" in private_bundle
+    assert "Visibility: <strong>public</strong>" in public_bundle
+    assert private_bundle != public_bundle
+
+
+def test_render_reflects_different_project_name_values(tmp_path: Path) -> None:
+    """The internal site's title/heading (site name) must change with the
+    existing `project_name` key instead of a hardcoded string."""
+    markdown = "# [[project_name]]\n"
+    alpha_root = tmp_path / "alpha"
+    beta_root = tmp_path / "beta"
+    alpha_root.mkdir()
+    beta_root.mkdir()
+
+    alpha_source = _write_markdown_site(
+        alpha_root, markdown, name="Alpha Project"
+    )
+    beta_source = _write_markdown_site(beta_root, markdown, name="Beta Project")
+
+    alpha_bundle = render(alpha_source, root=alpha_root)
+    beta_bundle = render(beta_source, root=beta_root)
+
+    assert "<title>Alpha Project — 內部專案網站</title>" in alpha_bundle
+    assert "<title>Beta Project — 內部專案網站</title>" in beta_bundle
+    assert alpha_bundle != beta_bundle
+
+
+def test_branch_strategy_switches_generated_site_content() -> None:
+    """The already-approved `branch_strategy` key must actually switch the
+    handbook's standard-vs-delivery guidance at Copier generation time,
+    proving that "mode switching" is config-driven rather than a second,
+    site-only setting."""
+    import jinja2
+
+    root = Path(__file__).parents[1]
+    template = (root / "template/docs/site-content.md.jinja").read_text(
+        encoding="utf-8"
+    )
+    environment = jinja2.Environment()
+
+    def render_for(branch_strategy: str) -> str:
+        return environment.from_string(template).render(
+            branch_strategy=branch_strategy,
+            enable_governance_drift_check=False,
+            project_mode="new",
+        )
+
+    delivery = render_for("delivery")
+    standard = render_for("main")
+
+    assert "Delivery route" in delivery
+    assert "批次邊界" in delivery
+    assert "Delivery route" not in standard
+    assert "批次邊界" not in standard
+    assert delivery != standard
+
+
+def test_internal_site_keys_are_documented_once() -> None:
+    """Rules governance's configuration table stays the single description
+    of internal-site settings; the internal-site page must reference it
+    instead of redefining the same key list independently."""
+    root = Path(__file__).parents[1]
+    for source in (
+        (root / "site/content/_index.zh-tw.md").read_text(encoding="utf-8"),
+        (root / "site/content/_index.en.md").read_text(encoding="utf-8"),
+    ):
+        governance_config = source.split('key="governance-config"', 1)[1].split(
+            "{{< /detail >}}", 1
+        )[0]
+        docs_site_access = source.split('key="docs-site-access"', 1)[1].split(
+            "{{< /detail >}}", 1
+        )[0]
+        for key in (
+            "project_name",
+            "project_description",
+            "repository_url",
+            "project_slug",
+        ):
+            assert key in governance_config
+            assert key not in docs_site_access
+        assert "project_visibility" in governance_config
+        assert "branch_strategy" in governance_config
+
+
 def test_render_surfaces_preserved_legacy_content(tmp_path: Path) -> None:
     source = _write_markdown_site(tmp_path, "# [[project_name]]")
     legacy = tmp_path / "docs/site-content.js"
@@ -150,6 +263,7 @@ def test_generated_site_uses_project_owned_markdown() -> None:
     assert "site-content.js" not in shell
     assert "[[project_name]]" in content
     assert "[[languages]]" in content
+    assert "[[project_visibility]]" in content
     assert not (root / "template/site/app.js").exists()
     assert not (root / "template/docs/site-content.js.jinja").exists()
 

@@ -541,15 +541,19 @@ Adoption 與 update 不從 workflow 檔名推測 ownership。`.csarc/config.yml`
 {{< detail key="governance-config" title="單一設定來源與責任層級" >}}
 | 層級 | `.csarc/config.yml` key | 預設／允許值 | 產生或驗證位置 |
 | --- | --- | --- | --- |
-| 必要基線 | `branch_strategy` | 預設 `delivery`；可選 `delivery`、`main` | 分支指引與 `policies/rulesets.json` |
-| 組織政策 | `code_owner` | 一個存在且有 repo write access 的 `@organization/team` | `.github/CODEOWNERS`；由 repository settings plan／apply／check 驗證 |
+| 必要基線 | `branch_strategy` | 預設 `delivery`；可選 `delivery`、`main` | 分支指引、`policies/rulesets.json`，以及內部網站的交付路線段落 |
+| 組織政策 | `code_owner` | 一個存在且有 repo write access 的 `@organization/team` | `.github/CODEOWNERS`；由 repository settings plan／apply／check 驗證；內部網站的主要負責人欄位 |
 | 組織政策 | `reviewers` | 一個或多個 GitHub 使用者名稱 | `.github/REVIEWERS`；`governance-comment.yml` 在每張非 draft PR 自動輪派 |
-| 專案選擇 | `project_visibility` | 預設 `private`；可選 `public`、`private`、Enterprise `internal` | 能力偵測與選配安全預設 |
+| 專案選擇 | `project_visibility` | 預設 `private`；可選 `public`、`private`、Enterprise `internal` | 能力偵測、選配安全預設，以及內部網站的可見受眾欄位 |
+| 專案選擇 | `project_name` | 必填非空字串；預設 `CSARC Project` | 內部網站的標題與頁首 |
+| 專案選擇 | `project_description` | 必填一句話用途說明，拒絕佔位文字 | 內部網站的簡介段落 |
+| 專案選擇 | `languages` | 零到多個 `python`、`rust`、`typescript` | 內部網站的「使用語言」欄位 |
+| 專案選擇 | `repository_url`、`project_slug` | 未覆寫時由 `code_owner`／`project_name` 推導 | 內部網站的複製（clone）指引 |
 | 專案選配 | `enable_governance_drift_check` | 預設 `false`；設為 `true` 產生每日排程 Action | `false` 只保留本機 drift checker；`true` 另生成 `governance-drift.yml` |
 
 公版 root 與生成 repo 使用同一批公開 keys 與驗證；只有生成 repo 另有 Copier `_src_path`、`_commit`。衍生公版可在同一份 YAML 增加 namespaced keys，不另建 profile。低頻 GitHub 細節留在原生 repository settings 或 `policies/`，不擴張 CSARC schema。
 
-內部網站直接讀取 `docs/site-content.md`，其中明確的 `[[key]]` 由 `.csarc/config.yml` 既有的 `project_name`、`project_description`、`repository_url`、`code_owner`、`languages`、`branch_strategy` 帶入。專案文字與樣式留在 `docs/site-content.md`、`docs/site-theme.css`，不另建網站設定格式。
+內部網站（由 project-owned `docs/site-content.md` 渲染出的生成專案手冊）只從上表 key 讀取明確的 `[[key]]` token；未知 key 會讓建置直接失敗，因此網站不會另建第二份設定 schema。上表以外的專案文字與樣式選擇，留在 `docs/site-content.md`、`docs/site-theme.css`，由專案自行維護。
 {{< /detail >}}
 
 {{< detail key="governance-exceptions" title="暫時例外怎麼留下紀錄" >}}
@@ -631,7 +635,7 @@ Adoption 與 update 不從 workflow 檔名推測 ownership。`.csarc/config.yml`
 {{< detail key="docs-site-access" title="存取與維護邊界" >}}
 `noindex` 與 `robots.txt` 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。
 
-renderer 從既有 `.csarc/config.yml` 讀取專案名稱、說明、語言、負責人、repository URL 與分支策略；專案文字寫在 `docs/site-content.md`，樣式覆寫留在 `docs/site-theme.css`，產生的 `docs/index.html` 不直接編輯。
+renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc/config.yml` key，不另定義第二份網站專用清單。專案文字寫在 `docs/site-content.md`，樣式覆寫留在 `docs/site-theme.css`，產生的 `docs/index.html` 不直接編輯。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
