@@ -35,7 +35,7 @@ asset="shellcheck-v${version}.${platform}.tar.gz"
 if [[ ! -f "$cache_dir/$asset" ]] ||
   [[ "$(shasum -a 256 "$cache_dir/$asset" | awk '{print $1}')" != \
     "$expected_sha256" ]]; then
-  curl -fsSL \
+  curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused \
     "https://github.com/koalaman/shellcheck/releases/download/v${version}/$asset" \
     -o "$cache_dir/$asset.tmp.$$"
   mv "$cache_dir/$asset.tmp.$$" "$cache_dir/$asset"
