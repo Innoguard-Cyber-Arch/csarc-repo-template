@@ -43,6 +43,7 @@ paired_files=(
   scripts/promotion_gate.py
   scripts/check-update-conflicts
   scripts/cleanup-worktrees
+  scripts/converge-release-tag
   scripts/csarc_config.py
   scripts/install-actionlint
   scripts/install-gitleaks

@@ -81,11 +81,22 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
 def test_release_converges_a_repeated_or_concurrent_run_to_one_release() -> (
     None
 ):
-    """Never trust a blind already-exists shortcut for tag or Release state."""
+    """Never trust a blind already-exists shortcut for tag or Release state.
+
+    The tag/Release creation guard clauses this test names live in
+    scripts/converge-release-tag (extracted from this workflow so they can
+    be driven directly, not just read as source text) — see
+    tests/test_release_convergence.py for behavioral proof that a resent
+    event and a genuine concurrent race actually converge to one tag and
+    one Release, not merely that these strings are present.
+    """
     workflow = yaml.safe_load(
         (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     )
     source = (ROOT / ".github/workflows/release.yml").read_text(
+        encoding="utf-8"
+    )
+    converge = (ROOT / "scripts/converge-release-tag").read_text(
         encoding="utf-8"
     )
 
@@ -95,11 +106,12 @@ def test_release_converges_a_repeated_or_concurrent_run_to_one_release() -> (
         "group": "release-${{ github.repository }}",
         "cancel-in-progress": False,
     }
+    assert "./scripts/converge-release-tag" in source
     # A rerun that finds the tag already pointing at this commit reuses it;
     # a tag at any other commit fails closed instead of moving or ignoring it.
-    assert 'test "$tag_sha" = "$GITHUB_SHA"' in source
+    assert 'test "$tag_sha" = "$sha"' in converge
     # A Release is only created when none exists yet for the tag.
-    assert 'if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then' in source
+    assert 'if ! gh release view "$tag" >/dev/null 2>&1; then' in converge
     # The exact release state is always re-derived from GitHub after any
     # candidate or rerun path, not assumed from a prior step's local output.
     assert (
@@ -128,7 +140,11 @@ def test_release_rerun_recovers_a_tag_without_a_release() -> None:
     )
 
     assert "steps.plan.outputs.status == 'released'" in source
-    assert "gh release create" in source
+    assert "./scripts/converge-release-tag" in source
+    converge = (ROOT / "scripts/converge-release-tag").read_text(
+        encoding="utf-8"
+    )
+    assert "gh release create" in converge
 
 
 def test_template_only_adds_release_workflow_to_new_repositories() -> None:

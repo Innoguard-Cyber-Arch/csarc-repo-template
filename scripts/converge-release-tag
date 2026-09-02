@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Ensure exactly one tag and one draft Release exist for a release candidate
+# SHA, converging a repeated or resent event to the same single outcome
+# instead of creating a duplicate. Extracted from .github/workflows/release.yml
+# so the convergence logic can be exercised directly by
+# tests/test_release_convergence.py against a fake `gh`, not only asserted to
+# exist in the workflow source.
+
+usage() {
+  echo "Usage: $0 --repo OWNER/NAME --sha SHA --tag TAG" >&2
+  exit 2
+}
+
+repo=""
+sha=""
+tag=""
+while (($#)); do
+  case "$1" in
+    --repo)
+      repo="$2"
+      shift 2
+      ;;
+    --sha)
+      sha="$2"
+      shift 2
+      ;;
+    --tag)
+      tag="$2"
+      shift 2
+      ;;
+    *)
+      usage
+      ;;
+  esac
+done
+[[ -n "$repo" && -n "$sha" && -n "$tag" ]] || usage
+
+if tag_sha="$(gh api "repos/$repo/git/ref/tags/$tag" --jq .object.sha 2>/dev/null)"; then
+  test "$tag_sha" = "$sha"
+else
+  gh api --method POST "repos/$repo/git/refs" \
+    -f ref="refs/tags/$tag" -f sha="$sha" >/dev/null
+fi
+
+if ! gh release view "$tag" >/dev/null 2>&1; then
+  gh release create "$tag" --target "$sha" \
+    --title "$tag" --draft --generate-notes
+fi
