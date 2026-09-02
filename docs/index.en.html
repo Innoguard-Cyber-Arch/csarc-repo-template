@@ -352,9 +352,7 @@
     .explorer-caption { margin-top: 5px; color: var(--muted); font-size: 18px; line-height: 1.18; }
     .explorer-caption strong { color: var(--ink); }
 
-    .ecosystem-slide, .similar-tools-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
-    .ecosystem-slide header { position: relative; margin-bottom: 1%; padding-right: 150px; }
-    .ecosystem-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
+    .similar-tools-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
 
     .similar-tools-slide header { margin-bottom: 8px; }
     .similar-tools-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
@@ -458,65 +456,6 @@
       font-weight: 900;
       letter-spacing: .02em;
     }
-    .tool-landscape {
-      display: grid;
-      flex: 1;
-      min-height: 0;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-    }
-    .tool-landscape.six { grid-template-rows: repeat(3, minmax(0, 1fr)); }
-    .tool-landscape.eight { grid-template-rows: repeat(4, minmax(0, 1fr)); }
-    .tool-profile {
-      display: grid;
-      min-width: 0;
-      grid-template-columns: 56px minmax(0, 1fr);
-      align-items: center;
-      gap: 10px;
-      padding: 8px 10px;
-      border: 1px solid var(--line);
-      border-left: 6px solid var(--ink);
-      background: var(--soft);
-    }
-    .tool-profile.adopt { border-left-color: #b9a700; background: #fffbea; }
-    .tool-profile.next { border-left-color: var(--best); background: var(--best-soft); }
-    .tool-profile.conditional { border-left-color: var(--optional); background: var(--optional-soft); }
-    .tool-logo-box {
-      display: grid;
-      width: 56px;
-      height: 56px;
-      place-items: center;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: white;
-    }
-    .tool-logo { display: block; max-width: 42px; max-height: 42px; object-fit: contain; }
-    .tool-profile h3 { margin-bottom: 2px; font-size: 20px; }
-    .tool-profile h3 a { color: var(--ink); text-decoration-color: var(--optional); text-underline-offset: 3px; }
-    .tool-status {
-      margin-right: 3px;
-      color: var(--muted);
-      font-size: 18px;
-      font-weight: 850;
-    }
-    .adopt .tool-status { color: #796900; }
-    .next .tool-status { color: #0b6540; }
-    .conditional .tool-status { color: #174f8b; }
-    .tool-profile p { font-size: 18px; line-height: 1.16; }
-    .tool-health { margin-top: 3px; color: var(--muted); font-weight: 700; }
-    .tool-deferred {
-      margin-top: 8px;
-      padding: 7px 10px;
-      border: 1px solid var(--line);
-      background: #ededeb;
-      color: var(--muted);
-      font-size: 18px;
-      line-height: 1.22;
-    }
-    .tool-deferred p + p { margin-top: 3px; }
-    .tool-deferred strong { color: var(--ink); }
-    .ecosystem-reference { margin-top: 7px; }
-
     .grid-2, .grid-3, .grid-4 { display: grid; gap: 1.15vw; min-height: 0; }
     .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -1281,7 +1220,7 @@
 
     /* The opening behaves like product documentation: what the template does, how to adopt it, and what it maintains. */
     .capability-slide, .adoption-slide, .pipeline-slide, .managed-files-slide,
-    .decision-slide, .ecosystem-slide, .bridge-slide, .review-notes-slide { padding-left: 11.9%; }
+    .decision-slide, .bridge-slide, .review-notes-slide { padding-left: 11.9%; }
     .capability-slide, .adoption-slide, .pipeline-slide, .managed-files-slide { padding-top: 3%; padding-right: 3.6%; padding-bottom: 3%; }
     .capability-slide h1, .adoption-slide h2, .pipeline-slide h2, .managed-files-slide h2 { font-size: clamp(30px, 2.2vw, 37px); }
     .capability-slide .package-hero { margin-bottom: 8px; padding-bottom: 9px; }
@@ -2405,7 +2344,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>Nine shared flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, reviewer assignment, work item closure, and a candidate release flow, plus the optional governance-drift and template-update-notice schedules</td>
+					<td>Nine shared flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, reviewer assignment, work item closure, and a candidate release flow, plus the optional governance-drift and template-update-notice schedules, and CodeQL SAST</td>
 					<td>Template-led</td>
 			</tr>
 			<tr>
@@ -2435,6 +2374,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 	</tbody>
 </table>
+<p>This table stays at three columns on purpose: the side navigation already links each row&rsquo;s area to its page, and the maintainer-only CI/CD settings appendix already lists verification entry points per Journey in more detail than a column could. Adding page-name and verification-entry columns here would just duplicate both instead of adding information.</p>
 <aside class="technical-detail" data-content-key="files-update">
   <h3>How updates protect product content</h3>
   <p>Copier attempts updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged; adjust them, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.</p>
