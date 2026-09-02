@@ -138,7 +138,7 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 
 {% if enable_governance_drift_check %}`enable_governance_drift_check` 已啟用：每日與手動 Action 會呼叫同一支 `scripts/check-governance-drift`；可修正的偏離會開立或更新一張追蹤 Issue。{% else %}`enable_governance_drift_check` 未啟用：不產生排程 Action 與檢查程式；需要時先透過 Copier 更新開啟選項。{% endif %}每次檢查都是快照，無法取代 GitHub audit log。
 
-{% if languages %}本機與 release workflow 會以相同原生工具建立已選語言的套件；GitHub Release 另附 checksum 與 SPDX SBOM。Registry publishing、artifact attestation 與消費端門禁仍是選配，不會因產生 GitHub Release 就自動啟用。{% endif %}
+{% if languages %}本機與 release workflow 會以相同原生工具建立已選語言的套件；GitHub Release 另附 checksum 與 SPDX SBOM。Registry publishing、artifact attestation 與消費端門禁由有實際需求的產品自行設定，不屬於公版選項。{% endif %}
 
 新建專案會取得 `release.yml`。GitHub 允許 Action 建 PR 時，由 Release Please 自動建立版本 PR；若上層政策禁止，執行 `python3 scripts/release_policy.py prepare-candidate`，再依輸出的 branch／title 開一般 PR。兩路都在版本 PR 合併後由同一 workflow 發布 GitHub Release；不要求 GitHub App、PAT 或 registry token，本機命令也不建立 tag／Release。既有專案保留自己的 product-owned release workflow，Copier 不覆寫或重複發布。
 
@@ -156,8 +156,8 @@ GitHub 從模板建立 repo 或 Copier 導入只會複製檔案，不會複製 r
 | 正式版本與 CHANGELOG | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}Automatic 或 Guided 建立同一種受審查 PR{% else %}沿用產品既有規則{% endif %}；已發布版本不改寫 |
 | tag／GitHub Release | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}版本 PR 合併並通過完整驗證後自動發布；首次成功實跑後才算 Active{% else %}模板不建立第二個 owner{% endif %} |
 | checksum／SBOM | {% if project_mode == "new" %}Configured{% else %}Product-owned{% endif %} | {% if project_mode == "new" %}與 exact-tag 成品同一次建立、下載並重驗；首次成功實跑後才算 Active{% else %}由產品 release workflow 決定{% endif %} |
-| attestation | Conditional | 由產品依 registry 與供應鏈需求另行啟用 |
-| PyPI／npm／GHCR | Not configured | 相關設定目前沒有 active publisher；不得當成已啟用 |
+| attestation | Product-owned | 由產品依 registry 與供應鏈需求另案設定 |
+| PyPI／npm／GHCR | Product-owned | 公版不提供 publisher 選項或 job |
 | production deployment | Not applicable | 由產品自行定義環境、健康檢查、核准與復原 |
 
 Automatic 模式下，`GITHUB_TOKEN` 建立的版本 PR workflows 可能等待人工核准，因此原 release run 會驗證候選 SHA。Guided 模式只把版本 PR 的建立交給人或 agent；版本決策、候選驗證與合併後發布仍共用同一套入口。版本 PR 一律需要人工審查，workflow 不會自我核准；GitHub 拒絕 tag／Release write 時則標示 Blocked，不改用本機直接發布。
