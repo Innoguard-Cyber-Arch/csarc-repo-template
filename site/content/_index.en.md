@@ -61,7 +61,7 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 | --- | --- | --- |
 | `.csarc/config.yml` | Template source, languages, branch strategy, and optional capabilities | Template-led |
 | `.github/ISSUE_TEMPLATE/`, `pull_request_template.md` | Work definition and PR contract | Template-led |
-| `.github/workflows/` | Nine shared flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, reviewer assignment, work item closure, and a candidate release flow, plus the optional governance-drift schedule | Template-led |
+| `.github/workflows/` | Nine shared flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, reviewer assignment, work item closure, and a candidate release flow, plus the optional governance-drift and template-update-notice schedules | Template-led |
 | `AGENTS.md`, `README.md`, `CLAUDE.md` | Agent working rules and user entry point | Shared |
 | `policies/`, `CODEOWNERS`, `.github/REVIEWERS` | Desired settings, owners, and reviewers | Shared |
 | `scripts/` | Local verification, work synchronization, and repository settings | Template-led |
@@ -72,6 +72,20 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 Copier attempts updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged; adjust them, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.
 
 Workflows, policies, scripts, and documents shared by root and `template/` are kept in sync. Files that differ because of project choices are verified by generating a real project. New repositories receive the release Action; adopted repositories keep their product-owned workflow.
+{{< /detail >}}
+
+{{< detail key="files-tools" title="Tools actually used" >}}
+Only tools this template directly integrates, executes, or produces into the repository. External alternatives stay on the Similar tools comparison; language toolchains (`uv`, `ty`, `pnpm`, `rustfmt`, `Clippy`, `Cargo`) stay on the Languages slide. Current versions live in `uv.lock`, the pinned Action SHA, or the install script named below; this table never restates them.
+
+| Tool | Purpose | Where it appears | Scope | License |
+| --- | --- | --- | --- | --- |
+| [Copier](https://github.com/copier-org/copier) | Generates, adopts, and updates repositories from this template | `copier.yml`, `template/`, `.csarc/config.yml` | Every repository created from or adopting this template | [MIT](https://github.com/copier-org/copier/blob/master/LICENSE) |
+| [zizmor](https://github.com/zizmorcore/zizmor) | Static security audit of GitHub Actions workflows | `pyproject.toml`, `scripts/verify-stage-github-actions-audit` | Local and CI verification (`github-actions-audit` stage) | [MIT](https://github.com/zizmorcore/zizmor/blob/main/LICENSE) |
+| [Dependabot](https://github.com/dependabot/dependabot-core) | Opens dependency-update pull requests | `.github/dependabot.yml` | Root and template package ecosystems | [MIT](https://github.com/dependabot/dependabot-core/blob/main/LICENSE) |
+| [OSV-Scanner](https://github.com/google/osv-scanner) | Scans lockfiles for disclosed vulnerabilities | `scripts/verify-dependencies`, `scripts/install-osv-scanner`, `.github/workflows/osv.yml` | Dependency-change PRs, delivery candidates, weekly schedule | [Apache-2.0](https://github.com/google/osv-scanner/blob/main/LICENSE) |
+| [Syft](https://github.com/anchore/syft) | Generates the release SPDX SBOM | `.github/workflows/release.yml` (`anchore/sbom-action`), `scripts/release_assets.py` | Delivery PR that creates a release | [Apache-2.0](https://github.com/anchore/syft/blob/main/LICENSE) |
+| [Release Please](https://github.com/googleapis/release-please) | Maintains the version/changelog pull request and creates the GitHub Release | `.github/workflows/release.yml`, `release-please-config.json`, `.release-please-manifest.json` | Delivery branch to `main` | [Apache-2.0](https://github.com/googleapis/release-please/blob/main/LICENSE) |
+| [Hugo](https://github.com/gohugoio/hugo) | Builds the bilingual internal site and `llms.txt` from Markdown | `scripts/install-hugo`, `scripts/build-decision-site`, `site/hugo.toml` | `docs/index.html`, `docs/index.en.html`, `llms.txt` | [Apache-2.0](https://github.com/gohugoio/hugo/blob/master/LICENSE) |
 {{< /detail >}}
 {{< /slide >}}
 
@@ -348,24 +362,7 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="ecosystem" class="dense" eyebrow="Tool selection" title="Tools implement the process; governance remains the through-line" subtitle="Every tool needs a current decision, not merely a logo on a page." legacy="false" >}}
-| Tool | Need | Current decision |
-| --- | --- | --- |
-| ![Copier logo](../assets/copier.svg) [Copier](https://github.com/copier-org/copier) | Updatable templates | Baseline; changes arrive through PRs |
-| ![zizmor logo](../assets/zizmor.png) [zizmor](https://github.com/zizmorcore/zizmor) | GitHub Actions security | The local contract remains; its dedicated workflow is archived |
-| Dependabot, OSV, Syft | Dependency updates, vulnerabilities, and SBOM | Dependabot is active; OSV is active in a new repository and candidate here pending this repository's own `main` landing; the SBOM contract is conditional and locally tested |
-| ![GitHub Community Projects logo](../assets/github-community-projects.png) [Safe Settings](https://github.com/github-community-projects/safe-settings) | Cross-repository settings | Evaluate after fleet and drift thresholds are met |
-| ![Renovate logo](../assets/renovate.png) [Renovate](https://github.com/renovatebot/renovate) | Flexible update presets | Do not replace Dependabot today |
-| ![GitHub Actions logo](../assets/github-actions.svg) ![PyScaffold logo](../assets/pyscaffold.svg) Starter Workflows, PyScaffold | Official workflow and Python structure examples | Content checklists only; do not copy policy blindly |
-| ![GitHub logo](../assets/github.png) [GitHub Spec Kit](https://github.com/github/spec-kit) | AI specification decomposition | Keep the current spec-to-Issue flow today |
-| ![Backstage logo](../assets/backstage.svg) [Backstage](https://backstage.io/docs/features/software-catalog/) | Catalog, ownership, and docs entry | PoC only after cross-team lookup cost reaches its threshold |
-
-{{< detail key="ecosystem-deferred" title="Capabilities not enabled yet" >}}
-Go and Rust profiles, Scorecard, Harden-Runner, authenticated hosting, RAG, generic deployment, and monitoring all wait for measurable demand. The template does not create empty configuration or placeholders to pretend support.
-{{< /detail >}}
-{{< /slide >}}
-
-{{< slide key="similar-tools" parity="supplemental" eyebrow="Tools appendix | Similar tools" title="Similar tools | Direct alternatives and focused references" subtitle="Standard mode shows projects with a similar overall purpose; Maintenance mode adds concrete comparisons by journey." class="similar-tools-slide" legacy="true" >}}
+{{< slide key="similar-tools" parity="supplemental" eyebrow="Similar tools" title="Similar tools | Direct alternatives and focused references" subtitle="Standard mode shows projects with a similar overall purpose; Maintenance mode adds concrete comparisons by journey. Tools this template directly integrates are on the File map instead." class="similar-tools-slide" legacy="true" >}}
 {{< similar-tools >}}
 {{< /slide >}}
 

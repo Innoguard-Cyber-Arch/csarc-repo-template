@@ -5,9 +5,9 @@
   "starThreshold": 1000,
   "labels": {
     "zh-tw": {
-      "eyebrow": "工具附錄｜相似工具",
+      "eyebrow": "相似工具",
       "title": "相似工具｜整體競品與局部參考",
-      "subtitle": "標準模式先看整體目的接近的套件；維運模式可再按旅程檢查各項具體做法。",
+      "subtitle": "標準模式先看整體目的接近的套件；維運模式可再按旅程檢查各項具體做法。這個模板直接整合的工具改列在「檔案地圖」。",
       "primaryTabOverline": "整體接近",
       "primaryTab": "主要相似工具",
       "primaryLegend": "整體目的相近｜至少涵蓋 5 個 Journey，且近 6 個月有發版",
@@ -29,9 +29,9 @@
       "csarc": "CSARC："
     },
     "en": {
-      "eyebrow": "Tools appendix | Similar tools",
+      "eyebrow": "Similar tools",
       "title": "Similar tools | Direct alternatives and focused references",
-      "subtitle": "Standard mode shows projects with a similar overall purpose; Maintenance mode adds concrete comparisons by journey.",
+      "subtitle": "Standard mode shows projects with a similar overall purpose; Maintenance mode adds concrete comparisons by journey. Tools this template directly integrates are on the File map instead.",
       "primaryTabOverline": "Overall match",
       "primaryTab": "Primary similar tools",
       "primaryLegend": "Similar overall purpose | covers at least five journeys and released within six months",

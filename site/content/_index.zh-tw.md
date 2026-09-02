@@ -150,56 +150,12 @@ fit = "符合畫面"
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="files" track="files" eyebrow="檔案地圖" title="模板把必要設定放到正確位置" subtitle="列出目前實際產生的主要檔案；公版可提出更新，但不會靜默覆寫產品內容。" class="legacy-slide managed-files-slide" legacy="true" >}}
-{{< legacy >}}
-      <header>
-        <h2>模板會把<span class="accent">必要設定放到正確位置</span></h2>
-        <p class="subtitle">共用規則與 9 條 GitHub Actions（其中 1 條候選）每個新 repo 都有；治理漂移排程依 <code>enable_governance_drift_check</code> 產生，語言工具與產品目錄則依未選語言、Python、Rust、TypeScript 或多語言模式產生。</p>
-      </header>
-      <div class="repo-map-window" aria-label="模板產生檔案的視覺對照">
-        <div class="repo-map-toolbar">
-          <span class="repo-map-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-          <span class="repo-map-address">your-project /</span>
-          <span class="repo-map-profile">共通／Python／Rust／TypeScript／多語言｜依宣告產生</span>
-        </div>
-        <div class="repo-tree-head"><span>路徑（依 repo 結構）</span><span>功能／對應旅程編號</span><span>語言</span><span>模板影響</span></div>
-        <div class="repo-tree-body">
-          <div class="repo-tree-row"><span class="repo-tree-path">.csarc/config.yml</span><span class="repo-tree-purpose"><span class="journey-code">09</span><span class="purpose-copy">公版來源、語言、分支與選用能力</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path">.gitignore</span><span class="repo-tree-purpose"><span class="journey-code">02</span><span class="purpose-copy">環境雜訊／語言產物</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path folder">.github/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04／05</span><span class="purpose-copy">GitHub 表單、自動檢查與審查設定</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1">CODEOWNERS＋REVIEWERS</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">指定 owner 與 reviewer 候選</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">ISSUE_TEMPLATE/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">工作單欄位／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1">pull_request_template.md</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">PR 必填內容</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-1 folder">workflows/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／04／05／06／07／08</span><span class="purpose-copy">9 條共用流程（其中 1 條候選）＋1 條選配排程</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">ci.yml</span><span class="repo-tree-purpose"><span class="journey-code">03</span><span class="purpose-copy">執行已宣告模組</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">issue-triage.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">檢查並整理工作單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">milestone-lifecycle.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">同步交付批次狀態</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">osv.yml</span><span class="repo-tree-purpose"><span class="journey-code">04</span><span class="purpose-copy">每週與手動漏洞掃描</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">pr-policy.yml</span><span class="repo-tree-purpose"><span class="journey-code">05</span><span class="purpose-copy">Issue／分支／PR 規則</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">release.yml</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">候選版本 PR 與 GitHub Release</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">spec-to-issue.yml</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">規格自動開單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">governance-comment.yml</span><span class="repo-tree-purpose"><span class="journey-code">08</span><span class="purpose-copy">輪派一位非作者 reviewer</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">governance-drift.yml</span><span class="repo-tree-purpose"><span class="journey-code">08</span><span class="purpose-copy">選配的每日治理漂移檢查</span></span><span class="scope-badge mixed">依設定</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path depth-2">work-item-closure.yml</span><span class="repo-tree-purpose"><span class="journey-code">06</span><span class="purpose-copy">里程碑工作合併後關單</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">docs/specs/</span><span class="repo-tree-purpose"><span class="journey-code">01</span><span class="purpose-copy">功能規格／工作定義</span></span><span class="scope-badge shared">共用</span><span class="owner-badge project">專案持有</span></div>
-          <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">docs/＋site/</span><span class="repo-tree-purpose"><span class="journey-code">09</span><span class="purpose-copy">專案說明、決策與內部網站</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path folder">policies/</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">repo 規則／治理</span></span><span class="scope-badge shared">共用</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path folder">scripts/</span><span class="repo-tree-purpose"><span class="journey-code">01／03／07</span><span class="purpose-copy">開單、驗證與套用設定</span></span><span class="scope-badge mixed">混合</span><span class="owner-badge template">公版主導</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path">version source＋CHANGELOG＋release-please config／manifest</span><span class="repo-tree-purpose"><span class="journey-code">07</span><span class="purpose-copy">版本來源與自動發版基線</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge shared">共同維護</span></div>
-          <div class="repo-tree-row project-owned"><span class="repo-tree-path folder">src/＋tests/；typescript/src/＋tests/</span><span class="repo-tree-purpose"><span class="journey-code">02／03</span><span class="purpose-copy">啟用模組的產品程式</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge project">專案持有</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path">README.md＋AGENTS.md＋CLAUDE.md</span><span class="repo-tree-purpose"><span class="journey-code">01–08</span><span class="purpose-copy">人與 AI 的使用規範</span></span><span class="scope-badge shared">共用</span><span class="owner-badge shared">共同維護</span></div>
-          <div class="repo-tree-row"><span class="repo-tree-path">pyproject.toml／uv.lock／package.json／pnpm-lock.yaml</span><span class="repo-tree-purpose"><span class="journey-code">03／04</span><span class="purpose-copy">語言工具與相依版本</span></span><span class="scope-badge mixed">依 profile</span><span class="owner-badge shared">共同維護</span></div>
-        </div>
-        <div class="repo-map-legend"><span><strong>黃色編號：</strong>對照左側旅程 tag。<strong>模板影響：</strong>公版主導會在 update 提出差異；共同維護可能衝突並由人處理。</span><span><strong>橘線：</strong>專案持有且不改寫。</span></div>
-      </div>
-{{< /legacy >}}
-
-{{< basic >}}
+{{< slide key="files" track="files" eyebrow="檔案地圖" title="模板把必要設定放到正確位置" subtitle="列出目前實際產生的主要檔案；公版可提出更新，但不會靜默覆寫產品內容。" class="dense" legacy="false" >}}
 | 路徑 | 作用 | 責任 |
 | --- | --- | --- |
 | `.csarc/config.yml` | 記錄公版來源、語言、分支與選用能力 | 公版主導 |
 | `.github/ISSUE_TEMPLATE/`、`pull_request_template.md` | 工作定義與 PR 契約 | 公版主導 |
-| `.github/workflows/` | 9 條流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單與候選發版，加上選配的治理漂移排程 | 公版主導 |
+| `.github/workflows/` | 9 條共用流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單與候選發版，加上選配的治理漂移與模板更新通知排程 | 公版主導 |
 | `AGENTS.md`、`README.md`、`CLAUDE.md` | Agent 工作方式與使用者入口 | 共同維護 |
 | `policies/`、`CODEOWNERS`、`.github/REVIEWERS` | 期望設定、owner 與 reviewer | 共同維護 |
 | `scripts/` | 本機驗證、工作同步與套用設定 | 公版主導 |
@@ -211,7 +167,20 @@ Copier 在短分支嘗試更新；若有衝突，只列出檔案且不修改 rep
 
 Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同步程式維持一致；只因專案選項而不同的檔案則以實際生成專案驗證。新 repo 會取得發版 Action；既有 repo 保留自己的 product-owned workflow。
 {{< /detail >}}
-{{< /basic >}}
+
+{{< detail key="files-tools" title="實際使用的工具" >}}
+只列這個模板直接整合、實際執行或會產生到 repository 的工具；外部方案比較留在「相似工具」，語言工具鏈（`uv`、`ty`、`pnpm`、`rustfmt`、`Clippy`、`Cargo`）留在「程式語言」頁。目前版本以 `uv.lock`、已固定的 Action SHA 或下方安裝腳本為準，這裡不重複標註。
+
+| 工具 | 用途 | 出現／設定位置 | 適用範圍 | 授權 |
+| --- | --- | --- | --- | --- |
+| [Copier](https://github.com/copier-org/copier) | 產生、導入與更新使用此模板的 repository | `copier.yml`、`template/`、`.csarc/config.yml` | 每個由此模板建立或導入的 repository | [MIT](https://github.com/copier-org/copier/blob/master/LICENSE) |
+| [zizmor](https://github.com/zizmorcore/zizmor) | 靜態稽核 GitHub Actions workflow 的安全性 | `pyproject.toml`、`scripts/verify-stage-github-actions-audit` | 本機與 CI 驗證（`github-actions-audit` 階段） | [MIT](https://github.com/zizmorcore/zizmor/blob/main/LICENSE) |
+| [Dependabot](https://github.com/dependabot/dependabot-core) | 開立相依套件更新 PR | `.github/dependabot.yml` | Root 與 template 的套件生態圈 | [MIT](https://github.com/dependabot/dependabot-core/blob/main/LICENSE) |
+| [OSV-Scanner](https://github.com/google/osv-scanner) | 掃描 lockfile 中已公開的漏洞 | `scripts/verify-dependencies`、`scripts/install-osv-scanner`、`.github/workflows/osv.yml` | 依賴變更 PR、交付候選、每週排程 | [Apache-2.0](https://github.com/google/osv-scanner/blob/main/LICENSE) |
+| [Syft](https://github.com/anchore/syft) | 產生發版用的 SPDX SBOM | `.github/workflows/release.yml`（`anchore/sbom-action`）、`scripts/release_assets.py` | 建立發版的交付 PR | [Apache-2.0](https://github.com/anchore/syft/blob/main/LICENSE) |
+| [Release Please](https://github.com/googleapis/release-please) | 維護版本／CHANGELOG PR 並建立 GitHub Release | `.github/workflows/release.yml`、`release-please-config.json`、`.release-please-manifest.json` | 交付分支到 `main` | [Apache-2.0](https://github.com/googleapis/release-please/blob/main/LICENSE) |
+| [Hugo](https://github.com/gohugoio/hugo) | 從 Markdown 建置雙語內部網站與 `llms.txt` | `scripts/install-hugo`、`scripts/build-decision-site`、`site/hugo.toml` | `docs/index.html`、`docs/index.en.html`、`llms.txt` | [Apache-2.0](https://github.com/gohugoio/hugo/blob/master/LICENSE) |
+{{< /detail >}}
 {{< /slide >}}
 
 {{< slide key="method" track="method" eyebrow="步驟 01" title="先把要做的事定義清楚" subtitle="把需求整理成可執行的 Issue；多張工作需要一起推進時，才建立里程碑。" class="legacy-slide decision-slide" legacy="true" >}}
@@ -689,73 +658,7 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="ecosystem" eyebrow="工具選型" title="工具是手段，流程與治理才是主線" subtitle="每個工具都要有現在的決定，不能只把 logo 放上頁面。" class="legacy-slide ecosystem-slide" legacy="true" >}}
-{{< legacy >}}
-      <header>
-        <span class="selection-sequence">附錄｜技術選型依據</span>
-        <h2>工具是實作手段，<span class="accent">流程與治理才是主線</span></h2>
-        <p class="subtitle">供已看過五月版的人查核選型：基本導入、未來導入與可選導入分開看；日常操作請回到前面的開發者旅程。</p>
-      </header>
-      <div class="tool-landscape eight">
-        <article class="tool-profile adopt">
-          <div class="tool-logo-box"><img class="tool-logo" src="assets/copier.svg" alt="Copier logo"></div>
-          <div><h3><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">Copier</a></h3><p><strong>可更新模板｜</strong>建立新案，也同步舊案。<strong>決定｜</strong>基本導入；差異走 PR。</p><p class="tool-health"><span class="tool-status">已完成</span>· MIT · 持續維護</p></div>
-        </article>
-        <article class="tool-profile adopt">
-          <div class="tool-logo-box"><img class="tool-logo" src="assets/zizmor.png" alt="zizmor logo"></div>
-          <div><h3><a href="https://github.com/zizmorcore/zizmor" target="_blank" rel="noreferrer">zizmor</a></h3><p><strong>Actions 安全｜</strong>檢查權限與不安全寫法。<strong>決定｜</strong>基本導入；PR 自動跑。</p><p class="tool-health"><span class="tool-status">已完成</span>· MIT · 持續維護</p></div>
-        </article>
-        <article class="tool-profile next">
-          <div class="tool-logo-box"><img class="tool-logo" src="assets/github-community-projects.png" alt="GitHub Community Projects logo"></div>
-          <div><h3><a href="https://github.com/github-community-projects/safe-settings" target="_blank" rel="noreferrer">GitHub Safe Settings</a></h3><p><strong>多 repo 治理｜</strong>集中套用、找出差異。<strong>決定｜</strong>未來；目前 JSON＋<code>gh api</code>＋排程漂移檢查已足夠。</p><p class="tool-health"><span class="tool-status">未來導入</span>· ISC · 持續維護</p></div>
-        </article>
-        <article class="tool-profile conditional">
-          <div class="tool-logo-box"><img class="tool-logo" src="assets/renovate.png" alt="Renovate logo"></div>
-          <div><h3><a href="https://github.com/renovatebot/renovate" target="_blank" rel="noreferrer">Renovate</a></h3><p><strong>套件更新｜</strong>等待與分組更細。<strong>決定｜</strong>不導入；保留能直接觸發既有 CI/CD checks 的 Dependabot。<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/74" target="_blank" rel="noreferrer">#74 評估</a>、<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/110" target="_blank" rel="noreferrer">#110 決策</a>。</p><p class="tool-health"><span class="tool-status">不採用</span>· AGPL · 持續維護</p></div>
-        </article>
-        <article class="tool-profile">
-          <div class="tool-logo-box"><img class="tool-logo" src="assets/github-actions.svg" alt="GitHub Actions logo"></div>
-          <div><h3><a href="https://github.com/actions/starter-workflows" target="_blank" rel="noreferrer">Starter Workflows</a></h3><p><strong>GitHub Actions 目錄｜</strong>官方範例。<strong>決定｜</strong>只參考分類，不照抄政策。</p><p class="tool-health"><span class="tool-status">內容參考</span>· GitHub · 持續維護</p></div>
-        </article>
-        <article class="tool-profile">
-          <div class="tool-logo-box"><img class="tool-logo" src="assets/pyscaffold.svg" alt="PyScaffold logo"></div>
-          <div><h3><a href="https://github.com/pyscaffold/pyscaffold" target="_blank" rel="noreferrer">PyScaffold</a></h3><p><strong>Python 骨架｜</strong>成熟結構與測試做法。<strong>決定｜</strong>只當內容檢查表。</p><p class="tool-health"><span class="tool-status">內容參考</span>· MIT · 持續維護</p></div>
-        </article>
-        <article class="tool-profile next">
-          <div class="tool-logo-box"><img class="tool-logo" src="assets/github.png" alt="GitHub logo"></div>
-          <div><h3><a href="https://github.com/github/spec-kit" target="_blank" rel="noreferrer">GitHub Spec Kit</a></h3><p><strong>AI 規格拆解｜</strong>串起規格、計畫與工作。<strong>決定｜</strong>未來；目前用 spec → Issue。</p><p class="tool-health"><span class="tool-status">未來導入</span>· MIT · 持續維護</p></div>
-        </article>
-        <article class="tool-profile conditional">
-          <div class="tool-logo-box"><img class="tool-logo" src="assets/backstage.svg" alt="Backstage logo"></div>
-          <div><h3><a href="https://backstage.io/docs/features/software-catalog/" target="_blank" rel="noreferrer">Backstage</a></h3><p><strong>開發者入口｜</strong>集中服務、owner 與文件。<strong>決定｜</strong>等跨團隊找 owner／服務開始反覆耗時才導入。</p><p class="tool-health"><span class="tool-status">條件式導入</span>· Apache-2.0 · 持續維護</p></div>
-        </article>
-      </div>
-      <aside class="tool-deferred" aria-label="未來選配與暫不採用工具">
-        <p><strong>依賴安全選型：</strong>Dependabot 提出更新、OSV-Scanner 檢查已知漏洞、Syft 建立 SBOM；三者各自負責，不互相替代。</p>
-        <p><strong>尚未啟用：</strong>Go、Scorecard、Harden-Runner、網站託管／登入（<a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/79" target="_blank" rel="noreferrer">#79</a>）、Hugo、RAG、通用部署與監控；repo 內部網站與生成內容模板已可用。</p>
-      </aside>
-      <p class="ecosystem-reference reference">Ref. Official project repositories linked above; logo assets from each project's brand kit.</p>
-{{< /legacy >}}
-
-{{< basic >}}
-| 工具 | 解決什麼 | 現在的決定 |
-| --- | --- | --- |
-| ![Copier logo](assets/copier.svg) [Copier](https://github.com/copier-org/copier) | 可更新模板 | 基本導入；差異走 PR |
-| ![zizmor logo](assets/zizmor.png) [zizmor](https://github.com/zizmorcore/zizmor) | GitHub Actions 安全 | 本機檢查契約保留；專用 workflow 仍封存 |
-| Dependabot、OSV、Syft | 依賴更新、漏洞與 SBOM | Dependabot 已啟用；OSV 在新生成 repo 立即啟用，本 repository 因候選尚未落地 main 而仍是 candidate；SBOM 是已通過本機測試的 conditional contract |
-| ![GitHub Community Projects logo](assets/github-community-projects.png) [Safe Settings](https://github.com/github-community-projects/safe-settings) | 多 repo 設定治理 | 規模與漂移門檻成立後才評估 |
-| ![Renovate logo](assets/renovate.png) [Renovate](https://github.com/renovatebot/renovate) | 更彈性的更新 preset | 現階段不取代 Dependabot |
-| ![GitHub Actions logo](assets/github-actions.svg) ![PyScaffold logo](assets/pyscaffold.svg) Starter Workflows、PyScaffold | 官方 workflow 與 Python 結構範例 | 只作內容檢查表，不照抄政策 |
-| ![GitHub logo](assets/github.png) [GitHub Spec Kit](https://github.com/github/spec-kit) | AI 規格拆解 | 現階段保留 spec → Issue |
-| ![Backstage logo](assets/backstage.svg) [Backstage](https://backstage.io/docs/features/software-catalog/) | Catalog、owner 與文件入口 | 跨團隊查找成本達門檻才 PoC |
-
-{{< detail key="ecosystem-deferred" title="尚未啟用的能力" >}}
-Go、Scorecard、Harden-Runner、網站託管與登入、RAG、通用部署與監控都等可測量需求再做。公版不建立空設定或 placeholder 來假裝支援。
-{{< /detail >}}
-{{< /basic >}}
-{{< /slide >}}
-
-{{< slide key="similar-tools" parity="supplemental" eyebrow="工具附錄｜相似工具" title="相似工具｜整體競品與局部參考" subtitle="標準模式先看整體目的接近的套件；維運模式可再按旅程檢查各項具體做法。" class="similar-tools-slide" legacy="true" >}}
+{{< slide key="similar-tools" parity="supplemental" eyebrow="相似工具" title="相似工具｜整體競品與局部參考" subtitle="標準模式先看整體目的接近的套件；維運模式可再按旅程檢查各項具體做法。這個模板直接整合的工具改列在「檔案地圖」。" class="similar-tools-slide" legacy="true" >}}
 {{< similar-tools >}}
 {{< /slide >}}
 
