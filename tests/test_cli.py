@@ -4540,7 +4540,11 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         assert commands
         assert all(excludes_large(command) for command in commands)
 
-    root_full_commands = pytest_commands(ROOT / "scripts/verify-template.sh")
+    # scripts/verify-template.sh is a thin aggregator (Issue #458); its own
+    # full-tier pytest invocation lives in the Regression tests stage script.
+    root_full_commands = pytest_commands(
+        ROOT / "scripts/verify-stage-regression-tests"
+    )
     assert root_full_commands
     assert not any(excludes_large(command) for command in root_full_commands)
 

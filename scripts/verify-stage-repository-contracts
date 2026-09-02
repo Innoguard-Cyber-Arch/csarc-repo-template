@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# "Repository contracts" stage of scripts/verify-template.sh: changed-tree
+# hygiene, unresolved Copier/merge conflict markers, secret scanning, and
+# known-vulnerability scanning of dependency lockfiles. Runnable standalone
+# to re-check just this stage without paying for the full run; aggregated
+# in order by scripts/verify-template.sh. See docs/ci-policy.md.
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+git diff --check
+./scripts/check-update-conflicts
+./scripts/scan-secrets
+./scripts/verify-dependencies

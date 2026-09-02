@@ -250,10 +250,58 @@ run_stage "Broken stage" sample_failure
     assert "TOTAL" in failure.stderr
 
 
+def test_full_verification_stages_are_independently_runnable_scripts() -> None:
+    """Rerun one full-verification stage without paying for the whole run.
+
+    scripts/verify-template.sh is a thin aggregator (Issue #458): each of its
+    seven stages is also a standalone scripts/verify-stage-* script. This
+    proves the aggregator still calls the documented scripts, by name, in
+    the same order, and that every one of them exists and is executable;
+    test_template_verification_reports_stage_timings above already proves
+    the shared run_stage/report_failure/print_timing_summary harness itself
+    still reports PASSED/FAILED and a non-zero exit, so that mechanism is
+    not re-tested here.
+    """
+    entry = REPO_ROOT / "scripts/verify-template.sh"
+    source = entry.read_text(encoding="utf-8")
+
+    expected = (
+        ("Repository contracts", "scripts/verify-stage-repository-contracts"),
+        (
+            "Static assets and paired files",
+            "scripts/verify-stage-static-assets",
+        ),
+        ("Python environment", "scripts/verify-stage-python-environment"),
+        ("Python quality", "scripts/verify-stage-python-quality"),
+        ("Regression tests", "scripts/verify-stage-regression-tests"),
+        ("Package smoke test", "scripts/verify-stage-package-smoke"),
+        ("GitHub Actions audit", "scripts/verify-stage-github-actions-audit"),
+    )
+
+    calls = [
+        line.strip()
+        for line in source.splitlines()
+        if line.strip().startswith('run_stage "')
+    ]
+    assert calls == [
+        f'run_stage "{name}" ./{script}' for name, script in expected
+    ]
+
+    for _, script in expected:
+        path = REPO_ROOT / script
+        assert path.is_file(), f"Missing stage script: {script}"
+        assert os.access(path, os.X_OK), f"Not executable: {script}"
+
+
 def test_release_verification_contains_issue_pr_regressions() -> None:
     """Keep each release set a provable superset of its Issue PR set."""
     root_issue = direct_regression_commands("scripts/verify-fast")
-    root_release = direct_regression_commands("scripts/verify-template.sh")
+    # scripts/verify-template.sh (Issue #458) is a thin aggregator; the
+    # Regression tests stage's own ./scripts/test-* invocations moved to
+    # scripts/verify-stage-regression-tests.
+    root_release = direct_regression_commands(
+        "scripts/verify-stage-regression-tests"
+    )
     generated_issue = direct_regression_commands(
         "template/scripts/verify-fast.jinja"
     )
@@ -300,9 +348,12 @@ def test_full_pytest_includes_the_issue_pr_ai_contract() -> None:
     issue_entry = (REPO_ROOT / "scripts/verify-fast").read_text(
         encoding="utf-8"
     )
-    release_entry = (REPO_ROOT / "scripts/verify-template.sh").read_text(
-        encoding="utf-8"
-    )
+    # The full-tier pytest invocation lives in the Regression tests stage
+    # script since scripts/verify-template.sh became a thin aggregator
+    # (Issue #458).
+    release_entry = (
+        REPO_ROOT / "scripts/verify-stage-regression-tests"
+    ).read_text(encoding="utf-8")
     ai_contract = (REPO_ROOT / "tests/test_ai_guidelines.py").read_text(
         encoding="utf-8"
     )
