@@ -115,6 +115,8 @@ GitHub Actions 看不到 agent host 上的本機 worktrees，因此建立 worktr
 
 {% if enable_codeql | default(false) %}此專案已產生 CodeQL workflow，分析已選取的 Python／TypeScript 模組；它補足跨函式資料流等 SAST 檢查，但仍可能有誤報與漏報，結果需人工 triage。{% else %}此專案未啟用 SAST。語言 lint 與 OSV 分別處理程式品質和已知相依漏洞，不能替代 SAST；public repo 可重新產生並啟用 `enable_codeql`，private／internal repo 則需先確認 GitHub Code Security 授權，或由專案選用核准的替代工具。{% endif %}
 
+{% if enable_docker | default(false) %}此專案已產生 `Dockerfile`、`docker-compose.yml` 起始範本，以及 `.github/workflows/docker-build-scan.yml`：只在建置或掃描相關路徑變更時觸發，`contents: read` 唯讀權限，只在 runner 本機建置映像（不推送）並用 Trivy 掃描已知漏洞，不登入、不推送任何 registry，也不要求任何 secret；`Dockerfile` 與 `docker-compose.yml` 只是起點，建置階段、base image 與最終 CMD 都需依實際封裝方式調整。{% else %}此專案未啟用容器範本。需要時可透過 Copier 更新開啟 `enable_docker`，取得起始 `Dockerfile`、`docker-compose.yml` 與唯讀、不推送的容器建置掃描 CI；未開啟前不會產生任何容器相關檔案、job 或權限。{% endif %}
+
 `./scripts/verify-template.sh` 與 root 專用升版／同步工具只屬於中央模板 repo，不會下發到本專案；本專案的本機與 CI 驗證入口都是 `./scripts/verify`。
 
 {% if not languages %}目前驗證 spec、README、JSON、workflow 與機密字串；沒有語言模組，因此不執行語言測試或打包。
