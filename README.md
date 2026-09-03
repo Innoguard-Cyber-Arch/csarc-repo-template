@@ -172,7 +172,15 @@ uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo
 
 ### Agent prompt
 
-固定版本的安裝契約是 [`docs/agent-install.md`](docs/agent-install.md)。下列三個 prompt 只選擇 lifecycle；CLI 會從 canonical immutable Release 解析並驗證 full SHA，再把它鎖進 plan 與 provenance。需要預先固定版本時，改用 Release 附件中的三個 pinned prompts。
+固定版本的安裝契約是 [`docs/agent-install.md`](docs/agent-install.md)。下列四個 prompt 只選擇 lifecycle；CLI 會從 canonical immutable Release 解析並驗證 full SHA，再把它鎖進 plan 與 provenance。需要預先固定版本時，改用 Release 附件中的三個 pinned prompts。
+
+不確定目前 repo 狀態、或想讓 CLI 自動判斷時，先用「自動判斷」prompt：`csarc status` 只讀取本機檔案與（若已導入）GitHub 上的公版版本與 repository 設定，把結果分成五種狀態（`create`／`adopt`／`update`／`current`／`policy-only-update`），判斷邏輯全部在 CLI 裡、不靠 agent 自由發揮，同一個狀態多次執行結果一致；再依回傳的 `next_command` 走下方對應的新建、既有導入或更新 prompt，或（僅政策設定變動時）直接執行 `scripts/apply-repository-settings.sh plan` 再 `apply`，不必重新走一次完整 adopt／update。
+
+自動判斷（推薦）：
+
+```text
+請使用 uv 從 canonical GitHub repository 的核准 release commit 執行官方 csarc CLI 的 `status` 子指令，判斷目前 workspace／既有 Git repository 屬於哪一種安裝狀態；uv 應按次管理隔離的 Python 3.14，不要求全域 Python。先執行 `csarc status --json`，不要自行判斷或假設目前狀態。依回傳的 state 與 next_command：create 或 adopt 或 update 時，改用對應的 init／adopt／update dry-run prompt 並等待確認；current 時回報不需動作；policy-only-update 時只執行 `scripts/apply-repository-settings.sh plan`、摘要差異並等待確認，確認後才 `apply`，不要重新走完整 adopt 或 update。全程不要修改全域環境、push 或開 PR。
+```
 
 新建：
 

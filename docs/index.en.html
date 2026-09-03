@@ -2058,6 +2058,9 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item human active" aria-current="step">
       <a href="#capability"><span>Capability</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -2156,12 +2159,134 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 </section>
 
+<section class="slide markdown-slide dense" id="install" data-content-key="install" data-parity="supplemental" aria-label="One command decides what happens next">
+  <aside class="journey-rail" aria-label="Presentation outline">
+  <h3>Use template</h3>
+  <ol class="journey-use">
+    <li class="journey-item human">
+      <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human active" aria-current="step">
+      <a href="#install"><span>Install</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#flow"><span>CI/CD flow</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#files"><span>File map</span></a>
+    </li>
+  </ol>
+  <h3>Workflow</h3>
+  <ol class="journey-main">
+    <li class="journey-item human">
+      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
+    </li>
+  </ol>
+  <h3>Maintenance</h3>
+  <ol class="journey-support">
+    <li class="journey-item human">
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
+    </li>
+  </ol>
+  <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
+  <div class="journey-legend" aria-label="Color key">
+    <span><i class="human" aria-hidden="true"></i>Human decision</span>
+    <span><i class="automated" aria-hidden="true"></i>Automated by default</span>
+    <span data-audience="maintainer"><i class="maintainer" aria-hidden="true"></i>Maintainers only</span>
+  </div>
+</aside>
+
+  <header>
+    <span class="selection-sequence">Install guide</span>
+    <h2>One command decides what happens next</h2>
+    <p class="subtitle">`csarc status` reads `.csarc/config.yml`, the Copier revision, and policies/ drift; the result never depends on agent judgment.</p>
+  </header>
+  <div class="markdown-body"><p>Whether the repository is brand new, an existing one, or already CSARC-managed, run the same command first:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"><code class="language-bash" data-lang="bash"><span style="display:flex;"><span>csarc status &lt;path&gt; --json
+</span></span></code></pre></div><p>It only reads local files plus, once a repository is already managed, the resolved template release and live GitHub settings; it never writes anything. The returned <code>state</code> field maps to exactly one of the five rows below, and <code>next_command</code> names the command to run next. Running it again against unchanged repository state always returns the same answer.</p>
+<table>
+	<thead>
+			<tr>
+					<th>State (<code>state</code>)</th>
+					<th>How it is detected</th>
+					<th>Next step</th>
+			</tr>
+	</thead>
+	<tbody>
+			<tr>
+					<td><code>create</code> (new repository)</td>
+					<td>The target path does not exist, or exists but is an empty directory</td>
+					<td><code>csarc init &lt;path&gt;</code>: preview with <code>--dry-run</code>, then confirm with <code>--yes --non-interactive</code></td>
+			</tr>
+			<tr>
+					<td><code>adopt</code> (existing repository)</td>
+					<td>The target already has content but no <code>.csarc/config.yml</code></td>
+					<td><code>csarc adopt &lt;path&gt;</code>: write a dry-run plan, review it, then apply with <code>--apply-plan</code></td>
+			</tr>
+			<tr>
+					<td><code>update</code> (update available)</td>
+					<td><code>.csarc/config.yml</code> exists and its pinned Copier revision is behind the resolved target release</td>
+					<td><code>csarc update &lt;path&gt; --check</code> to preview, then <code>csarc update &lt;path&gt;</code></td>
+			</tr>
+			<tr>
+					<td><code>current</code> (nothing to do)</td>
+					<td>The Copier revision is current, and <code>policies/</code> matches the repository&rsquo;s live GitHub settings</td>
+					<td>No action needed</td>
+			</tr>
+			<tr>
+					<td><code>policy-only-update</code> (policy settings changed)</td>
+					<td>The Copier revision is current, but <code>policies/</code> (for example, whether workarounds are allowed) no longer matches the live GitHub settings</td>
+					<td><code>scripts/apply-repository-settings.sh plan</code> to preview, then <code>apply</code>; this <strong>skips</strong> a full adopt or update run</td>
+			</tr>
+	</tbody>
+</table>
+<aside class="technical-detail" data-content-key="install-policy-only">
+  <h3>Why a policy-only change skips a full readopt</h3>
+  <p>Policy settings (branch protection, required checks, labels, CODEOWNER rules) live in <code>policies/*.json</code> and are applied to GitHub directly by <code>scripts/apply-repository-settings.sh</code>; they are separate from the Copier template files. Changing a policy never touches a template file and never moves the pinned Copier revision. When <code>csarc status</code> detects that the revision is unchanged but <code>apply-repository-settings.sh check</code> reports drift, it returns <code>policy-only-update</code> and points straight at the existing, standalone <code>plan</code>/<code>apply</code> flow instead of suggesting a full adopt or update.</p>
+<p>If <code>apply-repository-settings.sh check</code> itself cannot run (for example, <code>gh</code> is not authenticated or there is no network), <code>csarc status</code> does not assume policy drift. It falls back to <code>current</code> and marks <code>policy_check.available</code> as <code>false</code>, leaving the confirmation to a human.</p>
+</aside>
+<aside class="technical-detail" data-content-key="install-agent">
+  <h3>One prompt for an agent</h3>
+  The full contract lives in <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/agent-install.md"><code>docs/agent-install.md</code></a>: an agent always runs <code>csarc status</code> first and follows the row matching its returned <code>state</code>, instead of guessing which situation applies. All of the classification logic lives in the CLI (<code>detect_install_state</code>); the agent only calls it and acts on the result, so the same repository state never produces a different answer just because a different agent ran it.
+</aside>
+</div>
+</section>
+
 <section class="slide markdown-slide candidate-slide" id="flow" data-content-key="flow" data-track="flow" aria-label="The template guides every change">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
     </li>
     <li class="journey-item automated active" aria-current="step">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -2270,6 +2395,9 @@ html[data-detail-level="simple"] .detail-panel {
   <ol class="journey-use">
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -2462,6 +2590,9 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -2615,6 +2746,9 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -2741,6 +2875,9 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -2855,6 +2992,9 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -2957,6 +3097,9 @@ html[data-detail-level="simple"] .detail-panel {
   <ol class="journey-use">
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -3089,6 +3232,9 @@ html[data-detail-level="simple"] .detail-panel {
   <ol class="journey-use">
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -3232,6 +3378,9 @@ html[data-detail-level="simple"] .detail-panel {
   <ol class="journey-use">
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -3401,6 +3550,9 @@ html[data-detail-level="simple"] .detail-panel {
   <ol class="journey-use">
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -3620,6 +3772,9 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -3747,6 +3902,9 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -3829,6 +3987,9 @@ html[data-detail-level="simple"] .detail-panel {
   <ol class="journey-use">
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -3955,6 +4116,9 @@ html[data-detail-level="simple"] .detail-panel {
   <ol class="journey-use">
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -4518,6 +4682,9 @@ html[data-detail-level="simple"] .detail-panel {
   <ol class="journey-use">
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -5123,6 +5290,9 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -5220,6 +5390,9 @@ html[data-detail-level="simple"] .detail-panel {
   <ol class="journey-use">
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -5334,6 +5507,9 @@ html[data-detail-level="simple"] .detail-panel {
   <ol class="journey-use">
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
@@ -5463,6 +5639,9 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -5561,6 +5740,9 @@ html[data-detail-level="simple"] .detail-panel {
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
     </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
+    </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>
     </li>
@@ -5650,6 +5832,9 @@ html[data-detail-level="simple"] .detail-panel {
   <ol class="journey-use">
     <li class="journey-item human">
       <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#install"><span>Install</span></a>
     </li>
     <li class="journey-item automated">
       <a href="#flow"><span>CI/CD flow</span></a>

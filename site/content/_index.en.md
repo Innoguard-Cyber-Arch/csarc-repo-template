@@ -36,6 +36,34 @@ The template promises only capabilities that are implemented and tested. Go, gen
 {{< /detail >}}
 {{< /slide >}}
 
+{{< slide key="install" parity="supplemental" eyebrow="Install guide" title="One command decides what happens next" subtitle="`csarc status` reads `.csarc/config.yml`, the Copier revision, and policies/ drift; the result never depends on agent judgment." class="dense" legacy="false" >}}
+Whether the repository is brand new, an existing one, or already CSARC-managed, run the same command first:
+
+```bash
+csarc status <path> --json
+```
+
+It only reads local files plus, once a repository is already managed, the resolved template release and live GitHub settings; it never writes anything. The returned `state` field maps to exactly one of the five rows below, and `next_command` names the command to run next. Running it again against unchanged repository state always returns the same answer.
+
+| State (`state`) | How it is detected | Next step |
+| --- | --- | --- |
+| `create` (new repository) | The target path does not exist, or exists but is an empty directory | `csarc init <path>`: preview with `--dry-run`, then confirm with `--yes --non-interactive` |
+| `adopt` (existing repository) | The target already has content but no `.csarc/config.yml` | `csarc adopt <path>`: write a dry-run plan, review it, then apply with `--apply-plan` |
+| `update` (update available) | `.csarc/config.yml` exists and its pinned Copier revision is behind the resolved target release | `csarc update <path> --check` to preview, then `csarc update <path>` |
+| `current` (nothing to do) | The Copier revision is current, and `policies/` matches the repository's live GitHub settings | No action needed |
+| `policy-only-update` (policy settings changed) | The Copier revision is current, but `policies/` (for example, whether workarounds are allowed) no longer matches the live GitHub settings | `scripts/apply-repository-settings.sh plan` to preview, then `apply`; this **skips** a full adopt or update run |
+
+{{< detail key="install-policy-only" title="Why a policy-only change skips a full readopt" >}}
+Policy settings (branch protection, required checks, labels, CODEOWNER rules) live in `policies/*.json` and are applied to GitHub directly by `scripts/apply-repository-settings.sh`; they are separate from the Copier template files. Changing a policy never touches a template file and never moves the pinned Copier revision. When `csarc status` detects that the revision is unchanged but `apply-repository-settings.sh check` reports drift, it returns `policy-only-update` and points straight at the existing, standalone `plan`/`apply` flow instead of suggesting a full adopt or update.
+
+If `apply-repository-settings.sh check` itself cannot run (for example, `gh` is not authenticated or there is no network), `csarc status` does not assume policy drift. It falls back to `current` and marks `policy_check.available` as `false`, leaving the confirmation to a human.
+{{< /detail >}}
+
+{{< detail key="install-agent" title="One prompt for an agent" >}}
+The full contract lives in [`docs/agent-install.md`](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/agent-install.md): an agent always runs `csarc status` first and follows the row matching its returned `state`, instead of guessing which situation applies. All of the classification logic lives in the CLI (`detect_install_state`); the agent only calls it and acts on the result, so the same repository state never produces a different answer just because a different agent ran it.
+{{< /detail >}}
+{{< /slide >}}
+
 {{< slide key="flow" track="flow" eyebrow="CI/CD flow" title="The template guides every change" subtitle="Follow the Issue and PR prompts; the template prepares the right settings and tells you what needs attention." legacy="false"  class="candidate-slide" >}}
 | What you are doing | How the template guides you |
 | --- | --- |
