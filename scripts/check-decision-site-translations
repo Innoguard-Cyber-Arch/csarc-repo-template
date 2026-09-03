@@ -4,24 +4,26 @@
 from __future__ import annotations
 
 import argparse
-import re
+import runpy
 import sys
 import tomllib
 from pathlib import Path
+from typing import Final
 
 LANGUAGE_FILES = ("_index.zh-tw.md", "_index.en.md")
 type Shape = str | dict[str, "Shape"]
 type Block = tuple[str, str, tuple[str, ...]]
-BLOCK = re.compile(
-    r"(?={{<\s*(slide|detail|disclosure)\b([^>]*)>}}"
-    r"(.*?){{<\s*/\1\s*>}})",
-    re.DOTALL,
+
+# Shared with scripts/build_decision_site.py so the two only-Hugo-block-
+# syntax consumers (this shape checker and the render engine) parse
+# `{{< name attr="value" >}}...{{< /name >}}` the same way instead of each
+# keeping its own regex.
+_BLOCKS: Final = runpy.run_path(
+    str(Path(__file__).resolve().parent / "decision_site_blocks.py")
 )
-ATTRIBUTE = re.compile(r'(\w+)="([^"]*)"')
-NESTED_BLOCK = re.compile(
-    r"{{<\s*(detail|disclosure)\b[^>]*>}}.*?{{<\s*/\1\s*>}}",
-    re.DOTALL,
-)
+BLOCK = _BLOCKS["BLOCK"]
+ATTRIBUTE = _BLOCKS["ATTRIBUTE"]
+NESTED_BLOCK = _BLOCKS["NESTED_BLOCK"]
 
 
 def shape(value: object) -> Shape:

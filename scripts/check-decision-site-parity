@@ -129,7 +129,7 @@ def main() -> int:
         "--legacy", type=Path, default=Path("site/legacy/index.html")
     )
     parser.add_argument(
-        "--candidate", type=Path, default=Path("dist/hugo-site/index.html")
+        "--candidate", type=Path, default=Path("dist/decision-site/index.html")
     )
     args = parser.parse_args()
     try:
