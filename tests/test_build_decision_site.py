@@ -922,6 +922,7 @@ def test_build_output_feeds_render_site_unmodified(tmp_path: Path) -> None:
     bundled = render(outputs["zh-tw"], root=tmp_path)
     assert '<link rel="stylesheet"' not in bundled
     assert "<script src=" not in bundled
+    assert "Body paragraph." in bundled
 
 
 def test_theme_css_default_is_a_no_op_override(tmp_path: Path) -> None:
@@ -946,7 +947,6 @@ def test_theme_css_override_cascades_after_base_styles(tmp_path: Path) -> None:
     assert bundled.index("--yellow:#ffe600;") < bundled.index(
         "--yellow: #123456;"
     )
-    assert "Body paragraph." in bundled
 
 
 # --- real content regression (no Hugo) ------------------------------------
