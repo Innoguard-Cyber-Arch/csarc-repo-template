@@ -6,6 +6,9 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "build_decision_site.py"))
 RENDER_SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "render_site.py"))
+PARITY_MODULE = runpy.run_path(
+    str(ROOT / "scripts" / "check-decision-site-parity")
+)
 
 BuildError = SITE_MODULE["BuildError"]
 SiteData = SITE_MODULE["SiteData"]
@@ -26,6 +29,8 @@ load_site_data = SITE_MODULE["load_site_data"]
 build = SITE_MODULE["build"]
 _substitute_version_tokens = SITE_MODULE["_substitute_version_tokens"]
 render = RENDER_SITE_MODULE["render"]
+parse_parity = PARITY_MODULE["parse"]
+compare_parity = PARITY_MODULE["compare"]
 
 
 def _empty_data(**overrides: object) -> object:
@@ -1150,3 +1155,16 @@ def test_real_content_slide_ids_match_navigation_items(tmp_path: Path) -> None:
     ids = set(re.findall(r'data-content-key="([^"]*)"', text))
     for item in data.navigation["items"]:
         assert item["key"] in ids
+
+
+def test_real_content_keeps_decision_site_key_parity(tmp_path: Path) -> None:
+    """No slide key silently vanishes or appears unacknowledged (Issue #586).
+
+    Only the key set is checked here (`keys_only=True`), matching what
+    `scripts/build-decision-site --check` wires into CI. The exact-text
+    comparison is not part of this regression; see Issue #590.
+    """
+    outputs = build(ROOT, tmp_path / "dist/decision-site")
+    legacy = parse_parity(ROOT / "site/legacy/index.html", candidate=False)
+    candidate = parse_parity(outputs["zh-tw"], candidate=True)
+    assert compare_parity(legacy, candidate, keys_only=True) == []

@@ -118,24 +118,33 @@ def test_governance_single_source_item_translation_is_accurate() -> None:
     assert item["code"]["zh-tw"] == item["code"]["en"]
 
 
-def test_app_js_rollout_orphan_is_intentionally_untouched() -> None:
+def test_app_js_rollout_track_only_serves_the_legacy_fixture() -> None:
     """app.js only backs the frozen site/legacy/index.html parity fixture
     (Issue #472 explicitly excludes site/legacy/index.html), and that fixture
     still has a `data-track="rollout"` slide. So app.js's `rollout` entry is
-    not dead code in the context it actually runs in, and is out of scope for
-    this migration; this test locks in that decision so a future change
-    cannot silently orphan the fixture instead.
+    not dead code in the context it actually runs in; this test locks in
+    that reasoning so a future change cannot silently orphan the fixture
+    instead.
+
+    Issue #586 later restored an equivalent `key="rollout"` slide to the
+    live, Markdown-driven content (as an `audience="archive"` appendix, once
+    it confirmed the original content had been dropped, not redistributed
+    elsewhere). That live slide is unrelated to app.js: the new engine
+    (`scripts/build_decision_site.py` / `scripts/render_site.py`) never
+    references app.js, so nothing in its output can run the fixture-only
+    script this test protects, regardless of which `data-track` values the
+    live content uses.
     """
     app_js = (ROOT / "site/static/app.js").read_text(encoding="utf-8")
     legacy_fixture = (ROOT / "site/legacy/index.html").read_text(
         encoding="utf-8"
     )
+    build_decision_site = (ROOT / "scripts/build_decision_site.py").read_text(
+        encoding="utf-8"
+    )
+    render_site = (ROOT / "scripts/render_site.py").read_text(encoding="utf-8")
     assert "rollout:" in app_js
     assert 'data-track="rollout"' in legacy_fixture
     assert '<script src="app.js"></script>' in legacy_fixture
-    # The live, Markdown-driven decision slides never use this track.
-    for content in (
-        (ROOT / "site/content/_index.zh-tw.md").read_text(encoding="utf-8"),
-        (ROOT / "site/content/_index.en.md").read_text(encoding="utf-8"),
-    ):
-        assert 'track="rollout"' not in content
+    assert "app.js" not in build_decision_site
+    assert "app.js" not in render_site

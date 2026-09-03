@@ -294,7 +294,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="languages" track="languages" eyebrow="步驟 04" title="選擇程式語言後，自動帶入適合的檢查" subtitle="每種語言各自定義工具與測試；共通規則只執行一次。" class="legacy-slide decision-slide" legacy="true" >}}
+{{< slide key="languages" track="languages" parity="new" eyebrow="步驟 04" title="選擇程式語言後，自動帶入適合的檢查" subtitle="每種語言各自定義工具與測試；共通規則只執行一次。" class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <h2>步驟 4｜<span class="accent">每種程式語言各自管理</span></h2>
@@ -668,6 +668,37 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
 
 {{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜CI/CD 設定" title="CI/CD 設定｜依 Journey 檢查" subtitle="分開列出一般 repo 與 repo-template 在工作 PR 與 repository delivery PR 各自需要的測試與自動化。" class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
+{{< /slide >}}
+
+{{< slide key="rollout" track="rollout" audience="archive" eyebrow="分階段導入策略" title="分階段導入，每一步都能停下來" subtitle="三層導入：基本能力現在就有，未來與可選能力先寫清楚觸發門檻。" class="legacy-slide review-notes-slide" legacy="true" >}}
+<aside class="selection-note"><strong>Current state｜2026-09-03</strong><span>下方 technical view 保留原始三層導入判斷供稽核；各層現況以 <code>profiles/catalog.yaml</code> 與相關驗證腳本為準，不在此頁重複更新。</span></aside>
+{{< legacy >}}
+      <header>
+        <h2>分階段導入，<span class="accent">每一步都能驗證，也能停下來</span></h2>
+        <p class="subtitle"><strong>三層導入｜</strong>基本能力現在就隨模板產生；未來與可選能力先寫清楚觸發門檻，不用空檔案假裝完成。</p>
+      </header>
+      <p class="context-line"><strong>問題與目的｜</strong>一次導入模板、CI、部署、監控與 AI，團隊很難判斷哪裡出錯；分期後每一步都有完成條件。</p>
+      <div class="decision-strip">
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不按聲量或日期一次把功能全打開</h3><ul><li><strong>一次切換：</strong>錯誤會同時擴散到所有專案</li><li><strong>固定日期解鎖：</strong>時間到了不代表使用條件已成熟</li><li><strong>所有語言同時上：</strong>未驗證的 profile 只是空承諾</li></ul></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>三層不是日期，而是導入條件</h3><p><strong>基本導入：</strong>CI/CD-only、Python-only、TypeScript-only、混合 profile，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已完成。Free 會先查能力並套可用設定；private repo 不宣稱有 Ruleset 強制保護。<br><strong>已完成線上驗證：</strong>release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier 更新；共用治理與 CI-only composition 為 beta。<br><strong>仍在試行：</strong>Python、TypeScript 與混合 composition 仍各需一個真實 consuming repo 才能升為 beta。<br><strong>未來／可選：</strong>中央 catalog／治理平台、多 repo、Go／Rust、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></article>
+      </div>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>哪些 profile 已可用或仍在規劃：</strong><code>profiles/catalog.yaml</code></li><li><strong>先查方案再套可用設定：</strong><code>scripts/apply-repository-settings.sh</code>；Ruleset／App 條件備妥後再啟用</li><li><strong>建立與更新路徑是否都能通過：</strong><code>scripts/verify-template.sh</code></li></ul></aside>
+{{< /legacy >}}
+
+{{< basic >}}
+| 導入層級 | 目前狀態 |
+| --- | --- |
+| 基本導入 | CI/CD-only、Python-only、TypeScript-only、混合 profile；Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已完成 |
+| 已完成線上驗證 | Release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier update |
+| 仍在試行 | Python、TypeScript 與混合 composition 各需一個真實 consuming repo 才能升為 beta |
+| 未來／可選 | 中央 catalog／治理平台、多 repo、Go／Rust、網站託管／登入、部署、監控、RAG、自主 Agent |
+
+{{< detail key="rollout-config" title="設定方式" >}}
+- **哪些 profile 已可用或仍在規劃：** `profiles/catalog.yaml`
+- **先查方案再套可用設定：** `scripts/apply-repository-settings.sh`；Ruleset／App 條件備妥後再啟用
+- **建立與更新路徑是否都能通過：** `scripts/verify-template.sh`
+{{< /detail >}}
+{{< /basic >}}
 {{< /slide >}}
 
 {{< slide key="access-control" audience="archive" eyebrow="存取決策" title="託管方案未定前的臨時防護" subtitle="目前只有降低誤分享的措施，沒有把提示語宣稱成安全控制。" class="legacy-slide review-notes-slide" legacy="true" >}}
