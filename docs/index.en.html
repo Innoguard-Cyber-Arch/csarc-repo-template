@@ -2800,7 +2800,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li><strong>One implementation:</strong> GitHub Actions has one <code>verify</code> job with a 30-minute timeout and only calls repository scripts.</li>
 <li><strong>Repository scope:</strong> a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.</li>
 </ul>
-<p>Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, Work Issue closure, reviewer assignment, and Dependabot are active in a newly generated repository from its first commit. One release workflow is configured as a candidate pending a successful default-branch run. Dedicated promotion, release-handoff, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.</p>
+<p>Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, Work Issue closure, reviewer assignment, OSV, and Dependabot are active in a newly generated repository from its first commit. One release workflow is configured as a candidate pending a successful default-branch run. Dedicated promotion, release-handoff, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.</p>
 <aside class="config-guidance" data-audience="maintainer"><strong>Root repository state</strong><p>In <code>csarc-repo-template</code> itself, OSV is also candidate: its workflow has not yet landed on this repository's own <code>main</code>, and its trigger set does not include <code>pull_request</code>, so it cannot pre-register from a candidate branch. See the CI/CD settings page's current-automation table for the exact live-registration check and timestamp.</p></aside>
 <aside class="config-guidance" data-config-direct="true">
   <details class="config-guidance-fold" open>
@@ -3324,9 +3324,14 @@ html[data-detail-level="simple"] .detail-panel {
 					<td>Included in the same candidate path; Active only after its first successful run</td>
 			</tr>
 			<tr>
-					<td>Attestations and consumption</td>
+					<td>Production-side attestation</td>
+					<td>Removed (#439)</td>
+					<td>Zero active workflow ever consumed the release-attestation settings; #439 removed the setting surface itself rather than leave an option that cannot deliver a result. A consuming product adds real attestation through a separate Issue/ADR</td>
+			</tr>
+			<tr>
+					<td>Consumption-side verification</td>
 					<td>Conditional</td>
-					<td>Products opt in when registry and supply-chain needs justify them</td>
+					<td><code>scripts/verify_release_consumption.py</code> checks provenance independently of the production-side setting above; it becomes a gate only once a real consumer explicitly adopts it</td>
 			</tr>
 			<tr>
 					<td>PyPI, npm, and GHCR</td>

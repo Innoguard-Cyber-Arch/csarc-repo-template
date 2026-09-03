@@ -299,7 +299,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - **Action：**只有一個 `verify` job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。
 - **專案範圍：**一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。
 
-測試邏輯只寫在 scripts／tests。目前 active 的自動化是 CI、PR policy、Issue triage、spec-to-Issue、Milestone lifecycle、reviewer 指派、OSV 與 Dependabot；單一 release workflow 已設定為候選，另行的 promotion／release handoff／registry publisher／消費／live-integration／deployment workflow 未啟用。
+測試邏輯只寫在 scripts／tests。目前 active 的自動化是 CI、PR policy、Issue triage、spec-to-Issue、Milestone lifecycle、Work Issue closure、reviewer 指派、OSV 與 Dependabot；單一 release workflow 已設定為候選，另行的 promotion／release handoff／registry publisher／消費／live-integration／deployment workflow 未啟用。
 {{< /basic >}}
 {{< /slide >}}
 
@@ -439,7 +439,8 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 | 正式版本與 CHANGELOG | Candidate／Guided | Automatic 由 Release Please 建立受審查 PR；受平台政策限制時，Guided 由人或 agent 開一般 PR |
 | tag／GitHub Release | Candidate／Blocked | 版本 PR 合併後由唯一 workflow 發布；待預設分支實跑證明 |
 | checksum／SBOM | Configured | 已納入同一候選流程；首次成功實跑後才算 Active |
-| attestation／消費驗證 | Conditional | 由產品依 registry 與供應鏈需求選配 |
+| Production-side attestation | Removed（#439） | 沒有任何 active workflow 消費 release attestation 設定；#439 已移除該設定面，不留下承諾不了結果的選項。有真實需求的產品另開 Issue／ADR 加入 attestation |
+| Consumption-side verification | Conditional | `scripts/verify_release_consumption.py` 與上列產出端設定無關；真實消費者明確採用後才是門禁 |
 | PyPI／npm／GHCR | Not applicable | root 不發布 registry；#439 已移除閒置的 PyPI／npm／GHCR 設定項，因為沒有任何 workflow 消費它們，生成專案現在也不再提供這些設定。有真實需求的產品另開 Issue／ADR 自行加入 OIDC publisher |
 
 {{< detail key="standalone-delivery" title="獨立工作何時必須改掛里程碑" >}}
