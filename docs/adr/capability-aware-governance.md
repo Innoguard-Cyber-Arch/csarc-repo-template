@@ -2,7 +2,7 @@
 
 - **狀態：**Accepted
 - **日期：**2026-08-25
-- **來源 Issues：**[#18](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/18), [#28](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/28), [#62](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/62), [#65](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/65), [#87](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87), [#123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123), [#146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/146), [#163](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/163), [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199), [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254), [#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287), [#300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/300), [#301](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/301), [#576](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/576)
+- **來源 Issues：**[#18](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/18), [#28](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/28), [#62](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/62), [#65](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/65), [#87](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/87), [#123](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/123), [#146](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/146), [#163](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/163), [#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199), [#254](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/254), [#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287), [#300](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/300), [#301](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/301), [#576](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/576), [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580), [#607](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/607)
 - **實作 PRs：**[#25](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/25), [#59](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/59), [#63](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/63), [#66](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/66), [#90](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/90), [#128](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/128), [#154](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/154), [#165](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/165), [#306](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/306), [#579](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/579)
 
 ## 問題與限制
@@ -42,6 +42,43 @@ Repository 保存 desired policies；有管理權的 operator 決定是否 apply
 | 所有未知狀態都放行 | 不採用；會把缺權限誤當已啟用 |
 | 所有缺能力都永久阻擋 | 不採用；portable baseline 在 Free private 會永遠不可交付 |
 | 提前導入 Safe Settings／Allstar | 延後；fleet 規模與漂移頻率尚未達門檻 |
+
+## 2026-09-03 release_phase 收斂 Alpha 自我核准 bypass 範圍（#607）
+
+#580 記錄並落地了目前 live 已套用的 Ruleset self-approval bypass（`RepositoryRole`
+admin、`bypass_mode: "pull_request"`，寫回 root `policies/rulesets.json`），同時發現
+它的實際涵蓋範圍比原本以為的更廣：因為 GitHub 的 `bypass_actors` 綁在整個 Ruleset
+上、不是單一 rule type，這個 bypass 連 `required_status_checks` 都一併放寬，等於
+「alpha 期間 PR 相關規則全部不擋」。#607 的問題：這個較寬的涵蓋範圍不能是永久、不分
+專案發展階段的事實，尤其是 required_status_checks 這種「必要檢查真的有沒有過」的
+保證，不該無限期依賴人工自律。
+
+維護者的決定：把這個 bypass 的權限範圍綁定專案自己的發布階段
+（`release_phase`：alpha／beta／release），而不是一個固定不變的設定。`release_phase`
+寫在新增的 `policies/project-stage.json`，是人工宣告的單一權威來源（不像
+`governance_stage` 或 `profiles/catalog.yaml` 的 `stage` 那樣分類單一 PR 或單一
+profile——三者刻意保持不同軸線，避免命名碰撞，完整區分見
+`scripts/release_phase_rulesets.py` 的 module docstring）。GitHub Ruleset 的
+`bypass_actors` 是 Ruleset 層級欄位，要讓「review 可以 bypass、
+required_status_checks 不行」同時成立，落地把兩種規則拆進兩個 Ruleset
+（`policies/rulesets.json` 與新增的 `policies/rulesets-required-checks.json`），由
+`scripts/apply-repository-settings.sh`（透過 `scripts/release_phase_rulesets.py`）
+依 `release_phase` 決定 `required_status_checks` 規則實際生效在哪個 Ruleset：alpha
+併入帶 bypass 的那個，beta 起強制留在永遠空 bypass 的那個。release 階段的自動失效是
+結構性保證：`scripts/check-bypass-lifecycle`（已接進 `./scripts/verify-fast`）fail
+closed 擋下「`release_phase` 是 `release` 但任一 Ruleset 仍有非空 `bypass_actors`」
+這個狀態，不依賴人工記得清空。alpha／beta 期間每次實際使用 bypass 合併 PR，也新增
+`bypass-trace:` 結構化留言的使用留痕要求，以及 `scripts/check-bypass-trace` 可執行的
+查核工具（比對邏輯在 `scripts/check_bypass_trace.py`）。
+
+自動判斷「哪些 PR 真的用了 bypass」（交叉核對 review／required-check 實際狀態）維持
+未實作：`scripts/generate_audit_trail.py`（#535／#564）尚未併入 `main`，是獨立進行中
+的 Milestone 13 work，#607 刻意不依賴它，改成 operator 針對已識別的單一 PR 主動查核
+（跟 `scripts/check-pr-policy-status` 的用法一樣）；一旦該模組併入，可以再擴充做自動
+交叉核對。這整套機制與 #580 一樣是 root-only：`template/policies/rulesets.json.jinja`
+刻意保留空的 `bypass_actors`，不帶 `policies/project-stage.json` 或第二個 Ruleset
+檔；`scripts/apply-repository-settings.sh` 對這兩個新政策檔案的存在與否是條件式
+判斷，檔案不存在時（所有既有下游 repo）行為與 #607 之前完全一致。
 
 ## 重新評估條件
 

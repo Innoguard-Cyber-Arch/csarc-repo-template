@@ -41,13 +41,115 @@ Agent 或 automation 若要變更 PR 的 ready／draft、授權或 metadata，�
 lease，並透過 `scripts/pr_lifecycle.py` 執行；`scripts/verify` 會拒絕另一套重複寫入者。
 人工在 GitHub 上審查與合併不受這個工具限制。
 
-`gh pr merge --admin` 只能用來繞過文件明列的已知例外，目前僅一項：`pr-policy.yml`
-`title` job 的「Validate Milestone approval」step（要求非提案者在 #440 留言）在
-#512 解決前的過渡期。繞過前必須先確認同一個 `title` job 的「Validate pull request
-policy」step 本身是 success，不能只看整個 job 或整個 PR 的 conclusion 就一併略過——
-用 #513 的 `scripts/check-pr-policy-status`（完成前，改用
-`gh run view <run-id> --log | grep -E "Validate pull request policy|##\[error\]"`
-手動確認）。
+`gh pr merge --admin` 只能用來繞過文件明列的已知例外，目前有兩項：
+
+1. `pr-policy.yml` `title` job 的「Validate Milestone approval」step（要求非提案者在
+   #440 留言）在 #512 解決前的過渡期。繞過前必須先確認同一個 `title` job 的
+   「Validate pull request policy」step 本身是 success，不能只看整個 job 或整個 PR
+   的 conclusion 就一併略過——用 #513 的 `scripts/check-pr-policy-status`（完成前，
+   改用 `gh run view <run-id> --log | grep -E "Validate pull request policy|##\[error\]"`
+   手動確認）。
+2. Ruleset 的 self-approval 結構性卡點，見下方「Release phase 與 bypass 範圍收斂」。
+
+**`--admin` 本身不足以繞過任何 Ruleset 規則。** 舊版 classic branch protection 會自動
+給 repository admin 身分繞過，但 Ruleset 只認 `policies/rulesets.json`（或本節後述
+拆分後的第二個 Ruleset 檔）頂層 `bypass_actors`（不在 `rules` 陣列內）明列的項目；
+沒有對應 `bypass_actors` 項目時，`--admin` 對 Ruleset 直接無效，merge 會被拒絕。
+
+### Release phase 與 bypass 範圍收斂（#607）
+
+Repository 結構性只有一個真人帳號、沒有第二人可核准時，`require_code_owner_review`／
+`required_approving_review_count` 一旦透過 Ruleset 生效，任何人都無法核准自己開的
+PR——GitHub 回報「Review Can not approve your own pull request」，這是 GitHub 平台
+全站限制，不是本 repo 政策，review 端無法繞過（#580 記錄了這個結構性卡點與
+`actor_id: 5` 對應 repository **admin** 角色的實測結果）。
+
+解法是在 Ruleset 的 `bypass_actors` 加入：
+
+```json
+{"actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "pull_request"}
+```
+
+#580 也發現這個 bypass 的實際涵蓋範圍比字面看起來寬：`bypass_mode: "pull_request"`
+不只放寬 `pull_request` 規則本身（`require_code_owner_review`、
+`required_approving_review_count`），也一併放寬 `required_status_checks`
+規則——因為 GitHub 的 `bypass_actors` 是綁在整個 Ruleset 上，沒有「只對某個 rule
+type 生效」的欄位。#607 的決定：這個較寬的涵蓋範圍不能是永久、不分階段的事實。
+
+**`release_phase`** 是這個 repo 自己的整案發布成熟度宣告，寫在
+`policies/project-stage.json`（`{"release_phase": "alpha"}`），只有三個合法值：
+`alpha`／`beta`／`release`。它跟本 repo 既有兩個外形相似但軸線不同的「stage」概念
+刻意分開，避免第三次命名碰撞——`scripts/generate_audit_trail.py` 的
+`governance_stage`（alpha/beta/**stable**）分類的是「單一 PR 用哪種來源分支模式
+抵達 target」，`profiles/catalog.yaml` 的 `stage` 分類的是「單一語言／工具 profile
+自己的成熟度」；`release_phase` 兩者都不是，它是整個專案自己的發布階段，且第三個
+值是 **release**、不是 stable。三者的完整區分寫在
+`scripts/release_phase_rulesets.py` 的 module docstring。跟 `profiles/catalog.yaml`
+的 per-profile `stage` 一樣，`release_phase` 是人工宣告、不是自動推斷（不從分支
+模式或 semver 反推）——維護者判斷專案真的進入下一階段時，手動改這個值並送 PR。
+
+| release_phase | required_status_checks 可否 bypass | review self-approve 可否 bypass | 使用留痕 |
+| --- | --- | --- | --- |
+| alpha | 可以 | 可以 | 每次使用都必須留痕 |
+| beta | **不行**（必要檢查一定要真的過） | 可以 | 每次使用都必須留痕 |
+| release | 不行 | 不行（bypass 整體自動失效） | N/A（bypass 已經不存在） |
+
+`bypass_actors` 是 Ruleset 層級欄位，要達成「review 可以 bypass、
+required_status_checks 不行」，必須把兩種規則拆進兩個 Ruleset：
+
+* `policies/rulesets.json`（"CSARC protected branches"）——`non_fast_forward` ＋
+  `pull_request` 規則，`bypass_actors` 帶上述 admin 角色項目。
+* `policies/rulesets-required-checks.json`（"CSARC required checks"）——只有
+  `required_status_checks` 規則，`bypass_actors` 永遠是 `[]`。
+
+`scripts/release_phase_rulesets.py`（`apply-repository-settings.sh` 呼叫它的
+`assemble` 子命令）依 `release_phase` 決定 `required_status_checks` 規則實際生效在
+哪個 Ruleset：alpha 時把它併入帶 bypass 的 Ruleset（兩個規則一起被 bypass）；beta
+起維持分離，`required_status_checks` 留在永遠空 bypass 的第二個 Ruleset。
+`scripts/apply-repository-settings.sh check` 的既有 drift 比對（比較
+`gh api repos/{repo}/rules/branches/{branch}` 回傳的「該分支目前有效的規則聯集」）
+也相應改為比較兩個檔案 `rules` 的聯集，不管哪個規則實際放在哪個 Ruleset 物件裡。
+
+**release 階段的自動失效是結構性保證，不是人工步驟**：`scripts/check-bypass-lifecycle`
+（已接進 `./scripts/verify-fast`，每次 PR 都跑）讀取 `policies/project-stage.json`，
+只要 `release_phase` 是 `"release"`，`policies/rulesets.json` 或
+`policies/rulesets-required-checks.json` 裡有任何非空 `bypass_actors`，就直接
+fail——逼著「release_phase 已經正式進入 release，但 bypass_actors 忘記清空」這個
+狀態不可能被合併，而不是靠人記得清空。回歸測試在
+`tests/test_release_phase_rulesets.py`。
+
+**使用留痕（alpha／beta 都要）**：每次真的用這個 bypass（`gh pr merge --admin`）合併
+PR，必須在同一張 PR 上、合併之前，用 `gh pr comment` 留下一行結構化訊息：
+
+```text
+bypass-trace: release_phase=<alpha|beta> actor=<github-login> reason=<簡短原因>
+```
+
+`scripts/check-bypass-trace <PR 編號> --repo <owner/repo>`（核心比對邏輯在
+`scripts/check_bypass_trace.py`，回歸測試在 `tests/test_check_bypass_trace.py`）
+查核一張已合併 PR 是否在合併時間之前留有符合格式的留痕註解；PR 未合併時回報
+「尚無需查核」，已合併但找不到留痕則 fail closed（exit 1）。自動判斷「這張 PR
+是否真的用了 bypass」（交叉核對 review／required-check 實際狀態，
+`scripts/generate_audit_trail.py` 已在抓這些欄位）目前不在這個查核工具範圍內：
+`generate_audit_trail.py`（#535／#564）尚未併入 `main`，屬於獨立進行中的
+Milestone 13 work，本 Issue（#607）維持獨立、不依賴它；一旦它併入 `main`，可以
+再擴充 `check-bypass-trace` 交叉核對哪些 PR 疑似用了 bypass。目前的查核方式是
+operator 在每次 bypass-merge 後主動對該 PR 執行這個工具確認留痕存在，跟
+`scripts/check-pr-policy-status` 的用法一樣是針對單一 PR 主動查核，不是排程掃描。
+
+這是只在「repo 結構性只有一個真人帳號」這段 alpha／beta 期間才成立的例外，不是長期
+設計；`release_phase` 進入 `release` 後這整個 bypass 結構性消失。與 #570
+（`required_status_checks` Ruleset 定義修復）及 #552（Milestone 核可重新設計，同樣
+處理單一真人帳號 org 的自我核准風險）相關但範圍不同。Milestone tracker Issue 的
+`/milestone admin-approve` 自核（見 `docs/milestone-description.md`）是另一個獨立
+機制，只適用於 Milestone 核准留言，不是同一件事，不要混用。
+
+這整套 `release_phase` 機制是否要在本 repo 之外的下游生成 repo 也套用，不在本節
+範圍——公版 `template/policies/rulesets.json.jinja` 刻意保留空的 `bypass_actors`、
+不帶 `policies/project-stage.json` 或第二個 Ruleset 檔，只有真的撞上同一個「結構性
+只有一個真人帳號」問題的下游 repo，才需要自行決定是否套用等效機制（沿用 #580 已
+落地的判斷）。`scripts/apply-repository-settings.sh` 對這兩個新政策檔案的存在與否
+是條件式判斷：檔案不存在時（所有既有下游 repo）行為與本 Issue 之前完全一致。
 
 ### 不屬於里程碑的工作
 
