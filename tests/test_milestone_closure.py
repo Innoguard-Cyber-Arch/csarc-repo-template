@@ -18,10 +18,13 @@ append_completion_evidence = MODULE["append_completion_evidence"]
 record_promotion_evidence = MODULE["record_promotion_evidence"]
 closure_decision = MODULE["closure_decision"]
 reconcile = MODULE["reconcile"]
+reconciliation_status = MODULE["reconciliation_status"]
+regenerate_reconciliation = MODULE["regenerate_reconciliation"]
+record_reconciliation = MODULE["record_reconciliation"]
 
 
-def snapshot(*, reason: str = "completed") -> dict[str, Any]:
-    """Build one closable lifecycle snapshot."""
+def _base_snapshot(*, reason: str = "completed") -> dict[str, Any]:
+    """Build one closable lifecycle snapshot, without a Reconciliation."""
     return {
         "repo": "acme/project",
         "milestone": {
@@ -73,6 +76,20 @@ def snapshot(*, reason: str = "completed") -> dict[str, Any]:
             }
         ],
     }
+
+
+def snapshot(*, reason: str = "completed") -> dict[str, Any]:
+    """Build one closable lifecycle snapshot with a fresh Reconciliation.
+
+    Bakes in a Reconciliation section generated from this snapshot's own
+    current content, so every existing closure test keeps exercising
+    whatever gate it targets instead of tripping the new freshness check
+    it knows nothing about.
+    """
+    state = _base_snapshot(reason=reason)
+    tracker_issue = state["issues"][1]
+    tracker_issue["body"] = regenerate_reconciliation(state)
+    return state
 
 
 def test_acceptance_requires_a_complete_section() -> None:
@@ -149,6 +166,188 @@ def test_unchecked_promotion_box_blocks_an_otherwise_ready_closure() -> None:
     result = closure_decision(state)
     assert not result.allowed
     assert "Promotion" in result.summary
+
+
+def _with_pull_request(
+    state: dict[str, Any],
+    *,
+    number: int,
+    closes: int,
+    merged: bool,
+) -> dict[str, Any]:
+    """Add one pull-request Issue entry declaring it closes another Issue."""
+    state["issues"].append(
+        {
+            "number": number,
+            "title": f"Deliver #{closes}",
+            "state": "closed" if merged else "open",
+            "body": f"Closes #{closes}\n",
+            "pull_request": {
+                "merged_at": "2026-09-01T00:00:00Z" if merged else None,
+            },
+        }
+    )
+    return state
+
+
+def test_reconciliation_marks_delivered_when_pr_merged() -> None:
+    """A closed work Issue with a merged closing PR reconciles as delivered."""
+    state = _base_snapshot()
+    _with_pull_request(state, number=99, closes=42, merged=True)
+
+    body = regenerate_reconciliation(state)
+
+    assert "#42" in body
+    assert "Delivered" in body
+    assert "1 linked work Issue(s); 1 delivered." in body
+    assert reconciliation_status(body).allowed
+
+
+def test_reconciliation_flags_a_closed_issue_without_a_merged_pr() -> None:
+    """A closed work Issue with no merged closing PR is flagged, not hidden."""
+    state = _base_snapshot()
+
+    body = regenerate_reconciliation(state)
+
+    assert "Closed without a merged PR" in body
+    assert "0 delivered" in body
+
+
+def test_reconciliation_reports_an_open_issue_as_pending() -> None:
+    """A still-open linked work Issue reconciles as pending, not delivered."""
+    state = _base_snapshot()
+    state["issues"][0]["state"] = "open"
+
+    body = regenerate_reconciliation(state)
+
+    assert "Pending" in body
+
+
+def test_reconciliation_is_fresh_immediately_after_regeneration() -> None:
+    """A just-regenerated section is never considered stale."""
+    state = _base_snapshot()
+
+    body = regenerate_reconciliation(state)
+
+    result = reconciliation_status(body)
+    assert result.allowed
+    assert result.summary == "Reconciliation is fresh"
+
+
+def test_reconciliation_is_stale_after_an_unrelated_body_edit() -> None:
+    """Editing any other tracker section invalidates the reconciliation.
+
+    The regeneration tool only ever rewrites the Reconciliation section
+    itself, so a fingerprint mismatch can only mean a human or agent
+    touched the rest of the body afterward.
+    """
+    state = _base_snapshot()
+    body = regenerate_reconciliation(state)
+
+    edited = body.replace(
+        "Ship the reviewed batch.", "Ship the reviewed batch, plus more."
+    )
+
+    result = reconciliation_status(edited)
+    assert not result.allowed
+    assert result.summary == "Reconciliation: stale, regenerate before closing"
+
+
+def test_reconciliation_missing_section_is_reported_explicitly() -> None:
+    """A tracker that has never been reconciled fails closed, not silently."""
+    result = reconciliation_status("## Proposal\n\nShip it.\n")
+
+    assert not result.allowed
+    assert "missing" in result.summary.lower()
+
+
+def test_closure_refuses_a_missing_reconciliation() -> None:
+    """`closure_decision()` will not close on checkbox state alone."""
+    state = _base_snapshot()
+
+    result = closure_decision(state)
+    assert not result.allowed
+    assert "Reconciliation" in result.summary
+
+
+def test_closure_refuses_a_stale_reconciliation() -> None:
+    """A reconciliation regenerated before a later tracker edit cannot close."""
+    state = snapshot()
+    tracker_issue = state["issues"][1]
+    assert closure_decision(state).allowed
+
+    tracker_issue["body"] = tracker_issue["body"].replace(
+        "Ship the reviewed batch.", "Ship the reviewed batch, expanded."
+    )
+
+    result = closure_decision(state)
+    assert not result.allowed
+    assert result.summary == "Reconciliation: stale, regenerate before closing"
+
+
+def test_regenerating_reconciliation_clears_staleness() -> None:
+    """Re-running regeneration after an edit restores a closable state."""
+    state = snapshot()
+    tracker_issue = state["issues"][1]
+    tracker_issue["body"] = tracker_issue["body"].replace(
+        "Ship the reviewed batch.", "Ship the reviewed batch, expanded."
+    )
+    assert not closure_decision(state).allowed
+
+    tracker_issue["body"] = regenerate_reconciliation(state)
+
+    assert closure_decision(state).allowed
+
+
+def test_record_reconciliation_writes_the_updated_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The workflow helper fetches live state and persists the section."""
+    state = _base_snapshot()
+    calls: list[list[str]] = []
+
+    def fake_run_gh(arguments: list[str]) -> str:
+        calls.append(arguments)
+        return ""
+
+    monkeypatch.setitem(
+        record_reconciliation.__globals__, "load_snapshot", lambda *_: state
+    )
+    monkeypatch.setitem(
+        record_reconciliation.__globals__, "run_gh", fake_run_gh
+    )
+
+    result = record_reconciliation("acme/project", 8)
+
+    assert result.allowed
+    assert calls[-1][:3] == ["issue", "edit", "80"]
+    written_body = calls[-1][calls[-1].index("--body") + 1]
+    assert "## Reconciliation" in written_body
+    assert reconciliation_status(written_body).allowed
+
+
+def test_record_reconciliation_is_a_no_op_once_already_fresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A repeat run against unchanged state does not issue a redundant edit."""
+    state = snapshot()
+    calls: list[list[str]] = []
+
+    def fake_run_gh(arguments: list[str]) -> str:
+        calls.append(arguments)
+        return ""
+
+    monkeypatch.setitem(
+        record_reconciliation.__globals__, "load_snapshot", lambda *_: state
+    )
+    monkeypatch.setitem(
+        record_reconciliation.__globals__, "run_gh", fake_run_gh
+    )
+
+    result = record_reconciliation("acme/project", 8)
+
+    assert result.allowed
+    assert all(call[:2] != ["issue", "edit"] for call in calls)
 
 
 def test_append_completion_evidence_preserves_existing_content() -> None:

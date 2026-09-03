@@ -1235,6 +1235,7 @@ def report_settings(data: dict[str, object]) -> str:
         "coverage_mode",
         "coverage_threshold",
         "enable_codeql",
+        "enable_docker",
         "enable_governance_drift_check",
         "enable_precommit",
         "enable_template_update_notifications",

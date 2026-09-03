@@ -1,0 +1,32 @@
+/* Project- or fork-owned decision-site theme overrides (Issue #527).
+ *
+ * A repository that carries this template's own root decision-site
+ * engine (`scripts/build_decision_site.py`, not the smaller generated-
+ * project handbook -- see `template/docs/site-theme.css.jinja` for that
+ * separate path) can restyle its copy of the presentation here, without
+ * forking the render engine or `site/static/styles.css`.
+ *
+ * Scope, deliberately narrow (see docs/adr/portable-decision-site.md):
+ *   - Override CSS custom properties already declared in
+ *     `site/static/styles.css`'s `:root` block (colors and other design
+ *     tokens).
+ *   - Narrow, purely-visual declarations (color/background/border) on
+ *     existing block-level classes are also allowed.
+ *   - Do not add new HTML, JavaScript, selectors that change markup
+ *     semantics, or layout/structural rules; there is no automated
+ *     linter for this boundary, review it like any other change.
+ *
+ * This file is always linked and inlined by `scripts/build_decision_site.py`
+ * / `scripts/render_site.py`, so it must exist, but it ships empty: the
+ * committed `docs/index.html` and `docs/index.en.html` reflect the base
+ * palette in `site/static/styles.css` unchanged until a fork adds an
+ * override below. Example:
+ *
+ *   :root {
+ *     --yellow: #2e6b47;
+ *   }
+ *
+ * After editing, rebuild with `./scripts/build-decision-site`.
+ */
+:root {
+}

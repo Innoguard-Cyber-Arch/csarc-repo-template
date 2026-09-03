@@ -35,6 +35,44 @@ Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─────→ main
 `Completion evidence` 段落（見 #512）；#400 與 #401 的自動結案契約不再是 blocked gap。
 delivery branch 清理仍由 worktree 清理流程負責，不由版本或發版流程重複處理。
 
+## Milestone 掛勾安全網（#551）
+
+Milestone 8 收尾階段 #546–#550 五張 Issue／PR 全部沒有掛 Milestone，且沒有任何工具或
+檢查會提醒——純粹是開 Issue 時忘記加 `--milestone`。#551 為此補上兩層非阻擋性提醒，
+刻意不要求強制 fail-closed：許多 Issue／PR 本來就與任何 Milestone 無關（見 Issue #551
+的「邊界」段落）。
+
+- `scripts/gh-issue-create`：本機開 Issue 當下，若沒有帶 `--milestone`／`-m`，且
+  `scripts/detect-open-milestone` 判定目前恰好只有一個 open Milestone，會印出提示；
+  互動式終端機（`stdin` 是 tty）額外詢問是否要帶入該 Milestone，非互動環境
+  （agent／CI／腳本呼叫）只印出提醒，不阻擋 Issue 建立。
+- `scripts/validate-pr-policy`（CI 端：`pr-policy.yml` 的 `title` job「Validate
+  pull request policy」step）：PR 與其 linked Issue 兩邊都沒有掛任何 Milestone、且同樣
+  恰好有一個 open Milestone 時，於 PR 留言一次性提醒（內嵌 HTML comment marker 避免
+  重複留言）；檢查本身仍維持 pass，不 fail-closed，留言失敗（例如暫時性 API 錯誤）也
+  只印 `::notice::`，不影響結果。
+- 兩者共用同一支 `scripts/detect-open-milestone` 判斷式：0 個或 2 個以上 open
+  Milestone 都視為「無法判斷」，一律不提醒——避免在多 Milestone 並行時猜錯、誤導。
+- 這兩個安全網只在**建立／驗證當下**新增這層提醒。既有的「Issue 已掛 Milestone 但 PR
+  沒有（或反之、或兩者不同）」仍由 `scripts/validate-pr-policy` 既有的 fail-closed 比對
+  規則擋下（見下方 PR policy 逐 step 判讀一節），未被本次變更影響或放寬。
+
+**Milestone 一旦關閉，事後補掛不能用 `gh issue edit --milestone <name>`**——它只用
+名稱查找 open milestone，Milestone 關閉後查不到，會誤以為沒有這個 Milestone、或誤報
+找不到。正確做法是改用 REST API 直接指定 milestone number：
+
+```bash
+gh api repos/{owner}/{repo}/issues/{n} --method PATCH -f milestone=<number>
+```
+
+`<number>` 是 Milestone 的數字 ID（不是標題），可用下列指令查出，closed Milestone 也
+查得到：
+
+```bash
+gh api repos/{owner}/{repo}/milestones --method GET -f state=all \
+  --jq '.[] | "\(.number)\t\(.title)\t\(.state)"'
+```
+
 ## PR lifecycle single-writer
 
 Agent 或 automation 若要變更 PR 的 ready／draft、授權或 metadata，必須先取得 remote
@@ -104,6 +142,22 @@ timeout，只呼叫 `scripts/check-template-update`）。公開模板來源不�
 來源為 private repository 時，才由唯讀的 `CSARC_TEMPLATE_READ_TOKEN` repository
 secret 提供存取，且只有 `schedule`／`workflow_dispatch` 路徑讀得到，不會流向
 `pull_request` workflow。本 repo 是模板來源本身，不消費也不排程這個 workflow。
+
+生成 repo 另有一個選用容器能力（Issue #554 決定）：開啟 `enable_docker` 才產生
+`Dockerfile`、`docker-compose.yml` 兩份起始範本，以及
+`.github/workflows/docker-build-scan.yml`（`pull_request`，限 Dockerfile／
+docker-compose.yml／已選語言原始碼路徑變更，另加 `workflow_dispatch`；
+`contents: read`；20 分鐘 timeout）。該 job 只呼叫 `docker/build-push-action`
+（`push: false`）在 runner 本機建置映像，再用 `aquasecurity/trivy-action`
+掃描同一本機映像的已知漏洞（`HIGH`／`CRITICAL` 失敗），全程不登入、不推送任何
+registry，也不要求任何 secret。未開啟 `enable_docker` 的專案不會產生上述任一
+檔案，不會多一個觸發中的 job，也不會取得任何新權限；這維持
+`docs/adr/selective-ci-automation-adoption.md` 記錄的既有決定──「不預先幫所有
+repo 產生 container job，非容器專案不應支付 Docker runner 成本或取得 registry
+權限」──只是把它從「完全不提供」明確擴充為「非容器專案零影響的選配項」，兩者
+並不衝突：該 ADR 拒絕的是「預先幫『所有』repo 產生」，不是「讓明確選擇容器化的
+專案自行選用」。本模板 repo 自己的開發／CI 流程不引入 Docker，範圍僅限於是否
+提供這個選配能力給下游生成的專案。
 
 ## 驗證分級與實測成本
 
@@ -324,6 +378,49 @@ TOTAL（4002 秒／66 分 42 秒，尤其是 Regression tests 一階段的 3971 
 ```bash
 CSARC_CACHE_ROOT="$HOME/.cache/csarc" ./scripts/verify-template.sh
 ```
+
+### 本機驗證分級判斷原則（cheap-stage-first，#538）
+
+上方三層成本邊界只回答「這次改動落在哪一級」，Base-only re-merge 例外只回答「同一張已經
+驗證過的 PR 要不要重跑」。這裡把兩者之間還沒寫清楚的問題——「這次到底要不要在本機跑一次
+full」與「真的要跑時如何排序」——寫成可執行原則，延續這次 session 已經在用、源自
+Milestone 8（#465／#466）教訓的 cheap-stage-first 模式，避免重演本機測試反覆鬼打牆
+（redundant full rerun、網路瞬斷、環境競爭噪音耗掉大量時間）。
+
+**先判斷要不要在本機跑，依序四步：**
+
+1. 這張 PR 本身是不是 full-tier 邊界？不是的話，直接信任 hosted `verify` check；`fast`／
+   `docs` tier 的本機義務只到「開發中 focused check」（本節最上方第 1 級）為止，不必為了
+   保險另外在本機跑一次 full。
+2. 是 full-tier 邊界：這個 branch 自己這一輪內容有沒有本機全綠跑過一次
+   `./scripts/verify-template.sh`（生成 repo 是 `./scripts/verify`）？沒有的話，這正是
+   #458 規則要求的那一次，不能省略。
+3. 已經全綠過、現在只是因為 base 前進被迫重新合併：套用上方「Base-only re-merge 例外
+   （#468）」四項條件；符合就 push 信任 hosted `verify`，任何一項不符合才回到本機重跑。
+4. 以上都不成立，才真的執行一次本機 full；開始前先確認沒有其他 worktree／`pytest`／
+   `verify`／`copier` 程序同時佔用本機資源——上方「逐階段耗時量測（#465）」記錄的 4002
+   秒即混入另一個 worktree 的背景負載，不是乾淨基準，容易把負載噪音誤判成回歸。
+
+**真的要在本機跑一次全套時，依 cheap-stage-first 排序，不要悶頭跑到底才發現問題：**
+
+- 先跑上方「`scripts/verify-template.sh` 階段盤點（#458）」六個便宜階段（Repository
+  contracts、Static assets and paired files、Python environment、Python quality、
+  Package smoke test、GitHub Actions audit；#465 量測每階段 ≤10 秒），用對應的
+  `scripts/verify-stage-<name>` 逐一單獨執行，不必等待整條聚合器。
+- 六個便宜階段全部 PASSED，才進入唯一昂貴的 Regression tests 階段（#465 量測 3971 秒，
+  佔同次 TOTAL 九成以上）；任一便宜階段先失敗，就先處理該階段本身，不必先跑完昂貴階段。
+- Regression tests 若因暫時性錯誤中止（例如 #465 記錄的
+  `curl: (92) HTTP/2 stream ... PROTOCOL_ERROR` 網路瞬斷），只用
+  `scripts/verify-stage-regression-tests` 單獨重跑這一階段，不必連同已經 PASSED 的六個
+  便宜階段一起重跑整支聚合器。
+- 任務進行中一旦發現「其實有更便宜的路徑」（例如原本以為要本機全跑，後來發現符合
+  base-only re-merge 例外，或某階段本次 session 已經驗證過），立刻重新評估同一 session
+  內所有**還沒開始**的驗證步驟，不要因為原計畫已經寫好就照舊執行；已經真正執行並拿到結果
+  的步驟不必重跑。
+
+以上四步起頭判斷與 cheap-stage-first 排序，都不是放寬「full-tier PR 一定要本機全綠跑過
+一次」的既有規則（#458），只回答「什麼時候該跑」與「真的要跑時怎麼跑最省時間」；merge
+資格與 required check 仍由 Journey 08 與本文件既有規則決定。
 
 ## 版本、發版、交付與部署矩陣
 

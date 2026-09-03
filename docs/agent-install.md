@@ -1,5 +1,12 @@
 # CSARC agent install contract
 
+> This file is the **agent's automated install contract** only (the machine-driven
+> `csarc init`/`adopt`/`update` flow). Human prerequisite tool installation —
+> macOS (Homebrew) and Windows (winget/Chocolatey) commands, split by "install
+> and use a csarc-generated project" versus "contribute to this template
+> repository itself" — lives in [README.md's Prerequisites
+> section](../README.md#前置需求), not here.
+
 1. Resolve the current Git repository root yourself. Ask only when a new
    repository's name or location cannot be inferred unambiguously; do not put
    a guessed path into the user prompt.

@@ -85,18 +85,9 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 {{< /slide >}}
 
 {{< slide key="files" track="files" class="dense" eyebrow="File map" title="The template puts required settings in the right place" subtitle="This lists the major files currently generated; template updates never silently overwrite product-owned content." legacy="false" >}}
-| Path | Purpose | Responsibility |
-| --- | --- | --- |
-| `.csarc/config.yml` | Template source, languages, branch strategy, and optional capabilities | Template-led |
-| `.github/ISSUE_TEMPLATE/`, `pull_request_template.md` | Work definition and PR contract | Template-led |
-| `.github/workflows/` | Nine shared flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, reviewer assignment, work item closure, and a candidate release flow, plus the optional governance-drift and template-update-notice schedules, and CodeQL SAST | Template-led |
-| `AGENTS.md`, `README.md`, `CLAUDE.md` | Agent working rules and user entry point | Shared |
-| `policies/`, `CODEOWNERS`, `.github/REVIEWERS` | Desired settings, owners, and reviewers | Shared |
-| `scripts/` | Local verification, work synchronization, and repository settings | Template-led |
-| `docs/`, `site/` | Project guidance, specifications, decisions, and internal site | Shared |
-| `src/`, product tests, and product specifications | Product behavior | Project-owned |
+{{< file-map >}}
 
-This table stays at three columns on purpose: the side navigation already links each row's area to its page, and the maintainer-only CI/CD settings appendix already lists verification entry points per Journey in more detail than a column could. Adding page-name and verification-entry columns here would just duplicate both instead of adding information.
+The file map only lists path, purpose, and responsibility: the side navigation already links each item to its page, and the maintainer-only "CI/CD settings" appendix already lists verification entry points per Journey in more detail than this view could add; the tree view likewise avoids duplicating a page-name or verification-entry column.
 
 {{< detail key="files-update" title="How updates protect product content" >}}
 Copier attempts updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged; adjust them, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.
@@ -115,7 +106,7 @@ Only tools this template directly integrates, executes, or produces into the rep
 | [OSV-Scanner](https://github.com/google/osv-scanner) | Scans lockfiles for disclosed vulnerabilities | `scripts/verify-dependencies`, `scripts/install-osv-scanner`, `.github/workflows/osv.yml` | Dependency-change PRs, delivery candidates, weekly schedule | [Apache-2.0](https://github.com/google/osv-scanner/blob/main/LICENSE) |
 | [Syft](https://github.com/anchore/syft) | Generates the release SPDX SBOM | `.github/workflows/release.yml` (`anchore/sbom-action`), `scripts/release_assets.py` | Delivery PR that creates a release | [Apache-2.0](https://github.com/anchore/syft/blob/main/LICENSE) |
 | [Release Please](https://github.com/googleapis/release-please) | Maintains the version/changelog pull request and creates the GitHub Release | `.github/workflows/release.yml`, `release-please-config.json`, `.release-please-manifest.json` | Delivery branch to `main` | [Apache-2.0](https://github.com/googleapis/release-please/blob/main/LICENSE) |
-| [Hugo](https://github.com/gohugoio/hugo) | Builds the bilingual internal site and `llms.txt` from Markdown | `scripts/install-hugo`, `scripts/build-decision-site`, `site/hugo.toml` | `docs/index.html`, `docs/index.en.html`, `llms.txt` | [Apache-2.0](https://github.com/gohugoio/hugo/blob/master/LICENSE) |
+| Decision-site render engine | In-house, dependency-free Python engine that builds the bilingual internal site and `llms.txt` from Markdown; replaced Hugo on 2026-09-03 | `scripts/build_decision_site.py`, `scripts/build-decision-site`, `scripts/render_site.py`, `site/version.json` | `docs/index.html`, `docs/index.en.html`, `llms.txt` | In-house (this repository) |
 {{< /detail >}}
 {{< /slide >}}
 
@@ -185,7 +176,7 @@ Verification logic lives only in scripts and tests. CI, PR policy, Issue triage,
 {{< config-guidance track="contract" >}}
 {{< /slide >}}
 
-{{< slide key="languages" track="languages" eyebrow="Step 04" title="Choose a language and receive the matching checks" subtitle="Each language owns its tools and tests; shared rules run once." legacy="false" class="candidate-slide" >}}
+{{< slide key="languages" track="languages" parity="new" eyebrow="Step 04" title="Choose a language and receive the matching checks" subtitle="Each language owns its tools and tests; shared rules run once." legacy="false" class="candidate-slide" >}}
 Choose a project language and the template prepares the matching checks:
 
 - **Every project:** checks work rules, documentation, secrets, and dependency safety.
@@ -368,6 +359,16 @@ Root `.csarc/config.yml` records the capabilities selected by the template repos
 `noindex` and `robots.txt` reduce accidental spread but are not access control. An approved host can protect entry, but a downloaded HTML file can still be forwarded. An agent records only user-confirmed durable constraints in an Issue and a reviewed decision record, never a raw conversation transcript.
 
 The renderer resolves the same Rules-governance-approved `.csarc/config.yml` keys documented in the governance configuration table above; it does not define a second, site-only list. Product-specific prose lives in `docs/site-content.md`, theme overrides remain in `docs/site-theme.css`, and the generated `docs/index.html` is never edited directly.
+
+**Custom theme for this page (the root site, Issue #527):** the `.csarc/config.yml` / `docs/site-theme.css` path above belongs to the generated-project handbook. A maintainer who forks or vendors this template repository itself and wants to restyle its own root decision site uses `site/theme.css` instead. Scope stays deliberately narrow: only override CSS custom properties already declared in `site/static/styles.css`'s `:root` block, plus narrow, purely-visual declarations on existing block-level classes -- no new HTML, JavaScript, or layout rules; ordinary PR review is the only gate, no extra tooling. This file always exists and is always inlined by the engine; it ships empty, so the default output keeps the template's palette unchanged:
+
+```css
+:root {
+  --yellow: #2e6b47;
+}
+```
+
+Rebuild with `./scripts/build-decision-site` after editing. This is a structural addition to the presentation template, so `site/version.json`'s `template` version and the `scripts/check-decision-site-versions` compatibility check cover it; see the "根網站自訂主題" section of `docs/adr/portable-decision-site.md` for the full record.
 {{< /detail >}}
 
 <aside class="config-guidance"><strong>Website access</strong><p>If reader restrictions become necessary, evaluate Cloudflare Pages + Access first. The host, identity provider, data policy, and organization owner still require separate approval.</p></aside>
@@ -399,6 +400,23 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 
 {{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | CI/CD settings" title="CI/CD settings | Checks by Journey" subtitle="Separates the tests and automation that normal repositories and repo-template need for work and repository-delivery pull requests." class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
+{{< /slide >}}
+
+{{< slide key="rollout" track="rollout" audience="archive" class="dense" eyebrow="Phased rollout" title="Phased rollout, verifiable and stoppable at every step" subtitle="Three tiers: basic capability ships today; future and optional capability states its own trigger condition." legacy="false" >}}
+Adopting a template, CI, deployment, monitoring, and AI all at once makes it hard to tell where something broke. Splitting rollout into tiers gives every step its own completion condition instead of an empty placeholder file pretending to be done.
+
+| Tier | Current state |
+| --- | --- |
+| Basic rollout | CI/CD-only, Python-only, TypeScript-only, and mixed profiles ship today, along with Issue/spec, PR/CI, local verification, OSV, dependency policy, and the repo-internal site. Free plans detect their own capability and apply what is available; private repositories never claim Ruleset enforcement they cannot get. |
+| Verified in production | Release handoff, traceable artifacts, and Release attestation consumer verification are live, together with the first real CI-only downstream repository's adoption and Copier update; shared governance and CI-only composition are beta. |
+| Still trialing | Python, TypeScript, and mixed composition each still need one more real consuming repository before promotion to beta. |
+| Future or optional | A central catalog/governance platform, multi-repository support, Go/Rust, site hosting/login, deployment, monitoring, RAG, and autonomous agents. |
+
+{{< detail key="rollout-config" title="Where this is configured" >}}
+- **Which profiles are available or still planned:** `profiles/catalog.yaml`
+- **Detect the plan before applying settings:** `scripts/apply-repository-settings.sh`; only enable once Ruleset/App preconditions are met
+- **Whether create and update paths both pass:** `scripts/verify-template.sh`
+{{< /detail >}}
 {{< /slide >}}
 
 {{< slide key="access-control" audience="archive" class="dense" eyebrow="Access decision" title="Temporary protection before a hosting choice" subtitle="Current measures reduce accidental sharing; none is described as access control." legacy="false" >}}
@@ -483,4 +501,8 @@ Open an evaluation Issue that names a platform owner, cost ceiling, trial scope,
 {{< detail key="spec-format-cost" title="Why migration is deferred and what would trigger it" >}}
 Adopting Spec Kit requires rewriting `scripts/spec_to_issue.py`, converting existing specs, updating verification assertions, and designing an equivalent Issue sync. Supporting both formats adds cognitive and maintenance cost. Reevaluate when approved specifications regularly need reliable AI decomposition into several work items and the team accepts an additional CLI/agent workflow. Issue #77 closed with this decision recorded; open a new Issue if the reevaluation conditions above are met.
 {{< /detail >}}
+{{< /slide >}}
+
+{{< slide key="governance-audit-trail" audience="archive" parity="new" eyebrow="Governance audit" title="Audit trail: presentation and data freshness" subtitle="The audit trail module queries GitHub live; this static site only documents the output structure and how to regenerate it, and never embeds a fetched data row." class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< audit-trail >}}
 {{< /slide >}}

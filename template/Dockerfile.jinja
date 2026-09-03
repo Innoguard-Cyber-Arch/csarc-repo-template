@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1
+{% set python_target = "3.14" if python_support_mode == "latest" else python_min_version -%}
+# CSARC starter Dockerfile, generated because enable_docker was selected.
+# It is a working starting point for one containerized image, not a
+# finished multi-language production packaging strategy: review the base
+# image, build steps, and the final CMD below before relying on this in
+# production, especially if more than one language module is selected.
+{% if 'python' in languages %}
+FROM python:{{ python_target }}-slim AS python-build
+WORKDIR /app
+RUN pip install --no-cache-dir uv
+COPY pyproject.toml uv.lock ./
+COPY src ./src
+RUN uv sync --locked --no-dev
+{% endif -%}
+{% if 'typescript' in languages %}
+FROM node:24-slim AS typescript-build
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json tsconfig.build.json ./
+COPY typescript ./typescript
+RUN pnpm install --frozen-lockfile && pnpm run build
+{% endif -%}
+{% if 'rust' in languages %}
+FROM rust:1.98-slim AS rust-build
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+RUN cargo build --release --locked
+{% endif %}
+{% if 'python' in languages -%}
+FROM python:{{ python_target }}-slim AS runtime
+WORKDIR /app
+COPY --from=python-build /app /app
+ENV PATH="/app/.venv/bin:${PATH}"
+{% elif 'typescript' in languages -%}
+FROM node:24-slim AS runtime
+WORKDIR /app
+RUN corepack enable
+COPY --from=typescript-build /app /app
+{% elif 'rust' in languages -%}
+FROM debian:trixie-slim AS runtime
+WORKDIR /app
+COPY --from=rust-build /app/target/release/{{ project_slug }} /usr/local/bin/{{ project_slug }}
+{% else -%}
+FROM debian:trixie-slim AS runtime
+WORKDIR /app
+COPY . .
+{% endif -%}
+CMD {{ project_run_command }}

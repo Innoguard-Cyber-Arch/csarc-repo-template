@@ -45,6 +45,7 @@ paired_files=(
   scripts/cleanup-worktrees
   scripts/converge-release-tag
   scripts/csarc_config.py
+  scripts/detect-open-milestone
   scripts/install-actionlint
   scripts/install-gitleaks
   scripts/install-osv-scanner
@@ -73,6 +74,7 @@ paired_files=(
   tests/test_promotion_gate.py
   tests/test_milestone_approval.py
   tests/test_milestone_closure.py
+  tests/test_milestone_scope.py
   tests/test_release_policy.py
   tests/test_release_bundle.py
   tests/test_work_item_metadata.py

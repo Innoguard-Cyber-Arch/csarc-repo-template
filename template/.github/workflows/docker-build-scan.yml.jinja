@@ -1,0 +1,70 @@
+{% set has_python = "python" in languages -%}
+{% set has_typescript = "typescript" in languages -%}
+{% set has_rust = "rust" in languages -%}
+{% set has_src = has_python or has_rust -%}
+name: Container build and scan
+
+# Generated only when enable_docker is selected (see copier.yml); a project
+# that does not opt in never receives this file, so it gains no new
+# triggered job, runner cost, or permission. This job never authenticates
+# to a registry and never pushes an image: it only builds locally on the
+# runner and scans that local image, preserving the boundary recorded in
+# docs/adr/selective-ci-automation-adoption.md ("non-container projects
+# should not pay for Docker runner cost or gain registry access").
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    paths:
+      - "Dockerfile"
+      - "docker-compose.yml"
+      - ".github/workflows/docker-build-scan.yml"
+{%- if has_python %}
+      - "pyproject.toml"
+      - "uv.lock"
+{%- endif %}
+{%- if has_typescript %}
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "typescript/**"
+{%- endif %}
+{%- if has_rust %}
+      - "Cargo.toml"
+      - "Cargo.lock"
+{%- endif %}
+{%- if has_src %}
+      - "src/**"
+{%- endif %}
+  workflow_dispatch:
+
+concurrency:
+  group: docker-build-scan-{% raw %}${{ github.event.pull_request.number || github.ref }}{% endraw %}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-scan:
+    name: build and scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Build image without publishing it
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          push: false
+          load: true
+          tags: {{ project_slug }}:ci
+      - name: Scan the built image for known vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: {{ project_slug }}:ci
+          format: table
+          exit-code: "1"
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
