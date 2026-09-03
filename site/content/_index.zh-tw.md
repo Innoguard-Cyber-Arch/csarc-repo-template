@@ -181,7 +181,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 | [OSV-Scanner](https://github.com/google/osv-scanner) | 掃描 lockfile 中已公開的漏洞 | `scripts/verify-dependencies`、`scripts/install-osv-scanner`、`.github/workflows/osv.yml` | 依賴變更 PR、交付候選、每週排程 | [Apache-2.0](https://github.com/google/osv-scanner/blob/main/LICENSE) |
 | [Syft](https://github.com/anchore/syft) | 產生發版用的 SPDX SBOM | `.github/workflows/release.yml`（`anchore/sbom-action`）、`scripts/release_assets.py` | 建立發版的交付 PR | [Apache-2.0](https://github.com/anchore/syft/blob/main/LICENSE) |
 | [Release Please](https://github.com/googleapis/release-please) | 維護版本／CHANGELOG PR 並建立 GitHub Release | `.github/workflows/release.yml`、`release-please-config.json`、`.release-please-manifest.json` | 交付分支到 `main` | [Apache-2.0](https://github.com/googleapis/release-please/blob/main/LICENSE) |
-| [Hugo](https://github.com/gohugoio/hugo) | 從 Markdown 建置雙語內部網站與 `llms.txt` | `scripts/install-hugo`、`scripts/build-decision-site`、`site/hugo.toml` | `docs/index.html`、`docs/index.en.html`、`llms.txt` | [Apache-2.0](https://github.com/gohugoio/hugo/blob/master/LICENSE) |
+| 決策網站渲染引擎 | 自製、無外部依賴的 Python 引擎，從 Markdown 建置雙語內部網站與 `llms.txt`；2026-09-03 取代 Hugo | `scripts/build_decision_site.py`、`scripts/build-decision-site`、`scripts/render_site.py`、`site/version.json` | `docs/index.html`、`docs/index.en.html`、`llms.txt` | 自製（本 repository） |
 {{< /detail >}}
 {{< /slide >}}
 

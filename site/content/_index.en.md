@@ -87,7 +87,7 @@ Only tools this template directly integrates, executes, or produces into the rep
 | [OSV-Scanner](https://github.com/google/osv-scanner) | Scans lockfiles for disclosed vulnerabilities | `scripts/verify-dependencies`, `scripts/install-osv-scanner`, `.github/workflows/osv.yml` | Dependency-change PRs, delivery candidates, weekly schedule | [Apache-2.0](https://github.com/google/osv-scanner/blob/main/LICENSE) |
 | [Syft](https://github.com/anchore/syft) | Generates the release SPDX SBOM | `.github/workflows/release.yml` (`anchore/sbom-action`), `scripts/release_assets.py` | Delivery PR that creates a release | [Apache-2.0](https://github.com/anchore/syft/blob/main/LICENSE) |
 | [Release Please](https://github.com/googleapis/release-please) | Maintains the version/changelog pull request and creates the GitHub Release | `.github/workflows/release.yml`, `release-please-config.json`, `.release-please-manifest.json` | Delivery branch to `main` | [Apache-2.0](https://github.com/googleapis/release-please/blob/main/LICENSE) |
-| [Hugo](https://github.com/gohugoio/hugo) | Builds the bilingual internal site and `llms.txt` from Markdown | `scripts/install-hugo`, `scripts/build-decision-site`, `site/hugo.toml` | `docs/index.html`, `docs/index.en.html`, `llms.txt` | [Apache-2.0](https://github.com/gohugoio/hugo/blob/master/LICENSE) |
+| Decision-site render engine | In-house, dependency-free Python engine that builds the bilingual internal site and `llms.txt` from Markdown; replaced Hugo on 2026-09-03 | `scripts/build_decision_site.py`, `scripts/build-decision-site`, `scripts/render_site.py`, `site/version.json` | `docs/index.html`, `docs/index.en.html`, `llms.txt` | In-house (this repository) |
 {{< /detail >}}
 {{< /slide >}}
 
