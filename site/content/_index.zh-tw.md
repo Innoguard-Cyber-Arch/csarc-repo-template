@@ -327,7 +327,6 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< /slide >}}
 
 {{< slide key="pr" track="pr" eyebrow="步驟 06" title="讓完成的改動可審查、可交付" subtitle="獨立工作直接進 main；只有需要共同驗收的 Milestone 才使用交付 PR。" class="legacy-slide decision-slide" legacy="true" >}}
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>固定 dev/next 已退役。獨立工作 PR 直接進 main；Milestone 工作才進 dev/m*，完成後以交付 PR 進 main。下方 technical view 保留舊路徑與「發版 PR」用語供稽核。</span></aside>
 {{< legacy >}}
       <header>
         <h2>步驟 6｜<span class="accent">讓完成的改動可審查、可交付</span></h2>
@@ -396,7 +395,6 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< /slide >}}
 
 {{< slide key="deploy" track="deploy" eyebrow="步驟 07" title="先分清版本、發版、交付與部署" subtitle="工作先交付到 main；需要新版本時，系統建立一張仍須人工審查的版本 PR。" class="legacy-slide decision-slide" legacy="true" >}}
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>一支候選 release workflow 預計負責版本 PR 與 verified immutable GitHub Release；待預設分支實跑後才算啟用。Registry、attestation 與部署仍未自動啟用。</span></aside>
 {{< legacy >}}
       <header>
         <h2>步驟 7｜<span class="accent">版本規則與成品接續</span></h2>
@@ -605,7 +603,6 @@ renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc
 {{< /slide >}}
 
 {{< slide key="bridge" audience="maintainer" eyebrow="2026/05 內部分享簡報" title="回顧當時原則，對照目前實作" subtitle="回顧 2026 年 5 月內部分享的 SDLC 構想，標示目前保留、調整或延後的做法。" class="legacy-slide bridge-slide" legacy="true" >}}
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 保留五月版與 2026-08 的對照供稽核。現行獨立工作直進 main，Milestone 才用 dev/m*；交付不等於 Release，也沒有 active 成品發布或 deployment workflow。</span></aside>
 {{< legacy >}}
       <header>
         <h2>2026/05 內部分享簡報｜<span class="accent">SDLC 盤點</span></h2>
@@ -722,7 +719,6 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
 {{< /slide >}}
 
 {{< slide key="principles" audience="archive" eyebrow="關鍵決策" title="規則、理由與刻意不做" subtitle="這些是目前可由檔案與測試證明的決定。" class="legacy-slide review-notes-slide" legacy="true" >}}
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 的 promotion／兩段式 release handoff 是歷史設計。現行 CI 依風險分級；候選 Release Please 版本 PR 與單一 release workflow 預計分別負責審查與發布。</span></aside>
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
@@ -764,7 +760,6 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 {{< /slide >}}
 
 {{< slide key="benchmark" audience="archive" eyebrow="外部基準與實測" title="有骨架，還不是完整平台" subtitle="新 repo、Copier 更新、OSV、Release 與第一個 CI-only pilot 已有證據；其餘邊界仍明列。" class="legacy-slide review-notes-slide" legacy="true" >}}
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 保留舊 run 與當時判斷供稽核；Release Please 已納入單一候選 release workflow，待預設分支實跑；release consumption 與 live-integration 專用 workflows 仍未恢復。</span></aside>
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>

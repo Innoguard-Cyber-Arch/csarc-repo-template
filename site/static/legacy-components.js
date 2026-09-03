@@ -129,41 +129,17 @@ gh auth status`
       overlay.querySelector('.config-overlay-close').addEventListener('click', closeConfigOverlays);
     });
 
-    // Config-trigger / overlay content is now server-rendered by
-    // render_config_guidance() in scripts/build_decision_site.py from
-    // site/data/config_examples.json, in the page's own language. This
-    // only wires open/close interaction on top of the data-* attributes
-    // that render already emitted; it no longer builds DOM from an
-    // in-memory JS object. A `data-config-direct="true"` guidance block
-    // renders native <details>/<summary> and needs no JS at all.
-    document.querySelectorAll('.decision-slide .config-guidance:not([data-config-direct="true"]) .config-trigger').forEach(trigger => {
-      const overlay = document.getElementById(trigger.getAttribute('aria-controls'));
-      if (!overlay) return;
-      const card = overlay.querySelector('.config-overlay-card');
-      const heading = card.querySelector('h3');
-      const goalField = card.querySelector('.config-overlay-goal');
-      const fileField = card.querySelector('.config-overlay-path code');
-      const codeField = card.querySelector('pre');
-
-      trigger.addEventListener('click', () => {
-        const index = trigger.dataset.configIndex;
-        const isSameOpen = !overlay.hidden && overlay.dataset.itemIndex === index;
-        closeConfigOverlays();
-        if (isSameOpen) return;
-        heading.textContent = trigger.dataset.configTitle;
-        goalField.textContent = trigger.dataset.configGoal;
-        fileField.textContent = trigger.dataset.configFile;
-        // The shortcode HTML-escapes code and uses "&#10;" for newlines
-        // (see config-guidance.html); the browser decodes that entity back
-        // to a real newline when reading the attribute, so no JS unescaping
-        // is needed here.
-        codeField.textContent = trigger.dataset.configCode;
-        overlay.dataset.itemIndex = index;
-        overlay.hidden = false;
-        trigger.setAttribute('aria-expanded', 'true');
-      });
-    });
-
+    // Issue #525: config-guidance content (site/data/config_examples.json,
+    // rendered by render_config_guidance() in
+    // scripts/build_decision_site.py) is now always a static block with
+    // no click-to-reveal trigger of its own -- detail-toggle.css's
+    // simple/technical toggle shows or hides the whole thing directly, so
+    // this file no longer needs to wire up per-item overlay content for
+    // it. The remaining `.config-overlay` instances below belong to the
+    // unrelated setup-trigger/term-trigger widgets on the capability
+    // slide, and to detail-toggle.js's own "維運附錄" overlay (which wires
+    // its own close button already; this listener is a harmless no-op
+    // duplicate for that one).
     document.querySelectorAll('.decision-slide .config-overlay .config-overlay-close').forEach(closeButton => {
       closeButton.addEventListener('click', closeConfigOverlays);
     });

@@ -455,7 +455,13 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         assert inactive not in workflows_purpose
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
     assert "需人審查版本 PR 的發版流程仍是候選" in flow
-    assert "一支候選 release workflow" in chinese_delivery
+    # Issue #525: the "Current state" selection-note that used to carry
+    # this "candidate release workflow" phrasing was removed along with
+    # every other such box; the Candidate/Blocked status in the
+    # decision-register table below still conveys the same
+    # not-yet-proven-on-default-branch fact, without the retired
+    # legacy-vs-current framing.
+    assert "一支候選 release workflow" not in chinese_delivery
     assert "Candidate／Blocked" in chinese_delivery  # noqa: RUF001
     assert "promotion-gated adaptive release" not in chinese_delivery
     assert "下方 technical view 保留 2026-08" not in chinese_delivery
@@ -672,17 +678,24 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     for source in (chinese, english):
         for track in direct_tracks:
             assert f'{{{{< config-guidance track="{track}" >}}}}' in source
+    # Issue #525: config-guidance no longer has a fold-open/overlay split --
+    # one static block regardless of the (now presentation-inert) `direct`
+    # data field, with no click-to-reveal layer, so none of that wiring
+    # remains in either script.
     guidance_shortcode = render_config_guidance(
         "method", lang="zh-tw", data=site_data
     )
-    assert 'data-config-direct="true"' in guidance_shortcode
-    assert "guidance.dataset.configDirect === 'true'" not in active_components
+    assert "data-config-direct" not in guidance_shortcode
+    assert "config-trigger" not in guidance_shortcode
+    assert "configDirect" not in active_components
     assert (
         'not([data-config-direct="true"]) .config-trigger'
-    ) in active_components
-    assert "guidance.dataset.configDirect === 'true'" in (
-        root / "site/static/detail-toggle.js"
-    ).read_text(encoding="utf-8")
+    ) not in active_components
+    presentation_js = (root / "site/static/detail-toggle.js").read_text(
+        encoding="utf-8"
+    )
+    assert "configDirect" not in presentation_js
+    assert "config-guidance-fold" not in presentation_js
     assert (
         "規則治理單獨定義合併資格、權限與例外"
         in config_examples["tracks"]["agents"]["items"][-1]["goal"]["zh-tw"]

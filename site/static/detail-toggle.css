@@ -115,8 +115,25 @@ html[data-detail-level="technical"] .detail-level-control button[aria-pressed="t
   white-space: normal;
 }
 
-.legacy-slide > .basic-header,
-.legacy-slide > .basic-summary {
+.legacy-slide > .basic-header {
+  /* Duplicate title/subtitle block from _render_header(); the real
+     header already lives in .legacy-content. Always hidden regardless
+     of detail level -- unlike .basic-summary below, this one was never
+     meant to become visible in technical mode. */
+  display: none;
+}
+
+html[data-detail-level="simple"] .legacy-slide > .basic-summary {
+  display: none;
+}
+
+/* Issue #525: technical mode directly replaces the content page instead
+   of expanding an inline box inside it -- .basic-summary (the
+   {{< basic >}} block's rendering, appended right after .legacy-content)
+   becomes visible as a second, full content-page section. Its plain
+   prose duplicates .legacy-content's own simple-mode content, so only
+   its {{< detail >}} output (.technical-detail) is shown. */
+.legacy-slide > .basic-summary > :not(.technical-detail) {
   display: none;
 }
 
@@ -131,10 +148,6 @@ html[data-detail-level="technical"] .detail-level-control button[aria-pressed="t
 
 html[data-detail-level="technical"] .legacy-slide.decision-slide[data-track="method"] .decision-strip {
   flex: 0 0 auto;
-}
-
-.config-guidance--paged > p {
-  margin-bottom: 5px;
 }
 
 .config-tour-trigger {
@@ -286,8 +299,12 @@ html[data-detail-level="simple"] .technical-tour-trigger {
   grid-column: 1 / -1;
 }
 
-.markdown-body > .detail-panel {
+.markdown-body > .technical-detail {
   grid-column: 1 / -1;
+}
+
+html[data-detail-level="simple"] .markdown-body > .technical-detail {
+  display: none;
 }
 
 .markdown-body > p:first-child {
@@ -302,7 +319,6 @@ html[data-detail-level="simple"] .technical-tour-trigger {
 .markdown-body > ol,
 .markdown-body > table,
 .technical-detail,
-.markdown-body > .detail-panel,
 .markdown-body > .package-disclosure {
   margin: 0;
   padding: 16px 20px;
@@ -384,36 +400,13 @@ html[data-detail-level="simple"] .technical-tour-trigger {
   background: var(--best-soft);
 }
 
-.detail-panel {
-  display: grid;
-  min-height: 0;
-  grid-template-rows: 1fr;
-  opacity: 1;
-  transition: grid-template-rows .32s ease, opacity .2s ease, transform .32s ease;
-}
-
-.detail-panel__content {
-  min-height: 0;
-  overflow: hidden;
-}
-
-html[data-detail-level="simple"] .detail-panel {
-  grid-template-rows: 0fr;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-6px);
-}
-
 @media print {
   .detail-level-control,
   .language-control { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .detail-level-control button,
-  .detail-panel {
+  .detail-level-control button {
     transition: none;
   }
-
-  html[data-detail-level="simple"] .detail-panel { transform: none; }
 }
