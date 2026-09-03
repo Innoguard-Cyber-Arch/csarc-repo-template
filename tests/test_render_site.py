@@ -11,9 +11,17 @@ SITE_MODULE = runpy.run_path(
 PARITY_MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "check-decision-site-parity")
 )
+BUILD_MODULE = runpy.run_path(
+    str(Path(__file__).parents[1] / "scripts" / "build_decision_site.py")
+)
 BundleError = SITE_MODULE["BundleError"]
 render = SITE_MODULE["render"]
 parse_parity = PARITY_MODULE["parse"]
+load_site_data = BUILD_MODULE["load_site_data"]
+render_similar_tools = BUILD_MODULE["render_similar_tools"]
+render_testing = BUILD_MODULE["render_testing"]
+render_journey_rail = BUILD_MODULE["render_journey_rail"]
+render_config_guidance = BUILD_MODULE["render_config_guidance"]
 
 
 def _write_markdown_site(
@@ -392,18 +400,32 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     english_delivery = english.split('{{< slide key="deploy"', 1)[1].split(
         "{{< /slide >}}", 1
     )[0]
-    file_map = chinese.split('{{< slide key="files"', 1)[1].split(
-        "{{< /slide >}}", 1
-    )[0]
+    # The file-map's `.github/workflows/` purpose text moved from a
+    # markdown table cell (see the old `{{< slide key="files" >}}` body)
+    # into site/data/file_map.json's "workflows" entry when Issue #534
+    # replaced the flat table with a file-explorer-style tree (see
+    # scripts/build_decision_site.py's render_file_map); the sync
+    # invariant this test proves -- every active workflow file is
+    # mentioned by name -- carries over unchanged to that entry.
+    file_map_data = json.loads(
+        (root / "site/data/file_map.json").read_text(encoding="utf-8")
+    )
+    workflows_entry = next(
+        entry
+        for entry in file_map_data["entries"]
+        if entry["paths"] == [".github/workflows/"]
+    )
+    workflows_purpose = workflows_entry["purpose"]["zh-tw"]
     workflows = {
         path.name.removesuffix(".jinja")
         for path in (root / "template/.github/workflows").iterdir()
         if path.is_file()
     }
-    assert "9 條共用流程" in file_map
+    assert "9 條共用流程" in workflows_purpose
     workflow_labels = {
         "ci.yml": "必要驗證",
         "codeql.yml": "CodeQL SAST",
+        "docker-build-scan.yml": "容器建置掃描",
         "governance-comment.yml": "reviewer 指派",
         "governance-drift.yml": "治理漂移",
         "issue-triage.yml": "工作單整理",
@@ -417,17 +439,20 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     }
     assert workflows == set(workflow_labels)
     for workflow, label in workflow_labels.items():
-        assert label in file_map, (
+        assert label in workflows_purpose, (
             f"{workflow} lost its file-map mention ({label!r})"
         )
     # codeql.yml is conditional on enable_codeql (see copier.yml), exactly
     # like template-update.yml is conditional on
-    # enable_template_update_notifications and governance-drift.yml is
-    # conditional on enable_governance_drift_check: none of the three ship
-    # to every new repo.
-    assert "選配的治理漂移、模板更新通知排程與 CodeQL SAST" in file_map
+    # enable_template_update_notifications, governance-drift.yml is
+    # conditional on enable_governance_drift_check, and docker-build-scan.yml
+    # is conditional on enable_docker: none of the four ship to every new
+    # repo.
+    assert "選配的治理漂移、模板更新通知排程、CodeQL SAST 與容器建置掃描" in (
+        workflows_purpose
+    )
     for inactive in ("release-please.yml",):
-        assert inactive not in file_map
+        assert inactive not in workflows_purpose
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
     assert "需人審查版本 PR 的發版流程仍是候選" in flow
     assert "一支候選 release workflow" in chinese_delivery
@@ -476,20 +501,20 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     data = json.loads(
         (root / "site/data/similar_tools.json").read_text(encoding="utf-8")
     )
-    shortcode = (root / "site/layouts/shortcodes/similar-tools.html").read_text(
-        encoding="utf-8"
-    )
-    testing_shortcode = (
-        root / "site/layouts/shortcodes/testing.html"
-    ).read_text(encoding="utf-8")
-    journey_rail = (root / "site/layouts/partials/journey-rail.html").read_text(
-        encoding="utf-8"
+    site_data = load_site_data(root)
+    # Rendered by the engine (scripts/build_decision_site.py) rather than
+    # read from the retired Hugo shortcode/partial/home-layout sources
+    # those variable names originally referenced (Issue #524).
+    shortcode = render_similar_tools(lang="zh-tw", data=site_data)
+    testing_shortcode = render_testing(lang="zh-tw", data=site_data)
+    journey_rail = render_journey_rail(
+        site_data.navigation, lang="zh-tw", active_key="method"
     )
     navigation = json.loads(
         (root / "site/data/navigation.json").read_text(encoding="utf-8")
     )
-    presentation = (root / "site/layouts/home.presentation.html").read_text(
-        encoding="utf-8"
+    presentation = "\n".join(
+        (BUILD_MODULE["_REORDER_SCRIPT"], BUILD_MODULE["_DETAIL_LEVEL_SCRIPT"])
     )
     deck = (root / "site/static/deck.js").read_text(encoding="utf-8")
     styles = (root / "site/static/styles.css").read_text(encoding="utf-8")
@@ -522,10 +547,14 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert 'id="testing-panel-duration"' in testing_shortcode
     assert "statusLabel" not in data["testing"]["labels"]["zh-tw"]
     assert "statusLabel" not in data["testing"]["labels"]["en"]
+    # render_journey_rail() threads each item's `participation` value from
+    # navigation.json into its class, rather than hardcoding it; check two
+    # different data-driven values instead of asserting on retired Hugo
+    # template syntax (`{{ .participation }}`).
+    assert 'class="journey-bookend appendix maintainer"' in journey_rail
     assert (
-        'class="journey-bookend appendix {{ .participation }}' in journey_rail
+        'class="journey-item human active" aria-current="step">' in journey_rail
     )
-    assert 'class="journey-item {{ .participation }}' in journey_rail
     assert navigation["appendices"][-2]["key"] == "testing"
     assert navigation["appendices"][-1]["key"] == "bridge"
     assert navigation["appendices"][-2]["audience"] == "maintainer"
@@ -630,9 +659,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     for source in (chinese, english):
         for track in direct_tracks:
             assert f'{{{{< config-guidance track="{track}" >}}}}' in source
-    guidance_shortcode = (
-        root / "site/layouts/shortcodes/config-guidance.html"
-    ).read_text(encoding="utf-8")
+    guidance_shortcode = render_config_guidance(
+        "method", lang="zh-tw", data=site_data
+    )
     assert 'data-config-direct="true"' in guidance_shortcode
     assert "guidance.dataset.configDirect === 'true'" not in active_components
     assert (
@@ -1021,7 +1050,11 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert data["threshold"] == 5
     assert data["starThreshold"] == 1000
     assert 'class="tool-meta"' in shortcode
-    assert shortcode.count('class="capture-date"') == 2
+    # Every panel -- the primary table plus each feature-comparison group --
+    # shows its own capture-date marker.
+    assert shortcode.count('class="capture-date"') == 1 + len(
+        data["featureGroups"]
+    )
     assert data["labels"]["zh-tw"]["stars"] == "GitHub Stars"
     assert data["labels"]["en"]["stars"] == "GitHub Stars"
 

@@ -55,9 +55,9 @@
 
 | 類型 | 路徑 | 用途與維護方式 |
 | --- | --- | --- |
-| 單檔交付物 | `docs/index.html`、`docs/index.en.html` | 由 Hugo 來源重建的中英文 portable presentation；內嵌樣式、程式與媒體，不直接編輯 |
-| AI 閱讀索引 | `llms.txt`、`docs/llms.txt` | 由 Hugo 從共用 glossary 同源產生；不直接編輯 |
-| 網站來源 | `site/` | 分開維護雙語 Markdown、Hugo 模板、特殊視覺、互動與原始圖片；詳見 `site/README.md` |
+| 單檔交付物 | `docs/index.html`、`docs/index.en.html` | 由 `scripts/build_decision_site.py` 渲染引擎重建的中英文 portable presentation；內嵌樣式、程式與媒體，不直接編輯 |
+| AI 閱讀索引 | `llms.txt`、`docs/llms.txt` | 由渲染引擎從共用 glossary 同源產生；不直接編輯 |
+| 網站來源 | `site/` | 分開維護雙語 Markdown、純 Python 渲染引擎、特殊視覺、互動與原始圖片；詳見 `site/README.md` |
 | 操作契約 | `docs/agent-install.md`、`docs/milestone-description.md` | 已發布且可能由固定版本 URL 讀取的介面；路徑保持穩定 |
 | Runbook | `docs/live-integration.md`、`docs/artifact-consumption.md` | 維護者執行線上驗證或排查交付鏈時使用 |
 | 實證 | `docs/pilot-adoption.md` | 真實 consuming repository 的採用、更新與限制證據 |

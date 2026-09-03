@@ -32,6 +32,15 @@ set -euo pipefail
 # own rules, only calls it earlier. When no --title/-t flag is present at
 # all, this wrapper does not invent a check -- it passes through untouched
 # and lets `gh issue create` handle its own prompting/validation.
+#
+# Issue #551: when --milestone/-m is not already present, and
+# scripts/detect-open-milestone finds exactly one open Milestone, this
+# wrapper surfaces that -- interactively asking whether to attach it when
+# stdin is a terminal, otherwise only printing a notice. This is
+# deliberately a nudge, never a block: many Issues genuinely belong to no
+# Milestone (see Issue #551's boundary section), so any detection failure
+# (zero/multiple open Milestones, a gh error) is silently treated as
+# "nothing to suggest" and Issue creation proceeds exactly as before.
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -81,4 +90,56 @@ if (( title_found )); then
   fi
 fi
 
-exec gh issue create "$@"
+# Issue #551 safeguard: find --milestone/-m and --repo/-R (if given) among
+# the original arguments, the same way --title/-t was found above.
+milestone_given=0
+detect_repo_args=()
+i=0
+while (( i < ${#args[@]} )); do
+  arg="${args[$i]}"
+  case "$arg" in
+    --milestone=*|-m=*)
+      milestone_given=1
+      ;;
+    --milestone|-m)
+      milestone_given=1
+      ;;
+    -m?*)
+      milestone_given=1
+      ;;
+    --repo=*)
+      detect_repo_args=(--repo "${arg#--repo=}")
+      ;;
+    --repo|-R)
+      if (( i + 1 < ${#args[@]} )); then
+        detect_repo_args=(--repo "${args[$((i + 1))]}")
+      fi
+      ;;
+    -R?*)
+      detect_repo_args=(--repo "${arg#-R}")
+      ;;
+  esac
+  i=$((i + 1))
+done
+
+if (( ! milestone_given )) &&
+  # bash 3.2 (macOS's stock /bin/bash, see scripts/test-gh-issue-create)
+  # treats "${arr[@]}" on a zero-element array as an unbound variable
+  # under `set -u`; the ":-" guard avoids that while still expanding to
+  # the real elements when detect_repo_args is non-empty.
+  detected="$("$script_dir/detect-open-milestone" "${detect_repo_args[@]:-}" 2>/dev/null)"; then
+  detected_number="${detected%%$'\t'*}"
+  detected_title="${detected#*$'\t'}"
+  echo "One open Milestone is currently active: #${detected_number} ${detected_title}" >&2
+  if [[ -t 0 ]]; then
+    milestone_reply=""
+    read -r -p "Attach --milestone \"${detected_title}\" to this Issue? [y/N] " milestone_reply || milestone_reply=""
+    if [[ "$milestone_reply" =~ ^[Yy]$ ]]; then
+      args+=(--milestone "$detected_title")
+    fi
+  else
+    echo "Not attached automatically (non-interactive); pass --milestone \"${detected_title}\" if this Issue belongs to it." >&2
+  fi
+fi
+
+exec gh issue create "${args[@]}"

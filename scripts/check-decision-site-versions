@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""Fail closed when the site template version leaves the engine's range.
+
+The rendering engine (`scripts/build_decision_site.py`) and the
+presentation template (theme/CSS under `site/static/`) each carry their own
+version, independent of the repository/CLI's overall SemVer (Issue #524).
+`site/version.json` records both plus the range of template versions the
+current engine is compatible with; this script is the one place that range
+check runs.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+VERSION_FILE = ROOT / "site/version.json"
+_VERSION = re.compile(r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)$")
+_RANGE = re.compile(r"^>=(?P<min>\d+\.\d+\.\d+) <(?P<max>\d+\.\d+\.\d+)$")
+
+
+def _parse_version(value: str) -> tuple[int, int, int]:
+    """Parse one strict `MAJOR.MINOR.PATCH` version string."""
+    match = _VERSION.fullmatch(value)
+    if not match:
+        raise ValueError(f"not a MAJOR.MINOR.PATCH version: {value!r}")
+    return (int(match["major"]), int(match["minor"]), int(match["patch"]))
+
+
+def _parse_range(
+    value: str,
+) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+    """Parse a `>=MIN <MAX` half-open compatibility range."""
+    match = _RANGE.fullmatch(value)
+    if not match:
+        raise ValueError(
+            "expected a '>=MAJOR.MINOR.PATCH <MAJOR.MINOR.PATCH' range: "
+            f"{value!r}"
+        )
+    return _parse_version(match["min"]), _parse_version(match["max"])
+
+
+def check(data: dict[str, object]) -> str:
+    """Validate one `site/version.json` payload and return a status line."""
+    engine = data["engine"]  # type: ignore[assignment]
+    template = data["template"]  # type: ignore[assignment]
+    compatible_range = data["compatible_template_range"]  # type: ignore[assignment]
+    if not isinstance(engine, str) or not isinstance(template, str):
+        raise ValueError("'engine' and 'template' must be strings")
+    if not isinstance(compatible_range, str):
+        raise ValueError("'compatible_template_range' must be a string")
+
+    _parse_version(engine)
+    template_version = _parse_version(template)
+    minimum, maximum = _parse_range(compatible_range)
+    if not (minimum <= template_version < maximum):
+        raise ValueError(
+            f"template {template} does not satisfy engine {engine}'s "
+            f"compatible_template_range {compatible_range!r}"
+        )
+    return (
+        f"Decision-site versions: engine {engine}, template {template}, "
+        f"compatible with {compatible_range}\n"
+    )
+
+
+def main() -> int:
+    """Read `site/version.json` and fail closed on an incompatible pair."""
+    try:
+        data = json.loads(VERSION_FILE.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("expected a JSON object")
+        status = check(data)
+    except (OSError, KeyError, ValueError, json.JSONDecodeError) as error:
+        sys.stderr.write(
+            f"decision-site version contract invalid ({VERSION_FILE}): "
+            f"{error}\n"
+        )
+        return 1
+    sys.stdout.write(status)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

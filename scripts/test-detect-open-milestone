@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Regression test for scripts/detect-open-milestone (Issue #551): proves
+# the "exactly one open Milestone" heuristic shared by scripts/gh-issue-create
+# and scripts/validate-pr-policy behaves identically across its four
+# documented outcomes, entirely locally via a stubbed `gh` -- no network
+# access or real Milestone is ever touched.
+
+script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/detect-open-milestone"
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "$fixture_root"' EXIT
+
+stub_bin="$fixture_root/bin"
+mkdir -p "$stub_bin"
+call_log="$fixture_root/gh-calls.log"
+cat >"$stub_bin/gh" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >>"$call_log"
+case "\$STUB_GH_MODE" in
+  error) exit 1 ;;
+  malformed) printf '%s' 'not-json' ;;
+  *) printf '%s' "\${STUB_MILESTONES_JSON:-[]}" ;;
+esac
+EOF
+chmod +x "$stub_bin/gh"
+
+run_with_stub() {
+  PATH="$stub_bin:$PATH" "$script_path" "$@"
+}
+
+case_count=0
+
+# Case 1: zero open Milestones -- nothing to suggest, exit 1, no stdout.
+case_count=$((case_count + 1))
+: >"$call_log"
+set +e
+zero_out="$(STUB_MILESTONES_JSON='[]' run_with_stub --repo acme/project)"
+zero_status=$?
+set -e
+[[ "$zero_status" -eq 1 ]]
+[[ -z "$zero_out" ]]
+# The stub logs one argument per line (see cat above); check the queried
+# path landed in the call rather than assuming argv joins into one line.
+grep -Fq 'repos/acme/project/milestones' "$call_log"
+grep -Fq 'state=open' "$call_log"
+
+# Case 2: exactly one open Milestone -- exit 0, "<number>\t<title>" on stdout.
+case_count=$((case_count + 1))
+: >"$call_log"
+one_out="$(
+  STUB_MILESTONES_JSON='[{"number":9,"title":"Milestone 9: Decision site and adoption experience overhaul"}]' \
+    run_with_stub --repo acme/project
+)"
+[[ "$one_out" == $'9\tMilestone 9: Decision site and adoption experience overhaul' ]]
+
+# Case 3: two open Milestones -- ambiguous, treated the same as zero
+# (exit 1, no stdout) rather than guessing.
+case_count=$((case_count + 1))
+set +e
+two_out="$(
+  STUB_MILESTONES_JSON='[{"number":9,"title":"Milestone 9"},{"number":12,"title":"Research"}]' \
+    run_with_stub --repo acme/project
+)"
+two_status=$?
+set -e
+[[ "$two_status" -eq 1 ]]
+[[ -z "$two_out" ]]
+
+# Case 4: gh itself fails (auth/network/rate limit) -- exit 2, never
+# surfaced as a hard error to the caller.
+case_count=$((case_count + 1))
+set +e
+error_out="$(STUB_GH_MODE=error run_with_stub --repo acme/project)"
+error_status=$?
+set -e
+[[ "$error_status" -eq 2 ]]
+[[ -z "$error_out" ]]
+
+# Case 5: gh succeeds but returns unparsable data -- treated identically
+# to a gh failure (exit 2), not a crash.
+case_count=$((case_count + 1))
+set +e
+malformed_out="$(STUB_GH_MODE=malformed run_with_stub --repo acme/project)"
+malformed_status=$?
+set -e
+[[ "$malformed_status" -eq 2 ]]
+[[ -z "$malformed_out" ]]
+
+# Case 6: --repo=value (equals form) is accepted like --repo value.
+case_count=$((case_count + 1))
+: >"$call_log"
+STUB_MILESTONES_JSON='[]' run_with_stub --repo=acme/other >/dev/null || true
+grep -Fq 'repos/acme/other/milestones' "$call_log"
+
+# Case 7: no --repo at all falls back to gh api's {owner}/{repo}
+# placeholder, matching how `gh issue create` itself infers the current
+# repository when --repo/-R is omitted.
+case_count=$((case_count + 1))
+: >"$call_log"
+STUB_MILESTONES_JSON='[]' run_with_stub >/dev/null || true
+grep -Fq 'repos/{owner}/{repo}/milestones' "$call_log"
+
+echo "detect-open-milestone cases passed: $case_count"
