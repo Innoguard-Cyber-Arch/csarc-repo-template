@@ -325,6 +325,49 @@ TOTAL（4002 秒／66 分 42 秒，尤其是 Regression tests 一階段的 3971 
 CSARC_CACHE_ROOT="$HOME/.cache/csarc" ./scripts/verify-template.sh
 ```
 
+### 本機驗證分級判斷原則（cheap-stage-first，#538）
+
+上方三層成本邊界只回答「這次改動落在哪一級」，Base-only re-merge 例外只回答「同一張已經
+驗證過的 PR 要不要重跑」。這裡把兩者之間還沒寫清楚的問題——「這次到底要不要在本機跑一次
+full」與「真的要跑時如何排序」——寫成可執行原則，延續這次 session 已經在用、源自
+Milestone 8（#465／#466）教訓的 cheap-stage-first 模式，避免重演本機測試反覆鬼打牆
+（redundant full rerun、網路瞬斷、環境競爭噪音耗掉大量時間）。
+
+**先判斷要不要在本機跑，依序四步：**
+
+1. 這張 PR 本身是不是 full-tier 邊界？不是的話，直接信任 hosted `verify` check；`fast`／
+   `docs` tier 的本機義務只到「開發中 focused check」（本節最上方第 1 級）為止，不必為了
+   保險另外在本機跑一次 full。
+2. 是 full-tier 邊界：這個 branch 自己這一輪內容有沒有本機全綠跑過一次
+   `./scripts/verify-template.sh`（生成 repo 是 `./scripts/verify`）？沒有的話，這正是
+   #458 規則要求的那一次，不能省略。
+3. 已經全綠過、現在只是因為 base 前進被迫重新合併：套用上方「Base-only re-merge 例外
+   （#468）」四項條件；符合就 push 信任 hosted `verify`，任何一項不符合才回到本機重跑。
+4. 以上都不成立，才真的執行一次本機 full；開始前先確認沒有其他 worktree／`pytest`／
+   `verify`／`copier` 程序同時佔用本機資源——上方「逐階段耗時量測（#465）」記錄的 4002
+   秒即混入另一個 worktree 的背景負載，不是乾淨基準，容易把負載噪音誤判成回歸。
+
+**真的要在本機跑一次全套時，依 cheap-stage-first 排序，不要悶頭跑到底才發現問題：**
+
+- 先跑上方「`scripts/verify-template.sh` 階段盤點（#458）」六個便宜階段（Repository
+  contracts、Static assets and paired files、Python environment、Python quality、
+  Package smoke test、GitHub Actions audit；#465 量測每階段 ≤10 秒），用對應的
+  `scripts/verify-stage-<name>` 逐一單獨執行，不必等待整條聚合器。
+- 六個便宜階段全部 PASSED，才進入唯一昂貴的 Regression tests 階段（#465 量測 3971 秒，
+  佔同次 TOTAL 九成以上）；任一便宜階段先失敗，就先處理該階段本身，不必先跑完昂貴階段。
+- Regression tests 若因暫時性錯誤中止（例如 #465 記錄的
+  `curl: (92) HTTP/2 stream ... PROTOCOL_ERROR` 網路瞬斷），只用
+  `scripts/verify-stage-regression-tests` 單獨重跑這一階段，不必連同已經 PASSED 的六個
+  便宜階段一起重跑整支聚合器。
+- 任務進行中一旦發現「其實有更便宜的路徑」（例如原本以為要本機全跑，後來發現符合
+  base-only re-merge 例外，或某階段本次 session 已經驗證過），立刻重新評估同一 session
+  內所有**還沒開始**的驗證步驟，不要因為原計畫已經寫好就照舊執行；已經真正執行並拿到結果
+  的步驟不必重跑。
+
+以上四步起頭判斷與 cheap-stage-first 排序，都不是放寬「full-tier PR 一定要本機全綠跑過
+一次」的既有規則（#458），只回答「什麼時候該跑」與「真的要跑時怎麼跑最省時間」；merge
+資格與 required check 仍由 Journey 08 與本文件既有規則決定。
+
 ## 版本、發版、交付與部署矩陣
 
 | 邊界 | Issue／工作 PR | Milestone／canary 交付 PR | `main` | tag／manual event |
