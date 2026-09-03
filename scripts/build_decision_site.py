@@ -1268,6 +1268,7 @@ def render_page(markdown_text: str, *, lang: str, data: SiteData) -> str:
 {_DETAIL_LEVEL_SCRIPT}
   <link rel="stylesheet" href="{_ASSET_PREFIX}site/static/styles.css">
   <link rel="stylesheet" href="{_ASSET_PREFIX}site/static/detail-toggle.css">
+  <link rel="stylesheet" href="{_ASSET_PREFIX}site/theme.css">
 </head>
 <body>
   <div class="reading-controls">

@@ -2101,6 +2101,40 @@ html[data-detail-level="simple"] .detail-panel {
   html[data-detail-level="simple"] .detail-panel { transform: none; }
 }
 </style>
+  <style data-bundled-from="../../site/theme.css">
+/* Project- or fork-owned decision-site theme overrides (Issue #527).
+ *
+ * A repository that carries this template's own root decision-site
+ * engine (`scripts/build_decision_site.py`, not the smaller generated-
+ * project handbook -- see `template/docs/site-theme.css.jinja` for that
+ * separate path) can restyle its copy of the presentation here, without
+ * forking the render engine or `site/static/styles.css`.
+ *
+ * Scope, deliberately narrow (see docs/adr/portable-decision-site.md):
+ *   - Override CSS custom properties already declared in
+ *     `site/static/styles.css`'s `:root` block (colors and other design
+ *     tokens).
+ *   - Narrow, purely-visual declarations (color/background/border) on
+ *     existing block-level classes are also allowed.
+ *   - Do not add new HTML, JavaScript, selectors that change markup
+ *     semantics, or layout/structural rules; there is no automated
+ *     linter for this boundary, review it like any other change.
+ *
+ * This file is always linked and inlined by `scripts/build_decision_site.py`
+ * / `scripts/render_site.py`, so it must exist, but it ships empty: the
+ * committed `docs/index.html` and `docs/index.en.html` reflect the base
+ * palette in `site/static/styles.css` unchanged until a fork adds an
+ * override below. Example:
+ *
+ *   :root {
+ *     --yellow: #2e6b47;
+ *   }
+ *
+ * After editing, rebuild with `./scripts/build-decision-site`.
+ */
+:root {
+}
+</style>
 </head>
 <body>
   <div class="reading-controls">
@@ -3276,7 +3310,12 @@ html[data-detail-level="simple"] .detail-panel {
 <details class="package-disclosure" data-content-key="portable-bundle"><summary><span class="tech-name">Markdown＋Hugo → self-contained HTML</span></summary><div class="package-health"><p><code>docs/adr/</code> 保存 canonical 選型；Hugo 負責內容與 HTML；未修改的 renderer 只處理資產內嵌與安全檢查。最終的 <code>docs/index.html</code> 可用 <code>file://</code> 離線開啟，不依賴 Pages、CDN 或 JavaScript package runtime。</p></div></details>
 <aside class="technical-detail" data-content-key="docs-site-access"><h3>存取與維護邊界</h3>
 <p><code>noindex</code> 與 <code>robots.txt</code> 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。</p>
-<p>renderer 讀取的是上方「規則治理」設定表核准的同一批 <code>.csarc/config.yml</code> key，不另定義第二份網站專用清單。專案文字寫在 <code>docs/site-content.md</code>，樣式覆寫留在 <code>docs/site-theme.css</code>，產生的 <code>docs/index.html</code> 不直接編輯。</p></aside></div>
+<p>renderer 讀取的是上方「規則治理」設定表核准的同一批 <code>.csarc/config.yml</code> key，不另定義第二份網站專用清單。專案文字寫在 <code>docs/site-content.md</code>，樣式覆寫留在 <code>docs/site-theme.css</code>，產生的 <code>docs/index.html</code> 不直接編輯。</p>
+<p><strong>自訂本頁（根網站）主題（Issue #527）：</strong>上述 <code>.csarc/config.yml</code>／<code>docs/site-theme.css</code> 是生成專案的 handbook 路徑；fork 或 vendor 這份公版本身、想調整這份根決策網站配色的維護者，改用 <code>site/theme.css</code>。範圍嚴格限制在 <code>site/static/styles.css</code> 既有 <code>:root</code> 顏色 token，以及既有 class 的窄範圍視覺屬性，不開放新增 HTML、JavaScript 或版面配置；由一般 PR review 把關，不建立額外驗證工具。此檔一律存在、一律被引擎內嵌，預設為空白覆寫，因此預設輸出保持公版配色不變：</p>
+<pre class="command"><code>:root {
+  --yellow: #2e6b47;
+}</code></pre>
+<p>編輯後執行 <code>./scripts/build-decision-site</code> 重新產生 <code>docs/index.html</code>／<code>docs/index.en.html</code>。這是排版模板結構的新增，<code>site/version.json</code> 的 <code>template</code> 版本與 <code>scripts/check-decision-site-versions</code> 的相容範圍檢查涵蓋這次擴充；詳見 <code>docs/adr/portable-decision-site.md</code> 的「根網站自訂主題」一節。</p></aside></div>
 </section>
 <section class="slide markdown-slide legacy-slide bridge-slide" id="bridge" data-content-key="bridge" data-audience="maintainer" aria-label="回顧當時原則，對照目前實作">
   <aside class="journey-rail" aria-label="簡報目錄">
