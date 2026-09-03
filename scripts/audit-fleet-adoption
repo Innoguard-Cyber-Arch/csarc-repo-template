@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Local maintainer diagnostic for fleet-wide Copier adoption (Issue #521).
+#
+# This organization is private, and this template repository may be
+# shared with other groups in the future. The org's real repository list
+# must never be committed into site content or git history, so this
+# script exists to answer "does the fleet currently cross the
+# fleet-governance-thresholds numeric triggers?" ON DEMAND instead of from
+# a static, stale snapshot committed to the site (see the
+# fleet-governance-thresholds slide in site/content/_index.en.md /
+# _index.zh-tw.md for the threshold definitions this script evaluates;
+# this script does not change or duplicate those numbers).
+#
+# Each run queries the GitHub organization LIVE via `gh repo list` / `gh
+# api`, computes the current counts, and prints a report to standard
+# output only. It never writes a file, never creates a cache or artifact,
+# and never uploads anything anywhere. Re-run it whenever a current answer
+# is needed; nothing from a previous run is retained anywhere.
+#
+# Usage:
+#   scripts/audit-fleet-adoption [--org <organization>]
+#   scripts/audit-fleet-adoption --input <file>
+#
+# --org defaults to the GitHub owner of the current repository's `origin`
+# remote (resolved live via `gh repo view`, never hardcoded).
+#
+# --input reads pre-fetched repository records from a local JSON file
+# instead of calling `gh`, so the regression test
+# (scripts/test-audit-fleet-adoption) can exercise the threshold
+# computation against fixture data -- with placeholder repository names
+# only -- without any network access or GitHub auth. A real maintainer run
+# never passes --input.
+#
+# --input JSON shape: an array with one object per repository:
+#   {
+#     "name": "<repository name>",
+#     "has_codeowners": <bool>,       -- .github/CODEOWNERS present
+#     "has_copier_template": <bool>,  -- copier.yml present at the repo
+#                                        root, i.e. this repo IS a Copier
+#                                        template source, not a consumer
+#     "has_copier_adoption": <bool>,  -- .csarc/config.yml present, i.e.
+#                                        Copier has been run against it
+#     "drift_updated_at": <ISO 8601 string or null>
+#                                      -- updatedAt of the open
+#                                        "Repository governance drift
+#                                        detected" Issue in that
+#                                        repository, if any
+#   }
+#
+# A repository counts as an "active consuming repository" when Copier
+# adoption is present (`.csarc/config.yml`) and it is not itself a
+# template source (`copier.yml`) -- a template source repository can also
+# carry `.csarc/config.yml` from dogfooding Copier on itself, so adoption
+# alone is not enough to tell a consumer apart from a source.
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: scripts/audit-fleet-adoption [--org <organization>]
+       scripts/audit-fleet-adoption --input <file>
+EOF
+}
+
+org=""
+input_file=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --org)
+      [[ $# -ge 2 ]] || { usage; exit 2; }
+      org="$2"
+      shift 2
+      ;;
+    --input)
+      [[ $# -ge 2 ]] || { usage; exit 2; }
+      input_file="$2"
+      shift 2
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -n "$input_file" && -n "$org" ]]; then
+  echo "audit-fleet-adoption: --org and --input are mutually exclusive" >&2
+  exit 2
+fi
+
+records_json=""
+label=""
+
+if [[ -n "$input_file" ]]; then
+  if [[ ! -f "$input_file" ]]; then
+    echo "audit-fleet-adoption: no such file: $input_file" >&2
+    exit 2
+  fi
+  records_json="$(cat "$input_file")"
+  label="fixture input ($input_file)"
+else
+  if [[ -z "$org" ]]; then
+    org="$(gh repo view --json owner --jq '.owner.login')"
+  fi
+  label="$org"
+
+  repo_names="$(gh repo list "$org" --limit 1000 --json name --jq '.[].name')"
+
+  records_json="[]"
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+
+    has_codeowners=false
+    has_copier_template=false
+    has_copier_adoption=false
+    drift_updated_at=null
+
+    if gh api "repos/$org/$name/contents/.github/CODEOWNERS" >/dev/null 2>&1; then
+      has_codeowners=true
+    fi
+    if gh api "repos/$org/$name/contents/copier.yml" >/dev/null 2>&1; then
+      has_copier_template=true
+    fi
+    if gh api "repos/$org/$name/contents/.csarc/config.yml" >/dev/null 2>&1; then
+      has_copier_adoption=true
+    fi
+
+    if [[ "$has_copier_adoption" == true && "$has_copier_template" == false ]]; then
+      drift_iso="$(gh issue list --repo "$org/$name" --state open \
+        --search 'in:title "Repository governance drift detected"' \
+        --json updatedAt --jq '.[0].updatedAt // empty' 2>/dev/null || true)"
+      if [[ -n "$drift_iso" ]]; then
+        drift_updated_at="\"$drift_iso\""
+      fi
+    fi
+
+    record="$(jq -n \
+      --arg name "$name" \
+      --argjson has_codeowners "$has_codeowners" \
+      --argjson has_copier_template "$has_copier_template" \
+      --argjson has_copier_adoption "$has_copier_adoption" \
+      --argjson drift_updated_at "$drift_updated_at" \
+      '{name: $name, has_codeowners: $has_codeowners,
+        has_copier_template: $has_copier_template,
+        has_copier_adoption: $has_copier_adoption,
+        drift_updated_at: $drift_updated_at}')"
+
+    records_json="$(jq --argjson r "$record" '. + [$r]' <<<"$records_json")"
+  done <<<"$repo_names"
+fi
+
+# All computation below reads only $records_json (already in memory) and
+# writes only to standard output -- no file, cache, or network write from
+# this point on, in either the live-query or --input path.
+jq -r \
+  --arg label "$label" \
+  --argjson now "$(jq -n 'now')" \
+  '
+  def is_consuming: .has_copier_adoption and (.has_copier_template | not);
+  def drift_recent($now): (.drift_updated_at != null)
+    and ((.drift_updated_at | fromdateiso8601) >= ($now - (30 * 86400)));
+
+  . as $repos
+  | ($repos | length) as $scanned
+  | ($repos | map(select(is_consuming))) as $consuming
+  | ($consuming | length) as $consuming_count
+  | ($consuming | map(select(.has_codeowners)) | length) as $codeowners_count
+  | ($consuming | map(select(drift_recent($now))) | length) as $drift_recent_count
+  | ($consuming_count >= 10) as $catalog_crossed
+  | ($consuming_count >= 5 and $drift_recent_count >= 2) as $policy_crossed
+  | [
+      "Fleet adoption audit -- \($label)",
+      "Repositories scanned: \($scanned)",
+      "Active consuming repositories (Copier-adopted, excluding template sources): \($consuming_count)",
+      "  CODEOWNERS coverage among consuming repositories: \($codeowners_count)/\($consuming_count)",
+      "",
+      "Catalog / Backstage threshold (10+ active consuming repositories): "
+        + (if $catalog_crossed then "CROSSED (\($consuming_count)/10)" else "not crossed (\($consuming_count)/10)" end),
+      "  Not computed here (needs human Issue review): 3+ consuming repositories AND 2+ Issues within 90 days recording an owner/service lookup over 30 minutes.",
+      "",
+      "Central policy-enforcement threshold (5+ consuming repositories AND the same drift recurring in 2+ repositories within 30 days): "
+        + (if $policy_crossed then "CROSSED (consuming=\($consuming_count), drift-repeat=\($drift_recent_count))" else "not crossed (consuming=\($consuming_count), drift-repeat=\($drift_recent_count))" end),
+      "  Not computed here (needs manual review): 20%+ update PRs older than five workdays across two releases; or more than two manual repair hours per month.",
+      "",
+      "Nothing above is written to a file, cached, or uploaded. Re-run this script for a current answer."
+    ]
+  | .[]
+  ' <<<"$records_json"

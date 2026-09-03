@@ -420,18 +420,18 @@ There is no cross-repository catalog, comprehensive hosted governance, registry 
 {{< /detail >}}
 {{< /slide >}}
 
-{{< slide key="fleet-inventory" audience="archive" class="dense" eyebrow="Fleet governance" title="Inventory real repositories, not assumptions" subtitle="As of 2026-08-24, the organization has six private repositories and one consuming repository." legacy="false" >}}
-| Repository | Owner | Template state | Drift data |
-| --- | --- | --- | --- |
-| `csarc-repo-template` | `@Innoguard-Cyber-Arch/arch` | Source repository | Historical live integration proved one earlier design; no current drift sample is claimed |
-| `GRC` | No CODEOWNERS declared | Not adopted | No template drift data |
-| `LLM_Guard` | No CODEOWNERS declared | Not adopted | No template drift data |
-| `ai-guardrail` | `@Innoguard-Cyber-Arch/repository-maintainers` | v0.3.1 / CI-only beta | Adoption and update PRs passed; daily samples are now accumulating |
-| `claude-newsletter` | No CODEOWNERS declared | Not adopted | No template drift data |
-| `csarc-agent-kit` | No CODEOWNERS declared | Not adopted | No template drift data |
+{{< slide key="fleet-inventory" audience="archive" class="dense" eyebrow="Fleet governance" title="Audit the fleet locally instead of publishing it" subtitle="This organization is private; a maintainer checks current adoption on demand instead of reading a static page." legacy="false" >}}
+| Evaluation input | How a maintainer obtains it |
+| --- | --- |
+| Repository list | `gh repo list` against the live organization; never copied into site content or git history |
+| CODEOWNERS coverage | Presence of `.github/CODEOWNERS` per repository, read live via `gh api` |
+| Copier adoption | Presence of `.csarc/config.yml` per repository, read live via `gh api`, excluding template-source repositories that also carry it from dogfooding Copier on themselves |
+| Threshold comparison | Computed against the numeric triggers on `fleet-governance-thresholds` |
+
+Run `./scripts/audit-fleet-adoption` locally as a maintainer to reproduce this evaluation. The script queries the organization live, computes whether the fleet currently meets the catalog and policy-enforcement thresholds, and prints the result to standard output only. It never writes a file, never creates a cache or artifact, and never uploads anything anywhere, so the real repository list never lands in this site or its history.
 
 {{< detail key="fleet-inventory-source" title="Inventory evidence and interpretation" >}}
-The inventory reads GitHub repositories, default branches, CODEOWNERS, Copier answers, CSARC profiles, unfinished update PRs, and governance-drift runs. A repository with no completed scheduled sample is never counted as zero drift. Recount after each new pilot and during quarterly review.
+The script reads GitHub repositories, CODEOWNERS presence, and Copier adoption markers directly from the API; a repository with no completed scheduled drift sample is never counted as zero drift. Re-run after each new pilot and during quarterly review — a printed result reflects that moment only, and no snapshot is retained afterward.
 {{< /detail >}}
 {{< /slide >}}
 
