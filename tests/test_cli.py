@@ -4388,7 +4388,18 @@ def fake_policy_check(
                 args,
                 1,
                 "",
-                "Ruleset settings drift: missing required checks: verify\n",
+                "Ruleset settings drift: missing required checks: verify\n"
+                "Repository settings check failed with 1 actionable "
+                "difference(s).\n",
+            )
+        if mode == "transient-failure":
+            return subprocess.CompletedProcess(
+                args,
+                1,
+                "",
+                "Cannot determine Ruleset capability for owner/repo.\n"
+                "gh: Secondary rate limit reached; wait and retry "
+                "(HTTP 403)\n",
             )
         return subprocess.CompletedProcess(
             args, 1, "", "Install and authenticate GitHub CLI first.\n"
@@ -4410,7 +4421,19 @@ def write_policy_check_script(project: Path, mode: str) -> None:
             "#!/usr/bin/env bash\nset -euo pipefail\n"
             'test "${1:-}" = check\n'
             "echo 'Ruleset settings drift: missing required checks: verify' "
-            ">&2\nexit 1\n"
+            ">&2\n"
+            "echo 'Repository settings check failed with 1 actionable "
+            "difference(s).' >&2\n"
+            "exit 1\n"
+        )
+    elif mode == "transient-failure":
+        body = (
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            'test "${1:-}" = check\n'
+            "echo 'Cannot determine Ruleset capability for owner/repo.' >&2\n"
+            "echo 'gh: Secondary rate limit reached; wait and retry "
+            "(HTTP 403)' >&2\n"
+            "exit 1\n"
         )
     else:
         body = (
@@ -4557,6 +4580,73 @@ def test_install_state_reports_current_when_policy_check_is_unavailable(
     assert result["policy_check"]["drifted"] is None
 
 
+def test_install_state_reports_current_when_policy_check_fails_transiently(
+    tmp_path: Path,
+) -> None:
+    """Fail closed to current on a non-marker `gh api` hard stop.
+
+    Reproduces the PR #566 review finding: `apply-repository-settings.sh
+    check` hard-stops before its own check loop with "Cannot determine
+    Ruleset capability for $repo." whenever `gh api repos/$repo/rulesets`
+    fails with anything other than the one GitHub Free plan message it
+    specifically recognizes -- a plausible transient or rate-limited
+    failure. That message never matched any of the three originally
+    hardcoded "unavailable" markers, so it used to be misclassified as
+    confirmed drift (`available=True, drifted=True`) and would have told
+    an agent to run `apply` against live GitHub settings even though the
+    check never actually completed.
+    """
+    _source, project, first_sha = initialize_project(tmp_path)
+    result = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("transient-failure"),
+    )
+    assert result["state"] == cli.INSTALL_STATE_CURRENT
+    assert result["policy_check"]["available"] is False
+    assert result["policy_check"]["drifted"] is None
+
+
+def test_classify_policy_check_flags_transient_failure_unavailable() -> None:
+    """Classify a non-marker `gh api` hard stop as unavailable, not drift.
+
+    Direct reproduction of the reviewer's first experiment against PR #566:
+    piping a `CompletedProcess` carrying the script's "Cannot determine
+    Ruleset capability" hard-stop message through `classify_policy_check`
+    used to return `available=True, drifted=True` because that message
+    matched none of the three hardcoded unavailable markers.
+    """
+    result = subprocess.CompletedProcess(
+        ["scripts/apply-repository-settings.sh", "check"],
+        1,
+        "",
+        "Cannot determine Ruleset capability for owner/repo.\n"
+        "gh: Secondary rate limit reached; wait and retry (HTTP 403)\n",
+    )
+    policy = cli.classify_policy_check(result)
+    assert policy.available is False
+    assert policy.drifted is None
+
+
+def test_classify_policy_check_reports_missing_script_as_unavailable(
+    tmp_path: Path,
+) -> None:
+    """Classify a missing script as unavailable, not confirmed drift.
+
+    Direct reproduction of the reviewer's second experiment against PR
+    #566: piping `run_policy_settings_check`'s result for a target with no
+    `scripts/apply-repository-settings.sh` through `classify_policy_check`
+    used to return `available=True, drifted=True` because "scripts/
+    apply-repository-settings.sh is missing." matched none of the three
+    hardcoded unavailable markers either.
+    """
+    result = cli.run_policy_settings_check(tmp_path)
+    policy = cli.classify_policy_check(result)
+    assert policy.available is False
+    assert policy.drifted is None
+
+
 def test_run_policy_settings_check_reports_missing_script(
     tmp_path: Path,
 ) -> None:
@@ -4632,6 +4722,7 @@ def test_status_command_reports_update_available(
     [
         ("match", cli.INSTALL_STATE_CURRENT),
         ("drift", cli.INSTALL_STATE_POLICY_ONLY),
+        ("transient-failure", cli.INSTALL_STATE_CURRENT),
     ],
 )
 def test_status_command_end_to_end_policy_only_update(

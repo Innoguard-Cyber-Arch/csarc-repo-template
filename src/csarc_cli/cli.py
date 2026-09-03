@@ -74,11 +74,7 @@ INSTALL_STATE_NEXT_COMMAND = {
         "scripts/apply-repository-settings.sh apply"
     ),
 }
-POLICY_CHECK_UNAVAILABLE_MARKERS = (
-    "Install and authenticate GitHub CLI first.",
-    "Cannot identify the GitHub repository.",
-    "Cannot read repository metadata for",
-)
+POLICY_CHECK_COMPLETED_MARKER = "Repository settings check failed with"
 LEGACY_MILESTONE_HEADINGS = (
     "problem",
     "outcome",
@@ -4382,17 +4378,30 @@ def run_policy_settings_check(
 def classify_policy_check(
     result: subprocess.CompletedProcess[str],
 ) -> PolicyCheckResult:
-    """Classify one policy-drift check without guessing at ambiguous output."""
+    """Classify one policy-drift check without guessing at ambiguous output.
+
+    `scripts/apply-repository-settings.sh check` either runs its full
+    comparison to completion -- exit 0 for a clean match, or exit 1 with its
+    own `POLICY_CHECK_COMPLETED_MARKER` summary line once it has counted at
+    least one actionable difference -- or it hard-stops early on something
+    it cannot recover from: missing/unauthenticated `gh`, an unidentifiable
+    repository, unreadable repository metadata, a transient or
+    rate-limited `gh api` call (for example its own "Cannot determine
+    Ruleset capability" guard), an unusable invocation, or a missing script.
+    Keying off the script's own completion marker -- rather than
+    enumerating every hard-stop message the script can print -- means any
+    hard-stop path the script has today or gains later is treated as
+    unavailable by default instead of silently being misread as confirmed
+    drift.
+    """
     output = "\n".join(
         part for part in (result.stdout, result.stderr) if part
     ).strip()
     if result.returncode == 0:
         return PolicyCheckResult(True, False, output or "no drift detected")
-    if any(marker in output for marker in POLICY_CHECK_UNAVAILABLE_MARKERS):
-        return PolicyCheckResult(
-            False, None, output or "policy check unavailable"
-        )
-    return PolicyCheckResult(True, True, output or "policy drift detected")
+    if POLICY_CHECK_COMPLETED_MARKER in output:
+        return PolicyCheckResult(True, True, output or "policy drift detected")
+    return PolicyCheckResult(False, None, output or "policy check unavailable")
 
 
 def detect_install_state(
