@@ -29,6 +29,7 @@ if [[ "$tier" == "docs" ]]; then
 fi
 
 if [[ "$scopes" == *,docs,* ]]; then
+  python3 scripts/spec_to_issue.py validate
   python3 scripts/render_site.py --check
 fi
 

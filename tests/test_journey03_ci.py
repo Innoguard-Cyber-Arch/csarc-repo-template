@@ -181,26 +181,34 @@ def test_documentation_tier_validates_the_generated_site() -> None:
 
 
 def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
-    """A fast-tier PR that also touches docs must not skip the staleness check.
+    """A fast-tier PR that also touches docs must not skip docs checks.
 
     Issue #588: a PR with scopes = {"workflow", "docs", ...} classifies as
     tier "fast", not "docs", so the docs-only early-exit branch never runs.
-    The staleness check must also fire from a second gate, keyed on scopes
-    rather than tier, that survives past that early exit.
+    Both docs checks it used to bundle -- spec validation and the
+    decision-site staleness check -- must also fire from a second gate,
+    keyed on scopes rather than tier, that survives past that early exit.
+    Issue #598: #593 fixed only the staleness check in that second gate and
+    left spec_to_issue.py validate behind, silently skipped for any mixed-
+    scope PR that touches docs/specs/ or an ADR.
     """
     root_fast = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
     template_fast = (
         REPO_ROOT / "template/scripts/verify-fast.jinja"
     ).read_text(encoding="utf-8")
 
-    for source, check in (
+    for source, staleness_check in (
         (root_fast, "./scripts/build-decision-site --check"),
         (template_fast, "python3 scripts/render_site.py --check"),
     ):
         docs_tier_start = source.index('if [[ "$tier" == "docs" ]]; then')
         docs_tier_exit = source.index("exit 0", docs_tier_start)
-        mixed_scope_gate = source.index('"$scopes" == *,docs,*', docs_tier_exit)
-        assert check in source[mixed_scope_gate:]
+        gate_start = source.index('"$scopes" == *,docs,*', docs_tier_exit)
+        gate_end = source.index("\nfi", gate_start)
+        gate = source[gate_start:gate_end]
+
+        assert "python3 scripts/spec_to_issue.py validate" in gate
+        assert staleness_check in gate
 
 
 def test_template_smoke_reads_config_from_the_generated_repository() -> None:
