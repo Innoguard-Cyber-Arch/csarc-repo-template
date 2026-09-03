@@ -486,15 +486,21 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         '{{< slide key="similar-tools"', 1
     )[0]
     assert '<article class="decision-step' not in journey_decisions
-    assert journey_decisions.count('class="decision-step decision-fold') == 18
+    # Issue #533 merged the "contract" (Step 03) and "template-release"
+    # (Step 09) slides' simple/technical split into one legacy="false" body
+    # each, so they no longer carry a legacy `decision-strip`. That leaves 7
+    # of the original 9 legacy decision-workflow slides (method, agents,
+    # languages, pr, supply, deploy, governance) with their usual pair of
+    # "other approaches" / "our choice" decision-step-fold blocks.
+    assert journey_decisions.count('class="decision-step decision-fold') == 14
     assert (
-        journey_decisions.count('class="decision-step decision-fold" open') == 9
+        journey_decisions.count('class="decision-step decision-fold" open') == 7
     )
     assert (
         journey_decisions.count(
             'class="decision-step decision-fold recommended" open'
         )
-        == 9
+        == 7
     )
 
 
@@ -508,6 +514,13 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         (root / "site/data/similar_tools.json").read_text(encoding="utf-8")
     )
     site_data = load_site_data(root)
+    # site/data/similar_tools.json no longer inlines "testing.groups" -- each
+    # step now lives in its own site/data/testing/<key>.json, assembled in
+    # tab order by `load_site_data` (Issue #533). Merge the assembled list
+    # back into the raw-parsed `data` so the assertions below, which compare
+    # sibling "testing" fields read straight from the raw file, can keep
+    # indexing `data["testing"]["groups"]` unchanged.
+    data["testing"]["groups"] = site_data.similar_tools["testing"]["groups"]
     # Rendered by the engine (scripts/build_decision_site.py) rather than
     # read from the retired Hugo shortcode/partial/home-layout sources
     # those variable names originally referenced (Issue #524).
@@ -777,7 +790,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "declarativeState",
         "templateLifecycle",
     ]
-    assert [group["journey"] for group in data["testing"]["groups"]] == [
+    assert [group["code"] for group in data["testing"]["groups"]] == [
         "01",
         "02",
         "03",
@@ -829,7 +842,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         value.index("Python") < value.index("Rust") < value.index("TypeScript")
         for value in language_durations
     )
-    assert data["testing"]["groups"][0]["journey"] == "01"
+    assert data["testing"]["groups"][0]["code"] == "01"
     testing_rows = data["testing"]["groups"][0]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in testing_rows] == [
         "Issue 工作邊界",
@@ -867,7 +880,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     ]
     assert "release" not in testing_rows[2]["shared"]
     agent_rows = data["testing"]["groups"][1]["rows"]
-    assert data["testing"]["groups"][1]["journey"] == "02"
+    assert data["testing"]["groups"][1]["code"] == "02"
     assert agent_rows[0]["shared"] == {}
     assert agent_rows[0]["templateOnly"]["milestone"]["files"] == [
         {"path": "tests/test_ai_guidelines.py"}
@@ -888,7 +901,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         for stage in scope.values()
     )
     verification_rows = data["testing"]["groups"][2]["rows"]
-    assert data["testing"]["groups"][2]["journey"] == "03"
+    assert data["testing"]["groups"][2]["code"] == "03"
     assert [row["purpose"]["zh-tw"]["title"] for row in verification_rows] == [
         "判斷這次要跑多少",
         "Issue PR 的快速回饋",
@@ -898,7 +911,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         {"path": "scripts/ci_tier.py"}
     ]
     language_rows = data["testing"]["groups"][3]["rows"]
-    assert data["testing"]["groups"][3]["journey"] == "04"
+    assert data["testing"]["groups"][3]["code"] == "04"
     assert [row["purpose"]["zh-tw"]["title"] for row in language_rows] == [
         "設定與實際檔案一致",
         "各語言使用自己的檢查",
@@ -907,7 +920,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         "path": ".csarc/config.yml"
     }
     supply_rows = data["testing"]["groups"][4]["rows"]
-    assert data["testing"]["groups"][4]["journey"] == "05"
+    assert data["testing"]["groups"][4]["code"] == "05"
     assert [row["purpose"]["zh-tw"]["title"] for row in supply_rows] == [
         "鎖定版本可重現安裝",
         "一般更新自動提出 PR",
@@ -923,7 +936,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert supply_rows[2]["shared"]["release"]["automation"][1]["path"] == (
         ".github/workflows/osv.yml"
     )
-    assert data["testing"]["groups"][6]["journey"] == "07"
+    assert data["testing"]["groups"][6]["code"] == "07"
     delivery_rows = data["testing"]["groups"][6]["rows"]
     assert [row["purpose"]["zh-tw"]["title"] for row in delivery_rows] == [
         "獨立工作直接交付",
@@ -964,7 +977,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         },
     ]
     governance_rows = data["testing"]["groups"][7]["rows"]
-    assert data["testing"]["groups"][7]["journey"] == "08"
+    assert data["testing"]["groups"][7]["code"] == "08"
     assert [row["purpose"]["zh-tw"]["title"] for row in governance_rows] == [
         "輪派審查人",
         "偵測治理設定漂移",
@@ -985,7 +998,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
         for automation in governance_rows[1]["shared"]["release"]["automation"]
     )
     template_rows = data["testing"]["groups"][8]["rows"]
-    assert data["testing"]["groups"][8]["journey"] == "09"
+    assert data["testing"]["groups"][8]["code"] == "09"
     assert [row["purpose"]["zh-tw"]["title"] for row in template_rows] == [
         "建立新 repo",
         "首次導入既有 repo",
@@ -1022,7 +1035,7 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     ]
     assert verification_rows[0]["templateOnly"] == {}
     merge_rows = data["testing"]["groups"][5]["rows"]
-    assert data["testing"]["groups"][5]["journey"] == "06"
+    assert data["testing"]["groups"][5]["code"] == "06"
     assert [row["purpose"]["zh-tw"]["title"] for row in merge_rows] == [
         "PR 資料與目的分支",
         "候選內容包含最新基準",

@@ -1,0 +1,101 @@
+{
+  "key": "governance",
+  "code": "08",
+  "labels": {
+    "zh-tw": {
+      "title": "規則治理",
+      "heading": "步驟 08／審查與設定漂移",
+      "scope": "每張 PR 只自動請一位非作者 reviewer；選配排程重用本機檢查，不能把通知誤稱為合併門禁。"
+    },
+    "en": {
+      "title": "Rules governance",
+      "heading": "Step 08 / Review and settings drift",
+      "scope": "Each PR requests one non-author reviewer. The optional schedule reuses the local check and is never described as a merge gate."
+    }
+  },
+  "stageLabels": {
+    "zh-tw": {
+      "milestone": "每張非 draft PR",
+      "release": "每日／手動維運"
+    },
+    "en": {
+      "milestone": "Every non-draft PR",
+      "release": "Daily / manual maintenance"
+    }
+  },
+  "rows": [
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "輪派審查人",
+          "description": "只讀取 base branch 的 REVIEWERS，排除 PR 作者後提出一位個別 review request。"
+        },
+        "en": {
+          "title": "Assign a reviewer",
+          "description": "Read REVIEWERS only from the base branch, exclude the PR author, and request one individual review."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/request-reviewer"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/governance-comment.yml",
+              "job": "request-reviewer",
+              "trigger": {
+                "zh-tw": "PR 開啟、重開或轉為 ready",
+                "en": "PR opened, reopened, or marked ready"
+              },
+              "timeout": "5 min"
+            }
+          ]
+        }
+      },
+      "templateOnly": {}
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "偵測治理設定漂移",
+          "description": "比較 repo 現況與政策；可修正差異會更新一張 Issue，方案限制只留下 DEGRADED 證據。"
+        },
+        "en": {
+          "title": "Detect governance drift",
+          "description": "Compare live repository settings with policy. Fixable drift updates one Issue, while plan limits retain DEGRADED evidence."
+        }
+      },
+      "shared": {
+        "release": {
+          "files": [
+            {
+              "path": "scripts/check-governance-drift"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/governance-drift.yml",
+              "job": "check",
+              "trigger": {
+                "zh-tw": "enable_governance_drift_check 開啟後，每日或手動",
+                "en": "Daily or manual when enable_governance_drift_check is on"
+              },
+              "timeout": "5 min"
+            }
+          ]
+        }
+      },
+      "templateOnly": {
+        "release": {
+          "note": {
+            "zh-tw": "source repo 保留同一支程式供下發與本機驗證，但目前不啟用自己的排程。",
+            "en": "The source repository retains the same program for generation and local verification but does not enable its own schedule."
+          }
+        }
+      }
+    }
+  ]
+}

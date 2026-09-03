@@ -63,6 +63,14 @@ RETIRED_LEGACY_KEYS = {
         "re-scoped to audience=maintainer; visibility decision pending "
         "re-audit in Issue #536"
     ),
+    "contract": (
+        "legacy step-03 slide superseded by new candidate-authored M8 "
+        "content (Issue #533)"
+    ),
+    "template-release": (
+        "legacy step-09 slide superseded by new candidate-authored M8 "
+        "content (Issue #533)"
+    ),
 }
 
 
