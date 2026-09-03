@@ -2038,6 +2038,40 @@ html[data-detail-level="simple"] .detail-panel {
   html[data-detail-level="simple"] .detail-panel { transform: none; }
 }
 </style>
+  <style data-bundled-from="../../site/theme.css">
+/* Project- or fork-owned decision-site theme overrides (Issue #527).
+ *
+ * A repository that carries this template's own root decision-site
+ * engine (`scripts/build_decision_site.py`, not the smaller generated-
+ * project handbook -- see `template/docs/site-theme.css.jinja` for that
+ * separate path) can restyle its copy of the presentation here, without
+ * forking the render engine or `site/static/styles.css`.
+ *
+ * Scope, deliberately narrow (see docs/adr/portable-decision-site.md):
+ *   - Override CSS custom properties already declared in
+ *     `site/static/styles.css`'s `:root` block (colors and other design
+ *     tokens).
+ *   - Narrow, purely-visual declarations (color/background/border) on
+ *     existing block-level classes are also allowed.
+ *   - Do not add new HTML, JavaScript, selectors that change markup
+ *     semantics, or layout/structural rules; there is no automated
+ *     linter for this boundary, review it like any other change.
+ *
+ * This file is always linked and inlined by `scripts/build_decision_site.py`
+ * / `scripts/render_site.py`, so it must exist, but it ships empty: the
+ * committed `docs/index.html` and `docs/index.en.html` reflect the base
+ * palette in `site/static/styles.css` unchanged until a fork adds an
+ * override below. Example:
+ *
+ *   :root {
+ *     --yellow: #2e6b47;
+ *   }
+ *
+ * After editing, rebuild with `./scripts/build-decision-site`.
+ */
+:root {
+}
+</style>
 </head>
 <body>
   <div class="reading-controls">
@@ -2341,7 +2375,7 @@ html[data-detail-level="simple"] .detail-panel {
   <h2>模板把必要設定放到正確位置</h2>
   <p class="subtitle">列出目前實際產生的主要檔案；公版可提出更新，但不會靜默覆寫產品內容。</p>
 </header>
-<div class="markdown-body"><table><thead><tr><th>路徑</th><th>作用</th><th>責任</th></tr></thead><tbody><tr><td><code>.csarc/config.yml</code></td><td>記錄公版來源、語言、分支與選用能力</td><td>公版主導</td></tr><tr><td><code>.github/ISSUE_TEMPLATE/</code>、<code>pull_request_template.md</code></td><td>工作定義與 PR 契約</td><td>公版主導</td></tr><tr><td><code>.github/workflows/</code></td><td>9 條共用流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單與候選發版，加上選配的治理漂移、模板更新通知排程與 CodeQL SAST</td><td>公版主導</td></tr><tr><td><code>AGENTS.md</code>、<code>README.md</code>、<code>CLAUDE.md</code></td><td>Agent 工作方式與使用者入口</td><td>共同維護</td></tr><tr><td><code>policies/</code>、<code>CODEOWNERS</code>、<code>.github/REVIEWERS</code></td><td>期望設定、owner 與 reviewer</td><td>共同維護</td></tr><tr><td><code>scripts/</code></td><td>本機驗證、工作同步與套用設定</td><td>公版主導</td></tr><tr><td><code>docs/</code>、<code>site/</code></td><td>專案說明、規格、決策與內部網站</td><td>共同維護</td></tr><tr><td><code>src/</code>、產品測試與規格</td><td>真正產品行為</td><td>專案持有</td></tr></tbody></table>
+<div class="markdown-body"><table><thead><tr><th>路徑</th><th>作用</th><th>責任</th></tr></thead><tbody><tr><td><code>.csarc/config.yml</code></td><td>記錄公版來源、語言、分支與選用能力</td><td>公版主導</td></tr><tr><td><code>.github/ISSUE_TEMPLATE/</code>、<code>pull_request_template.md</code></td><td>工作定義與 PR 契約</td><td>公版主導</td></tr><tr><td><code>.github/workflows/</code></td><td>9 條共用流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單與候選發版，加上選配的治理漂移、模板更新通知排程、CodeQL SAST 與容器建置掃描</td><td>公版主導</td></tr><tr><td><code>AGENTS.md</code>、<code>README.md</code>、<code>CLAUDE.md</code></td><td>Agent 工作方式與使用者入口</td><td>共同維護</td></tr><tr><td><code>policies/</code>、<code>CODEOWNERS</code>、<code>.github/REVIEWERS</code></td><td>期望設定、owner 與 reviewer</td><td>共同維護</td></tr><tr><td><code>scripts/</code></td><td>本機驗證、工作同步與套用設定</td><td>公版主導</td></tr><tr><td><code>docs/</code>、<code>site/</code></td><td>專案說明、規格、決策與內部網站</td><td>共同維護</td></tr><tr><td><code>src/</code>、產品測試與規格</td><td>真正產品行為</td><td>專案持有</td></tr></tbody></table>
 <p>表格刻意維持三欄：側邊簡報目錄已可直接連到每個項目對應的頁面，僅維運可見的「CI/CD 設定」附錄也已逐 Journey 詳列驗證入口，細節比表格欄位更完整。另外加上「對應頁名」與「驗證入口」兩欄，只會重複這兩份既有內容。</p>
 <aside class="technical-detail" data-content-key="files-update"><h3>更新時怎麼保護產品內容</h3>
 <p>Copier 在短分支嘗試更新；若有衝突，只列出檔案且不修改 repo，調整後重跑，再由 PR 審查。建立、既有 repo 導入與同一 repo 後續 update 都有 fixture；回歸測試會刻意加入產品檔案，再確認更新後內容沒有被覆寫。</p>
@@ -3213,7 +3247,12 @@ html[data-detail-level="simple"] .detail-panel {
 <details class="package-disclosure" data-content-key="portable-bundle"><summary><span class="tech-name">Markdown＋Hugo → self-contained HTML</span></summary><div class="package-health"><p><code>docs/adr/</code> 保存 canonical 選型；Hugo 負責內容與 HTML；未修改的 renderer 只處理資產內嵌與安全檢查。最終的 <code>docs/index.html</code> 可用 <code>file://</code> 離線開啟，不依賴 Pages、CDN 或 JavaScript package runtime。</p></div></details>
 <aside class="technical-detail" data-content-key="docs-site-access"><h3>存取與維護邊界</h3>
 <p><code>noindex</code> 與 <code>robots.txt</code> 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。</p>
-<p>renderer 讀取的是上方「規則治理」設定表核准的同一批 <code>.csarc/config.yml</code> key，不另定義第二份網站專用清單。專案文字寫在 <code>docs/site-content.md</code>，樣式覆寫留在 <code>docs/site-theme.css</code>，產生的 <code>docs/index.html</code> 不直接編輯。</p></aside></div>
+<p>renderer 讀取的是上方「規則治理」設定表核准的同一批 <code>.csarc/config.yml</code> key，不另定義第二份網站專用清單。專案文字寫在 <code>docs/site-content.md</code>，樣式覆寫留在 <code>docs/site-theme.css</code>，產生的 <code>docs/index.html</code> 不直接編輯。</p>
+<p><strong>自訂本頁（根網站）主題（Issue #527）：</strong>上述 <code>.csarc/config.yml</code>／<code>docs/site-theme.css</code> 是生成專案的 handbook 路徑；fork 或 vendor 這份公版本身、想調整這份根決策網站配色的維護者，改用 <code>site/theme.css</code>。範圍嚴格限制在 <code>site/static/styles.css</code> 既有 <code>:root</code> 顏色 token，以及既有 class 的窄範圍視覺屬性，不開放新增 HTML、JavaScript 或版面配置；由一般 PR review 把關，不建立額外驗證工具。此檔一律存在、一律被引擎內嵌，預設為空白覆寫，因此預設輸出保持公版配色不變：</p>
+<pre class="command"><code>:root {
+  --yellow: #2e6b47;
+}</code></pre>
+<p>編輯後執行 <code>./scripts/build-decision-site</code> 重新產生 <code>docs/index.html</code>／<code>docs/index.en.html</code>。這是排版模板結構的新增，<code>site/version.json</code> 的 <code>template</code> 版本與 <code>scripts/check-decision-site-versions</code> 的相容範圍檢查涵蓋這次擴充；詳見 <code>docs/adr/portable-decision-site.md</code> 的「根網站自訂主題」一節。</p></aside></div>
 </section>
 <section class="slide markdown-slide legacy-slide bridge-slide" id="bridge" data-content-key="bridge" data-audience="maintainer" aria-label="回顧當時原則，對照目前實作">
   <aside class="journey-rail" aria-label="簡報目錄">

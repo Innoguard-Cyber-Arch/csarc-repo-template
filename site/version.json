@@ -1,5 +1,5 @@
 {
-  "engine": "1.0.0",
-  "template": "1.0.0",
+  "engine": "1.1.0",
+  "template": "1.1.0",
   "compatible_template_range": ">=1.0.0 <2.0.0"
 }

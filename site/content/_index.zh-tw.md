@@ -608,6 +608,16 @@ Adoption 與 update 不從 workflow 檔名推測 ownership。`.csarc/config.yml`
 `noindex` 與 `robots.txt` 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。
 
 renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc/config.yml` key，不另定義第二份網站專用清單。專案文字寫在 `docs/site-content.md`，樣式覆寫留在 `docs/site-theme.css`，產生的 `docs/index.html` 不直接編輯。
+
+**自訂本頁（根網站）主題（Issue #527）：**上述 `.csarc/config.yml`／`docs/site-theme.css` 是生成專案的 handbook 路徑；fork 或 vendor 這份公版本身、想調整這份根決策網站配色的維護者，改用 `site/theme.css`。範圍嚴格限制在 `site/static/styles.css` 既有 `:root` 顏色 token，以及既有 class 的窄範圍視覺屬性，不開放新增 HTML、JavaScript 或版面配置；由一般 PR review 把關，不建立額外驗證工具。此檔一律存在、一律被引擎內嵌，預設為空白覆寫，因此預設輸出保持公版配色不變：
+
+```css
+:root {
+  --yellow: #2e6b47;
+}
+```
+
+編輯後執行 `./scripts/build-decision-site` 重新產生 `docs/index.html`／`docs/index.en.html`。這是排版模板結構的新增，`site/version.json` 的 `template` 版本與 `scripts/check-decision-site-versions` 的相容範圍檢查涵蓋這次擴充；詳見 `docs/adr/portable-decision-site.md` 的「根網站自訂主題」一節。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}

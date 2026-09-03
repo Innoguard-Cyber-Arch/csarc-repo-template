@@ -726,6 +726,28 @@ def test_render_page_includes_mermaid_only_when_used() -> None:
     assert 'class="pre-mermaid"' not in diagram_html  # sanity: no stray class
 
 
+def test_render_page_links_theme_css_after_base_stylesheet() -> None:
+    # Issue #527: a fork-owned site/theme.css must be linked (and thus later
+    # inlined by scripts/render_site.py) after the base stylesheets so CSS
+    # cascade lets its overrides win over site/static/styles.css defaults.
+    content = (
+        "+++\n"
+        'title = "T"\n\n'
+        "[controls]\n"
+        'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
+        'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
+        'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
+        "+++\n\n"
+        '{{< slide key="a" title="A" legacy="false" >}}\nbody\n{{< /slide >}}\n'
+    )
+    html = render_page(content, lang="en", data=_empty_data())
+    theme_link = '<link rel="stylesheet" href="../../site/theme.css">'
+    assert theme_link in html
+    assert html.index("site/static/detail-toggle.css") < html.index(
+        "../../site/theme.css"
+    )
+
+
 def test_render_page_orders_language_switcher_zh_tw_then_en() -> None:
     content = (
         "+++\n"
@@ -752,8 +774,11 @@ def _write_fixture_site(root: Path) -> None:
     (site / "content").mkdir(parents=True)
     (site / "data").mkdir(parents=True)
     (site / "static").mkdir(parents=True)
-    (site / "static" / "styles.css").write_text("body{}", encoding="utf-8")
+    (site / "static" / "styles.css").write_text(
+        ":root{--yellow:#ffe600;}", encoding="utf-8"
+    )
     (site / "static" / "detail-toggle.css").write_text("", encoding="utf-8")
+    (site / "theme.css").write_text(":root {\n}\n", encoding="utf-8")
     (site / "static" / "deck.js").write_text("", encoding="utf-8")
     (site / "static" / "legacy-components.js").write_text("", encoding="utf-8")
     (site / "static" / "detail-toggle.js").write_text("", encoding="utf-8")
@@ -898,6 +923,30 @@ def test_build_output_feeds_render_site_unmodified(tmp_path: Path) -> None:
     assert '<link rel="stylesheet"' not in bundled
     assert "<script src=" not in bundled
     assert "Body paragraph." in bundled
+
+
+def test_theme_css_default_is_a_no_op_override(tmp_path: Path) -> None:
+    # Issue #527: site/theme.css ships empty, so the default build must not
+    # change the palette declared in site/static/styles.css.
+    _write_fixture_site(tmp_path)
+    outputs = build(tmp_path, tmp_path / "dist/decision-site")
+    bundled = render(outputs["zh-tw"], root=tmp_path)
+    assert bundled.count("--yellow:#ffe600;") == 1
+
+
+def test_theme_css_override_cascades_after_base_styles(tmp_path: Path) -> None:
+    # A fork-owned override in site/theme.css must reach the final bundle,
+    # positioned after site/static/styles.css so it wins the CSS cascade.
+    _write_fixture_site(tmp_path)
+    (tmp_path / "site" / "theme.css").write_text(
+        ":root {\n  --yellow: #123456;\n}\n", encoding="utf-8"
+    )
+    outputs = build(tmp_path, tmp_path / "dist/decision-site")
+    bundled = render(outputs["zh-tw"], root=tmp_path)
+    assert "--yellow: #123456;" in bundled
+    assert bundled.index("--yellow:#ffe600;") < bundled.index(
+        "--yellow: #123456;"
+    )
 
 
 # --- real content regression (no Hugo) ------------------------------------
