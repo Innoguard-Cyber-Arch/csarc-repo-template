@@ -244,7 +244,11 @@ def _admin_self_approval(
     reason = command.removeprefix("/milestone admin-approve:").strip()
     if not reason or author != proposer or author_type == "Bot":
         return None
-    return reason if author_association == "OWNER" else None
+    # GitHub reports "OWNER" only for repos owned directly by a personal
+    # account; on an organization repo, even the org's sole admin account
+    # is reported as "MEMBER". Accept both so this exception actually works
+    # on the organization repos it was built for.
+    return reason if author_association in ("OWNER", "MEMBER") else None
 
 
 def _record_objection(

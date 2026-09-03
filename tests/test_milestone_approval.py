@@ -119,14 +119,39 @@ def test_owner_self_approval_opens_the_gate_with_reason() -> None:
     )
 
 
+def test_member_self_approval_opens_the_gate_with_reason() -> None:
+    """A MEMBER-association proposer may self-approve too.
+
+    GitHub reports "OWNER" only for repos owned directly by a personal
+    account; on an organization repo, even the org's sole admin account is
+    reported as "MEMBER". This exception exists precisely for organizations
+    with no second human account, so it must work under that association.
+    """
+    result = approval_decision(
+        snapshot(
+            comment(
+                1,
+                "proposer",
+                "/milestone admin-approve: no reviewer available",
+                author_association="MEMBER",
+            )
+        )
+    )
+
+    assert result.allowed
+    assert result.summary == (
+        "Admin self-approved by proposer (reason: no reviewer available)"
+    )
+
+
 @pytest.mark.parametrize(
     "admin_comment",
     [
         comment(
             1,
             "proposer",
-            "/milestone admin-approve: no reviewer available",
-            author_association="MEMBER",
+            "/milestone admin-approve: outside collaborator",
+            author_association="CONTRIBUTOR",
         ),
         comment(
             1,
@@ -145,7 +170,7 @@ def test_owner_self_approval_opens_the_gate_with_reason() -> None:
 def test_admin_self_approval_rejects_impostors_and_empty_reasons(
     admin_comment: dict[str, Any],
 ) -> None:
-    """No association, empty reason, or wrong author bypasses review."""
+    """Untrusted association, empty reason, or wrong author bypasses review."""
     assert not approval_decision(snapshot(admin_comment)).allowed
 
 
