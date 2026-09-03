@@ -11,9 +11,17 @@ SITE_MODULE = runpy.run_path(
 PARITY_MODULE = runpy.run_path(
     str(Path(__file__).parents[1] / "scripts" / "check-decision-site-parity")
 )
+BUILD_MODULE = runpy.run_path(
+    str(Path(__file__).parents[1] / "scripts" / "build_decision_site.py")
+)
 BundleError = SITE_MODULE["BundleError"]
 render = SITE_MODULE["render"]
 parse_parity = PARITY_MODULE["parse"]
+load_site_data = BUILD_MODULE["load_site_data"]
+render_similar_tools = BUILD_MODULE["render_similar_tools"]
+render_testing = BUILD_MODULE["render_testing"]
+render_journey_rail = BUILD_MODULE["render_journey_rail"]
+render_config_guidance = BUILD_MODULE["render_config_guidance"]
 
 
 def _write_markdown_site(
@@ -480,20 +488,20 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     data = json.loads(
         (root / "site/data/similar_tools.json").read_text(encoding="utf-8")
     )
-    shortcode = (root / "site/layouts/shortcodes/similar-tools.html").read_text(
-        encoding="utf-8"
-    )
-    testing_shortcode = (
-        root / "site/layouts/shortcodes/testing.html"
-    ).read_text(encoding="utf-8")
-    journey_rail = (root / "site/layouts/partials/journey-rail.html").read_text(
-        encoding="utf-8"
+    site_data = load_site_data(root)
+    # Rendered by the engine (scripts/build_decision_site.py) rather than
+    # read from the retired Hugo shortcode/partial/home-layout sources
+    # those variable names originally referenced (Issue #524).
+    shortcode = render_similar_tools(lang="zh-tw", data=site_data)
+    testing_shortcode = render_testing(lang="zh-tw", data=site_data)
+    journey_rail = render_journey_rail(
+        site_data.navigation, lang="zh-tw", active_key="method"
     )
     navigation = json.loads(
         (root / "site/data/navigation.json").read_text(encoding="utf-8")
     )
-    presentation = (root / "site/layouts/home.presentation.html").read_text(
-        encoding="utf-8"
+    presentation = "\n".join(
+        (BUILD_MODULE["_REORDER_SCRIPT"], BUILD_MODULE["_DETAIL_LEVEL_SCRIPT"])
     )
     deck = (root / "site/static/deck.js").read_text(encoding="utf-8")
     styles = (root / "site/static/styles.css").read_text(encoding="utf-8")
@@ -526,10 +534,14 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert 'id="testing-panel-duration"' in testing_shortcode
     assert "statusLabel" not in data["testing"]["labels"]["zh-tw"]
     assert "statusLabel" not in data["testing"]["labels"]["en"]
+    # render_journey_rail() threads each item's `participation` value from
+    # navigation.json into its class, rather than hardcoding it; check two
+    # different data-driven values instead of asserting on retired Hugo
+    # template syntax (`{{ .participation }}`).
+    assert 'class="journey-bookend appendix maintainer"' in journey_rail
     assert (
-        'class="journey-bookend appendix {{ .participation }}' in journey_rail
+        'class="journey-item human active" aria-current="step">' in journey_rail
     )
-    assert 'class="journey-item {{ .participation }}' in journey_rail
     assert navigation["appendices"][-2]["key"] == "testing"
     assert navigation["appendices"][-1]["key"] == "bridge"
     assert navigation["appendices"][-2]["audience"] == "maintainer"
@@ -634,9 +646,9 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     for source in (chinese, english):
         for track in direct_tracks:
             assert f'{{{{< config-guidance track="{track}" >}}}}' in source
-    guidance_shortcode = (
-        root / "site/layouts/shortcodes/config-guidance.html"
-    ).read_text(encoding="utf-8")
+    guidance_shortcode = render_config_guidance(
+        "method", lang="zh-tw", data=site_data
+    )
     assert 'data-config-direct="true"' in guidance_shortcode
     assert "guidance.dataset.configDirect === 'true'" not in active_components
     assert (
@@ -1025,7 +1037,11 @@ def test_bilingual_maintainer_controls_and_similar_tools_stay_in_sync() -> None:
     assert data["threshold"] == 5
     assert data["starThreshold"] == 1000
     assert 'class="tool-meta"' in shortcode
-    assert shortcode.count('class="capture-date"') == 2
+    # Every panel -- the primary table plus each feature-comparison group --
+    # shows its own capture-date marker.
+    assert shortcode.count('class="capture-date"') == 1 + len(
+        data["featureGroups"]
+    )
     assert data["labels"]["zh-tw"]["stars"] == "GitHub Stars"
     assert data["labels"]["en"]["stars"] == "GitHub Stars"
 

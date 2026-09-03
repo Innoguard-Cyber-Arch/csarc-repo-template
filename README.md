@@ -32,7 +32,7 @@ Cyber-Arch 的可更新 repo 公版，支援只使用共通流程，或獨立選
 
 共同需求是 Git、GitHub CLI、uv；選 Rust 另需 rustup，選 TypeScript 另需 Node 24+ 與 pnpm 11。CSARC 交付的是 CI/CD 範本與治理流程，Python 只用來執行 init／adopt／update 的薄 CLI；`uvx --python 3.14` 會按次取得隔離 runtime，不要求使用者預先安裝或維護全域 Python。Windows 請在 WSL2 執行。
 
-建議每位開發者在自己 shell 的 profile 檔（例如 `~/.zshrc`、`~/.bashrc`、`~/.config/fish/config.fish`，依實際使用的 shell 而定）加入 `export CSARC_CACHE_ROOT="$HOME/.cache/csarc"`（或團隊約定的其他持久路徑）。這會讓 `uv`、`pnpm`，以及透過 `scripts/resolve-cache-root` 取得快取位置的固定版本工具安裝腳本（`scripts/install-gitleaks`／`install-actionlint`／`install-shellcheck`／`install-osv-scanner`／`install-hugo`）跨 worktree、跨 `csarc adopt --finalize` 產生的臨時候選目錄共用已驗證的下載內容。這純粹是本機效能最佳化：未設定時，`scripts/resolve-cache-root` 會退回各自 repo-local 的 `.cache/`，驗證正確性與結果完全不受影響，只是不同 worktree／臨時目錄之間不共用快取，需要各自重新下載，速度較慢。
+建議每位開發者在自己 shell 的 profile 檔（例如 `~/.zshrc`、`~/.bashrc`、`~/.config/fish/config.fish`，依實際使用的 shell 而定）加入 `export CSARC_CACHE_ROOT="$HOME/.cache/csarc"`（或團隊約定的其他持久路徑）。這會讓 `uv`、`pnpm`，以及透過 `scripts/resolve-cache-root` 取得快取位置的固定版本工具安裝腳本（`scripts/install-gitleaks`／`install-actionlint`／`install-shellcheck`／`install-osv-scanner`）跨 worktree、跨 `csarc adopt --finalize` 產生的臨時候選目錄共用已驗證的下載內容。這純粹是本機效能最佳化：未設定時，`scripts/resolve-cache-root` 會退回各自 repo-local 的 `.cache/`，驗證正確性與結果完全不受影響，只是不同 worktree／臨時目錄之間不共用快取，需要各自重新下載，速度較慢。
 
 請從實際 Git root 開啟 Codex／agent workspace；從 repo 上層開啟時，子目錄的 `AGENTS.md` 不一定會自動載入。開始前先在工作目錄執行 `test "$(git rev-parse --show-toplevel)" = "$(pwd -P)"`，失敗就切換到輸出的 Git root，不要複製另一份指引到父目錄。
 
@@ -59,7 +59,7 @@ CLI 固定驗證 canonical repository numeric ID、immutable stable Release、re
 | `scripts/verify-template.sh` | 建立、更新、語言與供應鏈回歸 |
 | `src/csarc_cli/` | `csarc init`／`adopt`／`update` 的薄層 Copier orchestration |
 | `docs/README.md`、`docs/specs/`、`docs/adr/` | Durable Project Memory 地圖、Spec-Driven Development（SDD）規格與 Architecture Decision Records（ADR） |
-| `site/`、`scripts/build-decision-site` | Hugo 內容、模板、樣式與可重現的單檔建置入口 |
+| `site/`、`scripts/build-decision-site` | 決策網站內容、純 Python 渲染引擎、樣式與可重現的單檔建置入口 |
 | `docs/index.html`、`docs/index.en.html` | 可離線交付的中英文生成簡報；目前只有 `noindex`／`robots.txt` 臨時防護，尚無實際存取控制 |
 
 Python 目前以 3.14、uv、Ruff、ty、pytest 與 src layout 為基線；CI 會同時驗證精確下界 3.14.0 與最新 3.14.x。生成專案若選 minimum 模式，會驗證所選版本的 `.0` 下界，以及一路到 3.14 的每個 feature release 最新 patch；目前刻意不宣告 3.11 支援。Rust 以 1.98、Cargo.lock、rustfmt、Clippy、cargo test 與 release build 為基線。TypeScript 以 Node 24、pnpm 11、Biome、strict TypeScript 與 Vitest 為基線。
