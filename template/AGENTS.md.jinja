@@ -55,6 +55,7 @@ Existing-repository history changes start read-only: propose semantic story grou
 {% endif %}{% if "rust" in languages %}- Rust iteration: `cargo fmt --all -- --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, and `cargo test --locked`.
 {% endif %}- Daily PR gate: `./scripts/verify-fast` (same tiered entry point CI runs).
 - Full delivery verification: `./scripts/verify` once by the pull request owner or integrator, only for a full-tier delivery boundary (see `docs/ci-policy.md`); `./scripts/verify <mode>` reruns one language module on its own.
+- Release execution (if this repository owns `release.yml`): hosted Automatic/Guided publish is a known permanent limitation, not a bug to chase — `GITHUB_TOKEN` cannot prove the Immutable Releases setting and this fails closed by design. Run `scripts/publish-release` locally under the maintainer's own admin identity instead; see `docs/ci-policy.md`'s hosted-release-limitation section.
 
 ## Editing boundaries
 
