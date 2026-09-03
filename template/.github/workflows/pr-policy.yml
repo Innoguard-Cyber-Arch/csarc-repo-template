@@ -97,7 +97,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_BODY: ${{ github.event.pull_request.body }}
-        run: ./scripts/check-scope-gate
+        run: |
+          if [[ -x ./scripts/check-scope-gate ]]; then
+            ./scripts/check-scope-gate
+          else
+            echo "::notice::Scope-drift gate starts after the rollout PR reaches its base branch."
+          fi
       - name: Revalidate queued Milestone approval
         if: ${{ github.event_name == 'merge_group' }}
         env:

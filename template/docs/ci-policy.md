@@ -322,7 +322,14 @@ collaborator 自核例外）才算通過，判斷邏輯與 tracker 層級的 `/m
   找不到連結 Issue（release 自動化、dependabot、main-sync bridge 等本來就沒
   有連結 work Issue 的 PR）則直接放行、不擋。`check-scope` 回報未通過時腳本
   以非 0 結束，比照本檔其他 gate 一貫的 fail-closed 模式擋下該 job；PR 沒有
-  宣告 `Tracker scope: expanded`，或已通過核可，都正常放行。
+  宣告 `Tracker scope: expanded`，或已通過核可，都正常放行。這個 step 比照
+  `check-pr`／`check-merge-group` 既有的 rollout-safety 寫法：因為
+  `title` job 用 `pull_request.base.sha` checkout（刻意不信任 PR 自己送來的
+  policy 腳本），`scripts/check-scope-gate` 這支新腳本要等到落地 `#632` 的
+  這次 PR 本身合併進 base branch 之後才會出現在該 checkout 裡；因此 step 先
+  判斷腳本是否存在（`[[ -x ./scripts/check-scope-gate ]]`），不存在只印
+  `::notice::` 放行，同一張 PR 在自己身上驗證時不會因為這個 chicken-and-egg
+  落差而誤擋（PR #633 落地時已由真實 CI run 實測到這個落差並修正）。
 - **Fingerprint-binding：**`approval_decision()`（tracker 核可）與
   `scope_decision()`（work Issue scope 核可）共用的 `_approval_records()`／
   `_gate_decision()`，現在額外比對每則 `/milestone approve`／
