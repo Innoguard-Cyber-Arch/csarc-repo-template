@@ -231,10 +231,47 @@ def tracker_errors(snapshot: dict[str, Any]) -> list[str]:
     return errors
 
 
+def _admin_self_approval(
+    command: str,
+    author: str,
+    author_type: str | None,
+    author_association: str | None,
+    proposer: str | None,
+) -> str | None:
+    """Return the reason for one valid owner self-approval, if any."""
+    if not command.startswith("/milestone admin-approve:"):
+        return None
+    reason = command.removeprefix("/milestone admin-approve:").strip()
+    if not reason or author != proposer or author_type == "Bot":
+        return None
+    return reason if author_association == "OWNER" else None
+
+
+def _record_objection(
+    command: str, author: str, url: object, objections: dict[str, str]
+) -> None:
+    """Record one objection comment, keyed by its own permalink."""
+    if not command.startswith("/milestone object:") or not isinstance(url, str):
+        return
+    if command.removeprefix("/milestone object:").strip():
+        objections[url] = author
+
+
+def _record_resolution(
+    command: str, author: str, objections: dict[str, str], resolved: set[str]
+) -> None:
+    """Record one objection withdrawal by its original author."""
+    if not command.startswith("/milestone resolve:"):
+        return
+    target = command.removeprefix("/milestone resolve:").strip()
+    if objections.get(target) == author:
+        resolved.add(target)
+
+
 def _approval_records(
     snapshot: dict[str, Any], proposer: str | None
 ) -> tuple[set[str], dict[str, str], set[str], dict[str, str]]:
-    """Collect valid approvals, objections, withdrawals, and admin self-approvals."""
+    """Collect approvals, objections, withdrawals, and admin self-approvals."""
     approvals: set[str] = set()
     objections: dict[str, str] = {}
     resolved: set[str] = set()
@@ -243,7 +280,6 @@ def _approval_records(
         body = comment.get("body")
         author = comment.get("user", {}).get("login")
         author_type = comment.get("user", {}).get("type")
-        author_association = comment.get("author_association")
         url = comment.get("html_url")
         if not isinstance(body, str) or not isinstance(author, str):
             continue
@@ -254,32 +290,27 @@ def _approval_records(
             if author != proposer and author_type != "Bot":
                 approvals.add(author)
             continue
-        if command.startswith("/milestone admin-approve:"):
-            reason = command.removeprefix("/milestone admin-approve:").strip()
-            if (
-                reason
-                and author == proposer
-                and author_type != "Bot"
-                and author_association == "OWNER"
-            ):
-                admin_approvals[author] = reason
+        reason = _admin_self_approval(
+            command,
+            author,
+            author_type,
+            comment.get("author_association"),
+            proposer,
+        )
+        if reason is not None:
+            admin_approvals[author] = reason
             continue
-        if command.startswith("/milestone object:") and isinstance(url, str):
-            if command.removeprefix("/milestone object:").strip():
-                objections[url] = author
-            continue
-        if command.startswith("/milestone resolve:"):
-            target = command.removeprefix("/milestone resolve:").strip()
-            if objections.get(target) == author:
-                resolved.add(target)
+        _record_objection(command, author, url, objections)
+        _record_resolution(command, author, objections, resolved)
     return approvals, objections, resolved, admin_approvals
 
 
 def approval_decision(
     snapshot: dict[str, Any], *, require_open: bool = True
 ) -> Decision:
-    """Require one non-proposer approval, or an owner's self-approval, and no
-    unresolved objection.
+    """Require one non-proposer approval, or an owner self-approval.
+
+    Also requires no unresolved objection.
     """
     errors = tracker_errors(snapshot)
     item = tracker(snapshot)

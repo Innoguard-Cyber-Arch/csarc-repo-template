@@ -145,14 +145,12 @@ def test_owner_self_approval_opens_the_gate_with_reason() -> None:
 def test_admin_self_approval_rejects_impostors_and_empty_reasons(
     admin_comment: dict[str, Any],
 ) -> None:
-    """A non-owner association, empty reason, or non-proposer author never bypasses review."""
+    """No association, empty reason, or wrong author bypasses review."""
     assert not approval_decision(snapshot(admin_comment)).allowed
 
 
-def test_ordinary_non_proposer_approval_still_works_alongside_admin_approve() -> (
-    None
-):
-    """A real reviewer approval is reported normally, distinct from an admin bypass."""
+def test_ordinary_approval_still_works_alongside_admin_approve() -> None:
+    """A real reviewer approval is reported normally, distinct from a bypass."""
     result = approval_decision(
         snapshot(
             comment(
