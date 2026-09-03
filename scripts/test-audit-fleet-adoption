@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Regression test for scripts/audit-fleet-adoption (Issue #521): proves the
+# threshold-computation logic correctly distinguishes a crossed threshold
+# from a non-crossed one for both the catalog and the central
+# policy-enforcement threshold defined on the fleet-governance-thresholds
+# slide, and that a repository dogfooding Copier on itself (a template
+# source that also carries .csarc/config.yml) is never counted as a
+# consuming repository.
+#
+# Every fixture uses generic placeholder repository names only
+# (example-repo-*, sample-consumer-*) -- never this organization's real
+# repository names -- because --input feeds the script's threshold logic
+# directly, without any `gh` call, network access, or GitHub auth.
+
+script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/audit-fleet-adoption"
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "$fixture_root"' EXIT
+
+# Portable "N days ago" in ISO 8601, computed with jq (not the platform
+# `date` binary) so this test behaves the same on macOS and Linux CI.
+days_ago() {
+  jq -n --argjson days "$1" '(now - ($days * 86400)) | gmtime | strftime("%Y-%m-%dT%H:%M:%SZ")' -r
+}
+recent_date="$(days_ago 5)"
+stale_date="$(days_ago 40)"
+
+run_audit() {
+  local fixture_file="$1"
+  "$script_path" --input "$fixture_file"
+}
+
+# Case 1: catalog threshold NOT crossed. Nine consuming repositories, one
+# template source (has_copier_template=true) that also carries
+# .csarc/config.yml from dogfooding -- it must not inflate the count to
+# ten.
+jq -n '
+  [range(0; 9) | {
+    name: ("sample-consumer-" + (. | tostring)),
+    has_codeowners: true,
+    has_copier_template: false,
+    has_copier_adoption: true,
+    drift_updated_at: null
+  }] + [{
+    name: "example-template-source",
+    has_codeowners: true,
+    has_copier_template: true,
+    has_copier_adoption: true,
+    drift_updated_at: null
+  }]
+' >"$fixture_root/catalog_not_crossed.json"
+out="$(run_audit "$fixture_root/catalog_not_crossed.json")"
+grep -Fq 'Active consuming repositories (Copier-adopted, excluding template sources): 9' <<<"$out"
+grep -Fq 'not crossed (9/10)' <<<"$out"
+
+# Case 2: catalog threshold CROSSED. Ten consuming repositories.
+jq -n '
+  [range(0; 10) | {
+    name: ("sample-consumer-" + (. | tostring)),
+    has_codeowners: true,
+    has_copier_template: false,
+    has_copier_adoption: true,
+    drift_updated_at: null
+  }]
+' >"$fixture_root/catalog_crossed.json"
+out="$(run_audit "$fixture_root/catalog_crossed.json")"
+grep -Fq 'Active consuming repositories (Copier-adopted, excluding template sources): 10' <<<"$out"
+grep -Fq 'CROSSED (10/10)' <<<"$out"
+
+# Case 3: policy threshold NOT crossed. Five consuming repositories (meets
+# the 5+ half), but only one has recent drift -- the drift-repeat half of
+# the AND condition is not met.
+jq -n --arg recent "$recent_date" '
+  [range(0; 5) | {
+    name: ("sample-consumer-" + (. | tostring)),
+    has_codeowners: false,
+    has_copier_template: false,
+    has_copier_adoption: true,
+    drift_updated_at: (if . == 0 then $recent else null end)
+  }]
+' >"$fixture_root/policy_not_crossed_single_drift.json"
+out="$(run_audit "$fixture_root/policy_not_crossed_single_drift.json")"
+grep -Fq 'not crossed (consuming=5, drift-repeat=1)' <<<"$out"
+
+# Case 4: policy threshold NOT crossed even though drift recurred in two
+# repositories -- because it fell outside the 30-day window (stale). A
+# script that ignored the window would wrongly report this as crossed.
+jq -n --arg stale "$stale_date" '
+  [range(0; 5) | {
+    name: ("sample-consumer-" + (. | tostring)),
+    has_codeowners: false,
+    has_copier_template: false,
+    has_copier_adoption: true,
+    drift_updated_at: (if . < 2 then $stale else null end)
+  }]
+' >"$fixture_root/policy_not_crossed_stale_drift.json"
+out="$(run_audit "$fixture_root/policy_not_crossed_stale_drift.json")"
+grep -Fq 'not crossed (consuming=5, drift-repeat=0)' <<<"$out"
+
+# Case 5: policy threshold CROSSED. Five consuming repositories, two with
+# drift recorded inside the last 30 days.
+jq -n --arg recent "$recent_date" '
+  [range(0; 5) | {
+    name: ("sample-consumer-" + (. | tostring)),
+    has_codeowners: false,
+    has_copier_template: false,
+    has_copier_adoption: true,
+    drift_updated_at: (if . < 2 then $recent else null end)
+  }]
+' >"$fixture_root/policy_crossed.json"
+out="$(run_audit "$fixture_root/policy_crossed.json")"
+grep -Fq 'CROSSED (consuming=5, drift-repeat=2)' <<<"$out"
+
+# Case 6: CODEOWNERS coverage is reported only over consuming repositories,
+# and a repository with Copier adoption absent is excluded from every
+# count (not just left uncounted for CODEOWNERS).
+jq -n '[
+  {name: "example-repo-a", has_codeowners: true,  has_copier_template: false, has_copier_adoption: true,  drift_updated_at: null},
+  {name: "example-repo-b", has_codeowners: false, has_copier_template: false, has_copier_adoption: true,  drift_updated_at: null},
+  {name: "example-repo-c", has_codeowners: true,  has_copier_template: false, has_copier_adoption: false, drift_updated_at: null}
+]' >"$fixture_root/codeowners_coverage.json"
+out="$(run_audit "$fixture_root/codeowners_coverage.json")"
+grep -Fq 'Repositories scanned: 3' <<<"$out"
+grep -Fq 'Active consuming repositories (Copier-adopted, excluding template sources): 2' <<<"$out"
+grep -Fq 'CODEOWNERS coverage among consuming repositories: 1/2' <<<"$out"
+
+# Case 7: --input never writes a file, cache, or artifact. Snapshot the
+# fixture directory before and after a run and confirm it is unchanged.
+before_listing="$(find "$fixture_root" -type f | sort)"
+run_audit "$fixture_root/codeowners_coverage.json" >/dev/null
+after_listing="$(find "$fixture_root" -type f | sort)"
+[[ "$before_listing" == "$after_listing" ]]
+
+# Case 8: usage errors exit non-zero and never fall through to a report.
+set +e
+"$script_path" --input "$fixture_root/does-not-exist.json" >/dev/null 2>/dev/null
+missing_status=$?
+"$script_path" --org acme --input "$fixture_root/catalog_crossed.json" >/dev/null 2>/dev/null
+conflict_status=$?
+set -e
+[[ "$missing_status" -ne 0 ]]
+[[ "$conflict_status" -ne 0 ]]
+
+echo "audit-fleet-adoption: all threshold-computation cases passed."

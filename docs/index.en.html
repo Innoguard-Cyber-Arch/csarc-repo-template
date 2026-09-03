@@ -5445,7 +5445,7 @@ html[data-detail-level="simple"] .detail-panel {
 </div>
 </section>
 
-<section class="slide markdown-slide dense" id="fleet-inventory" data-content-key="fleet-inventory" data-audience="archive" aria-label="Inventory real repositories, not assumptions">
+<section class="slide markdown-slide dense" id="fleet-inventory" data-content-key="fleet-inventory" data-audience="archive" aria-label="Audit the fleet locally instead of publishing it">
   <aside class="journey-rail" aria-label="Presentation outline">
   <h3>Use template</h3>
   <ol class="journey-use">
@@ -5507,62 +5507,40 @@ html[data-detail-level="simple"] .detail-panel {
 
   <header>
     <span class="selection-sequence">Fleet governance</span>
-    <h2>Inventory real repositories, not assumptions</h2>
-    <p class="subtitle">As of 2026-08-24, the organization has six private repositories and one consuming repository.</p>
+    <h2>Audit the fleet locally instead of publishing it</h2>
+    <p class="subtitle">This organization is private; a maintainer checks current adoption on demand instead of reading a static page.</p>
   </header>
   <div class="markdown-body"><table>
 	<thead>
 			<tr>
-					<th>Repository</th>
-					<th>Owner</th>
-					<th>Template state</th>
-					<th>Drift data</th>
+					<th>Evaluation input</th>
+					<th>How a maintainer obtains it</th>
 			</tr>
 	</thead>
 	<tbody>
 			<tr>
-					<td><code>csarc-repo-template</code></td>
-					<td><code>@Innoguard-Cyber-Arch/arch</code></td>
-					<td>Source repository</td>
-					<td>Historical live integration proved one earlier design; no current drift sample is claimed</td>
+					<td>Repository list</td>
+					<td><code>gh repo list</code> against the live organization; never copied into site content or git history</td>
 			</tr>
 			<tr>
-					<td><code>GRC</code></td>
-					<td>No CODEOWNERS declared</td>
-					<td>Not adopted</td>
-					<td>No template drift data</td>
+					<td>CODEOWNERS coverage</td>
+					<td>Presence of <code>.github/CODEOWNERS</code> per repository, read live via <code>gh api</code></td>
 			</tr>
 			<tr>
-					<td><code>LLM_Guard</code></td>
-					<td>No CODEOWNERS declared</td>
-					<td>Not adopted</td>
-					<td>No template drift data</td>
+					<td>Copier adoption</td>
+					<td>Presence of <code>.csarc/config.yml</code> per repository, read live via <code>gh api</code>, excluding template-source repositories that also carry it from dogfooding Copier on themselves</td>
 			</tr>
 			<tr>
-					<td><code>ai-guardrail</code></td>
-					<td><code>@Innoguard-Cyber-Arch/repository-maintainers</code></td>
-					<td>v0.3.1 / CI-only beta</td>
-					<td>Adoption and update PRs passed; daily samples are now accumulating</td>
-			</tr>
-			<tr>
-					<td><code>claude-newsletter</code></td>
-					<td>No CODEOWNERS declared</td>
-					<td>Not adopted</td>
-					<td>No template drift data</td>
-			</tr>
-			<tr>
-					<td><code>csarc-agent-kit</code></td>
-					<td>No CODEOWNERS declared</td>
-					<td>Not adopted</td>
-					<td>No template drift data</td>
+					<td>Threshold comparison</td>
+					<td>Computed against the numeric triggers on <code>fleet-governance-thresholds</code></td>
 			</tr>
 	</tbody>
 </table>
+<p>Run <code>./scripts/audit-fleet-adoption</code> locally as a maintainer to reproduce this evaluation. The script queries the organization live, computes whether the fleet currently meets the catalog and policy-enforcement thresholds, and prints the result to standard output only. It never writes a file, never creates a cache or artifact, and never uploads anything anywhere, so the real repository list never lands in this site or its history.</p>
 <aside class="technical-detail" data-content-key="fleet-inventory-source">
   <h3>Inventory evidence and interpretation</h3>
-  The inventory reads GitHub repositories, default branches, CODEOWNERS, Copier answers, CSARC profiles, unfinished update PRs, and governance-drift runs. A repository with no completed scheduled sample is never counted as zero drift. Recount after each new pilot and during quarterly review.
-</aside>
-</div>
+  The script reads GitHub repositories, CODEOWNERS presence, and Copier adoption markers directly from the API; a repository with no completed scheduled drift sample is never counted as zero drift. Re-run after each new pilot and during quarterly review — a printed result reflects that moment only, and no snapshot is retained afterward.
+</aside></div>
 </section>
 
 <section class="slide markdown-slide candidate-slide" id="fleet-governance-thresholds" data-content-key="fleet-governance-thresholds" data-audience="archive" aria-label="Measure the problem before adding a platform">

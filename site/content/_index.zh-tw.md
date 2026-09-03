@@ -783,40 +783,38 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="fleet-inventory" audience="archive" eyebrow="Fleet 治理" title="採用盤點以真實 repo 為準" subtitle="2026-08-24：組織共 6 個 private repo，目前只有 1 個 consuming repo。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< slide key="fleet-inventory" audience="archive" eyebrow="Fleet 治理" title="本機查詢採用盤點，不對外公開清單" subtitle="這個組織對外是私密的，頁面不再靜態列出真實 repository 清單。" class="legacy-slide review-notes-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <span class="selection-sequence">決策附錄</span>
-        <h2>Fleet 治理盤點｜<span class="accent">1 個 consuming repo</span></h2>
-        <p class="subtitle">2026-08-24 完成第一個真實 pilot：組織共 6 個 private repo，<code>ai-guardrail</code> 已導入並更新至 v0.3.1；其餘 4 個產品／工具 repo 尚未導入。門檻未達前不部署中央平台。</p>
+        <h2>Fleet 治理盤點｜<span class="accent">本機查詢，不對外公開</span></h2>
+        <p class="subtitle">這個組織對外是私密的，這個模板 repo 未來可能分享給公司其他組別；真實 repository 清單不寫進網站內容或 git 歷史。維護者改用 <code>scripts/audit-fleet-adoption</code> 在本機即時查詢、即時計算、只印在終端機。</p>
       </header>
-      <table class="decision-register audit-register" aria-label="Repository 採用盤點">
-        <thead><tr><th>Repository</th><th>Owner</th><th>模板版本</th><th>漂移資料</th></tr></thead>
+      <table class="decision-register audit-register" aria-label="Fleet 盤點評估方式">
+        <thead><tr><th>評估項目</th><th>取得方式</th></tr></thead>
         <tbody>
-          <tr><td><code>csarc-repo-template</code></td><td><code>@Innoguard-Cyber-Arch/arch</code></td><td>來源 repo，版本見頁首</td><td>非 consuming repo；live integration 已驗證 governance drift 可執行。</td></tr>
-          <tr><td><code>GRC</code></td><td>未宣告 CODEOWNERS</td><td>未導入</td><td>無模板漂移資料</td></tr>
-          <tr><td><code>LLM_Guard</code></td><td>未宣告 CODEOWNERS</td><td>未導入</td><td>無模板漂移資料</td></tr>
-          <tr><td><code>ai-guardrail</code></td><td><code>@Innoguard-Cyber-Arch/repository-maintainers</code></td><td><code>v0.3.1</code>／CI-only beta</td><td>導入與更新 PR 全綠；後續由 daily governance drift 累積頻率資料</td></tr>
-          <tr><td><code>claude-newsletter</code></td><td>未宣告 CODEOWNERS</td><td>未導入</td><td>無模板漂移資料</td></tr>
-          <tr><td><code>csarc-agent-kit</code></td><td>未宣告 CODEOWNERS</td><td>未導入</td><td>無模板漂移資料</td></tr>
+          <tr><td>Repository 清單</td><td>對真實組織執行 <code>gh repo list</code>，不寫入網站內容或 git 歷史</td></tr>
+          <tr><td>CODEOWNERS 覆蓋率</td><td>逐一以 <code>gh api</code> 檢查 <code>.github/CODEOWNERS</code> 是否存在</td></tr>
+          <tr><td>Copier 採用狀態</td><td>逐一以 <code>gh api</code> 檢查 <code>.csarc/config.yml</code> 是否存在；來源模板 repo 因為對自己跑過 Copier 也會有這個檔案，會被排除，不計為 consuming repo</td></tr>
+          <tr><td>門檻比對</td><td>對照 <code>fleet-governance-thresholds</code> 頁面既有的量化門檻計算</td></tr>
         </tbody>
       </table>
-      <aside class="selection-note"><strong>盤點結論</strong><span>目前只有一個下游 repo，足以證明導入與更新生命週期，不足以合理化中央平台。漂移頻率只計完成的排程樣本；「沒有 run」不記為「零漂移」。</span></aside>
-      <p class="bridge-reference reference">Inventory: GitHub repositories, default branches, CODEOWNERS, Copier answers and CSARC profiles; accessed August 24, 2026.</p>
+      <aside class="selection-note"><strong>執行方式</strong><span>維護者在本機執行 <code>./scripts/audit-fleet-adoption</code> 重現這次評估：腳本即時查詢組織、計算是否達到 catalog 與 policy enforcement 門檻，只印在標準輸出——不寫入任何檔案、不建立 cache 或 artifact、不上傳到任何地方，真實 repository 清單不會留在這個網站或它的歷史裡。</span></aside>
+      <p class="bridge-reference reference">盤點方法：GitHub repositories、CODEOWNERS、Copier 採用標記，透過 <code>gh api</code>／<code>gh repo list</code> 即時查詢。</p>
 {{< /legacy >}}
 
 {{< basic >}}
-| Repository | Owner | 模板狀態 | 漂移資料 |
-| --- | --- | --- | --- |
-| `csarc-repo-template` | `@Innoguard-Cyber-Arch/arch` | 來源 repo | 歷史 live integration 只證明舊設計；不宣稱有現行 drift sample |
-| `GRC` | 未宣告 CODEOWNERS | 未導入 | 無模板漂移資料 |
-| `LLM_Guard` | 未宣告 CODEOWNERS | 未導入 | 無模板漂移資料 |
-| `ai-guardrail` | `@Innoguard-Cyber-Arch/repository-maintainers` | v0.3.1／CI-only beta | 導入與 update PR 全綠，開始累積 daily drift samples |
-| `claude-newsletter` | 未宣告 CODEOWNERS | 未導入 | 無模板漂移資料 |
-| `csarc-agent-kit` | 未宣告 CODEOWNERS | 未導入 | 無模板漂移資料 |
+| 評估項目 | 取得方式 |
+| --- | --- |
+| Repository 清單 | 對真實組織執行 `gh repo list`，不寫入網站內容或 git 歷史 |
+| CODEOWNERS 覆蓋率 | 逐一以 `gh api` 檢查 `.github/CODEOWNERS` 是否存在 |
+| Copier 採用狀態 | 逐一以 `gh api` 檢查 `.csarc/config.yml` 是否存在；來源模板 repo 會被排除，不計為 consuming repo |
+| 門檻比對 | 對照 `fleet-governance-thresholds` 頁面既有的量化門檻計算 |
+
+維護者在本機執行 `./scripts/audit-fleet-adoption` 重現這次評估：腳本即時查詢組織、計算是否達到 catalog 與 policy enforcement 門檻，只印在標準輸出——不寫入任何檔案、不建立 cache 或 artifact、不上傳到任何地方，真實 repository 清單不會留在這個網站或它的歷史裡。
 
 {{< detail key="fleet-inventory-source" title="盤點證據與判讀方式" >}}
-盤點 GitHub repositories、default branches、CODEOWNERS、Copier answers、CSARC profiles、未完成 update PR 與 governance-drift runs。沒有完成排程樣本的 repo 不記為「零漂移」；新 pilot 與每季回顧都重新計數。
+腳本即時讀取 GitHub repositories、CODEOWNERS 是否存在、`.csarc/config.yml` 採用標記；沒有完成排程樣本的 repo 不記為「零漂移」。新 pilot 與每季回顧都重新執行，每次印出的結果只反映當下狀態，執行結束後不留下任何紀錄。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
