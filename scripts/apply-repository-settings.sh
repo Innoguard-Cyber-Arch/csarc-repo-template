@@ -104,7 +104,7 @@ with open(sys.argv[3], "w", encoding="utf-8") as handle:
     json.dump(rulesets[1], handle)
 PY
 fi
-# check_desired_rules_payload is only used by the check-mode drift
+# check_desired_rules_payload_extra is only used by the check-mode drift
 # comparison below: the effective-rules-branches endpoint returns the
 # union of rules enforced across every applicable Ruleset, not scoped by
 # name, so verifying "is required_status_checks in effect" must compare
