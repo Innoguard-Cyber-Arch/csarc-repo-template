@@ -231,24 +231,37 @@ def tracker_errors(snapshot: dict[str, Any]) -> list[str]:
     return errors
 
 
+def _collaborator_permission(repo: str, username: str) -> str | None:
+    """Return one collaborator's permission level for this repo, if known.
+
+    Unlike a comment's `author_association`, this is not affected by
+    whether the commenter's organization membership is public or private,
+    so it stays reliable under the workflow's own `GITHUB_TOKEN`.
+    """
+    try:
+        payload = json.loads(
+            run_gh(["api", f"repos/{repo}/collaborators/{username}/permission"])
+        )
+    except subprocess.CalledProcessError:
+        return None
+    permission = payload.get("permission")
+    return permission if isinstance(permission, str) else None
+
+
 def _admin_self_approval(
     command: str,
     author: str,
     author_type: str | None,
-    author_association: str | None,
+    permission: str | None,
     proposer: str | None,
 ) -> str | None:
-    """Return the reason for one valid owner self-approval, if any."""
+    """Return the reason for one valid admin self-approval, if any."""
     if not command.startswith("/milestone admin-approve:"):
         return None
     reason = command.removeprefix("/milestone admin-approve:").strip()
     if not reason or author != proposer or author_type == "Bot":
         return None
-    # GitHub reports "OWNER" only for repos owned directly by a personal
-    # account; on an organization repo, even the org's sole admin account
-    # is reported as "MEMBER". Accept both so this exception actually works
-    # on the organization repos it was built for.
-    return reason if author_association in ("OWNER", "MEMBER") else None
+    return reason if permission == "admin" else None
 
 
 def _record_objection(
@@ -280,6 +293,7 @@ def _approval_records(
     objections: dict[str, str] = {}
     resolved: set[str] = set()
     admin_approvals: dict[str, str] = {}
+    repo = snapshot.get("repo")
     for comment in snapshot.get("comments", []):
         body = comment.get("body")
         author = comment.get("user", {}).get("login")
@@ -294,12 +308,17 @@ def _approval_records(
             if author != proposer and author_type != "Bot":
                 approvals.add(author)
             continue
+        # Only query collaborator permission for a plausible admin-approve
+        # comment from the proposer -- avoids one API call per comment.
+        permission = (
+            _collaborator_permission(repo, author)
+            if isinstance(repo, str)
+            and author == proposer
+            and command.startswith("/milestone admin-approve:")
+            else None
+        )
         reason = _admin_self_approval(
-            command,
-            author,
-            author_type,
-            comment.get("author_association"),
-            proposer,
+            command, author, author_type, permission, proposer
         )
         if reason is not None:
             admin_approvals[author] = reason
