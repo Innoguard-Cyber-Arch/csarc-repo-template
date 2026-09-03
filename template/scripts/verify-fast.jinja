@@ -28,6 +28,10 @@ if [[ "$tier" == "docs" ]]; then
   exit 0
 fi
 
+if [[ "$scopes" == *,docs,* ]]; then
+  python3 scripts/render_site.py --check
+fi
+
 if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
   ./scripts/verify-dependencies
 fi
