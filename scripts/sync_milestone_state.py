@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 CHECK_NAME = "Milestone approval"
@@ -108,6 +109,62 @@ def _remove_section(body: str, heading: str) -> str:
 def _fingerprint(text: str) -> str:
     """Return one short, stable content fingerprint."""
     return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()[:16]
+
+
+_GITHUB_TIMESTAMP = "%Y-%m-%dT%H:%M:%SZ"
+# GitHub's own Issue `updated_at` can trail the `created_at` of the very
+# comment that caused it by a second or two while the platform finishes
+# recording that comment -- confirmed empirically against this repository's
+# own Issue history (a comment's `created_at` one second before its parent
+# Issue's `updated_at`). This grace window absorbs that recording lag
+# without weakening real staleness detection: a genuine follow-up edit or
+# comment happens seconds-to-hours later in practice, never within a few
+# seconds of the approval it would invalidate.
+_STALE_GRACE_SECONDS = 60
+
+
+def _parse_github_timestamp(value: object) -> float | None:
+    """Parse one GitHub REST UTC timestamp into comparable epoch seconds."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return (
+            datetime.strptime(value, _GITHUB_TIMESTAMP)
+            .replace(tzinfo=UTC)
+            .timestamp()
+        )
+    except ValueError:
+        return None
+
+
+def _approval_is_stale(
+    item_updated_at: object, comment_created_at: object
+) -> bool:
+    """Return whether one approval no longer binds to the current body.
+
+    This is the fingerprint-binding gate #632 adds on top of #552's
+    approval mechanism. Reconciliation's own staleness check
+    (`reconciliation_status()`) can compare a stored content hash exactly,
+    because the bot writes that hash itself right after computing it. An
+    approval comment is written by a human, not the bot, and GitHub does
+    not expose Issue body-edit history over REST at all (unlike a Git
+    diff, there is no per-revision body to hash retroactively) -- so
+    `updated_at` is the only queryable edit signal available, and it also
+    advances on Issue activity that never touched the body: a new comment,
+    a label, Milestone, or state change. This trades a higher
+    "needs re-approval" false-positive rate for never silently accepting
+    an approval that could be reading a version of the body that no longer
+    exists -- the conservative direction for a governance gate.
+
+    Missing data on either side reads as "cannot tell", not "definitely
+    stale": a caller that never supplies `item_updated_at` keeps today's
+    behavior unchanged.
+    """
+    updated = _parse_github_timestamp(item_updated_at)
+    created = _parse_github_timestamp(comment_created_at)
+    if updated is None or created is None:
+        return False
+    return updated - created > _STALE_GRACE_SECONDS
 
 
 def acceptance_complete(description: str) -> bool:
@@ -337,13 +394,28 @@ def _record_resolution(
 
 
 def _approval_records(
-    snapshot: dict[str, Any], proposer: str | None
-) -> tuple[set[str], dict[str, str], set[str], dict[str, str]]:
-    """Collect approvals, objections, withdrawals, and admin self-approvals."""
+    snapshot: dict[str, Any],
+    proposer: str | None,
+    *,
+    item_updated_at: str | None = None,
+) -> tuple[set[str], dict[str, str], set[str], dict[str, str], set[str]]:
+    """Collect approvals, objections, withdrawals, and admin self-approvals.
+
+    Also returns the authors whose approve/admin-approve comment no longer
+    binds (#632). `item_updated_at` is the tracker's (or work Issue's) own
+    `updated_at` field, read from the same snapshot as
+    `snapshot["comments"]`. When supplied, an approve/admin-approve
+    comment made stale by a later edit
+    (see `_approval_is_stale()`) is excluded from `approvals`/
+    `admin_approvals` and its author reported in the returned `stale` set
+    instead, so callers can distinguish "never approved" from "was
+    approved, then invalidated" in their own Decision message.
+    """
     approvals: set[str] = set()
     objections: dict[str, str] = {}
     resolved: set[str] = set()
     admin_approvals: dict[str, str] = {}
+    stale: set[str] = set()
     repo = snapshot.get("repo")
     for comment in snapshot.get("comments", []):
         body = comment.get("body")
@@ -355,9 +427,15 @@ def _approval_records(
         command = next(
             (line.strip() for line in body.splitlines() if line.strip()), ""
         )
+        is_stale = _approval_is_stale(
+            item_updated_at, comment.get("created_at")
+        )
         if command == "/milestone approve":
             if author != proposer and author_type != "Bot":
-                approvals.add(author)
+                if is_stale:
+                    stale.add(author)
+                else:
+                    approvals.add(author)
             continue
         # Only query collaborator permission for a plausible admin-approve
         # comment from the proposer -- avoids one API call per comment.
@@ -372,11 +450,14 @@ def _approval_records(
             command, author, author_type, permission, proposer
         )
         if reason is not None:
-            admin_approvals[author] = reason
+            if is_stale:
+                stale.add(author)
+            else:
+                admin_approvals[author] = reason
             continue
         _record_objection(command, author, url, objections)
         _record_resolution(command, author, objections, resolved)
-    return approvals, objections, resolved, admin_approvals
+    return approvals, objections, resolved, admin_approvals, stale
 
 
 def _gate_decision(
@@ -384,6 +465,7 @@ def _gate_decision(
     objections: dict[str, str],
     resolved: set[str],
     admin_approvals: dict[str, str],
+    stale: set[str],
     *,
     missing_message: str,
     approved_prefix: str = "Approved by",
@@ -395,9 +477,18 @@ def _gate_decision(
     Issue's scope-expansion gate: both read the identical comment
     vocabulary (`/milestone approve`, `/milestone admin-approve:`,
     `/milestone object:`, `/milestone resolve:`) via `_approval_records()`,
-    and only differ in wording.
+    and only differ in wording. `stale` (#632) names authors whose
+    approve/admin-approve comment was invalidated by a later edit -- when
+    it is the only reason no approval currently counts, the message says
+    so explicitly instead of reading identically to "never approved".
     """
     if not approvals and not admin_approvals:
+        if stale:
+            return Decision(
+                False,
+                f"{missing_message} (a later edit invalidated the approval "
+                f"from {', '.join(sorted(stale))} -- re-approve)",
+            )
         return Decision(False, missing_message)
     unresolved = sorted(set(objections) - resolved)
     if unresolved:
@@ -421,7 +512,9 @@ def approval_decision(
 ) -> Decision:
     """Require one non-proposer approval, or an owner self-approval.
 
-    Also requires no unresolved objection.
+    Also requires no unresolved objection. An approval is bound to the
+    tracker body as of its own comment's timestamp: editing the body
+    afterward invalidates it (#632; see `_approval_is_stale()`).
     """
     errors = tracker_errors(snapshot)
     item = tracker(snapshot)
@@ -432,14 +525,15 @@ def approval_decision(
             False, "The lifecycle Issue must remain open while work runs"
         )
     proposer = item.get("user", {}).get("login")
-    approvals, objections, resolved, admin_approvals = _approval_records(
-        snapshot, proposer
+    approvals, objections, resolved, admin_approvals, stale = _approval_records(
+        snapshot, proposer, item_updated_at=item.get("updated_at")
     )
     return _gate_decision(
         approvals,
         objections,
         resolved,
         admin_approvals,
+        stale,
         missing_message="A person other than the proposer must approve",
     )
 
@@ -469,6 +563,9 @@ def scope_decision(snapshot: dict[str, Any]) -> Decision:
     contains the literal `Tracker scope: expanded` marker line does it need
     its own non-proposer approval (or admin self-approval), evaluated with
     the exact same `/milestone` comment vocabulary as the tracker's gate.
+    That approval is bound to this Issue's body as of the approval
+    comment's own timestamp: editing the body afterward invalidates it
+    (#632; see `_approval_is_stale()`).
     """
     issue = snapshot.get("issue")
     if not isinstance(issue, dict):
@@ -477,14 +574,15 @@ def scope_decision(snapshot: dict[str, Any]) -> Decision:
     if not isinstance(body, str) or not has_scope_sentinel(body):
         return Decision(True, "In scope; inherits the tracker's approval")
     proposer = issue.get("user", {}).get("login")
-    approvals, objections, resolved, admin_approvals = _approval_records(
-        snapshot, proposer
+    approvals, objections, resolved, admin_approvals, stale = _approval_records(
+        snapshot, proposer, item_updated_at=issue.get("updated_at")
     )
     return _gate_decision(
         approvals,
         objections,
         resolved,
         admin_approvals,
+        stale,
         missing_message=(
             "Scope expansion declared: a person other than the proposer "
             "must approve"

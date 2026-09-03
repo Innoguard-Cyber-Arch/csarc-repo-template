@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import runpy
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,7 @@ def comment(
     body: str,
     *,
     author_type: str = "User",
+    created_at: str | None = None,
 ) -> dict[str, Any]:
     """Build one auditable work-Issue comment."""
     return {
@@ -52,11 +54,15 @@ def comment(
             f"https://github.com/acme/project/issues/101#issuecomment-{number}"
         ),
         "user": {"login": author, "type": author_type},
+        "created_at": created_at,
     }
 
 
 def issue_snapshot(
-    body: str, *comments: dict[str, Any], proposer: str = "worker"
+    body: str,
+    *comments: dict[str, Any],
+    proposer: str = "worker",
+    updated_at: str | None = None,
 ) -> dict[str, Any]:
     """Build one work-Issue snapshot as `load_issue_snapshot()` returns it."""
     return {
@@ -66,6 +72,7 @@ def issue_snapshot(
             "title": "Add retry queue",
             "body": body,
             "user": {"login": proposer, "type": "User"},
+            "updated_at": updated_at,
         },
         "comments": list(comments),
     }
@@ -209,3 +216,128 @@ def test_check_scope_loads_live_issue_and_comment_state(
 
     assert not result.allowed
     assert any("issues/101/comments" in "/".join(call) for call in calls)
+
+
+def _fake_run_gh(
+    body: str, comments: list[dict[str, Any]], updated_at: str
+) -> Callable[[list[str]], str]:
+    """Build a `run_gh()` stand-in for one live Issue + comments pair.
+
+    Used to prove `check-scope` -- the CLI Issue #632 wires into
+    `pr-policy.yml` -- reads live Issue state correctly end to end,
+    covering the same three outcomes the new workflow step depends on:
+    no sentinel (allowed), sentinel with no approval (blocked), and
+    sentinel with a non-proposer approval (allowed).
+    """
+
+    def fake_run_gh(arguments: list[str]) -> str:
+        if arguments[:2] == ["api", "repos/acme/project/issues/101"]:
+            return json.dumps(
+                {
+                    "number": 101,
+                    "body": body,
+                    "user": {"login": "worker", "type": "User"},
+                    "updated_at": updated_at,
+                }
+            )
+        return json.dumps(comments)
+
+    return fake_run_gh
+
+
+def test_check_scope_allows_a_pull_request_with_no_sentinel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No sentinel: the CI gate never blocks an ordinary in-scope PR."""
+    monkeypatch.setitem(
+        check_scope.__globals__,
+        "run_gh",
+        _fake_run_gh(IN_SCOPE_BODY, [], "2026-01-01T00:00:00Z"),
+    )
+
+    result = check_scope("acme/project", 101)
+
+    assert result.allowed
+
+
+def test_check_scope_blocks_an_unapproved_scope_expanded_pull_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sentinel present, no independent approval: the CI gate blocks it."""
+    monkeypatch.setitem(
+        check_scope.__globals__,
+        "run_gh",
+        _fake_run_gh(EXPANDED_BODY, [], "2026-01-01T00:00:00Z"),
+    )
+
+    result = check_scope("acme/project", 101)
+
+    assert not result.allowed
+
+
+def test_check_scope_allows_an_approved_scope_expanded_pull_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sentinel present with a fresh non-proposer approval: allowed."""
+    monkeypatch.setitem(
+        check_scope.__globals__,
+        "run_gh",
+        _fake_run_gh(
+            EXPANDED_BODY,
+            [comment(1, "reviewer", "/milestone approve", created_at=None)],
+            "2026-01-01T00:00:00Z",
+        ),
+    )
+
+    result = check_scope("acme/project", 101)
+
+    assert result.allowed
+
+
+def test_no_sentinel_inherits_even_after_a_later_edit() -> None:
+    """Fingerprint-binding only applies once a sentinel activates the gate."""
+    result = scope_decision(
+        issue_snapshot(IN_SCOPE_BODY, updated_at="2026-01-01T00:00:00Z")
+    )
+
+    assert result.allowed
+    assert "inherits" in result.summary.lower()
+
+
+def test_scope_approval_becomes_stale_after_a_later_body_edit() -> None:
+    """Editing the work Issue body after approval invalidates it (#632)."""
+    result = scope_decision(
+        issue_snapshot(
+            EXPANDED_BODY,
+            comment(
+                1,
+                "reviewer",
+                "/milestone approve",
+                created_at="2026-01-01T00:00:00Z",
+            ),
+            updated_at="2026-01-01T01:00:00Z",
+        )
+    )
+
+    assert not result.allowed
+    assert "invalidated" in result.summary
+    assert "reviewer" in result.summary
+
+
+def test_scope_approval_posted_after_the_last_edit_is_not_stale() -> None:
+    """An approval posted after the Issue's own last update still counts."""
+    result = scope_decision(
+        issue_snapshot(
+            EXPANDED_BODY,
+            comment(
+                1,
+                "reviewer",
+                "/milestone approve",
+                created_at="2026-01-02T00:00:00Z",
+            ),
+            updated_at="2026-01-01T00:00:00Z",
+        )
+    )
+
+    assert result.allowed
+    assert result.summary == "Scope expansion approved by reviewer"

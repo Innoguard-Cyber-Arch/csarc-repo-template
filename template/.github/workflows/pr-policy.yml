@@ -92,6 +92,12 @@ jobs:
           else
             echo "::notice::Milestone approval starts after the rollout PR reaches its base branch."
           fi
+      - name: Validate the scope-drift gate
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: ./scripts/check-scope-gate
       - name: Revalidate queued Milestone approval
         if: ${{ github.event_name == 'merge_group' }}
         env:

@@ -4,6 +4,7 @@
 - **日期：**2026-09-03
 - **來源 Issues：**[#552](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/552)（沿用並延伸 [#512](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/512)／[#518](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/518)／[#546](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/546)／[#549](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/549)／[#550](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/550) 已完成的機制；不推翻重來），另參考 [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580) 記錄的 Ruleset bypass 成本
 - **實作 PR：**[PR #609](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/609)
+- **後續補完 Issue：**[#632](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/632)——把本 ADR「刻意不做的部分」明確保留給後續 Issue 的兩件事（CI 接線、核可 fingerprint-binding）補齊；不推翻本 ADR 任何決定，見下方對應段落與「歷史 disposition」表
 
 ## 問題與限制
 
@@ -110,12 +111,35 @@ work PR 上，會把同一個 self-lock 複製到每一張 work PR，而且沒�
 「某張 linked work Issue 的即時狀態改變」：後兩者屬於不同的 GitHub 物件，而
 `regenerate_reconciliation()` 每次執行本來就會重新抓即時資料，不會回傳快取內容；唯一需
 要攔截的，是「maintainer 在最近一次 regenerate 之後、關閉之前，又動了 tracker body
-本身」這個時間窗口，而這正是 `#552` 原文描述的 staleness 情境。這個新機制目前只加進
+本身」這個時間窗口，而這正是 `#552` 原文描述的 staleness 情境。這個新機制當時只加進
 `sync_milestone_state.py` 本身（純函式＋新增的 `check-scope`／
 `regenerate-reconciliation` CLI 子指令），刻意不修改
 `.github/workflows/milestone-lifecycle.yml` 的觸發條件——要不要讓某個 GitHub 事件自動
 觸發 scope-gate 檢查或 reconciliation 重新產生，留給後續 Issue 決定，避免這次治理機制
 變更的 diff 範圍失控。
+
+**`#632` 後續補完（不推翻本 ADR，僅補齊上一段留下的兩個缺口）：**維護者盤點後確認
+`check-scope` 從未被任何 workflow 呼叫過，一張宣告 `Tracker scope: expanded` 且從未核
+可的 work Issue 實際上完全不會被擋下；同時 `approval_decision()`／`scope_decision()`
+都沒有把核可綁定到特定版本的 body。`#632`（PR 見本節下方 Ownership）補上兩層，範圍嚴格
+限定在上一段明確保留給「後續 Issue」的那兩件事，不重新設計 sentinel 偵測本身，也不擴大
+`/milestone approve`／`admin-approve` 留言語彙：
+
+- `pr-policy.yml` 新增一個呼叫新腳本 `scripts/check-scope-gate` 的 step，把
+  `scope_decision()` 實際接上工作 PR 的合併流程（fail-closed，無連結 Issue 或無
+  sentinel 時原樣放行）。
+- `_approval_records()`／`_gate_decision()` 新增 `_approval_is_stale()`：比對核可留言
+  `created_at` 與其所在 Issue（tracker 或 work Issue）自己的 `updated_at`，超過 60 秒
+  緩衝窗（吸收 GitHub 自己「留言建立」到「`updated_at` 反映該留言」之間的實測落差）即視
+  為過期。這與 Reconciliation 的 `reconciliation-fingerprint`（比對 bot 自己寫入、可精
+  確重算的內容雜湊）機制不同：GitHub REST 不提供 Issue body 的可查詢編輯歷史，核可留言
+  又是人寫的，不是 bot 生成，所以退而求其次，用 `updated_at` 這個唯一可查訊號——代價是
+  它也會被留言、label、Milestone、state 等與 body 編輯無關的活動一併觸發，因此判定刻意
+  只往「提高需要重新核可的誤判率」這個保守方向走，缺少任一時間戳（沿用舊測試 fixture 的
+  情境）一律視為「無法判斷」而非「一定過期」，不影響 `#552` 原有行為。
+
+完整說明見 `docs/ci-policy.md`「Scope-drift gate enforcement 與核可
+fingerprint-binding（#632）」一節；`docs/milestone-description.md` 同步更新對應段落。
 
 ## 歷史 disposition
 
@@ -125,16 +149,21 @@ work PR 上，會把同一個 self-lock 複製到每一張 work PR，而且沒�
 | Rejected | 每張 work Issue 一律要求核可，不論是否超出範圍 | [#552](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/552) 開放問題 → 本 ADR：只在 sentinel 存在時才加 gate |
 | Rejected | 為 work PR 加裝 GitHub 原生 required review | [#512](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/512)／[#518](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/518)／[#546](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/546)／[#549](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/549)／[#550](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/550) 的 self-lock 事件鏈與 [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580) 的 bypass 成本 → 本 ADR：明確不加，`validate-pr-policy` 結構檢查維持唯一 gate |
 | Superseded | 收尾盤點只掃描 checkbox 是否打勾 | 現況（`acceptance_complete()`／`promotion_complete()`）→ 本 ADR：加入 `reconciliation_status()` 作為額外的必要條件，不取代既有 checkbox 掃描 |
+| Completed | `check-scope` 接進 `pr-policy.yml`；`approval_decision()`／`scope_decision()` 核可綁定 body fingerprint | 本 ADR「刻意不做的部分」留給後續 Issue → [#632](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/632) 補完，不重新設計 sentinel 偵測或 `/milestone` 留言語彙 |
 
 ## Ownership 與驗證
 
 `scripts/sync_milestone_state.py`（與 `template/` 成對檔案）是這個機制唯一的 source of
-truth；`tests/test_milestone_scope.py` 覆蓋 sentinel 偵測與 scope gate，
-`tests/test_milestone_closure.py` 覆蓋 reconciliation 產生、staleness 判定與
-`closure_decision()` 的收尾把關。維護者（或 delegate）在真正把 tracker 關閉為
-completed 之前，必須跑過一次 `regenerate-reconciliation`，讓 Reconciliation 段落反映
-關閉當下的即時狀態；`closure_decision()` 本身會在 staleness 判定失敗時 fail closed，
-不需要額外人工記憶這個步驟。
+truth；`tests/test_milestone_scope.py` 覆蓋 sentinel 偵測、scope gate 與（`#632` 起）核
+可 fingerprint-binding 的 staleness 邊界，`tests/test_milestone_approval.py` 同樣覆蓋
+tracker 層級核可的 staleness 邊界，`tests/test_milestone_closure.py` 覆蓋 reconciliation
+產生、staleness 判定與 `closure_decision()` 的收尾把關。維護者（或 delegate）在真正把
+tracker 關閉為 completed 之前，必須跑過一次 `regenerate-reconciliation`，讓
+Reconciliation 段落反映關閉當下的即時狀態；`closure_decision()` 本身會在 staleness 判
+定失敗時 fail closed，不需要額外人工記憶這個步驟。`scripts/check-scope-gate`（與
+`scripts/test-check-scope-gate`，同樣與 `template/` 成對）是 `#632` 新增的 CI 接線層，
+把 `check-scope` 實際接進 `pr-policy.yml`；它本身不含判斷邏輯，只負責從 PR body 解析
+連結 Issue 編號後呼叫 `check-scope`。
 
 ## 評估過的替代方案
 
