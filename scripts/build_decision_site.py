@@ -435,7 +435,20 @@ def render_disclosure(
 
 
 def render_config_guidance(track: str, *, lang: str, data: SiteData) -> str:
-    """Port `site/layouts/shortcodes/config-guidance.html`."""
+    """Port `site/layouts/shortcodes/config-guidance.html`.
+
+    Issue #525 retired the old two-mode disclosure -- a fold-open
+    `<details>` for "direct" tracks, a button plus modal-overlay-with-
+    pager for the rest -- in favor of one static block. The
+    simple/technical toggle (see detail-toggle.css's `.config-guidance`
+    rule) already shows or hides this whole element directly in the
+    content page; once it is visible, every item is already in view, so
+    no further click-to-reveal layer is needed inside it. The `direct`
+    field in site/data/config_examples.json is no longer read here (both
+    prior styles collapsed into this one), but is left in the data file
+    since it still documents which tracks were considered "fixed
+    baseline" content when that distinction was authored.
+    """
     tracks = data.config_examples["tracks"]
     if track not in tracks:
         raise BuildError(
@@ -446,73 +459,27 @@ def render_config_guidance(track: str, *, lang: str, data: SiteData) -> str:
     labels = data.config_examples["labels"][lang]
     items = spec["items"]
 
-    def item_fields(item: dict[str, Any]) -> tuple[str, str, str, str, str]:
+    entries = []
+    for item in items:
         title = item["title"][lang]
         goal = item["goal"][lang]
-        summary_source = item.get("summary", item["goal"])
-        summary = summary_source[lang].replace("`", "")
         file_ = item["file"][lang]
         code = item["code"][lang]
-        return title, goal, summary, file_, code
-
-    if spec.get("direct", False):
-        parts = [
-            '<aside class="config-guidance" data-config-direct="true">',
-            '<details class="config-guidance-fold" open>',
-            f"<summary>{_esc(labels['heading'])}</summary>",
-            '<div class="config-actions">',
-        ]
-        for item in items:
-            title, goal, summary, file_, code = item_fields(item)
-            parts.append(
-                '<details class="config-inline-detail">'
-                f'<summary><span class="config-trigger-title">{_esc(title)}'
-                f'</span><span class="config-trigger-summary">{_esc(summary)}'
-                "</span></summary>"
-                '<div class="config-inline-body">'
-                f"<p>{_esc(goal)}</p>"
-                f'<p class="config-inline-path">{_esc(labels["configFile"])}'
-                f"<code>{_esc(file_)}</code></p>"
-                f'<pre class="code">{_code_html(code)}</pre>'
-                "</div></details>"
-            )
-        parts.append("</div></details></aside>")
-        return "".join(parts)
-
-    overlay_id = f"config-overlay-{track}"
-    triggers = []
-    for index, item in enumerate(items):
-        title, goal, summary, file_, code = item_fields(item)
-        esc_title = _esc(title)
-        triggers.append(
-            '<button type="button" class="config-trigger" '
-            'aria-expanded="false" '
-            f'aria-controls="{overlay_id}" data-config-index="{index}" '
-            f'data-config-title="{esc_title}" data-config-goal="{_esc(goal)}" '
-            f'data-config-file="{_esc(file_)}" '
-            f'data-config-code="{_code_html(code)}">'
-            f'<span class="config-trigger-title">{esc_title}</span>'
-            f'<span class="config-trigger-file">{_esc(file_)}</span>'
-            f'<span class="config-trigger-summary">{_esc(summary)}</span>'
-            "</button>"
+        entries.append(
+            '<article class="config-item">'
+            f"<h4>{_esc(title)}</h4>"
+            f"<p>{_esc(goal)}</p>"
+            f'<p class="config-item-path">{_esc(labels["configFile"])}'
+            f"<code>{_esc(file_)}</code></p>"
+            f'<pre class="code">{_code_html(code)}</pre>'
+            "</article>"
         )
-    overlay_aria_label = _esc(labels["overlayAriaLabel"])
-    overlay_close_label = _esc(labels["overlayCloseAriaLabel"])
-    config_file_label = _esc(labels["configFile"])
     return (
-        '<aside class="config-guidance">'
+        '<aside class="config-guidance" '
+        f'data-content-key="config-{_esc(track)}">'
         f"<strong>{_esc(labels['heading'])}</strong>"
         f"<p>{_esc(labels['intro'])}</p>"
-        f'<div class="config-actions">{"".join(triggers)}</div></aside>'
-        f'<aside id="{overlay_id}" class="config-overlay" hidden role="region" '
-        f'aria-label="{overlay_aria_label}">'
-        '<div class="config-overlay-card">'
-        '<button class="config-overlay-close" type="button" '
-        f'aria-label="{overlay_close_label}">×</button>'
-        '<h3></h3><p class="config-overlay-goal"></p>'
-        f'<p class="config-overlay-path">{config_file_label}<code></code></p>'
-        '<pre class="code"></pre>'
-        "</div></aside>"
+        f'<div class="config-items">{"".join(entries)}</div></aside>'
     )
 
 

@@ -905,90 +905,27 @@
     }
     .config-guidance > strong { display: block; color: var(--ink); }
     .config-guidance > p { margin: 1px 0 6px; color: var(--muted); font-size: 18px; }
-    .config-guidance-fold > summary {
-      position: relative;
-      padding-right: 34px;
-      color: var(--ink);
-      cursor: pointer;
-      font-weight: 850;
-      list-style: none;
-    }
-    .config-guidance-fold > summary::-webkit-details-marker { display: none; }
-    .config-guidance-fold > summary::after {
-      position: absolute;
-      top: 50%;
-      right: 0;
-      width: 24px;
-      height: 24px;
-      border: 1px solid var(--line);
-      border-radius: 50%;
-      background: white;
-      content: "+";
-      font-size: 20px;
-      line-height: 21px;
-      text-align: center;
-      transform: translateY(-50%);
-    }
-    .config-guidance-fold[open] > summary::after { content: "−"; }
-    .config-guidance-fold > summary:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
-    .config-guidance-fold > p { margin: 5px 0 6px; color: var(--muted); font-size: 18px; }
-    .config-actions {
+    /* Issue #525: config-guidance is now one static block (no
+       click-to-expand `<details>` fold or per-item disclosure) --
+       .config-items lists every item directly, in the page's own flow,
+       so the simple/technical toggle alone decides whether it's visible
+       at all (see detail-toggle.css's `.config-guidance` rule). */
+    .config-items {
       display: grid;
-      grid-template-columns: 1fr;
-      gap: 4px;
+      gap: 6px;
+      margin-top: 6px;
     }
-    .config-guidance[data-config-direct="true"] .config-actions { grid-template-columns: 1fr; }
-    .config-guidance[data-config-direct="true"] .config-trigger {
-      grid-template-columns: minmax(0, 29%) minmax(0, 71%);
-      grid-template-areas: "title summary";
-      min-height: 0;
-      padding: 5px 9px;
-      text-align: left;
-    }
-    .config-guidance[data-config-direct="true"] .config-trigger-file { display: none; }
-    .config-guidance[data-config-direct="true"] .config-trigger-summary {
-      display: block;
-      font-size: 15px;
-      line-height: 1.15;
-    }
-    .config-guidance[data-config-direct="true"] .config-trigger-title::after { content: ""; }
-    .config-inline-detail {
+    .config-item {
+      padding: 8px 10px;
       border: 1px solid var(--line);
       border-left: 4px solid #b9a700;
       background: white;
     }
-    .config-inline-detail + .config-inline-detail { margin-top: 4px; }
-    .config-inline-detail > summary {
-      position: relative;
-      display: block;
-      padding: 5px 36px 5px 9px;
-      cursor: pointer;
-      list-style: none;
-    }
-    .config-inline-detail > summary::-webkit-details-marker { display: none; }
-    .config-inline-detail > summary::after {
-      position: absolute;
-      top: 50%;
-      right: 9px;
-      content: "+";
-      font-size: 20px;
-      font-weight: 850;
-      transform: translateY(-50%);
-    }
-    .config-inline-detail[open] > summary::after { content: "−"; }
-    .config-inline-detail > summary:focus-visible { outline: 3px solid var(--yellow); outline-offset: 1px; }
-    .config-inline-detail .config-trigger-title { display: block; }
-    .config-inline-detail .config-trigger-summary { display: block; margin-top: 2px; font-size: 15px; line-height: 1.2; overflow-wrap: anywhere; }
-    .config-inline-body {
-      max-height: 190px;
-      padding: 8px 10px 10px;
-      overflow: auto;
-      border-top: 1px solid var(--line);
-    }
-    .config-inline-body p { font-size: 16px; line-height: 1.22; }
-    .config-inline-path { margin-top: 5px; }
-    .config-inline-path code { margin-left: 4px; color: #174f8b; font-weight: 750; }
-    .config-inline-body pre { margin: 6px 0 0; font-size: 14px; }
+    .config-item h4 { margin: 0 0 3px; font-size: 18px; font-weight: 750; }
+    .config-item p { margin: 0; font-size: 16px; line-height: 1.22; color: #4f4f4f; }
+    .config-item-path { margin-top: 4px; }
+    .config-item-path code { margin-left: 4px; color: #174f8b; font-weight: 750; }
+    .config-item pre.code { margin: 6px 0 0; max-height: 190px; overflow: auto; font-size: 14px; }
     .config-trigger {
       display: grid;
       grid-template-columns: minmax(0, 57%) minmax(0, 43%);
@@ -1798,8 +1735,25 @@ html[data-detail-level="technical"] .detail-level-control button[aria-pressed="t
   white-space: normal;
 }
 
-.legacy-slide > .basic-header,
-.legacy-slide > .basic-summary {
+.legacy-slide > .basic-header {
+  /* Duplicate title/subtitle block from _render_header(); the real
+     header already lives in .legacy-content. Always hidden regardless
+     of detail level -- unlike .basic-summary below, this one was never
+     meant to become visible in technical mode. */
+  display: none;
+}
+
+html[data-detail-level="simple"] .legacy-slide > .basic-summary {
+  display: none;
+}
+
+/* Issue #525: technical mode directly replaces the content page instead
+   of expanding an inline box inside it -- .basic-summary (the
+   {{< basic >}} block's rendering, appended right after .legacy-content)
+   becomes visible as a second, full content-page section. Its plain
+   prose duplicates .legacy-content's own simple-mode content, so only
+   its {{< detail >}} output (.technical-detail) is shown. */
+.legacy-slide > .basic-summary > :not(.technical-detail) {
   display: none;
 }
 
@@ -1814,10 +1768,6 @@ html[data-detail-level="technical"] .detail-level-control button[aria-pressed="t
 
 html[data-detail-level="technical"] .legacy-slide.decision-slide[data-track="method"] .decision-strip {
   flex: 0 0 auto;
-}
-
-.config-guidance--paged > p {
-  margin-bottom: 5px;
 }
 
 .config-tour-trigger {
@@ -1969,8 +1919,12 @@ html[data-detail-level="simple"] .technical-tour-trigger {
   grid-column: 1 / -1;
 }
 
-.markdown-body > .detail-panel {
+.markdown-body > .technical-detail {
   grid-column: 1 / -1;
+}
+
+html[data-detail-level="simple"] .markdown-body > .technical-detail {
+  display: none;
 }
 
 .markdown-body > p:first-child {
@@ -1985,7 +1939,6 @@ html[data-detail-level="simple"] .technical-tour-trigger {
 .markdown-body > ol,
 .markdown-body > table,
 .technical-detail,
-.markdown-body > .detail-panel,
 .markdown-body > .package-disclosure {
   margin: 0;
   padding: 16px 20px;
@@ -2067,38 +2020,15 @@ html[data-detail-level="simple"] .technical-tour-trigger {
   background: var(--best-soft);
 }
 
-.detail-panel {
-  display: grid;
-  min-height: 0;
-  grid-template-rows: 1fr;
-  opacity: 1;
-  transition: grid-template-rows .32s ease, opacity .2s ease, transform .32s ease;
-}
-
-.detail-panel__content {
-  min-height: 0;
-  overflow: hidden;
-}
-
-html[data-detail-level="simple"] .detail-panel {
-  grid-template-rows: 0fr;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-6px);
-}
-
 @media print {
   .detail-level-control,
   .language-control { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .detail-level-control button,
-  .detail-panel {
+  .detail-level-control button {
     transition: none;
   }
-
-  html[data-detail-level="simple"] .detail-panel { transform: none; }
 }
 </style>
   <style data-bundled-from="../../site/theme.css">
@@ -2539,7 +2469,7 @@ html[data-detail-level="simple"] .detail-panel {
           </ul>
         </details>
       </div>
-<aside class="config-guidance" data-config-direct="true"><details class="config-guidance-fold" open><summary>固定與可調政策</summary><div class="config-actions"><details class="config-inline-detail"><summary><span class="config-trigger-title">固定基線｜四種 Issue 表單與必填內容</span><span class="config-trigger-summary">問題與完成條件必填，空白 Issue 關閉；這些是公版工作契約，不提供停用開關。</span></summary><div class="config-inline-body"><p>提供 Feature、Task、Bug、Documentation 四個入口；都要求問題與完成條件，並關閉空白 Issue。</p><p class="config-inline-path">設定檔：<code>.github/ISSUE_TEMPLATE/{feature,task,bug,documentation}.yml＋config.yml</code></p><pre class="code">Feature       -&gt; Type: Feature; label: enhancement&#10;Task          -&gt; Type: Task; label: enhancement&#10;Bug           -&gt; Type: Bug; label: bug&#10;Documentation -&gt; Type: Task; label: documentation&#10;&#10;Required fields:&#10;  - problem&#10;  - acceptance&#10;&#10;# config.yml&#10;blank_issues_enabled: false&#10;contact_links: []</pre></div></details><details class="config-inline-detail"><summary><span class="config-trigger-title">固定基線｜標題、Label、負責人與工作層級</span><span class="config-trigger-summary">標題、分類與工作關係採同一套規則；組織若要改契約，應由公版政策變更而不是各 repo 自行關閉。</span></summary><div class="config-inline-body"><p>標題使用 12–80 個英文 ASCII 字元及至少三個詞；建立者自我指派，agent／CLI 使用 @me。</p><p class="config-inline-path">設定檔：<code>.github/ISSUE_TEMPLATE/*.yml＋AGENTS.md＋policies/labels.json＋docs/adr/spec-story-and-work-items.md</code></p><pre class="code">Title: 12-80 ASCII characters; at least 3 words&#10;Assignee: creator; agent/CLI uses @me&#10;&#10;Other classifications:&#10;  documentation -&gt; Task + documentation label&#10;  duplicate     -&gt; duplicate close reason&#10;  hotfix        -&gt; Bug + hotfix label + fix/&lt;Issue&gt;-* -&gt; main&#10;  promotion     -&gt; delivery tracking only&#10;&#10;Parent     -&gt; shared outcome still incomplete&#10;Dependency -&gt; actual execution order</pre></div></details><details class="config-inline-detail"><summary><span class="config-trigger-title">專案選擇｜規格要不要建立追蹤工作</span><span class="config-trigger-summary">現階段沿用單一輕量格式，不另導入 Spec Kit；需求真的需要完整 spec／plan／tasks 流程時再評估。</span></summary><div class="config-inline-body"><p>各專案在 `docs/specs/` 寫長期規格；front matter 決定同步 Task、Feature，或只保存文件。</p><p class="config-inline-path">設定檔：<code>docs/specs/＋scripts/spec_to_issue.py</code></p><pre class="code">tracking: issue  # Sync one Task&#10;tracking: story  # Sync one Feature parent&#10;tracking: none   # Keep the current contract only&#10;&#10;python scripts/spec_to_issue.py validate</pre></div></details><details class="config-inline-detail"><summary><span class="config-trigger-title">固定基線｜里程碑的啟動門檻</span><span class="config-trigger-summary">至少一位非提案者同意，且沒有尚未解決的反駁，工作才開始；里程碑結案方式由「版本／交付」定義。</span></summary><div class="config-inline-body"><p>每個里程碑使用一張生命週期追蹤 Issue，集中保存同意與反駁。</p><p class="config-inline-path">設定檔：<code>docs/milestone-description.md</code></p><pre class="code">## Problem&#10;## Outcome&#10;## Acceptance criteria&#10;- [ ] Observable result&#10;## Plan&#10;- #123 — Independently deliverable work&#10;## Kickoff decision&#10;- Approval: one non-proposer agreement&#10;- Objections: none unresolved&#10;## Out of scope&#10;## Verification&#10;## References</pre></div></details></div></details></aside>
+<aside class="config-guidance" data-content-key="config-method"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-items"><article class="config-item"><h4>固定基線｜四種 Issue 表單與必填內容</h4><p>提供 Feature、Task、Bug、Documentation 四個入口；都要求問題與完成條件，並關閉空白 Issue。</p><p class="config-item-path">設定檔：<code>.github/ISSUE_TEMPLATE/{feature,task,bug,documentation}.yml＋config.yml</code></p><pre class="code">Feature       -&gt; Type: Feature; label: enhancement&#10;Task          -&gt; Type: Task; label: enhancement&#10;Bug           -&gt; Type: Bug; label: bug&#10;Documentation -&gt; Type: Task; label: documentation&#10;&#10;Required fields:&#10;  - problem&#10;  - acceptance&#10;&#10;# config.yml&#10;blank_issues_enabled: false&#10;contact_links: []</pre></article><article class="config-item"><h4>固定基線｜標題、Label、負責人與工作層級</h4><p>標題使用 12–80 個英文 ASCII 字元及至少三個詞；建立者自我指派，agent／CLI 使用 @me。</p><p class="config-item-path">設定檔：<code>.github/ISSUE_TEMPLATE/*.yml＋AGENTS.md＋policies/labels.json＋docs/adr/spec-story-and-work-items.md</code></p><pre class="code">Title: 12-80 ASCII characters; at least 3 words&#10;Assignee: creator; agent/CLI uses @me&#10;&#10;Other classifications:&#10;  documentation -&gt; Task + documentation label&#10;  duplicate     -&gt; duplicate close reason&#10;  hotfix        -&gt; Bug + hotfix label + fix/&lt;Issue&gt;-* -&gt; main&#10;  promotion     -&gt; delivery tracking only&#10;&#10;Parent     -&gt; shared outcome still incomplete&#10;Dependency -&gt; actual execution order</pre></article><article class="config-item"><h4>專案選擇｜規格要不要建立追蹤工作</h4><p>各專案在 `docs/specs/` 寫長期規格；front matter 決定同步 Task、Feature，或只保存文件。</p><p class="config-item-path">設定檔：<code>docs/specs/＋scripts/spec_to_issue.py</code></p><pre class="code">tracking: issue  # Sync one Task&#10;tracking: story  # Sync one Feature parent&#10;tracking: none   # Keep the current contract only&#10;&#10;python scripts/spec_to_issue.py validate</pre></article><article class="config-item"><h4>固定基線｜里程碑的啟動門檻</h4><p>每個里程碑使用一張生命週期追蹤 Issue，集中保存同意與反駁。</p><p class="config-item-path">設定檔：<code>docs/milestone-description.md</code></p><pre class="code">## Problem&#10;## Outcome&#10;## Acceptance criteria&#10;- [ ] Observable result&#10;## Plan&#10;- #123 — Independently deliverable work&#10;## Kickoff decision&#10;- Approval: one non-proposer agreement&#10;- Objections: none unresolved&#10;## Out of scope&#10;## Verification&#10;## References</pre></article></div></aside>
 <p class="method-reference reference">Ref. <a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/adding-sub-issues" target="_blank" rel="noreferrer">GitHub sub-issues</a>。</p></div>
 <div class="markdown-body basic-summary"><h3 id="我們的選擇">我們的選擇</h3>
 <ul><li><strong>整體：</strong> 先把需求整理成一張可獨立完成與驗證的 Issue。</li><li><strong>工作分支：</strong> 開始實作時，每張 Issue 建立一個 <code>type/&lt;Issue&gt;-short-slug</code> 短期分支，不混入其他工作。</li><li><strong>里程碑：</strong> 多張工作有共同目標、期限或交付批次時才建立，並配一張生命週期追蹤 Issue。<ul><li>標題使用 <code>Milestone &lt;編號&gt;: &lt;里程碑名稱&gt;</code>；冒號後須與里程碑名稱完全相同。</li><li>核准、反駁與提前終止寫在內文或留言，不放進標題。</li><li>至少一位非提案者同意，且沒有尚未解決的反駁，才開始執行。</li><li>採預設交付分支模式時，一個進行中的里程碑只使用一個 <code>dev/m&lt;里程碑&gt;-*</code>；所屬工作分支都合入這裡。</li></ul></li><li><strong>Issue：</strong> 選擇 Feature、Task、Bug 或 Documentation 表單，再寫清楚問題、完成條件與驗證。<ul><li>標題使用清楚的英文；建立者預設負責這張 Issue。</li></ul></li><li><strong>例外：</strong> 重複工作以 Duplicate 結案；緊急工作仍先定義為 Bug，交付方式由「PR／合併」處理。</li></ul>
@@ -2621,7 +2551,7 @@ html[data-detail-level="simple"] .detail-panel {
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">常見的 AI 協作設計</span></summary><ul><li><strong>Repo 內指引：</strong>把固定命令與界線放在版本控制中，讓不同 agent 讀同一份規則。</li><li><strong>規格產物接力：</strong>大型工作先產生 spec、plan、tasks，再逐步交給 agent 執行。</li><li><strong>角色與調度：</strong>用專門角色、skills 或佇列安排多個 agent；適合工作量已大到需要額外協調時。</li><li><strong>人類檢查點：</strong>在需求、重大取捨、外部影響與不可逆操作前停下來取得決定。</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">六項責任各有唯一位置</span></summary><ul class="work-definition-list"><li><strong>工作與脈絡：</strong>GitHub Issue／PR 記錄範圍、進度與證據；核准的 spec／ADR 保存長期決策，跨 session、高風險或難復原工作才增加 plan，不保存聊天逐字稿。</li><li><strong>AI 規範：</strong>根目錄 <code>AGENTS.md</code> 是唯一來源；<code>CLAUDE.md</code> 只做薄匯入，子目錄只有規則真的不同時才覆寫。</li><li><strong>修改隔離：</strong>每項可寫工作各用 branch／worktree，只平行處理互不依賴的範圍；唯讀工作不必另開 worktree。</li><li><strong>驗證證據：</strong>執行最小且相關的本機程式；Action 只負責事件、權限與呼叫同一程式，不複製邏輯。</li><li><strong>決策與授權：</strong>人負責需求、重大取捨、外部影響與不可逆操作；審查、合併資格與例外由「規則治理」定義。</li><li><strong>模板建立與更新：</strong>Copier 負責產生與更新共用基線；既有 repo 的更新契約由「模板升級」定義。</li></ul></details>
       </div>
-<aside class="config-guidance" data-config-direct="true"><details class="config-guidance-fold" open><summary>固定與可調政策</summary><div class="config-actions"><details class="config-inline-detail"><summary><span class="config-trigger-title">固定基線｜人與 AI 各看一個清楚入口</span><span class="config-trigger-summary">子目錄只有命令或安全界線真的不同時才增加 AGENTS.md，避免多份規範漂移。</span></summary><div class="config-inline-body"><p>README 服務人；根目錄 AGENTS.md 是 AI 規範唯一來源，CLAUDE.md 只薄匯入。</p><p class="config-inline-path">設定檔：<code>README.md＋AGENTS.md＋CLAUDE.md</code></p><pre class="code"># README.md&#10;## Quick start&#10;## Verification&#10;## Support&#10;&#10;# AGENTS.md&#10;## Scope and sources of truth&#10;## Working loop&#10;## Commands&#10;## Editing boundaries&#10;## Safety</pre></div></details><details class="config-inline-detail"><summary><span class="config-trigger-title">可調整｜產品啟動與額外驗證命令</span><span class="config-trigger-summary">project_run_command 必填；既有 repo 可選填一支安全的 repository-relative 驗證程式。</span></summary><div class="config-inline-body"><p>讓 agent 知道怎麼啟動產品，以及共通驗證完成後還要執行哪一支專案檢查。</p><p class="config-inline-path">設定檔：<code>.csarc/config.yml＋AGENTS.md</code></p><pre class="code">project_run_command: uv run my-product&#10;project_verification_hook: scripts/verify-product</pre></div></details><details class="config-inline-detail"><summary><span class="config-trigger-title">固定基線｜平行可寫工作各自隔離</span><span class="config-trigger-summary">唯讀工作不需另開 worktree；清理程式只回收已合併且乾淨的目錄。</span></summary><div class="config-inline-body"><p>一項可寫工作對應一個 branch 與 worktree，只平行處理互不依賴的範圍。</p><p class="config-inline-path">設定檔：<code>AGENTS.md＋scripts/cleanup-worktrees＋scripts/test-worktree-cleanup</code></p><pre class="code">git worktree add ../task-388 -b feat/388-align-ai-guidelines&#10;./scripts/test-worktree-cleanup&#10;./scripts/cleanup-worktrees</pre></div></details><details class="config-inline-detail"><summary><span class="config-trigger-title">固定基線｜規範、驗證與治理各有唯一責任</span><span class="config-trigger-summary">人保留需求、重大取捨、外部影響與不可逆操作；本頁不重複定義合併權限。</span></summary><div class="config-inline-body"><p>AGENTS.md 說明怎麼做；scripts 提供證據；Action 只包裝執行；規則治理單獨定義合併資格、權限與例外。</p><p class="config-inline-path">設定檔：<code>AGENTS.md＋scripts/verify＋.github/workflows/＋policies/</code></p><pre class="code"># Local and Action use the same logic&#10;./scripts/verify&#10;&#10;# Governance and merge eligibility live under Rules governance&#10;policies/actions.json&#10;policies/rulesets.json</pre></div></details></div></details></aside></div>
+<aside class="config-guidance" data-content-key="config-agents"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-items"><article class="config-item"><h4>固定基線｜人與 AI 各看一個清楚入口</h4><p>README 服務人；根目錄 AGENTS.md 是 AI 規範唯一來源，CLAUDE.md 只薄匯入。</p><p class="config-item-path">設定檔：<code>README.md＋AGENTS.md＋CLAUDE.md</code></p><pre class="code"># README.md&#10;## Quick start&#10;## Verification&#10;## Support&#10;&#10;# AGENTS.md&#10;## Scope and sources of truth&#10;## Working loop&#10;## Commands&#10;## Editing boundaries&#10;## Safety</pre></article><article class="config-item"><h4>可調整｜產品啟動與額外驗證命令</h4><p>讓 agent 知道怎麼啟動產品，以及共通驗證完成後還要執行哪一支專案檢查。</p><p class="config-item-path">設定檔：<code>.csarc/config.yml＋AGENTS.md</code></p><pre class="code">project_run_command: uv run my-product&#10;project_verification_hook: scripts/verify-product</pre></article><article class="config-item"><h4>固定基線｜平行可寫工作各自隔離</h4><p>一項可寫工作對應一個 branch 與 worktree，只平行處理互不依賴的範圍。</p><p class="config-item-path">設定檔：<code>AGENTS.md＋scripts/cleanup-worktrees＋scripts/test-worktree-cleanup</code></p><pre class="code">git worktree add ../task-388 -b feat/388-align-ai-guidelines&#10;./scripts/test-worktree-cleanup&#10;./scripts/cleanup-worktrees</pre></article><article class="config-item"><h4>固定基線｜規範、驗證與治理各有唯一責任</h4><p>AGENTS.md 說明怎麼做；scripts 提供證據；Action 只包裝執行；規則治理單獨定義合併資格、權限與例外。</p><p class="config-item-path">設定檔：<code>AGENTS.md＋scripts/verify＋.github/workflows/＋policies/</code></p><pre class="code"># Local and Action use the same logic&#10;./scripts/verify&#10;&#10;# Governance and merge eligibility live under Rules governance&#10;policies/actions.json&#10;policies/rulesets.json</pre></article></div></aside></div>
 <div class="markdown-body basic-summary"><ul><li><strong>預設自動：</strong> 模板會產生並檢查 AI 規範；只有客製規範、重大決策與例外需要人判斷。</li><li><strong>工作與脈絡：</strong> GitHub Issue／PR 記錄工作；核准的 spec／ADR 保存長期決策，必要時才加 plan。</li><li><strong>AI 規範：</strong> 根目錄 <code>AGENTS.md</code>；<code>CLAUDE.md</code> 只薄匯入。</li><li><strong>修改隔離：</strong> 每項可寫工作各用 branch／worktree；唯讀工作不用。</li><li><strong>驗證證據：</strong> 本機程式是唯一邏輯；Action 只呼叫它。</li><li><strong>決策與授權：</strong> 人保留重大決策；審查與合併規則只由「規則治理」定義。</li><li><strong>模板建立與更新：</strong> Copier 負責共用基線；既有 repo 更新由「模板升級」定義。</li></ul></div>
 </section>
 <section class="slide markdown-slide legacy-slide decision-slide" id="contract" data-content-key="contract" data-track="contract" aria-label="先驗證改動，再讓 CI 重跑同一套規則">
@@ -2689,7 +2619,6 @@ html[data-detail-level="simple"] .detail-panel {
   <h2>先驗證改動，再讓 CI 重跑同一套規則</h2>
   <p class="subtitle">日常改動跑必要檢查；Milestone／canary 交付、緊急修正或高風險改動才跑完整驗證。</p>
 </header>
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>獨立工作 PR 直接進 main；只有 Milestone 工作進 dev/m*。下方 technical view 的舊 route 與「準備發版」用語只供稽核；完整檢查不代表自動發版。</span></aside>
 <div class="legacy-content"><header>
         <h2>步驟 3｜<span class="accent">先驗證改動，再讓 CI 重跑同一套規則</span></h2>
         <p class="subtitle"><strong>基本導入。</strong>開發時先跑與改動直接相關的測試；Issue PR 再由同一支 Action 依變更範圍選擇 docs、fast 或 full。</p>
@@ -2699,7 +2628,7 @@ html[data-detail-level="simple"] .detail-panel {
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">依 repo 規模與風險選擇驗證範圍</span></summary><ul><li><strong>每次全跑：</strong>每張 PR 都取得完整信心，適合測試很小、執行很快的 repo。</li><li><strong>只跑受影響項目：</strong>依 dependency graph 或路徑縮小範圍，回饋快，但分流規則必須可測。</li><li><strong>獨立 pipeline runtime：</strong>本機與不同 CI 平台執行相同 pipeline，換來額外引擎與環境成本。</li><li><strong>分階段驗證：</strong>日常快速、整合候選完整；需要清楚定義何時升級與哪一份結果有效。</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一份邏輯、一支 Action、兩種 repo 範圍</span></summary><ul class="work-definition-list"><li><strong>開發中：</strong>人或 agent 只跑能證明這次修改的 focused check，先取得新鮮輸出再宣稱完成。</li><li><strong>工作 PR（工作分支 → dev/m* 或 main）：</strong>系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li><li><strong>需要完整檢查時：</strong>準備發版、緊急修正，或系統無法安全縮小測試範圍時，執行完整檢查。</li><li><strong>同一套邏輯：</strong>GitHub Actions 只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li><li><strong>專案範圍：</strong>一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li></ul></details>
       </div>
-<aside class="config-guidance" data-config-direct="true"><details class="config-guidance-fold" open><summary>固定與可調政策</summary><div class="config-actions"><details class="config-inline-detail"><summary><span class="config-trigger-title">固定基線｜CI 依風險執行 fast 或 full</span><span class="config-trigger-summary">預設路徑不依賴中央 workflow；穩定 aggregate context 兼顧成本與 required checks。</span></summary><div class="config-inline-body"><p>預設路徑不依賴中央 workflow；穩定 aggregate context 兼顧成本與 required checks。</p><p class="config-inline-path">設定檔：<code>.github/workflows/ci.yml</code></p><pre class="code">on:&#10;  pull_request:&#10;  merge_group:&#10;    types: [checks_requested]&#10;  workflow_dispatch:&#10;permissions:&#10;  actions: read&#10;  contents: read&#10;jobs:&#10;  fast: # docs／fast routing&#10;  full: # promotion／hotfix／merge queue／manual&#10;  verify: # always-present aggregate context</pre></div></details><details class="config-inline-detail"><summary><span class="config-trigger-title">可調整｜覆蓋率與本機便利功能</span><span class="config-trigger-summary">覆蓋率可選全專案或只看本次差異，門檻預設 80%；pre-commit 預設關閉，CI 仍是必要證據。</span></summary><div class="config-inline-body"><p>組織可以調整共用覆蓋率政策與 pre-commit，不需要修改每支驗證腳本。</p><p class="config-inline-path">設定檔：<code>.csarc/config.yml</code></p><pre class="code">coverage_mode: global  # global | diff&#10;coverage_threshold: 80  # 1..100&#10;enable_precommit: false</pre></div></details><details class="config-inline-detail"><summary><span class="config-trigger-title">固定基線｜zizmor 只在相關變更與排程執行</span><span class="config-trigger-summary">workflow／action 變更與 promotion 由 CI 條件式掃描；每週另掃一次，普通 source／docs PR 不重複付費。</span></summary><div class="config-inline-body"><p>workflow／action 變更與 promotion 由 CI 條件式掃描；每週另掃一次，普通 source／docs PR 不重複付費。</p><p class="config-inline-path">設定檔：<code>.github/workflows/ci.yml＋.github/workflows/zizmor.yml</code></p><pre class="code">name: Zizmor scheduled audit&#10;on:&#10;  workflow_dispatch:&#10;  schedule:&#10;    - cron: &quot;43 3 * * 1&quot;&#10;permissions:&#10;  contents: read&#10;jobs:&#10;  audit:&#10;    steps:&#10;      - run: uvx --from zizmor==1.29.0 zizmor . --format plain&#10;# PR workflow changes are routed to the same audit by the CI tier rules.</pre></div></details></div></details></aside></div>
+<aside class="config-guidance" data-content-key="config-contract"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-items"><article class="config-item"><h4>固定基線｜CI 依風險執行 fast 或 full</h4><p>預設路徑不依賴中央 workflow；穩定 aggregate context 兼顧成本與 required checks。</p><p class="config-item-path">設定檔：<code>.github/workflows/ci.yml</code></p><pre class="code">on:&#10;  pull_request:&#10;  merge_group:&#10;    types: [checks_requested]&#10;  workflow_dispatch:&#10;permissions:&#10;  actions: read&#10;  contents: read&#10;jobs:&#10;  fast: # docs／fast routing&#10;  full: # promotion／hotfix／merge queue／manual&#10;  verify: # always-present aggregate context</pre></article><article class="config-item"><h4>可調整｜覆蓋率與本機便利功能</h4><p>組織可以調整共用覆蓋率政策與 pre-commit，不需要修改每支驗證腳本。</p><p class="config-item-path">設定檔：<code>.csarc/config.yml</code></p><pre class="code">coverage_mode: global  # global | diff&#10;coverage_threshold: 80  # 1..100&#10;enable_precommit: false</pre></article><article class="config-item"><h4>固定基線｜zizmor 只在相關變更與排程執行</h4><p>workflow／action 變更與 promotion 由 CI 條件式掃描；每週另掃一次，普通 source／docs PR 不重複付費。</p><p class="config-item-path">設定檔：<code>.github/workflows/ci.yml＋.github/workflows/zizmor.yml</code></p><pre class="code">name: Zizmor scheduled audit&#10;on:&#10;  workflow_dispatch:&#10;  schedule:&#10;    - cron: &quot;43 3 * * 1&quot;&#10;permissions:&#10;  contents: read&#10;jobs:&#10;  audit:&#10;    steps:&#10;      - run: uvx --from zizmor==1.29.0 zizmor . --format plain&#10;# PR workflow changes are routed to the same audit by the CI tier rules.</pre></article></div></aside></div>
 <div class="markdown-body basic-summary"><ul><li><strong>開發中：</strong>只跑能證明本次修改的 focused check。</li><li><strong>工作 PR（topic → main 或 <code>dev/m*</code>）：</strong>系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li><li><strong>需要完整檢查時：</strong>Milestone／canary 交付、緊急修正、merge queue、手動執行，或系統無法安全縮小測試範圍時，執行完整檢查。</li><li><strong>Action：</strong>只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li><li><strong>專案範圍：</strong>一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li></ul>
 <p>測試邏輯只寫在 scripts／tests。目前 active 的自動化是 CI、PR policy、Issue triage、spec-to-Issue、Milestone lifecycle、Work Issue closure、reviewer 指派、OSV 與 Dependabot；單一 release workflow 已設定為候選，另行的 promotion／release handoff／registry publisher／消費／live-integration／deployment workflow 未啟用。</p></div>
 </section>
@@ -2777,7 +2706,7 @@ html[data-detail-level="simple"] .detail-panel {
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">語言工具可以集中，也可以交回各生態圈</span></summary><ul><li><strong>單一跨語言工具：</strong>入口一致，但需要另外維護抽象層。</li><li><strong>各語言原生工具：</strong>開發者容易理解，版本與輸出則要由模板統一管理。</li><li><strong>每種組合各寫一套：</strong>初期直觀，組合增加後很容易重複與漂移。</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">每種語言各自檢查需要的事情</span></summary><ul><li><strong>所有專案：</strong>檢查工作規則、文件、敏感資料與套件風險。</li><li><strong>Python：</strong>檢查程式格式、型別、測試，以及能否製作安裝包。</li><li><strong>Rust：</strong>檢查程式格式、常見錯誤、測試，以及正式版本能否建置與打包。</li><li><strong>TypeScript：</strong>檢查程式格式、型別、測試，以及能否製作安裝包。</li><li><strong>同時使用多種語言：</strong>合併各語言的檢查，共通項目只跑一次。</li></ul></details>
       </div>
-<aside class="config-guidance"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-languages" data-config-index="0" data-config-title="可調整｜選用語言與 Python 支援範圍" data-config-goal="Copier 將選擇寫進 repo；偵測器只負責提醒實際檔案與宣告不一致，不擅自改設定。" data-config-file=".csarc/config.yml＋scripts/detect-language-profile" data-config-code="languages:&#10;- python&#10;- rust&#10;- typescript&#10;python_support_mode: latest  # latest | minimum&#10;python_min_version: &quot;3.12&quot;  # minimum only&#10;./scripts/detect-language-profile --suggest&#10;./scripts/detect-language-profile"><span class="config-trigger-title">可調整｜選用語言與 Python 支援範圍</span><span class="config-trigger-file">.csarc/config.yml＋scripts/detect-language-profile</span><span class="config-trigger-summary">languages 決定要產生哪些語言模組；Python 另可選最新穩定版或最低支援版本。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-languages" data-config-index="1" data-config-title="固定基線｜各語言使用原生工具" data-config-goal="共用治理不等於硬湊成同一套工具；每種語言使用其主流工具，再由同一驗證入口協調。" data-config-file="各語言 manifest＋lockfile" data-config-code="# Python module&#10;uv sync --locked&#10;uv run ruff format --check .&#10;uv run ruff check .&#10;uv run ty check&#10;uv run pytest --cov --cov-fail-under=80&#10;&#10;# Rust module&#10;cargo fmt --all -- --check&#10;cargo clippy --locked --all-targets --all-features -- -D warnings&#10;cargo test --locked --all-features&#10;cargo build --release --locked&#10;cargo package --locked --allow-dirty&#10;&#10;# TypeScript module&#10;pnpm install --frozen-lockfile --ignore-scripts&#10;pnpm exec biome ci .&#10;pnpm exec tsc --noEmit&#10;pnpm exec vitest run --coverage"><span class="config-trigger-title">固定基線｜各語言使用原生工具</span><span class="config-trigger-file">各語言 manifest＋lockfile</span><span class="config-trigger-summary">Ruff／Biome／rustfmt 負責格式，Ruff／Biome／Clippy 負責 lint；ty／TypeScript 檢查型別，各語言再使用自己的測試與打包工具。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-languages" data-config-index="2" data-config-title="固定基線｜一個入口驗證與打包" data-config-goal="本機、AI 與 GitHub 執行同一入口；各語言只持有自己的檢查。" data-config-file="scripts/verify-fast＋scripts/verify＋.github/workflows/ci.yml" data-config-code="./scripts/verify-fast&#10;./scripts/verify"><span class="config-trigger-title">固定基線｜一個入口驗證與打包</span><span class="config-trigger-file">scripts/verify-fast＋scripts/verify＋.github/workflows/ci.yml</span><span class="config-trigger-summary">fast 選必要子集，full 是其超集合，不為不同 PR 階段複製測試。</span></button></div></aside><aside id="config-overlay-languages" class="config-overlay" hidden role="region" aria-label="設定實作覆蓋卡"><div class="config-overlay-card"><button class="config-overlay-close" type="button" aria-label="關閉設定實作">×</button><h3></h3><p class="config-overlay-goal"></p><p class="config-overlay-path">設定檔：<code></code></p><pre class="code"></pre></div></aside></div>
+<aside class="config-guidance" data-content-key="config-languages"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-items"><article class="config-item"><h4>可調整｜選用語言與 Python 支援範圍</h4><p>Copier 將選擇寫進 repo；偵測器只負責提醒實際檔案與宣告不一致，不擅自改設定。</p><p class="config-item-path">設定檔：<code>.csarc/config.yml＋scripts/detect-language-profile</code></p><pre class="code">languages:&#10;- python&#10;- rust&#10;- typescript&#10;python_support_mode: latest  # latest | minimum&#10;python_min_version: &quot;3.12&quot;  # minimum only&#10;./scripts/detect-language-profile --suggest&#10;./scripts/detect-language-profile</pre></article><article class="config-item"><h4>固定基線｜各語言使用原生工具</h4><p>共用治理不等於硬湊成同一套工具；每種語言使用其主流工具，再由同一驗證入口協調。</p><p class="config-item-path">設定檔：<code>各語言 manifest＋lockfile</code></p><pre class="code"># Python module&#10;uv sync --locked&#10;uv run ruff format --check .&#10;uv run ruff check .&#10;uv run ty check&#10;uv run pytest --cov --cov-fail-under=80&#10;&#10;# Rust module&#10;cargo fmt --all -- --check&#10;cargo clippy --locked --all-targets --all-features -- -D warnings&#10;cargo test --locked --all-features&#10;cargo build --release --locked&#10;cargo package --locked --allow-dirty&#10;&#10;# TypeScript module&#10;pnpm install --frozen-lockfile --ignore-scripts&#10;pnpm exec biome ci .&#10;pnpm exec tsc --noEmit&#10;pnpm exec vitest run --coverage</pre></article><article class="config-item"><h4>固定基線｜一個入口驗證與打包</h4><p>本機、AI 與 GitHub 執行同一入口；各語言只持有自己的檢查。</p><p class="config-item-path">設定檔：<code>scripts/verify-fast＋scripts/verify＋.github/workflows/ci.yml</code></p><pre class="code">./scripts/verify-fast&#10;./scripts/verify</pre></article></div></aside></div>
 <div class="markdown-body basic-summary"><p>選擇專案語言後，模板會自動準備對應檢查：</p>
 <ul><li><strong>所有專案：</strong>檢查工作規則、文件、機密與套件安全。</li><li><strong>Python：</strong>檢查格式、型別、測試及安裝包。</li><li><strong>Rust：</strong>檢查格式、常見錯誤、測試、正式建置及安裝包。</li><li><strong>TypeScript：</strong>檢查格式、型別、測試及安裝包。</li></ul>
 <p>同一項共通檢查只跑一次。語言可以同時勾選，但不另外建立或說明每一種排列組合。</p></div>
@@ -2847,7 +2776,6 @@ html[data-detail-level="simple"] .detail-panel {
   <h2>讓完成的改動可審查、可交付</h2>
   <p class="subtitle">獨立工作直接進 main；只有需要共同驗收的 Milestone 才使用交付 PR。</p>
 </header>
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>固定 dev/next 已退役。獨立工作 PR 直接進 main；Milestone 工作才進 dev/m*，完成後以交付 PR 進 main。下方 technical view 保留舊路徑與「發版 PR」用語供稽核。</span></aside>
 <div class="legacy-content"><header>
         <h2>步驟 6｜<span class="accent">讓完成的改動可審查、可交付</span></h2>
         <p class="subtitle"><strong>基本導入。</strong>這一頁從準備開 PR 開始：工作 PR 完成一張 Issue，發版 PR 再確認整批成果。</p>
@@ -2857,7 +2785,7 @@ html[data-detail-level="simple"] .detail-panel {
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">依團隊規模選擇不同合併模型</span></summary><ul><li><strong>GitHub Flow：</strong>每張完成的 PR 直接進 main，路徑最短，適合可持續交付的團隊。</li><li><strong>長期整合分支：</strong>多項工作先在 dev／release branch 集中驗收，代價是要處理同步。</li><li><strong>Stacked PR：</strong>把大型改動拆成相依的小 PR，審查較聚焦，但需要維護堆疊順序。</li><li><strong>Merge queue：</strong>把已核准 PR 依最新 main 重新驗證後排序合併，需要平台門禁支援。</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">工作 PR 完成單項工作，發版 PR 完成交付批次</span></summary><ul><li><strong>工作 PR：</strong>一張 PR 只完成一張可驗收 Issue；內文以 <code>Closes #N</code> 連回同號未結案 Issue。進入里程碑分支時，系統確認分支、版本與工作關係後關單；直接進 main 的一般工作與 Hotfix 則由 GitHub 關單。</li><li><strong>PR 標題：</strong>採用 Angular／Conventional Commits 格式，簡短說明這次改動與版本影響。<details class="package-disclosure inline-disclosure"><summary><span class="tech-name">查看可用格式與版本影響</span></summary><div class="package-health"><p><strong>格式：</strong><code>type(scope)!: English summary</code></p><ul><li><strong>type：</strong><code>feat</code> 新功能、<code>fix</code> 修錯、<code>docs</code> 文件、<code>refactor</code> 重構、<code>test</code> 測試、<code>build</code> 建置／相依、<code>ci</code> 自動化、<code>chore</code> 維護、<code>revert</code> 撤回。</li><li><strong>scope：</strong>可省略；使用小寫指出影響範圍。</li><li><strong>!</strong>：可省略；只在破壞相容性時使用。</li><li><strong>版本影響：</strong><code>feat</code>＝minor、<code>fix</code>／<code>revert</code>＝patch、<code>!</code>＝major；其餘不主動升版。</li></ul></div></details></li><li><strong>PR 資料：</strong>分類、里程碑與負責人都要完整。<details class="package-disclosure inline-disclosure"><summary><span class="tech-name">查看 Label、里程碑與負責人規則</span></summary><div class="package-health"><ul><li><strong>Label：</strong><code>enhancement</code>、<code>bug</code>、<code>documentation</code> 擇一，且必須和連結的 Issue 相同。</li><li><strong>里程碑：</strong>必須和連結的 Issue 相同；Issue 未加入里程碑時，PR 也不加入。</li><li><strong>負責人：</strong>PR 作者必須列為 Assignee；正式交接時可再加入其他負責人。</li></ul></div></details></li><li><strong>發版 PR（dev → main）：</strong>里程碑工作完成後才執行完整驗證，確認整批內容與證據；里程碑的結案仍由生命週期追蹤 Issue 控制。</li><li><strong>同步：</strong>main 前進後，以另一張 PR 把變更帶回仍在開發的 dev 分支；不直接推送或改寫歷史。</li><li><strong>例外與授權：</strong>Hotfix 可從 <code>fix/*</code> 直接進 main，但仍需 Issue、驗證與審查；審查者、Alpha 例外與平台門禁都由「規則治理」定義。</li></ul></details>
       </div>
-<aside class="config-guidance"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-pr" data-config-index="0" data-config-title="固定基線｜PR 格式與工作關聯" data-config-goal="一張工作 PR 完成一張 Issue；里程碑工作由 Action 核對後關單，直接進 main 則沿用 GitHub 原生關單。" data-config-file="pull_request_template.md＋.github/workflows/pr-policy.yml＋.github/workflows/work-item-closure.yml＋scripts/pr_lifecycle.py" data-config-code="title: feat(scope): English summary&#10;branch: feat/123-short-slug&#10;body: Closes #123&#10;label: enhancement&#10;assignee: PR author&#10;milestone: same as Issue #123"><span class="config-trigger-title">固定基線｜PR 格式與工作關聯</span><span class="config-trigger-file">pull_request_template.md＋.github/workflows/pr-policy.yml＋.github/workflows/work-item-closure.yml＋scripts/pr_lifecycle.py</span><span class="config-trigger-summary">標題與目的分支符合規則；分類 Label 與里程碑必須和 Issue 相同，PR 作者必須列為 Assignee，內文使用 Closes #N 連回同號未結案 Issue。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-pr" data-config-index="1" data-config-title="可調整｜工作 PR 的分支模型" data-config-goal="里程碑工作先進 dev/m*，一般獨立工作直接進 main；main 更新後以 PR 同步，不直接改寫開發分支。" data-config-file="copier.yml＋.csarc/config.yml＋scripts/delivery_sync.py" data-config-code="branch_strategy: delivery  # delivery | main&#10;&#10;work:    type/123-short-slug -&gt; dev/m8-*&#10;release: dev/m8-* -&gt; main&#10;sync:    sync/main-to-m8-*-&lt;sha&gt; -&gt; dev/m8-*"><span class="config-trigger-title">可調整｜工作 PR 的分支模型</span><span class="config-trigger-file">copier.yml＋.csarc/config.yml＋scripts/delivery_sync.py</span><span class="config-trigger-summary">branch_strategy 可選 delivery 或 main；validator 依所選模型檢查目的分支與同步鏈。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-pr" data-config-index="2" data-config-title="可調整｜程式碼擁有者與審查人選" data-config-goal="公版產生 CODEOWNERS 與可輪派名單；誰可以合併及例外仍只由規則治理定義。" data-config-file=".csarc/config.yml＋.github/CODEOWNERS＋.github/REVIEWERS" data-config-code="code_owner: &quot;@organization/team&quot;&#10;reviewers: &quot;@alice,@bob&quot;&#10;&#10;desired reviews: 1&#10;require CODEOWNER: true&#10;dismiss stale reviews: true&#10;resolve review threads: true&#10;&#10;# Run before relying on enforcement&#10;./scripts/apply-repository-settings.sh check"><span class="config-trigger-title">可調整｜程式碼擁有者與審查人選</span><span class="config-trigger-file">.csarc/config.yml＋.github/CODEOWNERS＋.github/REVIEWERS</span><span class="config-trigger-summary">code_owner 指定 GitHub team；reviewers 是可輪派的帳號名單。平台無法強制時仍需人工指定與確認。</span></button></div></aside><aside id="config-overlay-pr" class="config-overlay" hidden role="region" aria-label="設定實作覆蓋卡"><div class="config-overlay-card"><button class="config-overlay-close" type="button" aria-label="關閉設定實作">×</button><h3></h3><p class="config-overlay-goal"></p><p class="config-overlay-path">設定檔：<code></code></p><pre class="code"></pre></div></aside></div>
+<aside class="config-guidance" data-content-key="config-pr"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-items"><article class="config-item"><h4>固定基線｜PR 格式與工作關聯</h4><p>一張工作 PR 完成一張 Issue；里程碑工作由 Action 核對後關單，直接進 main 則沿用 GitHub 原生關單。</p><p class="config-item-path">設定檔：<code>pull_request_template.md＋.github/workflows/pr-policy.yml＋.github/workflows/work-item-closure.yml＋scripts/pr_lifecycle.py</code></p><pre class="code">title: feat(scope): English summary&#10;branch: feat/123-short-slug&#10;body: Closes #123&#10;label: enhancement&#10;assignee: PR author&#10;milestone: same as Issue #123</pre></article><article class="config-item"><h4>可調整｜工作 PR 的分支模型</h4><p>里程碑工作先進 dev/m*，一般獨立工作直接進 main；main 更新後以 PR 同步，不直接改寫開發分支。</p><p class="config-item-path">設定檔：<code>copier.yml＋.csarc/config.yml＋scripts/delivery_sync.py</code></p><pre class="code">branch_strategy: delivery  # delivery | main&#10;&#10;work:    type/123-short-slug -&gt; dev/m8-*&#10;release: dev/m8-* -&gt; main&#10;sync:    sync/main-to-m8-*-&lt;sha&gt; -&gt; dev/m8-*</pre></article><article class="config-item"><h4>可調整｜程式碼擁有者與審查人選</h4><p>公版產生 CODEOWNERS 與可輪派名單；誰可以合併及例外仍只由規則治理定義。</p><p class="config-item-path">設定檔：<code>.csarc/config.yml＋.github/CODEOWNERS＋.github/REVIEWERS</code></p><pre class="code">code_owner: &quot;@organization/team&quot;&#10;reviewers: &quot;@alice,@bob&quot;&#10;&#10;desired reviews: 1&#10;require CODEOWNER: true&#10;dismiss stale reviews: true&#10;resolve review threads: true&#10;&#10;# Run before relying on enforcement&#10;./scripts/apply-repository-settings.sh check</pre></article></div></aside></div>
 <div class="markdown-body basic-summary"><table><thead><tr><th>PR 階段</th><th>目的地</th><th>這一步完成什麼</th></tr></thead><tbody><tr><td>獨立工作 PR</td><td>topic → main</td><td>審查一項改動；合併後關閉連結的 Issue</td></tr><tr><td>Milestone 工作 PR</td><td>topic → <code>dev/m*</code></td><td>審查批次內的一項改動</td></tr><tr><td>交付 PR</td><td><code>dev/m*</code> 或明列的 <code>dev/i*</code> → main</td><td>完整驗證整批成果後交付；維護者再結束里程碑與清理交付分支</td></tr></tbody></table>
 <details class="package-disclosure" data-content-key="pr-version-intent"><summary><span class="tech-name">PR 標題、分支與例外</span></summary><div class="package-health"><ul><li>工作分支使用 <code>type/&lt;Issue&gt;-short-slug</code>，並連回同號未結案 Issue。</li><li>PR 標題使用 Angular／Conventional Commits 格式：<code>type(scope)!: English summary</code>。type 可用 <code>feat</code> 新功能、<code>fix</code> 修錯、<code>docs</code> 文件、<code>refactor</code> 重構、<code>test</code> 測試、<code>build</code> 建置／相依、<code>ci</code> 自動化、<code>chore</code> 維護、<code>revert</code> 撤回；scope 與 <code>!</code> 可省略。版本意圖為 <code>feat</code>＝minor、<code>fix</code>／<code>revert</code>＝patch、<code>!</code>＝breaking／major，其餘不主動升版。</li><li>工作 Label 與里程碑要和 Issue 一致；PR 作者必須列為負責人。</li><li>里程碑工作進 <code>dev/m&lt;里程碑&gt;-*</code>；一般獨立工作直接進 <code>main</code>。</li><li><code>sync/main-to-*</code> PR 在 Milestone／canary 最終交付前納入最新 main；只有 owner 記錄真實相依時才提前同步，不對所有分支 fan-out。</li><li>只有明確標示的 standalone hotfix 可直接進 main；誰能合併由「規則治理」決定。</li></ul></div></details></div>
 </section>
@@ -2938,7 +2866,7 @@ html[data-detail-level="simple"] .detail-panel {
           <ul><li><strong>安裝：</strong>Python 與 TypeScript 都依鎖定版本清單（lockfile）重裝；TypeScript 另拒絕未滿三天的一般新版。</li><li><strong>更新：</strong>自動更新服務（Dependabot）每週依套件來源分組提出 PR；一般新版等三天，已知安全修補不等待。</li><li><strong>漏洞：</strong>已知漏洞掃描（OSV）檢查依賴變更與發版候選；每週與手動掃描補上沒有 PR 的期間。</li><li><strong>成品：</strong>軟體成分清單（SBOM）列出真正成品包含的套件，由清單工具 Syft 產生並接受同一套驗證。</li><li><strong>工具邊界：</strong>鎖定版本只證明每次安裝內容一致；漏洞掃描只認已公開資料；成分清單用來追查，不會主動阻擋漏洞。</li></ul>
         </details>
       </div>
-<aside class="config-guidance"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-supply" data-config-index="0" data-config-title="固定基線｜依鎖檔重裝，TypeScript 另等三天" data-config-goal="先證明已提交的套件集合可以重現，不把「安裝成功」誤當成「沒有漏洞」。" data-config-file="template/scripts/verify-fast.jinja＋template/scripts/verify.jinja＋template/pnpm-workspace.yaml" data-config-code="uv sync --locked&#10;cargo test --locked&#10;pnpm install --frozen-lockfile --ignore-scripts&#10;&#10;minimumReleaseAge: 4320&#10;minimumReleaseAgeStrict: true&#10;trustPolicy: no-downgrade"><span class="config-trigger-title">固定基線｜依鎖檔重裝，TypeScript 另等三天</span><span class="config-trigger-file">template/scripts/verify-fast.jinja＋template/scripts/verify.jinja＋template/pnpm-workspace.yaml</span><span class="config-trigger-summary">Python、Rust、TypeScript 都依 lockfile 重裝；pnpm 另拒絕發布未滿三天或 publisher trust 降級的版本。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-supply" data-config-index="1" data-config-title="固定基線｜Dependabot 提出一般與安全更新 PR" data-config-goal="一般新版先觀察三天；已知安全修補不等待，且更新 PR 繼續走相同 CI。" data-config-file=".github/dependabot.yml＋template/.github/dependabot.yml.jinja" data-config-code="cooldown:&#10;  default-days: 3&#10;&#10;# Security updates are not delayed by the cooldown."><span class="config-trigger-title">固定基線｜Dependabot 提出一般與安全更新 PR</span><span class="config-trigger-file">.github/dependabot.yml＋template/.github/dependabot.yml.jinja</span><span class="config-trigger-summary">使用 GitHub 原生 automation identity，不要求每個 repo 安裝高權限 App；一般更新與安全更新 PR 都走相同審查與 CI。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-supply" data-config-index="2" data-config-title="固定基線｜OSV 共用本機、PR 與每週掃描" data-config-goal="已公開漏洞立即處理，不和一般新版的三天觀察混在一起。" data-config-file="scripts/verify-dependencies＋.github/workflows/ci.yml＋.github/workflows/osv.yml" data-config-code="Issue PR with dependency changes -&gt; verify-dependencies&#10;Delivery PR -&gt; verify-dependencies&#10;Weekly schedule -&gt; verify-dependencies"><span class="config-trigger-title">固定基線｜OSV 共用本機、PR 與每週掃描</span><span class="config-trigger-file">scripts/verify-dependencies＋.github/workflows/ci.yml＋.github/workflows/osv.yml</span><span class="config-trigger-summary">依賴檔變更與交付候選執行同一支本機程式；每週排程只補沒有 PR 的期間。workflow 不自行重寫掃描條件。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-supply" data-config-index="3" data-config-title="專案選配｜依 GitHub 方案啟用 CodeQL" data-config-goal="需要跨函式資料流分析時啟用 SAST；不能把 lint 或套件漏洞掃描誤當成 CodeQL。" data-config-file=".csarc/config.yml＋.github/workflows/codeql.yml" data-config-code="project_visibility: public&#10;enable_codeql: true"><span class="config-trigger-title">專案選配｜依 GitHub 方案啟用 CodeQL</span><span class="config-trigger-file">.csarc/config.yml＋.github/workflows/codeql.yml</span><span class="config-trigger-summary">public repo 預設開啟；private／internal repo 先確認 GitHub Code Security 授權，未選 Python 或 TypeScript 時不產生。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-supply" data-config-index="4" data-config-title="條件式契約｜真正成品的 SPDX SBOM 與 checksum" data-config-goal="清冊必須來自精確 tag 的真正成品，不能只從原始碼猜測。" data-config-file="scripts/release_assets.py＋tests/test_release_assets.py" data-config-code="syft &lt;extracted-artifacts&gt; -o spdx-json=sbom.spdx.json&#10;python scripts/release_assets.py build ...&#10;python scripts/release_assets.py verify ..."><span class="config-trigger-title">條件式契約｜真正成品的 SPDX SBOM 與 checksum</span><span class="config-trigger-file">scripts/release_assets.py＋tests/test_release_assets.py</span><span class="config-trigger-summary">成品存在時可用 Syft 產生 SPDX 2.3 SBOM；repo 程式驗證 root package、dependency graph、checksum、來源與 provenance。目前沒有 active publisher，因此不宣稱已產生成品證據。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-supply" data-config-index="5" data-config-title="可調整｜回報本專案自身的漏洞" data-config-goal="掃描工具只看得到已知模式；有人主動回報才補得到掃描漏抓的問題。Issue 是公開索引的，通報流程要先把人導離開 Issue。" data-config-file=".csarc/config.yml＋SECURITY.md" data-config-code="security_reporting_channel: &gt;-&#10;  Use the approved private reporting channel.&#10;&#10;## Reporting a vulnerability&#10;&#10;Do not open a public GitHub Issue for a&#10;suspected vulnerability, exploit code,&#10;credentials, tokens, or customer data.&#10;&#10;&lt;!-- Project owner: replace with the actual&#10;private reporting channel and expected&#10;acknowledgement window. --&gt;"><span class="config-trigger-title">可調整｜回報本專案自身的漏洞</span><span class="config-trigger-file">.csarc/config.yml＋SECURITY.md</span><span class="config-trigger-summary">不寫死聯絡信箱或 SLA：模板不知道下游專案的實際通報管道，假造一個反而誤導回報者。專案 owner 必須在 SECURITY.md 填入實際管道與回應期待後，這份政策才算生效。</span></button></div></aside><aside id="config-overlay-supply" class="config-overlay" hidden role="region" aria-label="設定實作覆蓋卡"><div class="config-overlay-card"><button class="config-overlay-close" type="button" aria-label="關閉設定實作">×</button><h3></h3><p class="config-overlay-goal"></p><p class="config-overlay-path">設定檔：<code></code></p><pre class="code"></pre></div></aside></div>
+<aside class="config-guidance" data-content-key="config-supply"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-items"><article class="config-item"><h4>固定基線｜依鎖檔重裝，TypeScript 另等三天</h4><p>先證明已提交的套件集合可以重現，不把「安裝成功」誤當成「沒有漏洞」。</p><p class="config-item-path">設定檔：<code>template/scripts/verify-fast.jinja＋template/scripts/verify.jinja＋template/pnpm-workspace.yaml</code></p><pre class="code">uv sync --locked&#10;cargo test --locked&#10;pnpm install --frozen-lockfile --ignore-scripts&#10;&#10;minimumReleaseAge: 4320&#10;minimumReleaseAgeStrict: true&#10;trustPolicy: no-downgrade</pre></article><article class="config-item"><h4>固定基線｜Dependabot 提出一般與安全更新 PR</h4><p>一般新版先觀察三天；已知安全修補不等待，且更新 PR 繼續走相同 CI。</p><p class="config-item-path">設定檔：<code>.github/dependabot.yml＋template/.github/dependabot.yml.jinja</code></p><pre class="code">cooldown:&#10;  default-days: 3&#10;&#10;# Security updates are not delayed by the cooldown.</pre></article><article class="config-item"><h4>固定基線｜OSV 共用本機、PR 與每週掃描</h4><p>已公開漏洞立即處理，不和一般新版的三天觀察混在一起。</p><p class="config-item-path">設定檔：<code>scripts/verify-dependencies＋.github/workflows/ci.yml＋.github/workflows/osv.yml</code></p><pre class="code">Issue PR with dependency changes -&gt; verify-dependencies&#10;Delivery PR -&gt; verify-dependencies&#10;Weekly schedule -&gt; verify-dependencies</pre></article><article class="config-item"><h4>專案選配｜依 GitHub 方案啟用 CodeQL</h4><p>需要跨函式資料流分析時啟用 SAST；不能把 lint 或套件漏洞掃描誤當成 CodeQL。</p><p class="config-item-path">設定檔：<code>.csarc/config.yml＋.github/workflows/codeql.yml</code></p><pre class="code">project_visibility: public&#10;enable_codeql: true</pre></article><article class="config-item"><h4>條件式契約｜真正成品的 SPDX SBOM 與 checksum</h4><p>清冊必須來自精確 tag 的真正成品，不能只從原始碼猜測。</p><p class="config-item-path">設定檔：<code>scripts/release_assets.py＋tests/test_release_assets.py</code></p><pre class="code">syft &lt;extracted-artifacts&gt; -o spdx-json=sbom.spdx.json&#10;python scripts/release_assets.py build ...&#10;python scripts/release_assets.py verify ...</pre></article><article class="config-item"><h4>可調整｜回報本專案自身的漏洞</h4><p>掃描工具只看得到已知模式；有人主動回報才補得到掃描漏抓的問題。Issue 是公開索引的，通報流程要先把人導離開 Issue。</p><p class="config-item-path">設定檔：<code>.csarc/config.yml＋SECURITY.md</code></p><pre class="code">security_reporting_channel: &gt;-&#10;  Use the approved private reporting channel.&#10;&#10;## Reporting a vulnerability&#10;&#10;Do not open a public GitHub Issue for a&#10;suspected vulnerability, exploit code,&#10;credentials, tokens, or customer data.&#10;&#10;&lt;!-- Project owner: replace with the actual&#10;private reporting channel and expected&#10;acknowledgement window. --&gt;</pre></article></div></aside></div>
 <div class="markdown-body basic-summary"><p>模板會自動執行例行的更新與安全檢查；只有升級衝突、漏洞處置與風險接受需要人判斷。</p>
 <table><thead><tr><th>這次要防什麼</th><th>模板目前怎麼處理</th></tr></thead><tbody><tr><td>改了套件卻無法重裝</td><td>PR 會依鎖定版本清單（lockfile）重新安裝，確認每次拿到同一批套件</td></tr><tr><td>剛發布的惡意版本</td><td>自動更新服務（Dependabot）分組提出 PR；一般新版等三天，安全更新不等待</td></tr><tr><td>已公開漏洞沒有被注意</td><td>已知漏洞掃描（OSV）會檢查依賴 PR 與交付候選；每週掃描補上沒有 PR 的期間</td></tr><tr><td>發版後不知道包含什麼</td><td>軟體成分清單（SBOM）列出成品包含的套件；依賴安全負責驗證，交付成品時產生</td></tr></tbody></table>
 <aside class="technical-detail" data-content-key="supply-boundaries"><h3>這四種保護為什麼要分開</h3>
@@ -3009,7 +2937,6 @@ html[data-detail-level="simple"] .detail-panel {
   <h2>先分清版本、發版、交付與部署</h2>
   <p class="subtitle">工作先交付到 main；需要新版本時，系統建立一張仍須人工審查的版本 PR。</p>
 </header>
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>一支候選 release workflow 預計負責版本 PR 與 verified immutable GitHub Release；待預設分支實跑後才算啟用。Registry、attestation 與部署仍未自動啟用。</span></aside>
 <div class="legacy-content"><header>
         <h2>步驟 7｜<span class="accent">版本規則與成品接續</span></h2>
         <p class="subtitle"><strong>先交付、再審查版本、最後發布：</strong>工作 PR 不直接改版本；Release Please 集中更新版本與 CHANGELOG。</p>
@@ -3019,7 +2946,7 @@ html[data-detail-level="simple"] .detail-panel {
         <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">依產品型態選擇版本工具</span></summary><ul><li><strong>Release Please：</strong>以可審查 PR 集中更新版本與 CHANGELOG。</li><li><strong>semantic-release：</strong>成功 CI 後依 commit 慣例全自動發版。</li><li><strong>Changesets：</strong>以 changeset 檔管理多套件與 workspace 的版本影響。</li></ul></details>
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">自動準備版本，人審查後才發布</span></summary><ul><li><strong>獨立工作：</strong>能自己驗收且沒有共同期限或相依時，受審查 PR 可直接進 main。</li><li><strong>里程碑：</strong>需要共同整合或整批驗收時才使用 dev/m*；交付後再結案並清理分支。</li><li><strong>Hotfix：</strong>Bug Issue 與 fix/* PR 直接修正 main，但仍需另一人審查與 full verification。</li><li><strong>正式版本：</strong>Release Please 依 PR 標題建立版本 PR，同步版本與 CHANGELOG。</li><li><strong>Release：</strong>版本 PR 合併後，系統驗證成品、checksum 與 SBOM，成功才公開不可變 GitHub Release。</li></ul></details>
       </div>
-<aside class="config-guidance"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-deploy" data-config-index="0" data-config-title="人工邊界｜交付與里程碑結案分開" data-config-goal="合併到 main 不等於發版；里程碑完成仍須由 owner 確認 outcome 與必要證據。" data-config-file="docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/milestone-lifecycle.yml" data-config-code="normal completion:&#10;  delivery evidence: recorded&#10;  unfinished Issues: none&#10;  lifecycle Issue: completed&#10;&#10;early termination:&#10;  reason: recorded&#10;  unfinished Issues: moved or not planned&#10;  lifecycle Issue: not planned"><span class="config-trigger-title">人工邊界｜交付與里程碑結案分開</span><span class="config-trigger-file">docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/milestone-lifecycle.yml</span><span class="config-trigger-summary">#400 完成前，正常結案與提前終止都維持人工；不由 release workflow 推測完成。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-deploy" data-config-index="1" data-config-title="目前狀態｜發版 automation 未啟用" data-config-goal="文件只宣稱目前 repository 能由 active file 與 current run 證明的能力。" data-config-file="docs/adr/release-security-and-dependencies.md" data-config-code="version intent: active&#10;version + changelog: manual&#10;tag + GitHub Release: blocked (#369)&#10;artifact evidence: conditional&#10;deployment: not applicable"><span class="config-trigger-title">目前狀態｜發版 automation 未啟用</span><span class="config-trigger-file">docs/adr/release-security-and-dependencies.md</span><span class="config-trigger-summary">Release Please、promotion、成品發布與 consumption workflows 都在 archive；#369 決定唯一 owner 前維持 manual／conditional。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-deploy" data-config-index="2" data-config-title="保留契約｜成品與消費驗證可在本機重跑" data-config-goal="保留 exact-tag、checksum、SBOM、provenance 與 consumption 的 fail-closed 邊界，不假裝已有 publisher。" data-config-file="scripts/release_assets.py＋scripts/verify_release_consumption.py" data-config-code="build exact-tag artifacts&#10;verify SHA-256 + SPDX 2.3 + source identity&#10;publish only after an owner is approved&#10;consumer verifies its own policy"><span class="config-trigger-title">保留契約｜成品與消費驗證可在本機重跑</span><span class="config-trigger-file">scripts/release_assets.py＋scripts/verify_release_consumption.py</span><span class="config-trigger-summary">scripts／tests 是 conditional contract；真正 workflow 必須另行定義 owner、trigger、最小權限、timeout、concurrency、成本與成功／受控失敗 evidence。</span></button></div></aside><aside id="config-overlay-deploy" class="config-overlay" hidden role="region" aria-label="設定實作覆蓋卡"><div class="config-overlay-card"><button class="config-overlay-close" type="button" aria-label="關閉設定實作">×</button><h3></h3><p class="config-overlay-goal"></p><p class="config-overlay-path">設定檔：<code></code></p><pre class="code"></pre></div></aside>
+<aside class="config-guidance" data-content-key="config-deploy"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-items"><article class="config-item"><h4>人工邊界｜交付與里程碑結案分開</h4><p>合併到 main 不等於發版；里程碑完成仍須由 owner 確認 outcome 與必要證據。</p><p class="config-item-path">設定檔：<code>docs/milestone-description.md＋scripts/sync_milestone_state.py＋.github/workflows/milestone-lifecycle.yml</code></p><pre class="code">normal completion:&#10;  delivery evidence: recorded&#10;  unfinished Issues: none&#10;  lifecycle Issue: completed&#10;&#10;early termination:&#10;  reason: recorded&#10;  unfinished Issues: moved or not planned&#10;  lifecycle Issue: not planned</pre></article><article class="config-item"><h4>目前狀態｜發版 automation 未啟用</h4><p>文件只宣稱目前 repository 能由 active file 與 current run 證明的能力。</p><p class="config-item-path">設定檔：<code>docs/adr/release-security-and-dependencies.md</code></p><pre class="code">version intent: active&#10;version + changelog: manual&#10;tag + GitHub Release: blocked (#369)&#10;artifact evidence: conditional&#10;deployment: not applicable</pre></article><article class="config-item"><h4>保留契約｜成品與消費驗證可在本機重跑</h4><p>保留 exact-tag、checksum、SBOM、provenance 與 consumption 的 fail-closed 邊界，不假裝已有 publisher。</p><p class="config-item-path">設定檔：<code>scripts/release_assets.py＋scripts/verify_release_consumption.py</code></p><pre class="code">build exact-tag artifacts&#10;verify SHA-256 + SPDX 2.3 + source identity&#10;publish only after an owner is approved&#10;consumer verifies its own policy</pre></article></div></aside>
 <aside class="selection-note"><strong>目前邊界</strong><span>不要求 PAT、GitHub App、registry token 或空 deployment environment。新 repo 使用 CSARC workflow；既有 repo 保留自己的發布流程。Registry 與 attestation 仍是選配。</span></aside>
       <table class="decision-register" aria-label="版本來源與同步範圍">
         <thead><tr><th>版本範圍</th><th>單一來源</th><th>必須同步</th><th>獨立狀態</th></tr></thead>
@@ -3121,7 +3048,7 @@ html[data-detail-level="simple"] .detail-panel {
         <article class="plan-card enterprise"><h3>Enterprise <span class="plan-state">組織級</span></h3><p><strong>再加上：</strong>SAML SSO／SCIM、internal repo、private/internal 部署保護、私有 Pages、稽核串流與 IP 限制。</p><ul><li>組織／Enterprise Ruleset 可集中治理</li><li>目前只偵測並提示，不自動改組織設定</li></ul></article>
       </div>
       <aside class="selection-note"><strong>部署與例外原則</strong><span><code>plan</code> 先查帳號方案、repo 可見性、repository teams 與 Ruleset API；team 不存在、不可見或沒有 repo write access 時直接停止，不能被 Free private 的降級路徑掩蓋。能力只在 live check 證明可用後啟用，不以預設成熟度或日期判斷。Free private 不支援 team request，也無法強制核准；`governance-comment.yml` 自動輪派一位非作者 reviewer，僅提出 review request，不構成 merge gate。每個暫時例外都用 Issue 記錄提出者、另一位核准者、到期日、證據與復原方式，不能把未執行的檢查寫成通過。完整管理欄位驗證由管理員在可信任 checkout 使用 Administration read 憑證，不把 token 暴露給 PR 程式碼。GitHub 方案升級、不可逆操作與組織權限變更都需 organization owner 另案核准。</span></aside>
-<aside class="config-guidance"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-governance" data-config-index="0" data-config-title="單一來源｜治理只保存高價值選項" data-config-goal="root、生成 repo 與衍生公版共用同一份公開設定，不再維護 profile 或網站專用設定檔。" data-config-file=".csarc/config.yml＋policies/" data-config-code="branch_strategy: delivery  # delivery | main&#10;code_owner: &quot;@organization/team&quot;&#10;reviewers: &quot;@alice,@bob&quot;&#10;project_visibility: private  # public | private | internal&#10;enable_governance_drift_check: false"><span class="config-trigger-title">單一來源｜治理只保存高價值選項</span><span class="config-trigger-file">.csarc/config.yml＋policies/</span><span class="config-trigger-summary">分支、owner、reviewer、可見性與治理漂移選配存在 .csarc/config.yml；低頻 GitHub 原生細節仍留在 policies/。生成 repo 才另含 Copier 來源 metadata。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-governance" data-config-index="1" data-config-title="分開檢查 Ruleset policy、遠端儲存與實際強制能力" data-config-goal="Copier 建檔時可能還沒有遠端 repo；真正套用前再向 GitHub 查詢，避免依使用者手填的方案猜測。" data-config-file="scripts/apply-repository-settings.sh" data-config-code="gh api &quot;repos/$repo&quot;   --jq &#x27;[.owner.login, .owner.type, .visibility, .permissions.admin] | @tsv&#x27;&#10;gh api &quot;orgs/$owner&quot; --jq &#x27;.plan.name&#x27;&#10;gh api &quot;repos/$repo/rulesets&quot;&#10;# Free private keeps the desired policy in the repository.&#10;&#10;./scripts/apply-repository-settings.sh plan"><span class="config-trigger-title">分開檢查 Ruleset policy、遠端儲存與實際強制能力</span><span class="config-trigger-file">scripts/apply-repository-settings.sh</span><span class="config-trigger-summary">先確認登入者具有 repo admin；REST endpoint 判斷 GitHub 是否會強制規則。Free private 的 REST 與 GraphQL mutation 都會回 403；GraphQL query 僅用來偵測管理員是否曾從 Web UI 人工預建。其他未知錯誤會停止。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-governance" data-config-index="2" data-config-title="所有方案都套基本設定並保留政策來源" data-config-goal="Free private repo 不整包放棄；合併方式、Actions 預設權限、標籤與未來要啟用的 Ruleset 都跟著公版。" data-config-file="policies/repository.json＋policies/actions.json＋policies/labels.json" data-config-code="./scripts/apply-repository-settings.sh plan&#10;# Review the APPLY and PRESERVE list first.&#10;./scripts/apply-repository-settings.sh apply&#10;./scripts/apply-repository-settings.sh check"><span class="config-trigger-title">所有方案都套基本設定並保留政策來源</span><span class="config-trigger-file">policies/repository.json＋policies/actions.json＋policies/labels.json</span><span class="config-trigger-summary">Free private 直接套用 squash-only、刪除已合併分支、Actions 預設唯讀與標籤，並在 repo 內保留 ACTIVE Ruleset policy。公開 API 不能建立該 Ruleset，因此輸出保留 DEGRADED。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-governance" data-config-index="3" data-config-title="方案決定 Ruleset 是否成為真正門禁" data-config-goal="Free private 先在 repo 保存相同政策；public、Pro、Team 或 Enterprise 可強制 PR、一位核准、CODEOWNER 與必要檢查。Enterprise 的組織規則仍另審。" data-config-file="policies/rulesets.json＋.github/CODEOWNERS＋.github/REVIEWERS＋governance-comment.yml" data-config-code="# The same policy is stored in every repository and enforced when supported.&#10;required reviews: 1&#10;require CODEOWNER review: true&#10;required checks:&#10;  - verify&#10;  - title&#10;  - scan-pr / osv-scan&#10;  - audit&#10;&#10;# Enterprise organization controls are report-only here."><span class="config-trigger-title">方案決定 Ruleset 是否成為真正門禁</span><span class="config-trigger-file">policies/rulesets.json＋.github/CODEOWNERS＋.github/REVIEWERS＋governance-comment.yml</span><span class="config-trigger-summary">所有方案都先用 repository teams API 驗證 PR 內設定的 team 與 write access；Action 從 base branch 的 REVIEWERS 排除作者後輪派一位個別 reviewer。Free private 仍沒有 team request 或 merge gate。Ruleset 只保留 STAGED／MISSING 與 DEGRADED 紀錄。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-governance" data-config-index="4" data-config-title="治理漂移排程隨生成 repo 選配開啟，本模板 source 不自跑" data-config-goal="本機與生成 repo 都重複使用同一支腳本；需要持續監測時，Copier 選項開啟每日排程、least-privilege 權限、timeout 與 Issue 通知，不必個別重建。" data-config-file="scripts/check-governance-drift＋template/.github/workflows/governance-drift.yml" data-config-code="./scripts/check-governance-drift&#10;&#10;# enable_governance_drift_check=true generates the daily workflow and&#10;# script together; false generates neither. This template&#x27;s own source&#10;# repo keeps the script for local verification but does not schedule it."><span class="config-trigger-title">治理漂移排程隨生成 repo 選配開啟，本模板 source 不自跑</span><span class="config-trigger-file">scripts/check-governance-drift＋template/.github/workflows/governance-drift.yml</span><span class="config-trigger-summary">scripts/check-governance-drift 會呼叫 apply-repository-settings.sh check，可在可信任的本機 checkout 執行。生成 repo 開啟 enable_governance_drift_check 時，薄 Action 每日呼叫同一支程式並開立或更新一張追蹤 Issue；本模板 source repo 不排程。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-governance" data-config-index="5" data-config-title="暫時例外｜用 Issue 保存完整責任" data-config-goal="方案限制與事故復原可以暫時改走人工，但不能把缺少的門禁寫成已啟用。" data-config-file="GitHub Issue＋scripts/apply-repository-settings.sh check" data-config-code="Proposer: @alice&#10;Approver: @bob&#10;Expires: YYYY-MM-DD&#10;Evidence: &lt;exact check or platform limitation&gt;&#10;Recovery: &lt;command and expected result&gt;"><span class="config-trigger-title">暫時例外｜用 Issue 保存完整責任</span><span class="config-trigger-file">GitHub Issue＋scripts/apply-repository-settings.sh check</span><span class="config-trigger-summary">每張例外 Issue 都要有提出者、另一位核准者、到期日、證據與復原方式；復原驗證後才關單，延期需重新核准。</span></button></div></aside><aside id="config-overlay-governance" class="config-overlay" hidden role="region" aria-label="設定實作覆蓋卡"><div class="config-overlay-card"><button class="config-overlay-close" type="button" aria-label="關閉設定實作">×</button><h3></h3><p class="config-overlay-goal"></p><p class="config-overlay-path">設定檔：<code></code></p><pre class="code"></pre></div></aside>
+<aside class="config-guidance" data-content-key="config-governance"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-items"><article class="config-item"><h4>單一來源｜治理只保存高價值選項</h4><p>root、生成 repo 與衍生公版共用同一份公開設定，不再維護 profile 或網站專用設定檔。</p><p class="config-item-path">設定檔：<code>.csarc/config.yml＋policies/</code></p><pre class="code">branch_strategy: delivery  # delivery | main&#10;code_owner: &quot;@organization/team&quot;&#10;reviewers: &quot;@alice,@bob&quot;&#10;project_visibility: private  # public | private | internal&#10;enable_governance_drift_check: false</pre></article><article class="config-item"><h4>分開檢查 Ruleset policy、遠端儲存與實際強制能力</h4><p>Copier 建檔時可能還沒有遠端 repo；真正套用前再向 GitHub 查詢，避免依使用者手填的方案猜測。</p><p class="config-item-path">設定檔：<code>scripts/apply-repository-settings.sh</code></p><pre class="code">gh api &quot;repos/$repo&quot;   --jq &#x27;[.owner.login, .owner.type, .visibility, .permissions.admin] | @tsv&#x27;&#10;gh api &quot;orgs/$owner&quot; --jq &#x27;.plan.name&#x27;&#10;gh api &quot;repos/$repo/rulesets&quot;&#10;# Free private keeps the desired policy in the repository.&#10;&#10;./scripts/apply-repository-settings.sh plan</pre></article><article class="config-item"><h4>所有方案都套基本設定並保留政策來源</h4><p>Free private repo 不整包放棄；合併方式、Actions 預設權限、標籤與未來要啟用的 Ruleset 都跟著公版。</p><p class="config-item-path">設定檔：<code>policies/repository.json＋policies/actions.json＋policies/labels.json</code></p><pre class="code">./scripts/apply-repository-settings.sh plan&#10;# Review the APPLY and PRESERVE list first.&#10;./scripts/apply-repository-settings.sh apply&#10;./scripts/apply-repository-settings.sh check</pre></article><article class="config-item"><h4>方案決定 Ruleset 是否成為真正門禁</h4><p>Free private 先在 repo 保存相同政策；public、Pro、Team 或 Enterprise 可強制 PR、一位核准、CODEOWNER 與必要檢查。Enterprise 的組織規則仍另審。</p><p class="config-item-path">設定檔：<code>policies/rulesets.json＋.github/CODEOWNERS＋.github/REVIEWERS＋governance-comment.yml</code></p><pre class="code"># The same policy is stored in every repository and enforced when supported.&#10;required reviews: 1&#10;require CODEOWNER review: true&#10;required checks:&#10;  - verify&#10;  - title&#10;  - scan-pr / osv-scan&#10;  - audit&#10;&#10;# Enterprise organization controls are report-only here.</pre></article><article class="config-item"><h4>治理漂移排程隨生成 repo 選配開啟，本模板 source 不自跑</h4><p>本機與生成 repo 都重複使用同一支腳本；需要持續監測時，Copier 選項開啟每日排程、least-privilege 權限、timeout 與 Issue 通知，不必個別重建。</p><p class="config-item-path">設定檔：<code>scripts/check-governance-drift＋template/.github/workflows/governance-drift.yml</code></p><pre class="code">./scripts/check-governance-drift&#10;&#10;# enable_governance_drift_check=true generates the daily workflow and&#10;# script together; false generates neither. This template&#x27;s own source&#10;# repo keeps the script for local verification but does not schedule it.</pre></article><article class="config-item"><h4>暫時例外｜用 Issue 保存完整責任</h4><p>方案限制與事故復原可以暫時改走人工，但不能把缺少的門禁寫成已啟用。</p><p class="config-item-path">設定檔：<code>GitHub Issue＋scripts/apply-repository-settings.sh check</code></p><pre class="code">Proposer: @alice&#10;Approver: @bob&#10;Expires: YYYY-MM-DD&#10;Evidence: &lt;exact check or platform limitation&gt;&#10;Recovery: &lt;command and expected result&gt;</pre></article></div></aside>
 <table class="decision-register" aria-label="GitHub 方案與 apply／check 行為對照">
         <thead><tr><th>GitHub 方案與可見性</th><th><code>apply</code> 結果</th><th><code>check</code>／PR／CI/CD 行為</th></tr></thead>
         <tbody>
@@ -3209,7 +3136,6 @@ html[data-detail-level="simple"] .detail-panel {
   <h2>Copier 保持同步，公版也吃自己的規則</h2>
   <p class="subtitle">模板錯誤會一次影響多個專案，因此建立、導入與更新都要實跑。</p>
 </header>
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 的 Python 自動升版與專用 GitHub App 是封存設計。現行三十天觀察規則保留，但由一般受審查 PR 人工更新，不需要 App 或長效 secret。</span></aside>
 <div class="legacy-content"><header>
         <h2>Copier 保持同步，<span class="accent">公版本身也吃自己的規則</span></h2>
         <p class="subtitle"><strong>基本導入。</strong><code>template/</code> 是下發內容唯一來源；root 只因 GitHub 讀取慣例保留公版自己的治理設定，配對檔案由產生腳本從 root 生成 <code>template/</code> 副本。</p>
@@ -3220,7 +3146,7 @@ html[data-detail-level="simple"] .detail-panel {
         <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">Copier＋建立／導入／更新回歸</span></summary><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／導入／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；更新衝突時保持 repo 不變，調整後重跑再由 PR 審查。</p></div></details><p><strong>建立：</strong>共通基線與 Python、Rust、TypeScript 模組各自實跑驗證；多選時合併模組，不建立組合專屬流程。<br><strong>首次導入：</strong>在 repo 外以固定 Release 與完整 SHA 的 CLI 產生 machine plan，再只套用同一份未漂移 plan。第一張 PR 由人核對來源、plan、diff 與本機結果；base 尚無可信任 verifier 時，不執行 PR head 新增的 script，也不宣稱已自動驗證。<br><strong>後續更新：</strong>update dry-run 先預覽；候選內容與衝突全部驗證完成後才修改 target，接著由一般 PR 與 trusted-base checks 審查。<br><strong>更新通知：</strong>選用後每週檢查一次；有新版只建立或更新一張 Issue，不會自動修改 repo。<br><strong>版本：</strong>公版與所有語言模組共用一個 SemVer；各語言基線依自己的穩定版政策前進。</p></details>
       </div>
       <p class="context-line"><strong>root／template 配對檔案｜</strong>逐位元組相同的 workflow、policy、文件、script 與 test 由 <code>scripts/sync-paired-files.sh</code> 以 root 為唯一來源產生；<code>--check</code> 驗證內容與可執行位元。含 Jinja 變數的檔案改由實際生成 repo 的回歸測試確認；<code>AGENTS.md</code>／<code>README.md</code> 等責任不同的內容不強行配對。</p>
-<aside class="config-guidance"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-actions"><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-template-release" data-config-index="0" data-config-title="Copier 只詢問會改變骨架或驗證行為的選項" data-config-goal="不提供關閉型別或秘密掃描的開關；嚴格門檻是公版契約。" data-config-file="copier.yml" data-config-code="languages: [python]&#10;branch_strategy: delivery  # delivery | main&#10;python_support_mode: latest  # latest | minimum&#10;python_min_version: &quot;3.12&quot;  # Used only in minimum mode&#10;coverage_mode: global  # global | diff&#10;coverage_threshold: 80&#10;enable_precommit: false&#10;project_visibility: private  # public defaults CodeQL on&#10;enable_codeql: false         # private/internal require GitHub Code Security&#10;&#10;_skip_if_exists:&#10;  - &quot;src/**&quot;&#10;  - &quot;tests/**&quot;&#10;  - &quot;docs/specs/**&quot;"><span class="config-trigger-title">Copier 只詢問會改變骨架或驗證行為的選項</span><span class="config-trigger-file">copier.yml</span><span class="config-trigger-summary">語言與分支模式都在建立時明確選擇；main 是永久整合線，delivery 模式只為 Milestone 建立短期 dev/m*。_skip_if_exists 保護 src、tests、spec 不被更新覆寫。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-template-release" data-config-index="1" data-config-title="公版 root 鎖工具、跑 OSV，並檢查共用設定沒有漂移" data-config-goal="中央模板不能要求下游做到自己做不到的事；PR 說明模板是唯一刻意差異。" data-config-file="pyproject.toml＋uv.lock＋scripts/verify-template.sh" data-config-code="uv sync --locked&#10;uv lock --check&#10;uv run ruff format --check&#10;uv run ruff check&#10;uv run ty check&#10;./scripts/scan-secrets&#10;# Large repositories may explicitly narrow history:&#10;./scripts/scan-secrets --log-opts=&#x27;--since=2026-01-01&#x27;&#10;uv run zizmor . --format plain&#10;&#10;# Paired root/template policies are diff-checked."><span class="config-trigger-title">公版 root 鎖工具、跑 OSV，並檢查共用設定沒有漂移</span><span class="config-trigger-file">pyproject.toml＋uv.lock＋scripts/verify-template.sh</span><span class="config-trigger-summary">root 以鎖定環境跑 Ruff、ty、完整 Git 歷史、目前工作樹與 Actions 掃描；無 Git 歷史的新案仍掃工作樹，腳本也逐組 diff root／template 的共用政策。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-template-release" data-config-index="2" data-config-title="Python 新功能版本觀察三十天後再人工升級" data-config-goal="保留穩定版觀察期與完整驗證，不假裝已有排程或 GitHub App。" data-config-file="profiles/catalog.yaml＋scripts/update_python_version.py" data-config-code="version_policy:&#10;  stable_release_observation_days: 30&#10;  update_method: manual_reviewed_pull_request&#10;  merge_after_full_verification: manual"><span class="config-trigger-title">Python 新功能版本觀察三十天後再人工升級</span><span class="config-trigger-file">profiles/catalog.yaml＋scripts/update_python_version.py</span><span class="config-trigger-summary">profiles/catalog.yaml 保存三十天觀察規則；維護者以一般受審查 PR 更新支援版本。舊 python-version-policy workflow 留在 archive，沒有 active bot identity。</span></button><button type="button" class="config-trigger" aria-expanded="false" aria-controls="config-overlay-template-release" data-config-index="3" data-config-title="共通基線與每個語言模組都要真的執行" data-config-goal="每個 beta 語言都必須真的建立、導入、更新並執行自己的原生工具。" data-config-file="scripts/verify-template.sh＋profiles/catalog.yaml" data-config-code="./scripts/verify-template.sh&#10;&#10;# Covers global coverage, diff coverage, optional features,&#10;# reusable workflow and copier update.&#10;&#10;ci: {stage: beta, profiles: []}&#10;python: {stage: beta}&#10;typescript: {stage: beta}&#10;go: {stage: future}&#10;rust: {stage: beta}"><span class="config-trigger-title">共通基線與每個語言模組都要真的執行</span><span class="config-trigger-file">scripts/verify-template.sh＋profiles/catalog.yaml</span><span class="config-trigger-summary">共通生命週期由真實 repo 證明；每個語言模組則用可重現測試驗收，同時選取時合併執行，不另外維護組合測試。</span></button></div></aside><aside id="config-overlay-template-release" class="config-overlay" hidden role="region" aria-label="設定實作覆蓋卡"><div class="config-overlay-card"><button class="config-overlay-close" type="button" aria-label="關閉設定實作">×</button><h3></h3><p class="config-overlay-goal"></p><p class="config-overlay-path">設定檔：<code></code></p><pre class="code"></pre></div></aside></div>
+<aside class="config-guidance" data-content-key="config-template-release"><strong>固定與可調政策</strong><p>只列公版主要政策、可調選項與設定位置。</p><div class="config-items"><article class="config-item"><h4>Copier 只詢問會改變骨架或驗證行為的選項</h4><p>不提供關閉型別或秘密掃描的開關；嚴格門檻是公版契約。</p><p class="config-item-path">設定檔：<code>copier.yml</code></p><pre class="code">languages: [python]&#10;branch_strategy: delivery  # delivery | main&#10;python_support_mode: latest  # latest | minimum&#10;python_min_version: &quot;3.12&quot;  # Used only in minimum mode&#10;coverage_mode: global  # global | diff&#10;coverage_threshold: 80&#10;enable_precommit: false&#10;project_visibility: private  # public defaults CodeQL on&#10;enable_codeql: false         # private/internal require GitHub Code Security&#10;&#10;_skip_if_exists:&#10;  - &quot;src/**&quot;&#10;  - &quot;tests/**&quot;&#10;  - &quot;docs/specs/**&quot;</pre></article><article class="config-item"><h4>公版 root 鎖工具、跑 OSV，並檢查共用設定沒有漂移</h4><p>中央模板不能要求下游做到自己做不到的事；PR 說明模板是唯一刻意差異。</p><p class="config-item-path">設定檔：<code>pyproject.toml＋uv.lock＋scripts/verify-template.sh</code></p><pre class="code">uv sync --locked&#10;uv lock --check&#10;uv run ruff format --check&#10;uv run ruff check&#10;uv run ty check&#10;./scripts/scan-secrets&#10;# Large repositories may explicitly narrow history:&#10;./scripts/scan-secrets --log-opts=&#x27;--since=2026-01-01&#x27;&#10;uv run zizmor . --format plain&#10;&#10;# Paired root/template policies are diff-checked.</pre></article><article class="config-item"><h4>Python 新功能版本觀察三十天後再人工升級</h4><p>保留穩定版觀察期與完整驗證，不假裝已有排程或 GitHub App。</p><p class="config-item-path">設定檔：<code>profiles/catalog.yaml＋scripts/update_python_version.py</code></p><pre class="code">version_policy:&#10;  stable_release_observation_days: 30&#10;  update_method: manual_reviewed_pull_request&#10;  merge_after_full_verification: manual</pre></article><article class="config-item"><h4>共通基線與每個語言模組都要真的執行</h4><p>每個 beta 語言都必須真的建立、導入、更新並執行自己的原生工具。</p><p class="config-item-path">設定檔：<code>scripts/verify-template.sh＋profiles/catalog.yaml</code></p><pre class="code">./scripts/verify-template.sh&#10;&#10;# Covers global coverage, diff coverage, optional features,&#10;# reusable workflow and copier update.&#10;&#10;ci: {stage: beta, profiles: []}&#10;python: {stage: beta}&#10;typescript: {stage: beta}&#10;go: {stage: future}&#10;rust: {stage: beta}</pre></article></div></aside></div>
 <div class="markdown-body basic-summary"><ul><li><code>template/</code> 是下發內容來源；root 保留公版本身的 GitHub 治理與 dogfood 設定。</li><li><code>.csarc/config.yml</code> 同時是 Copier 的更新紀錄與 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取，後續擴充也增加設定項目，不另建第二份設定檔。</li><li>新 repo 先選語言與功能，再產生可直接驗證的基線；多個語言只是合併各自模組。</li><li>既有 repo 首次導入時，先用固定版本的 CLI 在本機產生 repo 外的變更清單，再套用同一份清單。第一張 PR 由人確認，因為舊的預設分支還沒有可信任的檢查程式。</li><li>第一次導入合併後，預設分支已有可信任的 PR policy，唯讀 CI 再驗證候選內容；升級仍先預覽，若有衝突就保持 repo 不變，修正後重跑。</li><li>可選的更新通知每週檢查新版；只建立或更新一張 Issue，不會自動修改 repo。</li></ul>
 <details class="package-disclosure" data-content-key="copier-update"><summary><span class="tech-name">Copier＋root dogfood＋建立／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">Copier</a> 記錄來源、語言與答案，能把新版公版套回可自行修改的既有 repo。首次導入先由人確認；後續更新若衝突就不修改 repo，調整後重跑，再以 PR 審查。GitHub Template 只複製一次，PyScaffold 則會形成第二套更新機制，因此不採用。</p></div></details>
 <aside class="technical-detail" data-content-key="template-release-scope"><h3>單一來源、版本基線與 root-only 邊界</h3>
@@ -3382,7 +3308,6 @@ html[data-detail-level="simple"] .detail-panel {
   <h2>回顧當時原則，對照目前實作</h2>
   <p class="subtitle">回顧 2026 年 5 月內部分享的 SDLC 構想，標示目前保留、調整或延後的做法。</p>
 </header>
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 保留五月版與 2026-08 的對照供稽核。現行獨立工作直進 main，Milestone 才用 dev/m*；交付不等於 Release，也沒有 active 成品發布或 deployment workflow。</span></aside>
 <div class="legacy-content"><header>
         <h2>2026/05 內部分享簡報｜<span class="accent">SDLC 盤點</span></h2>
         <p class="subtitle">回顧 2026 年 5 月內部分享的構想：保留方法，修正實作與平台能力假設；點選每列可看三句判斷。</p>
@@ -3770,7 +3695,6 @@ html[data-detail-level="simple"] .detail-panel {
   <h2>規則、理由與刻意不做</h2>
   <p class="subtitle">這些是目前可由檔案與測試證明的決定。</p>
 </header>
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 的 promotion／兩段式 release handoff 是歷史設計。現行 CI 依風險分級；候選 Release Please 版本 PR 與單一 release workflow 預計分別負責審查與發布。</span></aside>
 <div class="legacy-content"><header>
         <span class="selection-sequence">決策附錄</span>
         <h2>關鍵決策｜<span class="accent">規則、理由與刻意不做</span></h2>
@@ -3859,7 +3783,6 @@ html[data-detail-level="simple"] .detail-panel {
   <h2>有骨架，還不是完整平台</h2>
   <p class="subtitle">新 repo、Copier 更新、OSV、Release 與第一個 CI-only pilot 已有證據；其餘邊界仍明列。</p>
 </header>
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 保留舊 run 與當時判斷供稽核；Release Please 已納入單一候選 release workflow，待預設分支實跑；release consumption 與 live-integration 專用 workflows 仍未恢復。</span></aside>
 <div class="legacy-content"><header>
         <span class="selection-sequence">決策附錄</span>
         <h2>外部基準與實測｜<span class="accent">有骨架，還不是完整平台</span></h2>
@@ -4495,41 +4418,17 @@ gh auth status`
       overlay.querySelector('.config-overlay-close').addEventListener('click', closeConfigOverlays);
     });
 
-    // Config-trigger / overlay content is now server-rendered by
-    // render_config_guidance() in scripts/build_decision_site.py from
-    // site/data/config_examples.json, in the page's own language. This
-    // only wires open/close interaction on top of the data-* attributes
-    // that render already emitted; it no longer builds DOM from an
-    // in-memory JS object. A `data-config-direct="true"` guidance block
-    // renders native <details>/<summary> and needs no JS at all.
-    document.querySelectorAll('.decision-slide .config-guidance:not([data-config-direct="true"]) .config-trigger').forEach(trigger => {
-      const overlay = document.getElementById(trigger.getAttribute('aria-controls'));
-      if (!overlay) return;
-      const card = overlay.querySelector('.config-overlay-card');
-      const heading = card.querySelector('h3');
-      const goalField = card.querySelector('.config-overlay-goal');
-      const fileField = card.querySelector('.config-overlay-path code');
-      const codeField = card.querySelector('pre');
-
-      trigger.addEventListener('click', () => {
-        const index = trigger.dataset.configIndex;
-        const isSameOpen = !overlay.hidden && overlay.dataset.itemIndex === index;
-        closeConfigOverlays();
-        if (isSameOpen) return;
-        heading.textContent = trigger.dataset.configTitle;
-        goalField.textContent = trigger.dataset.configGoal;
-        fileField.textContent = trigger.dataset.configFile;
-        // The shortcode HTML-escapes code and uses "&#10;" for newlines
-        // (see config-guidance.html); the browser decodes that entity back
-        // to a real newline when reading the attribute, so no JS unescaping
-        // is needed here.
-        codeField.textContent = trigger.dataset.configCode;
-        overlay.dataset.itemIndex = index;
-        overlay.hidden = false;
-        trigger.setAttribute('aria-expanded', 'true');
-      });
-    });
-
+    // Issue #525: config-guidance content (site/data/config_examples.json,
+    // rendered by render_config_guidance() in
+    // scripts/build_decision_site.py) is now always a static block with
+    // no click-to-reveal trigger of its own -- detail-toggle.css's
+    // simple/technical toggle shows or hides the whole thing directly, so
+    // this file no longer needs to wire up per-item overlay content for
+    // it. The remaining `.config-overlay` instances below belong to the
+    // unrelated setup-trigger/term-trigger widgets on the capability
+    // slide, and to detail-toggle.js's own "維運附錄" overlay (which wires
+    // its own close button already; this listener is a harmless no-op
+    // duplicate for that one).
     document.querySelectorAll('.decision-slide .config-overlay .config-overlay-close').forEach(closeButton => {
       closeButton.addEventListener('click', closeConfigOverlays);
     });
@@ -4550,29 +4449,26 @@ gh auth status`
   const controls = document.querySelector('.detail-level-control');
   const audienceItems = document.querySelectorAll('[data-audience="maintainer"]');
   const languageLinks = document.querySelectorAll('.language-control a');
+  // Issue #525: technical-only content used to be revealed either by
+  // wrapping it in a click-to-expand `.detail-panel` (an animated
+  // grid-collapse) or, for config-guidance, a button plus modal overlay
+  // with a pager -- both "inline expand box" patterns that squeezed
+  // technical content into the same layout as the simple content and
+  // left no room for images. Both are gone now: `.technical-detail`
+  // (the {{< detail >}} shortcode's output) is shown or hidden directly
+  // in its natural page position by detail-toggle.css's
+  // `[data-detail-level]` rules alone, with no JS involved.
+  // `.config-guidance` and the other technical-only elements below still
+  // live inside `.legacy-content` and are shown/hidden directly (no
+  // wrapping, no overlay) via the `legacyDetails` collection.
   const selectors = [
-    '.config-guidance:not(.overview-detail)',
+    '.config-guidance',
     '.tool-deferred',
     '.background-band',
     '.review-note-footer',
-    '.reference',
-    '.technical-detail'
+    '.reference'
   ].join(', ');
 
-  document.querySelectorAll(selectors).forEach(detail => {
-    if (detail.closest('.legacy-content')) return;
-    if (detail.closest('.package-disclosure')) return;
-    const panel = document.createElement('div');
-    const content = document.createElement('div');
-    panel.className = 'detail-panel';
-    panel.dataset.detail = 'technical';
-    content.className = 'detail-panel__content';
-    detail.before(panel);
-    content.append(detail);
-    panel.append(content);
-  });
-
-  const panels = document.querySelectorAll('.detail-panel');
   const legacyDetails = document.querySelectorAll(
     selectors.split(', ').map(selector => `.legacy-content ${selector}`).join(', ')
   );
@@ -4614,93 +4510,6 @@ gh auth status`
       }
     });
     renderTab();
-  });
-
-  document.querySelectorAll('.legacy-content .config-guidance').forEach(guidance => {
-    if (guidance.dataset.configDirect === 'true') return;
-    const actions = guidance.querySelector('.config-actions');
-    const triggers = actions ? [...actions.querySelectorAll('.config-trigger')] : [];
-    const overlay = triggers[0]
-      ? document.getElementById(triggers[0].getAttribute('aria-controls'))
-      : null;
-    const card = overlay?.querySelector('.config-overlay-card');
-    if (!actions || !triggers.length || !overlay || !card) return;
-
-    guidance.classList.add('config-guidance--paged');
-    actions.remove();
-
-    const launcher = document.createElement('button');
-    launcher.type = 'button';
-    launcher.className = 'config-trigger config-tour-trigger';
-    launcher.setAttribute('aria-expanded', 'false');
-    launcher.setAttribute('aria-controls', overlay.id);
-    launcher.innerHTML = `<span class="config-trigger-title">開啟維運設定</span><span class="config-trigger-file">${triggers.length} 項</span><span class="config-trigger-summary">在同一視窗逐項查看設定檔、目的與範例。</span>`;
-    guidance.append(launcher);
-
-    overlay.classList.add('config-overlay--paged');
-    overlay.setAttribute('aria-label', '設定實作導覽');
-
-    const close = card.querySelector('.config-overlay-close');
-    const stage = document.createElement('div');
-    stage.className = 'config-overlay-stage';
-    [...card.children].filter(child => child !== close).forEach(child => stage.append(child));
-
-    const pager = document.createElement('nav');
-    pager.className = 'config-overlay-pager';
-    pager.setAttribute('aria-label', '設定項目切換');
-    const previous = document.createElement('button');
-    previous.type = 'button';
-    previous.textContent = '← 上一項';
-    const status = document.createElement('output');
-    status.setAttribute('aria-live', 'polite');
-    const next = document.createElement('button');
-    next.type = 'button';
-    next.textContent = '下一項 →';
-    pager.append(previous, status, next);
-    card.append(stage, pager);
-
-    function currentIndex() {
-      const value = Number(overlay.dataset.itemIndex);
-      return Number.isInteger(value) ? value : 0;
-    }
-
-    function updatePager(index) {
-      previous.disabled = index === 0;
-      next.disabled = index === triggers.length - 1;
-      status.value = `${index + 1} / ${triggers.length}`;
-      status.textContent = `${index + 1} / ${triggers.length}`;
-    }
-
-    function showPage(index, direction = 1) {
-      if (index < 0 || index >= triggers.length) return;
-      triggers[index].click();
-      launcher.setAttribute('aria-expanded', 'true');
-      updatePager(index);
-      if (!matchMedia('(prefers-reduced-motion: reduce)').matches && stage.animate) {
-        stage.animate(
-          [
-            { opacity: .35, transform: `translateX(${direction * 12}px)` },
-            { opacity: 1, transform: 'translateX(0)' }
-          ],
-          { duration: 180, easing: 'ease-out' }
-        );
-      }
-    }
-
-    launcher.addEventListener('click', () => {
-      if (!overlay.hidden) {
-        close.click();
-        return;
-      }
-      showPage(currentIndex());
-    });
-    previous.addEventListener('click', () => showPage(currentIndex() - 1, -1));
-    next.addEventListener('click', () => showPage(currentIndex() + 1));
-    close.addEventListener('click', () => launcher.setAttribute('aria-expanded', 'false'));
-    new MutationObserver(() => {
-      launcher.setAttribute('aria-expanded', String(!overlay.hidden));
-    }).observe(overlay, { attributes: true, attributeFilter: ['hidden'] });
-    updatePager(0);
   });
 
   const supplementalGuides = {
@@ -4827,10 +4636,6 @@ gh auth status`
     buttons.forEach(button => {
       button.setAttribute('aria-pressed', String(button.dataset.detailLevel === selected));
     });
-    panels.forEach(panel => {
-      panel.inert = simple;
-      panel.setAttribute('aria-hidden', String(simple));
-    });
     legacyDetails.forEach(detail => {
       detail.hidden = simple;
       detail.inert = simple;
@@ -4840,11 +4645,6 @@ gh auth status`
       item.hidden = simple;
       item.inert = simple;
     });
-    if (!simple) {
-      document.querySelectorAll('.config-guidance-fold').forEach(detail => {
-        detail.open = true;
-      });
-    }
     if (simple) {
       document.querySelectorAll('.config-overlay').forEach(overlay => {
         overlay.hidden = true;
