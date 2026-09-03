@@ -17,6 +17,27 @@ check_merge_group = MODULE["check_merge_group"]
 tracker_errors = MODULE["tracker_errors"]
 
 
+@pytest.fixture(autouse=True)
+def _no_network_permission_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default collaborator-permission lookups to unknown, never the network."""
+    monkeypatch.setitem(
+        approval_decision.__globals__,
+        "_collaborator_permission",
+        lambda repo, username: None,
+    )
+
+
+def _stub_permission(
+    monkeypatch: pytest.MonkeyPatch, permission: str | None
+) -> None:
+    """Make every collaborator-permission lookup return one fixed value."""
+    monkeypatch.setitem(
+        approval_decision.__globals__,
+        "_collaborator_permission",
+        lambda repo, username: permission,
+    )
+
+
 def snapshot(*comments: dict[str, Any]) -> dict[str, Any]:
     """Build one valid open lifecycle snapshot."""
     tracker = {
@@ -56,14 +77,12 @@ def comment(
     body: str,
     *,
     author_type: str = "User",
-    author_association: str = "NONE",
 ) -> dict[str, Any]:
     """Build one auditable lifecycle comment."""
     return {
         "body": body,
         "html_url": f"https://github.com/acme/project/issues/80#issuecomment-{number}",
         "user": {"login": author, "type": author_type},
-        "author_association": author_association,
     }
 
 
@@ -99,15 +118,23 @@ def test_missing_independent_approval_fails_closed(
     assert not approval_decision(snapshot(*comments)).allowed
 
 
-def test_owner_self_approval_opens_the_gate_with_reason() -> None:
-    """An owner proposer may self-approve when a reason is given."""
+def test_admin_self_approval_opens_the_gate_with_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A proposer with `admin` repo permission may self-approve.
+
+    This does not key off a comment's `author_association`: that field's
+    visibility depends on whether the commenter's organization membership
+    is public, which the workflow's own token may not be able to see.
+    Repository collaborator permission is unaffected by that setting.
+    """
+    _stub_permission(monkeypatch, "admin")
     result = approval_decision(
         snapshot(
             comment(
                 1,
                 "proposer",
                 "/milestone admin-approve: no reviewer before the deadline",
-                author_association="OWNER",
             )
         )
     )
@@ -119,29 +146,22 @@ def test_owner_self_approval_opens_the_gate_with_reason() -> None:
     )
 
 
-def test_member_self_approval_opens_the_gate_with_reason() -> None:
-    """A MEMBER-association proposer may self-approve too.
-
-    GitHub reports "OWNER" only for repos owned directly by a personal
-    account; on an organization repo, even the org's sole admin account is
-    reported as "MEMBER". This exception exists precisely for organizations
-    with no second human account, so it must work under that association.
-    """
+def test_admin_self_approval_rejects_non_admin_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A proposer without `admin` repo permission may not self-approve."""
+    _stub_permission(monkeypatch, "write")
     result = approval_decision(
         snapshot(
             comment(
                 1,
                 "proposer",
-                "/milestone admin-approve: no reviewer available",
-                author_association="MEMBER",
+                "/milestone admin-approve: outside collaborator",
             )
         )
     )
 
-    assert result.allowed
-    assert result.summary == (
-        "Admin self-approved by proposer (reason: no reviewer available)"
-    )
+    assert not result.allowed
 
 
 @pytest.mark.parametrize(
@@ -150,39 +170,35 @@ def test_member_self_approval_opens_the_gate_with_reason() -> None:
         comment(
             1,
             "proposer",
-            "/milestone admin-approve: outside collaborator",
-            author_association="CONTRIBUTOR",
-        ),
-        comment(
-            1,
-            "proposer",
             "/milestone admin-approve:",
-            author_association="OWNER",
         ),
         comment(
             1,
             "reviewer",
             "/milestone admin-approve: pretending to be the proposer",
-            author_association="OWNER",
         ),
     ],
 )
 def test_admin_self_approval_rejects_impostors_and_empty_reasons(
     admin_comment: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Untrusted association, empty reason, or wrong author bypasses review."""
+    """Empty reason or wrong author bypasses review despite admin permission."""
+    _stub_permission(monkeypatch, "admin")
     assert not approval_decision(snapshot(admin_comment)).allowed
 
 
-def test_ordinary_approval_still_works_alongside_admin_approve() -> None:
+def test_ordinary_approval_still_works_alongside_admin_approve(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A real reviewer approval is reported normally, distinct from a bypass."""
+    _stub_permission(monkeypatch, "admin")
     result = approval_decision(
         snapshot(
             comment(
                 1,
                 "proposer",
                 "/milestone admin-approve: backup path",
-                author_association="OWNER",
             ),
             comment(2, "reviewer", "/milestone approve"),
         )
@@ -192,8 +208,11 @@ def test_ordinary_approval_still_works_alongside_admin_approve() -> None:
     assert result.summary == "Approved by reviewer"
 
 
-def test_unresolved_objection_blocks_admin_self_approval_too() -> None:
+def test_unresolved_objection_blocks_admin_self_approval_too(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """An admin bypass never overrides an outstanding objection."""
+    _stub_permission(monkeypatch, "admin")
     objection = comment(
         2, "skeptic", "/milestone object: Missing rollback plan"
     )
@@ -203,7 +222,6 @@ def test_unresolved_objection_blocks_admin_self_approval_too() -> None:
                 1,
                 "proposer",
                 "/milestone admin-approve: ship now",
-                author_association="OWNER",
             ),
             objection,
         )

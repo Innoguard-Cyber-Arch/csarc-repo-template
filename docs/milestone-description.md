@@ -11,11 +11,13 @@ story；Milestone 只保留足以理解、排程與驗收一次 delivery／relea
 Milestone 名稱完全相同；本文依序掛 `Proposal`／`Completion evidence`／
 `Early termination`／`Promotion` 四個 H2 段落，核准、反駁與提前終止等狀態只寫在
 Issue 內文與留言。核准一律要求非提案者留言 `/milestone approve`；只有當 GitHub
-organization 結構性沒有第二個真人帳號可以核准時，repo owner／admin（`author_association`
-為 `OWNER` 或 `MEMBER`——組織 repo 下唯一真人帳號通常回報為 `MEMBER`，個人帳號 repo
-才回報 `OWNER`）才能對自己提出的 tracker 留言 `/milestone admin-approve: <理由>` 自核，
+organization 結構性沒有第二個真人帳號可以核准時，對該 repo 有 `admin` collaborator
+權限的提案者才能對自己提出的 tracker 留言 `/milestone admin-approve: <理由>` 自核，
 理由必填，且會在 approval 紀錄與 summary 上明確標成「Admin self-approved」，不得與
-一般非提案者核准混淆。
+一般非提案者核准混淆。此判斷查 `GET /repos/{repo}/collaborators/{username}/permission`
+而非留言的 `author_association` 欄位——後者的值會受該帳號的 organization membership
+公開／私密設定影響，若成員關係設為私密，workflow 自己的 `GITHUB_TOKEN` 可能看不到正確
+關係，導致這項檢查不穩定；repo collaborator 權限不受此影響。
 
 ```markdown
 ## Problem
