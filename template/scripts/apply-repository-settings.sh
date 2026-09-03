@@ -439,32 +439,37 @@ errors = []
 for rule_type in ("non_fast_forward", "pull_request", "required_status_checks"):
     if rule_type not in effective_by_type:
         errors.append(f"missing {rule_type} rule")
-desired_pull_request = desired_by_type["pull_request"]["parameters"]
-pull_request_rules = effective_by_type.get("pull_request", [])
-if pull_request_rules:
-    if max(rule.get("required_approving_review_count", 0) for rule in pull_request_rules) < desired_pull_request["required_approving_review_count"]:
-        errors.append("approval requirement is too weak")
-    for setting in (
-        "dismiss_stale_reviews_on_push",
-        "require_code_owner_review",
-        "require_last_push_approval",
-        "required_review_thread_resolution",
-    ):
-        if desired_pull_request[setting] and not any(rule.get(setting) for rule in pull_request_rules):
-            errors.append(f"{setting} is not enforced")
+    if rule_type not in desired_by_type:
+        errors.append(f"policy is missing a {rule_type} rule")
 
-desired_checks = {
-    check["context"]
-    for check in desired_by_type["required_status_checks"]["parameters"]["required_status_checks"]
-}
-effective_checks = {
-    check["context"]
-    for rule in effective_by_type.get("required_status_checks", [])
-    for check in rule.get("required_status_checks", [])
-}
-missing_checks = sorted(desired_checks - effective_checks)
-if missing_checks:
-    errors.append("missing required checks: " + ", ".join(missing_checks))
+if "pull_request" in desired_by_type:
+    desired_pull_request = desired_by_type["pull_request"]["parameters"]
+    pull_request_rules = effective_by_type.get("pull_request", [])
+    if pull_request_rules:
+        if max(rule.get("required_approving_review_count", 0) for rule in pull_request_rules) < desired_pull_request["required_approving_review_count"]:
+            errors.append("approval requirement is too weak")
+        for setting in (
+            "dismiss_stale_reviews_on_push",
+            "require_code_owner_review",
+            "require_last_push_approval",
+            "required_review_thread_resolution",
+        ):
+            if desired_pull_request[setting] and not any(rule.get(setting) for rule in pull_request_rules):
+                errors.append(f"{setting} is not enforced")
+
+if "required_status_checks" in desired_by_type:
+    desired_checks = {
+        check["context"]
+        for check in desired_by_type["required_status_checks"]["parameters"]["required_status_checks"]
+    }
+    effective_checks = {
+        check["context"]
+        for rule in effective_by_type.get("required_status_checks", [])
+        for check in rule.get("required_status_checks", [])
+    }
+    missing_checks = sorted(desired_checks - effective_checks)
+    if missing_checks:
+        errors.append("missing required checks: " + ", ".join(missing_checks))
 
 if errors:
     raise SystemExit("; ".join(errors))
