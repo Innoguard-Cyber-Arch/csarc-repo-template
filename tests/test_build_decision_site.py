@@ -281,27 +281,34 @@ def test_config_guidance_unknown_track_raises() -> None:
         raise AssertionError("expected BuildError")
 
 
-def test_config_guidance_overlay_mode_preserves_blank_line_in_code() -> None:
-    data = _empty_data()
-    data.config_examples["tracks"]["pr"] = _CONFIG_TRACK
-    html = render_config_guidance("pr", lang="en", data=data)
-    assert html.count('class="config-trigger"') == 1
-    assert 'aria-controls="config-overlay-pr"' in html
-    assert 'data-config-code="line one&#10;&#10;line two"' in html
-    assert '<div class="config-actions">' in html
-    assert '<aside id="config-overlay-pr" class="config-overlay" hidden' in html
-
-
-def test_config_guidance_direct_mode_renders_inline_pre() -> None:
-    data = _empty_data()
-    data.config_examples["tracks"]["method"] = {
-        **_CONFIG_TRACK,
-        "direct": True,
-    }
-    html = render_config_guidance("method", lang="en", data=data)
-    assert html.count('class="config-inline-detail"') == 1
-    assert '<pre class="code">line one&#10;&#10;line two</pre>' in html
-    assert "config-overlay" not in html  # only the overlay path needs one
+def test_config_guidance_renders_one_static_block_regardless_of_direct() -> (
+    None
+):
+    # Issue #525: the old fold-open/overlay-with-pager split collapsed into
+    # one static block -- the simple/technical toggle alone (see
+    # detail-toggle.css's `.config-guidance` rule) decides whether readers
+    # see it at all, so the `direct` field no longer changes the markup.
+    for direct in (False, True):
+        data = _empty_data()
+        track = {**_CONFIG_TRACK, "direct": direct}
+        data.config_examples["tracks"]["pr"] = track
+        html = render_config_guidance("pr", lang="en", data=data)
+        assert html == (
+            '<aside class="config-guidance" data-content-key="config-pr">'
+            "<strong>Policy</strong><p>Intro</p>"
+            '<div class="config-items">'
+            '<article class="config-item">'
+            "<h4>Title</h4><p>Goal</p>"
+            '<p class="config-item-path">Config file: <code>a.yml</code></p>'
+            '<pre class="code">line one&#10;&#10;line two</pre>'
+            "</article></div></aside>"
+        )
+        # No click-to-reveal layer of any kind survives: no trigger button,
+        # no fold, no overlay markup.
+        assert "config-trigger" not in html
+        assert "config-guidance-fold" not in html
+        assert "config-overlay" not in html
+        assert "<details" not in html
 
 
 def test_config_guidance_matches_real_governance_item_newlines() -> None:
@@ -325,8 +332,8 @@ def test_config_guidance_matches_real_governance_item_newlines() -> None:
             .replace(">", "&gt;")
             .replace("\n", "&#10;")
         )
-        assert f'data-config-code="{expected_code}"' in html
-        assert f'data-config-title="{item["title"][lang]}"' in html
+        assert f'<pre class="code">{expected_code}</pre>' in html
+        assert f"<h4>{item['title'][lang]}</h4>" in html
 
 
 # --- similar tools -----------------------------------------------------

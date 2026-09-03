@@ -4,29 +4,26 @@
   const controls = document.querySelector('.detail-level-control');
   const audienceItems = document.querySelectorAll('[data-audience="maintainer"]');
   const languageLinks = document.querySelectorAll('.language-control a');
+  // Issue #525: technical-only content used to be revealed either by
+  // wrapping it in a click-to-expand `.detail-panel` (an animated
+  // grid-collapse) or, for config-guidance, a button plus modal overlay
+  // with a pager -- both "inline expand box" patterns that squeezed
+  // technical content into the same layout as the simple content and
+  // left no room for images. Both are gone now: `.technical-detail`
+  // (the {{< detail >}} shortcode's output) is shown or hidden directly
+  // in its natural page position by detail-toggle.css's
+  // `[data-detail-level]` rules alone, with no JS involved.
+  // `.config-guidance` and the other technical-only elements below still
+  // live inside `.legacy-content` and are shown/hidden directly (no
+  // wrapping, no overlay) via the `legacyDetails` collection.
   const selectors = [
-    '.config-guidance:not(.overview-detail)',
+    '.config-guidance',
     '.tool-deferred',
     '.background-band',
     '.review-note-footer',
-    '.reference',
-    '.technical-detail'
+    '.reference'
   ].join(', ');
 
-  document.querySelectorAll(selectors).forEach(detail => {
-    if (detail.closest('.legacy-content')) return;
-    if (detail.closest('.package-disclosure')) return;
-    const panel = document.createElement('div');
-    const content = document.createElement('div');
-    panel.className = 'detail-panel';
-    panel.dataset.detail = 'technical';
-    content.className = 'detail-panel__content';
-    detail.before(panel);
-    content.append(detail);
-    panel.append(content);
-  });
-
-  const panels = document.querySelectorAll('.detail-panel');
   const legacyDetails = document.querySelectorAll(
     selectors.split(', ').map(selector => `.legacy-content ${selector}`).join(', ')
   );
@@ -68,93 +65,6 @@
       }
     });
     renderTab();
-  });
-
-  document.querySelectorAll('.legacy-content .config-guidance').forEach(guidance => {
-    if (guidance.dataset.configDirect === 'true') return;
-    const actions = guidance.querySelector('.config-actions');
-    const triggers = actions ? [...actions.querySelectorAll('.config-trigger')] : [];
-    const overlay = triggers[0]
-      ? document.getElementById(triggers[0].getAttribute('aria-controls'))
-      : null;
-    const card = overlay?.querySelector('.config-overlay-card');
-    if (!actions || !triggers.length || !overlay || !card) return;
-
-    guidance.classList.add('config-guidance--paged');
-    actions.remove();
-
-    const launcher = document.createElement('button');
-    launcher.type = 'button';
-    launcher.className = 'config-trigger config-tour-trigger';
-    launcher.setAttribute('aria-expanded', 'false');
-    launcher.setAttribute('aria-controls', overlay.id);
-    launcher.innerHTML = `<span class="config-trigger-title">開啟維運設定</span><span class="config-trigger-file">${triggers.length} 項</span><span class="config-trigger-summary">在同一視窗逐項查看設定檔、目的與範例。</span>`;
-    guidance.append(launcher);
-
-    overlay.classList.add('config-overlay--paged');
-    overlay.setAttribute('aria-label', '設定實作導覽');
-
-    const close = card.querySelector('.config-overlay-close');
-    const stage = document.createElement('div');
-    stage.className = 'config-overlay-stage';
-    [...card.children].filter(child => child !== close).forEach(child => stage.append(child));
-
-    const pager = document.createElement('nav');
-    pager.className = 'config-overlay-pager';
-    pager.setAttribute('aria-label', '設定項目切換');
-    const previous = document.createElement('button');
-    previous.type = 'button';
-    previous.textContent = '← 上一項';
-    const status = document.createElement('output');
-    status.setAttribute('aria-live', 'polite');
-    const next = document.createElement('button');
-    next.type = 'button';
-    next.textContent = '下一項 →';
-    pager.append(previous, status, next);
-    card.append(stage, pager);
-
-    function currentIndex() {
-      const value = Number(overlay.dataset.itemIndex);
-      return Number.isInteger(value) ? value : 0;
-    }
-
-    function updatePager(index) {
-      previous.disabled = index === 0;
-      next.disabled = index === triggers.length - 1;
-      status.value = `${index + 1} / ${triggers.length}`;
-      status.textContent = `${index + 1} / ${triggers.length}`;
-    }
-
-    function showPage(index, direction = 1) {
-      if (index < 0 || index >= triggers.length) return;
-      triggers[index].click();
-      launcher.setAttribute('aria-expanded', 'true');
-      updatePager(index);
-      if (!matchMedia('(prefers-reduced-motion: reduce)').matches && stage.animate) {
-        stage.animate(
-          [
-            { opacity: .35, transform: `translateX(${direction * 12}px)` },
-            { opacity: 1, transform: 'translateX(0)' }
-          ],
-          { duration: 180, easing: 'ease-out' }
-        );
-      }
-    }
-
-    launcher.addEventListener('click', () => {
-      if (!overlay.hidden) {
-        close.click();
-        return;
-      }
-      showPage(currentIndex());
-    });
-    previous.addEventListener('click', () => showPage(currentIndex() - 1, -1));
-    next.addEventListener('click', () => showPage(currentIndex() + 1));
-    close.addEventListener('click', () => launcher.setAttribute('aria-expanded', 'false'));
-    new MutationObserver(() => {
-      launcher.setAttribute('aria-expanded', String(!overlay.hidden));
-    }).observe(overlay, { attributes: true, attributeFilter: ['hidden'] });
-    updatePager(0);
   });
 
   const supplementalGuides = {
@@ -281,10 +191,6 @@
     buttons.forEach(button => {
       button.setAttribute('aria-pressed', String(button.dataset.detailLevel === selected));
     });
-    panels.forEach(panel => {
-      panel.inert = simple;
-      panel.setAttribute('aria-hidden', String(simple));
-    });
     legacyDetails.forEach(detail => {
       detail.hidden = simple;
       detail.inert = simple;
@@ -294,11 +200,6 @@
       item.hidden = simple;
       item.inert = simple;
     });
-    if (!simple) {
-      document.querySelectorAll('.config-guidance-fold').forEach(detail => {
-        detail.open = true;
-      });
-    }
     if (simple) {
       document.querySelectorAll('.config-overlay').forEach(overlay => {
         overlay.hidden = true;

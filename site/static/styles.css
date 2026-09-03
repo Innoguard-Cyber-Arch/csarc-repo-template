@@ -827,90 +827,27 @@
     }
     .config-guidance > strong { display: block; color: var(--ink); }
     .config-guidance > p { margin: 1px 0 6px; color: var(--muted); font-size: 18px; }
-    .config-guidance-fold > summary {
-      position: relative;
-      padding-right: 34px;
-      color: var(--ink);
-      cursor: pointer;
-      font-weight: 850;
-      list-style: none;
-    }
-    .config-guidance-fold > summary::-webkit-details-marker { display: none; }
-    .config-guidance-fold > summary::after {
-      position: absolute;
-      top: 50%;
-      right: 0;
-      width: 24px;
-      height: 24px;
-      border: 1px solid var(--line);
-      border-radius: 50%;
-      background: white;
-      content: "+";
-      font-size: 20px;
-      line-height: 21px;
-      text-align: center;
-      transform: translateY(-50%);
-    }
-    .config-guidance-fold[open] > summary::after { content: "−"; }
-    .config-guidance-fold > summary:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
-    .config-guidance-fold > p { margin: 5px 0 6px; color: var(--muted); font-size: 18px; }
-    .config-actions {
+    /* Issue #525: config-guidance is now one static block (no
+       click-to-expand `<details>` fold or per-item disclosure) --
+       .config-items lists every item directly, in the page's own flow,
+       so the simple/technical toggle alone decides whether it's visible
+       at all (see detail-toggle.css's `.config-guidance` rule). */
+    .config-items {
       display: grid;
-      grid-template-columns: 1fr;
-      gap: 4px;
+      gap: 6px;
+      margin-top: 6px;
     }
-    .config-guidance[data-config-direct="true"] .config-actions { grid-template-columns: 1fr; }
-    .config-guidance[data-config-direct="true"] .config-trigger {
-      grid-template-columns: minmax(0, 29%) minmax(0, 71%);
-      grid-template-areas: "title summary";
-      min-height: 0;
-      padding: 5px 9px;
-      text-align: left;
-    }
-    .config-guidance[data-config-direct="true"] .config-trigger-file { display: none; }
-    .config-guidance[data-config-direct="true"] .config-trigger-summary {
-      display: block;
-      font-size: 15px;
-      line-height: 1.15;
-    }
-    .config-guidance[data-config-direct="true"] .config-trigger-title::after { content: ""; }
-    .config-inline-detail {
+    .config-item {
+      padding: 8px 10px;
       border: 1px solid var(--line);
       border-left: 4px solid #b9a700;
       background: white;
     }
-    .config-inline-detail + .config-inline-detail { margin-top: 4px; }
-    .config-inline-detail > summary {
-      position: relative;
-      display: block;
-      padding: 5px 36px 5px 9px;
-      cursor: pointer;
-      list-style: none;
-    }
-    .config-inline-detail > summary::-webkit-details-marker { display: none; }
-    .config-inline-detail > summary::after {
-      position: absolute;
-      top: 50%;
-      right: 9px;
-      content: "+";
-      font-size: 20px;
-      font-weight: 850;
-      transform: translateY(-50%);
-    }
-    .config-inline-detail[open] > summary::after { content: "−"; }
-    .config-inline-detail > summary:focus-visible { outline: 3px solid var(--yellow); outline-offset: 1px; }
-    .config-inline-detail .config-trigger-title { display: block; }
-    .config-inline-detail .config-trigger-summary { display: block; margin-top: 2px; font-size: 15px; line-height: 1.2; overflow-wrap: anywhere; }
-    .config-inline-body {
-      max-height: 190px;
-      padding: 8px 10px 10px;
-      overflow: auto;
-      border-top: 1px solid var(--line);
-    }
-    .config-inline-body p { font-size: 16px; line-height: 1.22; }
-    .config-inline-path { margin-top: 5px; }
-    .config-inline-path code { margin-left: 4px; color: #174f8b; font-weight: 750; }
-    .config-inline-body pre { margin: 6px 0 0; font-size: 14px; }
+    .config-item h4 { margin: 0 0 3px; font-size: 18px; font-weight: 750; }
+    .config-item p { margin: 0; font-size: 16px; line-height: 1.22; color: #4f4f4f; }
+    .config-item-path { margin-top: 4px; }
+    .config-item-path code { margin-left: 4px; color: #174f8b; font-weight: 750; }
+    .config-item pre.code { margin: 6px 0 0; max-height: 190px; overflow: auto; font-size: 14px; }
     .config-trigger {
       display: grid;
       grid-template-columns: minmax(0, 57%) minmax(0, 43%);
