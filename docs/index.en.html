@@ -1673,7 +1673,14 @@ html[data-detail-level="technical"] .detail-level-control button[aria-pressed="t
   white-space: normal;
 }
 
-html[data-detail-level="simple"] .legacy-slide > .basic-header,
+.legacy-slide > .basic-header {
+  /* Duplicate title/subtitle block from _render_header(); the real
+     header already lives in .legacy-content. Always hidden regardless
+     of detail level -- unlike .basic-summary below, this one was never
+     meant to become visible in technical mode. */
+  display: none;
+}
+
 html[data-detail-level="simple"] .legacy-slide > .basic-summary {
   display: none;
 }
