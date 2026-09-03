@@ -38,7 +38,18 @@ if [[ -z "$repo" ]]; then
 fi
 ruleset_payload="$repo_root/policies/rulesets.json"
 release_policy="$repo_root/policies/releases.json"
+# issue_creation_policy has no REST field (an invalid value is silently
+# ignored and the field never appears in REST GET responses), so it is kept
+# out of policies/repository.json's flat REST PATCH and declared here
+# instead; it is only readable/writable through the GraphQL API.
+issue_creation_policy_payload="$repo_root/policies/issue-creation.json"
+# security_and_analysis requires GitHub Advanced Security on a private repo
+# (free on public). A rejected nested field can fail the entire repos/$repo
+# PATCH atomically, so it is kept out of policies/repository.json and PATCHed
+# in its own dedicated call instead.
+security_scanning_payload="$repo_root/policies/security-scanning.json"
 ruleset_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["name"])' "$ruleset_payload")"
+desired_issue_creation_policy="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["issue_creation_policy"])' "$issue_creation_policy_payload")"
 legacy_ruleset_name="CSARC preserve dev next"
 code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"
 
@@ -192,6 +203,30 @@ PY
     <<<"$graphql_state"
 }
 
+load_issue_creation_policy() {
+  local graphql_result
+  if ! graphql_result="$(
+    # GraphQL variables are intentionally literal in the query document.
+    # shellcheck disable=SC2016
+    gh api graphql \
+      -f query='query($owner: String!, $name: String!) {
+        repository(owner: $owner, name: $name) { issueCreationPolicy }
+      }' \
+      -f owner="$owner" \
+      -f name="${repo#*/}" 2>&1
+  )"; then
+    issue_creation_policy_error="$graphql_result"
+    return 1
+  fi
+  if ! issue_creation_policy_live="$(
+    python3 -c 'import json,sys; print(json.loads(sys.argv[1])["data"]["repository"]["issueCreationPolicy"])' \
+      "$graphql_result" 2>&1
+  )"; then
+    issue_creation_policy_error="$issue_creation_policy_live"
+    return 1
+  fi
+}
+
 ruleset_enforcement_available=true
 ruleset_inventory_available=true
 ruleset_skip_reason=""
@@ -297,6 +332,67 @@ PY
     elif [[ -z "$repository_drift" ]]; then
       echo "Repository settings match policies/repository.json."
     fi
+  fi
+
+  issue_creation_policy_error=""
+  if ! load_issue_creation_policy; then
+    echo "Cannot inspect issue creation policy for $repo." >&2
+    echo "$issue_creation_policy_error" >&2
+    check_errors=$((check_errors + 1))
+  elif [[ "$issue_creation_policy_live" != "$desired_issue_creation_policy" ]]; then
+    echo "Issue creation policy drift: desired $desired_issue_creation_policy, live $issue_creation_policy_live." >&2
+    check_errors=$((check_errors + 1))
+  else
+    echo "Issue creation policy matches policies/issue-creation.json."
+  fi
+
+  # security_and_analysis is compared per field using the same repository
+  # GET response fetched above; desired "enabled" but live "disabled" (or
+  # missing) is treated as DEGRADED (a plan/GHAS limitation), any other
+  # mismatch is treated as actionable drift. This mirrors the "DEGRADED
+  # Actions PR policy" true-vs-false heuristic used for Actions permissions.
+  if [[ "$repository_state_available" != "true" ]]; then
+    echo "Cannot inspect security_and_analysis for $repo: repository settings were not observable." >&2
+    check_errors=$((check_errors + 1))
+  elif ! security_and_analysis_status="$(python3 - "$security_scanning_payload" "$repository_state" 2>&1 <<'PY'
+import json
+import sys
+
+desired = json.load(open(sys.argv[1], encoding="utf-8"))["security_and_analysis"]
+actual = (json.loads(sys.argv[2]) or {}).get("security_and_analysis") or {}
+for field, expected in desired.items():
+    expected_status = expected["status"]
+    observed = (actual.get(field) or {}).get("status")
+    if observed == expected_status:
+        print(f"MATCH|{field}|{observed}")
+    elif expected_status == "enabled" and observed in (None, "disabled"):
+        print(f"DEGRADED|{field}|{observed}")
+    else:
+        print(f"DRIFT|{field}|{observed}")
+PY
+  )"; then
+    echo "Cannot compare security_and_analysis for $repo." >&2
+    echo "$security_and_analysis_status" >&2
+    check_errors=$((check_errors + 1))
+  else
+    while IFS='|' read -r security_field_kind security_field_name security_field_value; do
+      [[ -z "$security_field_kind" ]] && continue
+      case "$security_field_kind" in
+        MATCH)
+          echo "security_and_analysis.$security_field_name matches policies/security-scanning.json (enabled)."
+          ;;
+        DEGRADED)
+          [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
+            echo "::warning title=Security scanning degraded::security_and_analysis.$security_field_name is disabled although policy requests it."
+          echo "DEGRADED security_and_analysis.$security_field_name: desired enabled, live ${security_field_value:-disabled}; GitHub Advanced Security or an organization/plan policy may block this capability on this repository."
+          check_degraded=$((check_degraded + 1))
+          ;;
+        DRIFT)
+          echo "security_and_analysis drift: $security_field_name desired enabled, live ${security_field_value:-unknown}." >&2
+          check_errors=$((check_errors + 1))
+          ;;
+      esac
+    done <<<"$security_and_analysis_status"
   fi
 
   if ! release_state="$(gh api "repos/$repo/immutable-releases" 2>&1)"; then
@@ -499,8 +595,10 @@ echo "Account plan: $plan_label"
 echo "Repository visibility: $repo_visibility"
 echo "Deployment plan:"
 echo "- APPLY policies/repository.json"
+echo "- APPLY policies/issue-creation.json (issue_creation_policy via GraphQL)"
 echo "- APPLY policies/releases.json (immutable Releases)"
 echo "- APPLY policies/actions.json when account policy permits it"
+echo "- APPLY policies/security-scanning.json (security_and_analysis) when GitHub Advanced Security or repository visibility permits it"
 echo "- APPLY policies/labels.json (create or update policy labels)"
 if [[ "$legacy_ruleset_id" != "-" ]]; then
   echo "- DELETE stale Ruleset: $legacy_ruleset_name ($legacy_ruleset_id)"
@@ -550,6 +648,27 @@ if [[ "$mode" == "plan" ]]; then
   exit 0
 fi
 gh api --method PATCH "repos/$repo" --input "$repo_root/policies/repository.json" >/dev/null
+# REST has no issue_creation_policy field, so this is applied through the
+# GraphQL updateRepository mutation instead of the flat PATCH above. This
+# capability has not been observed to be plan/visibility-gated, so a failure
+# here is treated as a hard error like the other required baseline settings.
+repository_node_id="$(gh api "repos/$repo" --jq .node_id)"
+if ! issue_creation_policy_apply_error="$(
+  # GraphQL variables are intentionally literal in the mutation document.
+  # shellcheck disable=SC2016
+  gh api graphql \
+    -f query='mutation($id: ID!, $policy: RepositoryIssueCreationPolicy!) {
+      updateRepository(input: {repositoryId: $id, issueCreationPolicy: $policy}) {
+        repository { issueCreationPolicy }
+      }
+    }' \
+    -f id="$repository_node_id" \
+    -f policy="$desired_issue_creation_policy" 2>&1
+)"; then
+  echo "Cannot apply issue creation policy for $repo." >&2
+  echo "$issue_creation_policy_apply_error" >&2
+  exit 1
+fi
 if ! release_policy_error="$(
   gh api --method PUT "repos/$repo/immutable-releases" 2>&1
 )"; then
@@ -569,6 +688,24 @@ if ! actions_policy_error="$(
   else
     echo "Cannot apply Actions workflow permissions for $repo." >&2
     echo "$actions_policy_error" >&2
+    exit 1
+  fi
+fi
+
+# security_and_analysis gets its own dedicated PATCH (never merged into the
+# repository.json PATCH above): a rejected nested field would fail that
+# whole request atomically, taking basic unrelated settings down with it.
+security_and_analysis_applied=true
+if ! security_and_analysis_error="$(
+  gh api --method PATCH "repos/$repo" --input "$security_scanning_payload" 2>&1
+)"; then
+  if [[ "$security_and_analysis_error" =~ (403|422|Advanced\ Security|not\ permitted) ]]; then
+    security_and_analysis_applied=false
+    echo "DEGRADED security_and_analysis: $security_and_analysis_error"
+    echo "GitHub Advanced Security or an organization/plan policy may block secret scanning, push protection, or Dependabot security updates on this repository."
+  else
+    echo "Cannot apply security_and_analysis settings for $repo." >&2
+    echo "$security_and_analysis_error" >&2
     exit 1
   fi
 fi
@@ -615,7 +752,8 @@ if [[ "$ruleset_enforcement_available" == true ]]; then
 fi
 
 GH_REPO="$repo" "$0" check
-if [[ "$ruleset_enforcement_available" == true && "$actions_policy_applied" == true ]]; then
+if [[ "$ruleset_enforcement_available" == true && "$actions_policy_applied" == true &&
+  "$security_and_analysis_applied" == true ]]; then
   echo "Required repository settings applied, including branch protection."
 else
   echo "DEGRADED repository settings applied; unavailable policy remains declarative and runtime workflows adapt."
