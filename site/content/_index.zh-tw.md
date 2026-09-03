@@ -81,6 +81,34 @@ fit = "符合畫面"
 {{< /basic >}}
 {{< /slide >}}
 
+{{< slide key="install" parity="supplemental" eyebrow="安裝說明" title="一個指令，自動判斷目前該做什麼" subtitle="`csarc status` 讀 `.csarc/config.yml`、Copier 版本與 policies/ 現況，決定結果、不靠 agent 自由判斷。" class="dense" legacy="false" >}}
+不管是新 repo、舊 repo 還是已經導入過公版的 repo，都先執行同一個指令：
+
+```bash
+csarc status <path> --json
+```
+
+指令只讀取本機檔案與（若已導入）GitHub 上的公版版本、repository 設定，不會寫入任何東西。輸出的 `state` 欄位剛好對應下表五種情境之一，`next_command` 欄位直接給出下一步該執行的指令；同一個狀態重複執行永遠得到同一個結果。
+
+| 狀態（`state`） | 判斷依據 | 下一步 |
+| --- | --- | --- |
+| `create`（新 repo 建立） | 目標路徑不存在，或存在但是空目錄 | `csarc init <path>`：先 `--dry-run` 預覽，確認後加 `--yes --non-interactive` |
+| `adopt`（舊 repo 導入） | 目標已存在內容，但沒有 `.csarc/config.yml` | `csarc adopt <path>`：先寫出 dry-run 計畫，審查後用 `--apply-plan` 套用 |
+| `update`（有可用更新） | 已有 `.csarc/config.yml`，其中記錄的 Copier revision 落後目前可用版本 | `csarc update <path> --check` 預覽差異，確認後執行 `csarc update <path>` |
+| `current`（已是最新，不用做事） | Copier revision 已是最新，且 `policies/` 與 GitHub 上實際設定一致 | 不需要動作 |
+| `policy-only-update`（已是最新，但政策設定變了） | Copier revision 已是最新，但 `policies/`（例如允不允許 workaround）與 GitHub 上實際設定不一致 | `scripts/apply-repository-settings.sh plan` 預覽，確認後 `apply`；**不必**重新走一次完整 adopt／update |
+
+{{< detail key="install-policy-only" title="為什麼「已最新版但政策異動」不用重新導入" >}}
+政策設定（分支保護、必要檢查、標籤、CODEOWNER 規則）記錄在 `policies/*.json`，由 `scripts/apply-repository-settings.sh` 直接讀取並套用到 GitHub，跟 Copier 範本檔案是兩件事：改政策不需要改到任何範本檔案，Copier revision 也不會變。`csarc status` 偵測到「revision 相同、但 `apply-repository-settings.sh check` 回報落差」時回傳 `policy-only-update`，直接指向 `plan`／`apply` 這個既有、單獨的流程，不會建議重跑整個 adopt 或 update。
+
+若 `apply-repository-settings.sh check` 本身跑不動（例如 `gh` 未登入、沒有網路），`csarc status` 不會冒然回報「政策已變」；會退回 `current` 並在 `policy_check.available` 標示 `false`，保留由人工再次確認。
+{{< /detail >}}
+
+{{< detail key="install-agent" title="給 agent 的一個 prompt" >}}
+安裝流程的完整契約在 [`docs/agent-install.md`](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/agent-install.md)：agent 一律先執行 `csarc status`，依回傳的 `state` 走上表對應流程，不自行判斷現在是哪一種情境。判斷邏輯全部寫在 CLI 裡（`detect_install_state`），agent 只負責呼叫與依結果行動，同一個 repo 狀態不會因為換一次 agent 執行就得到不同答案。
+{{< /detail >}}
+{{< /slide >}}
+
 {{< slide key="flow" track="flow" eyebrow="CI/CD 流程" title="模板會帶你走完每次變更" subtitle="依表單填寫、提交 PR、查看結果；模板負責準備正確設定並指出要修正的地方。" class="legacy-slide pipeline-slide" legacy="true" >}}
 {{< legacy >}}
       <header>

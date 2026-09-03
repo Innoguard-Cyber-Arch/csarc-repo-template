@@ -14,11 +14,25 @@
 3. Run the CLI from the verified release commit:
    `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<verified-full-sha>'`.
    `uv` obtains an isolated Python when needed; never require a global Python
-   installation or edit a shell profile or global environment. Run the
-   requested `csarc init`, `adopt`, or `update` command as a dry-run first;
-   `adopt` and `adopt --finalize` default to dry-run when no `--apply-plan` is
-   supplied. For a release-specific request, pass both `--to` and
-   `--expected-sha`. Before `init` or `adopt`, confirm the project description,
+   installation or edit a shell profile or global environment. Before doing
+   anything else, run `csarc status <path> --json` (append `csarc` to the
+   `uvx` invocation above). It deterministically classifies the repository
+   into exactly one of five states — `create`, `adopt`, `update`, `current`,
+   or `policy-only-update` — from `.csarc/config.yml`, the pinned Copier
+   revision, and `policies/` drift; the classification logic lives entirely
+   in the CLI, so never infer the state from context, memory, or free-form
+   judgment, and running it again against unchanged repository state always
+   returns the same answer. Follow the returned `next_command`: for
+   `create`, `adopt`, or `update`, run the matching `csarc init`, `adopt`, or
+   `update` command as a dry-run first; `adopt` and `adopt --finalize`
+   default to dry-run when no `--apply-plan` is supplied. `current` needs no
+   action. `policy-only-update` means the Copier revision is already current
+   but live repository settings have drifted from `policies/`; skip Copier
+   entirely and run `scripts/apply-repository-settings.sh plan`, then
+   `apply` after the confirmation in step 5 — never rerun a full adopt or
+   update just to change a policy setting. For a release-specific request,
+   pass both `--to` and `--expected-sha`. Before `init` or `adopt`, confirm
+   the project description,
    shortest working product command, and security reporting channel. For an
    existing repository, separately confirm an optional repository-relative
    executable `project_verification_hook`; the product run command is never a

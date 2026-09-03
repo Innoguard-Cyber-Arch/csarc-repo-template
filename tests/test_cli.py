@@ -8,6 +8,7 @@ import re
 import shlex
 import stat
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -4369,6 +4370,391 @@ def test_update_check_reports_capability_drift_at_same_revision(
     assert payload["answers_changed"] is False
     assert payload["capabilities_changed"] is True
     assert payload["update_available"] is True
+
+
+def fake_policy_check(
+    mode: str,
+) -> Callable[[Path], subprocess.CompletedProcess[str]]:
+    """Build a deterministic stand-in for one policy-drift check outcome."""
+
+    def run(target: Path) -> subprocess.CompletedProcess[str]:
+        args = [str(target / "scripts" / "apply-repository-settings.sh")]
+        if mode == "match":
+            return subprocess.CompletedProcess(
+                args, 0, "All observable repository settings match policy.\n"
+            )
+        if mode == "drift":
+            return subprocess.CompletedProcess(
+                args,
+                1,
+                "",
+                "Ruleset settings drift: missing required checks: verify\n"
+                "Repository settings check failed with 1 actionable "
+                "difference(s).\n",
+            )
+        if mode == "transient-failure":
+            return subprocess.CompletedProcess(
+                args,
+                1,
+                "",
+                "Cannot determine Ruleset capability for owner/repo.\n"
+                "gh: Secondary rate limit reached; wait and retry "
+                "(HTTP 403)\n",
+            )
+        return subprocess.CompletedProcess(
+            args, 1, "", "Install and authenticate GitHub CLI first.\n"
+        )
+
+    return run
+
+
+def write_policy_check_script(project: Path, mode: str) -> None:
+    """Install one deterministic check-mode fake into a project fixture."""
+    if mode == "match":
+        body = (
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            'test "${1:-}" = check\n'
+            "echo 'All observable repository settings match policy.'\n"
+        )
+    elif mode == "drift":
+        body = (
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            'test "${1:-}" = check\n'
+            "echo 'Ruleset settings drift: missing required checks: verify' "
+            ">&2\n"
+            "echo 'Repository settings check failed with 1 actionable "
+            "difference(s).' >&2\n"
+            "exit 1\n"
+        )
+    elif mode == "transient-failure":
+        body = (
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            'test "${1:-}" = check\n'
+            "echo 'Cannot determine Ruleset capability for owner/repo.' >&2\n"
+            "echo 'gh: Secondary rate limit reached; wait and retry "
+            "(HTTP 403)' >&2\n"
+            "exit 1\n"
+        )
+    else:
+        body = (
+            "#!/usr/bin/env bash\nset -euo pipefail\n"
+            'test "${1:-}" = check\n'
+            "echo 'Install and authenticate GitHub CLI first.'\nexit 1\n"
+        )
+    write_executable(project / "scripts" / "apply-repository-settings.sh", body)
+
+
+def test_install_state_detects_create_for_missing_or_empty_target(
+    tmp_path: Path,
+) -> None:
+    """Classify a missing or empty target as create, never adopt."""
+    missing = tmp_path / "missing-project"
+    missing_state = cli.detect_install_state(missing)["state"]
+    assert missing_state == cli.INSTALL_STATE_CREATE
+
+    empty = tmp_path / "empty-project"
+    empty.mkdir()
+    empty_state = cli.detect_install_state(empty)["state"]
+    assert empty_state == cli.INSTALL_STATE_CREATE
+
+    non_empty = tmp_path / "non-empty-project"
+    non_empty.mkdir()
+    (non_empty / "file.txt").write_text("content\n", encoding="utf-8")
+    assert (
+        cli.detect_install_state(non_empty)["state"] != cli.INSTALL_STATE_CREATE
+    )
+
+
+def test_install_state_detects_adopt_for_repository_without_config(
+    tmp_path: Path,
+) -> None:
+    """Classify an existing repository with no CSARC config as adopt."""
+    project = tmp_path / "legacy-project"
+    project.mkdir()
+    (project / "README.md").write_text("legacy project\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: legacy project")
+
+    result = cli.detect_install_state(project)
+    assert result["state"] == cli.INSTALL_STATE_ADOPT
+    assert "csarc adopt" in result["next_command"]
+
+
+def test_install_state_does_not_detect_adopt_once_csarc_managed(
+    tmp_path: Path,
+) -> None:
+    """Do not classify a repository with CSARC config as adopt."""
+    _source, project, first_sha = initialize_project(tmp_path)
+    result = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("match"),
+    )
+    assert result["state"] != cli.INSTALL_STATE_ADOPT
+
+
+def test_install_state_detects_update_when_revision_is_behind(
+    tmp_path: Path,
+) -> None:
+    """Classify a pinned revision behind the target release as update."""
+    source, project, first_sha = initialize_project(tmp_path)
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    second_sha = commit(source, "test: template version two")
+
+    behind = cli.detect_install_state(
+        project, requested=second_sha, allow_unreleased=True
+    )
+    assert behind["state"] == cli.INSTALL_STATE_UPDATE
+    assert behind["update_status"]["update_available"] is True
+
+    current = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("match"),
+    )
+    assert current["state"] != cli.INSTALL_STATE_UPDATE
+
+
+def test_install_state_detects_current_when_policy_settings_match(
+    tmp_path: Path,
+) -> None:
+    """Classify a current revision with matching policy settings as current."""
+    _source, project, first_sha = initialize_project(tmp_path)
+    result = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("match"),
+    )
+    assert result["state"] == cli.INSTALL_STATE_CURRENT
+    assert result["policy_check"] == {
+        "available": True,
+        "detail": "All observable repository settings match policy.",
+        "drifted": False,
+    }
+
+
+def test_install_state_detects_policy_only_update_when_settings_drift(
+    tmp_path: Path,
+) -> None:
+    """Classify a current revision with drifted policy as policy-only-update."""
+    _source, project, first_sha = initialize_project(tmp_path)
+    result = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("drift"),
+    )
+    assert result["state"] == cli.INSTALL_STATE_POLICY_ONLY
+    assert result["policy_check"]["drifted"] is True
+    assert "policies/" in result["reason"]
+
+    not_drifted = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("match"),
+    )
+    assert not_drifted["state"] != cli.INSTALL_STATE_POLICY_ONLY
+
+
+def test_install_state_reports_current_when_policy_check_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    """Fail closed to current, not policy-only-update, when unauthenticated."""
+    _source, project, first_sha = initialize_project(tmp_path)
+    result = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("unavailable"),
+    )
+    assert result["state"] == cli.INSTALL_STATE_CURRENT
+    assert result["policy_check"]["available"] is False
+    assert result["policy_check"]["drifted"] is None
+
+
+def test_install_state_reports_current_when_policy_check_fails_transiently(
+    tmp_path: Path,
+) -> None:
+    """Fail closed to current on a non-marker `gh api` hard stop.
+
+    Reproduces the PR #566 review finding: `apply-repository-settings.sh
+    check` hard-stops before its own check loop with "Cannot determine
+    Ruleset capability for $repo." whenever `gh api repos/$repo/rulesets`
+    fails with anything other than the one GitHub Free plan message it
+    specifically recognizes -- a plausible transient or rate-limited
+    failure. That message never matched any of the three originally
+    hardcoded "unavailable" markers, so it used to be misclassified as
+    confirmed drift (`available=True, drifted=True`) and would have told
+    an agent to run `apply` against live GitHub settings even though the
+    check never actually completed.
+    """
+    _source, project, first_sha = initialize_project(tmp_path)
+    result = cli.detect_install_state(
+        project,
+        requested=first_sha,
+        allow_unreleased=True,
+        policy_check=fake_policy_check("transient-failure"),
+    )
+    assert result["state"] == cli.INSTALL_STATE_CURRENT
+    assert result["policy_check"]["available"] is False
+    assert result["policy_check"]["drifted"] is None
+
+
+def test_classify_policy_check_flags_transient_failure_unavailable() -> None:
+    """Classify a non-marker `gh api` hard stop as unavailable, not drift.
+
+    Direct reproduction of the reviewer's first experiment against PR #566:
+    piping a `CompletedProcess` carrying the script's "Cannot determine
+    Ruleset capability" hard-stop message through `classify_policy_check`
+    used to return `available=True, drifted=True` because that message
+    matched none of the three hardcoded unavailable markers.
+    """
+    result = subprocess.CompletedProcess(
+        ["scripts/apply-repository-settings.sh", "check"],
+        1,
+        "",
+        "Cannot determine Ruleset capability for owner/repo.\n"
+        "gh: Secondary rate limit reached; wait and retry (HTTP 403)\n",
+    )
+    policy = cli.classify_policy_check(result)
+    assert policy.available is False
+    assert policy.drifted is None
+
+
+def test_classify_policy_check_reports_missing_script_as_unavailable(
+    tmp_path: Path,
+) -> None:
+    """Classify a missing script as unavailable, not confirmed drift.
+
+    Direct reproduction of the reviewer's second experiment against PR
+    #566: piping `run_policy_settings_check`'s result for a target with no
+    `scripts/apply-repository-settings.sh` through `classify_policy_check`
+    used to return `available=True, drifted=True` because "scripts/
+    apply-repository-settings.sh is missing." matched none of the three
+    hardcoded unavailable markers either.
+    """
+    result = cli.run_policy_settings_check(tmp_path)
+    policy = cli.classify_policy_check(result)
+    assert policy.available is False
+    assert policy.drifted is None
+
+
+def test_run_policy_settings_check_reports_missing_script(
+    tmp_path: Path,
+) -> None:
+    """Report a missing policy script instead of raising an exception."""
+    result = cli.run_policy_settings_check(tmp_path)
+    assert result.returncode == 127
+    assert "missing" in result.stderr
+
+
+def test_status_command_reports_create_without_writes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Report the create state as plain JSON without touching the target."""
+    target = tmp_path / "brand-new"
+    assert main(["status", str(target), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["state"] == cli.INSTALL_STATE_CREATE
+    assert not target.exists()
+
+
+def test_status_command_reports_adopt_in_human_readable_form(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Print a human-readable state, reason, and next command by default."""
+    project = tmp_path / "legacy-project"
+    project.mkdir()
+    (project / "README.md").write_text("legacy project\n", encoding="utf-8")
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: legacy project")
+
+    assert main(["status", str(project)]) == 0
+    output = capsys.readouterr().out
+    assert "Install state: adopt" in output
+    assert "csarc adopt" in output
+
+
+def test_status_command_reports_update_available(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Report update via the CLI when the pinned revision is stale."""
+    source, project, _first_sha = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated project")
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    second_sha = commit(source, "test: template version two")
+    capsys.readouterr()
+
+    assert (
+        main(
+            [
+                "status",
+                str(project),
+                "--to",
+                second_sha,
+                "--allow-unreleased",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["state"] == cli.INSTALL_STATE_UPDATE
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_state"),
+    [
+        ("match", cli.INSTALL_STATE_CURRENT),
+        ("drift", cli.INSTALL_STATE_POLICY_ONLY),
+        ("transient-failure", cli.INSTALL_STATE_CURRENT),
+    ],
+)
+def test_status_command_end_to_end_policy_only_update(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mode: str,
+    expected_state: str,
+) -> None:
+    """Run the real target policy script through the status subcommand."""
+    _source, project, first_sha = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated project")
+    write_policy_check_script(project, mode)
+    capsys.readouterr()
+
+    assert (
+        main(
+            [
+                "status",
+                str(project),
+                "--to",
+                first_sha,
+                "--allow-unreleased",
+                "--json",
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["state"] == expected_state
 
 
 def test_non_interactive_writes_require_yes(tmp_path: Path) -> None:

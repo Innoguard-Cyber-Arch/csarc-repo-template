@@ -12,7 +12,7 @@ import stat
 import subprocess
 import sys
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -52,6 +52,29 @@ RELEASE_WRITER_MARKERS = (
     "ncipollo/release-action@",
     "softprops/action-gh-release@",
 )
+INSTALL_STATE_CREATE = "create"
+INSTALL_STATE_ADOPT = "adopt"
+INSTALL_STATE_UPDATE = "update"
+INSTALL_STATE_CURRENT = "current"
+INSTALL_STATE_POLICY_ONLY = "policy-only-update"
+INSTALL_STATE_NEXT_COMMAND = {
+    INSTALL_STATE_CREATE: (
+        "csarc init <path> --dry-run to preview, then --yes --non-interactive"
+    ),
+    INSTALL_STATE_ADOPT: (
+        "csarc adopt <path> to write a dry-run plan, review it, then "
+        "csarc adopt <path> --apply-plan <plan>"
+    ),
+    INSTALL_STATE_UPDATE: (
+        "csarc update <path> --check to preview, then csarc update <path>"
+    ),
+    INSTALL_STATE_CURRENT: "no action needed",
+    INSTALL_STATE_POLICY_ONLY: (
+        "scripts/apply-repository-settings.sh plan to preview, then "
+        "scripts/apply-repository-settings.sh apply"
+    ),
+}
+POLICY_CHECK_COMPLETED_MARKER = "Repository settings check failed with"
 LEGACY_MILESTONE_HEADINGS = (
     "problem",
     "outcome",
@@ -237,6 +260,15 @@ class ResolvedPlan:
         if self.adoption is not None:
             result["adoption"] = self.adoption
         return result
+
+
+@dataclass(frozen=True)
+class PolicyCheckResult:
+    """Outcome of comparing live repository settings with checked-in policy."""
+
+    available: bool
+    drifted: bool | None
+    detail: str
 
 
 @dataclass(frozen=True)
@@ -4320,6 +4352,187 @@ def update_status(
     return status, target_revision, previous
 
 
+def repository_target_is_new(target: Path) -> bool:
+    """Return whether a target is unwritten: missing or an empty directory.
+
+    Mirrors the `init` scope check in `validate_copy_target` so the two
+    functions never disagree about what counts as a brand-new project.
+    """
+    return not target.exists() or not any(target.iterdir())
+
+
+def run_policy_settings_check(
+    target: Path,
+) -> subprocess.CompletedProcess[str]:
+    """Run one target's own read-only repository policy-drift check."""
+    script = target / "scripts" / "apply-repository-settings.sh"
+    if not script.is_file():
+        return subprocess.CompletedProcess(
+            [str(script), "check"],
+            127,
+            "",
+            "scripts/apply-repository-settings.sh is missing.",
+        )
+    return run([str(script), "check"], cwd=target, capture=True, check=False)
+
+
+def classify_policy_check(
+    result: subprocess.CompletedProcess[str],
+) -> PolicyCheckResult:
+    """Classify one policy-drift check without guessing at ambiguous output.
+
+    `scripts/apply-repository-settings.sh check` either runs its full
+    comparison to completion -- exit 0 for a clean match, or exit 1 with its
+    own `POLICY_CHECK_COMPLETED_MARKER` summary line once it has counted at
+    least one actionable difference -- or it hard-stops early on something
+    it cannot recover from: missing/unauthenticated `gh`, an unidentifiable
+    repository, unreadable repository metadata, a transient or
+    rate-limited `gh api` call (for example its own "Cannot determine
+    Ruleset capability" guard), an unusable invocation, or a missing script.
+    Keying off the script's own completion marker -- rather than
+    enumerating every hard-stop message the script can print -- means any
+    hard-stop path the script has today or gains later is treated as
+    unavailable by default instead of silently being misread as confirmed
+    drift.
+    """
+    output = "\n".join(
+        part for part in (result.stdout, result.stderr) if part
+    ).strip()
+    if result.returncode == 0:
+        return PolicyCheckResult(True, False, output or "no drift detected")
+    if POLICY_CHECK_COMPLETED_MARKER in output:
+        return PolicyCheckResult(True, True, output or "policy drift detected")
+    return PolicyCheckResult(False, None, output or "policy check unavailable")
+
+
+def detect_install_state(
+    target: Path,
+    *,
+    requested: str | None = None,
+    expected_sha: str | None = None,
+    allow_unreleased: bool = False,
+    accept_legacy: bool = False,
+    from_release: str | None = None,
+    client: ReleaseClient | None = None,
+    policy_check: (
+        Callable[[Path], subprocess.CompletedProcess[str]] | None
+    ) = None,
+) -> dict[str, object]:
+    """Deterministically classify a target into one of five install states.
+
+    Reads only `.csarc/config.yml` (or legacy Copier answers), the pinned
+    Copier revision, and `policies/` drift; it never infers a state from
+    free-form judgment, so repeated runs against unchanged repository state
+    always return the same classification. The five states are: `create`
+    (no target yet, or an empty directory), `adopt` (an existing repository
+    without CSARC configuration), `update` (a pinned Copier revision behind
+    the resolved target release), `current` (revision and policy settings
+    both match), and `policy-only-update` (revision matches but the live
+    repository policy settings have drifted from `policies/`).
+    """
+    if repository_target_is_new(target):
+        return {
+            "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_CREATE],
+            "reason": f"{target} does not exist or is an empty directory.",
+            "state": INSTALL_STATE_CREATE,
+        }
+    answers_path = config_path(target)
+    if not answers_path.is_file():
+        return {
+            "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_ADOPT],
+            "reason": (
+                f"{target} has no {CONFIG_FILE}; it is not yet CSARC-managed."
+            ),
+            "state": INSTALL_STATE_ADOPT,
+        }
+    status, _target_revision, _previous = update_status(
+        target,
+        requested,
+        expected_sha=expected_sha,
+        allow_unreleased=allow_unreleased,
+        accept_legacy=accept_legacy,
+        from_release=from_release,
+        client=client,
+    )
+    if status["update_available"]:
+        return {
+            "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_UPDATE],
+            "reason": (
+                f"Copier revision {status['current_sha']} is behind "
+                f"target {status['target_sha']}."
+            ),
+            "state": INSTALL_STATE_UPDATE,
+            "update_status": status,
+        }
+    check_result = (policy_check or run_policy_settings_check)(target)
+    policy = classify_policy_check(check_result)
+    policy_report = {
+        "available": policy.available,
+        "detail": policy.detail,
+        "drifted": policy.drifted,
+    }
+    if not policy.available:
+        return {
+            "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_CURRENT],
+            "policy_check": policy_report,
+            "reason": (
+                "Copier revision is current; repository policy drift could "
+                f"not be checked: {policy.detail}"
+            ),
+            "state": INSTALL_STATE_CURRENT,
+            "update_status": status,
+        }
+    if policy.drifted:
+        return {
+            "next_command": (
+                INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_POLICY_ONLY]
+            ),
+            "policy_check": policy_report,
+            "reason": (
+                "Copier revision is current; repository policy settings "
+                "have drifted from policies/."
+            ),
+            "state": INSTALL_STATE_POLICY_ONLY,
+            "update_status": status,
+        }
+    return {
+        "next_command": INSTALL_STATE_NEXT_COMMAND[INSTALL_STATE_CURRENT],
+        "policy_check": policy_report,
+        "reason": (
+            "Copier revision and repository policy settings are both current."
+        ),
+        "state": INSTALL_STATE_CURRENT,
+        "update_status": status,
+    }
+
+
+def command_status(args: argparse.Namespace) -> int:
+    """Report the deterministic install state without changing anything."""
+    raw_target = args.path.expanduser()
+    target = (
+        raw_target.resolve()
+        if repository_target_is_new(raw_target)
+        else resolve_repository_target(raw_target)
+    )
+    result = detect_install_state(
+        target,
+        requested=args.to,
+        expected_sha=args.expected_sha,
+        allow_unreleased=args.allow_unreleased,
+        accept_legacy=args.accept_legacy,
+        from_release=args.from_release,
+    )
+    result["target"] = str(target)
+    if args.json:
+        print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+    else:
+        print(f"Target: {result['target']}")
+        print(f"Install state: {result['state']}")
+        print(f"Reason: {result['reason']}")
+        print(f"Next: {result['next_command']}")
+    return 0
+
+
 def update_plan_answers(  # noqa: C901
     answers: dict[str, object],
     explicit_data: dict[str, str],
@@ -4687,6 +4900,21 @@ def parser() -> argparse.ArgumentParser:
         "--data", action="append", default=[], metavar="KEY=VALUE"
     )
     add_write_options(update)
+
+    status = subparsers.add_parser(
+        "status",
+        help=(
+            "the one-prompt entry point: deterministically classify a "
+            "repository as create/adopt/update/current/policy-only-update"
+        ),
+    )
+    status.add_argument("path", nargs="?", type=Path, default=Path.cwd())
+    status.add_argument("--to", metavar="RELEASE_OR_SHA")
+    status.add_argument("--expected-sha", metavar="FULL_SHA")
+    status.add_argument("--from-release", metavar="RELEASE")
+    status.add_argument("--accept-legacy", action="store_true")
+    status.add_argument("--allow-unreleased", action="store_true")
+    status.add_argument("--json", action="store_true")
     return result
 
 
@@ -4698,6 +4926,8 @@ def main(arguments: list[str] | None = None) -> int:
             raise CliError("Native Windows is unsupported; run csarc in WSL2.")
         if args.command in {"init", "adopt"}:
             return command_copy(args, args.command)
+        if args.command == "status":
+            return command_status(args)
         if args.json and not args.check:
             raise CliError("--json is only valid with update --check.")
         return command_update(args)
