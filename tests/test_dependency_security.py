@@ -131,3 +131,9 @@ def test_restored_files_have_no_archive_copy() -> None:
     assert not (
         archive / "template-workflows/template-update.yml.jinja"
     ).exists()
+    # Issue #592: milestone-lifecycle and CodeQL were restored under a new
+    # design without their stale archive copies being removed in the same
+    # change -- keep that from drifting back.
+    assert not (archive / "root-workflows/milestone-policy.yml").exists()
+    assert not (archive / "template-workflows/milestone-policy.yml").exists()
+    assert not (archive / "template-workflows/codeql.yml.jinja").exists()
