@@ -31,7 +31,6 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
         "issues",
         "pull-requests",
         "statuses",
-        "administration",
     }
     assert workflow["jobs"]["release"]["timeout-minutes"] == 30
     assert "googleapis/release-please-action@45996ed1" in source
