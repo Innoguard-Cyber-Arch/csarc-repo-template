@@ -10,7 +10,11 @@ story；Milestone 只保留足以理解、排程與驗收一次 delivery／relea
 `Milestone 8: Interactive docs and policy alignment`。冒號後的文字必須與 GitHub
 Milestone 名稱完全相同；本文依序掛 `Proposal`／`Completion evidence`／
 `Early termination`／`Promotion` 四個 H2 段落，核准、反駁與提前終止等狀態只寫在
-Issue 內文與留言。
+Issue 內文與留言。核准一律要求非提案者留言 `/milestone approve`；只有當 GitHub
+organization 結構性沒有第二個真人帳號可以核准時，repo owner（`author_association`
+為 `OWNER`）才能對自己提出的 tracker 留言 `/milestone admin-approve: <理由>` 自核，
+理由必填，且會在 approval 紀錄與 summary 上明確標成「Admin self-approved」，不得與
+一般非提案者核准混淆。
 
 ```markdown
 ## Problem

@@ -233,15 +233,17 @@ def tracker_errors(snapshot: dict[str, Any]) -> list[str]:
 
 def _approval_records(
     snapshot: dict[str, Any], proposer: str | None
-) -> tuple[set[str], dict[str, str], set[str]]:
-    """Collect valid approvals, objections, and objection withdrawals."""
+) -> tuple[set[str], dict[str, str], set[str], dict[str, str]]:
+    """Collect valid approvals, objections, withdrawals, and admin self-approvals."""
     approvals: set[str] = set()
     objections: dict[str, str] = {}
     resolved: set[str] = set()
+    admin_approvals: dict[str, str] = {}
     for comment in snapshot.get("comments", []):
         body = comment.get("body")
         author = comment.get("user", {}).get("login")
         author_type = comment.get("user", {}).get("type")
+        author_association = comment.get("author_association")
         url = comment.get("html_url")
         if not isinstance(body, str) or not isinstance(author, str):
             continue
@@ -252,6 +254,16 @@ def _approval_records(
             if author != proposer and author_type != "Bot":
                 approvals.add(author)
             continue
+        if command.startswith("/milestone admin-approve:"):
+            reason = command.removeprefix("/milestone admin-approve:").strip()
+            if (
+                reason
+                and author == proposer
+                and author_type != "Bot"
+                and author_association == "OWNER"
+            ):
+                admin_approvals[author] = reason
+            continue
         if command.startswith("/milestone object:") and isinstance(url, str):
             if command.removeprefix("/milestone object:").strip():
                 objections[url] = author
@@ -260,13 +272,15 @@ def _approval_records(
             target = command.removeprefix("/milestone resolve:").strip()
             if objections.get(target) == author:
                 resolved.add(target)
-    return approvals, objections, resolved
+    return approvals, objections, resolved, admin_approvals
 
 
 def approval_decision(
     snapshot: dict[str, Any], *, require_open: bool = True
 ) -> Decision:
-    """Require one non-proposer approval and no unresolved objection."""
+    """Require one non-proposer approval, or an owner's self-approval, and no
+    unresolved objection.
+    """
     errors = tracker_errors(snapshot)
     item = tracker(snapshot)
     if errors or item is None:
@@ -276,8 +290,10 @@ def approval_decision(
             False, "The lifecycle Issue must remain open while work runs"
         )
     proposer = item.get("user", {}).get("login")
-    approvals, objections, resolved = _approval_records(snapshot, proposer)
-    if not approvals:
+    approvals, objections, resolved, admin_approvals = _approval_records(
+        snapshot, proposer
+    )
+    if not approvals and not admin_approvals:
         return Decision(False, "A person other than the proposer must approve")
     unresolved = sorted(set(objections) - resolved)
     if unresolved:
@@ -285,7 +301,13 @@ def approval_decision(
             False,
             f"Resolve {len(unresolved)} objection(s) before work continues",
         )
-    return Decision(True, f"Approved by {', '.join(sorted(approvals))}")
+    if approvals:
+        return Decision(True, f"Approved by {', '.join(sorted(approvals))}")
+    admins = ", ".join(
+        f"{author} (reason: {reason})"
+        for author, reason in sorted(admin_approvals.items())
+    )
+    return Decision(True, f"Admin self-approved by {admins}")
 
 
 def _completed_closure(snapshot: dict[str, Any], body: str) -> Decision:
