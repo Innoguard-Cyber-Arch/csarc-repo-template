@@ -64,7 +64,7 @@ CSARC 有兩種完全不同的情境，各自需要的工具不同：**使用 cs
 | uv | 一律需要；即使選 `ci`，生成專案的 `./scripts/verify` 仍以 `uv run --no-project python` 執行檢查腳本 | `brew install uv` | `winget install --id=astral-sh.uv -e`；沒有 winget 時用官方安裝腳本 `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 \| iex"`（見 [uv 安裝文件](https://docs.astral.sh/uv/getting-started/installation/)） |
 | Node.js 24+ | 只有選 `typescript` 語言模組時需要 | `brew install node` | `winget install --id OpenJS.NodeJS.LTS -e` |
 | pnpm 11 | 只有選 `typescript` 語言模組時需要 | `brew install pnpm` | `winget install -e --id pnpm.pnpm` |
-| rustup／Cargo | 只有選 `rust` 語言模組時需要 | `brew install rustup`（keg-only，安裝後執行一次 `rustup-init`）；或官方腳本 `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` | `winget install -e --id Rustlang.Rustup` |
+| rustup／Cargo | 只有選 `rust` 語言模組時需要 | `brew install rustup`（keg-only；該 formula 已不再提供 `rustup-init`，只需把 `$(brew --prefix rustup)/bin` 加入 `PATH` 即完成安裝）；或官方腳本 `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` | `winget install -e --id Rustlang.Rustup` |
 
 Windows 請在 WSL2（Ubuntu）內操作 repo 本身與 `csarc` CLI；上表 Windows 欄位的 winget／choco 指令供在原生 Windows 單獨安裝個別工具時使用（例如先裝 `git`／`gh` 再進 WSL2），macOS／WSL2 內的 Ubuntu 安裝範例見[內部網站附錄](docs/index.html)。
 
@@ -73,7 +73,7 @@ Windows 請在 WSL2（Ubuntu）內操作 repo 本身與 `csarc` CLI；上表 Win
 除了上表的 `uv`、`gh` 外，另需要：
 
 - **pnpm 11、rustup／Cargo**：完整跑 `./scripts/verify-template.sh` 會依序產生並驗證 Python、TypeScript、Rust 三種語言模組各自的原生驗證器（見 `tests/test_language_profiles.py`），三者都要具備；只跑日常 PR gate `./scripts/verify-fast` 通常不需要 rustup／Cargo，除非變更觸發模板 smoke test。安裝指令同上表。
-- **Hugo 0.165.0（Extended）**：只有 macOS 需要手動安裝——`scripts/install-hugo` 在 Darwin 上會直接要求先用 Homebrew 安裝；Linux（含 WSL2）由該腳本自動下載固定版本並快取，不需手動安裝。macOS：`brew install hugo`；原生 Windows：`winget install Hugo.Hugo.Extended`（或 `choco install hugo-extended`），但實際建置仍請在 WSL2 內執行。
+- **決策網站建置不需要額外工具。** `scripts/build-decision-site` 背後的 `scripts/build_decision_site.py` 是純 stdlib Python（見該檔案開頭註解），不再依賴 Hugo 或任何外部渲染器；只要有上表的 `uv`（或系統 `python3`）即可重建 `docs/index.html`／`docs/index.en.html`。
 - **gitleaks、actionlint、ShellCheck、OSV-Scanner：不需要手動安裝。** `scripts/verify-template.sh`／`scripts/verify-fast` 呼叫的 `scripts/install-gitleaks`／`install-actionlint`／`install-shellcheck`／`install-osv-scanner` 會在 macOS／Linux（含 WSL2）上自動下載、驗證 checksum 並快取固定版本，第一次執行只需要網路存取。以下指令僅供想在編輯器或本機獨立使用這些工具時參考：
 
   | 工具 | macOS（Homebrew） | Windows（winget／Chocolatey） |
