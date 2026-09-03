@@ -42,21 +42,16 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert "release_policy.py prepare-candidate" in source
     assert "./scripts/verify-release-candidate" in source
     assert "scripts/release_bundle.py prepare" in source
-    assert "scripts/release_bundle.py verify" in source
-    assert "releases/assets/$asset_id" in source
-    assert "gh release edit" in source
-    assert "for attempt in $(seq 1 12)" in source
-    assert "gh release verify" in source
+    assert "./scripts/publish-release stage" in source
+    assert "./scripts/publish-release resolve" in source
+    assert "./scripts/publish-release publish" in source
+    assert "./scripts/publish-release rerun-verify" in source
     assert "secrets.GITHUB_TOKEN" in source
     assert "PAT" not in source
     assert "create-github-app-token" not in source
     assert "release_policy.py release" not in source
     assert "/actions/workflows/" not in source
     assert "source_run_id" not in source
-    # A shell double-quoted --jq argument must escape its own literal quotes,
-    # so the merged-commit comparison reads as \"$GITHUB_SHA\" in source.
-    assert r".merge_commit_sha == \"$GITHUB_SHA\"" in source
-    assert 'jq -r .merge_commit_sha <<<"$pr"' in source
 
     settings = (ROOT / "scripts/apply-repository-settings.sh").read_text(
         encoding="utf-8"
@@ -77,6 +72,32 @@ def test_release_workflow_is_one_capability_aware_pipeline() -> None:
     assert "status=failure\nif (" in candidate
     assert 'publish_status "$status"' in candidate
 
+    # The publish stage (Issue #589) is a single implementation: release.yml
+    # calls scripts/publish-release for staging, state resolution,
+    # publishing, and rerun verification instead of keeping its own copy of
+    # this bash. See tests/test_release_publish.py for behavioral proof
+    # (mocked `gh`) that the extracted script does what these strings say.
+    publish = (ROOT / "scripts/publish-release").read_text(encoding="utf-8")
+    assert 'release_bundle.py" prepare' in publish
+    assert 'release_bundle.py" finalize' in publish
+    assert 'release_bundle.py" verify' in publish
+    assert "releases/assets/$asset_id" in publish
+    assert "gh release edit" in publish
+    assert "for attempt in $(seq 1 12)" in publish
+    assert "gh release verify" in publish
+    assert '"$repo_root/scripts/converge-release-tag"' in publish
+    assert '"$repo_root/scripts/verify-release-candidate"' in publish
+    assert "scripts/install-syft" in publish
+    # A shell double-quoted --jq argument must escape its own literal quotes,
+    # so the merged-commit comparison reads as \"$sha\" in the script.
+    assert r".merge_commit_sha == \"$sha\"" in publish
+    assert 'jq -r .merge_commit_sha <<<"$pr"' in publish
+    # A failed publish reverts a still-mutable Release back to draft instead
+    # of leaving a half-public Release; extracted from the old separate
+    # "Keep a failed mutable release in draft" step into this same script.
+    assert "revert_to_draft_on_failure" in publish
+    assert "trap revert_to_draft_on_failure EXIT" in publish
+
 
 def test_release_converges_a_repeated_or_concurrent_run_to_one_release() -> (
     None
@@ -93,12 +114,10 @@ def test_release_converges_a_repeated_or_concurrent_run_to_one_release() -> (
     workflow = yaml.safe_load(
         (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     )
-    source = (ROOT / ".github/workflows/release.yml").read_text(
-        encoding="utf-8"
-    )
     converge = (ROOT / "scripts/converge-release-tag").read_text(
         encoding="utf-8"
     )
+    publish = (ROOT / "scripts/publish-release").read_text(encoding="utf-8")
 
     # A same-repo concurrency group with cancel-in-progress disabled queues
     # concurrent or resent runs instead of racing them.
@@ -106,7 +125,9 @@ def test_release_converges_a_repeated_or_concurrent_run_to_one_release() -> (
         "group": "release-${{ github.repository }}",
         "cancel-in-progress": False,
     }
-    assert "./scripts/converge-release-tag" in source
+    # release.yml calls the extracted publish stage, which in turn calls
+    # converge-release-tag; it does not keep its own copy of that call.
+    assert "$repo_root/scripts/converge-release-tag" in publish
     # A rerun that finds the tag already pointing at this commit reuses it;
     # a tag at any other commit fails closed instead of moving or ignoring it.
     assert 'test "$tag_sha" = "$sha"' in converge
@@ -116,10 +137,13 @@ def test_release_converges_a_repeated_or_concurrent_run_to_one_release() -> (
     # candidate or rerun path, not assumed from a prior step's local output.
     assert (
         'release="$(gh release view "$tag" --json isDraft,isImmutable,tagName)"'
-        in source
+        in publish
     )
-    assert 'test "$(jq -r .tagName <<<"$release")" = "$tag"' in source
-    assert 'test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"' in source
+    assert 'test "$(jq -r .tagName <<<"$release")" = "$tag"' in publish
+    assert (
+        'test "$(git -C "$repo_root" rev-parse "$tag^{commit}")" = "$sha"'
+        in publish
+    )
 
 
 def test_release_please_always_stages_a_draft() -> None:
@@ -140,7 +164,9 @@ def test_release_rerun_recovers_a_tag_without_a_release() -> None:
     )
 
     assert "steps.plan.outputs.status == 'released'" in source
-    assert "./scripts/converge-release-tag" in source
+    assert "./scripts/publish-release stage" in source
+    publish = (ROOT / "scripts/publish-release").read_text(encoding="utf-8")
+    assert "$repo_root/scripts/converge-release-tag" in publish
     converge = (ROOT / "scripts/converge-release-tag").read_text(
         encoding="utf-8"
     )

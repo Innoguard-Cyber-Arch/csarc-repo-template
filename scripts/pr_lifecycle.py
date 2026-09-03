@@ -2310,16 +2310,15 @@ def writer_violations(text: str) -> list[str]:
     return sorted(set(found))
 
 
-def canonical_scanner_helper(root: Path, path: Path) -> bool:
-    """Trust only exact in-root helper paths without symlink components."""
+def _trusted_exact_path(
+    root: Path, path: Path, trusted: frozenset[str]
+) -> bool:
+    """Trust only exact in-root paths from `trusted`, rejecting symlinks."""
     try:
         relative = path.relative_to(root)
     except ValueError:
         return False
-    if relative.as_posix() not in {
-        "scripts/pr_lifecycle.py",
-        "template/scripts/pr_lifecycle.py",
-    }:
+    if relative.as_posix() not in trusted:
         return False
     current = root
     if current.is_symlink():
@@ -2339,6 +2338,55 @@ def canonical_scanner_helper(root: Path, path: Path) -> bool:
     return resolved == resolved_root / relative
 
 
+def canonical_scanner_helper(root: Path, path: Path) -> bool:
+    """Trust only exact in-root helper paths without symlink components."""
+    return _trusted_exact_path(
+        root,
+        path,
+        frozenset(
+            {"scripts/pr_lifecycle.py", "template/scripts/pr_lifecycle.py"}
+        ),
+    )
+
+
+def dependabot_auto_merge_exemption(root: Path, path: Path) -> bool:
+    """Trust the two exact dependabot-auto-merge.yml paths (see #602).
+
+    `gh pr merge --auto` only enqueues the pull request in GitHub's native
+    auto-merge queue; unlike the writes this scanner otherwise fails closed
+    on, it is not itself an immediate state mutation. The actual merge only
+    happens later, and only once GitHub confirms the required
+    `title`/`promotion`/`verify` checks and the branch protection review
+    requirement in policies/rulesets.json are satisfied — the same
+    reasoning already documented next to `contents: write` in the workflow
+    file itself. `gh pr edit --add-label needs-manual-review` in the same
+    workflow only ever fires on major-version updates that are explicitly
+    routed to human review rather than merged, so it carries no lifecycle
+    race either. That means neither write is the immediate-write race the
+    lease mechanism exists to prevent, so a narrow, exact-path exemption is
+    safe here without routing these writes through the lease.
+
+    This is a positive list, not a pattern relaxation: only these two exact
+    paths are trusted. A different file reusing the same unleased
+    `gh pr merge`/`gh pr edit --add-label` command text is still caught by
+    scan_writers.
+
+    Every scanner exemption must have its own tracking Issue (#602 is this
+    one's), and all exemptions are re-reviewed once the project leaves
+    beta — see docs/ci-policy.md's "PR lifecycle single-writer" section.
+    """
+    return _trusted_exact_path(
+        root,
+        path,
+        frozenset(
+            {
+                ".github/workflows/dependabot-auto-merge.yml",
+                "template/.github/workflows/dependabot-auto-merge.yml",
+            }
+        ),
+    )
+
+
 def scan_writers(root: Path) -> None:
     """Fail when repository automation bypasses the lifecycle tool."""
     paths = [
@@ -2356,6 +2404,7 @@ def scan_writers(root: Path) -> None:
             not path.is_file()
             or ("__pycache__" in relative.parts and path.suffix == ".pyc")
             or canonical_scanner_helper(root, path)
+            or dependabot_auto_merge_exemption(root, path)
         ):
             continue
         try:
