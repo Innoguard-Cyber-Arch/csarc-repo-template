@@ -6,5 +6,6 @@
   "delete_branch_on_merge": true,
   "has_issues": true,
   "has_projects": false,
-  "has_wiki": false
+  "has_wiki": false,
+  "pull_request_creation_policy": "collaborators_only"
 }

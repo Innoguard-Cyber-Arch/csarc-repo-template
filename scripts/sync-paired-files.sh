@@ -27,9 +27,11 @@ paired_files=(
   .github/workflows/spec-to-issue.yml
   .github/workflows/work-item-closure.yml
   policies/actions.json
+  policies/issue-creation.json
   policies/labels.json
   policies/releases.json
   policies/repository.json
+  policies/security-scanning.json
   docs/ci-policy.md
   docs/milestone-description.md
   docs/adr/README.md
@@ -57,6 +59,7 @@ paired_files=(
   scripts/spec_to_issue.py
   scripts/sync_milestone_state.py
   scripts/sync_work_item_metadata.py
+  scripts/test-apply-repository-settings
   scripts/test-issue-triage
   scripts/test-pr-policy
   scripts/test-worktree-cleanup
