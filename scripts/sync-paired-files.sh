@@ -45,6 +45,7 @@ paired_files=(
   scripts/cleanup-worktrees
   scripts/converge-release-tag
   scripts/csarc_config.py
+  scripts/detect-open-milestone
   scripts/install-actionlint
   scripts/install-gitleaks
   scripts/install-osv-scanner

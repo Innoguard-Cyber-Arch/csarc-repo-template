@@ -412,6 +412,7 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
     workflow_labels = {
         "ci.yml": "必要驗證",
         "codeql.yml": "CodeQL SAST",
+        "docker-build-scan.yml": "容器建置掃描",
         "governance-comment.yml": "reviewer 指派",
         "governance-drift.yml": "治理漂移",
         "issue-triage.yml": "工作單整理",
@@ -430,10 +431,13 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         )
     # codeql.yml is conditional on enable_codeql (see copier.yml), exactly
     # like template-update.yml is conditional on
-    # enable_template_update_notifications and governance-drift.yml is
-    # conditional on enable_governance_drift_check: none of the three ship
-    # to every new repo.
-    assert "選配的治理漂移、模板更新通知排程與 CodeQL SAST" in file_map
+    # enable_template_update_notifications, governance-drift.yml is
+    # conditional on enable_governance_drift_check, and docker-build-scan.yml
+    # is conditional on enable_docker: none of the four ship to every new
+    # repo.
+    assert "選配的治理漂移、模板更新通知排程、CodeQL SAST 與容器建置掃描" in (
+        file_map
+    )
     for inactive in ("release-please.yml",):
         assert inactive not in file_map
     assert "一般使用者不必記 workflow 或 script 名稱" in flow
