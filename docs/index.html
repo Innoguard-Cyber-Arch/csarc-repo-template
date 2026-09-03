@@ -4246,13 +4246,13 @@ gh auth status`
       overlay.querySelector('.config-overlay-close').addEventListener('click', closeConfigOverlays);
     });
 
-    // Config-trigger / overlay content is now server-rendered by the
-    // config-guidance Hugo shortcode (site/layouts/shortcodes/config-guidance.html)
-    // from site/data/config_examples.json, in the page's own language. This
-    // only wires open/close interaction on top of the data-* attributes that
-    // shortcode already emitted; it no longer builds DOM from an in-memory
-    // JS object. A `data-config-direct="true"` guidance block renders native
-    // <details>/<summary> and needs no JS at all.
+    // Config-trigger / overlay content is now server-rendered by
+    // render_config_guidance() in scripts/build_decision_site.py from
+    // site/data/config_examples.json, in the page's own language. This
+    // only wires open/close interaction on top of the data-* attributes
+    // that render already emitted; it no longer builds DOM from an
+    // in-memory JS object. A `data-config-direct="true"` guidance block
+    // renders native <details>/<summary> and needs no JS at all.
     document.querySelectorAll('.decision-slide .config-guidance:not([data-config-direct="true"]) .config-trigger').forEach(trigger => {
       const overlay = document.getElementById(trigger.getAttribute('aria-controls'));
       if (!overlay) return;
