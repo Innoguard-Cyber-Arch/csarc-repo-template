@@ -29,9 +29,11 @@ Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─────→ main
 緊急修正 ──────────────── reviewed hotfix PR ─────→ main
 ```
 
-工作 PR 關閉單項工作；Milestone 交付負責批次進入 `main`、結案與 delivery branch
-清理。#400 與 #401 的自動結案契約仍是 blocked gap，因此現在由維護者人工確認，不由
-版本或發版流程重複處理。
+工作 PR 關閉單項工作；Milestone 交付負責批次進入 `main`。`promote/m<編號>-<簡稱>` PR 以
+`Closes #<tracker>` 直接關閉該 Milestone 的 tracker Issue，並由 `milestone-lifecycle.yml`
+的 `record-promotion-evidence` job 在合併後自動把 merge commit 網址回填進 tracker 的
+`Completion evidence` 段落（見 #512）；#400 與 #401 的自動結案契約不再是 blocked gap。
+delivery branch 清理仍由 worktree 清理流程負責，不由版本或發版流程重複處理。
 
 ## PR lifecycle single-writer
 

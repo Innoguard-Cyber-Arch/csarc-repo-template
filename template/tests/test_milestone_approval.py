@@ -27,7 +27,8 @@ def snapshot(*comments: dict[str, Any]) -> dict[str, Any]:
         "body": (
             "## Proposal\n\nShip the reviewed batch.\n\n"
             "## Completion evidence\n\n<!-- Fill after release. -->\n\n"
-            "## Early termination\n\n<!-- Fill only when stopped. -->\n"
+            "## Early termination\n\n<!-- Fill only when stopped. -->\n\n"
+            "## Promotion\n\n<!-- Fill when ready to promote. -->\n"
         ),
         "user": {"login": "proposer", "type": "User"},
         "labels": [{"name": "enhancement"}],
@@ -55,12 +56,14 @@ def comment(
     body: str,
     *,
     author_type: str = "User",
+    author_association: str = "NONE",
 ) -> dict[str, Any]:
     """Build one auditable lifecycle comment."""
     return {
         "body": body,
         "html_url": f"https://github.com/acme/project/issues/80#issuecomment-{number}",
         "user": {"login": author, "type": author_type},
+        "author_association": author_association,
     }
 
 
@@ -94,6 +97,94 @@ def test_missing_independent_approval_fails_closed(
 ) -> None:
     """Silence, self-approval, and bots do not approve a Milestone."""
     assert not approval_decision(snapshot(*comments)).allowed
+
+
+def test_owner_self_approval_opens_the_gate_with_reason() -> None:
+    """An owner proposer may self-approve when a reason is given."""
+    result = approval_decision(
+        snapshot(
+            comment(
+                1,
+                "proposer",
+                "/milestone admin-approve: no reviewer before the deadline",
+                author_association="OWNER",
+            )
+        )
+    )
+
+    assert result.allowed
+    assert result.summary == (
+        "Admin self-approved by proposer "
+        "(reason: no reviewer before the deadline)"
+    )
+
+
+@pytest.mark.parametrize(
+    "admin_comment",
+    [
+        comment(
+            1,
+            "proposer",
+            "/milestone admin-approve: no reviewer available",
+            author_association="MEMBER",
+        ),
+        comment(
+            1,
+            "proposer",
+            "/milestone admin-approve:",
+            author_association="OWNER",
+        ),
+        comment(
+            1,
+            "reviewer",
+            "/milestone admin-approve: pretending to be the proposer",
+            author_association="OWNER",
+        ),
+    ],
+)
+def test_admin_self_approval_rejects_impostors_and_empty_reasons(
+    admin_comment: dict[str, Any],
+) -> None:
+    """No association, empty reason, or wrong author bypasses review."""
+    assert not approval_decision(snapshot(admin_comment)).allowed
+
+
+def test_ordinary_approval_still_works_alongside_admin_approve() -> None:
+    """A real reviewer approval is reported normally, distinct from a bypass."""
+    result = approval_decision(
+        snapshot(
+            comment(
+                1,
+                "proposer",
+                "/milestone admin-approve: backup path",
+                author_association="OWNER",
+            ),
+            comment(2, "reviewer", "/milestone approve"),
+        )
+    )
+
+    assert result.allowed
+    assert result.summary == "Approved by reviewer"
+
+
+def test_unresolved_objection_blocks_admin_self_approval_too() -> None:
+    """An admin bypass never overrides an outstanding objection."""
+    objection = comment(
+        2, "skeptic", "/milestone object: Missing rollback plan"
+    )
+    result = approval_decision(
+        snapshot(
+            comment(
+                1,
+                "proposer",
+                "/milestone admin-approve: ship now",
+                author_association="OWNER",
+            ),
+            objection,
+        )
+    )
+
+    assert not result.allowed
 
 
 def test_unresolved_objection_closes_the_gate() -> None:

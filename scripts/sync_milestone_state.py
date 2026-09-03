@@ -8,11 +8,17 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from typing import Any
 
 CHECK_NAME = "Milestone approval"
-TRACKER_SECTIONS = ("Proposal", "Completion evidence", "Early termination")
+TRACKER_SECTIONS = (
+    "Proposal",
+    "Completion evidence",
+    "Early termination",
+    "Promotion",
+)
 
 
 @dataclass(frozen=True)
@@ -72,6 +78,50 @@ def acceptance_complete(description: str) -> bool:
         return False
     checkboxes = re.findall(r"(?m)^- \[([ xX])\] ", section)
     return bool(checkboxes) and all(mark.lower() == "x" for mark in checkboxes)
+
+
+def promotion_complete(body: str) -> bool:
+    """Return whether every checkbox in the tracker Promotion section is set."""
+    section = _section(body, "Promotion")
+    if section is None:
+        return False
+    checkboxes = re.findall(r"(?m)^- \[([ xX])\] ", section)
+    return bool(checkboxes) and all(mark.lower() == "x" for mark in checkboxes)
+
+
+def promotion_decision(body: str) -> Decision:
+    """Validate that a tracker's Promotion section is ready to close."""
+    if _section(body, "Promotion") is None:
+        return Decision(False, "The lifecycle Issue needs a Promotion section")
+    if not promotion_complete(body):
+        return Decision(
+            False, "Complete every Promotion readiness checkbox first"
+        )
+    return Decision(True, "Promotion checklist complete")
+
+
+def append_completion_evidence(body: str, evidence_url: str) -> str:
+    """Append one delivery evidence URL into the Completion evidence section.
+
+    Preserves any content already present in the section (stripping only the
+    placeholder HTML comment) instead of overwriting it, so a promotion
+    bridge merge never clobbers evidence recorded by an earlier checkpoint.
+    """
+    match = re.search(
+        r"(?ms)^(## Completion evidence\s*$\n)(.*?)(?=^## |\Z)", body
+    )
+    if match is None:
+        raise RuntimeError(
+            "The lifecycle Issue body is missing a Completion evidence section"
+        )
+    heading = match.group(1)
+    kept = re.sub(r"(?s)<!--.*?-->", "", match.group(2)).strip()
+    if evidence_url in kept:
+        return body
+    lines = [line for line in kept.splitlines() if line.strip()]
+    lines.append(evidence_url)
+    new_section = heading + "\n".join(lines) + "\n\n"
+    return body[: match.start()] + new_section + body[match.end() :]
 
 
 def load_snapshot(repo: str, number: int) -> dict[str, Any]:
@@ -181,13 +231,51 @@ def tracker_errors(snapshot: dict[str, Any]) -> list[str]:
     return errors
 
 
+def _admin_self_approval(
+    command: str,
+    author: str,
+    author_type: str | None,
+    author_association: str | None,
+    proposer: str | None,
+) -> str | None:
+    """Return the reason for one valid owner self-approval, if any."""
+    if not command.startswith("/milestone admin-approve:"):
+        return None
+    reason = command.removeprefix("/milestone admin-approve:").strip()
+    if not reason or author != proposer or author_type == "Bot":
+        return None
+    return reason if author_association == "OWNER" else None
+
+
+def _record_objection(
+    command: str, author: str, url: object, objections: dict[str, str]
+) -> None:
+    """Record one objection comment, keyed by its own permalink."""
+    if not command.startswith("/milestone object:") or not isinstance(url, str):
+        return
+    if command.removeprefix("/milestone object:").strip():
+        objections[url] = author
+
+
+def _record_resolution(
+    command: str, author: str, objections: dict[str, str], resolved: set[str]
+) -> None:
+    """Record one objection withdrawal by its original author."""
+    if not command.startswith("/milestone resolve:"):
+        return
+    target = command.removeprefix("/milestone resolve:").strip()
+    if objections.get(target) == author:
+        resolved.add(target)
+
+
 def _approval_records(
     snapshot: dict[str, Any], proposer: str | None
-) -> tuple[set[str], dict[str, str], set[str]]:
-    """Collect valid approvals, objections, and objection withdrawals."""
+) -> tuple[set[str], dict[str, str], set[str], dict[str, str]]:
+    """Collect approvals, objections, withdrawals, and admin self-approvals."""
     approvals: set[str] = set()
     objections: dict[str, str] = {}
     resolved: set[str] = set()
+    admin_approvals: dict[str, str] = {}
     for comment in snapshot.get("comments", []):
         body = comment.get("body")
         author = comment.get("user", {}).get("login")
@@ -202,21 +290,28 @@ def _approval_records(
             if author != proposer and author_type != "Bot":
                 approvals.add(author)
             continue
-        if command.startswith("/milestone object:") and isinstance(url, str):
-            if command.removeprefix("/milestone object:").strip():
-                objections[url] = author
+        reason = _admin_self_approval(
+            command,
+            author,
+            author_type,
+            comment.get("author_association"),
+            proposer,
+        )
+        if reason is not None:
+            admin_approvals[author] = reason
             continue
-        if command.startswith("/milestone resolve:"):
-            target = command.removeprefix("/milestone resolve:").strip()
-            if objections.get(target) == author:
-                resolved.add(target)
-    return approvals, objections, resolved
+        _record_objection(command, author, url, objections)
+        _record_resolution(command, author, objections, resolved)
+    return approvals, objections, resolved, admin_approvals
 
 
 def approval_decision(
     snapshot: dict[str, Any], *, require_open: bool = True
 ) -> Decision:
-    """Require one non-proposer approval and no unresolved objection."""
+    """Require one non-proposer approval, or an owner self-approval.
+
+    Also requires no unresolved objection.
+    """
     errors = tracker_errors(snapshot)
     item = tracker(snapshot)
     if errors or item is None:
@@ -226,8 +321,10 @@ def approval_decision(
             False, "The lifecycle Issue must remain open while work runs"
         )
     proposer = item.get("user", {}).get("login")
-    approvals, objections, resolved = _approval_records(snapshot, proposer)
-    if not approvals:
+    approvals, objections, resolved, admin_approvals = _approval_records(
+        snapshot, proposer
+    )
+    if not approvals and not admin_approvals:
         return Decision(False, "A person other than the proposer must approve")
     unresolved = sorted(set(objections) - resolved)
     if unresolved:
@@ -235,7 +332,35 @@ def approval_decision(
             False,
             f"Resolve {len(unresolved)} objection(s) before work continues",
         )
-    return Decision(True, f"Approved by {', '.join(sorted(approvals))}")
+    if approvals:
+        return Decision(True, f"Approved by {', '.join(sorted(approvals))}")
+    admins = ", ".join(
+        f"{author} (reason: {reason})"
+        for author, reason in sorted(admin_approvals.items())
+    )
+    return Decision(True, f"Admin self-approved by {admins}")
+
+
+def _completed_closure(snapshot: dict[str, Any], body: str) -> Decision:
+    """Validate the completed-closure evidence chain for one tracker."""
+    description = snapshot["milestone"].get("description", "")
+    if not acceptance_complete(description):
+        return Decision(False, "Complete every Milestone acceptance criterion")
+    if not promotion_complete(body):
+        return Decision(False, "Complete every Promotion readiness checkbox")
+    approval = approval_decision(snapshot, require_open=False)
+    if not approval.allowed:
+        return approval
+    evidence = _section(body, "Completion evidence")
+    if (
+        not isinstance(evidence, str)
+        or not _meaningful(evidence)
+        or "https://github.com/" not in evidence
+    ):
+        return Decision(
+            False, "Completed closure needs a GitHub delivery evidence URL"
+        )
+    return Decision(True, "Completed with approval and delivery evidence")
 
 
 def closure_decision(snapshot: dict[str, Any]) -> Decision:
@@ -260,25 +385,7 @@ def closure_decision(snapshot: dict[str, Any]) -> Decision:
     body = item.get("body", "")
     reason = item.get("state_reason")
     if reason == "completed":
-        description = snapshot["milestone"].get("description", "")
-        if not acceptance_complete(description):
-            return Decision(
-                False, "Complete every Milestone acceptance criterion"
-            )
-        approval = approval_decision(snapshot, require_open=False)
-        if not approval.allowed:
-            return approval
-        evidence = _section(body, "Completion evidence")
-        if (
-            not isinstance(evidence, str)
-            or not _meaningful(evidence)
-            or "https://github.com/" not in evidence
-        ):
-            return Decision(
-                False,
-                "Completed closure needs a GitHub delivery evidence URL",
-            )
-        return Decision(True, "Completed with approval and delivery evidence")
+        return _completed_closure(snapshot, body)
     if reason == "not_planned":
         if not _meaningful(_section(body, "Early termination")):
             return Decision(False, "Not-planned closure needs an explanation")
@@ -404,6 +511,36 @@ def check_merge_group(repo: str, head_sha: str) -> Decision:
     return decision
 
 
+def record_promotion_evidence(
+    repo: str, tracker_number: int, evidence_url: str
+) -> Decision:
+    """Append one promotion merge evidence URL onto a tracker Issue."""
+    issue = json.loads(run_gh(["api", f"repos/{repo}/issues/{tracker_number}"]))
+    body = issue.get("body")
+    if not isinstance(body, str):
+        return Decision(False, "The lifecycle Issue body is missing")
+    try:
+        new_body = append_completion_evidence(body, evidence_url)
+    except RuntimeError as error:
+        return Decision(False, str(error))
+    if new_body == body:
+        return Decision(
+            True, f"Promotion evidence already recorded on #{tracker_number}"
+        )
+    run_gh(
+        [
+            "issue",
+            "edit",
+            str(tracker_number),
+            "--repo",
+            repo,
+            "--body",
+            new_body,
+        ]
+    )
+    return Decision(True, f"Recorded promotion evidence on #{tracker_number}")
+
+
 def reconcile(repo: str, number: int) -> Decision:
     """Synchronize one Milestone and refresh its open PR checks."""
     snapshot = load_snapshot(repo, number)
@@ -443,6 +580,11 @@ def main() -> None:
     queue = subparsers.add_parser("check-merge-group")
     queue.add_argument("--repo", required=True)
     queue.add_argument("--head-sha", required=True)
+    subparsers.add_parser("check-promotion")
+    record = subparsers.add_parser("record-promotion-evidence")
+    record.add_argument("--repo", required=True)
+    record.add_argument("--tracker", required=True, type=int)
+    record.add_argument("--evidence-url", required=True)
     sync = subparsers.add_parser("reconcile")
     sync.add_argument("--repo", required=True)
     sync.add_argument("--milestone", required=True, type=int)
@@ -451,6 +593,12 @@ def main() -> None:
         decision = check_pr(args.repo, args.pr)
     elif args.command == "check-merge-group":
         decision = check_merge_group(args.repo, args.head_sha)
+    elif args.command == "check-promotion":
+        decision = promotion_decision(sys.stdin.read())
+    elif args.command == "record-promotion-evidence":
+        decision = record_promotion_evidence(
+            args.repo, args.tracker, args.evidence_url
+        )
     else:
         decision = reconcile(args.repo, args.milestone)
     print(decision.summary)  # noqa: T201
