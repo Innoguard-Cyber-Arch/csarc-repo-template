@@ -6,12 +6,12 @@ set -Eeuo pipefail
 # preservation coverage that scripts/verify-fast deliberately excludes, and
 # the verify-template.sh stage-split regression in tests/test_journey03_ci.py)
 # with a coverage floor, plus the Issue-triage, worktree-cleanup,
-# PR-policy, base-only-remerge, gh-issue-create, and check-branch-fresh
-# self-tests. This is the single executable regression source for
-# create/adopt/update preservation; do not replace it with generated-profile
-# runs elsewhere. Runnable standalone to re-check just this stage without
-# paying for the full run; aggregated in order by scripts/verify-template.sh.
-# See docs/ci-policy.md.
+# PR-policy, base-only-remerge, gh-issue-create, check-branch-fresh, and
+# PR-policy-status self-tests. This is the single executable regression
+# source for create/adopt/update preservation; do not replace it with
+# generated-profile runs elsewhere. Runnable standalone to re-check just
+# this stage without paying for the full run; aggregated in order by
+# scripts/verify-template.sh. See docs/ci-policy.md.
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cache_root="$("$repo_root/scripts/resolve-cache-root")"
@@ -30,3 +30,4 @@ uv run pytest --cov=csarc_cli --cov-report=term-missing --cov-fail-under=80
 ./scripts/test-check-base-only-remerge
 ./scripts/test-gh-issue-create
 ./scripts/test-check-branch-fresh
+./scripts/test-check-pr-policy-status

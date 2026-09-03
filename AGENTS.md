@@ -73,6 +73,7 @@ Duplicate triage may close an Issue without code changes when it links the canon
 - Never commit secrets, tokens, private keys, or populated `.env` files.
 - Review the plan output before applying repository settings; do not operate production or external infrastructure without explicit authorization.
 - Do not bypass required checks, review, CODEOWNER approval, or supply-chain verification. Journey 08 is the only source for any merge exception or Alpha self-merge authorization.
+- When a shell pipeline's result is read from `$?`, the last stage of that pipeline must be the command actually being judged. `cmd | tail -N; echo $?` reports `tail`'s exit code, not `cmd`'s, and has produced false "it passed" claims in this repository's own Milestone 8 history. To keep both the output and the correct exit code, redirect to a file and check separately: `cmd >log 2>&1; status=$?`. For a pull request's checks specifically, use `scripts/check-pr-policy-status` (see `docs/ci-policy.md`'s "PR policy 逐 step 判讀（#513）" section) instead of grepping `gh run view --log` or trusting `gh pr checks`' job-level output by itself.
 
 ## Code Review Rules
 

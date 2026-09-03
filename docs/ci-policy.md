@@ -211,6 +211,41 @@ repo 的 full 入口是單一 `scripts/verify`，沒有本模板這種多階段�
 --check` 與 `scripts/check-update-conflicts` 兩者都乾淨），並確認上游變更沒有觸及上方
 條件 4 列出的路徑。
 
+### PR policy 逐 step 判讀（#513）
+
+`gh pr checks` 只回報每個 job 的整體 conclusion。`pr-policy.yml` 的 `title`
+job 依序執行多個 step，其中「Validate pull request policy」與「Validate
+Milestone approval」是彼此獨立的兩個 step；只要任一個失敗，job 整體就顯示
+`failure`，即使另一個 step 本身乾淨通過。手動用 `gh run view <run-id> --log
+| grep -E "Validate pull request policy|##\[error\]"` 逐次判讀容易誤判——本
+repo 在 Milestone 8 多 agent 並行協作期間就至少發生過一次誤讀——而且很慢。
+
+`scripts/check-pr-policy-status <pr-number> [--repo <owner/repo>] [--json]`
+改用 `gh api repos/{repo}/commits/{sha}/check-runs` 找出該 PR 目前 head
+commit 最新的 `verify`／`title` check run，再用
+`gh api repos/{repo}/actions/jobs/{job_id}` 讀 `title` job 的逐 step
+conclusion——不靠 log 文字比對，直接讀 step 本身的結構化結果。輸出三個獨立
+布林：`verify` check 是否 pass、「Validate pull request policy」step 是否
+success、「Validate Milestone approval」step 是否 success。預設印可讀摘要；
+`--json` 輸出結構化結果供 agent 直接解析。本機沒有裝 `gh`／`gh` 未認證，或
+PR 不存在時，明確報錯並以非 0 結束，不靜默給錯誤答案。
+
+往後任何人或 agent 要判斷「這個 PR 的 policy 檢查有沒有真的過」，一律用這支
+工具讀三個獨立布林，不要手動 grep log，也不要只看 `gh pr checks` 的 job 層級
+輸出。它只讀取 GitHub API、不修改任何 PR、check run 或 workflow，也不做
+「能不能合併」的最終判斷——那仍由 Journey 08 與本文件既有的 review／required
+check 規則決定；本工具只負責把 job 層級噪音拆成正確的 step 層級事實。
+
+`scripts/test-check-pr-policy-status` 用 mock `gh`（不打真實網路）對「job
+整體 fail 但目標 step success」與「目標 step 真的 fail」兩種情況各自回歸
+測試，也涵蓋 `gh` 未安裝與 PR 不存在兩種誤用場景，掛在
+`scripts/verify-template.sh` 的 Regression tests 階段下（與
+`test-check-base-only-remerge` 同一組 self-test）。`scripts/check-pr-policy-status`
+只存在於中央模板 repo、不下發到生成 repo：它是這個 repo 自己在 Milestone 8
+多 agent 並行協作期間需要的本機／agent 診斷工具，不是任何 `.github/workflows/`
+呼叫的 product surface；`pr-policy.yml` 本身（含其 job/step 結構）仍照原樣
+下發給生成 repo，不受影響。
+
 ### `scripts/verify-template.sh` 階段盤點（#458）
 
 `scripts/verify-template.sh` 是一個薄聚合器：七個階段各自是 `scripts/verify-stage-*`
@@ -232,7 +267,7 @@ PASSED／FAILED／TOTAL 回報）做回歸測試，並同時掛在 `scripts/veri
 | Static assets and paired files | `scripts/verify-stage-static-assets` | decision site 可重現 render、workflow／shell 靜態分析、static-validation fixture 的正／反向覆蓋、root／template 配對檔案漂移 | fast 只在對應 scope 才跑其中個別項目（`docs` tier 跑 render 檢查；`workflow`／`shell` scope 才跑 lint）；full 一律跑全部四項，是唯一同時驗證全部四種風險的入口 |
 | Python environment | `scripts/verify-stage-python-environment` | `uv.lock` 與 `pyproject.toml` 一致、環境可從鎖定版本安裝 | fast 的 `uv sync --locked` 是同一份鎖定契約；`uv lock --check` 只在 full 額外執行 |
 | Python quality | `scripts/verify-stage-python-quality` | 格式、lint、靜態型別 | fast 對相同原始碼跑相同三個命令，兩者呼叫同一份工具鏈設定，無額外邏輯 |
-| Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／base-only-remerge／gh-issue-create／check-branch-fresh／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`），且只在 governance／template／workflow／shell scope 才跑 Issue-triage／worktree-cleanup／PR-policy 三個 shell 自我測試；base-only-remerge、`scripts/gh-issue-create`（開 Issue 前本機先擋不合規標題，見 AGENTS.md 工作迴圈）與 `scripts/check-branch-fresh`（開工前本機核對既有分支是否仍等於 `origin/<branch>`，見 AGENTS.md 工作迴圈）三支本機專用工具的自我測試都只在這個 full 專屬階段跑，不進 `verify-fast`（見上方 Base-only re-merge 例外一節）；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
+| Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／base-only-remerge／gh-issue-create／check-branch-fresh／PR-policy-status／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`），且只在 governance／template／workflow／shell scope 才跑 Issue-triage／worktree-cleanup／PR-policy 三個 shell 自我測試；base-only-remerge、`scripts/gh-issue-create`（開 Issue 前本機先擋不合規標題，見 AGENTS.md 工作迴圈）、`scripts/check-branch-fresh`（開工前本機核對既有分支是否仍等於 `origin/<branch>`，見 AGENTS.md 工作迴圈）與 PR-policy-status 四支本機專用工具的自我測試都只在這個 full 專屬階段跑，不進 `verify-fast`（分別見上方 Base-only re-merge 例外一節與下方 PR policy 逐 step 判讀一節）；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
 | Package smoke test | `scripts/verify-stage-package-smoke` | wheel 可建置、已發布入口可從建置產物執行 | fast 不跑這個階段；改用範圍較窄的 Copier smoke copy（見下方 Journey 03 的 PR 級別 render/smoke） |
 | GitHub Actions audit | `scripts/verify-stage-github-actions-audit` | workflow 權限與注入稽核（zizmor） | fast 不跑；workflow scope 的一般 PR 由 full 邊界（promotion／hotfix／merge queue／manual）覆蓋，不會被跳過 |
 
