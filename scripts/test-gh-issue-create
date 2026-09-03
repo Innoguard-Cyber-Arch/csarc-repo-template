@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Regression test for scripts/gh-issue-create (Issue #514): proves the
+# wrapper blocks an invalid --title (in both its long and short flag
+# forms) before `gh` is ever invoked, and passes a valid --title -- along
+# with every other flag, in the original order, as separate argv elements
+# -- through to `gh issue create` completely unchanged. `gh` is stubbed on
+# PATH so no real Issue is ever created and no network access is required.
+
+script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gh-issue-create"
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "$fixture_root"' EXIT
+
+stub_bin="$fixture_root/bin"
+mkdir -p "$stub_bin"
+call_log="$fixture_root/gh-calls.log"
+cat >"$stub_bin/gh" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" >"$call_log"
+EOF
+chmod +x "$stub_bin/gh"
+
+run_with_stub() {
+  PATH="$stub_bin:$PATH" "$script_path" "$@"
+}
+
+assert_gh_not_called() {
+  [[ ! -s "$call_log" ]]
+}
+
+# bash 3.2 (macOS's stock /bin/bash) has no mapfile/readarray; read the
+# logged argv back one line per element the same way scripts/lint-workflows-shell
+# reads find output, to stay compatible with the same bash this repo's
+# other scripts target.
+read_logged_args() {
+  logged_args=()
+  local line
+  while IFS= read -r line; do
+    logged_args+=("$line")
+  done <"$call_log"
+}
+
+# Case 1: too-short title (under 12 characters) is blocked locally, and
+# gh is never invoked.
+: >"$call_log"
+set +e
+short_out="$(run_with_stub --title "short" --body "irrelevant" 2>&1)"
+short_status=$?
+set -e
+[[ "$short_status" -ne 0 ]]
+grep -Fq 'length must be 12-80 characters' <<<"$short_out"
+grep -Fq 'not calling' <<<"$short_out"
+assert_gh_not_called
+
+# Case 2: too-long title (over 80 characters) is blocked locally, and gh
+# is never invoked.
+: >"$call_log"
+long_title="$(printf 'x%.0s' {1..90})"
+set +e
+long_out="$(run_with_stub --title "$long_title" --body "irrelevant" 2>&1)"
+long_status=$?
+set -e
+[[ "$long_status" -ne 0 ]]
+grep -Fq 'length must be 12-80 characters' <<<"$long_out"
+assert_gh_not_called
+
+# Case 3: a valid title -- plus every other flag `gh issue create`
+# accepts -- passes through as separate argv elements, in the same order,
+# completely unchanged (proves the wrapper forwards "$@" verbatim rather
+# than reconstructing it from the parsed --title value).
+: >"$call_log"
+title_arg="Add dependency policy checks"
+run_with_stub --title "$title_arg" --body desc --label enhancement \
+  --milestone M8 --assignee @me --repo owner/repo >/dev/null
+read_logged_args
+expected_args=(
+  issue create
+  --title "$title_arg"
+  --body desc
+  --label enhancement
+  --milestone M8
+  --assignee @me
+  --repo owner/repo
+)
+[[ "${#logged_args[@]}" -eq "${#expected_args[@]}" ]]
+for idx in "${!expected_args[@]}"; do
+  [[ "${logged_args[$idx]}" == "${expected_args[$idx]}" ]]
+done
+
+# Case 4: --title=value (equals form) and the -t short flag are both
+# recognized for the pre-check, not just the space-separated long form.
+: >"$call_log"
+set +e
+equals_out="$(run_with_stub --title=short --body irrelevant 2>&1)"
+equals_status=$?
+set -e
+[[ "$equals_status" -ne 0 ]]
+grep -Fq 'length must be 12-80 characters' <<<"$equals_out"
+assert_gh_not_called
+
+: >"$call_log"
+set +e
+short_flag_out="$(run_with_stub -t short -b irrelevant 2>&1)"
+short_flag_status=$?
+set -e
+[[ "$short_flag_status" -ne 0 ]]
+grep -Fq 'length must be 12-80 characters' <<<"$short_flag_out"
+assert_gh_not_called
+
+# Case 5: no --title/-t flag at all is not this wrapper's problem to
+# invent -- it passes every argument through untouched and lets the real
+# `gh issue create` handle it.
+: >"$call_log"
+run_with_stub --body "no title given" >/dev/null
+read_logged_args
+no_title_args=("${logged_args[@]}")
+[[ "${#no_title_args[@]}" -eq 4 ]]
+[[ "${no_title_args[0]}" == "issue" ]]
+[[ "${no_title_args[1]}" == "create" ]]
+[[ "${no_title_args[2]}" == "--body" ]]
+[[ "${no_title_args[3]}" == "no title given" ]]
+
+echo "gh-issue-create cases passed: 5"
