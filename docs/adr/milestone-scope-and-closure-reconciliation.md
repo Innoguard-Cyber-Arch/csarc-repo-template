@@ -3,7 +3,7 @@
 - **狀態：**Accepted
 - **日期：**2026-09-03
 - **來源 Issues：**[#552](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/552)（沿用並延伸 [#512](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/512)／[#518](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/518)／[#546](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/546)／[#549](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/549)／[#550](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/550) 已完成的機制；不推翻重來），另參考 [#580](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/580) 記錄的 Ruleset bypass 成本
-- **實作 PR：**[PR #598](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/598)
+- **實作 PR：**[PR #609](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/609)
 
 ## 問題與限制
 
