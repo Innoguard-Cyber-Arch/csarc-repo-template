@@ -105,6 +105,8 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | `tests/test_release_policy.py` | 版本與候選 trust boundary 正反例 |
 | `tests/test_release_bundle.py` | 缺檔、竄改、錯 tag、重跑與 bundle identity |
 | `tests/test_journey07_release.py` | workflow 權限、pin、ownership 與 archive disposition |
+| `.github/workflows/dependabot-auto-merge.yml` | 只鎖定 `dependabot[bot]` 開出的 PR；minor／patch 排入 GitHub 原生 auto-merge 佇列，major 加標籤／留言、不合併 |
+| `tests/test_dependabot_auto_merge.py` | 觸發條件、job 層級 actor 閘門、權限、pin 與 minor/patch／major 分流的 workflow 邏輯回歸測試 |
 
 ## Archive disposition
 
@@ -135,6 +137,28 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 | [#406](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/406) Rewrite dependency security guidance and checks | preserved | 是 Dependency vulnerability 能力現行 owner；`scripts/verify-dependencies`、`tests/test_dependency_security.py` 與 `osv.yml` 都由其確立。狀態受限於 #407 同一則說明：候選尚未落地 `main`。 |
 | [#407](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/407) Restore minimal dependency update and vulnerability automation | preserved | `osv.yml`＋`.github/dependabot.yml` 是其直接成果，見「Current automation」表；本 repository 因候選尚未落地 `main` 而標 candidate，新生成 repo 因 Copier 初始 commit 即落地而標 active——並非能力本身失效。 |
 | [#426](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/426) Define branch lifecycle and cleanup rules | preserved | 直接對應 `docs/ci-policy.md`「現行交付路徑」與 `scripts/cleanup-worktrees`；固定 `dev/next`／`promote/next` 退役即是其規則的現行結果。 |
+
+## Dependabot 自動合併取代 #322 cooldown 半部結論（#557，2026-09-03）
+
+[#322](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/322) 上方列為 superseded（部分）：「dependency cooldown」半部（發行後延遲才開 PR）已由 #341 的 SBOM 與 #407 的
+`.github/dependabot.yml` `cooldown.default-days: 3` 落地保留；但「cooldown 滿足後、checks 通過即可自動合併」這一段，
+#322 當時判定維持 not planned——理由明列為「從未實作且目前沒有 owner 認領，也沒有已知事故證明其必要性」。本節不改寫、不刪除上方那一列，
+只記錄取代其中這一段門檻：[#557](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/557) 提供 #322 當時缺的兩個前提——
+明確 owner（維護者 matheme-justyn，同時是 Issue assignee）與明確事故（#543／#544／#545 三張 Dependabot PR 開出 2 小時仍無人處理的真實 backlog，
+不是推測性需求）。
+
+決定：新增 `.github/workflows/dependabot-auto-merge.yml`，只在 `github.event.pull_request.user.login == 'dependabot[bot]'`
+時執行（不是可被偽造的 `github.actor`，見 zizmor `bot-conditions` audit），於 `pull_request`
+（opened／synchronize／reopened）用 `dependabot/fetch-metadata` 讀 update-type；minor／patch 呼叫
+`gh pr merge --auto --squash` 排入 GitHub 原生 auto-merge 佇列（不是自建輪詢腳本），major 只加 `needs-manual-review`
+標籤並留言，不合併。這只是**排入**佇列，不是立即合併或繞過任何既有把關——實際合併仍完全由 GitHub 依
+`policies/rulesets.json` 的 branch protection（1 個 code owner approving review）與既有 `title`／`promotion`／`verify`
+required checks 全部通過後才執行；本決定沒有調整、放寬或繞過上述任何規則。
+
+範圍邊界：本節只取代「PR 開出後如何自動合併」這一段判斷，不重新開放整個 #322，也不影響已經 preserved 的 cooldown／SBOM
+半部——`.github/dependabot.yml` 的 `cooldown.default-days: 3` 維持原樣，不因本節新增而重新設定或延長。同步下發 `template/`
+（新 workflow 與 `policies/labels.json` 的 `needs-manual-review` 標籤定義），下游生成專案取得同一份政策；`docs/ci-policy.md`
+沿用既有「Current automation」表的 candidate／active 判斷慣例，待落地 `main` 並有 live run 證據後再登錄，不在本節預先宣告 active。
 
 ## 評估過的替代方案
 

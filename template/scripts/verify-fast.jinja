@@ -41,6 +41,7 @@ if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
   ./scripts/test-issue-triage
   ./scripts/test-worktree-cleanup
   ./scripts/test-pr-policy
+  ./scripts/test-apply-repository-settings
 fi
 {% if has_python -%}
 python_version="$UV_PYTHON"

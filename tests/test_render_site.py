@@ -400,10 +400,11 @@ def test_overview_matches_active_workflows_and_uses_plain_language() -> None:
         for path in (root / "template/.github/workflows").iterdir()
         if path.is_file()
     }
-    assert "9 條共用流程" in file_map
+    assert "10 條共用流程" in file_map
     workflow_labels = {
         "ci.yml": "必要驗證",
         "codeql.yml": "CodeQL SAST",
+        "dependabot-auto-merge.yml": "Dependabot 自動合併",
         "governance-comment.yml": "reviewer 指派",
         "governance-drift.yml": "治理漂移",
         "issue-triage.yml": "工作單整理",
