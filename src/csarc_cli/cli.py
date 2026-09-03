@@ -22,6 +22,9 @@ from urllib.parse import quote
 import yaml  # type: ignore[import-untyped]
 from reportlab.lib import colors  # type: ignore[import-untyped]
 from reportlab.lib.pagesizes import A4  # type: ignore[import-untyped]
+from reportlab.pdfbase.pdfmetrics import (  # type: ignore[import-untyped]
+    stringWidth,
+)
 from reportlab.pdfgen.canvas import Canvas  # type: ignore[import-untyped]
 
 CANONICAL_SOURCE = (
@@ -30,6 +33,8 @@ CANONICAL_SOURCE = (
 CANONICAL_REPOSITORY = "Innoguard-Cyber-Arch/csarc-repo-template"
 CANONICAL_REPOSITORY_ID = 1_340_899_393
 DEFAULT_OWNER = "@Innoguard-Cyber-Arch/arch"
+CONFIG_FILE = Path(".csarc/config.yml")
+LEGACY_ANSWERS_FILE = Path(".copier-answers.yml")
 PROVENANCE_FILE = Path(".csarc/provenance.json")
 PENDING_ADOPTION_FILE = Path(".csarc/adoption-pending.json")
 ADOPTION_REPORT_BASENAME = "csarc-adoption-dry-run"
@@ -38,6 +43,15 @@ AGENTS_BLOCK_START = "<!-- BEGIN CSARC MANAGED BLOCK -->"
 AGENTS_BLOCK_END = "<!-- END CSARC MANAGED BLOCK -->"
 FULL_SHA = re.compile(r"^[0-9a-fA-F]{40}$")
 REPOSITORY_VISIBILITIES = {"public", "private", "internal"}
+RELEASE_OWNERSHIPS = {"csarc-owned", "product-owned", "verification-only"}
+RELEASE_WRITER_MARKERS = (
+    "gh release create",
+    "gh release edit",
+    "gh release upload",
+    "googleapis/release-please-action@",
+    "ncipollo/release-action@",
+    "softprops/action-gh-release@",
+)
 LEGACY_MILESTONE_HEADINGS = (
     "problem",
     "outcome",
@@ -193,7 +207,9 @@ class ResolvedPlan:
         result: dict[str, object] = {
             "answers": dict(sorted(self.answers.items())),
             "mode": self.mode,
+            "release": release_contract(self.answers),
             "release_capabilities": self.capabilities,
+            "release_ownership": release_ownership(self.answers),
             "repository": self.repository.as_dict(),
             "schema_version": 1,
             "target": str(self.target),
@@ -412,12 +428,15 @@ class GhReleaseClient:
 
 def resolve_unreleased_revision(source: str, requested: str | None) -> Revision:
     """Resolve an explicitly allowed development-only revision."""
-    if requested is not None and FULL_SHA.fullmatch(requested):
-        return Revision(requested.lower(), requested.lower(), source)
     source_path = Path(source).expanduser()
-    if not source_path.exists():
+    if not source_path.is_dir():
         raise CliError(
-            "--allow-unreleased requires a full commit SHA or local Git source."
+            "--allow-unreleased template source is unavailable; use a local "
+            "Git repository."
+        )
+    if requested is not None and FULL_SHA.fullmatch(requested):
+        return Revision(
+            requested.lower(), git_commit(source_path, requested), source
         )
     label = requested or "latest-local-tag"
     reference = requested
@@ -532,17 +551,32 @@ def slugify(value: str) -> str:
     return slug or "csarc-project"
 
 
+def detect_languages(target: Path) -> list[str]:
+    """Return enabled language modules in their canonical order."""
+    manifests = (
+        ("python", "pyproject.toml"),
+        ("typescript", "package.json"),
+        ("rust", "Cargo.toml"),
+    )
+    return [
+        name for name, manifest in manifests if (target / manifest).is_file()
+    ]
+
+
 def detect_language(target: Path) -> str:
-    """Infer the narrowest supported language profile."""
-    has_python = (target / "pyproject.toml").is_file()
-    has_typescript = (target / "package.json").is_file()
-    if has_python and has_typescript:
-        return "python-typescript"
-    if has_python:
-        return "python"
-    if has_typescript:
-        return "typescript"
-    return "ci"
+    """Return the legacy profile label for compatibility."""
+    return "-".join(detect_languages(target)) or "ci"
+
+
+def selected_languages(answers: dict[str, object]) -> set[str]:
+    """Read new module answers with a legacy profile fallback."""
+    selected = answers.get("languages")
+    if isinstance(selected, list):
+        return {str(item) for item in selected}
+    legacy = answers.get("language")
+    if isinstance(legacy, str) and legacy != "ci":
+        return set(legacy.split("-"))
+    return set()
 
 
 def is_text(content: bytes) -> bool:
@@ -617,23 +651,29 @@ def copier_copy(
     ]
     if skip_tasks:
         command.append("--skip-tasks")
-    for key, value in sorted(data.items()):
-        serialized = str(value).lower() if isinstance(value, bool) else value
-        command.extend(["--data", f"{key}={serialized}"])
+    data_file = stage.parent / f".{stage.name}-copier-data.yml"
+    data_file.write_text(
+        yaml.safe_dump(dict(data), sort_keys=True), encoding="utf-8"
+    )
+    command.extend(["--data-file", str(data_file)])
     command.extend([source, str(stage)])
-    result = run(command, capture=True, check=False)
+    try:
+        result = run(command, capture=True, check=False)
+    finally:
+        data_file.unlink(missing_ok=True)
     if result.returncode != 0:
         raise CliError(
             result.stderr.strip() or result.stdout.strip() or "Copier failed."
         )
     pin_answer_commit(stage, revision.sha)
+    persist_release_answers(stage, data)
 
 
 def pin_answer_commit(target: Path, commit: str) -> None:
     """Replace Copier's abbreviated revision with the reviewed full SHA."""
-    answers = target / ".copier-answers.yml"
+    answers = config_path(target)
     if not answers.is_file():
-        raise CliError("Template did not create .copier-answers.yml.")
+        raise CliError(f"Template did not create {CONFIG_FILE}.")
     lines = answers.read_text(encoding="utf-8").splitlines()
     matches = sum(line.startswith("_commit:") for line in lines)
     if matches != 1:
@@ -643,6 +683,14 @@ def pin_answer_commit(target: Path, commit: str) -> None:
         for line in lines
     ]
     answers.write_text("\n".join(pinned) + "\n", encoding="utf-8")
+
+
+def config_path(target: Path) -> Path:
+    """Return the current config, falling back to pre-migration answers."""
+    current = target / CONFIG_FILE
+    if current.is_file():
+        return current
+    return target / LEGACY_ANSWERS_FILE
 
 
 def read_copier_answers(path: Path) -> dict[str, object]:
@@ -660,12 +708,38 @@ def read_copier_answers(path: Path) -> dict[str, object]:
     }
 
 
+def persist_release_answers(
+    target: Path, answers: Mapping[str, object]
+) -> None:
+    """Persist the CLI-resolved release contract in Copier's answer file."""
+    path = config_path(target)
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as error:
+        raise CliError(f"Cannot read Copier answers from {path}.") from error
+    if not isinstance(payload, dict):
+        raise CliError(f"Copier answers in {path} must be a mapping.")
+    contract = release_contract(answers)
+    payload.update(
+        release_immutable_releases=contract["immutable_releases"],
+        release_ownership=contract["ownership"],
+        release_ownership_reason=contract["reason"],
+        release_required_inputs=contract["required_inputs"],
+        release_settings_owner=contract["settings_owner"],
+        release_workflow=contract["selected_workflow"] or "",
+    )
+    path.write_text(
+        yaml.safe_dump(payload, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
 def project_verification_configuration(
     target: Path, answers: Mapping[str, object] | None = None
 ) -> dict[str, object]:
     """Describe the explicit project hook or the legacy fallback."""
     if answers is None:
-        answers_path = target / ".copier-answers.yml"
+        answers_path = config_path(target)
         answers = (
             read_copier_answers(answers_path) if answers_path.is_file() else {}
         )
@@ -783,7 +857,8 @@ def pending_adoption_data(
         "managed_files": [
             {"fingerprint": file_fingerprint(target / name), "path": name}
             for name in managed_files
-            if name != ".copier-answers.yml"
+            if name
+            not in {CONFIG_FILE.as_posix(), LEGACY_ANSWERS_FILE.as_posix()}
         ],
         "manual_files": list(manual_files),
         "repository": repository.as_dict(),
@@ -859,6 +934,7 @@ def provenance_data(
     previous: dict[str, object] | None = None,
     *,
     applied_at: str | None = None,
+    answers: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Build the auditable state recorded after a successful operation."""
     result: dict[str, object] = {
@@ -880,6 +956,8 @@ def provenance_data(
     }
     if previous is not None:
         result["previous"] = previous
+    if answers is not None:
+        result["release"] = release_contract(answers)
     return result
 
 
@@ -889,6 +967,7 @@ def write_provenance(
     previous: dict[str, object] | None = None,
     *,
     applied_at: str | None = None,
+    answers: Mapping[str, object] | None = None,
 ) -> None:
     """Atomically persist verified release provenance."""
     destination = target / PROVENANCE_FILE
@@ -896,7 +975,12 @@ def write_provenance(
     temporary = destination.with_suffix(".tmp")
     temporary.write_text(
         json.dumps(
-            provenance_data(revision, previous, applied_at=applied_at),
+            provenance_data(
+                revision,
+                previous,
+                applied_at=applied_at,
+                answers=answers,
+            ),
             indent=2,
             sort_keys=True,
         )
@@ -1116,20 +1200,14 @@ def report_settings(data: dict[str, object]) -> str:
     allowed = {
         "branch_strategy",
         "code_owner",
-        "container_mode",
-        "container_smoke_command",
-        "containerfile_path",
         "coverage_mode",
         "coverage_threshold",
         "enable_codeql",
         "enable_governance_drift_check",
-        "enable_npm_publishing",
         "enable_precommit",
-        "enable_pypi_publishing",
-        "enable_release_attestations",
         "enable_template_update_notifications",
         "language",
-        "npm_environment",
+        "languages",
         "package_name",
         "project_description",
         "project_mode",
@@ -1137,12 +1215,9 @@ def report_settings(data: dict[str, object]) -> str:
         "project_slug",
         "project_verification_hook",
         "project_visibility",
-        "pypi_environment",
         "python_min_version",
         "python_support_mode",
         "reviewers",
-        "use_reusable_workflow",
-        "workflow_ref",
     }
     return ", ".join(
         f"`{key}={markdown_code(value)}`"
@@ -1162,6 +1237,9 @@ def adoption_report_markdown(
 ) -> str:
     """Render the complete, shareable adoption decision report."""
     status, reason = plan_status(plan, adoption)
+    release = release_contract(data)
+    workflow = release["selected_workflow"] or "(none)"
+    inputs = ", ".join(cast(list[str], release["required_inputs"])) or "(none)"
     counts = (
         ("Add", len(plan.add)),
         ("Overwrite", len(plan.overwrite)),
@@ -1186,6 +1264,13 @@ def adoption_report_markdown(
         f"- Template: `{markdown_code(revision.label)}` / `{revision.sha}`",
         "- Release verification: "
         + ("verified immutable release" if revision.verified else "UNVERIFIED"),
+        f"- Release ownership: `{release['ownership']}`",
+        f"- Selected release workflow: `{workflow}`",
+        f"- Required release inputs: `{inputs}`",
+        f"- Release ownership reason: {release['reason']}",
+        "- Release repository settings: "
+        f"`{release['settings_owner']}` / immutable Releases "
+        f"`{release['immutable_releases']}`",
         f"- Settings: {report_settings(data)}",
         f"- Generated: `{generated_at}`",
         "",
@@ -1302,10 +1387,19 @@ def adoption_report_markdown(
     return "\n".join(lines)
 
 
-def pdf_text(value: object, limit: int = 92) -> str:
+def pdf_text(
+    value: object, limit: int = 92, max_width: float | None = None
+) -> str:
     """Return printable ASCII text supported by the bundled PDF font."""
     escaped = printable(value).encode("ascii", "backslashreplace").decode()
-    return escaped if len(escaped) <= limit else escaped[: limit - 3] + "..."
+    text = escaped if len(escaped) <= limit else escaped[: limit - 3] + "..."
+    while (
+        max_width is not None
+        and len(text) > 3
+        and stringWidth(text, "Helvetica", 8) > max_width
+    ):
+        text = text[:-4] + "..."
+    return text
 
 
 def draw_adoption_pdf(
@@ -1360,6 +1454,8 @@ def draw_adoption_pdf(
     hook = raw_hook if isinstance(raw_hook, dict) else {}
     hook_path = hook.get("path") or "(none)"
     hook_result = hook.get("result") or "not-run"
+    release = release_contract(data)
+    release_inputs = cast(list[str], release["required_inputs"])
     metadata = (
         ("Target", target),
         ("Repository", repository.repository or "(none)"),
@@ -1373,18 +1469,28 @@ def draw_adoption_pdf(
             "Verification",
             "verified immutable release" if revision.verified else "UNVERIFIED",
         ),
-        ("Profile", data.get("language", "unknown")),
+        ("Release ownership", release["ownership"]),
+        ("Release workflow", release["selected_workflow"] or "(none)"),
+        ("Release inputs", ", ".join(release_inputs) or "(none)"),
+        ("Release reason", release["reason"]),
+        ("Release settings owner", release["settings_owner"]),
+        ("Immutable Releases", release["immutable_releases"]),
+        ("Languages", data.get("languages", "unknown")),
         ("Project hook", hook_path),
         ("Hook configured", str(hook.get("configured") is True).lower()),
         ("Hook result", hook_result),
         ("Hook reason", hook.get("reason") or "(none)"),
     )
+    value_x = 56 + max(
+        stringWidth(label, "Helvetica-Bold", 8) for label, _ in metadata
+    )
+    value_width = page_width - 48 - value_x
     y = page_height - 178
     for label, value in metadata:
         document.setFont("Helvetica-Bold", 8)
         document.drawString(48, y, label)
         document.setFont("Helvetica", 8)
-        document.drawString(110, y, pdf_text(value, 105))
+        document.drawString(value_x, y, pdf_text(value, 105, value_width))
         y -= 15
 
     counts = (
@@ -1554,6 +1660,8 @@ def adoption_binding(payload: dict[str, object]) -> dict[str, object]:
         "adoption": adoption,
         "files": payload.get("files"),
         "mode": payload.get("mode"),
+        "release": payload.get("release"),
+        "release_ownership": payload.get("release_ownership"),
         "repository": payload.get("repository"),
         "target": payload.get("target"),
         "template": payload.get("template"),
@@ -1752,15 +1860,30 @@ def print_group(title: str, paths: tuple[str, ...]) -> None:
 
 def print_capabilities(payload: dict[str, object]) -> None:
     """Print capability results from a resolved plan."""
-    raw_states = payload.get("capabilities")
+    for name in ("organization_policy", "repository_setting"):
+        value = payload.get(name)
+        state = (
+            value.get("state", "unknown")
+            if isinstance(value, dict)
+            else "unknown"
+        )
+        print(f"GitHub release planning {name}={state}")
+    raw_states = payload.get("token_permissions", payload.get("capabilities"))
     states = raw_states if isinstance(raw_states, dict) else {}
-    summary = ", ".join(
-        f"{name}={value.get('state', 'unknown')}"
+    token_summary = ", ".join(
+        f"token {name}={value.get('state', 'unknown')}"
         for name, value in states.items()
         if isinstance(value, dict)
     )
-    print(f"GitHub release preflight: {summary or 'unknown'}")
-    print("Runtime workflows recheck capabilities before every release.")
+    print(f"GitHub release planning permissions: {token_summary or 'unknown'}")
+    effective = payload.get("effective")
+    mode = (
+        effective.get("mode", payload.get("mode", "blocked"))
+        if isinstance(effective, dict)
+        else payload.get("mode", "blocked")
+    )
+    print(f"GitHub release planning effective={mode}")
+    print("Planning only: this check neither enables nor publishes a release.")
     raw_integrations = payload.get("integrations")
     integrations = (
         raw_integrations if isinstance(raw_integrations, dict) else {}
@@ -1798,6 +1921,16 @@ def print_plan(plan: ResolvedPlan) -> None:
             else "UNVERIFIED"
         )
     )
+    release = release_contract(plan.answers)
+    release_inputs = cast(list[str], release["required_inputs"])
+    print(f"Release ownership: {release['ownership']}")
+    print(
+        f"Selected release workflow: {release['selected_workflow'] or '(none)'}"
+    )
+    print(f"Required release inputs: {', '.join(release_inputs) or '(none)'}")
+    print(f"Release ownership reason: {release['reason']}")
+    print(f"Release settings owner: {release['settings_owner']}")
+    print(f"Immutable Releases: {release['immutable_releases']}")
     print(f"Repository: {plan.repository.repository or '(none)'}")
     print(f"Repository owner: {plan.repository.owner or '(unknown)'}")
     print(f"Repository owner type: {plan.repository.owner_type or 'unknown'}")
@@ -2018,7 +2151,8 @@ def validate_pending_file_sets(
 ) -> None:
     """Derive pending paths from the template and reject unrelated changes."""
     expected_managed = set(pending_managed_paths(stage, planned)) - {
-        ".copier-answers.yml"
+        CONFIG_FILE.as_posix(),
+        LEGACY_ANSWERS_FILE.as_posix(),
     }
     raw_managed = pending.get("managed_files")
     managed = (
@@ -2057,7 +2191,8 @@ def validate_pending_file_sets(
         managed
         | manual
         | {
-            ".copier-answers.yml",
+            CONFIG_FILE.as_posix(),
+            LEGACY_ANSWERS_FILE.as_posix(),
             PENDING_ADOPTION_FILE.as_posix(),
         }
     )
@@ -2261,7 +2396,7 @@ def prepare_adoption_candidate(
                     candidate,
                     revision,
                     repository,
-                    candidate / ".copier-answers.yml",
+                    config_path(candidate),
                     pending_managed_paths(stage, planned),
                     (*planned.manual, *planned.unknown),
                 ),
@@ -2274,7 +2409,12 @@ def prepare_adoption_candidate(
             )
         else:
             create_adoption_lockfiles(candidate, answers)
-            write_provenance(candidate, revision, applied_at=generated_at)
+            write_provenance(
+                candidate,
+                revision,
+                applied_at=generated_at,
+                answers=answers,
+            )
             try:
                 hook = verify_project(candidate)
             except ProjectVerificationError as error:
@@ -2390,10 +2530,12 @@ def write_candidate_patch(
             raise CliError(detail)
 
 
-def create_adoption_lockfiles(target: Path, answers: dict[str, object]) -> None:
+def create_adoption_lockfiles(  # noqa: C901
+    target: Path, answers: dict[str, object]
+) -> None:
     """Create language lockfiles after an adoption is ready to finalize."""
-    language = answers.get("language")
-    if language in {"python", "python-typescript"}:
+    languages = selected_languages(answers)
+    if "python" in languages:
         python_version = target / ".python-version"
         if not python_version.is_file():
             raise CliError(
@@ -2423,7 +2565,7 @@ def create_adoption_lockfiles(target: Path, answers: dict[str, object]) -> None:
                 "Cannot create uv.lock after the manifest merge; fix "
                 f"pyproject.toml, then rerun csarc adopt --finalize. {detail}"
             )
-    if language in {"typescript", "python-typescript"}:
+    if "typescript" in languages:
         try:
             result = run(
                 ["pnpm", "install", "--lockfile-only", "--ignore-scripts"],
@@ -2441,6 +2583,25 @@ def create_adoption_lockfiles(target: Path, answers: dict[str, object]) -> None:
             raise CliError(
                 "Cannot create pnpm-lock.yaml after the manifest merge; fix "
                 f"package.json, then rerun csarc adopt --finalize. {detail}"
+            )
+    if "rust" in languages:
+        try:
+            result = run(
+                ["cargo", "generate-lockfile"],
+                cwd=target,
+                capture=True,
+                check=False,
+            )
+        except FileNotFoundError as error:
+            raise CliError(
+                "Cargo is required to create Cargo.lock; install the Rust "
+                "toolchain, then rerun csarc adopt --finalize."
+            ) from error
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip()
+            raise CliError(
+                "Cannot create Cargo.lock after the manifest merge; fix "
+                f"Cargo.toml, then rerun csarc adopt --finalize. {detail}"
             )
 
 
@@ -2900,21 +3061,25 @@ def apply_milestone_description_plan(
 def capability_preflight(
     script: Path, target: Path, *, emit: bool = True
 ) -> dict[str, object]:
-    """Run the read-only release preflight without making it a prerequisite."""
+    """Inspect release-related capabilities for planning only."""
     repository = target_repository(target)
     if repository is None or not script.is_file():
+        unknown = {"state": "unknown", "reason": "runtime check required"}
+        token_permissions = {
+            name: dict(unknown)
+            for name in ("actions_pull_requests", "contents", "release")
+        }
         payload: dict[str, object] = {
-            "mode": "verification-only",
+            "mode": "blocked",
             "reason": "GitHub origin or capability script is unavailable",
-            "capabilities": {
-                name: {"state": "unknown", "reason": "runtime check required"}
-                for name in (
-                    "actions_pull_requests",
-                    "contents",
-                    "release",
-                    "dispatch",
-                )
+            "organization_policy": dict(unknown),
+            "repository_setting": dict(unknown),
+            "token_permissions": token_permissions,
+            "effective": {
+                "mode": "blocked",
+                "reason": "GitHub origin or capability script is unavailable",
             },
+            "capabilities": token_permissions,
             "integrations": {
                 "renovate": {
                     "state": "fallback",
@@ -2945,11 +3110,18 @@ def capability_preflight(
         except json.JSONDecodeError:
             parsed = None
         payload = (
-            parsed
+            cast(dict[str, object], parsed)
             if result.returncode == 0 and isinstance(parsed, dict)
             else {
-                "mode": "verification-only",
+                "mode": "blocked",
                 "reason": "GitHub capability preflight was unavailable",
+                "organization_policy": {},
+                "repository_setting": {},
+                "token_permissions": {},
+                "effective": {
+                    "mode": "blocked",
+                    "reason": "GitHub capability preflight was unavailable",
+                },
                 "capabilities": {},
             }
         )
@@ -2958,27 +3130,329 @@ def capability_preflight(
     return payload
 
 
+def parse_languages(value: str) -> list[str]:
+    """Parse a CLI language selection without defining combinations."""
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        parsed = [part.strip() for part in value.split(",") if part.strip()]
+    if not isinstance(parsed, list) or not all(
+        isinstance(item, str) for item in parsed
+    ):
+        raise CliError("languages must be a JSON list or comma-separated list.")
+    unknown = sorted(set(parsed) - {"python", "typescript", "rust"})
+    if unknown:
+        raise CliError(f"Unsupported language modules: {', '.join(unknown)}")
+    return list(dict.fromkeys(parsed))
+
+
+def required_release_inputs(value: object) -> list[str]:
+    """Normalize the required workflow input names stored in flat config."""
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError as error:
+            raise CliError(
+                "release_required_inputs must be a JSON list."
+            ) from error
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(
+        isinstance(item, str) and item for item in value
+    ):
+        raise CliError(
+            "release_required_inputs must be a list of non-empty strings."
+        )
+    return sorted(set(value))
+
+
+def release_workflow_metadata(
+    target: Path, relative_name: str
+) -> dict[str, object]:
+    """Inspect one repository-local workflow for its release contract."""
+    relative = Path(relative_name)
+    if (
+        relative.is_absolute()
+        or relative.parts[:2] != (".github", "workflows")
+        or relative.suffix not in {".yml", ".yaml"}
+    ):
+        raise CliError(
+            "release_workflow must be a YAML file under .github/workflows."
+        )
+    path = checked_destination(target, relative_name)
+    if path.is_symlink() or not path.is_file():
+        raise CliError(
+            f"Selected release workflow does not exist: {relative_name}"
+        )
+    source = path.read_text(encoding="utf-8")
+    try:
+        workflow = yaml.safe_load(source)
+    except yaml.YAMLError as error:
+        raise CliError(
+            f"Selected release workflow is invalid YAML: {relative_name}"
+        ) from error
+    if not isinstance(workflow, dict):
+        raise CliError(
+            f"Selected release workflow is not a mapping: {relative_name}"
+        )
+    events = workflow.get("on", workflow.get(True))
+    dispatch = (
+        events.get("workflow_dispatch") if isinstance(events, dict) else None
+    )
+    inputs = dispatch.get("inputs", {}) if isinstance(dispatch, dict) else {}
+    if not isinstance(inputs, dict):
+        raise CliError(
+            f"Selected release workflow has invalid inputs: {relative_name}"
+        )
+    required = []
+    for name, settings in inputs.items():
+        if not isinstance(name, str) or not isinstance(settings, dict):
+            raise CliError(
+                f"Selected release workflow has invalid inputs: {relative_name}"
+            )
+        is_required = settings.get("required", False)
+        if not isinstance(is_required, bool):
+            raise CliError(
+                f"Selected release workflow has invalid inputs: {relative_name}"
+            )
+        if is_required:
+            required.append(name)
+    return {
+        "path": relative.as_posix(),
+        "required_inputs": sorted(required),
+        "writes_release": any(
+            marker in source for marker in RELEASE_WRITER_MARKERS
+        ),
+    }
+
+
+def release_writer_workflows(target: Path) -> list[dict[str, object]]:
+    """Return every parseable workflow that explicitly writes a Release."""
+    root = target / ".github" / "workflows"
+    if not root.is_dir() or root.is_symlink():
+        return []
+    result = []
+    for path in sorted((*root.glob("*.yml"), *root.glob("*.yaml"))):
+        metadata = release_workflow_metadata(
+            target, path.relative_to(target).as_posix()
+        )
+        if metadata["writes_release"]:
+            result.append(metadata)
+    return result
+
+
+def release_ownership(answers: Mapping[str, object]) -> str:
+    """Return an explicit owner, with project_mode as a legacy fallback."""
+    ownership = answers.get("release_ownership")
+    if ownership is None:
+        project_mode = answers.get("project_mode")
+        if project_mode == "new":
+            return "csarc-owned"
+        if project_mode == "existing":
+            return "product-owned"
+        raise CliError("project_mode must be new or existing.")
+    if ownership not in RELEASE_OWNERSHIPS:
+        raise CliError(
+            "release_ownership must be csarc-owned, product-owned, or "
+            "verification-only."
+        )
+    return str(ownership)
+
+
+def release_contract(answers: Mapping[str, object]) -> dict[str, object]:
+    """Return the normalized release contract used by every plan artifact."""
+    ownership = release_ownership(answers)
+    workflow = answers.get("release_workflow", "")
+    reason = answers.get("release_ownership_reason", "")
+    if (
+        not isinstance(workflow, str)
+        or not isinstance(reason, str)
+        or not reason
+    ):
+        raise CliError("Release workflow ownership is incomplete.")
+    inputs = required_release_inputs(answers.get("release_required_inputs"))
+    if ownership == "verification-only" and (workflow or inputs):
+        raise CliError(
+            "verification-only release ownership cannot select a workflow."
+        )
+    if ownership != "verification-only" and not workflow:
+        raise CliError(f"{ownership} release ownership requires a workflow.")
+    expected_settings = {
+        "csarc-owned": ("csarc-admin", "required"),
+        "product-owned": ("product-admin", "product-defined"),
+        "verification-only": ("none", "not-required"),
+    }[ownership]
+    settings_owner = answers.get("release_settings_owner", expected_settings[0])
+    immutable = answers.get("release_immutable_releases", expected_settings[1])
+    if (settings_owner, immutable) != expected_settings:
+        raise CliError("Release repository settings do not match ownership.")
+    return {
+        "immutable_releases": immutable,
+        "ownership": ownership,
+        "reason": reason,
+        "required_inputs": inputs,
+        "selected_workflow": workflow or None,
+        "settings_owner": settings_owner,
+    }
+
+
+def resolve_release_answers(  # noqa: C901
+    target: Path, answers: Mapping[str, object]
+) -> dict[str, object]:
+    """Resolve one fail-closed release owner from repository evidence."""
+    result = dict(answers)
+    project_mode = result.get("project_mode")
+    if project_mode not in {"new", "existing"}:
+        raise CliError("project_mode must be new or existing.")
+    explicit_owner = result.get("release_ownership")
+    writers = release_writer_workflows(target)
+    if explicit_owner is None:
+        ownership = (
+            "csarc-owned"
+            if project_mode == "new"
+            else "product-owned"
+            if len(writers) == 1
+            else "verification-only"
+        )
+    else:
+        ownership = release_ownership(result)
+
+    if ownership == "verification-only":
+        selected = result.get("release_workflow", "")
+        configured_inputs = required_release_inputs(
+            result.get("release_required_inputs")
+        )
+        if selected or configured_inputs:
+            raise CliError(
+                "verification-only release ownership cannot select a workflow."
+            )
+        reason = result.get("release_ownership_reason")
+        if not isinstance(reason, str) or not reason:
+            reason = (
+                "No product release writer was detected; CSARC verifies only."
+                if not writers
+                else "Multiple product release writers were detected; "
+                "CSARC verifies only until one owner is selected."
+            )
+        result.update(
+            release_immutable_releases="not-required",
+            release_ownership=ownership,
+            release_ownership_reason=reason,
+            release_required_inputs=[],
+            release_settings_owner="none",
+            release_workflow="",
+        )
+        return result
+
+    if ownership == "csarc-owned":
+        selected = result.get("release_workflow", "")
+        if not isinstance(selected, str):
+            raise CliError("release_workflow must be a string.")
+        expected = (
+            ".github/workflows/release.yml"
+            if project_mode == "new"
+            else selected
+        )
+        if not expected:
+            raise CliError(
+                "Existing CSARC-owned release requires an explicit workflow."
+            )
+        if writers and (
+            len(writers) != 1 or str(writers[0]["path"]) != expected
+        ):
+            raise CliError(
+                "CSARC-owned release would duplicate a product release writer."
+            )
+        if project_mode == "existing" and not writers:
+            raise CliError(
+                "Existing CSARC-owned release workflow does not exist."
+            )
+        observed_inputs = (
+            cast(list[str], writers[0]["required_inputs"]) if writers else []
+        )
+        saved_inputs = result.get("release_required_inputs")
+        if (
+            saved_inputs is not None
+            and required_release_inputs(saved_inputs) != observed_inputs
+        ):
+            raise CliError("Selected release workflow input contract drifted.")
+        result.update(
+            release_immutable_releases="required",
+            release_ownership=ownership,
+            release_ownership_reason=(
+                "CSARC owns the only version and GitHub Release workflow."
+            ),
+            release_required_inputs=observed_inputs,
+            release_settings_owner="csarc-admin",
+            release_workflow=expected,
+        )
+        return result
+
+    if project_mode != "existing":
+        raise CliError("product-owned release requires an existing repository.")
+    if len(writers) != 1:
+        raise CliError(
+            "Product-owned release requires exactly one release-writing "
+            "workflow."
+        )
+    workflow = writers[0]
+    selected = result.get("release_workflow", "")
+    if selected and selected != workflow["path"]:
+        raise CliError(
+            f"Selected release workflow {selected} is not the sole release "
+            "writer."
+        )
+    observed_inputs = cast(list[str], workflow["required_inputs"])
+    saved_inputs = result.get("release_required_inputs")
+    if (
+        saved_inputs is not None
+        and required_release_inputs(saved_inputs) != observed_inputs
+    ):
+        raise CliError("Selected release workflow input contract drifted.")
+    result.update(
+        release_immutable_releases="product-defined",
+        release_ownership=ownership,
+        release_ownership_reason=(
+            "The existing product workflow remains the only Release writer; "
+            "CSARC never dispatches it."
+        ),
+        release_required_inputs=observed_inputs,
+        release_settings_owner="product-admin",
+        release_workflow=workflow["path"],
+    )
+    return result
+
+
 def base_data(
     target: Path, mode: str, values: dict[str, str]
-) -> dict[str, str]:
+) -> dict[str, object]:
     """Build stable defaults while allowing explicit Copier answers."""
     slug = slugify(target.name)
-    data = {
+    detected_languages = (
+        detect_languages(target) if mode == "adopt" else ["python"]
+    )
+    data: dict[str, object] = {
         "project_mode": "existing" if mode == "adopt" else "new",
         "project_name": target.name.replace("-", " ").replace("_", " ").title(),
         "project_slug": slug,
         "package_name": slug.replace("-", "_").replace(".", "_"),
-        "language": detect_language(target) if mode == "adopt" else "python",
+        "language": "-".join(detected_languages) or "ci",
+        "languages": detected_languages,
         "code_owner": DEFAULT_OWNER,
     }
     if mode == "adopt":
         data["coverage_mode"] = "diff"
     data.update(values)
+    if "languages" in values:
+        data["languages"] = parse_languages(values["languages"])
+    if "language" in values and "languages" not in values:
+        legacy = values["language"]
+        data["languages"] = [] if legacy == "ci" else legacy.split("-")
     if "package_name" not in values:
         data["package_name"] = (
             str(data["project_slug"]).replace("-", "_").replace(".", "_")
         )
-    return data
+    return resolve_release_answers(target, data)
 
 
 def default_security_reporting_channel(repository_url: str) -> str:
@@ -3035,9 +3509,9 @@ def validate_copy_target(
             "Adoption is pending; complete the manual merge, then run "
             "csarc adopt --finalize."
         )
-    if (target / ".copier-answers.yml").exists():
+    if config_path(target).exists():
         raise CliError(
-            "Repository already has Copier answers; use csarc update."
+            "Repository already has CSARC configuration; use csarc update."
         )
     if require_clean:
         require_clean_repository(target)
@@ -3123,17 +3597,19 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
             "restart adoption from a clean commit."
         )
 
-    answers_path = checked_destination(target, ".copier-answers.yml")
+    answers_path = checked_destination(
+        target, config_path(target).relative_to(target).as_posix()
+    )
     if answers_path.is_symlink() or not answers_path.is_file():
         raise CliError(
-            "Pending adoption is missing .copier-answers.yml; restore the "
+            "Pending adoption is missing the CSARC configuration; restore the "
             "managed file, then rerun csarc adopt --finalize."
         )
     actual_answers_hash = hashlib.sha256(answers_path.read_bytes()).hexdigest()
     if actual_answers_hash != pending["answers_sha256"]:
         raise CliError(
             "Copier answers changed after adoption started; restore "
-            ".copier-answers.yml or restart adoption from a clean commit."
+            "configuration or restart adoption from a clean commit."
         )
     if read_answer(answers_path, "_src_path") != source:
         raise CliError(
@@ -3245,7 +3721,12 @@ def command_finalize_adoption(args: argparse.Namespace) -> int:  # noqa: C901
         candidate = temporary_root / "candidate"
         clone_working_tree(target, candidate)
         create_adoption_lockfiles(candidate, answers)
-        write_provenance(candidate, revision, applied_at=generated_at)
+        write_provenance(
+            candidate,
+            revision,
+            applied_at=generated_at,
+            answers=answers,
+        )
         checked_destination(
             candidate, PENDING_ADOPTION_FILE.as_posix()
         ).unlink()
@@ -3636,7 +4117,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
         stage.mkdir()
         copier_copy(revision.source, revision, stage, data)
         answers: dict[str, object] = dict(data)
-        answers.update(read_copier_answers(stage / ".copier-answers.yml"))
+        answers.update(read_copier_answers(config_path(stage)))
         capabilities = capability_preflight(
             stage / "scripts" / "release_policy.py", target, emit=False
         )
@@ -3684,7 +4165,7 @@ def command_copy(args: argparse.Namespace, mode: str) -> int:  # noqa: C901
             raise CliError("Adoption requires a saved machine plan.")
 
     verify_project(target)
-    write_provenance(target, revision)
+    write_provenance(target, revision, answers=answers)
     settings_plan(target)
     return 0
 
@@ -3795,9 +4276,9 @@ def update_status(
     client: ReleaseClient | None = None,
 ) -> tuple[dict[str, object], Revision, dict[str, object] | None]:
     """Return stable status plus verified current and target state."""
-    answers = target / ".copier-answers.yml"
+    answers = config_path(target)
     if not answers.is_file():
-        raise CliError("Missing .copier-answers.yml; use csarc adopt first.")
+        raise CliError(f"Missing {CONFIG_FILE}; use csarc adopt first.")
     source = read_answer(answers, "_src_path")
     current = read_answer(answers, "_commit")
     previous_revision, previous = current_revision(
@@ -3842,10 +4323,30 @@ def update_plan_answers(  # noqa: C901
     answers: dict[str, object],
     explicit_data: dict[str, str],
     repository: RepositoryContext,
-) -> tuple[dict[str, object], dict[str, str]]:
+) -> tuple[dict[str, object], dict[str, object]]:
     """Resolve update answers and Copier overrides from repository facts."""
     result = dict(answers)
-    update_data = dict(explicit_data)
+    update_data: dict[str, object] = dict(explicit_data)
+    release_ownership(answers)
+    release_keys = {
+        "release_ownership",
+        "release_ownership_reason",
+        "release_immutable_releases",
+        "release_required_inputs",
+        "release_settings_owner",
+        "release_workflow",
+    }
+    if release_keys.intersection(explicit_data):
+        raise CliError(
+            "Release ownership contract is discovered during adoption and "
+            "cannot be changed with --data."
+        )
+    requested_mode = explicit_data.get("project_mode")
+    if requested_mode is not None and requested_mode != answers["project_mode"]:
+        raise CliError(
+            "project_mode cannot change during update because it owns the "
+            "release boundary."
+        )
     saved_visibility = answers.get("project_visibility")
     update_data["project_visibility"] = repository.visibility
     if repository.repository is not None:
@@ -3863,17 +4364,18 @@ def update_plan_answers(  # noqa: C901
                 default_security_reporting_channel(repository_url)
             )
     if saved_visibility != repository.visibility:
-        enabled = (
-            repository.visibility == "public"
-            and answers.get("language") != "ci"
+        enabled = repository.visibility == "public" and bool(
+            selected_languages(answers)
         )
-        for key in ("enable_codeql", "enable_release_attestations"):
-            if key in answers and key not in explicit_data:
-                update_data[key] = str(enabled).lower()
+        if "enable_codeql" in answers and "enable_codeql" not in explicit_data:
+            update_data["enable_codeql"] = str(enabled).lower()
     for key, value in update_data.items():
         previous_value = answers.get(key)
-        if isinstance(previous_value, bool):
-            normalized = value.casefold()
+        if key == "languages":
+            result[key] = parse_languages(str(value))
+            update_data[key] = result[key]
+        elif isinstance(previous_value, bool):
+            normalized = str(value).casefold()
             if normalized in {"1", "true", "yes", "on"}:
                 result[key] = True
             elif normalized in {"0", "false", "no", "off"}:
@@ -3882,7 +4384,7 @@ def update_plan_answers(  # noqa: C901
                 raise CliError(f"{key} must be a boolean value.")
         elif isinstance(previous_value, int):
             try:
-                result[key] = int(value)
+                result[key] = int(str(value))
             except ValueError as error:
                 raise CliError(f"{key} must be an integer value.") from error
         else:
@@ -3898,9 +4400,9 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             "Adoption is pending; complete the manual merge and run "
             "csarc adopt --finalize before update."
         )
-    answers_path = target / ".copier-answers.yml"
+    answers_path = config_path(target)
     if not answers_path.is_file():
-        raise CliError("Missing .copier-answers.yml; use csarc adopt first.")
+        raise CliError(f"Missing {CONFIG_FILE}; use csarc adopt first.")
     saved_answers = read_copier_answers(answers_path)
     explicit_data = parse_data(args.data)
     saved_visibility = saved_answers.get("project_visibility")
@@ -3914,6 +4416,7 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
     candidate_answers, update_data = update_plan_answers(
         saved_answers, explicit_data, repository
     )
+    candidate_answers = resolve_release_answers(target, candidate_answers)
     status, target_revision, previous = update_status(
         target,
         args.to,
@@ -3940,7 +4443,8 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             candidate_answers,
             skip_tasks=True,
         )
-        answers = read_copier_answers(stage / ".copier-answers.yml")
+        target_uses_current_config = (stage / CONFIG_FILE).is_file()
+        answers = read_copier_answers(config_path(stage))
         preflight = capability_preflight(
             stage / "scripts" / "release_policy.py",
             target,
@@ -4001,28 +4505,33 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
             print_plan(plan)
         return 1 if status["update_available"] else 0
 
-    copier_data = [
-        part
-        for key, value in sorted(update_data.items())
-        for part in ("--data", f"{key}={value}")
-    ]
-    preview = run(
-        [
-            sys.executable,
-            "-m",
-            "copier",
-            "update",
-            "--trust",
-            "--defaults",
-            "--pretend",
-            "--vcs-ref",
-            str(status["target_sha"]),
-            *copier_data,
-            str(target),
-        ],
-        capture=True,
-        check=False,
-    )
+    with tempfile.TemporaryDirectory(
+        prefix="csarc-update-preview-"
+    ) as temporary:
+        data_file = Path(temporary) / "data.yml"
+        data_file.write_text(
+            yaml.safe_dump(update_data, sort_keys=True), encoding="utf-8"
+        )
+        preview = run(
+            [
+                sys.executable,
+                "-m",
+                "copier",
+                "update",
+                "--trust",
+                "--defaults",
+                "--pretend",
+                "--vcs-ref",
+                str(status["target_sha"]),
+                "--answers-file",
+                answers_path.relative_to(target).as_posix(),
+                "--data-file",
+                str(data_file),
+                str(target),
+            ],
+            capture=True,
+            check=False,
+        )
     if preview.returncode != 0:
         raise CliError(preview.stderr.strip() or preview.stdout.strip())
     print_plan(plan)
@@ -4048,6 +4557,11 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
         temporary_root = Path(temporary).resolve()
         candidate = temporary_root / "candidate"
         clone_target(target, candidate)
+        candidate_config_path = config_path(candidate)
+        data_file = temporary_root / "data.yml"
+        data_file.write_text(
+            yaml.safe_dump(update_data, sort_keys=True), encoding="utf-8"
+        )
         result = run(
             [
                 sys.executable,
@@ -4060,36 +4574,35 @@ def command_update(args: argparse.Namespace) -> int:  # noqa: C901
                 "inline",
                 "--vcs-ref",
                 str(status["target_sha"]),
-                *copier_data,
+                "--answers-file",
+                candidate_config_path.relative_to(candidate).as_posix(),
+                "--data-file",
+                str(data_file),
                 str(candidate),
             ],
             check=False,
         )
         conflicts = find_conflicts(candidate)
         if result.returncode != 0 or conflicts:
-            artifacts, delete_paths = candidate_patch_effects(
-                candidate, include_paths=conflicts
-            )
-            if artifacts or delete_paths:
-                write_candidate_patch(
-                    candidate,
-                    target,
-                    temporary_root / "conflict.patch",
-                    artifacts=artifacts,
-                    target_snapshot=target_snapshot,
-                    delete_paths=delete_paths,
-                    include_paths=conflicts,
-                )
             detail = (
                 ", ".join(conflicts) if conflicts else "Copier exited non-zero"
             )
             raise CliError(
                 f"Update needs manual conflict resolution ({detail}); "
-                "differences were preserved."
+                "the target was not changed. Resolve the listed files in "
+                "the target or template, then rerun the update."
             )
+        if (
+            target_uses_current_config
+            and candidate_config_path == candidate / LEGACY_ANSWERS_FILE
+        ):
+            migrated = candidate / CONFIG_FILE
+            migrated.parent.mkdir(parents=True, exist_ok=True)
+            candidate_config_path.replace(migrated)
         pin_answer_commit(candidate, str(status["target_sha"]))
+        persist_release_answers(candidate, answers)
         verify_project(candidate)
-        write_provenance(candidate, target_revision, previous)
+        write_provenance(candidate, target_revision, previous, answers=answers)
         artifacts, delete_paths = candidate_patch_effects(candidate)
         write_candidate_patch(
             candidate,

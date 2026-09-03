@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Reports whether the current checkout's local branch <branch> still
+# reflects origin/<branch>'s current tip (Issue #514): fetches origin
+# fresh, then classifies the comparison so a person or agent can tell,
+# before starting or resuming work on an existing branch/PR, whether local
+# state can be trusted -- instead of a manual, easy-to-skip `git log` /
+# `gh pr view --json headRefOid` eyeball comparison.
+#
+# "Different SHA" alone does not distinguish "merely behind" from
+# "diverged or rewritten" -- both start with local_tip != origin_tip -- so
+# this script uses `git merge-base --is-ancestor` rather than a plain SHA
+# comparison to tell them apart:
+#
+#   up-to-date
+#     local and origin/<branch> point at the same commit, OR origin's tip
+#     is already an ancestor of local's tip (local has unpushed commits;
+#     origin has nothing local doesn't already have). Safe either way.
+#
+#   behind (fast-forward available)
+#     local's tip is an ancestor of origin/<branch>'s tip: origin moved
+#     ahead but purely by adding commits on top of what local already had.
+#     `git merge --ff-only origin/<branch>` (or `git pull --ff-only`)
+#     catches local up without discarding anything.
+#
+#   diverged or rewritten -- do not assume your branch reflects current
+#   state
+#     neither tip is an ancestor of the other. origin/<branch> may have
+#     been force-pushed, rebased, or rebuilt by someone else since local's
+#     tip was recorded (or local has its own unpushed commits and origin
+#     also moved independently) -- local may already be stale or
+#     conflicting. Re-inspect before continuing; do not assume work done
+#     against the current local tip still applies.
+#
+# Read-only: never fetches into or mutates the local <branch> ref, the
+# working tree, or the index -- only updates the remote-tracking ref via
+# `git fetch`, exactly like a plain `git fetch` would.
+#
+# Usage: scripts/check-branch-fresh <branch>
+#   <branch>  Name of a local branch that has a same-named branch on the
+#             "origin" remote (e.g. origin/<branch>).
+#
+# Exit codes:
+#   0  up-to-date (including the "ahead of origin" sub-case above).
+#   1  behind, or diverged/rewritten -- see the printed STATUS line for
+#      which; something needs your attention before you proceed.
+#   2  usage error, or the comparison could not be evaluated at all (not a
+#      Git repository, no such local branch, no "origin" remote, the
+#      fetch failed, or origin still has no <branch> after a fresh fetch).
+
+if [[ $# -ne 1 ]]; then
+  echo "usage: $(basename "$0") <branch>" >&2
+  exit 2
+fi
+branch="$1"
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "ERROR: not inside a Git working tree" >&2
+  exit 2
+fi
+if ! git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null; then
+  echo "ERROR: no local branch named '$branch' (refs/heads/$branch not found)" >&2
+  exit 2
+fi
+if ! git remote get-url origin >/dev/null 2>&1; then
+  echo "ERROR: no 'origin' remote configured" >&2
+  exit 2
+fi
+
+echo "Fetching origin/$branch..." >&2
+if ! git fetch origin "$branch" >/dev/null 2>&1; then
+  echo "ERROR: 'git fetch origin $branch' failed -- check network access and that '$branch' exists on origin" >&2
+  exit 2
+fi
+if ! git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null; then
+  echo "ERROR: origin has no '$branch' branch (refs/remotes/origin/$branch not found after fetch) -- it may not be pushed yet" >&2
+  exit 2
+fi
+
+local_tip="$(git rev-parse "refs/heads/$branch")"
+origin_tip="$(git rev-parse "refs/remotes/origin/$branch")"
+
+if [[ "$local_tip" == "$origin_tip" ]]; then
+  echo "STATUS: up-to-date"
+  echo "local $branch and origin/$branch both point at $local_tip."
+  exit 0
+fi
+
+if git merge-base --is-ancestor "$local_tip" "$origin_tip"; then
+  behind_count="$(git rev-list --count "$local_tip..$origin_tip")"
+  {
+    echo "STATUS: behind (fast-forward available)"
+    echo "local $branch ($local_tip) is $behind_count commit(s) behind origin/$branch ($origin_tip)."
+    echo "Fast-forward with: git merge --ff-only origin/$branch   (or: git pull --ff-only)"
+  } >&2
+  exit 1
+fi
+
+if git merge-base --is-ancestor "$origin_tip" "$local_tip"; then
+  ahead_count="$(git rev-list --count "$origin_tip..$local_tip")"
+  echo "STATUS: up-to-date"
+  echo "local $branch ($local_tip) is $ahead_count commit(s) ahead of origin/$branch ($origin_tip); origin has nothing local doesn't already have."
+  exit 0
+fi
+
+{
+  echo "STATUS: diverged or rewritten — do not assume your branch reflects current state"
+  echo "local $branch ($local_tip) and origin/$branch ($origin_tip) share no ancestor relationship in either direction."
+  echo "origin/$branch may have been force-pushed, rebased, or rebuilt by someone else since your local tip was recorded."
+  echo "Re-inspect before continuing, e.g.:"
+  echo "  git log --oneline --graph $branch origin/$branch"
+  echo "  gh pr view --json headRefOid   # confirm what the PR actually points at"
+  echo "Only after confirming you want to discard local-only history: git reset --hard origin/$branch"
+} >&2
+exit 1

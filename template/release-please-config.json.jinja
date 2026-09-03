@@ -1,21 +1,22 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
-  "release-type": "{% if language == 'ci' %}simple{% elif language == 'python' %}python{% else %}node{% endif %}",
+  "release-type": "{% if "typescript" in languages %}node{% elif "python" in languages %}python{% elif "rust" in languages %}rust{% else %}simple{% endif %}",
   "packages": {
     ".": {
       "component": "{{ project_slug }}",
       "draft": true,
       "include-component-in-tag": false,
       "label": "enhancement",
-      "release-label": "enhancement"{% if language in ["python", "python-typescript"] %},
+      "release-label": "enhancement"{% if "python" in languages or ("rust" in languages and ("python" in languages or "typescript" in languages)) %},
       "extra-files": [
-{% if language == "python-typescript" %}
+{% if "typescript" in languages and "python" in languages %}
         {
           "type": "toml",
           "path": "pyproject.toml",
           "jsonpath": "$.project.version"
         },
 {% endif %}
+{% if "python" in languages %}
         {
           "type": "toml",
           "path": "uv.lock",
@@ -24,7 +25,20 @@
         {
           "type": "generic",
           "path": "src/{{ package_name }}/__init__.py"
+        }{% if "rust" in languages %},{% endif %}
+{% endif %}
+{% if "rust" in languages and ("python" in languages or "typescript" in languages) %}
+        {
+          "type": "toml",
+          "path": "Cargo.toml",
+          "jsonpath": "$.package.version"
+        },
+        {
+          "type": "toml",
+          "path": "Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value==\"{{ project_slug }}\")].version"
         }
+{% endif %}
       ]{% endif %}
     }
   }

@@ -64,6 +64,10 @@
     .table th { background: var(--panel); }
     .notice { padding: 16px 18px; border-left: 6px solid var(--green); background: #edf7f2; }
     .notice.optional { border-color: var(--yellow); background: #fffbea; }
+    .advanced { margin-top: 18px; border: 1px solid var(--line); background: var(--panel); }
+    .advanced summary { padding: 14px 16px; cursor: pointer; font-weight: 800; }
+    .advanced > div { padding: 0 18px 16px; }
+    .advanced > div > :last-child { margin-bottom: 0; }
     footer { padding-top: 32px; color: var(--muted); font-size: 13px; }
     @media (max-width: 920px) {
       .site { grid-template-columns: 1fr; width: min(100% - 24px, 760px); margin: 12px auto; }

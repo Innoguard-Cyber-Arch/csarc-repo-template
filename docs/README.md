@@ -55,8 +55,9 @@
 
 | 類型 | 路徑 | 用途與維護方式 |
 | --- | --- | --- |
-| 單檔交付物 | `docs/index.html` | 由 `site/` 重建的 portable presentation；內嵌樣式、程式與媒體，不直接編輯 |
-| 網站來源 | `site/` | 分開維護 HTML 內容、特殊視覺、互動與原始圖片；詳見 `site/README.md` |
+| 單檔交付物 | `docs/index.html`、`docs/index.en.html` | 由 Hugo 來源重建的中英文 portable presentation；內嵌樣式、程式與媒體，不直接編輯 |
+| AI 閱讀索引 | `llms.txt`、`docs/llms.txt` | 由 Hugo 從共用 glossary 同源產生；不直接編輯 |
+| 網站來源 | `site/` | 分開維護雙語 Markdown、Hugo 模板、特殊視覺、互動與原始圖片；詳見 `site/README.md` |
 | 操作契約 | `docs/agent-install.md`、`docs/milestone-description.md` | 已發布且可能由固定版本 URL 讀取的介面；路徑保持穩定 |
 | Runbook | `docs/live-integration.md`、`docs/artifact-consumption.md` | 維護者執行線上驗證或排查交付鏈時使用 |
 | 實證 | `docs/pilot-adoption.md` | 真實 consuming repository 的採用、更新與限制證據 |
@@ -66,14 +67,14 @@
 1. 先讀相關 current spec，再搜尋 `docs/adr/` 與 open／closed Issues。
 2. 在既有或新 Issue 摘要已確認限制、替代方案與先前決策如何被沿用、取代或駁回。
 3. 透過 scoped PR 更新 current spec 與對應 ADR；若只有實作細節改變，不製造無意義的 decision record。
-4. 若決策需要出現在簡報，同一個 PR 更新 `site/` 並重建 `docs/index.html`。
+4. 若決策需要出現在簡報，同一個 PR 更新 `site/`，再以 `./scripts/build-decision-site` 重建中英文交付物與索引。
 
 ## 維護原則
 
 - 規格改變時更新 current SDD；重大取捨改變時新增或更新 ADR，舊理由以 flow-forward disposition 保留。
 - 新增內容前先判斷它是使用指南、runbook、ADR、實證、規格或交付物，不以檔案格式決定分類。
 - `docs/agent-install.md` 等公開契約優先維持穩定路徑；需要分類時由本頁導覽，不為整理目錄破壞既有 URL。
-- `docs/index.html` 是 presentation，不是唯一來源；修改 `site/` 後執行 `uv run --no-project python scripts/render_site.py`，`--check` 只比對 committed bundle，不改檔案。
-- `docs/index.html` 必須保持單檔、無 runtime 外部 CSS、JavaScript、font 或 image 依賴。超連結可以指向外部參考資料，但離線開啟不能因網路不可用而失去簡報內容或操作能力。`noindex`／`robots.txt` 不是 access control。
+- `docs/index.html` 與 `docs/index.en.html` 是 presentation，不是唯一來源；修改 `site/` 後執行 `./scripts/build-decision-site`，`--check` 只比對 committed outputs，不改檔案。
+- 兩份 HTML 必須各自保持單檔、無 runtime 外部 CSS、JavaScript、font 或 image 依賴。超連結可以指向外部參考資料，但離線開啟不能因網路不可用而失去簡報內容或操作能力。`noindex`／`robots.txt` 不是 access control。
 - 網站呈現、來源、模板 ownership 與 GitHub capability fallback 的完整選型見 [`adr/portable-decision-site.md`](adr/portable-decision-site.md)。
 - Root 保存本 repo 的真實歷史；Copier template 只下發結構、說明與範例，並保留下游 project-owned memory。

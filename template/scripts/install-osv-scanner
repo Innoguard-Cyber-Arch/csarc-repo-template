@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+version="2.5.1"
+checksums_sha256="40120ab7d670199f6663d76f9806b6d11ab3c402df808e5cc4e13c5cb0643356"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cache_root="$("$repo_root/scripts/resolve-cache-root")"
+
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64) asset="osv-scanner_darwin_arm64" ;;
+  Darwin-x86_64) asset="osv-scanner_darwin_amd64" ;;
+  Linux-aarch64 | Linux-arm64) asset="osv-scanner_linux_arm64" ;;
+  Linux-x86_64) asset="osv-scanner_linux_amd64" ;;
+  *)
+    printf 'Unsupported platform. Install OSV-Scanner %s and place it on PATH.\n' "$version" >&2
+    exit 1
+    ;;
+esac
+
+cache_dir="$cache_root/osv-scanner/$version/$asset"
+binary="$cache_dir/osv-scanner"
+mkdir -p "$cache_dir"
+base_url="https://github.com/google/osv-scanner/releases/download/v${version}"
+if [[ ! -f "$cache_dir/checksums.txt" ]] ||
+  [[ "$(shasum -a 256 "$cache_dir/checksums.txt" | awk '{print $1}')" != \
+    "$checksums_sha256" ]]; then
+  curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused \
+    "$base_url/osv-scanner_SHA256SUMS" \
+    -o "$cache_dir/checksums.txt.tmp.$$"
+  mv "$cache_dir/checksums.txt.tmp.$$" "$cache_dir/checksums.txt"
+fi
+actual_checksums_sha256="$(shasum -a 256 "$cache_dir/checksums.txt" | awk '{print $1}')"
+if [[ "$actual_checksums_sha256" != "$checksums_sha256" ]]; then
+  echo "OSV-Scanner checksum manifest does not match the pinned digest." >&2
+  exit 1
+fi
+
+expected_asset_sha256="$(awk -v name="$asset" '$2 == name {print $1}' "$cache_dir/checksums.txt")"
+if [[ -z "$expected_asset_sha256" ]]; then
+  echo "OSV-Scanner release manifest does not contain the selected asset." >&2
+  exit 1
+fi
+if [[ ! -f "$binary" ]] ||
+  [[ "$(shasum -a 256 "$binary" | awk '{print $1}')" != \
+    "$expected_asset_sha256" ]]; then
+  curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused \
+    "$base_url/$asset" -o "$binary.tmp.$$"
+  mv "$binary.tmp.$$" "$binary"
+fi
+actual_asset_sha256="$(shasum -a 256 "$binary" | awk '{print $1}')"
+if [[ -z "$expected_asset_sha256" || "$actual_asset_sha256" != "$expected_asset_sha256" ]]; then
+  echo "OSV-Scanner binary does not match the pinned release manifest." >&2
+  exit 1
+fi
+
+chmod +x "$binary"
+printf '%s\n' "$binary"

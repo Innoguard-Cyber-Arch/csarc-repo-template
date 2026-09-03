@@ -1,7 +1,7 @@
 _min_copier_version: "9.17.0"
 _subdirectory: template
 _templates_suffix: .jinja
-_answers_file: .copier-answers.yml
+_answers_file: .csarc/config.yml
 _exclude:
   - "copier.yaml"
   - "copier.yml"
@@ -18,20 +18,24 @@ _exclude:
   - "{% if enable_template_update_notifications %}__keep_template_update_script__{% else %}scripts/check-template-update{% endif %}"
   - "{% if enable_governance_drift_check %}__keep_governance_drift_workflow__{% else %}.github/workflows/governance-drift.yml{% endif %}"
   - "{% if enable_governance_drift_check %}__keep_governance_drift_script__{% else %}scripts/check-governance-drift{% endif %}"
+  - "{% if project_mode == 'new' %}__keep_release_workflow__{% else %}.github/workflows/release.yml{% endif %}"
   - "{% if enable_codeql | default(false) %}__keep_codeql__{% else %}.github/workflows/codeql.yml{% endif %}"
-  - "{% if language in ['python', 'python-typescript'] %}__keep_python_version__{% else %}.python-version{% endif %}"
-  - "{% if language in ['python', 'python-typescript'] %}__keep_python_project__{% else %}pyproject.toml{% endif %}"
-  - "{% if language in ['python', 'python-typescript'] %}__keep_python_source__{% else %}/src{% endif %}"
-  - "{% if language in ['python', 'python-typescript'] %}__keep_python_tests__{% else %}/tests{% endif %}"
-  - "{% if language in ['typescript', 'python-typescript'] %}__keep_node_version__{% else %}.node-version{% endif %}"
-  - "{% if language in ['typescript', 'python-typescript'] %}__keep_node_package__{% else %}package.json{% endif %}"
-  - "{% if language in ['typescript', 'python-typescript'] %}__keep_pnpm_workspace__{% else %}pnpm-workspace.yaml{% endif %}"
-  - "{% if language in ['typescript', 'python-typescript'] %}__keep_biome__{% else %}biome.json{% endif %}"
-  - "{% if language in ['typescript', 'python-typescript'] %}__keep_tsconfig__{% else %}tsconfig.json{% endif %}"
-  - "{% if language in ['typescript', 'python-typescript'] %}__keep_tsconfig_build__{% else %}tsconfig.build.json{% endif %}"
-  - "{% if language in ['typescript', 'python-typescript'] %}__keep_vitest__{% else %}vitest.config.ts{% endif %}"
-  - "{% if language in ['typescript', 'python-typescript'] %}__keep_typescript_source__{% else %}/typescript{% endif %}"
-  - "{% if language == 'ci' %}__keep_ci_version__{% else %}version.txt{% endif %}"
+  - "{% if 'python' in languages %}__keep_python_version__{% else %}.python-version{% endif %}"
+  - "{% if 'python' in languages %}__keep_python_project__{% else %}pyproject.toml{% endif %}"
+  - "{% if 'python' in languages %}__keep_python_source__{% else %}/src/{{package_name}}{% endif %}"
+  - "{% if 'python' in languages %}__keep_python_tests__{% else %}/tests{% endif %}"
+  - "{% if 'typescript' in languages %}__keep_node_version__{% else %}.node-version{% endif %}"
+  - "{% if 'typescript' in languages %}__keep_node_package__{% else %}package.json{% endif %}"
+  - "{% if 'typescript' in languages %}__keep_pnpm_workspace__{% else %}pnpm-workspace.yaml{% endif %}"
+  - "{% if 'typescript' in languages %}__keep_biome__{% else %}biome.json{% endif %}"
+  - "{% if 'typescript' in languages %}__keep_tsconfig__{% else %}tsconfig.json{% endif %}"
+  - "{% if 'typescript' in languages %}__keep_tsconfig_build__{% else %}tsconfig.build.json{% endif %}"
+  - "{% if 'typescript' in languages %}__keep_vitest__{% else %}vitest.config.ts{% endif %}"
+  - "{% if 'typescript' in languages %}__keep_typescript_source__{% else %}/typescript{% endif %}"
+  - "{% if 'rust' in languages %}__keep_rust_toolchain__{% else %}rust-toolchain.toml{% endif %}"
+  - "{% if 'rust' in languages %}__keep_rust_manifest__{% else %}Cargo.toml{% endif %}"
+  - "{% if 'rust' in languages %}__keep_rust_source__{% else %}/src/lib.rs{% endif %}"
+  - "{% if not languages %}__keep_ci_version__{% else %}version.txt{% endif %}"
 _skip_if_exists:
   - "src/**/*.py"
   - "tests/**/*.py"
@@ -39,19 +43,59 @@ _skip_if_exists:
   - "typescript/tests/**/*.ts"
   - "docs/specs/**/*.md"
   - "docs/adr/**/*.md"
-  - "docs/site-content.js"
+  - "docs/site-content.md"
   - "docs/site-theme.css"
   - "{% if project_mode == 'existing' %}/README.md{% else %}__overwrite_readme__{% endif %}"
   - "{% if project_mode == 'existing' %}/SECURITY.md{% else %}__overwrite_security_policy__{% endif %}"
   - "{% if project_mode == 'existing' %}pyproject.toml{% else %}__overwrite_python_manifest__{% endif %}"
   - "{% if project_mode == 'existing' %}package.json{% else %}__overwrite_node_manifest__{% endif %}"
+  - "{% if project_mode == 'existing' %}Cargo.toml{% else %}__overwrite_rust_manifest__{% endif %}"
 _tasks:
   - command: "uv lock --python {{ '3.14' if (python_support_mode | default('latest')) == 'latest' else (python_min_version | default('3.12')) }}"
-    when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language in ['python', 'python-typescript'] }}"
+    when: "{{ _copier_operation == 'copy' and project_mode == 'new' and 'python' in languages }}"
   - command: "pnpm install --lockfile-only --ignore-scripts"
-    when: "{{ _copier_operation == 'copy' and project_mode == 'new' and language in ['typescript', 'python-typescript'] }}"
+    when: "{{ _copier_operation == 'copy' and project_mode == 'new' and 'typescript' in languages }}"
+  - command: "cargo generate-lockfile"
+    when: "{{ _copier_operation == 'copy' and project_mode == 'new' and 'rust' in languages }}"
   - command: "uv run --no-project python scripts/render_site.py"
 _migrations:
+  - command:
+      - python3
+      - -c
+      - |-
+        import hashlib
+        import re
+        from pathlib import Path
+
+        path = Path(".copier-answers.yml")
+        source = path.read_text(encoding="utf-8")
+        migrated, count = re.subn(
+            r"(?m)^(branch_strategy:\s*)(?:dev|'dev'|\"dev\")(\s*(?:#.*)?)$",
+            r"\1main\2",
+            source,
+        )
+        if count > 1:
+            raise SystemExit("Found duplicate legacy branch_strategy answers")
+        if count == 1:
+            path.write_text(migrated, encoding="utf-8")
+
+        legacy_template_tests = {
+            Path("tests/test_delivery_sync.py"):
+                "50fc918666723264272a9268ebaf5c0b120341e588e1e1f5841686f8448abc99",
+            Path("tests/test_promotion_gate.py"):
+                "c09481ea74c15f679e8eea5c39516a1a77e7d941b91bc716fb225a1ac2b3b0ad",
+            Path("tests/test_release_policy.py"):
+                "89d35a7eafdf5ec17f607e59ea192b2676989bf2e0ec94dd76961baacdd41bf5",
+        }
+        for legacy_test, legacy_sha256 in legacy_template_tests.items():
+            if (
+                legacy_test.is_file()
+                and not legacy_test.is_symlink()
+                and hashlib.sha256(legacy_test.read_bytes()).hexdigest()
+                == legacy_sha256
+            ):
+                legacy_test.unlink()
+    when: "{{ _stage == 'before' }}"
   - command:
       - "{{ _copier_python }}"
       - "-c"
@@ -61,7 +105,7 @@ _migrations:
   - command: "uv run --no-project python scripts/render_site.py"
     when: "{{ _stage == 'after' }}"
 _message_after_copy: |
-  {% if project_mode == 'existing' %}Existing pyproject.toml/package.json files were preserved. Merge the required tool settings and version markers described in README.md, run ./scripts/verify, then link the pull request to its Issue.{% else %}Project created. Confirm .csarc/profile.json, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request.{% endif %} GitHub template creation and Copier do not copy repository settings. Runtime workflows detect release capabilities automatically. Administrators may optionally run ./scripts/apply-repository-settings.sh plan, apply, and check to enable stronger repository controls; unsupported organization policy remains explicit and does not require adopters to change it. See README.md for the capability and visibility matrices.
+  {% if project_mode == 'existing' %}Existing product files and its release workflow were preserved. Review .csarc/config.yml, merge the required tool settings described in README.md, run ./scripts/verify, then link the pull request to its Issue. Apply release settings only when the product-owned workflow requires them.{% else %}Project created with the CSARC release workflow. Confirm .csarc/config.yml, run ./scripts/verify, then open an Issue and its numbered branch before the first pull request. Before the first release, an administrator must run ./scripts/apply-repository-settings.sh plan, review it, then run apply and check so immutable Releases and the other required controls are enabled.{% endif %} GitHub template creation and Copier do not copy repository settings. See README.md for the capability and visibility matrices.
 
 project_mode:
   type: str
@@ -70,6 +114,54 @@ project_mode:
     New repository: new
     Adopt an existing repository: existing
   default: new
+
+release_ownership:
+  type: str
+  help: Single owner allowed to create release tags, Releases, and assets
+  choices:
+    CSARC release workflow: csarc-owned
+    Existing product release workflow: product-owned
+    Verification without release writes: verification-only
+  default: "{{ 'csarc-owned' if project_mode == 'new' else 'verification-only' }}"
+  when: false
+
+release_workflow:
+  type: str
+  help: Explicit repository-relative workflow selected by the release owner
+  default: "{{ '.github/workflows/release.yml' if release_ownership == 'csarc-owned' else '' }}"
+  when: false
+
+release_required_inputs:
+  type: yaml
+  help: Required workflow_dispatch inputs declared by the selected workflow
+  default: []
+  when: false
+
+release_ownership_reason:
+  type: str
+  help: Auditable reason for the selected release ownership
+  default: "{{ 'CSARC owns the only version and GitHub Release workflow.' if release_ownership == 'csarc-owned' else 'No release workflow is selected; CSARC verifies only.' }}"
+  when: false
+
+release_settings_owner:
+  type: str
+  help: Owner responsible for release-related repository settings
+  choices:
+    CSARC bootstrap administrator: csarc-admin
+    Product administrator: product-admin
+    No release settings owner: none
+  default: "{{ 'csarc-admin' if release_ownership == 'csarc-owned' else 'product-admin' if release_ownership == 'product-owned' else 'none' }}"
+  when: false
+
+release_immutable_releases:
+  type: str
+  help: Whether immutable GitHub Releases are required by this ownership mode
+  choices:
+    Required during CSARC bootstrap: required
+    Defined by the product release contract: product-defined
+    Not required for verification-only: not-required
+  default: "{{ 'required' if release_ownership == 'csarc-owned' else 'product-defined' if release_ownership == 'product-owned' else 'not-required' }}"
+  when: false
 
 project_name:
   type: str
@@ -91,52 +183,33 @@ project_description:
 
 language:
   type: str
-  help: Product language modules; the answer is stored and verified in the repository
-  choices:
-    CI/CD baseline only: ci
-    Python only: python
-    TypeScript only: typescript
-    Python and TypeScript: python-typescript
+  help: Deprecated compatibility value for repositories created before language modules became multi-select
   default: python
+  when: false
 
-container_mode:
+languages:
   type: str
-  help: Verify an existing container image in CI, and optionally publish it to GHCR from verified releases
+  help: Select each programming language used by the project; leave all unchecked for the CI/CD baseline only
+  multiselect: true
   choices:
-    Disabled: none
-    Build, smoke-test, and scan only: verify
-    Build, verify, and publish to GHCR: ghcr
-  default: none
-  when: "{{ project_mode == 'existing' }}"
-
-containerfile_path:
-  type: str
-  help: Repository-relative Dockerfile or Containerfile used with the repository root as build context
-  default: Dockerfile
-  when: "{{ (container_mode | default('none')) != 'none' }}"
-  validator: "{% if containerfile_path.startswith('/') or '..' in containerfile_path.split('/') or not (containerfile_path | regex_search('^[A-Za-z0-9._/-]+$')) %}Use a safe repository-relative path without spaces or parent traversal.{% endif %}"
-
-container_smoke_command:
-  type: str
-  help: One-line shell command that smoke-tests the built image through the IMAGE environment variable
-  default: ""
-  when: "{{ (container_mode | default('none')) != 'none' }}"
-  validator: "{% if not container_smoke_command.strip() or '$IMAGE' not in container_smoke_command or '\n' in container_smoke_command %}Use one non-empty line that references $IMAGE, for example docker run --rm \"$IMAGE\" --help.{% endif %}"
+    Python: python
+    Rust: rust
+    TypeScript: typescript
+  default: "{{ [] if language == 'ci' else language.split('-') }}"
 
 branch_strategy:
   type: str
   help: Choose how issue branches are integrated before promotion to main
   choices:
-    Milestone delivery branches and rolling dev/next: delivery
+    Main with short-lived Milestone delivery branches: delivery
     Short branch → pull request → main: main
-    Shared test environment → dev → main: dev
   default: delivery
 
 package_name:
   type: str
   help: Python import package name
   default: "{{ project_slug | replace('-', '_') }}"
-  when: "{{ language in ['python', 'python-typescript'] }}"
+  when: "{{ 'python' in languages }}"
   validator: "{% if not package_name | regex_search('^[a-z_][a-z0-9_]*$') %}Use a lowercase Python identifier containing letters, numbers, or underscores.{% endif %}"
 
 code_owner:
@@ -148,7 +221,7 @@ code_owner:
 project_run_command:
   type: str
   help: Shortest command that successfully starts or invokes the product
-  default: "{% if language == 'python' %}uv run python -c 'import {{ package_name }}'{% elif language == 'typescript' %}pnpm run build{% elif language == 'python-typescript' %}uv run python -c 'import {{ package_name }}' && pnpm run build{% else %}./scripts/verify{% endif %}"
+  default: "{% if languages %}{% if 'python' in languages %}uv run python -c 'import {{ package_name }}'{% endif %}{% if 'python' in languages and ('typescript' in languages or 'rust' in languages) %} && {% endif %}{% if 'typescript' in languages %}pnpm run build{% endif %}{% if 'typescript' in languages and 'rust' in languages %} && {% endif %}{% if 'rust' in languages %}cargo test --locked{% endif %}{% else %}./scripts/verify{% endif %}"
   validator: "{% if not project_run_command | default('', true) | trim or project_run_command | trim | lower in ['todo', 'tbd', 'placeholder'] or '<' in project_run_command %}Enter a working product command without placeholder text.{% endif %}"
 
 project_verification_hook:
@@ -172,7 +245,7 @@ security_reporting_channel:
 
 reviewers:
   type: str
-  help: Comma-separated GitHub usernames eligible for automatic pull request review
+  help: Comma-separated GitHub usernames eligible for review assignment; assign manually until the Action is active
   default: "@jachline28"
   validator: "{% if not reviewers | regex_search('^@[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:\\s*,\\s*@[A-Za-z0-9][A-Za-z0-9-]{0,38})*$') %}Use one or more @username values separated by commas.{% endif %}"
 
@@ -183,7 +256,7 @@ python_support_mode:
     Latest stable only (Python 3.14): latest
     Declare a minimum supported version: minimum
   default: latest
-  when: "{{ language in ['python', 'python-typescript'] }}"
+  when: "{{ 'python' in languages }}"
 
 python_min_version:
   type: str
@@ -193,7 +266,7 @@ python_min_version:
     - "3.13"
     - "3.14"
   default: "3.12"
-  when: "{{ language in ['python', 'python-typescript'] and python_support_mode == 'minimum' }}"
+  when: "{{ 'python' in languages and python_support_mode == 'minimum' }}"
 
 coverage_mode:
   type: str
@@ -231,54 +304,10 @@ project_visibility:
 enable_codeql:
   type: bool
   help: Enable CodeQL SAST on public repositories or private/internal repositories licensed for GitHub Code Security
-  default: "{{ project_visibility == 'public' and language != 'ci' }}"
-  when: "{{ language != 'ci' }}"
+  default: "{{ project_visibility == 'public' and ('python' in languages or 'typescript' in languages) }}"
+  when: "{{ 'python' in languages or 'typescript' in languages }}"
 
 enable_governance_drift_check:
   type: bool
-  help: Check daily for repository governance drift (for example, branch protection disabled between CI runs) and maintain one tracking Issue
+  help: Reserve the optional scheduled governance drift check; keep disabled until its GitHub Action is active
   default: false
-
-enable_release_attestations:
-  type: bool
-  help: Sign release provenance and SBOM attestations on supported GitHub plans; public projects default on, private/internal stay explicit opt-in
-  default: "{{ project_visibility == 'public' }}"
-  when: "{{ language != 'ci' }}"
-
-enable_pypi_publishing:
-  type: bool
-  help: Publish Python distributions through PyPI Trusted Publishing
-  default: false
-  when: "{{ language in ['python', 'python-typescript'] }}"
-
-pypi_environment:
-  type: str
-  help: Protected GitHub environment configured in the PyPI trusted publisher
-  default: pypi
-  when: "{{ enable_pypi_publishing }}"
-  validator: "{% if not pypi_environment.strip() %}Use a non-empty GitHub environment name.{% endif %}"
-
-enable_npm_publishing:
-  type: bool
-  help: Publish the npm tarball through npm Trusted Publishing
-  default: false
-  when: "{{ language in ['typescript', 'python-typescript'] }}"
-
-npm_environment:
-  type: str
-  help: Protected GitHub environment configured in the npm trusted publisher
-  default: npm
-  when: "{{ enable_npm_publishing }}"
-  validator: "{% if not npm_environment.strip() %}Use a non-empty GitHub environment name.{% endif %}"
-
-use_reusable_workflow:
-  type: bool
-  help: Call the reusable multi-language workflow from this repository
-  default: false
-
-workflow_ref:
-  type: str
-  help: Full commit SHA for the reusable workflow
-  default: ""
-  when: "{{ use_reusable_workflow }}"
-  validator: "{% if not workflow_ref | regex_search('^[0-9a-fA-F]{40}$') %}Use a full 40-character hexadecimal commit SHA.{% endif %}"

@@ -1,0 +1,418 @@
+.reading-controls {
+  position: fixed;
+  top: 2px;
+  right: 18px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.detail-level-control {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(23, 23, 23, .2);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 4px 14px rgba(23, 23, 23, .12);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.detail-level-control[hidden] { display: none; }
+[data-audience="maintainer"][hidden] { display: none !important; }
+
+.controls[hidden],
+.view-controls[hidden],
+.progress[hidden] { display: none; }
+
+.detail-level-control button {
+  min-width: 54px;
+  padding: 5px 11px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  transition: background-color .2s ease, color .2s ease;
+}
+
+.detail-level-control button[aria-pressed="true"] {
+  background: var(--yellow);
+  color: var(--ink);
+}
+
+html[data-detail-level="technical"] .detail-level-control button[aria-pressed="true"] {
+  background: var(--optional);
+  color: white;
+}
+
+.detail-level-control button:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+.language-control {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(23, 23, 23, .2);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 4px 14px rgba(23, 23, 23, .12);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.language-control a {
+  padding: 5px 11px;
+  border-radius: 16px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.language-control a[aria-current="page"] {
+  background: var(--ink);
+  color: white;
+}
+
+.language-control a:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+.markdown-slide:not(.legacy-slide) {
+  padding: 3% 3.6% 3% 11.9%;
+}
+
+.markdown-slide:not(.legacy-slide) header {
+  position: relative;
+  padding-right: 330px;
+}
+
+.markdown-slide:not(.legacy-slide) h2 {
+  max-width: 1180px;
+  font-size: 36px;
+  white-space: normal;
+}
+
+.legacy-content { display: contents; }
+
+.legacy-content [hidden] { display: none !important; }
+
+.legacy-slide .basic-header {
+  position: relative;
+  padding-right: 330px;
+}
+
+.legacy-slide .basic-header h2 {
+  max-width: 1180px;
+  font-size: 36px;
+  white-space: normal;
+}
+
+.legacy-slide > .basic-header,
+.legacy-slide > .basic-summary {
+  display: none;
+}
+
+.journey-code {
+  flex: 0 0 27px;
+}
+
+.journey-item a > span:last-child {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+html[data-detail-level="technical"] .legacy-slide.decision-slide[data-track="method"] .decision-strip {
+  flex: 0 0 auto;
+}
+
+.config-guidance--paged > p {
+  margin-bottom: 5px;
+}
+
+.config-tour-trigger {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "title file"
+    "summary summary";
+  padding: 8px 11px;
+  border-left-width: 6px;
+}
+
+.config-tour-trigger .config-trigger-title::after {
+  content: "";
+}
+
+.config-tour-trigger .config-trigger-file {
+  color: var(--ink);
+  font-family: inherit;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.technical-tour-trigger {
+  margin-top: 8px;
+  border-left-color: var(--optional);
+}
+
+html[data-detail-level="simple"] .technical-tour-trigger {
+  display: none;
+}
+
+.config-overlay--paged {
+  top: 8%;
+  right: 4.7%;
+  bottom: 7%;
+  left: 13.7%;
+  width: auto;
+}
+
+.config-overlay--paged .config-overlay-card {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+
+.config-overlay-stage {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.config-overlay--paged .config-overlay-stage .code {
+  flex: 1;
+  min-height: 110px;
+  max-height: none;
+}
+
+.technical-supplement-page {
+  min-height: 0;
+  overflow: auto;
+}
+
+.technical-supplement-page[hidden] {
+  display: none;
+}
+
+.technical-supplement-page > .selection-note,
+.technical-supplement-page > .decision-register,
+.technical-supplement-page > .context-line,
+.technical-supplement-page > .reference {
+  margin: 0;
+}
+
+.technical-supplement-page > .context-line {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.config-overlay-pager {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: 140px 1fr 140px;
+  align-items: center;
+  gap: 12px;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.config-overlay-pager button {
+  padding: 8px 12px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: white;
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 850;
+}
+
+.config-overlay-pager button:last-child {
+  background: var(--ink);
+  color: white;
+}
+
+.config-overlay-pager button:disabled {
+  border-color: var(--line);
+  background: var(--soft);
+  color: var(--muted);
+  cursor: default;
+}
+
+.config-overlay-pager button:focus-visible {
+  outline: 4px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+.config-overlay-pager output {
+  font-size: 18px;
+  font-weight: 850;
+  text-align: center;
+}
+
+.markdown-body {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
+}
+
+.markdown-slide.single-column .markdown-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.markdown-slide.single-column .markdown-body > * {
+  grid-column: 1;
+}
+
+.markdown-body > p:first-child,
+.markdown-body > table {
+  grid-column: 1 / -1;
+}
+
+.markdown-body > .detail-panel {
+  grid-column: 1 / -1;
+}
+
+.markdown-body > p:first-child {
+  padding: 12px 15px;
+  border-left: 7px solid var(--yellow);
+  background: #fffbea;
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+.markdown-body > ul,
+.markdown-body > ol,
+.markdown-body > table,
+.technical-detail,
+.markdown-body > .detail-panel,
+.markdown-body > .package-disclosure {
+  margin: 0;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-top: 7px solid var(--yellow);
+  background: white;
+}
+
+.markdown-body > ul,
+.markdown-body > ol {
+  padding-left: 40px;
+}
+
+.markdown-body li,
+.markdown-body td,
+.markdown-body th,
+.technical-detail p {
+  font-size: 19px;
+  line-height: 1.35;
+}
+
+.markdown-body li + li,
+.technical-detail p + p {
+  margin-top: 8px;
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 8px 10px;
+}
+
+.markdown-slide.dense .markdown-body {
+  gap: 8px;
+}
+
+.markdown-slide.dense .markdown-body > p:first-child {
+  padding: 9px 12px;
+  font-size: 18px;
+}
+
+.markdown-slide.dense .markdown-body li,
+.markdown-slide.dense .markdown-body td,
+.markdown-slide.dense .markdown-body th,
+.markdown-slide.dense .technical-detail p {
+  font-size: 15px;
+  line-height: 1.22;
+}
+
+.markdown-slide.dense .markdown-body th,
+.markdown-slide.dense .markdown-body td {
+  padding: 5px 7px;
+}
+
+#ecosystem .markdown-body img {
+  width: 28px;
+  height: 28px;
+  margin-right: 7px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.technical-detail {
+  height: 100%;
+  border-top-color: var(--optional);
+  background: var(--optional-soft);
+}
+
+.technical-detail h3 {
+  margin-bottom: 8px;
+  font-size: 21px;
+}
+
+.markdown-body > .package-disclosure {
+  border-top-color: var(--best);
+  background: var(--best-soft);
+}
+
+.detail-panel {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition: grid-template-rows .32s ease, opacity .2s ease, transform .32s ease;
+}
+
+.detail-panel__content {
+  min-height: 0;
+  overflow: hidden;
+}
+
+html[data-detail-level="simple"] .detail-panel {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+}
+
+@media print {
+  .detail-level-control,
+  .language-control { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-level-control button,
+  .detail-panel {
+    transition: none;
+  }
+
+  html[data-detail-level="simple"] .detail-panel { transform: none; }
+}

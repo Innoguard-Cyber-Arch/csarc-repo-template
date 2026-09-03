@@ -1,0 +1,56 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: main
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    labels: [enhancement]
+    groups:
+      official-actions:
+        patterns: ["actions/*"]
+        update-types: [minor, patch]
+{%- if "python" in languages %}
+  - package-ecosystem: uv
+    directory: /
+    target-branch: main
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    labels: [enhancement]
+    groups:
+      routine-updates:
+        patterns: ["*"]
+        update-types: [minor, patch]
+{%- endif %}
+{%- if "typescript" in languages %}
+  - package-ecosystem: npm
+    directory: /
+    target-branch: main
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    labels: [enhancement]
+    groups:
+      routine-updates:
+        patterns: ["*"]
+        update-types: [minor, patch]
+{%- endif %}
+{%- if "rust" in languages %}
+  - package-ecosystem: cargo
+    directory: /
+    target-branch: main
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    labels: [enhancement]
+    groups:
+      routine-updates:
+        patterns: ["*"]
+        update-types: [minor, patch]
+{%- endif %}

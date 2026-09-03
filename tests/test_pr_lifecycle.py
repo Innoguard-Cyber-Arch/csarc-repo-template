@@ -57,7 +57,7 @@ class FakeGitHub:
 
     def __init__(self, head: str) -> None:
         self.head = head
-        self.head_ref = "dev/next"
+        self.head_ref = "hotfix/42-lifecycle"
         self.draft = False
         self.authorization_created_at = "2026-08-25T01:01:00Z"
         self.authorization_actor = "maintainer"
@@ -390,7 +390,7 @@ def test_origin_must_resolve_to_the_exact_github_repository(url: str) -> None:
         'requests.request("PATCH", f"repos/{repo}/pulls/" f"{number}")',
         "gh api -X PATCH repos/owner/repo/pulls/42 --field draft=true",
         'query = "mutation { markPullRequest" "ReadyForReview(input: $x) }"',
-        "gh pr create --base dev/next --head fix/x --label bug",
+        "gh pr create --base dev/m7-staged-ci --head fix/x --label bug",
         (
             "requests.patch("
             'f"https://api.github.com/repos/{repo}/pulls/{number}", '
@@ -693,7 +693,8 @@ def test_issue_label_helper_rejects_a_pull_request(
 def test_writer_scanner_allows_pr_creation_without_state_or_metadata() -> None:
     """Creating a plain PR is followed by a separately leased edit."""
     assert not writer_violations(
-        "gh pr create --base dev/next --head fix/x --title fix --body body"
+        "gh pr create --base dev/m7-staged-ci --head fix/x "
+        "--title fix --body body"
     )
 
 
@@ -914,7 +915,7 @@ def test_remote_lease_must_reuse_the_exact_head_commit(
                 payload["tree"] = {"sha": "9" * 40}
         return payload
 
-    github.get = tampered_get  # type: ignore[assignment]
+    github.get = tampered_get  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="canonical evidence"):
         require_lease(github, canonical, "owner/repo", 42, "a" * 40)
 
@@ -925,7 +926,7 @@ def test_retargeting_requires_the_destination_lane_lease(
     """A base retarget cannot change the lane covered by an active lease."""
     bind_canonical_remote(monkeypatch)
     canonical = lease_fixture()
-    canonical["base_ref"] = "dev/next"
+    canonical["base_ref"] = "dev/m7-staged-ci"
     canonical["refs"] = ["refs/heads/csarc/leases/pr-42"]
     github = FakeGitHub("a" * 40)
     github.canonical_lease = canonical
@@ -1013,7 +1014,7 @@ def test_remote_audit_comment_is_refetched(
             return {**payload, "body": "edited"}
         return payload
 
-    github.get = edited_comment  # type: ignore[assignment]
+    github.get = edited_comment  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="audit comment"):
         require_lease(github, canonical, "owner/repo", 42, "a" * 40)
 
@@ -1160,7 +1161,7 @@ def test_required_check_must_succeed_on_the_exact_head() -> None:
             ]
         return []
 
-    github.collection = stale_collection  # type: ignore[assignment]
+    github.collection = stale_collection  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="exact head: verify"):
         require_successful_checks(
             github, "owner/repo", "a" * 40, {("verify", None)}
@@ -1201,7 +1202,7 @@ def test_pinned_check_rejects_malformed_github_app_id(app_id: object) -> None:
             return []
         raise AssertionError(path)
 
-    github.collection = malformed_collection  # type: ignore[assignment]
+    github.collection = malformed_collection  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="Check run identity is malformed"):
         require_successful_checks(
             github, "owner/repo", github.head, {("verify", 1)}
@@ -1238,7 +1239,7 @@ def test_quota_fallback_rejects_malformed_github_app_id(
             return []
         raise AssertionError(path)
 
-    github.collection = malformed_collection  # type: ignore[assignment]
+    github.collection = malformed_collection  # ty: ignore[invalid-assignment]
     with pytest.raises(RuntimeError, match="Check run identity is malformed"):
         require_successful_checks(
             github,
@@ -1347,15 +1348,16 @@ def test_merge_snapshot_allows_agent_only_with_enforced_no_bypass_rules(
 def quota_snapshot_fixture() -> tuple[FakeGitHub, dict[str, object], str]:
     """Return a routine PR whose only required-check failure is quota."""
     github = FakeGitHub("a" * 40)
-    github.base_ref = "dev/next"
+    github.base_ref = "dev/m7-staged-ci"
     github.head_ref = "fix/42-quota-fallback"
+    github.issue_milestone_number = 7
     github.body += "\n\nCloses #42"
     github.check_conclusion = "failure"
     lease = lease_fixture()
-    lease["base_ref"] = "dev/next"
+    lease["base_ref"] = github.base_ref
     lease["refs"] = [
         "refs/heads/csarc/leases/pr-42",
-        base_lane_ref("dev/next"),
+        base_lane_ref(github.base_ref),
     ]
     run_url = "https://github.com/owner/repo/actions/runs/200"
     github.quota_note_body = promotion_gate.quota_fallback_note(
@@ -1505,7 +1507,7 @@ def test_alpha_marker_rejects_non_routine_routes(
     elif invalid_route == "branch":
         github.head_ref = "promote/m10-release-backed-adoption"
     else:
-        github.pull = lambda number=42: {  # type: ignore[method-assign]
+        github.pull = lambda number=42: {  # ty: ignore[invalid-assignment]
             **FakeGitHub.pull(github, number),
             "head": {
                 "ref": github.head_ref,
@@ -1655,7 +1657,6 @@ def test_alpha_work_branch_accepts_matching_delivery_milestone(
 @pytest.mark.parametrize(
     ("base_ref", "milestone"),
     [
-        ("dev/next", {}),
         ("dev/m10-release-backed-adoption", {"number": "10"}),
         ("dev/m1-delivery", {"number": True}),
     ],
@@ -1689,6 +1690,27 @@ def test_alpha_work_branch_rejects_malformed_issue_milestone(
 
     monkeypatch.setattr(github, "get", malformed_issue)
     with pytest.raises(RuntimeError, match="Issue Milestone is invalid"):
+        merge_snapshot(
+            github,
+            lease,
+            "https://github.com/owner/repo/pull/42#issuecomment-99",
+            quota_fallback_note_url=note_url,
+        )
+
+
+def test_alpha_work_branch_rejects_legacy_dev_next(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy dev/next is not a routine delivery route."""
+    bind_remote_lease(monkeypatch)
+    github, lease, note_url = alpha_quota_snapshot_fixture()
+    github.base_ref = "dev/next"
+    lease["base_ref"] = github.base_ref
+    lease["refs"] = [
+        "refs/heads/csarc/leases/pr-42",
+        base_lane_ref(github.base_ref),
+    ]
+    with pytest.raises(RuntimeError, match="same-repository delivery route"):
         merge_snapshot(
             github,
             lease,
@@ -2681,7 +2703,10 @@ def test_merge_does_not_release_a_lease_for_an_unconfirmed_result(
     )
     monkeypatch.setitem(merge.__globals__, "confirm_refs", lambda _lease: None)
     github = FakeGitHub("a" * 40)
-    github.merge = lambda *_: {"merged": False, "sha": None}  # type: ignore[method-assign]
+    github.merge = lambda *_: {  # ty: ignore[invalid-assignment]
+        "merged": False,
+        "sha": None,
+    }
     with pytest.raises(RuntimeError, match="synchronously merge"):
         merge(
             SimpleNamespace(

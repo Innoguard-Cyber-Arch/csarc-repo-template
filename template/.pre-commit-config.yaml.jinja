@@ -6,7 +6,7 @@ repos:
         entry: ./scripts/check-update-conflicts
         language: system
         pass_filenames: false
-{% if language in ["python", "python-typescript"] %}
+{% if "python" in languages %}
       - id: ruff-format
         name: Ruff format
         entry: uv run ruff format --check
@@ -17,13 +17,13 @@ repos:
         entry: uv run ruff check
         language: system
         types: [python]
-      - id: mypy
-        name: mypy
-        entry: uv run mypy
+      - id: ty
+        name: ty
+        entry: uv run ty check
         language: system
         pass_filenames: false
 {% endif %}
-{% if language in ["typescript", "python-typescript"] %}
+{% if "typescript" in languages %}
       - id: biome
         name: Biome
         entry: pnpm exec biome ci .

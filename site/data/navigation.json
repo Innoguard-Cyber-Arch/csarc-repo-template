@@ -1,0 +1,44 @@
+{
+  "labels": {
+    "zh-tw": {
+      "ariaLabel": "簡報目錄",
+      "use": "使用公版",
+      "workflow": "開發與維護",
+      "support": "公版管理",
+      "legend": "顏色說明",
+      "human": "需要人決策",
+      "automated": "預設自動完成",
+      "maintainer": "僅維運可見"
+    },
+    "en": {
+      "ariaLabel": "Presentation outline",
+      "use": "Use template",
+      "workflow": "Workflow",
+      "support": "Maintenance",
+      "legend": "Color key",
+      "human": "Human decision",
+      "automated": "Automated by default",
+      "maintainer": "Maintainers only"
+    }
+  },
+  "items": [
+    {"key": "capability", "group": "use", "participation": "human", "labels": {"zh-tw": "能力／導入", "en": "Capability"}},
+    {"key": "flow", "group": "use", "participation": "automated", "labels": {"zh-tw": "CI/CD 流程", "en": "CI/CD flow"}},
+    {"key": "files", "group": "use", "participation": "human", "labels": {"zh-tw": "檔案地圖", "en": "File map"}},
+    {"key": "method", "code": "01", "group": "workflow", "participation": "human", "labels": {"zh-tw": "工作定義", "en": "Work"}},
+    {"key": "agents", "code": "02", "group": "workflow", "participation": "automated", "labels": {"zh-tw": "AI 規範", "en": "AI rules"}},
+    {"key": "contract", "code": "03", "group": "workflow", "participation": "automated", "labels": {"zh-tw": "驗證／CI", "en": "Verify"}},
+    {"key": "languages", "code": "04", "group": "workflow", "participation": "automated", "labels": {"zh-tw": "程式語言", "en": "Languages"}},
+    {"key": "supply", "code": "05", "group": "workflow", "participation": "automated", "labels": {"zh-tw": "依賴安全", "en": "Supply"}},
+    {"key": "pr", "code": "06", "group": "workflow", "participation": "human", "labels": {"zh-tw": "PR／合併", "en": "PR merge"}},
+    {"key": "deploy", "code": "07", "group": "workflow", "participation": "human", "labels": {"zh-tw": "版本／交付", "en": "Delivery"}},
+    {"key": "governance", "code": "08", "group": "workflow", "participation": "human", "labels": {"zh-tw": "規則治理", "en": "Governance"}},
+    {"key": "template-release", "code": "09", "group": "support", "participation": "human", "labels": {"zh-tw": "模板升級", "en": "Updates"}},
+    {"key": "docs-site", "code": "10", "group": "support", "participation": "automated", "labels": {"zh-tw": "內部網站", "en": "Docs site"}}
+  ],
+  "appendices": [
+    {"key": "similar-tools", "participation": "human", "labels": {"zh-tw": "相似工具", "en": "Similar"}},
+    {"key": "testing", "participation": "maintainer", "audience": "maintainer", "labels": {"zh-tw": "CI/CD 設定", "en": "CI/CD"}},
+    {"key": "bridge", "participation": "maintainer", "audience": "maintainer", "labels": {"zh-tw": "五月盤點", "en": "May review"}}
+  ]
+}

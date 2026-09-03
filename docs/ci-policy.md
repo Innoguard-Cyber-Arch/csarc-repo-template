@@ -1,562 +1,374 @@
-# 分層 CI 政策
+# CI/CD 設定與交付邊界
 
-CI 是沒有獨立測試環境時的可攜式 integration layer；外部環境與 canary
-則在 promotion 階段補充端到端證據。分支策略與 workflow 分層必須一起使用：
-只把 PR 改送 `dev/*`，但仍讓每張 PR 跑完整矩陣，不會降低使用量。
+本頁只描述 2026-09-01 在 repository 內可執行、可由 live run 證明的設定。尚待其他 owner
+處理的歷史設計位於 `archive/ci-cd/2026-08-27/` 且不下發；已決定不恢復的版本／交付
+workflow 已刪除，歷史由 Git／Issue／PR 保存。舊 Issue 完成或舊 run 成功，都不等於目前
+active。版本、發版與成品責任的完整盤點見中央模板的
+[版本／交付 ADR](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md)。
 
-## 分支與驗證邊界
+## 現行交付路徑
 
-- Milestone 內的 Issue 從 `dev/m<編號>-<簡稱>` 分支工作；每張 Issue 仍有自己的
-  `type/<Issue 編號>-<簡稱>` 分支與 PR。
-- 沒有 Milestone 的一般孤立 Issue 進入 `dev/next`，等待下一次批次 promotion。
-  若一張孤立 Issue 確實要獨立 soak／canary，才使用一次性的
-  `dev/i<Issue 編號>-<簡稱>`；同號 Issue 不掛 Milestone、加上 `promotion` label，
-  並由該 branch 的 promotion PR 關閉。完成後刪除 branch。
-- `dev/* → main` 的 promotion、下述一次性 `promote/m*`／`promote/next → main`
-  bridge，以及標示
-  `hotfix` 的緊急修正，必須跑 full tier。
-- 已合併版本卻缺少 Release 時，只有同號 `fix/<Issue>-*`、`release-recovery`
-  label、`fix` title 的受審查 PR 可直接進 `main`；不得同時標示 `hotfix`。
-- `main` 更新後，尚在進行的 delivery branch 先透過受審查的 `sync/main-to-*` PR
-  納入新結果，再接受新的 Issue PR 或 promotion。
+`main` 是唯一永久整合 branch。一般獨立 Issue 從最新 `main` 建立短分支，經 PR 直接回
+`main`。只有需要共同整合與端到端驗收的 Milestone 才使用短生命週期
+`dev/m<編號>-<簡稱>`；Milestone 內每張 Issue 仍以自己的 `type/<Issue>-*` PR 進入該
+branch，最後由一張受審查的交付 PR 送回 `main`。
 
-### 孤立 Issue 決策樹
+Reviewer assignment（`.github/workflows/governance-comment.yml`）已在本 repo 與所有生成
+repo 啟用；治理漂移排程（`governance-drift.yml`）只在生成 repo 開啟
+`enable_governance_drift_check` 時產生並每日執行，本模板 source repo 保留同一支
+`scripts/check-governance-drift` 供本機驗證，不另外啟用排程。
+
+`dev/i<Issue>-*` 只適用於 Issue 已寫明獨立環境、soak／canary 目標與停止條件的例外。
+Hotfix 可由 `fix/<Issue>-*` 直接進 `main`，但仍須 Issue、review 與 full verification。
+固定 `dev/next` 與 `promote/next` 已退役，不是一般工作路徑。
 
 ```text
-這張 Issue 屬於可端到端驗收的 Milestone 嗎？
-├─ 是 → type/<issue>-* PR → dev/m<milestone>-*
-└─ 否
-   ├─ 能等待固定 release window 嗎？
-   │  └─ 是 → type/<issue>-* PR → dev/next → 批次 promotion
-   └─ 有文件化的獨立 soak／canary 需求嗎？
-      ├─ 是 → dev/i<issue>-* → 單獨 promotion → 刪除暫時 branch
-      └─ 否
-         ├─ 是需要立即修復正式環境的緊急缺陷嗎？
-         │  └─ 是 → standalone fix/* + hotfix label → main
-         └─ 否 → 回到 dev/next，不建立假 Milestone 或永久 branch
+獨立 Issue ──────────────── topic PR ───────────────→ main
+Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─────→ main
+明列 canary 的 Issue ─────→ dev/i* ─ 交付 PR ─────→ main
+緊急修正 ──────────────── reviewed hotfix PR ─────→ main
 ```
 
-`dev/i*` 不是讓普通 Issue 規避批次的捷徑；Issue 必須寫出為什麼不能與
-`dev/next` 一起驗證、canary 目標與停止條件。Hotfix 也不是快速通道：它仍跑 full
-tier、保留 promotion evidence 並立即形成 release 邊界。
-
-## 四層執行契約
-
-| 層次 | 事件 | 執行內容 | Required／取消規則 | 成本目的 |
-| --- | --- | --- | --- | --- |
-| Policy | 每張 PR | 同一個 runner 檢查 PR 標題／Issue 關聯、branch route、delivery sync 與 review policy | `title`、`promotion` 與 `verify` 都會產生；新 commit 可取消舊的一般 PR run | 先用便宜、確定性的規則拒絕錯誤流程 |
-| Docs／fast | 純文件或一般 Issue／sync PR | secret scan、格式、lint、型別、單元與 policy tests；workflow／shell scope 加跑 actionlint／ShellCheck，模板範圍另做單一預設 profile smoke | 由穩定的 `verify` aggregate 彙總；同 PR 新 commit 取消舊 run | 每次整合保留快速回饋，不支付完整矩陣 |
-| Full | promotion、hotfix、release recovery、merge queue、手動 dispatch、未知高風險路徑 | 所有支援 runtime、profiles、Copier update、release policy、安全與整合回歸 | `verify` 與 `promotion` 必須成功；候選 run 不取消 | 只在交付邊界支付一次完整信心成本 |
-| Periodic／release | daily／weekly schedule 或已驗證的發布邊界 | OSV、Zizmor、governance drift、artifact、digest、SBOM、provenance | 排程不阻塞普通 PR；發布只接受 release-source evidence，重跑採 idempotent | 把時間性風險與成品工作移出每個 commit |
-
-Full tier 將 runtime 無關的 lint、文件、治理、profile、Copier create／adopt／update、
-package metadata 與完整成品檢查集中在最新 Python 的 `canonical full` 一次執行。
-Python compatibility jobs 只做 locked install 與 runtime-sensitive tests：精確最低版
-`.0` 一定保留，從最低支援版到 3.14 的每個 feature release 也都保留；最新 3.14
-由 canonical 覆蓋，其餘 runtime 不再重跑相同的完整 suite。混合 profile 的
-TypeScript install、test、coverage、build 與 pack 另在單一 Node 24 job 執行，canonical
-透過既有 `CSARC_VERIFY_TYPESCRIPT=false` 避免重複。TypeScript-only 仍由單一 canonical
-Node job 完整驗證，Python-only 則不啟動 Node job。
-
-`scripts/ci_tier.py` 依事件、base／head、labels 與 changed paths 做 fail-closed
-分類。`site/**`、根目錄 Issue forms 與一般 Markdown 明確歸入 docs tier，根目錄
-`.gitignore` 歸入 fast；workflow 變更加跑 Zizmor，相依 manifest／lockfile 加跑
-OSV，治理宣告或 checker 加跑 remote governance。release／version 等未分類高風險
-路徑仍升級為 full，不會只為省 runner 而直接放行。Portable decision site 的 render
-check 在 fast job 內固定執行；只有 site 來源、相關 project docs、手動驗證或 promotion
-才上傳 artifact。
-
-### 選配容器交付
-
-只有既有 repo 明確設定 `container_mode` 並提供產品自己的 Dockerfile／Containerfile
-與 `$IMAGE` smoke command，才生成容器工作。`verify` 與 `ghcr` 都在非 docs PR 使用
-Buildx GHA cache 建置但不 push，接著執行啟動測試與 Trivy HIGH／CRITICAL 掃描；
-PR job 只有唯讀權限。`ghcr` 另在已驗證 release-source 邊界建置一次，保存 image
-bytes、checksum 與 SPDX SBOM；發布 job 才取得 `packages`／`id-token`／`attestations`
-write，將相同 bytes 推到版本與 commit SHA tag、附加 OCI attestation，再以 digest
-pull、驗證與 smoke test。`none` 不生成 job、Docker Dependabot 或 registry 權限。
-
-這是成品交付，不是 runtime deployment。公版不產生通用 Dockerfile、Kubernetes、
-雲端部署或 multi-arch matrix；部署環境、健康檢查與回復仍由產品 repo 定義。
-
-## `main` 回同步到進行中的 delivery branch
-
-`main` 每次前進後，trusted delivery-maintenance workflow 會列舉 `dev/next`、所有
-`dev/m*`，以及仍存在的 `dev/i*`。每條 branch 的 Issue／Milestone owner 對同步
-負責；不是由 hotfix 作者直接改寫其他團隊的 branch。同步必須在接受下一張 Issue PR
-或建立 promotion PR 前完成，避免較舊候選版本把已進入 `main` 的修正帶掉。
-
-預設採手動、可審查流程：
-
-```bash
-git fetch origin main <delivery-branch>
-git switch -c sync/main-to-<delivery>-<main-sha> origin/<delivery-branch>
-git merge --no-ff origin/main
-git push -u origin sync/main-to-<delivery>-<main-sha>
-gh pr create --base <delivery-branch> --head sync/main-to-<delivery>-<main-sha>
-```
-
-Sync PR 使用 repository 允許的 merge method；squash-only repository 直接以一般
-squash merge 合併，不需暫時開啟 merge commits 或使用 admin override。PR policy 與
-promotion preflight 優先接受 proposed head 對當前 `main` 的直接 ancestry；若 squash
-使 ancestry 不再保留，
-則透過 GitHub REST 核對 deterministic sync branch 對應的 PR 已合併至正確 delivery
-branch、該 PR head 確實包含完整的當前 main SHA，且 PR 的 `merge_commit_sha` 已包含在
-proposed head。任一 API 查詢失敗、main 已前進、PR 未合併、base 不符、sync head 未含
-該 main SHA，或 proposed head 未含該 squash commit 時都 fail closed；branch 名稱與
-commit message 本身不算證據。
-
-若發生 conflict，owner 在 `sync/*` branch 解決、說明取捨並重新跑受影響 checks；
-不得直接 push、force-push 或在 delivery branch 上解 conflict。若
-`CSARC_AUTO_SYNC=true`、`CSARC_SYNC_TOKEN` 可觸發後續 PR checks，且 branch／PR
-write probes 都是 `allowed`，workflow 才能自動建立相同 PR。任何能力為 `blocked`
-或 `unknown` 都只輸出上述手動指令，不猜測權限、不把未同步視為成功。
-main push 的 reconcile 只對過期 PR 的合併後 `title` policy context 寫入 failure，
-不寫 success；同步後的新 SHA 必須重新通過完整 PR policy，不能用 status 繞過標題、
-Issue 關聯或 branch route。
-
-## Required checks 與 concurrency
-
-Ruleset 固定要求 `title`、`promotion` 與 `verify`；delivery sync 已併入 `title`，
-不再留下獨立 required context。穩定的 `verify` aggregate context
-每次都建立，並彙總 fast、full、OSV、Zizmor 與 remote governance 的
-`success`／`skipped` 結果；因此不適用的重型 job 不會因 workflow-level path filter
-留下永久 Pending。
-
-一般 PR 的新 commit 會取消同一 PR 的舊 run。Promotion、hotfix、release 與手動
-full run 不取消進行中的驗證，避免候選版本遺失完整證據。CI 不再對合併後的同一
-source tree 跑第二次完整 suite；`main` push 留給同步與 release 邊界工作。
-
-## Promotion 與 canary 證據
-
-Ruleset 另固定要求 `promotion` context。一般 Issue／sync PR 會得到明確的
-not-applicable 成功結果；`dev/m* → main`、`dev/next → main`、`dev/i* → main`、
-hotfix 與 release recovery 則必須先確認 branch 包含最新 `main`。Milestone promotion 還會檢查同一
-Milestone 中，除 promotion Issue 外的工作均已關閉且沒有未勾選的 acceptance
-criterion。`dev/i<編號>-*` 則核對同號、無 Milestone 且標示 `promotion` 的 open
-Issue，不能借用別張 Issue 或偽裝 Milestone。
-
-若同一 Milestone 的後續工作明確依賴本 Milestone 先產生 immutable Release，可建立
-額外的 checkpoint promotion Issue。其 body 必須用唯一且依數字排序的 canonical marker
-明列本次候選，例如 `<!-- csarc-promotion-checkpoint: #12, #34 -->`。列出的每張
-work Issue 都必須已關閉、完成所有 acceptance criteria，且其工作 PR 確實存在於目前
-delivery range；main sync PR 不算 work Issue。未列出的下游 Issue 可保持 open，evidence
-只記錄本次實際 work Issues。沒有 marker 的 Milestone promotion 一律視為 final，仍要求
-其他所有非 promotion Issues 已關閉且完成。
-
-Promotion 的 squash fallback 使用與 PR policy 相同的 REST 證據鏈，並綁定 promotion
-PR 的 base SHA 等於當前 `main`、head ref 等於正確 delivery branch，以及該 branch
-包含已驗證的 sync squash commit；採用的 `direct-ancestry` 或 `squash-sync-pr-N` 會寫入
-preflight evidence。Hotfix 不適用此 fallback，仍須直接包含當前 `main`。
-
-若 reviewed squash sync 已讓 source delivery tree 包含 current main，但 GitHub 的三方
-merge 仍把原 promotion 判為 conflicting，可從 source delivery 建立一次性的 sibling
-bridge；不得 force-push 或直接推送到既有 delivery branch，也不得修改 merge settings：
-
-```bash
-git fetch origin main dev/m<編號>-<簡稱>
-git switch -c promote/m<編號>-<簡稱> origin/dev/m<編號>-<簡稱>
-git merge --no-ff -s ours origin/main
-test "$(git rev-parse HEAD^{tree})" = \
-  "$(git rev-parse origin/dev/m<編號>-<簡稱>^{tree})"
-git push -u origin promote/m<編號>-<簡稱>
-gh pr create --base main --head promote/m<編號>-<簡稱> --label promotion
-```
-
-Preflight 會把 `promote/mN-slug` 唯一對應到 `dev/mN-slug`，要求 bridge commit 的
-first parent 是該 source delivery 最新 SHA、second parent 是 current main，並確認
-bridge、workflow candidate 與 source tree 完全相同。Included PR provenance 只接受
-bridge ancestry 中已合併到同一 Milestone `dev/mN-*` 的 PR；跨 Milestone、`dev/next`、
-沒有 merged PR 的額外 commit、source ref 漂移或 tree 漂移都 fail closed。Bridge PR
-完成後即刪除暫時 branch；原 delivery branch 不重寫。
-
-Standalone `dev/next` 使用固定的 `promote/next` sibling bridge：
-
-```bash
-git fetch origin main dev/next
-git switch -c promote/next origin/dev/next
-git merge --no-ff -s ours origin/main
-test "$(git rev-parse HEAD^{tree})" = \
-  "$(git rev-parse origin/dev/next^{tree})"
-git push -u origin promote/next
-gh pr create --base main --head promote/next --label promotion
-```
-
-它必須是以 exact `dev/next` source 為 first parent、current
-`main` 為 second parent且保留 source tree 的同 repository merge commit；tracking Issue
-不得屬於 Milestone，included PR provenance 只接受合併到 `dev/next` 的 PR。Preservation
-transaction 同時綁定 source `dev/next` SHA 與 bridge head ref/SHA，因此固定 branch 名稱
-遭重用、任一 ref／parent／tree 漂移或 source history 被改寫時都 fail closed；source
-僅快轉前進時，complete／abort 仍能以已記錄的 source SHA 安全完成。
-Terminal evidence 會輸出 creator/owner cleanup 指令；該工具先核對 terminal ledger，再對
-ledger repository 的 canonical GitHub URL 執行帶有 exact
-`--force-with-lease=refs/heads/promote/next:<bridge-sha>` 的 deletion-only Git push。Ref
-已不存在時視為完成；ref 已前進時拒絕刪除，且永不以此流程刪除 `dev/next`，本機
-`origin` 也不能改變刪除目標。
-
-Promotion 會封裝候選 source archive，記錄 PR、base/head SHA、candidate tree、
-Milestone 與納入 Issues，並把完整 CI 的 `verify` 當成並列 required gate。合併後
-不重跑完整矩陣，而是下載該 PR 的 evidence、核對 `verify` 成功，並確認 `main`
-tree 與候選 tree 相同；任一不符都停止後續 release。
-
-外部 canary 採明確三態：
-
-- 同時設定 repository variable `CSARC_CANARY_COMMAND` 與
-  `CSARC_CANARY_ENVIRONMENT` 時為 `allowed`，候選 archive 會進入指定 GitHub
-  Environment 執行 smoke；敏感值只透過 environment secret
-  `CSARC_CANARY_TOKEN` 提供。
-- 兩者都未設定時為 `blocked`，只保留 artifact-only evidence，不能宣稱已完成
-  外部測試。
-- 只設定其中一項時為 `unknown`，同樣只保留 artifact-only evidence，並要求維護者
-  修正設定。這兩種 fallback 都不取代 full CI。
-
-Promotion Issue 會維持 open；只有 gate 通過且 PR 真正合併到 `main` 後，GitHub
-closing keyword 才關閉它。既有 Milestone lifecycle 會在所有 Issue 關閉且
-Milestone acceptance criteria 全部勾選時關閉 Milestone，之後若 Issue reopen 或
-criterion 取消勾選則重新開啟。
-
-### Promotion checklist 與證據保留
-
-Promotion owner 在請求合併前逐項確認：
-
-- tracking Issue 仍 open，PR 以 closing keyword 指向它，所有 acceptance checkbox
-  已完成；checkpoint 的 marker 與 delivery range 完全一致，final Milestone route 的
-  其他工作 Issue 則全部關閉。
-- delivery head 包含目前 `main`；候選 source、base/head SHA 與 Git tree 已封存。
-- full `verify` 與 `promotion` context 成功；或符合下方 quota-only promotion fallback，
-  且其精確 SHA/tree 證據與人工授權完整。納入 PR 清單與最高 SemVer intent 必須相符。
-- canary 為 `allowed` 且成功，或誠實記為 `blocked`／`unknown` artifact-only；後兩者
-  不得在 release note 宣稱外部環境驗證成功。
-- reviewer 知道 rollback 是 revert promotion PR／發布修正版，而不是重寫歷史。
-
-合併後，release-source 再核對 `main` tree identity 和原本的成功 run。Promotion
-evidence、release-source evidence 與 CI plan artifact 保留 90 天；GitHub PR、Issue、
-Milestone、workflow URL、commit 與 tag 是長期索引。證據核對成功後才讓 closing
-keyword 關閉 promotion Issue；Milestone lifecycle 再依 acceptance criteria 關閉
-Milestone。若任一核對失敗，保持 Issue／Milestone open、停止 release 並另開修正
-Issue，不回填假成功。`dev/i*` 只有在上述核對與 source handoff 成功後才刪除遠端
-branch。
-
-## 批次發版邊界
-
-發版以 promotion 為單位，而不是以每張 Issue PR 為單位：Milestone 原則上僅在完成時
-promotion 一次；只有 downstream acceptance 明確依賴同一 Milestone 的 immutable Release
-時，才使用上述 checkpoint promotion。`dev/next` 建議由團隊固定每週一個 release window 批次 promotion，
-沒有 release-worthy 變更時直接略過；`dev/i*` 在其獨立 canary 完成後單獨
-promotion；hotfix 才是立即 promotion／release。若下一個 release PR 合併前又有
-promotion，Release Please 更新同一張 PR，最後仍只建立一個 tag 與 GitHub Release。
-
-Promotion evidence 會列出 delivery range 中實際合併的 PR、標題與各自的
-major／minor／patch／no-release intent。Promotion PR 標題必須宣告其中最高等級，
-使 squash commit 與整批內容一致；若全部只有 `docs`、`ci`、`chore` 等 no-release
-變更，release jobs 會略過並留下原因，不建立空版本。
-
-`main` push 的 release-source job 會再次核對每個 promotion 的 full `verify`、
-canary 狀態與 tree identity，並把 delivery branch、Milestone／standalone batch／
-isolated route、promotion PR、main SHA、evidence run、Issues 與納入 PR 彙整成 90 天
-artifact 和 workflow summary。無關聯 PR、非 promotion／hotfix 或證據不符的 commit
-只會得到 verification-only 結果，不能進入 capability detection 或發布。
-
-Artifact workflow 不監聽任意 `v*` push，只接受 Release Please workflow 帶入
-source run ID 的明確 dispatch。它先驗證 tag commit 與 release-source evidence，
-再從 exact tag 建置 distributions／來源封存檔，將 production-only runtime 隔離後
-以固定 Syft 版本產生 SPDX JSON SBOM；runtime inventory 由套件管理器獨立列舉，
-不反向信任 SBOM 自己宣告的 dependency graph。workflow 只接受已完成成功、repository
-與 workflow identity 都相符的 source run，並以 terminal manifest 綁定明列成品的
-digest、source metadata 與 provenance；不使用 wildcard、也不要求不同執行間
-的 Syft JSON byte-identical。所有本機建置與 evidence 驗證成功後才建立 mutable draft，
-成品上傳後會下載到全新空目錄驗證，
-發布後再從 immutable Release 全新下載並驗證；不重跑已由 promotion 通過的完整
-runtime／template 測試矩陣。相同 source 的重跑只會沿用已驗證 immutable Release
-或尚可修復的 mutable draft；未知狀態 fail closed，失敗復原也只會把 mutable
-Release 留在 draft。既有 repo 的 Python／npm product identity 一律從 exact-tag
-`pyproject.toml`／`package.json` 讀取，不從 Copier project slug 推測。
-
-## Maintainer walkthrough
-
-### 兩個 Milestone 同時進行
-
-Milestone 7 的 Issues 各自由 `type/*` PR 進 `dev/m7-delivery`，Milestone 8 同理進
-`dev/m8-auth`；普通 PR 都跑 fast。Milestone 7 先完成時，owner 先同步最新 `main`，
-以 promotion PR 跑 full 與 canary，合併後形成一個 release 邊界。`main` 前進後，
-Milestone 8 owner 透過 `sync/main-to-m8-auth-<sha>` PR 納入結果；Milestone 8 不需
-重建 branch，也不能在未同步時繼續合併 Issue PR。兩條 delivery branch 可以平行，
-但不互相 merge；共同結果只透過 `main` 回流。
-
-### 孤立 Issue
-
-一般文件、維護或小功能 Issue 由 `type/<issue>-*` PR 進 `dev/next`，在每週 release
-window 與其他孤立工作一起 promotion。若 Issue #42 需要自己的外部 canary，Issue
-先記錄理由與停止條件，再建立 `dev/i42-canary`、加 `promotion` label，直接以這條
-branch 工作；full/canary 通過並 promotion 到 `main` 後刪除它。不能只因不想等待
-`dev/next` 就建立 `dev/i*`，也不能為單一 Issue 建立內容空洞的 Milestone。
-
-### 緊急 hotfix
-
-正式環境的緊急缺陷由 standalone `fix/<issue>-*`、`hotfix` label 直接對 `main` 開
-PR。它仍需 tracking Issue、人工審查、full `verify`、promotion evidence 和 tree
-identity；合併後立即形成 patch release 邊界。接著由每條進行中的 `dev/m*`、
-`dev/next` 與 `dev/i*` owner 各自建立 reviewed sync PR，把 hotfix 帶回去。
-
-### 缺失 Release recovery
-
-若已合併版本缺少對應 GitHub Release，使用同號 `fix/<Issue>-*`、`fix` title 與
-`release-recovery` label 對 `main` 開一張最小修復 PR。它可以保留原 Milestone，
-但不可同時標示 `hotfix`；必須通過 full `verify`、promotion evidence 與 merge 後
-tree identity。Release workflow 先把 distributions、精確 tag/commit 的 SPDX 2.3
-SBOM、artifact manifest 與 provenance 上傳到 draft，再下載並重驗 digest；全部吻合後
-才發布 immutable Release，發布後再驗 hosted assets 與 attestation。Actions 額度 fallback
-只產生 release-ineligible 證據，不得用來宣稱 recovery 完成。
-
-## 導入、回復與降級
-
-- **既有 main-only：**不改寫歷史、不回填舊 PR。先合併 policy/workflow，再從目前
-  `main` 建立 `dev/next`；新的 Milestone 才建立 `dev/m*`，open PR 在可安全 rebase
-  或 retarget 時逐張遷移。第一個 promotion 前先完成一次手動 dry run 與 full gate。
-- **既有單一 `dev`：**不把進行中工作硬拆成多條歷史。完成或凍結當前 `dev` 候選後，
-  由目前 `main` 建 `dev/next`，新 Milestone 使用 `dev/m*`；舊 `dev` 維持唯讀到候選
-  結束再刪除。
-- **回復 policy：**若 staged delivery 本身需要撤回，以正常 PR 把新 work 暫時改回
-  main-only 或單一 `dev` 設定；保留已產生的 evidence 與 branch，不 rewrite／force
-  push。已發布錯誤使用 revert/fix promotion 和新版本處理，絕不移動既有 tag。
-- **能力降級：**Ruleset 無法強制時標為 `DEGRADED`，仍產生可見 checks 供人工遵守；
-  sync 寫入能力 blocked／unknown 時改走上述手動 PR；canary blocked／unknown 時只
-  能宣告 artifact-only；release 權限不足時停在 verification-only。任何降級都不
-  會把 full failure、未知權限或未啟動 runner 當成功。
-
-## 安全掃描與治理頻率
-
-- Gitleaks 留在每張 PR 的 docs／fast／full 路徑。
-- actionlint 與 ShellCheck 在 workflow／shell 相關變更、full tier，以及既有每週
-  workflow audit 排程執行；兩者固定版本並驗證下載 checksum。
-- OSV 在相依或供應鏈設定變更、full tier，以及每週排程執行。
-- Zizmor 在 workflow／action 相關變更、full tier，以及每週排程執行。
-- Remote governance 在治理宣告／checker 變更、full tier，以及既有 daily drift
-  schedule 執行；reviewer assignment 只在 opened、reopened 或 ready-for-review
-  觸發，不在每次 synchronize 重做。
+工作 PR 關閉單項工作；Milestone 交付負責批次進入 `main`。`promote/m<編號>-<簡稱>` PR 以
+`Closes #<tracker>` 直接關閉該 Milestone 的 tracker Issue，並由 `milestone-lifecycle.yml`
+的 `record-promotion-evidence` job 在合併後自動把 merge commit 網址回填進 tracker 的
+`Completion evidence` 段落（見 #512）；#400 與 #401 的自動結案契約不再是 blocked gap。
+delivery branch 清理仍由 worktree 清理流程負責，不由版本或發版流程重複處理。
 
 ## PR lifecycle single-writer
 
-任何 agent 要把既有 PR 轉 Ready／Draft、改 label／milestone、準備 merge authorization
-或合併前，必須先以 `scripts/pr_lifecycle.py acquire` 對精確 repository、PR、head SHA
-與 task owner 建立 lease evidence。工具會用 create-only atomic push 同時取得該 PR 的
-remote ref 與以 base branch 雜湊命名的共用 destination-lane ref；任何兩張指向同一 base
-的 PR 都不能同時持有 merge lane。取得失敗、lease
-remote commit／base／head 漂移時一律停止。只有 remote commit 格式、parent、tree 與期限皆
-可驗證的過期 lease 可用 atomic compare-and-swap 回收；新 audit 會保留被回收 commit。
+Agent 或 automation 若要變更 PR 的 ready／draft、授權或 metadata，必須先取得 remote
+lease，並透過 `scripts/pr_lifecycle.py` 執行；`scripts/verify` 會拒絕另一套重複寫入者。
+人工在 GitHub 上審查與合併不受這個工具限制。
 
-持有 lease 的 task 只能透過同一工具的 `state` 執行 Ready／Draft，透過 `edit` 改
-body／label／milestone，並用 `authorization-template` 產生綁定該 PR 與完整 head SHA 的唯一文字，
-交由具 live maintain/admin 權限的人類原樣張貼。禁止直接呼叫 `gh pr ready`、`gh pr edit`
-或 `gh pr merge`。其他 task 在 lease 釋放前只做唯讀複審，若找到 blocker，先通知 owner，
-並用 `[P0]`、`[P1]` 或 `[merge-blocker]` 開頭；只有明確
-`[merge-blocker-resolved]` 可解除。不得自行改 PR state。Owner 在動作完成或明確放棄後
-才執行 `release`。Remote commit 與 audit comment 只公開隨機 capability 的 digest；raw
-capability 只存在 owner 的本機 evidence，任何 state／edit／release 前都重新驗證。
-GitHub App caller 必須從 pinned token action 的 `app-slug` 明確傳入 actor；一般 token 只
-接受 `/user` 可驗證的 identity，無法驗證時 fail closed。Audit 建立回應與後續 refetch 都
-必須吻合該 actor、repository、PR 與 canonical body。
+`gh pr merge --admin` 只能用來繞過文件明列的已知例外，目前僅一項：`pr-policy.yml`
+`title` job 的「Validate Milestone approval」step（要求非提案者在 #440 留言）在
+#512 解決前的過渡期。繞過前必須先確認同一個 `title` job 的「Validate pull request
+policy」step 本身是 success，不能只看整個 job 或整個 PR 的 conclusion 就一併略過——
+用 #513 的 `scripts/check-pr-policy-status`（完成前，改用
+`gh run view <run-id> --log | grep -E "Validate pull request policy|##\[error\]"`
+手動確認）。
 
-`check` 與 `merge` 會在 lease 內分頁重讀 timeline、一般留言、inline review comments、
-submitted COMMENTED review bodies、reviews、checklists、base、
-exact-head required checks 與 effective Ruleset；較新的 Draft、blocker 或任何漂移都使授權
-失效。`merge` 在 REST PUT 前再對 PR 與 destination lane refs 執行 exact CAS，且只使用
-SHA-bound synchronous REST merge。無法證明 approval、last-push、
-thread resolution、required checks 與 no bypass 時，包含 GitHub Free private repository，
-agent 必須停在 `human-only`，由人類在 GitHub 上手動合併。
+### 不屬於里程碑的工作
 
-Release Please action 會在回傳精確 PR number／head 前建立或修改 branch、Draft 與 labels，
-無法原子綁定這個 exact-PR lease，因此 Private Free degraded mode 的 repository workflow
-會停用自動 release PR 建立／更新，並明確 fail closed 為
-`release pull request (human-only)`，且不授予 PR／contents write。Human maintainer 建立
-或更新 release PR 後，後續 metadata／state 寫入仍必須走 lifecycle lease；不得把這個降級
-宣稱為已序列化的自動 release writer。
+一張 Issue 若能獨立審查、驗證與交付，且沒有共同期限、跨 Issue 相依、整批驗收或
+soak／canary 需求，就不必加入里程碑。它從最新 `main` 建立 topic branch，PR 直接回
+`main`，接受一般 review 與風險分級驗證，並以 `Closes #N` 在合併後結案。合併只代表
+repository delivery；後續由 release workflow 判斷是否需要建立版本 PR。
 
-Direct-main release follow-up 另外要求 default branch 上的
-`release-follow-up-policy.yml`，並要求 organization effective Ruleset 以 exact repository
-ID、`refs/heads/main` 與 workflow path 將它設為 required workflow。這個
-`pull_request_target` workflow 只 checkout
-default branch，不執行 PR head；它從 live API 重新取得 PR、destination ref、完整 files 與
-commits，並在驗證前後確認 destination SHA 未移動。Ruleset 無法讀取、workflow 未受強制，
-或 live ref 漂移時一律 fail closed；尤其 GitHub Free private repository 不得把候選分支內
-同名 job 當成 trusted gate，必須停在 human-only，且不得使用 direct-main release
-follow-up exemption。可信 gate 接受 GitHub Actions 的 verified Release Please commits，或
-live permission 為 `maintain`／`admin` 且每筆 commit 都由該 maintainer 擁有的 verified
-human-maintained release branch。
+若工作開始需要多張互相依賴的 Issue、共同交付日期、整批驗收、獨立環境或正式發版
+決策，必須在實作前加入適當里程碑，改走 `dev/m*`；不能用 standalone 路徑繞過批次治理。
 
-## Actions 額度 fallback
+### Hotfix
 
-本 repo 是 GitHub Teams private plan，結構性地會超出每月 included Actions
-minutes；這是這個 repo 從一開始就會遇到的常態限制，不是需要升級方案或等待
-「恢復」才能解決的一次性事故。
+Hotfix 只用於必須立即修正 `main` 的缺陷，不是一般工作的優先通道：
 
-這個流程適用於 GitHub Actions job 出現 zero-step billing block：GitHub 的
-runner 未啟動訊息提及 failed payments 或 spending limit，工具以其精確、泛用的
-billing 註記文字機械式辨識，不判讀實際帳務子原因——GitHub 帳務方案的內部差異
-不是這個 repo 的治理範圍。一般測試失敗、workflow／權限錯誤、平台事故、原因
-不明，或任何已開始執行 step 後才失敗的 job，都不算 zero-step billing block，
-仍然維持 blocked。
+1. 建立沒有里程碑的 Bug Issue，標上 `bug` 與 `hotfix`；若內容尚不能公開，改用
+   GitHub Security Advisory 的私密協作流程。
+2. 從最新 `main` 建立 `fix/<Issue>-<slug>`，PR 使用 `fix(scope): summary` 並直接 target
+   `main`。它仍須正常 review，且 CI 一律執行 full；不得以緊急為由跳過。
+3. PR 以 `Fixes #N`／`Closes #N` 連結 Issue。合併後保留 PR、commit SHA、full run、
+   rollback 說明與是否發版的決策；#401 負責一般 GitHub native 關單契約。
+4. `fix` 預設表達 patch 意圖；破壞相容性時明列 `!`。Release Please 會據此更新版本 PR；
+   版本 PR 尚未審查、合併且正式成品尚未發布前，hotfix 仍只算已交付、尚未發版。
 
-合併前必須確認 worktree 乾淨且 `HEAD` 等於 PR head SHA，執行完整本機驗證與每個可
-忠實重現的 required check；任何失敗都停止，GitHub-only checks 則逐項列出。不得
-建立或偽造成功 Check Run。fallback 不取代 release、publishing、deployment
-approval、secrets、provenance、CODEOWNER review 或任何無法本機重現的控制。額度
-恢復後須補跑該 SHA 的 GitHub checks 並記錄結果；平台不再允許補跑時，另開 Issue
-保留缺口，不得宣稱追溯成功。
+## Current automation
 
-### 一般 Issue PR
+下表逐項列出 canonical file、owner、觸發（輸入）、權限／timeout、產物（輸出）、測試與
+最新 live evidence；檔案存在或舊 run 成功不單獨算 active——見 Dependency vulnerability
+與 Work Issue closure 兩列的落地與失敗證據。Live evidence 以 2026-09-01 對
+`Innoguard-Cyber-Arch/csarc-repo-template` 的 `gh api actions/workflows` 與
+`gh run list` 查詢結果為準；重跑本盤點請重新查詢，不沿用本表數字。
 
-通過本機驗證後，用 `scripts/promotion_gate.py note-quota-fallback` 對每個受阻
-run URL 機械式確認 zero-step billing block（拒絕任何已執行 step 的 job），在 PR
-留下標題為 `Actions quota fallback note` 的留言，記錄 head SHA、受阻 run URL、
-驗證命令與結果、未重現 checks。`pr_lifecycle.py check` 與 `merge` 必須收到該留言的
-`--quota-fallback-note-url`，並仍須通過通用 exact-head merge authorization；fallback
-本身不另要求第二則 quota authorization。此路徑只適用於非 default branch 的一般
-Issue PR，不能取代 promotion、hotfix 或 release gate。新 commit 使既有 note 失效並須
-重新驗證、重新產生。只有 repo 現行政策已允許 author self-merge 時（見下方 Alpha
-例外），agent 才可合併。work branch 還必須只有一個 closing reference，綁定仍為
-open 且 Milestone 與目標 delivery branch 相符的同號 Issue；缺漏或多餘關聯都 fail
-closed。
+| 能力 | Canonical file | Owner | 事件（輸入） | 權限／timeout | 產物（輸出） | 測試 | 最新 live evidence | 狀態 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CI | `.github/workflows/ci.yml` | 驗證分級（#392／#403／#428） | `pull_request`、`merge_group`、`workflow_dispatch` | `contents: read`；30 分鐘；同一 PR 新 commit 取消舊 run | `scripts/ci_tier.py` 分類後，中央模板呼叫 `scripts/verify-fast` 或 `scripts/verify-template.sh`，生成 repo 呼叫 `scripts/verify`；輸出 `verify` check 與 step summary | `tests/test_ci_tier.py` | run [33519320562](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320562)，2026-09-01，success | active |
+| PR policy | `.github/workflows/pr-policy.yml` | PR／交付政策 | PR metadata 事件（opened／edited／synchronize／labeled） | 只給需要的 Issue／PR metadata 權限；固定 timeout | title、Issue、route 與 review policy 判定 | `scripts/test-pr-policy` | run [33519320929](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33519320929)，2026-09-01，success；同日對 #448／#453／#457 等未完成 checklist 的候選 PR 正確擋下合併，證明門禁確實生效 | active |
+| Dependency vulnerability | `.github/workflows/osv.yml` | 依賴安全（#406／#407） | weekly schedule、manual、相關 manifest／lockfile 變更 | `contents: read`；固定 timeout | OSV 掃描結果 | `tests/test_dependency_security.py` | 2026-09-01 以 `gh api repos/.../actions/workflows` 查詢：GitHub 僅註冊 7 支 workflow，**不含 `osv.yml`**——本檔尚未落地 `main`，且觸發條件不含 `pull_request`，候選分支無法預先註冊。前身「OSV scheduled scan」最後已知 run 於 2026-08-24 全部 failure，屬歷史證據，不代表本候選 | **root：candidate**（待 main 落地＋首次排程／手動觸發）；**新生成 repo：active**（Copier 初次 commit 即進入該 repo `main`，可立即註冊與觸發） |
+| Issue triage | `.github/workflows/issue-triage.yml` | Issue 分流 | `issues` 事件 | 最小 Issue metadata write | label／milestone routing | `scripts/test-issue-triage` | run [33524318953](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33524318953)，2026-09-01，`main`，success | active |
+| Spec to Issue | `.github/workflows/spec-to-issue.yml` | Spec 轉換 | spec 檔案變更事件／manual dispatch | 最小 Issue metadata write | 可審查 Issue 草稿 | `tests/test_spec_to_issue.py` | run [33490382161](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33490382161)，2026-09-01，success | active |
+| Milestone lifecycle | `.github/workflows/milestone-lifecycle.yml` | #400 | milestone／Issue 事件、核准 comment 偵測 | 最小 metadata write | lifecycle gate 狀態、closure 同步 | `tests/test_milestone_lifecycle.py`（本候選尚未含 #444 已拆分的 `test_milestone_approval.py`／`test_milestone_closure.py`，待 #444 併入才更新） | run [33524281794](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33524281794)，2026-09-01，`main`，success | active；完整結案契約仍由 #400／PR #444 擁有（尚未合併） |
+| Work Issue closure | `.github/workflows/work-item-closure.yml` | #401 | 里程碑工作 PR 合併進 `dev/m*`（`pull_request.closed`） | `contents: read`、Issue write；5 分鐘 | 對應 Issue 關閉 | `tests/test_work_pr_closure.py` | run [33502286588](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/actions/runs/33502286588)，2026-09-01，**failure**（checkout 用 `pull_request.base.sha`，缺合併後才有的 `close-work` 指令） | active（workflow 已啟用並真的執行）；已知 live 失敗，修正候選見 #401／PR #453，尚未合併 |
+| Dependabot | `.github/dependabot.yml` | GitHub 原生＋依賴安全 | schedule／manifest 變更 | GitHub 原生 bot 邊界，無 repo workflow 權限 | dependency PR | GitHub 原生功能，無 repo-local 測試；設定格式由 `scripts/sync-paired-files.sh --check` 涵蓋 | GitHub 註冊為 `Dependabot Updates`（`dynamic/dependabot/dependabot-updates`），state active（原生排程不透過 `gh run list` 查詢單筆 run） | active |
+| Version／Release | `.github/workflows/release.yml` | #369／#430 | `main` push（post-merge）、manual rerun | top-level read；單一 release job 才有 `contents`／PR／Issue／status write；30 分鐘 | Automatic 或 Guided 版本 PR；合併後由同一 workflow 發布 tag／GitHub Release／成品／checksum／SBOM | `tests/test_release_policy.py`、`tests/test_release_bundle.py`、`tests/test_journey07_release.py` | 尚未落地 `main`，無 tag／Release live run；候選僅由本表 CI／PR policy 兩筆 run 驗證檔案與規則本身 | candidate／blocked，待 default branch 首次 live run |
 
-Alpha opt-in 必須在 PR body 以獨立一行精確寫入 `Alpha 自行合併 / self-merged`。
-此時不要求 reviewer，執行者也可以是 exact-head maintainer authorization 的留言者；
-但 lifecycle lease、human authorization、完整本機證據、quota note、未解 blocker／
-changes-requested 檢查，以及 base/head/tree CAS 都不變。這個例外只接受關閉 branch
-同號 Issue 的一般 work PR，且 base 只能是 `dev/next` 或 `dev/m*`。Reviewed sync
-仍須 independent review，因為 deterministic branch 與 commit parents 無法單獨證明
-conflict resolution 的 tree 內容。sync、default-branch promotion、hotfix、release 與
-任意其他 route 一律拒絕。若 effective rules 因 403 或其他原因無法驗證，
-`check` 只能產生 `human-only` snapshot，`merge` 仍拒絕 agent merge；marker 不得推定
-server-side enforcement。
-目前 checked-in desired rules 仍要求一份 approving review；當 private repository 的
-live capability probe 又只能回 403 時，Alpha no-review 在本政策下只可
-`human-only`。只有未來明確採用且可驗證的 server-enforced zero-review/no-bypass
-policy 才可能得到 agent merge mode。
+所有第三方 Actions 鎖定完整 commit SHA，旁註可讀 release tag。Workflow YAML 只負責
+event、權限、環境與呼叫；分類與驗證規則留在本機可測的 scripts。Repository 預設
+`GITHUB_TOKEN` 為 read-only；release job 只在自己的 workflow 提升必要權限。Automatic
+模式必須允許 Actions 建立 PR；若上層政策禁止則使用 Guided，workflow 仍不能自行核准版本 PR。
 
-### `dev/next` promotion preservation
+上表只列本 repo 自己的 active automation。生成 repo 另有一個選用能力：開啟
+`enable_template_update_notifications` 才產生 `template-update.yml`
+（`schedule`／`workflow_dispatch`、`contents: read`＋`issues: write`、10 分鐘
+timeout，只呼叫 `scripts/check-template-update`）。公開模板來源不需要 secret；
+來源為 private repository 時，才由唯讀的 `CSARC_TEMPLATE_READ_TOKEN` repository
+secret 提供存取，且只有 `schedule`／`workflow_dispatch` 路徑讀得到，不會流向
+`pull_request` workflow。本 repo 是模板來源本身，不消費也不排程這個 workflow。
 
-每一個 `dev/next` → `main` promotion（一般 hosted、merge queue、manual 或 quota
-fallback）都必須先由管理者對精確 PR/head 執行 `delivery_sync.py prepare-dev-next`。
-`policies/dev-next-ruleset.json` 只保護 `dev/next` 與
-`csarc/dev-next-preservation-ledger`：兩者都禁止刪除與 non-fast-forward 更新，其他
-`dev/*` branch 仍可按生命週期清理。gate 會重新讀取 ledger 的完整單 parent 歷史、live
-PR/refs、effective rules 與 repository setting。只有兩個 ref 的 effective rules 都可驗證時
-才採 `ruleset-protected`；private repository 無法讀取 rules API 時可採下述 temporary mode，
-但任何無法綁定 exact prepared transaction 的情況仍一律 fail closed。
+## 驗證分級與實測成本
 
-Temporary mode 的 ledger ref 可能不受保護，因此 ref 本身不是 trust anchor。工具輸出的
-canonical authorization body 會綁定 repository、PR、base/head SHA、operation ID 與
-exact prepared ledger commit SHA，且必須由兩位不同、當下仍具 admin／maintain 權限的
-human maintainer 原樣留言授權。合併前 live ledger ref 必須仍精確指向該 SHA；合併或中止後
-只能沿包含該 authorized SHA 的 canonical 單 parent history 完成 transaction。ref 被移動、
-刪除、改寫或無法讀取時一律停止並交由人工恢復。
+驗證契約只有兩個成本邊界，粒度由粗到細另有一種本機專用、不屬於 CI 政策的第零層：
 
-一般 promotion 的 preflight evidence 會綁定 exact prepared ledger commit；main
-post-merge verifier 以同一 evidence append `restoring-complete`，再恢復暫停的
-auto-delete 並 append `completed`。關閉未合併 PR 則由 delivery-maintenance append
-`restoring-abort` 後恢復並 append `aborted`。`preparing` 配上已停用 setting、`prepared`
-配上已恢復 setting，或 PATCH 結果不明時都不自動猜測 ownership，必須人工檢查後重跑
-exact restoring operation。完成的 main base 不可重用；aborted operation 釋放該 base，
-但同一 operation ID 不可 replay。
+1. **開發中 focused check（本機專用，不是 CI 的第三種政策）**——直接執行單一命令，例如
+   `uv run pytest <path>`、`uv run ruff check <path>`，或針對
+   `scripts/verify-template.sh` 其中一階段單獨重跑對應的
+   `scripts/verify-stage-<name>`；不需要等待整條 pipeline，也不會被當成合併證據。
+2. **日常 PR gate（`docs`／`fast`，同一個成本邊界）**——`scripts/ci_tier.py` 依事件、
+   base／head、labels 與 changed paths 做 fail-closed 分類；未知或高風險內容升級為
+   full。純文件／site 變更落在 `docs`，是 `fast` 的 early-exit 實作細節，不是獨立的第
+   四套政策；其餘一般變更落在 `fast`。兩者入口都是 `scripts/verify-fast`。
+3. **完整交付驗證（`full`）**——只在 Milestone／canary 交付、hotfix、merge queue、手動
+   執行或未知高風險路徑觸發；中央模板入口是 `scripts/verify-template.sh`，生成 repo
+   入口是 `scripts/verify`（不帶參數即預設 full）。PR owner／integrator 只在自己的 PR
+   本身就落在這個邊界時，才需要在本機另外執行一次；一般 `fast`／`docs` PR 不需要在本機
+   重跑 full。
 
-Hosted temporary restoration 只使用獨立的 `CSARC_SYNC_TOKEN`，不會退回
-`github.token`。Prepare evidence 會以 secret metadata 標示 `hosted` 或 `human-only`；
-hosted complete／abort 在 append restoring checkpoint 前，先用該 token 對目前 setting 做
-no-op PATCH 並 refetch，以證明當下仍有 admin write。secret 缺失或驗證為 403 時不更新
-ledger／setting，workflow 失敗並輸出綁定 exact transaction 的人工 command。
-`promotion.yml` 與 `pr-policy.yml` 的 `pull_request`／`merge_group` jobs 只使用 read-only
-`github.token`，不引用管理 secret；temporary prepare 必須事先由 human maintainer 或其他
-受保護的 trusted path 完成。只有從 default branch 載入的
-`promotion-post-merge.yml` push job 與 `delivery-maintenance.yml` workflow-run／push／manual
-jobs 可取得 `CSARC_SYNC_TOKEN`。PR close 只觸發不含 secret 的 `dev-next-close.yml`；後續
-trusted workflow 會重新查驗 workflow ID 與唯一 closed PR，且不得 checkout 或執行 PR
-head 的程式碼。
+數據來自 #428／PR #431 在 2026-09-01 的最新 hosted run，目的是設定成本預期，不是永久 SLA；
+`full` 一列已由 #458 在 2026-09-02 於同一本機環境重新量測（見下方階段盤點與 PR 內文的
+before／after 紀錄）。
 
-### Promotion PR 的額外 fallback 證據
+| 分級 | 適用範圍 | 入口與測試集合 | 實測 |
+| --- | --- | --- | --- |
+| docs | 純文件與 site 內容 | `scripts/verify-fast`；來源檢查、render、雙語／glossary／llms 契約 | 與 fast 共用 bounded path |
+| fast | 一般工作 PR；依 scope 加 policy／template 檢查 | `scripts/verify-fast`；source fast 約 59 秒，policy／template scope 約 99 秒 | 約 1–4 分鐘的 PR feedback window（#428） |
+| full | Milestone／canary 交付、hotfix、merge queue、manual、未知高風險路徑 | 中央模板用 `scripts/verify-template.sh`；生成 repo 用 `scripts/verify full`（不帶參數時的預設行為） | 中央模板 verification 502 秒（8 分 22 秒，獨占環境全綠）；同機器有其他 worktree 並行執行時量到 810 秒，差異來自並行負載，不是本次變更（#458，2026-09-02） |
 
-`dev/m*`、`dev/next`、`dev/i*` 或 delivery strategy 的 `dev` promotion 到 `main`
-是實際的 release 邊界，風險層級不同，維持較嚴格的雙方確認，可使用同一個
-quota-only 例外；一般 main PR、release follow-up 與 hotfix 不因此新增快速通道。
-除前述共同條件外，必須使用既有 `scripts/promotion_gate.py`，依序完成：
+相依 manifest／lockfile 變更加跑 `scripts/verify-dependencies`。CI 不建立 release asset，
+也不把測試 artifact 當成正式成品。#408 已把更細的 stage timing 輸出納入現行入口。
 
-1. 在乾淨、精確等於 promotion PR head 的 worktree 執行 `prepare`，且
-   `--candidate-sha` 必須是該 head SHA；保存 candidate archive、SHA-256、base/head SHA、
-   candidate tree、納入 PR、SemVer intent 與 canary 三態。
-2. `dev/next` 的 standalone batch 必須先用相同 PR number 與 head SHA 執行
-   `delivery_sync.py prepare-dev-next`。工具先在遠端 append-only Git ledger 以
-   non-force fast-forward 建立唯一 transaction，綁定 repository、PR、base/head SHA 與
-   原本為 `true` 的 auto-delete，再於平台 deletion protection 無法驗證時暫停
-   auto-delete。若 API 不支援可信 ledger、已有其他 transaction，或 setting 原本就是
-   `false`，一律 fail closed；中止 promotion 時先關閉未合併 PR，再以同 operation ID
-   執行 `abort-dev-next` 恢復。
-3. 在同一 PR 留下標題為 `Actions quota fallback attestation` 的標準留言，再由 human
-   maintainer 留下 `Actions quota fallback authorization`。兩則留言都必須使用工具定義的
-   canonical JSON，精確綁定 repository、PR、base/head SHA、candidate tree、archive digest、
-   完整 blocked-run set 與上述 remote ledger commit／transaction。前者明示具 billing
-   visibility 且確認為已授權的一次性 billing zero-step block 特例處理，後者明示一次性、
-   無 admin bypass 的授權。
-4. `finalize-quota-fallback` 只接受 preflight archive、兩則留言 URL 與所有 blocked run
-   URL；工具會 refetch 同一 remote transaction，自行選擇 repo 內建 verifier（模板來源 repo 為
-   `./scripts/verify-template.sh`，生成專案為 `./scripts/verify`），並以 live
-   repository variables 重建 promotion preflight，
-   不接受呼叫者提供的命令字串。若 canary 是 `allowed`，fallback 不得替代它；只有
-   `blocked`／`unknown` 可維持 artifact-only。工具也會 refetch 留言、作者資格與 live
-   GitHub identity；輸出的 gate 是 `quota-fallback`、`release_eligible` 固定為 `false`。
-5. 僅以非 admin 的 squash merge 合併。更新乾淨的 `main` checkout 後執行
-   `verify-quota-main`，確認 main tree 等於已驗證 candidate tree，並把結果留在 PR；
-   `dev/next` route 還會重新讀取 canonical authorization 所綁定的 prepared ledger commit，
-   只用同一 operation、merged PR、head SHA 與 current main SHA 執行
-   `delivery_sync.py complete-dev-next`。工具確認長期 branch 未消失、tree lineage 一致後，
-   才把該 transaction append 為 completed 並恢復原本的 auto-delete；任何一步不符都停止、
-   revert／修正，不重寫歷史。
+### Base-only re-merge 例外（#468）
 
-新 commit、base SHA 漂移、candidate tree 改變、任何非 zero-step 失敗，或 attestation／
-authorization 不屬於同一 PR，都會使 fallback 失效。這份本機 evidence 只允許合併，
-不會被 hosted `release-source` 接受；在原 promotion 與 main post-merge checks 真正補跑
-成功前，不建立、移動或宣稱 tag、Release、package、provenance 或外部 canary 成功。
-checkpoint promotion 亦不例外。
+上表「full」列與 #458 規則只回答「這張 PR 要不要跑 full」：只有 PR 本身落在 full 邊界
+時，owner／integrator 才需要在最終候選樹本機執行一次 `./scripts/verify-template.sh`
+（生成 repo 是 `./scripts/verify`）。這條規則沒回答的是另一個問題：**同一張已經跑過
+這一次本機全綠的 PR，之後因為共用整合分支（例如本 Milestone 的 `dev/m8-hugo-docs`）
+持續前進、被迫重新合併 base 時，是不是每次都要重跑同一套完整驗證。** 本節是 #458 規
+則的窄範圍例外，回答「同一張 PR 內，什麼時候可以不用每次都重跑」——**不是**放寬「full
+-tier PR 永遠不用本機跑」，也不代表任何 PR 的第一次本機全綠可以省略。
 
-## 外部基準
+一次重新合併（re-merge）只在下列四個條件**同時**成立時，才算「base-only re-merge」、
+才可以直接 push 並信任 hosted `verify` check，不必再本機重跑：
 
-下列活躍大型 repository 與 GitHub 官方文件於 2026-08-24 查閱；當日三者約有
-90k、142k、116k GitHub stars，皆未 archived 且當天仍有 push。採用的是「依事件／
-路徑分流、昂貴檢查集中在整合或發版邊界、維持穩定 required context、候選版本保留
-完整證據」等原則，不照抄它們的 branch 名稱；本 repo 的 `dev/m*`、`dev/next` 與
-`dev/i*` 是依本團隊工作單與並行交付需求定義。
+1. **這個 branch 已經對自己這一輪真正的內容，跑過一次全綠的本機
+   `./scripts/verify-template.sh`（或生成 repo 的 `./scripts/verify`）。** own-verified-
+   head 必須是那次全綠時的 commit；如果那之後這個 branch 又有新的自有 commit（不是單純
+   重新合併 base），own-verified-head 就不等於目前 tip，這條例外不適用，仍照 #458 規則
+   本機重跑。
+2. **這次重新合併乾淨、不會產生任何衝突**——用 `git merge-tree` 在不動 working
+   tree／index／任何 ref 的前提下確認（三個引數版本：`--merge-base <old-base-tip>
+   <own-verified-head> <new-base-tip>`），不是只看實際合併當下有沒有手動解過衝突。
+3. **上游帶進來的檔案，跟這個 branch 自己這一輪已驗證的檔案完全沒有重疊**——即「incoming
+   diff 的檔案」（`git diff --stat <old-base-tip> <new-base-tip>`，`old-base-tip` 是
+   own-verified-head 當初同步到的那個共用 base commit）與「這個 branch 自己這一輪的檔
+   案」（`git diff --stat <old-base-tip> <own-verified-head>`）交集為空。
+4. **上游帶進來的變更沒有觸碰驗證／CI／政策基礎設施本身**——`scripts/verify*`、
+   `.github/workflows/`、`scripts/ci_tier.py`、`scripts/pr_lifecycle.py`、
+   `scripts/validate-*-policy`、`scripts/test-issue-triage`、
+   `scripts/test-worktree-cleanup`、`scripts/test-pr-policy`、`policies/` 等。就算與這
+   個 branch 自己的檔案完全沒有重疊，上游一旦動到「驗證本身的定義」（例如新增或修改一
+   個 verify-stage、調整 CI tier 分類邏輯、放寬 PR policy），先前的本機全綠就不能直接
+   沿用其涵蓋範圍，仍要求本機重跑。
 
-- [Home Assistant core CI](https://github.com/home-assistant/core/blob/dev/.github/workflows/ci.yaml)
-  展示大型矩陣依工作內容與 job 條件切分，而非讓每個步驟無條件執行。
-- [Next.js build and test](https://github.com/vercel/next.js/blob/canary/.github/workflows/build_and_test.yml)
-  與 [release branch workflow](https://github.com/vercel/next.js/blob/canary/.github/workflows/create_release_branch.yml)
-  區分日常整合與發布邊界。
-- [Rust CI entry](https://github.com/rust-lang/rust/blob/main/.github/workflows/ci.yml)
-  與 [job definitions](https://github.com/rust-lang/rust/blob/main/src/ci/github-actions/jobs.yml)
-  將龐大驗證矩陣集中管理，按事件組合工作。
-- GitHub 官方的 [workflow branch/path filters](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onpushpull_requestpull_request_targetpathspaths-ignore)
-  說明事件過濾；required check 可能因整個 workflow 被略過而保持 Pending，因此本案讓
-  workflow 建立穩定 aggregate job，再在 job 內把不適用項目標成 skipped。
+四項同時成立時，PR owner／integrator 可以直接 push 這次重新合併的結果，不必再本機重跑
+`./scripts/verify-template.sh`，改為信任 hosted `verify` check 作為這次重新合併後的最
+終驗證。這**不代表**降低驗證涵蓋範圍：hosted CI 對這次合併結果執行的仍是同一支
+`scripts/verify-template.sh`／`scripts/verify-stage-*`（生成 repo 是同一支
+`scripts/verify`），差別只在「誰的環境跑」從本機換成乾淨、不受本機 worktree 並行負載或
+網路瞬斷（#466）影響的 hosted runner，而且只在合併沒有引入新風險（條件 2–4）時才適用。
+`own-verified-head` 本身不會因為用了這條例外 push 過就往前移——只有真的又在本機重跑過
+一次全綠，才把它往前移；因此同一張 PR 即使因為 base 連續前進被迫重新合併多次，也可以連
+續套用本節例外，只要每次都用同一個原始 own-verified-head 重新檢查最新的
+`new-base-tip`。
 
-## 成本與證據
+以下情況**明確不符合**本節例外，一律仍要求本機重跑，不確定時也一律視為不符合：
 
-模板 repo 的導入前基線是一般 PR update 約 14 billed Linux runner-minutes。
-分層後的一般文件／來源 Issue PR，最多啟動 PR policy、CI fast 與 CI aggregate
-三個 runner job；首次 reviewer assignment 再多一個 job。以每個短 job 至少計一分鐘，
-14→3／4 job-minute 規劃模型分別估計減少約 79%／71%。這是明確標示的 job-minute 規劃估算，不是 hosted 實測
-或實際帳單數字。
+- 重新合併產生真實衝突（無論是否已手動解決）。
+- 上游變更觸及這個 branch 自己這一輪已驗證的任何檔案，即使只是同一檔案的不同行、不會
+  造成文字衝突。
+- 上游變更觸及上方條件 4 列出的驗證／CI／政策基礎設施。
+- 這個 branch 在上次本機全綠之後，又有新的自有 commit（不是單純的 base 重新合併）。
+- 這次 push 本身就是新的 full-tier 邊界起點（例如這是這張 PR 第一次落入 full 邊界，或
+  是另一條獨立的 hotfix／canary／manual 路徑），而不是同一張已驗證 PR 的後續重新合併。
 
-Runner 可用且 CI 已啟動時，workflow 會上傳 `ci-plan-<run-id>-<attempt>` artifact，並在
-workflow summary 記錄 tier、原因、scopes、條件式檢查與 fast job 秒數。Hosted duration 與 `ci-plan` artifact 僅作
-optional telemetry，用來校準規劃模型，不是 Milestone、promotion 或產品
-交付的必要驗收條件。任何 zero-step job 都不算 hosted success 或成本測量；額度、付款、
-平台或權限問題也不得被記成成功 telemetry。Portable baseline 不要求管理員升級 GitHub
-方案、調整帳單、建立 PAT／GitHub App 或維護自架 runner。
+`scripts/check-base-only-remerge <own-verified-head> <new-base-tip> [<old-base-tip>]`
+提供上述四項判斷的可執行版本：省略 `<old-base-tip>` 時預設為
+`git merge-base <own-verified-head> <new-base-tip>`；符合條件印出 `QUALIFIES` 並以
+exit 0 結束，任何一項不符合印出 `REQUIRES-FULL-RERUN` 與具體原因並以非 0 結束。它只讀
+取 refs 並用 `git merge-tree` 做唯讀的三方合併模擬，從不修改 working tree、index 或任
+何 ref，也從不自己執行或略過驗證——只回答「這次重新合併符不符合條件」。
+`scripts/test-check-base-only-remerge` 對合格案例與三種不合格案例（檔案重疊、觸及驗證
+基礎設施、檔名不重疊但仍衝突）做回歸測試，掛在 `scripts/verify-template.sh` 的
+Regression tests 階段下（與 `test-issue-triage`／`test-worktree-cleanup`／
+`test-pr-policy` 同一組 self-test）。它不掛在 `scripts/verify-fast`：`verify-fast` 的
+governance／template／workflow／shell scope 自我測試集合與生成 repo 的
+`template/scripts/verify-fast.jinja` 必須逐項相等（`tests/test_journey03_ci.py::
+test_release_verification_contains_issue_pr_regressions` 對此做回歸測試），而
+`scripts/check-base-only-remerge` 只存在於中央模板 repo、不會下發到生成 repo（生成
+repo 的 full 入口是單一 `scripts/verify`，沒有本模板這種多階段重新合併場景），所以只加
+在 full 專屬的 Regression tests 階段，不加進 fast／docs 都會執行的 `verify-fast`。
 
-[#189](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/189) 與
-[#199](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/199) 原本把成功 hosted 量測或恢復視為完成前提；
-[#287](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/287) 已以 capability-adaptive telemetry 取代該前提。
-Telemetry 可用性不改變本機 full verification、promotion tree evidence、security 或 supply-chain gates。
-Promotion 的 quota-only fallback 仍須完整執行同一套本機 full verification，且不能冒充 hosted 成功。
-Hosted runner 可用時，full tier 以 `canonical full`、`Python compatibility (<runtime>)` 與
-`TypeScript (Node <version>)` 分開留下 job result、duration 與 billed runner telemetry；
-`verify` aggregate 依 tier 與 profile 要求所有適用 job 必須 success，
-只允許真正不適用的 job skipped，避免漏啟動被誤判成功。
+沒有先跑這支腳本，也可以用等價的手動程序判斷：對照 `git diff --stat <old-base-tip>
+<own-verified-head>` 與 `git diff --stat <old-base-tip> <new-base-tip>` 兩份檔案清單有
+沒有交集，人工確認合併乾淨（沒有留下 `<<<<<<<`／`=======`／`>>>>>>>` 標記，`git diff
+--check` 與 `scripts/check-update-conflicts` 兩者都乾淨），並確認上游變更沒有觸及上方
+條件 4 列出的路徑。
+
+### PR policy 逐 step 判讀（#513）
+
+`gh pr checks` 只回報每個 job 的整體 conclusion。`pr-policy.yml` 的 `title`
+job 依序執行多個 step，其中「Validate pull request policy」與「Validate
+Milestone approval」是彼此獨立的兩個 step；只要任一個失敗，job 整體就顯示
+`failure`，即使另一個 step 本身乾淨通過。手動用 `gh run view <run-id> --log
+| grep -E "Validate pull request policy|##\[error\]"` 逐次判讀容易誤判——本
+repo 在 Milestone 8 多 agent 並行協作期間就至少發生過一次誤讀——而且很慢。
+
+`scripts/check-pr-policy-status <pr-number> [--repo <owner/repo>] [--json]`
+改用 `gh api repos/{repo}/commits/{sha}/check-runs` 找出該 PR 目前 head
+commit 最新的 `verify`／`title` check run，再用
+`gh api repos/{repo}/actions/jobs/{job_id}` 讀 `title` job 的逐 step
+conclusion——不靠 log 文字比對，直接讀 step 本身的結構化結果。輸出三個獨立
+布林：`verify` check 是否 pass、「Validate pull request policy」step 是否
+success、「Validate Milestone approval」step 是否 success。預設印可讀摘要；
+`--json` 輸出結構化結果供 agent 直接解析。本機沒有裝 `gh`／`gh` 未認證，或
+PR 不存在時，明確報錯並以非 0 結束，不靜默給錯誤答案。
+
+往後任何人或 agent 要判斷「這個 PR 的 policy 檢查有沒有真的過」，一律用這支
+工具讀三個獨立布林，不要手動 grep log，也不要只看 `gh pr checks` 的 job 層級
+輸出。它只讀取 GitHub API、不修改任何 PR、check run 或 workflow，也不做
+「能不能合併」的最終判斷——那仍由 Journey 08 與本文件既有的 review／required
+check 規則決定；本工具只負責把 job 層級噪音拆成正確的 step 層級事實。
+
+`scripts/test-check-pr-policy-status` 用 mock `gh`（不打真實網路）對「job
+整體 fail 但目標 step success」與「目標 step 真的 fail」兩種情況各自回歸
+測試，也涵蓋 `gh` 未安裝與 PR 不存在兩種誤用場景，掛在
+`scripts/verify-template.sh` 的 Regression tests 階段下（與
+`test-check-base-only-remerge` 同一組 self-test）。`scripts/check-pr-policy-status`
+只存在於中央模板 repo、不下發到生成 repo：它是這個 repo 自己在 Milestone 8
+多 agent 並行協作期間需要的本機／agent 診斷工具，不是任何 `.github/workflows/`
+呼叫的 product surface；`pr-policy.yml` 本身（含其 job/step 結構）仍照原樣
+下發給生成 repo，不受影響。
+
+### `scripts/verify-template.sh` 階段盤點（#458）
+
+`scripts/verify-template.sh` 是一個薄聚合器：七個階段各自是 `scripts/verify-stage-*`
+底下一支可獨立執行的腳本，聚合器仍依相同順序呼叫，並保留原有的
+START／PASSED／FAILED／timing summary 輸出格式與 pass/fail 語意；
+`scripts/test-verify-template-stages` 對這個聚合契約（呼叫順序、腳本存在且可執行、
+PASSED／FAILED／TOTAL 回報）做回歸測試，並同時掛在 `scripts/verify-fast` 的
+`shell` scope 與 `scripts/verify-template.sh` 的 Regression tests 階段下。
+
+盤點結論：七個階段各自覆蓋不重疊的風險，且 `scripts/verify-fast` 對同一批底層腳本只是
+依 scope 收斂呼叫範圍（例如只在 dependency scope 才跑 `verify-dependencies`），不是另一
+套重複邏輯——每個保留下來的風險都只有一個可執行的 regression source。本次盤點沒有找到可
+以在不流失獨立風險覆蓋的前提下安全移除的檢查，因此沒有刪除任何既有檢查，只拆分了檔案邊
+界、補上獨立重跑入口，並在下表記錄取捨依據。
+
+| 階段（`run_stage` 名稱） | 獨立入口 | 涵蓋風險 | 與 fast tier／其他檢查的關係 |
+| --- | --- | --- | --- |
+| Repository contracts | `scripts/verify-stage-repository-contracts` | changed-tree hygiene、未解決的 Copier／Git 衝突標記、機密掃描、已知漏洞掃描 | fast 每次都跑 `git diff --check`／`check-update-conflicts`／`scan-secrets`；`verify-dependencies` 只在 dependency scope 才跑，呼叫同一支腳本，不是重複邏輯 |
+| Static assets and paired files | `scripts/verify-stage-static-assets` | decision site 可重現 render、workflow／shell 靜態分析、static-validation fixture 的正／反向覆蓋、root／template 配對檔案漂移 | fast 只在對應 scope 才跑其中個別項目（`docs` tier 跑 render 檢查；`workflow`／`shell` scope 才跑 lint）；full 一律跑全部四項，是唯一同時驗證全部四種風險的入口 |
+| Python environment | `scripts/verify-stage-python-environment` | `uv.lock` 與 `pyproject.toml` 一致、環境可從鎖定版本安裝 | fast 的 `uv sync --locked` 是同一份鎖定契約；`uv lock --check` 只在 full 額外執行 |
+| Python quality | `scripts/verify-stage-python-quality` | 格式、lint、靜態型別 | fast 對相同原始碼跑相同三個命令，兩者呼叫同一份工具鏈設定，無額外邏輯 |
+| Regression tests | `scripts/verify-stage-regression-tests` | 完整 pytest（含 `large` 標記的 Copier create／existing-adoption／update 保存回歸）＋coverage 門檻，以及 Issue-triage／worktree-cleanup／PR-policy／base-only-remerge／gh-issue-create／check-branch-fresh／PR-policy-status／audit-fleet-adoption／`verify-template.sh` 聚合自我測試 | fast 只跑 `pytest -m "not large"`（略過 `large`），且只在 governance／template／workflow／shell scope 才跑 Issue-triage／worktree-cleanup／PR-policy 三個 shell 自我測試；base-only-remerge、`scripts/gh-issue-create`（開 Issue 前本機先擋不合規標題，見 AGENTS.md 工作迴圈）、`scripts/check-branch-fresh`（開工前本機核對既有分支是否仍等於 `origin/<branch>`，見 AGENTS.md 工作迴圈）、PR-policy-status 與 `scripts/audit-fleet-adoption`（本機即時查詢 fleet 採用門檻、只印 stdout，見 #521）五支本機專用工具的自我測試都只在這個 full 專屬階段跑，不進 `verify-fast`（分別見上方 Base-only re-merge 例外一節與下方 PR policy 逐 step 判讀一節）；`large` 覆蓋範圍只在 full 執行，是 Copier create／adopt／update 保存的唯一 regression source，未被任何字串比對或重複 profile 執行取代 |
+| Package smoke test | `scripts/verify-stage-package-smoke` | wheel 可建置、已發布入口可從建置產物執行 | fast 不跑這個階段；改用範圍較窄的 Copier smoke copy（見下方 Journey 03 的 PR 級別 render/smoke） |
+| GitHub Actions audit | `scripts/verify-stage-github-actions-audit` | workflow 權限與注入稽核（zizmor） | fast 不跑；workflow scope 的一般 PR 由 full 邊界（promotion／hotfix／merge queue／manual）覆蓋，不會被跳過 |
+
+#### 逐階段耗時量測（#465）
+
+上表只記錄涵蓋範圍與取捨依據，沒有留下逐階段秒數；聚合器本身每次執行都會印出
+timing summary（`PASSED/FAILED <秒數> <階段名>`），但這份資料原本只存在單次終端機
+輸出裡，Regression tests 這種本身就重（完整 pytest＋`large` 標記的 Copier
+create／adopt／update 矩陣）的階段沒有可查證據，只能自己跑一次全部七階段才知道量級。
+下表把一次完整 run 的 timing summary 轉存成文件，補上這個缺口。
+
+量測日期：2026-09-02；環境：本機（不是 hosted runner），與上方 full/fast 實測欄位
+同一台機器。本次量測**不是**獨占環境：同一次任務裡先後跑了三次
+`./scripts/verify-template.sh`，前兩次都不能當作乾淨樣本——第一次在 Repository
+contracts 階段因暫時性網路錯誤（`curl: (92) HTTP/2 stream 1 was not closed
+cleanly: PROTOCOL_ERROR`）於 212 秒處中止；第三次（跑之前已確認沒有其他
+pytest／verify／copier 程序在跑）前四個階段各只花 5s／5s／0s／1s，但 Regression
+tests 內一個需要對外連線的 adoption 保存測試又踩到同一種暫時性網路錯誤，於 1107 秒
+處失敗，同樣沒有跑完七個階段。下表數字取自第二次、七個階段全部 PASSED 的那次執行；
+量測期間偵測到另一個 worktree（`csarc-repo-template-issue-472`）同時開始執行自己的
+`uv run pytest`，系統 load average 從量測開始時約 3.5 上升到量測結束後約 5.5，因此
+TOTAL（4002 秒／66 分 42 秒，尤其是 Regression tests 一階段的 3971 秒）明顯高於
+#458 記錄的 502 秒獨占基準，不代表典型耗時，只保留為「同機器有其他背景負載時」的
+量測示例；三次嘗試合計已重試兩次，之後沒有再重跑，若需要乾淨的獨占基準，需在確認
+沒有其他 worktree／verify 活動、且網路連線穩定時重新量測，不宣稱本次數字為恆定 SLA。
+
+| 階段（`run_stage` 名稱） | 獨立入口 | 秒數（本次量測，非獨占） |
+| --- | --- | --- |
+| Repository contracts | `scripts/verify-stage-repository-contracts` | 10 |
+| Static assets and paired files | `scripts/verify-stage-static-assets` | 10 |
+| Python environment | `scripts/verify-stage-python-environment` | 2 |
+| Python quality | `scripts/verify-stage-python-quality` | 2 |
+| Regression tests | `scripts/verify-stage-regression-tests` | 3971 |
+| Package smoke test | `scripts/verify-stage-package-smoke` | 6 |
+| GitHub Actions audit | `scripts/verify-stage-github-actions-audit` | 1 |
+| TOTAL | — | 4002 |
+
+七個階段秒數總和（10+10+2+2+3971+6+1）等於同次執行回報的 TOTAL 4002 秒。
+
+`scripts/ci_tier.py` 另外輸出 `run_governance`／`run_osv`／`run_zizmor`／`upload_site`
+四個欄位；除了 `run_osv`（餵給 `scripts/verify-fast` 決定是否跑 `verify-dependencies`）
+外，其餘三個目前只出現在 `GITHUB_STEP_SUMMARY` 的 routing evidence，沒有 workflow 依它
+們另外調度執行——full tier 已涵蓋全部檢查，fast tier 直接用 `scopes` 決定子集，因此這幾
+個欄位不構成第二套調度邏輯，暫不需要移除或重構；如果之後要精簡，需求方需先確認沒有其他
+消費者依賴這些欄位的 evidence 呈現。
+
+本機在不同 worktree 重跑驗證時，可把 `CSARC_CACHE_ROOT` 設為同一個絕對路徑；`uv`、
+`pnpm` 與固定版本工具會共用已驗證的下載內容並依版本與平台分隔。`.venv`、
+`node_modules`、生成 fixture、checkout 與測試結果仍逐 worktree 隔離，快取命中不代表
+測試通過；損壞內容依固定 checksum 重新下載或失敗。例如：
+
+```bash
+CSARC_CACHE_ROOT="$HOME/.cache/csarc" ./scripts/verify-template.sh
+```
+
+## 版本、發版、交付與部署矩陣
+
+| 邊界 | Issue／工作 PR | Milestone／canary 交付 PR | `main` | tag／manual event |
+| --- | --- | --- | --- | --- |
+| 版本意圖 | PR title 表達 major／minor／patch／no-release | 彙整已核准意圖，不自行配置版本 | 保留已審查內容 | 不從 tag 反推或改寫 source |
+| 正式版本與 CHANGELOG | 一般工作不直接決定精確版本 | 交付 PR 不手改版本 | Automatic 由 Release Please 開版本 PR；受組織政策阻擋時，Guided 用同一規則在本機產生候選並開一般 PR | manual 只重跑同一流程，不另開版本來源 |
+| CI | docs／fast／full 依風險 | 一律 full | release workflow 對目前 `main` 跑一次 full | 候選只跑版本／檔案／可打包 focused check；正式發布前已在 main 跑 full |
+| 成品／checksum／SBOM | 不發布 | 不發布 | 版本 PR 合併後從精確 commit 建立 | draft Release 先上傳、下載重驗，成功才公開 |
+| tag／GitHub Release | 不建立 | 不建立 | 版本 PR 合併後由唯一 release workflow 建立 | 重跑只驗同一 tag；不移動 tag、不重寫成品 |
+| attestation／registry | 不建立 | 不建立 | 不自動啟用 | #439 已移除設定面（零 active 消費者），非留待選配 |
+| deployment | 不適用 | 不適用 | 不適用 | 由有真實 runtime target 的產品 repo 定義 |
+
+合併到 `main` 是 repository delivery，不等於 Release。公版本身與新生成 repo 使用 CSARC
+提供的單一 workflow；既有 repo 保留 product-owned release workflow，Copier 不依檔名猜測、
+不覆寫也不重複 dispatch。流程只用短效 `GITHUB_TOKEN`，不要求 GitHub App、PAT、registry
+token 或空 deployment environment。GitHub 會把 `GITHUB_TOKEN` 建立或更新版本 PR 所產生的
+PR workflows 設為等待人工核准；Automatic 由原 release run 驗證候選 SHA。若組織政策禁止
+Action 建 PR，Guided 只在本機執行 `python3 scripts/release_policy.py prepare-candidate` 並由人
+或 agent 開一般 PR；兩路共用版本計算、候選驗證與唯一 `release.yml` publisher。
+
+## Conditional 與退役能力
+
+`scripts/verify_release_consumption.py` 與其測試保留為 conditional 的消費端安全契約。
+checksum 與 SPDX SBOM 已由 `scripts/release_bundle.py` 納入 GitHub Release；production-side
+attestation 與 registry publishing 已由 #439 判定零 active 消費者並移除設定面，不是留待接上
+的 conditional 選項——需要時另開 Issue 明列真實 owner、權限與執行者。消費端門禁仍是獨立的
+conditional 契約，與此無關。
+
+歷史的 Release Please、artifact handoff 與 release follow-up 已由一支 `release.yml` 和兩個
+repo-local 入口取代；promotion、delivery maintenance、release consumption 與 live integration
+專用 workflow 不恢復。已決定的 archive copy 已刪除，歷史由 Git／Issue／PR 保存。Zizmor
+與 remote-governance 的舊 workflow 由各自 Journey 另行決定。
+
+## Failure 與 fallback
+
+- 分類器無法判斷時升級 full，不以 skipped 或 zero-step 當成功證據。
+- Hosted Actions 不可用時，維護者執行相同 repo-local 入口並附上 commit、命令與結果；
+  required check 仍不得被繞過。
+- 版本候選驗證失敗時，候選 SHA 明確收到 failure status；GitHub 拒絕 tag／Release write 時
+  明確標示 Blocked，不改走本機直接發布；發布失敗時 Release 保持 draft。
+  重跑會先清掉 draft 的舊 assets，再建立並驗證同一精確 bundle。
+- Milestone delivery branch 只在 final delivery 前同步當時最新 `main`；只有明列真實相依
+  才提前同步，不對所有 branch fan-out。
+- 合併後自動刪除一般來源 branch；Milestone／canary branch 等人工確認結案與 evidence 後
+  刪除。`scripts/cleanup-worktrees --apply` 只清除乾淨、未鎖定且可證明已合併的本機 worktree。
+- 沒有真實成品、owner、權限或 live run 時，狀態保持 manual、conditional、blocked 或
+  not applicable，不以歷史成功補足。

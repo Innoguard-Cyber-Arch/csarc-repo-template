@@ -5,16 +5,38 @@ version_policy:
   compatibility_override: explicit_minimum_version
   stable_release_observation_days: 30
   release_source: https://www.python.org/api/v2/downloads/release/
-  update_method: scheduled_verified_pull_request
-  merge_after_full_verification: automatic
+  update_method: manual_reviewed_pull_request
+  merge_after_full_verification: manual
   future_profiles_must_define_their_own_stable_channel: true
 
-template_release_policy:
+template_version_policy:
   version_source: version.txt
   strategy: single_semver_for_all_compositions
-  release_tool: release-please
+  materialization: release_please_reviewed_pull_request
+  release_automation: verified_immutable_github_release
   tag_format: vX.Y.Z
   breaking_change_in_any_beta_composition_bumps_major: true
+
+release_ownership_policy:
+  schema:
+    ownership: [csarc-owned, product-owned, verification-only]
+    selected_workflow: repository_relative_path_or_empty
+    required_inputs: sorted_string_list
+    reason: non_empty_string
+    settings_owner: [csarc-admin, product-admin, none]
+    immutable_releases: [required, product-defined, not-required]
+  csarc-owned:
+    behavior: creates_the_only_release
+    settings_owner: csarc-admin
+    immutable_releases: required
+  product-owned:
+    behavior: preserves_and_never_dispatches_the_product_workflow
+    settings_owner: product-admin
+    immutable_releases: product-defined
+  verification-only:
+    behavior: performs_no_release_writes
+    settings_owner: none
+    immutable_releases: not-required
 
 branching_policy:
   default: main
@@ -69,7 +91,7 @@ shared:
 
 profiles:
   python:
-    stage: alpha
+    stage: beta
     latest_reviewed_stable: "3.14"
     default_support_mode: latest
     support_modes:
@@ -96,7 +118,7 @@ profiles:
     verification: ./scripts/verify
 
   typescript:
-    stage: alpha
+    stage: beta
     latest_reviewed_active_lts: "24"
     stable_channel: node_active_lts
     stable_release_observation_days: 30
@@ -123,8 +145,23 @@ profiles:
     reason: Add only after a real consuming repository defines its stable toolchain and compatibility policy, then passes create and update tests.
 
   rust:
-    stage: future
-    reason: Add only after a real consuming repository defines its stable toolchain and MSRV policy, then passes create and update tests.
+    stage: beta
+    latest_reviewed_stable: "1.98.0"
+    stable_channel: rust_stable
+    stable_release_observation_days: 12
+    msrv: "1.98"
+    edition: "2024"
+    package_manager: cargo
+    configuration:
+      - Cargo.toml
+      - rust-toolchain.toml
+    lockfile: Cargo.lock
+    source_directory: src
+    verification: ./scripts/verify
+    tools:
+      format: rustfmt
+      lint: clippy
+      test_and_build: cargo
 
 compositions:
   ci:
@@ -133,21 +170,11 @@ compositions:
     profiles: []
     release_output: github_release_source_archive
 
-  python:
-    stage: alpha
-    profiles:
-      - python
-
-  python_typescript:
-    stage: alpha
-    profiles:
-      - python
-      - typescript
-
-  typescript:
-    stage: alpha
-    profiles:
-      - typescript
+  language_modules:
+    stage: beta
+    selectable_profiles: [python, rust, typescript]
+    selection: any_subset
+    verification: selected_modules_plus_shared_checks_once
 
 optional_modules:
   container_delivery:
@@ -165,11 +192,17 @@ optional_modules:
     deployment: project_specific
 
 promotion_requirements:
-  - real_consuming_repository
-  - documented_owner
-  - copier_create_test
-  - copier_update_test
-  - complete_local_and_ci_verification
+  shared_lifecycle:
+    - real_consuming_repository
+    - documented_owner
+    - copier_adoption_and_update
+    - complete_local_and_ci_verification
+  language_module:
+    - copier_create_test
+    - existing_repository_adoption_test
+    - copier_update_test
+    - native_toolchain_verification
+    - included_in_full_template_verification
 
 promotion_evidence:
   shared:
@@ -185,11 +218,24 @@ promotion_evidence:
     profile: ci
     result: docs/pilot-adoption.md
   python:
-    status: pending_real_consuming_repository
+    status: satisfied
+    method: executable_template_lifecycle
+    evidence:
+      - tests/test_cli.py::test_real_template_adoption_resumes_after_manifest_merge
+      - scripts/verify-template.sh
   typescript:
-    status: pending_real_consuming_repository
-  python_typescript:
-    status: pending_real_consuming_repository
+    status: satisfied
+    method: executable_template_lifecycle
+    evidence:
+      - tests/test_cli.py::test_real_template_adoption_resumes_after_manifest_merge
+      - scripts/verify-template.sh
+  rust:
+    status: satisfied
+    method: executable_template_lifecycle
+    evidence:
+      - tests/test_cli.py::test_real_template_adoption_resumes_after_manifest_merge
+      - tests/test_language_profiles.py::test_generated_language_module_runs_its_own_verifier
+      - scripts/verify-template.sh
   container_delivery:
     status: pilot_candidate_identified
     repository: Innoguard-Cyber-Arch/ai-guardrail

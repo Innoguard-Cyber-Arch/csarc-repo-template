@@ -38,7 +38,7 @@ $RECYCLE.BIN/
 # Shared generated output
 .cache/
 dist/
-{%- if language in ["python", "python-typescript"] %}
+{%- if "python" in languages %}
 
 # Python
 .venv*/
@@ -56,7 +56,12 @@ htmlcov/
 .eggs/
 build/
 {%- endif %}
-{%- if language in ["typescript", "python-typescript"] %}
+{%- if "rust" in languages %}
+
+# Rust
+/target/
+{%- endif %}
+{%- if "typescript" in languages %}
 
 # TypeScript and Node.js
 node_modules/

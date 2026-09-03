@@ -21,7 +21,7 @@ Spec-Driven Development（SDD）以 `docs/specs/` 的 living specifications 保�
 | 類型 | 路徑 | 維護責任 |
 | --- | --- | --- |
 | 單檔交付物 | `docs/index.html` | 由公版 renderer 產生，不直接編輯 |
-| 專案網站內容 | `docs/site-content.js` | 專案維護；Copier update 不覆寫 |
+| 專案網站內容 | `docs/site-content.md` | 專案維護；Copier update 不覆寫 |
 | 專案網站主題 | `docs/site-theme.css` | 專案維護；只覆寫必要的 design tokens 或窄範圍 selector |
 | 網站版型 | `site/` | 公版維護；Copier update 提供可審查的版型、樣式與互動更新 |
 | Delivery Milestone 格式 | `docs/milestone-description.md` | 公版維護 |
@@ -33,4 +33,4 @@ Spec-Driven Development（SDD）以 `docs/specs/` 的 living specifications 保�
 3. 以 scoped PR 更新 current spec 與對應 ADR；不得保存完整聊天逐字稿、模型 chain-of-thought、敏感資訊或未確認推論。
 4. 若網站需要呈現，更新 project-owned content 並重建 `docs/index.html`；presentation 不取代 canonical Markdown。
 
-修改 project-owned 內容或主題後，執行 `uv run --no-project python scripts/render_site.py` 重建單檔。`./scripts/verify` 會以 `--check` 模式拒絕 stale bundle、外部 runtime asset、不支援的 `schemaVersion`、重複 spec ID 與不完整 decision metadata。
+修改 project-owned Markdown 或主題後，執行 `uv run --no-project python scripts/render_site.py` 重建單檔。網站中的 `[[key]]` 直接讀取 `.csarc/config.yml`；不要另建網站設定。`./scripts/verify` 會以 `--check` 模式拒絕 stale bundle、未知設定 key、外部 runtime asset、重複 spec ID 與不完整 decision metadata。

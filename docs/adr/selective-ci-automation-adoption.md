@@ -1,7 +1,8 @@
 # Selective CI/CD automation adoption ADR
 
-- **狀態：**Accepted
+- **狀態：**Superseded
 - **日期：**2026-08-25
+- **備註：**由 #430 部分取代；只保留 official Actions 更新分組
 - **來源 Issue：**[#255](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/255)
 - **保留的實作 Issues：**[#242](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/242), [#245](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/245)
 - **實作 PRs：**[#247](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/247), [#248](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/pull/248)
@@ -17,16 +18,16 @@ CI/CD 設定不能因為別處存在就整批搬入。每多一項 workflow 都�
 | 類別 | 決定 | 邊界與理由 |
 | --- | --- | --- |
 | 立即採用 | 將官方 `actions/*` 的 minor／patch 更新合併為一組 | 這些更新具有共同 owner 與相近審查風險，可降低例行 PR 噪音；major 及第三方 Actions 仍各自成 PR，避免擴大審查與回退範圍。 |
-| 能力具備才啟用 | 容器 profile 使用 `none`、`verify`、`ghcr` 三種模式 | `none` 是預設值且不產生容器 job。只有 repository 已有有效 Containerfile 與 smoke command 才能使用 `verify`；只有通過既有 release boundary 且 registry write capability 可用時才能使用 `ghcr`。 |
+| 不採用 | 公版容器驗證／發布與 registry attestation 選項 | 目前沒有 active build、scan 或 publisher；移除無執行者的設定，避免產生錯誤保證。 |
 | 目前不採用 | 通用 Containerfile、雲端 runtime、Kubernetes、多架構 placeholder、長效 token、`workflow_run` 發布鏈與第二套相依更新身分 | 尚無跨 repository 的實際需求足以負擔額外權限、供應鏈與維護成本；需要時另開 Issue 以真實使用情境重新評估。 |
 
-`verify` 在 PR 以 Buildx cache 建置、執行 smoke test 並以 Trivy 阻擋 HIGH／CRITICAL 漏洞，但不推送映像。`ghcr` 從已驗證 release source 建置並保存相同 image bytes，發布 immutable digest、provenance 與 SPDX SBOM，再以 digest 拉回執行 smoke test。只有發布 job 取得 `packages: write`；能力為 blocked 或 unknown 時保留 verification-only 結果，不宣稱已發布。
+原容器設計的 Buildx、smoke、Trivy、GHCR 與 attestation 路徑只保留在 Git／Issue 歷史，不能當成現行能力。模板不再詢問或保存這些無執行者的選項，也不生成容器 build／publish job 或 registry 權限。
 
 ## Ownership 與驗證
 
-Repository owner 負責宣告容器能力與 smoke command；dependency owner 審查分組更新是否仍維持共同來源與相近風險。`.github/dependabot.yml`、`profiles/catalog.yaml`、生成 workflow 與 `./scripts/verify-template.sh` 是 executable evidence；decision site 只摘要同一決策，不取代設定與回歸測試。
+Dependency owner 審查官方 Actions 分組是否仍維持共同來源與相近風險。`.github/dependabot.yml` 與回歸測試是這項保留決策的 executable evidence；decision site 只摘要同一決策，不取代設定與測試。
 
-回退官方 Actions 分組只需移除 `groups.official-actions`，個別更新仍會繼續提出。回退容器能力則將模式設為 `none`；既有 Containerfile 與 repository 自有部署不由模板刪除。
+回退官方 Actions 分組只需移除 `groups.official-actions`，個別更新仍會繼續提出。既有產品的 Containerfile、workflow 與部署仍由產品擁有；Copier 不接管、覆寫或宣稱已驗證這些能力。
 
 ## 評估過的替代方案
 

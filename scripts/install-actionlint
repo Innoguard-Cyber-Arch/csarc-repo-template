@@ -4,13 +4,7 @@ set -euo pipefail
 version="1.7.12"
 checksums_sha256="433028cf0ba3c42163ea1a668dedce30fcdbe84fe912b1a5e288c006eab8a4f5"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cache_dir="$repo_root/.cache/actionlint/$version"
-binary="$cache_dir/actionlint"
-
-if [[ -x "$binary" ]]; then
-  printf '%s\n' "$binary"
-  exit 0
-fi
+cache_root="$("$repo_root/scripts/resolve-cache-root")"
 
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) asset="actionlint_${version}_darwin_arm64.tar.gz" ;;
@@ -23,24 +17,45 @@ case "$(uname -s)-$(uname -m)" in
     ;;
 esac
 
+cache_dir="$cache_root/actionlint/$version/$asset"
+binary="$cache_dir/actionlint"
 mkdir -p "$cache_dir"
 base_url="https://github.com/rhysd/actionlint/releases/download/v${version}"
-curl -fsSL "$base_url/actionlint_${version}_checksums.txt" \
-  -o "$cache_dir/checksums.txt"
+
+if [[ ! -f "$cache_dir/checksums.txt" ]] ||
+  [[ "$(shasum -a 256 "$cache_dir/checksums.txt" | awk '{print $1}')" != \
+    "$checksums_sha256" ]]; then
+  curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused \
+    "$base_url/actionlint_${version}_checksums.txt" \
+    -o "$cache_dir/checksums.txt.tmp.$$"
+  mv "$cache_dir/checksums.txt.tmp.$$" "$cache_dir/checksums.txt"
+fi
 actual_checksums_sha256="$(shasum -a 256 "$cache_dir/checksums.txt" | awk '{print $1}')"
 if [[ "$actual_checksums_sha256" != "$checksums_sha256" ]]; then
   echo "Actionlint checksum manifest does not match the pinned digest." >&2
   exit 1
 fi
 
-curl -fsSL "$base_url/$asset" -o "$cache_dir/$asset"
 expected_asset_sha256="$(awk -v name="$asset" '$2 == name {print $1}' "$cache_dir/checksums.txt")"
+if [[ -z "$expected_asset_sha256" ]]; then
+  echo "Actionlint release manifest does not contain the selected asset." >&2
+  exit 1
+fi
+if [[ ! -f "$cache_dir/$asset" ]] ||
+  [[ "$(shasum -a 256 "$cache_dir/$asset" | awk '{print $1}')" != \
+    "$expected_asset_sha256" ]]; then
+  curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused \
+    "$base_url/$asset" -o "$cache_dir/$asset.tmp.$$"
+  mv "$cache_dir/$asset.tmp.$$" "$cache_dir/$asset"
+fi
 actual_asset_sha256="$(shasum -a 256 "$cache_dir/$asset" | awk '{print $1}')"
 if [[ -z "$expected_asset_sha256" || "$actual_asset_sha256" != "$expected_asset_sha256" ]]; then
   echo "Actionlint archive does not match the pinned release manifest." >&2
   exit 1
 fi
 
-tar -xzf "$cache_dir/$asset" -C "$cache_dir" actionlint
-chmod +x "$binary"
+extract_dir="$(mktemp -d "$cache_dir/.extract.XXXXXX")"
+trap 'rm -rf "$extract_dir"' EXIT
+tar -xzf "$cache_dir/$asset" -C "$extract_dir" actionlint
+install -m 0755 "$extract_dir/actionlint" "$binary"
 printf '%s\n' "$binary"

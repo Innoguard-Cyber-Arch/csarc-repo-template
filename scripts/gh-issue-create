@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Thin wrapper around `gh issue create` (Issue #514): validates the
+# --title/-t value against scripts/validate-issue-title *before* calling
+# gh, entirely locally with no network call, so a too-long/too-short/
+# malformed title is caught at "open Issue" time instead of after the fact.
+# Today that same rule only runs once the Issue already exists, inside
+# scripts/validate-issue-policy (called from .github/workflows/
+# issue-triage.yml's "classify" job) -- catching it there means a
+# follow-up `gh issue edit` to fix the title post-hoc. This wrapper moves
+# the same, unmodified check to the front of the create flow.
+#
+# Transparently passes through every flag `gh issue create` accepts
+# (--title/-t, --body/-b, --body-file/-F, --label/-l, --milestone/-m,
+# --assignee/-a, --repo/-R, --type, --parent, --project/-p, etc.)
+# unchanged: this script only inspects the arguments to find --title's
+# value for the pre-check, then execs the real `gh issue create` with the
+# ORIGINAL argument list, untouched, if the title passes. It never adds,
+# drops, or reorders any argument.
+#
+# Usage: identical to `gh issue create`, e.g.:
+#   scripts/gh-issue-create --title "Add dependency policy checks" \
+#     --body "..." --label enhancement --assignee @me
+#
+# Exit codes:
+#   1  the --title/-t value failed scripts/validate-issue-title; the
+#      specific problem is printed and `gh issue create` is never invoked.
+#   *  otherwise, whatever `gh issue create` itself exits with.
+#
+# Boundary (Issue #514): does not change scripts/validate-issue-title's
+# own rules, only calls it earlier. When no --title/-t flag is present at
+# all, this wrapper does not invent a check -- it passes through untouched
+# and lets `gh issue create` handle its own prompting/validation.
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+title=""
+title_found=0
+args=("$@")
+i=0
+while (( i < ${#args[@]} )); do
+  arg="${args[$i]}"
+  case "$arg" in
+    --title=*)
+      title="${arg#--title=}"
+      title_found=1
+      ;;
+    --title)
+      if (( i + 1 < ${#args[@]} )); then
+        title="${args[$((i + 1))]}"
+        title_found=1
+        i=$((i + 1))
+      fi
+      ;;
+    -t=*)
+      title="${arg#-t=}"
+      title_found=1
+      ;;
+    -t)
+      if (( i + 1 < ${#args[@]} )); then
+        title="${args[$((i + 1))]}"
+        title_found=1
+        i=$((i + 1))
+      fi
+      ;;
+    -t?*)
+      # Glued short-flag form, e.g. -tSomeTitle.
+      title="${arg#-t}"
+      title_found=1
+      ;;
+  esac
+  i=$((i + 1))
+done
+
+if (( title_found )); then
+  if ! title_error="$("$script_dir/validate-issue-title" "$title" 2>&1)"; then
+    printf '%s\n' "$title_error" >&2
+    echo "Blocked locally: not calling 'gh issue create' -- fix the title and retry." >&2
+    exit 1
+  fi
+fi
+
+exec gh issue create "$@"

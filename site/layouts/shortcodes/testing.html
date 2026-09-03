@@ -1,0 +1,72 @@
+{{- $data := site.Data.similar_tools -}}
+{{- $lang := .Page.Lang -}}
+{{- $labels := index $data.testing.labels $lang -}}
+{{- $durationLabels := index $data.testing.duration.labels $lang -}}
+<div class="legacy-content similar-tools-content testing-content">
+  <div class="similar-tools-tabs" role="tablist" aria-label="{{ $labels.title }}">
+    <button id="testing-tab-duration" type="button" role="tab" aria-selected="true" aria-controls="testing-panel-duration" data-similar-tools-tab="0"><small>{{ $durationLabels.overline }}</small>{{ $durationLabels.title }}</button>
+    {{- range $groupIndex, $group := $data.testing.groups }}
+    {{- $groupLabels := index $group.labels $lang }}
+    <button id="testing-tab-{{ $group.key }}" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-{{ $group.key }}" data-similar-tools-tab="{{ add $groupIndex 1 }}"><small>Journey {{ $group.journey }}</small>{{ $groupLabels.title }}</button>
+    {{- end }}
+  </div>
+  <div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel>
+    <div class="similar-tools-testing-intro">
+      <strong>{{ $durationLabels.heading }}</strong><span>{{ $durationLabels.scope }}</span>
+      <p>{{ $durationLabels.runnerNote }}</p>
+      <p>{{ $durationLabels.archiveNote }}</p>
+    </div>
+    <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="{{ $durationLabels.heading }}">
+      <table class="similar-tools-matrix similar-tools-testing-matrix testing-duration-matrix">
+        <thead><tr><th scope="col">{{ $durationLabels.stage }}</th><th scope="col">{{ $durationLabels.shared }}</th><th scope="col">{{ $durationLabels.templateOnly }}</th></tr></thead>
+        <tbody>
+          {{- range $row := $data.testing.duration.rows }}
+          <tr>
+            <th scope="row"><strong>{{ index $row.stage $lang }}</strong></th>
+            {{- range $scope := (slice $row.shared $row.templateOnly) }}
+            <td><ul class="testing-duration-list">{{ range $scope.items }}<li><strong>{{ index .label $lang }}：</strong>{{ index .value $lang }}</li>{{ end }}</ul><p class="testing-duration-total"><strong>{{ $durationLabels.total }}</strong>{{ index $scope.total $lang }}</p></td>
+            {{- end }}
+          </tr>
+          {{- end }}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{- range $groupIndex, $group := $data.testing.groups }}
+  {{- $groupLabels := index $group.labels $lang }}
+  <div id="testing-panel-{{ $group.key }}" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-{{ $group.key }}" data-similar-tools-panel hidden>
+  <div class="similar-tools-testing-intro">
+    <strong>{{ $groupLabels.heading }}</strong><span>{{ $groupLabels.scope }}</span>
+  </div>
+  <div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="{{ $groupLabels.heading }}">
+    <table class="similar-tools-matrix similar-tools-testing-matrix">
+      <thead><tr><th scope="col">{{ $labels.purpose }}</th><th scope="col">{{ $labels.shared }}</th><th scope="col">{{ $labels.templateOnly }}</th></tr></thead>
+      <tbody>
+        {{- range $test := $group.rows }}
+        <tr>
+          {{- $purpose := index $test.purpose $lang }}
+          <th scope="row"><strong>{{ $purpose.title }}</strong><span>{{ $purpose.description }}</span></th>
+          {{- range $scope := (slice $test.shared $test.templateOnly) }}
+          <td><ul class="testing-stage-list">
+            {{- range $stageKey := (slice "milestone" "release") }}
+            {{- $stage := index $scope $stageKey }}
+            {{- with $stage }}
+            <li>
+              <strong>{{ if isset $group "stageLabels" }}{{ index (index $group.stageLabels $lang) $stageKey }}{{ else if eq $stageKey "milestone" }}{{ $labels.milestone }}{{ else }}{{ $labels.release }}{{ end }}</strong>
+              {{- with $stage.files }}<div class="testing-kind"><b>{{ $labels.tests }}</b><ul>{{ range . }}<li><code>{{ .path }}</code>{{ if .pending }}{{ $issue := default 382 .issue }} <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/{{ $issue }}" target="_blank" rel="noreferrer">{{ $labels.pending }} #{{ $issue }}</a>{{ end }}</li>{{ end }}</ul></div>{{ end }}
+              {{- with $stage.automation }}<div class="testing-kind"><b>{{ $labels.automation }}</b><ul>{{ range . }}<li><code>{{ .path }}</code>／<code>{{ .job }}</code>{{ if .pending }}{{ $issue := default 385 .issue }} <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/{{ $issue }}" target="_blank" rel="noreferrer">{{ $labels.pending }} #{{ $issue }}</a>{{ end }}<span>{{ $labels.trigger }}：{{ index .trigger $lang }} · {{ $labels.timeout }}：{{ .timeout }}</span></li>{{ end }}</ul></div>{{ end }}
+              {{- with $stage.automationNote }}<div class="testing-kind"><b>{{ $labels.automation }}</b><span>{{ index . $lang }}</span></div>{{ end }}
+              {{- with $stage.note }}<span>{{ index . $lang }}</span>{{ end }}
+            </li>
+            {{- end }}
+            {{- end }}
+          </ul></td>
+          {{- end }}
+        </tr>
+        {{- end }}
+      </tbody>
+    </table>
+  </div>
+  </div>
+  {{- end }}
+</div>

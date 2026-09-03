@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""Verify that the decision-site translations have the same structure."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+import tomllib
+from pathlib import Path
+
+LANGUAGE_FILES = ("_index.zh-tw.md", "_index.en.md")
+type Shape = str | dict[str, "Shape"]
+type Block = tuple[str, str, tuple[str, ...]]
+BLOCK = re.compile(
+    r"(?={{<\s*(slide|detail|disclosure)\b([^>]*)>}}"
+    r"(.*?){{<\s*/\1\s*>}})",
+    re.DOTALL,
+)
+ATTRIBUTE = re.compile(r'(\w+)="([^"]*)"')
+NESTED_BLOCK = re.compile(
+    r"{{<\s*(detail|disclosure)\b[^>]*>}}.*?{{<\s*/\1\s*>}}",
+    re.DOTALL,
+)
+
+
+def shape(value: object) -> Shape:
+    """Return only the nested keys and value types from front matter."""
+    if isinstance(value, dict):
+        return {key: shape(child) for key, child in value.items()}
+    if isinstance(value, str) and not value.strip():
+        raise ValueError("empty front-matter text")
+    return type(value).__name__
+
+
+def read_source(path: Path) -> tuple[Shape, list[Block]]:
+    """Read one source and return its front-matter and ordered content keys."""
+    text = path.read_text(encoding="utf-8")
+    parts = text.split("+++", 2)
+    if len(parts) != 3 or parts[0].strip():
+        raise ValueError(f"{path}: expected TOML front matter")
+    metadata = tomllib.loads(parts[1])
+    blocks: list[Block] = []
+    seen_keys: set[str] = set()
+    for block_type, raw_attributes, body in BLOCK.findall(parts[2]):
+        attributes = dict(ATTRIBUTE.findall(raw_attributes))
+        key = attributes.get("key", "")
+        if not key:
+            raise ValueError(f"{path}: {block_type} is missing a content key")
+        if not attributes.get("title", "").strip():
+            raise ValueError(
+                f"{path}: empty title attribute for {block_type} key {key!r}"
+            )
+        if any(not value.strip() for value in attributes.values()):
+            raise ValueError(
+                f"{path}: empty {block_type} attribute for key {key!r}"
+            )
+        if not body.strip():
+            raise ValueError(
+                f"{path}: empty content body for {block_type} key {key!r}"
+            )
+        if block_type == "slide" and not NESTED_BLOCK.sub("", body).strip():
+            raise ValueError(
+                f"{path}: empty direct content body for slide key {key!r}"
+            )
+        if key in seen_keys:
+            raise ValueError(f"{path}: duplicate content key {key!r}")
+        seen_keys.add(key)
+        blocks.append((block_type, key, tuple(sorted(attributes))))
+    if not blocks:
+        raise ValueError(f"{path}: no keyed content sections found")
+    return shape(metadata), blocks
+
+
+def main() -> int:
+    """Compare both language sources and report the first structural drift."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--content-dir", type=Path, default=Path("site/content")
+    )
+    args = parser.parse_args()
+    try:
+        sources = [
+            read_source(args.content_dir / name) for name in LANGUAGE_FILES
+        ]
+    except (
+        OSError,
+        UnicodeError,
+        ValueError,
+        tomllib.TOMLDecodeError,
+    ) as error:
+        sys.stderr.write(f"decision-site translations invalid: {error}\n")
+        return 1
+    if sources[0][0] != sources[1][0]:
+        sys.stderr.write(
+            "decision-site translations have different front-matter keys\n"
+        )
+        return 1
+    if sources[0][1] != sources[1][1]:
+        sys.stderr.write(
+            "decision-site translations have different content keys\n"
+        )
+        return 1
+    sys.stdout.write(
+        f"Decision-site translations: {len(sources[0][1])} keyed blocks\n"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

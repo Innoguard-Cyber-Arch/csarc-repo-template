@@ -1,0 +1,29 @@
+# CSARC settings for the template repository itself.
+# Copier source metadata belongs only to repositories generated from this source.
+branch_strategy: delivery
+code_owner: '@Innoguard-Cyber-Arch/arch'
+coverage_mode: global
+coverage_threshold: 80
+enable_codeql: false
+enable_governance_drift_check: false
+enable_precommit: false
+enable_template_update_notifications: false
+languages:
+- python
+package_name: csarc_cli
+project_description: Cyber-Arch cross-language repository template and governance baseline.
+project_mode: existing
+project_name: CSARC Repository Template
+project_run_command: uv run csarc --help
+project_slug: csarc-repo-template
+project_visibility: private
+python_support_mode: latest
+release_immutable_releases: required
+release_ownership: csarc-owned
+release_ownership_reason: CSARC owns the only version and GitHub Release workflow.
+release_required_inputs: []
+release_settings_owner: csarc-admin
+release_workflow: .github/workflows/release.yml
+repository_url: https://github.com/Innoguard-Cyber-Arch/csarc-repo-template
+reviewers: '@jachline28'
+security_reporting_channel: Use this private repository's GitHub Issues.

@@ -64,8 +64,8 @@ def test_no_generic_or_duplicate_issue_entrypoint() -> None:
             (form_dir / filename).read_text(encoding="utf-8")
             for filename in FORM_POLICY
         )
-        assert "type: \"Duplicate\"" not in form_text
-        assert "type: \"Hotfix\"" not in form_text
+        assert 'type: "Duplicate"' not in form_text
+        assert 'type: "Hotfix"' not in form_text
 
 
 def test_pr_templates_keep_repository_specific_checks_separate() -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -42,6 +43,7 @@ def scope_for(path: str) -> str:
         path.startswith(("policies/", "template/policies/"))
         or path.startswith("scripts/apply-repository-settings")
         or path.startswith("scripts/check-governance-drift")
+        or path.startswith("scripts/request-reviewer")
     ):
         return "governance"
     if path.endswith(".sh") or (
@@ -56,7 +58,7 @@ def scope_for(path: str) -> str:
             "pyproject.toml",
             "uv.lock",
         }
-        or path in {".github/dependabot.yml", "template/.github/dependabot.yml"}
+        or name in {"dependabot.yml", "pnpm-workspace.yaml"}
         or path.startswith(".github/dependency-review-config")
     ):
         return "dependency"
@@ -86,9 +88,10 @@ def affects_decision_site(path: str) -> bool:
     return path.startswith(("site/", "template/site/")) or path in {
         "docs/index.html",
         "docs/site-content.js",
+        "docs/site-content.md",
         "docs/site-theme.css",
         "scripts/render_site.py",
-        "template/docs/site-content.js.jinja",
+        "template/docs/site-content.md.jinja",
         "template/docs/site-theme.css.jinja",
         "template/scripts/render_site.py",
     }
@@ -108,7 +111,11 @@ def classify(
     promotion = (
         event in {"pull_request", "merge_group"}
         and base == "main"
-        and (head.startswith("dev/") or "promotion" in labels)
+        and (
+            re.fullmatch(r"dev/m[1-9][0-9]*-[a-z0-9][a-z0-9-]*", head)
+            is not None
+            or "promotion" in labels
+        )
     )
     hotfix = event == "pull_request" and base == "main" and "hotfix" in labels
     recovery = (
@@ -141,7 +148,15 @@ def classify(
         reason=reason,
         scopes=scopes,
         run_governance=full or "governance" in scopes,
-        run_osv=full or "dependency" in scopes,
+        run_osv=(
+            full
+            or "dependency" in scopes
+            or any(
+                Path(path).name
+                in {"install-osv-scanner", "verify-dependencies"}
+                for path in changed_files
+            )
+        ),
         run_zizmor=full or "workflow" in scopes,
         upload_site=(
             force_full

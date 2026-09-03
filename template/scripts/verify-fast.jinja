@@ -1,11 +1,17 @@
 {% set python_target = "3.14" if python_support_mode == "latest" else python_min_version -%}
-{% set has_python = language in ["python", "python-typescript"] -%}
-{% set has_typescript = language in ["typescript", "python-typescript"] -%}
+{% set has_python = "python" in languages -%}
+{% set has_typescript = "typescript" in languages -%}
+{% set has_rust = "rust" in languages -%}
 #!/usr/bin/env bash
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-export UV_CACHE_DIR="${UV_CACHE_DIR:-$repo_root/.cache/uv}"
+cache_root="$("$repo_root/scripts/resolve-cache-root")"
+if [[ -n "${CSARC_CACHE_ROOT:-}" ]]; then
+  export UV_CACHE_DIR="$cache_root/uv"
+else
+  export UV_CACHE_DIR="${UV_CACHE_DIR:-$cache_root/uv}"
+fi
 cd "$repo_root"
 
 tier="${CSARC_CI_TIER:-fast}"
@@ -18,28 +24,41 @@ git diff --check
 
 if [[ "$tier" == "docs" ]]; then
   python3 scripts/spec_to_issue.py validate
+  python3 scripts/render_site.py --check
   exit 0
+fi
+
+if [[ "${CSARC_RUN_OSV:-false}" == "true" || "$scopes" == *,dependency,* ]]; then
+  ./scripts/verify-dependencies
 fi
 
 if [[ "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
   ./scripts/lint-workflows-shell
 fi
 
-./scripts/test-pr-policy
-./scripts/test-release-follow-up-gates
-./scripts/test-issue-triage
-./scripts/test-worktree-cleanup
+if [[ "$scopes" == *,governance,* || "$scopes" == *,template,* ||
+  "$scopes" == *,workflow,* || "$scopes" == *,shell,* ]]; then
+  ./scripts/test-issue-triage
+  ./scripts/test-worktree-cleanup
+  ./scripts/test-pr-policy
+fi
 {% if has_python -%}
 python_version="$UV_PYTHON"
 uv sync --locked --python "$python_version"
 uv run ruff format --check .
 uv run ruff check .
-uv run mypy
+uv run ty check
 uv run pytest -m "not large"
 {% endif -%}
 {% if has_typescript -%}
-pnpm install --frozen-lockfile --ignore-scripts
+pnpm_store_dir="$cache_root/pnpm/store"
+pnpm install --store-dir "$pnpm_store_dir" --frozen-lockfile --ignore-scripts
 pnpm exec biome ci .
 pnpm exec tsc --noEmit
 pnpm exec vitest run
+{% endif -%}
+{% if has_rust -%}
+cargo fmt --all -- --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-features
 {% endif -%}

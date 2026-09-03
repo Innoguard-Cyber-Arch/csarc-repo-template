@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Reject sidebar labels that cannot fit the fixed-width presentation rail."""
+
+from __future__ import annotations
+
+import json
+import sys
+import unicodedata
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+DATA = ROOT / "site/data/navigation.json"
+MAX_COLUMNS = 10
+
+
+def display_columns(value: str) -> int:
+    """Count terminal columns used by one navigation label."""
+    return sum(
+        2 if unicodedata.east_asian_width(character) in {"F", "W"} else 1
+        for character in value
+    )
+
+
+def main() -> int:
+    """Validate every configured bilingual navigation label."""
+    data = json.loads(DATA.read_text(encoding="utf-8"))
+    violations: list[str] = []
+    count = 0
+
+    for item in [*data["items"], *data["appendices"]]:
+        for language in ("zh-tw", "en"):
+            label = item["labels"][language]
+            columns = display_columns(label)
+            count += 1
+            if columns > MAX_COLUMNS:
+                violations.append(
+                    f"{item['key']} {language}: {label!r} uses "
+                    f"{columns} columns; "
+                    f"maximum is {MAX_COLUMNS} (five full-width characters)"
+                )
+
+    if violations:
+        sys.stderr.write(
+            "Decision-site navigation labels must be rewritten to fit "
+            "the sidebar:\n"
+        )
+        sys.stderr.write(
+            "\n".join(f"- {violation}" for violation in violations) + "\n"
+        )
+        return 1
+
+    sys.stdout.write(
+        f"Decision-site navigation: {count} labels fit within five "
+        "full-width characters\n"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

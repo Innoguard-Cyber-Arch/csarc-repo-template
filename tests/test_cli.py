@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shlex
@@ -10,12 +11,50 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 from pypdf import PdfReader
 
 import csarc_cli.cli as cli
 from csarc_cli.cli import CliError, main
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_copier_migration_preserves_project_owned_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Do not replace a project-owned test symlink during migration."""
+    migration = yaml.safe_load((ROOT / "copier.yml").read_text())[
+        "_migrations"
+    ][0]["command"]
+    assert migration[:2] == ["python3", "-c"]
+
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    target = tmp_path / "project-owned.py"
+    target.write_text("project owned\n", encoding="utf-8")
+    legacy_test = tests / "test_delivery_sync.py"
+    legacy_test.symlink_to(target)
+    (tmp_path / ".copier-answers.yml").write_text(
+        "branch_strategy: dev\n", encoding="utf-8"
+    )
+
+    class LegacyDigest:
+        def hexdigest(self) -> str:
+            return (
+                "50fc918666723264272a9268ebaf5c0b120341e58"
+                "8e1e1f5841686f8448abc99"
+            )
+
+    monkeypatch.setattr(hashlib, "sha256", lambda _content: LegacyDigest())
+    monkeypatch.chdir(tmp_path)
+    exec(compile(migration[2], "copier.yml migration", "exec"), {})  # noqa: S102
+
+    assert legacy_test.is_symlink()
+    assert legacy_test.read_text(encoding="utf-8") == "project owned\n"
+    assert "branch_strategy: main" in (
+        tmp_path / ".copier-answers.yml"
+    ).read_text(encoding="utf-8")
 
 
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -83,9 +122,6 @@ project_visibility:
   type: str
   default: private
 enable_codeql:
-  type: bool
-  default: "{{ project_visibility == 'public' and language != 'ci' }}"
-enable_release_attestations:
   type: bool
   default: "{{ project_visibility == 'public' and language != 'ci' }}"
 """,
@@ -273,6 +309,7 @@ class FakeReleaseClient:
             raise self.commit_error
 
 
+@pytest.mark.large
 def test_init_dry_run_and_apply_pin_full_sha(tmp_path: Path) -> None:
     """Init previews without writes, then creates and verifies the project."""
     source, first_sha = make_template(tmp_path)
@@ -311,10 +348,25 @@ def test_capability_preflight_uses_readable_github_origin(
     script = tmp_path / "release_policy.py"
     script.touch()
     response = {
-        "mode": "direct",
-        "capabilities": {
-            "actions_pull_requests": {"state": "blocked"},
+        "mode": "blocked",
+        "organization_policy": {
+            "state": "blocked",
+            "reason": "organization policy blocks pull requests",
+        },
+        "repository_setting": {
+            "state": "allowed",
+            "reason": "repository setting allows pull requests",
+        },
+        "token_permissions": {
+            "actions_pull_requests": {"state": "unknown"},
             "contents": {"state": "unknown"},
+            "release": {"state": "unknown"},
+        },
+        "effective": {"mode": "blocked", "reason": "publication unproven"},
+        "capabilities": {
+            "actions_pull_requests": {"state": "unknown"},
+            "contents": {"state": "unknown"},
+            "release": {"state": "unknown"},
         },
         "integrations": {
             "renovate": {
@@ -350,7 +402,10 @@ def test_capability_preflight_uses_readable_github_origin(
     monkeypatch.setattr(cli, "run", fake_run)
     assert cli.capability_preflight(script, tmp_path) == response
     output = capsys.readouterr().out
-    assert "actions_pull_requests=blocked" in output
+    assert "organization_policy=blocked" in output
+    assert "repository_setting=allowed" in output
+    assert "token actions_pull_requests=unknown" in output
+    assert "effective=blocked" in output
     assert "Optional integration renovate: request-owner" in output
     assert "Next: Ask the organization owner." in output
 
@@ -485,6 +540,206 @@ def test_repository_context_without_remote_uses_safe_or_explicit_value(
     assert explicit.source == "explicit"
 
 
+def write_product_release_workflow(
+    root: Path,
+    name: str = "release.yml",
+    *,
+    input_name: str = "version",
+) -> Path:
+    """Create the release-significant shape preserved from csarc-ai-setup.
+
+    Mirrors the real, publicly preserved
+    ``Innoguard-Cyber-Arch/csarc-ai-setup`` workflow: a tag push publishes,
+    a manual ``workflow_dispatch`` only builds an artifact, and
+    ``scripts/verify-skills`` gates the bundle build. The release-writer
+    marker (``gh release create``) sits behind a tag-only ``if:`` guard so
+    detection must work from source text alone, not from trigger shape.
+    """
+    path = root / ".github" / "workflows" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "name: Product release\n"
+        "on:\n"
+        '  push:\n    tags: ["v*"]\n'
+        "  workflow_dispatch:\n"
+        "    inputs:\n"
+        f"      {input_name}:\n"
+        "        description: Exact product release input.\n"
+        "        required: true\n"
+        "permissions:\n"
+        "  contents: read\n"
+        "jobs:\n"
+        "  bundle:\n"
+        "    name: Build the member bundle\n"
+        "    runs-on: ubuntu-latest\n"
+        "    permissions:\n"
+        "      contents: write\n"
+        "    steps:\n"
+        "      - name: Enforce the promotion contract\n"
+        "        run: ./scripts/verify-skills\n"
+        '      - run: ./scripts/build-bundle --version "$VERSION"\n'
+        "      - name: Publish the release\n"
+        "        if: startsWith(github.ref, 'refs/tags/')\n"
+        "        env:\n"
+        "          GH_TOKEN: ${{ github.token }}\n"
+        '        run: gh release create "$VERSION" dist/*\n',
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_release_ownership_matrix_uses_explicit_workflow_contracts(
+    tmp_path: Path,
+) -> None:
+    """Resolve all ownership modes without relying on a workflow filename."""
+    root_answers = yaml.safe_load(
+        (ROOT / cli.CONFIG_FILE).read_text(encoding="utf-8")
+    )
+    root_contract = cli.release_contract(
+        cli.resolve_release_answers(ROOT, root_answers)
+    )
+    assert root_contract["ownership"] == "csarc-owned"
+    assert root_contract["immutable_releases"] == "required"
+
+    new = cli.base_data(tmp_path / "new", "init", {})
+    assert cli.release_contract(new) == {
+        "immutable_releases": "required",
+        "ownership": "csarc-owned",
+        "reason": "CSARC owns the only version and GitHub Release workflow.",
+        "required_inputs": [],
+        "selected_workflow": ".github/workflows/release.yml",
+        "settings_owner": "csarc-admin",
+    }
+
+    empty = tmp_path / "empty-existing"
+    empty.mkdir()
+    assert cli.release_contract(cli.base_data(empty, "adopt", {})) == {
+        "immutable_releases": "not-required",
+        "ownership": "verification-only",
+        "reason": (
+            "No product release writer was detected; CSARC verifies only."
+        ),
+        "required_inputs": [],
+        "selected_workflow": None,
+        "settings_owner": "none",
+    }
+
+    product = tmp_path / "product"
+    workflow = write_product_release_workflow(
+        product, "publish-product.yml", input_name="source_run_id"
+    )
+    contract = cli.release_contract(cli.base_data(product, "adopt", {}))
+    assert contract["ownership"] == "product-owned"
+    assert contract["selected_workflow"] == (
+        ".github/workflows/publish-product.yml"
+    )
+    assert contract["required_inputs"] == ["source_run_id"]
+
+    write_product_release_workflow(product, "second-writer.yml")
+    degraded = cli.release_contract(cli.base_data(product, "adopt", {}))
+    assert degraded["ownership"] == "verification-only"
+    assert "Multiple product release writers" in str(degraded["reason"])
+    with pytest.raises(CliError, match="exactly one release-writing workflow"):
+        cli.base_data(
+            product,
+            "adopt",
+            {
+                "release_ownership": "product-owned",
+                "release_workflow": workflow.relative_to(product).as_posix(),
+            },
+        )
+
+
+def test_tag_only_product_workflow_has_no_required_inputs(
+    tmp_path: Path,
+) -> None:
+    """Resolve a tag-triggered writer that declares no workflow_dispatch."""
+    product = tmp_path / "tag-only-product"
+    path = product / ".github" / "workflows" / "release.yml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "name: Product release\n"
+        "on:\n"
+        '  push:\n    tags: ["v*"]\n'
+        "permissions:\n"
+        "  contents: read\n"
+        "jobs:\n"
+        "  bundle:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    permissions:\n"
+        "      contents: write\n"
+        "    steps:\n"
+        "      - env:\n"
+        "          GH_TOKEN: ${{ github.token }}\n"
+        '        run: gh release create "$GITHUB_REF_NAME" dist/*\n',
+        encoding="utf-8",
+    )
+    contract = cli.release_contract(cli.base_data(product, "adopt", {}))
+    assert contract["ownership"] == "product-owned"
+    assert contract["selected_workflow"] == ".github/workflows/release.yml"
+    assert contract["required_inputs"] == []
+
+
+def test_release_capability_degrades_closed_when_writer_disappears(
+    tmp_path: Path,
+) -> None:
+    """Fail closed instead of silently downgrading a previously bound owner."""
+    now_empty = tmp_path / "now-empty-product"
+    now_empty.mkdir()
+    with pytest.raises(CliError, match="exactly one release-writing workflow"):
+        cli.resolve_release_answers(
+            now_empty,
+            {
+                "project_mode": "existing",
+                "release_ownership": "product-owned",
+                "release_ownership_reason": "Previously observed contract.",
+                "release_required_inputs": ["version"],
+                "release_workflow": ".github/workflows/release.yml",
+            },
+        )
+
+    now_empty_csarc = tmp_path / "now-empty-csarc"
+    now_empty_csarc.mkdir()
+    with pytest.raises(
+        CliError, match="CSARC-owned release workflow does not exist"
+    ):
+        cli.resolve_release_answers(
+            now_empty_csarc,
+            {
+                "project_mode": "existing",
+                "release_ownership": "csarc-owned",
+                "release_ownership_reason": "Previously observed contract.",
+                "release_required_inputs": [],
+                "release_workflow": ".github/workflows/release.yml",
+            },
+        )
+
+
+def test_release_orchestration_never_calls_the_dispatch_api() -> None:
+    """Prove no CSARC code path can duplicate-dispatch a product workflow."""
+    source = (ROOT / "src/csarc_cli/cli.py").read_text(encoding="utf-8")
+    assert "/dispatches" not in source
+    assert "workflow_dispatches" not in source
+    assert "gh workflow run" not in source
+    assert "gh api --method POST" not in source
+
+
+def test_release_workflow_input_drift_fails_closed(tmp_path: Path) -> None:
+    """Reject a selected workflow whose required input contract drifted."""
+    write_product_release_workflow(tmp_path)
+    with pytest.raises(CliError, match="input contract drifted"):
+        cli.resolve_release_answers(
+            tmp_path,
+            {
+                "project_mode": "existing",
+                "release_ownership": "product-owned",
+                "release_ownership_reason": "Previously observed contract.",
+                "release_required_inputs": ["source_run_id"],
+                "release_workflow": ".github/workflows/release.yml",
+            },
+        )
+
+
 @pytest.mark.parametrize(
     ("visibility", "enabled"),
     [("public", True), ("private", False), ("internal", False)],
@@ -526,9 +781,9 @@ def test_init_json_uses_one_complete_resolved_plan(
     assert payload["repository"]["visibility"] == visibility
     assert payload["answers"]["project_visibility"] == visibility
     assert payload["answers"]["enable_codeql"] is enabled
-    assert payload["answers"]["enable_release_attestations"] is enabled
     assert payload["answers"]["reviewers"] == "@default-reviewer"
-    assert payload["release_capabilities"]["mode"] == "verification-only"
+    assert payload["release_ownership"] == "csarc-owned"
+    assert payload["release_capabilities"]["mode"] == "blocked"
     assert not target.exists()
 
 
@@ -795,6 +1050,7 @@ def test_adopt_finalize_rejects_answer_drift(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_rejects_source_and_managed_file_drift(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -816,6 +1072,7 @@ def test_adopt_finalize_rejects_source_and_managed_file_drift(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_rejects_preserved_managed_file_drift(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -834,6 +1091,7 @@ def test_adopt_finalize_rejects_preserved_managed_file_drift(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_rejects_repository_drift(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -859,6 +1117,7 @@ def test_adopt_finalize_rejects_repository_drift(
     assert (project / cli.PENDING_ADOPTION_FILE).is_file()
 
 
+@pytest.mark.large
 def test_adopt_finalize_rechecks_repository_context_after_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -910,6 +1169,7 @@ def test_adopt_finalize_rechecks_repository_context_after_confirmation(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_failure_keeps_actionable_pending_state(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -929,6 +1189,7 @@ def test_adopt_finalize_failure_keeps_actionable_pending_state(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_requires_matching_second_stage_plan(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -973,6 +1234,7 @@ def test_adopt_finalize_requires_matching_second_stage_plan(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_rejects_unexpected_worktree_state(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1001,6 +1263,7 @@ def test_adopt_finalize_rejects_unexpected_worktree_state(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -1030,6 +1293,7 @@ def test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints(
     [
         ("python", "pyproject.toml", "uv.lock"),
         ("typescript", "package.json", "pnpm-lock.yaml"),
+        ("rust", "Cargo.toml", "Cargo.lock"),
     ],
 )
 @pytest.mark.large
@@ -1039,7 +1303,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
     manifest_name: str,
     lock_name: str,
 ) -> None:
-    """Finalize real Python and TypeScript adoptions without prior locks."""
+    """Finalize each language adoption without a pre-existing lockfile."""
     revision_sha = git(ROOT, "rev-parse", "HEAD")
     project = tmp_path / f"existing-{language}"
     reference = tmp_path / f"reference-{language}"
@@ -1067,7 +1331,7 @@ def test_real_template_adoption_resumes_after_manifest_merge(
             '[project]\nname = "existing-python"\nversion = "0.1.0"\n'
             'requires-python = ">=3.14,<3.15"\n'
         )
-    else:
+    elif language == "typescript":
         initial_manifest = (
             json.dumps(
                 {
@@ -1079,6 +1343,11 @@ def test_real_template_adoption_resumes_after_manifest_merge(
                 indent=2,
             )
             + "\n"
+        )
+    else:
+        initial_manifest = (
+            '[package]\nname = "existing-rust"\nversion = "0.1.0"\n'
+            'edition = "2024"\n\n[lib]\npath = "src/lib.rs"\n'
         )
     (project / "README.md").write_text("# Existing product\n", encoding="utf-8")
     (project / manifest_name).write_text(initial_manifest, encoding="utf-8")
@@ -1131,13 +1400,19 @@ def test_real_template_adoption_resumes_after_manifest_merge(
             + "\n[tool.product]\npreserved = true\n",
             encoding="utf-8",
         )
-    else:
+    elif language == "typescript":
         merged = json.loads(
             (reference / manifest_name).read_text(encoding="utf-8")
         )
         merged["productSetting"] = True
         manifest.write_text(
             json.dumps(merged, indent=2) + "\n", encoding="utf-8"
+        )
+    else:
+        manifest.write_text(
+            (reference / manifest_name).read_text(encoding="utf-8")
+            + "\n[package.metadata.product]\npreserved = true\n",
+            encoding="utf-8",
         )
 
     before = git(project, "status", "--porcelain")
@@ -1180,20 +1455,10 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         encoding="utf-8",
     )
     (project / ".gitignore").write_bytes(b"product-cache/\r\n.env\r\n")
-    product_release = project / ".github" / "workflows" / "release.yml"
-    product_release.write_text(
-        "name: Product release\n"
-        "on: workflow_dispatch\n"
-        "permissions: {}\n"
-        "jobs:\n"
-        "  release:\n"
-        "    runs-on: ubuntu-latest\n"
-        "    steps:\n"
-        '      - run: "true"\n',
-        encoding="utf-8",
-    )
+    product_release = write_product_release_workflow(project)
+    product_release_source = product_release.read_bytes()
     write_executable(
-        project / "scripts" / "verify-product",
+        project / "scripts" / "verify-skills",
         "#!/usr/bin/env bash\nset -euo pipefail\n"
         "grep -q '^# Product README$' README.md\n"
         "grep -q '^name: Product release$' .github/workflows/release.yml\n",
@@ -1219,6 +1484,8 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
         "project_name=Product Identity",
         "--data",
         "project_slug=product-identity",
+        "--data",
+        "project_verification_hook=scripts/verify-skills",
     ]
 
     assert main(arguments) == 0
@@ -1234,17 +1501,46 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert "README.md" in payload["files"]["preserve"]
     assert "CHANGELOG.md" in payload["files"]["preserve"]
     assert ".github/workflows/release.yml" in payload["files"]["preserve"]
-    assert ".github/workflows/csarc-release.yml" in payload["files"]["add"]
+    assert ".github/workflows/csarc-release.yml" not in payload["files"]["add"]
     assert cli.PROVENANCE_FILE.as_posix() in payload["files"]["add"]
+    assert payload["release"] == {
+        "immutable_releases": "product-defined",
+        "ownership": "product-owned",
+        "reason": (
+            "The existing product workflow remains the only Release writer; "
+            "CSARC never dispatches it."
+        ),
+        "required_inputs": ["version"],
+        "selected_workflow": ".github/workflows/release.yml",
+        "settings_owner": "product-admin",
+    }
     assert payload["adoption"]["project_verification_hook"] == {
         "configured": True,
-        "path": "scripts/verify-product",
+        "path": "scripts/verify-skills",
         "reason": "Project verification hook completed successfully.",
         "result": "passed",
-        "source": "fallback",
+        "source": "explicit",
     }
     assert payload["adoption"]["verification"] == "passed"
     assert payload["answers"]["package_name"] == "product_identity"
+    markdown = plan_path.with_name(
+        f"{cli.ADOPTION_REPORT_BASENAME}.md"
+    ).read_text(encoding="utf-8")
+    assert "Release ownership: `product-owned`" in markdown
+    assert (
+        "Selected release workflow: `.github/workflows/release.yml`" in markdown
+    )
+    assert "Required release inputs: `version`" in markdown
+    pdf = "\n".join(
+        page.extract_text() or ""
+        for page in PdfReader(
+            plan_path.with_name(f"{cli.ADOPTION_REPORT_BASENAME}.pdf")
+        ).pages
+    )
+    assert "Release workflow" in pdf
+    assert ".github/workflows/release.yml" in pdf
+    assert "Release inputs" in pdf
+    assert "version" in pdf
 
     assert (
         main(
@@ -1265,10 +1561,23 @@ def test_real_existing_adoption_uses_fixed_ownership_policies(
     assert (project / "CHANGELOG.md").read_text(encoding="utf-8") == (
         "# Product changes\n"
     )
-    assert product_release.read_text(encoding="utf-8").startswith(
-        "name: Product release"
+    assert product_release.read_bytes() == product_release_source
+    assert not (
+        project / ".github" / "workflows" / "csarc-release.yml"
+    ).is_file()
+    config = yaml.safe_load(
+        (project / cli.CONFIG_FILE).read_text(encoding="utf-8")
     )
-    assert (project / ".github" / "workflows" / "csarc-release.yml").is_file()
+    assert config["release_ownership"] == "product-owned"
+    assert config["release_workflow"] == ".github/workflows/release.yml"
+    assert config["release_required_inputs"] == ["version"]
+    assert config["release_settings_owner"] == "product-admin"
+    assert config["release_immutable_releases"] == "product-defined"
+    provenance = json.loads(
+        (project / cli.PROVENANCE_FILE).read_text(encoding="utf-8")
+    )
+    assert provenance["release"] == payload["release"]
+    assert (project / "scripts" / "verify-skills").is_file()
     assert "Keep this rule." in (project / "AGENTS.md").read_text(
         encoding="utf-8"
     )
@@ -1353,9 +1662,53 @@ def test_adoption_report_classifies_unknown_content(
     assert "Repository" in pdf_text and "(none)" in pdf_text
     assert "Visibility" in pdf_text and "private (safe-default)" in pdf_text
     assert "Template source" in pdf_text
+    placements: list[tuple[str, float, float]] = []
+
+    def record_pdf_text(
+        text: str,
+        _cm: list[float],
+        tm: list[float],
+        _font: dict[str, object] | None,
+        _size: float,
+    ) -> None:
+        if clean := text.strip():
+            placements.append((clean, tm[4], tm[5]))
+
+    PdfReader(report_dir / "csarc-adoption-dry-run.pdf").pages[0].extract_text(
+        visitor_text=record_pdf_text
+    )
+    labels = {
+        "Target",
+        "Repository",
+        "Visibility",
+        "Template source",
+        "Template",
+        "Verification",
+        "Profile",
+        "Project hook",
+        "Hook configured",
+        "Hook result",
+        "Hook reason",
+    }
+    for label, label_x, label_y in (
+        item for item in placements if item[0] in labels
+    ):
+        value, value_x, _ = next(
+            item
+            for item in placements
+            if item[2] == label_y and item[1] > label_x
+        )
+        assert (
+            value_x - label_x - cli.stringWidth(label, "Helvetica-Bold", 8)
+            >= 7.9
+        )
+        assert (
+            value_x + cli.stringWidth(value, "Helvetica", 8) <= cli.A4[0] - 48
+        )
     assert git(project, "status", "--porcelain") == before
 
 
+@pytest.mark.large
 def test_adoption_report_failure_keeps_markdown(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1468,12 +1821,41 @@ def test_adoption_report_path_and_settings_are_safe(tmp_path: Path) -> None:
     with pytest.raises(CliError, match="outside the target repo"):
         cli.adoption_report_directory(project, project / "reports")
     settings = cli.report_settings(
-        {"language": "python", "coverage_mode": "diff", "api_token": "secret"}
+        {
+            "language": "python",
+            "coverage_mode": "diff",
+            "enable_pypi_publishing": True,
+            "api_token": "secret",
+        }
     )
     assert "language=python" in settings
     assert "coverage_mode=diff" in settings
+    assert "enable_pypi_publishing" not in settings
     assert "api_token" not in settings
     assert "secret" not in settings
+
+
+def test_dangling_reusable_workflow_option_stays_removed() -> None:
+    """Issue #495: leave no trace of the caller-less reusable-workflow option.
+
+    ``use_reusable_workflow``/``workflow_ref`` never gained ``_exclude``
+    wiring and no template caller file ever existed, so the questions were
+    removed rather than restored. Guard against silently reintroducing a
+    Copier question, or a settings-report entry, that changes nothing about
+    what gets generated.
+    """
+    copier_config = yaml.safe_load(
+        (ROOT / "copier.yml").read_text(encoding="utf-8")
+    )
+    question_names = {key for key in copier_config if not key.startswith("_")}
+    assert "use_reusable_workflow" not in question_names
+    assert "workflow_ref" not in question_names
+
+    settings = cli.report_settings(
+        {"use_reusable_workflow": True, "workflow_ref": "a" * 40}
+    )
+    assert "use_reusable_workflow" not in settings
+    assert "workflow_ref" not in settings
 
 
 @pytest.mark.parametrize(
@@ -1529,7 +1911,9 @@ def test_adoption_markdown_reports_repository_context(
         tmp_path,
         cli.Revision("v1.0.0", "a" * 40, source),
         context,
-        {"language": "ci"},
+        cli.resolve_release_answers(
+            tmp_path, {"language": "ci", "project_mode": "existing"}
+        ),
         cli.Plan((), (), (), (), (), ()),
         "2026-08-24T00:00:00+00:00",
     )
@@ -1553,6 +1937,7 @@ def test_adopt_help_describes_report_directory(
     assert "plan without writing (the default for adopt)" in help_text
 
 
+@pytest.mark.large
 def test_adopt_applies_exact_plan_over_preserved_dirty_file(
     tmp_path: Path,
 ) -> None:
@@ -1949,6 +2334,7 @@ def test_adopt_rejects_race_between_comparison_and_snapshot(
     ).exists()
 
 
+@pytest.mark.large
 def test_adopt_infers_unicode_repository_and_applies_exact_plan(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1999,6 +2385,7 @@ def test_adopt_infers_unicode_repository_and_applies_exact_plan(
     assert (project / cli.PROVENANCE_FILE).is_file()
 
 
+@pytest.mark.large
 def test_adopt_rejects_plan_tampering_and_target_drift(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -2028,6 +2415,11 @@ def test_adopt_rejects_plan_tampering_and_target_drift(
         / cli.ADOPTION_PLAN_BASENAME
     )
     original = plan_path.read_text(encoding="utf-8")
+    assert json.loads(original)["release_ownership"] == "verification-only"
+    report_path = plan_path.with_name(f"{cli.ADOPTION_REPORT_BASENAME}.md")
+    assert "Release ownership: `verification-only`" in report_path.read_text(
+        encoding="utf-8"
+    )
     plan_path.write_text(
         original.replace('"mode": "adopt"', '"mode": "init"'),
         encoding="utf-8",
@@ -2057,6 +2449,7 @@ def test_json_differences_reports_paths_and_values() -> None:
     )
 
 
+@pytest.mark.large
 def test_adopt_rechecks_target_after_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2109,6 +2502,7 @@ def test_adopt_rechecks_target_after_confirmation(
     assert not (project / cli.PROVENANCE_FILE).exists()
 
 
+@pytest.mark.large
 def test_adopt_rechecks_repository_context_after_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2407,6 +2801,7 @@ def test_failed_project_hook_leaves_target_unchanged(tmp_path: Path) -> None:
     assert not (project / "managed.txt").exists()
 
 
+@pytest.mark.large
 def test_invalid_project_hook_blocks_pending_adoption_without_writes(
     tmp_path: Path,
 ) -> None:
@@ -2462,6 +2857,7 @@ def test_invalid_project_hook_blocks_pending_adoption_without_writes(
     assert not (project / "managed.txt").exists()
 
 
+@pytest.mark.large
 def test_adoption_records_and_replays_explicit_project_hook(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -2797,6 +3193,7 @@ def test_generated_verifier_status_descriptor_cannot_open_caller_path(
         ("scripts/not-executable", "not executable"),
     ],
 )
+@pytest.mark.large
 def test_project_hook_rejects_unsafe_or_unusable_paths(
     tmp_path: Path, path: str, error: str
 ) -> None:
@@ -3070,6 +3467,7 @@ def test_code_owner_verification_distinguishes_team_states(
     assert unknown["reason"] == "not authorized"
 
 
+@pytest.mark.large
 def test_adoption_preserves_executable_and_checked_patch_symlink(
     tmp_path: Path,
 ) -> None:
@@ -3148,6 +3546,7 @@ def test_adoption_preserves_executable_and_checked_patch_symlink(
     assert (project / "portable-link").readlink() == Path("product.txt")
 
 
+@pytest.mark.large
 def test_update_check_dry_run_apply_and_conflict(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -3235,6 +3634,8 @@ def test_update_check_dry_run_apply_and_conflict(
     commit(project, "test: customize managed file")
     managed.write_text("template version three\n", encoding="utf-8")
     third_sha = commit(source, "test: template version three")
+    expected_head, expected_changes, _ = cli.target_state(project)
+    expected_files = cli.target_file_snapshot(project)
 
     assert (
         main(
@@ -3250,7 +3651,106 @@ def test_update_check_dry_run_apply_and_conflict(
         )
         == 2
     )
-    assert "<<<<<<<" in (project / "managed.txt").read_text(encoding="utf-8")
+    actual_head, actual_changes, _ = cli.target_state(project)
+    assert (actual_head, actual_changes) == (expected_head, expected_changes)
+    assert cli.target_file_snapshot(project) == expected_files
+
+
+@pytest.mark.large
+def test_legacy_update_conflict_leaves_target_unchanged(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Keep a legacy target byte-identical when Copier finds a conflict."""
+    source, project, _ = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated project")
+
+    (project / cli.PROVENANCE_FILE).unlink()
+    (project / "managed.txt").write_text(
+        "legacy customization\n", encoding="utf-8"
+    )
+    commit(project, "test: legacy customized project")
+    (source / "template" / "managed.txt").write_text(
+        "template version two\n", encoding="utf-8"
+    )
+    target_sha = commit(source, "test: conflicting template update")
+    expected_head, expected_changes, _ = cli.target_state(project)
+    expected_files = cli.target_file_snapshot(project)
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--from-release",
+                "v0.2.4",
+                "--accept-legacy",
+                "--to",
+                target_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 2
+    )
+
+    error = capsys.readouterr().err
+    assert "managed.txt" in error
+    assert "the target was not changed" in error
+    actual_head, actual_changes, _ = cli.target_state(project)
+    assert (actual_head, actual_changes) == (expected_head, expected_changes)
+    assert cli.target_file_snapshot(project) == expected_files
+
+
+@pytest.mark.large
+def test_update_migrates_legacy_copier_answers_to_single_config(
+    tmp_path: Path,
+) -> None:
+    """Move legacy Copier tracking into the canonical repository config."""
+    source, project, _ = initialize_project(tmp_path)
+    git(project, "init", "-b", "main")
+    git(project, "config", "user.name", "CLI Test")
+    git(project, "config", "user.email", "cli-test@example.invalid")
+    commit(project, "test: generated legacy project")
+
+    copier_config = source / "copier.yml"
+    copier_config.write_text(
+        copier_config.read_text(encoding="utf-8").replace(
+            "_answers_file: .copier-answers.yml",
+            "_answers_file: .csarc/config.yml",
+        ),
+        encoding="utf-8",
+    )
+    verify = source / "template/scripts/verify"
+    verify.write_text(
+        verify.read_text(encoding="utf-8").replace(
+            ".copier-answers.yml", ".csarc/config.yml"
+        ),
+        encoding="utf-8",
+    )
+    second_sha = commit(source, "test: use one repository config")
+
+    assert (
+        main(
+            [
+                "update",
+                str(project),
+                "--to",
+                second_sha,
+                "--allow-unreleased",
+                "--yes",
+                "--non-interactive",
+            ]
+        )
+        == 0
+    )
+    config = project / ".csarc/config.yml"
+    assert config.is_file()
+    assert f"_commit: {second_sha}" in config.read_text(encoding="utf-8")
+    assert not (project / ".copier-answers.yml").exists()
 
 
 def test_update_check_validates_hook_without_running_it(
@@ -3318,6 +3818,7 @@ def test_update_check_validates_hook_without_running_it(
         ("../verify", "safe repository-relative"),
     ],
 )
+@pytest.mark.large
 def test_update_check_rejects_invalid_hook_without_writes(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -3368,6 +3869,7 @@ def test_update_check_rejects_invalid_hook_without_writes(
     assert cli.target_file_snapshot(project) == before_files
 
 
+@pytest.mark.large
 def test_update_hook_failure_leaves_target_unchanged(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -3420,6 +3922,7 @@ def test_update_hook_failure_leaves_target_unchanged(
     assert not (project / "hook-ran").exists()
 
 
+@pytest.mark.large
 def test_update_rechecks_committed_head_after_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3461,6 +3964,7 @@ def test_update_rechecks_committed_head_after_confirmation(
     )
 
 
+@pytest.mark.large
 def test_update_rechecks_repository_context_after_confirmation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3550,6 +4054,7 @@ def test_update_repository_rename_preserves_custom_security_channel(
     """Only move a repository-derived reporting channel to the new URL."""
     answers: dict[str, object] = {
         "language": "python",
+        "project_mode": "new",
         "project_visibility": "private",
         "repository_url": "https://github.com/old/repository",
         "security_reporting_channel": saved_channel,
@@ -3578,6 +4083,45 @@ def test_update_repository_rename_preserves_custom_security_channel(
         assert "security_reporting_channel" not in update_data
 
 
+def test_update_cannot_change_release_ownership() -> None:
+    """Keep the persisted lifecycle mode as the only release owner input."""
+    repository = cli.RepositoryContext(
+        "owner/repository",
+        "owner",
+        "Organization",
+        "private",
+        "github",
+        True,
+    )
+
+    with pytest.raises(CliError, match="owns the release boundary"):
+        cli.update_plan_answers(
+            {"project_mode": "existing", "project_visibility": "private"},
+            {"project_mode": "new"},
+            repository,
+        )
+
+    with pytest.raises(CliError, match="Release ownership contract"):
+        cli.update_plan_answers(
+            {
+                "project_mode": "existing",
+                "project_visibility": "private",
+                "release_ownership": "verification-only",
+            },
+            {"release_ownership": "product-owned"},
+            repository,
+        )
+
+    answers, update_data = cli.update_plan_answers(
+        {"project_mode": "existing", "project_visibility": "private"},
+        {"project_mode": "existing"},
+        repository,
+    )
+    assert cli.release_ownership(answers) == "product-owned"
+    assert update_data["project_mode"] == "existing"
+
+
+@pytest.mark.large
 def test_update_rechecks_snapshot_after_repository_context(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3635,6 +4179,7 @@ def test_update_rechecks_snapshot_after_repository_context(
     )
 
 
+@pytest.mark.large
 def test_update_recomputes_visibility_defaults_from_github(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3699,9 +4244,9 @@ def test_update_recomputes_visibility_defaults_from_github(
     assert payload["answers_changed"] is True
     assert payload["answers"]["project_visibility"] == "public"
     assert payload["answers"]["enable_codeql"] is True
-    assert payload["answers"]["enable_release_attestations"] is True
 
 
+@pytest.mark.large
 def test_update_plan_resolves_target_answers_and_capabilities(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3767,6 +4312,7 @@ def test_update_plan_resolves_target_answers_and_capabilities(
     assert payload["capabilities_changed"] is True
 
 
+@pytest.mark.large
 def test_update_check_reports_capability_drift_at_same_revision(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -3894,6 +4440,25 @@ def test_release_metadata_fails_closed(
     client.release_values[field] = value
     with pytest.raises(CliError, match=message):
         cli.resolve_revision(cli.CANONICAL_SOURCE, None, client=client)
+
+
+def test_unreleased_revision_requires_a_local_git_source(
+    tmp_path: Path,
+) -> None:
+    """Never turn a remote SHA into a first-adoption trust assertion."""
+    with pytest.raises(CliError, match="use a local Git repository"):
+        cli.resolve_revision(
+            "https://example.invalid/untrusted/template.git",
+            "a" * 40,
+            allow_unreleased=True,
+        )
+
+    source, revision = make_template(tmp_path)
+    resolved = cli.resolve_revision(
+        str(source), revision, allow_unreleased=True
+    )
+    assert resolved.sha == revision
+    assert not resolved.verified
 
 
 def test_release_trust_failures_stop_before_copy(
@@ -4243,26 +4808,18 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         assert commands
         assert all(excludes_large(command) for command in commands)
 
-    root_ci = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    compatibility_job = root_ci.split("  python-compatibility:\n", 1)[1].split(
-        "\n  adoption-macos:\n", 1
-    )[0]
-    compatibility_commands = [
-        shlex.split(line.strip())
-        for line in compatibility_job.splitlines()
-        if line.strip().startswith("uv run pytest")
-    ]
-    assert compatibility_commands
-    assert all(excludes_large(command) for command in compatibility_commands)
-
-    root_full_commands = pytest_commands(ROOT / "scripts/verify-template.sh")
+    # scripts/verify-template.sh is a thin aggregator (Issue #458); its own
+    # full-tier pytest invocation lives in the Regression tests stage script.
+    root_full_commands = pytest_commands(
+        ROOT / "scripts/verify-stage-regression-tests"
+    )
     assert root_full_commands
     assert not any(excludes_large(command) for command in root_full_commands)
 
     template_commands = pytest_commands(ROOT / "template/scripts/verify.jinja")
     assert len(template_commands) > 1
-    assert excludes_large(template_commands[0])
-    assert not any(excludes_large(command) for command in template_commands[1:])
+    assert any(excludes_large(command) for command in template_commands)
+    assert any(not excludes_large(command) for command in template_commands)
 
     marked_large = {
         name
@@ -4274,7 +4831,37 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         )
     }
     assert marked_large == {
+        "test_adopt_applies_exact_plan_over_preserved_dirty_file",
         "test_adopt_defaults_to_dry_run_and_preserves_product_files",
+        "test_adopt_finalize_does_not_trust_edited_checkpoint_fingerprints",
+        "test_adopt_finalize_failure_keeps_actionable_pending_state",
+        "test_adopt_finalize_rechecks_repository_context_after_confirmation",
+        "test_adopt_finalize_rejects_preserved_managed_file_drift",
+        "test_adopt_finalize_rejects_repository_drift",
+        "test_adopt_finalize_rejects_source_and_managed_file_drift",
+        "test_adopt_finalize_rejects_unexpected_worktree_state",
+        "test_adopt_finalize_requires_matching_second_stage_plan",
+        "test_adopt_infers_unicode_repository_and_applies_exact_plan",
+        "test_adopt_rechecks_repository_context_after_confirmation",
+        "test_adopt_rechecks_target_after_confirmation",
+        "test_adopt_rejects_plan_tampering_and_target_drift",
+        "test_adoption_preserves_executable_and_checked_patch_symlink",
+        "test_adoption_records_and_replays_explicit_project_hook",
+        "test_adoption_report_failure_keeps_markdown",
+        "test_init_dry_run_and_apply_pin_full_sha",
+        "test_invalid_project_hook_blocks_pending_adoption_without_writes",
+        "test_legacy_update_conflict_leaves_target_unchanged",
+        "test_project_hook_rejects_unsafe_or_unusable_paths",
         "test_real_existing_adoption_uses_fixed_ownership_policies",
         "test_real_template_adoption_resumes_after_manifest_merge",
+        "test_update_check_dry_run_apply_and_conflict",
+        "test_update_check_rejects_invalid_hook_without_writes",
+        "test_update_check_reports_capability_drift_at_same_revision",
+        "test_update_hook_failure_leaves_target_unchanged",
+        "test_update_migrates_legacy_copier_answers_to_single_config",
+        "test_update_plan_resolves_target_answers_and_capabilities",
+        "test_update_rechecks_committed_head_after_confirmation",
+        "test_update_rechecks_repository_context_after_confirmation",
+        "test_update_rechecks_snapshot_after_repository_context",
+        "test_update_recomputes_visibility_defaults_from_github",
     }

@@ -1,0 +1,79 @@
+# [[project_name]]
+
+[[project_description]]
+
+使用語言：**[[languages]]**。主要負責人：**[[code_owner]]**。
+
+## 開始使用
+
+1. 安裝 Git、GitHub CLI 與 uv。
+2. 複製 `[[repository_url]]`，進入 `[[project_slug]]`。
+3. 執行 `./scripts/verify`，在送出變更前完成相同驗證。
+
+## 檔案地圖
+
+- `.github/`：工作單、合併申請與 GitHub Actions。
+- `policies/`：可以審查的 GitHub 設定。
+- `docs/specs/`：目前系統必須做到的事。
+- `docs/adr/`：已確認的技術選擇與理由。
+- `scripts/verify`：本機與 CI 共用的驗證入口。
+- `docs/site-content.md`：你正在閱讀的網站內容。
+
+## 開發流程
+
+開 Issue／Milestone 前先搜尋 open／closed 歷史工作並摘要既有決策；Feature parent 保存 SDD story，Task／Bug subissues 保存可交付工作，Milestone 只管理有期限的 delivery。PR 保留 native Development link、Issue 連結與精簡清單，closing PR 的自身與 referenced Issue checklist 都必須完成。
+
+1. 先用 GitHub Issue 說清楚問題與完成條件。
+2. 從目前工作所屬的分支建立有 Issue 編號的短期分支。
+3. 完成修改並執行 `./scripts/verify`。
+4. 開 Pull Request，連回 Issue，讓另一位成員審查後再合併。
+
+### 進階: 分支與自動檢查
+
+- 目前分支策略是 `[[branch_strategy]]`；實際路徑以 repo 的工作定義與 GitHub 保護規則為準。
+{% if branch_strategy == "delivery" %}- **Delivery route：**`main` 是唯一永久 branch；並行里程碑各自使用短命 `dev/m*`，一般孤立 Issue 從最新 main 建立並直接回 main。只有獨立 soak／canary 才用一次性的 `dev/i*`。里程碑到 final delivery 才同步最新 main；不得 fan out、直接 push、建立假里程碑或永久 isolated branch。
+{% endif %}- **分層 CI：**本機與 CI 共用 repo 內的驗證程式。Issue PR 依變更選擇 docs／fast／full；未知路徑、promotion、hotfix、release recovery、merge queue 或手動 dispatch 走 full。現行 `.github/workflows/ci.yml` 只有一個 `verify` job，timeout 為 30 分鐘；完整契約見 `docs/ci-policy.md`。
+- **Actions 額度 fallback：**zero-step billing block 被機械式確認、且 job 未執行任何 step 時，agent 對精確 PR SHA 執行 `./scripts/verify`、列出無法本機重現的 checks，一般 PR 留下只對該 SHA 有效的 fallback 說明即可合併，不需要即時人工確認。{% if branch_strategy in ["dev", "delivery"] %}Promotion 到 main 仍維持 human attestation/authorization 雙方確認，另須保存 candidate archive/tree、合併後核對 tree identity，且本機證據不可用於 release。{% endif %}錯誤 budget、平台事故、workflow／權限問題、原因不明或真正測試失敗都不得套用；額度重置後補跑正式 checks。
+
+## 安全與相依套件
+
+- 密鑰只放 GitHub Secrets／Variables，不提交到 repo。
+- 相依套件使用鎖定檔，第三方 GitHub Actions 固定到完整 commit SHA。
+- 自動更新、已知漏洞掃描與軟體成分清單依 repo 的現行 workflow 執行。
+
+## GitHub 方案與門禁
+
+repo 推送後會由 CI 讀取實際能力。有管理權且要啟用較強門禁時，可再執行 `./scripts/apply-repository-settings.sh plan`、`apply` 與 `check`；check 會唯讀比對 CODEOWNERS、repository、Actions、政策標籤與有效 Ruleset。這不是 portable release baseline 的必要步驟。
+
+- **Free＋public：**公版套用並強制 Ruleset；缺少或不符政策時，governance check fail-closed。
+- **Free organization＋private：**從設定名單輪派一位個別 reviewer，期望 Ruleset 保留在 repo policy；不支援 team request，review request 不等於強制核准。
+- **Pro 個人帳號＋private：**公版套用並強制 Ruleset，是個人 private repo 的付費路徑。
+- **Team organization＋private：**Ruleset、必要審查、CODEOWNERS 與必要檢查皆可用；要先建立真實 CODEOWNERS team。
+- **Enterprise：**沿用 Team 的 repo 設定；SSO／SCIM、稽核串流、IP 限制與組織 Ruleset 屬組織層，不由本 repo 腳本自動修改。
+
+### 進階: GitHub 權限
+
+- `noindex` 只能降低搜尋引擎收錄，不是存取控制。
+- Ruleset、CODEOWNERS 與必要檢查能否強制執行，取決於 repo 可用的 GitHub 方案與權限。
+- 要調整組織政策時，先預覽設定差異，再由管理員套用。
+- **Free private 的下一步：**導入時用逗號設定一到多位 `reviewers`，workflow 會從生成的 `.github/REVIEWERS` 排除作者後輪派一位，並用短效 `GITHUB_TOKEN` 提出 request；設定腳本另在所有方案驗證 CODEOWNERS team 與 repo write access。Free private 不支援 team review request 或多位同時 reviewer；需要把核准變成 merge gate 時，請 owner 升級至 GitHub Team 以上。Ruleset 不可用時仍標示 `DEGRADED`；完整管理欄位驗證應由管理員在可信任 checkout 使用 Administration read 憑證，不把該 token 暴露給 PR 程式碼。這些紀錄與 review request 不能阻止有權限者直接 push 或忽略未核准合併。
+- **設定漂移：**{% if enable_governance_drift_check %}每日與手動 Action 會執行同一支本機檢查程式；發現可修正差異時維護一張追蹤 Issue。{% else %}目前未選用排程檢查，因此不會產生 Action 或檢查程式；需要時用 Copier 更新開啟。{% endif %}每次執行只代表當下快照，不能取代 GitHub audit log。
+
+## 交付與模板更新
+
+- 合併到正式分支前，先完成審查與該階段要求的驗證。
+{% if branch_strategy == "delivery" %}- **批次邊界：**Milestone 或其他 delivery PR 只負責把已驗證內容合併到 `main`；之後由版本 PR 分開審查版本與 CHANGELOG。
+{% endif %}- **PR 的 SemVer 意圖：**Active。PR 標題只表達 major／minor／patch／no-release。
+- **正式版本與 CHANGELOG：**{% if project_mode == "new" %}Active，Release Please 建立同一張受審查 PR。{% else %}Product-owned，沿用產品既有規則。{% endif %}
+- **tag／GitHub Release：**{% if project_mode == "new" %}Active，版本 PR 合併並通過完整驗證後自動發布。{% else %}Product-owned，模板不建立第二個 release owner。{% endif %}
+- **checksum／SBOM／attestation：**Conditional。本機 scripts／tests 保留安全契約，接上實際 publisher 後才執行。
+- **production deployment：**Not applicable。由產品另行定義環境、健康檢查、核准與復原。
+- Copier 以可審查的 Pull Request 更新公版；專案內容與樣式不會被靜默覆寫。
+- `docs/index.html` 是自動產物。請修改本 Markdown，再執行 `uv run --no-project python scripts/render_site.py`。
+
+### 進階: 責任邊界
+
+- `.csarc/config.yml` 是名稱、說明、語言、負責人、repository URL 與分支策略的單一設定來源。
+- 本頁不做存取控制；儲存庫可見度設定為 **[[project_visibility]]**，實際讀者範圍以此設定與實際託管平台為準，`noindex` 只能降低搜尋引擎收錄。
+- `site/`、renderer 與預設樣式由公版維護。
+- `docs/site-content.md` 與 `docs/site-theme.css` 由專案維護。

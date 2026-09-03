@@ -14,7 +14,7 @@ Repository = {{ repository_url | tojson }}
 dev = [
   "coverage[toml]>=7.10,<8",
   "diff-cover>=9.7,<11",
-  "mypy>=1.17,<3",
+  "ty==0.0.76",
 {% if enable_precommit %}
   "pre-commit>=4.3,<5",
 {% endif %}
@@ -30,6 +30,7 @@ build-backend = "hatchling.build"
 [tool.ruff]
 line-length = 80
 target-version = "py{{ python_target | replace('.', '') }}"
+extend-exclude = [".cache"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "B", "S", "C901", "UP", "SIM", "RUF", "ANN", "D", "T20"]
@@ -43,10 +44,11 @@ known-first-party = [{{ package_name | tojson }}, "scripts"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D", "S101"]
 
-[tool.mypy]
-python_version = "{{ python_target }}"
-strict = true
-files = ["src", "scripts", "tests"]
+[tool.ty.environment]
+python-version = "{{ python_target }}"
+
+[tool.ty.src]
+include = ["src", "scripts", "tests"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

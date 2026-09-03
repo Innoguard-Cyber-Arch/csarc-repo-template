@@ -1,0 +1,177 @@
+title = "CSARC Repo Template"
+title_zh_tw = "LLM 詞彙索引"
+title_en = "LLM glossary index"
+intro_zh_tw = "這份資料只用於產生 llms.txt 的雙語索引，不在簡報中另開名詞表。"
+intro_en = "This data generates the bilingual llms.txt index and is not rendered as a presentation glossary."
+source_label_zh_tw = "深入閱讀"
+source_label_en = "Read more"
+summary_zh_tw = "可審查、可更新且可離線交付的 repository 公版，涵蓋工作定義、驗證與發布治理。"
+summary_en = "A reviewable, updatable repository foundation for work definition, verification, and governed delivery."
+source_base = "https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/"
+
+[[groups]]
+key = "work"
+title_zh_tw = "工作與審查"
+title_en = "Work and review"
+
+  [[groups.terms]]
+  key = "issue"
+  term_zh_tw = "Issue 工作單"
+  term_en = "Issue"
+  summary_zh_tw = "界定一個可驗收結果、範圍與完成條件的工作單位。"
+  summary_en = "A unit of work that defines one observable outcome, its scope, and acceptance criteria."
+  path = "AGENTS.md#working-loop"
+
+  [[groups.terms]]
+  key = "story-milestone"
+  term_zh_tw = "故事里程碑"
+  term_en = "Story Milestone"
+  summary_zh_tw = "只有端到端成果需要時才建立、可獨立驗證的多 Issue story。"
+  summary_en = "An independently verifiable multi-Issue story, created only for an end-to-end outcome."
+  path = "docs/milestone-description.md"
+
+  [[groups.terms]]
+  key = "pull-request"
+  term_zh_tw = "Pull request"
+  term_en = "Pull request"
+  summary_zh_tw = "保存變更意圖、驗證證據與人類審查的整合邊界。"
+  summary_en = "The integration boundary that preserves intent, verification evidence, and human review."
+  path = ".github/pull_request_template.md"
+
+  [[groups.terms]]
+  key = "decision-record"
+  term_zh_tw = "決策記錄"
+  term_en = "Decision record"
+  summary_zh_tw = "保存已確認的架構、工具、安全與相容性取捨。"
+  summary_en = "The durable record of confirmed architecture, tooling, security, and compatibility trade-offs."
+  path = "docs/adr/README.md"
+
+[[groups]]
+key = "verification"
+title_zh_tw = "驗證與能力"
+title_en = "Verification and capability"
+
+  [[groups.terms]]
+  key = "fast-checks"
+  term_zh_tw = "快速驗證"
+  term_en = "Fast checks"
+  summary_zh_tw = "依變更風險執行的短回饋檢查，不取代交付前完整驗證。"
+  summary_en = "Short feedback checks selected by change risk; they do not replace full pre-delivery verification."
+  path = "docs/ci-policy.md"
+
+  [[groups.terms]]
+  key = "full-verification"
+  term_zh_tw = "完整驗證"
+  term_en = "Full verification"
+  summary_zh_tw = "交付前執行的 repository 級契約，統一檢查程式、政策與產物。"
+  summary_en = "The repository-wide pre-delivery contract for code, policy, and artifacts."
+  path = "AGENTS.md#commands"
+
+  [[groups.terms]]
+  key = "capability-state"
+  term_zh_tw = "平台能力狀態"
+  term_en = "Platform capability state"
+  summary_zh_tw = "以 allowed、blocked 或 unknown 記錄實測能力，不從方案名稱猜測。"
+  summary_en = "Observed capability recorded as allowed, blocked, or unknown instead of inferred from plan names."
+  path = "docs/adr/portable-decision-site.md"
+
+  [[groups.terms]]
+  key = "degraded-governance"
+  term_zh_tw = "DEGRADED（能力降級）"
+  term_en = "DEGRADED governance"
+  summary_zh_tw = "GitHub 方案或權限不支援某項強制功能；公版保留期望政策並要求人工補足，不把未執行誤寫成通過。"
+  summary_en = "A GitHub plan or permission cannot enforce a control; the template retains the desired policy and requires a human fallback without reporting an unrun control as passed."
+  path = "README.md#設定與密鑰"
+
+  [[groups.terms]]
+  key = "governance-exception"
+  term_zh_tw = "治理例外"
+  term_en = "Governance exception"
+  summary_zh_tw = "有期限的替代做法，必須記錄提出者、另一位核准者、到期日、證據與恢復方式。"
+  summary_en = "A time-bounded fallback that records its proposer, a different approver, expiry, evidence, and recovery path."
+  path = "docs/index.html#governance"
+
+  [[groups.terms]]
+  key = "portable-artifact"
+  term_zh_tw = "可攜式產物"
+  term_en = "Portable artifact"
+  summary_zh_tw = "沒有 runtime 外部資產、可下載並以 file:// 離線使用的單檔交付物。"
+  summary_en = "A single-file deliverable with no external runtime assets that remains usable through file://."
+  path = "docs/adr/portable-decision-site.md"
+
+[[groups]]
+key = "delivery"
+title_zh_tw = "整合與交付"
+title_en = "Integration and delivery"
+
+  [[groups.terms]]
+  key = "delivery-branch"
+  term_zh_tw = "Delivery branch"
+  term_en = "Delivery branch"
+  summary_zh_tw = "讓同一 story 的獨立 PR 先整合，再由 promotion 進入 main 的分支。"
+  summary_en = "The branch where independent PRs for one story integrate before promotion reaches main."
+  path = "docs/ci-policy.md"
+
+  [[groups.terms]]
+  key = "promotion"
+  term_zh_tw = "Promotion"
+  term_en = "Promotion"
+  summary_zh_tw = "把已驗證的 delivery branch 提升到 main 的明確交付動作。"
+  summary_en = "The explicit delivery action that advances a verified delivery branch to main."
+  path = "docs/ci-policy.md"
+
+  [[groups.terms]]
+  key = "release-intent"
+  term_zh_tw = "SemVer 意圖"
+  term_en = "SemVer intent"
+  summary_zh_tw = "由已驗證的 PR 標題宣告相容性影響；它不會自行配置精確版本。"
+  summary_en = "Declared by a validated PR title to express compatibility impact; it does not allocate an exact version."
+  path = "docs/ci-policy.md"
+
+  [[groups.terms]]
+  key = "version-materialization"
+  term_zh_tw = "正式版本配置"
+  term_en = "Version materialization"
+  summary_zh_tw = "在同一張受審查變更中同步版本檔、套件 metadata、CHANGELOG 與 README marker。"
+  summary_en = "Synchronizing version files, package metadata, the changelog, and the README marker in one reviewed change."
+  path = "docs/adr/release-security-and-dependencies.md"
+
+  [[groups.terms]]
+  key = "release"
+  term_zh_tw = "發版"
+  term_en = "Release"
+  summary_zh_tw = "以不可變 tag、GitHub Release、明列成品與可驗證證據發布一個版本。"
+  summary_en = "Publishing a version with an immutable tag, GitHub Release, explicit artifacts, and verifiable evidence."
+  path = "docs/adr/release-security-and-dependencies.md"
+
+  [[groups.terms]]
+  key = "repository-delivery"
+  term_zh_tw = "交付"
+  term_en = "Delivery"
+  summary_zh_tw = "把受審查且已驗證的工作送進權威分支或交給使用者；不一定產生新版本。"
+  summary_en = "Moving reviewed and verified work into the authoritative branch or to users; it does not always create a version."
+  path = "docs/adr/release-security-and-dependencies.md"
+
+  [[groups.terms]]
+  key = "deployment"
+  term_zh_tw = "部署"
+  term_en = "Deployment"
+  summary_zh_tw = "把產品送入真實 runtime environment，並負責健康檢查、核准與復原；不在本模板現行範圍。"
+  summary_en = "Operating the product in a real runtime with health checks, approval, and recovery; outside the template's current scope."
+  path = "docs/adr/release-security-and-dependencies.md"
+
+  [[groups.terms]]
+  key = "artifact-evidence"
+  term_zh_tw = "成品證據"
+  term_en = "Artifact evidence"
+  summary_zh_tw = "把成品 checksum、SBOM、來源 commit、build identity 與必要 attestation 綁在一起。"
+  summary_en = "Binding artifact checksums, the SBOM, source commit, build identity, and any required attestation."
+  path = "docs/adr/release-security-and-dependencies.md"
+
+  [[groups.terms]]
+  key = "copier-update"
+  term_zh_tw = "Copier 更新"
+  term_en = "Copier update"
+  summary_zh_tw = "以可審查差異把公版變更套入既有 repository，保留專案持有內容。"
+  summary_en = "A reviewable template update that preserves project-owned content in an existing repository."
+  path = "README.md"

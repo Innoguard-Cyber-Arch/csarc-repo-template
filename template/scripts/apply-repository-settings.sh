@@ -37,8 +37,9 @@ if [[ -z "$repo" ]]; then
   fi
 fi
 ruleset_payload="$repo_root/policies/rulesets.json"
-dev_next_ruleset_payload="$repo_root/policies/dev-next-ruleset.json"
+release_policy="$repo_root/policies/releases.json"
 ruleset_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["name"])' "$ruleset_payload")"
+legacy_ruleset_name="CSARC preserve dev next"
 code_owner="$(awk '!/^#/ && NF {print $NF; exit}' "$repo_root/.github/CODEOWNERS")"
 
 if ! repo_context="$({
@@ -122,7 +123,7 @@ fi
 
 print_ruleset_guidance() {
   echo "- DEGRADED required governance: $default_branch is not protected on this private repository."
-  echo "- PRESERVED desired Rulesets: policies/rulesets.json keeps branch governance and policies/dev-next-ruleset.json keeps deletion protection ready for dev/next on a supported plan or public repository."
+  echo "- PRESERVED desired Ruleset: policies/rulesets.json keeps main branch governance ready for a supported plan or public repository."
   echo "- API LIMIT: GitHub REST and GraphQL reject Ruleset creation and updates on this plan, even with enforcement disabled."
   echo "- OPTIONAL: an administrator may preconfigure a disabled Ruleset in the GitHub web UI; this script can detect but cannot create it."
   echo "  https://github.com/$repo/settings/rules"
@@ -154,22 +155,32 @@ load_graphql_ruleset() {
     graphql_ruleset_error="$graphql_result"
     return 1
   fi
-  if ! graphql_state="$(python3 - "$ruleset_name" "$graphql_result" <<'PY'
+  if ! graphql_state="$(python3 - "$ruleset_name" "$legacy_ruleset_name" "$graphql_result" <<'PY'
 import json
 import sys
 
 ruleset_name = sys.argv[1]
-repository = json.loads(sys.argv[2])["data"]["repository"]
+legacy_ruleset_name = sys.argv[2]
+repository = json.loads(sys.argv[3])["data"]["repository"]
 if repository is None:
     raise SystemExit("Repository is unavailable through the GraphQL API.")
 ruleset = next(
     (item for item in repository["rulesets"]["nodes"] if item["name"] == ruleset_name),
     None,
 )
+legacy_ruleset = next(
+    (
+        item
+        for item in repository["rulesets"]["nodes"]
+        if item["name"] == legacy_ruleset_name
+    ),
+    None,
+)
 print(
     ruleset["id"] if ruleset else "-",
     ruleset["enforcement"] if ruleset else "-",
     ruleset["target"] if ruleset else "-",
+    legacy_ruleset["id"] if legacy_ruleset else "-",
     sep="|",
 )
 PY
@@ -177,7 +188,7 @@ PY
     graphql_ruleset_error="$graphql_state"
     return 1
   fi
-  IFS='|' read -r ruleset_node_id ruleset_enforcement ruleset_target \
+  IFS='|' read -r ruleset_node_id ruleset_enforcement ruleset_target legacy_ruleset_id \
     <<<"$graphql_state"
 }
 
@@ -188,6 +199,7 @@ graphql_ruleset_error=""
 ruleset_node_id="-"
 ruleset_enforcement="-"
 ruleset_target="-"
+legacy_ruleset_id="-"
 if ! ruleset_access="$(gh api "repos/$repo/rulesets" 2>&1)"; then
   ruleset_enforcement_available=false
   if [[ "$ruleset_access" == *"Upgrade to GitHub Pro or make this repository public"* ]]; then
@@ -200,6 +212,12 @@ if ! ruleset_access="$(gh api "repos/$repo/rulesets" 2>&1)"; then
     echo "$ruleset_access"
     exit 1
   fi
+else
+  legacy_ruleset_id="$(
+    uv run --no-project python -c \
+      'import json,sys; name=sys.argv[1]; print(next((item["id"] for item in json.load(sys.stdin) if item["name"] == name), "-"))' \
+      "$legacy_ruleset_name" <<<"$ruleset_access"
+  )"
 fi
 
 if [[ "$mode" == "check" ]]; then
@@ -207,6 +225,11 @@ if [[ "$mode" == "check" ]]; then
   check_degraded=0
   repository_drift=""
   repository_state_available=false
+
+  if [[ "$legacy_ruleset_id" != "-" ]]; then
+    echo "Stale Ruleset must be removed: $legacy_ruleset_name ($legacy_ruleset_id)." >&2
+    check_errors=$((check_errors + 1))
+  fi
 
   if [[ -n "$codeowners_validation" ]]; then
     echo "CODEOWNERS validation failed: $codeowners_validation" >&2
@@ -276,6 +299,30 @@ PY
     fi
   fi
 
+  if ! release_state="$(gh api "repos/$repo/immutable-releases" 2>&1)"; then
+    echo "Cannot inspect the required immutable Releases setting for $repo." >&2
+    echo "$release_state" >&2
+    check_errors=$((check_errors + 1))
+  elif ! release_drift="$(python3 - "$release_policy" "$release_state" 2>&1 <<'PY'
+import json
+import sys
+
+desired = json.load(open(sys.argv[1], encoding="utf-8"))
+actual = json.loads(sys.argv[2])
+if actual.get("enabled") is not desired["enabled"]:
+    raise SystemExit(
+        "enabled: desired "
+        f"{desired['enabled']!r}, live {actual.get('enabled')!r}"
+    )
+PY
+  )"; then
+    echo "Release settings drift: $release_drift" >&2
+    echo "Immutable Releases are required before the release workflow can publish." >&2
+    check_errors=$((check_errors + 1))
+  else
+    echo "Immutable Releases match policies/releases.json."
+  fi
+
   if ! actions_state="$(gh api "repos/$repo/actions/permissions/workflow" 2>&1)"; then
     if [[ "$repo_admin" != "true" && "$actions_state" == *"Resource not accessible by integration"* ]]; then
       [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
@@ -320,7 +367,7 @@ PY
     elif [[ "$actions_pr_degraded" == "true" ]]; then
       [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
         echo "::warning title=Actions policy degraded::Actions cannot approve pull requests although policies/actions.json requests it."
-      echo "DEGRADED Actions PR policy: desired true, live false; an organization policy may block this capability. Runtime release workflows adapt."
+      echo "DEGRADED Actions PR policy: desired true, live false; an organization policy may block this capability. No release workflow is enabled by this script."
       check_degraded=$((check_degraded + 1))
     fi
     if [[ "$actions_default_drift" != "true" && "$actions_pr_degraded" != "true" && "$actions_pr_drift" != "true" ]]; then
@@ -377,23 +424,12 @@ PY
     echo "Cannot inspect effective rules for $repo:$default_branch." >&2
     echo "$branch_rules" >&2
     check_errors=$((check_errors + 1))
-  elif ! dev_next_rules="$(gh api "repos/$repo/rules/branches/dev%2Fnext" 2>&1)"; then
-    echo "Cannot inspect effective dev/next rules for $repo." >&2
-    echo "$dev_next_rules" >&2
-    check_errors=$((check_errors + 1))
-  elif ! ledger_rules="$(gh api "repos/$repo/rules/branches/csarc%2Fdev-next-preservation-ledger" 2>&1)"; then
-    echo "Cannot inspect effective preservation ledger rules for $repo." >&2
-    echo "$ledger_rules" >&2
-    check_errors=$((check_errors + 1))
-  elif ! ruleset_drift="$(python3 - "$ruleset_payload" "$dev_next_ruleset_payload" "$branch_rules" "$dev_next_rules" "$ledger_rules" 2>&1 <<'PY'
+  elif ! ruleset_drift="$(python3 - "$ruleset_payload" "$branch_rules" 2>&1 <<'PY'
 import json
 import sys
 
 desired = json.load(open(sys.argv[1], encoding="utf-8"))
-desired_dev_next = json.load(open(sys.argv[2], encoding="utf-8"))
-effective = json.loads(sys.argv[3])
-effective_dev_next = json.loads(sys.argv[4])
-effective_ledger = json.loads(sys.argv[5])
+effective = json.loads(sys.argv[2])
 desired_by_type = {rule["type"]: rule for rule in desired["rules"]}
 effective_by_type = {}
 for rule in effective:
@@ -403,21 +439,6 @@ errors = []
 for rule_type in ("non_fast_forward", "pull_request", "required_status_checks"):
     if rule_type not in effective_by_type:
         errors.append(f"missing {rule_type} rule")
-required_preservation_rules = {"deletion", "non_fast_forward"}
-for name, rules in (
-    ("dev/next", effective_dev_next),
-    ("preservation ledger", effective_ledger),
-):
-    observed = {rule.get("type") for rule in rules}
-    missing = sorted(required_preservation_rules - observed)
-    if missing:
-        errors.append(f"{name} is missing rules: {', '.join(missing)}")
-if desired_dev_next["conditions"]["ref_name"]["include"] != [
-    "refs/heads/dev/next",
-    "refs/heads/csarc/dev-next-preservation-ledger",
-]:
-    errors.append("preservation policy does not target only its two exact refs")
-
 desired_pull_request = desired_by_type["pull_request"]["parameters"]
 pull_request_rules = effective_by_type.get("pull_request", [])
 if pull_request_rules:
@@ -452,7 +473,7 @@ PY
     echo "Ruleset settings drift: $ruleset_drift" >&2
     check_errors=$((check_errors + 1))
   else
-    echo "Repository governance ready: $default_branch has the required effective rules; delivery-sync verifies dev/next and its ledger before promotion."
+    echo "Repository governance ready: $default_branch has the required effective rules."
   fi
 
   if (( check_errors > 0 )); then
@@ -473,8 +494,12 @@ echo "Account plan: $plan_label"
 echo "Repository visibility: $repo_visibility"
 echo "Deployment plan:"
 echo "- APPLY policies/repository.json"
+echo "- APPLY policies/releases.json (immutable Releases)"
 echo "- APPLY policies/actions.json when account policy permits it"
 echo "- APPLY policies/labels.json (create or update policy labels)"
+if [[ "$legacy_ruleset_id" != "-" ]]; then
+  echo "- DELETE stale Ruleset: $legacy_ruleset_name ($legacy_ruleset_id)"
+fi
 existing_labels="$(gh label list --repo "$repo" --limit 1000 --json name --jq '.[].name')"
 desired_labels="$({
   uv run --no-project python - "$repo_root/policies/labels.json" <<'PY'
@@ -497,7 +522,7 @@ else
   echo "- KEEP labels outside policy (default additive mode)"
 fi
 if [[ "$ruleset_enforcement_available" == true ]]; then
-  echo "- APPLY policies/rulesets.json and policies/dev-next-ruleset.json (enforced by GitHub)"
+  echo "- APPLY policies/rulesets.json (enforced by GitHub)"
   echo "CODEOWNERS team: $code_owner"
 elif [[ "$ruleset_inventory_available" == true ]]; then
   echo "- PRESERVE policies/rulesets.json locally (public APIs cannot create a Ruleset on this plan)"
@@ -520,6 +545,13 @@ if [[ "$mode" == "plan" ]]; then
   exit 0
 fi
 gh api --method PATCH "repos/$repo" --input "$repo_root/policies/repository.json" >/dev/null
+if ! release_policy_error="$(
+  gh api --method PUT "repos/$repo/immutable-releases" 2>&1
+)"; then
+  echo "Cannot enable required immutable Releases for $repo." >&2
+  echo "$release_policy_error" >&2
+  exit 1
+fi
 actions_policy_applied=true
 if ! actions_policy_error="$(
   gh api --method PUT "repos/$repo/actions/permissions/workflow" \
@@ -528,7 +560,7 @@ if ! actions_policy_error="$(
   if [[ "$actions_policy_error" =~ (403|409|not\ permitted) ]]; then
     actions_policy_applied=false
     echo "DEGRADED Actions PR policy: $actions_policy_error"
-    echo "The release workflow will select direct or verification-only mode at runtime."
+    echo "No release workflow is enabled; record this degraded capability before designing one."
   else
     echo "Cannot apply Actions workflow permissions for $repo." >&2
     echo "$actions_policy_error" >&2
@@ -559,21 +591,22 @@ if [[ "$prune_labels" == true ]]; then
 fi
 
 if [[ "$ruleset_enforcement_available" == true ]]; then
-  for current_ruleset_payload in "$ruleset_payload" "$dev_next_ruleset_payload"; do
-    current_ruleset_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["name"])' "$current_ruleset_payload")"
-    ruleset_id="$(
-      uv run --no-project python -c \
-        'import json,sys; name=sys.argv[1]; print(next((item["id"] for item in json.load(sys.stdin) if item["name"] == name), ""))' \
-        "$current_ruleset_name" <<<"$ruleset_access"
-    )"
-    if [[ -n "$ruleset_id" ]]; then
-      gh api --method PUT "repos/$repo/rulesets/$ruleset_id" \
-        --input "$current_ruleset_payload" >/dev/null
-    else
-      gh api --method POST "repos/$repo/rulesets" \
-        --input "$current_ruleset_payload" >/dev/null
-    fi
-  done
+  if [[ "$legacy_ruleset_id" != "-" ]]; then
+    gh api --method DELETE "repos/$repo/rulesets/$legacy_ruleset_id" >/dev/null
+  fi
+  current_ruleset_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["name"])' "$ruleset_payload")"
+  ruleset_id="$(
+    uv run --no-project python -c \
+      'import json,sys; name=sys.argv[1]; print(next((item["id"] for item in json.load(sys.stdin) if item["name"] == name), ""))' \
+      "$current_ruleset_name" <<<"$ruleset_access"
+  )"
+  if [[ -n "$ruleset_id" ]]; then
+    gh api --method PUT "repos/$repo/rulesets/$ruleset_id" \
+      --input "$ruleset_payload" >/dev/null
+  else
+    gh api --method POST "repos/$repo/rulesets" \
+      --input "$ruleset_payload" >/dev/null
+  fi
 fi
 
 GH_REPO="$repo" "$0" check

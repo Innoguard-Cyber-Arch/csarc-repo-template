@@ -1,0 +1,36 @@
+{{- $navigation := .Page.Site.Data.navigation -}}
+{{- $labels := index $navigation.labels .Page.Lang -}}
+<aside class="journey-rail" aria-label="{{ $labels.ariaLabel }}">
+  <h3>{{ $labels.use }}</h3>
+  <ol class="journey-use">
+    {{- range where $navigation.items "group" "use" }}
+    <li class="journey-item {{ .participation }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+      <a href="#{{ .key }}"><span>{{ index .labels $.Page.Lang }}</span></a>
+    </li>
+    {{- end }}
+  </ol>
+  <h3>{{ $labels.workflow }}</h3>
+  <ol class="journey-main">
+    {{- range where $navigation.items "group" "workflow" }}
+    <li class="journey-item {{ .participation }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+      <a href="#{{ .key }}"><span class="journey-code">{{ .code }}</span><span>{{ index .labels $.Page.Lang }}</span></a>
+    </li>
+    {{- end }}
+  </ol>
+  <h3>{{ $labels.support }}</h3>
+  <ol class="journey-support">
+    {{- range where $navigation.items "group" "support" }}
+    <li class="journey-item {{ .participation }}{{ if eq $.Key .key }} active{{ end }}"{{ if eq $.Key .key }} aria-current="step"{{ end }}>
+      <a href="#{{ .key }}"><span class="journey-code">{{ .code }}</span><span>{{ index .labels $.Page.Lang }}</span></a>
+    </li>
+    {{- end }}
+  </ol>
+  {{- range $navigation.appendices }}
+  <a class="journey-bookend appendix {{ .participation }}{{ if eq $.Key .key }} active-selection{{ end }}"{{ with .audience }} data-audience="{{ . }}"{{ end }} href="#{{ .key }}"{{ if eq $.Key .key }} aria-current="page"{{ end }}>{{ index .labels $.Page.Lang }}</a>
+  {{- end }}
+  <div class="journey-legend" aria-label="{{ $labels.legend }}">
+    <span><i class="human" aria-hidden="true"></i>{{ $labels.human }}</span>
+    <span><i class="automated" aria-hidden="true"></i>{{ $labels.automated }}</span>
+    <span data-audience="maintainer"><i class="maintainer" aria-hidden="true"></i>{{ $labels.maintainer }}</span>
+  </div>
+</aside>

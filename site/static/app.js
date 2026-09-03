@@ -1,0 +1,1107 @@
+    const configExamples = {};
+
+    Object.assign(configExamples, {
+      agents: [
+        {
+          title: 'README 回答八個接手問題；AGENTS 只留下六類工作規則',
+          goal: '人先知道專案如何使用、驗證與求助；AI 再讀可執行的工作界線，兩份文件不互相複製。',
+          summary: 'README 必須保留概述、快速開始、技術、驗證、設定、維運、支援與公版更新；AGENTS 只寫 AI 執行規則。',
+          file: 'README.md＋AGENTS.md',
+          code: `# README.md
+## 專案概述
+## 快速開始
+## 技術與目錄
+## 開發與驗證
+## 設定與密鑰
+## 發布與維運
+## 負責人與支援
+## 公版更新
+
+# AGENTS.md
+
+## Scope and sources of truth
+## Working loop
+## Commands
+## Editing boundaries
+## Safety
+## Code Review Rules`
+        },
+        {
+          title: '依專案語言只產生真的可執行的指令',
+          goal: '沒有選語言時只保留共通規則；選了哪些語言，就只產生那些語言的指令。',
+          summary: 'Copier 依 `languages` 複選結果渲染模組；同時選取多個語言時合併執行，共通檢查仍只跑一次。',
+          file: 'template/AGENTS.md.jinja＋scripts/verify-template.sh',
+          code: `{% if "python" in languages %}
+- Python iteration: uv run ruff check <paths>
+{% endif %}
+{% if "typescript" in languages %}
+- TypeScript iteration: pnpm exec biome check <paths>
+{% endif %}
+{% if "rust" in languages %}
+- Rust iteration: cargo clippy --all-targets --all-features -- -D warnings
+{% endif %}
+- Required final check: ./scripts/verify`
+        },
+        {
+          title: 'AI 能執行工作，但不能自行合併',
+          goal: 'AGENTS.md 說明工作方式；GitHub 權限與 Ruleset 才是不能繞過的控制點。',
+          summary: 'Actions 預設唯讀；repository toggle 允許 release workflow 建立 PR，但只有該 job 取得 pull-requests: write。Ruleset 仍要求至少一位人員與 CODEOWNER 審查。',
+          file: 'policies/actions.json＋policies/rulesets.json＋CODEOWNERS',
+          code: `policies/actions.json
+{
+  "default_workflow_permissions": "read",
+  "can_approve_pull_request_reviews": true
+}
+
+policies/rulesets.json
+{
+  "required_approving_review_count": 1,
+  "require_code_owner_review": true,
+  "required_review_thread_resolution": true
+}`
+        }
+      ],
+      governance: [
+        {
+          title: '分開檢查 Ruleset policy、遠端儲存與實際強制能力',
+          goal: 'Copier 建檔時可能還沒有遠端 repo；真正套用前再向 GitHub 查詢，避免依使用者手填的方案猜測。',
+          summary: '先確認登入者具有 repo admin；REST endpoint 判斷 GitHub 是否會強制規則。Free private 的 REST 與 GraphQL mutation 都會回 403；GraphQL query 僅用來偵測管理員是否曾從 Web UI 人工預建。其他未知錯誤會停止。',
+          file: 'scripts/apply-repository-settings.sh',
+          code: `gh api "repos/$repo" \
+  --jq '[.owner.login, .owner.type, .visibility, .permissions.admin] | @tsv'
+gh api "orgs/$owner" --jq '.plan.name'
+gh api "repos/$repo/rulesets"
+# Free private keeps the desired policy in the repository.
+
+./scripts/apply-repository-settings.sh plan`
+        },
+        {
+          title: '所有方案都套基本設定並保留政策來源',
+          goal: 'Free private repo 不整包放棄；合併方式、Actions 預設權限、標籤與未來要啟用的 Ruleset 都跟著公版。',
+          summary: 'Free private 直接套用 squash-only、刪除已合併分支、Actions 預設唯讀與標籤，並在 repo 內保留 ACTIVE Ruleset policy。公開 API 不能建立該 Ruleset，因此輸出保留 DEGRADED。',
+          file: 'policies/repository.json＋policies/actions.json＋policies/labels.json',
+          code: `./scripts/apply-repository-settings.sh plan
+# Review the APPLY and PRESERVE list first.
+./scripts/apply-repository-settings.sh apply
+./scripts/apply-repository-settings.sh check`
+        },
+        {
+          title: '方案決定 Ruleset 是否成為真正門禁',
+          goal: 'Free private 先在 repo 保存相同政策；public、Pro、Team 或 Enterprise 可強制 PR、一位核准、CODEOWNER 與必要檢查。Enterprise 的組織規則仍另審。',
+          summary: '所有方案都先用 repository teams API 驗證 PR 內設定的 team 與 write access；Free private 另從 REVIEWERS 名單輪派一位個別 reviewer，但 Ruleset 只保留 STAGED／MISSING 與 DEGRADED 紀錄。',
+          file: 'policies/rulesets.json＋.github/CODEOWNERS＋governance-comment.yml',
+          code: `# The same policy is stored in every repository and enforced when supported.
+required reviews: 1
+require CODEOWNER review: true
+required checks:
+  - verify
+  - title
+  - scan-pr / osv-scan
+  - audit
+
+# Enterprise organization controls are report-only here.`
+        },
+        {
+          title: '排程每天重跑 check，縮短 CI-only 的檢查間隔',
+          goal: 'CI 觸發的 check 只是一次性快照；daily cron 能抓出排程執行時仍存在的偏離，降低沒有程式碼變更時長期失察的風險。不需要另外導入 GitHub App 或第三方常駐服務，沿用同一個 check 邏輯即可。',
+          summary: '`governance-drift.yml` 用 daily cron 呼叫 `scripts/check-governance-drift`，它包一層 `apply-repository-settings.sh check`；可修正偏離會用 `gh issue create`／`gh issue edit` 開立或更新單一追蹤 Issue，內容附上 repository、Actions、政策標籤或 Ruleset 的實際差異。方案或組織限制造成的 DEGRADED 不讓 portable CI 永久失敗，也不會誤稱為沒有 drift；具體差異保留在 workflow log 與 warning annotation。這仍是快照檢查：若設定在兩次執行之間遭變更後又恢復，需由 GitHub audit log 或組織層事件監控追溯。下發專案透過 `enable_governance_drift_check`（預設關閉）選配同一 workflow。',
+          file: '.github/workflows/governance-drift.yml＋scripts/check-governance-drift',
+          code: `on:
+  schedule:
+    - cron: "13 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+- run: ./scripts/check-governance-drift
+
+# Inside the script:
+./scripts/apply-repository-settings.sh check
+# On drift, open/update one tracking Issue:
+gh issue list --state open --json number,title \
+  --jq '.[] | select(.title == "Repository governance drift detected") | .number'
+gh issue create --label bug --body-file "$body_file"
+gh issue edit "$issue_number" --body-file "$body_file"`
+        }
+      ],
+      template: [
+        {
+          title: '獨立勾選語言，只產生需要的工具鏈',
+          goal: 'Python、TypeScript、Rust 都是獨立模組；全不選時只產生共通 CI/CD 基線。',
+          summary: '答案寫入 `.csarc/config.yml`；它同時是 repo 的公版設定與 Copier 更新依據，不再另存 profile JSON。',
+          file: 'copier.yml',
+          code: `languages:
+  multiselect: true
+  choices: [python, typescript, rust]
+  default: [python]
+python_support_mode:
+  type: str
+  choices: [latest, minimum]
+  default: latest
+python_min_version:
+  choices: ["3.12", "3.13", "3.14"]
+  when: minimum
+use_reusable_workflow:
+  type: bool
+  default: false
+
+# 3.11 is intentionally outside the declared support range.
+# CI checks the selected .0 lower bound and every feature release through 3.14.`
+        },
+        {
+          title: '共用生命週期與語言模組分開驗收',
+          goal: '真實 repo 證明共用導入與線上邊界；語言模組以可重現的生命週期與原生工具驗收。',
+          file: 'profiles/catalog.yaml',
+          code: `template_release_policy:
+  strategy: single_semver_for_all_compositions
+
+profiles:
+  python:
+    stage: beta
+    latest_reviewed_stable: "3.14"
+    default_support_mode: latest
+    support_modes:
+      minimum:
+        selectable_minimums: ["3.12", "3.13", "3.14"]
+        minimum_patch_policy: first_patch
+        ci_tests_exact_minimum_and_every_feature_release: true
+    style_guide:
+      name: Google Python Style Guide
+      line_length: 80
+  typescript:
+    stage: beta
+    latest_reviewed_active_lts: "24"
+    package_manager: pnpm
+  rust:
+    stage: beta
+    latest_reviewed_stable: "1.98.0"
+    package_manager: cargo
+  go: {stage: future}
+
+compositions:
+  ci: {stage: beta, profiles: []}
+  language_modules:
+    stage: beta
+    selectable_profiles: [python, typescript, rust]
+    selection: any_subset
+
+version_policy:
+  stable_release_observation_days: 30
+  merge_after_full_verification: automatic
+
+verification: selected_modules_plus_shared_checks_once`
+        },
+        {
+          title: '既有 repo 在短分支同步審查過的模板內容',
+          goal: 'Copier 保留來源與答案；先從核准 release tag 查出 40 字元 SHA，再決定實際套用內容。',
+          file: '.csarc/config.yml',
+          code: `gh release list --repo Innoguard-Cyber-Arch/csarc-repo-template --limit 5
+gh api repos/Innoguard-Cyber-Arch/csarc-repo-template/commits/v0.1.0 --jq .sha
+git switch -c chore/update-repo-template
+uvx --python 3.14 --from copier copier update --trust \
+  --vcs-ref <reviewed-full-commit-sha>
+./scripts/verify`
+        }
+      ],
+      contract: [
+        {
+          title: '宣告 repo 使用哪些語言模組',
+          goal: 'Copier 將選擇寫進 repo；偵測器只負責提醒實際檔案與宣告不一致，不擅自改設定。',
+          summary: '`languages` 是唯一依據；`--suggest` 可依根目錄的 manifest 提示應勾選哪些語言。',
+          file: '.csarc/config.yml＋scripts/detect-language-profile',
+          code: `languages:
+- python
+- typescript
+- rust
+branch_strategy: delivery
+
+./scripts/detect-language-profile --suggest
+./scripts/detect-language-profile`
+        },
+        {
+          title: '各語言保留自己的品質、測試與鎖定設定',
+          goal: '共用治理不等於硬湊成同一套工具；每種語言使用其主流工具，再由同一驗證入口協調。',
+          summary: 'Python 使用 uv、Ruff、ty、pytest；TypeScript 使用 pnpm、Biome、TypeScript strict、Vitest；Rust 使用 Cargo、rustfmt、Clippy 與 cargo test。',
+          file: '各語言 manifest＋lockfile',
+          code: `# Python module
+uv sync --locked
+uv run ruff check .
+uv run ty check
+uv run pytest --cov --cov-fail-under=80
+
+# TypeScript module
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm exec biome ci .
+pnpm exec tsc --noEmit
+pnpm exec vitest run --coverage`
+        },
+        {
+          title: '一個入口驗證、打包，也證明錯誤會被拒絕',
+          goal: '本機、AI 與 GitHub 執行同一入口；正向測試證明可交付，負向測資證明門禁不是永遠綠燈。',
+          summary: 'Issue 標題與 PR policy 回歸案例檢查標籤、標題、stack base、Issue，以及 main／delivery routes；公版再注入錯誤 Python／TypeScript 檔。',
+          file: 'scripts/verify＋scripts/test-pr-policy＋.github/workflows/ci.yml',
+          code: `./scripts/test-pr-policy
+./scripts/verify
+
+on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+
+uses: Cyber-Arch/csarc-repo-template/
+  .github/workflows/reusable-ci.yml@<full-commit-sha>
+with:
+  language-profile: python`
+        }
+      ],
+      method: [
+        {
+          title: '工作單欄位與空白 Issue',
+          goal: '預設只提供一張開發工作表單，要求類型、問題與完成條件，並關閉沒有結構的空白 Issue。',
+          summary: '調整表單欄位、選項、必填狀態，以及是否允許空白 Issue。',
+          file: '.github/ISSUE_TEMPLATE/work-item.yml＋config.yml',
+          code: `# work-item.yml
+description: 用中文定義一個可驗證改動
+body:
+  - id: kind
+    type: dropdown
+    options: [feature, task, bug, documentation, duplicate]
+  - id: problem
+    type: textarea
+  - id: acceptance
+    type: textarea
+  - id: supplement
+    type: textarea
+    required: false
+
+# config.yml
+blank_issues_enabled: false
+contact_links: []`
+        },
+        {
+          title: '工作類型、標籤與父子層級',
+          goal: '模板使用 GitHub 原生 Feature、Task、Bug Types；documentation、duplicate、hotfix 則是不同用途的標籤或結案方式。',
+          summary: '定義 Feature／Task／Bug，以及 documentation、duplicate、hotfix 的用途與關係。',
+          file: 'AGENTS.md＋policies/labels.json＋docs/adr/spec-story-and-work-items.md＋scripts/ci_tier.py',
+          code: `Native Issue Types:
+  Feature -> shared outcome; label: enhancement
+  Task    -> deliverable work; label: enhancement
+  Bug     -> unexpected behavior; label: bug
+
+Other classifications:
+  documentation -> Task + documentation label
+  duplicate     -> duplicate close reason
+  hotfix         -> Bug + hotfix label + fix/<Issue>-* -> main`
+        },
+        {
+          title: '規格要不要建立追蹤工作',
+          goal: '各專案在 `docs/specs/` 寫長期規格；front matter 決定同步 Task、Feature，或只保存文件。',
+          summary: '決定一份 Spec 建立 Task、Feature，或只保存為長期契約。',
+          file: 'docs/specs/＋scripts/spec_to_issue.py',
+          code: `tracking: issue  # Sync one Task
+tracking: story  # Sync one Feature parent
+tracking: none   # Keep the current contract only
+
+python scripts/spec_to_issue.py validate`
+        },
+        {
+          title: '交付批次的說明格式',
+          goal: '里程碑只在多張工作需要同一期限、整合或發版時建立，並使用一致的可驗收說明。',
+          summary: '定義多張工作同批交付時，里程碑要寫哪些驗收內容。',
+          file: 'docs/milestone-description.md',
+          code: `## Problem
+## Outcome
+## Acceptance criteria
+- [ ] Observable result
+## Plan
+- #123 — Independently deliverable work
+## Out of scope
+## Verification
+## References`
+        }
+      ],
+      pr: [
+        {
+          title: '選定的保護分支要求一位核准、CODEOWNER 與必要檢查',
+          goal: '新提交會讓舊核准失效，不能直接推送或 force push。',
+          summary: '要求一位核准、CODEOWNER、最後推送者以外的人核准，並解完 review thread；新 commit 會撤銷舊核准。',
+          file: 'policies/rulesets.json',
+          code: `{
+  "type": "pull_request",
+  "parameters": {
+    "required_approving_review_count": 1,
+    "dismiss_stale_reviews_on_push": true,
+    "require_code_owner_review": true,
+    "require_last_push_approval": true,
+    "required_review_thread_resolution": true
+  }
+}`
+        },
+        {
+          title: 'PR 自動輪派一位同事審查',
+          goal: 'Free private 先可靠通知同事；支援 Ruleset 時再把核准變成 merge gate。',
+          summary: 'workflow 只 checkout base branch，從 REVIEWERS 設定排除作者後輪派一人；不執行 PR 分支程式碼。',
+          file: '.github/CODEOWNERS＋.github/REVIEWERS＋.github/workflows/governance-comment.yml',
+          code: `* {{ code_owner }}`
+        },
+        {
+          title: 'PR 同時核對標籤、Issue 編號、stack 來源與版本標題',
+          goal: '先有工作紀錄再改程式；標題仍是版本計算依據，內文可以用中文。',
+          summary: 'PR 至少選一個工作標籤；分支須為 `type/123-short-slug`，base 的 open PR 鏈須回到 main 或 Issue 所屬的 `dev/m*`，且連結 Issue 必須未結案、標題合格。',
+          file: '.github/workflows/pr-policy.yml＋scripts/test-pr-policy＋pull_request_template.md',
+          code: `^(feat|fix|docs|refactor|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?(!)?: .+
+
+if printf '%s' "$PR_TITLE" | LC_ALL=C \
+  grep -q '[^ -~]'; then
+  echo "The PR body may be written in Chinese."
+  exit 1
+fi
+
+branch: feat/123-short-slug
+base: feat/122-parent -> main
+body: Closes #123
+label: enhancement
+
+## Purpose
+## Checklist
+## Supplement`
+        }
+      ],
+      ci: [
+        {
+          title: 'CI 在 PR 依風險執行 fast 或 full，main 不重跑同一套測試',
+          goal: '預設路徑不依賴中央 workflow；穩定 aggregate context 兼顧成本與 required checks。',
+          file: '.github/workflows/ci.yml',
+          code: `on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+jobs:
+  fast: # docs／fast routing
+  full: # promotion／hotfix／merge queue／manual
+  verify: # always-present aggregate context`
+        },
+        {
+          title: '流程穩定後，可改用完整 SHA 呼叫 reusable workflow',
+          goal: 'Copier 預設關閉；啟用時必須輸入 40 字元 commit SHA，中央 private repo 另須允許 organization 存取。',
+          file: 'copier.yml＋.github/workflows/reusable-ci.yml',
+          code: `use_reusable_workflow: true
+workflow_ref: <40-character-commit-sha>
+
+uses: Innoguard-Cyber-Arch/csarc-repo-template/.github/workflows/reusable-ci.yml@<40-character-commit-sha>
+with:
+  language-profile: python
+
+gh api --method PUT \\
+  repos/Innoguard-Cyber-Arch/csarc-repo-template/actions/permissions/access \\
+  -f access_level=organization`
+        },
+        {
+          title: 'zizmor 依 workflow 風險與週期排程執行',
+          goal: 'workflow／action 變更與 promotion 由 CI 條件式掃描；每週另掃一次，普通 source／docs PR 不重複付費。',
+          file: '.github/workflows/ci.yml＋.github/workflows/zizmor.yml',
+          code: `name: Zizmor scheduled audit
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "43 3 * * 1"
+permissions:
+  contents: read
+jobs:
+  audit:
+    steps:
+      - run: uvx --from zizmor==1.29.0 zizmor . --format plain
+# PR workflow changes are routed to the same audit by ci_tier.py.`
+        }
+      ],
+      supply: [
+        {
+          title: '決定｜CI/CD 只按已證明需求與 repository 能力選擇性採用',
+          goal: '避免整批搬入不相關的 job、權限與維護負擔，讓每項自動化都有可驗證的啟用條件。',
+          summary: '近期只合併官方 `actions/*` 的 minor／patch 更新；major 與第三方 Actions 維持獨立。容器交付預設為 `none`，只有既有 Containerfile 與 smoke command 才啟用 `verify`，通過 release boundary 且具 registry 寫入能力才啟用 `ghcr`。通用 Containerfile、雲端部署、Kubernetes、多架構 placeholder、長效 token 與第二套更新身分均延後到真實需求出現再評估。',
+          file: 'docs/adr/selective-ci-automation-adoption.md',
+          code: `adopt now: actions/* minor + patch grouping
+capability-gated: container none | verify | ghcr
+defer: speculative build, publish, and deployment paths`
+        },
+        {
+          title: '一般套件新版觀察三天，再由測試與人員決定是否合併',
+          goal: '安全更新不等待；三天規則主要降低剛發布惡意版本的早期風險。',
+          summary: 'Dependabot 同時管理 GitHub Actions、`uv` 與 `npm` 生態；`cooldown.default-days=3` 延後一般升版，安全更新仍立即提出。只有官方 `actions/*` 的 minor／patch 會合併成一張 PR；major 與第三方 Actions 保持獨立，方便審查與回退。',
+          file: '.github/dependabot.yml',
+          code: `updates:
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+  - package-ecosystem: npm
+    directory: /
+    cooldown:
+      default-days: 3`
+        },
+        {
+          title: '兩種 lockfile 都驗內容；pnpm 本機也嚴格等三天',
+          goal: '版本號只供人閱讀；Python 比對 artifact SHA-256，npm 比對 integrity hash。',
+          summary: '`uv sync --locked` 與 `pnpm install --frozen-lockfile --ignore-scripts` 都會拒絕設定漂移；pnpm resolver 另阻擋發布未滿三天的直接與間接套件。',
+          file: 'uv.lock＋pnpm-lock.yaml＋pnpm-workspace.yaml＋scripts/verify',
+          code: `uv sync --locked
+pnpm install --frozen-lockfile --ignore-scripts
+
+minimumReleaseAge: 4320
+minimumReleaseAgeStrict: true
+trustPolicy: no-downgrade`
+        },
+        {
+          title: '相依下界要能測，天花板要能指出是誰擋住',
+          goal: 'Ruff／ty 的 Python target 只管語法；uv resolver 另外證明 dev 相依範圍可安裝。這不是漏洞掃描。',
+          summary: '`lowest-direct` 將直接相依降到宣告下界並重跑測試；每週排程逐一嘗試 PyPI 最新版，把 uv 的完整衝突鏈寫入 Actions summary。',
+          file: 'scripts/verify＋scripts/report_dependency_ceiling.py',
+          code: `uv pip compile pyproject.toml --group dev \
+  --resolution lowest-direct
+uv pip check --python <lower-bound-python>
+
+# Weekly ceiling report uses an exact requirement:
+uv pip compile pyproject.toml --group dev \
+  --upgrade-package "<package>==<latest>"`
+        },
+        {
+          title: 'PR、main 與每週排程掃描已公開登錄的漏洞',
+          goal: 'OSV 發現漏洞就失敗，不和一般新版的三天觀察混在一起。',
+          summary: '在 PR、main push 與每週一排程執行 OSV；掃到已登錄漏洞就讓檢查失敗，不套用三天等待。',
+          file: '.github/workflows/osv.yml',
+          code: `on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1"`
+        },
+        {
+          title: '方案感知的 CodeQL SAST，只分析實際語言',
+          goal: 'Ruff／TypeScript lint 找程式品質問題，OSV 找已知相依漏洞；CodeQL 另補跨函式資料流與安全查詢，三者不互相冒充。',
+          summary: 'Python／TypeScript public repo 預設產生 CodeQL；private／internal 只有確認 GitHub Code Security 授權後才 opt-in，否則明列 SAST 未涵蓋並由產品選核准替代工具。CI-only 不產生空 job。CodeQL 仍可能誤報或漏報，結果需人工 triage。',
+          file: 'copier.yml＋.github/workflows/codeql.yml',
+          code: `enable_codeql: true
+
+permissions:
+  contents: read
+  security-events: write
+
+matrix:
+  language: ["python", "javascript-typescript"]`
+        },
+        {
+          title: '缺失版本用受審查的 release recovery 補齊',
+          goal: '已合併但沒有 Release 的版本不繞過主線門禁，也不重跑或偽造舊證據。',
+          summary: '同號 `fix/*`、`fix` title 與 `release-recovery` label 才能直接進 main；候選仍跑 full 與 promotion。Root 發布先產生精確綁定 tag、commit、artifact digest 的 SPDX 2.3 SBOM 與 manifest，下載重驗成功後才解除 draft，發布後再驗 immutable state。',
+          file: '.github/workflows/release-template.yml＋scripts/release_assets.py',
+          code: `release-recovery -> full verify + promotion
+draft assets -> SPDX + manifest + provenance
+download + verify -> publish immutable -> verify again`
+        },
+        {
+          title: 'exact tag 發布時建立交付成品、SHA-256 與 SPDX SBOM',
+          goal: 'anchore/sbom-action 以固定 Syft 版本盤點內容；manifest 將成品、SBOM 與來源身分綁定。',
+          summary: '依 profile 打包並計算 SHA-256；Python／TypeScript 先建立不含開發工具的隔離 runtime，CI-only 則使用 exact-tag source，再由 Syft v1.50.0 產生 SPDX JSON。成品先上傳 mutable draft、下載至全新空目錄驗證，發布後再從 immutable Release 全新下載驗證；再現性依 digest／manifest，不要求 Syft JSON byte-identical。Registry、容器發布與 artifact attestation 需由有真實交付目標的產品另案實作。',
+          file: '.github/workflows/release.yml',
+          code: `- run: uv build               # Python
+- run: pnpm run build && pnpm pack --pack-destination dist # TypeScript
+- run: shasum -a 256 dist/* > SHA256SUMS
+- name: Materialize production runtime
+  run: |
+    mkdir -p "\${RUNNER_TEMP}/sbom-root"
+    UV_PROJECT_ENVIRONMENT="\${RUNNER_TEMP}/sbom-root/python-runtime" \\
+      uv sync --locked --no-dev --no-editable
+- uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+  with:
+    path: \${{ runner.temp }}/sbom-root
+    format: spdx-json
+    output-file: release-bundle/sbom.spdx.json
+    syft-version: v1.50.0`
+        },
+        {
+          title: '容器驗證與 registry 交付由產品自行定義',
+          goal: '公版不提供沒有執行者的容器或 publisher 開關；需要這些能力的產品以自己的交付 Issue 定義。',
+          summary: '產品要先有真實 Containerfile、registry owner、OIDC 信任、smoke test 與復原方式，再新增最小 workflow；非容器 repo 維持零 Docker job 與零 registry write 權限。',
+          file: '產品自行維護的 container 與 delivery files',
+          code: `# Product-owned extension
+# Define build, scan, publish, smoke, and recovery together.`
+        },
+        {
+          title: '決定｜保留 Dependabot 與 pnpm 的原生門禁',
+          goal: '讓 dependency PR 繼續觸發既有 CI/CD checks，且不要求每個導入者安裝高權限 App 或保存長效 PAT。',
+          summary: '不導入 Renovate：Dependabot 使用 GitHub 原生 automation identity，現有 PR checks 可直接執行。Dependabot cooldown 管理自動升版 PR 的三天等待；pnpm minimumReleaseAge 也保護本機與 CI resolution，並非完全重複。pnpm trustPolicy、OSV、resolver 上下界檢查與 SBOM 各自保留原本職責。若未來 Dependabot 無法表達已發生的跨 repo 需求，而且已有可維護的非 GITHUB_TOKEN 身分，再另案重評。',
+          file: '.github/dependabot.yml＋pnpm-workspace.yaml＋profiles/catalog.yaml',
+          code: `# Native updater; no extra App or long-lived token.
+.github/dependabot.yml
+
+# Install-time observation and publisher-trust gates.
+minimumReleaseAge: 4320
+minimumReleaseAgeStrict: true
+trustPolicy: no-downgrade`
+        },
+        {
+          title: '回報本專案自身的漏洞，不是掃相依套件',
+          goal: '掃描工具只看得到已知模式；有人主動回報才補得到掃描漏抓的問題。GitHub Issue 是公開索引的，必須避免張貼任何敏感資料。',
+          summary: '本公版與生成專案預設使用實際 repository 的 GitHub Issues，建立後維護者會收到通知。公開 Issue 不得包含 secrets、credentials、personal data 或其他敏感內容；不寫死未核准的 email 或 SLA，驗證腳本也會拒絕未完成的 placeholder。',
+          file: 'SECURITY.md',
+          code: `## Reporting a vulnerability
+
+Open a GitHub Issue. Maintainers receive
+notifications for new Issues.
+
+GitHub Issues are public. Do not post secrets,
+credentials, personal data, or other sensitive
+details.
+
+No acknowledgement or resolution SLA is
+invented.`
+        }
+      ],
+      deploy: [
+        {
+          title: '待啟用｜GitHub App 只給 Python 排程升版用',
+          goal: 'Client ID 放 Variable、private key 放 Secret；App 只建立 PR，不取得 Ruleset bypass，也不把長期憑證寫進 repo 或 .env。',
+          summary: 'release-please 已改用 GITHUB_TOKEN，不再需要這個 App。目前尚未建立 App，python-version-policy.yml 的排程升版 job 會略過；啟用時只給 Contents、Pull requests 讀寫權限。',
+          file: 'Repository Settings／Secrets and variables／Actions',
+          code: `# Settings > Developer settings > GitHub Apps
+# Install App in this repo; generate a private-key PEM.
+gh variable set CSARC_VERSION_BOT_CLIENT_ID \
+  --body '<client-id>'
+gh secret set CSARC_VERSION_BOT_PRIVATE_KEY \
+  < ./private-key.pem
+
+# Local runtime secrets only:
+.env          # ignored; never commit
+.env.example  # placeholders only`
+        },
+        {
+          title: '已配置｜每次依 GitHub capability 選 release mode',
+          goal: '不要求導入者提供長效憑證或修改無權控制的組織政策；未知能力一律 fail closed。',
+          summary: 'Actions PR、contents、Release、dispatch 各自輸出 allowed／blocked／unknown；四項都確認才用 release-please，否則交付能力完整才 direct release，再不行就 verification-only。',
+          file: 'scripts/release_policy.py＋release-please.yml',
+          code: `{
+  "mode": "release-pr | direct | verification-only",
+  "capabilities": {
+    "actions_pull_requests": {"state": "allowed | blocked | unknown"},
+    "contents": {"state": "allowed | blocked | unknown"},
+    "release": {"state": "allowed | blocked | unknown"},
+    "dispatch": {"state": "allowed | blocked | unknown"}
+  }
+}`
+        },
+        {
+          title: '已接通｜main 後配置版本並明確啟動成品 workflow',
+          goal: '版本、成品與來源沿用同一條可追溯鏈；並行或亂序 run 不能替舊 commit 配置新 tag。',
+          summary: 'PR 只顯示 SemVer 意圖；direct mode 重讀 main head 與可達 tags，只在版本與 CHANGELOG 已由 PR 寫入時建立 draft release 後 dispatch。判斷 JSON 保存 30 天。',
+          file: 'release_policy.py＋release-please.yml＋release.yml',
+          code: `if remote_main_sha != workflow_sha:
+    mode = "verification-only"
+    reason = "superseded"
+
+next_tag = bump(latest_reachable_tag, merged_commits)
+create_draft_release(next_tag)
+dispatch_artifacts(next_tag)`
+        }
+      ],
+      knowledge: [
+        {
+          title: 'README 只保留開始使用與日常入口',
+          goal: '完整設計放在 repo 內部網站，避免 README 再次膨脹。',
+          summary: '公版內部網站從 repository 內來源重建成單檔 HTML，不需要另外安裝框架；它仍和程式一起走 PR。',
+          file: 'README.md＋site/＋docs/index.html',
+          code: `[開啟內部網站與完整決策說明](docs/index.html)`
+        },
+        {
+          title: '來源分工、輸出維持單檔',
+          goal: 'Copier 更新公版版型時，不能覆寫每個專案自行補充的內容。',
+          summary: '`site/` 與 renderer 由公版更新；專案內容與 theme overrides 保留，再重建 `docs/index.html`。',
+          file: 'template/site/＋template/docs/＋copier.yml',
+          code: `_skip_if_exists:
+  - docs/site-content.md
+  - docs/site-theme.css`
+        }
+      ],
+      rollout: [
+        {
+          title: '語言模組依可重現證據分級',
+          goal: '基本、未來與可選不是口號，而是對可用能力的承諾。',
+          summary: '真實 consuming repo 已證明共用生命週期；Python、TypeScript 與 Rust 各自通過建立、導入、更新與原生工具鏈，列為 `beta`；Go 保持 `future`。',
+          file: 'profiles/catalog.yaml',
+          code: `ci: {stage: beta, profiles: []}
+python: {stage: beta}
+typescript: {stage: beta}
+go: {stage: future}
+rust: {stage: beta}`
+        },
+        {
+          title: 'GitHub 設定隨模板產生，再依遠端方案分層套用',
+          goal: '設定檔可以先審查；實際 repo 建立後才查方案與 API，不能使用的能力會明確略過。',
+          summary: 'Free private 在 repo 保存 ACTIVE Ruleset policy；check 仍比對 repository、Actions 與政策標籤，再將 Ruleset 限制標示 DEGRADED，並在 PR、workflow log 與 annotation 留下具體紀錄。public／Pro／Team／Enterprise 以有效規則作為門禁，可修正設定對不上政策時 fail-closed。GitHub App 仍是另一項獨立條件。',
+          file: 'policies/＋scripts/apply-repository-settings.sh',
+          code: `policies/repository.json
+policies/actions.json
+policies/labels.json
+policies/rulesets.json
+scripts/apply-repository-settings.sh`
+        },
+        {
+          title: '每次修改都測新案、既有案導入與後續更新',
+          goal: '可導入的條件是三條生命週期都通過，不是只看檔案存在。',
+          summary: '測試會真的執行 CLI init、adopt dry-run／machine plan／隔離驗證／apply，以及人工合併後的 finalize dry-run／apply-plan；update 也涵蓋 check／dry-run／apply 與衝突 fail-closed。兩次 dry-run 都不修改 target repo，正式套用拒絕任何 HEAD、working tree、release、answers、人工結果或輸出漂移。CLI 內部仍以 Copier 產生與 smart update。root-only 測試資產若混入生成 repo 也會失敗。',
+          file: 'src/csarc_cli/＋tests/test_cli.py＋scripts/verify-template.sh',
+          code: `csarc init ./my-project
+csarc adopt --dry-run
+csarc adopt --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
+csarc adopt --finalize --dry-run
+csarc adopt --finalize --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
+csarc update --check --json
+csarc update`
+        }
+      ],
+      'template-release': [
+        {
+          title: 'Copier 只詢問會改變骨架或驗證行為的選項',
+          goal: '不提供關閉型別或秘密掃描的開關；嚴格門檻是公版契約。',
+          summary: '語言與分支模式都在建立時明確選擇；delivery 模式只為 Milestone 建立短命整合 branch，standalone 直接回 main。`_skip_if_exists` 保護 src、tests、spec 不被更新覆寫。',
+          file: 'copier.yml',
+          code: `languages: [python]
+branch_strategy: delivery  # delivery | main
+python_support_mode: latest  # latest | minimum
+python_min_version: "3.12"  # Used only in minimum mode
+coverage_mode: global  # global | diff
+coverage_threshold: 80
+enable_precommit: false
+project_visibility: private  # public defaults CodeQL on
+enable_codeql: false         # private/internal require GitHub Code Security
+use_reusable_workflow: false
+
+_skip_if_exists:
+  - "src/**"
+  - "tests/**"
+  - "docs/specs/**"`
+        },
+        {
+          title: '公版 root 鎖工具、跑 OSV，並檢查共用設定沒有漂移',
+          goal: '中央模板不能要求下游做到自己做不到的事；PR 說明模板是唯一刻意差異。',
+          summary: 'root 以鎖定環境跑 Ruff、ty、完整 Git 歷史、目前工作樹與 Actions 掃描；無 Git 歷史的新案仍掃工作樹，腳本也逐組 diff root／template 的共用政策。',
+          file: 'pyproject.toml＋uv.lock＋scripts/verify-template.sh',
+          code: `uv sync --locked
+uv lock --check
+uv run ruff format --check
+uv run ruff check
+uv run ty check
+./scripts/scan-secrets
+# Large repositories may explicitly narrow history:
+./scripts/scan-secrets --log-opts='--since=2026-01-01'
+uv run zizmor . --format plain
+
+# Paired root/template policies are diff-checked.`
+        },
+        {
+          title: 'Python 新功能版本滿三十天後，自動建立升版 PR',
+          goal: '不靠人記得升級，也不繞過 Ruff、ty、CI、人工審查或模板更新測試。',
+          summary: '排程讀取 Python 官方發布日期；專用 GitHub App 建立帶 enhancement label 的 PR，通過全部門禁與人工審查後再由維護者合併。',
+          file: 'python-version-policy.yml＋scripts/update_python_version.py',
+          code: `version_policy:
+  stable_release_observation_days: 30
+  update_method: scheduled_verified_pull_request
+  merge_after_full_verification: human
+
+# Required repository settings
+CSARC_VERSION_BOT_CLIENT_ID
+CSARC_VERSION_BOT_PRIVATE_KEY`
+        },
+        {
+          title: '共通基線與每個語言模組都要真的執行',
+          goal: '每個 beta 語言都必須真的建立、導入、更新並執行自己的原生工具。',
+          summary: '共通生命週期由真實 repo 證明；每個語言模組則用可重現測試驗收，同時選取時合併執行，不另外維護組合測試。',
+          file: 'scripts/verify-template.sh＋profiles/catalog.yaml',
+          code: `./scripts/verify-template.sh
+
+# Covers global coverage, diff coverage, optional features,
+# reusable workflow and copier update.
+
+ci: {stage: beta, profiles: []}
+python: {stage: beta}
+typescript: {stage: beta}
+go: {stage: future}
+rust: {stage: beta}`
+        }
+      ]
+    });
+
+    const setupExamples = {
+      new: {
+        title: '建立新 repo',
+        goal: 'CLI 會選取核准 release、解析完整 commit SHA、顯示計畫，確認後才以 Copier 建立與驗證。',
+        location: 'Terminal',
+        code: `uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project
+
+# CI or an explicitly authorized agent:
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc init ./my-project \\
+  --yes --non-interactive`
+      },
+      existing: {
+        title: '把公版導入既有 repo',
+        goal: 'CLI 自行找出 Git root；--dry-run 可讀取 dirty tree，但只在 repo 外產生 Markdown、PDF 與不可套用的 machine plan。乾淨 tree 會先在暫存 clone 完成固定合併、產品 hook 與完整驗證，再鎖定可套用 plan；需要人工合併時，finalize 也必須重新 dry-run 並套用同一份第二階段 plan。',
+        location: '既有 repo 根目錄',
+        code: `git switch -c chore/<issue-number>-adopt-csarc-template
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt --dry-run
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt \\
+  --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json
+# Only when the first apply creates a manual-merge checkpoint:
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt --finalize --dry-run
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc adopt --finalize \\
+  --apply-plan ../<repo>-csarc-adoption-report/csarc-adoption-plan.json`
+      },
+      update: {
+        title: '更新已使用公版的 repo',
+        goal: 'CLI 讀取 .csarc/config.yml，解析核准 release，以 Copier smart update 顯示新版差異；衝突時保留差異並 fail closed。',
+        location: '專案 repo 根目錄',
+        code: `git switch -c chore/<issue-number>-update-repo-template
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update --check --json
+uvx --python 3.14 --from 'git+https://github.com/Innoguard-Cyber-Arch/csarc-repo-template.git@<approved-full-commit-sha>' csarc update`
+      },
+      mac: {
+        title: 'macOS 本機需求',
+        goal: '共同安裝 Git、GitHub CLI、uv；選 TypeScript 再使用 Node 與 pnpm，選 Rust 再使用 rustup 與 Cargo。只有 GitHub 連線操作需要登入。',
+        location: 'Terminal',
+        code: `brew install git gh uv node pnpm
+
+# Only for repository settings and GitHub end-to-end tests.
+gh auth login -h github.com
+gh auth status`
+      },
+      windows: {
+        title: 'Windows 本機需求',
+        goal: '採用 WSL2（Ubuntu）並在 WSL 裡操作 repo；選 TypeScript 再安裝 Node 24 與 pnpm 11，選 Rust 再安裝 rustup。',
+        location: 'PowerShell（管理員）→ Ubuntu',
+        code: `# PowerShell (Administrator)
+wsl --install -d Ubuntu
+
+# Ubuntu in WSL2
+sudo apt update
+sudo apt install -y git gh curl ca-certificates bash coreutils tar gawk libdigest-sha-perl
+curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+sudo apt install -y nodejs
+sudo npm install -g pnpm@11.22.0
+
+# Only for repository settings and GitHub end-to-end tests.
+gh auth login -h github.com
+gh auth status`
+      }
+    };
+
+    const lifecycleOrder = ['method', 'agents', 'contract', 'supply', 'pr', 'deploy', 'governance'];
+    const platformOrder = ['template-release', 'docs-site', 'rollout'];
+    const deckRoot = document.querySelector('.deck');
+    const capabilitySlide = document.querySelector('.capability-slide');
+    const flowSlide = document.querySelector('.pipeline-slide');
+    const filesSlide = document.querySelector('.managed-files-slide');
+    const bridgeSlide = document.querySelector('.bridge-slide');
+    const reviewNotesSlides = [...document.querySelectorAll('.review-notes-slide')];
+    const ecosystemSlide = document.querySelector('.ecosystem-slide');
+    deckRoot.replaceChildren(
+      capabilitySlide,
+      flowSlide,
+      filesSlide,
+      ...lifecycleOrder.map(track => document.querySelector(`[data-track="${track}"]`)),
+      ...platformOrder.map(track => document.querySelector(`[data-track="${track}"]`)),
+      bridgeSlide,
+      ecosystemSlide,
+      ...reviewNotesSlides
+    );
+    const slideCount = document.querySelectorAll('.slide').length;
+    document.querySelectorAll('.slide').forEach((slide, index) => {
+      slide.dataset.page = `${String(index + 1).padStart(2, '0')} / ${slideCount}`;
+    });
+    const allSlidesInOrder = [...document.querySelectorAll('.slide')];
+    const pageByTrack = Object.fromEntries(allSlidesInOrder.filter(slide => slide.dataset.track).map(slide => [slide.dataset.track, allSlidesInOrder.indexOf(slide) + 1]));
+    const ecosystemPage = allSlidesInOrder.indexOf(document.querySelector('.ecosystem-slide')) + 1;
+    const bridgePage = allSlidesInOrder.indexOf(document.querySelector('.bridge-slide')) + 1;
+    const reviewNotesPage = allSlidesInOrder.indexOf(reviewNotesSlides[0]) + 1;
+    const journey = [
+      { id: 'capability', label: '能力／導入', tier: 'priority', group: 'use' },
+      { id: 'flow', label: 'CI/CD 流程', tier: 'priority', group: 'use' },
+      { id: 'files', label: '檔案地圖', tier: 'priority', group: 'use' },
+      { id: 'method', code: '01', label: '工作定義', tier: 'priority', group: 'main' },
+      { id: 'agents', code: '02', label: 'AI 規範／實作', tier: 'priority', group: 'main' },
+      { id: 'contract', code: '03', label: '驗證／CI', tier: 'priority', group: 'main' },
+      { id: 'pr', code: '04', label: 'PR／合併', tier: 'priority', group: 'main' },
+      { id: 'supply', code: '05', label: '依賴安全', tier: 'priority', group: 'main' },
+      { id: 'deploy', code: '06', label: '版本／交付', tier: 'best', group: 'main' },
+      { id: 'governance', code: '07', label: '規則治理', tier: 'priority', group: 'main' },
+      { id: 'template-release', code: '08', label: '模板升級', tier: 'priority', group: 'support' },
+      { id: 'docs-site', code: '09', label: '內部網站', tier: 'priority', group: 'support' },
+      { id: 'rollout', code: '10', label: '導入層級', tier: 'best', group: 'support' }
+    ].map(item => ({ ...item, page: pageByTrack[item.id] }));
+    const renderJourneyItems = (items, activeTrack) => items.map(item => `<li class="journey-item ${item.id === activeTrack ? `active ${item.tier}` : ''}"${item.id === activeTrack ? ' aria-current="step"' : ''}><a href="#${item.page}">${item.code ? `<span class="journey-code">${item.code}</span>` : ''}<span>${item.label}</span></a></li>`).join('');
+    document.querySelectorAll('.slide').forEach(slide => {
+      const activeTrack = slide.dataset.navTrack || slide.dataset.track;
+      const useItems = renderJourneyItems(journey.filter(item => item.group === 'use'), activeTrack);
+      const mainItems = renderJourneyItems(journey.filter(item => item.group === 'main'), activeTrack);
+      const supportItems = renderJourneyItems(journey.filter(item => item.group === 'support'), activeTrack);
+      const onEcosystem = slide.classList.contains('ecosystem-slide');
+      const onBridge = slide.classList.contains('bridge-slide');
+      const onReviewNotes = slide.classList.contains('review-notes-slide');
+      const selectionCurrent = onEcosystem ? ' active-selection" aria-current="page' : '';
+      const bridgeCurrent = onBridge ? ' active-bridge" aria-current="page' : '';
+      const reviewNotesCurrent = onReviewNotes ? ' active-overview" aria-current="page' : '';
+      slide.insertAdjacentHTML('afterbegin', `<aside class="journey-rail" aria-label="簡報目錄"><h3>使用公版</h3><ol class="journey-use">${useItems}</ol><h3>開發與維護</h3><ol class="journey-main">${mainItems}</ol><h3>公版管理</h3><ol class="journey-support">${supportItems}</ol><a class="journey-bookend appendix${bridgeCurrent}" href="#${bridgePage}">五月盤點</a><a class="journey-bookend appendix${selectionCurrent}" href="#${ecosystemPage}">工具附錄</a><a class="journey-bookend appendix${reviewNotesCurrent}" href="#${reviewNotesPage}">決策附錄</a></aside>`);
+      const activeJourney = journey.find(item => item.id === activeTrack);
+      const contextLine = slide.querySelector('.context-line');
+      if (activeJourney && contextLine) {
+        const tierLabels = { priority: '必備', best: '最佳', optional: '可選' };
+        contextLine.insertAdjacentHTML('afterbegin', `<span class="decision-tier-tag ${activeJourney.tier}">${tierLabels[activeJourney.tier]}</span>`);
+      }
+    });
+
+    function closeConfigOverlays() {
+      document.querySelectorAll('.config-overlay').forEach(overlay => {
+        overlay.hidden = true;
+        overlay.removeAttribute('data-item-index');
+      });
+      document.querySelectorAll('.config-trigger[aria-expanded="true"], .setup-trigger[aria-expanded="true"], .term-trigger[aria-expanded="true"]').forEach(trigger => {
+        trigger.setAttribute('aria-expanded', 'false');
+      });
+    }
+
+    function closePackageDisclosures(except = null) {
+      document.querySelectorAll('.package-disclosure[open]').forEach(detail => {
+        if (detail !== except) detail.open = false;
+      });
+    }
+
+    function closeBridgeDetails(except = null) {
+      document.querySelectorAll('.bridge-detail[open]').forEach(detail => {
+        if (detail !== except) detail.open = false;
+      });
+    }
+
+    document.querySelectorAll('.package-disclosure').forEach(detail => {
+      detail.addEventListener('toggle', () => {
+        if (detail.open) closePackageDisclosures(detail);
+      });
+    });
+
+    const setupOverlay = document.createElement('aside');
+    setupOverlay.id = 'setup-overlay';
+    setupOverlay.className = 'config-overlay';
+    setupOverlay.hidden = true;
+    setupOverlay.setAttribute('role', 'region');
+    setupOverlay.setAttribute('aria-label', '導入與安裝指令');
+    setupOverlay.innerHTML = `<div class="config-overlay-card"><button class="config-overlay-close" type="button" aria-label="關閉指令">×</button><h3></h3><p class="config-overlay-goal"></p><p class="config-overlay-path">執行位置：<code></code></p><pre class="code"></pre></div>`;
+    capabilitySlide.append(setupOverlay);
+    capabilitySlide.querySelectorAll('.setup-trigger').forEach(trigger => {
+      trigger.setAttribute('aria-controls', setupOverlay.id);
+      trigger.addEventListener('click', () => {
+        const key = trigger.dataset.setup;
+        const setting = setupExamples[key];
+        const isSameOpen = !setupOverlay.hidden && setupOverlay.dataset.itemIndex === key;
+        closeConfigOverlays();
+        if (!setting || isSameOpen) return;
+        setupOverlay.querySelector('h3').textContent = setting.title;
+        setupOverlay.querySelector('.config-overlay-goal').textContent = setting.goal;
+        setupOverlay.querySelector('.config-overlay-path code').textContent = setting.location;
+        setupOverlay.querySelector('pre').textContent = setting.code;
+        setupOverlay.dataset.itemIndex = key;
+        setupOverlay.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+      });
+    });
+    setupOverlay.querySelector('.config-overlay-close').addEventListener('click', closeConfigOverlays);
+
+    document.querySelectorAll('.term-trigger').forEach(trigger => {
+      const overlay = document.querySelector(`#${trigger.getAttribute('aria-controls')}`);
+      if (!overlay) return;
+      trigger.addEventListener('click', () => {
+        const isOpen = !overlay.hidden;
+        closeConfigOverlays();
+        if (isOpen) return;
+        overlay.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+      });
+      overlay.querySelector('.config-overlay-close').addEventListener('click', closeConfigOverlays);
+    });
+
+    document.querySelectorAll('.decision-slide').forEach(slide => {
+      const track = slide.dataset.track;
+      const settings = configExamples[track];
+      const guidance = slide.querySelector('.config-guidance');
+      if (!settings || !guidance) return;
+
+      const direct = guidance.dataset.configDirect === 'true';
+      const heading = document.createElement('strong');
+      heading.textContent = direct ? '模板功能與客製化' : '需要設定的項目';
+      const intro = document.createElement('p');
+      intro.textContent = '設定內容與對應檔案如下。';
+      const actions = document.createElement('div');
+      actions.className = 'config-actions';
+
+      if (direct) {
+        settings.forEach(setting => {
+          const item = document.createElement('details');
+          item.className = 'config-inline-detail';
+          const itemSummary = document.createElement('summary');
+          const title = document.createElement('span');
+          title.className = 'config-trigger-title';
+          title.textContent = setting.title;
+          const description = document.createElement('span');
+          description.className = 'config-trigger-summary';
+          description.textContent = (setting.summary || setting.goal).replaceAll('`', '');
+          itemSummary.append(title, description);
+
+          const body = document.createElement('div');
+          body.className = 'config-inline-body';
+          const goal = document.createElement('p');
+          goal.textContent = setting.goal;
+          const path = document.createElement('p');
+          path.className = 'config-inline-path';
+          path.append('設定檔：');
+          const code = document.createElement('code');
+          code.textContent = setting.file;
+          path.append(code);
+          const example = document.createElement('pre');
+          example.className = 'code';
+          example.textContent = setting.code;
+          body.append(goal, path, example);
+          item.append(itemSummary, body);
+          actions.append(item);
+        });
+
+        const disclosure = document.createElement('details');
+        disclosure.className = 'config-guidance-fold';
+        disclosure.open = true;
+        const summary = document.createElement('summary');
+        summary.textContent = heading.textContent;
+        disclosure.append(summary, actions);
+        guidance.replaceChildren(disclosure);
+        return;
+      }
+
+      const overlay = document.createElement('aside');
+      overlay.id = `config-overlay-${track}`;
+      overlay.className = 'config-overlay';
+      overlay.hidden = true;
+      overlay.setAttribute('role', 'region');
+      overlay.setAttribute('aria-label', '設定實作覆蓋卡');
+      overlay.innerHTML = `<div class="config-overlay-card"><button class="config-overlay-close" type="button" aria-label="關閉設定實作">×</button><h3></h3><p class="config-overlay-goal"></p><p class="config-overlay-path">設定檔：<code></code></p><pre class="code"></pre></div>`;
+
+      settings.forEach((setting, index) => {
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'config-trigger';
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.setAttribute('aria-controls', overlay.id);
+
+        const title = document.createElement('span');
+        title.className = 'config-trigger-title';
+        title.textContent = setting.title;
+        const file = document.createElement('span');
+        file.className = 'config-trigger-file';
+        file.textContent = setting.file;
+        const summary = document.createElement('span');
+        summary.className = 'config-trigger-summary';
+        summary.textContent = (setting.summary || setting.goal).replaceAll('`', '');
+        trigger.append(title, file, summary);
+
+        trigger.addEventListener('click', () => {
+          const isSameOpen = !overlay.hidden && overlay.dataset.itemIndex === String(index);
+          closeConfigOverlays();
+          if (isSameOpen) return;
+          overlay.querySelector('h3').textContent = setting.title;
+          overlay.querySelector('.config-overlay-goal').textContent = setting.goal;
+          overlay.querySelector('.config-overlay-path code').textContent = setting.file;
+          overlay.querySelector('pre').textContent = setting.code;
+          overlay.dataset.itemIndex = String(index);
+          overlay.hidden = false;
+          trigger.setAttribute('aria-expanded', 'true');
+        });
+        actions.append(trigger);
+      });
+
+      overlay.querySelector('.config-overlay-close').addEventListener('click', closeConfigOverlays);
+      guidance.replaceChildren(heading, intro, actions);
+      slide.append(overlay);
+    });
+
+    addEventListener('click', event => {
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest('.package-disclosure')) closePackageDisclosures();
+      if (!event.target.closest('.bridge-detail')) closeBridgeDetails();
+      if (event.target.closest('.config-overlay-card, .config-trigger, .setup-trigger, .term-trigger')) return;
+      closeConfigOverlays();
+    });
+
+    const slides = [...document.querySelectorAll('.slide')];
+    const counter = document.querySelector('#counter');
+    const bar = document.querySelector('#bar');
+    const previous = document.querySelector('#previous');
+    const next = document.querySelector('#next');
+    const zoomOut = document.querySelector('#zoom-out');
+    const zoomReset = document.querySelector('#zoom-reset');
+    const zoomIn = document.querySelector('#zoom-in');
+    const zoomLevel = document.querySelector('#zoom-level');
+    let viewZoom = 1;
+    let current = Math.max(0, Math.min(slides.length - 1, Number(location.hash.slice(1)) - 1 || 0));
+    function fitDeck() {
+      const narrowScreen = innerWidth <= 640;
+      const fit = narrowScreen ? .68 : Math.min(innerWidth / 1600, innerHeight / 900);
+      document.documentElement.classList.toggle('narrow-screen', narrowScreen);
+      document.documentElement.style.setProperty('--deck-scale', Math.max(.1, fit * viewZoom));
+      zoomLevel.textContent = `${Math.round(viewZoom * 100)}%`;
+      zoomOut.disabled = viewZoom <= .6;
+      zoomIn.disabled = viewZoom >= 1;
+    }
+    function setViewZoom(value) {
+      viewZoom = Math.max(.6, Math.min(1, value));
+      fitDeck();
+    }
+    function show(index) {
+      closeConfigOverlays();
+      closePackageDisclosures();
+      closeBridgeDetails();
+      current = Math.max(0, Math.min(slides.length - 1, index));
+      slides.forEach((slide, i) => { const active = i === current; slide.classList.toggle('active', active); slide.setAttribute('aria-hidden', String(!active)); });
+      counter.textContent = `${current + 1} / ${slides.length}`;
+      bar.style.width = `${((current + 1) / slides.length) * 100}%`;
+      previous.disabled = current === 0; next.disabled = current === slides.length - 1;
+      history.replaceState(null, '', `#${current + 1}`);
+    }
+    previous.addEventListener('click', () => show(current - 1));
+    next.addEventListener('click', () => show(current + 1));
+    zoomOut.addEventListener('click', () => setViewZoom(viewZoom - .1));
+    zoomReset.addEventListener('click', () => setViewZoom(1));
+    zoomIn.addEventListener('click', () => setViewZoom(viewZoom + .1));
+    addEventListener('resize', fitDeck);
+    document.querySelectorAll('.bridge-detail').forEach(detail => {
+      detail.addEventListener('toggle', () => {
+        if (!detail.open) return;
+        closeBridgeDetails(detail);
+      });
+    });
+    addEventListener('keydown', event => {
+      if (event.key === 'Escape') { closeConfigOverlays(); closePackageDisclosures(); closeBridgeDetails(); return; }
+      if (event.target.closest('summary, button, a, input, textarea, select')) return;
+      if (['ArrowRight', 'PageDown', ' '].includes(event.key)) { event.preventDefault(); show(current + 1); }
+      if (['ArrowLeft', 'PageUp'].includes(event.key)) { event.preventDefault(); show(current - 1); }
+      if (event.key === '-') setViewZoom(viewZoom - .1);
+      if (event.key === '+') setViewZoom(viewZoom + .1);
+      if (event.key === '0') setViewZoom(1);
+      if (event.key === 'Home') show(0); if (event.key === 'End') show(slides.length - 1); if (event.key.toLowerCase() === 'p') print();
+    });
+    addEventListener('hashchange', () => show(Number(location.hash.slice(1)) - 1 || 0));
+    fitDeck();
+    show(current);
