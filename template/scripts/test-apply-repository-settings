@@ -13,6 +13,13 @@ set -euo pipefail
 # a pre-existing, separately tracked bug (Issue #570: policies/rulesets.json
 # has no required_status_checks rule, which crashes that comparison with a
 # Python KeyError) that is unrelated to what this test exercises.
+#
+# The stubbed repository is public (see the `@tsv` case below), so the
+# GitHub Pages check added by Issue #571 is always enforcement-available
+# here; the `pages` endpoint stub below reports a live source that matches
+# policies/pages.json so the "fully matching fixture" case (Case 1) reports
+# no drift. Pages' own drift/DEGRADED/enforcement-availability behavior is
+# covered independently in tests/test_apply_repository_settings.py.
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
@@ -75,6 +82,15 @@ PY
   "api repos/\$test_repo/immutable-releases")
     cat "\$repo_root/policies/releases.json"
     ;;
+  "api repos/\$test_repo/pages")
+    python3 - <<'PY'
+import json
+import os
+
+desired = json.load(open(os.path.join(os.environ["REPO_ROOT"], "policies/pages.json"), encoding="utf-8"))
+print(json.dumps({"source": desired["source"], "status": "built"}))
+PY
+    ;;
   "api repos/\$test_repo/actions/permissions/workflow")
     python3 - <<'PY'
 import json
@@ -115,6 +131,7 @@ grep -qF "security_and_analysis.secret_scanning matches policies/security-scanni
 grep -qF "security_and_analysis.secret_scanning_push_protection matches policies/security-scanning.json (enabled)." <<<"$output"
 grep -qF "security_and_analysis.dependabot_security_updates matches policies/security-scanning.json (enabled)." <<<"$output"
 grep -qF "Repository settings match policies/repository.json." <<<"$output"
+grep -qF "Pages settings match policies/pages.json." <<<"$output"
 
 # Case 2: issue_creation_policy drift (REST cannot see this field at all, so
 # this exercises the dedicated GraphQL check path, not the flat PATCH loop).
