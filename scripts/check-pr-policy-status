@@ -1,0 +1,246 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Report the real, step-level pass/fail status of a pull request's policy
+# checks, separated from job-level noise (Issue #513).
+#
+# `gh pr checks` only reports each job's overall conclusion. The `title`
+# job in .github/workflows/pr-policy.yml runs several steps in sequence,
+# including "Validate pull request policy" and "Validate Milestone
+# approval" as two independent steps. If either step fails, the job's
+# overall conclusion is "failure" -- even when "Validate pull request
+# policy" itself passed cleanly. Telling those apart previously required
+# manually running
+#   gh run view <run-id> --log | grep -E "Validate pull request policy|##\[error\]"
+# for every PR, which is slow and has produced at least one wrong read in
+# this repository's own Milestone 8 history.
+#
+# This script queries `gh api repos/{repo}/commits/{sha}/check-runs` to
+# find the most recent `verify` and `title` check runs for a pull
+# request's current head commit, then queries
+# `gh api repos/{repo}/actions/jobs/{job_id}` for the `title` job to read
+# its per-step conclusions directly -- no log scraping, no job-level
+# conclusion standing in for a specific step's result.
+#
+# It reports three independent booleans:
+#   - verify.passed                                whole `verify` check
+#   - title_job.steps.validate_pull_request_policy.passed
+#   - title_job.steps.validate_milestone_approval.passed
+#
+# Usage:
+#   scripts/check-pr-policy-status <pr-number> [--repo <owner/repo>] [--json]
+#
+#   <pr-number>          Pull request number to inspect.
+#   --repo <owner/repo>  Repository to query. Defaults to the repository
+#                         detected by `gh repo view` in the current
+#                         directory.
+#   --json                Print the full machine-readable result as JSON
+#                         instead of the human-readable summary.
+#
+# Exit status: 0 if the report was produced (regardless of whether the
+# underlying checks passed or failed -- that verdict is the *output*, not
+# the exit code); non-zero only when the report itself could not be
+# produced (missing dependency, no `gh` auth, PR not found, etc.), with a
+# clear message on stderr explaining why.
+
+usage() {
+  echo "usage: $(basename "$0") <pr-number> [--repo <owner/repo>] [--json]" >&2
+  exit 2
+}
+
+pr_number=""
+repo=""
+json_output=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo)
+      [[ $# -ge 2 ]] || usage
+      repo="$2"
+      shift 2
+      ;;
+    --json)
+      json_output=1
+      shift
+      ;;
+    -h | --help)
+      usage
+      ;;
+    -*)
+      usage
+      ;;
+    *)
+      if [[ -n "$pr_number" ]]; then
+        usage
+      fi
+      pr_number="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$pr_number" || ! "$pr_number" =~ ^[0-9]+$ ]]; then
+  usage
+fi
+
+if ! command -v gh >/dev/null 2>&1; then
+  echo "gh (GitHub CLI) is required but was not found on PATH. Install it: https://cli.github.com/" >&2
+  exit 1
+fi
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required but was not found on PATH." >&2
+  exit 1
+fi
+if ! gh auth status >/dev/null 2>&1; then
+  echo "gh is not authenticated. Run: gh auth login" >&2
+  exit 1
+fi
+
+if [[ -z "$repo" ]]; then
+  if ! repo="$(gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" || [[ -z "$repo" ]]; then
+    echo "Could not determine the repository from the current directory. Pass --repo <owner/repo>." >&2
+    exit 1
+  fi
+fi
+
+pr_json=""
+if ! pr_json="$(gh pr view "$pr_number" --repo "$repo" --json number,headRefOid,url,state 2>&1)"; then
+  echo "Could not read pull request #$pr_number in $repo:" >&2
+  printf '%s\n' "$pr_json" >&2
+  exit 1
+fi
+
+head_sha="$(jq -r '.headRefOid' <<<"$pr_json")"
+if [[ -z "$head_sha" || "$head_sha" == "null" ]]; then
+  echo "Pull request #$pr_number in $repo has no head commit to check." >&2
+  exit 1
+fi
+
+check_runs_pages=""
+if ! check_runs_pages="$(gh api "repos/$repo/commits/$head_sha/check-runs" --paginate --slurp 2>&1)"; then
+  echo "Could not read check runs for $repo@$head_sha:" >&2
+  printf '%s\n' "$check_runs_pages" >&2
+  exit 1
+fi
+check_runs="$(jq -c '[.[].check_runs[]]' <<<"$check_runs_pages")"
+
+# Each check-run name (e.g. "verify", "title") can appear multiple times
+# for the same head commit across reruns; the most recently started one
+# reflects the current state.
+latest_run_by_name() {
+  local name="$1"
+  jq -c --arg name "$name" \
+    '[.[] | select(.name == $name)] | sort_by(.started_at, .id) | last // null' \
+    <<<"$check_runs"
+}
+
+verify_run="$(latest_run_by_name "verify")"
+title_run="$(latest_run_by_name "title")"
+
+title_steps="null"
+if [[ "$title_run" != "null" ]]; then
+  title_job_id="$(jq -r '.id' <<<"$title_run")"
+  title_job_json=""
+  if ! title_job_json="$(gh api "repos/$repo/actions/jobs/$title_job_id" 2>&1)"; then
+    echo "Could not read step-level detail for the title job (job id $title_job_id):" >&2
+    printf '%s\n' "$title_job_json" >&2
+    exit 1
+  fi
+  title_steps="$(jq -c '.steps' <<<"$title_job_json")"
+fi
+
+checked_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+result="$(
+  jq -n \
+    --arg repo "$repo" \
+    --argjson pr_number "$pr_number" \
+    --arg head_sha "$head_sha" \
+    --arg checked_at "$checked_at" \
+    --argjson verify_run "$verify_run" \
+    --argjson title_run "$title_run" \
+    --argjson title_steps "$title_steps" \
+    --arg policy_step_name "Validate pull request policy" \
+    --arg milestone_step_name "Validate Milestone approval" \
+    '
+    def run_result:
+      if . == null then
+        {found: false, status: null, conclusion: null, passed: false, id: null, html_url: null}
+      else
+        {found: true, status: .status, conclusion: .conclusion,
+         passed: (.conclusion == "success"), id: .id, html_url: .html_url}
+      end;
+
+    def step_result($name):
+      (if . == null then [] else . end) as $steps
+      | ([$steps[]? | select(.name == $name)] | first) as $found
+      | if $found == null then
+          {found: false, status: null, conclusion: null, passed: false}
+        else
+          {found: true, status: $found.status, conclusion: $found.conclusion,
+           passed: ($found.conclusion == "success")}
+        end;
+
+    {
+      schema_version: 1,
+      repo: $repo,
+      pr_number: $pr_number,
+      head_sha: $head_sha,
+      checked_at: $checked_at,
+      verify: ($verify_run | run_result),
+      title_job: (
+        ($title_run | run_result) + {
+          steps: {
+            validate_pull_request_policy: ($title_steps | step_result($policy_step_name)),
+            validate_milestone_approval: ($title_steps | step_result($milestone_step_name))
+          }
+        }
+      )
+    }
+    '
+)"
+
+if [[ "$json_output" -eq 1 ]]; then
+  printf '%s\n' "$result"
+  exit 0
+fi
+
+bool_label() {
+  # $1: JSON boolean-ish string ("true"/"false"), $2: "found" flag.
+  if [[ "$2" != "true" ]]; then
+    echo "NOT FOUND"
+  elif [[ "$1" == "true" ]]; then
+    echo "PASS"
+  else
+    echo "FAIL"
+  fi
+}
+
+verify_found="$(jq -r '.verify.found' <<<"$result")"
+verify_passed="$(jq -r '.verify.passed' <<<"$result")"
+verify_conclusion="$(jq -r '.verify.conclusion // "n/a"' <<<"$result")"
+
+title_found="$(jq -r '.title_job.found' <<<"$result")"
+title_conclusion="$(jq -r '.title_job.conclusion // "n/a"' <<<"$result")"
+
+policy_found="$(jq -r '.title_job.steps.validate_pull_request_policy.found' <<<"$result")"
+policy_passed="$(jq -r '.title_job.steps.validate_pull_request_policy.passed' <<<"$result")"
+policy_conclusion="$(jq -r '.title_job.steps.validate_pull_request_policy.conclusion // "n/a"' <<<"$result")"
+
+milestone_found="$(jq -r '.title_job.steps.validate_milestone_approval.found' <<<"$result")"
+milestone_passed="$(jq -r '.title_job.steps.validate_milestone_approval.passed' <<<"$result")"
+milestone_conclusion="$(jq -r '.title_job.steps.validate_milestone_approval.conclusion // "n/a"' <<<"$result")"
+
+echo "PR #$pr_number in $repo (head $head_sha)"
+echo
+printf '%-55s %-9s (%s)\n' "verify check:" "$(bool_label "$verify_passed" "$verify_found")" "$verify_conclusion"
+if [[ "$title_found" == "true" ]]; then
+  printf '%-55s %-9s (%s)\n' "title job: Validate pull request policy step:" "$(bool_label "$policy_passed" "$policy_found")" "$policy_conclusion"
+  printf '%-55s %-9s (%s)\n' "title job: Validate Milestone approval step:" "$(bool_label "$milestone_passed" "$milestone_found")" "$milestone_conclusion"
+  echo
+  echo "title job overall conclusion: $title_conclusion (job-level conclusion; a single failing step fails the whole job even if the other step above passed -- read the two step lines, not this line, to know which step actually failed)"
+else
+  echo "title job:                                             NOT FOUND (no \"title\" check run for this head commit yet)"
+fi
+echo
+echo "Use --json for a machine-readable result."

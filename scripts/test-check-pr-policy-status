@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Regression test for scripts/check-pr-policy-status (Issue #513): proves
+# the tool tells apart a job-level "title" failure that masks a genuinely
+# passing "Validate pull request policy" step from a case where that step
+# itself really failed, using a mocked `gh` binary so the test never makes
+# a real network call. Also covers the required misuse-guard cases: `gh`
+# missing from PATH and a pull request that does not exist.
+
+script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-pr-policy-status"
+fixture_root="$(mktemp -d)"
+trap 'rm -rf "$fixture_root"' EXIT
+mkdir -p "$fixture_root/bin" "$fixture_root/jobs"
+
+mock_repo="octo/example"
+
+# A mock `gh` that answers exactly the calls check-pr-policy-status makes:
+# `gh auth status`, `gh pr view <n> --repo ... --json ...`,
+# `gh api repos/.../commits/.../check-runs --paginate --slurp`, and
+# `gh api repos/.../actions/jobs/<id>`. Its data comes from files under
+# $MOCK_ROOT so each test case below can swap fixtures without rewriting
+# the mock.
+cat >"$fixture_root/bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "$1" in
+  auth)
+    exit 0
+    ;;
+  pr)
+    if [[ "$2" == "view" ]]; then
+      pr_number="$3"
+      if [[ "$pr_number" != "$MOCK_PR_NUMBER" ]]; then
+        echo "GraphQL: Could not resolve to a PullRequest with the number of $pr_number. (repository.pullRequest)" >&2
+        exit 1
+      fi
+      printf '{"number":%s,"headRefOid":"%s","url":"https://example.invalid/pull/%s","state":"OPEN"}\n' \
+        "$pr_number" "$MOCK_HEAD_SHA" "$pr_number"
+      exit 0
+    fi
+    echo "mock gh: unexpected pr subcommand: $*" >&2
+    exit 2
+    ;;
+  api)
+    path="$2"
+    if [[ "$path" == repos/*/commits/*/check-runs ]]; then
+      cat "$MOCK_ROOT/check-runs.json"
+      exit 0
+    fi
+    if [[ "$path" == repos/*/actions/jobs/* ]]; then
+      job_id="${path##*/jobs/}"
+      if [[ ! -f "$MOCK_ROOT/jobs/$job_id.json" ]]; then
+        echo "mock gh: no fixture for job $job_id" >&2
+        exit 1
+      fi
+      cat "$MOCK_ROOT/jobs/$job_id.json"
+      exit 0
+    fi
+    echo "mock gh: unexpected api path: $path" >&2
+    exit 2
+    ;;
+  *)
+    echo "mock gh: unexpected command: $*" >&2
+    exit 2
+    ;;
+esac
+MOCK
+chmod +x "$fixture_root/bin/gh"
+
+export MOCK_ROOT="$fixture_root"
+export MOCK_PR_NUMBER="42"
+export MOCK_HEAD_SHA="abc123headsha"
+run_mocked() {
+  PATH="$fixture_root/bin:$PATH" "$script_path" "$@"
+}
+
+# Case 1: the "title" job's overall conclusion is "failure" (because
+# "Validate Milestone approval" failed), but "Validate pull request
+# policy" itself succeeded. The tool must report the policy step as
+# passed despite the job-level failure -- this is the exact scenario
+# Issue #513 exists to stop misreading.
+cat >"$fixture_root/check-runs.json" <<'JSON'
+[
+  {
+    "check_runs": [
+      {"id": 1001, "name": "verify", "status": "completed", "conclusion": "success", "started_at": "2026-09-01T00:00:00Z", "html_url": "https://example.invalid/verify"},
+      {"id": 1002, "name": "title", "status": "completed", "conclusion": "failure", "started_at": "2026-09-01T00:01:00Z", "html_url": "https://example.invalid/title"}
+    ]
+  }
+]
+JSON
+cat >"$fixture_root/jobs/1002.json" <<'JSON'
+{
+  "id": 1002,
+  "steps": [
+    {"name": "Validate pull request policy", "status": "completed", "conclusion": "success"},
+    {"name": "Validate Milestone approval", "status": "completed", "conclusion": "failure"}
+  ]
+}
+JSON
+
+masked_json="$(run_mocked "$MOCK_PR_NUMBER" --repo "$mock_repo" --json)"
+[[ "$(jq -r '.verify.passed' <<<"$masked_json")" == "true" ]]
+[[ "$(jq -r '.title_job.passed' <<<"$masked_json")" == "false" ]]
+[[ "$(jq -r '.title_job.conclusion' <<<"$masked_json")" == "failure" ]]
+[[ "$(jq -r '.title_job.steps.validate_pull_request_policy.passed' <<<"$masked_json")" == "true" ]]
+[[ "$(jq -r '.title_job.steps.validate_milestone_approval.passed' <<<"$masked_json")" == "false" ]]
+
+masked_summary="$(run_mocked "$MOCK_PR_NUMBER" --repo "$mock_repo")"
+grep -Fq "title job: Validate pull request policy step:           PASS" <<<"$masked_summary"
+grep -Fq "title job: Validate Milestone approval step:            FAIL" <<<"$masked_summary"
+
+# Case 2: "Validate pull request policy" genuinely fails (not masked by
+# an unrelated step). The tool must report it as failed, not just infer
+# failure from the job-level conclusion.
+cat >"$fixture_root/check-runs.json" <<'JSON'
+[
+  {
+    "check_runs": [
+      {"id": 1001, "name": "verify", "status": "completed", "conclusion": "success", "started_at": "2026-09-01T00:00:00Z", "html_url": "https://example.invalid/verify"},
+      {"id": 1003, "name": "title", "status": "completed", "conclusion": "failure", "started_at": "2026-09-01T00:02:00Z", "html_url": "https://example.invalid/title"}
+    ]
+  }
+]
+JSON
+cat >"$fixture_root/jobs/1003.json" <<'JSON'
+{
+  "id": 1003,
+  "steps": [
+    {"name": "Validate pull request policy", "status": "completed", "conclusion": "failure"},
+    {"name": "Validate Milestone approval", "status": "completed", "conclusion": "skipped"}
+  ]
+}
+JSON
+
+real_fail_json="$(run_mocked "$MOCK_PR_NUMBER" --repo "$mock_repo" --json)"
+[[ "$(jq -r '.title_job.steps.validate_pull_request_policy.passed' <<<"$real_fail_json")" == "false" ]]
+[[ "$(jq -r '.title_job.steps.validate_pull_request_policy.conclusion' <<<"$real_fail_json")" == "failure" ]]
+[[ "$(jq -r '.title_job.steps.validate_milestone_approval.passed' <<<"$real_fail_json")" == "false" ]]
+[[ "$(jq -r '.title_job.steps.validate_milestone_approval.conclusion' <<<"$real_fail_json")" == "skipped" ]]
+
+real_fail_summary="$(run_mocked "$MOCK_PR_NUMBER" --repo "$mock_repo")"
+grep -Fq "title job: Validate pull request policy step:           FAIL" <<<"$real_fail_summary"
+
+# Case 3: no "title" check run exists yet for the head commit (CI has not
+# started). The tool must say so rather than silently reporting pass.
+cat >"$fixture_root/check-runs.json" <<'JSON'
+[
+  {
+    "check_runs": []
+  }
+]
+JSON
+no_checks_json="$(run_mocked "$MOCK_PR_NUMBER" --repo "$mock_repo" --json)"
+[[ "$(jq -r '.verify.found' <<<"$no_checks_json")" == "false" ]]
+[[ "$(jq -r '.verify.passed' <<<"$no_checks_json")" == "false" ]]
+[[ "$(jq -r '.title_job.found' <<<"$no_checks_json")" == "false" ]]
+no_checks_summary="$(run_mocked "$MOCK_PR_NUMBER" --repo "$mock_repo")"
+grep -Fq 'title job:' <<<"$no_checks_summary"
+grep -Fiq 'NOT FOUND' <<<"$no_checks_summary"
+
+# Misuse guard: a pull request that does not exist must fail clearly, not
+# silently report an empty or misleading pass.
+set +e
+missing_pr_output="$(run_mocked "999" --repo "$mock_repo" 2>&1)"
+missing_pr_status=$?
+set -e
+[[ "$missing_pr_status" -ne 0 ]]
+grep -Fq "999" <<<"$missing_pr_output"
+
+# Misuse guard: `gh` missing from PATH must fail clearly, not silently
+# produce a wrong or empty answer -- this is the same class of foot-gun
+# Issue #513 itself is about (a tool that looks like it answered but
+# didn't check what it claims to have checked).
+set +e
+no_gh_output="$(PATH="/usr/bin:/bin" "$script_path" "$MOCK_PR_NUMBER" --repo "$mock_repo" 2>&1)"
+no_gh_status=$?
+set -e
+[[ "$no_gh_status" -ne 0 ]]
+grep -Fiq "gh" <<<"$no_gh_output"
+
+# Misuse guard: no PR number at all must fail with usage, not proceed.
+set +e
+no_args_output="$(run_mocked --repo "$mock_repo" 2>&1)"
+no_args_status=$?
+set -e
+[[ "$no_args_status" -ne 0 ]]
+grep -Fiq "usage" <<<"$no_args_output"
+
+echo "PR policy status cases passed: 7"
