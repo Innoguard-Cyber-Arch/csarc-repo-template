@@ -28,6 +28,7 @@ paired_files=(
   .github/workflows/work-item-closure.yml
   policies/actions.json
   policies/labels.json
+  policies/pages.json
   policies/releases.json
   policies/repository.json
   docs/ci-policy.md

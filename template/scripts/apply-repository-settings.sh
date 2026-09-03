@@ -73,6 +73,17 @@ case "$account_plan" in
   *) plan_label="Unknown ($account_plan)" ;;
 esac
 
+pages_policy="$repo_root/policies/pages.json"
+pages_policy_enabled="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["enabled"]))' "$pages_policy")"
+# GitHub Pages is free for public repositories on every plan; a private
+# repository requires GitHub Enterprise Cloud regardless of Ruleset
+# enforcement availability, so this is computed independently of
+# ruleset_enforcement_available above.
+pages_enforcement_available=true
+if [[ "$repo_visibility" != "public" && "$plan_label" != "GitHub Enterprise" ]]; then
+  pages_enforcement_available=false
+fi
+
 codeowners_validation=""
 codeowners_inspection_error=""
 codeowners_inspection_available=false
@@ -323,6 +334,43 @@ PY
     echo "Immutable Releases match policies/releases.json."
   fi
 
+  if [[ "$pages_policy_enabled" != "true" ]]; then
+    echo "Pages policy disabled: policies/pages.json requests enabled=false; no live GitHub Pages check performed."
+  elif [[ "$pages_enforcement_available" != true ]]; then
+    [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
+      echo "::warning title=GitHub Pages degraded::GitHub Pages is unavailable for this private repository on $plan_label."
+    echo "DEGRADED GitHub Pages: private repositories require GitHub Enterprise Cloud; $plan_label cannot enable Pages while $repo is private. policies/pages.json stays enabled=true for when this repository is public or the account upgrades; the template must keep working on every GitHub plan and visibility, so this account-plan and visibility limitation does not fail closed."
+    check_degraded=$((check_degraded + 1))
+  elif ! pages_state="$(gh api "repos/$repo/pages" 2>&1)"; then
+    if [[ "$pages_state" == *"Not Found"* ]]; then
+      echo "Pages settings drift: GitHub Pages is not enabled for $repo; policies/pages.json requests enabled=true." >&2
+      check_errors=$((check_errors + 1))
+    else
+      echo "Cannot inspect GitHub Pages settings for $repo." >&2
+      echo "$pages_state" >&2
+      check_errors=$((check_errors + 1))
+    fi
+  elif ! pages_drift="$(python3 - "$pages_policy" "$pages_state" 2>&1 <<'PY'
+import json
+import sys
+
+desired = json.load(open(sys.argv[1], encoding="utf-8"))["source"]
+actual = json.loads(sys.argv[2]).get("source", {})
+drift = [
+    f"source.{key}: desired {value!r}, live {actual.get(key)!r}"
+    for key, value in desired.items()
+    if actual.get(key) != value
+]
+if drift:
+    raise SystemExit("; ".join(drift))
+PY
+  )"; then
+    echo "Pages settings drift: $pages_drift" >&2
+    check_errors=$((check_errors + 1))
+  else
+    echo "Pages settings match policies/pages.json."
+  fi
+
   if ! actions_state="$(gh api "repos/$repo/actions/permissions/workflow" 2>&1)"; then
     if [[ "$repo_admin" != "true" && "$actions_state" == *"Resource not accessible by integration"* ]]; then
       [[ "${GITHUB_ACTIONS:-}" == "true" ]] &&
@@ -495,6 +543,13 @@ echo "Repository visibility: $repo_visibility"
 echo "Deployment plan:"
 echo "- APPLY policies/repository.json"
 echo "- APPLY policies/releases.json (immutable Releases)"
+if [[ "$pages_policy_enabled" != "true" ]]; then
+  echo "- SKIP policies/pages.json (enabled=false)"
+elif [[ "$pages_enforcement_available" == true ]]; then
+  echo "- APPLY policies/pages.json (GitHub Pages)"
+else
+  echo "- DEGRADED policies/pages.json: GitHub Pages requires GitHub Enterprise Cloud for a private repository on $plan_label"
+fi
 echo "- APPLY policies/actions.json when account policy permits it"
 echo "- APPLY policies/labels.json (create or update policy labels)"
 if [[ "$legacy_ruleset_id" != "-" ]]; then
@@ -551,6 +606,26 @@ if ! release_policy_error="$(
   echo "Cannot enable required immutable Releases for $repo." >&2
   echo "$release_policy_error" >&2
   exit 1
+fi
+pages_policy_applied=true
+if [[ "$pages_policy_enabled" == "true" ]]; then
+  if [[ "$pages_enforcement_available" != true ]]; then
+    pages_policy_applied=false
+    echo "DEGRADED GitHub Pages: private repositories require GitHub Enterprise Cloud; $plan_label cannot enable Pages while $repo is private. policies/pages.json stays enabled=true for when this repository is public or the account upgrades."
+  else
+    pages_source_payload="$(python3 -c 'import json,sys; policy=json.load(open(sys.argv[1], encoding="utf-8")); print(json.dumps({"source": policy["source"]}))' "$pages_policy")"
+    if gh api "repos/$repo/pages" >/dev/null 2>&1; then
+      if ! pages_policy_error="$(echo "$pages_source_payload" | gh api --method PUT "repos/$repo/pages" --input - 2>&1)"; then
+        echo "Cannot update GitHub Pages settings for $repo." >&2
+        echo "$pages_policy_error" >&2
+        exit 1
+      fi
+    elif ! pages_policy_error="$(echo "$pages_source_payload" | gh api --method POST "repos/$repo/pages" --input - 2>&1)"; then
+      echo "Cannot enable GitHub Pages for $repo." >&2
+      echo "$pages_policy_error" >&2
+      exit 1
+    fi
+  fi
 fi
 actions_policy_applied=true
 if ! actions_policy_error="$(
@@ -610,7 +685,7 @@ if [[ "$ruleset_enforcement_available" == true ]]; then
 fi
 
 GH_REPO="$repo" "$0" check
-if [[ "$ruleset_enforcement_available" == true && "$actions_policy_applied" == true ]]; then
+if [[ "$ruleset_enforcement_available" == true && "$actions_policy_applied" == true && "$pages_policy_applied" == true ]]; then
   echo "Required repository settings applied, including branch protection."
 else
   echo "DEGRADED repository settings applied; unavailable policy remains declarative and runtime workflows adapt."
