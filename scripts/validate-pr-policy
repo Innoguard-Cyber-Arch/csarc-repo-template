@@ -295,6 +295,47 @@ if [[ "$pr_milestone_number" != "$issue_milestone_number" ]]; then
   echo "The pull request Milestone must match Issue #${issue_number}."
   exit 1
 fi
+if [[ "$pr_milestone_number" == "0" && "$issue_milestone_number" == "0" ]]; then
+  # Issue #551: the match check above only catches a Milestone
+  # *mismatch*; it cannot catch "both silently unset", which is exactly
+  # how #546-#550 slipped through during Milestone 8 cleanup. This is a
+  # non-blocking nudge only -- many Issues/pull requests genuinely have
+  # nothing to do with any Milestone (see Issue #551's boundary section)
+  # -- so it must never fail this check, only make the omission visible
+  # once via a pull request comment. It shares the same "exactly one open
+  # Milestone" heuristic as scripts/gh-issue-create's local prompt, via
+  # scripts/detect-open-milestone, so the two safeguards never drift on
+  # what counts as "detected". See docs/ci-policy.md's Milestone
+  # safeguard section.
+  if milestone_hint="$(./scripts/detect-open-milestone --repo "$GITHUB_REPOSITORY" 2>/dev/null)"; then
+    hint_number="${milestone_hint%%$'\t'*}"
+    hint_title="${milestone_hint#*$'\t'}"
+    reminder_marker="<!-- csarc-milestone-safeguard:551 -->"
+    # A bare `var="$(cmd)"` assignment is NOT exempt from `set -e` the way
+    # an `if`/`&&` condition is -- a failing gh call here would otherwise
+    # abort this entire policy check, which is exactly the fail-closed
+    # behavior this safeguard must never have. The "||" fallback keeps a
+    # transient listing failure from doing anything worse than a rare
+    # duplicate reminder comment.
+    existing_comment_bodies="$(
+      gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+        --jq '[.[].body]' 2>/dev/null
+    )" || existing_comment_bodies="[]"
+    [[ -z "$existing_comment_bodies" ]] && existing_comment_bodies="[]"
+    if ! jq -e --arg marker "$reminder_marker" \
+      'type == "array" and any(.[]; type == "string" and contains($marker))' \
+      <<<"$existing_comment_bodies" >/dev/null 2>&1; then
+      reminder_body="${reminder_marker}
+Neither this pull request nor Issue #${issue_number} has a Milestone, and exactly one Milestone is currently open: #${hint_number} ${hint_title}.
+
+If this work belongs to it, attach the Milestone to the Issue (closed Milestones need \`gh api repos/${GITHUB_REPOSITORY}/issues/${issue_number} --method PATCH -f milestone=${hint_number}\`, not \`gh issue edit --milestone\`) and to this pull request. Otherwise no action is needed -- many Issues and pull requests are not tied to any Milestone."
+      if ! gh issue comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+        --body "$reminder_body" >/dev/null 2>&1; then
+        echo "::notice::Could not post the Milestone safeguard reminder (non-blocking, Issue #551)."
+      fi
+    fi
+  fi
+fi
 issue_selected_label=""
 issue_selected_count=0
 for label in bug enhancement documentation; do
