@@ -132,22 +132,64 @@ def _code_html(code: str) -> str:
     return html.escape(code, quote=True).replace("\n", "&#10;")
 
 
+# The CI/CD settings appendix (`{{< testing >}}`) used to keep all nine
+# steps' check tables inline under `similar_tools.json`'s "testing.groups"
+# array, which made a single-step edit touch one large, hard-to-review
+# file (Issue #533). Each step now lives in its own
+# `site/data/testing/<key>.json`; this tuple is the single source of the
+# tab order the appendix renders in (steps 01-09, matching the "workflow"
+# and "support" rows of `navigation.json`), since a directory listing is
+# not guaranteed to sort that way and nothing else records the order.
+_TESTING_STEP_ORDER: Final = (
+    "work",
+    "agents",
+    "contract",
+    "languages",
+    "supply",
+    "pr",
+    "delivery",
+    "governance",
+    "template-upgrade",
+)
+
+
 def load_site_data(root: Path) -> SiteData:
     """Load every `site/data/*` source the render functions consume."""
     data_dir = root / "site/data"
     with (data_dir / "glossary.toml").open("rb") as stream:
         glossary = tomllib.load(stream)
+    similar_tools = _load_json_file(data_dir / "similar_tools.json")
+    similar_tools["testing"]["groups"] = _load_testing_groups(
+        data_dir / "testing"
+    )
     return SiteData(
         navigation=_load_json_file(data_dir / "navigation.json"),
         glossary=glossary,
         config_examples=_load_json_file(data_dir / "config_examples.json"),
-        similar_tools=_load_json_file(data_dir / "similar_tools.json"),
+        similar_tools=similar_tools,
         version=_load_json_file(root / "site/version.json"),
     )
 
 
 def _load_json_file(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _load_testing_groups(testing_dir: Path) -> list[dict[str, Any]]:
+    """Load the CI/CD settings appendix's per-step files, in tab order."""
+    groups = [
+        _load_json_file(testing_dir / f"{key}.json")
+        for key in _TESTING_STEP_ORDER
+    ]
+    found = {group["key"] for group in groups}
+    expected = set(_TESTING_STEP_ORDER)
+    if found != expected:
+        raise BuildError(
+            "site/data/testing/*.json does not match _TESTING_STEP_ORDER: "
+            f"missing {sorted(expected - found)}, "
+            f"unexpected {sorted(found - expected)}"
+        )
+    return groups
 
 
 def _parse_front_matter(text: str) -> tuple[dict[str, Any], str]:
@@ -714,7 +756,7 @@ def render_testing(*, lang: str, data: SiteData) -> str:  # noqa: C901
             'role="tab" aria-selected="false" '
             f'aria-controls="testing-panel-{group["key"]}" '
             f'data-similar-tools-tab="{group_index + 1}">'
-            f"<small>Journey {_esc(group['journey'])}</small>"
+            f"<small>{_esc(labels['step'])} {_esc(group['code'])}</small>"
             f"{_esc(group_labels['title'])}</button>"
         )
 

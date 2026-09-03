@@ -1,0 +1,150 @@
+{
+  "key": "pr",
+  "code": "06",
+  "labels": {
+    "zh-tw": {
+      "title": "PR／合併",
+      "heading": "步驟 06／兩階段 PR",
+      "scope": "工作 PR 先驗證單一 Issue 與目的分支；交付 PR 再驗證完整批次。合併授權由規則治理統一處理。"
+    },
+    "en": {
+      "title": "PR / merge",
+      "heading": "Step 06 / Two PR stages",
+      "scope": "A work PR first validates one Issue and its destination; a release PR then validates the complete batch. Rules governance owns merge authorization."
+    }
+  },
+  "rows": [
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "PR 資料與目的分支",
+          "description": "標題、Issue、label、里程碑與目的分支必須互相一致。"
+        },
+        "en": {
+          "title": "PR metadata and destination",
+          "description": "Title, Issue, label, Milestone, and destination branch must agree."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/test-pr-policy"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/pr-policy.yml",
+              "job": "title",
+              "trigger": {
+                "zh-tw": "PR 開啟、內容／commit／metadata 變更",
+                "en": "PR opened or its content, commits, or metadata changes"
+              },
+              "timeout": "10 min"
+            }
+          ]
+        },
+        "release": {
+          "files": [
+            {
+              "path": "scripts/test-pr-policy"
+            }
+          ]
+        }
+      },
+      "templateOnly": {
+        "milestone": {
+          "note": {
+            "zh-tw": "使用相同 validator；repo-template 不維護另一套 PR 規則。",
+            "en": "Uses the same validator; repo-template has no second PR policy."
+          }
+        }
+      }
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "候選內容包含最新基準",
+          "description": "工作 PR 必須沿可追溯的 dev 鏈回到 main；同步 PR 只能把精確的 main 更新帶回目標 dev。"
+        },
+        "en": {
+          "title": "Candidate contains the current base",
+          "description": "A work PR must trace through its dev chain to main; a sync PR may carry only the exact main update back to its target dev branch."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "tests/test_delivery_sync.py"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/pr-policy.yml",
+              "job": "title",
+              "trigger": {
+                "zh-tw": "每次工作 PR 與 sync PR 更新",
+                "en": "Every work-PR and sync-PR update"
+              },
+              "timeout": "10 min"
+            }
+          ]
+        },
+        "release": {
+          "note": {
+            "zh-tw": "交付 PR 建立與 main 前進後的必要跨分支同步仍是人工 PR；#430 判定不恢復後已移除舊 workflows。",
+            "en": "Delivery-PR creation and required cross-branch synchronization after main advances remain manual PRs; #430 removed the old workflows after deciding not to restore them."
+          }
+        }
+      }
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "工作 PR 合併後結束 Issue",
+          "description": "工作 PR 成功進入正確目的分支後，才結束同號 Issue；交付 PR 不重複關單。"
+        },
+        "en": {
+          "title": "Close the Issue after its work PR merges",
+          "description": "Close the matching Issue only after its work PR enters the correct dev branch. The release PR does not close it again."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "tests/test_work_pr_closure.py"
+            },
+            {
+              "path": "scripts/pr_lifecycle.py"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/work-item-closure.yml",
+              "job": "close-work",
+              "trigger": {
+                "zh-tw": "里程碑工作 PR 合併進 dev/m*",
+                "en": "Milestone work PR merged into dev/m*"
+              },
+              "timeout": "5 min"
+            }
+          ],
+          "note": {
+            "zh-tw": "直接進 main 的一般工作與 Hotfix 沿用 GitHub 原生關單，不啟動這支 Action。",
+            "en": "Standalone work and hotfixes merged directly to main retain GitHub-native closure and do not start this Action."
+          }
+        }
+      },
+      "templateOnly": {
+        "milestone": {
+          "note": {
+            "zh-tw": "使用相同關單程式；repo-template 不維護另一套規則。",
+            "en": "Uses the same closure program; repo-template has no second rule."
+          }
+        }
+      }
+    }
+  ]
+}

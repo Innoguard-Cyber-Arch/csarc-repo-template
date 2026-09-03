@@ -68,7 +68,7 @@ A failed check is fixed in the same PR. A new problem found after merge becomes 
 | `docs/`, `site/` | Project guidance, specifications, decisions, and internal site | Shared |
 | `src/`, product tests, and product specifications | Product behavior | Project-owned |
 
-This table stays at three columns on purpose: the side navigation already links each row's area to its page, and the maintainer-only CI/CD settings appendix already lists verification entry points per Journey in more detail than a column could. Adding page-name and verification-entry columns here would just duplicate both instead of adding information.
+This table stays at three columns on purpose: the side navigation already links each row's area to its page, and the maintainer-only CI/CD settings appendix already lists verification entry points per step in more detail than a column could. Adding page-name and verification-entry columns here would just duplicate both instead of adding information.
 
 {{< detail key="files-update" title="How updates protect product content" >}}
 Copier attempts updates on a short branch. A conflict only lists the affected files and leaves the repository unchanged; adjust them, rerun, and then review the PR. Fixtures cover new project generation, existing-repository adoption, and a later update of the same repository. They add product-owned files and prove that an update does not overwrite them.
@@ -144,15 +144,33 @@ Only tools this template directly integrates, executes, or produces into the rep
 {{< /slide >}}
 
 {{< slide key="contract" track="contract" eyebrow="Step 03" title="Verify the change, then let CI rerun the same rules" subtitle="Issue PRs are tiered by change scope; full verification is reserved for high-risk boundaries." legacy="false"  class="candidate-slide" >}}
-- **During development:** run only the focused check that proves the current change, using fresh output before claiming completion.
-- **Work PR (topic → main or `dev/m*`):** the system selects the appropriate checks from the change; when unsure, it runs full verification.
-- **When full verification is needed:** run it for a Milestone or canary delivery, an urgent fix, a merge queue, a manual run, or whenever the system cannot safely narrow the test scope.
-- **One implementation:** GitHub Actions has one `verify` job with a 30-minute timeout and only calls repository scripts.
-- **Repository scope:** a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.
+- **During development:** run only the focused check that proves the current change (for example `uv run pytest <path>` or `uv run ruff check <path>`), using fresh output before claiming completion, without waiting on the full pipeline.
+- **Work PR (topic branch → main or `dev/m*`):** `scripts/ci_tier.py` classifies the change as `docs`, `fast`, or `full` from the event, base/head, labels, and changed paths. A pure documentation or site change lands on `docs` (an early-exit case of `fast`); an ordinary change lands on `fast`; any path the classifier cannot confidently place escalates, fail-closed, to `full`.
+- **When full verification is needed:** only for a Milestone or canary delivery, an urgent fix, a merge queue, a manual dispatch, or an unknown high-risk path the system cannot safely narrow.
+- **One implementation:** GitHub Actions has exactly one `verify` job with `contents: read` permission and a 30-minute timeout; a new commit on the same PR cancels the previous run. It only calls repository scripts — the central template uses `scripts/verify-fast` / `scripts/verify-template.sh`, and a generated repository uses `scripts/verify`.
+- **Repository scope:** an ordinary project verifies only its own change. The template repository's full verification also runs the `large`-marked Copier create / adopt / update regression tests, which actually generate a project and verify the components it preserves — not just check that files exist.
 
-Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, Work Issue closure, reviewer assignment, OSV, and Dependabot are active in a newly generated repository from its first commit. One release workflow is configured as a candidate pending a successful default-branch run. Dedicated promotion, release-handoff, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.
+Verification logic lives only in repository scripts and tests; GitHub Actions only decides the event, the permissions, and which program to call, never a second copy of the logic.
 
-<aside class="config-guidance" data-audience="maintainer"><strong>Root repository state</strong><p>In <code>csarc-repo-template</code> itself, OSV is also candidate: its workflow has not yet landed on this repository's own <code>main</code>, and its trigger set does not include <code>pull_request</code>, so it cannot pre-register from a candidate branch. See the CI/CD settings page's current-automation table for the exact live-registration check and timestamp.</p></aside>
+<aside class="config-guidance" data-audience="maintainer"><strong>Root repository state (2026-09-03)</strong><p>Dependency vulnerability scanning (<code>osv.yml</code>) is still candidate on the template repository's own root: the workflow has landed on <code>main</code> and is registered active by GitHub, but its trigger set is only <code>schedule</code> (Mondays 03:17 UTC) and <code>workflow_dispatch</code> — no <code>pull_request</code> — so it cannot pre-register from a candidate branch, and no scheduled or dispatched run has fired yet, so it does not meet this page's (or <code>docs/ci-policy.md</code>'s) bar for live run evidence. A newly generated repository is active from its first commit, since Copier's first commit lands directly on that repository's own <code>main</code>.</p></aside>
+
+{{< detail key="contract-automation" title="What automation is actually running today" >}}
+The states below are checked line by line against `docs/ci-policy.md`'s "Current automation" table and a live query (2026-09-03), not carried forward from whatever this page said at build time:
+
+- **Active:** CI (`ci.yml`), PR policy (`pr-policy.yml`), Issue triage (`issue-triage.yml`), Spec to Issue (`spec-to-issue.yml`), Milestone lifecycle (`milestone-lifecycle.yml`), Work Issue closure (`work-item-closure.yml`), reviewer assignment (`governance-comment.yml`), and Dependabot (a native GitHub feature) are all registered with a recent successful live run.
+- **A known limitation that is now fixed:** Work Issue closure used to check out `pull_request.base.sha`, so the `close-work` command — which only exists after the merge — could not be found and the run failed. #401 / PR #453 (merged 2026-09-02) switched it to `pull_request.merge_commit_sha`; a successful live run followed on 2026-09-03. Milestone lifecycle's approval/closure coverage (`tests/test_milestone_approval.py` / `tests/test_milestone_closure.py`) is also in this candidate; its tracking Issue #400 closed as completed on 2026-09-02.
+- **Depends on which repository:** dependency vulnerability scanning (OSV) is active in a generated repository; it is still candidate on the template's own root, for the reason in the aside above.
+- **Candidate, not re-verified here:** current Version/Release (`release.yml`) status lives in `docs/ci-policy.md`'s "Version, release, delivery, and deployment" matrix.
+- **Not active:** dedicated promotion, release-handoff, registry-publisher, consumption, live-integration, and deployment workflows do not exist, and are not conditional options waiting to be wired in.
+{{< /detail >}}
+
+{{< detail key="contract-cost" title="What the three verification tiers actually cost" >}}
+These numbers come from `docs/ci-policy.md`'s most recent measurement. They set cost expectations, not a permanent SLA — a rerun will report different numbers.
+
+- `docs` and `fast` share one bounded path; `docs` is just `fast`'s early-exit case for a pure documentation or site change.
+- `fast`: on 2026-09-01, with a warm cache on the same machine, a source-only scope took about 59 seconds and a scope also touching policy/template files took about 99 seconds; the full PR feedback window runs about 1-4 minutes (#428).
+- `full`: 502 seconds (8m22s) with all seven stages PASSED on an exclusive machine; up to 810 seconds when another worktree's process runs concurrently — the difference is contention, not heavier verification content (#458, 2026-09-02). Of the seven stages, Regression tests (the full pytest run plus the `large`-marked Copier create/adopt/update matrix) is usually by far the longest; the other six stages together usually add up to well under a minute.
+{{< /detail >}}
 
 {{< config-guidance track="contract" >}}
 {{< /slide >}}
@@ -165,7 +183,7 @@ Choose a project language and the template prepares the matching checks:
 - **Rust:** checks formatting, common mistakes, tests, the release build, and the installable package.
 - **TypeScript:** checks formatting, types, tests, and the installable package.
 
-Each language is selected independently. Selecting several languages combines their modules while each shared check still runs once; the documentation does not enumerate combinations.
+Each language is its own independent component (module), selected independently. Selecting several languages combines their modules while each shared check still runs once; the documentation does not enumerate combinations.
 
 {{< config-guidance track="languages" >}}
 {{< /slide >}}
@@ -296,31 +314,31 @@ Use a linked Issue to record the proposer, a different approver, expiry, evidenc
 {{< /slide >}}
 
 {{< slide key="template-release" track="template-release" eyebrow="Step 09" title="Copier keeps repositories aligned, and the template dogfoods its rules" subtitle="A template defect affects many projects, so creation, adoption, and update all run as real tests." legacy="false"  class="candidate-slide" >}}
-- `template/` is the delivered source; root retains the template repository's own GitHub governance and dogfood configuration.
+- `template/` is the only delivered source; root keeps the template repository's own GitHub governance and dogfood configuration only because that is how GitHub reads it, and `scripts/sync-paired-files.sh` generates root's paired-file copies under `template/`.
 - `.csarc/config.yml` is both Copier's update record and the repository's only template configuration. Languages, branch strategy, and optional capabilities read from it; later extensions add settings here instead of creating another configuration file.
-- A new repository selects its languages and capabilities, then receives a baseline it can verify directly. Selecting several languages only combines their independent modules.
-- A first adoption uses a pinned CLI outside the repository to produce an external change plan, then applies that same plan. A person reviews the first PR because the old default branch does not yet contain a trusted verifier.
-- After that first merge, the default branch supplies the trusted PR policy and read-only CI verifies the candidate. Updates still begin with a preview; a conflict leaves the repository unchanged so it can be corrected and rerun.
+- A new repository selects its languages and capabilities, then receives a baseline it can verify directly. Selecting several languages only combines their independent components (modules); it never builds a combination-specific pipeline.
+- A first adoption uses a pinned, full-SHA CLI release outside the repository to produce an external change plan, then applies that same undrifted plan. A person reviews the source, plan, diff, and local results in the first PR — the old default branch does not yet contain a trusted verifier, so a PR-head script is never executed and nothing claims automatic verification.
+- After that first merge, the default branch supplies the trusted PR policy and read-only CI verifies the candidate. Updates still begin with a dry-run preview, and only apply to the target once the candidate content and conflicts are fully verified; a conflict leaves the repository unchanged so it can be corrected, rerun, and reviewed by a normal PR and trusted-base checks.
 - The optional update notice checks weekly and only creates or refreshes one Issue; it never modifies the repository automatically.
 
-{{< disclosure key="copier-update" title="Copier + root dogfood + create/update regression" >}}
-[Copier](https://github.com/copier-org/copier) records source, language, and answers, then reapplies newer template revisions to an editable repository. A person approves the first adoption. A later update conflict leaves the repository unchanged so the affected files can be corrected, rerun, and reviewed in a PR. GitHub Template copies only once, while PyScaffold would create a second update mechanism, so neither fits this requirement.
+{{< disclosure key="copier-update" title="Copier + root dogfood + create/adopt/update regression" >}}
+[Copier](https://github.com/copier-org/copier) records source, language, and answers, then reapplies newer template revisions to an editable repository. A person approves the first adoption. A later update conflict leaves the repository unchanged so the affected files can be corrected, rerun, and reviewed in a PR. GitHub Template copies only once and forgets source and answers, while PyScaffold would create a second update mechanism, so neither fits this requirement.
 {{< /disclosure >}}
 
 {{< detail key="template-release-scope" title="Single source, runtime baselines, and the root-only boundary" >}}
-Root `.csarc/config.yml` records the capabilities selected by the template repository itself. A generated repository additionally records Copier's source and revision and writes changes through `csarc update --data`. The template source does not invent `_src_path` or `_commit` values that point back to itself or immediately become stale. A derived template should add namespaced settings to the same YAML instead of duplicating CSARC fields.
+Root `.csarc/config.yml` records the capabilities the template repository selects for itself. A generated repository additionally records Copier's source and revision and writes changes through `csarc update --data`. The template source does not invent `_src_path` or `_commit` values that point back to itself and would immediately go stale. A derived template should add namespaced settings to the same YAML instead of duplicating CSARC fields.
 
 `enable_template_update_notifications` generates `template-update.yml` and `check-template-update` only when selected. Public sources need no secret; private sources use a repository secret limited to read-only access to that template source.
 
-`scripts/sync-paired-files.sh` makes root the source of paired files and verifies copied content and permissions with `--check`. `profiles/catalog.yaml` records runtime baselines and their evidence. Python and Node baselines advance only after their own thirty-day observation period.
+`scripts/sync-paired-files.sh` makes root the single source of paired files, and `--check` verifies copied content and executable bits. `profiles/catalog.yaml` records runtime baselines and their evidence. Python and Node baselines advance only after their own thirty-day observation period (`profiles/catalog.yaml`'s `stable_release_observation_days: 30`).
 
-`scripts/verify-template.sh` runs create/adopt/update fixtures only in the template repository and is never delivered downstream. Generated repositories use the smaller `scripts/verify` entry point. The first-adoption machine plan stays outside the target, so proposed files cannot rewrite their own evidence. After the first PR merges, its base supplies the trusted PR policy and read-only CI runs candidate verification.
+`scripts/verify-template.sh` runs create/adopt/update fixtures only in the template repository and is never delivered downstream; generated repositories use the smaller `scripts/verify` entry point. The first-adoption machine plan stays outside the target, so proposed files cannot rewrite their own evidence. After the first PR merges, its base supplies the trusted PR policy and read-only CI runs candidate verification.
 {{< /detail >}}
 
 {{< detail key="template-release-status" title="Current automation boundary" >}}
-- **Active:** the CLI creates, adopts, or updates and verifies a candidate before writing the target; template full verification reruns all three paths.
+- **Active:** the CLI creates, adopts, or updates and verifies a candidate before writing the target. Template full verification's Regression tests stage reruns all three paths, including the `large`-marked Copier create/adopt/update matrix, and its Package smoke test stage separately confirms the wheel builds and its published entry point runs from the built artifact.
 - **Manual:** a person approves the external plan, source, and first adoption PR.
-- **Pending:** the update-notice workflow and checker script are restored, and a Copier fixture test verifies they are generated only when selected; `tests/test_template_update_notifications.py` covers the checker's own update-detection and Issue create/edit logic, including its fail-closed behavior on a check error, but no hosted scheduled run has been observed, so live-schedule execution is not yet claimed.
+- **Pending:** the update-notice workflow (`template-update.yml.jinja`) and checker script (`check-template-update`) are restored, and a Copier fixture test verifies they are generated only when selected; `tests/test_template_update_notifications.py` covers the checker's own update-detection and Issue create/edit logic, including its fail-closed behavior on a check error, but no hosted scheduled run has been observed, so live-schedule execution is not yet claimed.
 - **Retired:** remote governance and delivery orchestration do not return with this page; reviewer assignment is restored and covered under Rules governance instead.
 {{< /detail >}}
 
@@ -369,7 +387,7 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 {{< similar-tools >}}
 {{< /slide >}}
 
-{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | CI/CD settings" title="CI/CD settings | Checks by Journey" subtitle="Separates the tests and automation that normal repositories and repo-template need for work and repository-delivery pull requests." class="similar-tools-slide testing-slide" legacy="true" >}}
+{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | CI/CD settings" title="CI/CD settings | Checks by step" subtitle="Separates the tests and automation that normal repositories and repo-template need for work and repository-delivery pull requests." class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
 {{< /slide >}}
 

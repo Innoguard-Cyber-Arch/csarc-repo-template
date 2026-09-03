@@ -1,0 +1,76 @@
+{
+  "key": "agents",
+  "code": "02",
+  "labels": {
+    "zh-tw": {
+      "title": "AI 規範",
+      "heading": "步驟 02／最小驗證契約",
+      "scope": "一般 repo 在兩個 PR 階段都驗證 worktree 安全清理；repo-template 另外檢查 AI 規範來源與產出內容。"
+    },
+    "en": {
+      "title": "AI rules",
+      "heading": "Step 02 / Minimum verification contract",
+      "scope": "A normal repository validates safe worktree cleanup at both PR stages. repo-template also checks the AI-rule source and generated guidance."
+    }
+  },
+  "rows": [
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "AI 規範入口",
+          "description": "所有 agent 讀同一份根規範，生成內容只列該 profile 真能執行的命令。"
+        },
+        "en": {
+          "title": "AI rules entrypoint",
+          "description": "Every agent reads one root policy, and generated content lists only commands the profile can actually run."
+        }
+      },
+      "shared": {},
+      "templateOnly": {
+        "milestone": {
+          "files": [
+            {
+              "path": "tests/test_ai_guidelines.py"
+            }
+          ]
+        },
+        "release": {
+          "files": [
+            {
+              "path": "tests/test_ai_guidelines.py"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "平行工作隔離與安全清理",
+          "description": "可寫工作各自使用 branch／worktree，清理時不刪除未合併或有修改的目錄。"
+        },
+        "en": {
+          "title": "Parallel isolation and safe cleanup",
+          "description": "Writable tasks use separate branches and worktrees, and cleanup never removes unmerged or modified directories."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/test-worktree-cleanup"
+            }
+          ]
+        },
+        "release": {
+          "files": [
+            {
+              "path": "scripts/test-worktree-cleanup"
+            }
+          ]
+        }
+      },
+      "templateOnly": {}
+    }
+  ]
+}

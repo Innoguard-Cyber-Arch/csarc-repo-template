@@ -1,0 +1,139 @@
+{
+  "key": "work",
+  "code": "01",
+  "labels": {
+    "zh-tw": {
+      "title": "工作定義",
+      "heading": "步驟 01／最小測試契約",
+      "scope": "只驗證 Issue 如何成為可執行工作，以及里程碑是否取得開工同意；PR 合併與里程碑結案分別列在步驟 06、07。"
+    },
+    "en": {
+      "title": "Work definition",
+      "heading": "Step 01 / Minimum test contract",
+      "scope": "Validates how Issues become actionable and how a Milestone gains approval to start. PR merging and Milestone closure belong to Steps 06 and 07."
+    }
+  },
+  "stageLabels": {
+    "zh-tw": {
+      "milestone": "工作開始前",
+      "release": "工作結束時"
+    },
+    "en": {
+      "milestone": "Before work starts",
+      "release": "When work ends"
+    }
+  },
+  "rows": [
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "Issue 工作邊界",
+          "description": "標題、類型、assignee、label 與 duplicate 狀態要能收斂。"
+        },
+        "en": {
+          "title": "Issue work boundary",
+          "description": "Title, type, assignee, labels, and duplicate disposition must converge."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/test-issue-triage"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/issue-triage.yml",
+              "job": "classify",
+              "trigger": {
+                "zh-tw": "Issue opened／edited／reopened／closed",
+                "en": "Issue opened, edited, reopened, or closed"
+              },
+              "timeout": "5 min"
+            }
+          ]
+        },
+        "release": {
+          "files": [
+            {
+              "path": "scripts/test-issue-triage"
+            }
+          ]
+        }
+      },
+      "templateOnly": {
+        "release": {
+          "files": [
+            {
+              "path": "tests/test_work_item_forms.py"
+            }
+          ],
+          "automationNote": {
+            "zh-tw": "repo-template 額外確認產生出去的 Issue 表單仍符合定義。",
+            "en": "repo-template also confirms that generated Issue forms retain the definition."
+          }
+        }
+      }
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "Spec 契約與 Issue 同步",
+          "description": "驗證必要章節、acceptance criteria、穩定 spec id 與同步的冪等行為。"
+        },
+        "en": {
+          "title": "Spec contract and Issue sync",
+          "description": "Validate required sections, acceptance criteria, stable spec IDs, and idempotent synchronization."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "tests/test_spec_to_issue.py"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/spec-to-issue.yml",
+              "job": "sync",
+              "trigger": {
+                "zh-tw": "Spec／同步程式進入 main 或 dev；可手動執行",
+                "en": "Spec or sync code enters main or dev; manual dispatch is also allowed"
+              },
+              "timeout": "10 min"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "里程碑啟動門檻",
+          "description": "生命週期追蹤 Issue 保存同意與反駁；至少一位非提案者同意且沒有未解決反駁才開始。"
+        },
+        "en": {
+          "title": "Milestone kickoff gate",
+          "description": "One lifecycle Issue records agreement and objections. Work starts only with one non-proposer agreement and no unresolved objection."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "tests/test_milestone_approval.py",
+              "pending": true,
+              "issue": 400
+            }
+          ],
+          "automationNote": {
+            "zh-tw": "既有 milestone-lifecycle Action 尚未驗證留言中的同意與反駁；由 #400 補上共用 validator。",
+            "en": "The existing milestone-lifecycle Action does not yet validate agreement and objections in comments; #400 adds the shared validator."
+          }
+        }
+      }
+    }
+  ]
+}

@@ -162,7 +162,7 @@ fit = "符合畫面"
 | `docs/`、`site/` | 專案說明、規格、決策與內部網站 | 共同維護 |
 | `src/`、產品測試與規格 | 真正產品行為 | 專案持有 |
 
-表格刻意維持三欄：側邊簡報目錄已可直接連到每個項目對應的頁面，僅維運可見的「CI/CD 設定」附錄也已逐 Journey 詳列驗證入口，細節比表格欄位更完整。另外加上「對應頁名」與「驗證入口」兩欄，只會重複這兩份既有內容。
+表格刻意維持三欄：側邊簡報目錄已可直接連到每個項目對應的頁面，僅維運可見的「CI/CD 設定」附錄也已逐步驟詳列驗證入口，細節比表格欄位更完整。另外加上「對應頁名」與「驗證入口」兩欄，只會重複這兩份既有內容。
 
 {{< detail key="files-update" title="更新時怎麼保護產品內容" >}}
 Copier 在短分支嘗試更新；若有衝突，只列出檔案且不修改 repo，調整後重跑，再由 PR 審查。建立、既有 repo 導入與同一 repo 後續 update 都有 fixture；回歸測試會刻意加入產品檔案，再確認更新後內容沒有被覆寫。
@@ -277,30 +277,36 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="contract" track="contract" eyebrow="步驟 03" title="先驗證改動，再讓 CI 重跑同一套規則" subtitle="日常改動跑必要檢查；Milestone／canary 交付、緊急修正或高風險改動才跑完整驗證。" class="legacy-slide decision-slide" legacy="true" >}}
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>獨立工作 PR 直接進 main；只有 Milestone 工作進 dev/m*。下方 technical view 的舊 route 與「準備發版」用語只供稽核；完整檢查不代表自動發版。</span></aside>
-{{< legacy >}}
-      <header>
-        <h2>步驟 3｜<span class="accent">先驗證改動，再讓 CI 重跑同一套規則</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong>開發時先跑與改動直接相關的測試；Issue PR 再由同一支 Action 依變更範圍選擇 docs、fast 或 full。</p>
-      </header>
-      <p class="context-line"><strong>模板的作用｜</strong>把測試邏輯留在 repo 內可直接執行的 scripts／tests；GitHub Action 只負責何時啟動、使用哪些權限，以及呼叫同一份程式。</p>
-      <div class="decision-strip">
-        <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">依 repo 規模與風險選擇驗證範圍</span></summary><ul><li><strong>每次全跑：</strong>每張 PR 都取得完整信心，適合測試很小、執行很快的 repo。</li><li><strong>只跑受影響項目：</strong>依 dependency graph 或路徑縮小範圍，回饋快，但分流規則必須可測。</li><li><strong>獨立 pipeline runtime：</strong>本機與不同 CI 平台執行相同 pipeline，換來額外引擎與環境成本。</li><li><strong>分階段驗證：</strong>日常快速、整合候選完整；需要清楚定義何時升級與哪一份結果有效。</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">一份邏輯、一支 Action、兩種 repo 範圍</span></summary><ul class="work-definition-list"><li><strong>開發中：</strong>人或 agent 只跑能證明這次修改的 focused check，先取得新鮮輸出再宣稱完成。</li><li><strong>工作 PR（工作分支 → dev/m* 或 main）：</strong>系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li><li><strong>需要完整檢查時：</strong>準備發版、緊急修正，或系統無法安全縮小測試範圍時，執行完整檢查。</li><li><strong>同一套邏輯：</strong>GitHub Actions 只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li><li><strong>專案範圍：</strong>一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li></ul></details>
-      </div>
-      {{< config-guidance track="contract" >}}
-{{< /legacy >}}
+{{< slide key="contract" track="contract" eyebrow="步驟 03" title="先驗證改動，再讓 CI 重跑同一套規則" subtitle="Issue PR 依變更範圍分級；只有高風險交付邊界才跑完整驗證。" class="candidate-slide" legacy="false" >}}
+- **開發中：**只跑能證明本次修改的 focused check（例如 `uv run pytest <path>`、`uv run ruff check <path>`），用新鮮輸出才宣稱完成，不等待整條 pipeline。
+- **工作 PR（工作分支 → main 或 `dev/m*`）：**`scripts/ci_tier.py` 依事件、base／head、labels 與變更路徑分類為 `docs`、`fast` 或 `full`；純文件／site 內容落在 `docs`（`fast` 的 early-exit 情境），一般變更落在 `fast`；無法判斷的路徑一律 fail-closed 升級為 `full`。
+- **需要完整驗證時：**只在 Milestone／canary 交付、緊急修正、merge queue、手動執行，或系統無法安全縮小範圍的未知高風險路徑才觸發。
+- **同一套邏輯：**GitHub Actions 只有一個 `verify` job，`contents: read` 權限、最多 30 分鐘，同一 PR 新 commit 會取消舊 run；只呼叫 repo 內既有腳本——中央模板用 `scripts/verify-fast`／`scripts/verify-template.sh`，生成 repo 用 `scripts/verify`。
+- **專案範圍：**一般專案只驗證自己的改動；公版專案的完整驗證還包含標記 `large` 的 Copier 建立／既有導入／更新回歸測試，實際生成新專案元件並驗證其保存的產品內容，不只是「檔案存在」。
 
-{{< basic >}}
-- **開發中：**只跑能證明本次修改的 focused check。
-- **工作 PR（topic → main 或 `dev/m*`）：**系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。
-- **需要完整檢查時：**Milestone／canary 交付、緊急修正、merge queue、手動執行，或系統無法安全縮小測試範圍時，執行完整檢查。
-- **Action：**只有一個 `verify` job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。
-- **專案範圍：**一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。
+驗證邏輯只放在 repo 內可執行的 `scripts`／`tests`；GitHub Action 只負責事件、權限與呼叫同一份程式，不重複邏輯。
 
-測試邏輯只寫在 scripts／tests。目前 active 的自動化是 CI、PR policy、Issue triage、spec-to-Issue、Milestone lifecycle、Work Issue closure、reviewer 指派、OSV 與 Dependabot；單一 release workflow 已設定為候選，另行的 promotion／release handoff／registry publisher／消費／live-integration／deployment workflow 未啟用。
-{{< /basic >}}
+<aside class="config-guidance" data-audience="maintainer"><strong>Root repo 狀態（2026-09-03）</strong><p>依賴安全（<code>osv.yml</code>）在公版 root 自己身上仍是 candidate：這支 workflow 已落地 <code>main</code> 並由 GitHub 註冊為 active，但觸發條件只有 <code>schedule</code>（UTC 週一 03:17）與 <code>workflow_dispatch</code>，不含 <code>pull_request</code>，所以無法在候選分支預先註冊；<code>gh run list</code> 尚未查到任一次排程或手動觸發的 run，不構成本頁與 <code>docs/ci-policy.md</code> 定義的 live run 證據。新生成的 repo 因為 Copier 初次 commit 就進入該 repo 的 <code>main</code>，可以立即註冊與觸發，狀態是 active。</p></aside>
+
+{{< detail key="contract-automation" title="目前有哪些自動化真的在跑" >}}
+以下狀態逐項對照 `docs/ci-policy.md` 的「Current automation」表與即時查詢（2026-09-03），不沿用建置當下可能已過期的數字：
+
+- **Active：**CI（`ci.yml`）、PR policy（`pr-policy.yml`）、Issue triage（`issue-triage.yml`）、Spec to Issue（`spec-to-issue.yml`）、Milestone lifecycle（`milestone-lifecycle.yml`）、Work Issue closure（`work-item-closure.yml`）、reviewer 指派（`governance-comment.yml`）與 Dependabot（GitHub 原生功能）都已註冊並有近期成功的 live run。
+- **已修正的已知限制：**Work Issue closure 過去用 `pull_request.base.sha` checkout，合併後才存在的 `close-work` 指令因此找不到而失敗；#401／PR #453（2026-09-02 合併）已改用 `pull_request.merge_commit_sha`，2026-09-03 已有成功 live run。Milestone lifecycle 的核准／結案驗證覆蓋（`tests/test_milestone_approval.py`／`tests/test_milestone_closure.py`）也已在本候選中；追蹤 Issue #400 已於 2026-09-02 結案為 completed。
+- **依情境而定：**依賴安全（OSV）在生成 repo 是 active；在公版 root 自己身上仍是 candidate，理由見上方 aside。
+- **Candidate，本頁不重複驗證：**Version／Release（`release.yml`）目前確切狀態請直接查 `docs/ci-policy.md` 的「版本、發版、交付與部署矩陣」一節。
+- **未啟用：**專用的 promotion、release-handoff、registry publisher、consumption、live-integration 與 deployment workflow 都不存在，也不是留待接上的 conditional 選項。
+{{< /detail >}}
+
+{{< detail key="contract-cost" title="三種驗證分級的實際耗時" >}}
+數字取自 `docs/ci-policy.md` 記錄的最近一次量測，是設定成本預期的參考點，不是永久 SLA；重跑會拿到不同數字。
+
+- `docs` 與 `fast` 共用同一條 bounded path；`docs` 只是純文件／site 內容時的 early-exit 情境。
+- `fast`：2026-09-01 同機暖快取下，只碰 source 的 scope 約 59 秒，同時碰 policy／template 的 scope 約 99 秒；整條 PR feedback window 約 1–4 分鐘（#428）。
+- `full`：獨占環境下七個階段全數 PASSED 共 502 秒（8 分 22 秒）；同機器有其他 worktree 並行執行時量到 810 秒，差異來自資源競爭，不是驗證內容本身變重（#458，2026-09-02）。七個階段中，Regression tests（完整 pytest 加上標記 `large` 的 Copier 建立／導入／更新矩陣）通常是耗時最長的一段，其餘六個階段合計通常只有數十秒。
+{{< /detail >}}
+
+{{< config-guidance track="contract" >}}
 {{< /slide >}}
 
 {{< slide key="languages" track="languages" eyebrow="步驟 04" title="選擇程式語言後，自動帶入適合的檢查" subtitle="每種語言各自定義工具與測試；共通規則只執行一次。" class="legacy-slide decision-slide" legacy="true" >}}
@@ -325,7 +331,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 - **Rust：**檢查格式、常見錯誤、測試、正式建置及安裝包。
 - **TypeScript：**檢查格式、型別、測試及安裝包。
 
-同一項共通檢查只跑一次。語言可以同時勾選，但不另外建立或說明每一種排列組合。
+每種語言是各自獨立的元件（模組），同一項共通檢查只跑一次；語言可以同時勾選，但不另外建立或說明每一種排列組合。
 {{< /basic >}}
 {{< /slide >}}
 
@@ -534,51 +540,36 @@ Adoption 與 update 不從 workflow 檔名推測 ownership。`.csarc/config.yml`
 {{< /basic >}}
 {{< /slide >}}
 
-{{< slide key="template-release" track="template-release" eyebrow="步驟 09" title="Copier 保持同步，公版也吃自己的規則" subtitle="模板錯誤會一次影響多個專案，因此建立、導入與更新都要實跑。" class="legacy-slide decision-slide" legacy="true" >}}
-<aside class="selection-note"><strong>Current state｜2026-09-01</strong><span>下方 technical view 的 Python 自動升版與專用 GitHub App 是封存設計。現行三十天觀察規則保留，但由一般受審查 PR 人工更新，不需要 App 或長效 secret。</span></aside>
-{{< legacy >}}
-      <header>
-        <h2>Copier 保持同步，<span class="accent">公版本身也吃自己的規則</span></h2>
-        <p class="subtitle"><strong>基本導入。</strong><code>template/</code> 是下發內容唯一來源；root 只因 GitHub 讀取慣例保留公版自己的治理設定，配對檔案由產生腳本從 root 生成 <code>template/</code> 副本。</p>
-      </header>
-      <p class="context-line"><strong>問題與目的｜</strong>模板錯誤會一次影響多個專案；每次修改都要真的建立新案、導入既有案，再讓已導入的 repo 接收更新並通過完整驗證。</p>
-      <div class="decision-strip">
-        <details class="decision-step decision-fold" open><summary><span class="step-label">其他常見做法</span><span class="decision-fold-title">這次不選，因為無法持續同步或驗證</span></summary><ul><li><strong>GitHub Template：</strong>只複製一次，不記得來源與答案</li><li><strong>PyScaffold：</strong>可參考 Python 結構，但會形成第二套更新機制</li><li><strong>只驗 YAML：</strong>無法證明新案、既有案與更新真的能跑</li></ul></details>
-        <details class="decision-step decision-fold recommended" open><summary><span class="step-label">我們的選擇</span><span class="decision-fold-title">Copier＋建立／導入／更新回歸</span></summary><details class="package-disclosure"><summary><span><span class="tech-name">Copier</span>＋root dogfood＋建立／導入／更新回歸</span></summary><div class="package-health"><p><a href="https://github.com/copier-org/copier" target="_blank" rel="noreferrer">copier-org/copier</a>｜MIT｜公開、未封存且持續維護。</p><p><strong>採用原因：</strong>記錄來源、語言與答案，能把新版模板套回既有 repo；更新衝突時保持 repo 不變，調整後重跑再由 PR 審查。</p></div></details><p><strong>建立：</strong>共通基線與 Python、Rust、TypeScript 模組各自實跑驗證；多選時合併模組，不建立組合專屬流程。<br><strong>首次導入：</strong>在 repo 外以固定 Release 與完整 SHA 的 CLI 產生 machine plan，再只套用同一份未漂移 plan。第一張 PR 由人核對來源、plan、diff 與本機結果；base 尚無可信任 verifier 時，不執行 PR head 新增的 script，也不宣稱已自動驗證。<br><strong>後續更新：</strong>update dry-run 先預覽；候選內容與衝突全部驗證完成後才修改 target，接著由一般 PR 與 trusted-base checks 審查。<br><strong>更新通知：</strong>選用後每週檢查一次；有新版只建立或更新一張 Issue，不會自動修改 repo。<br><strong>版本：</strong>公版與所有語言模組共用一個 SemVer；各語言基線依自己的穩定版政策前進。</p></details>
-      </div>
-      <p class="context-line"><strong>root／template 配對檔案｜</strong>逐位元組相同的 workflow、policy、文件、script 與 test 由 <code>scripts/sync-paired-files.sh</code> 以 root 為唯一來源產生；<code>--check</code> 驗證內容與可執行位元。含 Jinja 變數的檔案改由實際生成 repo 的回歸測試確認；<code>AGENTS.md</code>／<code>README.md</code> 等責任不同的內容不強行配對。</p>
-      {{< config-guidance track="template-release" >}}
-{{< /legacy >}}
-
-{{< basic >}}
-- `template/` 是下發內容來源；root 保留公版本身的 GitHub 治理與 dogfood 設定。
+{{< slide key="template-release" track="template-release" eyebrow="步驟 09" title="Copier 保持同步，公版也吃自己的規則" subtitle="模板錯誤會一次影響多個專案，因此建立、導入與更新都要實跑。" class="candidate-slide" legacy="false" >}}
+- `template/` 是下發內容唯一來源；root 只因 GitHub 讀取慣例保留公版自己的治理與 dogfood 設定，配對檔案由 `scripts/sync-paired-files.sh` 從 root 產生 `template/` 副本。
 - `.csarc/config.yml` 同時是 Copier 的更新紀錄與 repo 唯一的公版設定；語言、分支與選用能力都從這裡讀取，後續擴充也增加設定項目，不另建第二份設定檔。
-- 新 repo 先選語言與功能，再產生可直接驗證的基線；多個語言只是合併各自模組。
-- 既有 repo 首次導入時，先用固定版本的 CLI 在本機產生 repo 外的變更清單，再套用同一份清單。第一張 PR 由人確認，因為舊的預設分支還沒有可信任的檢查程式。
-- 第一次導入合併後，預設分支已有可信任的 PR policy，唯讀 CI 再驗證候選內容；升級仍先預覽，若有衝突就保持 repo 不變，修正後重跑。
-- 可選的更新通知每週檢查新版；只建立或更新一張 Issue，不會自動修改 repo。
+- 新 repo 先選語言與功能，再產生可直接驗證的基線；多個語言只是合併各自元件（模組），不建立組合專屬流程。
+- 既有 repo 首次導入時，先用固定 Release 與完整 SHA 的 CLI 在 repo 外產生 machine plan，再只套用同一份未漂移的 plan。第一張 PR 由人核對來源、plan、diff 與本機結果——舊的預設分支還沒有可信任的檢查程式，不執行 PR head 新增的 script，也不宣稱已自動驗證。
+- 第一次導入合併後，預設分支已有可信任的 PR policy，唯讀 CI 再驗證候選內容；升級仍先用 dry-run 預覽，候選內容與衝突全部驗證完成才修改 target，若有衝突就保持 repo 不變，修正後重跑，再由一般 PR 與 trusted-base checks 審查。
+- 可選的更新通知每週檢查一次；有新版只建立或更新一張 Issue，不會自動修改 repo。
 
-{{< disclosure key="copier-update" title="Copier＋root dogfood＋建立／更新回歸" >}}
-[Copier](https://github.com/copier-org/copier) 記錄來源、語言與答案，能把新版公版套回可自行修改的既有 repo。首次導入先由人確認；後續更新若衝突就不修改 repo，調整後重跑，再以 PR 審查。GitHub Template 只複製一次，PyScaffold 則會形成第二套更新機制，因此不採用。
+{{< disclosure key="copier-update" title="Copier＋root dogfood＋建立／導入／更新回歸" >}}
+[Copier](https://github.com/copier-org/copier) 記錄來源、語言與答案，能把新版公版套回可自行修改的既有 repo。首次導入先由人確認；後續更新若衝突就不修改 repo，調整後重跑，再以 PR 審查。GitHub Template 只複製一次不記得來源與答案，PyScaffold 則會形成第二套更新機制，因此都不採用。
 {{< /disclosure >}}
 
 {{< detail key="template-release-scope" title="單一來源、版本基線與 root-only 邊界" >}}
-生成 repo 的 `.csarc/config.yml` 保存 Copier 所需的模板來源、版本與公版選項；root 使用同一批公開選項，但不偽造指回自己的 `_src_path`／`_commit`。設定變更透過 `csarc update --data` 寫回；繼承公版可在同一份 YAML 加 namespaced 欄位，不複製 CSARC 已有設定。
+Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外記錄 Copier 的來源與版本，並透過 `csarc update --data` 寫回變更。模板來源不會偽造指回自己、且很快就過期的 `_src_path`／`_commit`。繼承公版可在同一份 YAML 加 namespaced 欄位，不複製 CSARC 已有設定。
 
-`enable_template_update_notifications` 開啟時才產生 `template-update.yml` 與 `check-template-update`；公開來源不需 secret，private 來源才使用限於唯讀模板存取的 token。
+`enable_template_update_notifications` 開啟時才產生 `template-update.yml` 與 `check-template-update`；公開來源不需 secret，private 來源才使用限於唯讀模板存取的 repository secret。
 
-`scripts/sync-paired-files.sh` 讓 root 成為成對檔案的單一來源，`--check` 驗證副本內容與權限。`profiles/catalog.yaml` 保存語言基線與驗收證據；Python 與 Node 基線各自觀察三十天後才前進。
+`scripts/sync-paired-files.sh` 讓 root 成為成對檔案的單一來源，`--check` 驗證副本內容與可執行位元。`profiles/catalog.yaml` 保存語言基線與驗收證據；Python 與 Node 基線各自觀察三十天後才前進（`profiles/catalog.yaml` 的 `stable_release_observation_days: 30`）。
 
 `scripts/verify-template.sh` 只在公版 repo 實跑建立／導入／更新 fixture，不會下發到 consuming repository；生成 repo 使用較小的 `scripts/verify`。首次導入的 machine plan 留在 target 外，不能和待審內容一起被改寫成假證據；第一張 PR 合併後，base 才有可信任的 PR policy，唯讀 CI 再執行候選內容的驗證。
 {{< /detail >}}
 
 {{< detail key="template-release-status" title="目前自動化邊界" >}}
-- **Active：**CLI 在 candidate 內完成建立、導入或更新與驗證，成功後才寫入 target；公版完整測試會重跑三條路徑。
+- **Active：**CLI 在 candidate 內完成建立、導入或更新與驗證，成功後才寫入 target；公版完整驗證的 Regression tests 階段會重跑三條路徑（含標記 `large` 的 Copier create／adopt／update 矩陣），Package smoke test 階段則另外確認 wheel 可建置、已發布的入口可從建置產物直接執行。
 - **Manual：**首次導入的外部 plan、來源與第一張 PR 由人核准。
-- **Pending：**通知 workflow 與 checker script 已恢復，Copier fixture 測試也驗證只在選用時才會產生；`tests/test_template_update_notifications.py` 已涵蓋 checker 自身的更新判斷與 Issue create/edit 邏輯，包含 check-update 發生錯誤時的 fail-closed 行為，但尚未觀察到排程的 hosted 執行，因此不宣稱排程已能自動通知。
+- **Pending：**通知 workflow（`template-update.yml.jinja`）與 checker script（`check-template-update`）已恢復，Copier fixture 測試也驗證只在選用時才會產生；`tests/test_template_update_notifications.py` 已涵蓋 checker 自身的更新判斷與 Issue create/edit 邏輯，包含 check-update 發生錯誤時的 fail-closed 行為，但尚未觀察到排程的 hosted 執行，因此不宣稱排程已能自動通知。
 - **Retired：**remote governance 與 delivery orchestration 不隨本頁恢復；reviewer assignment 已恢復，改由「規則治理」頁說明。
 {{< /detail >}}
-{{< /basic >}}
+
+{{< config-guidance track="template-release" >}}
 {{< /slide >}}
 
 {{< slide key="docs-site" track="docs-site" eyebrow="步驟 10" title="單檔永遠可交付" subtitle="Hugo 管內容結構，既有 renderer 打包成可離線轉寄的 HTML。" class="legacy-slide decision-slide" legacy="true" >}}
@@ -665,7 +656,7 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
 {{< similar-tools >}}
 {{< /slide >}}
 
-{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜CI/CD 設定" title="CI/CD 設定｜依 Journey 檢查" subtitle="分開列出一般 repo 與 repo-template 在工作 PR 與 repository delivery PR 各自需要的測試與自動化。" class="similar-tools-slide testing-slide" legacy="true" >}}
+{{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜CI/CD 設定" title="CI/CD 設定｜依步驟檢查" subtitle="分開列出一般 repo 與 repo-template 在工作 PR 與 repository delivery PR 各自需要的測試與自動化。" class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
 {{< /slide >}}
 

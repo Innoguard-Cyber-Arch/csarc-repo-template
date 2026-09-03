@@ -1,0 +1,271 @@
+{
+  "key": "delivery",
+  "code": "07",
+  "labels": {
+    "zh-tw": {
+      "title": "版本／交付",
+      "heading": "步驟 07／交付與結案",
+      "scope": "交付完成並留下證據後才結束里程碑；若本批需要發版，還要附上 Release evidence。提前終止則先處理未完成工作。"
+    },
+    "en": {
+      "title": "Version / delivery",
+      "heading": "Step 07 / Delivery and closure",
+      "scope": "A Milestone closes only after delivery records its evidence; a batch that requires a release also records Release evidence. Early termination first disposes of unfinished work."
+    }
+  },
+  "stageLabels": {
+    "zh-tw": {
+      "milestone": "交付前",
+      "release": "交付後"
+    },
+    "en": {
+      "milestone": "Before delivery",
+      "release": "After delivery"
+    }
+  },
+  "rows": [
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "獨立工作直接交付",
+          "description": "沒有里程碑的單一工作 PR 直接進 main；一般 review 與風險分級驗證通過後，由 Closes #N 結案。"
+        },
+        "en": {
+          "title": "Deliver standalone work directly",
+          "description": "A single work PR without a Milestone targets main; after normal review and risk-based verification, Closes #N completes the Issue."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/test-pr-policy"
+            },
+            {
+              "path": "tests/test_ci_tier.py"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/pr-policy.yml",
+              "job": "title",
+              "trigger": {
+                "zh-tw": "無里程碑的 topic PR → main",
+                "en": "Topic PR without a Milestone → main"
+              },
+              "timeout": "10 min"
+            },
+            {
+              "path": ".github/workflows/ci.yml",
+              "job": "verify",
+              "trigger": {
+                "zh-tw": "同一 PR；依內容選 docs／fast／full",
+                "en": "The same PR; selects docs, fast, or full by content"
+              },
+              "timeout": "30 min"
+            }
+          ]
+        },
+        "release": {
+          "note": {
+            "zh-tw": "合併先完成 repository delivery；release workflow 再判斷是否需要版本 PR，不把兩個動作混成一次。",
+            "en": "Merge first completes repository delivery; the release workflow then decides whether a version PR is needed instead of combining both actions."
+          }
+        }
+      },
+      "templateOnly": {
+        "milestone": {
+          "note": {
+            "zh-tw": "root 與生成專案使用同一條 route 與 validator。",
+            "en": "The root and generated projects use the same route and validator."
+          }
+        }
+      }
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "Hotfix 完整驗證與證據",
+          "description": "緊急修正仍須 Bug Issue、review 與 full；合併後保存 head SHA、run、rollback 與發版決策。"
+        },
+        "en": {
+          "title": "Fully verify and evidence a hotfix",
+          "description": "An urgent fix still needs a Bug Issue, review, and full verification; after merge it retains the head SHA, run, rollback note, and release decision."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/test-pr-policy"
+            },
+            {
+              "path": "tests/test_ci_tier.py"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/pr-policy.yml",
+              "job": "title",
+              "trigger": {
+                "zh-tw": "bug＋hotfix 的 fix/* PR → main",
+                "en": "bug + hotfix on a fix/* PR → main"
+              },
+              "timeout": "10 min"
+            },
+            {
+              "path": ".github/workflows/ci.yml",
+              "job": "verify",
+              "trigger": {
+                "zh-tw": "同一 hotfix PR；固定 full",
+                "en": "The same hotfix PR; always full"
+              },
+              "timeout": "30 min"
+            }
+          ]
+        },
+        "release": {
+          "note": {
+            "zh-tw": "fix 預設是 patch 意圖；Release Please 產生精確版本 PR，仍須人審查後才發布。",
+            "en": "fix declares patch intent by default; Release Please creates the exact version PR, which still requires human review before publication."
+          }
+        }
+      },
+      "templateOnly": {
+        "milestone": {
+          "note": {
+            "zh-tw": "root 與生成專案使用同一條 route 與 validator。",
+            "en": "The root and generated projects use the same route and validator."
+          }
+        }
+      }
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "版本與 Release ownership",
+          "description": "PR 只宣告 SemVer 意圖；Release Please 集中更新精確版本與 CHANGELOG，單一 workflow 負責 tag 與 GitHub Release。"
+        },
+        "en": {
+          "title": "Version and Release ownership",
+          "description": "A PR declares only SemVer intent. Release Please centralizes the exact version and changelog, while one workflow owns the tag and GitHub Release."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "docs/adr/release-security-and-dependencies.md"
+            }
+          ],
+          "automationNote": {
+            "zh-tw": "root 與新 repo 由 Release Please 建版本 PR；既有 repo 保留 product-owned workflow。",
+            "en": "Release Please opens version PRs for the root and new repositories; adopted repositories retain their product-owned workflow."
+          }
+        },
+        "release": {
+          "files": [
+            {
+              "path": "scripts/release_policy.py"
+            },
+            {
+              "path": "scripts/release_bundle.py"
+            },
+            {
+              "path": "tests/test_release_bundle.py"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/release.yml",
+              "job": "version and publish",
+              "trigger": {
+                "zh-tw": "main 前進或人工重跑",
+                "en": "main advances or a manual rerun"
+              },
+              "timeout": "30 min"
+            }
+          ]
+        }
+      },
+      "templateOnly": {}
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "版本候選與發布證據",
+          "description": "同一 workflow 驗證 bot 版本 PR 的精確 SHA；合併後以 draft、下載重驗與 immutable check 完成發布。"
+        },
+        "en": {
+          "title": "Version candidate and release evidence",
+          "description": "The same workflow validates the bot version PR's exact SHA; after merge, draft staging, download verification, and the immutable check complete publication."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/verify-release-candidate"
+            }
+          ]
+        },
+        "release": {
+          "files": [
+            {
+              "path": "scripts/release_bundle.py"
+            },
+            {
+              "path": "tests/test_release_bundle.py"
+            }
+          ]
+        }
+      },
+      "templateOnly": {}
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "里程碑結案",
+          "description": "正常完成時確認發版與交付證據；提前終止時先記錄原因，並移轉或取消未完成 Issue。"
+        },
+        "en": {
+          "title": "Milestone closure",
+          "description": "Normal completion confirms release and delivery evidence. Early termination records a reason and first moves or cancels unfinished Issues."
+        }
+      },
+      "shared": {
+        "release": {
+          "files": [
+            {
+              "path": "tests/test_milestone_lifecycle.py"
+            },
+            {
+              "path": "tests/test_milestone_closure.py",
+              "pending": true,
+              "issue": 400
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/milestone-lifecycle.yml",
+              "job": "sync",
+              "trigger": {
+                "zh-tw": "生命週期追蹤 Issue closed／reopened／milestoned",
+                "en": "Lifecycle Issue closed, reopened, or milestoned"
+              },
+              "timeout": "5 min"
+            }
+          ]
+        }
+      },
+      "templateOnly": {
+        "release": {
+          "note": {
+            "zh-tw": "使用相同結案程式；repo-template 不維護另一套里程碑規則。",
+            "en": "Uses the same closure program; repo-template has no second Milestone rule."
+          }
+        }
+      }
+    }
+  ]
+}

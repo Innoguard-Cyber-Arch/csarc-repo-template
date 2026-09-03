@@ -459,6 +459,7 @@ def test_testing_pending_automation_defaults_issue_number() -> None:
                 "trigger",
                 "timeout",
                 "pending",
+                "step",
             ),
             "x",
         ),
@@ -475,6 +476,7 @@ def test_testing_pending_automation_defaults_issue_number() -> None:
                 "trigger",
                 "timeout",
                 "pending",
+                "step",
             ),
             "x",
         ),
@@ -514,7 +516,7 @@ def test_testing_pending_automation_defaults_issue_number() -> None:
     data.similar_tools["testing"]["groups"] = [
         {
             "key": "work",
-            "journey": "01",
+            "code": "01",
             "labels": {
                 "zh-tw": {"title": "工作", "heading": "h", "scope": "s"},
                 "en": {"title": "Work", "heading": "h", "scope": "s"},
@@ -856,12 +858,44 @@ def _write_fixture_site(root: Path) -> None:
                 "testing": {
                     "labels": {"zh-tw": {}, "en": {}},
                     "duration": {"labels": {"zh-tw": {}, "en": {}}, "rows": []},
-                    "groups": [],
                 },
             }
         ),
         encoding="utf-8",
     )
+    # The CI/CD settings appendix's per-step groups live under their own
+    # site/data/testing/<key>.json files (Issue #533), loaded by
+    # `_load_testing_groups` in the same fixed order as `_TESTING_STEP_ORDER`.
+    # Nothing in this minimal fixture's content source calls
+    # `{{< testing >}}`, so these stubs only need to satisfy that loader's
+    # own consistency check, not carry real rows.
+    testing_dir = site / "data" / "testing"
+    testing_dir.mkdir()
+    for key, code in (
+        ("work", "01"),
+        ("agents", "02"),
+        ("contract", "03"),
+        ("languages", "04"),
+        ("supply", "05"),
+        ("pr", "06"),
+        ("delivery", "07"),
+        ("governance", "08"),
+        ("template-upgrade", "09"),
+    ):
+        (testing_dir / f"{key}.json").write_text(
+            json.dumps(
+                {
+                    "key": key,
+                    "code": code,
+                    "labels": {
+                        "zh-tw": {"title": "t", "heading": "h", "scope": "s"},
+                        "en": {"title": "t", "heading": "h", "scope": "s"},
+                    },
+                    "rows": [],
+                }
+            ),
+            encoding="utf-8",
+        )
     for lang, title in (("zh-tw", "標題"), ("en", "Title")):
         (site / "content" / f"_index.{lang}.md").write_text(
             "+++\n"

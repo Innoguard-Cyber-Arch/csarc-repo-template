@@ -1,0 +1,117 @@
+{
+  "key": "languages",
+  "code": "04",
+  "labels": {
+    "zh-tw": {
+      "title": "程式語言",
+      "heading": "步驟 04／語言模組",
+      "scope": "建立或導入時選擇語言；Issue PR 只跑所選模組，交付 PR 再完成建置與打包。所有入口都讀取同一份公版設定。"
+    },
+    "en": {
+      "title": "Programming languages",
+      "heading": "Step 04 / Language modules",
+      "scope": "Languages are selected during creation or adoption. Issue PRs run the selected modules, while release PRs add builds and packaging. Every entrypoint reads the same template configuration."
+    }
+  },
+  "rows": [
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "設定與實際檔案一致",
+          "description": "公版設定列出的語言必須和 repo 內的 Python、Rust、TypeScript 專案檔一致。"
+        },
+        "en": {
+          "title": "Configuration matches repository files",
+          "description": "Languages listed by the template configuration must match the Python, Rust, and TypeScript project files in the repository."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": ".csarc/config.yml"
+            },
+            {
+              "path": "scripts/detect-language-profile"
+            }
+          ],
+          "automation": [
+            {
+              "path": ".github/workflows/ci.yml",
+              "job": "verify",
+              "trigger": {
+                "zh-tw": "修改程式、套件或公版設定的 Issue PR",
+                "en": "Issue PR changing code, dependencies, or template settings"
+              },
+              "timeout": "30 min"
+            }
+          ]
+        },
+        "release": {
+          "files": [
+            {
+              "path": ".csarc/config.yml"
+            },
+            {
+              "path": "scripts/detect-language-profile"
+            }
+          ]
+        }
+      },
+      "templateOnly": {
+        "release": {
+          "files": [
+            {
+              "path": "tests/test_language_profiles.py"
+            }
+          ],
+          "note": {
+            "zh-tw": "確認 Copier 建立單一設定檔，並正確組合各語言模組。",
+            "en": "Confirms that Copier creates one configuration file and composes the selected language modules correctly."
+          }
+        }
+      }
+    },
+    {
+      "purpose": {
+        "zh-tw": {
+          "title": "各語言使用自己的檢查",
+          "description": "Python、Rust、TypeScript 各自執行格式、靜態檢查、測試與必要的建置；共通規則只跑一次。"
+        },
+        "en": {
+          "title": "Each language runs its native checks",
+          "description": "Python, Rust, and TypeScript each run their own formatting, static checks, tests, and required builds while shared rules run once."
+        }
+      },
+      "shared": {
+        "milestone": {
+          "files": [
+            {
+              "path": "scripts/verify-fast"
+            }
+          ]
+        },
+        "release": {
+          "files": [
+            {
+              "path": "scripts/verify"
+            }
+          ]
+        }
+      },
+      "templateOnly": {
+        "release": {
+          "files": [
+            {
+              "path": "scripts/verify-template.sh"
+            }
+          ],
+          "note": {
+            "zh-tw": "另外建立各語言與多選範例，確認生成、更新與鎖檔仍可使用。",
+            "en": "Additionally creates single- and multi-language fixtures to confirm generation, updates, and lockfiles remain usable."
+          }
+        }
+      }
+    }
+  ]
+}
