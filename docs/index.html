@@ -2999,7 +2999,7 @@ html[data-detail-level="simple"] .detail-panel {
 <li>**Action：**只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li>
 <li>**專案範圍：**一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li>
 </ul>
-<p>測試邏輯只寫在 scripts／tests。目前 active 的自動化是 CI、PR policy、Issue triage、spec-to-Issue、Milestone lifecycle、reviewer 指派、OSV 與 Dependabot；單一 release workflow 已設定為候選，另行的 promotion／release handoff／registry publisher／消費／live-integration／deployment workflow 未啟用。</p></div>
+<p>測試邏輯只寫在 scripts／tests。目前 active 的自動化是 CI、PR policy、Issue triage、spec-to-Issue、Milestone lifecycle、Work Issue closure、reviewer 指派、OSV 與 Dependabot；單一 release workflow 已設定為候選，另行的 promotion／release handoff／registry publisher／消費／live-integration／deployment workflow 未啟用。</p></div>
 
 
 </section>
@@ -3591,9 +3591,14 @@ html[data-detail-level="simple"] .detail-panel {
 					<td>已納入同一候選流程；首次成功實跑後才算 Active</td>
 			</tr>
 			<tr>
-					<td>attestation／消費驗證</td>
+					<td>Production-side attestation</td>
+					<td>Removed（#439）</td>
+					<td>沒有任何 active workflow 消費 release attestation 設定；#439 已移除該設定面，不留下承諾不了結果的選項。有真實需求的產品另開 Issue／ADR 加入 attestation</td>
+			</tr>
+			<tr>
+					<td>Consumption-side verification</td>
 					<td>Conditional</td>
-					<td>由產品依 registry 與供應鏈需求選配</td>
+					<td><code>scripts/verify_release_consumption.py</code> 與上列產出端設定無關；真實消費者明確採用後才是門禁</td>
 			</tr>
 			<tr>
 					<td>PyPI／npm／GHCR</td>

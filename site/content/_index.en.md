@@ -150,7 +150,7 @@ Only tools this template directly integrates, executes, or produces into the rep
 - **One implementation:** GitHub Actions has one `verify` job with a 30-minute timeout and only calls repository scripts.
 - **Repository scope:** a normal repository checks its own changes; the template repository also confirms that newly generated repositories work.
 
-Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, Work Issue closure, reviewer assignment, and Dependabot are active in a newly generated repository from its first commit. One release workflow is configured as a candidate pending a successful default-branch run. Dedicated promotion, release-handoff, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.
+Verification logic lives only in scripts and tests. CI, PR policy, Issue triage, spec-to-Issue, Milestone lifecycle, Work Issue closure, reviewer assignment, OSV, and Dependabot are active in a newly generated repository from its first commit. One release workflow is configured as a candidate pending a successful default-branch run. Dedicated promotion, release-handoff, registry publication, consumption, live-integration, remote-governance, and deployment workflows are not active.
 
 <aside class="config-guidance" data-audience="maintainer"><strong>Root repository state</strong><p>In <code>csarc-repo-template</code> itself, OSV is also candidate: its workflow has not yet landed on this repository's own <code>main</code>, and its trigger set does not include <code>pull_request</code>, so it cannot pre-register from a candidate branch. See the CI/CD settings page's current-automation table for the exact live-registration check and timestamp.</p></aside>
 
@@ -224,7 +224,8 @@ Routine updates and security checks run automatically. People step in only for u
 | Exact version and changelog | Candidate / Guided | Automatic uses a reviewed Release Please PR; when platform policy blocks it, Guided uses a normal PR opened by a person or agent |
 | Tag and GitHub Release | Candidate / Blocked | The sole workflow publishes after the version PR; activation awaits a default-branch run |
 | Checksums and SBOM | Configured | Included in the same candidate path; Active only after its first successful run |
-| Attestations and consumption | Conditional | Products opt in when registry and supply-chain needs justify them |
+| Production-side attestation | Removed (#439) | Zero active workflow ever consumed the release-attestation settings; #439 removed the setting surface itself rather than leave an option that cannot deliver a result. A consuming product adds real attestation through a separate Issue/ADR |
+| Consumption-side verification | Conditional | `scripts/verify_release_consumption.py` checks provenance independently of the production-side setting above; it becomes a gate only once a real consumer explicitly adopts it |
 | PyPI, npm, and GHCR | Not applicable | The root publishes to no registry; #439 removed the dormant PyPI/npm/GHCR prompts because zero workflow consumed them, so generated projects no longer expose these settings either. A consuming product adds its own OIDC publisher through a separate Issue/ADR |
 
 {{< detail key="standalone-delivery" title="When standalone work must join a Milestone" >}}
