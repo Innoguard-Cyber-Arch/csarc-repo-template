@@ -151,6 +151,36 @@ operator 在每次 bypass-merge 後主動對該 PR 執行這個工具確認留�
 落地的判斷）。`scripts/apply-repository-settings.sh` 對這兩個新政策檔案的存在與否
 是條件式判斷：檔案不存在時（所有既有下游 repo）行為與本 Issue 之前完全一致。
 
+`scripts/pr_lifecycle.py` 的 `scan_writers`（`command_writer_violations`／
+`declarative_writer_violations`）掃描 `.github/workflows/`、`scripts/`
+與各自的 `template/` 對應目錄，對任何繞過 lease 直接寫入 PR 狀態的 `gh pr`／
+GraphQL／REST 呼叫 fail closed；`canonical_scanner_helper` 只白名單
+`pr_lifecycle.py` 自己這一支腳本（root 與 `template/` 兩份精確路徑，且逐段
+拒絕 symlink）。`.github/workflows/dependabot-auto-merge.yml`（root 與
+`template/.github/workflows/dependabot-auto-merge.yml`，#569 新增）裡的
+`gh pr merge --auto --squash` 與 `gh pr edit --add-label
+needs-manual-review` 兩處寫入向來未經過 lease，因此曾被 `scan_writers` 判定
+為「Unleased PR lifecycle writer」而 fail closed，連帶讓三種語言生成專案的
+`scripts/verify` 全部失敗（根因分析見 #597；例外本身見 #602）。維護者已確認
+方向：不強行把這兩行改走 lease——`gh pr merge --auto` 語意是排進 GitHub
+原生佇列，實際合併仍卡在 `title`／`promotion`／`verify` 必要檢查與
+`policies/rulesets.json` 的 branch protection review requirement，不是
+lease 機制原本要防的「立即搶寫」；`gh pr edit --add-label` 那行只在 major
+版本更新、本就要人工複核而非自動合併時才觸發，同樣不構成即時寫入競態。因此
+`scripts/pr_lifecycle.py` 新增一個與 `canonical_scanner_helper` 同風格、
+共用同一段 symlink 安全檢查的姊妹函式 `dependabot_auto_merge_exemption`，
+只正面表列這兩個精確路徑，不是放寬 pattern 本身——換一個檔名重現同樣的
+`gh pr merge`／`gh pr edit --add-label` 寫法仍會被 `scan_writers` 抓到
+（回歸測試見 `tests/test_pr_lifecycle.py` 的
+`test_dependabot_auto_merge_exemption_is_an_exact_path_allowlist`）。
+
+**通則（自 #602 起生效）**：往後每新增一個 `scan_writers` 例外，都必須有
+自己對應的 tracking Issue 記錄理由與範圍（不能只在程式碼註解裡說明，也不能
+一次開一張 Issue 涵蓋多個例外）；且所有既有例外都要在專案脫離 beta 階段後
+重新審核一次，確認當時的安全假設（例如「排隊等 required check」這類語意）
+仍然成立。這不是本節唯一的例外——`canonical_scanner_helper` 對
+`pr_lifecycle.py` 自身的例外也適用同一條通則，往後新增例外一律比照辦理。
+
 ### 不屬於里程碑的工作
 
 一張 Issue 若能獨立審查、驗證與交付，且沒有共同期限、跨 Issue 相依、整批驗收或
