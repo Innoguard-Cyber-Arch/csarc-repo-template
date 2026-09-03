@@ -49,12 +49,18 @@
       transform: translate(-50%, -50%) scale(var(--deck-scale));
       transform-origin: center;
     }
-    html.narrow-screen body { overflow: auto; }
+    html.narrow-screen, html.narrow-screen body { overflow-x: hidden; }
+    html.narrow-screen body { overflow-y: auto; }
     html.narrow-screen .deck {
       position: absolute;
       left: 0;
       top: 46px;
-      transform: scale(var(--deck-scale));
+      /* The fit script's narrow-screen scale is a fixed constant, not derived
+         from the actual viewport width, so it can leave the 1600px-wide deck
+         canvas wider than the viewport on very narrow phones. Clamp the
+         rendered scale to whatever actually fits so the deck never overflows
+         horizontally, without changing the desktop/tablet scaling path. */
+      transform: scale(min(var(--deck-scale), calc(100vw / 1600px)));
       transform-origin: top left;
     }
     .slide {
