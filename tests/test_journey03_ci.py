@@ -180,6 +180,29 @@ def test_documentation_tier_validates_the_generated_site() -> None:
     assert "python3 scripts/render_site.py --check" in template_fast
 
 
+def test_mixed_scope_pull_requests_still_catch_docs_staleness() -> None:
+    """A fast-tier PR that also touches docs must not skip the staleness check.
+
+    Issue #588: a PR with scopes = {"workflow", "docs", ...} classifies as
+    tier "fast", not "docs", so the docs-only early-exit branch never runs.
+    The staleness check must also fire from a second gate, keyed on scopes
+    rather than tier, that survives past that early exit.
+    """
+    root_fast = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
+    template_fast = (
+        REPO_ROOT / "template/scripts/verify-fast.jinja"
+    ).read_text(encoding="utf-8")
+
+    for source, check in (
+        (root_fast, "./scripts/build-decision-site --check"),
+        (template_fast, "python3 scripts/render_site.py --check"),
+    ):
+        docs_tier_start = source.index('if [[ "$tier" == "docs" ]]; then')
+        docs_tier_exit = source.index("exit 0", docs_tier_start)
+        mixed_scope_gate = source.index('"$scopes" == *,docs,*', docs_tier_exit)
+        assert check in source[mixed_scope_gate:]
+
+
 def test_template_smoke_reads_config_from_the_generated_repository() -> None:
     """Resolve the generated config relative to the generated repository."""
     source = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")
