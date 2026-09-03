@@ -3784,6 +3784,73 @@ html[data-detail-level="simple"] .detail-panel {
 <div class="markdown-body"><table><thead><tr><th>Option</th><th>Current state</th></tr></thead><tbody><tr><td>Current <code>docs/specs/*.md</code></td><td>Front matter records ID, priority, state, and optional tracking; markers repeatably synchronize an Issue or Milestone</td></tr><tr><td>GitHub Spec Kit</td><td><code>/specify → /plan → /tasks → /implement</code>; requires another CLI and supported AI tool, with no built-in one-spec-to-one-Issue synchronization</td></tr></tbody></table>
 <aside class="technical-detail" data-content-key="spec-format-cost"><h3>Why migration is deferred and what would trigger it</h3>
 <p>Adopting Spec Kit requires rewriting <code>scripts/spec_to_issue.py</code>, converting existing specs, updating verification assertions, and designing an equivalent Issue sync. Supporting both formats adds cognitive and maintenance cost. Reevaluate when approved specifications regularly need reliable AI decomposition into several work items and the team accepts an additional CLI/agent workflow. Issue #77 closed with this decision recorded; open a new Issue if the reevaluation conditions above are met.</p></aside></div>
+</section>
+<section class="slide markdown-slide legacy-slide review-notes-slide" id="governance-audit-trail" data-content-key="governance-audit-trail" data-audience="archive" data-parity="new" aria-label="Audit trail: presentation and data freshness">
+  <aside class="journey-rail" aria-label="Presentation outline">
+  <h3>Use template</h3>
+  <ol class="journey-use">
+    <li class="journey-item human">
+      <a href="#capability"><span>Capability</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#flow"><span>CI/CD flow</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#files"><span>File map</span></a>
+    </li>
+  </ol>
+  <h3>Workflow</h3>
+  <ol class="journey-main">
+    <li class="journey-item human">
+      <a href="#method"><span class="journey-code">01</span><span>Work</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#agents"><span class="journey-code">02</span><span>AI rules</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#contract"><span class="journey-code">03</span><span>Verify</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#languages"><span class="journey-code">04</span><span>Languages</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#supply"><span class="journey-code">05</span><span>Supply</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#pr"><span class="journey-code">06</span><span>PR merge</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#deploy"><span class="journey-code">07</span><span>Delivery</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#governance"><span class="journey-code">08</span><span>Governance</span></a>
+    </li>
+  </ol>
+  <h3>Maintenance</h3>
+  <ol class="journey-support">
+    <li class="journey-item human">
+      <a href="#template-release"><span class="journey-code">09</span><span>Updates</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#docs-site"><span class="journey-code">10</span><span>Docs site</span></a>
+    </li>
+  </ol>
+  <a class="journey-bookend appendix human" href="#similar-tools">Similar</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">May review</a>
+  <div class="journey-legend" aria-label="Color key">
+    <span><i class="human" aria-hidden="true"></i>Human decision</span>
+    <span><i class="automated" aria-hidden="true"></i>Automated by default</span>
+    <span data-audience="maintainer"><i class="maintainer" aria-hidden="true"></i>Maintainers only</span>
+  </div>
+</aside>
+
+<header class="basic-header">
+  <span class="selection-sequence">Governance audit</span>
+  <h2>Audit trail: presentation and data freshness</h2>
+  <p class="subtitle">The audit trail module queries GitHub live; this static site only documents the output structure and how to regenerate it, and never embeds a fetched data row.</p>
+</header>
+<div class="legacy-content audit-trail-content"><p><code>scripts/generate_audit_trail.py</code> (Issue #535) queries the GitHub GraphQL API live and writes two governance-audit Markdown tables: a pull-request audit trail, and a maker/checker log of changes under <code>policies/</code>.</p><table class="decision-register" aria-label="Audit trail output files and columns"><thead><tr><th>Output file</th><th>Contents</th><th>Columns</th></tr></thead><tbody><tr><td><code>docs/audit-trail/pr-audit.md</code></td><td>One row per pull request merged into the target branch: open/merge time, source -&gt; target branch, the linked Issue&#x27;s open/close time, Milestone, developers, reviewers, and a <code>governance_stage</code> classification (alpha/beta/stable) based on the source branch pattern.</td><td><code>PR</code> <code>Title</code> <code>Opened</code> <code>Merged</code> <code>Source -&gt; Target</code> <code>Issue</code> <code>Issue opened</code> <code>Issue closed</code> <code>Milestone</code> <code>Developers</code> <code>Reviewers</code> <code>governance_stage</code></td></tr><tr><td><code>docs/audit-trail/rule-changes.md</code></td><td>Only merged pull requests that changed a <code>policies/</code> path: change time, <code>proposed_by</code>/<code>proposing_pr</code> (who proposed it and which PR), and <code>approved_by</code>/<code>approving_review</code> (who approved it and which review).</td><td><code>Changed</code> <code>proposed_by</code> <code>proposing_pr</code> <code>approved_by</code> <code>approving_review</code></td></tr></tbody></table><aside class="selection-note"><strong>Freshness and trigger mechanism</strong><span>This decision site is a byte-reproducible, <code>file://</code>-openable static bundle -- it never embeds live-fetched GitHub data, and cannot. The table below only documents each output file&#x27;s column structure, not a snapshot of actual content at any point in time. Following the existing <code>scripts/check-governance-drift</code> precedent (the script stays available for local/CI verification only, with no additional schedule), this module is not wired into a schedule or an on-merge job that would generate and commit a snapshot either. Run the command below locally or in CI to produce a current audit snapshot yourself.</span></aside><p class="bridge-reference reference">Regenerate with: <code>python3 scripts/generate_audit_trail.py</code> (omit <code>--repo</code> to auto-detect the current repository; writes to <code>docs/audit-trail/</code> by default, and nothing is committed automatically)</p><p class="bridge-reference reference">Further reading: the presentation and trigger decision is recorded in <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/535" target="_blank" rel="noreferrer">#535</a> <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/559" target="_blank" rel="noreferrer">#559</a></p></div>
 </section></main>
   <nav class="controls" aria-label="Presentation controls" hidden>
     <button id="previous" type="button" aria-label="Previous slide">←</button>

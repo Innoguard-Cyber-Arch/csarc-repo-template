@@ -67,6 +67,16 @@ Issue #527 要求：在 #524 讓渲染引擎與排版模板各自獨立版本、
 
 **驗證**：`tests/test_build_decision_site.py` 覆蓋 `render_page()` 一律輸出 `site/theme.css` 的 stylesheet link，以及一筆全流程 fixture（`build()` 接 `render()`）證明實際覆寫的 token 值會出現在最終內嵌後的 bundle 裡。手動以真實內容執行 `./scripts/build-decision-site`，先確認預設（空白覆寫）與既有輸出一致，再暫時填入一個顏色覆寫、重新產生、瀏覽器開啟確認生效，最後還原。
 
+## 2026-09-03 稽核軌跡呈現與資料新鮮度（Issue #559）
+
+Issue #535 已完成稽核軌跡的資料自動產生機制：`scripts/generate_audit_trail.py` 即時查詢 GitHub GraphQL API，輸出 PR 稽核表與規則變更（`policies/` 路徑）maker/checker 紀錄兩份 Markdown。呈現層當時留待 #524 的 Python 渲染引擎落地後才處理，因此拆成獨立的 #559；#524 已合併，本節記錄呈現機制與資料新鮮度的實際決定。
+
+**決定**：這個決策網站是「重建後逐位元組相同、可用 `file://` 離線開啟」的靜態單檔（見本 ADR 最上方「決定」第 1 點），架構上不可能顯示即時查詢的結果，也不為了呈現這個模組破例。#535 的證據已建議比照 `scripts/check-governance-drift` 的既有先例——本模板 source repo 只保留腳本供本機／CI 驗證，不另外啟用排程；本 Issue 採用同一先例並延伸到「不提交快照」：既不加即時查詢（架構上做不到），也不加排程或 on-merge job 產生後提交進 repo（需要持續維護，且會讓使用者誤以為頁面上的資料是某個時間點的真實快照而非結構說明）。網站只呈現兩份輸出檔案各自的路徑與欄位結構，以及重新產生的確切指令，並在文案中明講「不嵌入即時或先前產生的資料列，也沒有排程」。
+
+**機制**：新增 `site/data/audit_trail.json`（單一來源，兩語言共用同一組真實檔案路徑與欄位名稱，避免各自手打翻譯漂移）與 `scripts/build_decision_site.py` 的 `render_audit_trail()`／`{{< audit-trail >}}` shortcode，沿用既有 `render_config_guidance`／`render_file_map` 這類「結構化、手動維護（非即時抓取）資料 → slide」的既有模式，不新增資料流或渲染架構。新增的 slide（`governance-audit-trail`，`audience="archive"`、`parity="new"`）沿用 `fleet-inventory`／`spec-format` 等既有「決策附錄」slide 的呈現慣例。
+
+**驗證**：`tests/test_build_decision_site.py` 新增 `render_audit_trail` 的單元測試，並以一則內容一致性測試（比照既有 `test_file_map_matches_real_workflow_directory_and_paths`）直接呼叫 `scripts/generate_audit_trail.py` 的 `render_pr_audit_table`／`render_rule_change_log`，比對其實際 Markdown 表頭欄位與 `site/data/audit_trail.json` 手寫的欄位清單逐字相符，避免兩邊日後各自修改而悄悄漂移。`./scripts/build-decision-site --check` 確認新增 slide 後仍逐位元組重建；`parity="new"` 讓 keys-only parity 檢查正確判定這是遷移後新增的內容，不會被誤判為遺漏既有 legacy slide。
+
 ## Ownership 與更新
 
 | 內容 | Owner | Copier update 行為 |

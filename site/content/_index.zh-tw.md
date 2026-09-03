@@ -929,3 +929,7 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
+
+{{< slide key="governance-audit-trail" audience="archive" parity="new" eyebrow="治理稽核" title="稽核軌跡：呈現機制與資料新鮮度" subtitle="稽核軌跡模組即時查詢 GitHub；這個靜態網站只說明輸出結構與如何重新產生，不嵌入任何即時或先前產生的資料列。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< audit-trail >}}
+{{< /slide >}}

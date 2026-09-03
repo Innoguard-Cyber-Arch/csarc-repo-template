@@ -9,6 +9,9 @@ RENDER_SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "render_site.py"))
 PARITY_MODULE = runpy.run_path(
     str(ROOT / "scripts" / "check-decision-site-parity")
 )
+AUDIT_TRAIL_GENERATOR_MODULE = runpy.run_path(
+    str(ROOT / "scripts" / "generate_audit_trail.py")
+)
 
 BuildError = SITE_MODULE["BuildError"]
 SiteData = SITE_MODULE["SiteData"]
@@ -21,6 +24,7 @@ render_config_guidance = SITE_MODULE["render_config_guidance"]
 render_file_map = SITE_MODULE["render_file_map"]
 render_similar_tools = SITE_MODULE["render_similar_tools"]
 render_testing = SITE_MODULE["render_testing"]
+render_audit_trail = SITE_MODULE["render_audit_trail"]
 render_journey_rail = SITE_MODULE["render_journey_rail"]
 render_slide = SITE_MODULE["render_slide"]
 render_page = SITE_MODULE["render_page"]
@@ -137,6 +141,36 @@ def _empty_data(**overrides: object) -> object:
                 "project": {"zh-tw": "專案持有", "en": "Project-owned"},
             },
             "entries": [],
+        },
+        "audit_trail": {
+            "command": "python3 scripts/generate_audit_trail.py",
+            "labels": {
+                "zh-tw": {
+                    "intro": "說明文字",
+                    "tableAriaLabel": "表格",
+                    "fileColumn": "檔案",
+                    "descriptionColumn": "內容",
+                    "columnsColumn": "欄位",
+                    "freshnessLabel": "新鮮度",
+                    "freshnessNote": "新鮮度說明",
+                    "commandIntro": "重新產生：",
+                    "commandOutro": "備註",
+                    "evidenceIntro": "延伸閱讀：",
+                },
+                "en": {
+                    "intro": "Intro",
+                    "tableAriaLabel": "Table",
+                    "fileColumn": "File",
+                    "descriptionColumn": "Contents",
+                    "columnsColumn": "Columns",
+                    "freshnessLabel": "Freshness",
+                    "freshnessNote": "Freshness note",
+                    "commandIntro": "Regenerate with:",
+                    "commandOutro": "note",
+                    "evidenceIntro": "Further reading:",
+                },
+            },
+            "files": [],
         },
         "version": {
             "engine": "1.0.0",
@@ -716,6 +750,91 @@ def test_testing_pending_automation_defaults_issue_number() -> None:
     assert '<div id="testing-panel-work"' in html
 
 
+# --- governance audit trail (Issue #559) ----------------------------------
+
+
+def _header_columns(markdown_table: str) -> list[str]:
+    """Extract the header cell text from the first pipe-table row."""
+    header_line = markdown_table.splitlines()[0]
+    return [cell.strip() for cell in header_line.strip("|").split("|")]
+
+
+def test_audit_trail_renders_file_rows_with_path_description_and_columns() -> (
+    None
+):
+    data = _empty_data()
+    data.audit_trail["files"] = [
+        {
+            "path": "docs/audit-trail/pr-audit.md",
+            "description": {"zh-tw": "說明 `x`", "en": "About `x`"},
+            "columns": ["PR", "governance_stage"],
+        }
+    ]
+    html = render_audit_trail(lang="en", data=data)
+    assert "<code>docs/audit-trail/pr-audit.md</code>" in html
+    assert "About <code>x</code>" in html  # description inline-code renders
+    assert "<code>PR</code>" in html
+    assert "<code>governance_stage</code>" in html
+
+
+def test_audit_trail_never_embeds_a_live_or_scheduled_snapshot() -> None:
+    # Issue #559's decision: this static, file://-openable bundle can never
+    # show live GitHub data, and no schedule/on-merge job generates and
+    # commits one either -- see docs/adr/portable-decision-site.md. The
+    # rendered copy must say so explicitly rather than implying real-time
+    # or automatically refreshed content.
+    data = _empty_data()
+    data.audit_trail["labels"]["en"]["freshnessNote"] = (
+        "never embeds live-fetched GitHub data, and cannot; no schedule "
+        "or on-merge job generates and commits a snapshot"
+    )
+    html = render_audit_trail(lang="en", data=data)
+    assert "never embeds live-fetched GitHub data, and cannot" in html
+    assert (
+        "no schedule or on-merge job generates and commits a snapshot" in html
+    )
+    assert "python3 scripts/generate_audit_trail.py" in html
+
+
+def test_audit_trail_columns_match_the_real_generator_headers() -> None:
+    # Content-fidelity check (mirrors test_file_map_matches_real_workflow_
+    # directory_and_paths): site/data/audit_trail.json hand-curates each
+    # output file's column list so both languages describe it identically,
+    # but that copy must never silently drift from
+    # scripts/generate_audit_trail.py's own Markdown header cells -- the
+    # actual source of truth for what the generated files contain.
+    data = load_site_data(ROOT)
+    files_by_path = {
+        entry["path"]: entry for entry in data.audit_trail["files"]
+    }
+    render_pr_audit_table = AUDIT_TRAIL_GENERATOR_MODULE[
+        "render_pr_audit_table"
+    ]
+    render_rule_change_log = AUDIT_TRAIL_GENERATOR_MODULE[
+        "render_rule_change_log"
+    ]
+    default_out_dir = AUDIT_TRAIL_GENERATOR_MODULE["DEFAULT_OUT_DIR"]
+    pr_audit_file = AUDIT_TRAIL_GENERATOR_MODULE["DEFAULT_PR_AUDIT_FILE"]
+    rule_change_file = AUDIT_TRAIL_GENERATOR_MODULE["DEFAULT_RULE_CHANGE_FILE"]
+    rule_prefixes = AUDIT_TRAIL_GENERATOR_MODULE["DEFAULT_RULE_PREFIXES"]
+
+    pr_audit_path = str(default_out_dir / pr_audit_file)
+    rule_change_path = str(default_out_dir / rule_change_file)
+    assert pr_audit_path in files_by_path
+    assert rule_change_path in files_by_path
+
+    pr_audit_markdown = render_pr_audit_table([], "owner/repo", "now")
+    rule_change_markdown = render_rule_change_log(
+        [], rule_prefixes, "owner/repo", "now"
+    )
+    assert files_by_path[pr_audit_path]["columns"] == _header_columns(
+        pr_audit_markdown[pr_audit_markdown.index("| PR |") :]
+    )
+    assert files_by_path[rule_change_path]["columns"] == _header_columns(
+        rule_change_markdown[rule_change_markdown.index("| Changed |") :]
+    )
+
+
 # --- journey rail --------------------------------------------------------
 
 
@@ -1069,6 +1188,41 @@ def _write_fixture_site(root: Path) -> None:
                     "project": {"zh-tw": "p", "en": "p"},
                 },
                 "entries": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (site / "data" / "audit_trail.json").write_text(
+        json.dumps(
+            {
+                "command": "python3 scripts/generate_audit_trail.py",
+                "labels": {
+                    "zh-tw": {
+                        "intro": "i",
+                        "tableAriaLabel": "t",
+                        "fileColumn": "f",
+                        "descriptionColumn": "d",
+                        "columnsColumn": "c",
+                        "freshnessLabel": "fl",
+                        "freshnessNote": "fn",
+                        "commandIntro": "ci",
+                        "commandOutro": "co",
+                        "evidenceIntro": "ei",
+                    },
+                    "en": {
+                        "intro": "i",
+                        "tableAriaLabel": "t",
+                        "fileColumn": "f",
+                        "descriptionColumn": "d",
+                        "columnsColumn": "c",
+                        "freshnessLabel": "fl",
+                        "freshnessNote": "fn",
+                        "commandIntro": "ci",
+                        "commandOutro": "co",
+                        "evidenceIntro": "ei",
+                    },
+                },
+                "files": [],
             }
         ),
         encoding="utf-8",

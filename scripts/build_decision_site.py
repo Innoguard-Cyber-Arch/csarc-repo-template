@@ -84,7 +84,7 @@ _LIST_ITEM: Final = re.compile(
     r"^(?P<indent>\s*)(?P<marker>[-*]|\d+\.)\s+(?P<text>.+)$"
 )
 _BARE_SELF_CLOSING: Final = re.compile(
-    r"^{{<\s*(?P<name>similar-tools|testing)\s*>}}$"
+    r"^{{<\s*(?P<name>similar-tools|testing|audit-trail)\s*>}}$"
 )
 
 
@@ -101,6 +101,7 @@ class SiteData:
     config_examples: dict[str, Any]
     similar_tools: dict[str, Any]
     file_map: dict[str, Any]
+    audit_trail: dict[str, Any]
     version: dict[str, Any]
 
 
@@ -144,6 +145,7 @@ def load_site_data(root: Path) -> SiteData:
         config_examples=_load_json_file(data_dir / "config_examples.json"),
         similar_tools=_load_json_file(data_dir / "similar_tools.json"),
         file_map=_load_json_file(data_dir / "file_map.json"),
+        audit_trail=_load_json_file(data_dir / "audit_trail.json"),
         version=_load_json_file(root / "site/version.json"),
     )
 
@@ -384,6 +386,8 @@ def _render_self_closing(
         return render_similar_tools(lang=lang, data=data)
     if name == "testing":
         return render_testing(lang=lang, data=data)
+    if name == "audit-trail":
+        return render_audit_trail(lang=lang, data=data)
     raise BuildError(
         f"unknown self-closing shortcode: {name}"
     )  # pragma: no cover
@@ -1021,6 +1025,69 @@ def render_testing(*, lang: str, data: SiteData) -> str:  # noqa: C901
         "</tr></thead>"
         f"<tbody>{''.join(duration_rows)}</tbody></table></div></div>"
         f"{''.join(group_panels)}</div>"
+    )
+
+
+# --- Governance audit trail (Issue #559) ----------------------------------
+
+_AUDIT_TRAIL_ISSUES: Final = (("535", "535"), ("559", "559"))
+
+
+def render_audit_trail(*, lang: str, data: SiteData) -> str:
+    """Render `{{< audit-trail >}}`: present the governance audit trail.
+
+    `scripts/generate_audit_trail.py` (Issue #535) queries live GitHub
+    state and writes two Markdown tables. This decision site is the
+    byte-reproducible, `file://`-openable static bundle
+    `docs/adr/portable-decision-site.md` requires, so it can never embed
+    that live query's result as if it were current -- Issue #559 decided
+    this shortcode instead documents each output file's *structure*
+    (paths and columns, sourced once here so both languages stay in sync
+    with the generator's real header text) plus the exact regeneration
+    command, and explicitly states that -- mirroring the
+    `scripts/check-governance-drift` precedent -- no schedule or
+    on-merge job generates and commits a snapshot either. The content
+    itself is hand-curated, not live-fetched, the same way
+    `site/data/config_examples.json` backs `render_config_guidance`.
+    """
+    audit = data.audit_trail
+    labels = audit["labels"][lang]
+    rows = "".join(
+        "<tr><td><code>{path}</code></td><td>{description}</td>"
+        "<td>{columns}</td></tr>".format(
+            path=_esc(entry["path"]),
+            description=_inline_markdown(entry["description"][lang]),
+            columns=" ".join(
+                f"<code>{_esc(column)}</code>" for column in entry["columns"]
+            ),
+        )
+        for entry in audit["files"]
+    )
+    evidence_links = " ".join(
+        f'<a href="https://github.com/Innoguard-Cyber-Arch/'
+        f'csarc-repo-template/issues/{number}" target="_blank" '
+        f'rel="noreferrer">#{label}</a>'
+        for number, label in _AUDIT_TRAIL_ISSUES
+    )
+    return (
+        '<div class="legacy-content audit-trail-content">'
+        f"<p>{_inline_markdown(labels['intro'])}</p>"
+        f'<table class="decision-register" '
+        f'aria-label="{_esc(labels["tableAriaLabel"])}">'
+        f"<thead><tr><th>{_esc(labels['fileColumn'])}</th>"
+        f"<th>{_esc(labels['descriptionColumn'])}</th>"
+        f"<th>{_esc(labels['columnsColumn'])}</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table>"
+        '<aside class="selection-note">'
+        f"<strong>{_esc(labels['freshnessLabel'])}</strong>"
+        f"<span>{_inline_markdown(labels['freshnessNote'])}</span></aside>"
+        f'<p class="bridge-reference reference">'
+        f"{_esc(labels['commandIntro'])} "
+        f"<code>{_esc(audit['command'])}</code> "
+        f"{_inline_markdown(labels['commandOutro'])}</p>"
+        f'<p class="bridge-reference reference">'
+        f"{_esc(labels['evidenceIntro'])} {evidence_links}</p>"
+        "</div>"
     )
 
 

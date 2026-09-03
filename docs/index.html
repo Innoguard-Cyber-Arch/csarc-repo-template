@@ -4153,6 +4153,73 @@ html[data-detail-level="simple"] .detail-panel {
 <div class="markdown-body basic-summary"><table><thead><tr><th>選項</th><th>現況</th></tr></thead><tbody><tr><td>現行 <code>docs/specs/*.md</code></td><td>Front matter 記錄 ID、優先度、狀態與選用 tracking；marker 可重跑同步 Issue 或里程碑</td></tr><tr><td>GitHub Spec Kit</td><td><code>/specify → /plan → /tasks → /implement</code>，需額外 CLI 與支援的 AI 工具，沒有內建一份 spec 對一張 Issue 的同步</td></tr></tbody></table>
 <aside class="technical-detail" data-content-key="spec-format-cost"><h3>目前不遷移的理由與重新評估條件</h3>
 <p>改採 Spec Kit 需重寫 <code>scripts/spec_to_issue.py</code>、轉換既有 specs、更新驗證斷言，並另行設計等價 Issue sync；雙格式則增加認知與維護負擔。當核准規格經常需要由 AI 穩定拆成多張子工作，且團隊願意維護額外 CLI／Agent 流程時再評估。Issue #77 已結案並記錄此決定；如需重新評估，請另開新 Issue。</p></aside></div>
+</section>
+<section class="slide markdown-slide legacy-slide review-notes-slide" id="governance-audit-trail" data-content-key="governance-audit-trail" data-audience="archive" data-parity="new" aria-label="稽核軌跡：呈現機制與資料新鮮度">
+  <aside class="journey-rail" aria-label="簡報目錄">
+  <h3>使用公版</h3>
+  <ol class="journey-use">
+    <li class="journey-item human">
+      <a href="#capability"><span>能力／導入</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#flow"><span>CI/CD 流程</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#files"><span>檔案地圖</span></a>
+    </li>
+  </ol>
+  <h3>開發與維護</h3>
+  <ol class="journey-main">
+    <li class="journey-item human">
+      <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
+    </li>
+  </ol>
+  <h3>公版管理</h3>
+  <ol class="journey-support">
+    <li class="journey-item human">
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
+    </li>
+  </ol>
+  <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
+  <div class="journey-legend" aria-label="顏色說明">
+    <span><i class="human" aria-hidden="true"></i>需要人決策</span>
+    <span><i class="automated" aria-hidden="true"></i>預設自動完成</span>
+    <span data-audience="maintainer"><i class="maintainer" aria-hidden="true"></i>僅維運可見</span>
+  </div>
+</aside>
+
+<header class="basic-header">
+  <span class="selection-sequence">治理稽核</span>
+  <h2>稽核軌跡：呈現機制與資料新鮮度</h2>
+  <p class="subtitle">稽核軌跡模組即時查詢 GitHub；這個靜態網站只說明輸出結構與如何重新產生，不嵌入任何即時或先前產生的資料列。</p>
+</header>
+<div class="legacy-content audit-trail-content"><p><code>scripts/generate_audit_trail.py</code>（Issue #535）即時查詢 GitHub GraphQL API，輸出兩份治理稽核 Markdown 表：PR 稽核軌跡，以及規則變更（<code>policies/</code> 路徑）的 maker/checker 紀錄。</p><table class="decision-register" aria-label="稽核軌跡輸出檔案與欄位"><thead><tr><th>輸出檔案</th><th>內容</th><th>欄位</th></tr></thead><tbody><tr><td><code>docs/audit-trail/pr-audit.md</code></td><td>涵蓋每一筆合併進目標分支的 PR：開啟／合併時間、來源→目標分支、連結 Issue 的開啟／關閉時間、Milestone、開發者、審查者，以及依來源分支模式分類的 <code>governance_stage</code>（alpha／beta／stable）。</td><td><code>PR</code> <code>Title</code> <code>Opened</code> <code>Merged</code> <code>Source -&gt; Target</code> <code>Issue</code> <code>Issue opened</code> <code>Issue closed</code> <code>Milestone</code> <code>Developers</code> <code>Reviewers</code> <code>governance_stage</code></td></tr><tr><td><code>docs/audit-trail/rule-changes.md</code></td><td>只列出改動 <code>policies/</code> 路徑的合併 PR：變更時間、<code>proposed_by</code>／<code>proposing_pr</code>（提案者與 PR），以及 <code>approved_by</code>／<code>approving_review</code>（核准者與核准的 review）。</td><td><code>Changed</code> <code>proposed_by</code> <code>proposing_pr</code> <code>approved_by</code> <code>approving_review</code></td></tr></tbody></table><aside class="selection-note"><strong>資料新鮮度與觸發機制</strong><span>這個決策網站是逐位元組重建、可用 <code>file://</code> 離線開啟的靜態單檔，不會、也不能嵌入即時查詢到的 GitHub 資料——下表只說明兩份輸出檔案各自的欄位結構，不是任何時間點的實際內容。比照 <code>scripts/check-governance-drift</code> 的既有先例（腳本保留供本機／CI 驗證，不另外啟用排程），這裡同樣不設定排程或 on-merge 自動產生並提交快照。維護者需在本機或 CI 執行下列指令，自行產生當下的稽核快照。</span></aside><p class="bridge-reference reference">重新產生： <code>python3 scripts/generate_audit_trail.py</code> （省略 <code>--repo</code> 會自動偵測目前 repository；預設寫入 <code>docs/audit-trail/</code>，不會自動提交）</p><p class="bridge-reference reference">延伸閱讀：呈現與觸發機制的決策記錄於 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/535" target="_blank" rel="noreferrer">#535</a> <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/559" target="_blank" rel="noreferrer">#559</a></p></div>
 </section></main>
   <nav class="controls" aria-label="簡報控制" hidden>
     <button id="previous" type="button" aria-label="上一頁">←</button>
