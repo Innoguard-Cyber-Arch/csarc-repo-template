@@ -1172,6 +1172,9 @@ def test_parity_ignores_explicit_supplemental_slides(tmp_path: Path) -> None:
 <section class="slide" id="public-supplement" data-parity="supplemental">
 <div class="legacy-content">Supplemental public copy</div>
 </section>
+<section class="slide" id="new-without-predecessor" data-parity="new">
+<div class="legacy-content">Genuinely new copy</div>
+</section>
 """,
         encoding="utf-8",
     )

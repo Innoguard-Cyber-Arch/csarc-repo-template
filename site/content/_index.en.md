@@ -148,7 +148,7 @@ Verification logic lives only in scripts and tests. CI, PR policy, Issue triage,
 {{< config-guidance track="contract" >}}
 {{< /slide >}}
 
-{{< slide key="languages" track="languages" eyebrow="Step 04" title="Choose a language and receive the matching checks" subtitle="Each language owns its tools and tests; shared rules run once." legacy="false" class="candidate-slide" >}}
+{{< slide key="languages" track="languages" parity="new" eyebrow="Step 04" title="Choose a language and receive the matching checks" subtitle="Each language owns its tools and tests; shared rules run once." legacy="false" class="candidate-slide" >}}
 Choose a project language and the template prepares the matching checks:
 
 - **Every project:** checks work rules, documentation, secrets, and dependency safety.
@@ -372,6 +372,23 @@ GitHub plan, repository visibility, organization policy, and token identity all 
 
 {{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="Maintenance appendix | CI/CD settings" title="CI/CD settings | Checks by Journey" subtitle="Separates the tests and automation that normal repositories and repo-template need for work and repository-delivery pull requests." class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
+{{< /slide >}}
+
+{{< slide key="rollout" track="rollout" audience="archive" class="dense" eyebrow="Phased rollout" title="Phased rollout, verifiable and stoppable at every step" subtitle="Three tiers: basic capability ships today; future and optional capability states its own trigger condition." legacy="false" >}}
+Adopting a template, CI, deployment, monitoring, and AI all at once makes it hard to tell where something broke. Splitting rollout into tiers gives every step its own completion condition instead of an empty placeholder file pretending to be done.
+
+| Tier | Current state |
+| --- | --- |
+| Basic rollout | CI/CD-only, Python-only, TypeScript-only, and mixed profiles ship today, along with Issue/spec, PR/CI, local verification, OSV, dependency policy, and the repo-internal site. Free plans detect their own capability and apply what is available; private repositories never claim Ruleset enforcement they cannot get. |
+| Verified in production | Release handoff, traceable artifacts, and Release attestation consumer verification are live, together with the first real CI-only downstream repository's adoption and Copier update; shared governance and CI-only composition are beta. |
+| Still trialing | Python, TypeScript, and mixed composition each still need one more real consuming repository before promotion to beta. |
+| Future or optional | A central catalog/governance platform, multi-repository support, Go/Rust, site hosting/login, deployment, monitoring, RAG, and autonomous agents. |
+
+{{< detail key="rollout-config" title="Where this is configured" >}}
+- **Which profiles are available or still planned:** `profiles/catalog.yaml`
+- **Detect the plan before applying settings:** `scripts/apply-repository-settings.sh`; only enable once Ruleset/App preconditions are met
+- **Whether create and update paths both pass:** `scripts/verify-template.sh`
+{{< /detail >}}
 {{< /slide >}}
 
 {{< slide key="access-control" audience="archive" class="dense" eyebrow="Access decision" title="Temporary protection before a hosting choice" subtitle="Current measures reduce accidental sharing; none is described as access control." legacy="false" >}}
