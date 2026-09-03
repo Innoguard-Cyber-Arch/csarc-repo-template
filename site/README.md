@@ -13,7 +13,8 @@ directly.
 | Path | Responsibility |
 | --- | --- |
 | `content/` | Paired Chinese and English Markdown with matching content keys, using the same `{{< slide key="..." >}}...{{< /slide >}}`-style block syntax the engine parses |
-| `static/` | Presentation styles, interactions, bundled local assets, and the vendored Mermaid build under `static/vendor/` |
+| `static/` | Template-owned presentation styles, interactions, bundled local assets, and the vendored Mermaid build under `static/vendor/` |
+| `theme.css` | Project- or fork-owned colour/theme overrides (Issue #527); ships empty, always linked and inlined, narrowly scoped to `:root` custom properties and existing block-level selectors -- see the file's own header comment |
 | `data/glossary.toml` | Shared glossary and `llms.txt` source |
 | `data/navigation.json` | Bilingual rail labels, grouping, participation colours, and legend copy |
 | `data/config_examples.json` | Fixed/adjustable policy examples rendered by `render_config_guidance()` |
@@ -63,8 +64,9 @@ generated-output drift are enforced by `./scripts/verify-template.sh`.
 
 ## Repository documentation boundary
 
-The engine only reads `site/content/`, `site/static/`, and `site/data/`.
-Existing `docs/decisions/`, `docs/specs/`, runbooks, and TDD or other
+The engine only reads `site/content/`, `site/static/`, `site/data/`, and the
+single project-owned `site/theme.css` override file. Existing
+`docs/decisions/`, `docs/specs/`, runbooks, and TDD or other
 engineering records stay independent Markdown sources with their own
 lifecycles; link to them from the presentation instead of moving or copying
 them into `site/content/`. The engine's own output stays under ignored

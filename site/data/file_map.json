@@ -1,0 +1,81 @@
+{
+  "labels": {
+    "zh-tw": {"address": "檔案總管｜專案根目錄"},
+    "en": {"address": "File Explorer | repository root"}
+  },
+  "responsibilityLabels": {
+    "template": {"zh-tw": "公版主導", "en": "Template-led"},
+    "shared": {"zh-tw": "共同維護", "en": "Shared"},
+    "project": {"zh-tw": "專案持有", "en": "Project-owned"}
+  },
+  "entries": [
+    {
+      "paths": [".csarc/config.yml"],
+      "responsibility": "template",
+      "purpose": {
+        "zh-tw": "記錄公版來源、語言、分支與選用能力",
+        "en": "Template source, languages, branch strategy, and optional capabilities"
+      }
+    },
+    {
+      "paths": [".github/ISSUE_TEMPLATE/", ".github/pull_request_template.md"],
+      "responsibility": "template",
+      "purpose": {
+        "zh-tw": "工作定義與 PR 契約",
+        "en": "Work definition and PR contract"
+      }
+    },
+    {
+      "paths": [".github/workflows/"],
+      "responsibility": "template",
+      "purpose": {
+        "zh-tw": "9 條共用流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單與候選發版，加上選配的治理漂移、模板更新通知排程、CodeQL SAST 與容器建置掃描",
+        "en": "Nine shared flows: Issue triage, Milestone sync, spec sync, PR rules, verification, scheduled vulnerability scanning, reviewer assignment, work item closure, and a candidate release flow, plus the optional governance-drift and template-update-notice schedules, CodeQL SAST, and a container build-and-scan job"
+      }
+    },
+    {
+      "paths": ["AGENTS.md", "README.md", "CLAUDE.md"],
+      "responsibility": "shared",
+      "purpose": {
+        "zh-tw": "Agent 工作方式與使用者入口",
+        "en": "Agent working rules and user entry point"
+      }
+    },
+    {
+      "paths": ["policies/", ".github/CODEOWNERS", ".github/REVIEWERS"],
+      "responsibility": "shared",
+      "purpose": {
+        "zh-tw": "期望設定、owner 與 reviewer",
+        "en": "Desired settings, owners, and reviewers"
+      }
+    },
+    {
+      "paths": ["scripts/"],
+      "responsibility": "template",
+      "purpose": {
+        "zh-tw": "本機驗證、工作同步與套用設定",
+        "en": "Local verification, work synchronization, and repository settings"
+      }
+    },
+    {
+      "paths": ["docs/", "site/"],
+      "responsibility": "shared",
+      "purpose": {
+        "zh-tw": "專案說明、規格、決策與內部網站",
+        "en": "Project guidance, specifications, decisions, and internal site"
+      }
+    },
+    {
+      "paths": ["src/"],
+      "responsibility": "project",
+      "note": {
+        "zh-tw": "、產品測試與規格",
+        "en": ", product tests, and product specifications"
+      },
+      "purpose": {
+        "zh-tw": "真正產品行為",
+        "en": "Product behavior"
+      }
+    }
+  ]
+}

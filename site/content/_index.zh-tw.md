@@ -151,18 +151,9 @@ fit = "符合畫面"
 {{< /slide >}}
 
 {{< slide key="files" track="files" eyebrow="檔案地圖" title="模板把必要設定放到正確位置" subtitle="列出目前實際產生的主要檔案；公版可提出更新，但不會靜默覆寫產品內容。" class="dense" legacy="false" >}}
-| 路徑 | 作用 | 責任 |
-| --- | --- | --- |
-| `.csarc/config.yml` | 記錄公版來源、語言、分支與選用能力 | 公版主導 |
-| `.github/ISSUE_TEMPLATE/`、`pull_request_template.md` | 工作定義與 PR 契約 | 公版主導 |
-| `.github/workflows/` | 9 條共用流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單與候選發版，加上選配的治理漂移、模板更新通知排程、CodeQL SAST 與容器建置掃描 | 公版主導 |
-| `AGENTS.md`、`README.md`、`CLAUDE.md` | Agent 工作方式與使用者入口 | 共同維護 |
-| `policies/`、`CODEOWNERS`、`.github/REVIEWERS` | 期望設定、owner 與 reviewer | 共同維護 |
-| `scripts/` | 本機驗證、工作同步與套用設定 | 公版主導 |
-| `docs/`、`site/` | 專案說明、規格、決策與內部網站 | 共同維護 |
-| `src/`、產品測試與規格 | 真正產品行為 | 專案持有 |
+{{< file-map >}}
 
-表格刻意維持三欄：側邊簡報目錄已可直接連到每個項目對應的頁面，僅維運可見的「CI/CD 設定」附錄也已逐步驟詳列驗證入口，細節比表格欄位更完整。另外加上「對應頁名」與「驗證入口」兩欄，只會重複這兩份既有內容。
+檔案地圖只列路徑、作用與責任：側邊簡報目錄已可直接連到每個項目對應的頁面，僅維運可見的「CI/CD 設定」附錄也已逐步驟詳列驗證入口，細節比這裡能呈現的更完整；樹狀呈現同樣不重複加上「對應頁名」或「驗證入口」。
 
 {{< detail key="files-update" title="更新時怎麼保護產品內容" >}}
 Copier 在短分支嘗試更新；若有衝突，只列出檔案且不修改 repo，調整後重跑，再由 PR 審查。建立、既有 repo 導入與同一 repo 後續 update 都有 fixture；回歸測試會刻意加入產品檔案，再確認更新後內容沒有被覆寫。
@@ -309,7 +300,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 {{< config-guidance track="contract" >}}
 {{< /slide >}}
 
-{{< slide key="languages" track="languages" eyebrow="步驟 04" title="選擇程式語言後，自動帶入適合的檢查" subtitle="每種語言各自定義工具與測試；共通規則只執行一次。" class="legacy-slide decision-slide" legacy="true" >}}
+{{< slide key="languages" track="languages" parity="new" eyebrow="步驟 04" title="選擇程式語言後，自動帶入適合的檢查" subtitle="每種語言各自定義工具與測試；共通規則只執行一次。" class="legacy-slide decision-slide" legacy="true" >}}
 {{< legacy >}}
       <header>
         <h2>步驟 4｜<span class="accent">每種程式語言各自管理</span></h2>
@@ -599,6 +590,16 @@ Root `.csarc/config.yml` 記錄公版自己選用的能力；生成 repo 另外�
 `noindex` 與 `robots.txt` 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。
 
 renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc/config.yml` key，不另定義第二份網站專用清單。專案文字寫在 `docs/site-content.md`，樣式覆寫留在 `docs/site-theme.css`，產生的 `docs/index.html` 不直接編輯。
+
+**自訂本頁（根網站）主題（Issue #527）：**上述 `.csarc/config.yml`／`docs/site-theme.css` 是生成專案的 handbook 路徑；fork 或 vendor 這份公版本身、想調整這份根決策網站配色的維護者，改用 `site/theme.css`。範圍嚴格限制在 `site/static/styles.css` 既有 `:root` 顏色 token，以及既有 class 的窄範圍視覺屬性，不開放新增 HTML、JavaScript 或版面配置；由一般 PR review 把關，不建立額外驗證工具。此檔一律存在、一律被引擎內嵌，預設為空白覆寫，因此預設輸出保持公版配色不變：
+
+```css
+:root {
+  --yellow: #2e6b47;
+}
+```
+
+編輯後執行 `./scripts/build-decision-site` 重新產生 `docs/index.html`／`docs/index.en.html`。這是排版模板結構的新增，`site/version.json` 的 `template` 版本與 `scripts/check-decision-site-versions` 的相容範圍檢查涵蓋這次擴充；詳見 `docs/adr/portable-decision-site.md` 的「根網站自訂主題」一節。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
@@ -658,6 +659,37 @@ GitHub plan、repo visibility、organization policy 與 token 身分都會影響
 
 {{< slide key="testing" audience="maintainer" parity="supplemental" eyebrow="維運附錄｜CI/CD 設定" title="CI/CD 設定｜依步驟檢查" subtitle="分開列出一般 repo 與 repo-template 在工作 PR 與 repository delivery PR 各自需要的測試與自動化。" class="similar-tools-slide testing-slide" legacy="true" >}}
 {{< testing >}}
+{{< /slide >}}
+
+{{< slide key="rollout" track="rollout" audience="archive" eyebrow="分階段導入策略" title="分階段導入，每一步都能停下來" subtitle="三層導入：基本能力現在就有，未來與可選能力先寫清楚觸發門檻。" class="legacy-slide review-notes-slide" legacy="true" >}}
+<aside class="selection-note"><strong>Current state｜2026-09-03</strong><span>下方 technical view 保留原始三層導入判斷供稽核；各層現況以 <code>profiles/catalog.yaml</code> 與相關驗證腳本為準，不在此頁重複更新。</span></aside>
+{{< legacy >}}
+      <header>
+        <h2>分階段導入，<span class="accent">每一步都能驗證，也能停下來</span></h2>
+        <p class="subtitle"><strong>三層導入｜</strong>基本能力現在就隨模板產生；未來與可選能力先寫清楚觸發門檻，不用空檔案假裝完成。</p>
+      </header>
+      <p class="context-line"><strong>問題與目的｜</strong>一次導入模板、CI、部署、監控與 AI，團隊很難判斷哪裡出錯；分期後每一步都有完成條件。</p>
+      <div class="decision-strip">
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不按聲量或日期一次把功能全打開</h3><ul><li><strong>一次切換：</strong>錯誤會同時擴散到所有專案</li><li><strong>固定日期解鎖：</strong>時間到了不代表使用條件已成熟</li><li><strong>所有語言同時上：</strong>未驗證的 profile 只是空承諾</li></ul></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>三層不是日期，而是導入條件</h3><p><strong>基本導入：</strong>CI/CD-only、Python-only、TypeScript-only、混合 profile，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已完成。Free 會先查能力並套可用設定；private repo 不宣稱有 Ruleset 強制保護。<br><strong>已完成線上驗證：</strong>release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier 更新；共用治理與 CI-only composition 為 beta。<br><strong>仍在試行：</strong>Python、TypeScript 與混合 composition 仍各需一個真實 consuming repo 才能升為 beta。<br><strong>未來／可選：</strong>中央 catalog／治理平台、多 repo、Go／Rust、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></article>
+      </div>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>哪些 profile 已可用或仍在規劃：</strong><code>profiles/catalog.yaml</code></li><li><strong>先查方案再套可用設定：</strong><code>scripts/apply-repository-settings.sh</code>；Ruleset／App 條件備妥後再啟用</li><li><strong>建立與更新路徑是否都能通過：</strong><code>scripts/verify-template.sh</code></li></ul></aside>
+{{< /legacy >}}
+
+{{< basic >}}
+| 導入層級 | 目前狀態 |
+| --- | --- |
+| 基本導入 | CI/CD-only、Python-only、TypeScript-only、混合 profile；Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已完成 |
+| 已完成線上驗證 | Release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier update |
+| 仍在試行 | Python、TypeScript 與混合 composition 各需一個真實 consuming repo 才能升為 beta |
+| 未來／可選 | 中央 catalog／治理平台、多 repo、Go／Rust、網站託管／登入、部署、監控、RAG、自主 Agent |
+
+{{< detail key="rollout-config" title="設定方式" >}}
+- **哪些 profile 已可用或仍在規劃：** `profiles/catalog.yaml`
+- **先查方案再套可用設定：** `scripts/apply-repository-settings.sh`；Ruleset／App 條件備妥後再啟用
+- **建立與更新路徑是否都能通過：** `scripts/verify-template.sh`
+{{< /detail >}}
+{{< /basic >}}
 {{< /slide >}}
 
 {{< slide key="access-control" audience="archive" eyebrow="存取決策" title="託管方案未定前的臨時防護" subtitle="目前只有降低誤分享的措施，沒有把提示語宣稱成安全控制。" class="legacy-slide review-notes-slide" legacy="true" >}}
@@ -887,4 +919,8 @@ Agent 不保存原始聊天。只有使用者已確認的 durable architecture�
 改採 Spec Kit 需重寫 `scripts/spec_to_issue.py`、轉換既有 specs、更新驗證斷言，並另行設計等價 Issue sync；雙格式則增加認知與維護負擔。當核准規格經常需要由 AI 穩定拆成多張子工作，且團隊願意維護額外 CLI／Agent 流程時再評估。Issue #77 已結案並記錄此決定；如需重新評估，請另開新 Issue。
 {{< /detail >}}
 {{< /basic >}}
+{{< /slide >}}
+
+{{< slide key="governance-audit-trail" audience="archive" parity="new" eyebrow="治理稽核" title="稽核軌跡：呈現機制與資料新鮮度" subtitle="稽核軌跡模組即時查詢 GitHub；這個靜態網站只說明輸出結構與如何重新產生，不嵌入任何即時或先前產生的資料列。" class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< audit-trail >}}
 {{< /slide >}}
