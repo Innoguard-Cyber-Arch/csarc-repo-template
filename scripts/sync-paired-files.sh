@@ -52,7 +52,9 @@ paired_files=(
   scripts/install-gitleaks
   scripts/install-osv-scanner
   scripts/install-shellcheck
+  scripts/install-syft
   scripts/lint-workflows-shell
+  scripts/publish-release
   scripts/release_bundle.py
   scripts/release_policy.py
   scripts/resolve-cache-root

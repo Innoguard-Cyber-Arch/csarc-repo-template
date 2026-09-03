@@ -205,159 +205,6 @@
       font-size: 18px;
     }
 
-    .repo-explorer-slide { padding-top: 3%; padding-right: 3.2%; padding-bottom: 2.7%; padding-left: 13.7%; }
-    .repo-explorer-slide header { margin-bottom: .8%; }
-    .repo-explorer-slide h2 { font-size: clamp(29px, 2.1vw, 35px); }
-    .explorer-window {
-      display: flex;
-      flex: 1;
-      min-height: 0;
-      flex-direction: column;
-      overflow: hidden;
-      border: 2px solid var(--ink);
-      border-radius: 9px;
-      background: white;
-      box-shadow: 0 9px 22px rgba(0, 0, 0, .12);
-    }
-    .explorer-toolbar {
-      display: grid;
-      grid-template-columns: 76px minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 10px;
-      min-height: 38px;
-      padding: 5px 10px;
-      border-bottom: 1px solid #bdbdb8;
-      background: #e9e9e6;
-    }
-    .window-dots { display: flex; gap: 6px; }
-    .window-dots i { width: 11px; height: 11px; border-radius: 50%; background: #a5a5a0; }
-    .window-dots i:first-child { background: #e65c52; }
-    .window-dots i:nth-child(2) { background: #e9b949; }
-    .window-dots i:last-child { background: #48a967; }
-    .explorer-address {
-      padding: 4px 10px;
-      border: 1px solid #c7c7c2;
-      border-radius: 5px;
-      background: white;
-      color: #3b3b39;
-      font: 750 18px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }
-    .explorer-profile { font-size: 18px; font-weight: 850; white-space: nowrap; }
-    .explorer-body { display: grid; flex: 1; min-height: 0; grid-template-columns: 28% 72%; }
-    .folder-pane {
-      min-height: 0;
-      padding: 10px 9px;
-      overflow: hidden;
-      border-right: 1px solid var(--line);
-      background: #f4f4f2;
-    }
-    .folder-pane ul { margin: 0; padding: 0; list-style: none; }
-    .folder-pane ul ul { margin: 2px 0 3px 7px; padding-left: 8px; border-left: 1px solid #bbb; }
-    .folder-pane li { position: relative; min-height: 26px; margin: 0; padding: 3px 4px 3px 26px; font: 750 17.5px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .folder-pane li::before {
-      content: "";
-      position: absolute;
-      left: 3px;
-      top: 8px;
-      width: 17px;
-      height: 12px;
-      border-radius: 2px;
-      background: #f0c842;
-      box-shadow: inset 0 0 0 1px #b99317;
-    }
-    .folder-pane li::after {
-      content: "";
-      position: absolute;
-      left: 4px;
-      top: 5px;
-      width: 8px;
-      height: 5px;
-      border-radius: 2px 2px 0 0;
-      background: #f0c842;
-      box-shadow: inset 0 0 0 1px #b99317;
-    }
-    .folder-pane .root-folder { padding-top: 5px; padding-bottom: 5px; background: #fff8bf; font-weight: 900; }
-    .folder-pane .root-folder::before, .folder-pane .root-folder::after { background: var(--yellow); }
-    .file-pane { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
-    .file-list-head, .file-row {
-      display: grid;
-      min-width: 128px;
-      grid-template-columns: minmax(0, 1.55fr) minmax(120px, .68fr) minmax(155px, .72fr);
-      align-items: center;
-      gap: 8px;
-      padding: 0 10px;
-    }
-    .file-list-head {
-      min-height: 30px;
-      border-bottom: 1px solid var(--line);
-      background: #f4f4f2;
-      color: var(--muted);
-      font-size: 18px;
-      font-weight: 850;
-    }
-    .file-rows { display: grid; flex: 1; min-height: 0; grid-template-rows: repeat(15, minmax(0, 1fr)); }
-    .file-row { border-bottom: 1px solid #e4e4e0; }
-    .file-row:nth-child(even) { background: #fbfbfa; }
-    .file-row:hover { background: #fffbea; }
-    .file-name {
-      position: relative;
-      min-width: 0;
-      padding-left: 24px;
-      overflow: hidden;
-      color: #174f8b;
-      font: 750 17.5px/1.08 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .file-name::before {
-      content: "";
-      position: absolute;
-      left: 4px;
-      top: 50%;
-      width: 12px;
-      height: 16px;
-      border: 1px solid #7d8ca2;
-      border-radius: 1px;
-      background: white;
-      transform: translateY(-50%);
-    }
-    .file-name.folder-name::before { width: 16px; height: 11px; border-color: #b99317; border-radius: 2px; background: #f0c842; }
-    .file-purpose { font-size: 18px; font-weight: 750; white-space: nowrap; }
-    .file-steps { display: flex; align-items: center; gap: 4px; }
-    .step-dot {
-      display: inline-grid;
-      width: 25px;
-      height: 25px;
-      place-items: center;
-      border-radius: 50%;
-      font-size: 17.5px;
-      font-weight: 900;
-      line-height: 1;
-    }
-    .step-dot.priority { border: 1px solid #baaa00; background: var(--yellow); }
-    .step-dot.best { border: 1px solid #6db091; background: var(--best-soft); color: #0b6540; }
-    .journey-route {
-      display: grid;
-      grid-template-columns: repeat(10, minmax(0, 1fr));
-      gap: 4px;
-      margin-top: 7px;
-    }
-    .route-stop {
-      padding: 4px 2px;
-      border-left: 4px solid #baaa00;
-      background: #fffbea;
-      font-size: 17.5px;
-      font-weight: 800;
-      line-height: 1.08;
-      text-align: center;
-      white-space: nowrap;
-    }
-    .route-stop.best { border-left-color: var(--best); background: var(--best-soft); color: #0b6540; }
-    .route-stop.optional { border-left-color: var(--optional); background: var(--optional-soft); color: #154969; }
-    .step-dot { border: 1px solid #9b9b95; background: #f3f3ef; color: var(--ink); }
-    .explorer-caption { margin-top: 5px; color: var(--muted); font-size: 18px; line-height: 1.18; }
-    .explorer-caption strong { color: var(--ink); }
-
     .similar-tools-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
 
     .similar-tools-slide header { margin-bottom: 8px; }
@@ -2448,7 +2295,7 @@ html[data-detail-level="simple"] .detail-panel {
 			</tr>
 			<tr>
 					<td><code>.github/workflows/</code></td>
-					<td>9 條共用流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單與候選發版，加上選配的治理漂移、模板更新通知排程與 CodeQL SAST</td>
+					<td>10 條共用流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單、Dependabot 自動合併與候選發版，加上選配的治理漂移、模板更新通知排程與 CodeQL SAST</td>
 					<td>公版主導</td>
 			</tr>
 			<tr>
@@ -3630,6 +3477,7 @@ html[data-detail-level="simple"] .detail-panel {
   <h3>自動發版的責任邊界</h3>
   <p>公版與新 repo 各自由自己的 release workflow 發布；既有 repo 保留 product-owned workflow。所有流程都要有唯一 owner、最小權限、完整 SHA pinning、timeout、concurrency、失敗復原與 runner 成本；歷史 run 只能當歷史資料。</p>
 <p>Adoption 與 update 不從 workflow 檔名推測 ownership。<code>.csarc/config.yml</code>、adoption plan、Markdown/PDF report 與 <code>.csarc/provenance.json</code> 一致揭露同一個明確的 <code>release_ownership</code>——<code>csarc-owned</code>、<code>product-owned</code> 或 <code>verification-only</code>——以及選定的 workflow 路徑、其 <code>workflow_dispatch</code> 必要 inputs、settings owner、是否要求 immutable Releases，以及降級為 <code>verification-only</code> 的原因（沒有找到 writer，或找到一個以上）。CSARC 不會 dispatch product-owned workflow，也不從名稱推測其 input contract；只讀取該 workflow 自己宣告的內容。</p>
+<p><code>release_ownership: csarc-owned</code> 的生成 repo（含本模板 root 自己）另外取得一條不依賴 GitHub Actions 是否健康的本機發版 backup：<code>release.yml</code> 的發布階段抽成單一腳本 <code>scripts/publish-release</code>，維護者或 agent 在本機（或任何持有 admin／write 權限的環境）呼叫同一份腳本即可完成 tag、Release、成品與 SBOM，Guided 模式的啟用條件也從「組織政策擋住 Actions 建 PR」擴大為包含「判斷 Actions／webhook 目前不可信任」。這條路徑仍要求版本 PR 經過與其他 <code>main</code> PR 相同的 review，GitHub Actions 仍是預設與建議路徑；細節見 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/ci-policy.md">ci-policy.md</a> 與 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/blob/main/docs/adr/release-security-and-dependencies.md">release-security-and-dependencies ADR</a>。這不是一個新的 Copier 選項——既有的 <code>release_ownership</code> 已經正確路由這個能力。</p>
 <p>里程碑完成時人工確認交付證據後再結案；#400、#401 尚未完成的 lifecycle gap 不在本頁複製 validator。工作分支合併後清理，里程碑 delivery branch 則等結案與未完成工作處置完成後才清理。</p>
 </aside>
 </div>
