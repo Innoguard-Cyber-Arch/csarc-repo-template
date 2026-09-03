@@ -474,3 +474,7 @@ Open an evaluation Issue that names a platform owner, cost ceiling, trial scope,
 Adopting Spec Kit requires rewriting `scripts/spec_to_issue.py`, converting existing specs, updating verification assertions, and designing an equivalent Issue sync. Supporting both formats adds cognitive and maintenance cost. Reevaluate when approved specifications regularly need reliable AI decomposition into several work items and the team accepts an additional CLI/agent workflow. Issue #77 closed with this decision recorded; open a new Issue if the reevaluation conditions above are met.
 {{< /detail >}}
 {{< /slide >}}
+
+{{< slide key="governance-audit-trail" audience="archive" parity="new" eyebrow="Governance audit" title="Audit trail: presentation and data freshness" subtitle="The audit trail module queries GitHub live; this static site only documents the output structure and how to regenerate it, and never embeds a fetched data row." class="legacy-slide review-notes-slide" legacy="true" >}}
+{{< audit-trail >}}
+{{< /slide >}}
