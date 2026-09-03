@@ -30,6 +30,7 @@ paired_files=(
   policies/actions.json
   policies/issue-creation.json
   policies/labels.json
+  policies/pages.json
   policies/releases.json
   policies/repository.json
   policies/security-scanning.json

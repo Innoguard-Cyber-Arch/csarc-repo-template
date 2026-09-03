@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "source": {
+    "branch": "main",
+    "path": "/docs"
+  }
+}

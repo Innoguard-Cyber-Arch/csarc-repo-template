@@ -111,19 +111,22 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           STATUS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RELEASE_TAG: ${{ steps.plan.outputs.tag }}
         run: |
           ./scripts/publish-release stage \
             --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" \
-            --tag "${{ steps.plan.outputs.tag }}"
+            --tag "$RELEASE_TAG"
       - name: Resolve the exact release state
         id: state
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name || steps.stage.outputs.tag }}
+          RELEASE_CREATED: ${{ steps.release.outputs.release_created }}
         run: |
           ./scripts/publish-release resolve \
             --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" \
-            --tag "${{ steps.release.outputs.tag_name || steps.stage.outputs.tag }}" \
-            --created "${{ steps.release.outputs.release_created }}"
+            --tag "$RELEASE_TAG" \
+            --created "$RELEASE_CREATED"
       - name: Prepare release assets
         if: ${{ steps.state.outputs.state == 'draft' }}
         env:
@@ -144,14 +147,16 @@ jobs:
         if: ${{ steps.state.outputs.state == 'draft' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.state.outputs.tag }}
         run: |
           ./scripts/publish-release publish \
-            --repo "$GITHUB_REPOSITORY" --tag "${{ steps.state.outputs.tag }}"
+            --repo "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG"
       - name: Verify an already-published rerun
         if: ${{ steps.state.outputs.state == 'published' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.state.outputs.tag }}
         run: |
           ./scripts/publish-release rerun-verify \
-            --repo "$GITHUB_REPOSITORY" --tag "${{ steps.state.outputs.tag }}"
+            --repo "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG"
 {% endraw %}
