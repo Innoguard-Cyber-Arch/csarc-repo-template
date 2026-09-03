@@ -13,7 +13,8 @@ The syntax has three shapes, all used by the content files:
   `slide`, `legacy`, `basic`, `detail`, and `disclosure` are containers, and
   none of them nest inside another block of the same name;
 - a *self-closing* call with attributes: `{{< config-guidance track="x" >}}`;
-- a bare self-closing call: `{{< similar-tools >}}`, `{{< testing >}}`.
+- a bare self-closing call: `{{< file-map >}}`, `{{< similar-tools >}}`,
+  `{{< testing >}}`.
 """
 
 from __future__ import annotations
@@ -39,7 +40,12 @@ NESTED_BLOCK: Final = re.compile(
 # `{{< /name >}}` close tag; site/content/*.md never nests one inside
 # another (verified by the content-fidelity ports in
 # tests/test_build_decision_site.py).
-SELF_CLOSING_NAMES: Final = ("config-guidance", "similar-tools", "testing")
+SELF_CLOSING_NAMES: Final = (
+    "config-guidance",
+    "file-map",
+    "similar-tools",
+    "testing",
+)
 # Shortcodes that always pair with a close tag and never nest inside their
 # own name, but may nest inside a `basic` or non-legacy slide body.
 CONTAINER_NAMES: Final = ("detail", "disclosure")
@@ -105,8 +111,9 @@ class MixedNode:
 def iter_mixed(text: str) -> list[MixedNode]:
     """Tokenize a body into ordered prose/shortcode segments.
 
-    Splits `text` on every top-level `config-guidance` / `similar-tools` /
-    `testing` self-closing call and `detail` / `disclosure` container block,
+    Splits `text` on every top-level `config-guidance` / `file-map` /
+    `similar-tools` / `testing` self-closing call and `detail` / `disclosure`
+    container block,
     preserving document order and treating everything else as one prose
     segment per gap (including raw HTML lines Hugo's `unsafe = true`
     goldmark setting let authors write directly).

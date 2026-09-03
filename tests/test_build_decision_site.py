@@ -6,6 +6,12 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "build_decision_site.py"))
 RENDER_SITE_MODULE = runpy.run_path(str(ROOT / "scripts" / "render_site.py"))
+PARITY_MODULE = runpy.run_path(
+    str(ROOT / "scripts" / "check-decision-site-parity")
+)
+AUDIT_TRAIL_GENERATOR_MODULE = runpy.run_path(
+    str(ROOT / "scripts" / "generate_audit_trail.py")
+)
 
 BuildError = SITE_MODULE["BuildError"]
 SiteData = SITE_MODULE["SiteData"]
@@ -15,8 +21,10 @@ render_mixed = SITE_MODULE["render_mixed"]
 render_detail = SITE_MODULE["render_detail"]
 render_disclosure = SITE_MODULE["render_disclosure"]
 render_config_guidance = SITE_MODULE["render_config_guidance"]
+render_file_map = SITE_MODULE["render_file_map"]
 render_similar_tools = SITE_MODULE["render_similar_tools"]
 render_testing = SITE_MODULE["render_testing"]
+render_audit_trail = SITE_MODULE["render_audit_trail"]
 render_journey_rail = SITE_MODULE["render_journey_rail"]
 render_slide = SITE_MODULE["render_slide"]
 render_page = SITE_MODULE["render_page"]
@@ -25,6 +33,8 @@ load_site_data = SITE_MODULE["load_site_data"]
 build = SITE_MODULE["build"]
 _substitute_version_tokens = SITE_MODULE["_substitute_version_tokens"]
 render = RENDER_SITE_MODULE["render"]
+parse_parity = PARITY_MODULE["parse"]
+compare_parity = PARITY_MODULE["compare"]
 
 
 def _empty_data(**overrides: object) -> object:
@@ -119,6 +129,48 @@ def _empty_data(**overrides: object) -> object:
                 },
                 "groups": [],
             },
+        },
+        "file_map": {
+            "labels": {
+                "zh-tw": {"address": "檔案總管｜專案根目錄"},
+                "en": {"address": "File Explorer | repository root"},
+            },
+            "responsibilityLabels": {
+                "template": {"zh-tw": "公版主導", "en": "Template-led"},
+                "shared": {"zh-tw": "共同維護", "en": "Shared"},
+                "project": {"zh-tw": "專案持有", "en": "Project-owned"},
+            },
+            "entries": [],
+        },
+        "audit_trail": {
+            "command": "python3 scripts/generate_audit_trail.py",
+            "labels": {
+                "zh-tw": {
+                    "intro": "說明文字",
+                    "tableAriaLabel": "表格",
+                    "fileColumn": "檔案",
+                    "descriptionColumn": "內容",
+                    "columnsColumn": "欄位",
+                    "freshnessLabel": "新鮮度",
+                    "freshnessNote": "新鮮度說明",
+                    "commandIntro": "重新產生：",
+                    "commandOutro": "備註",
+                    "evidenceIntro": "延伸閱讀：",
+                },
+                "en": {
+                    "intro": "Intro",
+                    "tableAriaLabel": "Table",
+                    "fileColumn": "File",
+                    "descriptionColumn": "Contents",
+                    "columnsColumn": "Columns",
+                    "freshnessLabel": "Freshness",
+                    "freshnessNote": "Freshness note",
+                    "commandIntro": "Regenerate with:",
+                    "commandOutro": "note",
+                    "evidenceIntro": "Further reading:",
+                },
+            },
+            "files": [],
         },
         "version": {
             "engine": "1.0.0",
@@ -334,6 +386,157 @@ def test_config_guidance_matches_real_governance_item_newlines() -> None:
         )
         assert f'<pre class="code">{expected_code}</pre>' in html
         assert f"<h4>{item['title'][lang]}</h4>" in html
+
+
+# --- file map (Issue #534) ----------------------------------------------
+
+
+def _file_map_data(entries: list[dict]) -> object:
+    return _empty_data(
+        file_map={
+            "labels": {
+                "zh-tw": {"address": "檔案總管"},
+                "en": {"address": "Address"},
+            },
+            "responsibilityLabels": {
+                "template": {"zh-tw": "公版主導", "en": "Template-led"},
+                "shared": {"zh-tw": "共同維護", "en": "Shared"},
+                "project": {"zh-tw": "專案持有", "en": "Project-owned"},
+            },
+            "entries": entries,
+        }
+    )
+
+
+def test_file_map_renders_single_path_leaf_with_icon_tag_and_purpose() -> None:
+    data = _file_map_data(
+        [
+            {
+                "paths": ["AGENTS.md"],
+                "responsibility": "template",
+                "purpose": {"zh-tw": "規範", "en": "Rules"},
+            }
+        ]
+    )
+    html = render_file_map(lang="en", data=data)
+    assert html == (
+        '<div class="file-map-window">'
+        '<div class="file-map-toolbar">'
+        '<span class="file-map-dots" aria-hidden="true">'
+        "<i></i><i></i><i></i></span>"
+        '<code class="file-map-address">Address</code></div>'
+        '<ul class="file-map-tree"><li class="file-map-node">'
+        '<div class="file-map-row">'
+        '<span class="file-map-icon is-file" aria-hidden="true"></span>'
+        '<code class="file-map-name">AGENTS.md</code>'
+        '<span class="file-map-tag file-map-tag-template">Template-led'
+        "</span></div>"
+        '<p class="file-map-purpose">Rules</p></li></ul></div>'
+    )
+
+
+def test_file_map_merges_shared_directory_prefix_from_separate_entries() -> (
+    None
+):
+    # `.github/workflows/` and `.github/REVIEWERS` are two distinct
+    # site/data/file_map.json entries (different purpose/responsibility),
+    # but they share a real directory prefix: the tree must merge them
+    # under one `.github/` branch instead of listing `.github/` twice.
+    data = _file_map_data(
+        [
+            {
+                "paths": [".github/workflows/"],
+                "responsibility": "template",
+                "purpose": {"zh-tw": "流程", "en": "Flows"},
+            },
+            {
+                "paths": [".github/REVIEWERS"],
+                "responsibility": "shared",
+                "purpose": {"zh-tw": "審查", "en": "Reviewers"},
+            },
+        ]
+    )
+    html = render_file_map(lang="en", data=data)
+    assert html == (
+        '<div class="file-map-window">'
+        '<div class="file-map-toolbar">'
+        '<span class="file-map-dots" aria-hidden="true">'
+        "<i></i><i></i><i></i></span>"
+        '<code class="file-map-address">Address</code></div>'
+        '<ul class="file-map-tree"><li class="file-map-node">'
+        '<details class="file-map-branch" open>'
+        '<summary class="file-map-summary">'
+        '<span class="file-map-row">'
+        '<span class="file-map-icon is-dir" aria-hidden="true"></span>'
+        '<code class="file-map-name">.github/</code></span></summary>'
+        "<ul>"
+        '<li class="file-map-node"><div class="file-map-row">'
+        '<span class="file-map-icon is-dir" aria-hidden="true"></span>'
+        '<code class="file-map-name">workflows/</code>'
+        '<span class="file-map-tag file-map-tag-template">Template-led'
+        "</span></div>"
+        '<p class="file-map-purpose">Flows</p></li>'
+        '<li class="file-map-node"><div class="file-map-row">'
+        '<span class="file-map-icon is-file" aria-hidden="true"></span>'
+        '<code class="file-map-name">REVIEWERS</code>'
+        '<span class="file-map-tag file-map-tag-shared">Shared</span>'
+        "</div>"
+        '<p class="file-map-purpose">Reviewers</p></li>'
+        "</ul></details></li></ul></div>"
+    )
+
+
+def test_file_map_renders_non_path_note_after_the_name() -> None:
+    # site/data/file_map.json's "src/" entry appends a non-path note
+    # ("product tests, and product specifications") that was part of the
+    # original table's path cell but isn't a real path itself.
+    data = _file_map_data(
+        [
+            {
+                "paths": ["src/"],
+                "responsibility": "project",
+                "note": {"zh-tw": "、額外文字", "en": ", extra text"},
+                "purpose": {"zh-tw": "行為", "en": "Behavior"},
+            }
+        ]
+    )
+    html = render_file_map(lang="en", data=data)
+    assert html == (
+        '<div class="file-map-window">'
+        '<div class="file-map-toolbar">'
+        '<span class="file-map-dots" aria-hidden="true">'
+        "<i></i><i></i><i></i></span>"
+        '<code class="file-map-address">Address</code></div>'
+        '<ul class="file-map-tree"><li class="file-map-node">'
+        '<div class="file-map-row">'
+        '<span class="file-map-icon is-dir" aria-hidden="true"></span>'
+        '<code class="file-map-name">src/</code>'
+        '<span class="file-map-note">, extra text</span>'
+        '<span class="file-map-tag file-map-tag-project">Project-owned'
+        "</span></div>"
+        '<p class="file-map-purpose">Behavior</p></li></ul></div>'
+    )
+
+
+def test_file_map_matches_real_workflow_directory_and_paths() -> None:
+    # Content-fidelity check against the real site/data/file_map.json (no
+    # Hugo, mirrors test_config_guidance_matches_real_governance_item_
+    # newlines): every literal path must exist in this repository, and the
+    # `.github/workflows/` entry's purpose must still name every active
+    # workflow file -- the same invariant
+    # tests/test_render_site.py::test_overview_matches_active_workflows_
+    # and_uses_plain_language proves from the other side.
+    data = load_site_data(ROOT)
+    file_map = data.file_map
+    for entry in file_map["entries"]:
+        for path in entry["paths"]:
+            assert (ROOT / path).exists(), f"file-map path missing: {path}"
+    html = render_file_map(lang="zh-tw", data=data)
+    assert "<code>" not in html  # never fall back to un-styled inline code
+    assert html.count('<span class="file-map-icon is-dir"') >= 1
+    assert html.count('<span class="file-map-icon is-file"') >= 1
+    for kind in ("template", "shared", "project"):
+        assert f'file-map-tag-{kind}"' in html
 
 
 # --- similar tools -----------------------------------------------------
@@ -554,6 +757,91 @@ def test_testing_pending_automation_defaults_issue_number() -> None:
     assert '<div id="testing-panel-work"' in html
 
 
+# --- governance audit trail (Issue #559) ----------------------------------
+
+
+def _header_columns(markdown_table: str) -> list[str]:
+    """Extract the header cell text from the first pipe-table row."""
+    header_line = markdown_table.splitlines()[0]
+    return [cell.strip() for cell in header_line.strip("|").split("|")]
+
+
+def test_audit_trail_renders_file_rows_with_path_description_and_columns() -> (
+    None
+):
+    data = _empty_data()
+    data.audit_trail["files"] = [
+        {
+            "path": "docs/audit-trail/pr-audit.md",
+            "description": {"zh-tw": "說明 `x`", "en": "About `x`"},
+            "columns": ["PR", "governance_stage"],
+        }
+    ]
+    html = render_audit_trail(lang="en", data=data)
+    assert "<code>docs/audit-trail/pr-audit.md</code>" in html
+    assert "About <code>x</code>" in html  # description inline-code renders
+    assert "<code>PR</code>" in html
+    assert "<code>governance_stage</code>" in html
+
+
+def test_audit_trail_never_embeds_a_live_or_scheduled_snapshot() -> None:
+    # Issue #559's decision: this static, file://-openable bundle can never
+    # show live GitHub data, and no schedule/on-merge job generates and
+    # commits one either -- see docs/adr/portable-decision-site.md. The
+    # rendered copy must say so explicitly rather than implying real-time
+    # or automatically refreshed content.
+    data = _empty_data()
+    data.audit_trail["labels"]["en"]["freshnessNote"] = (
+        "never embeds live-fetched GitHub data, and cannot; no schedule "
+        "or on-merge job generates and commits a snapshot"
+    )
+    html = render_audit_trail(lang="en", data=data)
+    assert "never embeds live-fetched GitHub data, and cannot" in html
+    assert (
+        "no schedule or on-merge job generates and commits a snapshot" in html
+    )
+    assert "python3 scripts/generate_audit_trail.py" in html
+
+
+def test_audit_trail_columns_match_the_real_generator_headers() -> None:
+    # Content-fidelity check (mirrors test_file_map_matches_real_workflow_
+    # directory_and_paths): site/data/audit_trail.json hand-curates each
+    # output file's column list so both languages describe it identically,
+    # but that copy must never silently drift from
+    # scripts/generate_audit_trail.py's own Markdown header cells -- the
+    # actual source of truth for what the generated files contain.
+    data = load_site_data(ROOT)
+    files_by_path = {
+        entry["path"]: entry for entry in data.audit_trail["files"]
+    }
+    render_pr_audit_table = AUDIT_TRAIL_GENERATOR_MODULE[
+        "render_pr_audit_table"
+    ]
+    render_rule_change_log = AUDIT_TRAIL_GENERATOR_MODULE[
+        "render_rule_change_log"
+    ]
+    default_out_dir = AUDIT_TRAIL_GENERATOR_MODULE["DEFAULT_OUT_DIR"]
+    pr_audit_file = AUDIT_TRAIL_GENERATOR_MODULE["DEFAULT_PR_AUDIT_FILE"]
+    rule_change_file = AUDIT_TRAIL_GENERATOR_MODULE["DEFAULT_RULE_CHANGE_FILE"]
+    rule_prefixes = AUDIT_TRAIL_GENERATOR_MODULE["DEFAULT_RULE_PREFIXES"]
+
+    pr_audit_path = str(default_out_dir / pr_audit_file)
+    rule_change_path = str(default_out_dir / rule_change_file)
+    assert pr_audit_path in files_by_path
+    assert rule_change_path in files_by_path
+
+    pr_audit_markdown = render_pr_audit_table([], "owner/repo", "now")
+    rule_change_markdown = render_rule_change_log(
+        [], rule_prefixes, "owner/repo", "now"
+    )
+    assert files_by_path[pr_audit_path]["columns"] == _header_columns(
+        pr_audit_markdown[pr_audit_markdown.index("| PR |") :]
+    )
+    assert files_by_path[rule_change_path]["columns"] == _header_columns(
+        rule_change_markdown[rule_change_markdown.index("| Changed |") :]
+    )
+
+
 # --- journey rail --------------------------------------------------------
 
 
@@ -733,6 +1021,28 @@ def test_render_page_includes_mermaid_only_when_used() -> None:
     assert 'class="pre-mermaid"' not in diagram_html  # sanity: no stray class
 
 
+def test_render_page_links_theme_css_after_base_stylesheet() -> None:
+    # Issue #527: a fork-owned site/theme.css must be linked (and thus later
+    # inlined by scripts/render_site.py) after the base stylesheets so CSS
+    # cascade lets its overrides win over site/static/styles.css defaults.
+    content = (
+        "+++\n"
+        'title = "T"\n\n'
+        "[controls]\n"
+        'language = "L"\ndetail = "D"\nsimple = "S"\ntechnical = "T"\n'
+        'slides = "SL"\nprevious = "P"\nnext = "N"\nzoom = "Z"\n'
+        'zoom_out = "ZO"\nzoom_reset = "ZR"\nzoom_in = "ZI"\nfit = "F"\n'
+        "+++\n\n"
+        '{{< slide key="a" title="A" legacy="false" >}}\nbody\n{{< /slide >}}\n'
+    )
+    html = render_page(content, lang="en", data=_empty_data())
+    theme_link = '<link rel="stylesheet" href="../../site/theme.css">'
+    assert theme_link in html
+    assert html.index("site/static/detail-toggle.css") < html.index(
+        "../../site/theme.css"
+    )
+
+
 def test_render_page_orders_language_switcher_zh_tw_then_en() -> None:
     content = (
         "+++\n"
@@ -759,8 +1069,11 @@ def _write_fixture_site(root: Path) -> None:
     (site / "content").mkdir(parents=True)
     (site / "data").mkdir(parents=True)
     (site / "static").mkdir(parents=True)
-    (site / "static" / "styles.css").write_text("body{}", encoding="utf-8")
+    (site / "static" / "styles.css").write_text(
+        ":root{--yellow:#ffe600;}", encoding="utf-8"
+    )
     (site / "static" / "detail-toggle.css").write_text("", encoding="utf-8")
+    (site / "theme.css").write_text(":root {\n}\n", encoding="utf-8")
     (site / "static" / "deck.js").write_text("", encoding="utf-8")
     (site / "static" / "legacy-components.js").write_text("", encoding="utf-8")
     (site / "static" / "detail-toggle.js").write_text("", encoding="utf-8")
@@ -869,6 +1182,58 @@ def _write_fixture_site(root: Path) -> None:
         ),
         encoding="utf-8",
     )
+    (site / "data" / "file_map.json").write_text(
+        json.dumps(
+            {
+                "labels": {
+                    "zh-tw": {"address": "a"},
+                    "en": {"address": "a"},
+                },
+                "responsibilityLabels": {
+                    "template": {"zh-tw": "t", "en": "t"},
+                    "shared": {"zh-tw": "s", "en": "s"},
+                    "project": {"zh-tw": "p", "en": "p"},
+                },
+                "entries": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (site / "data" / "audit_trail.json").write_text(
+        json.dumps(
+            {
+                "command": "python3 scripts/generate_audit_trail.py",
+                "labels": {
+                    "zh-tw": {
+                        "intro": "i",
+                        "tableAriaLabel": "t",
+                        "fileColumn": "f",
+                        "descriptionColumn": "d",
+                        "columnsColumn": "c",
+                        "freshnessLabel": "fl",
+                        "freshnessNote": "fn",
+                        "commandIntro": "ci",
+                        "commandOutro": "co",
+                        "evidenceIntro": "ei",
+                    },
+                    "en": {
+                        "intro": "i",
+                        "tableAriaLabel": "t",
+                        "fileColumn": "f",
+                        "descriptionColumn": "d",
+                        "columnsColumn": "c",
+                        "freshnessLabel": "fl",
+                        "freshnessNote": "fn",
+                        "commandIntro": "ci",
+                        "commandOutro": "co",
+                        "evidenceIntro": "ei",
+                    },
+                },
+                "files": [],
+            }
+        ),
+        encoding="utf-8",
+    )
     for lang, title in (("zh-tw", "標題"), ("en", "Title")):
         (site / "content" / f"_index.{lang}.md").write_text(
             "+++\n"
@@ -907,6 +1272,30 @@ def test_build_output_feeds_render_site_unmodified(tmp_path: Path) -> None:
     assert "Body paragraph." in bundled
 
 
+def test_theme_css_default_is_a_no_op_override(tmp_path: Path) -> None:
+    # Issue #527: site/theme.css ships empty, so the default build must not
+    # change the palette declared in site/static/styles.css.
+    _write_fixture_site(tmp_path)
+    outputs = build(tmp_path, tmp_path / "dist/decision-site")
+    bundled = render(outputs["zh-tw"], root=tmp_path)
+    assert bundled.count("--yellow:#ffe600;") == 1
+
+
+def test_theme_css_override_cascades_after_base_styles(tmp_path: Path) -> None:
+    # A fork-owned override in site/theme.css must reach the final bundle,
+    # positioned after site/static/styles.css so it wins the CSS cascade.
+    _write_fixture_site(tmp_path)
+    (tmp_path / "site" / "theme.css").write_text(
+        ":root {\n  --yellow: #123456;\n}\n", encoding="utf-8"
+    )
+    outputs = build(tmp_path, tmp_path / "dist/decision-site")
+    bundled = render(outputs["zh-tw"], root=tmp_path)
+    assert "--yellow: #123456;" in bundled
+    assert bundled.index("--yellow:#ffe600;") < bundled.index(
+        "--yellow: #123456;"
+    )
+
+
 # --- real content regression (no Hugo) ------------------------------------
 
 
@@ -927,3 +1316,16 @@ def test_real_content_slide_ids_match_navigation_items(tmp_path: Path) -> None:
     ids = set(re.findall(r'data-content-key="([^"]*)"', text))
     for item in data.navigation["items"]:
         assert item["key"] in ids
+
+
+def test_real_content_keeps_decision_site_key_parity(tmp_path: Path) -> None:
+    """No slide key silently vanishes or appears unacknowledged (Issue #586).
+
+    Only the key set is checked here (`keys_only=True`), matching what
+    `scripts/build-decision-site --check` wires into CI. The exact-text
+    comparison is not part of this regression; see Issue #590.
+    """
+    outputs = build(ROOT, tmp_path / "dist/decision-site")
+    legacy = parse_parity(ROOT / "site/legacy/index.html", candidate=False)
+    candidate = parse_parity(outputs["zh-tw"], candidate=True)
+    assert compare_parity(legacy, candidate, keys_only=True) == []

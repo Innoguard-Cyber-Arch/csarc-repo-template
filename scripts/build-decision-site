@@ -16,6 +16,17 @@ python3 "$repo_root/scripts/build_decision_site.py" \
   --root "$repo_root" \
   --output-dir "$build_dir"
 
+if (($# == 1)); then
+  # --keys-only: verify no slide key silently vanished or appeared without
+  # acknowledgment (RETIRED_LEGACY_KEYS / parity="supplemental"|"new").
+  # The exact-text comparison is not wired in; see check-decision-site-
+  # parity's module docstring and Issue #590 for why.
+  python3 "$repo_root/scripts/check-decision-site-parity" \
+    --legacy "$repo_root/site/legacy/index.html" \
+    --candidate "$build_dir/index.html" \
+    --keys-only
+fi
+
 sources=("$build_dir/index.html" "$build_dir/index.en.html")
 outputs=(docs/index.html docs/index.en.html)
 

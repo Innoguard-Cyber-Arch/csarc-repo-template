@@ -359,6 +359,68 @@
     .explorer-caption { margin-top: 5px; color: var(--muted); font-size: 18px; line-height: 1.18; }
     .explorer-caption strong { color: var(--ink); }
 
+    .file-map-window {
+      /* An explicit height keeps this grid item (see
+         .markdown-body > .file-map-window in detail-toggle.css) sized to
+         its true content height: a grid item with overflow other than
+         visible otherwise contributes an automatic minimum size of 0 to
+         its auto-sized row, which silently clips the tree instead of
+         letting the row grow to fit it. */
+      height: max-content;
+      overflow: hidden;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      background: white;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, .1);
+    }
+    .file-map-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 26px;
+      padding: 4px 10px;
+      border-bottom: 1px solid #bdbdb8;
+      background: #e9e9e6;
+    }
+    .file-map-dots { display: flex; flex: 0 0 auto; gap: 6px; }
+    .file-map-dots i { width: 9px; height: 9px; border-radius: 50%; background: #a5a5a0; }
+    .file-map-dots i:first-child { background: #e65c52; }
+    .file-map-dots i:nth-child(2) { background: #e9b949; }
+    .file-map-dots i:last-child { background: #48a967; }
+    .file-map-address { padding: 2px 8px; border: 1px solid #c7c7c2; border-radius: 5px; background: white; color: #3b3b39; font: 750 13px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .file-map-tree, .file-map-tree ul { margin: 0; padding: 0; list-style: none; }
+    .file-map-tree { padding: 4px 9px; }
+    .file-map-tree ul { margin-left: 8px; padding-left: 9px; border-left: 1px solid var(--line); }
+    .file-map-node { margin: 0; }
+    .file-map-branch > summary.file-map-summary { cursor: pointer; }
+    .file-map-branch > summary.file-map-summary::-webkit-details-marker { display: none; }
+    .file-map-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      column-gap: 7px;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .file-map-summary::before {
+      content: "▸";
+      display: inline-block;
+      width: 12px;
+      margin-right: 2px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .file-map-branch[open] > .file-map-summary::before { content: "▾"; }
+    .file-map-icon { flex: 0 0 auto; align-self: center; width: 10px; height: 13px; border: 1px solid #7d8ca2; border-radius: 1px; background: white; }
+    .file-map-icon.is-dir { width: 13px; height: 9px; border-color: #b99317; border-radius: 2px; background: #f0c842; }
+    .file-map-name { font: 750 13px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #174f8b; }
+    .file-map-note { color: var(--muted); font-size: 12px; }
+    .file-map-tag { flex: 0 0 auto; margin-left: auto; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 850; white-space: nowrap; }
+    .file-map-tag-template { background: #ececea; color: #333; }
+    .file-map-tag-shared { background: var(--optional-soft); color: #174f8b; }
+    .file-map-tag-project { background: #ffe2d5; color: #8a3d20; }
+    .file-map-purpose { margin: 0 0 1px 25px; color: #333; font-size: 12px; line-height: 1.16; }
+
     .similar-tools-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
 
     .similar-tools-slide header { margin-bottom: 8px; }
@@ -1852,7 +1914,8 @@ html[data-detail-level="simple"] .technical-tour-trigger {
 }
 
 .markdown-body > p:first-child,
-.markdown-body > table {
+.markdown-body > table,
+.markdown-body > .file-map-window {
   grid-column: 1 / -1;
 }
 
@@ -1966,6 +2029,40 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   .detail-level-control button {
     transition: none;
   }
+}
+</style>
+  <style data-bundled-from="../../site/theme.css">
+/* Project- or fork-owned decision-site theme overrides (Issue #527).
+ *
+ * A repository that carries this template's own root decision-site
+ * engine (`scripts/build_decision_site.py`, not the smaller generated-
+ * project handbook -- see `template/docs/site-theme.css.jinja` for that
+ * separate path) can restyle its copy of the presentation here, without
+ * forking the render engine or `site/static/styles.css`.
+ *
+ * Scope, deliberately narrow (see docs/adr/portable-decision-site.md):
+ *   - Override CSS custom properties already declared in
+ *     `site/static/styles.css`'s `:root` block (colors and other design
+ *     tokens).
+ *   - Narrow, purely-visual declarations (color/background/border) on
+ *     existing block-level classes are also allowed.
+ *   - Do not add new HTML, JavaScript, selectors that change markup
+ *     semantics, or layout/structural rules; there is no automated
+ *     linter for this boundary, review it like any other change.
+ *
+ * This file is always linked and inlined by `scripts/build_decision_site.py`
+ * / `scripts/render_site.py`, so it must exist, but it ships empty: the
+ * committed `docs/index.html` and `docs/index.en.html` reflect the base
+ * palette in `site/static/styles.css` unchanged until a fork adds an
+ * override below. Example:
+ *
+ *   :root {
+ *     --yellow: #2e6b47;
+ *   }
+ *
+ * After editing, rebuild with `./scripts/build-decision-site`.
+ */
+:root {
 }
 </style>
 </head>
@@ -2271,8 +2368,8 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <h2>模板把必要設定放到正確位置</h2>
   <p class="subtitle">列出目前實際產生的主要檔案；公版可提出更新，但不會靜默覆寫產品內容。</p>
 </header>
-<div class="markdown-body"><table><thead><tr><th>路徑</th><th>作用</th><th>責任</th></tr></thead><tbody><tr><td><code>.csarc/config.yml</code></td><td>記錄公版來源、語言、分支與選用能力</td><td>公版主導</td></tr><tr><td><code>.github/ISSUE_TEMPLATE/</code>、<code>pull_request_template.md</code></td><td>工作定義與 PR 契約</td><td>公版主導</td></tr><tr><td><code>.github/workflows/</code></td><td>9 條共用流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單與候選發版，加上選配的治理漂移、模板更新通知排程、CodeQL SAST 與容器建置掃描</td><td>公版主導</td></tr><tr><td><code>AGENTS.md</code>、<code>README.md</code>、<code>CLAUDE.md</code></td><td>Agent 工作方式與使用者入口</td><td>共同維護</td></tr><tr><td><code>policies/</code>、<code>CODEOWNERS</code>、<code>.github/REVIEWERS</code></td><td>期望設定、owner 與 reviewer</td><td>共同維護</td></tr><tr><td><code>scripts/</code></td><td>本機驗證、工作同步與套用設定</td><td>公版主導</td></tr><tr><td><code>docs/</code>、<code>site/</code></td><td>專案說明、規格、決策與內部網站</td><td>共同維護</td></tr><tr><td><code>src/</code>、產品測試與規格</td><td>真正產品行為</td><td>專案持有</td></tr></tbody></table>
-<p>表格刻意維持三欄：側邊簡報目錄已可直接連到每個項目對應的頁面，僅維運可見的「CI/CD 設定」附錄也已逐 Journey 詳列驗證入口，細節比表格欄位更完整。另外加上「對應頁名」與「驗證入口」兩欄，只會重複這兩份既有內容。</p>
+<div class="markdown-body"><div class="file-map-window"><div class="file-map-toolbar"><span class="file-map-dots" aria-hidden="true"><i></i><i></i><i></i></span><code class="file-map-address">檔案總管｜專案根目錄</code></div><ul class="file-map-tree"><li class="file-map-node"><details class="file-map-branch" open><summary class="file-map-summary"><span class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">.csarc/</code></span></summary><ul><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-file" aria-hidden="true"></span><code class="file-map-name">config.yml</code><span class="file-map-tag file-map-tag-template">公版主導</span></div><p class="file-map-purpose">記錄公版來源、語言、分支與選用能力</p></li></ul></details></li><li class="file-map-node"><details class="file-map-branch" open><summary class="file-map-summary"><span class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">.github/</code></span></summary><ul><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">ISSUE_TEMPLATE/</code><span class="file-map-tag file-map-tag-template">公版主導</span></div><p class="file-map-purpose">工作定義與 PR 契約</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-file" aria-hidden="true"></span><code class="file-map-name">pull_request_template.md</code><span class="file-map-tag file-map-tag-template">公版主導</span></div><p class="file-map-purpose">工作定義與 PR 契約</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">workflows/</code><span class="file-map-tag file-map-tag-template">公版主導</span></div><p class="file-map-purpose">9 條共用流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單與候選發版，加上選配的治理漂移、模板更新通知排程、CodeQL SAST 與容器建置掃描</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-file" aria-hidden="true"></span><code class="file-map-name">CODEOWNERS</code><span class="file-map-tag file-map-tag-shared">共同維護</span></div><p class="file-map-purpose">期望設定、owner 與 reviewer</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-file" aria-hidden="true"></span><code class="file-map-name">REVIEWERS</code><span class="file-map-tag file-map-tag-shared">共同維護</span></div><p class="file-map-purpose">期望設定、owner 與 reviewer</p></li></ul></details></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-file" aria-hidden="true"></span><code class="file-map-name">AGENTS.md</code><span class="file-map-tag file-map-tag-shared">共同維護</span></div><p class="file-map-purpose">Agent 工作方式與使用者入口</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-file" aria-hidden="true"></span><code class="file-map-name">README.md</code><span class="file-map-tag file-map-tag-shared">共同維護</span></div><p class="file-map-purpose">Agent 工作方式與使用者入口</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-file" aria-hidden="true"></span><code class="file-map-name">CLAUDE.md</code><span class="file-map-tag file-map-tag-shared">共同維護</span></div><p class="file-map-purpose">Agent 工作方式與使用者入口</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">policies/</code><span class="file-map-tag file-map-tag-shared">共同維護</span></div><p class="file-map-purpose">期望設定、owner 與 reviewer</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">scripts/</code><span class="file-map-tag file-map-tag-template">公版主導</span></div><p class="file-map-purpose">本機驗證、工作同步與套用設定</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">docs/</code><span class="file-map-tag file-map-tag-shared">共同維護</span></div><p class="file-map-purpose">專案說明、規格、決策與內部網站</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">site/</code><span class="file-map-tag file-map-tag-shared">共同維護</span></div><p class="file-map-purpose">專案說明、規格、決策與內部網站</p></li><li class="file-map-node"><div class="file-map-row"><span class="file-map-icon is-dir" aria-hidden="true"></span><code class="file-map-name">src/</code><span class="file-map-note">、產品測試與規格</span><span class="file-map-tag file-map-tag-project">專案持有</span></div><p class="file-map-purpose">真正產品行為</p></li></ul></div>
+<p>檔案地圖只列路徑、作用與責任：側邊簡報目錄已可直接連到每個項目對應的頁面，僅維運可見的「CI/CD 設定」附錄也已逐 Journey 詳列驗證入口，細節比這裡能呈現的更完整；樹狀呈現同樣不重複加上「對應頁名」或「驗證入口」。</p>
 <aside class="technical-detail" data-content-key="files-update"><h3>更新時怎麼保護產品內容</h3>
 <p>Copier 在短分支嘗試更新；若有衝突，只列出檔案且不修改 repo，調整後重跑，再由 PR 審查。建立、既有 repo 導入與同一 repo 後續 update 都有 fixture；回歸測試會刻意加入產品檔案，再確認更新後內容沒有被覆寫。</p>
 <p>Root 與 <code>template/</code> 同時使用的 workflow、policy、script 與文件由同步程式維持一致；只因專案選項而不同的檔案則以實際生成專案驗證。新 repo 會取得發版 Action；既有 repo 保留自己的 product-owned workflow。</p></aside>
@@ -2535,7 +2632,7 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 <div class="markdown-body basic-summary"><ul><li><strong>開發中：</strong>只跑能證明本次修改的 focused check。</li><li><strong>工作 PR（topic → main 或 <code>dev/m*</code>）：</strong>系統依修改內容自動選擇適合的檢查；無法判斷時執行完整檢查。</li><li><strong>需要完整檢查時：</strong>Milestone／canary 交付、緊急修正、merge queue、手動執行，或系統無法安全縮小測試範圍時，執行完整檢查。</li><li><strong>Action：</strong>只有一個 <code>verify</code> job，最多執行 30 分鐘，只呼叫 repo 內既有腳本。</li><li><strong>專案範圍：</strong>一般專案只檢查自己的改動；公版專案還會確認模板產生的新專案能正常使用。</li></ul>
 <p>測試邏輯只寫在 scripts／tests。目前 active 的自動化是 CI、PR policy、Issue triage、spec-to-Issue、Milestone lifecycle、Work Issue closure、reviewer 指派、OSV 與 Dependabot；單一 release workflow 已設定為候選，另行的 promotion／release handoff／registry publisher／消費／live-integration／deployment workflow 未啟用。</p></div>
 </section>
-<section class="slide markdown-slide legacy-slide decision-slide" id="languages" data-content-key="languages" data-track="languages" aria-label="選擇程式語言後，自動帶入適合的檢查">
+<section class="slide markdown-slide legacy-slide decision-slide" id="languages" data-content-key="languages" data-track="languages" data-parity="new" aria-label="選擇程式語言後，自動帶入適合的檢查">
   <aside class="journey-rail" aria-label="簡報目錄">
   <h3>使用公版</h3>
   <ol class="journey-use">
@@ -3139,7 +3236,12 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 <details class="package-disclosure" data-content-key="portable-bundle"><summary><span class="tech-name">Markdown＋Hugo → self-contained HTML</span></summary><div class="package-health"><p><code>docs/adr/</code> 保存 canonical 選型；Hugo 負責內容與 HTML；未修改的 renderer 只處理資產內嵌與安全檢查。最終的 <code>docs/index.html</code> 可用 <code>file://</code> 離線開啟，不依賴 Pages、CDN 或 JavaScript package runtime。</p></div></details>
 <aside class="technical-detail" data-content-key="docs-site-access"><h3>存取與維護邊界</h3>
 <p><code>noindex</code> 與 <code>robots.txt</code> 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。</p>
-<p>renderer 讀取的是上方「規則治理」設定表核准的同一批 <code>.csarc/config.yml</code> key，不另定義第二份網站專用清單。專案文字寫在 <code>docs/site-content.md</code>，樣式覆寫留在 <code>docs/site-theme.css</code>，產生的 <code>docs/index.html</code> 不直接編輯。</p></aside></div>
+<p>renderer 讀取的是上方「規則治理」設定表核准的同一批 <code>.csarc/config.yml</code> key，不另定義第二份網站專用清單。專案文字寫在 <code>docs/site-content.md</code>，樣式覆寫留在 <code>docs/site-theme.css</code>，產生的 <code>docs/index.html</code> 不直接編輯。</p>
+<p><strong>自訂本頁（根網站）主題（Issue #527）：</strong>上述 <code>.csarc/config.yml</code>／<code>docs/site-theme.css</code> 是生成專案的 handbook 路徑；fork 或 vendor 這份公版本身、想調整這份根決策網站配色的維護者，改用 <code>site/theme.css</code>。範圍嚴格限制在 <code>site/static/styles.css</code> 既有 <code>:root</code> 顏色 token，以及既有 class 的窄範圍視覺屬性，不開放新增 HTML、JavaScript 或版面配置；由一般 PR review 把關，不建立額外驗證工具。此檔一律存在、一律被引擎內嵌，預設為空白覆寫，因此預設輸出保持公版配色不變：</p>
+<pre class="command"><code>:root {
+  --yellow: #2e6b47;
+}</code></pre>
+<p>編輯後執行 <code>./scripts/build-decision-site</code> 重新產生 <code>docs/index.html</code>／<code>docs/index.en.html</code>。這是排版模板結構的新增，<code>site/version.json</code> 的 <code>template</code> 版本與 <code>scripts/check-decision-site-versions</code> 的相容範圍檢查涵蓋這次擴充；詳見 <code>docs/adr/portable-decision-site.md</code> 的「根網站自訂主題」一節。</p></aside></div>
 </section>
 <section class="slide markdown-slide legacy-slide bridge-slide" id="bridge" data-content-key="bridge" data-audience="maintainer" aria-label="回顧當時原則，對照目前實作">
   <aside class="journey-rail" aria-label="簡報目錄">
@@ -3366,6 +3468,86 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
   <p class="subtitle">分開列出一般 repo 與 repo-template 在工作 PR 與 repository delivery PR 各自需要的測試與自動化。</p>
 </header>
 <div class="legacy-content similar-tools-content testing-content"><div class="similar-tools-tabs" role="tablist" aria-label="CI/CD 設定"><button id="testing-tab-duration" type="button" role="tab" aria-selected="true" aria-controls="testing-panel-duration" data-similar-tools-tab="0"><small>總覽</small>預計執行時間</button><button id="testing-tab-work" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-work" data-similar-tools-tab="1"><small>Journey 01</small>工作定義</button><button id="testing-tab-agents" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-agents" data-similar-tools-tab="2"><small>Journey 02</small>AI 規範</button><button id="testing-tab-contract" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-contract" data-similar-tools-tab="3"><small>Journey 03</small>驗證／CI</button><button id="testing-tab-languages" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-languages" data-similar-tools-tab="4"><small>Journey 04</small>程式語言</button><button id="testing-tab-supply" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-supply" data-similar-tools-tab="5"><small>Journey 05</small>依賴安全</button><button id="testing-tab-pr" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-pr" data-similar-tools-tab="6"><small>Journey 06</small>PR／合併</button><button id="testing-tab-delivery" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-delivery" data-similar-tools-tab="7"><small>Journey 07</small>版本／交付</button><button id="testing-tab-governance" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-governance" data-similar-tools-tab="8"><small>Journey 08</small>規則治理</button><button id="testing-tab-template-upgrade" type="button" role="tab" aria-selected="false" aria-controls="testing-panel-template-upgrade" data-similar-tools-tab="9"><small>Journey 09</small>模板升級</button></div><div id="testing-panel-duration" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-duration" data-similar-tools-panel><div class="similar-tools-testing-intro"><strong>兩種 PR 的預計執行時間</strong><span>每格加總一次 PR 預計使用的 runner minutes；同一個 job 內的項目會標示已計入，不重複相加。不含排隊，首次下載相依或 cache miss 可能較久。2026-09-01 同機暖快取實測：repo-template 的 source fast 由約 201 秒降至 59 秒；同時修改 policy／template 時為 99 秒。full 仍以 GitHub-hosted runner 實測校準。</span><p>Runner｜0 steps 表示程式尚未執行，先檢查 runner、帳務與 GitHub 狀態。</p><p>封存｜archive/ci-cd/ 只供參考；恢復前逐條確認目的、觸發、權限、timeout 與本機入口。</p></div><div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="兩種 PR 的預計執行時間"><table class="similar-tools-matrix similar-tools-testing-matrix testing-duration-matrix"><thead><tr><th scope="col">PR 階段</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template</th></tr></thead><tbody><tr><th scope="row"><strong>工作 PR（topic → main 或 dev/m*）</strong></th><td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>fast 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>docs &lt; 1 分鐘；fast 2–5 分鐘</li><li><strong>04 程式語言：</strong>fast 已包含：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–5 分鐘（只執行已選語言）</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>08 規則治理：</strong>fast 已包含：&lt; 1 分鐘；不含人工遠端核對</li><li><strong>09 模板升級：</strong>首次導入 0 runner 分鐘（本機＋人工）；後續更新驗證已包含在 fast 的 2–5 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–7 分鐘</p></td><td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>fast 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>驗證／CI 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>docs &lt; 1 分鐘；source fast 約 1 分鐘；policy／template 變更約 2 分鐘</li><li><strong>04 程式語言：</strong>fast 已包含：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–5 分鐘（只執行已選語言）</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>08 規則治理：</strong>fast 已包含：&lt; 1 分鐘；不含人工遠端核對</li><li><strong>09 模板升級：</strong>fast 已包含代表性建立 smoke：&lt; 1 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 1–4 分鐘（fast 實測 59–99 秒）</p></td></tr><tr><th scope="row"><strong>交付 PR（dev/m*／dev/i* → main）</strong></th><td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>full 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>full 5–15 分鐘</li><li><strong>04 程式語言：</strong>full 已包含：Python 3–6 分鐘；Rust 2–5 分鐘；TypeScript 3–7 分鐘（只執行已選語言）</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>08 規則治理：</strong>full 已包含：&lt; 1 分鐘；不含人工遠端核對</li><li><strong>09 模板升級：</strong>後續更新驗證已包含在 full 的 5–15 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–17 分鐘</p></td><td><ul class="testing-duration-list"><li><strong>01 工作定義：</strong>full 已包含：&lt; 1 分鐘</li><li><strong>02 AI 規範：</strong>full 其中 &lt; 1 分鐘</li><li><strong>03 驗證／CI：</strong>full verification 實測 8 分 22 秒（獨占環境，#458）</li><li><strong>04 程式語言：</strong>full 已包含生成矩陣：Python 1–3 分鐘；Rust 1–3 分鐘；TypeScript 1–4 分鐘</li><li><strong>05 依賴安全：</strong>通常少於 1 分鐘</li><li><strong>06 PR／合併：</strong>約 1–2 分鐘</li><li><strong>08 規則治理：</strong>full 已包含：&lt; 1 分鐘；不含人工遠端核對</li><li><strong>09 模板升級：</strong>full 已包含建立／導入／更新回歸：約 1–3 分鐘</li></ul><p class="testing-duration-total"><strong>Runner 總合：</strong>約 6–8 分鐘（完整 job 實測 6 分 16 秒）</p></td></tr></tbody></table></div></div><div id="testing-panel-work" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-work" data-similar-tools-panel hidden><div class="similar-tools-testing-intro"><strong>Journey 01／最小測試契約</strong><span>只驗證 Issue 如何成為可執行工作，以及里程碑是否取得開工同意；PR 合併與里程碑結案分別列在 Journey 06、07。</span></div><div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 01／最小測試契約"><table class="similar-tools-matrix similar-tools-testing-matrix"><thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead><tbody><tr><th scope="row"><strong>Issue 工作邊界</strong><span>標題、類型、assignee、label 與 duplicate 狀態要能收斂。</span></th><td><ul class="testing-stage-list"><li><strong>工作開始前</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-issue-triage</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/issue-triage.yml</code>／<code>classify</code><span>Trigger：Issue opened／edited／reopened／closed · Timeout：5 min</span></li></ul></div></li><li><strong>工作結束時</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-issue-triage</code></li></ul></div></li></ul></td><td><ul class="testing-stage-list"><li><strong>工作結束時</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_item_forms.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>repo-template 額外確認產生出去的 Issue 表單仍符合定義。</span></div></li></ul></td></tr><tr><th scope="row"><strong>Spec 契約與 Issue 同步</strong><span>驗證必要章節、acceptance criteria、穩定 spec id 與同步的冪等行為。</span></th><td><ul class="testing-stage-list"><li><strong>工作開始前</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_spec_to_issue.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/spec-to-issue.yml</code>／<code>sync</code><span>Trigger：Spec／同步程式進入 main 或 dev；可手動執行 · Timeout：10 min</span></li></ul></div></li></ul></td><td><ul class="testing-stage-list"></ul></td></tr><tr><th scope="row"><strong>里程碑啟動門檻</strong><span>生命週期追蹤 Issue 保存同意與反駁；至少一位非提案者同意且沒有未解決反駁才開始。</span></th><td><ul class="testing-stage-list"><li><strong>工作開始前</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_milestone_approval.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/400" target="_blank" rel="noreferrer">待 #400</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>既有 milestone-lifecycle Action 尚未驗證留言中的同意與反駁；由 #400 補上共用 validator。</span></div></li></ul></td><td><ul class="testing-stage-list"></ul></td></tr></tbody></table></div></div><div id="testing-panel-agents" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-agents" data-similar-tools-panel hidden><div class="similar-tools-testing-intro"><strong>Journey 02／最小驗證契約</strong><span>一般 repo 在兩個 PR 階段都驗證 worktree 安全清理；repo-template 另外檢查 AI 規範來源與產出內容。</span></div><div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 02／最小驗證契約"><table class="similar-tools-matrix similar-tools-testing-matrix"><thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead><tbody><tr><th scope="row"><strong>AI 規範入口</strong><span>所有 agent 讀同一份根規範，生成內容只列該 profile 真能執行的命令。</span></th><td><ul class="testing-stage-list"></ul></td><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div></li><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_ai_guidelines.py</code></li></ul></div></li></ul></td></tr><tr><th scope="row"><strong>平行工作隔離與安全清理</strong><span>可寫工作各自使用 branch／worktree，清理時不刪除未合併或有修改的目錄。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div></li><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-worktree-cleanup</code></li></ul></div></li></ul></td><td><ul class="testing-stage-list"></ul></td></tr></tbody></table></div></div><div id="testing-panel-contract" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-contract" data-similar-tools-panel hidden><div class="similar-tools-testing-intro"><strong>Journey 03／分階段驗證</strong><span>一般 repo 只驗證自己的改動；repo-template 在交付候選額外驗證生成、導入與更新。Action 只呼叫同一份本機程式。</span></div><div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 03／分階段驗證"><table class="similar-tools-matrix similar-tools-testing-matrix"><thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead><tbody><tr><th scope="row"><strong>判斷這次要跑多少</strong><span>開發時自行跑 focused check；CI 依變更路徑與交付階段選 docs、fast 或 full，未知路徑升級為 full。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：工作 PR（topic → main 或 dev/m*） · Timeout：30 min</span></li></ul></div></li><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：promotion／merge group／hotfix／手動執行 · Timeout：30 min</span></li></ul></div></li></ul></td><td><ul class="testing-stage-list"></ul></td></tr><tr><th scope="row"><strong>Issue PR 的快速回饋</strong><span>只跑與本次修改相關的格式、靜態檢查、一般測試與必要 smoke；不跑完整 profile／adopt／update 矩陣。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-fast</code></li></ul></div></li></ul></td><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><span>template、workflow 或 shell 有變更時，fast 會額外產生一個代表性 repo 做 smoke 驗證。</span></li></ul></td></tr><tr><th scope="row"><strong>交付候選的完整證據</strong><span>只對固定且未再變動的交付候選跑一次完整驗證；成功後以 SHA／tree 證明合併的是同一份內容。</span></th><td><ul class="testing-stage-list"><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div></li></ul></td><td><ul class="testing-stage-list"><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>額外驗證模板本身、生成結果，以及既有 repo 的導入與更新路徑；每個 `scripts/verify-stage-*` 都能單獨重跑一個階段，`scripts/verify-template.sh` 仍是唯一必要的最終聚合入口。</span></li></ul></td></tr></tbody></table></div></div><div id="testing-panel-languages" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-languages" data-similar-tools-panel hidden><div class="similar-tools-testing-intro"><strong>Journey 04／語言模組</strong><span>建立或導入時選擇語言；Issue PR 只跑所選模組，交付 PR 再完成建置與打包。所有入口都讀取同一份公版設定。</span></div><div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 04／語言模組"><table class="similar-tools-matrix similar-tools-testing-matrix"><thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead><tbody><tr><th scope="row"><strong>設定與實際檔案一致</strong><span>公版設定列出的語言必須和 repo 內的 Python、Rust、TypeScript 專案檔一致。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>.csarc/config.yml</code></li><li><code>scripts/detect-language-profile</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：修改程式、套件或公版設定的 Issue PR · Timeout：30 min</span></li></ul></div></li><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>.csarc/config.yml</code></li><li><code>scripts/detect-language-profile</code></li></ul></div></li></ul></td><td><ul class="testing-stage-list"><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_language_profiles.py</code></li></ul></div><span>確認 Copier 建立單一設定檔，並正確組合各語言模組。</span></li></ul></td></tr><tr><th scope="row"><strong>各語言使用自己的檢查</strong><span>Python、Rust、TypeScript 各自執行格式、靜態檢查、測試與必要的建置；共通規則只跑一次。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-fast</code></li></ul></div></li><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div></li></ul></td><td><ul class="testing-stage-list"><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>另外建立各語言與多選範例，確認生成、更新與鎖檔仍可使用。</span></li></ul></td></tr></tbody></table></div></div><div id="testing-panel-supply" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-supply" data-similar-tools-panel hidden><div class="similar-tools-testing-intro"><strong>Journey 05／依賴安全</strong><span>依賴異動先重現鎖檔安裝；已知漏洞只在依賴變更與交付候選加跑，週期掃描另補沒有 PR 的時段。</span></div><div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 05／依賴安全"><table class="similar-tools-matrix similar-tools-testing-matrix"><thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead><tbody><tr><th scope="row"><strong>鎖定版本可重現安裝</strong><span>依 lockfile 安裝，拒絕未記錄的解析結果；TypeScript 另執行三天觀察期與發布者 trust policy。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-fast</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：依賴檔案變更的 Issue PR · Timeout：30 min</span></li></ul></div></li><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：交付 PR／merge group／手動完整驗證 · Timeout：30 min</span></li></ul></div></li></ul></td><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-fast</code></li></ul></div><span>依賴設定變更時，額外產生一個代表性 repo 驗證生成結果。</span></li><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-template.sh</code></li></ul></div><span>完整測試所有 profile 的生成與鎖檔契約。</span></li></ul></td></tr><tr><th scope="row"><strong>一般更新自動提出 PR</strong><span>Dependabot 依生態圈分組更新，一般新版等三天；安全修補不套用等待期。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>.github/dependabot.yml</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>每週依生態圈提出更新 PR；建立的 PR 仍走同一個 CI job。</span></div></li></ul></td><td><ul class="testing-stage-list"><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_dependency_security.py</code></li></ul></div><span>確認不同 profile 只生成適用的更新生態圈。</span></li></ul></td></tr><tr><th scope="row"><strong>已公開漏洞立即檢查</strong><span>依賴檔案變更與交付候選使用同一個 OSV 本機入口；每週排程補上沒有 PR 的期間。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-dependencies</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：依賴檔案變更的 Issue PR · Timeout：30 min</span></li></ul></div></li><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-dependencies</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：交付 PR／merge group／手動完整驗證 · Timeout：30 min</span></li><li><code>.github/workflows/osv.yml</code>／<code>scan</code><span>Trigger：每週一／手動掃描 · Timeout：10 min</span></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>每週與手動掃描另由薄 workflow 呼叫同一入口，不複製掃描邏輯。</span></div></li></ul></td><td><ul class="testing-stage-list"></ul></td></tr><tr><th scope="row"><strong>發版成品清冊與雜湊</strong><span>從精確 tag 的真正成品建立 SPDX SBOM、checksum 與相互綁定的證據。</span></th><td><ul class="testing-stage-list"><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/release_assets.py</code></li><li><code>tests/test_release_assets.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>依賴安全擁有 SBOM 規格與驗證；真正成品出現時由發版流程觸發，但不把責任移到「版本／交付」。</span></div></li></ul></td><td><ul class="testing-stage-list"></ul></td></tr></tbody></table></div></div><div id="testing-panel-pr" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-pr" data-similar-tools-panel hidden><div class="similar-tools-testing-intro"><strong>Journey 06／兩階段 PR</strong><span>工作 PR 先驗證單一 Issue 與目的分支；交付 PR 再驗證完整批次。合併授權由規則治理統一處理。</span></div><div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 06／兩階段 PR"><table class="similar-tools-matrix similar-tools-testing-matrix"><thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead><tbody><tr><th scope="row"><strong>PR 資料與目的分支</strong><span>標題、Issue、label、里程碑與目的分支必須互相一致。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：PR 開啟、內容／commit／metadata 變更 · Timeout：10 min</span></li></ul></div></li><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-pr-policy</code></li></ul></div></li></ul></td><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><span>使用相同 validator；repo-template 不維護另一套 PR 規則。</span></li></ul></td></tr><tr><th scope="row"><strong>候選內容包含最新基準</strong><span>工作 PR 必須沿可追溯的 dev 鏈回到 main；同步 PR 只能把精確的 main 更新帶回目標 dev。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_delivery_sync.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：每次工作 PR 與 sync PR 更新 · Timeout：10 min</span></li></ul></div></li><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><span>交付 PR 建立與 main 前進後的必要跨分支同步仍是人工 PR；#430 判定不恢復後已移除舊 workflows。</span></li></ul></td><td><ul class="testing-stage-list"></ul></td></tr><tr><th scope="row"><strong>工作 PR 合併後結束 Issue</strong><span>工作 PR 成功進入正確目的分支後，才結束同號 Issue；交付 PR 不重複關單。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_work_pr_closure.py</code></li><li><code>scripts/pr_lifecycle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/work-item-closure.yml</code>／<code>close-work</code><span>Trigger：里程碑工作 PR 合併進 dev/m* · Timeout：5 min</span></li></ul></div><span>直接進 main 的一般工作與 Hotfix 沿用 GitHub 原生關單，不啟動這支 Action。</span></li></ul></td><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><span>使用相同關單程式；repo-template 不維護另一套規則。</span></li></ul></td></tr></tbody></table></div></div><div id="testing-panel-delivery" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-delivery" data-similar-tools-panel hidden><div class="similar-tools-testing-intro"><strong>Journey 07／交付與結案</strong><span>交付完成並留下證據後才結束里程碑；若本批需要發版，還要附上 Release evidence。提前終止則先處理未完成工作。</span></div><div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 07／交付與結案"><table class="similar-tools-matrix similar-tools-testing-matrix"><thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead><tbody><tr><th scope="row"><strong>獨立工作直接交付</strong><span>沒有里程碑的單一工作 PR 直接進 main；一般 review 與風險分級驗證通過後，由 Closes #N 結案。</span></th><td><ul class="testing-stage-list"><li><strong>交付前</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-pr-policy</code></li><li><code>tests/test_ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：無里程碑的 topic PR → main · Timeout：10 min</span></li><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：同一 PR；依內容選 docs／fast／full · Timeout：30 min</span></li></ul></div></li><li><strong>交付後</strong><span>合併先完成 repository delivery；release workflow 再判斷是否需要版本 PR，不把兩個動作混成一次。</span></li></ul></td><td><ul class="testing-stage-list"><li><strong>交付前</strong><span>root 與生成專案使用同一條 route 與 validator。</span></li></ul></td></tr><tr><th scope="row"><strong>Hotfix 完整驗證與證據</strong><span>緊急修正仍須 Bug Issue、review 與 full；合併後保存 head SHA、run、rollback 與發版決策。</span></th><td><ul class="testing-stage-list"><li><strong>交付前</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/test-pr-policy</code></li><li><code>tests/test_ci_tier.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/pr-policy.yml</code>／<code>title</code><span>Trigger：bug＋hotfix 的 fix/* PR → main · Timeout：10 min</span></li><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：同一 hotfix PR；固定 full · Timeout：30 min</span></li></ul></div></li><li><strong>交付後</strong><span>fix 預設是 patch 意圖；Release Please 產生精確版本 PR，仍須人審查後才發布。</span></li></ul></td><td><ul class="testing-stage-list"><li><strong>交付前</strong><span>root 與生成專案使用同一條 route 與 validator。</span></li></ul></td></tr><tr><th scope="row"><strong>版本與 Release ownership</strong><span>PR 只宣告 SemVer 意圖；Release Please 集中更新精確版本與 CHANGELOG，單一 workflow 負責 tag 與 GitHub Release。</span></th><td><ul class="testing-stage-list"><li><strong>交付前</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>docs/adr/release-security-and-dependencies.md</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>root 與新 repo 由 Release Please 建版本 PR；既有 repo 保留 product-owned workflow。</span></div></li><li><strong>交付後</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/release_policy.py</code></li><li><code>scripts/release_bundle.py</code></li><li><code>tests/test_release_bundle.py</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/release.yml</code>／<code>version and publish</code><span>Trigger：main 前進或人工重跑 · Timeout：30 min</span></li></ul></div></li></ul></td><td><ul class="testing-stage-list"></ul></td></tr><tr><th scope="row"><strong>版本候選與發布證據</strong><span>同一 workflow 驗證 bot 版本 PR 的精確 SHA；合併後以 draft、下載重驗與 immutable check 完成發布。</span></th><td><ul class="testing-stage-list"><li><strong>交付前</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-release-candidate</code></li></ul></div></li><li><strong>交付後</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/release_bundle.py</code></li><li><code>tests/test_release_bundle.py</code></li></ul></div></li></ul></td><td><ul class="testing-stage-list"></ul></td></tr><tr><th scope="row"><strong>里程碑結案</strong><span>正常完成時確認發版與交付證據；提前終止時先記錄原因，並移轉或取消未完成 Issue。</span></th><td><ul class="testing-stage-list"><li><strong>交付後</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_milestone_lifecycle.py</code></li><li><code>tests/test_milestone_closure.py</code> <a class="testing-pending-tag" href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/400" target="_blank" rel="noreferrer">待 #400</a></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/milestone-lifecycle.yml</code>／<code>sync</code><span>Trigger：生命週期追蹤 Issue closed／reopened／milestoned · Timeout：5 min</span></li></ul></div></li></ul></td><td><ul class="testing-stage-list"><li><strong>交付後</strong><span>使用相同結案程式；repo-template 不維護另一套里程碑規則。</span></li></ul></td></tr></tbody></table></div></div><div id="testing-panel-governance" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-governance" data-similar-tools-panel hidden><div class="similar-tools-testing-intro"><strong>Journey 08／審查與設定漂移</strong><span>每張 PR 只自動請一位非作者 reviewer；選配排程重用本機檢查，不能把通知誤稱為合併門禁。</span></div><div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 08／審查與設定漂移"><table class="similar-tools-matrix similar-tools-testing-matrix"><thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead><tbody><tr><th scope="row"><strong>輪派審查人</strong><span>只讀取 base branch 的 REVIEWERS，排除 PR 作者後提出一位個別 review request。</span></th><td><ul class="testing-stage-list"><li><strong>每張非 draft PR</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/request-reviewer</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/governance-comment.yml</code>／<code>request-reviewer</code><span>Trigger：PR 開啟、重開或轉為 ready · Timeout：5 min</span></li></ul></div></li></ul></td><td><ul class="testing-stage-list"></ul></td></tr><tr><th scope="row"><strong>偵測治理設定漂移</strong><span>比較 repo 現況與政策；可修正差異會更新一張 Issue，方案限制只留下 DEGRADED 證據。</span></th><td><ul class="testing-stage-list"><li><strong>每日／手動維運</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/check-governance-drift</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/governance-drift.yml</code>／<code>check</code><span>Trigger：enable_governance_drift_check 開啟後，每日或手動 · Timeout：5 min</span></li></ul></div></li></ul></td><td><ul class="testing-stage-list"><li><strong>每日／手動維運</strong><span>source repo 保留同一支程式供下發與本機驗證，但目前不啟用自己的排程。</span></li></ul></td></tr></tbody></table></div></div><div id="testing-panel-template-upgrade" class="similar-tools-panel" role="tabpanel" aria-labelledby="testing-tab-template-upgrade" data-similar-tools-panel hidden><div class="similar-tools-testing-intro"><strong>Journey 09／建立、導入與更新</strong><span>公版 repo 驗證建立、既有 repo 首次導入與後續更新；生成 repo 只保留自己的驗證入口與選用的更新通知。首次導入沒有可信任 base 時由人核准，不執行 PR head 新增的程式。</span></div><div class="similar-tools-table-wrap" tabindex="0" role="region" aria-label="Journey 09／建立、導入與更新"><table class="similar-tools-matrix similar-tools-testing-matrix"><thead><tr><th scope="col">測試目的</th><th scope="col">任何使用本模板的 repo</th><th scope="col">repo-template 額外</th></tr></thead><tbody><tr><th scope="row"><strong>建立新 repo</strong><span>由固定公版版本產生所選設定與語言模組，再執行生成 repo 自己的驗證。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div><span>生成完成後只執行自己的驗證；不下發公版專用測試。</span></li></ul></td><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify-fast</code></li></ul></div><span>建立一個代表性 repo 做 smoke；不在每張 Issue PR 跑完整矩陣。</span></li><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_cli.py</code></li><li><code>scripts/verify-template.sh</code></li></ul></div><span>完整重跑建立矩陣。</span></li></ul></td></tr><tr><th scope="row"><strong>首次導入既有 repo</strong><span>repo 外的固定 CLI 產生 machine plan 並套用同一份 plan；第一張 PR 由人核對來源、diff 與本機證據。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>人工門檻：base 尚無可信任 verifier 時不執行 PR head 程式；合併後才啟用一般自動檢查。</span></div></li></ul></td><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_cli.py</code></li></ul></div><span>修改導入邏輯時在本機跑受影響的 focused case；大型導入矩陣不放進 fast。</span></li><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_cli.py</code></li><li><code>scripts/verify-template.sh</code></li></ul></div><span>完整重跑導入、人工衝突與失敗不改 target。</span></li></ul></td></tr><tr><th scope="row"><strong>後續更新與衝突</strong><span>先在 candidate 完成 Copier update 與驗證；通過後才修改 target，失敗或衝突可修正後重跑。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：首次導入已合併後的更新 Issue PR · Timeout：30 min</span></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>base 上的 PR policy 先驗證規則，唯讀 CI 再執行候選內容。</span></div></li><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/verify</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/ci.yml</code>／<code>verify</code><span>Trigger：含模板更新的發版 PR · Timeout：30 min</span></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><span>沿用唯讀 contents 權限的 CI；Action 只選擇並呼叫 repo-local 驗證。</span></div></li></ul></td><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_cli.py</code></li></ul></div><span>修改更新邏輯時在本機跑受影響的 focused case；大型 update 矩陣不放進 fast。</span></li><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_cli.py</code></li><li><code>scripts/verify-template.sh</code></li></ul></div><span>完整驗證同一 repo 的 update、legacy conflict 與原子失敗。</span></li></ul></td></tr><tr><th scope="row"><strong>通知有新版公版</strong><span>通知只提示維護者評估新版，不會自動套用或合併。</span></th><td><ul class="testing-stage-list"><li><strong>工作 PR（topic → main 或 dev/m*）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>scripts/check-template-update</code></li></ul></div><div class="testing-kind"><b>CI/CD／GitHub Action</b><ul><li><code>.github/workflows/template-update.yml</code>／<code>check</code><span>Trigger：每週一／手動執行；只有設定開啟才產生 · Timeout：10 min</span></li></ul></div></li></ul></td><td><ul class="testing-stage-list"><li><strong>交付 PR（dev/m*／dev/i* → main）</strong><div class="testing-kind"><b>測試檔／入口</b><ul><li><code>tests/test_template_update_notifications.py</code></li></ul></div><span>確認開啟時 workflow 與 checker 同時產生，關閉時兩者都不存在，而且 root 不會誤執行。</span></li></ul></td></tr></tbody></table></div></div></div>
+</section>
+<section class="slide markdown-slide legacy-slide review-notes-slide" id="rollout" data-content-key="rollout" data-track="rollout" data-audience="archive" aria-label="分階段導入，每一步都能停下來">
+  <aside class="journey-rail" aria-label="簡報目錄">
+  <h3>使用公版</h3>
+  <ol class="journey-use">
+    <li class="journey-item human">
+      <a href="#capability"><span>能力／導入</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#flow"><span>CI/CD 流程</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#files"><span>檔案地圖</span></a>
+    </li>
+  </ol>
+  <h3>開發與維護</h3>
+  <ol class="journey-main">
+    <li class="journey-item human">
+      <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
+    </li>
+  </ol>
+  <h3>公版管理</h3>
+  <ol class="journey-support">
+    <li class="journey-item human">
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
+    </li>
+  </ol>
+  <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
+  <div class="journey-legend" aria-label="顏色說明">
+    <span><i class="human" aria-hidden="true"></i>需要人決策</span>
+    <span><i class="automated" aria-hidden="true"></i>預設自動完成</span>
+    <span data-audience="maintainer"><i class="maintainer" aria-hidden="true"></i>僅維運可見</span>
+  </div>
+</aside>
+
+<header class="basic-header">
+  <span class="selection-sequence">分階段導入策略</span>
+  <h2>分階段導入，每一步都能停下來</h2>
+  <p class="subtitle">三層導入：基本能力現在就有，未來與可選能力先寫清楚觸發門檻。</p>
+</header>
+<aside class="selection-note"><strong>Current state｜2026-09-03</strong><span>下方 technical view 保留原始三層導入判斷供稽核；各層現況以 <code>profiles/catalog.yaml</code> 與相關驗證腳本為準，不在此頁重複更新。</span></aside>
+<div class="legacy-content"><header>
+        <h2>分階段導入，<span class="accent">每一步都能驗證，也能停下來</span></h2>
+        <p class="subtitle"><strong>三層導入｜</strong>基本能力現在就隨模板產生；未來與可選能力先寫清楚觸發門檻，不用空檔案假裝完成。</p>
+      </header>
+      <p class="context-line"><strong>問題與目的｜</strong>一次導入模板、CI、部署、監控與 AI，團隊很難判斷哪裡出錯；分期後每一步都有完成條件。</p>
+      <div class="decision-strip">
+        <article class="decision-step"><span class="step-label">其他常見做法</span><h3>不按聲量或日期一次把功能全打開</h3><ul><li><strong>一次切換：</strong>錯誤會同時擴散到所有專案</li><li><strong>固定日期解鎖：</strong>時間到了不代表使用條件已成熟</li><li><strong>所有語言同時上：</strong>未驗證的 profile 只是空承諾</li></ul></article>
+        <article class="decision-step recommended"><span class="step-label">我們的選擇</span><h3>三層不是日期，而是導入條件</h3><p><strong>基本導入：</strong>CI/CD-only、Python-only、TypeScript-only、混合 profile，以及 Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已完成。Free 會先查能力並套可用設定；private repo 不宣稱有 Ruleset 強制保護。<br><strong>已完成線上驗證：</strong>release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier 更新；共用治理與 CI-only composition 為 beta。<br><strong>仍在試行：</strong>Python、TypeScript 與混合 composition 仍各需一個真實 consuming repo 才能升為 beta。<br><strong>未來／可選：</strong>中央 catalog／治理平台、多 repo、Go／Rust、網站託管／登入、Hugo、部署、監控、RAG、自主 Agent。</p></article>
+      </div>
+      <aside class="config-guidance"><strong>設定方式</strong><ul><li><strong>哪些 profile 已可用或仍在規劃：</strong><code>profiles/catalog.yaml</code></li><li><strong>先查方案再套可用設定：</strong><code>scripts/apply-repository-settings.sh</code>；Ruleset／App 條件備妥後再啟用</li><li><strong>建立與更新路徑是否都能通過：</strong><code>scripts/verify-template.sh</code></li></ul></aside></div>
+<div class="markdown-body basic-summary"><table><thead><tr><th>導入層級</th><th>目前狀態</th></tr></thead><tbody><tr><td>基本導入</td><td>CI/CD-only、Python-only、TypeScript-only、混合 profile；Issue／spec、PR／CI、本機驗證、OSV、依賴政策與 repo 內部網站已完成</td></tr><tr><td>已完成線上驗證</td><td>Release handoff、可追溯成品、Release attestation 消費端驗證，以及第一個真實 CI-only 下游 repo 的導入與 Copier update</td></tr><tr><td>仍在試行</td><td>Python、TypeScript 與混合 composition 各需一個真實 consuming repo 才能升為 beta</td></tr><tr><td>未來／可選</td><td>中央 catalog／治理平台、多 repo、Go／Rust、網站託管／登入、部署、監控、RAG、自主 Agent</td></tr></tbody></table>
+<aside class="technical-detail" data-content-key="rollout-config"><h3>設定方式</h3>
+<ul><li><strong>哪些 profile 已可用或仍在規劃：</strong> <code>profiles/catalog.yaml</code></li><li><strong>先查方案再套可用設定：</strong> <code>scripts/apply-repository-settings.sh</code>；Ruleset／App 條件備妥後再啟用</li><li><strong>建立與更新路徑是否都能通過：</strong> <code>scripts/verify-template.sh</code></li></ul></aside></div>
 </section>
 <section class="slide markdown-slide legacy-slide review-notes-slide" id="access-control" data-content-key="access-control" data-audience="archive" aria-label="託管方案未定前的臨時防護">
   <aside class="journey-rail" aria-label="簡報目錄">
@@ -3894,6 +4076,73 @@ html[data-detail-level="simple"] .markdown-body > .technical-detail {
 <div class="markdown-body basic-summary"><table><thead><tr><th>選項</th><th>現況</th></tr></thead><tbody><tr><td>現行 <code>docs/specs/*.md</code></td><td>Front matter 記錄 ID、優先度、狀態與選用 tracking；marker 可重跑同步 Issue 或里程碑</td></tr><tr><td>GitHub Spec Kit</td><td><code>/specify → /plan → /tasks → /implement</code>，需額外 CLI 與支援的 AI 工具，沒有內建一份 spec 對一張 Issue 的同步</td></tr></tbody></table>
 <aside class="technical-detail" data-content-key="spec-format-cost"><h3>目前不遷移的理由與重新評估條件</h3>
 <p>改採 Spec Kit 需重寫 <code>scripts/spec_to_issue.py</code>、轉換既有 specs、更新驗證斷言，並另行設計等價 Issue sync；雙格式則增加認知與維護負擔。當核准規格經常需要由 AI 穩定拆成多張子工作，且團隊願意維護額外 CLI／Agent 流程時再評估。Issue #77 已結案並記錄此決定；如需重新評估，請另開新 Issue。</p></aside></div>
+</section>
+<section class="slide markdown-slide legacy-slide review-notes-slide" id="governance-audit-trail" data-content-key="governance-audit-trail" data-audience="archive" data-parity="new" aria-label="稽核軌跡：呈現機制與資料新鮮度">
+  <aside class="journey-rail" aria-label="簡報目錄">
+  <h3>使用公版</h3>
+  <ol class="journey-use">
+    <li class="journey-item human">
+      <a href="#capability"><span>能力／導入</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#flow"><span>CI/CD 流程</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#files"><span>檔案地圖</span></a>
+    </li>
+  </ol>
+  <h3>開發與維護</h3>
+  <ol class="journey-main">
+    <li class="journey-item human">
+      <a href="#method"><span class="journey-code">01</span><span>工作定義</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#agents"><span class="journey-code">02</span><span>AI 規範</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#contract"><span class="journey-code">03</span><span>驗證／CI</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#languages"><span class="journey-code">04</span><span>程式語言</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#supply"><span class="journey-code">05</span><span>依賴安全</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#pr"><span class="journey-code">06</span><span>PR／合併</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#deploy"><span class="journey-code">07</span><span>版本／交付</span></a>
+    </li>
+    <li class="journey-item human">
+      <a href="#governance"><span class="journey-code">08</span><span>規則治理</span></a>
+    </li>
+  </ol>
+  <h3>公版管理</h3>
+  <ol class="journey-support">
+    <li class="journey-item human">
+      <a href="#template-release"><span class="journey-code">09</span><span>模板升級</span></a>
+    </li>
+    <li class="journey-item automated">
+      <a href="#docs-site"><span class="journey-code">10</span><span>內部網站</span></a>
+    </li>
+  </ol>
+  <a class="journey-bookend appendix human" href="#similar-tools">相似工具</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#testing">CI/CD 設定</a>
+  <a class="journey-bookend appendix maintainer" data-audience="maintainer" href="#bridge">五月盤點</a>
+  <div class="journey-legend" aria-label="顏色說明">
+    <span><i class="human" aria-hidden="true"></i>需要人決策</span>
+    <span><i class="automated" aria-hidden="true"></i>預設自動完成</span>
+    <span data-audience="maintainer"><i class="maintainer" aria-hidden="true"></i>僅維運可見</span>
+  </div>
+</aside>
+
+<header class="basic-header">
+  <span class="selection-sequence">治理稽核</span>
+  <h2>稽核軌跡：呈現機制與資料新鮮度</h2>
+  <p class="subtitle">稽核軌跡模組即時查詢 GitHub；這個靜態網站只說明輸出結構與如何重新產生，不嵌入任何即時或先前產生的資料列。</p>
+</header>
+<div class="legacy-content audit-trail-content"><p><code>scripts/generate_audit_trail.py</code>（Issue #535）即時查詢 GitHub GraphQL API，輸出兩份治理稽核 Markdown 表：PR 稽核軌跡，以及規則變更（<code>policies/</code> 路徑）的 maker/checker 紀錄。</p><table class="decision-register" aria-label="稽核軌跡輸出檔案與欄位"><thead><tr><th>輸出檔案</th><th>內容</th><th>欄位</th></tr></thead><tbody><tr><td><code>docs/audit-trail/pr-audit.md</code></td><td>涵蓋每一筆合併進目標分支的 PR：開啟／合併時間、來源→目標分支、連結 Issue 的開啟／關閉時間、Milestone、開發者、審查者，以及依來源分支模式分類的 <code>governance_stage</code>（alpha／beta／stable）。</td><td><code>PR</code> <code>Title</code> <code>Opened</code> <code>Merged</code> <code>Source -&gt; Target</code> <code>Issue</code> <code>Issue opened</code> <code>Issue closed</code> <code>Milestone</code> <code>Developers</code> <code>Reviewers</code> <code>governance_stage</code></td></tr><tr><td><code>docs/audit-trail/rule-changes.md</code></td><td>只列出改動 <code>policies/</code> 路徑的合併 PR：變更時間、<code>proposed_by</code>／<code>proposing_pr</code>（提案者與 PR），以及 <code>approved_by</code>／<code>approving_review</code>（核准者與核准的 review）。</td><td><code>Changed</code> <code>proposed_by</code> <code>proposing_pr</code> <code>approved_by</code> <code>approving_review</code></td></tr></tbody></table><aside class="selection-note"><strong>資料新鮮度與觸發機制</strong><span>這個決策網站是逐位元組重建、可用 <code>file://</code> 離線開啟的靜態單檔，不會、也不能嵌入即時查詢到的 GitHub 資料——下表只說明兩份輸出檔案各自的欄位結構，不是任何時間點的實際內容。比照 <code>scripts/check-governance-drift</code> 的既有先例（腳本保留供本機／CI 驗證，不另外啟用排程），這裡同樣不設定排程或 on-merge 自動產生並提交快照。維護者需在本機或 CI 執行下列指令，自行產生當下的稽核快照。</span></aside><p class="bridge-reference reference">重新產生： <code>python3 scripts/generate_audit_trail.py</code> （省略 <code>--repo</code> 會自動偵測目前 repository；預設寫入 <code>docs/audit-trail/</code>，不會自動提交）</p><p class="bridge-reference reference">延伸閱讀：呈現與觸發機制的決策記錄於 <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/535" target="_blank" rel="noreferrer">#535</a> <a href="https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/559" target="_blank" rel="noreferrer">#559</a></p></div>
 </section></main>
   <nav class="controls" aria-label="簡報控制" hidden>
     <button id="previous" type="button" aria-label="上一頁">←</button>

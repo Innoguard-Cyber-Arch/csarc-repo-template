@@ -55,12 +55,35 @@ Issue #524 重新檢視「頁面呈現架構」「首頁重做」「自訂排版
 
 **測試**：`tests/test_build_decision_site.py` 對每個渲染函式做 fixture 單元測試（不需要 Hugo、Node 或瀏覽器自動化），並涵蓋 config-guidance 的多行程式碼樣本換行保留、similar-tools 的排序邏輯與 mermaid 區塊的條件式輸出；原本需要實跑 Hugo 才能驗證的 `tests/test_config_guidance.py` 端對端測試已改用新引擎直接驗證，移除 Hugo 相依。
 
+## 2026-09-03 根網站自訂主題（Issue #527）
+
+Issue #527 要求：在 #524 讓渲染引擎與排版模板各自獨立版本、可替換之後，讓維護這個 repository 自己（fork 或 vendor 這份公版，不是 Copier 下發的生成專案）內部決策網站的人，能不 fork 引擎或版面邏輯就換一套顏色主題。原則維持「盡可能簡單」：只開放顏色與既有區塊的窄範圍視覺覆寫，不開放任意 CSS／HTML。
+
+**機制**：新增 `site/theme.css`，與生成專案既有的 `docs/site-theme.css`（`template/docs/site-theme.css.jinja`）同一套設計、不同路徑——因為根網站與生成專案的 handbook 是兩套不同 renderer（見上方「Ownership 與更新」與 2026-09-03 節）。`scripts/build_decision_site.py` 在 `<head>` 固定多輸出一個 `<link rel="stylesheet" href="../../site/theme.css">`（在 `site/static/styles.css` 之後，讓 CSS cascade 覆寫生效），`scripts/render_site.py` 既有的 stylesheet 內嵌步驟原樣處理它，不需要修改。此檔一律存在（committed，預設空白 `:root {}` 加說明註解），因此預設輸出的 `docs/index.html`／`docs/index.en.html` 不變；有需要時直接覆寫 `site/static/styles.css` 的 `:root` token 或既有 class 的顏色屬性即可，範圍與界線寫在檔案自己的開頭註解裡，由一般 PR review 把關，不另建驗證工具。
+
+**不採用 `.csarc/config.yml`**：`scripts/build_decision_site.py` 已明確記載根網站內容不吃 `.csarc/config.yml`（該檔案是 repository 治理設定，`[[key]]` token 機制服務的是生成專案的 `docs/site-content.md`）。用 YAML 顏色鍵值再轉譯成 CSS 會是第二套主題機制，與既有 `site/static/styles.css` 的 CSS custom properties 重複；因此選擇同一種 CSS 覆寫檔案格式，只是換一個 repo 內路徑。
+
+**版本**：這是排版模板結構契約的新增（一個一律存在、一律被 link 的新檔案），`site/version.json` 的 `engine`／`template` 由 `1.0.0` 一併調整為 `1.1.0`，仍落在既有 `compatible_template_range`（`>=1.0.0 <2.0.0`）內，`scripts/check-decision-site-versions` 驗證通過。
+
+**驗證**：`tests/test_build_decision_site.py` 覆蓋 `render_page()` 一律輸出 `site/theme.css` 的 stylesheet link，以及一筆全流程 fixture（`build()` 接 `render()`）證明實際覆寫的 token 值會出現在最終內嵌後的 bundle 裡。手動以真實內容執行 `./scripts/build-decision-site`，先確認預設（空白覆寫）與既有輸出一致，再暫時填入一個顏色覆寫、重新產生、瀏覽器開啟確認生效，最後還原。
+
+## 2026-09-03 稽核軌跡呈現與資料新鮮度（Issue #559）
+
+Issue #535 已完成稽核軌跡的資料自動產生機制：`scripts/generate_audit_trail.py` 即時查詢 GitHub GraphQL API，輸出 PR 稽核表與規則變更（`policies/` 路徑）maker/checker 紀錄兩份 Markdown。呈現層當時留待 #524 的 Python 渲染引擎落地後才處理，因此拆成獨立的 #559；#524 已合併，本節記錄呈現機制與資料新鮮度的實際決定。
+
+**決定**：這個決策網站是「重建後逐位元組相同、可用 `file://` 離線開啟」的靜態單檔（見本 ADR 最上方「決定」第 1 點），架構上不可能顯示即時查詢的結果，也不為了呈現這個模組破例。#535 的證據已建議比照 `scripts/check-governance-drift` 的既有先例——本模板 source repo 只保留腳本供本機／CI 驗證，不另外啟用排程；本 Issue 採用同一先例並延伸到「不提交快照」：既不加即時查詢（架構上做不到），也不加排程或 on-merge job 產生後提交進 repo（需要持續維護，且會讓使用者誤以為頁面上的資料是某個時間點的真實快照而非結構說明）。網站只呈現兩份輸出檔案各自的路徑與欄位結構，以及重新產生的確切指令，並在文案中明講「不嵌入即時或先前產生的資料列，也沒有排程」。
+
+**機制**：新增 `site/data/audit_trail.json`（單一來源，兩語言共用同一組真實檔案路徑與欄位名稱，避免各自手打翻譯漂移）與 `scripts/build_decision_site.py` 的 `render_audit_trail()`／`{{< audit-trail >}}` shortcode，沿用既有 `render_config_guidance`／`render_file_map` 這類「結構化、手動維護（非即時抓取）資料 → slide」的既有模式，不新增資料流或渲染架構。新增的 slide（`governance-audit-trail`，`audience="archive"`、`parity="new"`）沿用 `fleet-inventory`／`spec-format` 等既有「決策附錄」slide 的呈現慣例。
+
+**驗證**：`tests/test_build_decision_site.py` 新增 `render_audit_trail` 的單元測試，並以一則內容一致性測試（比照既有 `test_file_map_matches_real_workflow_directory_and_paths`）直接呼叫 `scripts/generate_audit_trail.py` 的 `render_pr_audit_table`／`render_rule_change_log`，比對其實際 Markdown 表頭欄位與 `site/data/audit_trail.json` 手寫的欄位清單逐字相符，避免兩邊日後各自修改而悄悄漂移。`./scripts/build-decision-site --check` 確認新增 slide 後仍逐位元組重建；`parity="new"` 讓 keys-only parity 檢查正確判定這是遷移後新增的內容，不會被誤判為遺漏既有 legacy slide。
+
 ## Ownership 與更新
 
 | 內容 | Owner | Copier update 行為 |
 | --- | --- | --- |
 | Renderer、基礎設計 tokens、共用元件與驗證 | 公版 | 隨公版更新，產生可審查差異 |
 | `docs/site-content.md` 與允許的 theme overrides | consuming project | 首次建立後保留，不靜默覆寫 |
+| `site/theme.css`（root 網站自己的顏色／窄範圍區塊覆寫，Issue #527） | 這個 repository 的 fork／vendor 者 | 不經 Copier；root 本身預設保持空白，git 層面的分歧與合併由各自的 fork 自行處理 |
 | `docs/index.html`、`docs/index.en.html` | renderer output | 由來源重建；CI 驗證沒有 stale 或人工修改 |
 | Decision records、specs 與產品實證 | owning repository | 專案擁有；公版只提供結構與規則 |
 

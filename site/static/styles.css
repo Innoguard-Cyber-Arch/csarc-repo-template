@@ -343,6 +343,68 @@
     .explorer-caption { margin-top: 5px; color: var(--muted); font-size: 18px; line-height: 1.18; }
     .explorer-caption strong { color: var(--ink); }
 
+    .file-map-window {
+      /* An explicit height keeps this grid item (see
+         .markdown-body > .file-map-window in detail-toggle.css) sized to
+         its true content height: a grid item with overflow other than
+         visible otherwise contributes an automatic minimum size of 0 to
+         its auto-sized row, which silently clips the tree instead of
+         letting the row grow to fit it. */
+      height: max-content;
+      overflow: hidden;
+      border: 2px solid var(--ink);
+      border-radius: 8px;
+      background: white;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, .1);
+    }
+    .file-map-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 26px;
+      padding: 4px 10px;
+      border-bottom: 1px solid #bdbdb8;
+      background: #e9e9e6;
+    }
+    .file-map-dots { display: flex; flex: 0 0 auto; gap: 6px; }
+    .file-map-dots i { width: 9px; height: 9px; border-radius: 50%; background: #a5a5a0; }
+    .file-map-dots i:first-child { background: #e65c52; }
+    .file-map-dots i:nth-child(2) { background: #e9b949; }
+    .file-map-dots i:last-child { background: #48a967; }
+    .file-map-address { padding: 2px 8px; border: 1px solid #c7c7c2; border-radius: 5px; background: white; color: #3b3b39; font: 750 13px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .file-map-tree, .file-map-tree ul { margin: 0; padding: 0; list-style: none; }
+    .file-map-tree { padding: 4px 9px; }
+    .file-map-tree ul { margin-left: 8px; padding-left: 9px; border-left: 1px solid var(--line); }
+    .file-map-node { margin: 0; }
+    .file-map-branch > summary.file-map-summary { cursor: pointer; }
+    .file-map-branch > summary.file-map-summary::-webkit-details-marker { display: none; }
+    .file-map-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      column-gap: 7px;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .file-map-summary::before {
+      content: "▸";
+      display: inline-block;
+      width: 12px;
+      margin-right: 2px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .file-map-branch[open] > .file-map-summary::before { content: "▾"; }
+    .file-map-icon { flex: 0 0 auto; align-self: center; width: 10px; height: 13px; border: 1px solid #7d8ca2; border-radius: 1px; background: white; }
+    .file-map-icon.is-dir { width: 13px; height: 9px; border-color: #b99317; border-radius: 2px; background: #f0c842; }
+    .file-map-name { font: 750 13px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #174f8b; }
+    .file-map-note { color: var(--muted); font-size: 12px; }
+    .file-map-tag { flex: 0 0 auto; margin-left: auto; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 850; white-space: nowrap; }
+    .file-map-tag-template { background: #ececea; color: #333; }
+    .file-map-tag-shared { background: var(--optional-soft); color: #174f8b; }
+    .file-map-tag-project { background: #ffe2d5; color: #8a3d20; }
+    .file-map-purpose { margin: 0 0 1px 25px; color: #333; font-size: 12px; line-height: 1.16; }
+
     .similar-tools-slide { padding-top: 3%; padding-bottom: 3%; padding-left: 13.7%; }
 
     .similar-tools-slide header { margin-bottom: 8px; }
