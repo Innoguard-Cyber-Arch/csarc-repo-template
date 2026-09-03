@@ -18,7 +18,7 @@ README、agent instructions、深入決策與簡報若各自重述同一件事�
 
 ## Context
 
-目前 root presentation 由 `site/` 維護，生成專案則由 template renderer 與 project-owned content／theme 組合。Hugo、雙語與 `llms.txt` 在 cutoff 時仍是 open work，不屬於本 spec 已完成能力。
+目前 root presentation 由 `site/` 維護，生成專案則由 template renderer 與 project-owned content／theme 組合。Hugo 已由 Issue #524（Milestone 13）完全取代為本機 Python 渲染引擎，不再是候選或 open work；雙語與 `llms.txt` 已隨同一批改動落地。
 
 ## Acceptance criteria
 
@@ -28,7 +28,7 @@ README、agent instructions、深入決策與簡報若各自重述同一件事�
 - [x] Root 保存自身真實內容；Copier template 保存 renderer／結構，並保留 consuming project 的內容與 theme overrides。
 - [x] `noindex`／`robots.txt` 只標示資料邊界，不被描述成 access control。
 - [x] 聊天只在使用者確認後摘要進 work item／decision record；不保存完整逐字稿、敏感資訊或模型 chain-of-thought。
-- [x] Planned Hugo、i18n 與 AI-readable output 在正式 cutover 前保持候選狀態，不改寫目前交付宣稱。
+- [x] Hugo 已由 Issue #524（Milestone 13）正式 cutover 為本機 Python 渲染引擎；i18n（雙語）與 `llms.txt`（AI-readable output）已隨同一批改動落地，不再是候選狀態。
 
 ## Plan
 
