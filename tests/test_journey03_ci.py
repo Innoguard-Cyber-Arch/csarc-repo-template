@@ -180,6 +180,43 @@ def test_documentation_tier_validates_the_generated_site() -> None:
     assert "python3 scripts/render_site.py --check" in template_fast
 
 
+def test_documentation_check_runs_for_mixed_scope_fast_tier_pull_requests() -> (
+    None
+):
+    """Issue #588: a docs-scoped file must not escape staleness checks.
+
+    A pull request that touches ``site/content/`` alongside another scope
+    (workflow, governance, shell, ...) lands in the ``fast`` tier, not the
+    ``docs`` tier, because ``ci_tier.py`` only assigns the ``docs`` tier to
+    scope sets that are *exactly* ``{"docs"}``. The staleness check must
+    therefore trigger off the ``docs`` scope, not off the ``docs`` tier, or
+    such a pull request can merge a stale ``docs/index.html`` unnoticed
+    (this happened in PR #569).
+    """
+    site_check = {
+        "scripts/verify-fast": "./scripts/build-decision-site --check",
+        "template/scripts/verify-fast.jinja": (
+            "python3 scripts/render_site.py --check"
+        ),
+    }
+    for path, check_command in site_check.items():
+        source = (REPO_ROOT / path).read_text(encoding="utf-8")
+
+        gate_start = source.index('if [[ "$scopes" == *,docs,*')
+        gate_end = source.index("\nfi", gate_start)
+        gate = source[gate_start:gate_end]
+
+        assert '"$tier" == "docs"' in gate
+        assert check_command in gate
+
+        early_exit_start = source.index('if [[ "$tier" == "docs" ]]', gate_end)
+        early_exit_end = source.index("\nfi", early_exit_start)
+        early_exit = source[early_exit_start:early_exit_end]
+
+        assert "exit 0" in early_exit
+        assert check_command not in early_exit
+
+
 def test_template_smoke_reads_config_from_the_generated_repository() -> None:
     """Resolve the generated config relative to the generated repository."""
     source = (REPO_ROOT / "scripts/verify-fast").read_text(encoding="utf-8")

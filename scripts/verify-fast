@@ -18,9 +18,12 @@ git diff --check
 ./scripts/check-update-conflicts
 ./scripts/scan-secrets
 
-if [[ "$tier" == "docs" ]]; then
+if [[ "$scopes" == *,docs,* || "$tier" == "docs" ]]; then
   python3 scripts/spec_to_issue.py validate
   ./scripts/build-decision-site --check
+fi
+
+if [[ "$tier" == "docs" ]]; then
   exit 0
 fi
 
