@@ -5,6 +5,7 @@ code_owner: '@Innoguard-Cyber-Arch/arch'
 coverage_mode: global
 coverage_threshold: 80
 enable_codeql: false
+enable_docker: false
 enable_governance_drift_check: false
 enable_precommit: false
 enable_template_update_notifications: false

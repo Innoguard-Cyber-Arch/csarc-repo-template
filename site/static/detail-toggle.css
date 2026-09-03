@@ -281,7 +281,8 @@ html[data-detail-level="simple"] .technical-tour-trigger {
 }
 
 .markdown-body > p:first-child,
-.markdown-body > table {
+.markdown-body > table,
+.markdown-body > .file-map-window {
   grid-column: 1 / -1;
 }
 

@@ -60,7 +60,12 @@ _SCHEMA_VERSION = re.compile(r"\bschemaVersion\s*:\s*(?P<version>\d+)\b")
 _CONFIG_TOKEN = re.compile(r"\[\[(?P<key>[a-z][a-z0-9_]*)\]\]")
 _INLINE_CODE = re.compile(r"`([^`]+)`")
 _LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
-_BOLD = re.compile(r"\*\*([^*]+)\*\*")
+# Non-greedy across any character, not just non-"*" ones: a bold span that
+# wraps an inline code span containing a literal "*" (e.g. `` **a `dev/m*`
+# label** ``, found while porting the root decision site to
+# scripts/build_decision_site.py in Issue #524) must still close instead of
+# silently staying literal "**...**" text.
+_BOLD = re.compile(r"\*\*(.+?)\*\*")
 _MARKDOWN_NAV = "<!-- CSARC_SITE_NAV -->"
 _MARKDOWN_CONTENT = "<!-- CSARC_SITE_CONTENT -->"
 _MARKDOWN_TITLE = "<!-- CSARC_SITE_TITLE -->"

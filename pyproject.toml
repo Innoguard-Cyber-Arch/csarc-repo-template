@@ -55,7 +55,11 @@ known-first-party = ["csarc_cli", "scripts"]
 [tool.ruff.lint.per-file-ignores]
 "src/csarc_cli/cli.py" = ["T20"]
 "scripts/render_release_prompt.py" = ["RUF001"]
+# Bilingual decision-site HTML strings embed full-width CJK punctuation
+# (｜／：（） etc.) throughout by design, same as render_release_prompt.py.
+"scripts/build_decision_site.py" = ["RUF001", "RUF002"]
 "tests/test_release_prompt.py" = ["D", "S101", "RUF001"]
+"tests/test_build_decision_site.py" = ["D", "S101", "RUF001"]
 "tests/**" = ["D", "S101"]
 "template/tests/**" = ["D", "S101"]
 

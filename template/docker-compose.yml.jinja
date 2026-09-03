@@ -1,0 +1,7 @@
+# CSARC starter compose file for local development against the image built
+# by ./Dockerfile. Adjust the service name, ports, volumes, and environment
+# for this project's actual runtime needs; nothing here is required by CI.
+services:
+  {{ project_slug }}:
+    build: .
+    image: {{ project_slug }}:local

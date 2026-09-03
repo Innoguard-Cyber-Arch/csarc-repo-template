@@ -1,31 +1,26 @@
 """Regression coverage for Issue #472: config_examples.json + the
-config-guidance Hugo shortcode replace the old hardcoded, zh-tw-only
-`configExamples` JS objects in site/static/{app,legacy-components}.js.
+config-guidance shortcode (now `render_config_guidance` in
+scripts/build_decision_site.py; see Issue #524's Hugo-to-Python port)
+replace the old hardcoded, zh-tw-only `configExamples` JS objects in
+site/static/{app,legacy-components}.js.
 
 Covers:
 - the merged data file drops the orphaned tracks that had no matching
   decision-slide (`template`, `knowledge`) instead of migrating dead data;
 - every migrated item carries real, distinct zh-tw and en text (not a
-  machine-translation placeholder or a copy of the zh-tw string);
-- the config-guidance shortcode actually renders the right number of
-  config-trigger / inline-detail items per track in both languages. This is
-  an end-to-end Hugo-build check, not just a source read: the shortcode's
-  first implementation silently dropped items whenever a `code` sample
-  contained a blank line, once it was embedded in the markdownify-processed
-  English page (a Go template pipe-argument-order bug, then a CommonMark
-  raw-HTML-block/blank-line interaction) — a source-only check would not
-  have caught it.
+  machine-translation placeholder or a copy of the zh-tw string).
+
+End-to-end rendering coverage (the right number of config-trigger /
+inline-detail items per track, and multi-line `code` samples surviving
+rendering byte-for-byte in both languages) now lives in
+tests/test_build_decision_site.py, exercising `render_config_guidance`
+directly -- no Hugo build required.
 """
 
 from __future__ import annotations
 
 import json
-import re
-import shutil
-import subprocess
 from pathlib import Path
-
-import pytest
 
 ROOT = Path(__file__).parents[1]
 
@@ -144,131 +139,3 @@ def test_app_js_rollout_orphan_is_intentionally_untouched() -> None:
         (ROOT / "site/content/_index.en.md").read_text(encoding="utf-8"),
     ):
         assert 'track="rollout"' not in content
-
-
-def _hugo_binary() -> str | None:
-    try:
-        # repository-owned installer script, no untrusted input
-        result = subprocess.run(  # noqa: S603
-            [str(ROOT / "scripts/install-hugo")],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-    except subprocess.CalledProcessError, OSError:
-        return None
-    stripped = result.stdout.strip()
-    path = stripped.splitlines()[-1] if stripped else ""
-    return path or None
-
-
-@pytest.mark.skipif(
-    shutil.which("hugo") is None and _hugo_binary() is None,
-    reason="Hugo is not installable in this environment",
-)
-def test_config_guidance_shortcode_renders_expected_counts_in_both_languages(
-    tmp_path: Path,
-) -> None:
-    hugo_bin = _hugo_binary() or shutil.which("hugo")
-    assert hugo_bin
-    destination = tmp_path / "hugo-site"
-    # locally installed/cached Hugo binary resolved above, no untrusted input
-    subprocess.run(  # noqa: S603
-        [
-            hugo_bin,
-            "--source",
-            str(ROOT),
-            "--config",
-            "site/hugo.toml",
-            "--destination",
-            str(destination),
-            "--cleanDestinationDir",
-            "--noBuildLock",
-            "--environment",
-            "production",
-            "--quiet",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-
-    data = _load_config_examples()
-    zh_html = (destination / "index.html").read_text(encoding="utf-8")
-    en_html = (destination / "en/index.html").read_text(encoding="utf-8")
-
-    for lang, html in (("zh-tw", zh_html), ("en", en_html)):
-        direct_items = sum(
-            len(spec["items"])
-            for spec in data["tracks"].values()
-            if spec["direct"]
-        )
-        assert html.count('class="config-inline-detail"') == direct_items
-
-        for track, spec in data["tracks"].items():
-            if spec["direct"]:
-                continue
-            expected = len(spec["items"])
-            actual = len(
-                re.findall(f'aria-controls="config-overlay-{track}"', html)
-            )
-            assert actual == expected, (
-                f"{lang}: track {track!r} rendered {actual} config-trigger "
-                f"buttons, expected {expected} (see site/data/"
-                "config_examples.json)"
-            )
-
-        # No leftover markdownify corruption from a raw-HTML block ending at
-        # a blank line partway through a multi-line `code` sample.
-        assert "&lt;button" not in html
-        assert "&ldquo;" not in html and "&rdquo;" not in html
-
-    # The same governance item's rendered trigger carries distinct,
-    # correctly localized text in each language.
-    item = data["tracks"]["governance"]["items"][0]
-    assert f'data-config-title="{item["title"]["zh-tw"]}"' in zh_html
-    assert f'data-config-title="{item["title"]["en"]}"' in en_html
-
-    # Content-level check, not just a trigger count: the multi-line `code`
-    # sample (with an embedded blank line) must survive server rendering
-    # byte-for-byte in the data-config-code attribute, decoded from its
-    # "&#10;" HTML-entity encoding back to real newlines. A wrong Go
-    # template pipe argument order previously collapsed this to a single
-    # "\n" character without changing the trigger count at all.
-    for lang, html in (("zh-tw", zh_html), ("en", en_html)):
-        match = re.search(
-            r'aria-controls="config-overlay-governance"[^>]*'
-            r'data-config-code="([^"]*)"',
-            html,
-        )
-        assert match, f"{lang}: governance[0] trigger not found"
-        rendered_code = (
-            match.group(1)
-            .replace("&#10;", "\n")
-            .replace("&#34;", '"')
-            .replace("&amp;", "&")
-        )
-        assert rendered_code == item["code"][lang], (
-            f"{lang}: governance[0] data-config-code does not match the "
-            "source code sample once decoded"
-        )
-        assert "\n" in rendered_code, (
-            f"{lang}: governance[0] data-config-code lost its embedded newlines"
-        )
-
-    # Same check for a "direct" track's inline <pre>, whose zh-tw source code
-    # contains a blank line (site/data/config_examples.json: agents[0]).
-    agents_item = data["tracks"]["agents"]["items"][0]
-    for lang, html in (("zh-tw", zh_html), ("en", en_html)):
-        match = re.search(
-            r'<pre class="code">([^<]*)</pre>\s*</div>\s*</details>',
-            html[html.find(agents_item["title"][lang]) :],
-        )
-        assert match, f"{lang}: agents[0] inline <pre> not found"
-        rendered_code = match.group(1).replace("&#10;", "\n")
-        assert rendered_code == agents_item["code"][lang]
-        assert "\n\n" in rendered_code, (
-            f"{lang}: agents[0] <pre> lost its embedded blank line"
-        )

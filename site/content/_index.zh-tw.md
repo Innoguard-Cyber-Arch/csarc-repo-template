@@ -151,18 +151,9 @@ fit = "符合畫面"
 {{< /slide >}}
 
 {{< slide key="files" track="files" eyebrow="檔案地圖" title="模板把必要設定放到正確位置" subtitle="列出目前實際產生的主要檔案；公版可提出更新，但不會靜默覆寫產品內容。" class="dense" legacy="false" >}}
-| 路徑 | 作用 | 責任 |
-| --- | --- | --- |
-| `.csarc/config.yml` | 記錄公版來源、語言、分支與選用能力 | 公版主導 |
-| `.github/ISSUE_TEMPLATE/`、`pull_request_template.md` | 工作定義與 PR 契約 | 公版主導 |
-| `.github/workflows/` | 9 條共用流程：工作單整理、里程碑同步、規格開單、PR 規則、必要驗證、漏洞排程、reviewer 指派、工作關單與候選發版，加上選配的治理漂移、模板更新通知排程與 CodeQL SAST | 公版主導 |
-| `AGENTS.md`、`README.md`、`CLAUDE.md` | Agent 工作方式與使用者入口 | 共同維護 |
-| `policies/`、`CODEOWNERS`、`.github/REVIEWERS` | 期望設定、owner 與 reviewer | 共同維護 |
-| `scripts/` | 本機驗證、工作同步與套用設定 | 公版主導 |
-| `docs/`、`site/` | 專案說明、規格、決策與內部網站 | 共同維護 |
-| `src/`、產品測試與規格 | 真正產品行為 | 專案持有 |
+{{< file-map >}}
 
-表格刻意維持三欄：側邊簡報目錄已可直接連到每個項目對應的頁面，僅維運可見的「CI/CD 設定」附錄也已逐 Journey 詳列驗證入口，細節比表格欄位更完整。另外加上「對應頁名」與「驗證入口」兩欄，只會重複這兩份既有內容。
+檔案地圖只列路徑、作用與責任：側邊簡報目錄已可直接連到每個項目對應的頁面，僅維運可見的「CI/CD 設定」附錄也已逐 Journey 詳列驗證入口，細節比這裡能呈現的更完整；樹狀呈現同樣不重複加上「對應頁名」或「驗證入口」。
 
 {{< detail key="files-update" title="更新時怎麼保護產品內容" >}}
 Copier 在短分支嘗試更新；若有衝突，只列出檔案且不修改 repo，調整後重跑，再由 PR 審查。建立、既有 repo 導入與同一 repo 後續 update 都有 fixture；回歸測試會刻意加入產品檔案，再確認更新後內容沒有被覆寫。
@@ -181,7 +172,7 @@ Root 與 `template/` 同時使用的 workflow、policy、script 與文件由同�
 | [OSV-Scanner](https://github.com/google/osv-scanner) | 掃描 lockfile 中已公開的漏洞 | `scripts/verify-dependencies`、`scripts/install-osv-scanner`、`.github/workflows/osv.yml` | 依賴變更 PR、交付候選、每週排程 | [Apache-2.0](https://github.com/google/osv-scanner/blob/main/LICENSE) |
 | [Syft](https://github.com/anchore/syft) | 產生發版用的 SPDX SBOM | `.github/workflows/release.yml`（`anchore/sbom-action`）、`scripts/release_assets.py` | 建立發版的交付 PR | [Apache-2.0](https://github.com/anchore/syft/blob/main/LICENSE) |
 | [Release Please](https://github.com/googleapis/release-please) | 維護版本／CHANGELOG PR 並建立 GitHub Release | `.github/workflows/release.yml`、`release-please-config.json`、`.release-please-manifest.json` | 交付分支到 `main` | [Apache-2.0](https://github.com/googleapis/release-please/blob/main/LICENSE) |
-| [Hugo](https://github.com/gohugoio/hugo) | 從 Markdown 建置雙語內部網站與 `llms.txt` | `scripts/install-hugo`、`scripts/build-decision-site`、`site/hugo.toml` | `docs/index.html`、`docs/index.en.html`、`llms.txt` | [Apache-2.0](https://github.com/gohugoio/hugo/blob/master/LICENSE) |
+| 決策網站渲染引擎 | 自製、無外部依賴的 Python 引擎，從 Markdown 建置雙語內部網站與 `llms.txt`；2026-09-03 取代 Hugo | `scripts/build_decision_site.py`、`scripts/build-decision-site`、`scripts/render_site.py`、`site/version.json` | `docs/index.html`、`docs/index.en.html`、`llms.txt` | 自製（本 repository） |
 {{< /detail >}}
 {{< /slide >}}
 
@@ -608,6 +599,16 @@ Adoption 與 update 不從 workflow 檔名推測 ownership。`.csarc/config.yml`
 `noindex` 與 `robots.txt` 只能降低意外擴散，不是存取控制。核准 host 可保護入口，但下載後的離線 HTML 仍可能被轉寄。Agent 只把使用者已確認的 durable constraint 摘要進 Issue，再經 PR 寫入 decision record，不保存原始對話逐字稿。
 
 renderer 讀取的是上方「規則治理」設定表核准的同一批 `.csarc/config.yml` key，不另定義第二份網站專用清單。專案文字寫在 `docs/site-content.md`，樣式覆寫留在 `docs/site-theme.css`，產生的 `docs/index.html` 不直接編輯。
+
+**自訂本頁（根網站）主題（Issue #527）：**上述 `.csarc/config.yml`／`docs/site-theme.css` 是生成專案的 handbook 路徑；fork 或 vendor 這份公版本身、想調整這份根決策網站配色的維護者，改用 `site/theme.css`。範圍嚴格限制在 `site/static/styles.css` 既有 `:root` 顏色 token，以及既有 class 的窄範圍視覺屬性，不開放新增 HTML、JavaScript 或版面配置；由一般 PR review 把關，不建立額外驗證工具。此檔一律存在、一律被引擎內嵌，預設為空白覆寫，因此預設輸出保持公版配色不變：
+
+```css
+:root {
+  --yellow: #2e6b47;
+}
+```
+
+編輯後執行 `./scripts/build-decision-site` 重新產生 `docs/index.html`／`docs/index.en.html`。這是排版模板結構的新增，`site/version.json` 的 `template` 版本與 `scripts/check-decision-site-versions` 的相容範圍檢查涵蓋這次擴充；詳見 `docs/adr/portable-decision-site.md` 的「根網站自訂主題」一節。
 {{< /detail >}}
 {{< /basic >}}
 {{< /slide >}}
