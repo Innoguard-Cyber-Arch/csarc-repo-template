@@ -37,7 +37,7 @@ def test_build_records_filters_by_target_branch() -> None:
     # trail reports on.
     records = _records()
     numbers = sorted(record.number for record in records)
-    assert numbers == [601, 602, 603]
+    assert numbers == [601, 602, 603, 605]
 
 
 def test_governance_stage_maps_source_branch_pattern() -> None:
@@ -62,6 +62,13 @@ def test_developer_and_reviewer_aggregation() -> None:
     assert multi_author.developers == ("dana", "frank")
     assert multi_author.reviewers == ("erin",)
     assert multi_author.issue_number is None
+
+    # PR #605 is opened by "zack" but "alice" also has a commit on it, and
+    # "alice" sorts before "zack" -- this is the exact ordering that used
+    # to make render_rule_change_log's proposed_by pick the wrong person.
+    multi_author_reordered = records[605]
+    assert multi_author_reordered.author == "zack"
+    assert multi_author_reordered.developers == ("alice", "zack")
 
 
 def test_pr_audit_table_reports_reality_including_gaps() -> None:
@@ -103,6 +110,30 @@ def test_rule_change_log_only_includes_rule_touching_prs() -> None:
     # policies/, so neither belongs in a rule-change log.
     assert "[#602]" not in log
     assert "[#603]" not in log
+
+    # PR #605 (policies/rulesets.json) does belong -- see the dedicated
+    # proposed_by-attribution test below for the identity assertion.
+    assert "[#605]" in log
+
+
+def test_rule_change_log_proposed_by_uses_actual_author() -> None:
+    # Regression for the PR #564 review finding: proposed_by used to be
+    # `record.developers[0]`, i.e. whichever login sorts first among the
+    # PR author and every commit author -- not necessarily the person who
+    # actually opened the pull request. PR #605 is authored by "zack", but
+    # co-committer "alice" sorts first alphabetically, so a correct
+    # implementation must still report "zack".
+    records = _records()
+    record_605 = next(record for record in records if record.number == 605)
+    assert record_605.author == "zack"
+    assert record_605.developers == ("alice", "zack")
+
+    log = render_rule_change_log(
+        records, ("policies/",), "owner/repo", "2026-09-03T00:00:00Z"
+    )
+    row = next(line for line in log.splitlines() if "[#605]" in line)
+    assert "zack" in row
+    assert "alice" not in row
 
 
 def test_rendering_is_deterministic() -> None:
@@ -165,7 +196,7 @@ def test_main_rejects_non_positive_retries(tmp_path: Path) -> None:
 def test_load_fixture_nodes_round_trips_expected_shape() -> None:
     nodes = load_fixture_nodes(FIXTURE)
     assert isinstance(nodes, list)
-    assert {node["number"] for node in nodes} == {601, 602, 603, 604}
+    assert {node["number"] for node in nodes} == {601, 602, 603, 604, 605}
     # Confirm the fixture itself is valid JSON with no trailing garbage,
     # matching the shape load_fixture_nodes expects from a real search
     # response's flattened `data.search.nodes` pages.

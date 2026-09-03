@@ -124,6 +124,7 @@ class PullRequestRecord:
     base_ref: str
     head_ref: str
     milestone: str | None
+    author: str
     developers: tuple[str, ...]
     reviewers: tuple[str, ...]
     approvals: tuple[tuple[str, str], ...]
@@ -156,6 +157,23 @@ def _logins(nodes: list[JsonObject], key: str = "author") -> list[str]:
             if isinstance(login, str) and login:
                 logins.add(login)
     return sorted(logins)
+
+
+def _pr_author_login(node: JsonObject) -> str:
+    """Return the PR opener's login, distinct from `developers`.
+
+    `developers` (see `_developer_logins` below) is an alphabetically
+    sorted union used for the general "who touched this" display; it must
+    never stand in for "who proposed this", because sort order has no
+    relationship to who actually opened the pull request. This field is
+    the single, authoritative source for that maker identity.
+    """
+    author = node.get("author")
+    if isinstance(author, dict):
+        login = author.get("login")
+        if isinstance(login, str) and login:
+            return login
+    return ""
 
 
 def _developer_logins(node: JsonObject) -> tuple[str, ...]:
@@ -212,6 +230,7 @@ def record_from_node(node: JsonObject) -> PullRequestRecord:
         base_ref=node.get("baseRefName", ""),
         head_ref=node.get("headRefName", ""),
         milestone=milestone_title,
+        author=_pr_author_login(node),
         developers=_developer_logins(node),
         reviewers=tuple(_logins(review_nodes)),
         approvals=approvals,
@@ -407,11 +426,11 @@ def render_rule_change_log(
             "| {changed} | {proposed_by} | [#{pr}]({url}) | "
             "{approved_by} | {approving_review} |".format(
                 changed=record.merged_at or "(unknown)",
-                proposed_by=(
-                    record.developers[0]
-                    if record.developers
-                    else "(none recorded)"
-                ),
+                # The PR's actual opener, not developers[0] -- that tuple
+                # is an alphabetically sorted union of the author and every
+                # commit author, so its first element is whichever login
+                # sorts earliest, not necessarily who proposed the change.
+                proposed_by=record.author or "(none recorded)",
                 pr=record.number,
                 url=record.url,
                 approved_by=approved_by,

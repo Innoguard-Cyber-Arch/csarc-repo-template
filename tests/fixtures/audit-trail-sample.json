@@ -108,5 +108,33 @@
         { "number": 588, "createdAt": "2026-08-05T08:00:00Z", "closedAt": "2026-08-09T18:00:00Z" }
       ]
     }
+  },
+  {
+    "number": 605,
+    "title": "fix(governance): rotate ruleset signing key",
+    "url": "https://github.com/owner/repo/pull/605",
+    "createdAt": "2026-08-16T09:00:00Z",
+    "mergedAt": "2026-08-17T12:00:00Z",
+    "baseRefName": "main",
+    "headRefName": "fix/605-rotate-ruleset-key",
+    "author": { "login": "zack" },
+    "milestone": null,
+    "reviews": {
+      "nodes": [
+        {
+          "author": { "login": "yara" },
+          "url": "https://github.com/owner/repo/pull/605#pullrequestreview-3",
+          "submittedAt": "2026-08-17T11:30:00Z"
+        }
+      ]
+    },
+    "commits": {
+      "nodes": [
+        { "commit": { "authors": { "nodes": [{ "user": { "login": "zack" } }] } } },
+        { "commit": { "authors": { "nodes": [{ "user": { "login": "alice" } }] } } }
+      ]
+    },
+    "files": { "nodes": [{ "path": "policies/rulesets.json" }] },
+    "closingIssuesReferences": { "nodes": [] }
   }
 ]
