@@ -177,16 +177,23 @@ def _load_json_file(path: Path) -> dict[str, Any]:
 
 def _load_testing_groups(testing_dir: Path) -> list[dict[str, Any]]:
     """Load the CI/CD settings appendix's per-step files, in tab order."""
+    on_disk = {path.stem for path in testing_dir.glob("*.json")}
+    expected = set(_TESTING_STEP_ORDER)
+    if on_disk != expected:
+        raise BuildError(
+            "site/data/testing/*.json does not match _TESTING_STEP_ORDER: "
+            f"missing {sorted(expected - on_disk)}, "
+            f"unexpected {sorted(on_disk - expected)}"
+        )
     groups = [
         _load_json_file(testing_dir / f"{key}.json")
         for key in _TESTING_STEP_ORDER
     ]
     found = {group["key"] for group in groups}
-    expected = set(_TESTING_STEP_ORDER)
     if found != expected:
         raise BuildError(
-            "site/data/testing/*.json does not match _TESTING_STEP_ORDER: "
-            f"missing {sorted(expected - found)}, "
+            "site/data/testing/*.json 'key' fields do not match "
+            f"_TESTING_STEP_ORDER: missing {sorted(expected - found)}, "
             f"unexpected {sorted(found - expected)}"
         )
     return groups

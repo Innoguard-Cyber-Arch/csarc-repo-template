@@ -913,6 +913,24 @@ def _write_fixture_site(root: Path) -> None:
     (root / "docs").mkdir()
 
 
+def test_testing_groups_reject_an_unexpected_extra_file(tmp_path: Path) -> None:
+    # `_load_testing_groups` only iterates the 9 known keys from
+    # _TESTING_STEP_ORDER, so a stray extra file in site/data/testing/ was
+    # previously never inspected at all -- silently ignored instead of
+    # failing closed. It must now be rejected.
+    _write_fixture_site(tmp_path)
+    (tmp_path / "site" / "data" / "testing" / "zzz-extra.json").write_text(
+        json.dumps({"key": "zzz-extra"}), encoding="utf-8"
+    )
+    try:
+        build(tmp_path, tmp_path / "dist/decision-site")
+    except BuildError as error:
+        assert "unexpected" in str(error)
+        assert "zzz-extra" in str(error)
+    else:
+        raise AssertionError("expected BuildError for the extra file")
+
+
 def test_build_writes_both_languages_and_llms_txt(tmp_path: Path) -> None:
     _write_fixture_site(tmp_path)
     outputs = build(tmp_path, tmp_path / "dist/decision-site")
