@@ -1,0 +1,112 @@
+[
+  {
+    "number": 601,
+    "title": "feat(governance): tighten label policy",
+    "url": "https://github.com/owner/repo/pull/601",
+    "createdAt": "2026-08-10T09:00:00Z",
+    "mergedAt": "2026-08-11T15:30:00Z",
+    "baseRefName": "main",
+    "headRefName": "feat/590-tighten-label-policy",
+    "author": { "login": "alice" },
+    "milestone": { "title": "Milestone 9: Decision site and adoption experience overhaul" },
+    "reviews": {
+      "nodes": [
+        {
+          "author": { "login": "bob" },
+          "url": "https://github.com/owner/repo/pull/601#pullrequestreview-1",
+          "submittedAt": "2026-08-11T15:00:00Z"
+        }
+      ]
+    },
+    "commits": {
+      "nodes": [
+        { "commit": { "authors": { "nodes": [{ "user": { "login": "alice" } }] } } }
+      ]
+    },
+    "files": {
+      "nodes": [
+        { "path": "policies/labels.json" },
+        { "path": "docs/ci-policy.md" }
+      ]
+    },
+    "closingIssuesReferences": {
+      "nodes": [
+        { "number": 590, "createdAt": "2026-08-08T08:00:00Z", "closedAt": "2026-08-11T15:30:00Z" }
+      ]
+    }
+  },
+  {
+    "number": 602,
+    "title": "feat(governance): promote milestone 9 delivery",
+    "url": "https://github.com/owner/repo/pull/602",
+    "createdAt": "2026-08-12T09:00:00Z",
+    "mergedAt": "2026-08-13T10:00:00Z",
+    "baseRefName": "main",
+    "headRefName": "dev/m9-decision-site-adoption",
+    "author": { "login": "carol" },
+    "milestone": { "title": "Milestone 9: Decision site and adoption experience overhaul" },
+    "reviews": { "nodes": [] },
+    "commits": {
+      "nodes": [
+        { "commit": { "authors": { "nodes": [{ "user": { "login": "carol" } }] } } }
+      ]
+    },
+    "files": { "nodes": [{ "path": "README.md" }] },
+    "closingIssuesReferences": {
+      "nodes": [
+        { "number": 585, "createdAt": "2026-08-01T08:00:00Z", "closedAt": "2026-08-13T10:00:00Z" }
+      ]
+    }
+  },
+  {
+    "number": 603,
+    "title": "fix(governance): canary soak the audit trail generator",
+    "url": "https://github.com/owner/repo/pull/603",
+    "createdAt": "2026-08-14T09:00:00Z",
+    "mergedAt": "2026-08-15T11:00:00Z",
+    "baseRefName": "main",
+    "headRefName": "dev/i535-audit-trail-soak",
+    "author": { "login": "dana" },
+    "milestone": null,
+    "reviews": {
+      "nodes": [
+        {
+          "author": { "login": "erin" },
+          "url": "https://github.com/owner/repo/pull/603#pullrequestreview-2",
+          "submittedAt": "2026-08-15T10:30:00Z"
+        }
+      ]
+    },
+    "commits": {
+      "nodes": [
+        { "commit": { "authors": { "nodes": [{ "user": { "login": "dana" } }] } } },
+        { "commit": { "authors": { "nodes": [{ "user": { "login": "frank" } }] } } }
+      ]
+    },
+    "files": { "nodes": [{ "path": "scripts/generate_audit_trail.py" }] },
+    "closingIssuesReferences": { "nodes": [] }
+  },
+  {
+    "number": 604,
+    "title": "feat(delivery): work item merged into the milestone branch",
+    "url": "https://github.com/owner/repo/pull/604",
+    "createdAt": "2026-08-09T09:00:00Z",
+    "mergedAt": "2026-08-09T18:00:00Z",
+    "baseRefName": "dev/m9-decision-site-adoption",
+    "headRefName": "feat/588-example",
+    "author": { "login": "gina" },
+    "milestone": { "title": "Milestone 9: Decision site and adoption experience overhaul" },
+    "reviews": { "nodes": [] },
+    "commits": {
+      "nodes": [
+        { "commit": { "authors": { "nodes": [{ "user": { "login": "gina" } }] } } }
+      ]
+    },
+    "files": { "nodes": [{ "path": "policies/actions.json" }] },
+    "closingIssuesReferences": {
+      "nodes": [
+        { "number": 588, "createdAt": "2026-08-05T08:00:00Z", "closedAt": "2026-08-09T18:00:00Z" }
+      ]
+    }
+  }
+]
