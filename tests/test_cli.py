@@ -4865,3 +4865,26 @@ def test_large_adoption_tests_are_excluded_from_bounded_gates() -> None:
         "test_update_rechecks_snapshot_after_repository_context",
         "test_update_recomputes_visibility_defaults_from_github",
     }
+
+
+def test_generated_python_project_declares_pyyaml_for_its_paired_test() -> None:
+    """Keep ty check able to resolve the paired dependabot test's import.
+
+    template/tests/test_dependabot_auto_merge.py is copied byte-for-byte
+    into every generated project and does `import yaml` at module level.
+    [tool.ty.src] include in template/pyproject.toml.jinja covers "tests",
+    so a generated project's own `ty check` fails with unresolved-import
+    unless pyyaml is declared as a dependency.
+    """
+    paired_test = (
+        ROOT / "template/tests/test_dependabot_auto_merge.py"
+    ).read_text(encoding="utf-8")
+    assert "import yaml" in paired_test
+
+    pyproject = (ROOT / "template/pyproject.toml.jinja").read_text(
+        encoding="utf-8"
+    )
+    dependency_groups = pyproject.split("[dependency-groups]", 1)[1].split(
+        "\n[", 1
+    )[0]
+    assert "pyyaml" in dependency_groups
