@@ -32,7 +32,7 @@ dev = [
   "pytest-cov>=6.2,<8",
   "ruff>=0.12,<1",
   "ty==0.0.76",
-  "zizmor==1.29.0",
+  "zizmor==1.30.0",
 ]
 
 [tool.uv]
