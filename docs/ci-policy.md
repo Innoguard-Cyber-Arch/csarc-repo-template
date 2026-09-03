@@ -35,6 +35,44 @@ Milestone Issue ─ topic PR → dev/m* ─ 交付 PR ─────→ main
 `Completion evidence` 段落（見 #512）；#400 與 #401 的自動結案契約不再是 blocked gap。
 delivery branch 清理仍由 worktree 清理流程負責，不由版本或發版流程重複處理。
 
+## Milestone 掛勾安全網（#551）
+
+Milestone 8 收尾階段 #546–#550 五張 Issue／PR 全部沒有掛 Milestone，且沒有任何工具或
+檢查會提醒——純粹是開 Issue 時忘記加 `--milestone`。#551 為此補上兩層非阻擋性提醒，
+刻意不要求強制 fail-closed：許多 Issue／PR 本來就與任何 Milestone 無關（見 Issue #551
+的「邊界」段落）。
+
+- `scripts/gh-issue-create`：本機開 Issue 當下，若沒有帶 `--milestone`／`-m`，且
+  `scripts/detect-open-milestone` 判定目前恰好只有一個 open Milestone，會印出提示；
+  互動式終端機（`stdin` 是 tty）額外詢問是否要帶入該 Milestone，非互動環境
+  （agent／CI／腳本呼叫）只印出提醒，不阻擋 Issue 建立。
+- `scripts/validate-pr-policy`（CI 端：`pr-policy.yml` 的 `title` job「Validate
+  pull request policy」step）：PR 與其 linked Issue 兩邊都沒有掛任何 Milestone、且同樣
+  恰好有一個 open Milestone 時，於 PR 留言一次性提醒（內嵌 HTML comment marker 避免
+  重複留言）；檢查本身仍維持 pass，不 fail-closed，留言失敗（例如暫時性 API 錯誤）也
+  只印 `::notice::`，不影響結果。
+- 兩者共用同一支 `scripts/detect-open-milestone` 判斷式：0 個或 2 個以上 open
+  Milestone 都視為「無法判斷」，一律不提醒——避免在多 Milestone 並行時猜錯、誤導。
+- 這兩個安全網只在**建立／驗證當下**新增這層提醒。既有的「Issue 已掛 Milestone 但 PR
+  沒有（或反之、或兩者不同）」仍由 `scripts/validate-pr-policy` 既有的 fail-closed 比對
+  規則擋下（見下方 PR policy 逐 step 判讀一節），未被本次變更影響或放寬。
+
+**Milestone 一旦關閉，事後補掛不能用 `gh issue edit --milestone <name>`**——它只用
+名稱查找 open milestone，Milestone 關閉後查不到，會誤以為沒有這個 Milestone、或誤報
+找不到。正確做法是改用 REST API 直接指定 milestone number：
+
+```bash
+gh api repos/{owner}/{repo}/issues/{n} --method PATCH -f milestone=<number>
+```
+
+`<number>` 是 Milestone 的數字 ID（不是標題），可用下列指令查出，closed Milestone 也
+查得到：
+
+```bash
+gh api repos/{owner}/{repo}/milestones --method GET -f state=all \
+  --jq '.[] | "\(.number)\t\(.title)\t\(.state)"'
+```
+
 ## PR lifecycle single-writer
 
 Agent 或 automation 若要變更 PR 的 ready／draft、授權或 metadata，必須先取得 remote
