@@ -17,7 +17,7 @@
 - `template/` is what downstream repositories receive. Root configuration governs this template repository itself.
 - Use root `docs/specs/` for SDD current contracts; `docs/README.md` maps durable project memory.
 - Use `docs/adr/` for decisions. In updated projects, also search project-owned `docs/decisions/`; never move or overwrite it automatically.
-- Edit the root presentation through the Hugo layers in `site/`: bilingual Markdown belongs in `site/content/`, templates and shortcodes in `site/layouts/`, styles and interactions in `site/static/`, and shared glossary data in `site/data/`. Run `./scripts/build-decision-site` to rebuild `docs/index.html`, `docs/index.en.html`, and the `llms.txt` indexes; do not hand-edit generated outputs. `site/legacy/index.html` is a read-only parity fixture.
+- Edit the root presentation through `site/`: bilingual Markdown belongs in `site/content/`, the pure-Python render engine lives in `scripts/build_decision_site.py` (with shared block parsing in `scripts/decision_site_blocks.py`), styles and interactions stay in `site/static/`, and shared glossary/navigation/config data live in `site/data/`. Run `./scripts/build-decision-site` to rebuild `docs/index.html`, `docs/index.en.html`, and the `llms.txt` indexes; do not hand-edit generated outputs. `site/legacy/index.html` is a read-only parity fixture. The engine and the presentation template each carry an independent version in `site/version.json`, checked by `scripts/check-decision-site-versions`.
 - Keep decision records, the deck, and checked-in paths aligned. Do not describe a capability as active unless the template creates and verifies it.
 
 ## Working loop

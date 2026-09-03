@@ -106,7 +106,6 @@ def test_pinned_tool_caches_are_platform_scoped_and_revalidated() -> None:
     installers = (
         "install-actionlint",
         "install-gitleaks",
-        "install-hugo",
         "install-osv-scanner",
         "install-shellcheck",
     )

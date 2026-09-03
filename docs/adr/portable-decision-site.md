@@ -41,6 +41,20 @@ Issue #205 以兩次真實 spike 重新檢查第 3 點。mdBook 的書本導覽�
 
 Issue #209 經維護者實際檢視後，Hugo source 收斂到通用的 `site/` 結構，正式取代手寫 `site/index.html`，並輸出 `docs/index.html` 與 `docs/index.en.html`。Hugo publish directory 固定在已忽略的 `dist/`，不會掃描或覆寫 `docs/adr/`、`docs/specs/` 與其他既有文件。舊頁移到 `site/legacy/index.html`，只作文字、圖片與視覺回歸基準；仍被基準頁引用的樣式、互動與資產保留在 `site/static/`，確認不再使用後才移除。
 
+## 2026-09-03 移除 Hugo，改用純 Python 渲染引擎
+
+Issue #524 重新檢視「頁面呈現架構」「首頁重做」「自訂排版模板」三個後續 Issue 共同依賴的最底層基礎設施。維護者判斷：Hugo 太重、太通用，不符合「輕量、單純、簡報感」的產品定位；下游使用者應該只需要維護 Markdown 內容與選色，不需要理解一套通用靜態網站產生器。本節取代（supersede）上一節「2026-08-25 Hugo 正式切換」——Hugo 不再是本模板採用的 renderer。
+
+**決定**：`scripts/build_decision_site.py` 是新的 renderer，僅用 Python 標準函式庫（`re`、`json`、`tomllib`、`pathlib`、`html`），不引入 Node、Markdown 套件或樣板引擎。`site/content/_index.{zh-tw,en}.md` 既有的 `{{< slide key="..." >}}...{{< /slide >}}` 區塊語法完全不變；新引擎（搭配共用的 `scripts/decision_site_blocks.py` 解析器）把原本 `site/layouts/` 下的每個 Hugo shortcode／partial／home layout 逐一改寫成讀取同一批 `site/data/*.json`／`*.toml` 的 Python 函式。新引擎的輸出（`dist/decision-site/` 下的雙語 pre-bundle HTML）交給 `scripts/render_site.py` 的 `render()`——完全未修改——內嵌資產並拒絕外部 runtime asset，這正是本 ADR「未修改的 renderer 只負責資產內嵌」約束的字面實作，延續不變。`scripts/install-hugo`、`site/hugo.toml`、`site/layouts/` 已刪除。
+
+**Mermaid**：新引擎支援 ` ```mermaid ` fenced code block，輸出 `<pre class="mermaid">` 加一段簡短的本地 boot `<script>`；圖表函式庫本身以固定版本形式 vendor 在 `site/static/vendor/mermaid.min.js`（記錄來源網址與 SHA256），只在頁面真的包含 mermaid 區塊時才引用，其餘頁面零成本。
+
+**版本**：新增 `site/version.json` 記錄渲染引擎（`engine`）與排版模板（`template`）各自獨立的版本號，以及引擎相容的模板版本範圍（`compatible_template_range`），不跟著 repo／CLI 整體 SemVer 走；`scripts/check-decision-site-versions` 驗證版本落在相容範圍內，fail closed。
+
+**內容一致性**：切換前後以「拆解 HTML 標籤、正規化空白後比對逐頁可見文字」與「id／href／data-track／data-audience／data-content-key／aria-controls 屬性值集合」兩種方式核對雙語輸出，兩者皆完全相符。英文頁逐頁文字位元組相同；中文頁有 5 個投影片的差異，經追查是 Hugo 的 goldmark／CommonMark flanking-rule 對「`**標籤：**` 後緊接全形冒號與中文字、無空白」的既有排版寫法留下未轉換的字面 `**...**`（既有 bug，非本次引入）——新引擎改用簡單的正則比對兩個 `**` 之間任意字元，正確轉成 `<strong>`，等於順帶修正了這個既有渲染缺陷。`llms.txt` 與 `docs/llms.txt` 逐位元組相同。
+
+**測試**：`tests/test_build_decision_site.py` 對每個渲染函式做 fixture 單元測試（不需要 Hugo、Node 或瀏覽器自動化），並涵蓋 config-guidance 的多行程式碼樣本換行保留、similar-tools 的排序邏輯與 mermaid 區塊的條件式輸出；原本需要實跑 Hugo 才能驗證的 `tests/test_config_guidance.py` 端對端測試已改用新引擎直接驗證，移除 Hugo 相依。
+
 ## Ownership 與更新
 
 | 內容 | Owner | Copier update 行為 |
