@@ -102,8 +102,27 @@ def classify_probe(
     )
 
 
-def select_release_mode(capabilities: dict[str, Capability]) -> tuple[str, str]:
-    """Choose Automatic, Guided, or Blocked without a second publisher."""
+def select_release_mode(
+    capabilities: dict[str, Capability], *, operator_reason: str | None = None
+) -> tuple[str, str]:
+    """Choose Automatic, Guided, or Blocked without a second publisher.
+
+    Guided mode has one automatically-detected trigger (Actions pull
+    requests are blocked or unknown per observed capabilities) and one
+    operator-asserted trigger: `operator_reason` is a non-empty, human- or
+    agent-authored justification recording a live decision that Actions or
+    its webhook delivery is currently unhealthy (see Issue #589 and #587,
+    and docs/ci-policy.md's "Release 發版不依賴 Actions 健康度的 fallback"
+    section). There is no capability probe for "Actions/webhooks are
+    unhealthy": an idle hosted runner or a dropped `pull_request` webhook
+    delivery looks identical to "nothing to release right now" from the
+    GitHub REST API this module probes, so this trigger is deliberately
+    manual rather than auto-detected. An operator override can only steer
+    an otherwise-automatic release toward the same reviewed Guided path
+    (prepare-candidate -> ordinary pull request -> ordinary review); it
+    never turns a genuinely blocked publish capability into a usable one,
+    and it never skips review.
+    """
     pull_requests = capabilities["actions_pull_requests"]
     blocked = [
         name
@@ -120,6 +139,12 @@ def select_release_mode(capabilities: dict[str, Capability]) -> tuple[str, str]:
             "blocked",
             "GitHub tag or Release publication is unavailable or unproven: "
             + ", ".join([*blocked, *unknown]),
+        )
+    if operator_reason:
+        return (
+            "guided",
+            "Operator judged Actions or webhook delivery unhealthy: "
+            + operator_reason,
         )
     if pull_requests.state == "allowed":
         return (
@@ -946,6 +971,7 @@ def report(
     source: str,
     *,
     policies: dict[str, Capability] | None = None,
+    operator_reason: str | None = None,
     **extra: object,
 ) -> dict[str, object]:
     """Build the machine-readable decision record."""
@@ -964,7 +990,9 @@ def report(
             "blocked",
             "Actions pull requests are blocked by " + ", ".join(policy_blocks),
         )
-    mode, reason = select_release_mode(effective_capabilities)
+    mode, reason = select_release_mode(
+        effective_capabilities, operator_reason=operator_reason
+    )
     token_permissions = {
         name: asdict(capability)
         for name, capability in sorted(capabilities.items())
@@ -975,6 +1003,7 @@ def report(
         "source": source,
         "mode": mode,
         "reason": reason,
+        "operator_override": operator_reason,
         "organization_policy": asdict(policy["organization_policy"]),
         "repository_setting": asdict(policy["repository_setting"]),
         "token_permissions": token_permissions,
@@ -1546,6 +1575,18 @@ def parser() -> argparse.ArgumentParser:
     detect.add_argument("--branch", required=True)
     detect.add_argument("--output", type=Path)
     detect.add_argument("--github-output", type=Path)
+    detect.add_argument(
+        "--operator-reason",
+        default=None,
+        help=(
+            "Non-empty justification for forcing Guided mode because an "
+            "operator or agent judged Actions or webhook delivery "
+            "currently unhealthy, rather than because Actions pull "
+            "requests are blocked by policy. Never forces Automatic or "
+            "overrides a genuinely blocked publish capability; see "
+            "select_release_mode()."
+        ),
+    )
 
     boundary = subparsers.add_parser("boundary")
     boundary.add_argument(
@@ -1742,7 +1783,12 @@ def main(arguments: list[str] | None = None) -> int:  # noqa: C901
         policies = workflow_policy_observations(api, args.repo)
     if args.command == "detect":
         write_report(
-            report(capabilities, "runtime", policies=policies),
+            report(
+                capabilities,
+                "runtime",
+                policies=policies,
+                operator_reason=args.operator_reason,
+            ),
             args.output,
             args.github_output,
         )

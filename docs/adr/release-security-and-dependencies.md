@@ -98,13 +98,16 @@ CSARC 採一條可審查、可重跑，並依 GitHub 能力降級的發版路徑
 
 | 檔案 | 責任 |
 | --- | --- |
-| `.github/workflows/release.yml` | 一支 GitHub event／permission wrapper；root 與新生成 repo 的發布入口 |
+| `.github/workflows/release.yml` | 一支 GitHub event／permission wrapper；root 與新生成 repo 的發布入口；發布階段呼叫 `scripts/publish-release`，不保留自己的一份邏輯 |
+| `scripts/publish-release`（#589） | 發布階段的單一實作：`stage`／`resolve`／`publish`／`rerun-verify` 子命令，涵蓋驗證並暫存已合併候選、判定 tag／Release 狀態、build 成品與 SBOM、上傳並公開、驗證重跑，以及發布失敗時把仍可變的 Release 收回 draft；`release.yml` 與本機／agent 執行呼叫同一份腳本 |
+| `scripts/install-syft`（#589） | 本機／agent 發布路徑產生 SPDX SBOM 的直接 CLI 等效：抓取與 `release.yml` 的 `anchore/sbom-action` 相同 pin 版本的 Syft 二進位並驗證 checksum |
 | `scripts/verify-release-candidate` | 驗證自動或 guided 版本 PR 的身分、變更範圍與精確 SHA，再回寫 status |
-| `scripts/release_policy.py` | 共用 Conventional Commit／版本決策；本機只產生候選檔，不寫 GitHub |
+| `scripts/release_policy.py` | 共用 Conventional Commit／版本決策；本機只產生候選檔，不寫 GitHub；`detect`／`select_release_mode` 的 Guided 觸發條件（#589）已擴充為政策阻擋或維護者／agent 明示的 `--operator-reason` 兩者之一 |
 | `scripts/release_bundle.py` | build、tag identity、checksum、SPDX、evidence 與重跑驗證 |
-| `tests/test_release_policy.py` | 版本與候選 trust boundary 正反例 |
+| `tests/test_release_policy.py` | 版本與候選 trust boundary 正反例；Guided 模式 operator override 觸發條件與 fail-closed 邊界（#589） |
 | `tests/test_release_bundle.py` | 缺檔、竄改、錯 tag、重跑與 bundle identity |
-| `tests/test_journey07_release.py` | workflow 權限、pin、ownership 與 archive disposition |
+| `tests/test_release_publish.py`（#589） | 對 mocked `gh` 與真實 Git fixture 驅動 `scripts/publish-release` 的行為回歸：staging 成功／fail-closed、state 判定、發布成功、發布失敗回退 draft、已發布重跑不重建 |
+| `tests/test_journey07_release.py` | workflow 權限、pin、ownership 與 archive disposition；`release.yml`／`release.yml.jinja` 呼叫 `scripts/publish-release` 而非保留自己一份 bash 的來源層級驗證（#589） |
 | `.github/workflows/dependabot-auto-merge.yml` | 只鎖定 `dependabot[bot]` 開出的 PR；minor／patch 排入 GitHub 原生 auto-merge 佇列，major 加標籤／留言、不合併 |
 | `tests/test_dependabot_auto_merge.py` | 觸發條件、job 層級 actor 閘門、權限、pin 與 minor/patch／major 分流的 workflow 邏輯回歸測試 |
 
@@ -159,6 +162,58 @@ required checks 全部通過後才執行；本決定沒有調整、放寬或繞�
 半部——`.github/dependabot.yml` 的 `cooldown.default-days: 3` 維持原樣，不因本節新增而重新設定或延長。同步下發 `template/`
 （新 workflow 與 `policies/labels.json` 的 `needs-manual-review` 標籤定義），下游生成專案取得同一份政策；`docs/ci-policy.md`
 沿用既有「Current automation」表的 candidate／active 判斷慣例，待落地 `main` 並有 live run 證據後再登錄，不在本節預先宣告 active。
+
+## 發版不依賴 Actions 健康度的本機 fallback（#589，2026-09-03）
+
+2026-09-03 的實際事故（#587）證明「發版」目前完全綁在 `release.yml` 這一支 workflow 是否能在
+GitHub Actions 上成功執行：M8 promotion 後，`docs/index.html` 過期讓 full-tier 驗證卡住，`main`
+上每一次 push 觸發的 `release.yml` run 全部失敗，加上同一天稍早出現的 `pull_request` webhook 投遞
+間歇性異常，讓「能不能發版」完全停擺超過 8 小時、沒有人自動被通知，直到人工檢查 Releases 頁面才
+發現。既有的 Actions 額度 fallback（見 [staged-delivery-and-verification
+ADR](staged-delivery-and-verification.md)）解決的是不同的觸發條件：額度用盡有 GitHub 回傳的明確
+錯誤訊息（zero-step billing block），可以機械式偵測；本節處理的觸發條件——hosted runner 卡住、
+webhook 沒有投遞、或其他導致 Actions 本身不健康的狀況——沒有對應的機械式訊號，只能由人或 agent
+主動判斷後啟用，這是本節與額度 fallback 在觸發機制上的根本差異。
+
+**決定：** 沿用本 ADR 決定第 4 點既有的 Guided 模式，只把它的啟用條件從單一觸發（「上層政策禁止
+Action 建立 PR」）擴大為兩個觸發之一：原本的政策阻擋，或維護者／agent 判斷 Actions／webhook 目前
+不可信任。兩者共用完全相同的機制與信任邊界：`python3 scripts/release_policy.py prepare-candidate`
+在本機計算版本與 CHANGELOG，人或 agent 開一般 PR，經過與其他 `main` PR 相同的 review 才能合併——
+本機執行不能成為省略審查的手段，也不構成第二個 tag／Release writer。合併後把 `release.yml` 原本
+內聯在「Validate and stage the merged version candidate」到「Keep a failed mutable release in
+draft」之間的 bash 抽成 `scripts/publish-release`（`stage`／`resolve`／`publish`／`rerun-verify`
+子命令），`release.yml` 與本機／agent 執行的路徑呼叫同一份實作，不維持兩套邏輯；SBOM 產生同樣
+只有一份規則：`release.yml` 仍呼叫 `anchore/sbom-action`（pin 版本不變），`scripts/publish-release`
+在該檔案不存在時（本機沒有前置的 Actions 步驟）改用 `scripts/install-syft` 抓同一個 pin 版本的
+Syft 二進位直接呼叫 `syft scan dir:. -o spdx-json=<output>`，兩條路徑產生的 SBOM 接受同一份
+`scripts/release_bundle.py verify` 驗證，不是兩套互相可能漂移的規則。
+
+**代價（不能只講好處）：**
+
+- **放棄 hosted runner 的乾淨、一致環境保證。** 本機執行的環境不由 GitHub 控管；只有本機 `full`
+  驗證全綠才能視為等同 hosted 的證明強度。
+- **需要本機或執行者持有具備 admin／write 權限的長效憑證，而不是 Actions 短效 `GITHUB_TOKEN`。**
+  這不是為所有 CSARC-owned repo 新增一項標準要求——`scripts/apply-repository-settings.sh apply`
+  本來就已經要求 repo admin 用自己的 `gh` 身分執行；本節只是讓同一位已經持有這個權限的維護者，
+  多一個「用同一身分完成發版」的選項。
+- **沒有 merge 後自動觸發，需要人或排程主動執行。** 需要另外一道獨立排程的存量檢查偵測「`main`
+  已經前進但過去 N 小時內沒有成功的 `release.yml` run 或本機發版紀錄」，取代目前完全仰賴人工檢查
+  Releases 頁面才會發現的狀態；這道檢查因範圍與時間考量從 #589 拆分成獨立追蹤（見
+  [#605](https://github.com/Innoguard-Cyber-Arch/csarc-repo-template/issues/605)），本節本身不
+  包含它。
+- **本機執行結果的可稽核性不如 hosted run 的公開 log。** 緩解方式是強制在合併說明或 Issue 留言
+  記錄執行者、commit SHA、指令與結果。
+- **local-vs-hosted 邏輯漂移風險。** 緩解方式是本節設計的第一原則——單一 repo-local 腳本被兩種
+  呼叫方式共用，不維持兩套實作。
+
+**明確的非目標：** `verify`／`title`／`promotion` 三個 required status check 仍然、也必須繼續只由
+hosted Actions 產生——它們的價值來自 GitHub 自己信任這份報告，本機執行無法滿足這個信任邊界，本節
+不主張、也沒有把這三者改成可本機執行。CodeQL 上傳到 GitHub 原生 code-scanning 介面同樣不在本節
+適用範圍。GitHub Actions 仍是預設／建議路徑，一般情況下仍建議走 hosted `release.yml`；本機路徑是
+明確的 backup，不是取代。本節也不新增 Copier 選項：既有的 `release_ownership`
+（`csarc-owned`／`product-owned`／`verification-only`）已經正確路由這個能力——`release.yml`／
+`release.yml.jinja` 只下發給 `csarc-owned` 生成 repo；`scripts/publish-release` 與擴充後的 Guided
+模式一旦存在於這兩個檔案，就隨同一套機制自動下發，不需要、也不新增第二個選配旗標。
 
 ## 評估過的替代方案
 

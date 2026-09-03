@@ -344,6 +344,79 @@ def test_release_mode_is_fail_closed(
     assert select_release_mode(capabilities(*states))[0] == expected
 
 
+def test_operator_override_forces_guided_over_automatic() -> None:
+    """An operator can route an otherwise-Automatic release to Guided.
+
+    This is the Issue #589 trigger extension: the operator or an agent has
+    judged Actions or its webhook delivery currently unhealthy, which has
+    no corresponding capability probe (unlike an organization policy that
+    blocks Actions pull requests), so it can only be asserted explicitly.
+    """
+    mode, reason = select_release_mode(
+        capabilities("allowed", "allowed", "allowed", "allowed"),
+        operator_reason="hosted runner and pull_request webhook delivery "
+        "appear unhealthy (#587)",
+    )
+    assert mode == "guided"
+    assert "#587" in reason
+    assert "unhealthy" in reason
+
+
+def test_operator_override_never_unblocks_a_genuinely_blocked_publish() -> None:
+    """An operator override cannot manufacture a publish capability.
+
+    Guided mode still needs a working tag/Release publish capability for
+    the identity running it; if that capability is observed blocked or
+    unknown, the operator's local-execution judgment about Actions health
+    is irrelevant and the release stays blocked, not guided.
+    """
+    mode, reason = select_release_mode(
+        capabilities("allowed", "blocked", "allowed", "allowed"),
+        operator_reason="Actions looks unhealthy",
+    )
+    assert mode == "blocked"
+    assert "Actions looks unhealthy" not in reason
+
+
+def test_operator_override_absent_uses_ordinary_detection() -> None:
+    """No override reason falls back to the existing capability-only path."""
+    automatic, _ = select_release_mode(
+        capabilities("allowed", "allowed", "allowed", "allowed"),
+        operator_reason=None,
+    )
+    assert automatic == "automatic"
+    empty_reason, _ = select_release_mode(
+        capabilities("allowed", "allowed", "allowed", "allowed"),
+        operator_reason="",
+    )
+    assert empty_reason == "automatic"
+
+
+def test_report_records_the_operator_override_reason() -> None:
+    """The machine-readable report preserves the operator's own wording.
+
+    The release-security-and-dependencies ADR requires recording who made
+    this local-execution decision and why; carrying the exact reason string
+    through to the JSON report is what lets a merge description or Issue
+    comment quote it verbatim as that evidence.
+    """
+    payload = report(
+        capabilities("allowed", "allowed", "allowed", "allowed"),
+        "test",
+        operator_reason="webhook delivery looked stuck for #587",
+    )
+    assert payload["mode"] == "guided"
+    assert (
+        payload["operator_override"] == "webhook delivery looked stuck for #587"
+    )
+
+    unset = report(
+        capabilities("allowed", "allowed", "allowed", "allowed"), "test"
+    )
+    assert unset["mode"] == "automatic"
+    assert unset["operator_override"] is None
+
+
 def test_http_failures_are_never_allowed() -> None:
     assert classify_probe(403).state == "blocked"
     assert classify_probe(409).state == "blocked"
